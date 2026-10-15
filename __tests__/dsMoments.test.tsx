@@ -1,0 +1,433 @@
+/*
+ * The five moments (guidelines/components/Moment*.html, DESIGN-BRIEF §9.3 #9
+ * and #11, motion #43, Flow 2's celebration, Flow 10's It's a Blend). L4:
+ * full screen, skippable, a celebration spent once, Reduce Motion a
+ * crossfade in place with the same haptic.
+ */
+import { act, fireEvent, render, screen } from '@testing-library/react-native'
+import React from 'react'
+import { AccessibilityInfo, StyleSheet } from 'react-native'
+import * as Reanimated from 'react-native-reanimated'
+
+import DsP5Preview from '../app/preview/ds-p5'
+import { MomentBlend, type MomentBlendProps } from '../components/ds/MomentBlend'
+import { MomentMatch, type MomentMatchProps } from '../components/ds/MomentMatch'
+import { MomentPour } from '../components/ds/MomentPour'
+import { MomentReady } from '../components/ds/MomentReady'
+import { MomentRecap, type MomentRecapProps } from '../components/ds/MomentRecap'
+import { COLOR, MATERIAL, SPRING } from '../lib/design/tokens'
+import { H } from '../lib/haptics'
+
+jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
+jest.mock('react-native-reanimated', () => {
+  const actual = jest.requireActual('react-native-reanimated')
+  return { ...actual, __esModule: true, useReducedMotion: jest.fn(() => false), withSpring: jest.fn(actual.withSpring) }
+})
+jest.mock('expo-linear-gradient', () => {
+  const { View } = jest.requireActual('react-native')
+  return { LinearGradient: (props: object) => <View {...props} /> }
+})
+jest.mock('expo-glass-effect', () => {
+  const { View } = jest.requireActual('react-native')
+  return {
+    GlassView: (props: object) => <View {...props} />,
+    isGlassEffectAPIAvailable: jest.fn(() => true),
+    isLiquidGlassAvailable: jest.fn(() => true),
+  }
+})
+
+const reduceMotion = Reanimated.useReducedMotion as jest.Mock
+const withSpring = Reanimated.withSpring as jest.Mock
+const HIDDEN = { includeHiddenElements: true }
+const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id, HIDDEN).props.style)
+const advance = (ms: number) => act(async () => jest.advanceTimersByTime(ms))
+const sprungWith = (spring: keyof typeof SPRING) => withSpring.mock.calls.some((c) => c[1]?.stiffness === SPRING[spring].stiffness)
+
+let haptic: Record<'match' | 'success' | 'primary', jest.SpyInstance>
+let announce: jest.SpyInstance
+let screenReader: jest.SpyInstance
+beforeEach(() => {
+  jest.useFakeTimers()
+  reduceMotion.mockReturnValue(false)
+  haptic = {
+    match: jest.spyOn(H, 'match').mockImplementation(() => {}),
+    success: jest.spyOn(H, 'success').mockImplementation(() => {}),
+    primary: jest.spyOn(H, 'primary').mockImplementation(() => {}),
+  }
+  announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibilityWithOptions').mockImplementation(() => {})
+  screenReader = jest.spyOn(AccessibilityInfo, 'isScreenReaderEnabled').mockResolvedValue(false)
+  jest.spyOn(AccessibilityInfo, 'isReduceTransparencyEnabled').mockResolvedValue(false)
+  jest.spyOn(AccessibilityInfo, 'isDarkerSystemColorsEnabled').mockResolvedValue(false)
+})
+afterEach(() => jest.useRealTimers())
+
+const PHOTO = 'https://example.com/me.jpg'
+
+function match(props: Partial<MomentMatchProps> = {}) {
+  const p: MomentMatchProps = {
+    you: { kind: 'photo', uri: PHOTO },
+    them: { kind: 'creature', pseudonym: 'Velvet Heron' },
+    name: 'Velvet Heron',
+    reason: 'Both into live music',
+    opener: 'Which set are you here for?',
+    onSayHi: jest.fn(),
+    onClose: jest.fn(),
+    testID: 'm',
+    ...props,
+  }
+  return { p, el: <MomentMatch {...p} /> }
+}
+
+describe('<MomentMatch> · It’s mutual (#11, ROUND3 D · 4.4)', () => {
+  it('says it, with why and the opener, then Say hi and Keep looking', async () => {
+    const { p, el } = match()
+    await render(el)
+    expect(screen.getByText('It’s mutual')).toBeTruthy()
+    expect(screen.getByText('You and Velvet Heron matched · Both into live music')).toBeTruthy()
+    expect(screen.getByText('TRY')).toBeTruthy()
+    expect(screen.getByText('“Which set are you here for?”')).toBeTruthy()
+    await advance(1260)
+    await fireEvent.press(screen.getByRole('button', { name: 'Say hi' }))
+    expect(p.onSayHi).toHaveBeenCalledTimes(1)
+    await fireEvent.press(screen.getByRole('button', { name: 'Keep looking' }))
+    expect(p.onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('is announced once, everything in it from t0', async () => {
+    await render(match().el)
+    expect(announce).toHaveBeenCalledTimes(1)
+    expect(announce).toHaveBeenCalledWith('It’s mutual. You and Velvet Heron matched, Both into live music. Try: Which set are you here for?', { queue: true })
+  })
+
+  it.each([
+    ['photo · photo', { kind: 'photo', uri: PHOTO }, { kind: 'photo', uri: PHOTO }, true],
+    ['photo · creature', { kind: 'photo', uri: PHOTO }, { kind: 'creature', pseudonym: 'Velvet Heron' }, false],
+    ['creature · creature', { kind: 'creature', pseudonym: 'Cosmic Panda' }, { kind: 'creature', pseudonym: 'Velvet Heron' }, false],
+  ] as const)('%s: never shows a face either person hid', async (_, you, them, theirPhoto) => {
+    await render(match({ you, them }).el)
+    expect(!!screen.queryByTestId('m-them-body', HIDDEN)).toBe(theirPhoto)
+  })
+
+  it('the faces meet on M.pop, three hearts arc, and H.match lands on the frame the bump does', async () => {
+    await render(match().el)
+    expect(sprungWith('pop')).toBe(true)
+    expect(screen.getAllByTestId(/^m-heart-/, HIDDEN)).toHaveLength(3)
+    await advance(999)
+    expect(haptic.match).not.toHaveBeenCalled()
+    await advance(1)
+    expect(haptic.match).toHaveBeenCalledTimes(1)
+    await advance(5000)
+    expect(haptic.match).toHaveBeenCalledTimes(1)
+  })
+
+  it('a tap anywhere skips to the end: the haptic still lands, once', async () => {
+    await render(match().el)
+    await advance(300)
+    await fireEvent.press(screen.getByTestId('m-skip', HIDDEN))
+    expect(haptic.match).toHaveBeenCalledTimes(1)
+    expect(screen.getByTestId('m-actions', HIDDEN).props.pointerEvents).toBe('box-none')
+    await advance(5000)
+    expect(haptic.match).toHaveBeenCalledTimes(1)
+  })
+
+  it('Say hi is tappable once fully shown (1100 + 160 ms); with a screen reader, from t0', async () => {
+    await render(match().el)
+    await advance(1259)
+    expect(screen.getByTestId('m-actions', HIDDEN).props.pointerEvents).toBe('none')
+    await advance(1)
+    expect(screen.getByTestId('m-actions', HIDDEN).props.pointerEvents).toBe('box-none')
+    screenReader.mockResolvedValue(true)
+    await render(match().el)
+    await act(async () => {})
+    expect(screen.getByTestId('m-actions', HIDDEN).props.pointerEvents).toBe('box-none')
+  })
+
+  it('Reduce Motion: the faces placed, no hearts, H.match at once', async () => {
+    reduceMotion.mockReturnValue(true)
+    await render(match().el)
+    expect(sprungWith('pop')).toBe(false)
+    expect(screen.queryAllByTestId(/^m-heart-/, HIDDEN)).toHaveLength(0)
+    await advance(0)
+    expect(haptic.match).toHaveBeenCalledTimes(1)
+  })
+
+  it('system back is Keep looking, and the haptic still lands (once)', async () => {
+    const { p, el } = match()
+    await render(el)
+    await act(async () => screen.getByTestId('m-modal', HIDDEN).props.onRequestClose())
+    expect(p.onClose).toHaveBeenCalledTimes(1)
+    expect(haptic.match).toHaveBeenCalledTimes(1)
+  })
+
+  it('a tap on the faces or the words skips: nothing over the skip area but the buttons is a hit target', async () => {
+    await render(match().el)
+    expect(screen.getByTestId('m-faces', HIDDEN).props.pointerEvents).toBe('none')
+    expect(screen.getByTestId('m-copy', HIDDEN).props.pointerEvents).toBe('none')
+  })
+
+  it('Reduce Transparency makes the scrim opaque; Increase Contrast lifts the line and rings the opener', async () => {
+    jest.spyOn(AccessibilityInfo, 'isReduceTransparencyEnabled').mockResolvedValue(true)
+    jest.spyOn(AccessibilityInfo, 'isDarkerSystemColorsEnabled').mockResolvedValue(true)
+    await render(match().el)
+    await act(async () => {})
+    expect(flat('m-scrim').backgroundColor).toBe(COLOR.ink)
+    expect(flat('m-why').color).toBe(COLOR.textPrimary)
+    expect(flat('m-opener')).toMatchObject({ borderColor: MATERIAL.hairlineIncreaseContrast })
+  })
+})
+
+function blend(props: Partial<MomentBlendProps> = {}) {
+  const p = {
+    ours: { kind: 'crew', name: 'Nebula', emblemSeed: 'nebula', count: 3 },
+    theirs: { kind: 'crew', name: 'Orbit', emblemSeed: 'orbit', count: 4 },
+    facets: ['Dance floor', 'Friendship'],
+    yourLike: true,
+    onOpen: jest.fn(),
+    onLater: jest.fn(),
+    testID: 'b',
+    ...props,
+  } as MomentBlendProps
+  return { p, el: <MomentBlend {...p} /> }
+}
+
+describe('<MomentBlend> · It’s a Blend (Flow 10.8, §21.5)', () => {
+  it('crew × crew: the counts, nobody named, the shared facets, Open the Blend and Later', async () => {
+    const { p, el } = blend()
+    await render(el)
+    expect(screen.getByText('It’s a Blend')).toBeTruthy()
+    expect(screen.getByText('Nebula + Orbit · 3 + 4 people')).toBeTruthy()
+    expect(screen.getByText('Nobody’s named yet. Everyone’s on tonight’s names until your crew chooses to reveal.')).toBeTruthy()
+    expect(screen.getByText('You both: Dance floor · Friendship')).toBeTruthy()
+    expect(announce).toHaveBeenCalledWith('It’s a Blend. Nebula and Orbit, 7 people.', { queue: true })
+    await advance(1200)
+    await fireEvent.press(screen.getByRole('button', { name: 'Open the Blend' }))
+    expect(p.onOpen).toHaveBeenCalledTimes(1)
+    await fireEvent.press(screen.getByRole('button', { name: 'Later' }))
+    expect(p.onLater).toHaveBeenCalledTimes(1)
+  })
+
+  it('crew × person, from the crew’s side: “one more”', async () => {
+    await render(blend({ theirs: { kind: 'person', pseudonym: 'Quiet Heron' } }).el)
+    expect(screen.getByText('Nebula + one more · 3 + 1 people')).toBeTruthy()
+  })
+
+  it('person × crew, from the person’s side: no facet line (yours is people data)', async () => {
+    await render(blend({ ours: { kind: 'person', pseudonym: 'Cosmic Panda' }, theirs: { kind: 'crew', name: 'Nebula', emblemSeed: 'nebula', count: 3 } }).el)
+    expect(screen.getByText('You + Nebula · 1 + 3 people')).toBeTruthy()
+    expect(screen.queryByText(/You both/)).toBeNull()
+  })
+
+  it('the emblems interlock on M.pop; H.match on landing for the person whose like made it', async () => {
+    await render(blend().el)
+    expect(sprungWith('pop')).toBe(true)
+    await advance(619)
+    expect(haptic.match).not.toHaveBeenCalled()
+    await advance(1)
+    expect(haptic.match).toHaveBeenCalledTimes(1)
+  })
+
+  it('seen later (someone else’s like): no haptic, ever', async () => {
+    await render(blend({ yourLike: false }).el)
+    await advance(5000)
+    await fireEvent.press(screen.getByTestId('b-skip', HIDDEN))
+    expect(haptic.match).not.toHaveBeenCalled()
+  })
+
+  it('Reduce Motion: the emblems fade in place, H.match unchanged', async () => {
+    reduceMotion.mockReturnValue(true)
+    await render(blend().el)
+    expect(sprungWith('pop')).toBe(false)
+    await advance(0)
+    expect(haptic.match).toHaveBeenCalledTimes(1)
+  })
+
+  it('system back is Later', async () => {
+    const { p, el } = blend()
+    await render(el)
+    await act(async () => screen.getByTestId('b-modal', HIDDEN).props.onRequestClose())
+    expect(p.onLater).toHaveBeenCalledTimes(1)
+  })
+
+  it('a tap on the emblems or the words skips; the buttons go live once fully shown', async () => {
+    await render(blend().el)
+    expect(screen.getByTestId('b-art', HIDDEN).props.pointerEvents).toBe('none')
+    expect(screen.getByTestId('b-copy', HIDDEN).props.pointerEvents).toBe('none')
+    await advance(820)
+    expect(screen.getByTestId('b-actions', HIDDEN).props.pointerEvents).toBe('none')
+    await advance(220)
+    expect(screen.getByTestId('b-actions', HIDDEN).props.pointerEvents).toBe('box-none')
+  })
+})
+
+describe('<MomentReady> · the one celebration (Flow 2)', () => {
+  it('the mark assembles on M.pop; H.success once as it completes; done at 1.3 s', async () => {
+    const onDone = jest.fn()
+    await render(<MomentReady name="Sam" onDone={onDone} testID="r" />)
+    expect(sprungWith('pop')).toBe(true)
+    expect(announce).toHaveBeenCalledWith('You’re all set, Sam.', { queue: true })
+    await advance(529)
+    expect(haptic.success).not.toHaveBeenCalled()
+    await advance(1)
+    expect(haptic.success).toHaveBeenCalledWith({ important: true })
+    await advance(769)
+    expect(onDone).not.toHaveBeenCalled()
+    await advance(1)
+    expect(onDone).toHaveBeenCalledTimes(1)
+    expect(haptic.success).toHaveBeenCalledTimes(1)
+  })
+
+  it('a tap on the mark skips (it is not a hit target)', async () => {
+    await render(<MomentReady onDone={jest.fn()} testID="r" />)
+    expect(screen.getByTestId('r-centre', HIDDEN).props.pointerEvents).toBe('none')
+  })
+
+  it('tap to skip: the haptic and the hand-off now, once each', async () => {
+    const onDone = jest.fn()
+    await render(<MomentReady onDone={onDone} testID="r" />)
+    await fireEvent.press(screen.getByRole('button', { name: 'Skip' }))
+    expect(haptic.success).toHaveBeenCalledTimes(1)
+    expect(onDone).toHaveBeenCalledTimes(1)
+    await advance(5000)
+    expect(onDone).toHaveBeenCalledTimes(1)
+  })
+
+  it('Reduce Motion: the mark fades in, the orbs hold, the haptic at once', async () => {
+    reduceMotion.mockReturnValue(true)
+    const onDone = jest.fn()
+    await render(<MomentReady onDone={onDone} testID="r" />)
+    expect(sprungWith('pop')).toBe(false)
+    await advance(0)
+    expect(haptic.success).toHaveBeenCalledTimes(1)
+    await advance(500)
+    expect(onDone).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('<MomentPour> · the check-in success (#9)', () => {
+  it('H.success on the server’s answer, the flood on M.settle, “You’re in.”, the Room at 700 ms', async () => {
+    const onDone = jest.fn()
+    await render(<MomentPour venue="Toit" onDone={onDone} testID="p" />)
+    expect(sprungWith('settle')).toBe(true)
+    expect(screen.getByText('You’re in.')).toBeTruthy()
+    expect(screen.getByText('Toit')).toBeTruthy()
+    expect(announce).toHaveBeenCalledWith('You’re in. Toit.', { queue: true })
+    await advance(0)
+    expect(haptic.success).toHaveBeenCalledWith({ important: true })
+    await advance(699)
+    expect(onDone).not.toHaveBeenCalled()
+    await advance(1)
+    expect(onDone).toHaveBeenCalledTimes(1)
+    // It clears itself: every touch goes through to the Room, and the screen reader no longer finds it.
+    const stage = screen.getByTestId('p', HIDDEN)
+    expect(stage.props.pointerEvents).toBe('none')
+    expect(stage.props.accessibilityElementsHidden).toBe(true)
+    expect(stage.props.importantForAccessibility).toBe('no-hide-descendants')
+  })
+
+  it('a tap skips to the Room', async () => {
+    const onDone = jest.fn()
+    await render(<MomentPour venue="Toit" onDone={onDone} testID="p" />)
+    await fireEvent.press(screen.getByTestId('p-skip', HIDDEN))
+    expect(onDone).toHaveBeenCalledTimes(1)
+    expect(haptic.success).toHaveBeenCalledTimes(1)
+  })
+
+  it('Reduce Motion: a crossfade to the filled state, same haptic, same hand-off', async () => {
+    reduceMotion.mockReturnValue(true)
+    const onDone = jest.fn()
+    await render(<MomentPour venue="Toit" onDone={onDone} testID="p" />)
+    expect(sprungWith('settle')).toBe(false)
+    await advance(700)
+    expect(haptic.success).toHaveBeenCalledTimes(1)
+    expect(onDone).toHaveBeenCalledTimes(1)
+  })
+})
+
+function recap(props: Partial<MomentRecapProps> = {}) {
+  const p: MomentRecapProps = {
+    face: { kind: 'photo', uri: PHOTO },
+    title: 'Vinyl Night',
+    venue: 'Toit',
+    minutes: 135,
+    matches: 2,
+    rated: false,
+    onRate: jest.fn(),
+    onBack: jest.fn(),
+    onClose: jest.fn(),
+    testID: 'w',
+    ...props,
+  }
+  return { p, el: <MomentRecap {...p} /> }
+}
+
+describe('<MomentRecap> · That’s a wrap (#43)', () => {
+  it('two numbers, already set, and the one thing left to do', async () => {
+    const { p, el } = recap()
+    await render(el)
+    expect(screen.getByText('IT’S OVER')).toBeTruthy()
+    expect(screen.getByText('That’s a wrap')).toBeTruthy()
+    expect(screen.getByText('Vinyl Night · Toit')).toBeTruthy()
+    expect(screen.getByLabelText('In the room, 2 hours 15 minutes')).toBeTruthy()
+    expect(screen.getByText('2h 15m')).toBeTruthy()
+    expect(screen.getByLabelText('Matches, 2')).toBeTruthy()
+    await fireEvent.press(screen.getByRole('button', { name: 'Rate who you met' }))
+    expect(p.onRate).toHaveBeenCalledTimes(1)
+    await fireEvent.press(screen.getByRole('button', { name: 'Back to tonight' }))
+    expect(p.onBack).toHaveBeenCalledTimes(1)
+    await fireEvent.press(screen.getByRole('button', { name: 'Close' }))
+    expect(p.onClose).toHaveBeenCalledTimes(1)
+    expect(announce).toHaveBeenCalledWith('That’s a wrap. Vinyl Night, Toit.', { queue: true })
+    // No haptic on open.
+    expect(haptic.success).not.toHaveBeenCalled()
+    expect(haptic.match).not.toHaveBeenCalled()
+  })
+
+  it('no matches: Rate the night', async () => {
+    await render(recap({ matches: 0 }).el)
+    expect(screen.getByRole('button', { name: 'Rate the night' })).toBeTruthy()
+  })
+
+  it('rated: thanks once, and nothing else to do', async () => {
+    await render(recap({ rated: true }).el)
+    expect(screen.getByText('You rated this night. Thanks.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Rate/ })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Back to tonight' })).toBeTruthy()
+  })
+
+  it('no photo: the creature; no check-in time: no time tile', async () => {
+    await render(recap({ face: { kind: 'creature', pseudonym: 'Cosmic Panda' }, minutes: null }).el)
+    expect(screen.queryByTestId('w-face-body', HIDDEN)).toBeNull()
+    expect(screen.queryByLabelText(/In the room/)).toBeNull()
+  })
+
+  it('#43: the title rises 8 pt as it fades; Reduce Motion fades only', async () => {
+    await render(recap().el)
+    expect(flat('w-block-0').transform).toEqual([{ translateY: 8 }])
+    reduceMotion.mockReturnValue(true)
+    await render(recap().el)
+    expect(flat('w-block-0').transform).toEqual([{ translateY: 0 }])
+  })
+})
+
+describe('/preview/ds-p5', () => {
+  it('replays every moment on demand', async () => {
+    // Still orbs: a gallery of drifting ones would run the fake clock frame by frame.
+    reduceMotion.mockReturnValue(true)
+    await render(<DsP5Preview />)
+    for (const [button, moment] of [
+      ['ds-play-match-photo-photo', 'ds-moment-match'],
+      ['ds-play-match-creature-creature', 'ds-moment-match'],
+      ['ds-play-blend-cc', 'ds-moment-blend'],
+      ['ds-play-blend-cpPerson', 'ds-moment-blend'],
+      ['ds-play-ready', 'ds-moment-ready'],
+      ['ds-play-pour', 'ds-moment-pour'],
+    ]) {
+      await fireEvent.press(screen.getByTestId(button))
+      expect(screen.getByTestId(moment, HIDDEN)).toBeTruthy()
+      await advance(1000)
+    }
+    expect(screen.getByTestId('ds-recap-rated', HIDDEN)).toBeTruthy()
+    expect(screen.getByTestId('ds-orbs-feed-late', HIDDEN)).toBeTruthy()
+    expect(screen.getByTestId('ds-emblem-orbit-field', HIDDEN)).toBeTruthy()
+  })
+})

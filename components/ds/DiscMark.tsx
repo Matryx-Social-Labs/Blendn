@@ -13,11 +13,12 @@ const MONOGRAM =
 
 /**
  * The brand gradient as SVG paint, for a path or a stroke: `<GradientFill>` is
- * a View and cannot fill either. Same stops (`GRADIENT.brand`), and the caller
- * keeps the 135° (top-left to bottom-right) direction.
+ * a View and cannot fill either. Same stops (`GRADIENT.brand`, or `fill` for
+ * paint with white text on it), and the caller keeps the 135° (top-left to
+ * bottom-right) direction.
  */
-export function BrandGradient(props: LinearGradientProps & { id: string }) {
-  const { colors, locations } = GRADIENT.brand
+export function BrandGradient({ gradient = 'brand', ...props }: LinearGradientProps & { id: string; gradient?: keyof typeof GRADIENT }) {
+  const { colors, locations } = GRADIENT[gradient]
   return (
     <LinearGradient {...props}>
       {colors.map((color, i) => (

@@ -189,6 +189,10 @@ place; screens move to it one at a time, and `EMBER` goes when the last has.
   `ProgressBar`, `TabBar` (hosts `Disc`), `TopBar`, and `MonoFamily` (`Badge`,
   `PresenceDot`, `LivePill`, `TimeBadge`, `Price`). Every state is on
   `/preview/ds-p1`
+- P5, sets and moments: `Orbs` and `Grain` (L0, the only ambient loop),
+  `CrewEmblem`, and the five L4 moments `MomentMatch`, `MomentBlend`,
+  `MomentReady`, `MomentPour`, `MomentRecap` on one `MomentStage`; each on
+  `/preview/ds-p5`. A moment plays its own haptic, so its caller plays none
 - Satoshi is gitignored (its licence; this repo is public): copy it in before
   Metro runs — `docs/RELEASING.md`, "Satoshi"
 
