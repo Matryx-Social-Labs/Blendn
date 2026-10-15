@@ -7,7 +7,6 @@ import { askIntentRoute, revealOffer, submitCheckIn, type CheckInOutcome } from 
 import { isExpectedRefusal } from './checkInRefusal'
 import { getCurrentLocation as getLocationFix, type CheckInLocation, type ShowTray } from './locationFix'
 import { Logger } from './logger'
-import { NotificationHelpers } from './notifications'
 import { useAuth } from './useAuth'
 import { useInteractionFeedback } from './useInteractionFeedback'
 
@@ -43,8 +42,6 @@ export type CheckedInOutcome =
 
 export type UseCheckInFlowOptions = {
   eventId: string
-  /** For the check-in notification; "Event" when not known yet. */
-  eventTitle?: string | null
   showTray: ShowTray
   closeTray: () => void
   /**
@@ -61,16 +58,14 @@ export type UseCheckInFlowOptions = {
   /**
    * `'tray'` (default) ends a check-in with "Checked in / Go to Chat", as the
    * event screen always has. `'none'` skips that one tray, for a screen that
-   * moves straight into the room — the reveal offer, "Why do you go out?" and
-   * the notification still happen, because they are about the user, not the
-   * screen.
+   * moves straight into the room — the reveal offer and "Why do you go out?"
+   * still happen, because they are about the user, not the screen.
    */
   afterSuccess?: 'tray' | 'none'
 }
 
 export function useCheckInFlow({
   eventId,
-  eventTitle,
   showTray,
   closeTray,
   onCheckedIn,
@@ -259,17 +254,6 @@ export function useCheckInFlow({
         } else if (askIntent) {
           // No tray to hang the question from, so it is asked straight away.
           router.push(askIntentRoute(eventId))
-        }
-
-        // Send check-in success notification to the user
-        try {
-          await NotificationHelpers.checkInNotification(
-            eventTitle || 'Event',
-            user.id
-          )
-        } catch (notificationError) {
-          Logger.warn('events', 'checkInNotification:failed', { error: notificationError as any })
-          // Don't fail check-in if notification fails
         }
 
         return 'checkedIn'

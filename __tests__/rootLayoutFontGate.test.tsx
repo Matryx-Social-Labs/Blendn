@@ -51,7 +51,6 @@ jest.mock('../lib/paywall', () => ({ notePathname: jest.fn() }))
 jest.mock('../lib/notifications', () => ({
   initializePushNotifications: jest.fn(async () => {}),
   removePushTokenFromProfile: jest.fn(async () => {}),
-  setupNotificationListener: () => ({ remove: () => {} }),
   setupNotificationResponseListener: () => ({ remove: () => {} }),
 }))
 jest.mock('../lib/socketClient', () => ({

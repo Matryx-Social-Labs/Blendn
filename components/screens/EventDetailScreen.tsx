@@ -1034,7 +1034,6 @@ export default function EventDetail() {
   // The check-in itself, shared with the Blend'n room's hold-to-check-in.
   const { checkingIn, celebrations, start: startCheckIn } = useCheckInFlow({
     eventId: String(id),
-    eventTitle,
     showTray,
     closeTray,
     onLocated: setUserLocation,

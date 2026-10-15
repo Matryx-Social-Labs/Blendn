@@ -11,7 +11,6 @@ import { ToastProvider } from '../components/Toast';
 import {
     initializePushNotifications,
     removePushTokenFromProfile,
-    setupNotificationListener,
     setupNotificationResponseListener
 } from '../lib/notifications';
 import { initSocketWithAppState, cleanup as cleanupSocket, disconnect as disconnectSocket } from '../lib/socketClient';
@@ -188,12 +187,10 @@ function RootLayout() {
   }, [pathname]);
 
   useEffect(() => {
-    // Set up notification listeners once
-    const notificationListener = setupNotificationListener();
+    // Set up the notification tap listener once
     const responseListener = setupNotificationResponseListener();
 
     return () => {
-      notificationListener?.remove?.();
       responseListener?.remove?.();
     };
   }, []);
