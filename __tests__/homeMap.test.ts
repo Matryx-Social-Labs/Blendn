@@ -531,7 +531,7 @@ describe('"my location"', () => {
     // MapLibre iOS jumps (drive, 2026-10-15): flat first, or a tilted camera put Bengaluru a kilometre from
     // Saarbrücken; the zoom last, once tilted, or it lands a step out. And the opening zoom set again once tilted.
     expect(component).toMatch(
-      /stop\(\{ zoom: view\.current\.zoom, pitch: 0, [^}]*\}\)\s*stop\(\{ center: move\.to, pitch: [^}]*duration: 0 \}\)\s*stop\(\{ center: move\.to, zoom: move\.at\?\.zoom \?\? view\.current\.zoom/
+      /const \{ zoom, pitch \} = move\.at \?\? MAP_THEME\.camera\s*stop\(\{ zoom: view\.current\.zoom, pitch: 0, [^}]*\}\)\s*stop\(\{ center: move\.to, pitch, padding: pad, duration: 0 \}\)\s*stop\(\{ center: move\.to, zoom, padding: pad, duration: 0 \}\)/
     )
     // Once: a style that loads again does not send the camera back to where it opened (review L2).
     expect(component).toMatch(/if \(!ready\.current\) \{\s*ready\.current = true[\s\S]{0,300}stop\(\{ center: opening, zoom: MAP_THEME\.camera\.zoom, padding: shown\.current\.padding, duration: 0 \}\)/)

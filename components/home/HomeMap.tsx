@@ -251,9 +251,11 @@ export const HomeMap = memo(function HomeMap({
      * at the tilt it starts from and keeps that height across latitudes, so the
      * zoom goes last, once the camera is there and tilted, with the centre again.
      */
+    // It lands at the map's own zoom and tilt: the last zoom the map reported can be the one it opened at, before its fix (drive, review round).
+    const { zoom, pitch } = move.at ?? MAP_THEME.camera
     stop({ zoom: view.current.zoom, pitch: 0, padding: pad, duration: 0 })
-    stop({ center: move.to, pitch: move.at?.pitch ?? view.current.pitch, padding: pad, duration: 0 })
-    stop({ center: move.to, zoom: move.at?.zoom ?? view.current.zoom, padding: pad, duration: 0 })
+    stop({ center: move.to, pitch, padding: pad, duration: 0 })
+    stop({ center: move.to, zoom, padding: pad, duration: 0 })
   }
 
   /*
