@@ -315,15 +315,42 @@ export function lightSignature(pins: Pin[], view: { centre: [number, number]; zo
 }
 
 /**
- * Whether the camera goes to the city's centre. A city picked in the Pulse is
- * the person asking: always. The city resolved at launch only when there is
- * nothing better — no fix of their own and no map they have moved: on a phone
- * the first drive found it dragging people from where they stood to the middle
- * of town.
+ * Whether the camera goes to the city's centre. A city chosen in the city
+ * picker is the person asking: always, even the city the map already shows,
+ * and even after they moved the map (owner, 2026-10-15). A city the app decided
+ * — stored, inferred, or a better guess later — only when there is nothing
+ * better: no fix of their own and no map they have moved. On a phone the first
+ * drive found it dragging people from where they stood to the middle of town.
  */
-export function shouldFollowCity(s: { firstCity: boolean; hasFix: boolean; touched: boolean }): boolean {
-  if (!s.firstCity) return true
-  return !s.hasFix && !s.touched
+export function shouldFollowCity(s: { picked: boolean; hasFix: boolean; touched: boolean }): boolean {
+  return s.picked || (!s.hasFix && !s.touched)
+}
+
+/**
+ * How the camera gets somewhere (design kit motion #41). Within a city it
+ * eases; across cities there is no flight — it jumps, under a fade of the
+ * map's ground. With Reduce Motion it just jumps. From nowhere known yet (the
+ * map not reporting where it is) counts as across.
+ */
+export function cameraMove(
+  from: [number, number] | null,
+  to: [number, number],
+  s: { easeMs: number; reduceMotion: boolean }
+): { duration: number; fade: boolean } {
+  if (s.reduceMotion) return { duration: 0, fade: false }
+  const across = !from || getDistanceKm(from[1], from[0], to[1], to[0]) > MAP_THEME.camera.acrossCityKm
+  return across ? { duration: 0, fade: true } : { duration: s.easeMs, fade: false }
+}
+
+/**
+ * Where "my location" takes the camera: the fix, at the map's own zoom and
+ * tilt. Null without a fix: the button asks for one instead.
+ */
+export function locateTarget(
+  fix: { latitude: number; longitude: number } | null
+): { center: [number, number]; zoom: number; pitch: number } | null {
+  if (!fix) return null
+  return { center: [fix.longitude, fix.latitude], zoom: MAP_THEME.camera.zoom, pitch: MAP_THEME.camera.pitch }
 }
 
 /** How far a fix must move before the camera follows it: past GPS jitter. */

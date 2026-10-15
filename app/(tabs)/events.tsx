@@ -365,11 +365,8 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
   const [cityOptions, setCityOptions] = useState<CityOption[]>([])
   const [deviceCity, setDeviceCity] = useState<string | null>(null)
   const [cityPickerOpen, setCityPickerOpen] = useState(false)
-  // Places browses the same city from the same spot (components/home/HomeShell.tsx).
-  useEffect(
-    () => onBrowse({ city: selectedCity, location: userLocation, ready: cityResolved, cityCentre: cityOptions.find((c) => c.city === selectedCity)?.centre ?? null }),
-    [onBrowse, selectedCity, userLocation, cityResolved, cityOptions]
-  )
+  // Bumped by every city the person chooses, so the map moves even to the city it already shows.
+  const [cityPick, setCityPick] = useState(0)
   const [userFirstName, setUserFirstName] = useState<string | null>(getFirstName(user?.name))
   const [showPreviewHint, setShowPreviewHint] = useState(false)
   const listRef = useRef<any>(null)
@@ -1061,6 +1058,20 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
       })
   }, [userLocation, getCurrentLocationQuietly])
 
+  // Places browses the same city from the same spot, and the map follows it (components/home/HomeShell.tsx).
+  useEffect(
+    () =>
+      onBrowse({
+        city: selectedCity,
+        location: userLocation,
+        ready: cityResolved,
+        cityCentre: cityOptions.find((c) => c.city === selectedCity)?.centre ?? null,
+        cityPick,
+        requestLocation: requestLocationIfNeeded,
+      }),
+    [onBrowse, selectedCity, userLocation, cityResolved, cityOptions, cityPick, requestLocationIfNeeded]
+  )
+
   // Check location permission status on mount (without requesting)
   useEffect(() => {
     const checkLocationPermission = async () => {
@@ -1496,6 +1507,7 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
    */
   const chooseCity = useCallback((city: string) => {
     setSelection({ city, source: 'chosen' })
+    setCityPick((n) => n + 1)
     setCityPickerOpen(false)
     void storeCity(city, 'chosen')
   }, [])

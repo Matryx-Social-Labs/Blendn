@@ -13,15 +13,18 @@ import {
 import { router } from 'expo-router'
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AppState, StyleSheet, useWindowDimensions, type NativeSyntheticEvent } from 'react-native'
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
 
 import { eventFromApi } from '../../lib/api'
 import { apiClient } from '../../lib/apiClient'
 import {
   backoffMs,
+  cameraMove,
   insideLastCircle,
   LIGHT_MIN_ZOOM,
   liveAt,
   loadPins,
+  locateTarget,
   roundQuery,
   shadeOf,
   shouldFollowCity,
@@ -43,7 +46,8 @@ import {
 } from '../../lib/mapStyleEmber'
 import { MAP_THEME } from '../../lib/mapTheme'
 import { SPACE } from '../../lib/theme'
-import { Chips, CityBuildings, GroundGlow, LitBuildings, OwnBuildings } from './MapLitLayers'
+import { LocateButton } from './LocateButton'
+import { Chips, CityBuildings, GroundGlow, LitBuildings, OwnBuildings, useReduceMotion } from './MapLitLayers'
 import { useMapLighting, type Collection, type MapView, type Segment } from './useMapLighting'
 
 /** Where the map opens before the phone has a fix: central Bengaluru. */
@@ -56,6 +60,8 @@ const PIN_LIMIT = 50
 const LIVE_TICK_MS = 60_000
 
 type Point = { type: 'Point'; coordinates: [number, number] }
+/** A camera move: where to, how long an ease within a city takes, and a zoom and tilt to arrive at. */
+type Move = { to: [number, number]; easeMs: number; at?: { zoom: number; pitch: number } }
 type PinFeature = { type: 'Feature'; id: string; geometry: Point; properties: { id: string; kind: string; glow: number; color: string } }
 
 const NO_PINS: Pin[] = []
@@ -104,7 +110,12 @@ const pinApi = {
  *   Elsewhere, OpenFreeMap's, lit by a copy (stage 1).
  * - **The camera keeps what matters above the drawer**: every move carries the
  *   drawer's height as padding, from the first frame. A move asked for before
- *   the map is ready is made once it is.
+ *   the map is ready is made once it is. Within a city a move eases; across
+ *   cities it jumps under a fade of the map's ground (`cameraMove`).
+ * - **A city chosen in the picker always moves the map** (`cityPick`), even to
+ *   the city it shows; a city the app decided never takes it from your fix.
+ * - **"My location"** (`LocateButton`) brings the map back to your fix, or asks
+ *   for one through the Pulse's own location flow (`requestLocation`).
  * - **The check-in boundary is never drawn.** No payload carries it; every
  *   lit shape is a public building outline or a public pin, sized by
  *   `lib/mapTheme.ts` alone.
@@ -112,6 +123,9 @@ const pinApi = {
 export const HomeMap = memo(function HomeMap({
   center,
   cityCentre,
+  cityPick,
+  requestLocation,
+  locateVisible,
   segment,
   topInset,
   bottomInset,
@@ -119,8 +133,14 @@ export const HomeMap = memo(function HomeMap({
   glowVisible,
 }: {
   center: { latitude: number; longitude: number } | null
-  /** The picked city's centre: the map goes there whenever the city changes. */
+  /** The selected city's centre (`shouldFollowCity` says when the map goes there). */
   cityCentre: { latitude: number; longitude: number } | null
+  /** Bumped by every city chosen in the picker: the map goes to it, even the city it shows. */
+  cityPick: number
+  /** Ask for the phone's position (the Pulse's own permission and "Turn on location" flow). */
+  requestLocation: () => void
+  /** The drawer leaves room for the "my location" button. */
+  locateVisible: boolean
   segment: Segment
   /** Where the top bar ends, so the attribution is not under it. */
   topInset: number
@@ -134,8 +154,18 @@ export const HomeMap = memo(function HomeMap({
   const { width, height } = useWindowDimensions()
   const map = useRef<MapRef>(null)
   const camera = useRef<CameraRef>(null)
-  // The person has moved the map: the first live fix no longer takes it over.
+  // The person has moved the map (a pan, or a city picked): a fix no longer takes it over.
   const touched = useRef(false)
+  // The same, for the "my location" button to draw: filled while the map follows the fix.
+  const [moved, setMoved] = useState(false)
+  const setTouched = (on: boolean) => {
+    touched.current = on
+    setMoved(on)
+  }
+  const reduceMotion = useReduceMotion()
+  // Across cities the map's ground covers the jump, then fades off it.
+  const fade = useSharedValue(0)
+  const fadeStyle = useAnimatedStyle(() => ({ opacity: fade.get() }))
   const followedFix = useRef<{ latitude: number; longitude: number } | null>(null)
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null)
   // The last circle fully answered, and for which segment: a switch asks again.
@@ -154,13 +184,19 @@ export const HomeMap = memo(function HomeMap({
   }, [bottomInset])
   // A move asked for before the map is ready is dropped by native: hold it until it is (review H3).
   const ready = useRef(false)
-  const pendingMove = useRef<{ center: [number, number]; duration: number } | null>(null)
-  const moveTo = (to: [number, number], duration: number) => {
+  const pendingMove = useRef<Move | null>(null)
+  /** Within a city, an ease of `easeMs`; across cities, a jump under the fade (`cameraMove`). */
+  const moveTo = (move: Move) => {
     if (!ready.current) {
-      pendingMove.current = { center: to, duration }
+      pendingMove.current = move
       return
     }
-    camera.current?.easeTo({ center: to, padding: padding.current, duration })
+    const { duration, fade: fades } = cameraMove(view.current.centre, move.to, { easeMs: move.easeMs, reduceMotion })
+    if (fades) {
+      fade.set(1)
+      fade.set(withTiming(0, { duration: MAP_THEME.camera.fadeMs }))
+    }
+    camera.current?.easeTo({ center: move.to, ...move.at, padding: padding.current, duration })
   }
 
   const [query, setQuery] = useState<PinQuery | null>(null)
@@ -198,21 +234,35 @@ export const HomeMap = memo(function HomeMap({
   useEffect(() => {
     if (!center || !shouldFollowFix(followedFix.current, center, touched.current)) return
     followedFix.current = center
-    moveTo([center.longitude, center.latitude], 400)
-  }, [center])
+    moveTo({ to: [center.longitude, center.latitude], easeMs: 400 })
+  }, [center]) // eslint-disable-line react-hooks/exhaustive-deps -- only a new fix moves the camera here
 
-  // A city picked in the Pulse is a place to look at: follow it (`shouldFollowCity`).
+  // A city chosen in the picker is a place to look at; one the app decided only when you have no fix (`shouldFollowCity`).
   const cityLat = cityCentre?.latitude
   const cityLon = cityCentre?.longitude
-  const seenCity = useRef(false)
+  const seenPick = useRef(cityPick)
   const hasFix = center !== null
   useEffect(() => {
+    const picked = cityPick !== seenPick.current
+    seenPick.current = cityPick
     if (cityLat === undefined || cityLon === undefined) return
-    const firstCity = !seenCity.current
-    seenCity.current = true
-    if (!shouldFollowCity({ firstCity, hasFix, touched: touched.current })) return
-    moveTo([cityLon, cityLat], 600)
-  }, [cityLat, cityLon]) // eslint-disable-line react-hooks/exhaustive-deps -- a fix arriving is not a city change
+    if (!shouldFollowCity({ picked, hasFix, touched: touched.current })) return
+    // Choosing a city is moving the map yourself: the next fix must not drag it back.
+    if (picked) setTouched(true)
+    moveTo({ to: [cityLon, cityLat], easeMs: MAP_THEME.camera.easeMs })
+  }, [cityPick, cityLat, cityLon]) // eslint-disable-line react-hooks/exhaustive-deps -- a fix arriving is not a city change
+
+  // "My location": back to the fix and following it again, or ask for one.
+  const locate = () => {
+    setTouched(false)
+    const target = locateTarget(center)
+    if (!target) {
+      requestLocation()
+      return
+    }
+    followedFix.current = center
+    moveTo({ to: target.center, easeMs: MAP_THEME.camera.easeMs, at: { zoom: target.zoom, pitch: target.pitch } })
+  }
 
   useEffect(
     () => () => {
@@ -245,7 +295,7 @@ export const HomeMap = memo(function HomeMap({
 
   const onRegionDidChange = (e: NativeSyntheticEvent<ViewStateChangeEvent>) => {
     const { bounds, center: centre, zoom, pitch, userInteraction } = e.nativeEvent
-    if (userInteraction) touched.current = true
+    if (userInteraction) setTouched(true)
     view.current = { bounds: bounds as Bounds, centre: centre as [number, number], zoom, pitch }
     setOwnTiles((drawing) => drawsOwnBuildings(OWN_BUILDINGS_URL, bounds as Bounds, drawing))
     relight()
@@ -258,7 +308,7 @@ export const HomeMap = memo(function HomeMap({
     ready.current = true
     const held = pendingMove.current
     pendingMove.current = null
-    if (held) camera.current?.easeTo({ center: held.center, padding: padding.current, duration: held.duration })
+    if (held) moveTo(held)
     const m = map.current
     if (!m) return
     m.getViewState()
@@ -331,75 +381,84 @@ export const HomeMap = memo(function HomeMap({
   const style = useMemo(() => homeMapStyle(), [])
 
   return (
-    <Map
-      ref={map}
-      style={StyleSheet.absoluteFill}
-      mapStyle={style}
-      light={LIGHT}
-      logo={false}
-      attribution
-      attributionPosition={{ top: topInset + SPACE.sm, left: SPACE.sm }}
-      compass={false}
-      onRegionDidChange={onRegionDidChange}
-      onDidFinishLoadingMap={onLoaded}
-      // Each frame drawn with every tile loaded; the hook makes it one pass per new view or new pins.
-      // Not `onDidFinishRenderingMapFully`: on iOS that fires once, when the map first loads.
-      onDidFinishRenderingFrameFully={onFrame}
-      // No PII: which style host failed is all a fix needs.
-      onDidFailLoadingMap={() => Logger.error('events', 'Home map style failed to load', { styleHost: styleHost(style) })}
-      accessibilityLabel="Map of events and places"
-    >
-      <Camera
-        ref={camera}
-        initialViewState={{
-          center: startAt,
-          zoom: MAP_THEME.camera.zoom,
-          pitch: MAP_THEME.camera.pitch,
-          // The drawer covers the bottom of the map: the first frame keeps its centre in the part you can see.
-          padding: { bottom: bottomInset },
-        }}
-      />
-      {/*
-       * `mode` passed explicitly: MLRN's Android component starts in COMPASS render mode and applies `mode`
-       * only when given, so the puck followed the compass and the map redrew about 7 times a second forever
-       * (measured on the emulator, step 2c drive). A plain puck redraws only when the fix moves.
-       */}
-      {center ? <NativeUserLocation mode="default" /> : null}
-      {/*
-       * Remounted together when the building source switches: the glow goes under
-       * the buildings and the lit copies over them, so they must be added after
-       * the buildings layer, in this order.
-       */}
-      <Fragment key={ownTiles ? 'own-buildings' : 'openfreemap-buildings'}>
-        {ownTiles && OWN_BUILDINGS_URL ? <OwnBuildings url={OWN_BUILDINGS_URL} states={lit.states} onOpen={open} /> : <CityBuildings />}
-        <GroundGlow data={lit.glow} visible={glowVisible} under={buildingLayerId} />
-        <LitBuildings data={lit.bands} onPress={openPlace} over={buildingLayerId} />
-      </Fragment>
-      <GeoJSONSource id="pins" data={pinData} onPress={openPlace}>
-        <Layer
-          id="pin-glow"
-          type="circle"
-          maxzoom={LIGHT_MIN_ZOOM}
-          paint={{
-            'circle-color': ['get', 'color'],
-            'circle-radius': ['*', ['get', 'glow'], MAP_THEME.pin.glowPxPerStep],
-            'circle-blur': 1,
-            'circle-opacity': MAP_THEME.pin.glowOpacity,
+    <>
+      <Map
+        ref={map}
+        style={StyleSheet.absoluteFill}
+        mapStyle={style}
+        light={LIGHT}
+        logo={false}
+        attribution
+        attributionPosition={{ top: topInset + SPACE.sm, left: SPACE.sm }}
+        compass={false}
+        onRegionDidChange={onRegionDidChange}
+        onDidFinishLoadingMap={onLoaded}
+        // Each frame drawn with every tile loaded; the hook makes it one pass per new view or new pins.
+        // Not `onDidFinishRenderingMapFully`: on iOS that fires once, when the map first loads.
+        onDidFinishRenderingFrameFully={onFrame}
+        // No PII: which style host failed is all a fix needs.
+        onDidFailLoadingMap={() => Logger.error('events', 'Home map style failed to load', { styleHost: styleHost(style) })}
+        accessibilityLabel="Map of events and places"
+      >
+        <Camera
+          ref={camera}
+          initialViewState={{
+            center: startAt,
+            zoom: MAP_THEME.camera.zoom,
+            pitch: MAP_THEME.camera.pitch,
+            // The drawer covers the bottom of the map: the first frame keeps its centre in the part you can see.
+            padding: { bottom: bottomInset },
           }}
         />
-        <Layer
-          id="pin-dot"
-          type="circle"
-          maxzoom={LIGHT_MIN_ZOOM}
-          paint={{
-            'circle-color': ['get', 'color'],
-            'circle-radius': MAP_THEME.pin.dotRadiusPx,
-            'circle-stroke-color': MAP_THEME.pin.dotStroke,
-            'circle-stroke-width': MAP_THEME.pin.dotStrokePx,
-          }}
-        />
-      </GeoJSONSource>
-      <Chips chips={lit.chips} onOpen={open} />
-    </Map>
+        {/*
+         * `mode` passed explicitly: MLRN's Android component starts in COMPASS render mode and applies `mode`
+         * only when given, so the puck followed the compass and the map redrew about 7 times a second forever
+         * (measured on the emulator, step 2c drive). A plain puck redraws only when the fix moves.
+         */}
+        {center ? <NativeUserLocation mode="default" /> : null}
+        {/*
+         * Remounted together when the building source switches: the glow goes under
+         * the buildings and the lit copies over them, so they must be added after
+         * the buildings layer, in this order.
+         */}
+        <Fragment key={ownTiles ? 'own-buildings' : 'openfreemap-buildings'}>
+          {ownTiles && OWN_BUILDINGS_URL ? <OwnBuildings url={OWN_BUILDINGS_URL} states={lit.states} onOpen={open} /> : <CityBuildings />}
+          <GroundGlow data={lit.glow} visible={glowVisible} under={buildingLayerId} />
+          <LitBuildings data={lit.bands} onPress={openPlace} over={buildingLayerId} />
+        </Fragment>
+        <GeoJSONSource id="pins" data={pinData} onPress={openPlace}>
+          <Layer
+            id="pin-glow"
+            type="circle"
+            maxzoom={LIGHT_MIN_ZOOM}
+            paint={{
+              'circle-color': ['get', 'color'],
+              'circle-radius': ['*', ['get', 'glow'], MAP_THEME.pin.glowPxPerStep],
+              'circle-blur': 1,
+              'circle-opacity': MAP_THEME.pin.glowOpacity,
+            }}
+          />
+          <Layer
+            id="pin-dot"
+            type="circle"
+            maxzoom={LIGHT_MIN_ZOOM}
+            paint={{
+              'circle-color': ['get', 'color'],
+              'circle-radius': MAP_THEME.pin.dotRadiusPx,
+              'circle-stroke-color': MAP_THEME.pin.dotStroke,
+              'circle-stroke-width': MAP_THEME.pin.dotStrokePx,
+            }}
+          />
+        </GeoJSONSource>
+        <Chips chips={lit.chips} onOpen={open} />
+      </Map>
+      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.fade, fadeStyle]} />
+      <LocateButton visible={locateVisible} following={hasFix && !moved} bottom={bottomInset + SPACE.lg} onPress={locate} />
+    </>
   )
+})
+
+const styles = StyleSheet.create({
+  // The map's own ground, so a jump between cities reads as the one surface fading, not a black flash.
+  fade: { backgroundColor: MAP_THEME.base.ground },
 })

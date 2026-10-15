@@ -3,7 +3,8 @@
  * one place (step 2c).
  *
  * PROVISIONAL. The owner approved the look of prototype v2 on 2026-10-09
- * (`.context/prototypes/3d-map/`, research §4.2) and will redesign the whole
+ * (`.context/prototypes/3d-map/`, research §4.2), and the brighter, labelled
+ * night basemap (variant B) on 2026-10-15, and will redesign the whole
  * app from a Claude Design link; a map redesign is meant to be an edit to this
  * file alone. Nothing else under `lib/` or `components/` holds a map colour,
  * height, radius, timing or light setting (`__tests__/mapLit.test.ts`).
@@ -33,23 +34,49 @@ const ORCHID = '#D277C4'
 const EMBER_GLOW = '#FF6A3D'
 
 export const MAP_THEME = {
-  /** Where the map opens: close enough that a lit building and a beacon read as 3D, tilted so they stand up. */
-  camera: { zoom: 16, pitch: 55 },
+  camera: {
+    /** Where the map opens (and where "my location" goes back to): close enough that a lit building and a beacon read as 3D, tilted so they stand up. */
+    zoom: 16,
+    pitch: 55,
+    /** Farther than this from where the map is, a move is to another city: no flight, a jump under a fade (design kit motion #41). */
+    acrossCityKm: 30,
+    /** Within a city, the camera eases this long. */
+    easeMs: 600,
+    /** Across cities, the map's ground fades off the jump this long. */
+    fadeMs: 200,
+  },
 
   /**
-   * The basemap: the prototype's night palette. None of these are tokens: they
-   * are the map's own neutrals, dark and cool, so the only warm, saturated
-   * colour on the map is ours (the first device drive read warm-brown).
+   * The basemap: variant B of the contrast prototype (owner, 2026-10-15;
+   * `.context/prototypes/map-contrast/REPORT.md`). None of these are tokens:
+   * they are the map's own neutrals, dark and cool, so the only warm, saturated
+   * colour on the map is ours. The streets read as lines you can follow (every
+   * road 2:1 or more on the ground); water and park are hue steps, not light ones.
    */
   base: {
-    ground: '#0D0C0D',
-    park: '#121813',
-    water: '#0B121B',
-    roadMinor: '#1B191A',
-    roadMajor: '#262223',
-    roadMotorway: '#2E2828',
-    label: '#6F696B',
-    labelHalo: '#0B0A0B',
+    ground: '#14131C',
+    park: '#152A1E',
+    water: '#132C47',
+    roadMinor: '#4B4A56',
+    roadMajor: '#585764',
+    /** Major roads below the buildings' zoom: 2.4:1, so they do not compete with the pin dots there. */
+    roadMajorFar: '#53525F',
+    /** Under secondary roads and up, a pixel each side, from the buildings' zoom. */
+    roadMajorCasing: '#605F6C',
+    roadMotorway: '#5D5C69',
+    /** Road and street names: 5.3:1 on the halo (4.5:1 is the floor). */
+    label: '#868495',
+    labelHalo: '#0E0D15',
+  },
+
+  /** Names beyond the roads: streets at walking zoom, water, neighbourhoods and places. */
+  labels: {
+    /** Street names (minor, service and pedestrian streets) from this zoom. */
+    streetMinZoom: 15,
+    /** Neighbourhood, suburb, town and city names. 6.9:1 on the halo. */
+    place: '#9A98AA',
+    /** River and lake names, in italic. 5.3:1 on the halo. */
+    water: '#6A89AD',
   },
 
   /**
@@ -62,10 +89,10 @@ export const MAP_THEME = {
     minZoom: 14,
     /** `[height in metres, colour]`, interpolated linearly. */
     ramp: [
-      [0, '#141416'],
-      [15, '#1A1A1F'],
-      [40, '#222228'],
-      [90, '#2C2C33'],
+      [0, '#1F1E27'],
+      [15, '#26252F'],
+      [40, '#2F2E39'],
+      [90, '#3A3944'],
     ],
   },
 

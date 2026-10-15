@@ -23,7 +23,7 @@ import {
   type LitPlace,
   type Ring,
 } from '../lib/mapLit'
-import { buildingHeights, CITY_BUILDINGS, cityColour } from '../lib/mapStyleEmber'
+import { buildingHeights, CITY_BUILDINGS, cityColour, EMBER_MAP_STYLE, LABELS_FROM_LAYER_ID } from '../lib/mapStyleEmber'
 import { MAP_THEME } from '../lib/mapTheme'
 import { EMBER } from '../lib/theme'
 
@@ -365,18 +365,62 @@ describe("the map theme is the one place for the map's look", () => {
   const contrast = (a: string, b: string) => (Math.max(lum(a), lum(b)) + 0.05) / (Math.min(lum(a), lum(b)) + 0.05)
 
   it('keeps every colour that carries a lit place at 3:1 or more on the ground (WCAG 1.4.11)', () => {
-    // The crowns and roofs (most of what shows at a tilt), the top of the walls, the glows and the beacons; a wall's foot is shading.
+    // The crowns and roofs (most of what shows at a tilt), live or not, the top of the walls, the glows and the beacons; a wall's foot is shading.
     const carrying = [
       MAP_THEME.event.walls[1],
       MAP_THEME.event.crown,
+      MAP_THEME.event.liveCrown,
       MAP_THEME.event.glow,
       MAP_THEME.venue.walls[1],
       MAP_THEME.venue.crown,
+      MAP_THEME.venue.liveCrown,
       MAP_THEME.venue.glow,
       ...MAP_THEME.beacon.event,
       ...MAP_THEME.beacon.venue,
     ]
     for (const c of carrying) expect(contrast(c, MAP_THEME.base.ground)).toBeGreaterThanOrEqual(3)
+  })
+
+  it('draws every road at 2:1 or more on the ground, so a street is a line you can follow (variant B)', () => {
+    const { ground, roadMinor, roadMajor, roadMajorFar, roadMajorCasing, roadMotorway } = MAP_THEME.base
+    for (const road of [roadMinor, roadMajor, roadMajorFar, roadMajorCasing, roadMotorway]) expect(contrast(road, ground)).toBeGreaterThanOrEqual(2)
+  })
+
+  it('steps the major roads down below the buildings\' zoom, so the pin dots stay brighter there (REPORT.md, trade-off a)', () => {
+    const { ground, roadMajor, roadMajorFar } = MAP_THEME.base
+    expect(contrast(roadMajorFar, ground)).toBeLessThan(contrast(roadMajor, ground))
+    expect(contrast(roadMajorFar, ground)).toBeLessThanOrEqual(2.45)
+    const dots = [...Object.values(MAP_THEME.pin.event), ...Object.values(MAP_THEME.pin.venue)]
+    for (const dot of dots) expect(contrast(dot, ground)).toBeGreaterThan(contrast(roadMajorFar, ground) + 1.5)
+    const majors = EMBER_MAP_STYLE.layers.filter((l) => ['road_secondary_tertiary', 'road_trunk_primary', 'road_motorway'].includes(l.id))
+    expect(majors).toHaveLength(3)
+    for (const l of majors) expect((l.paint as Record<string, unknown>)['line-color']).toEqual(['step', ['zoom'], roadMajorFar, MAP_THEME.city.minZoom, expect.any(String)])
+  })
+
+  it('keeps every name at 4.5:1 or more against its halo and the ground (WCAG 1.4.3)', () => {
+    const { ground, label, labelHalo } = MAP_THEME.base
+    for (const text of [label, MAP_THEME.labels.place, MAP_THEME.labels.water]) {
+      expect(contrast(text, labelHalo)).toBeGreaterThanOrEqual(4.5)
+      expect(contrast(text, ground)).toBeGreaterThanOrEqual(4.5)
+    }
+  })
+
+  it('names the streets from walking zoom, the river and the neighbourhoods, over the buildings (variant B)', () => {
+    const ids = EMBER_MAP_STYLE.layers.map((l) => l.id)
+    const over = ids.indexOf(LABELS_FROM_LAYER_ID)
+    for (const id of ['highway-name-minor', 'waterway-name', 'water-name', 'label_neighbourhood']) expect(ids.indexOf(id)).toBeGreaterThan(over)
+    const streets = EMBER_MAP_STYLE.layers.find((l) => l.id === 'highway-name-minor')
+    expect(streets).toMatchObject({ 'source-layer': 'transportation_name', minzoom: MAP_THEME.labels.streetMinZoom })
+    expect(MAP_THEME.labels.streetMinZoom).toBe(15)
+    // Pedestrian streets are drawn and named: a pedestrianised centre had no streets at all.
+    for (const id of ['road_minor', 'highway-name-minor']) {
+      expect(JSON.stringify(EMBER_MAP_STYLE.layers.find((l) => l.id === id))).toContain('"pedestrian"')
+    }
+    // The casings sit under the roads they case, from the buildings' zoom.
+    for (const id of ['road_secondary_tertiary_casing', 'road_trunk_primary_casing']) {
+      expect(ids.indexOf(id)).toBeLessThan(ids.indexOf('road_minor'))
+      expect(EMBER_MAP_STYLE.layers.find((l) => l.id === id)).toMatchObject({ minzoom: MAP_THEME.city.minZoom })
+    }
   })
 
   it('keeps the city calm and cool: darker than anything lit, never warmer than it is blue, yet above the ground', () => {
@@ -394,6 +438,8 @@ describe("the map theme is the one place for the map's look", () => {
     expect(MAP_THEME.light.anchor).toBe('map')
     expect(MAP_THEME.light.intensity).toBeGreaterThanOrEqual(0.3)
     expect(MAP_THEME.light.intensity).toBeLessThanOrEqual(0.5)
+    // Variant B left the light alone (variant C's 0.6 cost the lit buildings their lead).
+    expect(MAP_THEME.light.intensity).toBe(0.45)
     const [r, , b] = [1, 3, 5].map((i) => parseInt(MAP_THEME.light.color.slice(i, i + 2), 16))
     expect(b).toBeGreaterThanOrEqual(r)
   })

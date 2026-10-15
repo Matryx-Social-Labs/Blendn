@@ -663,8 +663,21 @@ empty states. Design ticket: SCRUM-541.
   past six days), or a venue glyph and its bucket; a screen reader hears plain
   words. Tap a pin, a lit building or a chip to open it. An event lights up
   when its doors open, without a new read. The camera keeps its centre above
-  the drawer from the first frame, follows the picked city and your first
-  location fix (until you move the map yourself), and shows your position.
+  the drawer from the first frame, follows your location fix (until you move
+  the map yourself), and shows your position. **A city chosen in the city
+  picker always moves the map**, even the city it already shows; a city the app
+  decided (stored or inferred) never takes the map from your fix. Within a city
+  a move eases (600 ms); across cities there is no flight — it jumps under a
+  200 ms fade of the map's ground (design kit motion #41); with Reduce Motion it
+  just jumps. **"My location"** (`LocateButton.tsx`, PLACEHOLDER, design ticket
+  SCRUM-667) sits bottom-right above the drawer, hidden at `full`: filled while
+  the map follows you, outlined once you have moved it; a tap brings the map
+  back to your fix, or with no fix runs the Pulse's own location flow (the OS
+  ask, or its "Turn on location" tray). **The basemap is variant B** of the
+  contrast prototype (2026-10-15): streets 2:1 or more on the ground, with
+  pedestrian streets drawn, major roads cased from the buildings' zoom and a
+  step dimmer below it, street names from zoom 15, river, lake and
+  neighbourhood names, every name 4.5:1 or more on its halo.
   OpenFreeMap's attribution stays on (the OpenStreetMap licence), under the
   top bar; the style can be moved off OpenFreeMap with
   `EXPO_PUBLIC_MAP_STYLE_URL`. Inside a city our own building tiles cover

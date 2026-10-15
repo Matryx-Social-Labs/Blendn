@@ -4,11 +4,13 @@ import { join } from 'path'
 import {
   backoffMs,
   buildingUnder,
+  cameraMove,
   insideLastCircle,
   lightCandidates,
   lightSignature,
   liveAt,
   loadPins,
+  locateTarget,
   MAX_QUERY_RADIUS_KM,
   pinsFor,
   roundQuery,
@@ -153,9 +155,9 @@ describe('the building a pin lights', () => {
 /** Read as source: a layer that draws the boundary renders fine and is wrong. */
 const code = (rel: string) =>
   readFileSync(join(__dirname, '..', rel), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+const component = code('components/home/HomeMap.tsx')
 
 describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
-  const component = code('components/home/HomeMap.tsx')
   // The map's own layers live in two files: the component and its lit layers.
   const layers = component + code('components/home/MapLitLayers.tsx')
   // Everything that decides what the map draws: the component, its layers, its lighting, its pure parts, its style and its theme.
@@ -338,16 +340,91 @@ describe('the map style can move without a release (step 2 review)', () => {
   })
 })
 
-describe('the map and the city (step 2 drive)', () => {
-  it("follows a city the person picks, but the city resolved at launch never takes the map from their own position", () => {
-    // Launch: the city arrives after the fix — the fix wins.
-    expect(shouldFollowCity({ firstCity: true, hasFix: true, touched: false })).toBe(false)
-    // Launch with no fix: the city is the best place to look.
-    expect(shouldFollowCity({ firstCity: true, hasFix: false, touched: false })).toBe(true)
+describe('the map and the city (step 2 drive; owner, 2026-10-15)', () => {
+  it('moves to a city chosen in the picker, even the one it shows: a re-pick is a pick', () => {
+    // The owner, in Saarbrücken with a fix, picked Bengaluru — the only city on staging — and nothing moved.
+    expect(shouldFollowCity({ picked: true, hasFix: true, touched: false })).toBe(true)
+  })
+
+  it('moves to a city picked after the person panned the map', () => {
+    expect(shouldFollowCity({ picked: true, hasFix: true, touched: true })).toBe(true)
+    expect(shouldFollowCity({ picked: true, hasFix: false, touched: true })).toBe(true)
+  })
+
+  it('never lets a city the app decided take the map from where the person stands', () => {
+    // Launch: the stored or inferred city arrives after the fix — the fix wins.
+    expect(shouldFollowCity({ picked: false, hasFix: true, touched: false })).toBe(false)
+    // A better guess later (the device city) is not a pick either.
+    expect(shouldFollowCity({ picked: false, hasFix: true, touched: true })).toBe(false)
     // Launch after the person already moved the map: theirs.
-    expect(shouldFollowCity({ firstCity: true, hasFix: false, touched: true })).toBe(false)
-    // A later pick is the person asking: follow it, fix or not.
-    expect(shouldFollowCity({ firstCity: false, hasFix: true, touched: true })).toBe(true)
+    expect(shouldFollowCity({ picked: false, hasFix: false, touched: true })).toBe(false)
+  })
+
+  it('goes to a city the app decided when there is nothing better: no fix, no map moved', () => {
+    expect(shouldFollowCity({ picked: false, hasFix: false, touched: false })).toBe(true)
+  })
+})
+
+describe('how the camera gets there (design kit motion #41)', () => {
+  const saarbruecken: [number, number] = [6.9965, 49.2354]
+  const bengaluru: [number, number] = [77.5946, 12.9716]
+  const indiranagar: [number, number] = [77.6408, 12.9784]
+  const ease = { easeMs: MAP_THEME.camera.easeMs, reduceMotion: false }
+
+  it('eases within a city, in 600 ms or less', () => {
+    expect(cameraMove(bengaluru, indiranagar, ease)).toEqual({ duration: MAP_THEME.camera.easeMs, fade: false })
+    expect(MAP_THEME.camera.easeMs).toBeLessThanOrEqual(600)
+  })
+
+  it('jumps across cities, under a 200 ms fade: no flight', () => {
+    expect(cameraMove(saarbruecken, bengaluru, ease)).toEqual({ duration: 0, fade: true })
+    expect(MAP_THEME.camera.fadeMs).toBe(200)
+  })
+
+  it('draws the line between the two at the theme distance', () => {
+    const km = MAP_THEME.camera.acrossCityKm
+    // Due north, one degree of latitude is ~111.2 km.
+    const north = (d: number): [number, number] => [bengaluru[0], bengaluru[1] + d / 111.195]
+    expect(cameraMove(bengaluru, north(km - 1), ease).fade).toBe(false)
+    expect(cameraMove(bengaluru, north(km + 1), ease).fade).toBe(true)
+    expect(km).toBe(30)
+  })
+
+  it('jumps from nowhere known (the map has not said where it is yet)', () => {
+    expect(cameraMove(null, bengaluru, ease)).toEqual({ duration: 0, fade: true })
+  })
+
+  it('just jumps with Reduce Motion, near or far', () => {
+    expect(cameraMove(bengaluru, indiranagar, { ...ease, reduceMotion: true })).toEqual({ duration: 0, fade: false })
+    expect(cameraMove(saarbruecken, bengaluru, { ...ease, reduceMotion: true })).toEqual({ duration: 0, fade: false })
+  })
+})
+
+describe('"my location"', () => {
+  it('goes to the fix at the map\'s own zoom and tilt', () => {
+    expect(locateTarget({ latitude: 49.2354, longitude: 6.9965 })).toEqual({
+      center: [6.9965, 49.2354],
+      zoom: MAP_THEME.camera.zoom,
+      pitch: MAP_THEME.camera.pitch,
+    })
+  })
+
+  it('has nowhere to go without a fix: the button asks for one instead', () => {
+    expect(locateTarget(null)).toBeNull()
+  })
+
+  it('is wired: a tap with no fix asks through the Pulse, and every move takes the one camera rule', () => {
+    expect(component).toMatch(/const target = locateTarget\(center\)\s*if \(!target\) \{\s*requestLocation\(\)/)
+    expect(component).toMatch(/cameraMove\(view\.current\.centre, move\.to/)
+    // Hidden while the drawer is full.
+    expect(code('components/home/HomeShell.tsx')).toMatch(/locateVisible=\{snap !== 'full'\}/)
+    // A re-pick changes no coordinates: the effect is keyed on the pick itself.
+    expect(component).toMatch(/\}, \[cityPick, cityLat, cityLon\]\)/)
+    // The fade never takes a touch: the map under it is live.
+    expect(component).toMatch(/<Animated\.View pointerEvents="none"/)
+    // The Pulse hands over its own location flow; it never grows a second one.
+    expect(code('app/(tabs)/events.tsx')).toMatch(/requestLocation: requestLocationIfNeeded/)
+    expect(code('app/(tabs)/events.tsx')).toMatch(/setSelection\(\{ city, source: 'chosen' \}\)\s*setCityPick\(\(n\) => n \+ 1\)/)
   })
 })
 

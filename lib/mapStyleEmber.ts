@@ -5,10 +5,12 @@
  * needs: land, water, parks, roads, buildings and place names. No POI icons
  * (no sprite), no road shields, no boundaries.
  *
- * Muted so the lit buildings are the brightest thing on it: roads a step above
- * the ground, labels low-contrast, buildings an opaque cool dark grey that gets
- * lighter with height. Every colour and size is `lib/mapTheme.ts`. The tiles
- * carry no Blendn data.
+ * Quiet, so the lit buildings are the brightest thing on it, but readable: the
+ * streets are lines you can follow (pedestrian streets too) and are named at
+ * walking zoom, the river and the neighbourhoods are named, and the buildings
+ * are an opaque cool dark grey that gets lighter with height (variant B,
+ * 2026-10-15). Every colour and size is `lib/mapTheme.ts`. The tiles carry no
+ * Blendn data.
  *
  * Free, no key: OpenFreeMap. Its attribution stays on (`HomeMap.tsx`), as the
  * OpenStreetMap licence requires. OpenFreeMap has no SLA, so the style can be
@@ -33,35 +35,75 @@ import { MAP_THEME } from './mapTheme'
 
 // The spec's own property types, read off the layer types the package exports.
 type LineWidth = NonNullable<LineLayerSpecification['paint']>['line-width']
+type LineColor = NonNullable<LineLayerSpecification['paint']>['line-color']
 type TextSize = NonNullable<SymbolLayerSpecification['layout']>['text-size']
 type TextField = NonNullable<SymbolLayerSpecification['layout']>['text-field']
 type ExtrusionColor = NonNullable<FillExtrusionLayerSpecification['paint']>['fill-extrusion-color']
 
-const { ground: GROUND, park: PARK, water: WATER, roadMinor: ROAD_MINOR, roadMajor: ROAD_MAJOR, roadMotorway: ROAD_MOTORWAY, label: LABEL, labelHalo: LABEL_HALO } =
-  MAP_THEME.base
+const {
+  ground: GROUND,
+  park: PARK,
+  water: WATER,
+  roadMinor: ROAD_MINOR,
+  roadMajor: ROAD_MAJOR,
+  roadMajorFar: ROAD_MAJOR_FAR,
+  roadMajorCasing: ROAD_MAJOR_CASING,
+  roadMotorway: ROAD_MOTORWAY,
+  label: LABEL,
+  labelHalo: LABEL_HALO,
+} = MAP_THEME.base
+const LABELS = MAP_THEME.labels
 
 const NAME: TextField = ['coalesce', ['get', 'name_en'], ['get', 'name']]
 const FONT = ['Noto Sans Regular']
+const ITALIC = ['Noto Sans Italic']
+const HALO = { 'text-halo-color': LABEL_HALO, 'text-halo-width': 1 }
 
-const road = (id: string, classes: string[], color: string, width: LineWidth): LineLayerSpecification => ({
+/**
+ * A pedestrian street (OpenMapTiles class `path`, subclass `pedestrian`) is a
+ * street on foot: drawn and named as a minor road. Left out, a pedestrianised
+ * centre (Saarbrücken's) had no streets at all.
+ */
+const PEDESTRIAN = ['all', ['==', ['get', 'class'], 'path'], ['==', ['get', 'subclass'], 'pedestrian']]
+/** Features of these classes (and pedestrian streets, if asked). */
+const ofClass = (classes: string[], pedestrian = false) => {
+  const match = ['match', ['get', 'class'], classes, true, false]
+  return (pedestrian ? ['any', match, PEDESTRIAN] : match) as FilterSpecification
+}
+
+const road = (id: string, classes: string[], color: LineColor, stops: number[], pedestrian = false): LineLayerSpecification => ({
   id,
   type: 'line',
   source: 'openmaptiles',
   'source-layer': 'transportation',
-  filter: ['all', ['match', ['get', 'brunnel'], ['tunnel'], false, true], ['match', ['get', 'class'], classes, true, false]],
+  filter: ['all', ['match', ['get', 'brunnel'], ['tunnel'], false, true], ofClass(classes, pedestrian)] as FilterSpecification,
   layout: { 'line-cap': 'round', 'line-join': 'round' },
-  paint: { 'line-color': color, 'line-width': width },
+  paint: { 'line-color': color, 'line-width': ['interpolate', ['exponential', 1.2], ['zoom'], ...stops] as LineWidth },
 })
 
-const place = (id: string, cls: string, minzoom: number, size: TextSize): SymbolLayerSpecification => ({
+/** `[zoom, width]` pairs, flat. */
+const MINOR_WIDTH = [13.5, 0, 14, 2, 20, 14]
+const SECONDARY_WIDTH = [6.5, 0, 8, 0.5, 20, 12]
+const PRIMARY_WIDTH = [5, 0, 7, 1, 20, 16]
+/** A casing is the road's own curve plus a pixel each side. */
+const cased = (stops: number[]) => stops.map((v, i) => (i % 2 === 1 && v !== 0 ? v + 2 : v))
+/** A casing shows from the buildings' zoom only: zoomed out it just makes the network heavy. */
+const casing = (id: string, classes: string[], stops: number[]): LineLayerSpecification => ({
+  ...road(id, classes, ROAD_MAJOR_CASING, cased(stops)),
+  minzoom: MAP_THEME.city.minZoom,
+})
+/** Below the buildings' zoom a major road steps down, so the pin dots stay the brighter thing (REPORT.md, trade-off a). */
+const nearOrFar = (near: string): LineColor => ['step', ['zoom'], ROAD_MAJOR_FAR, MAP_THEME.city.minZoom, near]
+
+const place = (id: string, classes: string[], minzoom: number, size: TextSize): SymbolLayerSpecification => ({
   id,
   type: 'symbol',
   source: 'openmaptiles',
   'source-layer': 'place',
   minzoom,
-  filter: ['==', ['get', 'class'], cls],
+  filter: ofClass(classes),
   layout: { 'text-field': NAME, 'text-font': FONT, 'text-size': size, 'text-max-width': 8 },
-  paint: { 'text-color': LABEL, 'text-halo-color': LABEL_HALO, 'text-halo-width': 1 },
+  paint: { 'text-color': LABELS.place, ...HALO },
 })
 
 /** The id of the extruded building layer: lit buildings are queried from it. */
@@ -286,23 +328,64 @@ export const EMBER_MAP_STYLE: StyleSpecification = {
       filter: ['==', ['get', 'class'], 'river'],
       paint: { 'line-color': WATER, 'line-width': ['interpolate', ['exponential', 1.2], ['zoom'], 11, 0.5, 20, 6] },
     },
-    road('road_minor', ['minor', 'service'], ROAD_MINOR, ['interpolate', ['exponential', 1.2], ['zoom'], 13.5, 0, 14, 2, 20, 14]),
-    road('road_secondary_tertiary', ['secondary', 'tertiary'], ROAD_MAJOR, ['interpolate', ['exponential', 1.2], ['zoom'], 6.5, 0, 8, 0.5, 20, 12]),
-    road('road_trunk_primary', ['primary', 'trunk'], ROAD_MAJOR, ['interpolate', ['exponential', 1.2], ['zoom'], 5, 0, 7, 1, 20, 16]),
-    road('road_motorway', ['motorway'], ROAD_MOTORWAY, ['interpolate', ['exponential', 1.2], ['zoom'], 5, 0, 7, 1, 20, 16]),
+    casing('road_secondary_tertiary_casing', ['secondary', 'tertiary'], SECONDARY_WIDTH),
+    casing('road_trunk_primary_casing', ['primary', 'trunk', 'motorway'], PRIMARY_WIDTH),
+    road('road_minor', ['minor', 'service'], ROAD_MINOR, MINOR_WIDTH, true),
+    road('road_secondary_tertiary', ['secondary', 'tertiary'], nearOrFar(ROAD_MAJOR), SECONDARY_WIDTH),
+    road('road_trunk_primary', ['primary', 'trunk'], nearOrFar(ROAD_MAJOR), PRIMARY_WIDTH),
+    road('road_motorway', ['motorway'], nearOrFar(ROAD_MOTORWAY), PRIMARY_WIDTH),
+    // The buildings go in just under this layer (`LABELS_FROM_LAYER_ID`), so every name from here up is over them.
     {
       id: 'highway-name-major',
       type: 'symbol',
       source: 'openmaptiles',
       'source-layer': 'transportation_name',
       minzoom: 13,
-      filter: ['match', ['get', 'class'], ['primary', 'secondary', 'tertiary', 'trunk'], true, false],
+      filter: ofClass(['primary', 'secondary', 'tertiary', 'trunk']),
       layout: { 'symbol-placement': 'line', 'text-field': NAME, 'text-font': FONT, 'text-size': 11 },
-      paint: { 'text-color': LABEL, 'text-halo-color': LABEL_HALO, 'text-halo-width': 1 },
+      paint: { 'text-color': LABEL, ...HALO },
     },
-    place('label_other', 'suburb', 11, ['interpolate', ['linear'], ['zoom'], 11, 10, 15, 12]),
-    place('label_town', 'town', 6, ['interpolate', ['exponential', 1.2], ['zoom'], 7, 12, 11, 14]),
-    place('label_city', 'city', 3, ['interpolate', ['exponential', 1.2], ['zoom'], 4, 11, 7, 13, 11, 18]),
+    {
+      id: 'highway-name-minor',
+      type: 'symbol',
+      source: 'openmaptiles',
+      'source-layer': 'transportation_name',
+      minzoom: LABELS.streetMinZoom,
+      filter: ofClass(['minor', 'service'], true),
+      layout: { 'symbol-placement': 'line', 'text-field': NAME, 'text-font': FONT, 'text-size': 10.5 },
+      paint: { 'text-color': LABEL, ...HALO },
+    },
+    {
+      id: 'waterway-name',
+      type: 'symbol',
+      source: 'openmaptiles',
+      'source-layer': 'waterway',
+      minzoom: 13,
+      filter: ['all', ['==', ['get', 'class'], 'river'], ['has', 'name']],
+      layout: {
+        'symbol-placement': 'line',
+        'symbol-spacing': 350,
+        'text-field': NAME,
+        'text-font': ITALIC,
+        'text-size': 11,
+        'text-letter-spacing': 0.1,
+      },
+      paint: { 'text-color': LABELS.water, ...HALO },
+    },
+    {
+      id: 'water-name',
+      type: 'symbol',
+      source: 'openmaptiles',
+      'source-layer': 'water_name',
+      minzoom: 11,
+      filter: ['==', ['geometry-type'], 'Point'],
+      layout: { 'text-field': NAME, 'text-font': ITALIC, 'text-size': 11, 'text-max-width': 6 },
+      paint: { 'text-color': LABELS.water, ...HALO },
+    },
+    place('label_neighbourhood', ['neighbourhood', 'quarter', 'village', 'hamlet'], 13, ['interpolate', ['linear'], ['zoom'], 13, 10, 16, 12]),
+    place('label_other', ['suburb'], 11, ['interpolate', ['linear'], ['zoom'], 11, 10, 15, 12]),
+    place('label_town', ['town'], 6, ['interpolate', ['exponential', 1.2], ['zoom'], 7, 12, 11, 14]),
+    place('label_city', ['city'], 3, ['interpolate', ['exponential', 1.2], ['zoom'], 4, 11, 7, 13, 11, 18]),
   ],
 }
 

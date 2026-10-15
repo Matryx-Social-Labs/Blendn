@@ -173,7 +173,7 @@ export const LitBuildings = memo(function LitBuildings({
 })
 
 /** Reduce Motion, followed live: it is switched on and off mid-session (review M4). */
-function useReduceMotion(): boolean {
+export function useReduceMotion(): boolean {
   const [on, setOn] = useState(false)
   useEffect(() => {
     let alive = true

@@ -20,8 +20,12 @@ export interface HomeBrowse {
   location: { latitude: number; longitude: number } | null
   /** The city has been decided (stored, inferred or none at all): Places may ask now. */
   ready: boolean
-  /** Where the picked city is (`/events/cities` `centre`): the map goes there when the city changes. */
+  /** Where the selected city is (`/events/cities` `centre`). */
   cityCentre: { latitude: number; longitude: number } | null
+  /** Bumped by every city chosen in the picker, never by one the app decided: the map goes there, even to the city it shows. */
+  cityPick: number
+  /** Ask for the phone's position: the Pulse's own location flow (the OS ask, or its "Turn on location" tray). */
+  requestLocation: () => void
 }
 
 type Segment = 'events' | 'places'
@@ -57,7 +61,14 @@ export function HomeShell({
   const [segment, setSegment] = useState<Segment>('events')
   const [placesOpened, setPlacesOpened] = useState(false)
   const [screenReader, setScreenReader] = useState(false)
-  const [browse, setBrowse] = useState<HomeBrowse>({ city: null, location: null, ready: false, cityCentre: null })
+  const [browse, setBrowse] = useState<HomeBrowse>({
+    city: null,
+    location: null,
+    ready: false,
+    cityCentre: null,
+    cityPick: 0,
+    requestLocation: () => {},
+  })
 
   /*
    * With a screen reader the list is the screen: open it, and take the map out
@@ -118,6 +129,9 @@ export function HomeShell({
         <HomeMap
           center={browse.location}
           cityCentre={browse.cityCentre}
+          cityPick={browse.cityPick}
+          requestLocation={browse.requestLocation}
+          locateVisible={snap !== 'full'}
           segment={segment}
           topInset={insets.top + TOP_BAR_HEIGHT}
           bottomInset={height - points[snap]}
