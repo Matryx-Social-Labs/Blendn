@@ -183,6 +183,12 @@ place; screens move to it one at a time, and `EMBER` goes when the last has.
   `Avatar`, `Loader`/`Spinner`, `StateScreen`/`GlyphWell`. Import each file
   directly (no barrel: it would hide wiring from `noOrphanComponents`). Every
   state is on `/preview/ds-p0`
+- `components/ds/` P1, the inputs (ROUND3 B4): `TextField`/`TextArea`,
+  `DateField`, `SearchField`, `Chip`/`InterestChip`, `Toggle` (SettingsRow
+  draws it), `SegmentedControl`, `RadioCard`, `LookingForCard`, `Stepper`,
+  `ProgressBar`, `TabBar` (hosts `Disc`), `TopBar`, and `MonoFamily` (`Badge`,
+  `PresenceDot`, `LivePill`, `TimeBadge`, `Price`). Every state is on
+  `/preview/ds-p1`
 - Satoshi is gitignored (its licence; this repo is public): copy it in before
   Metro runs — `docs/RELEASING.md`, "Satoshi"
 

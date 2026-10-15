@@ -1,5 +1,5 @@
 import { Children, Fragment, isValidElement, useEffect, useRef, useState, type ReactNode } from 'react'
-import { Platform, Pressable, StyleSheet, Switch, Text, View } from 'react-native'
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { Icon, type IconName } from '../ui/Icon'
 import { COLOR, ICON, MATERIAL, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
@@ -7,6 +7,7 @@ import { H } from '../../lib/haptics'
 import { OPACITY } from '../../lib/theme'
 import { Spinner } from './Loader'
 import { font, IC_HAIRLINE, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
+import { Toggle } from './Toggle'
 
 export type SettingsTrail = 'switch' | 'chevron' | 'external' | 'none'
 
@@ -51,11 +52,9 @@ function useRollbackHaptic(error: boolean) {
  * One element for a screen reader: "{title}, {hint}, switch, on" — the whole
  * row toggles, so the switch is drawn, not focused. It plays `H.toggle` (§10.2,
  * a switch changes); a chevron or external row is silent. Pressed: a 6% wash on
- * iOS, a ripple on Android; no scale on rows. Text scales freely and the row
- * grows. Increase Contrast whitens the trailing glyph.
- *
- * ponytail: the switch is React Native's, in the §4.7 colours, until the P1
- * Toggle lands (Material switch geometry on Android, the pressed thumb).
+ * iOS, a ripple on Android; no scale on rows, but the row's press reaches the
+ * <Toggle>'s thumb. Busy dims the toggle beside its spinner. Text scales
+ * freely and the row grows. Increase Contrast whitens the trailing glyph.
  */
 export function SettingsRow({
   icon,
@@ -75,6 +74,8 @@ export function SettingsRow({
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const [focused, setFocused] = useState(false)
+  // The finger on the row reaches the toggle's thumb.
+  const [down, setDown] = useState(false)
   useRollbackHaptic(error)
 
   const isSwitch = trail === 'switch'
@@ -93,6 +94,8 @@ export function SettingsRow({
       // A plain row has no action, but is not disabled: it must not read as dimmed.
       onPress={trail === 'none' ? undefined : press}
       disabled={disabled || busy}
+      onPressIn={() => setDown(true)}
+      onPressOut={() => setDown(false)}
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
       android_ripple={{ color: PRESSED_WASH.android }}
@@ -116,13 +119,7 @@ export function SettingsRow({
       {busy ? <Spinner testID={testID && `${testID}-spinner`} size={18} /> : null}
       {isSwitch ? (
         <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-          <Switch
-            value={value}
-            disabled={disabled || busy}
-            trackColor={{ false: COLOR.switchOffTrack, true: COLOR.selectionFill }}
-            thumbColor={value ? COLOR.selectionInk : COLOR.textPrimary}
-            ios_backgroundColor={COLOR.switchOffTrack}
-          />
+          <Toggle value={value} disabled={busy} pressed={down || previewState === 'pressed'} testID={testID && `${testID}-toggle`} />
         </View>
       ) : null}
       {trail === 'chevron' || trail === 'external' ? (
