@@ -88,6 +88,11 @@ export function useIncreaseContrast() {
 
 export const useScreenReader = () => useSetting(screenReader, 'screenReaderChanged')
 
+const reduceTransparency = () => AccessibilityInfo.isReduceTransparencyEnabled()
+
+/** iOS Reduce Transparency (Android has none: its fallbacks are already solid). */
+export const useReduceTransparency = () => useSetting(reduceTransparency, 'reduceTransparencyChanged')
+
 /** Increase Contrast's 50% hairline (§14), the same on every surface that draws one. */
 export const IC_HAIRLINE = { borderWidth: 1, borderColor: MATERIAL.hairlineIncreaseContrast } as const
 

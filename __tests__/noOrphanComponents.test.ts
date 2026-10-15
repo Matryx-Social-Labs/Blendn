@@ -89,6 +89,16 @@ const KNOWN_ORPHANS: Record<string, string> = {
   'TabBar.tsx': 'redesign P1 chrome; replaces the tab bar in app/(tabs)/_layout.tsx with the disc in Flow 4 (§11, §13)',
   'TopBar.tsx': 'redesign P1 chrome; every pushed screen adopts it with its redesign (Flows 6, 7, 10)',
   'MonoFamily.tsx': 'redesign P1 marks (Badge, PresenceDot, LivePill, TimeBadge, Price); adopted with the Pulse, the Banter and Blend’n+ (Flows 3, 5, 12)',
+  /* P5, sets and moments (ROUND3 B4), built ahead of their flows; each goes with the first flow that adopts it. */
+  'Orbs.tsx': 'redesign L0 backdrop (§4, motion #22, #53); the brand screens (landing, onboarding, the Blend’n overlay) and the feeds adopt it with their redesign',
+  'Grain.tsx': 'redesign L0 grain tile; laid over the orbs wherever a redesigned screen draws them',
+  'CrewEmblem.tsx': 'redesign P5 crew emblem (§21.3); replaces CrewParts’ emoji tile with the Crews redesign (Flow 10)',
+  'MomentStage.tsx': 'the stage the P5 moments share; goes with the first of them a flow adopts',
+  'MomentMatch.tsx': 'redesign P5 moment (#11, D · 4.4); replaces components/blendn/MatchMoment.tsx with the Room redesign (Flow 4)',
+  'MomentBlend.tsx': 'redesign P5 moment (Flow 10.8); the crew like that makes a Blend opens it with the Crews redesign',
+  'MomentReady.tsx': 'redesign P5 moment (Flow 2); /onboarding/ready plays it on the server’s yes with the onboarding redesign',
+  'MomentPour.tsx': 'redesign P5 moment (#9); the check-in success in the Blend’n overlay, with the VenuePass redesign (Flow 4)',
+  'MomentRecap.tsx': 'redesign P5 moment (#43); replaces components/blendn/RoomRecap.tsx with the Room redesign (Flow 4)',
 }
 
 const sources = walk(join(ROOT, 'app'))
