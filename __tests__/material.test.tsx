@@ -2,10 +2,10 @@
  * <Material> resolves glass, blur or solid by platform, glass support and
  * Reduce Transparency, and takes its tints from the tokens (DESIGN-BRIEF §5).
  */
-import { render, screen, waitFor } from '@testing-library/react-native'
-import { isLiquidGlassAvailable } from 'expo-glass-effect'
+import { act, render, screen, waitFor } from '@testing-library/react-native'
+import { isGlassEffectAPIAvailable, isLiquidGlassAvailable } from 'expo-glass-effect'
 import React from 'react'
-import { AccessibilityInfo, Platform, StyleSheet, Text } from 'react-native'
+import { AccessibilityInfo, Platform, StyleSheet, Text, TextInput } from 'react-native'
 
 import { Material, materialTier } from '../components/ui/Material'
 import { MATERIAL } from '../lib/design/tokens'
@@ -14,7 +14,7 @@ jest.mock('expo-glass-effect', () => {
   const { View } = jest.requireActual('react-native')
   return {
     GlassView: (props: object) => <View {...props} testID="glass" />,
-    isGlassEffectAPIAvailable: () => true,
+    isGlassEffectAPIAvailable: jest.fn(() => true),
     isLiquidGlassAvailable: jest.fn(() => true),
   }
 })
@@ -28,6 +28,7 @@ jest.mock('expo-linear-gradient', () => {
 })
 
 const liquidGlass = isLiquidGlassAvailable as jest.Mock
+const glassApi = isGlassEffectAPIAvailable as jest.Mock
 
 function on(os: 'ios' | 'android', { glass = false, reduceTransparency = false } = {}) {
   Object.defineProperty(Platform, 'OS', { value: os, configurable: true })
@@ -70,11 +71,53 @@ describe('<Material>', () => {
     expect(screen.getByTestId('glass').props.glassEffectStyle).toBe('clear')
   })
 
-  it('is a blur tinted harder on older iOS', async () => {
+  it('is a blur tinted harder on older iOS, at the full system material', async () => {
     on('ios')
     await draw('sheet')
-    expect(screen.getByTestId('blur').props.tint).toBe('systemChromeMaterialDark')
+    expect(screen.getByTestId('blur').props).toMatchObject({ tint: 'systemChromeMaterialDark', intensity: 100 })
     expect(screen.getByText('Pulse')).toBeTruthy()
+  })
+
+  it('falls back to blur when the glass API is missing or throws (iOS 26 betas, an older binary)', async () => {
+    on('ios', { glass: true })
+    glassApi.mockReturnValueOnce(false)
+    await draw('bar')
+    expect(screen.queryByTestId('glass')).toBeNull()
+    expect(screen.getByTestId('blur')).toBeTruthy()
+  })
+
+  it('falls back to blur, not a crash, when the native module is absent', async () => {
+    on('ios', { glass: true })
+    glassApi.mockImplementationOnce(() => {
+      throw new Error("Cannot find native module 'ExpoGlassEffect'")
+    })
+    await draw('bar')
+    expect(screen.getByTestId('blur')).toBeTruthy()
+  })
+
+  it('keeps its children mounted when Reduce Transparency switches tiers', async () => {
+    on('ios')
+    let changed: (value: boolean) => void = () => {}
+    const remove = jest.fn()
+    jest.spyOn(AccessibilityInfo, 'addEventListener').mockImplementation(((_: string, handler: (v: boolean) => void) => {
+      changed = handler
+      return { remove }
+    }) as never)
+    const input = React.createRef<TextInput>()
+    const { unmount } = await render(
+      <Material role="bar" testID="material">
+        <TextInput ref={input} />
+      </Material>
+    )
+    const before = input.current
+    await act(async () => changed(true))
+    expect(flat('material').backgroundColor).toBe(MATERIAL.solidBar)
+    expect(input.current).toBe(before)
+    await act(async () => changed(false))
+    expect(screen.getByTestId('blur')).toBeTruthy()
+    expect(input.current).toBe(before)
+    await unmount()
+    expect(remove).toHaveBeenCalledTimes(1)
   })
 
   it('turns solid under Reduce Transparency on older iOS', async () => {

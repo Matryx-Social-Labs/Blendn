@@ -75,16 +75,28 @@ function liquidGlassAvailable() {
   }
 }
 
+/*
+ * The last Reduce Transparency value seen, shared by every Material, so one
+ * mounted after the first answer starts right instead of drawing a frame of
+ * blur and then switching. Asked once when this module loads, which is long
+ * before the first chrome renders.
+ */
+let lastReduceTransparency = false
+function remember(value: boolean) {
+  lastReduceTransparency = value
+}
+AccessibilityInfo.isReduceTransparencyEnabled?.().then(remember, () => {})
+
 function useReduceTransparency() {
-  const [on, setOn] = useState(false)
+  const [on, setOn] = useState(lastReduceTransparency)
   useEffect(() => {
     let live = true
-    AccessibilityInfo.isReduceTransparencyEnabled()
-      .then((value) => {
-        if (live) setOn(value)
-      })
-      .catch(() => {})
-    const sub = AccessibilityInfo.addEventListener('reduceTransparencyChanged', setOn)
+    const update = (value: boolean) => {
+      remember(value)
+      if (live) setOn(value)
+    }
+    AccessibilityInfo.isReduceTransparencyEnabled().then(update, () => {})
+    const sub = AccessibilityInfo.addEventListener('reduceTransparencyChanged', update)
     return () => {
       live = false
       sub.remove()
@@ -92,6 +104,15 @@ function useReduceTransparency() {
   }, [])
   return on
 }
+
+/*
+ * expo-blur's intensity is 0–100, a fraction of the system material; its web
+ * build maps one unit to 0.2px. The token's 24px is past that ceiling, so the
+ * blur tier draws the system material at full strength, as §5.3 asks.
+ */
+const EXPO_BLUR_PX_PER_UNIT = 0.2
+const EXPO_BLUR_MAX = 100
+const BLUR_INTENSITY = Math.min(EXPO_BLUR_MAX, MATERIAL.blurRadius / EXPO_BLUR_PX_PER_UNIT)
 
 /**
  * The one glass surface (§5): glass on iOS 26+, blur on older iOS, solid on
@@ -125,19 +146,26 @@ export function Material({ role, style, children, ...rest }: Omit<ViewProps, 'ro
     )
   }
 
-  if (tier === 'blur') {
-    return (
-      <View {...rest} style={[styles.clip, styles.edge, style]}>
-        <BlurView tint={BLUR[role].material} style={StyleSheet.absoluteFill} />
+  /*
+   * Blur and solid share one shape — a View, its layers in one slot, the
+   * children in the next — so Reduce Transparency switching between them
+   * swaps the layers and keeps the children mounted (a focused TextInput in
+   * the composer stays focused).
+   */
+  const layers =
+    tier === 'blur' ? (
+      <>
+        <BlurView tint={BLUR[role].material} intensity={BLUR_INTENSITY} style={StyleSheet.absoluteFill} />
         <View style={[StyleSheet.absoluteFill, { backgroundColor: BLUR[role].tint }]} />
-        {children}
-      </View>
+      </>
+    ) : (
+      <LinearGradient colors={MATERIAL.solidInnerHighlight.colors} style={styles.highlight} />
     )
-  }
+  const surface = tier === 'blur' ? styles.edge : [styles.solid, { backgroundColor: SOLID[role] }]
 
   return (
-    <View {...rest} style={[styles.clip, styles.solid, { backgroundColor: SOLID[role] }, style]}>
-      <LinearGradient colors={MATERIAL.solidInnerHighlight.colors} style={styles.highlight} />
+    <View {...rest} style={[styles.clip, surface, style]}>
+      {layers}
       {children}
     </View>
   )
