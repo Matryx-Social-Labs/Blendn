@@ -59,7 +59,6 @@ jest.mock('../lib/logger', () => ({
   Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() },
 }))
 jest.mock('../lib/sentry', () => ({ Sentry: { captureMessage: jest.fn(), captureException: jest.fn() } }))
-jest.mock('expo-haptics', () => ({}))
 jest.mock('expo-router', () => ({
   // On focus once, like a screen that is open.
   useFocusEffect: (effect: () => void | (() => void)) => require('react').useEffect(effect, [effect]),

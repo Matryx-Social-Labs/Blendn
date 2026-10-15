@@ -1,10 +1,10 @@
 import { Ionicons } from '@expo/vector-icons'
-import * as Haptics from 'expo-haptics'
 import type { ReactNode } from 'react'
 import { StyleSheet, View } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Animated, { interpolate, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
+import { H } from '../../lib/haptics'
 import { EMBER, ICON, SPACE } from '../../lib/theme'
 import { replyDragOffset, REPLY_SWIPE_TRIGGER } from '../../lib/swipeReply'
 
@@ -25,9 +25,7 @@ export function SwipeToReply({ children, onReply, enabled = true }: SwipeToReply
   const dx = useSharedValue(0)
   const armed = useSharedValue(false)
 
-  const tick = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {})
-  }
+  const tick = () => H.threshold({ swipeToReply: true })
 
   const pan = Gesture.Pan()
     .enabled(enabled)

@@ -1,7 +1,7 @@
+import { H } from '../../lib/haptics'
 import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
 import * as Clipboard from 'expo-clipboard'
-import * as Haptics from 'expo-haptics'
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
@@ -914,9 +914,8 @@ function GroupChatInner() {
     const copy: SheetAction = {
       label: 'Copy',
       then: () => {
-        Clipboard.setStringAsync(message.message_text)
-          .then(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success))
-          .catch(() => {})
+        // No haptic: copying is silent (§10.2).
+        Clipboard.setStringAsync(message.message_text).catch(() => {})
       },
     }
 
@@ -979,7 +978,7 @@ function GroupChatInner() {
    * inline arrow here would re-render every mounted bubble each time.
    */
   const openMessageMenu = useCallback((message: Message) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {})
+    H.longPress()
     messageMenuRef.current(message)
   }, [messageMenuRef])
 

@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons'
-import * as Haptics from 'expo-haptics'
+import { H } from '../lib/haptics'
 import { EMBER, EMBER_RADIUS, ICON, SPACE, TYPE } from '../lib/theme'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
@@ -159,6 +159,7 @@ export default function PhotoManager({ userId, maxPhotos = 6 }: PhotoManagerProp
           showToast(saved.error, 'error')
           return
         }
+        H.success()
         setPhotos(prev => adoptStoredUrls(prev, saved.photos))
         AccessibilityInfo.announceForAccessibility('Photo added')
         Logger.info('profile', 'PhotoManager: Photo added', { userId, path: result.path || result.url })
@@ -204,9 +205,8 @@ export default function PhotoManager({ userId, maxPhotos = 6 }: PhotoManagerProp
       ]
       // Optimistic: the grid reorders under the finger, and a failed write
       // puts it back rather than leaving the UI ahead of the server. The
-      // haptic lands on the same frame the tiles start to move.
+      // haptic waits for the server: outcome after truth (§10.1).
       setPhotos(reordered.map((p, i) => ({ ...p, order: i, isPrimary: i === 0 })))
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {})
 
       try {
         const saved = await reorderPhotos(userId, reordered.map((p) => p.url), photos[0]?.url)
@@ -215,6 +215,7 @@ export default function PhotoManager({ userId, maxPhotos = 6 }: PhotoManagerProp
           showToast(saved.error, 'error')
           return
         }
+        H.success()
         setPhotos(prev => adoptStoredUrls(prev, saved.photos))
       } finally {
         writing.current = false
