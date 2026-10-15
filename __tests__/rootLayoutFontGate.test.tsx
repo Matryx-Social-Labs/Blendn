@@ -154,7 +154,8 @@ describe('cold start by a link, fonts still loading (SCRUM-619)', () => {
   })
 
   it('signed out, the link is still held for after sign-in once the fonts are in', async () => {
-    // Routing waits for the navigator: a redirect sent before it mounts is dropped.
+    // The guard redirects while the layout still renders nothing. Expo Router's
+    // own root navigator holds that, and the Stack mounts on it.
     const r = await coldStartByLink(SIGNED_OUT)
     await fontsArrive([true, null])
 
