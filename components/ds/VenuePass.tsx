@@ -34,6 +34,8 @@ export type VenuePassProps = {
   confirmed?: boolean
   /** The pour (MomentPour, #9), mounted in the panel so its flood rises through it and is clipped to it. */
   pour?: ReactNode
+  /** Under the hold, over the note: "Tell your crew" after the server's yes (Flow 4 delta R2-D1 "success"; the pass grows to hold it). */
+  children?: ReactNode
   /** Outside the fence: the hold dims under `holdLabel` ("Go live when you’re here · 350 m"). */
   disabled?: boolean
   /** The design gallery only: the hold frozen this far in. */
@@ -71,6 +73,7 @@ export function VenuePass({
   refused,
   confirmed,
   pour,
+  children,
   disabled,
   previewProgress,
   testID,
@@ -130,6 +133,7 @@ export function VenuePass({
         previewProgress={previewProgress}
         testID={testID && `${testID}-hold`}
       />
+      {children}
       {/* The hold's hint already says it: the line is for the eye. */}
       <Text accessibilityElementsHidden importantForAccessibility="no" style={[font('caption', bold), styles.secondary, styles.note]}>
         {note}

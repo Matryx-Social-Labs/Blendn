@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Linking, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import { GestureDetector } from 'react-native-gesture-handler'
 import Animated from 'react-native-reanimated'
@@ -103,6 +103,8 @@ export type TonightViewProps = {
   onCheckIn: () => void
   /** The Room failed to load for someone checked in: Tonight stays, with a quiet line (Flow 4 Room #15). */
   onRoomRetry?: () => void
+  /** After the server's yes: "Tell your crew" in the pass, which grows upward to hold it (Flow 4 delta R2-D1 "success"). */
+  crewStrip?: ReactNode
   topInset: number
   bottomInset: number
 }
@@ -134,6 +136,7 @@ export function TonightView({
   onBrowse,
   onCheckIn,
   onRoomRetry,
+  crewStrip,
   topInset,
   bottomInset,
 }: TonightViewProps) {
@@ -245,7 +248,7 @@ export function TonightView({
           style={[styles.passDock, { paddingBottom: bottomInset + SPACE.md }]}
           onLayout={(e) => setDockAt(e.nativeEvent.layout)}
         >
-          <View onLayout={(e) => setPassAt(e.nativeEvent.layout)}>
+          <View testID="tonight-pass-slot" onLayout={(e) => setPassAt(e.nativeEvent.layout)}>
             <VenuePass
               title={door.title}
               cover={door.photo}
@@ -255,7 +258,9 @@ export function TonightView({
               busy={checkingIn && !youreIn}
               confirmed={youreIn}
               testID="tonight-pass"
-            />
+            >
+              {youreIn ? crewStrip : null}
+            </VenuePass>
           </View>
         </View>
       ) : null}

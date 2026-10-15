@@ -252,7 +252,8 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
 
   // --- crews (R2-D1: People | Crews, the strip, crew cards, Liking as) ---------
   const [gridView, setGridView] = useState<'people' | 'crews'>('people')
-  const crews = useCrewsHere(mode === 'room' ? eventId : null)
+  // Read in the Room, and on the pass once the server has said yes (its "Tell your crew" strip).
+  const crews = useCrewsHere(mode === 'room' ? eventId : checkIn.youreIn ? (insideEvent?.id ?? null) : null)
   const myCrewsHere = crews.state.status === 'ready' ? crews.state.data.myCrews : []
   const soloCrews = crewsThatMayLikePeople(myCrewsHere, crews.mine ?? [])
   /*
@@ -341,15 +342,18 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
     next?.()
   }
 
-  // A wave's banner on the tabs opens the overlay at their card.
+  // A wave's banner on the tabs opens the overlay at their card: once the Room is there, during render, then cleared from the store.
   const pending = usePendingPerson()
+  const [takenPending, setTakenPending] = useState<string | null>(null)
+  if (!pending && takenPending) setTakenPending(null)
+  if (pending && mode === 'room' && pending !== takenPending) {
+    setTakenPending(pending)
+    const known = room.people.find((p) => p.id === pending)
+    setOpen({ id: pending, name: known?.name ?? waves.received[pending]?.fromName ?? 'Someone' })
+  }
   useEffect(() => {
-    if (!pending || mode !== 'room') return
-    const id = takePendingPerson()
-    if (!id) return
-    const known = room.people.find((p) => p.id === id)
-    setOpen({ id, name: known?.name ?? waves.received[id]?.fromName ?? 'Someone' })
-  }, [pending, mode, room.people, waves.received])
+    if (pending && pending === takenPending) takePendingPerson()
+  }, [pending, takenPending])
 
   const openCard = useCallback((p: OpenCard) => setOpen({ id: p.id, name: p.name }), [])
   const like = useCallback(
@@ -361,8 +365,6 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
       if (open?.id === p.id) setRefusals((r) => ({ ...r, [p.id]: { text: answer.refusal.message, checkIn: answer.refusal.checkIn } }))
       else say(answer.refusal.message)
     },
-    // `forget` only sets state.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [room, open?.id, say]
   )
   const wave = useCallback(
@@ -382,8 +384,6 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
       }
       setSent((w) => ({ ...w, [id]: 'waved' }))
     },
-    // `forget` only sets state.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [room, sent]
   )
   const openProfile = useCallback(
@@ -643,6 +643,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
             }}
             onCheckIn={() => void checkIn.start()}
             onRoomRetry={room.status === 'error' ? room.retry : undefined}
+            crewStrip={<PeopleCrewStrip myCrews={myCrewsHere} mine={crews.mine} eventTitle={insideEvent?.title ?? ''} actions={crewActions} inset={false} />}
             topInset={topInset}
             bottomInset={insets.bottom}
           />

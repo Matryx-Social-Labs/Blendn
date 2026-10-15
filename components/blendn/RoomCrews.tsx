@@ -19,20 +19,24 @@ const SOLO_ON = 'Crews with room for one more can see you until the night ends. 
 const SOLO_OFF = 'Crews with room for one more can see you; nobody else learns you turned this on.'
 
 /**
- * Your crews here, under the visibility line in the People view (Flow 4
- * delta R2-D1, Flow 10 · 10.6): "Crew Nebula · 2 of 4 in" and "Tell your crew
- * — We're here". Nothing when none of your crews is here.
+ * Your crews here, under the visibility line in the People view and in the
+ * pass after your check-in (Flow 4 delta R2-D1, Flow 10 · 10.6): "Crew Nebula
+ * · 2 of 4 in" and "Tell your crew — We're here". Nothing when none of your
+ * crews is here.
  */
 export function PeopleCrewStrip({
   myCrews,
   mine,
   eventTitle,
   actions,
+  inset = true,
 }: {
   myCrews: MyCrewHere[]
   mine: Crew[] | null
   eventTitle: string
   actions: CrewActions
+  /** In the Room, between the gutters; in the pass, its own padding. */
+  inset?: boolean
 }) {
   if (myCrews.length === 0) return null
   const crews: StripCrew[] = myCrews.map((c) => {
@@ -48,7 +52,7 @@ export function PeopleCrewStrip({
     }
   })
   return (
-    <View style={styles.gutter}>
+    <View style={inset && styles.gutter}>
       <CrewStrip crews={crews} onTell={(id) => void actions.here({ crewId: id })} testID="room-crew-strip" />
     </View>
   )

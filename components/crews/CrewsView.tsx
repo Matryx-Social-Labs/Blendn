@@ -17,8 +17,6 @@ import { crewsApi } from '../../lib/crewsApi'
 import { showSheet } from '../../lib/sheet'
 import type { TellState } from '../ds/CrewStrip'
 import { useToast } from '../Toast'
-import { PlaceholderBanner } from '../ui/PlaceholderBanner'
-import { Text } from '../ui/Text'
 
 /** A page of cards: the server's default, well under its 50. */
 const PAGE = 30
