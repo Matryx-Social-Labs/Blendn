@@ -35,7 +35,7 @@ The owner asked for the recommended option on each (2026-10-15).
 |---|---|---|---|
 | R1 | Intent's labels. Flow 4 #14 shows "Meet people · Live music · Dance · Network · Just out" | **ROUND3 D3, everywhere:** Dating · Friendship · Networking · Just here for the event. Single choice. That covers #14 "Why do you go out?", the Flow 3 preferences, Flow 14 and LookingForCard. | 5 A6 |
 | R2 | What happens after "You're in." when the server asks a question | **As built (#394).** Part 3 draws it. | 5 C1–C6, A4, A5 |
-| R3 | Hold to check in | **The Flow 4 pill** (56 pt, surfaceSunken track, a white label clipped at the fill edge), with **#8's timing and haptics** (900 ms linear, `H.tick` at 25/50/75, `H.commit` at 100%). **The quarter marks are drawn:** 1 px hairlines, white 25%, which turn ink once the fill passes them. The label is "Hold to blend in"; the screen-reader hint is "Double-tap to check in."; busy is "Checking you in…". A refusal drains on `M.settle` into Flow 4 #16's sheet (#10). Delete the page's ring and shake. Redraw #8 and #10 on this pill. | 5 A1–A3, B1 |
+| R3 | Hold to check in | **The Flow 4 frames, exactly:** the 56 pt pill, the surfaceSunken track and a white label clipped at the fill edge. **No quarter marks** are drawn (owner, 2026-10-15). **#8 supplies only the timing and haptics:** 900 ms linear, `H.tick` at 25/50/75, `H.commit` at 100%. The label is "Hold to blend in"; the screen-reader hint is "Double-tap to check in."; busy is "Checking you in…". A refusal drains on `M.settle` into Flow 4 #16's sheet (#10). Delete the page's ring and shake. Redraw #8 and #10 on the Flow 4 pill, without the marks. | 5 A1–A3, B1 |
 | R4 | What "regular" means | **The server's definition** (ROUND3 G3). The badge shows a tier and never a number, so it needs no threshold of its own. | 5 A30 |
 | R5 | Under-18 states | **Delete them all.** The product is strictly 18+. | 5 A60 |
 | R6 | An unlisted event when shared | **The area, never the venue:** in the share tray, the card and the link preview. Fix the no-op ternary in `flow16.js`. | 5 A74 |
@@ -81,7 +81,7 @@ The conflicts audit found the same five causes behind most of its 154 rows:
 | t (ms) | What happens | Token |
 |---|---|---|
 | 0 | The hold starts on the docked pass. The fill moves linearly. | `--dur-hold` 900 |
-| 225 · 450 · 675 | A quarter mark turns ink as the fill passes it. | `H.tick` Soft · Light · Medium |
+| 225 · 450 · 675 | A haptic tick at each quarter. Nothing is drawn. | `H.tick` Soft · Light · Medium |
 | 900 | Commit. The label turns to "Checking you in…" and the fill stays full while the server is asked. | `H.commit` |
 | server OK = 0′ | **The pour.** The gradient floods up through the docked pass and the venue name sits at its top left. | `H.success`, `M.settle` |
 | 0′+200 | "You're in." fades in at the bottom left of the pass. | `D.base` |
