@@ -8,8 +8,6 @@ export default function PrivateChatLayout() {
         headerShown: false,
         contentStyle: { backgroundColor: EMBER.bg },
       }}
-    >
-      <Stack.Screen name="[conversationId]" options={{ headerShown: false }} />
-    </Stack>
+    />
   )
 }

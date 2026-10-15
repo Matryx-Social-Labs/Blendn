@@ -2,7 +2,7 @@ import * as Clipboard from 'expo-clipboard'
 import * as Haptics from 'expo-haptics'
 import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
-import { router, Stack, useLocalSearchParams } from 'expo-router'
+import { router, useLocalSearchParams } from 'expo-router'
 import {
   revealAction,
   revealConfirmation,
@@ -916,7 +916,6 @@ function PrivateChatInner() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <Stack.Screen options={{ headerShown: false }} />
       <KeyboardAvoidingView style={styles.flex} behavior={KEYBOARD_BEHAVIOR}>
         <ChatHeader
           // Server-resolved. A pseudonym until they reveal, and the route param
@@ -1147,15 +1146,6 @@ const styles = StyleSheet.create({
   matchOpenerBody: { ...TYPE.body, color: EMBER.textSecondary },
   // A text action: `label` in `textPrimary` (docs/DESIGN_SYSTEM.md).
   loadMoreText: { ...TYPE.label, color: EMBER.textPrimary },
-
-  // Messages
-
-
-  // Day separator
-
-  // Typing
-
-  // Input bar — WhatsApp style: simple, no icons
 
   // Scroll to bottom
   scrollToBottomHit: { flex: 1, alignItems: 'center', justifyContent: 'center' },

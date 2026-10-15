@@ -561,7 +561,7 @@ function RootLayout() {
               // This was `#000000`, so a push revealed a different black than
               // the tab underneath it.
               contentStyle: { backgroundColor: EMBER.bg },
-              animation: Platform.OS === 'ios' ? 'ios_from_right' : 'slide_from_right',
+              animation: routeTransition,
             }}
           >
       <Stack.Screen
@@ -575,20 +575,8 @@ function RootLayout() {
         * The two signed-out screens. Both are also listed in `isAuthRoute`
         * above — without that they mount and are replaced on the next tick.
         */}
-      <Stack.Screen
-        name="sign-in"
-        options={{
-          headerShown: false,
-          animation: routeTransition,
-        }}
-      />
-      <Stack.Screen
-        name="forgot-password"
-        options={{
-          headerShown: false,
-          animation: routeTransition,
-        }}
-      />
+      <Stack.Screen name="sign-in" options={{ headerShown: false }} />
+      <Stack.Screen name="forgot-password" options={{ headerShown: false }} />
       <Stack.Screen
         name="(tabs)"
         options={{ 
@@ -608,7 +596,6 @@ function RootLayout() {
         name="onboarding"
         options={{
           headerShown: false,
-          animation: routeTransition,
           /*
            * No swipe back out of the flow. Its own stack handles moving between
            * steps; a gesture at this level would drop someone out of onboarding
@@ -622,7 +609,6 @@ function RootLayout() {
         name="settings" 
         options={{ 
           headerShown: false,
-          animation: routeTransition,
         }} 
       />
       {/*
@@ -646,7 +632,6 @@ function RootLayout() {
         name="event/[id]"
         options={{
           headerShown: false,
-          animation: routeTransition,
           presentation: 'card',
           gestureEnabled: true,
           fullScreenGestureEnabled: true,
@@ -658,7 +643,6 @@ function RootLayout() {
         options={{
           headerShown: false,
           presentation: 'card',
-          animation: routeTransition,
         }}
       />
       <Stack.Screen
@@ -666,7 +650,6 @@ function RootLayout() {
         options={{
           headerShown: false,
           presentation: 'card',
-          animation: routeTransition,
         }}
       />
       {/*
@@ -681,7 +664,6 @@ function RootLayout() {
         options={{
           headerShown: false,
           presentation: 'card',
-          animation: routeTransition,
         }}
       />
       <Stack.Screen
@@ -703,23 +685,15 @@ function RootLayout() {
         name="edit-profile" 
         options={{ 
           headerShown: false,
-          animation: routeTransition,
         }} 
       />
       <Stack.Screen 
         name="blocked-users" 
         options={{ 
           headerShown: false,
-          animation: routeTransition,
         }} 
       />
-      <Stack.Screen
-        name="user/[id]"
-        options={{
-          headerShown: false,
-          animation: routeTransition,
-        }}
-      />
+      <Stack.Screen name="user/[id]" options={{ headerShown: false }} />
       {/*
         `/room` only opens the Blend'n overlay (hosted by the tab layout) and
         steps back. No animation, so the hop is invisible.
@@ -731,36 +705,30 @@ function RootLayout() {
         `preview/profile` opened with a "< (tabs)" bar across its hero.
       */}
       <Stack.Screen name="preview" options={{ headerShown: false }} />
-      <Stack.Screen
-        name="nearby-events"
-        options={{
-          headerShown: false,
-          animation: routeTransition,
-        }}
-      />
+      <Stack.Screen name="nearby-events" options={{ headerShown: false }} />
       {/* Settings' About and Contact support. */}
-      <Stack.Screen name="about" options={{ headerShown: false, animation: routeTransition }} />
-      <Stack.Screen name="support" options={{ headerShown: false, animation: routeTransition }} />
+      <Stack.Screen name="about" options={{ headerShown: false }} />
+      <Stack.Screen name="support" options={{ headerShown: false }} />
       {/* Friends. Declared so none of them inherits the native header. */}
-      <Stack.Screen name="friends/index" options={{ headerShown: false, animation: routeTransition }} />
-      <Stack.Screen name="friends/add" options={{ headerShown: false, animation: routeTransition }} />
-      <Stack.Screen name="friends/requests" options={{ headerShown: false, animation: routeTransition }} />
-      <Stack.Screen name="friends/[userId]" options={{ headerShown: false, animation: routeTransition }} />
+      <Stack.Screen name="friends/index" options={{ headerShown: false }} />
+      <Stack.Screen name="friends/add" options={{ headerShown: false }} />
+      <Stack.Screen name="friends/requests" options={{ headerShown: false }} />
+      <Stack.Screen name="friends/[userId]" options={{ headerShown: false }} />
       {/* A room's info, from the options button in its header. */}
-      <Stack.Screen name="chat-info/[id]" options={{ headerShown: false, animation: routeTransition }} />
+      <Stack.Screen name="chat-info/[id]" options={{ headerShown: false }} />
       {/* Placeholder screen: logic complete, design provisional (docs/PLACEHOLDER_SCREENS.md §6). */}
-      <Stack.Screen name="board/[eventId]" options={{ headerShown: false, animation: routeTransition }} />
+      <Stack.Screen name="board/[eventId]" options={{ headerShown: false }} />
       {/* Matching v2's about-you fields, reached from Edit profile (step 10, docs/PLACEHOLDER_SCREENS.md §15). */}
-      <Stack.Screen name="edit-about-you" options={{ headerShown: false, animation: routeTransition }} />
+      <Stack.Screen name="edit-about-you" options={{ headerShown: false }} />
       {/* Crews and Blends (step 9). Placeholder screens (docs/PLACEHOLDER_SCREENS.md §14). */}
-      <Stack.Screen name="crews/index" options={{ headerShown: false, animation: routeTransition }} />
-      <Stack.Screen name="crews/new" options={{ headerShown: false, animation: routeTransition }} />
-      <Stack.Screen name="crews/[crewId]" options={{ headerShown: false, animation: routeTransition }} />
-      <Stack.Screen name="blend/[blendId]" options={{ headerShown: false, animation: routeTransition }} />
+      <Stack.Screen name="crews/index" options={{ headerShown: false }} />
+      <Stack.Screen name="crews/new" options={{ headerShown: false }} />
+      <Stack.Screen name="crews/[crewId]" options={{ headerShown: false }} />
+      <Stack.Screen name="blend/[blendId]" options={{ headerShown: false }} />
       {/* A place from the Places list. Placeholder until step 5 (docs/PLACEHOLDER_SCREENS.md §10). */}
-      <Stack.Screen name="venue/[id]" options={{ headerShown: false, animation: routeTransition }} />
+      <Stack.Screen name="venue/[id]" options={{ headerShown: false }} />
       {/* An offer from a place and its door pass (step 12). Placeholder design (docs/PLACEHOLDER_SCREENS.md §16). */}
-      <Stack.Screen name="offer/[id]" options={{ headerShown: false, animation: routeTransition }} />
+      <Stack.Screen name="offer/[id]" options={{ headerShown: false }} />
       {/* The Blendn+ paywall, a modal with "Not now" (step 11). Placeholder design (docs/PLACEHOLDER_SCREENS.md §13). */}
       <Stack.Screen
         name="plus"

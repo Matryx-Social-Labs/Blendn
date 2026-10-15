@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons'
-import { router, Stack, useLocalSearchParams } from 'expo-router'
+import { router, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useState } from 'react'
 import { FlatList, Linking, Pressable, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -69,7 +69,7 @@ const refused = (serverSays: string | undefined, fallback: string): SheetOutcome
  *   host letting it happen. The event itself is reported from its own page;
  *   offering both here made a moderator guess which one somebody meant.
  */
-function ChatInfoInner() {
+export default function ChatInfo() {
   const params = useLocalSearchParams<{ id: string; roomName?: string; eventTitle?: string; eventImage?: string }>()
   const chatGroupId = String(params.id)
   const { user } = useAuth()
@@ -281,7 +281,6 @@ function ChatInfoInner() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <Stack.Screen options={{ headerShown: false }} />
       <AppHeader title="Room info" onBack={() => router.back()} />
 
       <FlatList
@@ -427,7 +426,3 @@ const styles = StyleSheet.create({
   more: { alignItems: 'center', paddingVertical: SPACE.lg },
   moreText: { ...TYPE.label, color: EMBER.textPrimary },
 })
-
-export default function ChatInfo() {
-  return <ChatInfoInner />
-}

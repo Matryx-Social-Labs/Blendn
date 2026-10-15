@@ -77,8 +77,6 @@ async function readOsPush(): Promise<OsPush> {
 export default function SettingsScreen() {
   const { user } = useAuth()
   const { showToast } = useToast()
-  const [, setDisplayName] = useState<string>('')
-  const [, setAvatarUrl] = useState<string | null>(null)
   const [preferences, setPreferences] = useState<PreferencesState>(DEFAULT_PREFERENCES)
   // What the screen currently shows, readable from an async callback. Two
   // toggles can be in flight at once, and a rollback that spread the snapshot
@@ -170,7 +168,7 @@ export default function SettingsScreen() {
       friendsSeeMe: toBoolean(profile.friends_see_me_in_rooms, DEFAULT_PREFERENCES.friendsSeeMe),
     }
 
-    return { profile, nextPrefs }
+    return nextPrefs
   }, [])
 
   const loadPreferences = useCallback(async () => {
@@ -205,17 +203,7 @@ export default function SettingsScreen() {
       }
       if (result.success && result.data) {
         setPreferencesError(null)
-        const { profile, nextPrefs } = hydratePreferencesFromProfile(result.data)
-        const name = profile.name || user.name || 'You'
-        setDisplayName(name)
-        // Get avatar from profile photos if available
-        const photos = profile.photos || profile.profile_photos || []
-        const primary = Array.isArray(photos) && photos[0] ? photos[0] : null
-        if (primary) {
-          setAvatarUrl(primary)
-        } else if (user.image) {
-          setAvatarUrl(user.image)
-        }
+        const nextPrefs = hydratePreferencesFromProfile(result.data)
         setPreferences(nextPrefs)
         savePreferencesLocal(nextPrefs)
       }

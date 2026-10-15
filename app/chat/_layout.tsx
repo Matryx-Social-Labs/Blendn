@@ -8,8 +8,6 @@ export default function ChatLayout() {
         headerShown: false,
         contentStyle: { backgroundColor: EMBER.bg },
       }}
-    >
-      <Stack.Screen name="[id]" options={{ headerShown: false }} />
-    </Stack>
+    />
   )
 }

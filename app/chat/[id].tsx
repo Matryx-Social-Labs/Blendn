@@ -2,7 +2,7 @@ import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
 import * as Clipboard from 'expo-clipboard'
 import * as Haptics from 'expo-haptics'
-import { router, Stack, useLocalSearchParams } from 'expo-router'
+import { router, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ActivityIndicator,
@@ -1080,7 +1080,6 @@ function GroupChatInner() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <Stack.Screen options={{ headerShown: false }} />
       <KeyboardAvoidingView style={styles.flex} behavior={KEYBOARD_BEHAVIOR}>
         <GroupChatHeader
             name={roomName || defaultRoomName(roomKind)}
@@ -1254,21 +1253,6 @@ const styles = StyleSheet.create({
   // A text action: `label` in `textPrimary` (docs/DESIGN_SYSTEM.md).
   loadMoreText: { ...TYPE.label, color: EMBER.textPrimary },
   pressed: { opacity: OPACITY.pressed },
-
-  // System / announcement messages
-
-  // Messages
-
-
-
-
-  // Day separator
-
-  // Typing
-
-
-
-  // Input bar
 
   // Scroll to bottom
   scrollToBottomHit: { flex: 1, alignItems: 'center', justifyContent: 'center' },
