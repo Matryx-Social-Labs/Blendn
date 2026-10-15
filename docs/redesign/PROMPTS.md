@@ -681,3 +681,133 @@ Add to the "Rules" list of the handoff prefix above:
 - Tokens come from tokens/tokens.json (base motion values; Reduce Motion is a separate table read through useReducedMotion()), never from the frames' literals or the manifest.
 - Before building, check that the manifest's --rise-list reads 8px and --dur-base 220ms. If either reads its Reduce Motion value, stop: the export still carries the Reduce Motion values as defaults.
 ```
+
+---
+
+# Round 4 · One source of truth, check-in end to end, first-run tips (2026-10-15)
+
+Round 4 comes from building the app on the published project. Everything is in [`ROUND4.md`](./ROUND4.md):
+- **1:** rulings on the questions the build raised;
+- **2:** why the project tells implementers two or three things about the same component, and the fix;
+- **3:** check-in from the hold to the Room, as timed frames;
+- **4:** first-run tips (coach marks) and the Help › Tips screen;
+- **5:** the 154 conflicts, with evidence and a fix each;
+- **6:** the 54 screens and states the app reaches that no frame draws;
+- **7:** four server changes behind frames that are already drawn.
+
+**Every prompt runs in the "Blend'n Design System" project.** Use the Round 2 delta wrapper for every R4-D prompt.
+
+**Before you start:** re-sync `docs/redesign/` into the project from `dev` (the same files are on `docs/redesign-brief`). It now has `ROUND4.md`.
+
+## Order
+
+1. **R4-0:** one source of truth, the rulings, and the system rows of Part 5. Publish.
+2. **R4-1:** check-in end to end.
+3. **R4-2:** coach marks and Help › Tips.
+4. **R4-3:** the component pages and motion cards, rebuilt from the builders, one group at a time.
+5. **R4-D:** the missing states, flow by flow, in the order the client is being rebuilt: Flow 4 → 5 → 3 → 6 → 10 → 11 → 12 → 13 → 7 → 1.
+6. **Prompt 10** again, across every flow.
+
+## R4-0 · One source of truth, the rulings, the system
+
+```
+Read docs/redesign/ROUND4.md parts 1, 2 and 5. Do these in order, and show me each step before moving on.
+
+1. Fold every delta into the builder it patches (part 2). For each R2-D*, R3-0, R3-D* and R3-G "after" that calls an approved builder and patches it, move the change into that builder. Then delete the "before" frames, the text-scrubs (for example the C1 "walked in" scrub in five files) and the round3/r3g.js wrapper. When you finish, a flow, its component page and its motion card should all call one builder. List each builder you changed and the frames that changed as a result; any frame that changes in a way a delta didn't ask for, show me before and after.
+2. Apply the rulings R1–R14 (part 1). Before and after for every frame that changes.
+3. Regenerate tokens/tokens.json from the CSS and fix part 5 B10–B14, B19 and B27: raw colours, sizes, spacing and durations become tokens. Add the missing tokens B12 names. Then show me _ds_manifest.json: --rise-list 8px, --dur-base 220ms, --dur-hold 900ms.
+4. Fix the rule breaks in part 5 B (glass, the type floor, contrast, targets, designer notes drawn as copy). Use the fix column in each row.
+5. For every other part 5 row whose fix says "pick one" or "decide": take the row's "Chose" column, unless it breaks a rule in DESIGN-BRIEF.md or ROUND3, in which case follow the rule. List the rows and what you took.
+
+Don't redraw anything that isn't listed. If a change forces another, stop and ask. Publish when I approve.
+```
+
+## R4-1 · Check-in end to end
+
+```
+Read docs/redesign/ROUND4.md part 3 and rulings R2 and R3. On the Flow 4 canvas, draw check-in as one sequence of timed frames, iOS and Android, each labelled with its timestamp and the token or haptic that fires:
+
+1. The hold on the docked pass: 0, 225, 450, 675 and 900 ms, with the quarter marks turning ink and "Checking you in…" at commit (R3). Redraw motion cards #8 and #10 on this pill.
+2. The pour inside the docked pass: server OK, +200 ("You're in." fading in), +700.
+3. No question: the Room at +700 (motion #9).
+4. With a question: +400, +1200, cleared at +1820, then the reveal sheet over Tonight with the checked-in pass behind it, then intent, then the Room. Draw it with both questions due, with one, and with neither. A backdrop tap is "no" or "skip".
+5. The Room isn't ready at +700: the pour holds, filled, up to 4 s, then hands off to the Room skeleton. A tap skips.
+6. Checking in from the event page: Blend in opens Blend'n at Tonight with that pass docked; the same sequence; closing the Room returns to the event page reading "You're in".
+7. Already checked in: no pour, straight to the Room.
+8. "Tell your crew · We're here" at the top of the Room, until it's sent or for 10 minutes.
+9. Reduce Motion: the same order and holds, with 200 ms crossfades; the haptics are kept.
+
+Then update motion card #9 to show both endings (Room at 700; the question path), and retire the other three drawings of the pour (ROUND4 part 5 A4).
+```
+
+## R4-2 · Coach marks and Help › Tips
+
+```
+Read docs/redesign/ROUND4.md part 4 and the CoachMark component page. Draw each coach mark in the inventory in place, on its own screen, as the frame where it first appears: the caret on what it names, iOS and Android, at 200% text, and Reduce Motion (no pop). Use the sentence from the table word for word.
+
+Then draw Settings › Help › Tips in Flow 7: a plain list of every coach-mark sentence, grouped by screen.
+
+Don't add a coach mark for anything a person can already see or read. If you think a screen needs one that isn't in the inventory, list it with your reason and ask; don't draw it.
+```
+
+## R4-3 · Component pages and motion cards (send one group at a time)
+
+```
+Read docs/redesign/ROUND4.md part 5 A and D. For group <P0 | P1 | P2 | P3 | P4 | P5>: rebuild each component page from the builder the flows now call (after R4-0), so the page can't drift from the flows again. Apply every A and D row that names a component in this group. Rebuild each motion card that draws one of these components on the real component: it shows timing, haptics and Reduce Motion, not a second drawing. Finish with a table: component · rows applied · what changed on the page.
+```
+
+## R4-D · The missing states (inside the delta wrapper)
+
+Each one goes inside the Round 2 delta wrapper. The rows are in [`ROUND4.md`](./ROUND4.md) part 6. Each row names the nearest frame to extend and the client `file:line` that reaches the state.
+
+**R4-D4 · Flow 4 (core loop):**
+- every Flow 4 row in part 6 A.1: the chat dock when the event's chat isn't open, "Ended" in Going, taking down a Board post, the Board ask end lines, and the two location trays;
+- the Flow 4 toasts and trays in A.2;
+- the 4.8 leftover in part 6 B: "You checked in somewhere else." on the venue composer.
+
+**R4-D5 · Flow 5 (Banter and chat):**
+- every Flow 5 row in A.1: "You're not in this room" and the Rejoin outcomes, Room info and the Banter row for a place's room, the already-muted sheet, loading older messages, and DM loading, trays and withheld-at-send;
+- the 5.9 leftover: the two photo refusals as drawn frames.
+
+**R4-D3 · Flow 3 (discovery):**
+- every Flow 3 row in A.1: the Scene's organiser-written sections (house rules, FAQ, accessibility, cancellations) as attendee-facing text, the report-event reasons, the map's name chips, locate button and credits, and the city skyline art;
+- the Flow 3 toasts and trays in A.2.
+
+**R4-D6 · Flow 6 (people and profile):**
+- every Flow 6 row in A.1: the edit-profile load failure, the remove-photo confirm, the Education and Phone fields, the About line on a revealed profile, and `/edit-about-you`;
+- the Flow 6 toasts in A.2;
+- the stock Lucide cat on the empty photo stack (R3-A 3 leftover): use the creature set.
+
+**R4-D10 · Flow 10 (crews):**
+- every Flow 10 row in A.1: crews screen and crew detail loading and failed, the decline-invite confirm, "We're here" before check-in, the Room's Crews view states, crew chat after removal, and the Blend room after leaving;
+- the Flow 10 toasts in A.2.
+
+**R4-D11 · Flow 11 (Places live):**
+- the Go Live refusals (weak GPS, rate limit, timeout, not found, Stay locked);
+- the venue page refused before it loads;
+- one-tap "Go live again";
+- Stop being live, confirmed (R12).
+
+**R4-D12 · Flow 12 (Blend'n+):**
+- prices loading, failed and unavailable;
+- waiting for the store to confirm;
+- store errors;
+- restore outcomes;
+- the status read failing.
+
+**R4-D13 · Flow 13 (regulars):**
+- the offer screen loading, failed and 404;
+- the report's reason step (R13);
+- "let them know" refused;
+- the venue page's "No offers from {venue}" switch.
+
+**R4-D7 · Flow 7 (settings and system):**
+- a sign-out the server didn't confirm;
+- deleting an account while a subscription runs;
+- the crash screen with no mail app;
+- Help › Tips (from R4-2), if it isn't drawn yet.
+
+**R4-D1 · Flow 1 (entry):**
+- Forgot password: Resend refused on "Check your inbox".
+
+**Match page:** replace the stock Lucide cat in `components/sets.js` with the creature set (R3-A 3 leftover).
