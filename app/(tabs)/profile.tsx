@@ -658,7 +658,6 @@ function ProfileInner() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: EMBER.bg },
-  flex: { flex: 1 },
 
   /* The screen gutter, and 32 between sections. */
   panel: { paddingHorizontal: GUTTER, paddingVertical: SPACE.lg, gap: SPACE.xxl },

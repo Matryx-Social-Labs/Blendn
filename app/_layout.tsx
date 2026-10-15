@@ -784,7 +784,4 @@ const styles = StyleSheet.create({
      */
     backgroundColor: EMBER.bg,
   },
-  bg: {
-    ...StyleSheet.absoluteFill,
-  },
 })
