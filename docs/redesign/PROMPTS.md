@@ -727,7 +727,7 @@ Don't redraw anything that isn't listed. If a change forces another, stop and as
 ```
 Read docs/redesign/ROUND4.md part 3 and rulings R2 and R3. On the Flow 4 canvas, draw check-in as one sequence of timed frames, iOS and Android, each labelled with its timestamp and the token or haptic that fires:
 
-1. The hold on the docked pass: 0, 225, 450, 675 and 900 ms, with the quarter marks turning ink and "Checking you in…" at commit (R3). Redraw motion cards #8 and #10 on this pill.
+1. The hold on the docked pass, exactly as the Flow 4 frames draw it (no quarter marks): 0, 225, 450, 675 and 900 ms, with the H.tick and H.commit annotations and "Checking you in…" at commit (R3). Redraw motion cards #8 and #10 on this pill and remove #8's quarter marks.
 2. The pour inside the docked pass: server OK, +200 ("You're in." fading in), +700.
 3. No question: the Room at +700 (motion #9).
 4. With a question: +400, +1200, cleared at +1820, then the reveal sheet over Tonight with the checked-in pass behind it, then intent, then the Room. Draw it with both questions due, with one, and with neither. A backdrop tap is "no" or "skip".
