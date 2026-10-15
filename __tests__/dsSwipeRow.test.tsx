@@ -113,6 +113,31 @@ describe('<SwipeRow>', () => {
     expect(onPress).toHaveBeenCalledTimes(1)
   })
 
+  it('controlled: an owner who keeps it closed gets it back closed after a drag', async () => {
+    reduceMotion.mockReturnValue(true)
+    const onOpenChange = jest.fn()
+    await render(row({ open: false, onOpenChange }))
+    await drag(-(W / 2 + 10))
+    expect(onOpenChange).toHaveBeenLastCalledWith(true)
+    expect(offset()).toBe(0)
+  })
+
+  it('a cancelled drag (a system interrupt) goes back and answers nothing', async () => {
+    reduceMotion.mockReturnValue(true)
+    const onOpenChange = jest.fn()
+    await render(row({ onOpenChange }))
+    await act(async () =>
+      fireGestureHandler(getByGestureTestId('s-swipe'), [
+        { state: State.BEGAN, translationX: 0 },
+        { state: State.ACTIVE, translationX: 0 },
+        { state: State.ACTIVE, translationX: -W },
+        { state: State.CANCELLED, translationX: -W },
+      ])
+    )
+    expect(onOpenChange).not.toHaveBeenCalled()
+    expect(offset()).toBe(0)
+  })
+
   it('Reduce Motion: the drag is kept; it snaps without the spring', async () => {
     reduceMotion.mockReturnValue(true)
     withSpring.mockClear()

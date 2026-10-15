@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Modal, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated'
@@ -11,7 +11,7 @@ import { COLOR, EASING, FONT_FAMILY, ICON, MATERIAL, PRESS, SIZE, SPACE, SPRING 
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { tint } from '../../lib/theme'
 import type { Rect } from './chatShared'
-import { ReactionBar } from './ReactionBar'
+import { ReactionBar, reactionBarWidth } from './ReactionBar'
 import { font, IC_HAIRLINE, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
 
 /** The page's column: 220 pt wide, 20 pt corners. */
@@ -99,11 +99,51 @@ export type LongPressMenuProps = {
   items: MenuItem[]
   /** The reaction bar above the item; omit where there are none (a DM, a room that refuses writes, still sending). */
   reactions?: { mine: readonly string[]; onPick: (emoji: ChatReaction) => void }
-  /** The dim, system back, the escape gesture, or after an item or a reaction. */
+  /** The dim, system back, the escape gesture, or after an item or a reaction. It must hide the menu. */
   onClose: () => void
-  /** The item as it lifts: the screen draws its copy (the bubble). */
+  /** The item as it lifts: the screen draws its copy (`<ChatBubble lifted>`) at the anchor's width. */
   children: ReactNode
   testID?: string
+}
+
+/** How close to a screen edge the overlay's pieces may come. */
+const EDGE = SPACE.sm
+
+/**
+ * Where the lifted item, the bar and the menu go: the bar above the item, the
+ * menu below it, all on screen. Near the bottom the item moves up so the menu
+ * fits; an item too tall for both pins the menu to the bottom, over the item.
+ * Each piece lines up with the item's `side` edge and is kept off the sides.
+ */
+export function placeLongPress({
+  window,
+  insets,
+  anchor,
+  side,
+  bar,
+  menu,
+}: {
+  window: { width: number; height: number }
+  insets: { top: number; bottom: number }
+  anchor: Rect
+  side: 'left' | 'right'
+  /** The bar's size, or null without one. */
+  bar: { width: number; height: number } | null
+  menu: { width: number; height: number }
+}) {
+  const highest = insets.top + EDGE + (bar ? bar.height + SPACE.sm : 0)
+  const bottom = window.height - insets.bottom - EDGE
+  const lowest = bottom - menu.height - SPACE.md - anchor.height
+  const top = lowest < highest ? highest : Math.max(highest, Math.min(anchor.y, lowest))
+  const left = (width: number) => {
+    const at = side === 'left' ? anchor.x : anchor.x + anchor.width - width
+    return Math.max(EDGE, Math.min(at, window.width - EDGE - width))
+  }
+  return {
+    item: top,
+    bar: bar ? { top: top - bar.height - SPACE.sm, left: left(bar.width) } : null,
+    menu: { top: Math.min(top + anchor.height + SPACE.md, bottom - menu.height), left: left(MENU_WIDTH) },
+  }
 }
 
 /**
@@ -111,13 +151,14 @@ export type LongPressMenuProps = {
  * the reaction bar above it and the menu below, both springing from it. The
  * screen plays `H.longPress` as the hold completes (the bubble does); an item
  * or a reaction closes it, and so do the dim, Android's back and the escape
- * gesture. Kept on screen: near an edge the item moves in, so the bar and the
- * menu fit.
+ * gesture. `onClose` must hide it. On iOS an item runs once the menu has been
+ * dismissed, so an item that opens a sheet presents it over the screen, not
+ * over a modal on its way out.
  *
  * Motion #36: the item lifts 0.97 → 1.03 on `M.settle`; the dim fades over
- * `base`; the bar and the menu spring 0.9 → 1 at their anchors on `M.snap`.
- * Reduce Motion: no lift and no spring; the dim fades. Glass never fades
- * (§5.2 rule 6), so the menu appears in place.
+ * `base`; the bar and the menu spring 0.9 → 1 at their anchors on `M.snap`
+ * (the bar springs itself). Reduce Motion: no lift and no spring; the dim
+ * fades. Glass never fades (§5.2 rule 6), so the menu appears in place.
  *
  * ponytail: iOS's 6 pt blur behind the dim is not drawn (Material is the only
  * blur and has no backdrop role); no exit animation (it unmounts).
@@ -126,14 +167,29 @@ export function LongPressMenu({ visible, anchor, side, items, reactions, onClose
   const window = useWindowDimensions()
   const insets = useSafeAreaInsets()
   const reduceMotion = useReducedMotion()
-  const lift = useSharedValue(1)
-  const pop = useSharedValue(1)
+  const lift = useSharedValue(reduceMotion ? 1 : PRESS.scale)
+  const pop = useSharedValue(reduceMotion ? 1 : SPRING_FROM)
   const dim = useSharedValue(0)
-  const [menuHeight, setMenuHeight] = useState(items.length * SIZE.control)
+  const estimate = items.length * SIZE.control
+  const [menuHeight, setMenuHeight] = useState(estimate)
+  // Each open starts from this menu's own estimate, not the last one's measure (state adjusted in render).
+  const [openedFor, setOpenedFor] = useState(visible)
+  if (visible !== openedFor) {
+    setOpenedFor(visible)
+    if (visible) setMenuHeight(estimate)
+  }
+  // An item to run once iOS has dismissed the menu.
+  const pending = useRef<(() => void) | null>(null)
 
   useEffect(() => {
-    if (!visible) return
-    dim.set(withSequence(withTiming(0, { duration: 0 }), withTiming(1, { duration: motionTokens(reduceMotion).duration.base, easing: Easing.bezier(...EASING.gentle) })))
+    if (!visible) {
+      // Back to where an open starts, so the next one's first frame is right.
+      dim.set(0)
+      lift.set(reduceMotion ? 1 : PRESS.scale)
+      pop.set(reduceMotion ? 1 : SPRING_FROM)
+      return
+    }
+    dim.set(withTiming(1, { duration: motionTokens(reduceMotion).duration.base, easing: Easing.bezier(...EASING.gentle) }))
     if (reduceMotion) return
     lift.set(withSequence(withTiming(PRESS.scale, { duration: 0 }), withSpring(LIFT, SPRING.settle)))
     pop.set(withSequence(withTiming(SPRING_FROM, { duration: 0 }), withSpring(1, SPRING.snap)))
@@ -144,14 +200,23 @@ export function LongPressMenu({ visible, anchor, side, items, reactions, onClose
   const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.get() }] }))
 
   if (!anchor) return null
-  const bar = reactions ? SIZE.control + SPACE.sm : 0
-  const highest = insets.top + SPACE.sm + bar
-  const lowest = window.height - insets.bottom - SPACE.sm - menuHeight - SPACE.md - anchor.height
-  const top = Math.max(highest, Math.min(anchor.y, lowest))
-  const across = side === 'left' ? { left: anchor.x } : { right: window.width - anchor.x - anchor.width }
-  const close = (then: () => void) => () => {
+  const at = placeLongPress({
+    window,
+    insets,
+    anchor,
+    side,
+    bar: reactions ? { width: reactionBarWidth(), height: SIZE.control } : null,
+    menu: { width: MENU_WIDTH, height: menuHeight },
+  })
+  const runItem = (then: () => void) => () => {
     onClose()
-    then()
+    if (Platform.OS === 'ios') pending.current = then
+    else then()
+  }
+  const dismissed = () => {
+    const then = pending.current
+    pending.current = null
+    then?.()
   }
 
   return (
@@ -163,6 +228,7 @@ export function LongPressMenu({ visible, anchor, side, items, reactions, onClose
       statusBarTranslucent
       navigationBarTranslucent
       onRequestClose={onClose}
+      onDismiss={dismissed}
     >
       {/* A Modal is its own native root: the bar's scrub needs its own root view. */}
       <GestureHandlerRootView style={styles.fill}>
@@ -178,24 +244,28 @@ export function LongPressMenu({ visible, anchor, side, items, reactions, onClose
           </Animated.View>
           <Animated.View
             testID={testID && `${testID}-item`}
-            style={[styles.place, { top, left: anchor.x, width: anchor.width, transformOrigin: `${side} center` }, liftStyle]}
+            style={[styles.place, { top: at.item, left: anchor.x, width: anchor.width, transformOrigin: `${side} center` }, liftStyle]}
           >
             {children}
           </Animated.View>
-          {reactions ? (
-            <Animated.View
-              testID={testID && `${testID}-bar`}
-              style={[styles.place, across, { top: top - bar, transformOrigin: `${side} bottom` }, popStyle]}
-            >
-              <ReactionBar side={side} mine={reactions.mine} onPick={(emoji) => close(() => reactions.onPick(emoji))()} />
-            </Animated.View>
+          {reactions && at.bar ? (
+            <View testID={testID && `${testID}-bar`} style={[styles.place, at.bar]}>
+              <ReactionBar
+                side={side}
+                mine={reactions.mine}
+                onPick={(emoji) => {
+                  onClose()
+                  reactions.onPick(emoji)
+                }}
+              />
+            </View>
           ) : null}
           <Animated.View
             testID={testID && `${testID}-menu`}
             onLayout={(e) => setMenuHeight(e.nativeEvent.layout.height)}
-            style={[styles.place, across, { top: top + anchor.height + SPACE.md, transformOrigin: `${side} top` }, popStyle]}
+            style={[styles.place, at.menu, { transformOrigin: `${side} top` }, popStyle]}
           >
-            <ContextMenu items={items.map((item) => ({ ...item, onPress: close(item.onPress) }))} />
+            <ContextMenu items={items.map((item) => ({ ...item, onPress: runItem(item.onPress) }))} />
           </Animated.View>
         </View>
       </GestureHandlerRootView>

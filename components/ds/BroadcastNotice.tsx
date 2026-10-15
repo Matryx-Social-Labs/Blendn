@@ -1,7 +1,7 @@
 import { Image } from 'expo-image'
 import { useVideoPlayer, VideoView } from 'expo-video'
-import { useEffect, useState } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { useEffect, useRef, useState } from 'react'
+import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { Icon } from '../ui/Icon'
 import { COLOR, FONT_FAMILY, ICON, MATERIAL, RADIUS, SPACE, TYPE } from '../../lib/design/tokens'
@@ -50,8 +50,9 @@ export function spokenDuration(duration: string) {
  * at its end the poster returns. "Couldn't load this · Try again" when it
  * fails. Before the poster loads, the slot is a static `surface` block.
  *
- * Read as one element ("Announcement from Toit: {text}, {time}"), the play
- * button after it. No haptic, play included. Increase Contrast: the hairline.
+ * Read as one element ("Announcement from Toit: {text}, with a photo, {time}"),
+ * the play button after it; a failed video is announced and Try again takes
+ * focus. No haptic, play included. Increase Contrast: the hairline.
  */
 export function BroadcastNotice({ kind, from, text, time, media, testID }: BroadcastNoticeProps) {
   const bold = useBoldText()
@@ -66,7 +67,9 @@ export function BroadcastNotice({ kind, from, text, time, media, testID }: Broad
     >
       <View
         accessible
-        accessibilityLabel={`${announcement ? `Announcement from ${from}` : `Sponsored, ${from}`}: ${text}, ${time}`}
+        accessibilityLabel={`${announcement ? `Announcement from ${from}` : `Sponsored, ${from}`}: ${text}${
+          media ? `, with a ${media.kind === 'image' ? 'photo' : 'video'}` : ''
+        }, ${time}`}
         style={styles.words}
       >
         <View style={styles.head}>
@@ -110,6 +113,14 @@ function Video({ media, testID }: { media: Extract<BroadcastMedia, { kind: 'vide
   const bold = useBoldText()
   const [state, setState] = useState<VideoState>('poster')
   const [attempt, setAttempt] = useState(0)
+  const retry = useRef<View>(null)
+
+  // The play button that had focus is gone: say what happened and put focus on Try again.
+  useEffect(() => {
+    if (state !== 'failed') return
+    if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility('Couldn’t load this video')
+    if (retry.current) AccessibilityInfo.sendAccessibilityEvent(retry.current, 'focus')
+  }, [state])
 
   return (
     <View testID={testID} style={styles.media}>
@@ -137,10 +148,11 @@ function Video({ media, testID }: { media: Extract<BroadcastMedia, { kind: 'vide
         <Playing key={attempt} uri={media.uri} onEnd={() => setState('poster')} onError={() => setState('failed')} />
       ) : null}
       {state === 'failed' ? (
-        <View style={styles.center}>
+        <View style={styles.center} accessibilityLiveRegion="polite">
           <Icon name="cloud-off" color={COLOR.textSecondary} />
           <Text style={[font('meta', bold), styles.secondary]}>Couldn’t load this</Text>
           <Pressable
+            ref={retry}
             accessibilityRole="button"
             hitSlop={(minTarget() - TYPE.meta.lineHeight) / 2}
             onPress={() => {

@@ -81,6 +81,14 @@ describe('<PollBubble>', () => {
     expect(onVote).not.toHaveBeenCalled()
   })
 
+  it('closed with counts withheld: “Closed”, never “0 votes”; a mix draws no bars', async () => {
+    await render(<PollBubble question={Q} options={[{ label: 'One more', votes: null }, { label: 'Call it', votes: null }]} closed testID="p" />)
+    expect(screen.getByText('Closed', { exact: true })).toBeTruthy()
+    expect(screen.queryByText(/0 votes/)).toBeNull()
+    await screen.rerender(<PollBubble question={Q} options={[{ label: 'One more', votes: 7 }, { label: 'Call it', votes: null }]} picked={0} testID="p" />)
+    expect(screen.queryByTestId('p-bar-0')).toBeNull()
+  })
+
   it('reads as one poll: who it is from, then the question', async () => {
     await render(<PollBubble question={Q} options={counted} />)
     expect(screen.getByLabelText(`Poll from the organiser: ${Q}`)).toBeTruthy()

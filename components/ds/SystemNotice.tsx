@@ -21,7 +21,9 @@ export function SystemLine({ text, testID }: { text: string; testID?: string }) 
 export type SystemNoticeProps = {
   /** One sentence; the server's, verbatim, when it is the server speaking. */
   text: string
+  /** `info`, or for `warn` the triangle: a warning never differs by its tint alone. */
   icon?: IconName
+  /** `warn` is also read as "Warning: …". */
   kind?: 'info' | 'warn'
   /** At most one text action. */
   action?: { label: string; onPress: () => void }
@@ -36,7 +38,7 @@ export type SystemNoticeProps = {
  * action as a button. No haptic: a notice is read, not felt. Increase
  * Contrast: the 50% hairline.
  */
-export function SystemNotice({ text, icon = 'info', kind = 'info', action, testID }: SystemNoticeProps) {
+export function SystemNotice({ text, icon, kind = 'info', action, testID }: SystemNoticeProps) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   return (
@@ -44,9 +46,11 @@ export function SystemNotice({ text, icon = 'info', kind = 'info', action, testI
       testID={testID}
       style={[styles.card, { backgroundColor: kind === 'warn' ? COLOR.warningTint : COLOR.surface }, contrast && IC_HAIRLINE]}
     >
-      <Icon name={icon} size={ICON.control} />
+      <Icon name={icon ?? (kind === 'warn' ? 'triangle-alert' : 'info')} size={ICON.control} />
       <View style={styles.body}>
-        <Text style={[font('meta', bold), styles.text]}>{text}</Text>
+        <Text accessibilityLabel={kind === 'warn' ? `Warning: ${text}` : undefined} style={[font('meta', bold), styles.text]}>
+          {text}
+        </Text>
         {action ? (
           <Pressable
             accessibilityRole="button"

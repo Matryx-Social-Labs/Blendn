@@ -35,11 +35,14 @@ export type PollBubbleProps = {
   testID?: string
 }
 
+/** Every count is known: only then is there a total, and are there bars (never a zero, never a partial 100%). */
+const counted = (options: PollOption[]) => options.every((o) => typeof o.votes === 'number')
+
 function footLine(options: PollOption[], picked: number | undefined, closed: boolean, total: number) {
-  if (closed) return `Closed · ${plural(total, 'vote')}`
+  if (closed) return counted(options) ? `Closed · ${plural(total, 'vote')}` : 'Closed'
   if (picked === undefined) return 'Tap to vote · you can change it until it closes'
   if (options.every((o) => o.votes === undefined)) return 'Results appear when the poll closes'
-  if (options.some((o) => o.votes === null)) return 'Counts show once 5 or more people vote'
+  if (!counted(options)) return 'Counts show once 5 or more people vote'
   return plural(total, 'vote')
 }
 
@@ -81,11 +84,11 @@ export function PollBubble({ question, options, picked, closed = false, onVote, 
         const count = shown && votes !== undefined ? (votes === null ? 'Fewer than 5' : String(votes)) : null
         return (
           <Option
-            key={label}
+            key={i}
             label={label}
             count={count}
             spoken={count && (votes === null ? 'fewer than 5 votes' : plural(votes ?? 0, 'vote'))}
-            bar={shown && typeof votes === 'number' && total > 0 ? (`${Math.round((votes / total) * 100)}%` as const) : null}
+            bar={shown && counted(options) && typeof votes === 'number' && total > 0 ? (`${Math.round((votes / total) * 100)}%` as const) : null}
             mark={i === picked ? 'check' : picked === undefined && !closed ? 'ring' : 'none'}
             closed={closed}
             onPress={

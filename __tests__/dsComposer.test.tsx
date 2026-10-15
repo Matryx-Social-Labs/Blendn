@@ -82,11 +82,16 @@ describe('<Composer>', () => {
     expect(onCancelReply).toHaveBeenCalledTimes(1)
   })
 
-  it('failed: “Not sent · Tap to retry”, H.error once as it fails', async () => {
+  it('failed: “Not sent · Tap to retry”, H.error and an announcement once as it fails, never on mount', async () => {
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {})
     const onRetry = jest.fn()
     await render(composer({ value: 'Tusk.', state: 'failed', onRetry }))
+    expect(haptic.error).not.toHaveBeenCalled()
+    await screen.rerender(composer({ value: 'Tusk.', onRetry }))
+    await screen.rerender(composer({ value: 'Tusk.', state: 'failed', onRetry }))
     await screen.rerender(composer({ value: 'Tusk!', state: 'failed', onRetry }))
     expect(haptic.error).toHaveBeenCalledTimes(1)
+    expect(announce).toHaveBeenCalledWith('Not sent. Tap to retry')
     await fireEvent.press(screen.getByRole('button', { name: 'Not sent. Tap to retry' }))
     expect(onRetry).toHaveBeenCalledTimes(1)
   })
@@ -103,6 +108,13 @@ describe('<Composer>', () => {
     expect(screen.getByLabelText(said)).toBeTruthy()
     expect(haptic.send).not.toHaveBeenCalled()
     expect(haptic.error).not.toHaveBeenCalled()
+  })
+
+  it('a lock that arrives while you are in the room is announced', async () => {
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {})
+    await render(composer())
+    await screen.rerender(composer({ state: 'muted' }))
+    expect(announce).toHaveBeenCalledWith('Muted. The organiser has muted you in this room.')
   })
 
   it('a mute carries no countdown; a rate limit carries the server’s, as the hint', async () => {

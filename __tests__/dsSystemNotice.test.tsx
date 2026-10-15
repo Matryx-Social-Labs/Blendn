@@ -41,9 +41,10 @@ describe('<SystemNotice>', () => {
     for (const spy of spies) expect(spy).not.toHaveBeenCalled()
   })
 
-  it('warn: on the warning tint', async () => {
-    await render(<SystemNotice kind="warn" icon="triangle-alert" text="A message here was taken down." testID="n" />)
+  it('warn: on the warning tint, and read as a warning (never the tint alone)', async () => {
+    await render(<SystemNotice kind="warn" text="A message here was taken down." testID="n" />)
     expect(flat('n').backgroundColor).toBe(COLOR.warningTint)
+    expect(screen.getByLabelText('Warning: A message here was taken down.')).toBeTruthy()
   })
 
   it('Increase Contrast: the 50% hairline', async () => {

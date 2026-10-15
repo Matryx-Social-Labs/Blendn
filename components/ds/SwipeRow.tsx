@@ -31,7 +31,7 @@ export type SwipeRowProps = {
   onPress?: () => void
   /** The row read as one element; its actions are in the rotor. */
   accessibilityLabel: string
-  /** Controlled when given; a tap elsewhere closing it is the list's job. */
+  /** Controlled when given: the row rests where this says, sliding back if a drag's answer is not taken. A tap elsewhere closing it is the list's job. */
   open?: boolean
   onOpenChange?: (open: boolean) => void
   /** The row as drawn (the Banter row): opaque, it covers the tray. */
@@ -66,9 +66,12 @@ export function SwipeRow({ actions, onPress, accessibilityLabel, open, onOpenCha
     past.set(to)
     x.set(reduceMotion ? (to ? -width : 0) : withSpring(to ? -width : 0, SPRING.snap))
   }
+  // Each answer the row gives bumps `asked`, so a controlled row whose owner keeps `open` as it was slides back to it.
+  const [asked, setAsked] = useState(0)
   const report = useCallback(
     (next: boolean) => {
       setIsOpen(next)
+      setAsked((n) => n + 1)
       onOpenChange?.(next)
     },
     [onOpenChange]
@@ -79,11 +82,12 @@ export function SwipeRow({ actions, onPress, accessibilityLabel, open, onOpenCha
   }
   const shownOpen = open ?? isOpen
 
+  // Where it rests: the prop when controlled, its own state otherwise; at the current tray's width.
   useEffect(() => {
-    if (open !== undefined) slide(open)
-    // Follows the prop only.
+    slide(shownOpen)
+    // `slide` is rebuilt each render from `width` and `reduceMotion`, both listed through their effects here.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open])
+  }, [shownOpen, width, asked])
 
   const tick = useCallback(() => H.detent(), [])
   const swipe = Gesture.Pan()
@@ -99,7 +103,12 @@ export function SwipeRow({ actions, onPress, accessibilityLabel, open, onOpenCha
       past.set(beyond)
       scheduleOnRN(tick)
     })
-    .onEnd((e) => {
+    .onEnd((e, success) => {
+      // A cancelled drag (a system interrupt) goes back to where it began and answers nothing.
+      if (!success) {
+        slide(start.get() < -width / 2)
+        return
+      }
       const opened = e.velocityX < -FLING_VELOCITY ? true : e.velocityX > FLING_VELOCITY ? false : -x.get() >= width / 2
       slide(opened)
       scheduleOnRN(report, opened)

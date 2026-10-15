@@ -84,6 +84,20 @@ describe('<ReactionBar>', () => {
     expect(reaction).toHaveBeenLastCalledWith('land')
   })
 
+  it('a cancelled scrub picks nothing', async () => {
+    const onPick = jest.fn()
+    await render(<ReactionBar mine={[]} onPick={onPick} testID="r" />)
+    await act(async () =>
+      fireGestureHandler(getByGestureTestId('r-scrub'), [
+        { state: State.BEGAN, x: cellX(0) },
+        { state: State.ACTIVE, x: cellX(0) },
+        { state: State.ACTIVE, x: cellX(3) },
+        { state: State.CANCELLED, x: cellX(3) },
+      ])
+    )
+    expect(onPick).not.toHaveBeenCalled()
+  })
+
   it('iOS: control glass. Android: the solid tier', async () => {
     await render(<ReactionBar mine={[]} onPick={jest.fn()} />)
     expect(screen.getByTestId('glass')).toBeTruthy()
@@ -116,11 +130,16 @@ describe('<ReactionPill>', () => {
     expect(screen.queryByText('1')).toBeNull()
   })
 
-  it('a tap toggles it, silently (the landing plays the haptic)', async () => {
+  it('a tap gives it with H.reaction(land); taking yours back is silent', async () => {
     const onPress = jest.fn()
     await render(<ReactionPill emoji="😂" count={1} mine={false} onPress={onPress} />)
     await fireEvent.press(screen.getByRole('button'))
     expect(onPress).toHaveBeenCalledTimes(1)
+    expect(reaction).toHaveBeenCalledWith('land')
+    reaction.mockClear()
+    await screen.rerender(<ReactionPill emoji="😂" count={2} mine onPress={onPress} />)
+    await fireEvent.press(screen.getByRole('button'))
+    expect(onPress).toHaveBeenCalledTimes(2)
     expect(reaction).not.toHaveBeenCalled()
   })
 

@@ -66,18 +66,28 @@ export const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n ==
 /*
  * One to three emoji and nothing else render at 32 pt with no bubble
  * (R3-D5 5.11). An emoji is a pictograph with its variation selector, skin
- * modifiers and joined parts.
+ * modifier and joined parts, a flag (two regional indicators) or a keycap;
+ * not ©, ® or ™, which are pictographs that read as text.
  */
-const EMOJI_ONLY = /^(?:\p{Extended_Pictographic}(?:️|\p{Emoji_Modifier}|‍\p{Extended_Pictographic})*){1,3}$/u
+const EMOJI =
+  '(?:(?![\\u00A9\\u00AE\\u2122])\\p{Extended_Pictographic}(?:\\uFE0F|\\p{Emoji_Modifier}|\\u200D\\p{Extended_Pictographic})*' +
+  '|\\p{Regional_Indicator}{2}|[#*0-9]\\uFE0F?\\u20E3)'
+const EMOJI_ONLY = new RegExp(`^${EMOJI}{1,3}$`, 'u')
 export const emojiOnly = (text: string) => EMOJI_ONLY.test(text.replace(/\s/g, ''))
 
 /*
- * Links are tappable text, never a preview (R3-D5 5.11, R10): a domain with an
- * optional scheme and path. ponytail: a word like "notes.txt" reads as a link;
- * the server, which counts links, is the authority, and its rule can replace
- * this when it ships one.
+ * Links are tappable text, never a preview (R3-D5 5.11, R10): anything with a
+ * scheme, or a bare domain on a common TLD, with a path that does not swallow
+ * the sentence's closing punctuation; never the domain of an email address.
+ * ponytail: the TLD list keeps "ok.thanks" and "Dr.Smith" as words; the
+ * server, which counts links, is the authority, and its rule replaces this
+ * when it ships one.
  */
-const LINK = /(?:https?:\/\/)?(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/[^\s]*)?/gi
+const PATH_END = `[^\\s.,;:!?)\\]'"]`
+const LINK = new RegExp(
+  `(?<![@\\w.])(?:https?:\\/\\/[^\\s]*${PATH_END}|(?:[a-z0-9-]+\\.)+(?:com|in|org|net|io|co|app|me|ly|gg|link|xyz|info|ai|dev|live|club|events)\\b(?:\\/[^\\s]*${PATH_END})?)`,
+  'gi'
+)
 export type TextPart = { text: string; url?: string }
 export function linkParts(text: string): TextPart[] {
   const parts: TextPart[] = []

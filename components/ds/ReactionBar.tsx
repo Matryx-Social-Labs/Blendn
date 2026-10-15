@@ -23,6 +23,8 @@ import { font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast } from '
 
 /** Each emoji's target: 44 pt on iOS, 48 dp on Android (the page's 40 pt disc sits inside it). */
 export const REACTION_CELL = minTarget
+/** The bar's width: six targets and its end padding. */
+export const reactionBarWidth = () => CHAT_REACTIONS.length * REACTION_CELL() + 2 * SPACE.xs
 const DISC = SIZE.control - SPACE.sm
 /** The emoji under the finger grows (the page's pressed state). */
 const HOT_SCALE = 1.2
@@ -63,7 +65,9 @@ export type ReactionBarProps = {
 export function ReactionBar({ mine, onPick, side = 'left', previewPressed, testID }: ReactionBarProps) {
   const contrast = useIncreaseContrast()
   const reduceMotion = useReducedMotion()
-  const hot = useSharedValue(previewPressed ?? -1)
+  // The emoji under a scrubbing finger, and the one a finger is pressing: two writers, two values.
+  const hot = useSharedValue(-1)
+  const held = useSharedValue(previewPressed ?? -1)
   const scale = useSharedValue(reduceMotion ? 1 : BAR_FROM)
   const cell = REACTION_CELL()
 
@@ -96,8 +100,8 @@ export function ReactionBar({ mine, onPick, side = 'left', previewPressed, testI
       hot.set(i)
       scheduleOnRN(tick)
     })
-    .onEnd(() => {
-      if (hot.get() >= 0) scheduleOnRN(pick, hot.get())
+    .onEnd((e, success) => {
+      if (success) scheduleOnRN(pick, under(e.x))
     })
     .onFinalize(() => hot.set(-1))
   if (testID) scrub.withTestId(`${testID}-scrub`)
@@ -115,6 +119,7 @@ export function ReactionBar({ mine, onPick, side = 'left', previewPressed, testI
               index={i}
               selected={mine.includes(emoji)}
               hot={hot}
+              held={held}
               reduceMotion={reduceMotion}
               onPress={() => pick(i)}
               testID={testID && `${testID}-disc-${i}`}
@@ -131,6 +136,7 @@ function Cell({
   index,
   selected,
   hot,
+  held,
   reduceMotion,
   onPress,
   testID,
@@ -139,6 +145,7 @@ function Cell({
   index: number
   selected: boolean
   hot: SharedValue<number>
+  held: SharedValue<number>
   reduceMotion: boolean
   onPress: () => void
   testID?: string
@@ -156,7 +163,7 @@ function Cell({
   }, [])
 
   const style = useAnimatedStyle(() => {
-    const grown = withTiming(hot.get() === index ? HOT_SCALE : 1, { duration: DURATION.press })
+    const grown = withTiming(hot.get() === index || held.get() === index ? HOT_SCALE : 1, { duration: DURATION.press })
     const from = reduceMotion ? 1 : EMOJI_FROM
     return {
       opacity: Math.min(1, appear.get()),
@@ -168,8 +175,8 @@ function Cell({
     <ScalePress
       pressedScale={1}
       onPress={onPress}
-      onPressIn={() => hot.set(index)}
-      onPressOut={() => hot.set(-1)}
+      onPressIn={() => held.set(index)}
+      onPressOut={() => held.set(-1)}
       accessibilityRole="button"
       accessibilityLabel={`React, ${reactionName(emoji)}`}
       accessibilityState={{ selected }}
@@ -190,9 +197,9 @@ export type ReactionPillProps = {
   count: number
   /** Yours is among them: a 1 pt white outline. */
   mine: boolean
-  /** Give it or take yours back. */
+  /** Give it (`H.reaction('land')`) or take yours back (silent). */
   onPress?: () => void
-  /** Yours has just landed (#37): it pops in on `M.pop`. The bar played the haptic. */
+  /** Yours has just landed (#37): it pops in on `M.pop`. Whatever gave it played the haptic. */
   landed?: boolean
   testID?: string
 }
@@ -201,8 +208,9 @@ export type ReactionPillProps = {
  * A reaction under a bubble (the same page): a 28 pt `surfaceSunken` pill
  * with the emoji and, past one, a Geist Mono count; yours has a 1 pt white
  * outline. Read "fire, 3, including you"; the count, never who. A tap gives it
- * or takes yours back, silently: the landing is what plays. Yours lands with a
- * pop from 0.85 on `M.pop` (#37); under Reduce Motion it simply appears.
+ * (`H.reaction('land')`) or takes yours back (silent, as an unlike is). Yours
+ * lands with a pop from 0.85 on `M.pop` (#37); under Reduce Motion it simply
+ * appears. Its target reaches 44/48 through a hit slop.
  * ponytail: the count swaps; it rolls once RollingNumber (P2) exists.
  */
 export function ReactionPill({ emoji, count, mine, onPress, landed = false, testID }: ReactionPillProps) {
@@ -238,11 +246,14 @@ export function ReactionPill({ emoji, count, mine, onPress, landed = false, test
   }
   return (
     <ScalePress
-      onPress={onPress}
+      onPress={() => {
+        if (!mine) H.reaction('land')
+        onPress()
+      }}
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ selected: mine }}
-      hitSlop={{ top: (minTarget() - PILL_HEIGHT) / 2, bottom: (minTarget() - PILL_HEIGHT) / 2 }}
+      hitSlop={(minTarget() - PILL_HEIGHT) / 2}
     >
       {body}
     </ScalePress>

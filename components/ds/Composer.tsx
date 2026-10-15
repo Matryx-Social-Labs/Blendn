@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Platform, Pressable, StyleSheet, Text, TextInput, View, type StyleProp, type ViewStyle } from 'react-native'
+import { useEffect, useRef, useState } from 'react'
+import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, TextInput, View, type StyleProp, type ViewStyle } from 'react-native'
 
 import ScalePress from '../motion/ScalePress'
 import { GradientFill } from '../ui/GradientFill'
@@ -86,7 +86,8 @@ export type ComposerProps = {
  * draw nothing: the feed says so in one line.
  *
  * `H.send` when a message is committed (#12's motion is the screen's); `H.error`
- * once as a send fails; a locked composer plays nothing. Nothing says
+ * once as a send fails (not when it mounts already failed); a locked composer
+ * plays nothing. A change of state is announced. Nothing says
  * "sending": a sent message appears at once (Flow 5's prototype). Read as
  * "Message, text field" and "Send, button, dimmed" until there is text; a
  * locked reason reads as one element, the countdown as its hint.
@@ -108,10 +109,7 @@ export function Composer({
   testID,
 }: ComposerProps) {
   const contrast = useIncreaseContrast()
-
-  useEffect(() => {
-    if (state === 'failed') H.error()
-  }, [state])
+  useStateChange(state, reason)
 
   if (state === 'banned' || state === 'left' || state === 'ended') return null
   const locked = state !== 'normal' && state !== 'failed'
@@ -139,6 +137,33 @@ export function Composer({
         : null}
     </View>
   )
+}
+
+/** What a change of state says aloud: the reason it can't post, or the failure. */
+function spokenState(state: ComposerState, reason?: string) {
+  if (state === 'failed') return 'Not sent. Tap to retry'
+  if (state === 'normal' || state === 'banned' || state === 'left' || state === 'ended') return null
+  const { title, body } = LOCKED[state]
+  const said = reason ?? body
+  return said ? `${title}. ${said}` : title
+}
+
+/**
+ * As the state changes (not as it mounts in one): `H.error` once when a send
+ * fails, and the new reason announced, since the field it replaces may have
+ * had focus. iOS announces; Android reads the rows' polite live regions.
+ */
+function useStateChange(state: ComposerState, reason?: string) {
+  const previous = useRef(state)
+  useEffect(() => {
+    if (previous.current === state) return
+    previous.current = state
+    if (state === 'failed') H.error()
+    const said = spokenState(state, reason)
+    if (said && Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(said)
+    // On a change of state only; the reason is read as it stood then.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state])
 }
 
 function Field({
@@ -202,7 +227,13 @@ function Field({
 function Failed({ onRetry }: { onRetry?: () => void }) {
   const bold = useBoldText()
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel="Not sent. Tap to retry" onPress={onRetry} style={styles.failed}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Not sent. Tap to retry"
+      accessibilityLiveRegion="polite"
+      onPress={onRetry}
+      style={[styles.failed, { minHeight: minTarget() }]}
+    >
       <Icon name="circle-alert" size={ICON.inline} color={COLOR.destructive} />
       <Text style={[font('caption', bold), styles.destructive]}>Not sent · Tap to retry</Text>
     </Pressable>
@@ -219,6 +250,7 @@ function LockedRow({ state, reason, countdown, action }: { state: Locked } & Pic
     <View style={styles.locked}>
       <View
         accessible
+        accessibilityLiveRegion="polite"
         accessibilityLabel={body ? `${title}. ${body}` : title}
         accessibilityHint={clock ? `You can post again in ${clock}` : undefined}
         style={styles.reason}
@@ -274,7 +306,7 @@ const styles = StyleSheet.create({
   pressedIos: { transform: [{ scale: PRESS.scaleDisc }] },
   wash: { backgroundColor: PRESSED_WASH.android },
   counter: { alignSelf: 'flex-end', color: COLOR.textSecondary, paddingHorizontal: SPACE.lg, paddingBottom: SPACE.sm },
-  failed: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, paddingHorizontal: SPACE.lg, paddingBottom: SPACE.sm },
+  failed: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, paddingHorizontal: SPACE.lg },
   locked: {
     minHeight: SIZE.input,
     flexDirection: 'row',

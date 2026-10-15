@@ -2,7 +2,7 @@ import { Image } from 'expo-image'
 import { useCallback, useEffect, useState } from 'react'
 import { Modal, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler'
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated'
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { scheduleOnRN } from 'react-native-worklets'
 
@@ -13,8 +13,9 @@ import { avatarOf, BUBBLE, timeFont, type ChatPerson, type Rect } from './chatSh
 import { IconButton } from './IconButton'
 import { font, useBoldText, useScreenReader } from './shared'
 
-/** Pinch stops at 4×. */
+/** Pinch stops at 4×; a screen reader's Zoom in goes to 2×. */
 const MAX_ZOOM = 4
+const ZOOM_STEP = 2
 /** A drag down dismisses past 140 pt or at 900 pt/s, as the Blend'n overlay does (#7). */
 const DISMISS = { distance: 140, velocity: 900 } as const
 
@@ -32,6 +33,79 @@ export type ImageViewerProps = {
   testID?: string
 }
 
+/** Zoomed in, the photo pans no further than its own overhang, so it can't leave the screen. */
+function clampPan(value: number, extent: number, zoom: number) {
+  'worklet'
+  const max = (extent * (zoom - 1)) / 2
+  return Math.max(-max, Math.min(max, value))
+}
+
+/** Pinch to zoom, pan while zoomed, drag down to dismiss, tap for the chrome. */
+function useViewerGestures({
+  window,
+  onClose,
+  onTap,
+  testID,
+}: {
+  window: { width: number; height: number }
+  onClose: () => void
+  onTap: () => void
+  testID?: string
+}) {
+  const zoom = useSharedValue(1)
+  const zoomFrom = useSharedValue(1)
+  const panX = useSharedValue(0)
+  const panY = useSharedValue(0)
+  const panFrom = useSharedValue({ x: 0, y: 0 })
+  const drop = useSharedValue(0)
+  const close = useCallback(() => onClose(), [onClose])
+
+  const zoomTo = (to: number) => {
+    'worklet'
+    zoom.set(withSpring(to, SPRING.settle))
+    panX.set(withSpring(clampPan(panX.get(), window.width, to), SPRING.settle))
+    panY.set(withSpring(clampPan(panY.get(), window.height, to), SPRING.settle))
+  }
+  const reset = () => {
+    zoom.set(1)
+    panX.set(0)
+    panY.set(0)
+    drop.set(0)
+  }
+
+  const pinch = Gesture.Pinch()
+    .onStart(() => zoomFrom.set(zoom.get()))
+    .onUpdate((e) => zoom.set(Math.min(MAX_ZOOM, Math.max(1, zoomFrom.get() * e.scale))))
+    .onEnd(() => zoomTo(zoom.get()))
+  const drag = Gesture.Pan()
+    .averageTouches(true)
+    .onStart(() => panFrom.set({ x: panX.get(), y: panY.get() }))
+    .onUpdate((e) => {
+      const z = zoom.get()
+      if (z > 1) {
+        panX.set(clampPan(panFrom.get().x + e.translationX, window.width, z))
+        panY.set(clampPan(panFrom.get().y + e.translationY, window.height, z))
+        return
+      }
+      drop.set(e.translationY)
+    })
+    .onEnd((e, success) => {
+      if (zoom.get() > 1) return
+      // A cancelled drag springs back; it never closes.
+      if (success && (drop.get() > DISMISS.distance || e.velocityY > DISMISS.velocity)) {
+        scheduleOnRN(close)
+        return
+      }
+      drop.set(withSpring(0, { ...SPRING.fling, velocity: e.velocityY }))
+    })
+  const tap = Gesture.Tap().onStart(() => scheduleOnRN(onTap))
+  if (testID) {
+    drag.withTestId(`${testID}-drag`)
+    tap.withTestId(`${testID}-tap`)
+  }
+  return { gesture: Gesture.Race(Gesture.Simultaneous(pinch, drag), tap), zoom, panX, panY, drop, reset, zoomTo }
+}
+
 /**
  * A photo from a bubble (guidelines/components/ImageViewer.html, ROUND3 D 5.9):
  * full-bleed on ink, contained, never cropped. The chrome is two media
@@ -43,7 +117,8 @@ export type ImageViewerProps = {
  *
  * Motion #33: it travels from the bubble's frame on `M.travel` while the ink
  * fades in. Reduce Motion: it fades over 200 ms. No haptic. Read: Close, the
- * photo ("Photo from Cosmic Panda, 9:52 PM"), More, the sender's line.
+ * photo ("Photo from Cosmic Panda, 9:52 PM", with Zoom in and Zoom out as its
+ * actions), More, the sender's line.
  *
  * ponytail: the close doesn't travel back to the bubble (it unmounts); the
  * page's gradient scrims are a scrim pill under the foot line (a gradient
@@ -64,62 +139,22 @@ export function ImageViewer({ visible, uri, sender, time, onClose, onMore, from,
   }
 
   const open = useSharedValue(0)
-  const zoom = useSharedValue(1)
-  const zoomFrom = useSharedValue(1)
-  const panX = useSharedValue(0)
-  const panY = useSharedValue(0)
-  const panFrom = useSharedValue({ x: 0, y: 0 })
-  const drop = useSharedValue(0)
   const travel = !!from && !reduceMotion
+  const toggle = useCallback(() => setChrome((on) => !on), [])
+  const { gesture, zoom, panX, panY, drop, reset, zoomTo } = useViewerGestures({ window, onClose, onTap: toggle, testID })
 
   useEffect(() => {
-    if (!visible) return
-    zoom.set(1)
-    panX.set(0)
-    panY.set(0)
-    drop.set(0)
+    if (!visible) {
+      // Back to where an open starts, so the next one's first frame is right.
+      reset()
+      open.set(0)
+      return
+    }
     const fade = withTiming(1, { duration: motionTokens(reduceMotion).duration.base, easing: Easing.bezier(...EASING.gentle) })
-    open.set(withSequence(withTiming(0, { duration: 0 }), travel ? withSpring(1, SPRING.travel) : fade))
-    // On opening only; the rest is read as it stood then.
+    open.set(travel ? withSpring(1, SPRING.travel) : fade)
+    // On opening and closing only; the rest is read as it stood then.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible])
-
-  const toggle = useCallback(() => setChrome((on) => !on), [])
-  const close = useCallback(() => onClose(), [onClose])
-
-  const pinch = Gesture.Pinch()
-    .onStart(() => zoomFrom.set(zoom.get()))
-    .onUpdate((e) => zoom.set(Math.min(MAX_ZOOM, Math.max(1, zoomFrom.get() * e.scale))))
-    .onEnd(() => {
-      if (zoom.get() > 1) return
-      panX.set(withSpring(0, SPRING.settle))
-      panY.set(withSpring(0, SPRING.settle))
-    })
-  const drag = Gesture.Pan()
-    .averageTouches(true)
-    .onStart(() => panFrom.set({ x: panX.get(), y: panY.get() }))
-    .onUpdate((e) => {
-      if (zoom.get() > 1) {
-        panX.set(panFrom.get().x + e.translationX)
-        panY.set(panFrom.get().y + e.translationY)
-        return
-      }
-      drop.set(e.translationY)
-    })
-    .onEnd((e) => {
-      if (zoom.get() > 1) return
-      if (drop.get() > DISMISS.distance || e.velocityY > DISMISS.velocity) {
-        scheduleOnRN(close)
-        return
-      }
-      drop.set(withSpring(0, { ...SPRING.fling, velocity: e.velocityY }))
-    })
-  const tap = Gesture.Tap().onStart(() => scheduleOnRN(toggle))
-  if (testID) {
-    drag.withTestId(`${testID}-drag`)
-    tap.withTestId(`${testID}-tap`)
-  }
-  const gesture = Gesture.Race(Gesture.Simultaneous(pinch, drag), tap)
 
   const photoStyle = useAnimatedStyle(() => {
     const p = open.get()
@@ -163,6 +198,11 @@ export function ImageViewer({ visible, uri, sender, time, onClose, onMore, from,
               accessible
               accessibilityRole="image"
               accessibilityLabel={`Photo from ${sender.name}, ${time}`}
+              accessibilityActions={[
+                { name: 'zoomIn', label: 'Zoom in' },
+                { name: 'zoomOut', label: 'Zoom out' },
+              ]}
+              onAccessibilityAction={(e) => zoomTo(e.nativeEvent.actionName === 'zoomIn' ? ZOOM_STEP : 1)}
               style={[StyleSheet.absoluteFill, photoStyle]}
             >
               <Image source={{ uri }} style={styles.fill} contentFit="contain" accessible={false} />

@@ -225,7 +225,7 @@ function LiveRoom() {
         }
         onClose={() => setMenu(null)}
       >
-        {menu ? <ChatBubble {...bubbleProps(menu.message, messages.indexOf(menu.message))} /> : null}
+        {menu ? <ChatBubble {...bubbleProps(menu.message, messages.indexOf(menu.message))} lifted /> : null}
       </LongPressMenu>
       <ImageViewer
         testID="ds-demo-viewer"

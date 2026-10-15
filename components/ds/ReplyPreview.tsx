@@ -53,6 +53,7 @@ export function ReplyPreview({ name, text, onPress, onCancel, testID }: ReplyPre
         accessibilityLabel={`Replying to ${name}: ${text}`}
         accessibilityHint="Shows the original message"
         onPress={onPress}
+        hitSlop={SPACE.xs}
       >
         {quote}
       </Pressable>

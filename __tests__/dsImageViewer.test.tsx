@@ -95,6 +95,29 @@ describe('<ImageViewer>', () => {
     expect(onClose).toHaveBeenCalledTimes(2)
   })
 
+  it('a cancelled drag (a system interrupt) never closes it', async () => {
+    const onClose = jest.fn()
+    await render(viewer({ onClose }))
+    await act(async () =>
+      fireGestureHandler(getByGestureTestId('v-drag'), [
+        { state: State.BEGAN, translationY: 0 },
+        { state: State.ACTIVE, translationY: 0 },
+        { state: State.ACTIVE, translationY: 300 },
+        { state: State.CANCELLED, translationY: 300 },
+      ])
+    )
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('a screen reader zooms with the photo’s actions', async () => {
+    withSpring.mockClear()
+    await render(viewer())
+    const photo = screen.getByRole('image', { name: 'Photo from Cosmic Panda, 9:52 PM' })
+    expect(photo.props.accessibilityActions.map((a: { label: string }) => a.label)).toEqual(['Zoom in', 'Zoom out'])
+    await fireEvent(photo, 'accessibilityAction', { nativeEvent: { actionName: 'zoomIn' } })
+    expect(withSpring).toHaveBeenCalledWith(2, expect.objectContaining({ stiffness: SPRING.settle.stiffness }))
+  })
+
   it('Android back closes it', async () => {
     const onClose = jest.fn()
     await render(viewer({ onClose }))

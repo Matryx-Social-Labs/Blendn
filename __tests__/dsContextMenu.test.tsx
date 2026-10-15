@@ -11,7 +11,7 @@ import React from 'react'
 import { AccessibilityInfo, Platform, StyleSheet, Text } from 'react-native'
 import * as Reanimated from 'react-native-reanimated'
 
-import { ContextMenu, LongPressMenu, type MenuItem } from '../components/ds/ContextMenu'
+import { ContextMenu, LongPressMenu, placeLongPress, type MenuItem } from '../components/ds/ContextMenu'
 import { COLOR, MATERIAL, SIZE, SPRING } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 
@@ -73,6 +73,39 @@ describe('<ContextMenu>', () => {
   })
 })
 
+describe('placeLongPress', () => {
+  const window = { width: 360, height: 800 }
+  const insets = { top: 40, bottom: 30 }
+  const bar = { width: 296, height: 48 }
+  const menu = { width: 220, height: 240 }
+
+  it('mid-screen: the item stays; the bar above, the menu below', () => {
+    const at = placeLongPress({ window, insets, anchor: { x: 64, y: 300, width: 220, height: 44 }, side: 'left', bar, menu })
+    expect(at.item).toBe(300)
+    expect(at.bar).toEqual({ top: 300 - 48 - 8, left: 56 })
+    expect(at.menu).toEqual({ top: 300 + 44 + 12, left: 64 })
+  })
+
+  it('near the bottom: the item moves up so the menu fits', () => {
+    const at = placeLongPress({ window, insets, anchor: { x: 64, y: 700, width: 220, height: 44 }, side: 'left', bar, menu })
+    expect(at.menu.top + menu.height).toBeLessThanOrEqual(800 - 30)
+    expect(at.item).toBeLessThan(700)
+  })
+
+  it('an item too tall for both: the menu pins to the bottom, over it', () => {
+    const at = placeLongPress({ window, insets, anchor: { x: 24, y: 100, width: 300, height: 600 }, side: 'left', bar: null, menu })
+    expect(at.menu.top).toBe(800 - 30 - 8 - 240)
+  })
+
+  it('yours lines up on its right edge; a bar too wide for the space is kept on screen', () => {
+    const yours = placeLongPress({ window, insets, anchor: { x: 200, y: 300, width: 136, height: 44 }, side: 'right', bar, menu })
+    expect(yours.bar?.left).toBe(336 - 296)
+    expect(yours.menu.left).toBe(336 - 220)
+    const theirs = placeLongPress({ window, insets, anchor: { x: 100, y: 300, width: 200, height: 44 }, side: 'left', bar, menu })
+    expect(theirs.bar?.left).toBe(360 - 8 - 296)
+  })
+})
+
 describe('<LongPressMenu>', () => {
   const menu = (props: Partial<React.ComponentProps<typeof LongPressMenu>> = {}) => (
     <LongPressMenu visible anchor={ANCHOR} side="left" items={items()} onClose={jest.fn()} testID="lp" {...props}>
@@ -97,7 +130,19 @@ describe('<LongPressMenu>', () => {
     expect(screen.queryByTestId('lp-bar')).toBeNull()
   })
 
-  it('an item runs and closes the menu; so does a reaction', async () => {
+  it('iOS: an item closes the menu and runs once it has been dismissed (a sheet it opens is not lost)', async () => {
+    const reply = jest.fn()
+    const onClose = jest.fn()
+    await render(menu({ items: items({ reply }), onClose }))
+    await fireEvent.press(screen.getByRole('button', { name: 'Reply' }))
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(reply).not.toHaveBeenCalled()
+    await fireEvent(screen.getByTestId('lp-modal'), 'dismiss')
+    expect(reply).toHaveBeenCalledTimes(1)
+  })
+
+  it('Android: an item closes the menu and runs at once; a reaction too', async () => {
+    on('android')
     const reply = jest.fn()
     const onPick = jest.fn()
     const onClose = jest.fn()
@@ -105,7 +150,6 @@ describe('<LongPressMenu>', () => {
     await render(menu({ items: items({ reply }), reactions: { mine: [], onPick }, onClose }))
     await fireEvent.press(screen.getByRole('button', { name: 'Reply' }))
     expect(reply).toHaveBeenCalledTimes(1)
-    expect(onClose).toHaveBeenCalledTimes(1)
     await fireEvent.press(screen.getByRole('button', { name: 'React, heart' }))
     expect(onPick).toHaveBeenCalledWith('❤️')
     expect(onClose).toHaveBeenCalledTimes(2)

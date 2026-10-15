@@ -227,6 +227,52 @@ describe('<ChatBubble>', () => {
     expect(report).toHaveBeenCalledTimes(1)
   })
 
+  it('a screen reader reacts from the bubble: the six as actions, landing with H.reaction', async () => {
+    const land = jest.spyOn(H, 'reaction').mockImplementation(() => {})
+    const onReactionPress = jest.fn()
+    await render(bubble({ reactions: [{ emoji: '🔥', count: 3, mine: true }], onReactionPress }))
+    const names = message().props.accessibilityActions.map((a: { name: string }) => a.name)
+    expect(names).toEqual(expect.arrayContaining(['React, thumbs up', 'Take back fire']))
+    await fireEvent(message(), 'accessibilityAction', { nativeEvent: { actionName: 'React, heart' } })
+    expect(onReactionPress).toHaveBeenLastCalledWith('❤️')
+    expect(land).toHaveBeenCalledWith('land')
+    land.mockClear()
+    await fireEvent(message(), 'accessibilityAction', { nativeEvent: { actionName: 'Take back fire' } })
+    expect(onReactionPress).toHaveBeenLastCalledWith('🔥')
+    expect(land).not.toHaveBeenCalled()
+  })
+
+  it('removed offers no actions; not sent offers no Reply', async () => {
+    const actions = [{ label: 'Copy', onPress: jest.fn() }]
+    await render(bubble({ removed: true, onReply: jest.fn(), actions }))
+    expect(message().props.accessibilityActions).toEqual([])
+    await screen.rerender(bubble({ mine: true, failed: true, onReply: jest.fn(), actions }))
+    expect(message().props.accessibilityActions.map((a: { name: string }) => a.name)).toEqual(['Copy'])
+  })
+
+  it('a cancelled swipe (a system interrupt) springs back and replies to nothing', async () => {
+    const onReply = jest.fn()
+    await render(bubble({ onReply }))
+    await act(async () =>
+      fireGestureHandler(getByGestureTestId('b-swipe'), [
+        { state: State.BEGAN, translationX: 0 },
+        { state: State.ACTIVE, translationX: 0 },
+        { state: State.ACTIVE, translationX: 80 },
+        { state: State.CANCELLED, translationX: 80 },
+      ])
+    )
+    expect(onReply).not.toHaveBeenCalled()
+  })
+
+  it('lifted (the menu’s copy): the bubble alone, no name, creature, time or gestures', async () => {
+    await render(bubble({ lifted: true, first: true, last: true, onLongPress: jest.fn() }))
+    expect(message()).toBeTruthy()
+    expect(screen.queryByText('Cosmic Panda')).toBeNull()
+    expect(screen.queryByTestId('b-avatar', { includeHiddenElements: true })).toBeNull()
+    expect(screen.queryByText('9:38 PM', { includeHiddenElements: true })).toBeNull()
+    expect(() => getByGestureTestId('b-hold')).toThrow()
+  })
+
   it('arrives silently: no haptic for an incoming message', async () => {
     const spies = Object.keys(H).map((k) => jest.spyOn(H, k as keyof typeof H).mockImplementation(() => {}))
     await render(bubble({ animateIn: 'arrive' }))

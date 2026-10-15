@@ -104,11 +104,14 @@ describe('<BroadcastNotice>', () => {
     for (const spy of spies) expect(spy).not.toHaveBeenCalled()
   })
 
-  it('a video that fails says so, and Try again plays it afresh', async () => {
+  it('a video that fails says so aloud, and Try again plays it afresh', async () => {
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {})
     await render(<BroadcastNotice kind="sponsored" from="Bira 91" text="Two-for-one." time="10:02 PM" media={VIDEO} />)
+    expect(screen.getByLabelText('Sponsored, Bira 91: Two-for-one., with a video, 10:02 PM')).toBeTruthy()
     await fireEvent.press(screen.getByRole('button', { name: 'Play video, 30 seconds' }))
     await act(async () => latest().emit('statusChange', { status: 'error' }))
     expect(screen.getByText('Couldn’t load this')).toBeTruthy()
+    expect(announce).toHaveBeenCalledWith('Couldn’t load this video')
     await fireEvent.press(screen.getByRole('button', { name: 'Try again' }))
     expect(players).toHaveLength(2)
     expect(latest().play).toHaveBeenCalled()
