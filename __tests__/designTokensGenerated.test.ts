@@ -5,10 +5,10 @@
  * instead. The fix is `npm run tokens`.
  */
 import fs from 'fs'
+import { DURATION, REDUCE_MOTION, SPRING } from '../lib/design/tokens'
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { render, SOURCE, OUTPUT } = require('../scripts/generate-design-tokens')
-import { DURATION, REDUCE_MOTION, SPRING } from '../lib/design/tokens'
 
 describe('generated design tokens', () => {
   it('match what the generator makes from design/tokens.json', () => {

@@ -13,6 +13,7 @@
  * shipping.
  */
 
+import { GeistMono_500Medium, GeistMono_700Bold } from '@expo-google-fonts/geist-mono'
 import {
   Manrope_400Regular,
   Manrope_600SemiBold,
@@ -43,4 +44,20 @@ export const EMBER_FONT_MODULES = {
   Manrope_400Regular,
   Manrope_600SemiBold,
   Manrope_700Bold,
+  /*
+   * The redesign's families (lib/design/tokens.ts `FONT_FAMILY`), loaded now so
+   * screens can move to them one at a time.
+   *
+   * Satoshi is the unmodified Fontshare OTF, required from a gitignored folder:
+   * the ITF licence lets the app embed it but not this public repo publish it.
+   * A build without the four files fails to bundle, by name, rather than
+   * shipping the system font — docs/RELEASING.md, "Satoshi", says where they
+   * come from. Geist Mono is OFL, from its npm package.
+   */
+  Satoshi_400Regular: require('../assets/fonts/satoshi/Satoshi-Regular.otf'),
+  Satoshi_500Medium: require('../assets/fonts/satoshi/Satoshi-Medium.otf'),
+  Satoshi_700Bold: require('../assets/fonts/satoshi/Satoshi-Bold.otf'),
+  Satoshi_900Black: require('../assets/fonts/satoshi/Satoshi-Black.otf'),
+  GeistMono_500Medium,
+  GeistMono_700Bold,
 } as const

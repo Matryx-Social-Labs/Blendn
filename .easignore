@@ -1,0 +1,64 @@
+# EAS uploads by this file instead of .gitignore when it exists. It is
+# .gitignore minus one line, `/assets/fonts/satoshi/`: the Satoshi files are kept
+# out of git (public repo, ITF licence) but must reach the build, local or cloud.
+# __tests__/fonts.test.ts fails if a .gitignore rule is missing here.
+
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files
+.env*.local
+
+# typescript
+*.tsbuildinfo
+
+app-example
+
+.env
+.env.development
+
+# Design assets (re-export from Figma if needed)
+assets/figma/
+
+# Dev tool config
+.claude/
+.env.local
+
+# Sentry CLI auth token (sensitive)
+android/sentry.properties
+ios/sentry.properties
+
+# Figma source and its PDF export. 183 MB and 202 MB — over GitHub's 100 MB
+# hard limit, so committing them fails the push and needs history surgery to
+# undo. They live in the design tool, not the app repo.
+*.fig
+Blendn.pdf

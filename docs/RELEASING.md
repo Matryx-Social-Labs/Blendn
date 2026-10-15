@@ -75,6 +75,33 @@ Nothing else in `.env.example` is a secret. Everything prefixed `EXPO_PUBLIC_`
 is compiled into the bundle — see *Environment variables* below for why that is
 not a leak and what the actual rule is.
 
+### ⚠️ Satoshi is not in the repo: copy it in before anything bundles
+
+The redesign's typeface, Satoshi, is under the ITF Free Font License v2.0. The
+app may embed it; the files may not be published, modified, subset or
+converted, and this repository is public. So `lib/fonts.ts` requires four
+unmodified OTFs from `assets/fonts/satoshi/`, which is gitignored, and
+`__tests__/fonts.test.ts` fails if one is ever tracked.
+
+Every machine that runs Metro or builds — `npx expo start`, `expo run:*`,
+`npm run ship:local`, a cloud `eas build` — copies them in first, from the
+design-system export (company-internal; ask the owner, never a public link):
+
+```bash
+mkdir -p assets/fonts/satoshi
+cp <export>/uploads/Satoshi_Complete/Fonts/OTF/Satoshi-{Regular,Medium,Bold,Black}.otf assets/fonts/satoshi/
+```
+
+Without them the bundle fails, naming the missing file; it never silently ships
+the system font. `npm test`, typecheck and lint do not need them (Jest maps the
+files to a stub), so CI is unaffected.
+
+**They reach EAS through `.easignore`.** EAS uploads by `.gitignore` unless
+`.easignore` exists, and by `.gitignore` the fonts would be left behind — on
+`eas build --local` too, which copies the project the same way. `.easignore` is
+`.gitignore` minus the Satoshi line; `fonts.test.ts` fails if a rule is added to
+one and not the other. Geist Mono is OFL and comes from npm.
+
 ### ⚠️ Xcode 27: `expo run:ios` cannot find the Simulator, and the Pods are too old for it
 
 Two things that cost an afternoon on 2026-09-21, both on a stock Xcode 27.0
