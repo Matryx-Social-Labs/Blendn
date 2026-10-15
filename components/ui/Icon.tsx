@@ -25,6 +25,7 @@ import Apple from 'lucide-react-native/icons/apple'
 import Archive from 'lucide-react-native/icons/archive'
 import ArrowDown from 'lucide-react-native/icons/arrow-down'
 import ArrowDownUp from 'lucide-react-native/icons/arrow-down-up'
+import ArrowLeft from 'lucide-react-native/icons/arrow-left'
 import ArrowLeftRight from 'lucide-react-native/icons/arrow-left-right'
 import ArrowUp from 'lucide-react-native/icons/arrow-up'
 import ArrowUpRight from 'lucide-react-native/icons/arrow-up-right'
@@ -52,6 +53,7 @@ import ChevronRight from 'lucide-react-native/icons/chevron-right'
 import Cigarette from 'lucide-react-native/icons/cigarette'
 import CircleAlert from 'lucide-react-native/icons/circle-alert'
 import CircleCheck from 'lucide-react-native/icons/circle-check'
+import CirclePause from 'lucide-react-native/icons/circle-pause'
 import CircleQuestionMark from 'lucide-react-native/icons/circle-question-mark'
 import CircleSlash from 'lucide-react-native/icons/circle-slash'
 import CircleUserRound from 'lucide-react-native/icons/circle-user-round'
@@ -155,6 +157,7 @@ const ICONS = {
   archive: Archive,
   'arrow-down': ArrowDown,
   'arrow-down-up': ArrowDownUp,
+  'arrow-left': ArrowLeft,
   'arrow-left-right': ArrowLeftRight,
   'arrow-up': ArrowUp,
   'arrow-up-right': ArrowUpRight,
@@ -182,6 +185,7 @@ const ICONS = {
   cigarette: Cigarette,
   'circle-alert': CircleAlert,
   'circle-check': CircleCheck,
+  'circle-pause': CirclePause,
   'circle-question-mark': CircleQuestionMark,
   'circle-slash': CircleSlash,
   'circle-user-round': CircleUserRound,

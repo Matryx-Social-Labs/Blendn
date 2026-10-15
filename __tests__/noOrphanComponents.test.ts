@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync, statSync } from 'fs'
-import { join, basename } from 'path'
+import { join, basename, dirname } from 'path'
 
 /**
  * Every component reaches a real screen.
@@ -66,35 +66,52 @@ const KNOWN_ORPHANS: Record<string, string> = {
   'VenuePlate.tsx': 'redesign P5 set; the art for a place with no next event (Places tiles and rows, the venue hero) adopts it with the Places redesign',
   'Disc.tsx': 'the redesign centre button (§11), built ahead of its slot; Flow 4 swaps it in for RoomButton in app/(tabs)/_layout.tsx',
   'DiscMark.tsx': 'the monogram drawn from its vector; on a screen with the disc (Flow 4), later the splash and the Live Activity (§11.6)',
+  /* The P0 system components (ROUND3 B4), built ahead of their flows; each goes with the first flow that adopts it. */
+  'Avatar.tsx': 'redesign P0 component; adopted with the Room and People flows (ROUND3 B4, D · 4)',
+  'Banner.tsx': 'redesign P0 component; adopted with the Room (VisibilityBanner) and the system banners (ROUND3 B4)',
+  'Button.tsx': 'redesign P0 component; every redesigned flow adopts it for its actions (ROUND3 B4, §12)',
+  'IconButton.tsx': 'redesign P0 component; adopted with the first redesigned top bar (ROUND3 B4)',
+  'Loader.tsx': 'redesign P0 component; the morphing loader replaces the spinners flow by flow (ROUND3 B4, motion #24)',
+  'Sheet.tsx': 'redesign P0 component; replaces ActionTray flow by flow (ROUND3 B4)',
+  'SettingsRow.tsx': 'redesign P0 component; adopted with the Settings flow (ROUND3 B4, D · 7)',
+  'StateScreen.tsx': 'redesign P0 component; replaces LoadError and the empty states flow by flow (ROUND3 B4)',
+  'ds/Toast.tsx': 'redesign P0 component; the toast provider (components/Toast.tsx) moves to it with its first redesigned flow (ROUND3 B4)',
 }
 
 const sources = walk(join(ROOT, 'app'))
   .concat(walk(join(ROOT, 'components')))
   .concat(walk(join(ROOT, 'lib')))
 
+const componentFiles = walk(join(ROOT, 'components')).filter((f) => f.endsWith('.tsx'))
+
+/**
+ * A component's ledger key, and the tail an import of it ends with: its file
+ * name, or `dir/file` when another component shares the name
+ * (`components/Toast.tsx` and `components/ds/Toast.tsx`), so an import of one
+ * does not count as wiring the other.
+ */
+function key(full: string) {
+  const file = basename(full)
+  return componentFiles.filter((f) => basename(f) === file).length > 1 ? `${basename(dirname(full))}/${file}` : file
+}
+const importsOf = (file: string) => new RegExp(`['"][^'"]*/${file.replace(/\.tsx$/, '')}['"]`)
+
 /*
  * Importers that are not a screen: the preview harness, and a component on the
  * ledger — `VenuePlate` drawing an `<Icon>` puts no Icon on a screen, and
  * counting it would read Icon's entry as stale while nothing ships either.
  */
-const nonPreview = sources.filter(
-  (f) => !f.includes(`${'app'}/preview/`) && !Object.hasOwn(KNOWN_ORPHANS, basename(f))
-)
-
-const componentFiles = walk(join(ROOT, 'components')).filter((f) => f.endsWith('.tsx'))
+const nonPreview = sources.filter((f) => !f.includes(`${'app'}/preview/`) && !Object.hasOwn(KNOWN_ORPHANS, key(f)))
 
 describe('no component is reachable only from the preview harness', () => {
   it.each(componentFiles.map((f) => [f.replace(`${ROOT}/`, ''), f]))(
     '%s reaches a real screen',
     (rel, full) => {
-      const name = basename(full, '.tsx')
-      const importers = nonPreview.filter(
-        (f) => f !== full && new RegExp(`['"][^'"]*/${name}['"]`).test(readFileSync(f, 'utf8'))
-      )
+      const importers = nonPreview.filter((f) => f !== full && importsOf(key(full)).test(readFileSync(f, 'utf8')))
 
       if (importers.length > 0) return
 
-      const reason = KNOWN_ORPHANS[basename(full)]
+      const reason = KNOWN_ORPHANS[key(full)]
       if (reason) {
         // Recorded debt. The message is the ledger entry, so a reader who hits
         // this sees the decision rather than an unexplained allowance.
@@ -120,12 +137,7 @@ describe('the orphan ledger stays honest', () => {
      * undone and gets done twice.
      */
     for (const file of Object.keys(KNOWN_ORPHANS)) {
-      const name = basename(file, '.tsx')
-      const importers = nonPreview.filter(
-        (f) =>
-          !f.endsWith(`/${file}`) &&
-          new RegExp(`['"][^'"]*/${name}['"]`).test(readFileSync(f, 'utf8'))
-      )
+      const importers = nonPreview.filter((f) => !f.endsWith(`/${file}`) && importsOf(file).test(readFileSync(f, 'utf8')))
       expect({ file, importers: importers.map((f) => f.replace(`${ROOT}/`, '')) }).toEqual({
         file,
         importers: [],
@@ -135,7 +147,7 @@ describe('the orphan ledger stays honest', () => {
 
   it('names a file that exists', () => {
     // A stale entry silently disables the check for a name nothing matches.
-    const present = new Set(componentFiles.map((f) => basename(f)))
+    const present = new Set(componentFiles.map(key))
     for (const file of Object.keys(KNOWN_ORPHANS)) expect(present.has(file)).toBe(true)
   })
 })

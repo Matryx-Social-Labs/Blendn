@@ -178,6 +178,11 @@ place; screens move to it one at a time, and `EMBER` goes when the last has.
 - `components/ui/Material.tsx` (glass/blur/solid), `GradientFill.tsx` (the two
   brand gradients), `Icon.tsx` (Lucide, outlined) — the only places glass, a
   gradient or a Lucide glyph may come from
+- `components/ds/` — the P0 system components (ROUND3 B4): `Button`, `IconButton`,
+  `Sheet`, `Toast`, `Banner`/`VisibilityBanner`, `SettingsRow`/`SettingsGroup`,
+  `Avatar`, `Loader`/`Spinner`, `StateScreen`/`GlyphWell`. Import each file
+  directly (no barrel: it would hide wiring from `noOrphanComponents`). Every
+  state is on `/preview/ds-p0`
 - Satoshi is gitignored (its licence; this repo is public): copy it in before
   Metro runs — `docs/RELEASING.md`, "Satoshi"
 
