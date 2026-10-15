@@ -18,6 +18,8 @@ import React from 'react'
 import { AccessibilityInfo, StyleSheet } from 'react-native'
 
 import { BlendnScreen } from '../components/blendn/BlendnScreen'
+import { ASK_AT, ROOM_AT } from '../components/ds/MomentPour'
+import { DURATION } from '../lib/design/tokens'
 import { askIntentRoute, intentAnswered, submitCheckIn, type CheckInOutcome } from '../lib/checkIn'
 import { H } from '../lib/haptics'
 
@@ -196,19 +198,25 @@ it('no question: the pour holds, filled, until the Room has loaded, then hands o
   expect(router.push).not.toHaveBeenCalled()
 })
 
-it('"Why do you go out?": the pour, then the sheet over Tonight (#14), then the Room', async () => {
-  let underTheSheet: { room: boolean; tonight: boolean } | null = null
+it('"Why do you go out?": the pour plays out and clears, then the sheet over Tonight (#14), then the Room', async () => {
+  let underTheSheet: { room: boolean; tonight: boolean; pourReleased: boolean } | null = null
   router.push.mockImplementation(() => {
-    underTheSheet = { room: roomShowing(), tonight: tonightShowing() }
+    const pour = screen.queryByTestId('blendn-pour', HIDDEN)
+    underTheSheet = { room: roomShowing(), tonight: tonightShowing(), pourReleased: !pour || pour.props.pointerEvents === 'none' }
   })
   await holdToCheckIn(fresh(true))
   // The room loads under the pour; it still waits its turn.
   await advance(300)
   await act(async () => mockRoomLoads())
   expect(roomShowing()).toBe(false)
-  await advance(400)
+  // Not at the Room's 700 ms: the pour holds "You're in." to ASK_AT, then fades over D.base.
+  await advance(ROOM_AT - 300)
+  expect(router.push).not.toHaveBeenCalled()
+  await advance(ASK_AT - ROOM_AT)
+  expect(router.push).not.toHaveBeenCalled()
+  await advance(DURATION.base)
   expect(router.push).toHaveBeenCalledWith(askIntentRoute('e1'))
-  expect(underTheSheet).toEqual({ room: false, tonight: true })
+  expect(underTheSheet).toEqual({ room: false, tonight: true, pourReleased: true })
   // While the sheet is up: Tonight, the pass reading "You're in".
   await advance(3000)
   expect(roomShowing()).toBe(false)

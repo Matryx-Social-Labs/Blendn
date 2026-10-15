@@ -26,6 +26,15 @@ export type PourFrame = { x: number; y: number; width: number; height: number }
 
 /** #9: Tonight crossfades to the Room here, over `DURATION.base`. */
 export const ROOM_AT = 700
+/**
+ * #9 has no beat for a question after the check-in: its 700 ms is the hand-off
+ * to the Room. The reveal offer and "Why do you go out?" (Flow 4 Tonight #13,
+ * #14) are sheets rising over Tonight with the docked pass, so the pour plays
+ * out first: "You're in." is fully shown at `YOURE_IN_AT + DURATION.base`
+ * (420 ms) and held readable about a second more, then the pour fades over
+ * `DURATION.base`, and only once that fade is done does the question come.
+ */
+export const ASK_AT = 1600
 /** #9: "You're in." is 900 28/32, −0.8: no TYPE role is (`moment` is 44/48). */
 const YOURE_IN_TYPE = {
   fontFamily: FONT_FAMILY.brand[900],
@@ -46,23 +55,29 @@ const YOURE_IN_TYPE = {
  *
  * At 700 ms it hands off: `onDone`, and it crossfades away over `D.base` while
  * the caller's Room crossfades in. `ready={false}` holds it, filled, until the
- * Room is there to hand off to, so it never clears onto Tonight. A tap skips
- * to the hand-off, ready or not. Drawn in place, not in a Modal: mount it over
- * Tonight; it lets every touch through once it has handed off.
+ * Room is there to hand off to, so it never clears onto Tonight. With `asks`
+ * (a question comes before the Room) it holds "You're in." until `ASK_AT`,
+ * fades, and calls `onDone` only once the fade is done, so the sheet never
+ * rises over a pour still on screen. A tap skips to the hand-off, ready or
+ * not (with `asks`, still clearing first). Drawn in place, not in a Modal:
+ * mount it over Tonight; it lets every touch through once it has handed off.
  *
  * Reduce Motion: the panel crossfades to filled with "You're in." in 200 ms;
- * the same hand-off at 700 ms, over 200 ms; the same haptic.
+ * the same hand-off at 700 ms (or `ASK_AT`), over 200 ms; the same haptic.
  */
 export function MomentPour({
   venue,
   onDone,
   ready = true,
+  asks = false,
   frame,
   testID,
 }: {
   venue: string
   onDone: () => void
   ready?: boolean
+  /** A question (the reveal offer, "Why do you go out?") comes before the Room: play out, clear, then `onDone`. Read once, at mount. */
+  asks?: boolean
   /**
    * Where the pass is. The Tonight door passes its docked pass, so the flood
    * fills exactly it (Flow 4); without one (the event screen has no pass) the
@@ -106,14 +121,33 @@ export function MomentPour({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  const [asking] = useState(asks)
   const handedOff = useRef(false)
+  /** The fade before a question, while it runs: `onDone` is owed when it ends. */
+  const clearing = useRef<ReturnType<typeof setTimeout> | null>(null)
   const handOff = () => {
     if (handedOff.current) return
     handedOff.current = true
     shown.set(fade(0, duration.base))
     setDone(true)
-    latestOnDone.current()
+    if (!asking) {
+      latestOnDone.current()
+      return
+    }
+    // ponytail: the fade's length on a JS timer rather than its completion callback; both are `duration.base`.
+    clearing.current = setTimeout(() => {
+      clearing.current = null
+      latestOnDone.current()
+    }, duration.base)
   }
+  // Unmounted mid-fade (the overlay closed): nothing is asked of a screen that is gone. The check-in that waits on
+  // the hand-off lives on the same screen, so it goes with it rather than pushing a question over whatever is left.
+  useEffect(
+    () => () => {
+      if (clearing.current) clearTimeout(clearing.current)
+    },
+    []
+  )
   useEffect(() => {
     if (timeUp && ready) handOff()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -121,7 +155,7 @@ export function MomentPour({
 
   const skipBeats = useBeats([
     { at: 0, run: () => H.success({ important: true }) },
-    { at: ROOM_AT, run: () => setTimeUp(true) },
+    { at: asking ? ASK_AT : ROOM_AT, run: () => setTimeUp(true) },
   ])
   const skip = () => {
     flood.set(1)
