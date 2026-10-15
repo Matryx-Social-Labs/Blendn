@@ -76,6 +76,11 @@ describe('kinds and sizes', () => {
     expect(flat('b').backgroundColor).toBe(COLOR.destructiveFill)
   })
 
+  it('a 36 pt row action reaches the target through slop above and below', async () => {
+    await draw({ size: 'sm' })
+    expect(screen.getByTestId('b').props.hitSlop).toEqual({ top: 4, bottom: 4 })
+  })
+
   it('secondary is surface, 8% white on glass, raised at 36', async () => {
     await draw({ kind: 'secondary' })
     expect(flat('b').backgroundColor).toBe(COLOR.surface)
@@ -105,6 +110,16 @@ describe('haptics: only where the page puts one', () => {
     await draw({ kind: 'destructive' })
     await pressIn()
     expect(haptics.destructive).toHaveBeenCalledTimes(1)
+  })
+
+  it('plays the cue a page names instead of its kind’s own (H.primary on a strong “Use at the door”)', async () => {
+    await draw({ kind: 'strong', pressHaptic: H.primary })
+    await pressIn()
+    expect(haptics.primary).toHaveBeenCalledTimes(1)
+    await draw({ kind: 'primary', pressHaptic: H.select })
+    await pressIn()
+    expect(haptics.select).toHaveBeenCalledTimes(1)
+    expect(haptics.primary).toHaveBeenCalledTimes(1)
   })
 
   it.each(['strong', 'secondary', 'tertiary'] as const)('%s is silent', async (kind) => {

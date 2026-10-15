@@ -203,6 +203,14 @@ place; screens move to it one at a time, and `EMBER` goes when the last has.
   `CoachMark`; the rules they share in `chatShared.ts`, the six reactions in
   `lib/chatReactions.ts`. Every state, and a live room to drive the gestures,
   on `/preview/ds-p3`
+- `components/ds/` P4, the rest of R2-D0 (ROUND3 B4): `NotificationRow`/
+  `NotificationVisual`, `InAppBanner` (with the wave), `CountTicks`, `CrewCard`/
+  `CrewRow`, `CrewStrip`, `LikingAsChip`, `RevealSheet`/`RevealSide`,
+  `GoLiveSheet`, `SessionSheet`, `ExpiryPrompt`/`NotLiveNotice`, `OverlapLine`,
+  `AchievementBadge`, `TonightSheet`, `PlanCard`/`NightPassRow`/`PlanList`,
+  `NeverForSalePanel`, `ManageStatusRow`, `OfferCard`, `ShareSheet`,
+  `LinkPreviewCard`, `StoryCard`. Built from the flows and their deltas (the
+  newest delta's "after" first); every state on `/preview/ds-p4`
 - P5, sets and moments: `Orbs` and `Grain` (L0, the only ambient loop),
   `CrewEmblem`, and the five L4 moments `MomentMatch`, `MomentBlend`,
   `MomentReady`, `MomentPour`, `MomentRecap` on one `MomentStage`; each on

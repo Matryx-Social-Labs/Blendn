@@ -132,10 +132,10 @@ export function TimeBadge({ when, testID }: { when: string; testID?: string }) {
 const PRICE_ROLE = { lg: 'display', md: 'heading', sm: 'meta' } as const
 const UNIT_ROLE = { lg: 'body', md: 'caption', sm: 'caption' } as const
 
-/** "₹199" → "199 rupees"; "/ month" → "a month". "Free" stays "Free". */
-function spoken(amount: string, per?: string) {
+/** "₹199" → "199 rupees"; "/ month" → "a month", "/ 3 months" → "every 3 months". "Free" stays "Free". */
+export function spokenPrice(amount: string, per?: string) {
   const words = amount.startsWith('₹') ? `${amount.slice(1)} rupees` : amount
-  return per ? `${words} ${per.replace(/^\/\s*/, 'a ')}` : words
+  return per ? `${words} ${per.replace(/^\/\s*(?=\d)/, 'every ').replace(/^\/\s*/, 'a ')}` : words
 }
 
 /**
@@ -157,7 +157,7 @@ export function Price({
 }) {
   const bold = useBoldText()
   return (
-    <View testID={testID} accessible accessibilityLabel={spoken(amount, per)} style={styles.price}>
+    <View testID={testID} accessible accessibilityLabel={spokenPrice(amount, per)} style={styles.price}>
       <Text style={[font(PRICE_ROLE[size], bold, FONT_FAMILY.mono[700]), styles.tabular, { color }]}>{amount}</Text>
       {per ? <Text style={[font(UNIT_ROLE[size], bold, FONT_FAMILY.brand[400]), styles.unit]}>{per}</Text> : null}
     </View>
