@@ -7,7 +7,7 @@
  * value that is missing drops its part rather than printing a placeholder.
  */
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+import { MONTHS } from './time'
 
 /** The slots Edit profile offers — `PhotoManager`'s grid. */
 export const MAX_PHOTOS = 6

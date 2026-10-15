@@ -62,17 +62,18 @@ export async function getCurrentLocation({
   maxAccuracyM = CHECK_IN_MAX_ACCURACY_M,
   onRetry,
 }: CheckInTrays): Promise<CheckInLocation | null> {
+  const settingsButtons: ActionTrayButton[] = [
+    { label: 'Cancel', onPress: closeTray },
+    {
+      label: 'Open Settings',
+      variant: 'primary',
+      onPress: () => {
+        closeTray()
+        Linking.openSettings().catch(() => {})
+      },
+    },
+  ]
   try {
-    // Fallback if expo-location is not available
-    if (!Location) {
-      Logger.warn('events', 'location:moduleUnavailable')
-      showTray(
-        'Location service not available',
-        'Location services are required to check in to events. Please ensure you have the latest version of this app.'
-      )
-      return null
-    }
-
     // Check if location services are enabled
     const serviceEnabled = await Location.hasServicesEnabledAsync()
     if (!serviceEnabled) {
@@ -80,17 +81,7 @@ export async function getCurrentLocation({
       showTray(
         'Location services disabled',
         'Please enable location services in your device settings to check in to events.',
-        [
-          { label: 'Cancel', onPress: closeTray },
-          {
-            label: 'Open Settings',
-            variant: 'primary',
-            onPress: () => {
-              closeTray()
-              Linking.openSettings().catch(() => {})
-            }
-          }
-        ]
+        settingsButtons
       )
       return null
     }
@@ -100,17 +91,7 @@ export async function getCurrentLocation({
     const { status } = permission
     if (status === 'granted' && permission.ios?.accuracy === 'reduced') {
       Logger.warn('events', 'location:preciseOff')
-      showTray(PRECISE_OFF.title, PRECISE_OFF.message, [
-        { label: 'Cancel', onPress: closeTray },
-        {
-          label: 'Open Settings',
-          variant: 'primary',
-          onPress: () => {
-            closeTray()
-            Linking.openSettings().catch(() => {})
-          },
-        },
-      ])
+      showTray(PRECISE_OFF.title, PRECISE_OFF.message, settingsButtons)
       return null
     }
     if (status !== 'granted') {
@@ -118,17 +99,7 @@ export async function getCurrentLocation({
       showTray(
         'Location permission required',
         'Blendn needs location access to verify you are at events. This keeps check-ins authentic.',
-        [
-          { label: 'Cancel', onPress: closeTray },
-          {
-            label: 'Open Settings',
-            variant: 'primary',
-            onPress: () => {
-              closeTray()
-              Linking.openSettings().catch(() => {})
-            }
-          }
-        ]
+        settingsButtons
       )
       return null
     }

@@ -212,10 +212,9 @@ export function useTonight(): TonightState {
    * row simply keeps the feed's count and no taste line.
    */
   const insideEventId = signal.insideEventId
-  const previewKey = [insideEventId, ...events.slice(0, PREVIEW_TOP).map((e) => e.id)]
-    .filter((id): id is string => !!id)
-    .filter((id, i, all) => all.indexOf(id) === i)
-    .join(',')
+  const previewKey = [
+    ...new Set([insideEventId, ...events.slice(0, PREVIEW_TOP).map((e) => e.id)].filter((id): id is string => !!id)),
+  ].join(',')
 
   useEffect(() => {
     if (!previewKey) return
@@ -232,11 +231,7 @@ export function useTonight(): TonightState {
       if (cancelled) return
       const found = answers.filter((a): a is readonly [string, RoomPreview] => a !== null)
       if (found.length === 0) return
-      setPreviews((prev) => {
-        const copy = { ...prev }
-        for (const [id, preview] of found) copy[id] = preview
-        return copy
-      })
+      setPreviews((prev) => ({ ...prev, ...Object.fromEntries(found) }))
     })
     return () => {
       cancelled = true

@@ -1,3 +1,10 @@
+/**
+ * Fixed English short names, for labels that must not change shape with the
+ * device's locale or ICU build ("Sept" in en-GB on one engine, "Sep" on another).
+ */
+export const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+export const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
 export const formatTimeRange = (startIso: string, endIso: string, opts?: { includeDate?: boolean; timezone?: string }) => {
   try {
     const s = new Date(startIso)

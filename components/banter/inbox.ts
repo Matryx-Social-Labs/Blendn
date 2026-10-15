@@ -8,10 +8,10 @@
  * phones is not one design.
  */
 
+import { MONTHS, WEEKDAYS } from '../../lib/time'
+
 const MINUTE = 60 * 1000
 const HOUR = 60 * MINUTE
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
 

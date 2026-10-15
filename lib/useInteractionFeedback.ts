@@ -10,13 +10,9 @@ export function useInteractionFeedback() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {})
   }, [])
 
-  const warning = useCallback(() => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {})
-  }, [])
-
   const error = useCallback(() => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {})
   }, [])
 
-  return { tap, success, warning, error }
+  return { tap, success, error }
 }
