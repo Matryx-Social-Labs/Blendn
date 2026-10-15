@@ -1,0 +1,362 @@
+/**
+ * The Blend'n overlay driven end to end against a room the test moves
+ * (Flow 4; the security review of the redesign): the PersonCard from the grid,
+ * Meet next, the dock's wave row, the wave toast and the tabs' banner; like
+ * and wave refusals on the card; Block / Report after the card has left;
+ * Liking as a crew says the crew it sends as; the reveal gate; Check out
+ * confirms and closes first; the Match, the Recap and the room's error.
+ */
+import { act, fireEvent, render, screen } from '@testing-library/react-native'
+import React from 'react'
+import { AccessibilityInfo } from 'react-native'
+
+import { BlendnScreen } from '../components/blendn/BlendnScreen'
+import { openBlendn } from '../lib/blendnOverlay'
+import { crewsApi } from '../lib/crewsApi'
+import { listenForWaves } from '../lib/roomWaves'
+import { showUserSafetyActions } from '../lib/safetyUtils'
+
+jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
+jest.mock('react-native-reanimated', () => ({ ...jest.requireActual('react-native-reanimated'), __esModule: true, useReducedMotion: () => true }))
+jest.mock('react-native-gesture-handler', () => ({
+  ...jest.requireActual('react-native-gesture-handler'),
+  GestureDetector: ({ children }: { children: React.ReactNode }) => children,
+}))
+jest.mock('expo-linear-gradient', () => {
+  const { View } = jest.requireActual('react-native')
+  return { LinearGradient: (props: object) => <View {...props} /> }
+})
+jest.mock('expo-router', () => ({
+  router: { push: jest.fn(), navigate: jest.fn(), back: jest.fn(), replace: jest.fn() },
+  useFocusEffect: (effect: () => void) => {
+    const { useEffect } = jest.requireActual('react')
+    useEffect(effect, [effect])
+  },
+}))
+jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn(), journey: jest.fn() } }))
+jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { id: 'me', name: 'Sam Rao', image: null } }) }))
+jest.mock('../lib/apiClient', () => ({ apiClient: new Proxy({}, { get: () => jest.fn(async () => ({ success: true, data: [] })) }) }))
+jest.mock('../lib/safetyUtils', () => ({ showUserSafetyActions: jest.fn() }))
+jest.mock('../lib/sheet', () => ({ showSheet: jest.fn(), sheetClosed: async () => {} }))
+const mockWaveListeners = new Set<(d: unknown) => void>()
+jest.mock('../lib/socketClient', () => ({
+  connect: jest.fn(),
+  subscribeToChatMessage: () => () => {},
+  subscribeToRoomWave: (fn: (d: unknown) => void) => {
+    mockWaveListeners.add(fn)
+    return () => mockWaveListeners.delete(fn)
+  },
+}))
+jest.mock('../lib/networkStatus', () => ({ getNetworkState: () => 'online', subscribeNetworkState: () => () => {} }))
+jest.mock('../lib/crewsApi', () => ({
+  crewsApi: { crewsAt: jest.fn(), myCrews: jest.fn(), openToCrews: jest.fn(), here: jest.fn(), likeCrew: jest.fn(), likePersonAsCrew: jest.fn(), report: jest.fn() },
+}))
+jest.mock('../components/blendn/RoomStage', () => {
+  const { forwardRef } = jest.requireActual('react')
+  return {
+    RoomStage: forwardRef(({ children }: { children: React.ReactNode }, _ref: unknown) => children),
+    useStageScroll: () => ({ onScroll: undefined, native: {}, scrollEventThrottle: 16 }),
+  }
+})
+jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn() }) }))
+jest.mock('@react-native-async-storage/async-storage', () => require('@react-native-async-storage/async-storage/jest/async-storage-mock'))
+
+/* The room, as a store the test sets. */
+const mockRoom = {
+  like: jest.fn(),
+  sendWave: jest.fn(),
+  remove: jest.fn(),
+  refresh: jest.fn(async () => {}),
+  retry: jest.fn(),
+  clearMatch: jest.fn(),
+  connect: jest.fn(async () => true),
+  loadMore: jest.fn(async () => {}),
+}
+jest.mock('../lib/useRoom', () => {
+  const { useSyncExternalStore } = jest.requireActual('react')
+  let state: Record<string, unknown> = {}
+  const listeners = new Set<() => void>()
+  return {
+    useRoom: () => useSyncExternalStore((fn: () => void) => (listeners.add(fn), () => listeners.delete(fn)), () => state),
+    mockSetRoom: (next: Record<string, unknown>) => {
+      state = next
+      listeners.forEach((fn) => fn())
+    },
+  }
+})
+const mockControls = {
+  revealed: false,
+  revealBusy: false,
+  listed: true,
+  readiness: { ok: true, missing: '' },
+  toggleReveal: jest.fn(),
+  checkOut: jest.fn(async () => true),
+  checkOutBusy: false,
+}
+jest.mock('../lib/useRoomControls', () => ({ useRoomControls: () => mockControls }))
+jest.mock('../lib/useTonight', () => ({
+  useTonight: () => ({ status: 'ready', events: [], insideEventId: null, location: 'on', offline: false, refresh: async () => {} }),
+}))
+
+const { mockSetRoom } = jest.requireMock('../lib/useRoom') as { mockSetRoom: (s: Record<string, unknown>) => void }
+const { router } = jest.requireMock('expo-router') as { router: { push: jest.Mock } }
+const api = crewsApi as jest.Mocked<typeof crewsApi>
+const HIDDEN = { includeHiddenElements: true }
+
+const person = (id: string, o: Record<string, unknown> = {}) => ({
+  id,
+  name: `Person ${id}`,
+  photo: null,
+  interests: ['Vinyl'],
+  sharedIntents: [],
+  sharedWorkField: false,
+  workField: null,
+  sharedEvents: 0,
+  sharedPlans: 0,
+  overlaps: [],
+  sign: null,
+  badges: [],
+  insideNow: true,
+  arrivedAt: null,
+  liked: false,
+  matched: false,
+  conversationId: null,
+  requested: false,
+  pending: false,
+  reason: '',
+  raw: {},
+  ...o,
+})
+const PEOPLE = Array.from({ length: 6 }, (_, i) => person(`p${i}`))
+const ready = (o: Record<string, unknown> = {}) => ({
+  ...mockRoom,
+  status: 'ready',
+  event: { id: 'e1', title: 'Vinyl Night', endsAt: new Date(Date.now() + 3600_000).toISOString() },
+  checkedInAt: new Date(Date.now() - 30 * 60_000).toISOString(),
+  revealed: false,
+  hereCount: 7,
+  people: PEOPLE,
+  arrivals: [],
+  hasMore: false,
+  loadingMore: false,
+  chatGroupId: null,
+  match: null,
+  error: null,
+  connection: { state: 'connected' },
+  ...o,
+})
+
+/** The open card's Modal has left (iOS reports it through onDismiss). */
+const cardGone = () => act(async () => screen.getByTestId('person-card-modal', HIDDEN).props.onDismiss?.())
+const card = () => screen.queryByTestId('person-card-card', HIDDEN)
+
+beforeEach(() => {
+  jest.clearAllMocks()
+  mockControls.revealed = false
+  mockControls.listed = true
+  mockControls.readiness = { ok: true, missing: '' }
+  api.crewsAt.mockResolvedValue({ success: true, data: { crewsEnabled: true, crews: [], myCrews: [], total: 0, hasMore: false } })
+  api.myCrews.mockResolvedValue({ success: true, data: { crews: [], invites: [] } })
+  mockRoom.like.mockResolvedValue({ kind: 'liked' })
+  mockRoom.sendWave.mockResolvedValue({ kind: 'sent' })
+  jest.spyOn(AccessibilityInfo, 'isScreenReaderEnabled').mockResolvedValue(false)
+  jest.spyOn(AccessibilityInfo, 'isReduceTransparencyEnabled').mockResolvedValue(false)
+  jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {})
+  jest.spyOn(AccessibilityInfo, 'announceForAccessibilityWithOptions').mockImplementation(() => {})
+  mockSetRoom(ready())
+})
+afterEach(() => listenForWaves(null))
+
+const drawRoom = async () => {
+  await render(<BlendnScreen />)
+  await act(async () => {})
+}
+const openFromGrid = async (i: number) => {
+  jest.useFakeTimers()
+  await fireEvent.press(screen.getByTestId(`room-face-${i}`))
+  await act(async () => jest.advanceTimersByTime(400))
+  jest.useRealTimers()
+}
+
+describe('the PersonCard, from every room surface (R3-D4 4.1)', () => {
+  it('a grid face opens it: their name, their reasons, Like · Wave · Message · ⋯ · View profile', async () => {
+    await drawRoom()
+    await openFromGrid(3)
+    expect(card()).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Like' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Wave at Person p3' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Message' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Block or report Person p3' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'View profile' })).toBeTruthy()
+  })
+
+  it('a Meet next card opens it', async () => {
+    await drawRoom()
+    await fireEvent.press(screen.getByTestId('meet-next-0'))
+    expect(card()).toBeTruthy()
+  })
+
+  it('the tabs’ wave banner opens the overlay at their card', async () => {
+    openBlendn('p2')
+    await drawRoom()
+    expect(screen.getByRole('button', { name: 'Wave at Person p2' })).toBeTruthy()
+  })
+
+  it('a wave while you are here: the ✓ capsule, then their card with "Waved at you" and Wave back (4.2)', async () => {
+    listenForWaves('e1')
+    await drawRoom()
+    await act(async () => mockWaveListeners.forEach((fn) => fn({ eventId: 'e1', fromUserId: 'p4', fromName: 'Person p4' })))
+    await fireEvent.press(screen.getByRole('button', { name: 'Person p4 waved at you' }))
+    expect(screen.getByText('Waved at you · 1 min', HIDDEN)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Wave back at Person p4' })).toBeTruthy()
+  })
+})
+
+describe('like and wave refusals (R3-D4 4.3)', () => {
+  it('a refused like is one neutral line on the card, and does not show it as liked', async () => {
+    mockRoom.like.mockResolvedValue({ kind: 'refused', refusal: { message: 'That didn’t go through.', variant: 'info' } })
+    await drawRoom()
+    await openFromGrid(1)
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Like' })))
+    expect(screen.getByText('That didn’t go through.', HIDDEN)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Like' })).toBeTruthy()
+  })
+
+  it('a lapsed check-in offers Check in, which docks this room’s pass and re-reads the room', async () => {
+    mockRoom.sendWave.mockResolvedValue({ kind: 'refused', refusal: { message: 'Check in to wave at people here', variant: 'info', checkIn: true } })
+    await drawRoom()
+    await openFromGrid(2)
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Wave at Person p2' })))
+    expect(screen.getByText('Check in to wave at people here', HIDDEN)).toBeTruthy()
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Check in' })))
+    expect(mockRoom.refresh).toHaveBeenCalled()
+    expect(jest.requireActual('../lib/blendnOverlay').getDoor()).toMatchObject({ id: 'e1', title: 'Vinyl Night' })
+  })
+
+  it('a wave goes: the hand waves while it is on its way, then "Waved"', async () => {
+    let answer: (v: unknown) => void = () => {}
+    mockRoom.sendWave.mockReturnValue(new Promise((r) => (answer = r)))
+    await drawRoom()
+    await openFromGrid(2)
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Wave at Person p2' })))
+    expect(screen.getByTestId('person-card-card-hand-waving', HIDDEN)).toBeTruthy()
+    await act(async () => answer({ kind: 'sent' }))
+    expect(screen.getByLabelText('Waved')).toBeTruthy()
+  })
+})
+
+describe('Block and Report wait for the card to have left', () => {
+  it('⋯ closes the card, then opens the safety sheet once it is gone; either removes them', async () => {
+    await drawRoom()
+    await openFromGrid(3)
+    await fireEvent.press(screen.getByRole('button', { name: 'Block or report Person p3' }))
+    expect(showUserSafetyActions).not.toHaveBeenCalled()
+    await cardGone()
+    expect(showUserSafetyActions).toHaveBeenCalledWith('Person p3', 'p3', expect.any(Function), expect.any(Function))
+    ;(showUserSafetyActions as jest.Mock).mock.calls[0][2]()
+    expect(mockRoom.remove).toHaveBeenCalledWith('p3')
+  })
+})
+
+describe('Liking as a crew: what the button says is what it sends (R2-D1)', () => {
+  const nebula = { crewId: 'nebula', name: 'Nebula', presentCount: 2 }
+  const crew = (crewId: string, o: Record<string, unknown> = {}) => ({ crewId, name: crewId, emblemSeed: crewId, openToSolo: true, size: 3, ...o })
+
+  it('one crew here that may like people: "Like for Nebula" likes as Nebula', async () => {
+    api.crewsAt.mockResolvedValue({ success: true, data: { crewsEnabled: true, crews: [], myCrews: [nebula], total: 0, hasMore: false } })
+    api.myCrews.mockResolvedValue({ success: true, data: { crews: [crew('nebula', { name: 'Nebula' })], invites: [] } } as never)
+    api.likePersonAsCrew.mockResolvedValue({ success: true, data: { liked: true, blend: null } })
+    await drawRoom()
+    await openFromGrid(1)
+    await fireEvent.press(screen.getByRole('button', { name: 'Like for Nebula' }))
+    await cardGone()
+    expect(api.likePersonAsCrew).toHaveBeenCalledWith('e1', 'p1', 'nebula')
+    expect(mockRoom.like).not.toHaveBeenCalled()
+  })
+
+  it('"Like as yourself" never sends as a crew', async () => {
+    api.crewsAt.mockResolvedValue({ success: true, data: { crewsEnabled: true, crews: [], myCrews: [nebula], total: 0, hasMore: false } })
+    api.myCrews.mockResolvedValue({ success: true, data: { crews: [crew('nebula', { name: 'Nebula' })], invites: [] } } as never)
+    await drawRoom()
+    await openFromGrid(1)
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Like as yourself' })))
+    expect(mockRoom.like).toHaveBeenCalledWith('p1')
+    expect(api.likePersonAsCrew).not.toHaveBeenCalled()
+  })
+
+  it('a crew that may not like people (closed to solo) leaves the plain Like, which is you', async () => {
+    api.crewsAt.mockResolvedValue({ success: true, data: { crewsEnabled: true, crews: [], myCrews: [nebula], total: 0, hasMore: false } })
+    api.myCrews.mockResolvedValue({ success: true, data: { crews: [crew('nebula', { name: 'Nebula', openToSolo: false })], invites: [] } } as never)
+    await drawRoom()
+    await openFromGrid(1)
+    expect(screen.queryByRole('button', { name: 'Like for Nebula' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Like' })).toBeTruthy()
+  })
+
+  it('several that may: "Like for your crew", and the app picks none for you', async () => {
+    const orbit = { crewId: 'orbit', name: 'Orbit', presentCount: 2 }
+    api.crewsAt.mockResolvedValue({ success: true, data: { crewsEnabled: true, crews: [], myCrews: [nebula, orbit], total: 0, hasMore: false } })
+    api.myCrews.mockResolvedValue({ success: true, data: { crews: [crew('nebula', { name: 'Nebula' }), crew('orbit', { name: 'Orbit' })], invites: [] } } as never)
+    await drawRoom()
+    await openFromGrid(1)
+    await fireEvent.press(screen.getByRole('button', { name: 'Like for your crew' }))
+    await cardGone()
+    expect(api.likePersonAsCrew).not.toHaveBeenCalled()
+    const { showSheet } = jest.requireMock('../lib/sheet') as { showSheet: jest.Mock }
+    const actions = showSheet.mock.calls[0][0].actions.map((a: { label: string }) => a.label)
+    expect(actions).toEqual(['Nebula', 'Orbit', 'Just me', 'Cancel'])
+  })
+})
+
+describe('the visibility line and its gate', () => {
+  it('nothing to reveal: the line says so, and its action is the profile, never a reveal', async () => {
+    mockControls.readiness = { ok: false, missing: 'a photo' }
+    await drawRoom()
+    await fireEvent.press(screen.getByRole('button', { name: 'Add a photo' }))
+    expect(router.push).toHaveBeenCalledWith('/edit-profile')
+    expect(mockControls.toggleReveal).not.toHaveBeenCalled()
+  })
+
+  it('named: Go anonymous is never gated', async () => {
+    mockControls.revealed = true
+    mockControls.readiness = { ok: false, missing: 'a photo' }
+    await drawRoom()
+    await fireEvent.press(screen.getByRole('button', { name: 'Go anonymous' }))
+    expect(mockControls.toggleReveal).toHaveBeenCalled()
+  })
+})
+
+describe('Check out always confirms (Room #16)', () => {
+  it('the confirm: Stay, and Check out in destructiveFill; it closes before the check-out runs', async () => {
+    await drawRoom()
+    await fireEvent.press(screen.getByRole('button', { name: 'Check out' }))
+    expect(screen.getByText('Check out of this event?', HIDDEN)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Stay' })).toBeTruthy()
+    const buttons = screen.getAllByRole('button', { name: 'Check out' })
+    await act(async () => fireEvent.press(buttons[buttons.length - 1]))
+    expect(mockControls.checkOut).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('the Match, the Recap, the room’s error', () => {
+  it('a mutual like plays the Match with the faces the room has earned (D · 4.4)', async () => {
+    mockSetRoom(ready({ match: { person: person('p1'), name: 'Night Cat', you: 'Quiet Otter', conversationId: 'c1', at: Date.now() } }))
+    await drawRoom()
+    expect(screen.getByText('It’s mutual', HIDDEN)).toBeTruthy()
+    expect(screen.getByText(/You and Night Cat matched/, HIDDEN)).toBeTruthy()
+  })
+
+  it('the night is over: That’s a wrap, never a check-out', async () => {
+    mockSetRoom(ready({ event: { id: 'e1', title: 'Vinyl Night', endsAt: new Date(Date.now() - 60_000).toISOString() } }))
+    await drawRoom()
+    expect(screen.getByText('That’s a wrap', HIDDEN)).toBeTruthy()
+    expect(mockControls.checkOut).not.toHaveBeenCalled()
+  })
+
+  it('a room that failed to load leaves Tonight up, with a quiet line (Room #15)', async () => {
+    mockSetRoom({ ...mockRoom, status: 'error', event: null, people: [], arrivals: [], match: null, error: 'Network request failed', connection: { state: 'connected' } })
+    await drawRoom()
+    expect(screen.getByText('Couldn’t check your room. You can still browse tonight.')).toBeTruthy()
+    expect(screen.queryByText('Network request failed')).toBeNull()
+  })
+})

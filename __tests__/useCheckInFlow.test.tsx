@@ -254,6 +254,53 @@ describe('the sheets it asks for (Flow 4 Tonight #15–#22)', () => {
   })
 })
 
+describe('the hold under a tray (Flow 4 Tonight #15, #23–#26: "Your hold still counts")', () => {
+  const { getCurrentLocation } = jest.requireMock('../lib/locationFix') as { getCurrentLocation: jest.Mock }
+
+  it('a location tray keeps the pass full until it closes; then it drains', async () => {
+    let trays!: { closeTray: () => void; onRetry: () => void }
+    getCurrentLocation.mockImplementationOnce(async (t: typeof trays) => {
+      trays = t
+      return null
+    })
+    const { done } = await checkIn(fresh())
+    expect(await done).toBe('failed')
+    expect(flow.checkingIn).toBe(true)
+    await act(async () => trays.closeTray())
+    expect(props.closeTray).toHaveBeenCalled()
+    expect(flow.checkingIn).toBe(false)
+  })
+
+  it('its Try again resumes the check-in, and the pass stays full through it', async () => {
+    let trays!: { closeTray: () => void; onRetry: () => void }
+    getCurrentLocation.mockImplementationOnce(async (t: typeof trays) => {
+      trays = t
+      return null
+    })
+    await checkIn(fresh())
+    submit.mockClear()
+    await act(async () => {
+      trays.closeTray()
+      trays.onRetry()
+    })
+    expect(submit).toHaveBeenCalledTimes(1)
+    expect(flow.checkingIn).toBe(true)
+  })
+
+  it('the server’s timeout keeps it full too; Cancel drains it', async () => {
+    await checkIn({ kind: 'timeout' } as CheckInOutcome)
+    expect(flow.checkingIn).toBe(true)
+    const cancel = (props.showTray.mock.calls[0][2] as { label: string; onPress: () => void }[]).find((b) => b.label === 'Cancel')!
+    await act(async () => cancel.onPress())
+    expect(flow.checkingIn).toBe(false)
+  })
+
+  it('a refusal drains at once (#16–#22)', async () => {
+    await checkIn({ kind: 'refused', refusal: checkInRefusal('EVENT_ENDED', 'Over.'), errorCode: 'EVENT_ENDED', alreadyCheckedIn: false } as CheckInOutcome)
+    expect(flow.checkingIn).toBe(false)
+  })
+})
+
 describe('every door is this flow', () => {
   const read = (file: string) =>
     readFileSync(join(__dirname, '..', file), 'utf8')
