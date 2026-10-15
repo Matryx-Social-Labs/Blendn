@@ -722,7 +722,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
       {/* Over Tonight, and over the Room as it takes over: the pour clears itself, so it stays mounted. */}
       {/* Held, filled, until the Room is there; a question first clears it onto Tonight (Flow 4 #12–#14). */}
       {checkIn.pours > 0 ? (
-        <MomentPour key={checkIn.pours} testID="blendn-pour" frame={passFrame ?? undefined} venue={insideEvent?.venue ?? ''} ready={roomReady || checkIn.asks} onDone={checkIn.pourDone} />
+        <MomentPour key={checkIn.pours} testID="blendn-pour" frame={passFrame ?? undefined} venue={insideEvent?.venue ?? ''} ready={roomReady || checkIn.asks} asks={checkIn.asks} onDone={checkIn.pourDone} />
       ) : null}
 
       <ActionTray

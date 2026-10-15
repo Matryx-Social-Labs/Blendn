@@ -13,10 +13,10 @@ import { SafeAreaProvider } from 'react-native-safe-area-context'
 import DsP5Preview from '../app/preview/ds-p5'
 import { MomentBlend, type MomentBlendProps } from '../components/ds/MomentBlend'
 import { MomentMatch, type MomentMatchProps } from '../components/ds/MomentMatch'
-import { MomentPour, PANEL_TOP } from '../components/ds/MomentPour'
+import { ASK_AT, MomentPour, PANEL_TOP, ROOM_AT } from '../components/ds/MomentPour'
 import { MomentReady } from '../components/ds/MomentReady'
 import { MomentRecap, type MomentRecapProps } from '../components/ds/MomentRecap'
-import { COLOR, MATERIAL, RADIUS, SPACE, SPRING } from '../lib/design/tokens'
+import { COLOR, DURATION, MATERIAL, RADIUS, SPACE, SPRING } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
@@ -305,7 +305,7 @@ describe('<MomentReady> · the one celebration (Flow 2)', () => {
 })
 
 describe('<MomentPour> · the check-in success (motion #9)', () => {
-  const pour = (props: { ready?: boolean } = {}) => <MomentPour venue="Toit" onDone={onDone} testID="p" {...props} />
+  const pour = (props: { ready?: boolean; asks?: boolean } = {}) => <MomentPour venue="Toit" onDone={onDone} testID="p" {...props} />
   let onDone: jest.Mock
   beforeEach(() => {
     onDone = jest.fn()
@@ -370,6 +370,65 @@ describe('<MomentPour> · the check-in success (motion #9)', () => {
     const stage = screen.getByTestId('p', HIDDEN)
     expect(stage.props.pointerEvents).toBe('none')
     expect(stage.props.accessibilityElementsHidden).toBe(true)
+  })
+
+  it('before a question it plays out: “You’re in.” held to ASK_AT, then onDone only after the fade’s D.base', async () => {
+    await render(pour({ asks: true }))
+    await advance(ROOM_AT)
+    expect(onDone).not.toHaveBeenCalled()
+    expect(screen.getByTestId('p', HIDDEN).props.pointerEvents).toBe('auto')
+    await advance(ASK_AT - ROOM_AT)
+    // The fade has begun (it lets touches through) but the question waits for its end.
+    expect(screen.getByTestId('p', HIDDEN).props.pointerEvents).toBe('none')
+    expect(onDone).not.toHaveBeenCalled()
+    await advance(DURATION.base - 1)
+    expect(onDone).not.toHaveBeenCalled()
+    await advance(1)
+    expect(onDone).toHaveBeenCalledTimes(1)
+    expect(haptic.success).toHaveBeenCalledTimes(1)
+  })
+
+  it('Reduce Motion: the same order and hold before a question, a 200 ms crossfade, the haptic kept', async () => {
+    reduceMotion.mockReturnValue(true)
+    await render(pour({ asks: true }))
+    await advance(0)
+    expect(haptic.success).toHaveBeenCalledTimes(1)
+    await advance(ASK_AT)
+    await advance(199)
+    expect(onDone).not.toHaveBeenCalled()
+    await advance(1)
+    expect(onDone).toHaveBeenCalledTimes(1)
+  })
+
+  it('ASK_AT holds “You’re in.” about a second after it is fully shown', () => {
+    expect(ASK_AT).toBe(1600)
+    expect(ROOM_AT).toBe(700)
+  })
+
+  it('a pour unmounted mid-fade asks nothing of a screen that is gone', async () => {
+    const view = await render(pour({ asks: true }))
+    await advance(ASK_AT)
+    await view.unmount()
+    await advance(1000)
+    expect(onDone).not.toHaveBeenCalled()
+  })
+
+  it('a skip during the fade before a question hands off once', async () => {
+    await render(pour({ asks: true }))
+    await advance(ASK_AT)
+    await fireEvent.press(screen.getByTestId('p-skip', HIDDEN))
+    await advance(1000)
+    expect(onDone).toHaveBeenCalledTimes(1)
+  })
+
+  it('whether a question follows is read once, at mount: a later asks={false} does not move the hold', async () => {
+    const view = await render(pour({ asks: true }))
+    await view.rerender(pour({ asks: false }))
+    await advance(ROOM_AT)
+    expect(onDone).not.toHaveBeenCalled()
+    await advance(ASK_AT - ROOM_AT)
+    await advance(1000)
+    expect(onDone).toHaveBeenCalledTimes(1)
   })
 
   it('holds, filled, until the Room is there to hand off to', async () => {
@@ -480,6 +539,7 @@ describe('/preview/ds-p5', () => {
       ['ds-play-ready', 'ds-moment-ready'],
       ['ds-play-pour', 'ds-moment-pour'],
       ['ds-play-pour-held', 'ds-moment-pour'],
+      ['ds-play-pour-asks', 'ds-moment-pour'],
       ['ds-play-pour-pass', 'ds-moment-pour'],
     ]) {
       await fireEvent.press(screen.getByTestId(button))
