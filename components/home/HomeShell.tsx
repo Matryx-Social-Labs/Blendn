@@ -1,6 +1,7 @@
 import { useIsFocused } from 'expo-router'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { AccessibilityInfo, Keyboard, Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native'
+import { AccessibilityInfo, Keyboard, Platform, Pressable, StyleSheet, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native'
+import { useSharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { tabBarTop } from '../../app/(tabs)/_layout'
@@ -20,8 +21,16 @@ export interface HomeBrowse {
   location: { latitude: number; longitude: number } | null
   /** The city has been decided (stored, inferred or none at all): Places may ask now. */
   ready: boolean
-  /** Where the picked city is (`/events/cities` `centre`): the map goes there when the city changes. */
+  /** Where the selected city is (`/events/cities` `centre`). */
   cityCentre: { latitude: number; longitude: number } | null
+  /**
+   * Bumped by every city the person chooses, never by one the app decided: the
+   * map goes there, even to the city it shows. `here` when the choice was where
+   * they stand ("Use my current location", the switch banner): the map shows them.
+   */
+  cityPick: { n: number; here: boolean }
+  /** Ask for the phone's position: the Pulse's own location flow (the OS ask, or its "Turn on location" tray). Settles when it does. */
+  requestLocation: () => void | Promise<void>
 }
 
 type Segment = 'events' | 'places'
@@ -53,11 +62,23 @@ export function HomeShell({
     [height, insets.top, insets.bottom]
   )
   const [snap, setSnap] = useState<DrawerSnap>('half')
+  // The drawer's top edge as it moves; "my location" rides on it.
+  const drawerTop = useSharedValue(points[snap])
+  // The map's own height: the screen less the tab bar. The map waits for it, so its first frame is centred.
+  const [mapHeight, setMapHeight] = useState<number | null>(null)
+  const onLayout = (e: LayoutChangeEvent) => setMapHeight(e.nativeEvent.layout.height)
   const restore = useRef<DrawerSnap | null>(null)
   const [segment, setSegment] = useState<Segment>('events')
   const [placesOpened, setPlacesOpened] = useState(false)
   const [screenReader, setScreenReader] = useState(false)
-  const [browse, setBrowse] = useState<HomeBrowse>({ city: null, location: null, ready: false, cityCentre: null })
+  const [browse, setBrowse] = useState<HomeBrowse>({
+    city: null,
+    location: null,
+    ready: false,
+    cityCentre: null,
+    cityPick: { n: 0, here: false },
+    requestLocation: () => {},
+  })
 
   /*
    * With a screen reader the list is the screen: open it, and take the map out
@@ -109,25 +130,34 @@ export function HomeShell({
   const events = useMemo(() => renderEvents(setBrowse, pulseVisible), [renderEvents, pulseVisible])
 
   return (
-    <View style={styles.root}>
+    <View style={styles.root} onLayout={onLayout}>
       <View
         style={StyleSheet.absoluteFill}
         importantForAccessibility={screenReader ? 'no-hide-descendants' : 'auto'}
         accessibilityElementsHidden={screenReader}
       >
-        <HomeMap
-          center={browse.location}
-          cityCentre={browse.cityCentre}
-          segment={segment}
-          topInset={insets.top + TOP_BAR_HEIGHT}
-          bottomInset={height - points[snap]}
-          focused={focused}
-          // Nothing breathes where nobody can see it: the drawer full over the map, or a screen reader (which hides the map).
-          glowVisible={focused && snap !== 'full' && !screenReader}
-        />
+        {mapHeight !== null ? (
+          <HomeMap
+            center={browse.location}
+            cityCentre={browse.cityCentre}
+            cityPick={browse.cityPick}
+            requestLocation={browse.requestLocation}
+            locateVisible={snap !== 'full'}
+            drawerTop={drawerTop}
+            drawer={points}
+            segment={segment}
+            topChrome={insets.top + TOP_BAR_HEIGHT}
+            mapHeight={mapHeight}
+            drawerSnapTop={points[snap]}
+            focused={focused}
+            // Nothing breathes where nobody can see it: the drawer full over the map, or a screen reader (which hides the map).
+            glowVisible={focused && snap !== 'full' && !screenReader}
+          />
+        ) : null}
       </View>
       <PulseTopBar actions={<NotificationBell />} />
       <HomeDrawer
+        y={drawerTop}
         points={points}
         snap={snap}
         onSnap={onSnap}

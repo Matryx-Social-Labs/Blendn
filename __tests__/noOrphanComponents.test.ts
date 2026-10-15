@@ -61,7 +61,6 @@ const KNOWN_ORPHANS: Record<string, string> = {
    */
   'Material.tsx': 'redesign Phase 1 foundation; the tab bar adopts it first (DESIGN-BRIEF §5.3), after the native rebuild that adds expo-glass-effect',
   'GradientFill.tsx': 'redesign Phase 1 foundation; the primary button and the centre disc adopt it with their redesign (§4.3, §11)',
-  'Icon.tsx': 'redesign Phase 1 foundation; screens move from Ionicons to it one at a time as they are redesigned (§8)',
   'Creature.tsx': 'redesign P5 set (ROUND3 B7); the pseudonym discs (Face, ChatBubble, Banter, Room info, the profile hero) move to it from the emoji with their redesign',
   'VenuePlate.tsx': 'redesign P5 set; the art for a place with no next event (Places tiles and rows, the venue hero) adopts it with the Places redesign',
   'Disc.tsx': 'the redesign centre button (§11), built ahead of its slot; Flow 4 swaps it in for RoomButton in app/(tabs)/_layout.tsx',

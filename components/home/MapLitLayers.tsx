@@ -17,7 +17,6 @@ import {
   CITY_BUILDINGS,
   LABELS_FROM_LAYER_ID,
   OWN_BUILDINGS,
-  OWN_BUILDINGS_ATTRIBUTION,
   OWN_BUILDINGS_TILE_ZOOM,
   type OwnBuildingState,
 } from '../../lib/mapStyleEmber'
@@ -64,7 +63,7 @@ const STATE_RETRY_MS = 400
  * feature-state, applied as a diff: set for the new, removed for the gone, and
  * counted as applied only once native says so (a refusal is retried a few
  * times, then left until the lighting changes). Tapping it opens the place it
- * stands for. Credited, with links, next to OpenFreeMap.
+ * stands for. Credited in the corner credit and About › Map data (`MAP_CREDITS`).
  */
 export const OwnBuildings = memo(function OwnBuildings({
   url,
@@ -126,7 +125,6 @@ export const OwnBuildings = memo(function OwnBuildings({
       // Built at one zoom only; MapLibre overzooms past it.
       minzoom={OWN_BUILDINGS_TILE_ZOOM}
       maxzoom={OWN_BUILDINGS_TILE_ZOOM}
-      attribution={OWN_BUILDINGS_ATTRIBUTION}
       onPress={onPress}
     >
       <Layer
@@ -173,7 +171,7 @@ export const LitBuildings = memo(function LitBuildings({
 })
 
 /** Reduce Motion, followed live: it is switched on and off mid-session (review M4). */
-function useReduceMotion(): boolean {
+export function useReduceMotion(): boolean {
   const [on, setOn] = useState(false)
   useEffect(() => {
     let alive = true
