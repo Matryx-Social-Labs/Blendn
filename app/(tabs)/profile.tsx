@@ -25,7 +25,7 @@ import { SectionHeader } from '../../components/pulse/SectionHeader'
 import { Text } from '../../components/ui/Text'
 import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
-import { agoLabel, identityMeta, profileGaps } from '../../lib/meProfile'
+import { agoLabel, identityMeta, interestNames, profileGaps } from '../../lib/meProfile'
 import { MOTION_DURATION, MOTION_EASING } from '../../lib/motion'
 import { queryCache } from '../../lib/queryCache'
 import { pastEventRows, type PastEventRow } from '../../lib/savedEvents'
@@ -215,10 +215,7 @@ function ProfileInner() {
 
       const data = result.data
       const photos = data.photos || data.profile_photos || []
-      const interests = Array.isArray(data.interests)
-        ? data.interests.map((i: any) => (typeof i === 'string' ? i : i?.name || ''))
-            .filter((n: string) => n)
-        : []
+      const interests = interestNames(data.interests)
 
       const viewModel: UserProfileViewModel = {
         id: data.id || data.user_id || user.id,

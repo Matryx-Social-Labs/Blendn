@@ -1,4 +1,5 @@
-import { Image } from 'react-native'
+import Constants from 'expo-constants'
+import { Image, Platform } from 'react-native'
 
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, SPACE, TYPE } from '../../lib/theme'
 
@@ -11,6 +12,13 @@ export function assetAspect(mod: number, fallback: number): number {
   const s = Image.resolveAssetSource(mod)
   return s?.width && s?.height ? s.width / s.height : fallback
 }
+
+/** What a sign-in tells the server about this phone. */
+export const currentDeviceInfo = () => ({
+  platform: Platform.OS,
+  device: Constants.deviceName || undefined,
+  appVersion: Constants.expoConfig?.version || undefined,
+})
 
 // The same lockup as the entry screen, so the brand does not change colour
 // between the two taps of signing in (this was the all-white `lockup-white`).

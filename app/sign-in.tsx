@@ -1,11 +1,9 @@
 import { Ionicons } from '@expo/vector-icons'
-import Constants from 'expo-constants'
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useEffect, useRef, useState } from 'react'
 import {
   Image,
   KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -18,7 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { LegalLine } from '../components/LegalLine'
 import { Logger } from '../lib/logger'
-import { AUTH_FORM_STYLES, AUTH_LOCKUP } from '../components/onboarding/authForm'
+import { AUTH_FORM_STYLES, AUTH_LOCKUP, currentDeviceInfo } from '../components/onboarding/authForm'
 import { EmberButton } from '../components/onboarding/EmberControls'
 import { CONTROL, EMBER, EMBER_RADIUS, ICON, MAX_FONT_SCALE, SPACE, TYPE } from '../lib/theme'
 import { signInWithEmail, signUp } from '../lib/useAuth'
@@ -148,11 +146,7 @@ export default function SignIn() {
     setBusy(true)
     setError(null)
     try {
-      const deviceInfo = {
-        platform: Platform.OS,
-        device: Constants.deviceName || undefined,
-        appVersion: Constants.expoConfig?.version || undefined,
-      }
+      const deviceInfo = currentDeviceInfo()
 
       /*
        * Required, 18 or over, on the form and on the server: Blend'n is 18+

@@ -9,6 +9,10 @@
 
 import { MONTHS } from './time'
 
+/** Interest names from a profile payload: plain strings, or `{ id, name, slug, icon }` objects. */
+export const interestNames = (raw: unknown): string[] =>
+  Array.isArray(raw) ? raw.map((i: any) => (typeof i === 'string' ? i : i?.name || '')).filter((n: string) => n) : []
+
 /** The slots Edit profile offers — `PhotoManager`'s grid. */
 export const MAX_PHOTOS = 6
 
