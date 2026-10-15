@@ -17,7 +17,8 @@
     "lint": "expo lint",
     "test": "jest",
     "test:watch": "jest --watch",
-    "lint:design": "node scripts/check-design-tokens.js"
+    "lint:design": "node scripts/check-design-tokens.js",
+    "tokens": "node scripts/generate-design-tokens.js"
   },
   "dependencies": {
     "@expo-google-fonts/geist-mono": "^0.4.3",
