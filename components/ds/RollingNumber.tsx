@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { StyleSheet, View, useWindowDimensions, type TextStyle } from 'react-native'
-import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated'
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated'
 
 import { COLOR, FONT_FAMILY, MAX_FONT_SCALE, SPRING } from '../../lib/design/tokens'
-import { motionTokens, useReducedMotion } from '../../lib/motion'
+import { useReducedMotion } from '../../lib/motion'
 import { font, useBoldText } from './shared'
 
 /**
@@ -20,6 +20,7 @@ function Column({
   roll,
   rollIn,
   height,
+  cap,
   text,
   testID,
 }: {
@@ -29,6 +30,8 @@ function Column({
   /** A column added after the first draw (99 → 100) rolls in from below. */
   rollIn: boolean
   height: number
+  /** The role's text-size cap: the glyphs stop where the column's height does. */
+  cap: number
   text: TextStyle[]
   testID?: string
 }) {
@@ -38,8 +41,7 @@ function Column({
   const p = useSharedValue(roll?.q ?? (rollIn ? 0 : 1))
 
   useEffect(() => {
-    const go = () =>
-      p.set(reduceMotion ? withTiming(1, { duration: motionTokens(true).duration.quick }) : withSpring(1, SPRING.settle))
+    const go = () => p.set(reduceMotion ? 1 : withSpring(1, SPRING.snap))
     if (roll) return
     if (rollIn && last.current === char && p.get() === 0) return go()
     if (last.current === char) return
@@ -61,11 +63,11 @@ function Column({
   return (
     <View style={[styles.column, { height }]}>
       {from !== null ? (
-        <Animated.Text testID={testID && `${testID}-out`} style={[...text, styles.out, outStyle]}>
+        <Animated.Text testID={testID && `${testID}-out`} maxFontSizeMultiplier={cap} style={[...text, styles.out, outStyle]}>
           {from}
         </Animated.Text>
       ) : null}
-      <Animated.Text testID={testID && `${testID}-in`} style={[...text, inStyle]}>
+      <Animated.Text testID={testID && `${testID}-in`} maxFontSizeMultiplier={cap} style={[...text, inStyle]}>
         {char}
       </Animated.Text>
     </View>
@@ -76,11 +78,13 @@ function Column({
  * A number that changes while you watch (guidelines/components/RollingNumber.html):
  * the Room's "14 here now", the recap tiles, a count beside a heading. Only
  * the digit that changes rolls, old digit up and out, new digit in from below,
- * on `M.settle`; the others hold still. Geist Mono 700, tabular, so nothing
+ * on `M.snap` (motion #24, #26; the page's `M.settle` is the older word); the
+ * others hold still. Geist Mono 700, tabular, so nothing
  * shifts. A new column (99 → 100) rolls in as the width grows. Never a tween
  * through the values between, never a spinner.
  *
- * Reduce Motion: a `quick` crossfade in place. Scales freely with text. Read
+ * Reduce Motion: the number changes instantly (#24). Scales with text up to
+ * its role's cap. Read
  * as its value only, never as a live region (counters are not, §14): the caller
  * groups it with its unit ("14 here now"). No haptic: the event behind the
  * number carries its own.
@@ -123,6 +127,7 @@ export function RollingNumber({
             roll={preview && was !== char ? { from: was?.trim() || '0', q: preview.q } : undefined}
             rollIn={fromRight >= firstWidth}
             height={height}
+            cap={cap}
             text={text}
             testID={testID && `${testID}-${fromRight}`}
           />

@@ -1,9 +1,12 @@
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { useEffect, useRef, useState, type ComponentProps, type ComponentRef, type ReactNode, type RefObject } from 'react'
+import { AccessibilityInfo, Platform, ScrollView, StyleSheet, Text, View } from 'react-native'
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated'
 
 import ScalePress from '../motion/ScalePress'
 import { Icon, type IconName } from '../ui/Icon'
-import { COLOR, FONT_FAMILY, ICON, MATERIAL, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, MATERIAL, PRESS, RADIUS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
+import { useReducedMotion } from '../../lib/motion'
 import { Avatar } from './Avatar'
 import { Button } from './Button'
 import { InterestChip } from './Chip'
@@ -11,7 +14,7 @@ import type { Face } from './Facepile'
 import { Spinner } from './Loader'
 import { PresenceDot } from './MonoFamily'
 import { Sheet } from './Sheet'
-import { CONTROL_FONT_CAP, font, minTarget, useBoldText, useIncreaseContrast } from './shared'
+import { CONTROL_FONT_CAP, focusRing, font, minTarget, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
 import { StateScreen } from './StateScreen'
 
 /** ROUND3 D · 4.1: here now · was here · pre-event room · matched · friend · unavailable · thin. */
@@ -35,6 +38,8 @@ export type PersonCardPerson = {
 export type PersonCardContentProps = {
   person: PersonCardPerson
   variant: PersonVariant
+  /** Matched and friend: checked in here now, so the card says so. A here-now card always is. */
+  here?: boolean
   state?: PersonState
   /** They waved at you this long ago ("2 min"): the still chip, and Wave reads Wave back (4.2). Kept on the phone, gone after 10 minutes. */
   wavedAtYou?: string
@@ -50,12 +55,15 @@ export type PersonCardContentProps = {
   onViewProfile?: () => void
   /** The unavailable card's Close. */
   onClose?: () => void
+  /** The sheet's focus target: the head, read first as the card opens (`PersonCard` passes it). */
+  headRef?: RefObject<ComponentRef<typeof View> | null>
   testID?: string
 }
 
 const FACE = 112
-/** Flow 15 #18's still "Waved": a 1.5 pt outline (the export's 35% white; `inputBorder` is the token at 38%). */
-const WAVED_EDGE = 1.5
+/** #15: a Like button pops 0.85 → 1 on `M.pop` as it turns to Liked. */
+const LIKE_POP_FROM = 0.85
+
 const PRE_EVENT = 'You can only message people from an event you have both attended.'
 
 /**
@@ -69,9 +77,10 @@ const PRE_EVENT = 'You can only message people from an event you have both atten
  *
  * - Like: the gradient primary (there is always an event here: here and was),
  *   `H.like` once; Liked is a still white pill. Say hi (matched): `H.primary`.
- * - Wave (here now only): none on the press (#51; the server can't promise
- *   delivery). Busy while it goes; then a still "Waved" with the word
- *   (Flow 15 #18). Waved at you: a still chip and Wave back.
+ * - Wave (here now only): none on the press (#51, R3-D4; the server can't
+ *   promise delivery). Busy while it goes; then the label settles to a still
+ *   white "Waved" with a check (R3-D4, which Flow 15 #18 defers to). Waved at
+ *   you: a still chip and Wave back.
  * - Message (secondary; the ConnectSheet reveals you) or a still Requested.
  *   ⋯ is Block / Report. View profile on every variant but unavailable.
  *
@@ -83,6 +92,7 @@ const PRE_EVENT = 'You can only message people from an event you have both atten
 export function PersonCardContent({
   person,
   variant,
+  here = false,
   state = 'none',
   wavedAtYou,
   refusal,
@@ -93,10 +103,19 @@ export function PersonCardContent({
   onMore,
   onViewProfile,
   onClose,
+  headRef,
   testID,
 }: PersonCardContentProps) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
+  const reduceMotion = useReducedMotion()
+  const likedStyle = useLikedPop(state, reduceMotion)
+
+  // 4.3: the refusal is read as it arrives, or a screen reader hears nothing happen.
+  const refusalText = refusal?.text
+  useEffect(() => {
+    if (refusalText) AccessibilityInfo.announceForAccessibility(refusalText)
+  }, [refusalText])
   const panel = Platform.OS === 'android' ? COLOR.surfaceSunken : MATERIAL.fillOnGlass
   const quiet = contrast ? COLOR.textPrimary : COLOR.textSecondary
   const { name, age } = person
@@ -116,7 +135,8 @@ export function PersonCardContent({
 
   const thin = variant === 'thin'
   const line = thin ? person.city : variant === 'friend' ? 'Friend' : person.reason
-  const presence = variant === 'was' ? 'Was here' : variant === 'pre' ? 'Going' : thin ? null : 'Here now'
+  const presence =
+    variant === 'was' ? 'Was here' : variant === 'pre' ? 'Going' : variant === 'here' || (here && variant !== 'thin') ? 'Here now' : null
   const heading = [name, age, line, presence?.toLowerCase()].filter((p) => p != null && p !== '').join(', ')
   const showReasons = !thin && variant !== 'pre' && !!person.reasons?.length
   const note =
@@ -131,8 +151,9 @@ export function PersonCardContent({
             : `${state === 'waved' && variant === 'here' ? 'Waved. ' : ''}Message sends a request and reveals you to ${name}.`
 
   const circle = (icon: IconName, label: string, onPress?: () => void, busy = false) => (
-    <ScalePress
+    <Control
       testID={id(icon)}
+      radius={RADIUS.capsule}
       onPress={onPress}
       disabled={busy}
       accessibilityRole="button"
@@ -141,7 +162,7 @@ export function PersonCardContent({
       style={[styles.circle, { backgroundColor: panel }]}
     >
       {busy ? <Spinner /> : <Icon name={icon} size={ICON.control} />}
-    </ScalePress>
+    </Control>
   )
 
   return (
@@ -153,7 +174,7 @@ export function PersonCardContent({
         </View>
       ) : null}
 
-      <View accessible accessibilityRole="header" accessibilityLabel={heading} style={styles.head}>
+      <View ref={headRef} accessible accessibilityRole="header" accessibilityLabel={heading} style={styles.head}>
         <Avatar size={FACE} ring={COLOR.ink} testID={id('face')} {...person.face} />
         <View style={styles.headText}>
           <Text style={[font('title', bold), styles.ink]}>
@@ -205,24 +226,24 @@ export function PersonCardContent({
         </View>
       ) : null}
 
-      <View style={styles.actions}>
+      <View testID={id('actions')} style={styles.actions}>
         {variant === 'matched' ? (
           <Button label="Say hi" onPress={onSayHi} style={styles.grow} testID={id('say-hi')} />
         ) : variant === 'here' || variant === 'was' ? (
           state === 'liked' ? (
-            <View
+            <Animated.View
               testID={id('liked')}
               accessible
               accessibilityRole="button"
               accessibilityLabel="Liked"
               accessibilityState={{ selected: true }}
-              style={[styles.pill, styles.grow, styles.liked]}
+              style={[styles.pill, styles.grow, styles.liked, likedStyle]}
             >
               <Icon name="heart" size={ICON.control} color={COLOR.ink} active />
               <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('button', bold), styles.onWhite]}>
                 Liked
               </Text>
-            </View>
+            </Animated.View>
           ) : (
             <Button
               label="Like"
@@ -241,15 +262,16 @@ export function PersonCardContent({
 
         {variant === 'here' ? (
           state === 'waved' ? (
-            <View testID={id('waved')} accessible accessibilityLabel="Waved" style={[styles.pill, styles.waved]}>
-              <Icon name="hand" size={ICON.control} />
-              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('button', bold), styles.ink]}>
+            <View testID={id('waved')} accessible accessibilityLabel="Waved" style={[styles.pill, styles.liked]}>
+              <Icon name="check" size={ICON.control} color={COLOR.ink} active />
+              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('button', bold), styles.onWhite]}>
                 Waved
               </Text>
             </View>
           ) : wavedAtYou && state !== 'waveBusy' ? (
-            <ScalePress
+            <Control
               testID={id('wave-back')}
+              radius={RADIUS.capsule}
               onPress={onWave}
               accessibilityRole="button"
               accessibilityLabel={`Wave back at ${name}`}
@@ -259,7 +281,7 @@ export function PersonCardContent({
               <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('button', bold), styles.ink]}>
                 Wave back
               </Text>
-            </ScalePress>
+            </Control>
           ) : (
             circle('hand', `Wave at ${name}`, onWave, state === 'waveBusy')
           )
@@ -282,26 +304,77 @@ export function PersonCardContent({
       {refusal ? (
         <View style={styles.refusal}>
           <Text style={[font('meta', bold), styles.ink, styles.shrink]}>{refusal.text}</Text>
-          {refusal.action ? <TextAction label={refusal.action.label} onPress={refusal.action.onPress} /> : null}
+          {refusal.action ? <TextAction label={refusal.action.label} onPress={refusal.action.onPress} testID={id('refusal-action')} /> : null}
         </View>
       ) : null}
 
       {note ? <Text style={[font('caption', bold), styles.note, { color: quiet }]}>{note}</Text> : null}
 
       <View style={styles.center}>
-        <TextAction label="View profile" onPress={onViewProfile} />
+        <TextAction label="View profile" onPress={onViewProfile} testID={id('view-profile')} />
       </View>
     </View>
   )
 }
 
+/** #15: Like turns to Liked with a pop, 0.85 → 1 on `M.pop`; Reduce Motion places it. */
+function useLikedPop(state: PersonState, reduceMotion: boolean) {
+  const scale = useSharedValue(1)
+  const last = useRef(state)
+  useEffect(() => {
+    const was = last.current
+    last.current = state
+    if (reduceMotion || was === state || state !== 'liked') return
+    scale.set(LIKE_POP_FROM)
+    scale.set(withSpring(1, SPRING.pop))
+  }, [state, reduceMotion, scale])
+  return useAnimatedStyle(() => ({ transform: [{ scale: scale.get() }] }))
+}
+
+/**
+ * A control the card draws itself (the circles, Wave back, the text actions):
+ * iOS scales on `M.press`, Android ripples without scaling, and a keyboard or
+ * Switch Control focus draws the ring, as Button and IconButton do.
+ */
+function Control({ radius, testID, style, children, ...press }: ComponentProps<typeof ScalePress> & { radius: number; children: ReactNode }) {
+  const android = Platform.OS === 'android'
+  const [focused, setFocused] = useState(false)
+  return (
+    <View>
+      <ScalePress
+        testID={testID}
+        {...press}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        pressedScale={android ? 1 : PRESS.scale}
+        android_ripple={{ color: PRESSED_WASH.android, foreground: true }}
+        style={style}
+      >
+        {children}
+      </ScalePress>
+      {focused
+        ? focusRing(radius).map((ring, i) => (
+            <View key={i} testID={i ? undefined : testID && `${testID}-focus`} pointerEvents="none" style={ring} />
+          ))
+        : null}
+    </View>
+  )
+}
+
 /** A row-scale text action: 700 14 white on a 44 / 48 target (the R3 ruling). Silent. */
-function TextAction({ label, onPress }: { label: string; onPress?: () => void }) {
+function TextAction({ label, onPress, testID }: { label: string; onPress?: () => void; testID?: string }) {
   const bold = useBoldText()
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} style={[styles.textAction, { minHeight: minTarget() }]}>
+    <Control
+      testID={testID}
+      radius={RADIUS.thumb}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={[styles.textAction, { minHeight: minTarget() }]}
+    >
       <Text style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>{label}</Text>
-    </Pressable>
+    </Control>
   )
 }
 
@@ -312,10 +385,11 @@ function TextAction({ label, onPress }: { label: string; onPress?: () => void })
  * grid cell (#33) is the screen's.
  */
 export function PersonCard({ visible, onClose, testID, ...card }: PersonCardContentProps & { visible: boolean; onClose: () => void }) {
+  const head = useRef<ComponentRef<typeof View>>(null)
   return (
-    <Sheet visible={visible} onClose={onClose} detents={['medium', 'tall']} testID={testID}>
+    <Sheet visible={visible} onClose={onClose} detents={['medium', 'tall']} focusRef={head} testID={testID}>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollBody}>
-        <PersonCardContent {...card} onClose={onClose} testID={testID && `${testID}-card`} />
+        <PersonCardContent {...card} onClose={onClose} headRef={head} testID={testID && `${testID}-card`} />
       </ScrollView>
     </Sheet>
   )
@@ -357,11 +431,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.lg,
   },
   liked: { backgroundColor: COLOR.textPrimary },
-  waved: { borderWidth: WAVED_EDGE, borderColor: COLOR.inputBorder, backgroundColor: COLOR.surface },
   refusal: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.md },
   note: { textAlign: 'center' },
   center: { alignItems: 'center' },
   textAction: { justifyContent: 'center', paddingHorizontal: SPACE.lg },
-  scroll: { flex: 1 },
-  scrollBody: { paddingBottom: SPACE.xl },
+  /** The focus rings sit 4 pt outside the controls: the scroll gives them the room. */
+  scroll: { flex: 1, marginHorizontal: -SPACE.xs },
+  scrollBody: { paddingHorizontal: SPACE.xs, paddingTop: SPACE.xs, paddingBottom: SPACE.xl },
 })

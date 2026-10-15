@@ -67,6 +67,8 @@ describe('<Facepile>', () => {
   it('is one element, “{N} people here”; the faces are decorative', async () => {
     await render(<Facepile faces={FACES} total={14} />)
     expect(screen.getByLabelText('14 people here')).toBeTruthy()
+    await render(<Facepile faces={FACES} total={14} text="and Priya" />)
+    expect(screen.getByLabelText('14 people here, and Priya')).toBeTruthy()
     await render(<Facepile faces={FACES} total={1} accessibilityLabel="Priya is here" />)
     expect(screen.getByLabelText('Priya is here')).toBeTruthy()
   })

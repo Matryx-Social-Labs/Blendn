@@ -1,5 +1,5 @@
 import { Image } from 'expo-image'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { AccessibilityInfo, StyleSheet, Text, View } from 'react-native'
 import Svg, { Circle } from 'react-native-svg'
 
@@ -30,6 +30,10 @@ export type VenuePassProps = {
   busy?: boolean
   busyLabel?: string
   refused?: boolean
+  /** The server said yes (#9): the hold stays full under "You’re in". */
+  confirmed?: boolean
+  /** The pour (MomentPour, #9), mounted in the panel so its flood rises through it and is clipped to it. */
+  pour?: ReactNode
   /** Outside the fence: the hold dims under `holdLabel` ("Go live when you’re here · 350 m"). */
   disabled?: boolean
   /** The design gallery only: the hold frozen this far in. */
@@ -45,8 +49,11 @@ export type VenuePassProps = {
  * three "?" discs with "N people here share your taste" (never who), then the
  * HoldToConfirm and the consequence in one line.
  *
- * Its haptics are the hold's: `H.tick` ×3, `H.commit`; the caller plays
- * `H.success` as the Room opens. Read: "You're here. {title}. {N} inside now."
+ * Its haptics are the hold's: `H.tick` ×3, `H.commit`, `H.error` on a refusal
+ * (the fill drains, #10). On the server's yes (#9, the Flow 4 prototype) the
+ * hold reads "You're in" and the screen mounts the pour in `pour`: its flood
+ * rises through this panel and plays `H.success` (it is MomentPour's, not a
+ * second one here). Read: "You're here. {title}. {N} inside now."
  * then the tease, then the hold, whose hint is the consequence. The panel
  * grows with its text; only the pill is fixed. Increase Contrast: the 50%
  * hairline.
@@ -62,6 +69,8 @@ export function VenuePass({
   busy,
   busyLabel = 'Checking you in…',
   refused,
+  confirmed,
+  pour,
   disabled,
   previewProgress,
   testID,
@@ -116,6 +125,7 @@ export function VenuePass({
         busy={busy}
         busyLabel={busyLabel}
         refused={refused}
+        confirmedLabel={confirmed ? 'You’re in' : undefined}
         disabled={disabled}
         previewProgress={previewProgress}
         testID={testID && `${testID}-hold`}
@@ -124,6 +134,7 @@ export function VenuePass({
       <Text accessibilityElementsHidden importantForAccessibility="no" style={[font('caption', bold), styles.secondary, styles.note]}>
         {note}
       </Text>
+      {pour ? <View style={StyleSheet.absoluteFill}>{pour}</View> : null}
       {contrast ? <View testID={testID && `${testID}-contrast`} pointerEvents="none" style={[StyleSheet.absoluteFill, styles.radius, IC_HAIRLINE]} /> : null}
     </View>
   )
@@ -157,6 +168,8 @@ export type DoorCodeProps = {
   redeemedAt?: string
   /** The label of an ended pass ("ENDED SUNDAY"). */
   endedLabel?: string
+  /** False while another screen covers it: no ticking, no announcing to someone elsewhere. */
+  active?: boolean
   testID?: string
 }
 
@@ -173,22 +186,22 @@ export type DoorCodeProps = {
  * the ring is not read. No haptic (`H.success` on the server's redeem is the
  * screen's).
  */
-export function DoorCode({ state, code = '', rotatesAt = 0, redeemedAt, endedLabel, testID }: DoorCodeProps) {
+export function DoorCode({ state, code = '', rotatesAt = 0, redeemedAt, endedLabel, active = true, testID }: DoorCodeProps) {
   const bold = useBoldText()
   const live = state === 'live' && code.length > 0
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
-    if (!live) return
+    if (!live || !active) return
     const id = setInterval(() => setNow(Date.now()), TICK_MS)
     return () => clearInterval(id)
-  }, [live])
+  }, [live, active])
 
   const announced = useRef(code)
   useEffect(() => {
     if (!live || announced.current === code) return
     announced.current = code
-    AccessibilityInfo.announceForAccessibility(spoken(code))
-  }, [live, code])
+    if (active) AccessibilityInfo.announceForAccessibility(spoken(code))
+  }, [live, active, code])
 
   const left = Math.min(CODE_PERIOD_S, Math.max(0, Math.ceil((rotatesAt - now) / 1000)))
   const still = state === 'redeemed' || state === 'used' || state === 'ended' ? STILL[state] : null

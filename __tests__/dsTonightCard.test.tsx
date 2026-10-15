@@ -50,7 +50,7 @@ const swipe = (dx: number, vx = 0) =>
   act(async () => {
     const h = getByGestureTestId('t-swipe').handlers as unknown as Record<string, (e: object, ok?: boolean) => void>
     h.onUpdate({ translationX: dx })
-    h.onEnd({ translationX: dx, velocityX: vx })
+    h.onEnd({ translationX: dx, velocityX: vx }, true)
   })
 
 describe('the deck', () => {
@@ -88,9 +88,11 @@ describe('moving it', () => {
     jest.useFakeTimers()
     const onIndexChange = jest.fn()
     await draw({ onIndexChange })
+    jest.mocked(Reanimated.withSpring).mockClear()
     await swipe(-80)
+    expect(Reanimated.withSpring).toHaveBeenCalledWith(-322, expect.objectContaining({ stiffness: SPRING.snap.stiffness }), expect.any(Function))
     expect(select).not.toHaveBeenCalled()
-    await act(async () => jest.advanceTimersByTime(500))
+    await act(async () => jest.advanceTimersByTime(1500))
     expect(onIndexChange).toHaveBeenCalledWith(1)
     expect(select).toHaveBeenCalledTimes(1)
   })
@@ -105,6 +107,29 @@ describe('moving it', () => {
     expect(select).not.toHaveBeenCalled()
   })
 
+  it('a pan the system cancels moves nothing, however far it went', async () => {
+    // Reduce Motion settles at once, so a wrongly accepted cancel would show here.
+    reduceMotion.mockReturnValue(true)
+    const onIndexChange = jest.fn()
+    await draw({ onIndexChange })
+    await act(async () => {
+      const h = getByGestureTestId('t-swipe').handlers as unknown as Record<string, (e: object, ok?: boolean) => void>
+      h.onUpdate({ translationX: -120 })
+      h.onEnd({ translationX: -120, velocityX: 0 }, false)
+    })
+    await act(async () => {})
+    expect(onIndexChange).not.toHaveBeenCalled()
+  })
+
+  it('a flick from the card the parent moved to: from 1 it goes to 2', async () => {
+    jest.useFakeTimers()
+    const onIndexChange = jest.fn()
+    await draw({ onIndexChange, index: 1 })
+    await swipe(-20, -800)
+    await act(async () => jest.advanceTimersByTime(1500))
+    expect(onIndexChange).toHaveBeenCalledWith(2)
+  })
+
   it('nothing before the first card', async () => {
     const onIndexChange = jest.fn()
     await draw({ onIndexChange })
@@ -116,10 +141,10 @@ describe('moving it', () => {
     reduceMotion.mockReturnValue(true)
     const onIndexChange = jest.fn()
     await draw({ onIndexChange })
-    jest.mocked(Reanimated.withTiming).mockClear()
+    jest.mocked(Reanimated.withSpring).mockClear()
     await swipe(-80)
     await act(async () => {})
-    expect(Reanimated.withTiming).not.toHaveBeenCalled()
+    expect(Reanimated.withSpring).not.toHaveBeenCalled()
     expect(onIndexChange).toHaveBeenCalledWith(1)
     expect(select).toHaveBeenCalledTimes(1)
   })
@@ -138,8 +163,16 @@ describe('a screen reader', () => {
     const onIndexChange = jest.fn()
     const onOpen = jest.fn()
     await draw({ onIndexChange, onOpen })
-    const deck = screen.getByLabelText('Vinyl Night, 9 PM, at Toit, 1.2 km, 42 going, 1 of 3')
+    const deck = screen.getByLabelText('Vinyl Night, 9 PM, at Toit, 1.2 km, 42 going')
     expect(deck.props.accessibilityRole).toBe('adjustable')
+    // The value is what VoiceOver speaks after each adjust; the actions are named for TalkBack's menu.
+    expect(deck.props.accessibilityValue).toEqual({ text: '1 of 3' })
+    expect(deck.props.accessibilityActions).toEqual(
+      expect.arrayContaining([
+        { name: 'increment', label: 'Next event' },
+        { name: 'decrement', label: 'Previous event' },
+      ])
+    )
     await act(async () => deck.props.onAccessibilityAction({ nativeEvent: { actionName: 'increment' } }))
     expect(onIndexChange).toHaveBeenCalledWith(1)
     await act(async () => deck.props.onAccessibilityAction({ nativeEvent: { actionName: 'decrement' } }))

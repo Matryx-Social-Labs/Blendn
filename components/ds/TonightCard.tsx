@@ -1,10 +1,10 @@
-import { useCallback, useEffect } from 'react'
-import { StyleSheet, View } from 'react-native'
+import { useCallback, useLayoutEffect } from 'react'
+import { Platform, StyleSheet, View } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
-import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated'
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
 
-import { COLOR, DURATION, RADIUS, SPACE, SPRING } from '../../lib/design/tokens'
+import { COLOR, RADIUS, SPACE, SPRING } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
 import { tint } from '../../lib/theme'
@@ -34,14 +34,15 @@ const PIP_OFF = tint(COLOR.textPrimary, 0.35)
  * hero EventCard at radius 32 with a 2 pt ink outline, up to two fanned
  * back-cards (plain surface, −5° and 4°), and pips. One card: no fan, no pips.
  *
- * A horizontal swipe past 56 pt (or a flick) moves the deck: the top card
- * leaves on a `quick` throw and `H.select` plays as the next one settles; a
- * short drag springs back on `M.snap`. Reduce Motion cuts between cards (the
+ * A horizontal swipe past 56 pt (or a flick) moves the deck on `M.snap`: the
+ * top card leaves and `H.select` plays as the next one settles; a short drag
+ * springs back on `M.snap`. Reduce Motion cuts between cards (the
  * drag still tracks the finger). A tap opens the event, silently.
  *
- * A screen reader hears "{title}, {time}, at {venue}, 1 of 3" and adjusts the
- * deck (swipe up or down); a double-tap opens it. The pips are not read. The
- * top card grows with its text; the fan does not.
+ * A screen reader hears "{title}, {time}, at {venue}", the value "1 of 3",
+ * and adjusts the deck (VoiceOver: swipe up or down; TalkBack: Next event and
+ * Previous event in its actions); a double-tap opens it. The pips are not
+ * read. The top card's words stop at 1.5× (EventCard); the fan never scales.
  */
 export function TonightCard({
   events,
@@ -68,8 +69,8 @@ export function TonightCard({
   const event = events[index] ?? events[0]
   const dragX = useSharedValue(0)
 
-  // The next card is drawn in place once the parent moves the index.
-  useEffect(() => {
+  // The next card is drawn in place, before paint, once the parent moves the index.
+  useLayoutEffect(() => {
     dragX.set(0)
   }, [index, dragX])
 
@@ -92,8 +93,11 @@ export function TonightCard({
     .onUpdate((e) => {
       dragX.set(e.translationX)
     })
-    .onEnd((e) => {
-      const dir = e.translationX < -COMMIT || e.velocityX < -FLING ? 1 : e.translationX > COMMIT || e.velocityX > FLING ? -1 : 0
+    .onEnd((e, success) => {
+      const toNext = e.translationX < -COMMIT || e.velocityX < -FLING
+      const toPrevious = e.translationX > COMMIT || e.velocityX > FLING
+      // A pan the system cancels is not a swipe, however far it went.
+      const dir = !success ? 0 : toNext ? 1 : toPrevious ? -1 : 0
       const next = index + dir
       if (dir === 0 || next < 0 || next >= count) {
         dragX.set(reduceMotion ? 0 : withSpring(0, SPRING.snap))
@@ -104,7 +108,7 @@ export function TonightCard({
         return
       }
       dragX.set(
-        withTiming(-dir * width, { duration: DURATION.quick }, (done) => {
+        withSpring(-dir * width, SPRING.snap, (done) => {
           if (done) scheduleOnRN(settle, next)
         })
       )
@@ -112,7 +116,7 @@ export function TonightCard({
   if (testID) swipe.withTestId(`${testID}-swipe`)
 
   const lean = useAnimatedStyle(
-    () => ({ transform: [{ translateX: dragX.get() }, { rotate: `${(dragX.get() / width) * TILT}deg` }] }),
+    () => ({ transform: [{ translateX: dragX.get() }, { rotate: `${width ? (dragX.get() / width) * TILT : 0}deg` }] }),
     [width]
   )
 
@@ -141,9 +145,19 @@ export function TonightCard({
           <Animated.View
             accessible
             accessibilityRole={many ? 'adjustable' : 'button'}
-            accessibilityLabel={many ? `${eventLabel(event)}, ${index + 1} of ${count}` : eventLabel(event)}
-            accessibilityHint={many ? 'Swipe up or down to move through tonight.' : undefined}
-            accessibilityActions={many ? [{ name: 'increment' }, { name: 'decrement' }, { name: 'activate' }] : [{ name: 'activate' }]}
+            accessibilityLabel={eventLabel(event)}
+            // What VoiceOver speaks after each adjust; TalkBack reads it with the card.
+            accessibilityValue={many ? { text: `${index + 1} of ${count}` } : undefined}
+            accessibilityHint={many && Platform.OS === 'ios' ? 'Swipe up or down to move through tonight.' : undefined}
+            accessibilityActions={
+              many
+                ? [
+                    { name: 'increment', label: 'Next event' },
+                    { name: 'decrement', label: 'Previous event' },
+                    { name: 'activate' },
+                  ]
+                : [{ name: 'activate' }]
+            }
             onAccessibilityAction={(e) => {
               const action = e.nativeEvent.actionName
               if (action === 'increment') move(1)

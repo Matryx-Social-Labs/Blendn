@@ -8,7 +8,7 @@
  */
 import { act, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { AccessibilityInfo, StyleSheet } from 'react-native'
+import { AccessibilityInfo, StyleSheet, View } from 'react-native'
 
 import { DoorCode, VenuePass } from '../components/ds/VenuePass'
 import { COLOR, FONT_FAMILY, MATERIAL, RADIUS, TYPE } from '../lib/design/tokens'
@@ -79,6 +79,14 @@ describe('<VenuePass>', () => {
     expect(screen.getByRole('button').props.accessibilityState).toMatchObject({ disabled: true })
   })
 
+  it('on the server’s yes (#9, the Flow 4 prototype): the hold reads “You’re in”, and the pour floods up inside the panel', async () => {
+    await pass({ confirmed: true, pour: <View testID="the-pour" /> })
+    expect(screen.getAllByText('You’re in', { includeHiddenElements: true })).toHaveLength(2)
+    expect(screen.getByTestId('the-pour', { includeHiddenElements: true })).toBeTruthy()
+    // Clipped to the panel: the pour sits inside its rounded, clipping box.
+    expect(flat('v')).toMatchObject({ overflow: 'hidden', borderRadius: RADIUS.sheet })
+  })
+
   it('Increase Contrast: the 50% hairline', async () => {
     jest.spyOn(AccessibilityInfo, 'isDarkerSystemColorsEnabled').mockResolvedValue(true)
     await pass()
@@ -107,7 +115,18 @@ describe('<DoorCode>', () => {
     expect(screen.getByLabelText('Door code K 7 Q, M 2 X')).toBeTruthy()
     expect(screen.getByTestId('d-ring', { includeHiddenElements: true }).props.accessibilityElementsHidden).toBe(true)
     await screen.rerender(<DoorCode state="live" code="P4WN8R" rotatesAt={NOW + 50_000} testID="d" />)
+    expect(announce).toHaveBeenCalledTimes(1)
     expect(announce).toHaveBeenCalledWith('Door code P 4 W, N 8 R')
+  })
+
+  it('covered by another screen (`active` false): it neither ticks nor announces', async () => {
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {})
+    jest.useFakeTimers({ now: NOW })
+    await render(<DoorCode state="live" code="K7QM2X" rotatesAt={NOW + 20_000} active={false} />)
+    await act(async () => jest.advanceTimersByTime(5_000))
+    expect(screen.getByText('20 s', { includeHiddenElements: true })).toBeTruthy()
+    await screen.rerender(<DoorCode state="live" code="P4WN8R" rotatesAt={NOW + 50_000} active={false} />)
+    expect(announce).not.toHaveBeenCalled()
   })
 
   it('offline: no code, the wifi-off well and the sentence that says why', async () => {

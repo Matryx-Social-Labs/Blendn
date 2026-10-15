@@ -10,12 +10,14 @@ import { COLOR, DURATION, ICON, RADIUS, SIZE, SPACE, SPRING } from '../../lib/de
 import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
 import { OPACITY } from '../../lib/theme'
-import { Button, useRefusal } from './Button'
+import { Button } from './Button'
 import { CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast, useScreenReader } from './shared'
 
 /** A finger may drift this far and still be holding. */
 const MAX_DRIFT = SPACE.xl
 const QUARTERS = 4
+/** A long label ("Go live when you’re here · 350 m") shrinks this far before it would lose its tail. */
+const LABEL_MIN_SCALE = 0.8
 
 export type HoldToConfirmProps = {
   /** "Hold to blend in". */
@@ -30,8 +32,10 @@ export type HoldToConfirmProps = {
   busyLabel?: string
   /** Outside the fence: 45%, no hold. */
   disabled?: boolean
-  /** The server said no (#20): the destructive ring, the shake and `H.error`, when it turns on. */
+  /** The server said no (#10): `H.error` as it turns on, and the fill drains on `M.settle`. */
   refused?: boolean
+  /** The server said yes (#9): the fill stays full under this label ("You’re in"), with nothing left to hold. */
+  confirmedLabel?: string
   icon?: IconName
   /** The design gallery only: the fill frozen this far in. */
   previewProgress?: number
@@ -46,11 +50,14 @@ export type HoldToConfirmProps = {
  *
  * `H.tick` at 25 / 50 / 75% and `H.commit` at 100%, fired from the UI thread on
  * the frame the fill crosses; the outcome's `H.success` / `H.error` is the
- * caller's, on the server's answer. Letting go before the end rewinds on
+ * caller's, on the server's answer (#8). Letting go before the end rewinds on
  * `M.settle`, silently; Reduce Motion cuts the rewind but keeps the fill (the
- * hold's speed is information). A refusal: the destructive ring for one #20
- * shake, `H.error` at t0. One hold in the product: check-in and Go Live both
- * use this; no staff hold (ROUND3 G3).
+ * hold's speed is information). Busy keeps the fill full under its label. A
+ * refusal (#10, R3-D4 4.7): `H.error` at t0 and the fill drains on `M.settle`,
+ * not a bounce (the refusal sheet is the screen's). A yes (#9, the Flow 4
+ * prototype): the fill stays full under "You're in" and the pour (MomentPour)
+ * plays `H.success`. One hold in the product: check-in and Go Live both use
+ * this; no staff hold (ROUND3 G3).
  *
  * The hold is never required. A screen reader gets one strong button (a
  * double-tap confirms); Switch Control and Voice Control activate the pill
@@ -66,6 +73,7 @@ export function HoldToConfirm({
   busyLabel,
   disabled = false,
   refused = false,
+  confirmedLabel,
   icon = 'fingerprint-pattern',
   previewProgress,
   testID,
@@ -74,10 +82,10 @@ export function HoldToConfirm({
   const reduceMotion = useReducedMotion()
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
-  const shake = useRefusal(refused && !screenReader)
   const [width, setWidth] = useState(0)
-  const progress = useSharedValue(previewProgress ?? (busy ? 1 : 0))
-  const inactive = disabled || busy
+  const full = busy || !!confirmedLabel
+  const progress = useSharedValue(previewProgress ?? (full ? 1 : 0))
+  const inactive = disabled || full
 
   const commit = useCallback(() => {
     H.commit()
@@ -95,14 +103,19 @@ export function HoldToConfirm({
     }
   )
 
-  // Busy holds the fill full; when it drops (done, or refused) the fill drains.
-  const wasBusy = useRef(busy)
+  // Busy and confirmed hold the fill full; when they drop (refused, or done) the fill drains.
+  const wasFull = useRef(full)
   useEffect(() => {
     if (previewProgress != null) progress.set(previewProgress)
-    else if (busy) progress.set(1)
-    else if (wasBusy.current) progress.set(reduceMotion ? 0 : withSpring(0, SPRING.settle))
-    wasBusy.current = busy
-  }, [busy, previewProgress, reduceMotion, progress])
+    else if (full) progress.set(1)
+    else if (wasFull.current || refused) progress.set(reduceMotion ? 0 : withSpring(0, SPRING.settle))
+    wasFull.current = full
+  }, [full, refused, previewProgress, reduceMotion, progress])
+
+  // #10: the refusal's one haptic, as it arrives.
+  useEffect(() => {
+    if (refused) H.error()
+  }, [refused])
 
   const hold = Gesture.LongPress()
     .enabled(!inactive && previewProgress == null)
@@ -117,7 +130,8 @@ export function HoldToConfirm({
       scheduleOnRN(commit)
     })
     .onFinalize((_e, success) => {
-      if (!success) progress.set(reduceMotion ? 0 : withSpring(0, SPRING.settle))
+      // A cancel after the edge (busy disables the gesture, an Android drift) is not a release: it committed.
+      if (!success && progress.get() < 1) progress.set(reduceMotion ? 0 : withSpring(0, SPRING.settle))
     })
   if (testID) hold.withTestId(`${testID}-hold`)
 
@@ -135,26 +149,31 @@ export function HoldToConfirm({
         label={srLabel ?? label}
         accessibilityHint={consequence}
         onPress={commit}
-        disabled={disabled}
+        disabled={disabled || !!confirmedLabel}
         loading={busy}
-        refused={refused}
         testID={testID}
       />
     )
   }
 
-  const text = busy && busyLabel ? busyLabel : label
+  const text = confirmedLabel ?? (busy && busyLabel ? busyLabel : label)
   const labelRow = (color: string) => (
     <>
       <Icon name={icon} size={ICON.control} color={color} />
-      <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('button', bold), { color }]}>
+      <Text
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={LABEL_MIN_SCALE}
+        maxFontSizeMultiplier={CONTROL_FONT_CAP}
+        style={[font('button', bold), styles.shrink, { color }]}
+      >
         {text}
       </Text>
     </>
   )
 
   return (
-    <Animated.View testID={testID && `${testID}-wrap`} style={[disabled && styles.disabled, shake]}>
+    <View testID={testID && `${testID}-wrap`} style={disabled && styles.disabled}>
       <GestureDetector gesture={hold}>
         <View
           testID={testID}
@@ -180,10 +199,9 @@ export function HoldToConfirm({
             </Animated.View>
           </Animated.View>
           {contrast ? <View testID={testID && `${testID}-contrast`} pointerEvents="none" style={[styles.edge, IC_HAIRLINE]} /> : null}
-          {refused ? <View testID={testID && `${testID}-refused`} pointerEvents="none" style={[styles.edge, styles.refused]} /> : null}
         </View>
       </GestureDetector>
-    </Animated.View>
+    </View>
   )
 }
 
@@ -205,6 +223,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.lg,
   },
   fill: { ...StyleSheet.absoluteFill, overflow: 'hidden' },
+  shrink: { flexShrink: 1 },
   edge: { ...StyleSheet.absoluteFill, borderRadius: RADIUS.button },
-  refused: { borderWidth: SPACE.xxs, borderColor: COLOR.destructive },
 })

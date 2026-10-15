@@ -67,6 +67,15 @@ it('asked: a still line in place of the actions', async () => {
   expect(screen.getByText('Asked · they’ll decide in their own time')).toBeTruthy()
 })
 
+it('the actions wrap rather than truncate on a narrow phone; the asked line grows rather than clips', async () => {
+  await draw({ testID: 'r' })
+  expect(flat('r-actions')).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap' })
+  await draw({ state: 'asked', testID: 'r' })
+  const line = screen.getByText('Asked · they’ll decide in their own time')
+  expect(line.props.numberOfLines).toBeUndefined()
+  expect(flat('r-asked').minHeight).toBe(48)
+})
+
 it('Increase Contrast: the 50% hairline, the eye line in white', async () => {
   jest.spyOn(AccessibilityInfo, 'isDarkerSystemColorsEnabled').mockResolvedValue(true)
   await draw()

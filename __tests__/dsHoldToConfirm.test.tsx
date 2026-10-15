@@ -88,6 +88,14 @@ describe('the pill', () => {
     expect(animated('h-fill-label').transform).toEqual([{ translateX: 180 }])
   })
 
+  it('a long label shrinks to fit the pill rather than losing its tail', async () => {
+    await draw({ disabled: true, label: 'Go live when you’re here · 350 m' })
+    for (const l of screen.getAllByText('Go live when you’re here · 350 m', { includeHiddenElements: true })) {
+      expect(l.props).toMatchObject({ numberOfLines: 1, adjustsFontSizeToFit: true })
+      expect(StyleSheet.flatten(l.props.style).flexShrink).toBe(1)
+    }
+  })
+
   it('is a button that states its consequence', async () => {
     await draw()
     const pill = screen.getByRole('button', { name: 'Hold to blend in' })
@@ -132,6 +140,15 @@ describe('the hold', () => {
     expect(haptics.commit).not.toHaveBeenCalled()
   })
 
+  it('a hold already committed is never rewound: a cancel after the edge (busy disables it, Android drift) keeps it full', async () => {
+    await draw()
+    await hold('begin')
+    await hold('start')
+    jest.mocked(Reanimated.withSpring).mockClear()
+    await hold('release')
+    expect(Reanimated.withSpring).not.toHaveBeenCalled()
+  })
+
   it('Reduce Motion: the rewind cuts', async () => {
     reduceMotion.mockReturnValue(true)
     await draw()
@@ -154,17 +171,49 @@ describe('states', () => {
     expect(onConfirm).not.toHaveBeenCalled()
   })
 
-  it('busy: the fill stays full under its own label; read as busy', async () => {
+  it('busy: the fill stays full under its own label; read as busy; it drains when busy drops', async () => {
+    jest.useFakeTimers()
     await draw({ busy: true, busyLabel: 'Checking you in…' })
+    await layout()
+    await act(async () => jest.advanceTimersByTime(16))
+    expect(animated('h-fill').transform).toEqual([{ translateX: 0 }])
+    await screen.rerender(<HoldToConfirm label="Hold to blend in" onConfirm={jest.fn()} testID="h" />)
+    await act(async () => jest.advanceTimersByTime(1000))
+    expect(animated('h-fill').transform).toEqual([{ translateX: -300 }])
+    await screen.rerender(<HoldToConfirm label="Hold to blend in" busy busyLabel="Checking you in…" onConfirm={jest.fn()} testID="h" />)
     expect(screen.getAllByText('Checking you in…', { includeHiddenElements: true })).toHaveLength(2)
     expect(screen.getByRole('button').props.accessibilityState).toMatchObject({ busy: true })
   })
 
-  it('refused: the destructive ring and H.error at t0', async () => {
-    await draw()
+  it('refused (#10, R3-D4 4.7): H.error at t0 and the pass drains on M.settle, not a bounce; no ring, no shake', async () => {
+    await draw({ busy: true, busyLabel: 'Checking you in…' })
+    jest.mocked(Reanimated.withSpring).mockClear()
+    jest.mocked(Reanimated.withTiming).mockClear()
     await screen.rerender(<HoldToConfirm label="Hold to blend in" onConfirm={jest.fn()} refused testID="h" />)
-    expect(flat('h-refused')).toMatchObject({ borderWidth: 2, borderColor: COLOR.destructive })
     expect(haptics.error).toHaveBeenCalledTimes(1)
+    expect(Reanimated.withSpring).toHaveBeenCalledWith(0, expect.objectContaining({ stiffness: SPRING.settle.stiffness }))
+    expect(screen.queryByTestId('h-refused', { includeHiddenElements: true })).toBeNull()
+    expect(Reanimated.withTiming).not.toHaveBeenCalled()
+  })
+
+  it('refused under Reduce Motion: the drain cuts; H.error still plays', async () => {
+    reduceMotion.mockReturnValue(true)
+    await draw({ busy: true })
+    jest.mocked(Reanimated.withSpring).mockClear()
+    await screen.rerender(<HoldToConfirm label="Hold to blend in" onConfirm={jest.fn()} refused testID="h" />)
+    expect(haptics.error).toHaveBeenCalledTimes(1)
+    expect(Reanimated.withSpring).not.toHaveBeenCalled()
+  })
+
+  it('confirmed (#9, the Flow 4 prototype): the fill stays full and the label reads “You’re in”; nothing to hold, no haptic', async () => {
+    const onConfirm = jest.fn()
+    await draw({ confirmedLabel: 'You’re in', onConfirm })
+    expect(screen.getAllByText('You’re in', { includeHiddenElements: true })).toHaveLength(2)
+    const pill = screen.getByRole('button')
+    expect(pill.props.accessibilityState).toMatchObject({ disabled: true })
+    await act(async () => pill.props.onAccessibilityAction({ nativeEvent: { actionName: 'activate' } }))
+    expect(onConfirm).not.toHaveBeenCalled()
+    for (const spy of Object.values(haptics)) expect(spy).not.toHaveBeenCalled()
   })
 
   it('Switch Control and Voice Control activate it directly, with H.commit', async () => {

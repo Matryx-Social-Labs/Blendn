@@ -8,16 +8,23 @@
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { Platform, StyleSheet } from 'react-native'
+import { AccessibilityInfo, Platform, StyleSheet } from 'react-native'
 
 import { PersonCard, PersonCardContent, type PersonCardPerson } from '../components/ds/PersonCard'
-import { COLOR, FONT_FAMILY, MATERIAL, TYPE } from '../lib/design/tokens'
+import * as Reanimated from 'react-native-reanimated'
+
+import { COLOR, FONT_FAMILY, MATERIAL, SPRING, TYPE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('react-native-reanimated', () => {
   const actual = jest.requireActual('react-native-reanimated')
-  return { ...actual, __esModule: true, useReducedMotion: jest.fn(() => false) }
+  return {
+    ...actual,
+    __esModule: true,
+    useReducedMotion: jest.fn(() => false),
+    withSpring: jest.fn(actual.withSpring),
+  }
 })
 jest.mock('expo-linear-gradient', () => {
   const { View } = jest.requireActual('react-native')
@@ -38,9 +45,11 @@ const PRIYA: PersonCardPerson = {
   chips: ['Vinyl', 'Techno'],
 }
 
+const reduceMotion = Reanimated.useReducedMotion as jest.Mock
 let haptics: Record<string, jest.SpyInstance>
 beforeEach(() => {
   on('ios')
+  reduceMotion.mockReturnValue(false)
   haptics = Object.fromEntries(Object.keys(H).map((k) => [k, jest.spyOn(H, k as keyof typeof H).mockImplementation(() => {})]))
 })
 const silent = (except: string[] = []) => {
@@ -121,6 +130,19 @@ describe('the states', () => {
     silent()
   })
 
+  it('#15: Liked pops in, 0.85 → 1 on M.pop; Reduce Motion places it', async () => {
+    const card = (state: 'none' | 'liked') => <PersonCardContent person={PRIYA} variant="here" state={state} testID="p" />
+    await render(card('none'))
+    jest.mocked(Reanimated.withSpring).mockClear()
+    await screen.rerender(card('liked'))
+    expect(Reanimated.withSpring).toHaveBeenCalledWith(1, expect.objectContaining({ stiffness: SPRING.pop.stiffness }))
+    reduceMotion.mockReturnValue(true)
+    await render(card('none'))
+    jest.mocked(Reanimated.withSpring).mockClear()
+    await screen.rerender(card('liked'))
+    expect(Reanimated.withSpring).not.toHaveBeenCalledWith(1, expect.objectContaining({ stiffness: SPRING.pop.stiffness }))
+  })
+
   it('requested: a check and “Requested” in place of Message, and the line says so', async () => {
     await draw({ state: 'requested' })
     expect(screen.queryByRole('button', { name: 'Message' })).toBeNull()
@@ -137,11 +159,11 @@ describe('the states', () => {
     expect(onWave).not.toHaveBeenCalled()
   })
 
-  it('waved: a still “Waved” with the word, not a dimmed button (Flow 15 #18)', async () => {
+  it('waved: the label settles to a still white “Waved” with a check (R3-D4 12, 15), not a dimmed button', async () => {
     await draw({ state: 'waved' })
     expect(screen.queryByRole('button', { name: /Wave/ })).toBeNull()
-    expect(text('Waved')).toBeTruthy()
-    expect(flat('p-waved')).toMatchObject({ borderColor: COLOR.inputBorder })
+    expect(StyleSheet.flatten(text('Waved')!.props.style).color).toBe(COLOR.ink)
+    expect(flat('p-waved')).toMatchObject({ backgroundColor: COLOR.textPrimary })
     expect(text('Waved. Message sends a request and reveals you to Priya.')).toBeTruthy()
   })
 
@@ -152,6 +174,16 @@ describe('the states', () => {
     await fireEvent.press(screen.getByRole('button', { name: 'Wave back at Priya' }))
     expect(onWave).toHaveBeenCalledTimes(1)
     silent()
+  })
+
+  it('a refusal is announced as it arrives, so a screen reader hears why nothing happened', async () => {
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {})
+    await draw()
+    await screen.rerender(
+      <PersonCardContent person={PRIYA} variant="here" refusal={{ text: 'That didn’t go through.' }} onLike={jest.fn()} testID="p" />
+    )
+    expect(announce).toHaveBeenCalledTimes(1)
+    expect(announce).toHaveBeenCalledWith('That didn’t go through.')
   })
 
   it('a refusal is one neutral line under the actions, with its action, and no haptic', async () => {
@@ -192,6 +224,14 @@ describe('the variants', () => {
     expect(onSayHi).toHaveBeenCalledTimes(1)
   })
 
+  it('matched and friend say “Here now” only when they are (`here`); never by default', async () => {
+    await draw({ variant: 'matched' })
+    expect(screen.getByLabelText('Priya, 27, Both open to dating')).toBeTruthy()
+    expect(query('p-presence-dot')).toBeNull()
+    await draw({ variant: 'friend', here: true })
+    expect(screen.getByLabelText('Priya, 27, Friend, here now')).toBeTruthy()
+  })
+
   it('f · friend: “Friend”, no Like, Message opens your chat', async () => {
     await draw({ variant: 'friend' })
     expect(text('Friend')).toBeTruthy()
@@ -221,6 +261,21 @@ describe('the variants', () => {
   })
 })
 
+it('the hand-drawn controls take the focus ring and, on Android, ripple instead of scaling', async () => {
+  await draw()
+  const wave = screen.getByRole('button', { name: 'Wave at Priya' })
+  await fireEvent(wave, 'focus')
+  expect(query('p-hand-focus')).toBeTruthy()
+  const more = screen.getByRole('button', { name: 'View profile' })
+  await fireEvent(more, 'focus')
+  expect(query('p-view-profile-focus')).toBeTruthy()
+})
+
+it('the action row wraps rather than truncating a label at large text or on a narrow phone', async () => {
+  await draw()
+  expect(flat('p-actions')).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap' })
+})
+
 it('Android: the panels are sunken, not 8% white', async () => {
   on('android')
   await draw()
@@ -246,4 +301,20 @@ it('<PersonCard> presents it in the sheet, with no title of its own', async () =
   await act(async () => {})
   expect(screen.getByTestId('s-modal', { includeHiddenElements: true }).props.visible).toBe(true)
   expect(screen.getByLabelText('Priya, 27, Both open to dating, here now')).toBeTruthy()
+})
+
+it('<PersonCard> sends a screen reader to the person, not the handle, as it opens', async () => {
+  const focus = jest.spyOn(AccessibilityInfo, 'sendAccessibilityEvent').mockImplementation(() => {})
+  await render(<PersonCard visible onClose={jest.fn()} person={PRIYA} variant="here" testID="s" />)
+  await act(async () => {})
+  await fireEvent(screen.getByTestId('s-modal', { includeHiddenElements: true }), 'show')
+  expect(focus).toHaveBeenCalledWith(expect.anything(), 'focus')
+})
+
+it('<PersonCard>: the unavailable card’s Close closes the sheet', async () => {
+  const onClose = jest.fn()
+  await render(<PersonCard visible onClose={onClose} person={PRIYA} variant="gone" testID="s" />)
+  await act(async () => {})
+  await fireEvent.press(screen.getByRole('button', { name: 'Close' }))
+  expect(onClose).toHaveBeenCalledTimes(1)
 })

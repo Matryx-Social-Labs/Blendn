@@ -1,10 +1,10 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 
-import { COLOR, FONT_FAMILY, SPACE, TYPE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, RADIUS, SPACE, TYPE } from '../../lib/design/tokens'
 import { OPACITY } from '../../lib/theme'
 import { PresenceDot } from './MonoFamily'
-import { font, minTarget, useBoldText } from './shared'
+import { focusRing, font, minTarget, useBoldText } from './shared'
 
 export type SectionAction = { label: string; onPress: () => void; busy?: boolean }
 
@@ -41,6 +41,7 @@ export function SectionHeader({
   testID?: string
 }) {
   const bold = useBoldText()
+  const [focused, setFocused] = useState(false)
   const slop = (minTarget() - TYPE.meta.lineHeight) / 2
   const heading = count == null ? title : `${title}, ${count}`
 
@@ -66,18 +67,27 @@ export function SectionHeader({
         {action || right ? (
           <View style={styles.right}>
             {action ? (
-              <Pressable
-                testID={testID && `${testID}-action`}
-                onPress={action.onPress}
-                disabled={action.busy}
-                hitSlop={{ top: slop, bottom: slop, left: SPACE.sm, right: SPACE.sm }}
-                accessibilityRole="button"
-                accessibilityLabel={action.label}
-                accessibilityState={{ disabled: !!action.busy, busy: !!action.busy }}
-                style={action.busy ? styles.busy : null}
-              >
-                <Text style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.action]}>{action.label}</Text>
-              </Pressable>
+              <View>
+                <Pressable
+                  testID={testID && `${testID}-action`}
+                  onPress={action.onPress}
+                  onFocus={() => setFocused(true)}
+                  onBlur={() => setFocused(false)}
+                  disabled={action.busy}
+                  hitSlop={{ top: slop, bottom: slop }}
+                  accessibilityRole="button"
+                  accessibilityLabel={action.label}
+                  accessibilityState={{ disabled: !!action.busy, busy: !!action.busy }}
+                  style={[styles.actionBox, { minWidth: minTarget() }, action.busy && styles.busy]}
+                >
+                  <Text style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.action]}>{action.label}</Text>
+                </Pressable>
+                {focused
+                  ? focusRing(RADIUS.thumb).map((ring, i) => (
+                      <View key={i} testID={i ? undefined : testID && `${testID}-action-focus`} pointerEvents="none" style={ring} />
+                    ))
+                  : null}
+              </View>
             ) : null}
             {right}
           </View>
@@ -98,5 +108,7 @@ const styles = StyleSheet.create({
   tabular: { fontVariant: ['tabular-nums'] },
   right: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, flexShrink: 0 },
   action: { color: COLOR.textPrimary },
+  /** A short action ("Edit") still reaches the 44 / 48 width; the label sits at the right edge. */
+  actionBox: { alignItems: 'flex-end' },
   busy: { opacity: OPACITY.disabled },
 })

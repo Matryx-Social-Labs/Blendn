@@ -46,7 +46,7 @@ export function MeetNextCard({
   const [focused, setFocused] = useState(false)
 
   return (
-    <View testID={testID && `${testID}-scale`} style={previewState === 'pressed' && styles.pressed}>
+    <View testID={testID && `${testID}-scale`} style={[{ width }, previewState === 'pressed' && styles.pressed]}>
       <ScalePress
         testID={testID}
         onPress={onPress}

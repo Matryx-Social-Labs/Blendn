@@ -57,8 +57,8 @@ function useGrace(loading: boolean) {
   return loading && shown
 }
 
-/** #20 when `refused` turns on: `H.error` at t0 and the shake, which Reduce Motion stops. HoldToConfirm's refusal too. */
-export function useRefusal(refused: boolean) {
+/** #20 when `refused` turns on: `H.error` at t0 and the shake, which Reduce Motion stops. */
+function useRefusal(refused: boolean) {
   const reduceMotion = useReducedMotion()
   const offset = useSharedValue(0)
   useEffect(() => {

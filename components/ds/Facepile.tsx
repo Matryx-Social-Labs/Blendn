@@ -60,13 +60,14 @@ export function Facepile({
     <View
       testID={testID}
       accessible
-      accessibilityLabel={accessibilityLabel ?? `${total} ${total === 1 ? 'person' : 'people'} here`}
+      accessibilityLabel={accessibilityLabel ?? [`${total} ${total === 1 ? 'person' : 'people'} here`, text].filter(Boolean).join(', ')}
       style={styles.row}
     >
       <View style={styles.stack}>
         {shown.map((face, i) => (
           <View
-            key={i}
+            // By who, so an arrival at the front doesn't repaint every face into its neighbour's slot.
+            key={face.kind === 'photo' ? face.uri : face.pseudonym}
             testID={testID && `${testID}-slot-${i}`}
             style={i ? { marginLeft: -Math.round(size / 4) } : null}
           >

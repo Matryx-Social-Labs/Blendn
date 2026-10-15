@@ -49,6 +49,16 @@ it('the action is its own button, 700 14 white, silent, reaching the 44 pt targe
   expect(TYPE.meta.lineHeight + a.top + a.bottom).toBeGreaterThanOrEqual(SIZE.targetAndroid)
 })
 
+it('a short action (“Edit”) is still a 44 / 48 pt wide target, and a keyboard focus rings it', async () => {
+  await render(<SectionHeader title="Interests" action={{ label: 'Edit', onPress: jest.fn() }} testID="h" />)
+  expect(StyleSheet.flatten(screen.getByTestId('h-action').props.style).minWidth).toBe(SIZE.targetIos)
+  await fireEvent(screen.getByTestId('h-action'), 'focus')
+  expect(screen.getByTestId('h-action-focus', { includeHiddenElements: true })).toBeTruthy()
+  on('android')
+  await render(<SectionHeader title="Interests" action={{ label: 'Edit', onPress: jest.fn() }} testID="h" />)
+  expect(StyleSheet.flatten(screen.getByTestId('h-action').props.style).minWidth).toBe(SIZE.targetAndroid)
+})
+
 it('a busy action is 45%, disabled and says so', async () => {
   const onPress = jest.fn()
   await render(<SectionHeader title="Interests" action={{ label: 'Saving…', onPress, busy: true }} testID="h" />)

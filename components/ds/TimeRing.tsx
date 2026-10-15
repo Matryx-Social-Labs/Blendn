@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, type ReactNode } from 'react'
+import { memo, useLayoutEffect, useRef, type ReactNode } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
 
@@ -41,7 +41,8 @@ export const TimeRing = memo(function TimeRing({
   const contrast = useIncreaseContrast()
   const shown = useSharedValue(1)
   const last = useRef(text)
-  useEffect(() => {
+  // Before paint, so the new words never show a frame at full strength before they fade in.
+  useLayoutEffect(() => {
     if (last.current === text) return
     last.current = text
     shown.set(0)

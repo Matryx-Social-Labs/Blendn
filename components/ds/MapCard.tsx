@@ -173,6 +173,7 @@ export function MapPin({
       }}
       accessibilityRole="button"
       accessibilityLabel={label ? `${label}, pin` : 'Pin'}
+      accessibilityState={{ selected }}
       style={[styles.centre, { width: target, height: target }]}
     >
       {dot}

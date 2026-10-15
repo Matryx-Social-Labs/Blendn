@@ -1,8 +1,9 @@
 /*
- * <RollingNumber> (guidelines/components/RollingNumber.html): a count that rolls
- * on M.settle, only the digit that changes (old up and out, new in from below),
- * in Geist Mono 700, tabular, so nothing shifts. Reduce Motion crossfades in
- * place. Never a tween through the values between; no haptic; read as the value.
+ * <RollingNumber> (guidelines/components/RollingNumber.html; motion #24, #26,
+ * which set its timing): a count that rolls on M.snap, only the digit that
+ * changes (old up and out, new in from below), in Geist Mono 700, tabular, so
+ * nothing shifts. Reduce Motion: the number changes instantly. Never a tween
+ * through the values between; no haptic; read as the value.
  */
 import { act, render, screen } from '@testing-library/react-native'
 import React from 'react'
@@ -10,7 +11,7 @@ import { StyleSheet } from 'react-native'
 import * as Reanimated from 'react-native-reanimated'
 
 import { RollingNumber } from '../components/ds/RollingNumber'
-import { COLOR, FONT_FAMILY, SPRING, TYPE } from '../lib/design/tokens'
+import { COLOR, FONT_FAMILY, MAX_FONT_SCALE, SPRING, TYPE } from '../lib/design/tokens'
 
 jest.mock('react-native-reanimated', () => {
   const actual = jest.requireActual('react-native-reanimated')
@@ -51,12 +52,12 @@ it('is read as its value, never as a live region', async () => {
   expect(n.props.accessibilityLiveRegion).toBeUndefined()
 })
 
-it('14 → 15: only the changing digit rolls, on M.settle; the 1 holds still', async () => {
+it('14 → 15: only the changing digit rolls, on M.snap (#24); the 1 holds still', async () => {
   await render(<RollingNumber value={14} testID="n" />)
   jest.mocked(Reanimated.withSpring).mockClear()
   await screen.rerender(<RollingNumber value={15} testID="n" />)
   expect(Reanimated.withSpring).toHaveBeenCalledTimes(1)
-  expect(Reanimated.withSpring).toHaveBeenCalledWith(1, expect.objectContaining({ stiffness: SPRING.settle.stiffness }))
+  expect(Reanimated.withSpring).toHaveBeenCalledWith(1, expect.objectContaining({ stiffness: SPRING.snap.stiffness }))
   expect(all('1')).toHaveLength(1)
   expect(all('4')).toHaveLength(1)
   expect(all('5')).toHaveLength(1)
@@ -80,21 +81,32 @@ it('99 → 100: the width grows, the new column rolls in', async () => {
   expect(Reanimated.withSpring).toHaveBeenCalledTimes(3)
 })
 
-it('Reduce Motion: a crossfade in place, nothing travels', async () => {
+it('Reduce Motion (#24): the number changes instantly, nothing travels or fades', async () => {
   reduceMotion.mockReturnValue(true)
   jest.useFakeTimers()
   await render(<RollingNumber value={14} testID="n" />)
   jest.mocked(Reanimated.withSpring).mockClear()
+  jest.mocked(Reanimated.withTiming).mockClear()
   await screen.rerender(<RollingNumber value={15} testID="n" />)
   expect(Reanimated.withSpring).not.toHaveBeenCalled()
-  expect(Reanimated.withTiming).toHaveBeenCalled()
-  await act(async () => jest.advanceTimersByTime(1000))
+  expect(Reanimated.withTiming).not.toHaveBeenCalled()
+  await act(async () => jest.advanceTimersByTime(16))
   expect(animated('n-0-in')).toMatchObject({ opacity: 1 })
   expect(animated('n-0-in').transform).toBeUndefined()
+  expect(animated('n-0-out').opacity).toBe(0)
 })
 
 it('the gallery draws a mid-roll frame', async () => {
   await render(<RollingNumber value={15} preview={{ from: 14, q: 0.5 }} testID="n" />)
   expect(animated('n-0-out').opacity).toBe(0.5)
   expect(all('4')).toHaveLength(1)
+})
+
+it('at large text the digits stop at their role’s cap, so the column never clips them', async () => {
+  await render(<RollingNumber value={14} testID="n" />)
+  for (const id of ['n-0-in', 'n-1-in']) {
+    expect(screen.getByTestId(id, { includeHiddenElements: true }).props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.numericDisplay)
+  }
+  await render(<RollingNumber value={15} preview={{ from: 14, q: 0.5 }} testID="n" />)
+  expect(screen.getByTestId('n-0-out', { includeHiddenElements: true }).props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.numericDisplay)
 })

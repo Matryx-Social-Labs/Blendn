@@ -93,7 +93,7 @@ export function AmenityGrid({ tiles, testID }: { tiles: AmenityTileProps[]; test
   return (
     <View testID={testID} style={styles.grid}>
       {shown.map((t, i) => (
-        <AmenityTile key={`${t.label}-${t.value}`} testID={testID && `${testID}-${i}`} {...t} style={styles.cell} />
+        <AmenityTile key={`${i}-${t.label}-${t.value}`} testID={testID && `${testID}-${i}`} {...t} style={styles.cell} />
       ))}
       {folded ? (
         <AmenityTile

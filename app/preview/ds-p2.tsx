@@ -381,9 +381,10 @@ function Holds() {
     ['disabled', { disabled: true, label: 'Go live when you’re here · 350 m' }],
     ['refused', { refused: true }],
     ['busy', { busy: true, busyLabel: 'Checking you in…' }],
+    ['confirmed', { confirmedLabel: 'You’re in' }],
   ] as const
   return (
-    <Section title="HoldToConfirm" note="900 ms · H.tick at 25 / 50 / 75 · H.commit at 100 · a release rewinds on M.settle · a screen reader gets one button">
+    <Section title="HoldToConfirm" note="#8: 900 ms · H.tick at 25 / 50 / 75 · H.commit at 100 · a release rewinds on M.settle · #10: refused is H.error and a drain · #9: You’re in · a screen reader gets one button">
       {states.map(([state, props]) => (
         <Cell key={state} label={state} testID={`ds-hold-${state}`}>
           <HoldToConfirm label="Hold to blend in" onConfirm={noop} consequence="Checks you in. Other people at this event will see you." {...props} />
@@ -404,19 +405,26 @@ function Holds() {
   )
 }
 
-function VenuePasses() {
-  const [busy, setBusy] = useState(false)
+/** The live pass: hold → busy until the stand-in server answers yes → "You’re in" → back to armed. */
+function useCheckIn() {
+  const [phase, setPhase] = useState<'armed' | 'busy' | 'in'>('armed')
   useEffect(() => {
-    if (!busy) return
-    const timer = setTimeout(() => setBusy(false), ANSWER_MS)
+    if (phase === 'armed') return
+    const timer = setTimeout(() => setPhase(phase === 'busy' ? 'in' : 'armed'), ANSWER_MS)
     return () => clearTimeout(timer)
-  }, [busy])
+  }, [phase])
+  return { busy: phase === 'busy', confirmed: phase === 'in', onConfirm: () => setPhase('busy') }
+}
+
+function VenuePasses() {
+  const live = useCheckIn()
   const pass = { title: 'Vinyl Night', cover: COVER, hereCount: 14, tasteCount: 4, onConfirm: noop }
   const states = [
     ['armed', {}],
     ['mid', { previewProgress: 0.6 }],
     ['busy', { busy: true }],
     ['refused', { refused: true }],
+    ['confirmed', { confirmed: true }],
     ['outside', { disabled: true, holdLabel: 'Go live when you’re here · 350 m', note: 'Walk in and the pass arms itself.' }],
     ['switch', { holdLabel: 'Hold to switch', note: 'Checking in here takes you out of Fandom.' }],
     ['first', { hereCount: 0, tasteCount: 0 }],
@@ -428,8 +436,8 @@ function VenuePasses() {
           <VenuePass {...pass} {...props} />
         </Cell>
       ))}
-      <Cell label="live · hold to check in" testID="ds-venuepass-live" style={styles.backdrop}>
-        <VenuePass {...pass} busy={busy} onConfirm={() => setBusy(true)} />
+      <Cell label="live · hold, the server says yes, You’re in" testID="ds-venuepass-live" style={styles.backdrop}>
+        <VenuePass {...pass} {...live} />
       </Cell>
     </Section>
   )
@@ -539,8 +547,8 @@ function PersonCards() {
     ['here', { variant: 'here' }],
     ['was', { variant: 'was' }],
     ['pre', { variant: 'pre' }],
-    ['matched', { variant: 'matched' }],
-    ['friend', { variant: 'friend' }],
+    ['matched', { variant: 'matched', here: true }],
+    ['friend', { variant: 'friend', here: true }],
     ['gone', { variant: 'gone' }],
     ['thin', { variant: 'thin', person: { face: creature('Cosmic Panda'), name: 'Cosmic Panda', age: 27, city: 'Bengaluru' } }],
     ['liked', { variant: 'here', state: 'liked' }],
@@ -553,7 +561,7 @@ function PersonCards() {
     ['refused-checkin', { variant: 'here', refusal: { text: 'Check in to wave at people here.', action: { label: 'Check in', onPress: noop } } }],
   ]
   return (
-    <Section title="PersonCard" note="D · 4.1 variants a b d e f g h · Like is the gradient primary (H.like) · Say hi H.primary · Wave, Message, ⋯ silent · Waved is still, with the word">
+    <Section title="PersonCard" note="R3-D4 · variants a b d e f g h · Like is the gradient primary (H.like, #15 pop) · Say hi H.primary · Wave, Message, ⋯ silent · Waved settles to a still white pill">
       {cards.map(([name, props]) => (
         <Cell key={name} label={name} testID={`ds-person-${name}`} style={styles.backdrop}>
           <SheetFrame>
@@ -584,7 +592,7 @@ function PersonCards() {
 function RollingNumbers() {
   const [n, setN] = useState(14)
   return (
-    <Section title="RollingNumber" note="only the changing digit rolls, on M.settle · Geist Mono 700 tabular · Reduce Motion crossfades · no haptic">
+    <Section title="RollingNumber" note="#24: only the changing digit rolls, on M.snap · Geist Mono 700 tabular · Reduce Motion: instant · no haptic">
       <Cell label="40 · the Room" testID="ds-rolling-40">
         <RollingNumber value={14} />
       </Cell>

@@ -35,6 +35,12 @@ const DEFAULT_SIZE: Record<'hero' | 'compact', ViewStyle> = { hero: { height: 30
 /** The scrim covers the lower 62% of the photo (the page). */
 const SCRIM_HEIGHT = '62%'
 const ROW_HEIGHT = 64
+/**
+ * The words on the photo stop at 1.5×: the card is a fixed size, and past it a
+ * two-line title runs up under the pills (the page lets them scale freely; a
+ * fixed card can't hold that).
+ */
+const FOOT_FONT_CAP = 1.5
 const PILL_HEIGHT = 28
 
 /** "{You're going, }{title}, {time}, at {venue}, {distance}, {N} going": the pills are not separate elements. */
@@ -49,7 +55,7 @@ export function eventLabel({ title, time, venue, distance, going, saved }: Pick<
  * - `hero` (radius 32) and `compact` (radius 24): the words on the photo over
  *   the 62% ink scrim; the time badge and "N going" top-left as scrim pills;
  *   the title in two lines at most, then "at {venue} · {distance}". Saved adds
- *   the white "You're going · 9 PM" ribbon. Their text scales freely.
+ *   the white "You're going · 9 PM" ribbon. Their text stops at 1.5×.
  * - `row`: the list form, 64 pt: a 56 pt thumb, the title, venue · distance ·
  *   the time in Geist Mono, one line each, capped at 1.3×.
  *
@@ -87,10 +93,15 @@ export function EventCard(props: EventCardProps) {
             <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold), styles.ink]}>
               {title}
             </Text>
-            <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary]}>
-              {[venue, distance].filter(Boolean).join(' · ')} ·{' '}
-              <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{time}</Text>
-            </Text>
+            {/* The venue gives way to a long name; the time, the thing the row is for, never does. */}
+            <View style={styles.rowMeta}>
+              <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary, styles.shrink]}>
+                {[venue, distance].filter(Boolean).join(' · ')} ·
+              </Text>
+              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary, styles.tabular]}>
+                {time}
+              </Text>
+            </View>
           </View>
         </Pressable>
         {ring ? <Ring radius={RADIUS.rowInCard} testID={testID} /> : null}
@@ -135,10 +146,10 @@ export function EventCard(props: EventCardProps) {
           </View>
         ) : null}
         <View style={[styles.foot, hero ? styles.footHero : styles.footCompact]}>
-          <Text numberOfLines={2} style={[font(hero ? 'title' : 'bodyStrong', bold), styles.ink]}>
+          <Text numberOfLines={2} maxFontSizeMultiplier={FOOT_FONT_CAP} style={[font(hero ? 'title' : 'bodyStrong', bold), styles.ink]}>
             {title}
           </Text>
-          <Text numberOfLines={1} style={[font('meta', bold), styles.ink]}>
+          <Text numberOfLines={1} maxFontSizeMultiplier={FOOT_FONT_CAP} style={[font('meta', bold), styles.ink]}>
             {[`at ${venue}`, distance].filter(Boolean).join(' · ')}
           </Text>
         </View>
@@ -188,4 +199,6 @@ const styles = StyleSheet.create({
   rowPressed: { backgroundColor: PRESSED_WASH.ios },
   thumb: { width: SIZE.primary, height: SIZE.primary, borderRadius: RADIUS.thumb, overflow: 'hidden', backgroundColor: COLOR.surface },
   rowText: { flex: 1, minWidth: 0 },
+  rowMeta: { flexDirection: 'row', alignItems: 'baseline', gap: SPACE.xs },
+  shrink: { flexShrink: 1 },
 })

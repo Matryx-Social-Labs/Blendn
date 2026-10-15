@@ -85,14 +85,14 @@ export function RevealBar({
       {state === 'youOnly' ? (
         <Text style={[font('meta', bold), styles.secondary]}>They can see you. They’ll decide in their own time.</Text>
       ) : state === 'asked' ? (
-        <View style={styles.asked}>
+        <View testID={testID && `${testID}-asked`} style={styles.asked}>
           <Icon name="check" size={ICON.inline} color={COLOR.textSecondary} />
-          <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary, styles.shrink]}>
+          <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary, styles.shrink]}>
             Asked · they’ll decide in their own time
           </Text>
         </View>
       ) : (
-        <View style={styles.actions}>
+        <View testID={testID && `${testID}-actions`} style={styles.actions}>
           <Button kind="strong" size="md" icon="eye" label="Show them who you are" onPress={onShow} previewState={previewState} style={styles.grow} testID={testID && `${testID}-show`} />
           {state === 'none' ? <Button kind="secondary" size="md" onGlass label="Ask them" onPress={onAsk} testID={testID && `${testID}-ask`} /> : null}
         </View>
@@ -112,10 +112,12 @@ const styles = StyleSheet.create({
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
   shrink: { flexShrink: 1 },
-  actions: { flexDirection: 'row', gap: SPACE.sm },
-  grow: { flex: 1 },
+  /** Wraps rather than truncating "Show them who you are" on a narrow phone or at large text. */
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
+  grow: { flexGrow: 1 },
   asked: {
-    height: SIZE.control,
+    minHeight: SIZE.control,
+    paddingVertical: SPACE.sm,
     borderRadius: RADIUS.capsule,
     backgroundColor: MATERIAL.fillOnGlass,
     flexDirection: 'row',

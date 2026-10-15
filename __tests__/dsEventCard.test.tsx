@@ -80,7 +80,22 @@ describe('hero and compact', () => {
   })
 })
 
+it('the words on the photo stop at 1.5×, so the foot never runs up under the pills in a fixed card', async () => {
+  await render(<EventCard kind="compact" {...VINYL} />)
+  expect(screen.getByText('Vinyl Night', { includeHiddenElements: true }).props.maxFontSizeMultiplier).toBe(1.5)
+  expect(screen.getByText('at Toit · 1.2 km', { includeHiddenElements: true }).props.maxFontSizeMultiplier).toBe(1.5)
+})
+
 describe('row', () => {
+  it('a long venue gives way; the time is never the part cut off', async () => {
+    await render(<EventCard kind="row" {...VINYL} venue="Toit Brewpub, 100 Feet Road, Indiranagar" />)
+    const venue = screen.getByText('Toit Brewpub, 100 Feet Road, Indiranagar · 1.2 km ·', { includeHiddenElements: true })
+    expect(venue.props.numberOfLines).toBe(1)
+    expect(StyleSheet.flatten(venue.props.style).flexShrink).toBe(1)
+    const time = screen.getByText('9 PM', { includeHiddenElements: true })
+    expect(StyleSheet.flatten(time.props.style).flexShrink ?? 0).toBe(0)
+  })
+
   it('a 64 pt row: the 56 pt thumb at radius 8, the title on one line, venue · distance · the time in Geist Mono', async () => {
     await render(<EventCard kind="row" {...VINYL} testID="e" />)
     expect(flat('e').height).toBe(64)
