@@ -364,8 +364,8 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
   const [cityOptions, setCityOptions] = useState<CityOption[]>([])
   const [deviceCity, setDeviceCity] = useState<string | null>(null)
   const [cityPickerOpen, setCityPickerOpen] = useState(false)
-  // Bumped by every city the person chooses, so the map moves even to the city it already shows.
-  const [cityPick, setCityPick] = useState(0)
+  // Bumped by every city the person chooses, so the map moves even to the city it already shows; `here` when they chose where they stand.
+  const [cityPick, setCityPick] = useState({ n: 0, here: false })
   const [userFirstName, setUserFirstName] = useState<string | null>(getFirstName(user?.name))
   const [showPreviewHint, setShowPreviewHint] = useState(false)
   const listRef = useRef<any>(null)
@@ -1048,11 +1048,12 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
     }
   }, [showTray, closeTray])
 
-  const requestLocationIfNeeded = useCallback(() => {
-    if (userLocation) return
-    if (locationRequestInFlight.current) return
+  // Settles when the ask does, so the map's "my location" can show it is waiting.
+  const requestLocationIfNeeded = useCallback((): Promise<void> => {
+    if (userLocation) return Promise.resolve()
+    if (locationRequestInFlight.current) return Promise.resolve()
     locationRequestInFlight.current = true
-    getCurrentLocationQuietly()
+    return getCurrentLocationQuietly()
       .finally(() => {
         locationRequestInFlight.current = false
       })
@@ -1505,9 +1506,9 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
    * The picker, the "you're in X, switch?" banner, and "use my current
    * location" all land here. Once chosen, the app stops moving them.
    */
-  const chooseCity = useCallback((city: string) => {
+  const chooseCity = useCallback((city: string, here = false) => {
     setSelection({ city, source: 'chosen' })
-    setCityPick((n) => n + 1)
+    setCityPick((p) => ({ n: p.n + 1, here }))
     setCityPickerOpen(false)
     void storeCity(city, 'chosen')
   }, [])
@@ -2081,7 +2082,7 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
                 <TouchableOpacity
                   accessibilityRole="button"
                   accessibilityLabel={`Switch to ${switchSuggestion}`}
-                  onPress={() => chooseCity(switchSuggestion)}
+                  onPress={() => chooseCity(switchSuggestion, true)}
                   style={[styles.bannerCta, styles.bannerCtaOnInfo]}
                 >
                   <Text style={styles.bannerCtaText}>Switch</Text>
@@ -2589,7 +2590,7 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
             {deviceCity && !sameCity(deviceCity, selectedCity) ? (
               <TouchableOpacity
                 style={[styles.cityPickerRow, styles.cityPickerRowLocate]}
-                onPress={() => chooseCity(deviceCity)}
+                onPress={() => chooseCity(deviceCity, true)}
                 accessibilityRole="button"
                 accessibilityLabel={`Use my current location, ${deviceCity}`}
               >

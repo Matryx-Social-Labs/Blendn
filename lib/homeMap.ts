@@ -315,15 +315,18 @@ export function lightSignature(pins: Pin[], view: { centre: [number, number]; zo
 }
 
 /**
- * Whether the camera goes to the city's centre. A city chosen in the city
- * picker is the person asking: always, even the city the map already shows,
- * and even after they moved the map (owner, 2026-10-15). A city the app decided
- * — stored, inferred, or a better guess later — only when there is nothing
- * better: no fix of their own and no map they have moved. On a phone the first
- * drive found it dragging people from where they stood to the middle of town.
+ * What a city change does to the map. A city chosen in the city picker is the
+ * person asking: go there, even to the city the map already shows, and even
+ * after they moved the map (owner, 2026-10-15). "Use my current location" and
+ * the "browse events here?" switch are a choice of where they stand: show them,
+ * following. A city the app decided — stored, inferred, or a better guess
+ * later — only when there is nothing better: no fix of their own and no map
+ * they have moved. On a phone the first drive found it dragging people from
+ * where they stood to the middle of town.
  */
-export function shouldFollowCity(s: { picked: boolean; hasFix: boolean; touched: boolean }): boolean {
-  return s.picked || (!s.hasFix && !s.touched)
+export function cityPickAction(s: { picked: boolean; here: boolean; hasFix: boolean; touched: boolean }): 'locate' | 'city' | null {
+  if (s.picked) return s.here ? 'locate' : 'city'
+  return !s.hasFix && !s.touched ? 'city' : null
 }
 
 /**
@@ -340,6 +343,40 @@ export function cameraMove(
   if (s.reduceMotion) return { duration: 0, fade: false }
   const across = !from || getDistanceKm(from[1], from[0], to[1], to[0]) > MAP_THEME.camera.acrossCityKm
   return across ? { duration: 0, fade: true } : { duration: s.easeMs, fade: false }
+}
+
+/**
+ * The zoom to ask MapLibre for on an ease that also tilts. MapLibre iOS
+ * (MLRN `CameraUpdateItem._makeCamera`) turns a zoom into a height at the tilt
+ * the camera starts from, then tilts: from flat to 55° a zoom-16 ease landed at
+ * about 15.2 (log2(cos 0° / cos 55°) = 0.80 short). Android sets the zoom
+ * itself, so it gets the zoom as asked.
+ */
+export function tiltedZoom(zoom: number, pitchFrom: number, pitchTo: number, os: string): number {
+  if (os !== 'ios' || pitchFrom === pitchTo) return zoom
+  const cos = (deg: number) => Math.cos((deg * Math.PI) / 180)
+  return zoom + Math.log2(cos(pitchFrom) / cos(pitchTo))
+}
+
+/** A camera move in flight: where it is going, and until when. */
+export type InFlight = { to: [number, number]; zoom?: number; pitch?: number; until: number }
+
+/**
+ * What the map does when the drawer settles at a new snap (review M1):
+ * - a move still in flight (a pick, a locate) is sent again with the new
+ *   padding, never undone by reading a centre mid-flight;
+ * - while it follows your fix, the fix;
+ * - else whatever is in the middle of the map, read off the map.
+ */
+export function snapRecentre(s: {
+  now: number
+  inFlight: InFlight | null
+  following: boolean
+  fix: [number, number] | null
+}): { kind: 'reissue'; move: InFlight; durationMs: number } | { kind: 'centre'; to: [number, number] } | { kind: 'read' } {
+  if (s.inFlight && s.now < s.inFlight.until) return { kind: 'reissue', move: s.inFlight, durationMs: s.inFlight.until - s.now }
+  if (s.following && s.fix) return { kind: 'centre', to: s.fix }
+  return { kind: 'read' }
 }
 
 /**
@@ -369,11 +406,6 @@ export function visibleCentreY(padding: { top: number; bottom: number }, mapHeig
   return (padding.top + mapHeight - padding.bottom) / 2
 }
 
-/** What stays centred when the drawer settles at a new snap: your position while the map follows it, else whatever was centred. */
-export function snapCentre(s: { following: boolean; fix: [number, number] | null; centred: [number, number] }): [number, number] {
-  return s.following && s.fix ? s.fix : s.centred
-}
-
 /**
  * Where "my location" sits as the drawer moves (its top edge, `drawerTop`): a
  * gap above it, fading out as it rises from half to full, like Google and
@@ -382,7 +414,9 @@ export function snapCentre(s: { following: boolean; fix: [number, number] | null
 export function locateRide(drawerTop: number, drawer: { half: number; full: number }): { translateY: number; opacity: number } {
   'worklet'
   const { sizePx, gapPx } = MAP_THEME.locate
-  const shown = (drawerTop - drawer.full) / (drawer.half - drawer.full)
+  const span = drawer.half - drawer.full
+  // A screen too short for a half step between half and full: shown until full (review L3).
+  const shown = span > 0 ? (drawerTop - drawer.full) / span : drawerTop > drawer.full ? 1 : 0
   return { translateY: drawerTop - gapPx - sizePx, opacity: Math.min(1, Math.max(0, shown)) }
 }
 

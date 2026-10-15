@@ -22,7 +22,7 @@ const drawer = { half: 420, full: 120 }
 
 describe('LocateButton', () => {
   const button = (over: Partial<React.ComponentProps<typeof LocateButton>> = {}) => (
-    <LocateButton visible following drawerTop={makeMutable(drawer.half)} drawer={drawer} onPress={jest.fn()} {...over} />
+    <LocateButton visible following pending={false} drawerTop={makeMutable(drawer.half)} drawer={drawer} onPress={jest.fn()} {...over} />
   )
 
   it('is a button a screen reader calls "Show my location", at least 44 pt, that does what it says', async () => {
@@ -42,14 +42,31 @@ describe('LocateButton', () => {
     expect(screen.getByRole('button', { name: 'Show my location' })).not.toBeSelected()
   })
 
-  it('is not there while the drawer is full', async () => {
+  it('says it is waiting while it asks for a fix, and takes no second tap (review L7)', async () => {
+    const onPress = jest.fn()
+    await render(button({ pending: true, onPress }))
+    const target = screen.getByRole('button', { name: 'Show my location' })
+    expect(target).toBeBusy()
+    fireEvent.press(target)
+    expect(onPress).not.toHaveBeenCalled()
+  })
+
+  it('stays drawn while the drawer reaches full, but cannot be tapped or read there (review L3)', async () => {
     await render(button({ visible: false }))
     expect(screen.queryByRole('button', { name: 'Show my location' })).toBeNull()
+    // Still mounted, so its fade finishes instead of popping out.
+    expect(screen.getByRole('button', { name: 'Show my location', includeHiddenElements: true })).toBeTruthy()
   })
 })
 
 describe('MapCredit', () => {
   const text = 'OpenFreeMap · © OpenMapTiles · © OpenStreetMap contributors'
+  const ours = `${text} · Overture Maps Foundation · Google Open Buildings · Microsoft`
+  const seconds = async (ms: number) => {
+    await act(async () => {
+      jest.advanceTimersByTime(ms)
+    })
+  }
   beforeEach(() => jest.useFakeTimers())
   afterEach(() => {
     jest.useRealTimers()
@@ -57,34 +74,42 @@ describe('MapCredit', () => {
   })
 
   it('is there as the map opens, and gone after its few seconds', async () => {
-    await render(<MapCredit text={text} top={100} dismissed={false} />)
+    await render(<MapCredit text={text} top={100} gestures={0} />)
     expect(screen.getByText(text)).toBeTruthy()
-    await act(async () => {
-      jest.advanceTimersByTime(MAP_THEME.credit.showForMs - 1)
-    })
+    await seconds(MAP_THEME.credit.showForMs - 1)
     expect(screen.getByText(text)).toBeTruthy()
-    await act(async () => {
-      jest.advanceTimersByTime(1)
-    })
+    await seconds(1)
     expect(screen.queryByText(text)).toBeNull()
     expect(MAP_THEME.credit.showForMs).toBe(5000)
   })
 
-  it('goes on the first gesture, and stays gone', async () => {
-    await render(<MapCredit text={text} top={100} dismissed={false} />)
-    await screen.rerender(<MapCredit text={text} top={100} dismissed />)
+  it('goes on the next gesture', async () => {
+    await render(<MapCredit text={text} top={100} gestures={0} />)
+    await screen.rerender(<MapCredit text={text} top={100} gestures={1} />)
     expect(screen.queryByText(text)).toBeNull()
-    // Back to following the fix is not a reason to show it again.
-    await screen.rerender(<MapCredit text={text} top={100} dismissed={false} />)
+  })
+
+  it('comes back when what it credits changes — our buildings after a pick — then goes again (review H1)', async () => {
+    await render(<MapCredit text={text} top={100} gestures={0} />)
+    await screen.rerender(<MapCredit text={text} top={100} gestures={3} />)
+    expect(screen.queryByText(text)).toBeNull()
+    // The pick draws our tiles: a new line, up again, though gestures happened before it.
+    await screen.rerender(<MapCredit text={ours} top={100} gestures={3} />)
+    expect(screen.getByText(ours)).toBeTruthy()
+    await seconds(MAP_THEME.credit.showForMs)
+    expect(screen.queryByText(ours)).toBeNull()
+    // And on the next gesture after a fresh one.
+    await screen.rerender(<MapCredit text={text} top={100} gestures={3} />)
+    expect(screen.getByText(text)).toBeTruthy()
+    await screen.rerender(<MapCredit text={text} top={100} gestures={4} />)
     expect(screen.queryByText(text)).toBeNull()
   })
 
   it('fades out, or with Reduce Motion simply goes', async () => {
-    await render(<MapCredit text={text} top={100} dismissed={false} />)
-    const fades = JSON.stringify(screen.toJSON())
-    expect(fades).toContain(`opacity ${MAP_THEME.credit.fadeMs}ms`)
+    await render(<MapCredit text={text} top={100} gestures={0} />)
+    expect(JSON.stringify(screen.toJSON())).toContain(`opacity ${MAP_THEME.credit.fadeMs}ms`)
     jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true)
-    await render(<MapCredit text={text} top={100} dismissed={false} />)
+    await render(<MapCredit text={text} top={100} gestures={0} />)
     await act(async () => {})
     expect(JSON.stringify(screen.toJSON())).not.toContain('ms ease-out')
   })

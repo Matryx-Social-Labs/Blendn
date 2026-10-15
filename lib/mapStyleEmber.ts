@@ -192,9 +192,15 @@ const BASEMAP_CREDITS: MapCredit[] = [MAP_CREDITS.openFreeMap, MAP_CREDITS.openM
 /** What our building tiles draw from. */
 export const OWN_BUILDINGS_CREDITS: MapCredit[] = [MAP_CREDITS.openStreetMap, MAP_CREDITS.overture, MAP_CREDITS.googleOpenBuildings, MAP_CREDITS.microsoft]
 
-/** The corner credit: the basemap's sources, and our buildings' when our tiles draw. Each source once. */
-export function mapCreditLine(ownTiles: boolean): string {
-  const drawn = ownTiles ? [...BASEMAP_CREDITS, ...OWN_BUILDINGS_CREDITS] : BASEMAP_CREDITS
+/**
+ * The corner credit: the basemap's sources, and our buildings' when our tiles
+ * draw, each once. A style moved off OpenFreeMap (`EXPO_PUBLIC_MAP_STYLE_URL`)
+ * is credited to OpenStreetMap alone, never to a provider it may not use
+ * (review L6).
+ */
+export function mapCreditLine(ownTiles: boolean, ourStyle = true): string {
+  const basemap = ourStyle ? BASEMAP_CREDITS : [MAP_CREDITS.openStreetMap]
+  const drawn = ownTiles ? [...basemap, ...OWN_BUILDINGS_CREDITS] : basemap
   return [...new Set(drawn)].map((c) => c.text).join(' · ')
 }
 

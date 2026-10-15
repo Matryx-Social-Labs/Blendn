@@ -23,10 +23,14 @@ export interface HomeBrowse {
   ready: boolean
   /** Where the selected city is (`/events/cities` `centre`). */
   cityCentre: { latitude: number; longitude: number } | null
-  /** Bumped by every city chosen in the picker, never by one the app decided: the map goes there, even to the city it shows. */
-  cityPick: number
-  /** Ask for the phone's position: the Pulse's own location flow (the OS ask, or its "Turn on location" tray). */
-  requestLocation: () => void
+  /**
+   * Bumped by every city the person chooses, never by one the app decided: the
+   * map goes there, even to the city it shows. `here` when the choice was where
+   * they stand ("Use my current location", the switch banner): the map shows them.
+   */
+  cityPick: { n: number; here: boolean }
+  /** Ask for the phone's position: the Pulse's own location flow (the OS ask, or its "Turn on location" tray). Settles when it does. */
+  requestLocation: () => void | Promise<void>
 }
 
 type Segment = 'events' | 'places'
@@ -72,7 +76,7 @@ export function HomeShell({
     location: null,
     ready: false,
     cityCentre: null,
-    cityPick: 0,
+    cityPick: { n: 0, here: false },
     requestLocation: () => {},
   })
 

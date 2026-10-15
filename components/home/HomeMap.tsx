@@ -5,6 +5,7 @@ import {
   Map,
   NativeUserLocation,
   type CameraRef,
+  type CameraStop,
   type LightSpecification,
   type MapRef,
   type PressEventWithFeatures,
@@ -12,7 +13,7 @@ import {
 } from '@maplibre/maplibre-react-native'
 import { router } from 'expo-router'
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AppState, StyleSheet, useWindowDimensions, type NativeSyntheticEvent } from 'react-native'
+import { AppState, Platform, StyleSheet, useWindowDimensions, type NativeSyntheticEvent } from 'react-native'
 import Animated, { useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated'
 
 import { eventFromApi } from '../../lib/api'
@@ -20,6 +21,7 @@ import { apiClient } from '../../lib/apiClient'
 import {
   backoffMs,
   cameraMove,
+  cityPickAction,
   insideLastCircle,
   LIGHT_MIN_ZOOM,
   liveAt,
@@ -28,12 +30,13 @@ import {
   mapPadding,
   roundQuery,
   shadeOf,
-  shouldFollowCity,
   shouldFollowFix,
-  snapCentre,
+  snapRecentre,
+  tiltedZoom,
   viewportQuery,
   visibleCentreY,
   type Bounds,
+  type InFlight,
   type Pin,
   type PinQuery,
 } from '../../lib/homeMap'
@@ -145,10 +148,10 @@ export const HomeMap = memo(function HomeMap({
   center: { latitude: number; longitude: number } | null
   /** The selected city's centre (`shouldFollowCity` says when the map goes there). */
   cityCentre: { latitude: number; longitude: number } | null
-  /** Bumped by every city chosen in the picker: the map goes to it, even the city it shows. */
-  cityPick: number
-  /** Ask for the phone's position (the Pulse's own permission and "Turn on location" flow). */
-  requestLocation: () => void
+  /** Bumped by every city the person chooses; `here` when they chose where they stand. */
+  cityPick: { n: number; here: boolean }
+  /** Ask for the phone's position (the Pulse's own permission and "Turn on location" flow); settles when the ask does. */
+  requestLocation: () => void | Promise<void>
   /** The drawer leaves room for the "my location" button. */
   locateVisible: boolean
   /** The drawer's top edge as it moves, and where it rests at half and full: the button rides on it. */
@@ -177,6 +180,10 @@ export const HomeMap = memo(function HomeMap({
     touched.current = on
     setMoved(on)
   }
+  // The person's gestures on the map, counted: the corner credit goes on the next one.
+  const [gestures, setGestures] = useState(0)
+  // "My location" asked the phone for a fix and is waiting (review L7).
+  const [asking, setAsking] = useState(false)
   const reduceMotion = useReduceMotion()
   // Across cities the map's ground covers the jump, then fades off it.
   const fade = useSharedValue(0)
@@ -195,25 +202,44 @@ export const HomeMap = memo(function HomeMap({
    * reckoning), and the first frame has it too (`initialViewState`).
    */
   const padding = mapPadding({ topChrome, mapHeight, drawerTop: drawerSnapTop })
-  const pad = useRef(padding)
+  // The map you can see as the camera last used it: its padding and the map's height, together (review M3).
+  const shown = useRef({ padding, mapHeight })
+  // The move in flight, and a count of moves: a settled snap must not undo a newer move (review M1).
+  const lastMove = useRef<InFlight | null>(null)
+  const moves = useRef(0)
   // A move asked for before the map is ready is dropped by native: hold it until it is (review H3).
   const ready = useRef(false)
   // The credit's few seconds start when there is a map to see, not when the screen mounts.
   const [mapUp, setMapUp] = useState(false)
   const pendingMove = useRef<Move | null>(null)
+
+  /** One camera stop; MLRN's promise is typed void by its wrappers, so stops go through `setStop`, failures logged (review L4). */
+  const stop = (to: CameraStop) => {
+    const cam = camera.current
+    if (!cam) return
+    Promise.resolve()
+      .then(() => cam.setStop({ easing: 'ease', ...to }))
+      .catch((error) => Logger.warn('events', 'Home map camera stop failed', { error: String(error) }))
+  }
+
   /** Within a city, an ease of `easeMs`; across cities, a jump under the fade (`cameraMove`). */
   const moveTo = (move: Move) => {
     if (!ready.current) {
       pendingMove.current = move
       return
     }
+    moves.current += 1
+    const pad = shown.current.padding
     const { duration, fade: fades } = cameraMove(view.current.centre, move.to, { easeMs: move.easeMs, reduceMotion })
+    lastMove.current = { to: move.to, zoom: move.at?.zoom, pitch: move.at?.pitch, until: Date.now() + duration }
     if (fades) {
       fade.set(1)
       fade.set(withTiming(0, { duration: MAP_THEME.camera.fadeMs }))
     }
     if (duration > 0) {
-      camera.current?.easeTo({ center: move.to, ...move.at, padding: pad.current, duration })
+      // An ease that also tilts asks for the zoom MapLibre iOS will land on (review M2).
+      const at = move.at && { pitch: move.at.pitch, zoom: tiltedZoom(move.at.zoom, view.current.pitch, move.at.pitch, Platform.OS) }
+      stop({ center: move.to, ...at, padding: pad, duration })
       return
     }
     /*
@@ -225,30 +251,47 @@ export const HomeMap = memo(function HomeMap({
      * at the tilt it starts from and keeps that height across latitudes, so the
      * zoom goes last, once the camera is there and tilted, with the centre again.
      */
-    camera.current?.zoomTo(view.current.zoom, { pitch: 0, padding: pad.current, duration: 0 })
-    camera.current?.easeTo({ center: move.to, pitch: move.at?.pitch ?? view.current.pitch, padding: pad.current, duration: 0 })
-    camera.current?.easeTo({ center: move.to, zoom: move.at?.zoom ?? view.current.zoom, padding: pad.current, duration: 0 })
+    stop({ zoom: view.current.zoom, pitch: 0, padding: pad, duration: 0 })
+    stop({ center: move.to, pitch: move.at?.pitch ?? view.current.pitch, padding: pad, duration: 0 })
+    stop({ center: move.to, zoom: move.at?.zoom ?? view.current.zoom, padding: pad, duration: 0 })
   }
 
   /*
    * The drawer settled at a new snap (on the snap, never per drag frame: motion
-   * #41): keep what was centred centred in the map you can now see — your
-   * position while the map follows it, else whatever was in the middle.
+   * #41): keep what was centred centred in the map you can now see
+   * (`snapRecentre`). Decided a tick later, so a pick or a locate in the same
+   * commit wins (its effect runs after this one), and dropped if any move
+   * started meanwhile (review M1).
    */
   useEffect(() => {
-    const before = pad.current
-    pad.current = padding
-    if (!ready.current || (before.top === padding.top && before.bottom === padding.bottom)) return
-    map.current
-      ?.unproject([width / 2, visibleCentreY(before, mapHeight)])
-      .then((centred) => {
-        const fix: [number, number] | null = center ? [center.longitude, center.latitude] : null
-        const to = snapCentre({ following: !touched.current, fix, centred: centred as [number, number] })
-        camera.current?.easeTo({ center: to, padding: pad.current, duration: reduceMotion ? 0 : MAP_THEME.camera.easeMs })
-      })
-      .catch((error) => Logger.warn('events', 'Home map could not re-centre on the drawer', { error: String(error) }))
+    const before = shown.current
+    shown.current = { padding, mapHeight }
+    if (!ready.current || (before.padding.top === padding.top && before.padding.bottom === padding.bottom)) return
+    const startedAt = moves.current
+    const fix: [number, number] | null = center ? [center.longitude, center.latitude] : null
+    const settle = reduceMotion ? 0 : MAP_THEME.camera.easeMs
+    const timer = setTimeout(() => {
+      if (moves.current !== startedAt) return
+      const plan = snapRecentre({ now: Date.now(), inFlight: lastMove.current, following: !touched.current, fix })
+      if (plan.kind === 'reissue') {
+        const { to, zoom, pitch } = plan.move
+        stop({ center: to, ...(zoom !== undefined && { zoom }), ...(pitch !== undefined && { pitch }), padding: shown.current.padding, duration: plan.durationMs })
+        return
+      }
+      if (plan.kind === 'centre') {
+        stop({ center: plan.to, padding: shown.current.padding, duration: settle })
+        return
+      }
+      map.current
+        ?.unproject([width / 2, visibleCentreY(before.padding, before.mapHeight)])
+        .then((centred) => {
+          if (moves.current !== startedAt) return
+          stop({ center: centred as [number, number], padding: shown.current.padding, duration: settle })
+        })
+        .catch((error) => Logger.warn('events', 'Home map could not re-centre on the drawer', { error: String(error) }))
+    }, 0)
+    return () => clearTimeout(timer)
   }, [padding.top, padding.bottom]) // eslint-disable-line react-hooks/exhaustive-deps -- only a settled snap re-centres
-
 
   const [query, setQuery] = useState<PinQuery | null>(null)
   // Read again when the app comes back to the foreground (a venue may have filled up).
@@ -290,32 +333,42 @@ export const HomeMap = memo(function HomeMap({
     moveTo({ to: [center.longitude, center.latitude], easeMs: 400 })
   }, [center]) // eslint-disable-line react-hooks/exhaustive-deps -- only a new fix moves the camera here
 
-  // A city chosen in the picker is a place to look at; one the app decided only when you have no fix (`shouldFollowCity`).
-  const cityLat = cityCentre?.latitude
-  const cityLon = cityCentre?.longitude
-  const seenPick = useRef(cityPick)
-  const hasFix = center !== null
-  useEffect(() => {
-    const picked = cityPick !== seenPick.current
-    seenPick.current = cityPick
-    if (cityLat === undefined || cityLon === undefined) return
-    if (!shouldFollowCity({ picked, hasFix, touched: touched.current })) return
-    // Choosing a city is moving the map yourself: the next fix must not drag it back.
-    if (picked) setTouched(true)
-    moveTo({ to: [cityLon, cityLat], easeMs: MAP_THEME.camera.easeMs })
-  }, [cityPick, cityLat, cityLon]) // eslint-disable-line react-hooks/exhaustive-deps -- a fix arriving is not a city change
-
-  // "My location": back to the fix and following it again, or ask for one.
+  // "My location": back to the fix and following it again, or ask for one (dimmed until the ask settles).
   const locate = () => {
     setTouched(false)
     const target = locateTarget(center)
     if (!target) {
-      requestLocation()
+      setAsking(true)
+      Promise.resolve(requestLocation())
+        .catch((error) => Logger.warn('events', 'Home map location ask failed', { error: String(error) }))
+        .finally(() => setAsking(false))
       return
     }
     followedFix.current = center
     moveTo({ to: target.center, easeMs: MAP_THEME.camera.easeMs, at: { zoom: target.zoom, pitch: target.pitch } })
   }
+
+  // A city change: a pick goes there, a choice of where you stand shows you, one the app decided only when you have no fix (`cityPickAction`).
+  const cityLat = cityCentre?.latitude
+  const cityLon = cityCentre?.longitude
+  const seenPick = useRef(cityPick.n)
+  const hasFix = center !== null
+  useEffect(() => {
+    const picked = cityPick.n !== seenPick.current
+    const action = cityPickAction({ picked, here: cityPick.here, hasFix, touched: touched.current })
+    if (action === 'locate') {
+      seenPick.current = cityPick.n
+      locate()
+      return
+    }
+    // A pick waits for its city's centre rather than being lost (review L1).
+    if (cityLat === undefined || cityLon === undefined) return
+    seenPick.current = cityPick.n
+    if (action !== 'city') return
+    // Choosing a city is moving the map yourself: the next fix must not drag it back.
+    if (picked) setTouched(true)
+    moveTo({ to: [cityLon, cityLat], easeMs: MAP_THEME.camera.easeMs })
+  }, [cityPick.n, cityLat, cityLon]) // eslint-disable-line react-hooks/exhaustive-deps -- a fix arriving is not a city change
 
   useEffect(
     () => () => {
@@ -348,7 +401,10 @@ export const HomeMap = memo(function HomeMap({
 
   const onRegionDidChange = (e: NativeSyntheticEvent<ViewStateChangeEvent>) => {
     const { bounds, center: centre, zoom, pitch, userInteraction } = e.nativeEvent
-    if (userInteraction) setTouched(true)
+    if (userInteraction) {
+      setTouched(true)
+      setGestures((n) => n + 1)
+    }
     view.current = { bounds: bounds as Bounds, centre: centre as [number, number], zoom, pitch }
     setOwnTiles((drawing) => drawsOwnBuildings(OWN_BUILDINGS_URL, bounds as Bounds, drawing))
     relight()
@@ -358,13 +414,16 @@ export const HomeMap = memo(function HomeMap({
 
   // Before anybody moves the map there is no region change to ask from: seed it once the map is up.
   const onLoaded = () => {
-    ready.current = true
-    setMapUp(true)
-    // The first frame's zoom was turned into a height before it was tilted (see `moveTo`): it opened near z15. Again, tilted.
-    camera.current?.easeTo({ center: opening, zoom: MAP_THEME.camera.zoom, padding: pad.current, duration: 0 })
-    const held = pendingMove.current
-    pendingMove.current = null
-    if (held) moveTo(held)
+    // Once: a style that loads again must not send the camera back to where it opened (review L2).
+    if (!ready.current) {
+      ready.current = true
+      setMapUp(true)
+      // The first frame's zoom was turned into a height before it was tilted (see `moveTo`): it opened near z15. Again, tilted.
+      stop({ center: opening, zoom: MAP_THEME.camera.zoom, padding: shown.current.padding, duration: 0 })
+      const held = pendingMove.current
+      pendingMove.current = null
+      if (held) moveTo(held)
+    }
     const m = map.current
     if (!m) return
     m.getViewState()
@@ -508,9 +567,16 @@ export const HomeMap = memo(function HomeMap({
         </GeoJSONSource>
         <Chips chips={lit.chips} onOpen={open} />
       </Map>
-      {mapUp ? <MapCredit text={mapCreditLine(ownTiles)} top={topChrome + SPACE.sm} dismissed={moved} /> : null}
+      {mapUp ? <MapCredit text={mapCreditLine(ownTiles, typeof style !== 'string')} top={topChrome + SPACE.sm} gestures={gestures} /> : null}
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.fade, fadeStyle]} />
-      <LocateButton visible={locateVisible} following={hasFix && !moved} drawerTop={drawerTop} drawer={drawer} onPress={locate} />
+      <LocateButton
+        visible={locateVisible}
+        following={hasFix && !moved}
+        pending={asking}
+        drawerTop={drawerTop}
+        drawer={drawer}
+        onPress={locate}
+      />
     </>
   )
 })

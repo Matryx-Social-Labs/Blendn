@@ -5,6 +5,7 @@ import {
   backoffMs,
   buildingUnder,
   cameraMove,
+  cityPickAction,
   insideLastCircle,
   lightCandidates,
   lightSignature,
@@ -17,9 +18,9 @@ import {
   pinsFor,
   roundQuery,
   shadeOf,
-  shouldFollowCity,
   shouldFollowFix,
-  snapCentre,
+  snapRecentre,
+  tiltedZoom,
   viewportQuery,
   visibleCentreY,
 } from '../lib/homeMap'
@@ -186,10 +187,13 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
     expect(types.filter((t) => t !== 'fill-extrusion' && t !== 'circle')).toEqual([])
   })
 
-  it('moves the camera only with the drawer padding, so the centre stays above the drawer', () => {
-    const moves = component.split('\n').filter((line) => /\.(easeTo|flyTo|jumpTo|zoomTo)\(/.test(line))
-    expect(moves.length).toBeGreaterThan(0)
-    for (const line of moves) expect(line).toMatch(/padding:/)
+  it('moves the camera only through one stop helper, every stop with the padding', () => {
+    expect(component).not.toMatch(/camera\.current\?\.(easeTo|flyTo|jumpTo|zoomTo)\(/)
+    const stops = component.split('\n').filter((line) => /\bstop\(\{/.test(line))
+    expect(stops.length).toBeGreaterThanOrEqual(6)
+    for (const line of stops) expect(line).toMatch(/padding:/)
+    // Its failures are logged, never left floating (review L4).
+    expect(component).toMatch(/cam\.setStop\(\{ easing: 'ease', \.\.\.to \}\)\)\s*\.catch\(/)
     // …and the first frame has it too: a padding-only camera change is a no-op on Android (review H3).
     expect(component).toMatch(/initialViewState=\{\{[\s\S]*?\bpadding,\s*\}\}/)
     expect(component).toMatch(/const padding = mapPadding\(\{ topChrome, mapHeight, drawerTop: drawerSnapTop \}\)/)
@@ -347,27 +351,35 @@ describe('the map style can move without a release (step 2 review)', () => {
 })
 
 describe('the map and the city (step 2 drive; owner, 2026-10-15)', () => {
+  const act = (over: Partial<Parameters<typeof cityPickAction>[0]>) => cityPickAction({ picked: false, here: false, hasFix: true, touched: false, ...over })
+
   it('moves to a city chosen in the picker, even the one it shows: a re-pick is a pick', () => {
     // The owner, in Saarbrücken with a fix, picked Bengaluru — the only city on staging — and nothing moved.
-    expect(shouldFollowCity({ picked: true, hasFix: true, touched: false })).toBe(true)
+    expect(act({ picked: true })).toBe('city')
   })
 
   it('moves to a city picked after the person panned the map', () => {
-    expect(shouldFollowCity({ picked: true, hasFix: true, touched: true })).toBe(true)
-    expect(shouldFollowCity({ picked: true, hasFix: false, touched: true })).toBe(true)
+    expect(act({ picked: true, touched: true })).toBe('city')
+    expect(act({ picked: true, touched: true, hasFix: false })).toBe('city')
+  })
+
+  it('shows the person, following them, when what they chose was where they stand (review L5)', () => {
+    // "Use my current location" and "You're in X. Browse events here?": not the middle of town, the fix.
+    expect(act({ picked: true, here: true })).toBe('locate')
+    expect(act({ picked: true, here: true, touched: true })).toBe('locate')
   })
 
   it('never lets a city the app decided take the map from where the person stands', () => {
     // Launch: the stored or inferred city arrives after the fix — the fix wins.
-    expect(shouldFollowCity({ picked: false, hasFix: true, touched: false })).toBe(false)
+    expect(act({})).toBeNull()
     // A better guess later (the device city) is not a pick either.
-    expect(shouldFollowCity({ picked: false, hasFix: true, touched: true })).toBe(false)
+    expect(act({ touched: true })).toBeNull()
     // Launch after the person already moved the map: theirs.
-    expect(shouldFollowCity({ picked: false, hasFix: false, touched: true })).toBe(false)
+    expect(act({ hasFix: false, touched: true })).toBeNull()
   })
 
   it('goes to a city the app decided when there is nothing better: no fix, no map moved', () => {
-    expect(shouldFollowCity({ picked: false, hasFix: false, touched: false })).toBe(true)
+    expect(act({ hasFix: false })).toBe('city')
   })
 })
 
@@ -432,16 +444,28 @@ describe('your position sits in the middle of the map you can see (owner, TestFl
 
   it('keeps your position centred when the drawer settles while the map follows you, and your own middle once you have moved it', () => {
     const fix: [number, number] = [6.9965, 49.2354]
-    const centred: [number, number] = [6.99, 49.24]
-    expect(snapCentre({ following: true, fix, centred })).toEqual(fix)
-    expect(snapCentre({ following: false, fix, centred })).toEqual(centred)
-    expect(snapCentre({ following: true, fix: null, centred })).toEqual(centred)
+    const base = { now: 1_000, inFlight: null, fix }
+    expect(snapRecentre({ ...base, following: true })).toEqual({ kind: 'centre', to: fix })
+    expect(snapRecentre({ ...base, following: false })).toEqual({ kind: 'read' })
+    expect(snapRecentre({ ...base, following: true, fix: null })).toEqual({ kind: 'read' })
+  })
+
+  it('sends a move still in flight again with the new padding, rather than undo it from a mid-flight centre (review M1)', () => {
+    const pick = { to: [77.6077, 12.9711] as [number, number], until: 1_400 }
+    // A pick to Bengaluru 400 ms from landing when the drawer settles: it lands, re-padded, in the time it had left.
+    expect(snapRecentre({ now: 1_000, inFlight: pick, following: true, fix: [6.99, 49.23] })).toEqual({ kind: 'reissue', move: pick, durationMs: 400 })
+    // Landed: back to the usual rule.
+    expect(snapRecentre({ now: 1_400, inFlight: pick, following: false, fix: null })).toEqual({ kind: 'read' })
   })
 
   it('re-centres once per settled snap, with a centre and the new padding, never per drag frame', () => {
-    expect(component).toMatch(/useEffect\(\(\) => \{\s*const before = pad\.current\s*pad\.current = padding/)
-    expect(component).toMatch(/unproject\(\[width \/ 2, visibleCentreY\(before, mapHeight\)\]\)/)
-    expect(component).toMatch(/easeTo\(\{ center: to, padding: pad\.current, duration: reduceMotion \? 0 : MAP_THEME\.camera\.easeMs \}\)/)
+    expect(component).toMatch(/useEffect\(\(\) => \{\s*const before = shown\.current\s*shown\.current = \{ padding, mapHeight \}/)
+    // The old centre is read with the padding AND the map height it was drawn with (review M3).
+    expect(component).toMatch(/unproject\(\[width \/ 2, visibleCentreY\(before\.padding, before\.mapHeight\)\]\)/)
+    // A tick later, and dropped if a move started meanwhile: a pick in the same commit wins (review M1).
+    expect(component).toMatch(/const startedAt = moves\.current[\s\S]*?setTimeout\(\(\) => \{\s*if \(moves\.current !== startedAt\) return/)
+    expect(component).toMatch(/\.then\(\(centred\) => \{\s*if \(moves\.current !== startedAt\) return/)
+    expect(component).toMatch(/moves\.current \+= 1/)
     expect(component).toMatch(/\}, \[padding\.top, padding\.bottom\]\)/)
     // Keyed on the settled snap's top, not the animated drawer value.
     expect(code('components/home/HomeShell.tsx')).toMatch(/drawerSnapTop=\{points\[snap\]\}/)
@@ -473,6 +497,22 @@ describe('"my location"', () => {
     expect(locateRide(120, drawer).opacity).toBe(0) // full
     expect(locateRide(100, drawer).opacity).toBe(0) // dragged past full
     expect(gapPx).toBeGreaterThan(0)
+    // A screen with no room between half and full: never NaN (review L3).
+    expect(locateRide(400, { half: 120, full: 120 }).opacity).toBe(1)
+    expect(locateRide(120, { half: 120, full: 120 }).opacity).toBe(0)
+  })
+
+  it('lands at its zoom on iOS when the ease also tilts the camera (review M2)', () => {
+    // MapLibre iOS sets the zoom as a height at the old tilt, then tilts: from flat a zoom-16 ease landed near 15.2.
+    const asked = tiltedZoom(16, 0, 55, 'ios')
+    expect(asked).toBeCloseTo(16 + Math.log2(1 / Math.cos((55 * Math.PI) / 180)), 6)
+    expect(asked - 16).toBeCloseTo(0.8, 2)
+    // Model of iOS: the height at the old tilt, re-tilted, loses log2(cos from / cos to) — so it lands at 16.
+    const landed = asked - Math.log2(Math.cos(0) / Math.cos((55 * Math.PI) / 180))
+    expect(landed).toBeCloseTo(16, 6)
+    // Already at the tilt, or on Android (which sets the zoom itself): as asked.
+    expect(tiltedZoom(16, 55, 55, 'ios')).toBe(16)
+    expect(tiltedZoom(16, 0, 55, 'android')).toBe(16)
   })
 
   it('follows the drawer frame by frame: the shell hands the drawer and the button one animated value', () => {
@@ -485,23 +525,32 @@ describe('"my location"', () => {
   })
 
   it('is wired: a tap with no fix asks through the Pulse, and every move takes the one camera rule', () => {
-    expect(component).toMatch(/const target = locateTarget\(center\)\s*if \(!target\) \{\s*requestLocation\(\)/)
+    expect(component).toMatch(/const target = locateTarget\(center\)\s*if \(!target\) \{\s*setAsking\(true\)\s*Promise\.resolve\(requestLocation\(\)\)[\s\S]*?\.finally\(\(\) => setAsking\(false\)\)/)
+    expect(component).toMatch(/tiltedZoom\(move\.at\.zoom, view\.current\.pitch, move\.at\.pitch, Platform\.OS\)/)
     expect(component).toMatch(/cameraMove\(view\.current\.centre, move\.to/)
     // MapLibre iOS jumps (drive, 2026-10-15): flat first, or a tilted camera put Bengaluru a kilometre from
     // Saarbrücken; the zoom last, once tilted, or it lands a step out. And the opening zoom set again once tilted.
     expect(component).toMatch(
-      /zoomTo\(view\.current\.zoom, \{ pitch: 0, [^}]*\}\)\s*camera\.current\?\.easeTo\(\{ center: move\.to, pitch: [^}]*duration: 0 \}\)\s*camera\.current\?\.easeTo\(\{ center: move\.to, zoom: move\.at\?\.zoom \?\? view\.current\.zoom/
+      /stop\(\{ zoom: view\.current\.zoom, pitch: 0, [^}]*\}\)\s*stop\(\{ center: move\.to, pitch: [^}]*duration: 0 \}\)\s*stop\(\{ center: move\.to, zoom: move\.at\?\.zoom \?\? view\.current\.zoom/
     )
-    expect(component).toMatch(/ready\.current = true[\s\S]{0,300}easeTo\(\{ center: opening, zoom: MAP_THEME\.camera\.zoom, padding: pad\.current, duration: 0 \}\)/)
+    // Once: a style that loads again does not send the camera back to where it opened (review L2).
+    expect(component).toMatch(/if \(!ready\.current\) \{\s*ready\.current = true[\s\S]{0,300}stop\(\{ center: opening, zoom: MAP_THEME\.camera\.zoom, padding: shown\.current\.padding, duration: 0 \}\)/)
     // Hidden while the drawer is full.
     expect(code('components/home/HomeShell.tsx')).toMatch(/locateVisible=\{snap !== 'full'\}/)
     // A re-pick changes no coordinates: the effect is keyed on the pick itself.
-    expect(component).toMatch(/\}, \[cityPick, cityLat, cityLon\]\)/)
+    expect(component).toMatch(/\}, \[cityPick\.n, cityLat, cityLon\]\)/)
+    // A pick waits for its city's centre rather than being marked seen and lost (review L1).
+    expect(component).toMatch(/if \(cityLat === undefined \|\| cityLon === undefined\) return\s*seenPick\.current = cityPick\.n/)
     // The fade never takes a touch: the map under it is live.
     expect(component).toMatch(/<Animated\.View pointerEvents="none"/)
     // The Pulse hands over its own location flow; it never grows a second one.
     expect(code('app/(tabs)/events.tsx')).toMatch(/requestLocation: requestLocationIfNeeded/)
-    expect(code('app/(tabs)/events.tsx')).toMatch(/setSelection\(\{ city, source: 'chosen' \}\)\s*setCityPick\(\(n\) => n \+ 1\)/)
+    const pulse = code('app/(tabs)/events.tsx')
+    expect(pulse).toMatch(/setSelection\(\{ city, source: 'chosen' \}\)\s*setCityPick\(\(p\) => \(\{ n: p\.n \+ 1, here \}\)\)/)
+    // Where you stand is a choice of you, not of a city centre (review L5); the picker's rows are picks.
+    expect(pulse).toMatch(/chooseCity\(switchSuggestion, true\)/)
+    expect(pulse).toMatch(/chooseCity\(deviceCity, true\)/)
+    expect(pulse.match(/chooseCity\(item\.city\)/g)).toHaveLength(2)
   })
 })
 

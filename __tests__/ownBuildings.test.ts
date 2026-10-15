@@ -195,12 +195,21 @@ describe('the credits (review H2; the owner, 2026-10-15: no (i) on the map)', ()
     expect(mapCreditLine(true).match(/OpenStreetMap/g)).toHaveLength(1)
   })
 
+  it("never names OpenFreeMap for a style moved off it: OpenStreetMap alone, and our buildings' when they draw (review L6)", () => {
+    expect(mapCreditLine(false, false)).toBe('© OpenStreetMap contributors')
+    expect(mapCreditLine(true, false)).toBe(OWN_BUILDINGS_CREDITS.map((c) => c.text).join(' · '))
+    expect(mapCreditLine(true, false)).not.toMatch(/OpenFreeMap|OpenMapTiles/)
+  })
+
   it('turn the native attribution off and show our corner credit instead', () => {
     const map = code('components/home/HomeMap.tsx')
     expect(map).toMatch(/attribution=\{false\}/)
     expect(map).toMatch(/logo=\{false\}/)
     // Mounted once the map has loaded, so its few seconds are seconds of map.
-    expect(map).toMatch(/\{mapUp \? <MapCredit text=\{mapCreditLine\(ownTiles\)\}/)
+    expect(map).toMatch(/\{mapUp \? <MapCredit text=\{mapCreditLine\(ownTiles, typeof style !== 'string'\)\}/)
+    // It goes on the next gesture, counted, so a new line can come back after earlier ones (review H1).
+    expect(map).toMatch(/gestures=\{gestures\}/)
+    expect(map).toMatch(/if \(userInteraction\) \{\s*setTouched\(true\)\s*setGestures\(\(n\) => n \+ 1\)/)
     expect(map).toMatch(/ready\.current = true\s*setMapUp\(true\)/)
     // The source carries no attribution of its own any more: nothing would show it.
     expect(code('components/home/MapLitLayers.tsx')).not.toMatch(/attribution=/)

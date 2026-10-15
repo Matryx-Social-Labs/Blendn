@@ -61,7 +61,6 @@ const KNOWN_ORPHANS: Record<string, string> = {
    */
   'Material.tsx': 'redesign Phase 1 foundation; the tab bar adopts it first (DESIGN-BRIEF §5.3), after the native rebuild that adds expo-glass-effect',
   'GradientFill.tsx': 'redesign Phase 1 foundation; the primary button and the centre disc adopt it with their redesign (§4.3, §11)',
-  'Icon.tsx': 'redesign Phase 1 foundation; screens move from Ionicons to it one at a time as they are redesigned (§8)',
 }
 
 const sources = walk(join(ROOT, 'app'))
