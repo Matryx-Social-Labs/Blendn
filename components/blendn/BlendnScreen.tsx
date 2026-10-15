@@ -17,7 +17,6 @@ import { markRoomLeft } from '../../lib/roomMembership'
 import { roomRecap, type RoomRecap as Recap } from '../../lib/roomRecap'
 import { newestWave, useRoomWaves, wavedAtYouLabel, waveShown } from '../../lib/roomWaves'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
-import { sheetClosed } from '../../lib/sheet'
 import { useAuth } from '../../lib/useAuth'
 import { useCheckInFlow } from '../../lib/useCheckInFlow'
 import { useLatest } from '../../lib/useLatest'
@@ -28,7 +27,7 @@ import { chooseCrew, crewCards, openBlend, useCrewActions, useCrewsHere } from '
 import { VisibilityBanner, type Visibility } from '../ds/Banner'
 import type { Face } from '../ds/Facepile'
 import { IconButton } from '../ds/IconButton'
-import { MomentBlend, type MomentBlendProps } from '../ds/MomentBlend'
+import { MomentBlend, type BlendCrew, type BlendPerson } from '../ds/MomentBlend'
 import { MomentMatch } from '../ds/MomentMatch'
 import { MomentPour, type PourFrame } from '../ds/MomentPour'
 import { MomentRecap } from '../ds/MomentRecap'
@@ -64,6 +63,10 @@ export function openerFor(p: RoomPerson): string {
   if (p.sharedWorkField && p.workField) return `Another ${p.workField} person — what are you working on?`
   return 'What brought you here tonight?'
 }
+
+/** A Blend just made (Flow 10 · 10.8): both sides, as the moment draws them, and where it opens. */
+type Sides = { ours: BlendCrew; theirs: BlendCrew | BlendPerson } | { ours: BlendPerson; theirs: BlendCrew }
+type MadeBlend = { sides: Sides; ref: BlendRef; title: string }
 
 type Tray = { visible: boolean; title: string; message: string; buttons: TrayButton[]; extra?: TrayExtra }
 const NO_TRAY: Tray = { visible: false, title: '', message: '', buttons: [] }
@@ -229,17 +232,18 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   const likingAsCrewId = likingAsId !== undefined ? likingAsId : defaultAs.as === 'crew' ? defaultAs.crewId : defaultAs.as === 'choose' ? myCrewsHere[0]?.crewId ?? null : null
   const likingAsCrew = myCrewsHere.find((c) => c.crewId === likingAsCrewId) ?? null
   const emblemOf = (crewId: string) => crews.mine?.find((m) => m.crewId === crewId)?.emblemSeed ?? crewId
-  const [blend, setBlend] = useState<(Omit<MomentBlendProps, 'onOpen' | 'onLater' | 'yourLike'> & { ref: BlendRef; title: string }) | null>(null)
+  const [blend, setBlend] = useState<MadeBlend | null>(null)
   const crewActions = useCrewActions(eventId, crews, {
     likeAsCrewId: likingAsId,
     onBlend: (ref, card, asCrewId) => {
       const ours = myCrewsHere.find((c) => c.crewId === asCrewId)
+      const theirs: BlendCrew = { kind: 'crew', name: card.name, emblemSeed: card.emblemSeed, count: card.presentCount }
       setBlend({
         ref,
         title: `Blend with ${card.name}`,
-        ...(ours
-          ? { ours: { kind: 'crew', name: ours.name, emblemSeed: emblemOf(ours.crewId), count: ours.presentCount }, theirs: { kind: 'crew', name: card.name, emblemSeed: card.emblemSeed, count: card.presentCount } }
-          : { ours: { kind: 'person', pseudonym: myPseudonym ?? myName }, theirs: { kind: 'crew', name: card.name, emblemSeed: card.emblemSeed, count: card.presentCount } }),
+        sides: ours
+          ? { ours: { kind: 'crew', name: ours.name, emblemSeed: emblemOf(ours.crewId), count: ours.presentCount }, theirs }
+          : { ours: { kind: 'person', pseudonym: myPseudonym ?? myName }, theirs },
       })
     },
   })
@@ -332,18 +336,11 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
    * server learned about them, so all this may say is that the like went,
    * unless it made a Blend.
    */
-  const likeForCrew = async (p: RoomPerson) => {
+  const likeForCrew = async (p: RoomPerson, crewId: string) => {
     if (!eventId || likingForCrew.current) return
     likingForCrew.current = true
     try {
       setOpen(null)
-      let crewId = likingAsCrewId
-      if (!crewId && soloCrews.length > 1) {
-        await sheetClosed()
-        crewId = await chooseCrew(soloCrews, `Like ${p.name} for…`)
-      }
-      crewId ??= soloCrews[0]?.crewId ?? null
-      if (!crewId) return
       const result = await crewsApi.likePersonAsCrew(eventId, p.id, crewId)
       if (!result.success || !result.data) {
         say(crewMessage(result, 'card', 'Couldn’t send the like. Try again.'), 'error')
@@ -354,15 +351,28 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
         setBlend({
           ref: result.data.blend,
           title: `Blend with ${p.name}`,
-          ours: { kind: 'crew', name: crew.name, emblemSeed: emblemOf(crew.crewId), count: crew.presentCount },
-          theirs: { kind: 'person', pseudonym: p.name },
+          sides: { ours: { kind: 'crew', name: crew.name, emblemSeed: emblemOf(crew.crewId), count: crew.presentCount }, theirs: { kind: 'person', pseudonym: p.name } },
         })
       } else say('Liked for your crew', 'success')
     } finally {
       likingForCrew.current = false
     }
   }
-  const crewForCard = soloCrews.find((c) => c.crewId === likingAsCrewId) ?? (likingAsId === null ? null : soloCrews[0] ?? null)
+  /*
+   * The crew "Like for {crew}" names is the crew the like is sent as: one
+   * value, read by the button and the request alike. "Just me" (null) is never
+   * a crew; a chosen crew that may not like people (closed to solo, or too
+   * big) leaves the plain Like, which is you. With no choice yet, your one
+   * crew here that may.
+   */
+  const crewForCard =
+    likingAsId === null
+      ? null
+      : likingAsId !== undefined
+        ? (soloCrews.find((c) => c.crewId === likingAsId) ?? null)
+        : soloCrews.length === 1
+          ? soloCrews[0]
+          : (soloCrews.find((c) => c.crewId === likingAsCrewId) ?? null)
 
   // --- the room chat ----------------------------------------------------------
   const openChat = useCallback(async () => {
@@ -388,8 +398,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
     router.push({ pathname: '/chat/[id]', params: { id: String(id), roomName: eventTitle || 'Event chat', eventTitle } as never })
   }, [chatGroupId, eventId, eventTitle, say])
 
-  // --- waves to you (SCRUM-630) ------------------------------------------------
-  const removedIds = useMemo(() => new Set<string>(), [])
+  // --- waves to you (SCRUM-630); a blocked or reported person's are dropped at the source (`ignoreWavesFrom`) ---
   const dockWave = newestWave(waves.received, now)
   const waveKeys = useMemo(() => Object.fromEntries(Object.values(waves.received).map((w) => [w.fromUserId, w.at])), [waves.received])
 
@@ -477,7 +486,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
             onLike={(p) => void like(p)}
             chatGroupId={room.chatGroupId}
             myId={user?.id}
-            dockWave={dockWave && !removedIds.has(dockWave.fromUserId) ? { kind: 'wave', id: `wave-${dockWave.fromUserId}`, fromUserId: dockWave.fromUserId, fromName: dockWave.fromName, at: dockWave.at } : null}
+            dockWave={dockWave ? { kind: 'wave', id: `wave-${dockWave.fromUserId}`, fromUserId: dockWave.fromUserId, fromName: dockWave.fromName, at: dockWave.at } : null}
             onOpenChat={() => void openChat()}
             onOpenPerson={(id) => openCard({ id, name: waves.received[id]?.fromName ?? 'Someone' })}
             enter={enter}
@@ -609,7 +618,11 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
               }
             : undefined
         }
-        crewLike={openPerson && crewForCard ? { name: crewForCard.name, emblemSeed: emblemOf(crewForCard.crewId), onPress: () => void likeForCrew(openPerson) } : undefined}
+        crewLike={
+          openPerson && crewForCard && !openPerson.matched
+            ? { name: crewForCard.name, emblemSeed: emblemOf(crewForCard.crewId), onPress: () => void likeForCrew(openPerson, crewForCard.crewId) }
+            : undefined
+        }
         onLike={() => openPerson && void like(openPerson)}
         onWave={() => open && void wave(open.id)}
         onMessage={() => {
@@ -668,7 +681,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
 
       {blend ? (
         <MomentBlend
-          {...(blend as MomentBlendProps)}
+          {...blend.sides}
           yourLike
           onOpen={() => {
             setBlend(null)

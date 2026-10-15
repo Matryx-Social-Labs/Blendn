@@ -35,6 +35,8 @@ type State = {
 const EMPTY: State = { latest: null, received: {} }
 let state: State = EMPTY
 let listeningFor: string | null = null
+/** People blocked or reported in this room: their waves are never shown, and the ones already here go. */
+let ignored = new Set<string>()
 let unsubscribe: (() => void) | null = null
 const listeners = new Set<() => void>()
 
@@ -52,13 +54,27 @@ export function listenForWaves(eventId: string | null): void {
   unsubscribe?.()
   unsubscribe = null
   listeningFor = eventId
+  ignored = new Set()
   set(EMPTY)
   if (!eventId) return
   unsubscribe = subscribeToRoomWave((data) => {
-    if (data.eventId !== listeningFor) return
+    if (data.eventId !== listeningFor || ignored.has(data.fromUserId)) return
     const wave: RoomWave = { eventId: data.eventId, fromUserId: data.fromUserId, fromName: data.fromName, at: Date.now() }
     set({ latest: wave, received: { ...state.received, [wave.fromUserId]: wave } })
   })
+}
+
+/**
+ * After a block or a report (`useRoom`'s `remove`): nothing from them shows
+ * again in this room — no toast, no banner, no dock row, no card from a wave
+ * (SCRUM-630 moved the listener out of `useRoom`, which used to filter here).
+ */
+export function ignoreWavesFrom(userId: string): void {
+  ignored.add(userId)
+  if (!state.received[userId] && state.latest?.fromUserId !== userId) return
+  const received = { ...state.received }
+  delete received[userId]
+  set({ latest: state.latest?.fromUserId === userId ? null : state.latest, received })
 }
 
 /** The toast or banner has shown it. */

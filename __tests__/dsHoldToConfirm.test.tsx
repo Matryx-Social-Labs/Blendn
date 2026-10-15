@@ -247,3 +247,37 @@ describe('accessibility settings', () => {
     expect(haptics.commit).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('the quarter marks (motion #8)', () => {
+  // A screen reader found on by an earlier test is remembered app-wide (shared.ts): the marks are the visual pill's.
+  beforeEach(() => {
+    jest.spyOn(AccessibilityInfo, 'isScreenReaderEnabled').mockResolvedValue(false)
+  })
+  const drawn = async (props: Partial<React.ComponentProps<typeof HoldToConfirm>> = {}) => {
+    await draw(props)
+    await act(async () => {})
+  }
+  it('three 1 pt hairlines at 25 / 50 / 75% in 25% white, hidden from screen readers', async () => {
+    await drawn()
+    for (const q of [25, 50, 75]) {
+      expect(flat(`h-mark-${q}`)).toMatchObject({ position: 'absolute', top: 0, bottom: 0, width: 1, left: `${q}%` })
+      const mark = screen.getByTestId(`h-mark-${q}`, { includeHiddenElements: true })
+      expect(mark.props.accessibilityElementsHidden).toBe(true)
+      expect(mark.props.importantForAccessibility).toBe('no-hide-descendants')
+      expect(StyleSheet.flatten(mark.props.children[0].props.style).backgroundColor).toBe('rgba(255,255,255,0.25)')
+      expect(flat(`h-mark-${q}-passed`).backgroundColor).toBe(COLOR.ink)
+    }
+  })
+
+  it('a mark turns ink once the fill has passed it, the frame its tick fires', async () => {
+    await drawn({ previewProgress: 0.6 })
+    expect(animated('h-mark-25-passed').opacity).toBe(1)
+    expect(animated('h-mark-50-passed').opacity).toBe(1)
+    expect(animated('h-mark-75-passed').opacity).toBe(0)
+  })
+
+  it('none has passed at rest', async () => {
+    await drawn()
+    for (const q of [25, 50, 75]) expect(animated(`h-mark-${q}-passed`).opacity).toBe(0)
+  })
+})

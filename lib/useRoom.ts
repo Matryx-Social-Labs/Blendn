@@ -21,6 +21,7 @@ import {
   withRoster,
   type LiveRoster,
 } from './roomLive'
+import { ignoreWavesFrom } from './roomWaves'
 import { recallRoster, rememberRoster } from './rosterMemory'
 import { getBlockedUsers } from './safetyUtils'
 import {
@@ -733,6 +734,8 @@ export function useRoom(): RoomState & RoomActions {
   const remove = useCallback((id: string) => {
     setRemoved((prev) => (prev[id] ? prev : { ...prev, [id]: true }))
     setLive((prev) => withoutPerson(prev, id))
+    // Their waves too: heard at the tab layout now, so told here.
+    ignoreWavesFrom(id)
   }, [])
 
   /*

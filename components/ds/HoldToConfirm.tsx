@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
-import Animated, { Easing, useAnimatedReaction, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated'
+import Animated, { Easing, useAnimatedReaction, useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
 
 import { GradientFill } from '../ui/GradientFill'
@@ -9,7 +9,7 @@ import { Icon, type IconName } from '../ui/Icon'
 import { COLOR, DURATION, ICON, RADIUS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
-import { OPACITY } from '../../lib/theme'
+import { OPACITY, tint } from '../../lib/theme'
 import { Button } from './Button'
 import { CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast, useScreenReader } from './shared'
 
@@ -18,6 +18,10 @@ const MAX_DRIFT = SPACE.xl
 const QUARTERS = 4
 /** A long label ("Go live when you’re here · 350 m") shrinks this far before it would lose its tail. */
 const LABEL_MIN_SCALE = 0.8
+/** #8: the quarter marks, 1 pt hairlines at 25 / 50 / 75% of the track, white at 25% until the fill passes them. */
+const MARKS = [0.25, 0.5, 0.75] as const
+const MARK_WIDTH = 1
+const MARK_ALPHA = 0.25
 
 export type HoldToConfirmProps = {
   /** "Hold to blend in". */
@@ -47,6 +51,8 @@ export type HoldToConfirmProps = {
  * ROUND3 B10): hold for 900 ms (`DURATION.hold`). The surfaceSunken track fills
  * with the gradient from the left, linearly, and the label is drawn twice so it
  * turns white exactly at the fill edge (transforms only: no layout per frame).
+ * Motion #8's quarter marks sit on the track, 1 pt in 25% white, and turn ink
+ * as the fill passes each, with its `H.tick`.
  *
  * `H.tick` at 25 / 50 / 75% and `H.commit` at 100%, fired from the UI thread on
  * the frame the fill crosses; the outcome's `H.success` / `H.error` is the
@@ -198,6 +204,9 @@ export function HoldToConfirm({
               {labelRow(COLOR.textOnGradient)}
             </Animated.View>
           </Animated.View>
+          {MARKS.map((at) => (
+            <QuarterMark key={at} at={at} progress={progress} testID={testID && `${testID}-mark-${at * 100}`} />
+          ))}
           {contrast ? <View testID={testID && `${testID}-contrast`} pointerEvents="none" style={[styles.edge, IC_HAIRLINE]} /> : null}
         </View>
       </GestureDetector>
@@ -205,8 +214,26 @@ export function HoldToConfirm({
   )
 }
 
+/**
+ * One of #8's quarter marks: a hairline in 25% white on the track, turning ink
+ * where the fill has passed it, on the frame its `H.tick` fires (both read the
+ * same progress). Opacity only, on the UI thread; decorative.
+ */
+function QuarterMark({ at, progress, testID }: { at: number; progress: SharedValue<number>; testID?: string }) {
+  const passed = useAnimatedStyle(() => ({ opacity: progress.get() >= at ? 1 : 0 }))
+  return (
+    <View testID={testID} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.mark, { left: `${at * 100}%` }]}>
+      <View style={[StyleSheet.absoluteFill, styles.markTrack]} />
+      <Animated.View testID={testID && `${testID}-passed`} style={[StyleSheet.absoluteFill, styles.markPassed, passed]} />
+    </View>
+  )
+}
+
 const styles = StyleSheet.create({
   disabled: { opacity: OPACITY.disabled },
+  mark: { position: 'absolute', top: 0, bottom: 0, width: MARK_WIDTH },
+  markTrack: { backgroundColor: tint(COLOR.textPrimary, MARK_ALPHA) },
+  markPassed: { backgroundColor: COLOR.ink },
   track: {
     height: SIZE.primary,
     borderRadius: RADIUS.button,

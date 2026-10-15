@@ -39,6 +39,7 @@ const CELLS = [
   'ds-gridface-away',
   'ds-meetnext-row-360',
   'ds-hold-75',
+  'ds-hold-60',
   'ds-hold-live',
   'ds-venuepass-outside',
   'ds-doorcode-live',
