@@ -38,6 +38,14 @@ function played() {
   ]
 }
 
+it('imports under a partial mock of expo-haptics: the enums are read only when a haptic plays', () => {
+  jest.isolateModules(() => {
+    jest.doMock('expo-haptics', () => ({}))
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    expect(() => require('../lib/haptics')).not.toThrow()
+  })
+})
+
 describe('H on iOS', () => {
   beforeEach(() => on('ios', '26.0'))
 

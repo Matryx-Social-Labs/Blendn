@@ -268,7 +268,8 @@ const ICONS = {
   wind: Wind,
   wrench: Wrench,
   x: X,
-  zap: Zap,} as const satisfies Record<string, LucideIcon>
+  zap: Zap,
+} as const satisfies Record<string, LucideIcon>
 
 export type IconName = keyof typeof ICONS
 
