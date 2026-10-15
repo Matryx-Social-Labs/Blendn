@@ -84,7 +84,21 @@ export type SheetProps = {
  * scrim, and the drag between detents (`heights`, or the sheet's own height
  * when it has none).
  */
-function useSheetMotion({ visible, heights, busy, requestClose }: { visible: boolean; heights: number[]; busy: boolean; requestClose: () => void }) {
+function useSheetMotion({
+  visible,
+  heights,
+  opening,
+  busy,
+  requestClose,
+}: {
+  visible: boolean
+  /** Lowest first. */
+  heights: number[]
+  /** The index it opens at. */
+  opening: number
+  busy: boolean
+  requestClose: () => void
+}) {
   const window = useWindowDimensions()
   const reduceMotion = useReducedMotion()
   const [mounted, setMounted] = useState(visible)
@@ -93,15 +107,15 @@ function useSheetMotion({ visible, heights, busy, requestClose }: { visible: boo
 
   const offset = useSharedValue(reduceMotion ? 0 : window.height)
   const scrim = useSharedValue(0)
-  const height = useSharedValue(heights[0] ?? 0)
-  const at = useSharedValue(0)
+  const height = useSharedValue(heights[opening] ?? 0)
+  const at = useSharedValue(opening)
   const natural = useSharedValue(0)
 
   useEffect(() => {
     const fade = motionTokens(reduceMotion).duration.base
     if (visible) {
-      at.set(0)
-      height.set(heights[0] ?? 0)
+      at.set(opening)
+      height.set(heights[opening] ?? 0)
       if (!reduceMotion) {
         offset.set(window.height)
         offset.set(withSpring(0, SPRING.travel))
@@ -121,7 +135,7 @@ function useSheetMotion({ visible, heights, busy, requestClose }: { visible: boo
   const playDetent = useCallback(() => H.detent(), [])
   const levels = heights.length ? heights : null
   const drag = Gesture.Pan()
-    .enabled(!busy)
+    .enabled(visible && !busy)
     .activeOffsetY([-SPACE.sm, SPACE.sm])
     .onUpdate((e) => {
       const stops = levels ?? [natural.get()]
@@ -133,13 +147,12 @@ function useSheetMotion({ visible, heights, busy, requestClose }: { visible: boo
     .onEnd((e) => {
       const stops = levels ?? [natural.get()]
       const to = settleDetent(stops, at.get(), height.get(), offset.get(), e.velocityY)
-      if (to === 'dismiss') {
-        scheduleOnRN(requestClose)
-        return
-      }
-      if (to !== at.get()) scheduleOnRN(playDetent)
-      at.set(to)
-      height.set(withSpring(stops[to], { ...SPRING.fling, velocity: -e.velocityY }))
+      // A dismiss the owner refuses (a "discard changes?" ask) springs back to where it was.
+      const next = to === 'dismiss' ? at.get() : to
+      if (to === 'dismiss') scheduleOnRN(requestClose)
+      else if (to !== at.get()) scheduleOnRN(playDetent)
+      at.set(next)
+      height.set(withSpring(stops[next], { ...SPRING.fling, velocity: -e.velocityY }))
       offset.set(withSpring(0, { ...SPRING.fling, velocity: e.velocityY }))
     })
 
@@ -185,13 +198,13 @@ export function Sheet({ visible, onClose, title, body, icon, actions = [], deten
   const requestClose = useCallback(() => {
     if (!busy) onClose()
   }, [busy, onClose])
-  const heights = (detents ?? []).map((d) => Math.round(window.height * DETENT[d]))
-  const { mounted, drag, placeStyle, scrimStyle, natural, fixedHeight } = useSheetMotion({ visible, heights, busy, requestClose })
+  const stops = [...new Set(detents)].sort((a, b) => DETENT[a] - DETENT[b])
+  const heights = stops.map((d) => Math.round(window.height * DETENT[d]))
+  const opening = detents ? stops.indexOf(detents[0]) : 0
+  const { mounted, drag, placeStyle, scrimStyle, natural, fixedHeight } = useSheetMotion({ visible, heights, opening, busy, requestClose })
   if (testID) drag.withTestId(`${testID}-drag`)
-
-  useEffect(() => {
-    if (visible && mounted && titleRef.current) AccessibilityInfo.sendAccessibilityEvent(titleRef.current, 'focus')
-  }, [visible, mounted])
+  // Once the modal is on screen: iOS presents it a frame after mount and drops a focus sent earlier.
+  const focusTitle = () => titleRef.current && AccessibilityInfo.sendAccessibilityEvent(titleRef.current, 'focus')
 
   const handle = android ? HANDLE.android : HANDLE.ios
 
@@ -204,9 +217,10 @@ export function Sheet({ visible, onClose, title, body, icon, actions = [], deten
       statusBarTranslucent
       navigationBarTranslucent
       onRequestClose={requestClose}
+      onShow={focusTitle}
     >
       {/* A Modal is its own native root: gestures inside it need their own root view. */}
-      <GestureHandlerRootView style={styles.fill}>
+      <GestureHandlerRootView testID={testID && `${testID}-root`} pointerEvents={visible ? 'auto' : 'none'} style={styles.fill}>
         <KeyboardAvoidingView style={styles.end} behavior={KEYBOARD_BEHAVIOR}>
           <Animated.View
             testID={testID && `${testID}-scrim`}
@@ -276,14 +290,14 @@ const styles = StyleSheet.create({
   sheet: {
     borderTopLeftRadius: RADIUS.sheet,
     borderTopRightRadius: RADIUS.sheet,
-    paddingTop: SPACE.xl,
     paddingHorizontal: SPACE.gutter,
     gap: SPACE.md,
   },
-  head: { gap: SPACE.md },
+  /** The top padding is the head's, so the handle above the title is inside the drag's bounds (Android checks them). */
+  head: { gap: SPACE.md, paddingTop: SPACE.xl },
   handleHit: {
     position: 'absolute',
-    top: -SPACE.xl,
+    top: 0,
     alignSelf: 'center',
     width: SIZE.targetAndroid * 2,
     height: SPACE.xl,

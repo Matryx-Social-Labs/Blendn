@@ -1,15 +1,15 @@
 import { Image } from 'expo-image'
-import type { ReactNode } from 'react'
 import { StyleSheet, View } from 'react-native'
 import Svg, { Polygon } from 'react-native-svg'
 
 import { Icon } from '../ui/Icon'
-import { CREATURE_PALETTES, MATERIAL, PALETTE_GLYPH, RADIUS, SPACE } from '../../lib/design/tokens'
+import { MATERIAL, PALETTE_GLYPH, RADIUS, SPACE } from '../../lib/design/tokens'
+import { Creature, creatureFor } from './Creature'
 import { useIncreaseContrast } from './shared'
 
 export type AvatarSize = 24 | 32 | 40 | 56 | 72 | 112
 
-/** The glyph sits at half the disc; a crew square's corner is 30% of its side (the Avatar page). */
+/** A crew's emblem sits at half the square; its corner is 30% of its side (the Avatar page). */
 const GLYPH_FRACTION = 0.5
 const CREW_CORNER = 0.3
 
@@ -22,8 +22,8 @@ export type AvatarProps = {
   testID?: string
 } & (
   | { kind: 'photo'; uri: string }
-  /** `glyph` draws the creature at the size it is given (the creature set, P5); `palette` is the pseudonym's hash. */
-  | { kind: 'creature'; palette: number; glyph: (size: number) => ReactNode }
+  /** The pseudonym (the `markSeed`, never a user id): it picks the creature and its palette (`creatureFor`). */
+  | { kind: 'creature'; pseudonym: string }
   /** A crew's emblem plate: two colours. */
   | { kind: 'crew'; plate: readonly [string, string] }
 )
@@ -42,9 +42,9 @@ function Plate({ colors, testID }: { colors: readonly [string, string]; testID?:
  * Who someone is, as a picture (DESIGN-BRIEF §12, guidelines/components/Avatar.html).
  *
  * - `photo`: earned; only where the room names someone to you.
- * - `creature`: everyone else. An outline animal at half the disc on a
- *   two-colour plate from the eight creature palettes; the same pseudonym
- *   draws the same one everywhere in one event.
+ * - `creature`: everyone else, as `<Creature>` draws them: an outline animal
+ *   at half the disc on a two-colour plate; the same pseudonym draws the same
+ *   one everywhere in one event.
  * - `crew`: a square with 30% corners on the crew's emblem plate.
  *
  * Decorative when the name is beside it; given `label`, it reads the name (a
@@ -55,8 +55,6 @@ function Plate({ colors, testID }: { colors: readonly [string, string]; testID?:
 export function Avatar(props: AvatarProps) {
   const { size, ring, label, testID } = props
   const contrast = useIncreaseContrast()
-  const radius = props.kind === 'crew' ? Math.round(size * CREW_CORNER) : RADIUS.capsule
-  const glyphSize = Math.round(size * GLYPH_FRACTION)
   const ringColor = contrast ? MATERIAL.hairlineIncreaseContrast : ring
 
   const name = label && (props.kind === 'crew' ? `${label}, crew` : label)
@@ -64,12 +62,20 @@ export function Avatar(props: AvatarProps) {
     ? { accessible: true, accessibilityLabel: name }
     : { accessibilityElementsHidden: true, importantForAccessibility: 'no-hide-descendants' as const }
 
+  if (props.kind === 'creature') {
+    return (
+      <View testID={testID} style={{ width: size, height: size }} {...a11y}>
+        <Creature {...creatureFor(props.pseudonym)} size={size} ring={ringColor} />
+      </View>
+    )
+  }
+  const radius = props.kind === 'crew' ? Math.round(size * CREW_CORNER) : RADIUS.capsule
   return (
     <View testID={testID} style={{ width: size, height: size }} {...a11y}>
       {ringColor ? (
         <View
           testID={testID && `${testID}-ring`}
-          style={[styles.ring, { backgroundColor: ringColor, borderRadius: radius === RADIUS.capsule ? radius : radius + SPACE.xxs }]}
+          style={[styles.ring, { backgroundColor: ringColor, borderRadius: props.kind === 'crew' ? radius + SPACE.xxs : radius }]}
         />
       ) : null}
       <View testID={testID && `${testID}-body`} style={[styles.body, { width: size, height: size, borderRadius: radius }]}>
@@ -77,11 +83,8 @@ export function Avatar(props: AvatarProps) {
           <Image source={{ uri: props.uri }} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} />
         ) : (
           <>
-            <Plate
-              testID={testID && `${testID}-plate`}
-              colors={props.kind === 'crew' ? props.plate : CREATURE_PALETTES[props.palette % CREATURE_PALETTES.length]}
-            />
-            {props.kind === 'crew' ? <Icon name="users" size={glyphSize} color={PALETTE_GLYPH.creature} /> : props.glyph(glyphSize)}
+            <Plate testID={testID && `${testID}-plate`} colors={props.plate} />
+            <Icon name="users" size={Math.round(size * GLYPH_FRACTION)} color={PALETTE_GLYPH.creature} />
           </>
         )}
       </View>

@@ -96,7 +96,8 @@ export function IconButton({
             {glyph}
           </Material>
         )}
-        {pressed && android ? <View style={[StyleSheet.absoluteFill, styles.wash]} /> : null}
+        {/* Android's live press is the ripple; the wash stands in for it only in the gallery. */}
+        {previewState === 'pressed' && android ? <View style={[StyleSheet.absoluteFill, styles.wash]} /> : null}
         {contrast ? (
           <View
             testID={testID && `${testID}-contrast`}

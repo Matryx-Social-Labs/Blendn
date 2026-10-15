@@ -47,15 +47,23 @@ export function font(role: keyof typeof TYPE, bold: boolean, family: string = TY
   return { ...TYPE[role], fontFamily: (bold && BOLDER[family]) || family }
 }
 
+/**
+ * The last answer per setting, shared by every component, so one mounted after
+ * the first starts right instead of drawing a frame without the setting (as
+ * `<Material>` does for Reduce Transparency).
+ */
+const lastAnswer = new Map<AccessibilityChangeEventName, boolean>()
+
 function useSetting(query: () => Promise<boolean>, event: AccessibilityChangeEventName) {
-  const [on, setOn] = useState(false)
+  const [on, setOn] = useState(() => lastAnswer.get(event) ?? false)
   useEffect(() => {
     let live = true
-    query().then(
-      (value) => live && setOn(value),
-      () => {}
-    )
-    const sub = AccessibilityInfo.addEventListener(event, (value) => live && setOn(Boolean(value)))
+    const update = (value: boolean) => {
+      lastAnswer.set(event, value)
+      if (live) setOn(value)
+    }
+    query().then(update, () => {})
+    const sub = AccessibilityInfo.addEventListener(event, (value) => update(Boolean(value)))
     return () => {
       live = false
       sub.remove()

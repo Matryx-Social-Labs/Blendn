@@ -106,6 +106,9 @@ describe('<SettingsRow>', () => {
     expect(flat('r').backgroundColor).toBe(PRESSED_WASH.ios)
     await render(<SettingsRow icon="shield" title="Blocked users" trail="chevron" previewState="focused" testID="r" />)
     expect(flat('r-focus').borderColor).toBe(COLOR.focusRing)
+    // A switch row is focused as a row too: the switch inside is drawn, not focused.
+    await render(push({ previewState: 'focused' }))
+    expect(flat('r-focus').borderColor).toBe(COLOR.focusRing)
   })
 })
 

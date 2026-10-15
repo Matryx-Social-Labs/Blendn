@@ -36,26 +36,46 @@ export function toastDwell(text: string, { action = false, screenReader = false 
   return action || screenReader ? Math.max(dwell, LONG_DWELL_MS) : dwell
 }
 
-/** A timer that can hold: `pause` keeps what was left, `resume` runs it out. */
+/**
+ * A timer that can hold: `pause` keeps what is left (once, however many
+ * fingers), `resume` runs it out. A longer `ms` (a screen reader found on)
+ * extends what is left; nothing else restarts it, a parent's re-render
+ * included.
+ */
 function useDwell(ms: number, onDone: () => void) {
-  const state = useRef({ left: ms, since: 0, timer: undefined as ReturnType<typeof setTimeout> | undefined })
+  const done = useRef(onDone)
+  useEffect(() => {
+    done.current = onDone
+  })
+  const state = useRef({ left: ms, total: ms, since: 0, paused: true, timer: undefined as ReturnType<typeof setTimeout> | undefined })
   const resume = useCallback(() => {
     const s = state.current
-    clearTimeout(s.timer)
+    if (!s.paused) return
+    s.paused = false
     s.since = Date.now()
-    s.timer = setTimeout(onDone, s.left)
-  }, [onDone])
+    s.timer = setTimeout(() => done.current(), s.left)
+  }, [])
   const pause = useCallback(() => {
     const s = state.current
+    if (s.paused) return
+    s.paused = true
     clearTimeout(s.timer)
     s.left = Math.max(0, s.left - (Date.now() - s.since))
   }, [])
   useEffect(() => {
     const s = state.current
-    s.left = ms
     resume()
     return () => clearTimeout(s.timer)
-  }, [ms, resume])
+  }, [resume])
+  useEffect(() => {
+    const s = state.current
+    if (ms === s.total) return
+    const running = !s.paused
+    pause()
+    s.left = Math.max(0, s.left + ms - s.total)
+    s.total = ms
+    if (running) resume()
+  }, [ms, pause, resume])
   return { pause, resume }
 }
 
@@ -95,15 +115,29 @@ function useToastMotion(onDismiss: () => void) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  const exit = { duration: motionTokens(reduceMotion).duration.quick, easing: Easing.bezier(...EASING.exit) }
   const [gone, setGone] = useState(false)
   const leave = useCallback(() => {
     if (gone) return
     setGone(true)
-    const exit = { duration: motionTokens(reduceMotion).duration.quick, easing: Easing.bezier(...EASING.exit) }
-    if (!reduceMotion) offset.set(withTiming(android ? EXIT_DRIFT : -(height.get() + insets.top + SPACE.sm), exit))
+    // Outward from wherever it is: a swipe has already moved it.
+    if (!reduceMotion) offset.set(withTiming(android ? offset.get() + EXIT_DRIFT : -(height.get() + insets.top + SPACE.sm), exit))
     if (android) opacity.set(withTiming(0, exit))
-    setTimeout(onDismiss, reduceMotion && !android ? 0 : exit.duration)
-  }, [gone, android, reduceMotion, onDismiss, insets.top, offset, opacity, height])
+    // `exit` is rebuilt each render from `reduceMotion`, which is listed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gone, android, reduceMotion, insets.top, offset, opacity, height])
+
+  // `onDismiss` once the exit has played, and never after an unmount.
+  const dismiss = useRef(onDismiss)
+  useEffect(() => {
+    dismiss.current = onDismiss
+  })
+  const exitMs = reduceMotion && !android ? 0 : exit.duration
+  useEffect(() => {
+    if (!gone) return
+    const timer = setTimeout(() => dismiss.current(), exitMs)
+    return () => clearTimeout(timer)
+  }, [gone, exitMs])
 
   const swipe = Gesture.Pan()
     .activeOffsetY(side * SPACE.sm)

@@ -1,4 +1,4 @@
-import { Children, Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
+import { Children, Fragment, isValidElement, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Platform, Pressable, StyleSheet, Switch, Text, View } from 'react-native'
 
 import { Icon, type IconName } from '../ui/Icon'
@@ -101,7 +101,10 @@ export function SettingsRow({
       accessibilityState={{ disabled, busy, checked: isSwitch ? value : undefined }}
       style={({ pressed }) => [
         styles.row,
-        (pressed || previewState === 'pressed') && { backgroundColor: PRESSED_WASH[Platform.OS === 'android' ? 'android' : 'ios'] },
+        // Android's live press is the ripple; the wash stands in for it only in the gallery.
+        ((pressed && Platform.OS !== 'android') || previewState === 'pressed') && {
+          backgroundColor: PRESSED_WASH[Platform.OS === 'android' ? 'android' : 'ios'],
+        },
         disabled && { opacity: OPACITY.disabled },
       ]}
     >
@@ -129,7 +132,7 @@ export function SettingsRow({
           color={contrast ? COLOR.textPrimary : COLOR.textTertiary}
         />
       ) : null}
-      {(focused || previewState === 'focused') && !isSwitch ? (
+      {focused || previewState === 'focused' ? (
         <View testID={testID && `${testID}-focus`} pointerEvents="none" style={styles.focus} />
       ) : null}
     </Pressable>
@@ -153,7 +156,8 @@ export function SettingsGroup({ title, children, testID }: { title?: string; chi
       ) : null}
       <View testID={testID && `${testID}-card`} style={[styles.card, contrast && IC_HAIRLINE]}>
         {Children.toArray(children).map((row, i) => (
-          <Fragment key={i}>
+          // `toArray` keys each row, so a row's focus and rollback state stay with it when rows come and go.
+          <Fragment key={isValidElement(row) ? row.key : i}>
             {i ? <View testID={testID && `${testID}-hairline`} accessibilityElementsHidden style={[styles.hairline, contrast && styles.hairlineContrast]} /> : null}
             {row}
           </Fragment>

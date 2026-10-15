@@ -118,8 +118,48 @@ describe('<Toast>', () => {
     await advance(10000)
     expect(onDismiss).not.toHaveBeenCalled()
     await fireEvent(screen.getByTestId('t'), 'touchEnd')
-    await advance(2000 + 1000)
+    await advance(2000)
+    // Then the exit plays.
+    await advance(1000)
     expect(onDismiss).toHaveBeenCalledTimes(1)
+  })
+
+  it('a parent re-rendering does not restart the dwell', async () => {
+    const onDismiss = jest.fn()
+    await render(<Toast kind="info" text="You left." onDismiss={() => onDismiss()} />)
+    for (let i = 0; i < 3; i++) {
+      await advance(2000)
+      await screen.rerender(<Toast kind="info" text="You left." onDismiss={() => onDismiss()} />)
+    }
+    await advance(0)
+    await advance(1000)
+    expect(onDismiss).toHaveBeenCalledTimes(1)
+  })
+
+  it('a second finger does not count the hold twice', async () => {
+    const onDismiss = jest.fn()
+    await render(<Toast kind="info" text="You left." onDismiss={onDismiss} testID="t" />)
+    await advance(2000)
+    await fireEvent(screen.getByTestId('t'), 'touchStart')
+    await advance(1500)
+    await fireEvent(screen.getByTestId('t'), 'touchStart')
+    await advance(500)
+    await fireEvent(screen.getByTestId('t'), 'touchEnd')
+    // 3 s of dwell were left when the first finger landed.
+    await advance(2900)
+    expect(onDismiss).not.toHaveBeenCalled()
+    await advance(100)
+    await advance(1000)
+    expect(onDismiss).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not call onDismiss after it has been unmounted', async () => {
+    const onDismiss = jest.fn()
+    await render(<Toast kind="info" text="Removed" action={{ label: 'Undo', onPress: () => {} }} onDismiss={onDismiss} />)
+    await fireEvent.press(screen.getByRole('button', { name: 'Undo' }))
+    await screen.unmount()
+    await advance(20000)
+    expect(onDismiss).not.toHaveBeenCalled()
   })
 
   it('enters on M.snap; under Reduce Motion it does not move', async () => {

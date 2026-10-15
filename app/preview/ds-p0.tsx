@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
 import { SafeAreaInsetsContext, useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -11,8 +11,7 @@ import { SettingsGroup, SettingsRow } from '../../components/ds/SettingsRow'
 import { Sheet, type SheetProps } from '../../components/ds/Sheet'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { Toast, type ToastKind } from '../../components/ds/Toast'
-import { Icon } from '../../components/ui/Icon'
-import { COLOR, CREATURE_PALETTES, PALETTE_GLYPH, RADIUS, SIZE, SPACE, TYPE, VENUE_PLATES } from '../../lib/design/tokens'
+import { COLOR, CREATURE_PALETTES, RADIUS, SIZE, SPACE, TYPE, VENUE_PLATES } from '../../lib/design/tokens'
 
 /**
  * Every P0 system component in every state it draws, on demand
@@ -32,6 +31,12 @@ export default function DsP0Preview() {
   const insets = useSafeAreaInsets()
   const [sheet, setSheet] = useState<keyof typeof SHEETS | null>(null)
   const [toast, setToast] = useState<{ kind: ToastKind; key: number } | null>(null)
+  // A busy sheet will not close (that is the state), so the gallery's lets go after a while.
+  useEffect(() => {
+    if (sheet !== 'busy') return
+    const timer = setTimeout(() => setSheet(null), BUSY_SHEET_MS)
+    return () => clearTimeout(timer)
+  }, [sheet])
 
   return (
     <View style={styles.page}>
@@ -282,8 +287,7 @@ function Settings() {
 
 const SIZES_AVATAR: AvatarSize[] = [24, 32, 40, 56, 72, 112]
 const CREW_PLATE = [CREATURE_PALETTES[0][0], CREATURE_PALETTES[2][1]] as const
-/** Stand-in glyph until the creature set (P5) lands. */
-const cat = (size: number) => <Icon name="cat" size={size} color={PALETTE_GLYPH.creature} />
+const PSEUDONYMS = ['Night Cat', 'Velvet Heron', 'Cosmic Panda', 'Quiet Fox', 'Neon Owl', 'Lucky Otter', 'Cosmic Comet', 'Velvet Lion']
 const PHOTO = 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=256'
 
 function Avatars() {
@@ -293,25 +297,25 @@ function Avatars() {
         {SIZES_AVATAR.map((s) => <Avatar key={s} kind="photo" uri={PHOTO} size={s} />)}
       </Cell>
       <Cell label="creature" testID="ds-avatar-creature" style={styles.rowEnd}>
-        {SIZES_AVATAR.map((s) => <Avatar key={s} kind="creature" palette={1} glyph={cat} size={s} />)}
+        {SIZES_AVATAR.map((s) => <Avatar key={s} kind="creature" pseudonym="Night Cat" size={s} />)}
       </Cell>
       <Cell label="crew square" testID="ds-avatar-crew" style={styles.rowEnd}>
         {SIZES_AVATAR.map((s) => <Avatar key={s} kind="crew" plate={CREW_PLATE} size={s} />)}
       </Cell>
       <Cell label="ring on ink · white ring" testID="ds-avatar-ring" style={styles.row}>
         <Avatar kind="photo" uri={PHOTO} size={32} ring={COLOR.ink} />
-        <Avatar kind="creature" palette={1} glyph={cat} size={32} ring={COLOR.ink} />
+        <Avatar kind="creature" pseudonym="Night Cat" size={32} ring={COLOR.ink} />
         <Avatar kind="photo" uri={PHOTO} size={24} ring={COLOR.textPrimary} />
       </Cell>
       <Cell label="a stack of six at 32, −8" testID="ds-avatar-stack" style={styles.stack}>
-        {[0, 1, 2, 3, 4, 5].map((i) => (
-          <View key={i} style={i ? styles.overlap : null}>
-            <Avatar kind="creature" palette={i} glyph={cat} size={32} ring={COLOR.ink} />
+        {PSEUDONYMS.slice(0, 6).map((name, i) => (
+          <View key={name} style={i ? styles.overlap : null}>
+            <Avatar kind="creature" pseudonym={name} size={32} ring={COLOR.ink} />
           </View>
         ))}
       </Cell>
-      <Cell label="the eight palettes" testID="ds-avatar-palettes" style={styles.row}>
-        {CREATURE_PALETTES.map((_, i) => <Avatar key={i} kind="creature" palette={i} glyph={cat} size={40} />)}
+      <Cell label="eight pseudonyms" testID="ds-avatar-pseudonyms" style={styles.row}>
+        {PSEUDONYMS.map((name) => <Avatar key={name} kind="creature" pseudonym={name} size={40} />)}
       </Cell>
     </Section>
   )
@@ -368,6 +372,7 @@ function Toasts({ onShow }: { onShow: (kind: ToastKind) => void }) {
 }
 
 const noop = () => {}
+const BUSY_SHEET_MS = 4000
 const SHEETS: Record<string, (close: () => void) => Omit<SheetProps, 'visible' | 'onClose'>> = {
   short: (close) => ({
     title: 'Share Vinyl Night',

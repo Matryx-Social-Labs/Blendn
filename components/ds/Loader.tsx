@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { AccessibilityInfo, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
+import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import Animated, {
   cancelAnimation,
   Easing,
@@ -13,12 +13,8 @@ import Animated, {
 import { COLOR, DURATION, EASING, FONT_FAMILY, RADIUS, SPACE, TYPE } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
 import { tint } from '../../lib/theme'
+import { DiscMark } from './DiscMark'
 import { font, minTarget, useBoldText } from './shared'
-
-const MONOGRAM = require('../../assets/logo/monogram-gradient.png')
-const MONOGRAM_WHITE = require('../../assets/logo/monogram-white.png')
-/** The monogram's width / height (`app/index.tsx`). */
-const MONOGRAM_ASPECT = 453 / 534
 
 /** The spinner's track under its turning arc. */
 const TRACK_ALPHA = 0.25
@@ -156,11 +152,7 @@ export function Loader({
           ]}
         />
         <Animated.View style={markStyle}>
-          <Image
-            source={ink ? MONOGRAM_WHITE : MONOGRAM}
-            style={{ height: markHeight, width: markHeight * MONOGRAM_ASPECT, tintColor: ink ? COLOR.ink : undefined }}
-            resizeMode="contain"
-          />
+          <DiscMark height={markHeight} fill={ink ? 'ink' : 'gradient'} />
         </Animated.View>
       </View>
       {line ? (

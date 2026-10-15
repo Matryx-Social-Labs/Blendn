@@ -100,11 +100,14 @@ describe('<Sheet>', () => {
     ])
   })
 
-  it('moves focus to the title as it opens, and plays nothing', async () => {
+  it('moves focus to the title once it is shown, and plays nothing', async () => {
     const focus = jest.spyOn(AccessibilityInfo, 'sendAccessibilityEvent').mockImplementation(() => {})
     const spies = Object.keys(H).map((k) => jest.spyOn(H, k as keyof typeof H).mockImplementation(() => {}))
     await render(signOut())
     expect(screen.getByRole('header', { name: 'Sign out?' })).toBeTruthy()
+    // Not before the modal is on screen: iOS presents it a frame later and drops an early focus.
+    expect(focus).not.toHaveBeenCalled()
+    await fireEvent(screen.getByTestId('s-modal'), 'show')
     expect(focus).toHaveBeenCalledWith(expect.anything(), 'focus')
     for (const spy of spies) expect(spy).not.toHaveBeenCalled()
   })
@@ -171,6 +174,31 @@ describe('<Sheet>', () => {
       ])
     )
     expect(detent).toHaveBeenCalledTimes(1)
+  })
+
+  it('opens at its first detent even when the list is not in order, and drags between them', async () => {
+    const detent = jest.spyOn(H, 'detent').mockImplementation(() => {})
+    const onClose = jest.fn()
+    const { height } = Dimensions.get('window')
+    await render(signOut({ onClose, detents: ['tall', 'medium'] }))
+    expect(flat('s-place').height).toBe(Math.round(height * 0.92))
+    const down = Math.round(height * 0.36)
+    await act(async () =>
+      fireGestureHandler(getByGestureTestId('s-drag'), [
+        { state: State.BEGAN },
+        { state: State.ACTIVE, translationY: 0 },
+        { state: State.ACTIVE, translationY: down },
+        { state: State.END, translationY: down, velocityY: 0 },
+      ])
+    )
+    expect(detent).toHaveBeenCalledTimes(1)
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('takes no touches while it leaves', async () => {
+    await render(signOut())
+    await screen.rerender(signOut({ visible: false }))
+    expect(screen.getByTestId('s-root', { includeHiddenElements: true }).props.pointerEvents).toBe('none')
   })
 
   it('rises on M.travel; under Reduce Motion it does not rise', async () => {
