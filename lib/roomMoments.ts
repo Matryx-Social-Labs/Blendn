@@ -50,6 +50,27 @@ function shortest(long: string, short: string): string {
 }
 
 /**
+ * Every reason, in the order `reasonLine` ranks them: the PersonCard's
+ * reasons panel (the card's head shows the top one). Matching v2's overlaps
+ * are the server's own sentences, already budgeted and positive only. Invents
+ * nothing when the server sent nothing.
+ */
+export function reasonLines(p: ReasonSource & { overlaps?: readonly { text: string }[] }): string[] {
+  const out: string[] = []
+  const intents = p.sharedIntents ?? []
+  if (intents.includes('dating')) out.push('Both open to dating')
+  if (intents.includes('networking')) out.push('Both here to network')
+  if (intents.includes('friends')) out.push('Both here to make friends')
+  const plans = p.sharedPlans ?? 0
+  if (plans > 0) out.push(`Going to ${plans} more ${plans === 1 ? 'event' : 'events'} together`)
+  const nights = p.sharedEvents ?? 0
+  if (nights > 0) out.push(`Both at ${nights} ${nights === 1 ? 'night' : 'nights'} before`)
+  if (p.sharedWorkField && p.workField) out.push(`You both work in ${p.workField}`)
+  for (const o of p.overlaps ?? []) out.push(o.text)
+  return out
+}
+
+/**
  * One short reason to walk over.
  *
  * The same priority the old Grid card's box used —

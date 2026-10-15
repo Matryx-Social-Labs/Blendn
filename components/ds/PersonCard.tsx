@@ -41,6 +41,16 @@ export type PersonCardContentProps = {
   /** Matched and friend: checked in here now, so the card says so. A here-now card always is. */
   here?: boolean
   state?: PersonState
+  /**
+   * The states one at a time, as the gallery draws them, or each on its own:
+   * in a room someone can be liked, waved at and requested all at once, and
+   * one never hides another. Either form sets it.
+   */
+  liked?: boolean
+  requested?: boolean
+  /** A wave on its way: the hand waves (#51). */
+  waving?: boolean
+  waved?: boolean
   /** They waved at you this long ago ("2 min"): the still chip, and Wave reads Wave back (4.2). Kept on the phone, gone after 10 minutes. */
   wavedAtYou?: string
   /** A like or wave the server refused (4.3): one neutral line, never naming the action, maybe with its action. No haptic. */
@@ -100,6 +110,10 @@ export function PersonCardContent({
   variant,
   here = false,
   state = 'none',
+  liked = false,
+  requested = false,
+  waving = false,
+  waved = false,
   wavedAtYou,
   refusal,
   crewLike,
@@ -116,7 +130,11 @@ export function PersonCardContent({
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const reduceMotion = useReducedMotion()
-  const likedStyle = useLikedPop(state, reduceMotion)
+  const isLiked = liked || state === 'liked'
+  const isRequested = requested || state === 'requested'
+  const waveBusy = waving || state === 'waveBusy'
+  const isWaved = waved || state === 'waved'
+  const likedStyle = useLikedPop(isLiked, reduceMotion)
 
   // 4.3: the refusal is read as it arrives, or a screen reader hears nothing happen.
   const refusalText = refusal?.text
@@ -153,11 +171,11 @@ export function PersonCardContent({
         ? null
         : variant === 'friend'
           ? `Message opens your chat with ${name}.`
-          : state === 'requested'
+          : isRequested
             ? `Request sent to ${name}. They’ll see your name and photo.`
-            : crewLike && state !== 'liked' && (variant === 'here' || variant === 'was')
+            : crewLike && !isLiked && (variant === 'here' || variant === 'was')
               ? `A crew like is shown to ${name} as ${crewLike.name}, never as you.`
-              : `${state === 'waved' && variant === 'here' ? 'Waved. ' : ''}Message sends a request and reveals you to ${name}.`
+              : `${isWaved && variant === 'here' ? 'Waved. ' : ''}Message sends a request and reveals you to ${name}.`
 
   const circle = (icon: IconName, label: string, onPress?: () => void, busy = false) => (
     <Control
@@ -240,7 +258,7 @@ export function PersonCardContent({
         {variant === 'matched' ? (
           <Button label="Say hi" onPress={onSayHi} style={styles.grow} testID={id('say-hi')} />
         ) : variant === 'here' || variant === 'was' ? (
-          state === 'liked' ? (
+          isLiked ? (
             <Animated.View
               testID={id('liked')}
               accessible
@@ -284,14 +302,14 @@ export function PersonCardContent({
         ) : null}
 
         {variant === 'here' ? (
-          state === 'waved' ? (
+          isWaved ? (
             <View testID={id('waved')} accessible accessibilityLabel="Waved" style={[styles.pill, styles.liked]}>
               <Icon name="check" size={ICON.control} color={COLOR.ink} active />
               <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('button', bold), styles.onWhite]}>
                 Waved
               </Text>
             </View>
-          ) : wavedAtYou && state !== 'waveBusy' ? (
+          ) : wavedAtYou && !waveBusy ? (
             <Control
               testID={id('wave-back')}
               radius={RADIUS.capsule}
@@ -306,11 +324,11 @@ export function PersonCardContent({
               </Text>
             </Control>
           ) : (
-            circle('hand', `Wave at ${name}`, onWave, state === 'waveBusy')
+            circle('hand', `Wave at ${name}`, onWave, waveBusy)
           )
         ) : null}
 
-        {variant === 'pre' || variant === 'matched' ? null : state === 'requested' ? (
+        {variant === 'pre' || variant === 'matched' ? null : isRequested ? (
           <View accessible accessibilityLabel={`Request sent to ${name}`} style={[styles.pill, styles.grow, { backgroundColor: panel }]}>
             <Icon name="check" size={ICON.control} color={COLOR.textSecondary} />
             <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('button', bold), styles.secondary]}>
@@ -324,7 +342,7 @@ export function PersonCardContent({
         <View style={styles.end}>{circle('ellipsis', `Block or report ${name}`, onMore)}</View>
       </View>
 
-      {crewLike && state !== 'liked' && (variant === 'here' || variant === 'was') ? (
+      {crewLike && !isLiked && (variant === 'here' || variant === 'was') ? (
         <View style={styles.center}>
           <TextAction
             label="Like as yourself"
@@ -373,16 +391,16 @@ function WavingHand({ testID }: { testID?: string }) {
 }
 
 /** #15: Like turns to Liked with a pop, 0.85 → 1 on `M.pop`; Reduce Motion places it. */
-function useLikedPop(state: PersonState, reduceMotion: boolean) {
+function useLikedPop(liked: boolean, reduceMotion: boolean) {
   const scale = useSharedValue(1)
-  const last = useRef(state)
+  const last = useRef(liked)
   useEffect(() => {
     const was = last.current
-    last.current = state
-    if (reduceMotion || was === state || state !== 'liked') return
+    last.current = liked
+    if (reduceMotion || was === liked || !liked) return
     scale.set(LIKE_POP_FROM)
     scale.set(withSpring(1, SPRING.pop))
-  }, [state, reduceMotion, scale])
+  }, [liked, reduceMotion, scale])
   return useAnimatedStyle(() => ({ transform: [{ scale: scale.get() }] }))
 }
 
