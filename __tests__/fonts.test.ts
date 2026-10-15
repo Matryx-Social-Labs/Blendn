@@ -72,17 +72,49 @@ describe('Ember fonts', () => {
   })
 
   /*
-   * EAS uploads by `.easignore` instead of `.gitignore` when it exists, and it
-   * must: otherwise the gitignored Satoshi files never reach a build. That makes
-   * it a second copy of `.gitignore`, and a rule added to one and not the other
-   * would upload what git keeps out (`.env`, signing keys) to the build.
+   * EAS uploads by `.easignore` instead of every `.gitignore` when it exists,
+   * and it must: otherwise the gitignored Satoshi files never reach a build.
+   * That makes it a second copy of all of them — the nested ones too (ios/:
+   * Pods, build, .xcode.env.local; android/: local.properties, .cxx) — and a
+   * rule added to one and not the other would upload what git keeps out
+   * (`.env`, signing keys, build trees) to the build.
    */
   it('uploads to EAS everything git ignores, except Satoshi', () => {
     const rules = (file: string) =>
       fs.readFileSync(path.join(ROOT, file), 'utf8').split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'))
+    /** A nested rule as git applies it: anchored when it has an inner slash, at any depth below otherwise. */
+    const scoped = (dir: string, rule: string) => {
+      const negated = rule.startsWith('!')
+      const pattern = negated ? rule.slice(1) : rule
+      const inner = pattern.replace(/\/$/, '').includes('/')
+      return `${negated ? '!' : ''}${dir}/${inner ? pattern.replace(/^\//, '') : `**/${pattern}`}`
+    }
+    const nested = execFileSync('git', ['ls-files', '*.gitignore'], { cwd: ROOT, encoding: 'utf8' })
+      .split('\n')
+      .filter((f) => f && f !== '.gitignore')
     const satoshi = '/assets/fonts/satoshi/'
+    const wanted = [
+      ...rules('.gitignore').filter((r) => r !== satoshi),
+      ...nested.flatMap((f) => rules(f).map((r) => scoped(path.dirname(f), r))),
+    ]
+    expect(nested).toEqual(expect.arrayContaining(['ios/.gitignore', 'android/.gitignore']))
     expect(rules('.gitignore')).toContain(satoshi)
     expect(rules('.easignore')).not.toContain(satoshi)
-    expect(rules('.gitignore').filter((r) => r !== satoshi && !rules('.easignore').includes(r))).toEqual([])
+    expect(wanted.filter((r) => !rules('.easignore').includes(r))).toEqual([])
+  })
+
+  /*
+   * Jest maps every Satoshi .otf to a stub, so a typo in one of lib/fonts.ts's
+   * four requires would pass here and fail only in Metro. Where the folder is
+   * present (a developer's machine, a build machine), each required file must
+   * be in it; CI has no folder and skips this.
+   */
+  it('requires Satoshi files that exist, wherever the folder does', () => {
+    const required = [
+      ...fs.readFileSync(path.join(ROOT, 'lib/fonts.ts'), 'utf8').matchAll(/require\('\.\.\/(assets\/fonts\/satoshi\/[^']+)'\)/g),
+    ].map((m) => m[1])
+    expect(required).toHaveLength(4)
+    if (!fs.existsSync(path.join(ROOT, 'assets/fonts/satoshi'))) return
+    expect(required.filter((rel) => !fs.existsSync(path.join(ROOT, rel)))).toEqual([])
   })
 })

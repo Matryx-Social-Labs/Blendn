@@ -84,23 +84,30 @@ unmodified OTFs from `assets/fonts/satoshi/`, which is gitignored, and
 `__tests__/fonts.test.ts` fails if one is ever tracked.
 
 Every machine that runs Metro or builds — `npx expo start`, `expo run:*`,
-`npm run ship:local`, a cloud `eas build` — copies them in first, from the
-design-system export (company-internal; ask the owner, never a public link):
+`npm run ship:local`, an `eas build` started from it — copies them in first,
+from the design-system export (company-internal; ask the owner, never a public
+link):
 
 ```bash
 mkdir -p assets/fonts/satoshi
 cp <export>/uploads/Satoshi_Complete/Fonts/OTF/Satoshi-{Regular,Medium,Bold,Black}.otf assets/fonts/satoshi/
 ```
 
-Without them the bundle fails, naming the missing file; it never silently ships
-the system font. `npm test`, typecheck and lint do not need them (Jest maps the
-files to a stub), so CI is unaffected.
+Without them a build stops in its first minute: `scripts/check-satoshi.sh`
+runs as EAS's `eas-build-pre-install` hook and in `npm run ship:local`'s
+guards, and names the missing files. (Development-client builds are let
+through: they embed no bundle.) `npm test`, typecheck and lint do not need the
+fonts — Jest maps them to a stub — so the GitHub `verify` check is unaffected.
 
-**They reach EAS through `.easignore`.** EAS uploads by `.gitignore` unless
-`.easignore` exists, and by `.gitignore` the fonts would be left behind — on
-`eas build --local` too, which copies the project the same way. `.easignore` is
-`.gitignore` minus the Satoshi line; `fonts.test.ts` fails if a rule is added to
-one and not the other. Geist Mono is OFL and comes from npm.
+**Which builds get them, and which cannot:**
+
+| Build | Satoshi |
+|---|---|
+| `eas build --local`, `npm run ship:local` | Yes, from this checkout. EAS copies the project by `.gitignore` unless `.easignore` exists; `.easignore` is the root and nested (`ios/`, `android/`) `.gitignore` rules minus the Satoshi line, and `fonts.test.ts` fails if they drift. `ship:local`'s iOS smoke test copies the folder into its fresh worktree |
+| `eas build` run from a machine that has them | Yes: a CLI upload goes by `.easignore` the same way |
+| The EAS workflows (`stage-testflight.yml`, `prod-appstore.yml`) | **No.** They check out from GitHub, where the fonts never are, and `.easignore` plays no part. They fail at the pre-install check with the message above. Feeding them the fonts (an EAS secret file, say) is a licence decision the owner has not made; until then, ship from a Mac |
+
+Geist Mono is OFL and comes from npm.
 
 ### ⚠️ Xcode 27: `expo run:ios` cannot find the Simulator, and the Pods are too old for it
 

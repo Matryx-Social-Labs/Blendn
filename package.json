@@ -18,7 +18,8 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "lint:design": "node scripts/check-design-tokens.js",
-    "tokens": "node scripts/generate-design-tokens.js"
+    "tokens": "node scripts/generate-design-tokens.js",
+    "eas-build-pre-install": "bash scripts/check-satoshi.sh"
   },
   "dependencies": {
     "@expo-google-fonts/geist-mono": "^0.4.3",
