@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import Animated, { ReduceMotion, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated'
 
@@ -45,8 +45,11 @@ export function SegmentedControl({ items, selected, onChange, disabled = false, 
   const n = items.length
 
   const pos = useSharedValue(selected)
+  // The last segment asked for, not the thumb mid-flight.
+  const target = useRef(selected)
   useEffect(() => {
-    if (pos.get() === selected) return
+    if (target.current === selected) return
+    target.current = selected
     pos.set(reduceMotion ? selected : withSpring(selected, { ...SPRING.snap, reduceMotion: ReduceMotion.Never }))
   }, [selected, reduceMotion, pos])
   // Percentages of the track, so the thumb is right on the first frame, before any layout.
@@ -74,6 +77,8 @@ export function SegmentedControl({ items, selected, onChange, disabled = false, 
                 onChange(i)
               }}
               disabled={disabled}
+              // A segment is 40 pt inside the 4 pt track; the slop makes it the control's 48.
+              hitSlop={{ top: SPACE.xs, bottom: SPACE.xs }}
               onFocus={() => setFocused(true)}
               onBlur={() => setFocused(false)}
               accessibilityRole="tab"

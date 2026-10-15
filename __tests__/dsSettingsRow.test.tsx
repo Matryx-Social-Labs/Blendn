@@ -64,8 +64,11 @@ describe('<SettingsRow>', () => {
   })
 
   it('the row’s press reaches the toggle: its thumb widens under the finger', async () => {
-    await render(push({ previewState: 'pressed' }))
+    await render(push())
+    await fireEvent(screen.getByTestId('r'), 'pressIn')
     expect(flat('r-toggle-thumb').width).toBe(32)
+    await fireEvent(screen.getByTestId('r'), 'pressOut')
+    expect(flat('r-toggle-thumb').width).toBe(27)
   })
 
   it('busy dims the toggle, not the row', async () => {

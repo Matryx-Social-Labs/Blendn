@@ -6,7 +6,7 @@
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { AccessibilityInfo, StyleSheet } from 'react-native'
+import { AccessibilityInfo, Platform, StyleSheet, TextInput } from 'react-native'
 
 import { TextArea, TextField } from '../components/ds/TextField'
 import { COLOR, FONT_FAMILY, MATERIAL, RADIUS, SIZE } from '../lib/design/tokens'
@@ -48,6 +48,28 @@ describe('<TextField>', () => {
     expect(StyleSheet.flatten(screen.getByText('That doesn’t look like an email.').props.style).color).toBe(COLOR.destructive)
     expect(input().props.accessibilityHint).toBe('That doesn’t look like an email.')
     expect(input().props.accessibilityLabel).toBe('Email')
+  })
+
+  it('an error is announced when it arrives: iOS speaks it, Android’s line is an assertive live region', async () => {
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibilityWithOptions').mockImplementation(() => {})
+    await render(field({ value: 'sam@blendn' }))
+    expect(announce).not.toHaveBeenCalled()
+    await screen.rerender(field({ value: 'sam@blendn', error: 'That doesn’t look like an email.' }))
+    expect(announce).toHaveBeenCalledWith('That doesn’t look like an email.', { queue: true })
+    expect(screen.getByText('That doesn’t look like an email.').props.accessibilityLiveRegion).toBe('assertive')
+    Object.defineProperty(Platform, 'OS', { value: 'android', configurable: true })
+    announce.mockClear()
+    await render(field({ value: 'sam@blendn' }))
+    await screen.rerender(field({ value: 'sam@blendn', error: 'That doesn’t look like an email.' }))
+    expect(announce).not.toHaveBeenCalled()
+    Object.defineProperty(Platform, 'OS', { value: 'ios', configurable: true })
+  })
+
+  it('a tap anywhere on the capsule focuses the field, not only on the text', async () => {
+    const focus = jest.spyOn(TextInput.prototype, 'focus')
+    await render(field())
+    await fireEvent.press(screen.getByTestId('f-box'))
+    expect(focus).toHaveBeenCalledTimes(1)
   })
 
   it('plays nothing on focus or typing (H.error is the submit button’s, once)', async () => {
@@ -131,8 +153,11 @@ describe('<TextArea>', () => {
     expect(input().props.maxLength).toBeUndefined()
   })
 
-  it('grows with the text: nothing is capped', async () => {
+  it('grows with its text (flex-grow from its content, never basis 0) and scales it freely', async () => {
     await render(area())
+    expect(StyleSheet.flatten(input().props.style)).toMatchObject({ flexGrow: 1 })
+    expect(StyleSheet.flatten(input().props.style).flexBasis).toBeUndefined()
+    expect(StyleSheet.flatten(input().props.style).flex).toBeUndefined()
     expect(input().props.maxFontSizeMultiplier).toBeUndefined()
   })
 

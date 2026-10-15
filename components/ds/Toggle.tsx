@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Platform, Pressable, StyleSheet, View } from 'react-native'
 import Animated, { Easing, ReduceMotion, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated'
 
@@ -34,6 +34,7 @@ const COLOUR_EASE = Easing.bezier(...EASING.standard)
 
 export type ToggleProps = {
   value: boolean
+  /** Without it the toggle is drawn, not operated: its row (a `SettingsRow`) is the control. */
   onValueChange?: (next: boolean) => void
   /** The row's title: "Event updates". Not needed inside a `SettingsRow`, which is the element. */
   accessibilityLabel?: string
@@ -73,9 +74,12 @@ export function Toggle({ value, onValueChange, accessibilityLabel, disabled = fa
 
   const pos = useSharedValue(value ? 1 : 0)
   const tone = useSharedValue(value ? 1 : 0)
+  // The last value asked for, not the thumb mid-flight: a flip back before the first frame still lands.
+  const target = useRef(value)
   useEffect(() => {
+    if (target.current === value) return
+    target.current = value
     const to = value ? 1 : 0
-    if (pos.get() === to) return
     pos.set(reduceMotion ? to : withSpring(to, { ...SPRING.snap, reduceMotion: NEVER }))
     tone.set(withTiming(to, { duration: motionTokens(reduceMotion).duration.quick, easing: COLOUR_EASE, reduceMotion: NEVER }))
   }, [value, reduceMotion, pos, tone])
@@ -96,10 +100,13 @@ export function Toggle({ value, onValueChange, accessibilityLabel, disabled = fa
       <Pressable
         testID={testID}
         onPress={() => {
+          if (!onValueChange) return
           H.toggle(!value)
-          onValueChange?.(!value)
+          onValueChange(!value)
         }}
         disabled={disabled}
+        // Without a handler it is drawn by its row, which is the one element and the one focus.
+        focusable={!!onValueChange}
         hitSlop={{ top: slop, bottom: slop, left: 0, right: 0 }}
         onPressIn={() => setDown(true)}
         onPressOut={() => setDown(false)}

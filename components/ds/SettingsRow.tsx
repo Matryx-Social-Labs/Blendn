@@ -74,6 +74,8 @@ export function SettingsRow({
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const [focused, setFocused] = useState(false)
+  // The finger on the row reaches the toggle's thumb.
+  const [down, setDown] = useState(false)
   useRollbackHaptic(error)
 
   const isSwitch = trail === 'switch'
@@ -92,6 +94,8 @@ export function SettingsRow({
       // A plain row has no action, but is not disabled: it must not read as dimmed.
       onPress={trail === 'none' ? undefined : press}
       disabled={disabled || busy}
+      onPressIn={() => setDown(true)}
+      onPressOut={() => setDown(false)}
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
       android_ripple={{ color: PRESSED_WASH.android }}
@@ -107,31 +111,27 @@ export function SettingsRow({
         disabled && { opacity: OPACITY.disabled },
       ]}
     >
-      {({ pressed }) => (
-        <>
-          <Icon name={icon} size={ICON.control} color={ink} />
-          <View style={styles.text}>
-            <Text style={[font('bodyStrong', bold), { color: ink }]}>{title}</Text>
-            {hint ? <Text style={[font('meta', bold), { color: error ? COLOR.destructive : COLOR.textSecondary }]}>{hint}</Text> : null}
-          </View>
-          {busy ? <Spinner testID={testID && `${testID}-spinner`} size={18} /> : null}
-          {isSwitch ? (
-            <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-              <Toggle value={value} disabled={busy} pressed={pressed || previewState === 'pressed'} testID={testID && `${testID}-toggle`} />
-            </View>
-          ) : null}
-          {trail === 'chevron' || trail === 'external' ? (
-            <Icon
-              name={trail === 'chevron' ? 'chevron-right' : 'external-link'}
-              size={ICON.inline}
-              color={contrast ? COLOR.textPrimary : COLOR.textTertiary}
-            />
-          ) : null}
-          {focused || previewState === 'focused' ? (
-            <View testID={testID && `${testID}-focus`} pointerEvents="none" style={styles.focus} />
-          ) : null}
-        </>
-      )}
+      <Icon name={icon} size={ICON.control} color={ink} />
+      <View style={styles.text}>
+        <Text style={[font('bodyStrong', bold), { color: ink }]}>{title}</Text>
+        {hint ? <Text style={[font('meta', bold), { color: error ? COLOR.destructive : COLOR.textSecondary }]}>{hint}</Text> : null}
+      </View>
+      {busy ? <Spinner testID={testID && `${testID}-spinner`} size={18} /> : null}
+      {isSwitch ? (
+        <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          <Toggle value={value} disabled={busy} pressed={down || previewState === 'pressed'} testID={testID && `${testID}-toggle`} />
+        </View>
+      ) : null}
+      {trail === 'chevron' || trail === 'external' ? (
+        <Icon
+          name={trail === 'chevron' ? 'chevron-right' : 'external-link'}
+          size={ICON.inline}
+          color={contrast ? COLOR.textPrimary : COLOR.textTertiary}
+        />
+      ) : null}
+      {focused || previewState === 'focused' ? (
+        <View testID={testID && `${testID}-focus`} pointerEvents="none" style={styles.focus} />
+      ) : null}
     </Pressable>
   )
 }

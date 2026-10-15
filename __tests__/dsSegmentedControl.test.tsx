@@ -78,6 +78,19 @@ describe('<SegmentedControl>', () => {
     expect(Reanimated.withSpring).not.toHaveBeenCalled()
   })
 
+  it('the thumb is one segment wide and sits on the selected one, in percentages of the track', async () => {
+    await draw({ selected: 1 })
+    expect(flat('s-thumb').width).toBe('50%')
+    expect(Reanimated.getAnimatedStyle(screen.getByTestId('s-thumb')).left).toBe('50%')
+    await render(<SegmentedControl items={['Tonight', 'This week', 'Later']} selected={2} onChange={jest.fn()} testID="s" />)
+    expect(Reanimated.getAnimatedStyle(screen.getByTestId('s-thumb')).left).toBe(`${200 / 3}%`)
+  })
+
+  it('each 40 pt segment reaches the 48 pt target', async () => {
+    await draw()
+    expect(screen.getByTestId('s-0').props.hitSlop).toMatchObject({ top: 4, bottom: 4 })
+  })
+
   it('pressed: the other segment dims before the thumb moves', async () => {
     await draw({ previewPressed: 1 })
     expect(flat('s-1').opacity).toBeLessThan(1)

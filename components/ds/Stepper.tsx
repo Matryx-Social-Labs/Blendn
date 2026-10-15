@@ -59,7 +59,12 @@ export function Stepper({ label, value, onChange, min = 1, max = 20, onGlass = f
     const atBound = side === 'minus' ? value <= min : value >= max
     const pressed = down === side || previewState === `pressed-${side}`
     return (
-      <View style={pressed && !android ? styles.pressedIos : null}>
+      // Not separate elements for a screen reader: iOS groups them under the adjustable row, Android needs telling.
+      <View
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        style={pressed && !android ? styles.pressedIos : null}
+      >
         <ScalePress
           testID={testID && `${testID}-${side}`}
           onPress={() => step(side === 'minus' ? -1 : 1)}
@@ -90,7 +95,7 @@ export function Stepper({ label, value, onChange, min = 1, max = 20, onGlass = f
       accessible
       accessibilityRole="adjustable"
       accessibilityLabel={label}
-      accessibilityValue={{ min, max, now: value }}
+      accessibilityValue={{ min, max, now: value, text: String(value) }}
       accessibilityState={{ disabled }}
       accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
       onAccessibilityAction={({ nativeEvent }) => step(nativeEvent.actionName === 'increment' ? 1 : -1)}

@@ -11,9 +11,9 @@ export type DateParts = readonly [string, string, string]
 
 /** Day-first everywhere (India), never a locale switch; the year box is half as wide again. */
 const BOXES = [
-  { name: 'Day', placeholder: 'DD', length: 2, flex: 1 },
-  { name: 'Month', placeholder: 'MM', length: 2, flex: 1 },
-  { name: 'Year', placeholder: 'YYYY', length: 4, flex: 1.5 },
+  { name: 'day', placeholder: 'DD', length: 2, flex: 1 },
+  { name: 'month', placeholder: 'MM', length: 2, flex: 1 },
+  { name: 'year', placeholder: 'YYYY', length: 4, flex: 1.5 },
 ] as const
 /** Digits 1 pt apart, as the page sets them. */
 const DIGIT_TRACKING = 1
@@ -91,7 +91,7 @@ export function DateField({
               selectionColor={COLOR.textPrimary}
               cursorColor={COLOR.textPrimary}
               maxFontSizeMultiplier={CONTROL_FONT_CAP}
-              accessibilityLabel={box.name}
+              accessibilityLabel={`${label}, ${box.name}`}
               accessibilityHint={error}
               accessibilityState={{ disabled }}
               style={[font('heading', bold, FONT_FAMILY.mono[500]), styles.digits]}
@@ -116,9 +116,12 @@ const styles = StyleSheet.create({
   labelRow: { paddingHorizontal: SPACE.xs },
   row: { flexDirection: 'row', gap: SPACE.sm },
   box: { height: SIZE.input, borderRadius: RADIUS.capsule, backgroundColor: COLOR.surface, justifyContent: 'center' },
+  // Fills its 56 pt box, so a tap anywhere in it lands on the text.
   digits: {
+    flex: 1,
     color: COLOR.textPrimary,
     textAlign: 'center',
+    textAlignVertical: 'center',
     fontVariant: ['tabular-nums'],
     letterSpacing: DIGIT_TRACKING,
     padding: 0,

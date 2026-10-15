@@ -22,6 +22,8 @@ jest.mock('react-native-reanimated', () => {
 const reduceMotion = Reanimated.useReducedMotion as jest.Mock
 const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id, { includeHiddenElements: true }).props.style)
 const animated = (id: string) => Reanimated.getAnimatedStyle(screen.getByTestId(id, { includeHiddenElements: true }))
+/** One frame: a jump has landed by then, a spring has not. */
+const FRAME = 16
 const on = (os: 'ios' | 'android') => Object.defineProperty(Platform, 'OS', { value: os, configurable: true })
 
 let toggle: jest.SpyInstance
@@ -87,6 +89,42 @@ describe('<Toggle>', () => {
     await draw()
     await screen.rerender(<Toggle value onValueChange={jest.fn()} accessibilityLabel="Event updates" testID="t" />)
     expect(Reanimated.withSpring).not.toHaveBeenCalled()
+  })
+
+  it('lands at the far end, and back when the value flips back mid-travel', async () => {
+    jest.useFakeTimers()
+    await draw()
+    await screen.rerender(<Toggle value onValueChange={jest.fn()} accessibilityLabel="Event updates" testID="t" />)
+    await act(async () => jest.advanceTimersByTime(1000))
+    expect(animated('t-thumb').left).toBe(51 - 27 - 2)
+    await screen.rerender(<Toggle value onValueChange={jest.fn()} accessibilityLabel="Event updates" testID="t" />)
+    await screen.rerender(<Toggle value={false} onValueChange={jest.fn()} accessibilityLabel="Event updates" testID="t" />)
+    await act(async () => jest.advanceTimersByTime(1000))
+    expect(animated('t-thumb').left).toBe(2)
+    expect(animated('t-on').opacity).toBe(0)
+    jest.useRealTimers()
+  })
+
+  it('Reduce Motion: the thumb is at the far end on the next frame; with motion it is still travelling', async () => {
+    jest.useFakeTimers()
+    await draw()
+    await screen.rerender(<Toggle value onValueChange={jest.fn()} accessibilityLabel="Event updates" testID="t" />)
+    await act(async () => jest.advanceTimersByTime(FRAME))
+    expect(animated('t-thumb').left).toBeLessThan(51 - 27 - 2)
+
+    reduceMotion.mockReturnValue(true)
+    await draw()
+    await screen.rerender(<Toggle value onValueChange={jest.fn()} accessibilityLabel="Event updates" testID="t" />)
+    await act(async () => jest.advanceTimersByTime(FRAME))
+    expect(animated('t-thumb').left).toBe(51 - 27 - 2)
+    jest.useRealTimers()
+  })
+
+  it('drawn by its row (no onValueChange): not focusable, silent', async () => {
+    await render(<Toggle value testID="t" />)
+    expect(screen.getByTestId('t').props.focusable).toBe(false)
+    await fireEvent.press(screen.getByTestId('t'))
+    expect(toggle).not.toHaveBeenCalled()
   })
 
   it('disabled: 45%, does nothing', async () => {

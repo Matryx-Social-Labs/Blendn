@@ -76,6 +76,13 @@ describe('<TopBar>', () => {
     expect(title).toMatchObject({ fontSize: TYPE.bodyStrong.fontSize, fontFamily: FONT_FAMILY.brand[700], textAlign: 'center' })
   })
 
+  it('condensed: the centred title keeps clear of the wider side', async () => {
+    await draw({ state: 'condensed', save: { onPress: jest.fn() } })
+    await fireEvent(screen.getByTestId('top-right'), 'layout', { nativeEvent: { layout: { width: 100, height: 48, x: 0, y: 0 } } })
+    // 16 in, the 100 pt Save, 12 to the title: the same on both sides, so the title stays centred.
+    expect(flat('top-condensed')).toMatchObject({ left: 128, right: 128 })
+  })
+
   it('Android: the arrow back, and the solid bar once scrolled', async () => {
     on('android')
     await draw({ state: 'scrolled' })

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { AccessibilityInfo, Platform, Pressable, StyleSheet, TextInput, View, type TextInputProps } from 'react-native'
+import { AccessibilityInfo, Platform, Pressable, StyleSheet, TextInput, type TextInputProps } from 'react-native'
 
 import { Icon } from '../ui/Icon'
 import { COLOR, ICON, MATERIAL, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
@@ -8,7 +8,7 @@ import { Spinner } from './Loader'
 import { FieldBorder } from './TextField'
 import { CONTROL_FONT_CAP, font, minTarget, useBoldText, useIncreaseContrast } from './shared'
 
-export type SearchFieldProps = Omit<TextInputProps, 'style' | 'editable' | 'placeholderTextColor'> & {
+export type SearchFieldProps = Omit<TextInputProps, 'style' | 'editable' | 'placeholderTextColor' | 'accessibilityLabel' | 'accessibilityRole'> & {
   value: string
   onChangeText: (text: string) => void
   /** Scoped by the screen: "Search events…", "Search cities". Also its name, without the ellipsis. */
@@ -64,7 +64,14 @@ export function SearchField({
   const fill = inSheet && Platform.OS === 'android' ? COLOR.surfaceSunken : MATERIAL.fillOnGlass
 
   return (
-    <View testID={testID} style={[styles.field, { backgroundColor: fill }, disabled && { opacity: OPACITY.disabled }]}>
+    // The whole capsule is the target: a tap beside the text focuses it.
+    <Pressable
+      testID={testID}
+      accessible={false}
+      onPress={() => input.current?.focus()}
+      disabled={disabled}
+      style={[styles.field, { backgroundColor: fill }, disabled && { opacity: OPACITY.disabled }]}
+    >
       {busy ? (
         <Spinner testID={testID && `${testID}-spinner`} size={20} />
       ) : (
@@ -111,7 +118,7 @@ export function SearchField({
         </Pressable>
       ) : null}
       <FieldBorder testID={testID && `${testID}-border`} focused={active} error={false} contrast={contrast} radius={RADIUS.capsule} />
-    </View>
+    </Pressable>
   )
 }
 
@@ -124,5 +131,5 @@ const styles = StyleSheet.create({
     gap: SPACE.sm,
     paddingHorizontal: SPACE.lg,
   },
-  input: { flex: 1, color: COLOR.textPrimary, padding: 0 },
+  input: { flex: 1, alignSelf: 'stretch', textAlignVertical: 'center', color: COLOR.textPrimary, padding: 0 },
 })

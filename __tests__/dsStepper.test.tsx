@@ -28,6 +28,9 @@ jest.mock('react-native-reanimated', () => {
 })
 
 const reduceMotion = Reanimated.useReducedMotion as jest.Mock
+const HIDDEN = { includeHiddenElements: true }
+/** One frame: a jump has landed by then, a spring or a held animation has not. */
+const FRAME = 16
 const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id, { includeHiddenElements: true }).props.style)
 const on = (os: 'ios' | 'android') => Object.defineProperty(Platform, 'OS', { value: os, configurable: true })
 
@@ -57,9 +60,9 @@ describe('<Stepper>', () => {
   it('steps by one with H.select', async () => {
     const onChange = jest.fn()
     await draw({ onChange })
-    await fireEvent.press(screen.getByTestId('s-plus'))
+    await fireEvent.press(screen.getByTestId('s-plus', HIDDEN))
     expect(onChange).toHaveBeenLastCalledWith(3)
-    await fireEvent.press(screen.getByTestId('s-minus'))
+    await fireEvent.press(screen.getByTestId('s-minus', HIDDEN))
     expect(onChange).toHaveBeenLastCalledWith(1)
     expect(select).toHaveBeenCalledTimes(2)
   })
@@ -68,7 +71,7 @@ describe('<Stepper>', () => {
     const onChange = jest.fn()
     await draw({ value: 1, onChange })
     expect(flat('s-minus').opacity).toBe(OPACITY.disabled)
-    await fireEvent.press(screen.getByTestId('s-minus'))
+    await fireEvent.press(screen.getByTestId('s-minus', HIDDEN))
     expect(onChange).not.toHaveBeenCalled()
     expect(select).not.toHaveBeenCalled()
     expect(StyleSheet.flatten(screen.getByText('1', { includeHiddenElements: true }).props.style).color).toBe(COLOR.textPrimary)
@@ -76,11 +79,18 @@ describe('<Stepper>', () => {
     expect(flat('s-plus').opacity).toBe(OPACITY.disabled)
   })
 
+  it('the discs are not separate elements on Android either', async () => {
+    await draw()
+    expect(screen.queryByTestId('s-plus')).toBeNull()
+    expect(screen.getByTestId('s-plus', { includeHiddenElements: true })).toBeTruthy()
+  })
+
   it('is one adjustable element: “Spaces, 2”, swiped up and down', async () => {
     const onChange = jest.fn()
     await draw({ onChange })
     const adj = screen.getByRole('adjustable', { name: 'Spaces' })
-    expect(adj.props.accessibilityValue).toMatchObject({ min: 1, max: 20, now: 2 })
+    // `text`, or iOS reads min/max/now as a percentage (“11%”).
+    expect(adj.props.accessibilityValue).toMatchObject({ min: 1, max: 20, now: 2, text: '2' })
     await fireEvent(adj, 'accessibilityAction', { nativeEvent: { actionName: 'increment' } })
     expect(onChange).toHaveBeenLastCalledWith(3)
     await fireEvent(adj, 'accessibilityAction', { nativeEvent: { actionName: 'decrement' } })
@@ -90,7 +100,7 @@ describe('<Stepper>', () => {
   it('Android pressed: the ripple and the corner squared to 12 dp', async () => {
     on('android')
     await draw()
-    await fireEvent(screen.getByTestId('s-plus'), 'pressIn')
+    await fireEvent(screen.getByTestId('s-plus', HIDDEN), 'pressIn')
     expect(flat('s-plus').borderRadius).toBe(RADIUS.pressedAndroid)
   })
 
@@ -98,7 +108,7 @@ describe('<Stepper>', () => {
     const onChange = jest.fn()
     await draw({ disabled: true, onChange })
     expect(flat('s').opacity).toBe(OPACITY.disabled)
-    await fireEvent.press(screen.getByTestId('s-plus'))
+    await fireEvent.press(screen.getByTestId('s-plus', HIDDEN))
     expect(onChange).not.toHaveBeenCalled()
   })
 
@@ -128,6 +138,26 @@ describe('<ProgressBar>', () => {
     await render(<ProgressBar progress={0.25} testID="p" />)
     await screen.rerender(<ProgressBar progress={0.5} testID="p" />)
     expect(Reanimated.withSpring).not.toHaveBeenCalled()
+  })
+
+  it('lands where the last value says, even when it flips back during the hold', async () => {
+    jest.useFakeTimers()
+    await render(<ProgressBar progress={0.25} testID="p" />)
+    await screen.rerender(<ProgressBar progress={0.5} testID="p" />)
+    await screen.rerender(<ProgressBar progress={0.25} testID="p" />)
+    await act(async () => jest.advanceTimersByTime(2000))
+    expect(Reanimated.getAnimatedStyle(screen.getByTestId('p-fill', { includeHiddenElements: true })).width).toBe('25%')
+    jest.useRealTimers()
+  })
+
+  it('Reduce Motion: the new width on the next frame', async () => {
+    jest.useFakeTimers()
+    reduceMotion.mockReturnValue(true)
+    await render(<ProgressBar progress={0.25} testID="p" />)
+    await screen.rerender(<ProgressBar progress={0.5} testID="p" />)
+    await act(async () => jest.advanceTimersByTime(FRAME))
+    expect(Reanimated.getAnimatedStyle(screen.getByTestId('p-fill', { includeHiddenElements: true })).width).toBe('50%')
+    jest.useRealTimers()
   })
 
   it('clamps to 0–1', async () => {

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Platform, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -49,6 +50,9 @@ export function TopBar({ title, sub, state = 'rest', onBack, actions = [], save,
   const circle = android ? SIZE.circleButtonAndroid : SIZE.circleButton
   const condensed = state === 'condensed'
   const top = insets.top + SPACE.sm
+  // The condensed title is centred, so it keeps clear of the wider side on both: the back circle, or the actions and Save.
+  const [rightWidth, setRightWidth] = useState(0)
+  const inset = SPACE.lg + Math.max(circle, rightWidth) + SPACE.md
 
   return (
     <View testID={testID} style={[styles.header, { paddingTop: top }, !condensed && styles.roomBelow]}>
@@ -75,17 +79,15 @@ export function TopBar({ title, sub, state = 'rest', onBack, actions = [], save,
             </>
           )}
         </View>
-        {actions.length ? (
-          <View style={styles.actions}>
-            {actions.map((a) => (
-              <IconButton key={a.label} icon={a.icon} accessibilityLabel={a.label} onPress={a.onPress} />
-            ))}
-          </View>
-        ) : null}
-        {save ? <Button label="Save" size="md" onPress={save.onPress} loading={save.saving} disabled={save.disabled} /> : null}
+        <View testID={testID && `${testID}-right`} onLayout={(e) => setRightWidth(e.nativeEvent.layout.width)} style={styles.right}>
+          {actions.map((a) => (
+            <IconButton key={a.label} icon={a.icon} accessibilityLabel={a.label} onPress={a.onPress} />
+          ))}
+          {save ? <Button label="Save" size="md" onPress={save.onPress} loading={save.saving} disabled={save.disabled} /> : null}
+        </View>
       </View>
       {condensed ? (
-        <View pointerEvents="none" style={[styles.condensed, { top, height: circle, left: SPACE.lg + circle + SPACE.md, right: SPACE.lg + circle + SPACE.md }]}>
+        <View testID={testID && `${testID}-condensed`} pointerEvents="none" style={[styles.condensed, { top, height: circle, left: inset, right: inset }]}>
           <Text
             accessibilityRole="header"
             style={[font('bodyStrong', bold, FONT_FAMILY.brand[700]), styles.ink, styles.centre]}
@@ -107,7 +109,7 @@ const styles = StyleSheet.create({
   titles: { flex: 1, minWidth: 0 },
   ink: { color: COLOR.textPrimary },
   sub: { color: COLOR.textSecondary },
-  actions: { flexDirection: 'row', gap: SPACE.sm },
+  right: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   condensed: { position: 'absolute', justifyContent: 'center' },
   centre: { textAlign: 'center' },
   contrast: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 1, backgroundColor: MATERIAL.hairlineIncreaseContrast },

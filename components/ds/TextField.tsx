@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from 'react'
-import { Pressable, StyleSheet, Text, TextInput, View, type TextInputProps } from 'react-native'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, TextInput, View, type TextInputProps } from 'react-native'
 
 import { Icon } from '../ui/Icon'
 import { COLOR, FONT_FAMILY, ICON, MATERIAL, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
@@ -25,14 +25,23 @@ export function FieldLabel({ text, bold, contrast }: { text: string; bold: boole
   return <Text style={[font('label', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{text}</Text>
 }
 
-/** The one error sentence, with its glyph, and the hint, under the field. */
+/**
+ * The one error sentence, with its glyph, and the hint, under the field. An
+ * error is assertive (§14): spoken as it arrives, queued behind another when
+ * a form refuses several at once (iOS), a live region on Android.
+ */
 export function FieldNotes({ error, hint, bold }: { error?: string; hint?: string; bold: boolean }) {
+  useEffect(() => {
+    if (error && Platform.OS === 'ios') AccessibilityInfo.announceForAccessibilityWithOptions(error, { queue: true })
+  }, [error])
   return (
     <>
       {error ? (
         <View style={styles.note}>
           <Icon name="circle-alert" size={ICON.inline} color={COLOR.destructive} />
-          <Text style={[font('meta', bold), styles.noteText, { color: COLOR.destructive }]}>{error}</Text>
+          <Text accessibilityLiveRegion="assertive" style={[font('meta', bold), styles.noteText, { color: COLOR.destructive }]}>
+            {error}
+          </Text>
         </View>
       ) : null}
       {hint ? <Text style={[font('meta', bold), styles.hint]}>{hint}</Text> : null}
@@ -72,7 +81,10 @@ function useFocus({ onFocus, onBlur }: Pick<TextInputProps, 'onFocus' | 'onBlur'
   }
 }
 
-type FieldProps = Omit<TextInputProps, 'style' | 'editable' | 'secureTextEntry' | 'placeholderTextColor' | 'maxLength' | 'multiline'> & {
+type FieldProps = Omit<
+  TextInputProps,
+  'style' | 'editable' | 'secureTextEntry' | 'placeholderTextColor' | 'maxLength' | 'multiline' | 'accessibilityLabel' | 'accessibilityHint'
+> & {
   value: string
   onChangeText: (text: string) => void
   /** Geist Mono, above the field. Also its name for a screen reader (else the placeholder). */
@@ -128,6 +140,7 @@ export function TextField({
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const focus = useFocus({ onFocus, onBlur })
+  const input = useRef<TextInput>(null)
   const [revealed, setRevealed] = useState(defaultRevealed)
   const dots = secure && !revealed && value.length > 0
   const eye = minTarget()
@@ -135,9 +148,17 @@ export function TextField({
   return (
     <View testID={testID} style={[styles.field, disabled && { opacity: OPACITY.disabled }]}>
       {label ? <View style={styles.labelRow}><FieldLabel text={label} bold={bold} contrast={contrast} /></View> : null}
-      <View testID={testID && `${testID}-box`} style={[styles.box, secure && { paddingRight: eye + SPACE.sm }]}>
+      {/* The whole capsule is the target: a tap on its padding focuses the text. */}
+      <Pressable
+        testID={testID && `${testID}-box`}
+        accessible={false}
+        onPress={() => input.current?.focus()}
+        disabled={disabled}
+        style={[styles.box, secure && { paddingRight: eye + SPACE.sm }]}
+      >
         <TextInput
           {...rest}
+          ref={input}
           testID={testID && `${testID}-input`}
           value={value}
           onChangeText={onChangeText}
@@ -152,7 +173,7 @@ export function TextField({
           accessibilityLabel={label ?? rest.placeholder}
           accessibilityHint={spokenHint(error, value, limit, hint)}
           accessibilityState={{ disabled }}
-          style={[dots ? font('body', bold, FONT_FAMILY.mono[500]) : font('body', bold), styles.input, dots && styles.dots]}
+          style={[dots ? font('body', bold, FONT_FAMILY.mono[500]) : font('body', bold), styles.input, styles.line, dots && styles.dots]}
         />
         {limit !== undefined ? (
           <Text
@@ -182,7 +203,7 @@ export function TextField({
           contrast={contrast}
           radius={RADIUS.capsule}
         />
-      </View>
+      </Pressable>
       <FieldNotes error={error} hint={hint} bold={bold} />
     </View>
   )
@@ -213,6 +234,7 @@ export function TextArea({
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const focus = useFocus({ onFocus, onBlur })
+  const input = useRef<TextInput>(null)
   const near = limit !== undefined && limit - count(value) < COUNTER_WARN_AT
 
   let counter: ReactNode = null
@@ -232,9 +254,10 @@ export function TextArea({
           {counter}
         </View>
       ) : null}
-      <View testID={testID && `${testID}-box`} style={[styles.area, { minHeight }]}>
+      <Pressable testID={testID && `${testID}-box`} accessible={false} onPress={() => input.current?.focus()} disabled={disabled} style={[styles.area, { minHeight }]}>
         <TextInput
           {...rest}
+          ref={input}
           testID={testID && `${testID}-input`}
           multiline
           value={value}
@@ -249,7 +272,7 @@ export function TextArea({
           accessibilityLabel={label ?? rest.placeholder}
           accessibilityHint={spokenHint(error, value, limit, hint)}
           accessibilityState={{ disabled }}
-          style={[font('body', bold), styles.input]}
+          style={[font('body', bold), styles.input, styles.grow]}
         />
         <FieldBorder
           testID={testID && `${testID}-border`}
@@ -258,7 +281,7 @@ export function TextArea({
           contrast={contrast}
           radius={RADIUS.sheet}
         />
-      </View>
+      </Pressable>
       <FieldNotes error={error} hint={hint} bold={bold} />
     </View>
   )
@@ -277,7 +300,10 @@ const styles = StyleSheet.create({
     gap: SPACE.md,
     paddingHorizontal: SPACE.xl,
   },
-  input: { flex: 1, color: COLOR.textPrimary, padding: 0 },
+  input: { color: COLOR.textPrimary, padding: 0 },
+  line: { flex: 1 },
+  /** Grows from its content (basis auto) past the minimum; `flex: 1` would pin it at the minimum. */
+  grow: { flexGrow: 1 },
   dots: { letterSpacing: SPACE.xxs },
   eye: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
   area: {

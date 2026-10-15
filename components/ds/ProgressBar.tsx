@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { StyleSheet, View } from 'react-native'
 import Animated, { ReduceMotion, useAnimatedStyle, useSharedValue, withDelay, withSpring } from 'react-native-reanimated'
 
@@ -27,8 +27,11 @@ export function ProgressBar({ progress, testID }: { progress: number; testID?: s
   const contrast = useIncreaseContrast()
   const to = clamp(progress)
   const fill = useSharedValue(to)
+  // The last target asked for, not the value mid-flight: a flip back during the hold still lands.
+  const target = useRef(to)
   useEffect(() => {
-    if (fill.get() === to) return
+    if (target.current === to) return
+    target.current = to
     fill.set(reduceMotion ? to : withDelay(HOLD_MS, withSpring(to, { ...SPRING.settle, reduceMotion: ReduceMotion.Never }), ReduceMotion.Never))
   }, [to, reduceMotion, fill])
   const fillStyle = useAnimatedStyle(() => ({ width: `${fill.get() * 100}%` }))
