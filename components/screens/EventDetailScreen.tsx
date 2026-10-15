@@ -910,7 +910,13 @@ export default function EventDetail() {
   }, [id, isLive, checkInCount])
 
   const eventTitle = event?.title
-  const openEventChat = useCallback(async () => {
+  /**
+   * `push` from the check-in's hand-off: this screen stays mounted under the
+   * chat, so the pour clearing and the CTA settling after it never land in a
+   * screen that is being replaced (Android: "addViewAt … already has a
+   * parent", driven on #389). The CTA's own tap still replaces.
+   */
+  const openEventChat = useCallback(async (how: 'push' | 'replace' = 'replace') => {
     try {
       let chatId = eventChatGroupId
       let chatName = eventTitle || 'Event Chat'
@@ -925,25 +931,25 @@ export default function EventDetail() {
 
       if (chatId) {
         const query = `?roomName=${encodeURIComponent(chatName)}&eventTitle=${encodeURIComponent(eventTitle || '')}`
-        router.replace(`/chat/${chatId}${query}` as any)
+        router[how](`/chat/${chatId}${query}` as any)
         return
       }
     } catch (err) {
       Logger.warn('events', 'openEventChat:failed', { error: err as any })
     }
 
-    router.replace('/(tabs)/chat' as any)
+    router[how]('/(tabs)/chat' as any)
   }, [eventChatGroupId, eventTitle, id])
 
   // The check-in itself, shared with the Blend'n room's hold-to-check-in.
-  const { checkingIn, pours, pourDone, start: startCheckIn } = useCheckInFlow({
+  const { checkingIn, pours, pourDone, dismissTray, start: startCheckIn } = useCheckInFlow({
     eventId: String(id),
     showTray,
     closeTray,
     onLocated: setUserLocation,
     onOpenMaps: openInMaps,
-    // Where the pour hands off: this screen is not the room, its chat is.
-    onOpenChat: openEventChat,
+    // Last, after the pour and its questions: this screen is not the room, its chat is.
+    onEnterRoom: () => openEventChat('push'),
     // Update check-in status directly - no need for another API call
     onCheckedIn: (outcome) =>
       setCheckInStatus(
@@ -1616,7 +1622,7 @@ export default function EventDetail() {
         title={trayState.title}
         message={trayState.message}
         buttons={trayState.buttons}
-        onClose={closeTray}
+        onClose={dismissTray}
       />
     </View>
   )

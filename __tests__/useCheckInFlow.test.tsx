@@ -4,9 +4,9 @@
  * The owner removed the "Rules and regulations" tray (docs/redesign/SCREENS.md,
  * Flow 4: the press or the hold is the consent), and the design puts the pour
  * where the "Checked in / Go to Chat" tray and the confetti were (DESIGN-BRIEF
- * §9.3 #9). A fresh check-in pours straight into the room; the reveal offer and
- * "Why do you go out?" (SCRUM-77) still follow it, because they are about the
- * user, not the screen.
+ * §9.3 #9). Flow 4's order (Tonight #12–#14, motion #9): the pour, then the
+ * reveal offer and "Why do you go out?" (SCRUM-77) if the server asks, then
+ * the room — and nothing navigates while any of it is still on screen.
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import { readFileSync } from 'fs'
@@ -16,7 +16,7 @@ import { AccessibilityInfo } from 'react-native'
 
 import { MomentPour } from '../components/ds/MomentPour'
 import { apiClient } from '../lib/apiClient'
-import { askIntentRoute, revealOffer, submitCheckIn, type CheckInOutcome } from '../lib/checkIn'
+import { askIntentRoute, intentAnswered, revealOffer, submitCheckIn, type CheckInOutcome } from '../lib/checkIn'
 import { H } from '../lib/haptics'
 import { useCheckInFlow, type UseCheckInFlowOptions } from '../lib/useCheckInFlow'
 
@@ -57,12 +57,12 @@ function Door(props: UseCheckInFlowOptions) {
   return flow.pours > 0 ? <MomentPour key={flow.pours} venue="Toit" onDone={flow.pourDone} testID="pour" /> : null
 }
 
-let props: jest.Mocked<Required<Pick<UseCheckInFlowOptions, 'showTray' | 'closeTray' | 'onCheckedIn' | 'onOpenChat'>>>
+let props: jest.Mocked<Required<Pick<UseCheckInFlowOptions, 'showTray' | 'closeTray' | 'onCheckedIn' | 'onEnterRoom'>>>
 let success: jest.SpyInstance
 let error: jest.SpyInstance
 beforeEach(() => {
   jest.useFakeTimers()
-  props = { showTray: jest.fn(), closeTray: jest.fn(), onCheckedIn: jest.fn(), onOpenChat: jest.fn(async () => {}) }
+  props = { showTray: jest.fn(), closeTray: jest.fn(), onCheckedIn: jest.fn(), onEnterRoom: jest.fn(async () => {}) }
   success = jest.spyOn(H, 'success').mockImplementation(() => {})
   error = jest.spyOn(H, 'error').mockImplementation(() => {})
   jest.spyOn(AccessibilityInfo, 'announceForAccessibilityWithOptions').mockImplementation(() => {})
@@ -95,21 +95,22 @@ describe('a check-in', () => {
     expect(props.showTray).not.toHaveBeenCalled()
   })
 
-  it('a fresh one pours once, with one H.success, and hands off into the room as the pour does', async () => {
+  it('a fresh one pours once, with one H.success, and enters the room as the pour hands off', async () => {
     const { done } = await checkIn(fresh())
     expect(props.onCheckedIn).toHaveBeenCalledWith(fresh())
+    expect(flow.youreIn).toBe(true)
     expect(screen.getAllByTestId('pour', HIDDEN)).toHaveLength(1)
     await advance(699)
-    expect(props.onOpenChat).not.toHaveBeenCalled()
+    expect(props.onEnterRoom).not.toHaveBeenCalled()
     await advance(1)
-    expect(props.onOpenChat).toHaveBeenCalledTimes(1)
+    expect(props.onEnterRoom).toHaveBeenCalledTimes(1)
     expect(await done).toBe('checkedIn')
+    expect(flow.youreIn).toBe(false)
     await advance(1000)
     // The pour's haptic is the check-in's only one: the hook plays none of its own.
     expect(success).toHaveBeenCalledTimes(1)
     expect(success).toHaveBeenCalledWith({ important: true })
-    expect(screen.getAllByTestId('pour', HIDDEN)).toHaveLength(1)
-    // No "Checked in / Go to Chat" tray: the pour went straight into the room.
+    // No "Checked in / Go to Chat" tray.
     expect(props.showTray).not.toHaveBeenCalled()
   })
 
@@ -117,36 +118,54 @@ describe('a check-in', () => {
     const { done } = await checkIn(fresh())
     await fireEvent.press(screen.getByTestId('pour-skip', HIDDEN))
     expect(await done).toBe('checkedIn')
-    expect(props.onOpenChat).toHaveBeenCalledTimes(1)
+    expect(props.onEnterRoom).toHaveBeenCalledTimes(1)
     expect(success).toHaveBeenCalledTimes(1)
   })
 
-  it('asks "Why do you go out?" on top of the room, after the hand-off', async () => {
+  it('asks "Why do you go out?" after the pour and enters the room only once it is answered', async () => {
     const { done } = await checkIn(fresh({ askIntent: true }))
+    expect(flow.asks).toBe(true)
     expect(router.push).not.toHaveBeenCalled()
     await advance(700)
-    await done
-    expect(props.onOpenChat).toHaveBeenCalledTimes(1)
     expect(router.push).toHaveBeenCalledWith(askIntentRoute('e1'))
-    expect(props.onOpenChat.mock.invocationCallOrder[0]).toBeLessThan(router.push.mock.invocationCallOrder[0])
+    // Flow 4 Tonight #14: the sheet is over the screen the pour cleared onto; the room waits for it.
+    await advance(5000)
+    expect(props.onEnterRoom).not.toHaveBeenCalled()
+    expect(flow.youreIn).toBe(true)
+    await act(async () => intentAnswered())
+    expect(await done).toBe('checkedIn')
+    expect(props.onEnterRoom).toHaveBeenCalledTimes(1)
   })
 
-  it('offers the reveal once the pour has handed off, and its answer enters the room', async () => {
+  it('offers the reveal after the pour, then the intent, then the room', async () => {
     offer.mockResolvedValue({ title: 'Show who you are?', message: 'm', confirm: 'Show me', cancel: 'Not now' })
     const { done } = await checkIn(fresh({ revealSuggestion: true, askIntent: true }))
     expect(props.showTray).not.toHaveBeenCalled()
     await advance(700)
-    await done
     expect(props.showTray).toHaveBeenCalledTimes(1)
     const [title, , buttons] = props.showTray.mock.calls[0]
     expect(title).toBe('Show who you are?')
-    // The offer is the room's door here: nothing enters before it is answered.
-    expect(props.onOpenChat).not.toHaveBeenCalled()
     await act(async () => buttons!.find((b) => b.label === 'Show me')!.onPress())
     expect(props.closeTray).toHaveBeenCalled()
     expect(apiClient.setMatchPreferences).toHaveBeenCalledWith('e1', { revealed: true })
-    expect(props.onOpenChat).toHaveBeenCalledTimes(1)
+    // The question waits for the tray to leave (iOS drops a push made while it is).
+    await advance(1000)
     expect(router.push).toHaveBeenCalledWith(askIntentRoute('e1'))
+    expect(props.onEnterRoom).not.toHaveBeenCalled()
+    await act(async () => intentAnswered())
+    await done
+    expect(props.onEnterRoom).toHaveBeenCalledTimes(1)
+  })
+
+  it('a reveal offer closed from its backdrop is a "no", and the room still comes', async () => {
+    offer.mockResolvedValue({ title: 'Show who you are?', message: 'm', confirm: 'Show me', cancel: 'Not now' })
+    const { done } = await checkIn(fresh({ revealSuggestion: true }))
+    await advance(700)
+    expect(props.showTray).toHaveBeenCalledTimes(1)
+    await act(async () => flow.dismissTray())
+    await done
+    expect(apiClient.setMatchPreferences).not.toHaveBeenCalled()
+    expect(props.onEnterRoom).toHaveBeenCalledTimes(1)
   })
 
   it('"You were already in" is a quiet way in: no pour, no success haptic', async () => {
@@ -172,14 +191,20 @@ describe('every door is this flow', () => {
       .replace(/^\s*\/\/.*$/gm, '')
 
   it.each(['components/screens/EventDetailScreen.tsx', 'components/blendn/BlendnScreen.tsx'])(
-    '%s runs it and draws its pour, not confetti',
+    '%s runs it, draws its pour and lets it hear the tray close',
     (file) => {
       const src = read(file)
       expect(src).toContain('useCheckInFlow({')
-      expect(src).toMatch(/<MomentPour key=\{(checkIn\.)?pours\}[^>]*onDone=\{(checkIn\.)?pourDone\}/)
-      expect(src).not.toContain('ConfettiBurst')
+      expect(src).toMatch(/<MomentPour[^>]*key=\{(checkIn\.)?pours\}[^>]*onDone=\{(checkIn\.)?pourDone\}/)
+      expect(src).toMatch(/onClose=\{(checkIn\.)?dismissTray\}/)
     }
   )
+
+  it('the event screen pushes its chat after the check-in, never replaces itself mid-pour (Android crash on #389)', () => {
+    const src = read('components/screens/EventDetailScreen.tsx')
+    expect(src).toContain("onEnterRoom: () => openEventChat('push')")
+    expect(src).toMatch(/router\[how\]\(`\/chat\//)
+  })
 
   it('the Pulse’s "Blend in" opens the Blend’n pass rather than checking in on its own', () => {
     // A check-in always goes through the hold (docs/redesign/SCREENS.md, Pulse).

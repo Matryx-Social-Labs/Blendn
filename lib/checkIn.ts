@@ -130,6 +130,26 @@ export async function submitCheckIn(
   }
 }
 
+let intentClosed: (() => void) | null = null
+
+/**
+ * Settles when the "Why do you go out?" screen asked after a check-in has
+ * gone, saved or dismissed: the check-in waits for it before the room shows
+ * (Flow 4 Tonight #14: the pour, then the sheet, then the Room).
+ */
+export function untilIntentAnswered(): Promise<void> {
+  intentClosed?.()
+  return new Promise((resolve) => {
+    intentClosed = resolve
+  })
+}
+
+/** The intent screen calls this as it goes. */
+export function intentAnswered(): void {
+  intentClosed?.()
+  intentClosed = null
+}
+
 /** "Why do you go out?" — the preferences screen with the intent leading. */
 export function askIntentRoute(eventId: string): Href {
   return {

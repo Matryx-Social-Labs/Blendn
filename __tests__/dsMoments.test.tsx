@@ -4,18 +4,19 @@
  * full screen, skippable, a celebration spent once, Reduce Motion a
  * crossfade in place with the same haptic.
  */
-import { act, fireEvent, render, screen } from '@testing-library/react-native'
+import { act, fireEvent, render, screen, within } from '@testing-library/react-native'
 import React from 'react'
 import { AccessibilityInfo, StyleSheet } from 'react-native'
 import * as Reanimated from 'react-native-reanimated'
+import { SafeAreaProvider } from 'react-native-safe-area-context'
 
 import DsP5Preview from '../app/preview/ds-p5'
 import { MomentBlend, type MomentBlendProps } from '../components/ds/MomentBlend'
 import { MomentMatch, type MomentMatchProps } from '../components/ds/MomentMatch'
-import { MomentPour } from '../components/ds/MomentPour'
+import { MomentPour, PANEL_TOP } from '../components/ds/MomentPour'
 import { MomentReady } from '../components/ds/MomentReady'
 import { MomentRecap, type MomentRecapProps } from '../components/ds/MomentRecap'
-import { COLOR, MATERIAL, SPRING } from '../lib/design/tokens'
+import { COLOR, MATERIAL, RADIUS, SPACE, SPRING } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
@@ -303,39 +304,96 @@ describe('<MomentReady> · the one celebration (Flow 2)', () => {
   })
 })
 
-describe('<MomentPour> · the check-in success (#9)', () => {
-  it('H.success on the server’s answer, the flood on M.settle, “You’re in.”, the Room at 700 ms', async () => {
-    const onDone = jest.fn()
-    await render(<MomentPour venue="Toit" onDone={onDone} testID="p" />)
-    expect(sprungWith('settle')).toBe(true)
-    expect(screen.getByText('You’re in.')).toBeTruthy()
-    expect(screen.getByText('Toit')).toBeTruthy()
+describe('<MomentPour> · the check-in success (motion #9)', () => {
+  const pour = (props: { ready?: boolean } = {}) => <MomentPour venue="Toit" onDone={onDone} testID="p" {...props} />
+  let onDone: jest.Mock
+  beforeEach(() => {
+    onDone = jest.fn()
+  })
+
+  it('draws the pass as #9 does: a panel under the top bar, the venue top left, “You’re in.” bottom left', async () => {
+    // A phone with a notch and a home indicator: the panel sits inside them.
+    const metrics = { frame: { x: 0, y: 0, width: 393, height: 852 }, insets: { top: 59, bottom: 34, left: 0, right: 0 } }
+    await render(<SafeAreaProvider initialMetrics={metrics}>{pour()}</SafeAreaProvider>)
+    // Inset 12 at the sides, 40 under the top inset, 24 over the bottom one; radius 24; the surface; the flood kept inside.
+    expect(flat('p-panel')).toMatchObject({
+      position: 'absolute',
+      left: SPACE.md,
+      right: SPACE.md,
+      top: 59 + PANEL_TOP,
+      bottom: 34 + SPACE.xl,
+      borderRadius: RADIUS.sheet,
+      backgroundColor: COLOR.surface,
+      overflow: 'hidden',
+    })
+    expect(SPACE.md).toBe(12)
+    expect(PANEL_TOP).toBe(40)
+    expect(SPACE.xl).toBe(24)
+    expect(RADIUS.sheet).toBe(24)
+    // The flood is the panel's, not the screen's.
+    const panel = screen.getByTestId('p-panel', HIDDEN)
+    expect(within(panel).getByTestId('p-flood', HIDDEN)).toBeTruthy()
+    expect(flat('p-venue')).toMatchObject({ position: 'absolute', left: 16, top: 16, fontSize: 20, lineHeight: 26 })
+    expect(flat('p-youre-in')).toMatchObject({ position: 'absolute', left: 16, right: 16, bottom: 24, fontSize: 28, lineHeight: 32, letterSpacing: -0.8, fontFamily: 'Satoshi_900Black' })
+    expect(flat('p-youre-in').top).toBeUndefined()
+    expect(within(panel).getByText('Toit')).toBeTruthy()
+    expect(within(panel).getByText('You’re in.')).toBeTruthy()
     expect(announce).toHaveBeenCalledWith('You’re in. Toit.', { queue: true })
+  })
+
+  it('on the Tonight door it fills the docked pass exactly: the flood in its bounds, “You’re in.” at its bottom left', async () => {
+    // Flow 4 delta R2-D1 "success": the pass docked 12 in at the bottom, 234 tall.
+    const pass = { x: 12, y: 584, width: 369, height: 234 }
+    await render(<MomentPour venue="Toit" onDone={onDone} testID="p" frame={pass} />)
+    expect(flat('p-panel')).toMatchObject({ position: 'absolute', left: 12, top: 584, width: 369, height: 234, borderRadius: RADIUS.sheet, overflow: 'hidden' })
+    expect(flat('p-panel').right).toBeUndefined()
+    expect(flat('p-panel').bottom).toBeUndefined()
+    const panel = screen.getByTestId('p-panel', HIDDEN)
+    expect(within(panel).getByTestId('p-flood', HIDDEN)).toBeTruthy()
+    expect(flat('p-flood')).toMatchObject({ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 })
+    expect(flat('p-youre-in')).toMatchObject({ left: 16, bottom: 24 })
+    expect(flat('p-venue')).toMatchObject({ left: 16, top: 16 })
+  })
+
+  it('H.success once on the server’s answer, the flood on M.settle, the Room at 700 ms', async () => {
+    await render(pour())
+    expect(sprungWith('settle')).toBe(true)
     await advance(0)
     expect(haptic.success).toHaveBeenCalledWith({ important: true })
     await advance(699)
     expect(onDone).not.toHaveBeenCalled()
     await advance(1)
     expect(onDone).toHaveBeenCalledTimes(1)
-    // It clears itself: every touch goes through to the Room, and the screen reader no longer finds it.
+    await advance(1000)
+    expect(haptic.success).toHaveBeenCalledTimes(1)
+    // It has handed off: every touch goes through to the Room, and the screen reader no longer finds it.
     const stage = screen.getByTestId('p', HIDDEN)
     expect(stage.props.pointerEvents).toBe('none')
     expect(stage.props.accessibilityElementsHidden).toBe(true)
-    expect(stage.props.importantForAccessibility).toBe('no-hide-descendants')
   })
 
-  it('a tap skips to the Room', async () => {
-    const onDone = jest.fn()
-    await render(<MomentPour venue="Toit" onDone={onDone} testID="p" />)
+  it('holds, filled, until the Room is there to hand off to', async () => {
+    const view = await render(pour({ ready: false }))
+    await advance(3000)
+    expect(onDone).not.toHaveBeenCalled()
+    expect(screen.getByTestId('p', HIDDEN).props.pointerEvents).toBe('auto')
+    await view.rerender(pour({ ready: true }))
+    await advance(0)
+    expect(onDone).toHaveBeenCalledTimes(1)
+  })
+
+  it('a tap skips to the hand-off, ready or not', async () => {
+    await render(pour({ ready: false }))
     await fireEvent.press(screen.getByTestId('p-skip', HIDDEN))
     expect(onDone).toHaveBeenCalledTimes(1)
     expect(haptic.success).toHaveBeenCalledTimes(1)
+    await advance(1000)
+    expect(onDone).toHaveBeenCalledTimes(1)
   })
 
-  it('Reduce Motion: a crossfade to the filled state, same haptic, same hand-off', async () => {
+  it('Reduce Motion: a crossfade to the filled state, the same haptic and hand-off', async () => {
     reduceMotion.mockReturnValue(true)
-    const onDone = jest.fn()
-    await render(<MomentPour venue="Toit" onDone={onDone} testID="p" />)
+    await render(pour())
     expect(sprungWith('settle')).toBe(false)
     await advance(700)
     expect(haptic.success).toHaveBeenCalledTimes(1)
@@ -421,6 +479,8 @@ describe('/preview/ds-p5', () => {
       ['ds-play-blend-cpPerson', 'ds-moment-blend'],
       ['ds-play-ready', 'ds-moment-ready'],
       ['ds-play-pour', 'ds-moment-pour'],
+      ['ds-play-pour-held', 'ds-moment-pour'],
+      ['ds-play-pour-pass', 'ds-moment-pour'],
     ]) {
       await fireEvent.press(screen.getByTestId(button))
       expect(screen.getByTestId(moment, HIDDEN)).toBeTruthy()

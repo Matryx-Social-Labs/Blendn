@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
+import { ScrollView, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native'
 import { SafeAreaInsetsContext, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Button } from '../../components/ds/Button'
@@ -51,6 +51,8 @@ const PLAYS = [
   ...Object.keys(BLENDS).map((v) => `blend-${v}`),
   'ready',
   'pour',
+  'pour-held',
+  'pour-pass',
 ] as const
 
 const RECAPS: Record<string, Partial<MomentRecapProps>> = {
@@ -185,7 +187,18 @@ function Moment({ play, onEnd }: { play: (typeof PLAYS)[number]; onEnd: () => vo
   }
   if (play === 'ready') return <MomentReady testID="ds-moment-ready" name="Sam" onDone={onEnd} />
   // The pour clears itself and lets touches through; the next Play replaces it.
-  return <MomentPour testID="ds-moment-pour" venue="Toit" onDone={noop} />
+  // Held: no Room to hand off to yet, so it stays filled until a tap.
+  if (play !== 'pour-pass') return <MomentPour testID="ds-moment-pour" venue="Toit" ready={play !== 'pour-held'} onDone={noop} />
+  return <PourInPass />
+}
+
+/** The Tonight door: the pour fills the pass docked at the bottom (Flow 4 delta R2-D1, "success"). */
+const PASS_HEIGHT = 234
+function PourInPass() {
+  const { width, height } = useWindowDimensions()
+  const { bottom } = useSafeAreaInsets()
+  const frame = { x: SPACE.md, y: height - bottom - SPACE.md - PASS_HEIGHT, width: width - SPACE.md * 2, height: PASS_HEIGHT }
+  return <MomentPour testID="ds-moment-pour" venue="Toit" frame={frame} onDone={noop} />
 }
 
 function Section({ title, note, children }: { title: string; note?: string; children: ReactNode }) {
