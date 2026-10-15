@@ -115,7 +115,7 @@ const NOUN_CHARACTERS: Record<string, string> = {
 }
 
 /** "Cosmic Panda" → "panda"; "Cosmic Panda 2" (a collision suffix) → "panda". */
-function nounOf(pseudonym: string): string | null {
+export function nounOf(pseudonym: string): string | null {
   const words = pseudonym.split(/\s+/).filter((w) => /^[A-Za-z]+$/.test(w))
   return words.length > 1 ? words[words.length - 1].toLowerCase() : null
 }

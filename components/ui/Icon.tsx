@@ -57,6 +57,7 @@ import CircleSlash from 'lucide-react-native/icons/circle-slash'
 import CircleUserRound from 'lucide-react-native/icons/circle-user-round'
 import Clock from 'lucide-react-native/icons/clock'
 import CloudOff from 'lucide-react-native/icons/cloud-off'
+import Coffee from 'lucide-react-native/icons/coffee'
 import Copy from 'lucide-react-native/icons/copy'
 import CreditCard from 'lucide-react-native/icons/credit-card'
 import Disc3 from 'lucide-react-native/icons/disc-3'
@@ -99,6 +100,7 @@ import MessageSquareOff from 'lucide-react-native/icons/message-square-off'
 import MicOff from 'lucide-react-native/icons/mic-off'
 import Moon from 'lucide-react-native/icons/moon'
 import Music from 'lucide-react-native/icons/music'
+import Music2 from 'lucide-react-native/icons/music-2'
 import Navigation from 'lucide-react-native/icons/navigation'
 import Pencil from 'lucide-react-native/icons/pencil'
 import Play from 'lucide-react-native/icons/play'
@@ -126,6 +128,7 @@ import Timer from 'lucide-react-native/icons/timer'
 import Toilet from 'lucide-react-native/icons/toilet'
 import Trash from 'lucide-react-native/icons/trash'
 import Trees from 'lucide-react-native/icons/trees'
+import TreePalm from 'lucide-react-native/icons/tree-palm'
 import TriangleAlert from 'lucide-react-native/icons/triangle-alert'
 import Unlink from 'lucide-react-native/icons/unlink'
 import User from 'lucide-react-native/icons/user'
@@ -140,6 +143,7 @@ import Utensils from 'lucide-react-native/icons/utensils'
 import VolumeX from 'lucide-react-native/icons/volume-x'
 import Wifi from 'lucide-react-native/icons/wifi'
 import Wind from 'lucide-react-native/icons/wind'
+import Wine from 'lucide-react-native/icons/wine'
 import Wrench from 'lucide-react-native/icons/wrench'
 import X from 'lucide-react-native/icons/x'
 import Zap from 'lucide-react-native/icons/zap'
@@ -183,6 +187,7 @@ const ICONS = {
   'circle-user-round': CircleUserRound,
   clock: Clock,
   'cloud-off': CloudOff,
+  coffee: Coffee,
   copy: Copy,
   'credit-card': CreditCard,
   'disc-3': Disc3,
@@ -225,6 +230,7 @@ const ICONS = {
   'mic-off': MicOff,
   moon: Moon,
   music: Music,
+  'music-2': Music2,
   navigation: Navigation,
   pencil: Pencil,
   play: Play,
@@ -252,6 +258,7 @@ const ICONS = {
   toilet: Toilet,
   trash: Trash,
   trees: Trees,
+  'tree-palm': TreePalm,
   'triangle-alert': TriangleAlert,
   unlink: Unlink,
   user: User,
@@ -266,6 +273,7 @@ const ICONS = {
   'volume-x': VolumeX,
   wifi: Wifi,
   wind: Wind,
+  wine: Wine,
   wrench: Wrench,
   x: X,
   zap: Zap,

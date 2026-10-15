@@ -62,13 +62,24 @@ const KNOWN_ORPHANS: Record<string, string> = {
   'Material.tsx': 'redesign Phase 1 foundation; the tab bar adopts it first (DESIGN-BRIEF §5.3), after the native rebuild that adds expo-glass-effect',
   'GradientFill.tsx': 'redesign Phase 1 foundation; the primary button and the centre disc adopt it with their redesign (§4.3, §11)',
   'Icon.tsx': 'redesign Phase 1 foundation; screens move from Ionicons to it one at a time as they are redesigned (§8)',
+  'Creature.tsx': 'redesign P5 set (ROUND3 B7); the pseudonym discs (Face, ChatBubble, Banter, Room info, the profile hero) move to it from the emoji with their redesign',
+  'VenuePlate.tsx': 'redesign P5 set; the art for a place with no next event (Places tiles and rows, the venue hero) adopts it with the Places redesign',
 }
 
 const sources = walk(join(ROOT, 'app'))
   .concat(walk(join(ROOT, 'components')))
   .concat(walk(join(ROOT, 'lib')))
 
-const nonPreview = sources.filter((f) => !f.includes(`${'app'}/preview/`))
+/*
+ * Importers that are not a screen: the preview harness, a barrel
+ * (`components/ds/index.ts`), and a component on the ledger (`VenuePlate`
+ * drawing an `<Icon>` puts no Icon on a screen).
+ * ponytail: an import *through* the barrel is not traced either; when a screen
+ * adopts a ds component that way, resolve the barrel's re-exports here.
+ */
+const nonPreview = sources.filter(
+  (f) => !f.includes(`${'app'}/preview/`) && basename(f) !== 'index.ts' && !Object.hasOwn(KNOWN_ORPHANS, basename(f))
+)
 
 const componentFiles = walk(join(ROOT, 'components')).filter((f) => f.endsWith('.tsx'))
 
