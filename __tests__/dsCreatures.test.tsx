@@ -20,6 +20,7 @@ import DsCreaturesPreview from '../app/preview/ds-creatures'
 import { VENUE_PLATE_GLYPHS, VenuePlate } from '../components/ds/VenuePlate'
 import { Icon } from '../components/ui/Icon'
 import { CREATURE_PALETTES, PALETTE_GLYPH, VENUE_PLATES } from '../lib/design/tokens'
+import { pseudonymAvatar } from '../lib/pseudonymAvatar'
 
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
@@ -49,17 +50,23 @@ describe('the creature set is the design’s, byte for byte', () => {
 })
 
 /*
- * Expected values from the design's own code, run in Node over creatures.js:
+ * Animal names: expected values from the design's own code, run in Node over
+ * creatures.js — `BNC.glyph(noun)`, where `noun` is the client's `nounOf`
+ * (the design's prototype reads the last space-separated word, which would
+ * draw "Cosmic Panda 2", a collision suffix, as a hashed creature).
  *
- *   glyph   = BNC.glyph(nounOf(seed) ?? seed)
- *   palette = |FNV-1a(seed)| % 8          ("the pseudonym picks the palette")
+ * Everything else — a last word that is not an animal, or no noun at all —
+ * deviates from creatures.js on purpose (owner's ruling on #384): not the
+ * design's hash of the noun, which makes every "… Comet" one creature, but
+ * today's pick from the whole trimmed pseudonym (`pseudonymAvatar`'s second
+ * mix), so "Cosmic Comet" and "Velvet Comet" differ. Those rows are derived
+ * from that rule, and the test below holds them to `pseudonymAvatar` itself.
  *
- * `seed` is what `pseudonymAvatar` takes today: the pseudonym trimmed,
- * 'anonymous' when empty. `nounOf` is the client's: the design's prototype
- * (`JU.avatar`) reads the last space-separated word, which would draw
- * "Cosmic Panda 2" — a collision suffix — as a hashed creature, not a panda.
+ * The palette is |FNV-1a(seed)| % 8 throughout ("the pseudonym picks the
+ * palette"), today's hue index. `seed` is what `pseudonymAvatar` takes: the
+ * pseudonym trimmed, 'anonymous' when empty.
  */
-const FIXTURES: [seed: string, glyph: CreatureGlyph, palette: number][] = [
+const ANIMALS: [seed: string, glyph: CreatureGlyph, palette: number][] = [
   ['Cosmic Panda', 'panda', 5],
   ['Velvet Heron', 'bird', 1],
   ['Neon Dragon', 'snake', 0],
@@ -73,29 +80,42 @@ const FIXTURES: [seed: string, glyph: CreatureGlyph, palette: number][] = [
   // A glyph's own name draws it, mapped or not.
   ['Golden Whale', 'whale', 1],
   ['Silver Hedgehog', 'hedgehog', 5],
-  // Not creatures: the cast, by the noun.
-  ['Cosmic Comet', 'panda', 1],
-  ['Stellar Nebula', 'dolphin', 5],
-  ['Blazing Phoenix', 'koala', 7],
-  ['Brave Titan', 'wolf', 1],
-  ['Misty Mantis', 'hedgehog', 1],
-  ['Noble Sphinx', 'wolf', 3],
-  ['Dusk Meadow', 'fox', 7],
   ['Cosmic Panda 2', 'panda', 1],
   ['COSMIC PANDA', 'panda', 5],
   ['  Cosmic Panda  ', 'panda', 5],
-  // `markSeed`'s fallbacks and placeholders: no noun, so the whole seed.
-  ['room-1:user-9', 'unicorn', 5],
-  ['you', 'koala', 4],
-  ['', 'pufferfish', 6],
-  ['anonymous', 'pufferfish', 6],
-  ['Café', 'koala', 4],
+]
+const NOT_ANIMALS: [seed: string, glyph: CreatureGlyph, palette: number][] = [
+  ['Cosmic Comet', 'parrot', 1],
+  ['Velvet Comet', 'dolphin', 3],
+  ['Stellar Nebula', 'lion', 5],
+  ['Blazing Phoenix', 'pufferfish', 7],
+  ['Brave Titan', 'fox', 1],
+  ['Misty Mantis', 'fox', 1],
+  ['Noble Sphinx', 'owl', 3],
+  ['Dusk Meadow', 'butterfly', 7],
+  // `markSeed`'s fallbacks and placeholders: no noun.
+  ['room-1:user-9', 'koala', 5],
+  ['you', 'flamingo', 4],
+  ['', 'wolf', 6],
+  ['anonymous', 'wolf', 6],
+  ['Café', 'unicorn', 4],
 ]
 
+/** `pseudonymAvatar`'s cast, as emoji, in the order `CREATURE_CAST` draws it. */
+const TODAY = ['🦊', '🐼', '🦉', '🐙', '🦁', '🐝', '🦋', '🐢', '🦜', '🐺', '🐬', '🦩', '🐨', '🦄', '🐡', '🦔']
+
 describe('creatureFor: one seed, one creature on one palette', () => {
-  it.each(FIXTURES)('%j draws %s on palette %i', (seed, glyph, palette) => {
+  it.each([...ANIMALS, ...NOT_ANIMALS])('%j draws %s on palette %i', (seed, glyph, palette) => {
     expect(creatureFor(seed)).toEqual({ glyph, palette })
     expect(creatureFor(seed)).toEqual(creatureFor(seed))
+  })
+
+  it.each(NOT_ANIMALS.map(([seed]) => seed))('%j: not an animal, so the creature it draws today', (seed) => {
+    expect(TODAY[CREATURE_CAST.indexOf(creatureFor(seed).glyph)]).toBe(pseudonymAvatar(seed).character)
+  })
+
+  it('tells two people with the same non-animal noun apart', () => {
+    expect(creatureFor('Cosmic Comet').glyph).not.toBe(creatureFor('Velvet Comet').glyph)
   })
 
   it('draws every mapped noun as its own creature', () => {
@@ -104,7 +124,7 @@ describe('creatureFor: one seed, one creature on one palette', () => {
     }
   })
 
-  it('hashes a noun that names an Object.prototype key instead of drawing nothing', () => {
+  it('does not take a noun that names an Object.prototype key for an animal', () => {
     // The design's `G[k] ? k` takes "constructor" for a glyph; there is no such path.
     expect(CREATURE_CAST).toContain(creatureFor('Brave Constructor').glyph)
   })

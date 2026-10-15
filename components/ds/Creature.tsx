@@ -2,7 +2,7 @@ import { StyleSheet, View } from 'react-native'
 import Svg, { Circle, Path } from 'react-native-svg'
 
 import { CREATURE_PALETTES, ICON, PALETTE_GLYPH, RADIUS, SPACE } from '../../lib/design/tokens'
-import { fnv1a, nounOf } from '../../lib/pseudonymAvatar'
+import { castIndex, fnv1a, nounOf } from '../../lib/pseudonymAvatar'
 
 /*
  * The creature set (ROUND3 B7, "Faces"): the bespoke outlined animals that
@@ -78,38 +78,43 @@ export const CREATURE_NOUNS: Readonly<Record<string, CreatureGlyph>> = {
   beetle: 'bee', worm: 'snake', bug: 'bee',
 }
 
-/** For a noun that is not a creature ("Comet"): the client's 16-glyph cast, in its order. */
+/** For a name that is not an animal ("Comet"): the client's 16-glyph cast, in its order. */
 export const CREATURE_CAST: readonly CreatureGlyph[] = [
   'fox', 'panda', 'owl', 'octopus', 'lion', 'bee', 'butterfly', 'turtle', 'parrot', 'wolf', 'dolphin', 'flamingo', 'koala', 'unicorn', 'pufferfish', 'hedgehog',
 ]
 
 /**
- * The design's `BNC.glyph`: a glyph's own name draws it, a mapped noun its
- * creature, anything else a cast member by FNV-1a of the noun — so every
- * "… Comet" is the same creature, as every "… Panda" is a panda.
+ * The design's `BNC.glyph` for an animal: a glyph's own name draws it, a
+ * mapped noun its creature. Anything else is not an animal here.
  */
-function creatureGlyph(nounOrGlyph: string): CreatureGlyph {
-  const k = nounOrGlyph.toLowerCase()
+function animalGlyph(noun: string | null): CreatureGlyph | undefined {
+  if (!noun) return undefined
   // `Object.hasOwn`, not the design's `G[k]`: "constructor" is not a creature.
-  if (Object.hasOwn(CREATURE_GLYPHS, k)) return k as CreatureGlyph
-  if (Object.hasOwn(CREATURE_NOUNS, k)) return CREATURE_NOUNS[k]
-  return CREATURE_CAST[Math.abs(fnv1a(k)) % CREATURE_CAST.length]
+  if (Object.hasOwn(CREATURE_GLYPHS, noun)) return noun as CreatureGlyph
+  if (Object.hasOwn(CREATURE_NOUNS, noun)) return CREATURE_NOUNS[noun]
+  return undefined
 }
 
 /**
- * A pseudonym's creature and palette: the noun picks the creature, the whole
- * pseudonym the palette (the same 8-way hash `pseudonymAvatar` picks its hue
- * with), so one person is one disc everywhere under that name and a different
- * one at the next event.
+ * A pseudonym's creature and palette. The palette is the whole pseudonym's
+ * 8-way hash (the one `pseudonymAvatar` picks its hue with), so one person is
+ * one disc everywhere under that name and a different one at the next event.
+ * An animal noun draws its animal; anything else draws the cast member
+ * `pseudonymAvatar` draws today, from the whole pseudonym.
+ *
+ * That last part departs from creatures.js, which hashes the noun alone and
+ * so makes every "… Comet" one creature: the owner kept today's variety
+ * (#384), so "Cosmic Comet" and "Velvet Comet" differ.
  *
  * Feed it what `pseudonymAvatar` takes, the `markSeed` — never a user id.
  * Spread it into `<Creature>`.
  */
 export function creatureFor(pseudonym: string): { glyph: CreatureGlyph; palette: number } {
   const seed = pseudonym.trim() || 'anonymous'
+  const h = Math.abs(fnv1a(seed))
   return {
-    glyph: creatureGlyph(nounOf(seed) ?? seed),
-    palette: Math.abs(fnv1a(seed)) % CREATURE_PALETTES.length,
+    glyph: animalGlyph(nounOf(seed)) ?? CREATURE_CAST[castIndex(h, CREATURE_CAST.length)],
+    palette: h % CREATURE_PALETTES.length,
   }
 }
 

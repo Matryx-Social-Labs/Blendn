@@ -114,6 +114,15 @@ const NOUN_CHARACTERS: Record<string, string> = {
   pelican: '🐦', puffin: '🐦', kite: '🐦', koel: '🐦',
 }
 
+/**
+ * Which of a `size`-strong cast a seed's hash `h` draws: a second mix of `h`,
+ * so the creature does not follow the hue (`h % 8`). `components/ds/Creature`
+ * picks with it too, so a name that is not an animal keeps its creature.
+ */
+export function castIndex(h: number, size: number): number {
+  return Math.abs(Math.imul(h ^ 0x9e3779b9, 2654435761)) % size
+}
+
 /** "Cosmic Panda" → "panda"; "Cosmic Panda 2" (a collision suffix) → "panda". */
 export function nounOf(pseudonym: string): string | null {
   const words = pseudonym.split(/\s+/).filter((w) => /^[A-Za-z]+$/.test(w))
@@ -184,7 +193,7 @@ export function pseudonymAvatar(pseudonym: string): PseudonymAvatar {
   const noun = nounOf(seed)
   const character =
     (noun && NOUN_CHARACTERS[noun]) ||
-    CHARACTERS[Math.abs(Math.imul(h ^ 0x9e3779b9, 2654435761)) % CHARACTERS.length]
+    CHARACTERS[castIndex(h, CHARACTERS.length)]
   return { colors, initial: seed[0].toUpperCase(), character }
 }
 
