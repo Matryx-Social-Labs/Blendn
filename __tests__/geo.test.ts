@@ -105,7 +105,7 @@ describe('formatDistance', () => {
   })
 
   it('is null for values that are not real distances', () => {
-    // `distanceMap` stores Infinity for an event with no coordinates, and a
+    // The nearby sort uses Infinity for an event with no coordinates, and a
     // NaN would render as "NaNkm away" on a card.
     expect(formatDistance(Number.POSITIVE_INFINITY)).toBeNull()
     expect(formatDistance(NaN)).toBeNull()

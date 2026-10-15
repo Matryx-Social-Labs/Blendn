@@ -40,7 +40,7 @@ import { UPCOMING_THUMB, UpcomingCard } from '../../components/pulse/UpcomingCar
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import { VirtualizedList } from '../../components/VirtualizedList'
-import { eventFromApi, getEvents as fetchEventsApi, type BlendnEvent } from '../../lib/api'
+import { getEvents as fetchEventsApi, type BlendnEvent } from '../../lib/api'
 import {
   activeFilterCount,
   filtersToQuery,
@@ -91,18 +91,6 @@ import { Grabber } from '../../components/ui/Grabber'
 import Animated from 'react-native-reanimated'
 import { fadeInFast, fadeOutFast } from '../../components/motion/presence'
 
-/*
- * Distance in METRES, not kilometres.
- *
- * This returned kilometres and was compared against `check_in_radius`, which
- * the API supplies in metres -- so `distance <= 100` was true anywhere within a
- * hundred kilometres and the "Check In" button appeared across the city. The
- * server refused correctly, so the user simply tapped and was rejected.
- *
- * Converting once here, at the boundary, rather than at each call site: the
- * bug existed because two call sites disagreed about the unit, and the fix
- * should remove the opportunity rather than patch both.
- */
 /*
  * One shared definition, in `lib/api.ts`, derived from the API mapping itself.
  *
@@ -264,7 +252,6 @@ const proximityFor = (
       within_radius: distanceMetres <= checkInRadiusMetres,
       // The field name is the contract: kilometres here, metres above.
       distance_km: distanceMetres / 1000,
-      can_check_in: distanceMetres <= checkInRadiusMetres,
     }
   }
   return proximityMap
@@ -299,12 +286,11 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
    * server would reject the second anyway. `find` rather than a list keeps that
    * assumption visible.
    */
-  const [checkedInEvents, setCheckedInEvents] = useState<Event[]>([])
   const [interestStatuses, setInterestStatuses] = useState<{ [eventId: string]: boolean }>({})
   const [interestCounts, setInterestCounts] = useState<Record<string, number>>({})
 
   /*
-   * The five maps every action handler reads, held so they do not force the
+   * The four maps every action handler reads, held so they do not force the
    * handlers to change identity. See lib/useLatest.ts for what that was costing.
    *
    * The `Ref` suffix is load-bearing. The React Compiler cannot see through
@@ -312,7 +298,6 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
    * it reads `.current` as a dependency of every handler.
    */
   const latestCheckinStatusesRef = useLatest(checkinStatuses)
-  const latestCheckedInEventsRef = useLatest(checkedInEvents)
   const latestProximityDataRef = useLatest(proximityData)
   const latestInterestStatusesRef = useLatest(interestStatuses)
   const latestInterestCountsRef = useLatest(interestCounts)
@@ -567,26 +552,20 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
     })
   }, [userLocation, latestInterestCountsRef])
 
+  /*
+   * Re-reads the active check-ins after a check-in or out. Nothing here draws
+   * them: the read refreshes the SWR entry the tab bar's Blend'n button reads
+   * (`app/(tabs)/_layout.tsx`).
+   */
   const loadCheckedInEvents = useCallback(async () => {
     if (!user) return
     try {
       Logger.journey('checkin', 'loadActiveCheckins:start', { userId: user.id })
       const result = await apiClient.getActiveCheckins()
-      if (result.success && result.data?.checkIns) {
-        // Transform check-in data to Event format
-        const activeEvents: Event[] = result.data.checkIns
-          .filter((c: any) => c.event)
-          .map((c: any) => eventFromApi(c.event))
-          .map(normalizeEvent)
-        setCheckedInEvents(activeEvents)
-        Logger.journey('checkin', 'loadActiveCheckins:done', { count: activeEvents.length })
-      } else {
-        setCheckedInEvents([])
-        Logger.journey('checkin', 'loadActiveCheckins:done', { count: 0 })
-      }
+      const count = result.success && result.data?.checkIns ? result.data.checkIns.filter((c: any) => c.event).length : 0
+      Logger.journey('checkin', 'loadActiveCheckins:done', { count })
     } catch (e) {
       Logger.error('events', 'Unexpected error', { error: e as any })
-      setCheckedInEvents([])
     }
   }, [user])
 
@@ -626,7 +605,6 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
   const handleCheckIn = useCallback(async (event: Event) => {
     if (checkInFlightRef.current.has(event.id)) return
     let previousStatus: any = undefined
-    let hadCheckedInEvent = false
     try {
       Logger.journey('checkin', 'start', { eventId: event.id })
       if (!user) {
@@ -663,7 +641,6 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
       checkInFlightRef.current.add(event.id)
       feedback.tap()
       previousStatus = latestCheckinStatusesRef.current[event.id]
-      hadCheckedInEvent = latestCheckedInEventsRef.current.some((e) => e.id === event.id)
 
       // Optimistic UI update
       setCheckinStatuses((prev) => ({
@@ -673,9 +650,6 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
           checkInTime: new Date().toISOString(),
         },
       }))
-      if (!hadCheckedInEvent) {
-        setCheckedInEvents((prev) => [event, ...prev])
-      }
       
       Logger.journey('checkin', 'api:checkIn:call', { eventId: event.id })
       const outcome = await submitCheckIn(event.id, userLocation)
@@ -690,9 +664,6 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
             else delete next[event.id]
             return next
           })
-          if (!hadCheckedInEvent) {
-            setCheckedInEvents((prev) => prev.filter((e) => e.id !== event.id))
-          }
           feedback.error()
         }
         if (outcome.kind === 'timeout') {
@@ -843,9 +814,6 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
         else delete next[event.id]
         return next
       })
-      if (!hadCheckedInEvent) {
-        setCheckedInEvents((prev) => prev.filter((e) => e.id !== event.id))
-      }
       Logger.error('events', 'Unexpected error', { error: error as any })
       feedback.error()
       // Fixed copy: an exception's message is for the log, not for the person.
@@ -857,7 +825,7 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
     } finally {
       checkInFlightRef.current.delete(event.id)
     }
-  }, [user, userLocation, feedback, showTray, closeTray, latestCheckinStatusesRef, latestCheckedInEventsRef, userFirstName, loadCheckinStatusesBatch, loadCheckedInEvents])
+  }, [user, userLocation, feedback, showTray, closeTray, latestCheckinStatusesRef, userFirstName, loadCheckinStatusesBatch, loadCheckedInEvents])
 
   const toggleInterest = useCallback(async (event: Event) => {
     if (interestInFlightRef.current.has(event.id)) return
@@ -930,11 +898,9 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
     feedback.tap()
 
     const previousStatus = latestCheckinStatusesRef.current[event.id]
-    const previousCheckedInEvents = latestCheckedInEventsRef.current
 
     // Optimistic removal from checked-in state
     setCheckinStatuses((prev) => ({ ...prev, [event.id]: { status: 'not_checked_in' } }))
-    setCheckedInEvents((prev) => prev.filter((e) => e.id !== event.id))
 
     try {
       const result = await checkOutOf(String(event.id))
@@ -956,7 +922,6 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
           else delete next[event.id]
           return next
         })
-        setCheckedInEvents(previousCheckedInEvents)
         feedback.error()
         showTray({
           title: 'Check-out failed',
@@ -972,7 +937,6 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
         else delete next[event.id]
         return next
       })
-      setCheckedInEvents(previousCheckedInEvents)
       feedback.error()
       showTray({
         title: 'Check-out failed',
@@ -983,7 +947,7 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
     } finally {
       checkOutInFlightRef.current.delete(event.id)
     }
-  }, [feedback, showTray, closeTray, latestCheckinStatusesRef, latestCheckedInEventsRef, loadCheckedInEvents, loadCheckinStatusesBatch])
+  }, [feedback, showTray, closeTray, latestCheckinStatusesRef, loadCheckedInEvents, loadCheckinStatusesBatch])
 
   const handleEventPreview = useCallback((event: Event) => {
     markPreviewHintSeen()
@@ -1121,13 +1085,6 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
       })
   }, [userLocation, locationStatus, getCurrentLocationQuietly])
 
-  /*
-   * No location prompt on scroll. Scrolling past 180pt used to raise the OS
-   * permission dialog (and, once refused, a "Turn on location" tray) in the
-   * middle of reading the feed, for a request nobody had made. The ask is the
-   * Nearby section's own button, where the reason is on screen beside it.
-   */
-
   // Check location permission status on mount (without requesting)
   useEffect(() => {
     const checkLocationPermission = async () => {
@@ -1165,14 +1122,6 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
     checkLocationPermission()
   }, [])
 
-  /*
-   * Refetch when the browsed city changes, as well as on sign-in.
-   *
-   * `selectedCity` is in the dependency list because it is what the request is
-   * scoped by — without it, picking a city would change the header and leave
-   * the list showing the previous city's events, which is the same class of
-   * mismatch this whole change exists to remove.
-   */
   /*
    * The filter's category list, from the server rather than a copy.
    *
@@ -1305,15 +1254,6 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
         setInterestCounts(countMap)
         setCheckinStatuses(checkinMap)
       }
-      if (meta?.activeCheckins?.length) {
-        const activeEvents: Event[] = meta.activeCheckins
-          .filter((c: any) => c.event)
-          .map((c: any) => eventFromApi(c.event))
-          .map(normalizeEvent)
-        setCheckedInEvents(activeEvents)
-      } else {
-        setCheckedInEvents([])
-      }
       if (meta?.profile?.profile) {
         const profile = meta.profile.profile
         const profileFirstName = getFirstName(profile.name)
@@ -1441,27 +1381,6 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
       preloadImages(urls, 'normal').catch(() => {})
     }
   }, [events])
-
-  /*
-   * The checked-in strip used to be here.
-   *
-   * A section header, a horizontal list of full-width cards and a Check out
-   * pill — roughly a third of the first screen, permanently, to say one bit of
-   * information: *you are checked in somewhere*. It was the most expensive
-   * square footage on the Pulse and it pushed the feed the screen exists for
-   * below the fold.
-   *
-   * That bit now lives on the Blend'n button in the tab bar, which is where the
-   * app already keeps this state — `roomButtonTarget` reads the same active
-   * check-in and the button is on every screen rather than only this one. The
-   * disc stays flat; a still status dot on its edge says you are in a room
-   * (see `roomButtonGlow`, which picks the dot).
-   *
-   * **Check out moved with it, it was not dropped.** The strip carried the only
-   * one-tap check-out and that is worth protecting, so it is now in the room
-   * screen's top bar — the place that button takes you. `handleCheckOut`
-   * below stays for the long-press action tray, which is the other caller.
-   */
 
   // The journey log the proximity pass has always written, on the same
   // conditions. `proximityData` itself is derived near the top (`proximityFor`).
@@ -1812,52 +1731,21 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
   // Memoized keyExtractor
   const keyExtractor = useCallback((item: Event) => item.id, [])
 
-  // Compute all distances once and cache - avoids O(n^2) recalculations
-  const distanceMap = useMemo(() => {
-    const map: Record<string, number> = {}
-    if (!userLocation) return map
-    for (const ev of events) {
-      // Use proximity data if available, otherwise calculate
-      const prox = proximityData[ev.id]
-      if (prox && typeof prox.distance_km === 'number') {
-        map[ev.id] = prox.distance_km
-      } else if (ev.latitude && ev.longitude) {
-        // This map is in kilometres -- it sits alongside `prox.distance_km`
-        // and feeds sorting, not the check-in gate. Converting explicitly
-        // rather than keeping a second helper in a different unit.
-        map[ev.id] =
-          getDistanceMetres(userLocation.latitude, userLocation.longitude, ev.latitude, ev.longitude) / 1000
-      } else {
-        map[ev.id] = Number.POSITIVE_INFINITY
-      }
-    }
-    return map
-  }, [events, userLocation, proximityData])
-
   const upcomingItems = useMemo(() => {
     return events
       .filter(e => new Date(e.start_time).getTime() >= eventsLoadedAt)
       .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
   }, [events, eventsLoadedAt])
 
-  /*
-   * `happeningNowItems` is gone. It was recomputed on every render and
-   * rendered nowhere — its only remaining use was seeding the "already shown"
-   * set below, which the sections that *do* render already cover.
-   *
-   * If a "happening now" section is wanted, it should be built deliberately
-   * against the checked-in strip, which already knows what you are at.
-   */
-
   const nearbyItems = useMemo(() => {
     if (!userLocation) return [] as Event[]
     return events
       .filter(e => Number.isFinite(e.latitude) && Number.isFinite(e.longitude))
-      .map(e => ({ e, d: distanceMap[e.id] ?? Number.POSITIVE_INFINITY }))
+      .map(e => ({ e, d: proximityData[e.id]?.distance_km ?? Number.POSITIVE_INFINITY }))
       .filter(x => Number.isFinite(x.d))
       .sort((a, b) => a.d - b.d)
       .map(x => x.e)
-  }, [events, userLocation, distanceMap])
+  }, [events, userLocation, proximityData])
 
   const formatTimeRange = (startIso: string, endIso: string, opts?: { timezone?: string }) => fmtRange(startIso, endIso, { includeDate: true, timezone: opts?.timezone })
 
@@ -2092,26 +1980,6 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
     )
   }
 
-  /*
-   * `renderUpcomingFigmaCarousel` was here, and it drew Featured a second time.
-   *
-   *     const renderUpcomingFigmaCarousel = () => (
-   *       <>
-   *         {renderFeaturedRow()}     // <- already rendered by the caller
-   *         {renderUpcomingStack()}
-   *       </>
-   *     )
-   *
-   * The list renders Featured in its own `!isNarrowed` branch and then this one
-   * directly beneath it, so any city with at least one upcoming event drew the
-   * whole Featured carousel twice — the same hero, the same events, one screen
-   * apart. Live since #130.
-   *
-   * It had one caller and its only job was bundling two rows, one of which the
-   * caller already had. Gone rather than corrected: a wrapper that returns
-   * exactly one thing is the thing.
-   */
-
   const renderNearbyList = (items: Event[]) => {
     const day = new Date().toLocaleDateString(undefined, { weekday: 'long' })
     const place = selectedCity || 'Your area'
@@ -2168,7 +2036,7 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
                 venue name is the better thing to give up the space to.
               */
               locationLabel={
-                (browsingHere ? formatDistance(distanceMap[ev.id]) : null)
+                (browsingHere ? formatDistance(proximityData[ev.id]?.distance_km) : null)
                   || ev.venue_name || ev.address || ''
               }
             />
@@ -2214,12 +2082,6 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
     if (!showLoadingSkeleton && mainListData.length > 0) mainRowsRevealPending.current = false
   }, [showLoadingSkeleton, mainListData.length])
 
-  /*
-   * The Pulse's headline, city line and search field.
-   *
-   * Built once and rendered into both branches of the list header — see the
-   * comment at the render site for why it cannot live in only one of them.
-   */
   /*
    * The undesigned rows, rendered into the feed's header rather than above it.
    *

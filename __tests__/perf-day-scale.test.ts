@@ -33,7 +33,6 @@ describe("the Pulse handlers keep their identity", () => {
   it("reads the volatile maps through refs inside handlers", () => {
     for (const ref of [
       "latestCheckinStatusesRef",
-      "latestCheckedInEventsRef",
       "latestProximityDataRef",
       "latestInterestStatusesRef",
       "latestInterestCountsRef",
@@ -50,7 +49,6 @@ describe("the Pulse handlers keep their identity", () => {
      */
     const VOLATILE = [
       "checkinStatuses",
-      "checkedInEvents",
       "proximityData",
       "interestStatuses",
       "interestCounts",
