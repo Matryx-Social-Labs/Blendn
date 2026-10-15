@@ -62,7 +62,7 @@ import { scrollListToEnd, useFollowEnd } from '../../lib/useFollowEnd'
 import { mergeNewestPage } from '../../lib/mergeNewestPage'
 import { newClientId } from '../../lib/clientId'
 import { receiptFor } from '../../lib/receipts'
-import { withUnreadDivider, type UnreadDivider } from '../../lib/unreadDivider'
+import { withDaySeparators, withUnreadDivider, type UnreadDivider } from '../../lib/unreadDivider'
 import type { DmReplyQuote } from '../../lib/apiClient'
 import { ReplyBar } from '../../components/chat/ReplyBar'
 import { SwipeToReply } from '../../components/chat/SwipeToReply'
@@ -105,22 +105,6 @@ const quoteFrom = (m: PrivateMessage): DmReplyQuote => ({
 const formatTime = (iso: string) => {
   const d = new Date(iso)
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-}
-
-const toDayKey = (iso: string) => {
-  const d = new Date(iso)
-  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
-}
-
-const formatDayLabel = (iso: string) => {
-  const d = new Date(iso)
-  const today = new Date()
-  const yesterday = new Date(); yesterday.setDate(today.getDate() - 1)
-  const same = (a: Date, b: Date) =>
-    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
-  if (same(d, today)) return 'Today'
-  if (same(d, yesterday)) return 'Yesterday'
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: d.getFullYear() !== today.getFullYear() ? 'numeric' : undefined })
 }
 
 
@@ -745,16 +729,10 @@ function PrivateChatInner() {
     void deliver(message.id, message.text, { clientId: message.clientId ?? newClientId(), replyToId: message.replyToId })
   }
 
-  const chatItems: ChatListItem[] = React.useMemo(() => {
-    const items: ChatListItem[] = []
-    let lastDay: string | null = null
-    for (const m of messages) {
-      const day = toDayKey(m.createdAt)
-      if (day !== lastDay) { items.push({ kind: 'separator', id: `sep-${day}`, label: formatDayLabel(m.createdAt) }); lastDay = day }
-      items.push({ kind: 'message', ...m })
-    }
-    return withUnreadDivider(items, unread?.firstId, unread?.count ?? 0)
-  }, [messages, unread])
+  const chatItems: ChatListItem[] = React.useMemo(
+    () => withUnreadDivider(withDaySeparators(messages, (m) => m.createdAt), unread?.firstId, unread?.count ?? 0),
+    [messages, unread]
+  )
 
   /*
    * Scroll to "N unread messages" once it is in the list (SCRUM-406). Once per

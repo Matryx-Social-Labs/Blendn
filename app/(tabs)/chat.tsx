@@ -53,7 +53,7 @@ import {
   subscribeToUserNotifications,
 } from '../../lib/socketClient'
 import { MOTION_DURATION } from '../../lib/motion'
-import { EMBER, EMBER_RADIUS, OPACITY, SPACE, TYPE } from '../../lib/theme'
+import { EMBER, EMBER_RADIUS, SPACE, TYPE } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
 import { useLiveSync } from '../../lib/useLiveSync'
 import { TAB_BAR_CLEARANCE } from './_layout'
@@ -105,7 +105,6 @@ import { TAB_BAR_CLEARANCE } from './_layout'
 
 interface GroupChat {
   chat_room_id: string
-  event_id: string
   event_title: string
   /** `memberCount` — active members. 0 when the server did not say. */
   participant_count: number
@@ -530,7 +529,6 @@ function ChatInner() {
           const preview = previewFromConversation(room)
           return {
             chat_room_id: String(room.id || room.chat_room_id || room.chatRoomId || ''),
-            event_id: room.event_id || room.eventId || '',
             // A place's room is named for the place; its venue day's title is bookkeeping (step 5).
             event_title: roomDisplayTitle(room) || room.event_title || room.eventTitle || room.title || room.name || 'Event chat',
             // `memberCount` is what `GET /chat/groups` sends; never for a place's room (H5, D-19).
@@ -1116,7 +1114,7 @@ function ChatInner() {
               No chats match “{query.trim()}”
             </Text>
           ) : listFailed ? (
-            <InboxLoadFailed onRetry={() => void loadChats(true, true)} />
+            <LoadError title="Couldn't load your chats" onRetry={() => void loadChats(true, true)} />
           ) : hasHeaderContent ? null : (
             <EmptyInbox />
           )
@@ -1168,10 +1166,6 @@ function InboxSkeleton() {
   )
 }
 
-function InboxLoadFailed({ onRetry }: { onRetry: () => void }) {
-  return <LoadError title="Couldn't load your chats" onRetry={onRetry} />
-}
-
 function EmptyInbox() {
   return (
     <LoadState
@@ -1192,7 +1186,6 @@ const REQUEST_REFLOW = LinearTransition.duration(MOTION_DURATION.normal).easing(
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: EMBER.bg },
-  pressed: { opacity: OPACITY.pressed },
   content: { paddingHorizontal: BANTER_PADDING_HORIZONTAL },
   header: { gap: BANTER_SECTION_GAP, marginBottom: BANTER_SECTION_GAP },
   // A heading and its content are 16 apart, not 32.

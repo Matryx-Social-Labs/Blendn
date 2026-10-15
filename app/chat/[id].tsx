@@ -31,6 +31,7 @@ import { useToast } from '../../components/Toast'
 import { queryCache } from '../../lib/queryCache'
 import { emitChatListUpdate } from '../../lib/chatListUpdates'
 import { markDomainsDirty } from '../../lib/liveSyncState'
+import { withDaySeparators } from '../../lib/unreadDivider'
 import { apiClient, type ChatReaction } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import { subscribeToLiveEnded, subscribeToChatMessage, subscribeToChatTyping, subscribeToChatReaction, subscribeToChatMessageDeleted, subscribeToChatMemberBanned, subscribeToChatMemberLeft, rejoinChatSocket, startTyping, stopTyping, ChatMessageCallback, ChatTypingCallback, ChatReactionCallback, ChatMessageDeletedCallback, ChatMemberBannedCallback } from '../../lib/socketClient'
@@ -84,22 +85,6 @@ type ChatListItem =
 
 let _tempIdCounter = 0
 const MESSAGES_CACHE_TTL = 60 * 1000
-
-const toDayKey = (iso: string) => {
-  const d = new Date(iso)
-  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
-}
-
-const formatDayLabel = (iso: string) => {
-  const d = new Date(iso)
-  const today = new Date()
-  const yesterday = new Date(); yesterday.setDate(today.getDate() - 1)
-  const same = (a: Date, b: Date) =>
-    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
-  if (same(d, today)) return 'Today'
-  if (same(d, yesterday)) return 'Yesterday'
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: d.getFullYear() !== today.getFullYear() ? 'numeric' : undefined })
-}
 
 const formatTime = (iso: string) => {
   const d = new Date(iso)
@@ -900,16 +885,7 @@ function GroupChatInner() {
     else router.push(`/venue/${venueId}` as never)
   }
 
-  const chatItems: ChatListItem[] = React.useMemo(() => {
-    const items: ChatListItem[] = []
-    let lastDay: string | null = null
-    for (const m of messages) {
-      const day = toDayKey(m.created_at)
-      if (day !== lastDay) { items.push({ kind: 'separator', id: `sep-${day}`, label: formatDayLabel(m.created_at) }); lastDay = day }
-      items.push({ kind: 'message', ...m })
-    }
-    return items
-  }, [messages])
+  const chatItems: ChatListItem[] = React.useMemo(() => withDaySeparators(messages, (m) => m.created_at), [messages])
 
   const socketStatus = useLiveSync({
     enabled: !!chatRoomId && !!currentUser && !outside,
