@@ -662,8 +662,10 @@ empty states. Design ticket: SCRUM-541.
   the roof: the name and "LIVE ●" or the start (in India's time, with the date
   past six days), or a venue glyph and its bucket; a screen reader hears plain
   words. Tap a pin, a lit building or a chip to open it. An event lights up
-  when its doors open, without a new read. The camera keeps its centre above
-  the drawer from the first frame, follows your location fix (until you move
+  when its doors open, without a new read. The camera keeps its centre in the
+  middle of the map you can see — between the top bar and the drawer — from the
+  first frame, and eases to keep it there when the drawer settles at a new
+  snap; it follows your location fix (until you move
   the map yourself), and shows your position. **A city chosen in the city
   picker always moves the map**, even the city it already shows; a city the app
   decided (stored or inferred) never takes the map from your fix. Within a city

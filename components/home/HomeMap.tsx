@@ -25,11 +25,14 @@ import {
   liveAt,
   loadPins,
   locateTarget,
+  mapPadding,
   roundQuery,
   shadeOf,
   shouldFollowCity,
   shouldFollowFix,
+  snapCentre,
   viewportQuery,
+  visibleCentreY,
   type Bounds,
   type Pin,
   type PinQuery,
@@ -110,9 +113,11 @@ const pinApi = {
  *   `OWN_BUILDINGS_CITIES`, with `EXPO_PUBLIC_BUILDINGS_TILES_URL` set): each
  *   building is its own feature, lit as itself through feature-state.
  *   Elsewhere, OpenFreeMap's, lit by a copy (stage 1).
- * - **The camera keeps what matters above the drawer**: every move carries the
- *   drawer's height as padding, from the first frame. A move asked for before
- *   the map is ready is made once it is. Within a city a move eases; across
+ * - **The camera keeps what matters in the middle of the map you can see**,
+ *   between the top bar and the drawer: every move carries both as padding,
+ *   from the first frame, and when the drawer settles at a new snap the map
+ *   eases to keep what was centred centred. A move asked for before the map is
+ *   ready is made once it is. Within a city a move eases; across
  *   cities it jumps under a fade of the map's ground (`cameraMove`).
  * - **A city chosen in the picker always moves the map** (`cityPick`), even to
  *   the city it shows; a city the app decided never takes it from your fix.
@@ -131,8 +136,9 @@ export const HomeMap = memo(function HomeMap({
   drawerTop,
   drawer,
   segment,
-  topInset,
-  bottomInset,
+  topChrome,
+  mapHeight,
+  drawerSnapTop,
   focused,
   glowVisible,
 }: {
@@ -149,10 +155,12 @@ export const HomeMap = memo(function HomeMap({
   drawerTop: SharedValue<number>
   drawer: { half: number; full: number }
   segment: Segment
-  /** Where the top bar ends, so the attribution is not under it. */
-  topInset: number
-  /** How much of the map the drawer covers at its settled snap. */
-  bottomInset: number
+  /** Where the top bar ends. */
+  topChrome: number
+  /** The map view's own height: it ends at the tab bar, not the screen's foot. */
+  mapHeight: number
+  /** The drawer's top edge at its settled snap. */
+  drawerSnapTop: number
   /** The home tab is the screen in front: pins are read again when it comes back. */
   focused: boolean
   /** The map can be seen (focused, the drawer not full, no screen reader): only then may a glow breathe. */
@@ -181,14 +189,13 @@ export const HomeMap = memo(function HomeMap({
   const blockedUntil = useRef(0)
   const view = useRef<MapView>({ bounds: null, centre: null, zoom: MAP_THEME.camera.zoom, pitch: MAP_THEME.camera.pitch })
   /*
-   * The drawer covers the bottom of the map. Every camera move carries the
-   * drawer's height as padding (a padding-only change is a no-op on Android),
-   * and the first frame has it too (`initialViewState`).
+   * The top bar and the drawer cover the map. Every camera move carries them
+   * as padding (`mapPadding`), with a centre (a padding-only change is a no-op
+   * on Android, and MapLibre iOS re-centres a centre-less stop by its own
+   * reckoning), and the first frame has it too (`initialViewState`).
    */
-  const padding = useRef({ bottom: bottomInset })
-  useEffect(() => {
-    padding.current = { bottom: bottomInset }
-  }, [bottomInset])
+  const padding = mapPadding({ topChrome, mapHeight, drawerTop: drawerSnapTop })
+  const pad = useRef(padding)
   // A move asked for before the map is ready is dropped by native: hold it until it is (review H3).
   const ready = useRef(false)
   // The credit's few seconds start when there is a map to see, not when the screen mounts.
@@ -206,7 +213,7 @@ export const HomeMap = memo(function HomeMap({
       fade.set(withTiming(0, { duration: MAP_THEME.camera.fadeMs }))
     }
     if (duration > 0) {
-      camera.current?.easeTo({ center: move.to, ...move.at, padding: padding.current, duration })
+      camera.current?.easeTo({ center: move.to, ...move.at, padding: pad.current, duration })
       return
     }
     /*
@@ -216,12 +223,32 @@ export const HomeMap = memo(function HomeMap({
      * (the first drive's jump from Saarbrücken to Bengaluru landed a kilometre up
      * the road), so the camera goes flat first. And it turns a zoom into a height
      * at the tilt it starts from and keeps that height across latitudes, so the
-     * zoom goes last, once the camera is there and tilted.
+     * zoom goes last, once the camera is there and tilted, with the centre again.
      */
-    camera.current?.zoomTo(view.current.zoom, { pitch: 0, padding: padding.current, duration: 0 })
-    camera.current?.easeTo({ center: move.to, pitch: move.at?.pitch ?? view.current.pitch, padding: padding.current, duration: 0 })
-    camera.current?.zoomTo(move.at?.zoom ?? view.current.zoom, { padding: padding.current, duration: 0 })
+    camera.current?.zoomTo(view.current.zoom, { pitch: 0, padding: pad.current, duration: 0 })
+    camera.current?.easeTo({ center: move.to, pitch: move.at?.pitch ?? view.current.pitch, padding: pad.current, duration: 0 })
+    camera.current?.easeTo({ center: move.to, zoom: move.at?.zoom ?? view.current.zoom, padding: pad.current, duration: 0 })
   }
+
+  /*
+   * The drawer settled at a new snap (on the snap, never per drag frame: motion
+   * #41): keep what was centred centred in the map you can now see — your
+   * position while the map follows it, else whatever was in the middle.
+   */
+  useEffect(() => {
+    const before = pad.current
+    pad.current = padding
+    if (!ready.current || (before.top === padding.top && before.bottom === padding.bottom)) return
+    map.current
+      ?.unproject([width / 2, visibleCentreY(before, mapHeight)])
+      .then((centred) => {
+        const fix: [number, number] | null = center ? [center.longitude, center.latitude] : null
+        const to = snapCentre({ following: !touched.current, fix, centred: centred as [number, number] })
+        camera.current?.easeTo({ center: to, padding: pad.current, duration: reduceMotion ? 0 : MAP_THEME.camera.easeMs })
+      })
+      .catch((error) => Logger.warn('events', 'Home map could not re-centre on the drawer', { error: String(error) }))
+  }, [padding.top, padding.bottom]) // eslint-disable-line react-hooks/exhaustive-deps -- only a settled snap re-centres
+
 
   const [query, setQuery] = useState<PinQuery | null>(null)
   // Read again when the app comes back to the foreground (a venue may have filled up).
@@ -237,6 +264,8 @@ export const HomeMap = memo(function HomeMap({
 
   // Which tiles draw the buildings, by the whole view: ours once it is inside a covered city (`drawsOwnBuildings`).
   const startAt: [number, number] = center ? [center.longitude, center.latitude] : DEFAULT_CENTRE
+  // Where the first frame opens: the camera is there until something moves it.
+  const [opening] = useState(startAt)
   const [ownTiles, setOwnTiles] = useState(() => drawsOwnBuildings(OWN_BUILDINGS_URL, roughView(startAt), false))
   const buildingLayerId = ownTiles ? OWN_BUILDINGS_LAYER_ID : BUILDING_LAYER_ID
 
@@ -332,7 +361,7 @@ export const HomeMap = memo(function HomeMap({
     ready.current = true
     setMapUp(true)
     // The first frame's zoom was turned into a height before it was tilted (see `moveTo`): it opened near z15. Again, tilted.
-    camera.current?.zoomTo(MAP_THEME.camera.zoom, { padding: padding.current, duration: 0 })
+    camera.current?.easeTo({ center: opening, zoom: MAP_THEME.camera.zoom, padding: pad.current, duration: 0 })
     const held = pendingMove.current
     pendingMove.current = null
     if (held) moveTo(held)
@@ -430,11 +459,11 @@ export const HomeMap = memo(function HomeMap({
         <Camera
           ref={camera}
           initialViewState={{
-            center: startAt,
+            center: opening,
             zoom: MAP_THEME.camera.zoom,
             pitch: MAP_THEME.camera.pitch,
             // The drawer covers the bottom of the map: the first frame keeps its centre in the part you can see.
-            padding: { bottom: bottomInset },
+            padding,
           }}
         />
         {/*
@@ -479,7 +508,7 @@ export const HomeMap = memo(function HomeMap({
         </GeoJSONSource>
         <Chips chips={lit.chips} onOpen={open} />
       </Map>
-      {mapUp ? <MapCredit text={mapCreditLine(ownTiles)} top={topInset + SPACE.sm} dismissed={moved} /> : null}
+      {mapUp ? <MapCredit text={mapCreditLine(ownTiles)} top={topChrome + SPACE.sm} dismissed={moved} /> : null}
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.fade, fadeStyle]} />
       <LocateButton visible={locateVisible} following={hasFix && !moved} drawerTop={drawerTop} drawer={drawer} onPress={locate} />
     </>

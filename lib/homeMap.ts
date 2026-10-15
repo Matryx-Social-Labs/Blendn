@@ -354,6 +354,27 @@ export function locateTarget(
 }
 
 /**
+ * The camera's padding: the top bar above and the drawer below, so what is
+ * centred is centred in the map you can see. In the map view's own points: it
+ * ends at the tab bar, not at the screen's foot. Measured on the simulator
+ * before this (2026-10-15): the bottom was taken from the screen's height, 92 pt
+ * too much, and there was no top, so your position sat about 110 pt above the middle.
+ */
+export function mapPadding(s: { topChrome: number; mapHeight: number; drawerTop: number }): { top: number; bottom: number } {
+  return { top: s.topChrome, bottom: Math.max(0, s.mapHeight - s.drawerTop) }
+}
+
+/** The middle of the map you can see, from the top of the map view. */
+export function visibleCentreY(padding: { top: number; bottom: number }, mapHeight: number): number {
+  return (padding.top + mapHeight - padding.bottom) / 2
+}
+
+/** What stays centred when the drawer settles at a new snap: your position while the map follows it, else whatever was centred. */
+export function snapCentre(s: { following: boolean; fix: [number, number] | null; centred: [number, number] }): [number, number] {
+  return s.following && s.fix ? s.fix : s.centred
+}
+
+/**
  * Where "my location" sits as the drawer moves (its top edge, `drawerTop`): a
  * gap above it, fading out as it rises from half to full, like Google and
  * Apple Maps. A worklet: it runs per frame on the UI thread.

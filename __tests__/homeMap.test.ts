@@ -12,14 +12,18 @@ import {
   loadPins,
   locateRide,
   locateTarget,
+  mapPadding,
   MAX_QUERY_RADIUS_KM,
   pinsFor,
   roundQuery,
   shadeOf,
   shouldFollowCity,
   shouldFollowFix,
+  snapCentre,
   viewportQuery,
+  visibleCentreY,
 } from '../lib/homeMap'
+import { drawerSnapPoints } from '../lib/home'
 import { glowRadius } from '../lib/mapLit'
 import { CITY_BUILDINGS, EMBER_MAP_STYLE, homeMapStyle, styleHost } from '../lib/mapStyleEmber'
 import { MAP_THEME } from '../lib/mapTheme'
@@ -187,7 +191,8 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
     expect(moves.length).toBeGreaterThan(0)
     for (const line of moves) expect(line).toMatch(/padding:/)
     // …and the first frame has it too: a padding-only camera change is a no-op on Android (review H3).
-    expect(component).toMatch(/initialViewState=\{\{[\s\S]*?padding: \{ bottom: bottomInset \}/)
+    expect(component).toMatch(/initialViewState=\{\{[\s\S]*?\bpadding,\s*\}\}/)
+    expect(component).toMatch(/const padding = mapPadding\(\{ topChrome, mapHeight, drawerTop: drawerSnapTop \}\)/)
   })
 
   it("draws the person's dot as a plain puck, never one that follows the compass (Android redrew the map forever)", () => {
@@ -401,6 +406,50 @@ describe('how the camera gets there (design kit motion #41)', () => {
   })
 })
 
+describe('your position sits in the middle of the map you can see (owner, TestFlight 124)', () => {
+  // iPhone 17 Pro, measured on the simulator: 874 pt screen, 62 pt safe area + 64 pt top bar, the map view 782 pt (the tab bar's top).
+  const topChrome = 126
+  const mapHeight = 782
+  const points = drawerSnapPoints({ height: 874, topChrome, tabBarTop: mapHeight })
+
+  it.each(['peek', 'half', 'full'] as const)('pads the top bar and the drawer at %s, in the map view\'s own points', (snap) => {
+    const padding = mapPadding({ topChrome, mapHeight, drawerTop: points[snap] })
+    expect(padding).toEqual({ top: topChrome, bottom: mapHeight - points[snap] })
+    // The middle of the padded map is halfway between the top bar and the drawer's edge.
+    expect(visibleCentreY(padding, mapHeight)).toBe((topChrome + points[snap]) / 2)
+  })
+
+  it('no longer pads from the screen\'s foot: at half the old padding put you about 110 pt above the middle', () => {
+    const half = points.half
+    const before = (mapHeight - (874 - half)) / 2 // bottom only, from the screen's height: 172.5, as measured
+    const now = visibleCentreY(mapPadding({ topChrome, mapHeight, drawerTop: half }), mapHeight)
+    expect(now - before).toBe(109)
+  })
+
+  it('never pads below nothing', () => {
+    expect(mapPadding({ topChrome, mapHeight, drawerTop: mapHeight + 40 }).bottom).toBe(0)
+  })
+
+  it('keeps your position centred when the drawer settles while the map follows you, and your own middle once you have moved it', () => {
+    const fix: [number, number] = [6.9965, 49.2354]
+    const centred: [number, number] = [6.99, 49.24]
+    expect(snapCentre({ following: true, fix, centred })).toEqual(fix)
+    expect(snapCentre({ following: false, fix, centred })).toEqual(centred)
+    expect(snapCentre({ following: true, fix: null, centred })).toEqual(centred)
+  })
+
+  it('re-centres once per settled snap, with a centre and the new padding, never per drag frame', () => {
+    expect(component).toMatch(/useEffect\(\(\) => \{\s*const before = pad\.current\s*pad\.current = padding/)
+    expect(component).toMatch(/unproject\(\[width \/ 2, visibleCentreY\(before, mapHeight\)\]\)/)
+    expect(component).toMatch(/easeTo\(\{ center: to, padding: pad\.current, duration: reduceMotion \? 0 : MAP_THEME\.camera\.easeMs \}\)/)
+    expect(component).toMatch(/\}, \[padding\.top, padding\.bottom\]\)/)
+    // Keyed on the settled snap's top, not the animated drawer value.
+    expect(code('components/home/HomeShell.tsx')).toMatch(/drawerSnapTop=\{points\[snap\]\}/)
+    // The map waits for its own height, so the first frame is centred too.
+    expect(code('components/home/HomeShell.tsx')).toMatch(/\{mapHeight !== null \? \(\s*<HomeMap/)
+  })
+})
+
 describe('"my location"', () => {
   it('goes to the fix at the map\'s own zoom and tilt', () => {
     expect(locateTarget({ latitude: 49.2354, longitude: 6.9965 })).toEqual({
@@ -441,9 +490,9 @@ describe('"my location"', () => {
     // MapLibre iOS jumps (drive, 2026-10-15): flat first, or a tilted camera put Bengaluru a kilometre from
     // Saarbrücken; the zoom last, once tilted, or it lands a step out. And the opening zoom set again once tilted.
     expect(component).toMatch(
-      /zoomTo\(view\.current\.zoom, \{ pitch: 0, [^}]*\}\)\s*camera\.current\?\.easeTo\(\{ center: move\.to, pitch: [^}]*duration: 0 \}\)\s*camera\.current\?\.zoomTo\(move\.at\?\.zoom \?\? view\.current\.zoom/
+      /zoomTo\(view\.current\.zoom, \{ pitch: 0, [^}]*\}\)\s*camera\.current\?\.easeTo\(\{ center: move\.to, pitch: [^}]*duration: 0 \}\)\s*camera\.current\?\.easeTo\(\{ center: move\.to, zoom: move\.at\?\.zoom \?\? view\.current\.zoom/
     )
-    expect(component).toMatch(/ready\.current = true[\s\S]{0,200}zoomTo\(MAP_THEME\.camera\.zoom, \{ padding: padding\.current, duration: 0 \}\)/)
+    expect(component).toMatch(/ready\.current = true[\s\S]{0,300}easeTo\(\{ center: opening, zoom: MAP_THEME\.camera\.zoom, padding: pad\.current, duration: 0 \}\)/)
     // Hidden while the drawer is full.
     expect(code('components/home/HomeShell.tsx')).toMatch(/locateVisible=\{snap !== 'full'\}/)
     // A re-pick changes no coordinates: the effect is keyed on the pick itself.
