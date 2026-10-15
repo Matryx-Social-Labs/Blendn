@@ -60,6 +60,6 @@ All of them are in [`ROUND3.md` part A](./ROUND3.md#a--rulings-every-open-questi
 - **Lock screens carry no names and no user-typed text,** for every kind of notification. The "Message request declined" push is dropped.
 - **Tapping a person anywhere in a room opens the same PersonCard.** Crew and Blend members open a reduced sheet.
 - **A wave stays a live moment.** You can wave back, and it reaches you with the overlay closed. A refused like or wave carries no haptic.
-- **Blend'n+ launches with Monthly ₹199 and Night Pass ₹49 only.** Staff redeem a door pass with a 1-second hold.
+- **Blend'n+, regulars and matching v2 are built** (2026-10-15). The design follows the server where it's a server fact: all four plans, Night Pass · 24 hours, a server-granted trial that renews nothing, and a door pass whose rotating code staff type on the dashboard ([ROUND3 part G](./ROUND3.md#g--built-since-round-3-flows-1114-aligned-2026-10-15)).
 - **DM photos only, once both people have revealed.** No attendee media in event rooms, and no link previews.
 - **The app feels alive through change, not loops.** Motion pack 2 adds arrivals, reorders, swipe-to-reply, the long-press lift, the wave and the time-of-night orbs. It rejects breathing rooms, reaction bursts and confetti.

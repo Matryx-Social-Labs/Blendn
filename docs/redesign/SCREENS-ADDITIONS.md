@@ -14,8 +14,8 @@ Where these screens touch flows that are already designed (the Room, the Banter,
 | 9 | Notifications: the bell, the screen, **push notification design**, the in-app banner, settings | Built, not designed |
 | 10 | Crews: making one, arriving together, crews in the Room, Blends, the crew reveal | Built, not designed |
 | 11 | Places live: venue detail, Go Live, the venue room, expiry, hand-offs | Built, not designed |
-| 12 | Blend'n+: the paywall, Night Pass, manage | Planned (proposal frames) |
-| 13 | Regulars: blind offers, the door pass, "let this venue know" | Planned (proposal frames) |
+| 12 | Blend'n+: the paywall, Night Pass, manage | **Built since** (admin step 11): see [ROUND3 G2](./ROUND3.md#g--built-since-round-3-flows-1114-aligned-2026-10-15) |
+| 13 | Regulars: blind offers, the door pass, "let this venue know" | **Built since** (admin step 12): see [ROUND3 G3](./ROUND3.md#g--built-since-round-3-flows-1114-aligned-2026-10-15) |
 | 14 | Matching v2: overlap lines, new profile fields, badges | Planned, partly built |
 | 15 | System states nobody has designed | Built, not designed |
 | 16 | Sharing and link previews: share sheets, OG cards, Story cards, the public event and venue pages | Needs build (today an event shares as plain text with no link) |

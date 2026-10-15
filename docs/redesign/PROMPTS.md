@@ -512,9 +512,10 @@ Round 3 comes from reading the built Claude Design project against the app and t
    - **R3-D10** crews;
    - **R3-D1** entry and onboarding (it carries the never-run R2-D6);
    - **R3-D12/16**.
-5. **R2-D7** as written above. Its proposal flows are drawn now.
-6. **R3-A:** accessibility frames, the icon inventory, the creature set.
-7. **Prompt 10** again, across every flow.
+5. **R3-G:** Flows 11–14 aligned with what the server now serves.
+6. **R2-D7** as written above. Its proposal flows are drawn now.
+7. **R3-A:** accessibility frames, the icon inventory, the creature set.
+8. **Prompt 10** again, across every flow.
 
 ## R3-0 · Fix the system, apply the rulings
 
@@ -522,7 +523,7 @@ Round 3 comes from reading the built Claude Design project against the app and t
 Read docs/redesign/ROUND3.md parts A, B and C. Do these, in order, and show me each before moving on.
 
 1. The token export (B1). Declare every Reduce Motion value as its own token in :root (e.g. --dur-quick-reduce-motion, @kind other). Make the prefers-reduced-motion block alias them with no @kind annotation, or move it to styles.css. Use 160ms, not 0, for the faded durations, and --shake-distance-reduce-motion: 0 instead of zeroing --dur-medium. Then show me _ds_manifest.json: --rise-list must read 8px, --dur-base 220ms and --orb-drift 24px, with the -reduce-motion tokens listed beside them. (--dur-quick can't show the bug: its Reduce Motion value is 160ms too.)
-2. The missing tokens (B2): the 0.80 bar and sheet tint, the 0.86 blur tier, --dur-hold 900ms, --dur-hold-staff 1000ms, the creature palettes (8), the venue-type plates and the map ramps.
+2. The missing tokens (B2): the 0.80 bar and sheet tint, the 0.86 blur tier, --dur-hold 900ms, the creature palettes (8), the venue-type plates and the map ramps.
 3. tokens/tokens.json (B3), generated from the CSS: base motion values plus a separate Reduce Motion table, the seven springs as {stiffness, damping, mass: 1}, the type roles, the corrected kinds.
 4. The rulings (A1–A4). Make the copy changes and removals their "Frames" column names, before and after side by side. Where it says "As drawn", change nothing. Draw no new frames here: N3, S2, C1 and C4 are drawn by R3-D9, R3-D12/16 and R3-D10. A5–A7 change frames only through the C rows and the R3-D prompts that cite them, except: remove any drawn organiser tools on the Scene (D1), goals on the profile edit screens (D3) and conversation pinning (D4).
 5. The corrections (C, rows 1–21). Before and after.
@@ -638,8 +639,21 @@ Each goes inside the Round 2 delta wrapper. The sections named are in [`ROUND3.m
 - **2.3:** the pulled photo tile.
 
 **R3-D12/16 · Flows 12 and 16**
-- **12:** remove Quarterly and Yearly from the page and Manage.
+- **12:** see R3-G below.
 - **16:** each public page in its "listings not public" variant.
+
+## R3-G · Flows 11–14: align with what the server now serves
+
+Run after R3-0, inside the delta wrapper. Blend'n+, regulars and matching v2 were built after Round 3, so these frames move from "Proposal — not built" to built, where ROUND3 part G says so.
+
+```
+Read docs/redesign/ROUND3.md part G. For each row whose "Design change" isn't "As drawn", change the frames it names, before and after side by side:
+- Flow 11: the expiry prompt's copy (45 min).
+- Flow 12: all four plans ("3 months", not "Quarterly"), Night Pass · 24 hours, the server-granted trial with nothing renewing, "What you get" as built (perks and crew extras "Coming soon"). Keep the Tonight sheet and its preselection: the client builds them.
+- Flow 13: the door pass with the rotating code and its 30-second ring (no staff hold, no tonight's word), the four pass states, "Why you got this" for regulars only, the visible-regular line without a photo, Report and Stop offers from {venue} under ⋯, the offline pass.
+- Flow 14: label counts before and after a reveal, the server's overlap sentences, the three-a-day refusal, the "Show my badges" switch, the room-under-8 state, the crew badge as a tier.
+Remove "Proposal — not built" from every frame that is now built; keep it on artists, the icebreaker, the match band and Wrapped.
+```
 
 ## R3-A · Accessibility, icons, creatures
 

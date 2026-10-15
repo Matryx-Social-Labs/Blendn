@@ -28,7 +28,7 @@ The app has a written design system, and parts of it **ban what this brief asks 
 
 **Round 3 (2026-10-09):** [`ROUND3.md`](./ROUND3.md) rules on the questions this brief and SCREENS-ADDITIONS left open, and wins wherever it rules. Four of its rules change how this brief is read:
 - Reduce Motion values are their own tokens (`--dur-quick-reduce-motion`), never an override of the base token.
-- There is one hold in the product: 900 ms, the `H.tick` ramp, `H.commit` (check-in and Go Live), 1 s for staff.
+- There is one hold in the product: 900 ms, the `H.tick` ramp, `H.commit` (check-in and Go Live). Staff redeem a door pass by typing its rotating code on the dashboard (ROUND3 G3).
 - A refusal about another person (a like or wave refused) carries no haptic.
 - The app is alive through change, calm otherwise. ROUND3 part E is motion pack 2.
 
@@ -999,7 +999,7 @@ When flows are handed to Claude Code, these old guards are rewritten in the same
 | 9 | **Crews** (now designed in SCREENS-ADDITIONS Flow 10) | Create from friends, crew chat, "We're here", crew cards that carry **counts, never people** (the shipped API overrides the plan's menagerie), a Blend room in the Banter's Live now, a reveal scoped to one Blend |
 | 10 | **Matching v2** | Person and crew cards with one sentence of overlap; profile fields for languages, home state, this-or-that, an opt-in sign, IPL teams |
 | 11 | **Blend'n+** | The paywall: ₹199/mo · ₹499/quarter · ₹1,499/yr · Night Pass ₹49, **App Store / Play in-app purchase only**; restore and manage |
-| 12 | **Regulars** | A **live, animated door pass** (one per day; staff redeem it with a 1-second hold, ROUND3 P1). It's the cousin of DICE's activating ticket, and a natural place for the "disc fills" language. Plus a revocable "Let this venue know I'm a regular" opt-in |
+| 12 | **Regulars** | A **live, animated door pass** (one per day; staff type its rotating code on the dashboard and tap Redeemed, ROUND3 G3). It's the cousin of DICE's activating ticket, and a natural place for the "disc fills" language. Plus a revocable "Let this venue know I'm a regular" opt-in |
 
 ---
 

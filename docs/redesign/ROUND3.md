@@ -20,7 +20,8 @@ What this file holds:
 | [C](#c--corrections-drawn-frames-that-contradict-the-server-or-a-rule) | Corrections: drawn frames that contradict the server or a rule | R3-0 |
 | [D](#d--new-screens-and-states-by-flow) | New screens and states, flow by flow: the small paths nobody drew (tap a person in the chat, wave back, the long-press menu…) | R3-D… |
 | [E](#e--making-it-alive-motion-pack-2) | Making it alive: motion pack 2 (#25–#53) | R3-2 |
-| [F](#f--not-design-server-and-client-follow-ups) | Not design: server and client follow-ups | — |
+| [F](#f--not-design-server-and-client-follow-ups) | Not design: server and client follow-ups, now Jira tickets | — |
+| [G](#g--built-since-round-3-flows-1114-aligned-2026-10-15) | Built since Round 3: Flows 11–14 aligned with what the server now serves; rulings P1–P7 revised | R3-G |
 
 **Authority.** Where this file rules on something, it wins over `DESIGN-BRIEF.md`, `SCREENS.md` and `SCREENS-ADDITIONS.md`. Everything it doesn't mention stands.
 
@@ -57,13 +58,13 @@ The owner asked for the recommendations to be taken (2026-10-09). "As drawn" mea
 
 | # | Question | Ruling | Frames |
 |---|---|---|---|
-| P1 | Staff redeem a door pass by tap or by hold | **A 1-second hold**, as drawn, with a single activation for screen readers. It replaces the earlier "tap": a pocket tap can't spend a one-use pass. | As drawn. |
-| P2 | Night Pass product type | **A one-off, not a subscription.** Google Play: a one-time product. App Store: a non-renewing subscription. Both through RevenueCat; confirm against the store guidelines when built. | None. |
-| P3 | Trial length | **14 days**, reminder on day 12, as drawn. | As drawn. |
-| P4 | Plans on offer | **Monthly ₹199 and Night Pass ₹49 only at launch.** Quarterly and yearly were never priced by the owner. | Flow 12 page and Manage: remove Quarterly and Yearly. |
+| P1 | Staff redeem a door pass by tap or by hold | ~~A 1-second hold~~ **Superseded by G3:** the built pass shows a rotating code that staff type on the dashboard. | G3 |
+| P2 | Night Pass product type | **A one-off, not a subscription**, as built. It lasts **24 hours from purchase** and stacks (G2). | G2 |
+| P3 | Trial length | **Superseded by G2:** 14 days, granted by our server to eligible accounts; nothing renews when it ends. | G2 |
+| P4 | Plans on offer | **Superseded by G2:** the four configured packages ship (Monthly, 3 months, Yearly, Night Pass). | G2 |
 | P5 | Default selection | **Monthly** on the page, **Just tonight** in the Tonight sheet. | As drawn. |
-| P6 | The expiry prompt | Free extend is the gradient primary; Blend'n+ a solid secondary; **never on a night's first Go Live.** | As drawn. |
-| P7 | Tonight's word on the pass | **Keep**, 12% tint. | As drawn. |
+| P6 | The expiry prompt | Free extend is the gradient primary; Blend'n+ a solid secondary; **never on a night's first Go Live** (client rule). The free extend is **45 min**, as built (G1). | G1 |
+| P7 | Tonight's word on the pass | **Superseded by G3:** the rotating code replaced it. | G3 |
 | P8 | The centre button while live at a venue | **Variant 1, the plain full disc.** The time lives in the live pill. The fill already means "you can check in here"; a second meaning on it confuses both. | Flow 11 disc board: mark variant 2 "Rejected". |
 | P9 | (c′) "Go live · Toit" on the disc | **Later.** It needs venue check-in areas on the client. | Stays a proposal. |
 
@@ -149,7 +150,7 @@ A build from that export has Reduce Motion on for everyone: no list rise, instan
 ### B2 · Missing tokens
 
 - **Glass tints the frames already use:** bar and sheet ink **0.80** and the **0.86** blur tier (decision 3). The manifest has only `--glass-tint-text 0.60`, so a handoff would build bars where `textSecondary` measures 2.35:1.
-- **Hold durations:** `--dur-hold: 900ms` (check-in, Go Live) and `--dur-hold-staff: 1000ms`. The hold's speed is information and stays under Reduce Motion; today it's a literal.
+- **Hold duration:** `--dur-hold: 900ms` (check-in, Go Live). The hold's speed is information and stays under Reduce Motion; today it's a literal.
 - **Palettes now written as literals:**
   - the creature palettes (4 in `ui.js`; the client has 8);
   - the venue-type plates (`places.js`, `flow11.js`);
@@ -246,7 +247,7 @@ The anonymous room is the product's face; it shouldn't be stock icons.
 | Where | Drift | Fix |
 |---|---|---|
 | Flow 10 validation | The field shakes, with no haptic | Shake the primary, `H.error` once on submit (decisions 95, 150) |
-| Flow 13 staff hold | `H.threshold` | `H.tick` (§21.5), `H.success` on the stamp |
+| Flow 13 staff hold | `H.threshold` | Removed: staff type the code on the dashboard (G3) |
 | Flow 11 Go Live hold (decision 134) | 700 ms, `H.threshold` | The check-in hold exactly: 900 ms, the `H.tick` ramp, `H.commit`, then `H.success` (§21.5). One hold in the product |
 | Flow 6 invite landing | The orbs lift | Orbs lift only at check-in, the Match and Ready (§9.3 #22) |
 | `F4.sheet` on Android | 60% scrim | 50% (§13) |
@@ -286,7 +287,7 @@ The project holds the full Satoshi package (`uploads/Satoshi_Complete/`, 60 file
 | 13 | Flow 2 media | A pulled photo drawn blurred | The photo is gone: an empty tile with the shield glyph (D · 6.3). |
 | 14 | Flow 6 blocked users | A reason under each row | The server returns no reason; the date only. |
 | 15 | Flow 3 / Flow 7 | Two different "Cancel your RSVP?" bodies | One: "Your place goes to the next person in line." |
-| 16 | Flow 12 | Quarterly and Yearly plans | Remove (P4). |
+| 16 | Flow 12 | "Quarterly" | Keep all four plans (G2); label it "3 months". |
 | 17 | Flow 9 | Two copy columns; "Crew update" | Rulings N2, N6. |
 | 18 | Flow 3 | "The Pulse" with an orange word | All white (F3). |
 | 19 | Flow 11 | Disc variant 2 | Marked "Rejected" (P8). |
@@ -370,7 +371,7 @@ Copy: "It's mutual" · "You and {name} matched · {reason}", where {name} is the
 - **The disc:** drains live → idle on `M.settle`.
 - **Haptic:** none; it's unsolicited, like the auto-checkout notice.
 
-**4.7 · Precise location is off at the door**
+**4.7 · Precise location is off at the door** (iOS shipped its own tray in client #367; Android is SCRUM-634)
 
 Today this reads "GPS signal weak · accuracy 3000m", which moving can never fix.
 
@@ -621,7 +622,7 @@ Today an attendee who resets a password is sent to the dashboard's `/login`, whi
 
 ### Flows 12 and 16
 
-- **12:** remove Quarterly and Yearly (P4).
+- **12:** align with what's built (part G).
 - **16:** each public page in its "listings not public" variant (S2).
 
 ### R2-D7 can run now
@@ -695,52 +696,90 @@ Its proposal pieces were waiting on Flows 12–14, which are drawn. Run it as wr
 
 ## F · Not design: server and client follow-ups
 
-The design can be drawn without these. Building it can't. Listed for the owner, to file as tickets.
+The design can be drawn without these; building it can't. Re-verified on admin dev `98fd7c5a` and client dev `bc8b92a` (2026-10-15) and filed in Jira with the label `found-in-redesign-r3`.
 
-**Server (admin)**
-- **N1:** stop sending the "Message request declined" push and writing its bell row.
-- **The crews sweeper still dissolves a new crew of one with open invites** within 15 minutes (`lib/crews/sweep.ts` `repairCrews` counts `crew_members` only). Flow 10's "Forming" state stays blocked until it counts open invites.
-- **4.6:** when an event is cancelled:
-  - emit `live:ended { reason: 'cancelled' }` to each checked-in person;
-  - add checked-in people to the cancel push. Today it goes to RSVPs and saves only.
-- **1.2:** the reset-password page redirects every user to the dashboard's `/login` after 2.5 s (`app/reset-password/page.tsx:77,121`), which refuses attendees.
-- **#25:** `event:room:checkin` goes to the room for everyone, including people with online status off, whom the roster hides (`lib/check-in-core.ts:401` against `checkins/route.ts:149`). Filter it by the roster's rule; the client prints "{name} walked in" from it today.
-- **4.6:** decide whether a cancelled event's chat closes; today it stays open for its normal window.
-- **5.12:** the room-info participants list ignores `visibleInRoom`. It always shows the pseudonym, even for someone the roster shows by name.
-- **R6:** a friend flag on the room roster, set only where `visibleInRoom` already names them; never for a friend with `friends_see_me_in_rooms` off.
-- **10.1:** let `POST /users/:id/report` accept crew and Blend handles, as block already does.
-- **5.4:**
-  - `retryAfter` on `SPAM_BLOCKED`;
-  - human sentences for "Burst rate exceeded…" and "Too many links (3)".
-- **5.6:** strip the "📢 [Announcement…]" and "📣 [Sponsored]" prefixes from previews, and never use a sponsored message as one.
-- **R9:** refuse attendee media in event rooms; allow DM photos only between people who've revealed, or friends; prove with a test that a sealed copy carries no location metadata (nothing strips EXIF today).
-- **5.10:** serve the contact-details warning before sending, with a crew-room variant.
-- **4.10:** tell the author when the slower check takes a Board post down.
-- **3.1:** `changedAt` and `changes[]` on the event and RSVP reads.
-- **6.3:** a signal when moderation pulls a photo.
-- **9.2:** a bell row when a report is acted on.
-- **C1:** the crew-reveal system line.
-- **N2, N4, N6:** the push copy.
-- **4.1 h:** a single-card read for a person who isn't on the loaded deck page.
-- Later: outgoing message requests (`direction=sent`), `mutedUntil`.
+**Defects, filed**
 
-**Client**
-- **Waves (4.2, 9.1):**
-  - `room:wave` is heard only while the overlay is open (`useRoom`), so a wave is lost with it closed;
-  - a received wave fires two haptics; a sent one fires Light.
-- **Copy (C20):** Copy fires a success haptic.
-- **Profiles (6.1, 6.2):**
-  - `/user/[id]` always starts unliked: `youLiked` isn't passed from the card;
-  - a received message request shows as "Requested".
-- **Chat (5.1, 5.8, 5.11):**
-  - the chat avatar is a plain `View` with no tap target;
-  - a failed send is dropped when you leave the chat, and there are no drafts;
-  - links aren't tappable.
-- **Photos (6.3):** the limit says 5 MB while the server allows 10 MB.
-- **Motion (E):**
-  - `MOTION_SPRING.gentle` / `snappy` bounce at 0.36 / 0.45;
-  - four `LinearTransition`s use an off-token curve;
-  - `ScalePress` runs on the JS thread, fires `selectionAsync` on every press, and drops the press squash under Reduce Motion.
-- **Not installed yet:** `expo-glass-effect` (#30), `expo-battery` (the Low Power pause), `expo-sensors` (the PassDisc tilt), `lucide-react-native`.
+| Ticket | What | Item |
+|---|---|---|
+| SCRUM-620 · P2 | `event:room:checkin` announces people whose online status is off (`lib/check-in-core.ts:403`); the client prints "{name} walked in" | #25, C1 |
+| SCRUM-626 · P2 | Chat media keeps its location metadata; event rooms accept attendee media; DMs accept media with no reveal or friend check | R9 |
+| SCRUM-628 · P2 | Venue offer pushes are on by default with no consent in the app (App Store 4.5.4) | G3 |
+| SCRUM-621 · P3 | "Message request declined" push and bell row | N1 |
+| SCRUM-622 · P3 | A cancelled event tells nobody who is checked in | 4.6 |
+| SCRUM-623 · P3 | A person can't be reported from a crew chat or a Blend | 10.1 |
+| SCRUM-624 · P3 | Spam refusals show developer text; `SPAM_BLOCKED` has no `retryAfter` | 5.4 |
+| SCRUM-625 · P3 | Banter previews show raw broadcast text; sponsored messages become previews | 5.6 |
+| SCRUM-627 · P3 | Lock-screen pushes carry names and user-typed text | N2, N4, N6 |
+| SCRUM-630 · P3 | A wave is lost with the overlay closed; double haptics | 4.2, 9.1 |
+| SCRUM-631 · P3 | Tapping a person in the room chat opens nothing | 5.1 |
+| SCRUM-632 · P3 | A profile starts unliked; a received request shows as "Requested" | 6.1, 6.2 |
+| SCRUM-633 · P3 | A failed send disappears when you leave the chat | 5.8 |
+| SCRUM-634 · P3 | Android approximate location loops on "GPS signal weak" | 4.7 |
+| SCRUM-635 · P3 | Checking in elsewhere takes you out silently | 4.8 |
+| SCRUM-329 · P3 (existing) | The reset-password page sends attendees to `/login` (`page.tsx:76,101`) | 1.2 |
+| SCRUM-629 · P4 | Event-room participants always show the pseudonym | 5.12 |
+| SCRUM-636 · P4 | Photos over 5 MB refused by the app; the server takes 10 MB | 6.3 |
+| SCRUM-637 · P4 | Copy fires a success haptic; links aren't tappable | C20, 5.11 |
+| SCRUM-638 · P4 | `supportsTablet: true` | R12 |
+
+**Fixed since Round 3:** the crews sweeper no longer dissolves a new crew of one (admin #648), so Flow 10's "Forming" state is unblocked. iOS approximate location has its own tray (client #367).
+
+**Server work the design needs, not filed yet** (the owner's rule is to file as each piece is built): `changedAt` / `changes[]` (3.1) · serving the contact-details warning, whose copy already exists in `contactInfoWarning` (5.10) · telling the author of a Board post taken down (4.10) · a pulled-photo signal (6.3) · a report-outcome row (9.2) · the crew-reveal line (C1) · a friend flag on the roster (R6) · a single-card read (4.1 h) · later, outgoing requests and `mutedUntil`.
+
+**Client work that is the redesign itself, not filed:**
+- **Motion (E):** `MOTION_SPRING.gentle` / `snappy` bounce at 0.36 / 0.45; four `LinearTransition`s on an off-token curve; `ScalePress` on the JS thread, `selectionAsync` on every press, no squash under Reduce Motion.
+- **Not installed:** `expo-glass-effect` (#30), `expo-battery` (the Low Power pause), `expo-sensors` (the PassDisc tilt), `lucide-react-native`.
 - **Theme:** still the old EMBER palette and Plus Jakarta Sans.
-- **R12:** `supportsTablet: true`.
+
+
+---
+
+## G · Built since Round 3: Flows 11–14 aligned (2026-10-15)
+
+Admin steps 10 (matching v2, #657), 11 (Blend'n+, #653) and 12 (regulars, #660) shipped after Round 3. **Flows 12, 13 and 14 are no longer proposals.** Where the build is a server fact, the design follows it. Where it's a client choice, the design still leads and the client builds to it. Facts read on admin dev `98fd7c5a` and client dev `bc8b92a`.
+
+### G1 · Places live (Flow 11)
+
+| Item | Built | Design change |
+|---|---|---|
+| The expiry prompt | "Extend 45 min · free" · "Stay live till I leave · Blendn+" · "Let it end" (`lib/goLive.ts:43`, `components/LiveAtVenue.tsx:203-223`) | Use the built copy: **45 min**, not 20. Keep the client rule: no Plus row on a night's first Go Live |
+| Stay | 60 min, then +20 per ping inside, up to 4 h, cut at 06:00 (`lib/go-live.ts:21-33`); label "Stay while Blendn is open here" | As drawn |
+| Stay without Plus | 403 `PLUS_REQUIRED` "Staying live is part of Blendn+." (server copy) | As drawn |
+
+### G2 · Blend'n+ (Flow 12)
+
+| Item | Built | Design change |
+|---|---|---|
+| Plans | Four packages: Monthly ₹199 · 3 months ₹499 · Yearly ₹1,499 · Night Pass ₹49 (`docs/IAP-SETUP.md`); prices come from the store's own price string (`lib/purchases.ts:96-126`) | **Keep all four** (P4 superseded). Label "3 months", not "Quarterly". Savings lines computed from the store's prices only |
+| Night Pass | One-off, **24 h from purchase**, stacks (`lib/plus.ts:51`) | "Night Pass · 24 hours" everywhere; never "until 6 am" |
+| Trial | 14 days, **granted by our server**, only to accounts active before their city's paywall date; no store intro offer (`lib/plus.ts:33-52`) | **Nothing renews when it ends.** Replace the timeline with "14 days of Blend'n+, free. Nothing renews: choose a plan when it ends, or don't." No "we'll remind you", no "₹199/month starts" |
+| Referral month | Built (`lib/plus.ts:37-42`) | Manage's "A month on us" state, as drawn |
+| What Plus buys | Stay, and night history beyond the last 3 (`/me/attendance` `lockedCount`) | The "What you get" list shows those two now; partner perks and crew extras say "Coming soon" until SCRUM-584 builds them |
+| Launch gating | Per city: "Blendn+ is free during launch in your city…" (server copy) | As drawn ("Free during launch") |
+| The Tonight sheet, preselection | Not built: `/plus` buys on a row tap (`app/plus.tsx:247-265`) | **The design stands** (P5). The client builds the contextual sheet and the preselection |
+
+### G3 · Regulars and the door pass (Flow 13)
+
+| Item | Built | Design change |
+|---|---|---|
+| Redeem | **Staff type a 6-character code on the dashboard and tap Redeemed.** The code changes every 30 s (`lib/offers/pass-code.ts:20-21`) and needs a connection; venue owners only; one pass per person per venue per night | The PassDisc keeps the pour and the tilt (proof it's a live screen) and shows **the code, large, in Geist Mono, with a 30-second ring**. Copy: "Show this at the door. Staff type the code and tap Redeemed." (server copy). No staff hold on the attendee's phone (P1 superseded). Offline: "This pass needs a connection to show its code." |
+| Tonight's word | Not built; the code does that job | Removed (P7 superseded) |
+| Pass states | live · redeemed · used_tonight · ended (`GET /offers/:id`) | One frame each; "Used tonight" is still and neutral |
+| Audience | **Regulars only**: 3+ nights in 30 days; a floor of 5; Venue Pro only; 2 a week; 140 characters (`lib/regulars.ts`, `lib/offer-actions.ts`) | Drop the lapsed, first-timer and live-now examples. "Why you got this": "Toit sent this to everyone who's been there 3 or more nights in the last 30 days. Blend'n picked who — Toit never sees the list, only roughly how many were sent and used." |
+| Offer push | "You have a new offer" / "Open Blendn to see it." (server copy); **on by default** | The in-context ask (13.3) is required before any offer push: SCRUM-628 |
+| Visible regular | First name and nights in the last 30, **no photo**; off by default | 13.4: "Toit will see your first name and how many nights you've been in the last 30 days." Remove "profile photo" |
+| Report an offer, stop a venue's offers | `POST /offers/:id/report`; `PUT /me/offers` | Add both to the offer card's ⋯ |
+| Passes & offers list | Not built; offers open from the push and the bell | **The design stands**; the client builds the list on `GET /offers` |
+
+### G4 · Matching v2 (Flow 14)
+
+| Item | Built | Design change |
+|---|---|---|
+| Labels on a card | 2 before a reveal, 4 after; origin (Tier B) only in rooms of 8+; the rarest overlap first (`lib/matching.ts`) | As drawn, with the counts stated |
+| The face line (14.1) | The client's face line ignores the server's overlaps (`lib/roomMoments.ts:62-98`) | **The design stands:** the face line is `overlaps[0]`. Client work |
+| Copy | "You both picked {a} over {b}" · "Both from {state}" (server copy) | Use the server's sentences |
+| Limits | "You can change your languages, home state, sign or field of work three times a day. Try again tomorrow." (server copy) | A refusal frame in Edit profile |
+| Badges | As ruled, plus a "Show my badges" switch (on by default); hidden in rooms under 8 | Add the switch to Me's badges card; draw the room-under-8 state (no badges) |
+| The crew badge | "{N} nights out together", a number (`lib/crews/signals.ts:160`) | Badges are tiers, never counts: "Out together often" (a one-line server change; file with the redesign) |
+| Not built | Artists, the icebreaker, the match band, Wrapped | Stay labelled "Proposal — not built" |
