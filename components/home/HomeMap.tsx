@@ -191,6 +191,8 @@ export const HomeMap = memo(function HomeMap({
   }, [bottomInset])
   // A move asked for before the map is ready is dropped by native: hold it until it is (review H3).
   const ready = useRef(false)
+  // The credit's few seconds start when there is a map to see, not when the screen mounts.
+  const [mapUp, setMapUp] = useState(false)
   const pendingMove = useRef<Move | null>(null)
   /** Within a city, an ease of `easeMs`; across cities, a jump under the fade (`cameraMove`). */
   const moveTo = (move: Move) => {
@@ -328,6 +330,7 @@ export const HomeMap = memo(function HomeMap({
   // Before anybody moves the map there is no region change to ask from: seed it once the map is up.
   const onLoaded = () => {
     ready.current = true
+    setMapUp(true)
     // The first frame's zoom was turned into a height before it was tilted (see `moveTo`): it opened near z15. Again, tilted.
     camera.current?.zoomTo(MAP_THEME.camera.zoom, { padding: padding.current, duration: 0 })
     const held = pendingMove.current
@@ -476,7 +479,7 @@ export const HomeMap = memo(function HomeMap({
         </GeoJSONSource>
         <Chips chips={lit.chips} onOpen={open} />
       </Map>
-      <MapCredit text={mapCreditLine(ownTiles)} top={topInset + SPACE.sm} dismissed={moved} />
+      {mapUp ? <MapCredit text={mapCreditLine(ownTiles)} top={topInset + SPACE.sm} dismissed={moved} /> : null}
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.fade, fadeStyle]} />
       <LocateButton visible={locateVisible} following={hasFix && !moved} drawerTop={drawerTop} drawer={drawer} onPress={locate} />
     </>

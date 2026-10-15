@@ -199,7 +199,9 @@ describe('the credits (review H2; the owner, 2026-10-15: no (i) on the map)', ()
     const map = code('components/home/HomeMap.tsx')
     expect(map).toMatch(/attribution=\{false\}/)
     expect(map).toMatch(/logo=\{false\}/)
-    expect(map).toMatch(/<MapCredit text=\{mapCreditLine\(ownTiles\)\}/)
+    // Mounted once the map has loaded, so its few seconds are seconds of map.
+    expect(map).toMatch(/\{mapUp \? <MapCredit text=\{mapCreditLine\(ownTiles\)\}/)
+    expect(map).toMatch(/ready\.current = true\s*setMapUp\(true\)/)
     // The source carries no attribution of its own any more: nothing would show it.
     expect(code('components/home/MapLitLayers.tsx')).not.toMatch(/attribution=/)
   })
