@@ -28,7 +28,7 @@ The Blend'n screen is an **overlay hosted by the tab layout** (a modal route put
 - [x] Person card: expands from face, pull down to close, double-tap / pull to like, wave, connect, safety
 - [x] Match moment: hearts arc your face → theirs, avatar bump, success haptic, "Say hi" opener
 - [x] Chat dock: last 2 messages + composer, arrivals/waves/matches as system lines, drag up → full chat
-- [ ] Polls + reactions UI (API clients exist: votePoll, reactToChatMessage)
+- [ ] Polls + reactions UI (API client exists: reactToChatMessage; the unused getPoll/votePoll were deleted — restore from git history)
 - [x] Swipe down to close
 
 ## Verify

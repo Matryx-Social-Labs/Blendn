@@ -40,7 +40,7 @@ import { UPCOMING_THUMB, UpcomingCard } from '../../components/pulse/UpcomingCar
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import { VirtualizedList } from '../../components/VirtualizedList'
-import { eventFromApi, getCategories, getEvents as fetchEventsApi, type BlendnEvent } from '../../lib/api'
+import { eventFromApi, getEvents as fetchEventsApi, type BlendnEvent } from '../../lib/api'
 import {
   activeFilterCount,
   filtersToQuery,
@@ -1190,10 +1190,11 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
     let cancelled = false
     void (async () => {
       try {
-        const result = await getCategories()
-        if (cancelled || !Array.isArray(result?.data)) return
+        const result = await apiClient.getCategories()
+        const rows = result.success ? result.data : undefined
+        if (cancelled || !Array.isArray(rows)) return
         setCategoryOptions(
-          result.data
+          rows
             .filter((c) => !c.parent_id && typeof c.slug === 'string' && typeof c.name === 'string')
             .map((c) => ({ slug: String(c.slug), name: String(c.name) }))
         )

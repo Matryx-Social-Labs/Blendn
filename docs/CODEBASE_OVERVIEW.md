@@ -271,8 +271,6 @@ Cache TTLs per endpoint type:
 | Events list | 60 s |
 | Chat groups / conversations | 30 s |
 | Check-ins | 30 s |
-| Event check-ins | 30 s |
-| Interested users | 30 s |
 | Chat participants | 30 s |
 | Message requests | 30 s |
 | Categories | 10 min |

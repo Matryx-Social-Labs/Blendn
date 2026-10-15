@@ -101,7 +101,7 @@ Resume reads the unfinished flow's progress from `AsyncStorage` (`lib/onboarding
 | File | Purpose |
 |------|---------|
 | `apiClient.ts` | Core HTTP client — JWT auth, token refresh, priority request queue, SWR-style response cache |
-| `api.ts` | Legacy wrappers over `apiClient` with camelCase→snake_case transform; prefer `apiClient` directly for new code |
+| `api.ts` | `getEvents` (0-based page in, snake_case events out) and `eventFromApi`, the event mapper. Everything else calls `apiClient` directly |
 | `socketClient.ts` | Socket.io client — typed events, room-based subscriptions, reconnect with exponential backoff |
 | `useAuth.ts` | Global auth state **singleton** (not React context) + `useAuth()` hook |
 | `queryCache.ts` | In-memory TTL/LRU cache (max 500 entries, 5 min default TTL) |

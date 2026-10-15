@@ -1,38 +1,13 @@
 /**
- * API Helper
- *
- * This module provides a unified API layer using the admin backend API.
- * Supabase has been deprecated and removed.
+ * The event list in the shape the app holds: `getEvents` over `apiClient`, and
+ * the camelCase → snake_case mapper. Everything else calls `apiClient` directly.
  */
 
 import { apiClient } from './apiClient'
 import { sessionFromApi } from './eventSession'
 import { Logger } from './logger'
 
-Logger.info('api', 'Using admin backend for API calls')
-
-// ============== EVENTS ==============
-
-interface EventsParams {
-  page?: number
-  limit?: number
-  search?: string
-  /** Scopes the list to one city. Values come from `apiClient.getEventCities()`. */
-  city?: string
-  lat?: number
-  lon?: number
-  /** A hard cut in km. Omit it for browsing — see `apiClient.getEvents`. */
-  radius?: number
-  categoryId?: string
-  categorySlug?: string
-  startDate?: string
-  endDate?: string
-  status?: string
-  sortBy?: string
-  sortOrder?: 'asc' | 'desc'
-  include?: string
-  interestedPreviewLimit?: number
-}
+type EventsParams = NonNullable<Parameters<typeof apiClient.getEvents>[0]>
 
 /** The server's own event shape, so the mapper below cannot drift from it. */
 type EventPayload = NonNullable<
@@ -103,27 +78,9 @@ export async function getEvents(params?: EventsParams, options?: { force?: boole
     page: (params.page || 0) + 1,
   } : { page: 1 }
   const result = await apiClient.getEvents(apiParams, { force: !!options?.force })
-  Logger.info('api', 'getEvents raw result', {
-    success: result.success,
-    eventCount: result.data?.events?.length || 0,
-    firstEvent: result.data?.events?.[0] ? {
-      id: result.data.events[0].id,
-      title: result.data.events[0].title,
-      coverImageUrl: result.data.events[0].coverImageUrl,
-    } : null
-  })
   if (result.success && result.data) {
     // Transform API response (camelCase) to mobile format (snake_case)
     const events = result.data.events.map(eventFromApi)
-    Logger.info('api', 'getEvents transformed', {
-      eventCount: events.length,
-      firstEvent: events[0] ? {
-        id: events[0].id,
-        title: events[0].title,
-        cover_image_url: events[0].cover_image_url,
-        venue_name: events[0].venue_name,
-      } : null
-    })
     return {
       data: events,
       meta: {
@@ -163,136 +120,3 @@ export interface BlendnEvent extends MappedEvent {
    */
   display_city?: string
 }
-
-export async function getEvent(eventId: string, params?: { lat?: number; lon?: number }) {
-  const result = await apiClient.getEvent(eventId, params)
-  if (result.success && result.data) {
-    return { data: result.data, error: null }
-  }
-  return { data: null, error: { message: result.error || 'Failed to fetch event' } }
-}
-
-// ============== CHECK-IN ==============
-
-// Checking in and out lives in lib/checkIn.ts.
-
-export async function getCheckinStatus(eventId: string) {
-  // Get check-in status from batch endpoint
-  const result = await apiClient.getBatchCheckinStatuses([eventId])
-  if (result.success && result.data?.statuses?.[eventId]) {
-    const status = result.data.statuses[eventId]
-    return {
-      status: status.status === 'checked_in' ? 'checked_in' : 'not_checked_in',
-      checked_in_at: status.checkInTime || null,
-      checked_out_at: null,
-    }
-  }
-  return { status: 'not_checked_in' }
-}
-
-// ============== INTERESTS/FAVORITES ==============
-
-export async function toggleEventInterest(eventId: string) {
-  const result = await apiClient.toggleInterest(eventId)
-  if (result.success && result.data) {
-    return result.data
-  }
-  return null
-}
-
-export async function getUserInterestedEventIds(eventIds?: string[]) {
-  if (!eventIds || eventIds.length === 0) {
-    return new Set<string>()
-  }
-  const result = await apiClient.getBatchInterestStatuses(eventIds)
-  if (result.success && result.data?.interests) {
-    const set = new Set<string>()
-    Object.entries(result.data.interests).forEach(([eventId, interested]) => {
-      if (interested) set.add(eventId)
-    })
-    return set
-  }
-  return new Set<string>()
-}
-
-export async function getEventInterestCounts(eventIds: string[]) {
-  if (!eventIds || eventIds.length === 0) {
-    return {}
-  }
-  const result = await apiClient.getBatchInterestCounts(eventIds)
-  if (result.success && result.data?.counts) {
-    return result.data.counts
-  }
-  return {}
-}
-
-// ============== CHAT ==============
-
-export async function sendChatMessage(
-  chatGroupId: string,
-  content: string,
-  type: 'text' | 'image' | 'video' = 'text',
-  metadata?: Record<string, unknown>
-) {
-  const result = await apiClient.sendChatMessage(chatGroupId, content, type, metadata)
-  if (result.success) {
-    return { data: result.data, error: null }
-  }
-  return { data: null, error: { message: result.error || 'Failed to send message' } }
-}
-
-export async function getChatMessages(chatGroupId: string, params?: { limit?: number; before?: string }) {
-  const result = await apiClient.getChatMessages(chatGroupId, params)
-  if (result.success && result.data) {
-    return { data: result.data, error: null }
-  }
-  return { data: null, error: { message: result.error || 'Failed to fetch messages' } }
-}
-
-// ============== PROFILE ==============
-
-export async function getProfile(userId: string) {
-  const result = await apiClient.getProfile(userId)
-  if (result.success && result.data) {
-    return { data: result.data, error: null }
-  }
-  return { data: null, error: { message: result.error || 'Failed to fetch profile' } }
-}
-
-export async function updateProfile(
-  userId: string,
-  updates: {
-    name?: string
-    phone?: string
-    age?: number
-    location?: string
-    interests?: string[]
-    onboarded?: boolean
-  }
-) {
-  const result = await apiClient.updateProfile(userId, updates)
-  if (result.success && result.data) {
-    return { data: result.data, error: null }
-  }
-  return { data: null, error: { message: result.error || 'Failed to update profile' } }
-}
-
-// ============== NOTIFICATIONS ==============
-
-export async function registerPushToken(token: string, platform: 'ios' | 'android') {
-  const result = await apiClient.registerPushToken(token, platform)
-  return result.success
-}
-
-// ============== CATEGORIES ==============
-
-export async function getCategories() {
-  const result = await apiClient.getCategories()
-  if (result.success && result.data) {
-    return { data: result.data, error: null }
-  }
-  return { data: null, error: { message: result.error || 'Failed to fetch categories' } }
-}
-
-// Export flag for consumers to check (always true now)
-export const USE_API_BACKEND = true
