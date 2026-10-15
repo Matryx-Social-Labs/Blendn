@@ -75,8 +75,8 @@ import {
 } from '../../lib/pulse'
 import { liveWindow, sessionOver } from '../../lib/eventSession'
 import { mergeEventPage, pageHasMore, pulseEmptyCopy, pulseEmptyKind } from '../../lib/pulseFeed'
-import { askIntentRoute, checkOutOf, revealOffer, submitCheckIn } from '../../lib/checkIn'
-import { openInMaps } from '../../lib/openInMaps'
+import { checkOutOf } from '../../lib/checkIn'
+import { openBlendn } from '../../lib/blendnOverlay'
 import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import { usePresence } from '../../lib/usePresence'
@@ -216,8 +216,6 @@ const normalizeEvent = (event: Event): Event => ({
 /** Stable identities for the Featured carousel — see `featuredCards`. */
 const featuredKeyExtractor = (item: { id: string }) => `feat-${item.id}`
 const FeaturedSeparator = () => <View style={{ width: FEATURED_CARD_GAP }} />
-
-const getFirstName = (value?: string | null): string | null => value?.trim().split(/\s+/)[0] || null
 
 /*
  * Which events are close enough to check in to, and how far each one is.
@@ -366,7 +364,6 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
   const [cityPickerOpen, setCityPickerOpen] = useState(false)
   // Bumped by every city the person chooses, so the map moves even to the city it already shows; `here` when they chose where they stand.
   const [cityPick, setCityPick] = useState({ n: 0, here: false })
-  const [userFirstName, setUserFirstName] = useState<string | null>(getFirstName(user?.name))
   const [showPreviewHint, setShowPreviewHint] = useState(false)
   const listRef = useRef<any>(null)
   // Tapping Pulse while already on it goes back to the top (the bar emits `tabPress`).
@@ -467,7 +464,6 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
   const [locationStatus, setLocationStatus] = useState<'checking' | 'granted' | 'denied' | 'undetermined'>('checking')
   const locationRequestInFlight = useRef(false)
   const interestInFlightRef = useRef<Set<string>>(new Set())
-  const checkInFlightRef = useRef<Set<string>>(new Set())
   const checkOutInFlightRef = useRef<Set<string>>(new Set())
   const lastFetchLocationRef = useRef<string>('none')
   const initialLoadedRef = useRef(false)
@@ -608,221 +604,6 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
     }
   }, [user, events])
 
-  const handleCheckIn = useCallback(async (event: Event) => {
-    if (checkInFlightRef.current.has(event.id)) return
-    let previousStatus: any = undefined
-    try {
-      Logger.journey('checkin', 'start', { eventId: event.id })
-      if (!user) {
-        Logger.journey('auth', 'blocked:notSignedIn')
-        showTray({
-          title: 'Sign in required',
-          message: 'Please sign in to check in to events.',
-          buttons: [
-            { label: 'Not now', onPress: closeTray },
-            { label: 'Sign in', variant: 'primary', onPress: () => { closeTray(); router.replace('/' as any) } },
-          ],
-        })
-        return
-      }
-      if (!userLocation) {
-        showTray({
-          title: 'Location required',
-          message: 'Turn on location so we can check you in.',
-          buttons: [
-            { label: 'Cancel', onPress: closeTray },
-            {
-              label: 'Open settings',
-              variant: 'primary',
-              onPress: () => {
-                closeTray()
-                try { (Linking as any)?.openSettings?.() } catch {}
-              }
-            },
-          ],
-        })
-        return
-      }
-
-      // No press haptic: the server's answer plays one within a second (§10.2 H.primary).
-      checkInFlightRef.current.add(event.id)
-      previousStatus = latestCheckinStatusesRef.current[event.id]
-
-      // Optimistic UI update
-      setCheckinStatuses((prev) => ({
-        ...prev,
-        [event.id]: {
-          status: 'checked_in',
-          checkInTime: new Date().toISOString(),
-        },
-      }))
-      
-      Logger.journey('checkin', 'api:checkIn:call', { eventId: event.id })
-      const outcome = await submitCheckIn(event.id, userLocation)
-
-      if (outcome.kind !== 'checkedIn') {
-        const alreadyIn = outcome.kind === 'refused' && outcome.alreadyCheckedIn
-        if (!alreadyIn) {
-          // Rollback optimistic update
-          setCheckinStatuses(restoreStatus(event.id, previousStatus))
-          H.error({ blocking: true })
-        }
-        if (outcome.kind === 'timeout') {
-          Logger.warn('events', 'Check-in timed out', { eventId: event.id })
-          showTray({
-            title: 'Still checking you in',
-            message: 'This is taking longer than expected. Try again.',
-            buttons: [{ label: 'Done', variant: 'primary', onPress: closeTray }],
-          })
-          return
-        }
-        /*
-         * The server's refusal, named — the same words and the same map the
-         * event screen offers (lib/checkInRefusal.ts). This tray used to say
-         * "Check-in failed" over the raw sentence for every refusal, and never
-         * offered directions to somebody standing in the wrong place.
-         */
-        const { refusal } = outcome
-        Logger.error('events', 'Check-in refused', { title: refusal.title })
-        showTray({
-          title: refusal.title,
-          message: refusal.message,
-          buttons: refusal.offerDirections
-            ? [
-                { label: 'Done', onPress: closeTray },
-                {
-                  label: 'Open maps',
-                  variant: 'primary',
-                  onPress: () => {
-                    closeTray()
-                    void openInMaps(event)
-                  },
-                },
-              ]
-            : [{ label: 'Done', variant: 'primary', onPress: closeTray }],
-        })
-        if (alreadyIn) {
-          loadCheckinStatusesBatch()
-          loadCheckedInEvents()
-        }
-        return
-      }
-
-      Logger.journey('checkin', 'success', { eventId: event.id })
-      H.success({ important: true })
-
-      /*
-       * "Why do you go out?" — asked at the door of the first room.
-       *
-       * Onboarding never wrote `intent_default` (SCRUM-77), so every account
-       * that came through it was refused the board for a field it was never
-       * asked. The server says `intentNeeded` while there is no default; the
-       * question is the preferences screen with the intent leading, and the
-       * answer is saved as the default. Asked after whatever tray follows the
-       * check-in, not instead of it — the reveal warning is the more
-       * important sentence and goes first.
-       */
-      const { askIntent } = outcome
-      const closeAndAsk = () => {
-        closeTray()
-        if (askIntent) router.push(askIntentRoute(event.id))
-      }
-
-      /*
-       * The reveal suggestion, offered rather than applied.
-       *
-       * `revealSuggestion` is true when this person has `reveal_by_default`
-       * set. Check-in used to *apply* that — so walking into a room could name
-       * you, and someone visible at a work meetup in March was visible at a
-       * club in August without touching anything. The server now always creates
-       * `revealed: false` and hands the preference back for the app to ask
-       * about. Dismissing writes nothing, because the row is already false.
-       * `revealOffer` decides whether this is the first, explaining, one.
-       */
-      if (outcome.revealSuggestion && user?.id) {
-        const offer = await revealOffer({ id: user.id, firstName: userFirstName, image: user.image })
-        showTray({
-          title: offer.title,
-          message: offer.message,
-          buttons: [
-            {
-              label: offer.confirm,
-              variant: 'primary',
-              onPress: () => {
-                closeAndAsk()
-                apiClient
-                  .setMatchPreferences(event.id, { revealed: true })
-                  .catch((e) => Logger.error('match', 'reveal from prompt failed', { error: e }))
-              },
-            },
-            { label: offer.cancel, onPress: closeAndAsk },
-          ],
-        })
-        loadCheckinStatusesBatch()
-        loadCheckedInEvents()
-        return
-      }
-
-      // Get event chat and offer navigation
-      const chatResult = await apiClient.getEventChat(event.id)
-      /*
-       * The room is `chatGroupId` / `chatGroupName`: `GET /events/:id/chat` has
-       * never sent `id` or `name`, so this never offered "Go to chat" after a
-       * check-in (SCRUM-457). The app's other callers already read it this way.
-       */
-      const chatId = chatResult.success ? (chatResult.data?.chatGroupId ?? chatResult.data?.id) : undefined
-      if (chatId) {
-        const chatName = chatResult.data?.chatGroupName || chatResult.data?.name || 'Event chat'
-        showTray({
-          title: 'Checked in',
-          message: 'You have been checked in and added to the event chat.',
-          buttons: [
-            {
-              label: 'Go to chat',
-              variant: 'primary',
-              onPress: () => {
-                closeTray()
-                router.push({
-                  pathname: '/chat/[id]',
-                  params: {
-                    id: chatId,
-                    roomName: chatName,
-                    eventTitle: event.title,
-                  } as any,
-                })
-                // On top of the chat, so saving lands them in the room.
-                if (askIntent) closeAndAsk()
-              },
-            },
-            { label: 'Stay here', onPress: closeAndAsk },
-          ],
-        })
-      } else {
-        showTray({
-          title: 'Checked in',
-          message: 'You have been checked in.',
-          buttons: [{ label: 'Done', variant: 'primary', onPress: closeAndAsk }],
-        })
-      }
-
-      // Refresh the checkin status for this event
-      loadCheckinStatusesBatch()
-      loadCheckedInEvents()
-    } catch (error) {
-      setCheckinStatuses(restoreStatus(event.id, previousStatus))
-      Logger.error('events', 'Unexpected error', { error: error as any })
-      H.error({ blocking: true })
-      // Fixed copy: an exception's message is for the log, not for the person.
-      showTray({
-        title: 'Check-in failed',
-        message: "Couldn't check you in. Try again.",
-        buttons: [{ label: 'Done', variant: 'primary', onPress: closeTray }],
-      })
-    } finally {
-      checkInFlightRef.current.delete(event.id)
-    }
-  }, [user, userLocation, showTray, closeTray, latestCheckinStatusesRef, userFirstName, loadCheckinStatusesBatch, loadCheckedInEvents])
-
   const toggleInterest = useCallback(async (event: Event) => {
     if (interestInFlightRef.current.has(event.id)) return
     let prevInterested = false
@@ -960,9 +741,10 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
         // The check-in's name everywhere else in the app (the Scene's CTA).
         label: 'Blend in',
         variant: 'primary',
+        // Into the Blend'n pass: a check-in always goes through the hold (docs/redesign/SCREENS.md, Pulse).
         onPress: () => {
           closeTray()
-          handleCheckIn(event)
+          openBlendn()
         },
       })
     }
@@ -1010,7 +792,7 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
       buttons,
       size: 'expanded',
     })
-  }, [closeTray, toggleInterest, handleEventPress, handleCheckIn, handleCheckOut, showTray, markPreviewHintSeen, latestCheckinStatusesRef, latestProximityDataRef, latestInterestStatusesRef])
+  }, [closeTray, toggleInterest, handleEventPress, handleCheckOut, showTray, markPreviewHintSeen, latestCheckinStatusesRef, latestProximityDataRef, latestInterestStatusesRef])
 
   const getCurrentLocationQuietly = useCallback(async () => {
     try {
@@ -1187,7 +969,7 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
        */
       const lat = userLocation?.latitude
       const lon = userLocation?.longitude
-      const { data: eventsData, meta, error } = await fetchEventsApi({
+      const { data: eventsData, error } = await fetchEventsApi({
         page: 0,
         limit: PAGE_SIZE,
         city: selectedCity ?? undefined,
@@ -1228,15 +1010,6 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
         setInterestStatuses(maps.interests)
         setInterestCounts(maps.counts)
         setCheckinStatuses(maps.checkins)
-      }
-      if (meta?.profile?.profile) {
-        const profile = meta.profile.profile
-        const profileFirstName = getFirstName(profile.name)
-        if (profileFirstName) {
-          setUserFirstName(profileFirstName)
-        }
-        // `profile.location` does not set the browse city — see the note where
-        // the profile is loaded above.
       }
       // Image preloading is handled by useEffect when events change
       Logger.journey('events', 'fetch:success', { count: eventsData?.length || 0 })
@@ -1320,18 +1093,6 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
     // including it here would fire that fetch a second, unguarded time.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, authLoading, selectedCity, searchTerm, filters])
-
-  // A changed sign-in name replaces the first name. The profile fetch in
-  // `fetchEvents` writes it too, and whichever wrote last wins. Adjusted
-  // during render, against the name last seen, rather than in an effect.
-  const [seenAuthName, setSeenAuthName] = useState(user?.name)
-  if (seenAuthName !== user?.name) {
-    setSeenAuthName(user?.name)
-    const authFirstName = getFirstName(user?.name)
-    if (authFirstName) {
-      setUserFirstName(authFirstName)
-    }
-  }
 
   // Preload images - use a ref to track already preloaded URLs and avoid redundant work
   const preloadedUrlsRef = useRef<Set<string>>(new Set())

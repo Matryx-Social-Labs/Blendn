@@ -60,7 +60,6 @@ describe("the Pulse handlers keep their identity", () => {
      */
     const HANDLERS = [
       "handleEventPress",
-      "handleCheckIn",
       "handleCheckOut",
       "toggleInterest",
       "handleEventPreview",

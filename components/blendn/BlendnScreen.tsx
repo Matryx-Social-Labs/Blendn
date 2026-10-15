@@ -26,8 +26,8 @@ import { useTonight } from '../../lib/useTonight'
 import ActionTray, { type ActionTrayButton } from '../ActionTray'
 import { CrewCardView } from '../crews/CrewParts'
 import { chooseCrew, crewCards, CrewsFooter, CrewsHeader, openBlend, useCrewActions, useCrewsHere } from '../crews/CrewsView'
+import { MomentPour } from '../ds/MomentPour'
 import { ConnectSheet } from '../grid/ConnectSheet'
-import { ConfettiBurst } from '../motion/ConfettiBurst'
 import ScalePress from '../motion/ScalePress'
 import RealtimeStatusBanner from '../RealtimeStatusBanner'
 import { RoomVisibilityBanner } from '../RoomVisibilityBanner'
@@ -164,8 +164,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
     eventId: insideEvent?.id ?? '',
     showTray,
     closeTray,
-    // The room *is* the success state: no "Checked in / Go to chat" tray.
-    afterSuccess: 'none',
+    // No `onOpenChat`: the overlay turns into the Room under the pour by itself.
     onOpenMaps: () => insideEvent && router.push({ pathname: '/event/[id]', params: { id: insideEvent.id } as never }),
   })
 
@@ -644,11 +643,8 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
         }}
       />
 
-      {/* Out of the pass's hold button: the dock's padding, the pass's, half the button. */}
-      <ConfettiBurst
-        trigger={checkIn.celebrations}
-        originBottom={insets.bottom + SPACE.md + SPACE.lg + CONTROL.md / 2}
-      />
+      {/* Over Tonight, and over the Room as it takes over: the pour clears itself, so it stays mounted. */}
+      {checkIn.pours > 0 ? <MomentPour key={checkIn.pours} venue={insideEvent?.venue ?? ''} onDone={checkIn.pourDone} /> : null}
 
       <ActionTray
         visible={tray.visible}

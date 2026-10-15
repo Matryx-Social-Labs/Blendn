@@ -102,9 +102,9 @@ export function muteLabel(mute: RoomMute | null | undefined, now: Date = new Dat
  * named after their event — repeating it said nothing, so the line is how many
  * are in the room, or nothing at all until that is known.
  *
- * A room's own name is often "<event> Chat" (what check-in's "Go to Chat"
- * passes), which is the same name with a suffix: both header lines truncated
- * to "Founders' Breakfast Club — …" and the count never showed.
+ * A room's own name is often "<event> Chat" (what the check-in passes as it
+ * hands off to the chat), which is the same name with a suffix: both header
+ * lines truncated to "Founders' Breakfast Club — …" and the count never showed.
  */
 export function roomSubtitle(name: string, eventTitle: string | undefined, memberCount: number | null): string | undefined {
   const bare = name.trim().replace(/\s+chat$/i, '')

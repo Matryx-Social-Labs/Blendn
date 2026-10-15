@@ -286,7 +286,7 @@ Audit: [`audit/audit-discovery.md`](./audit/audit-discovery.md), `docs/PULSE.md`
   - The two composition lists (screen and harness) match.
   - Board entry shows before doors only.
   - The rating is private.
-  - "Rules and regulations" is **removed** from check-in (an owner ask still in code).
+  - "Rules and regulations" is **removed** from check-in (the owner's ask; gone from the code).
   - One CTA slot; never two primaries; quiet once done.
   - No price, no "LIMITED ACCESS"; the scarcity pill only says something true (10 or fewer left, under 20% remaining, or Full).
   - Report-event is always reachable, with no check-in gate.
