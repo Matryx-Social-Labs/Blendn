@@ -1,4 +1,3 @@
-import { typingLabel } from '../components/chat/TypingIndicator'
 import {
   directHeaderAvatar,
   emptyThreadLine,
@@ -52,20 +51,7 @@ describe('one seed rule for a person’s mark', () => {
 })
 
 describe('the DM says their name once, in one grammar', () => {
-  it('writes "{name} is typing…" from the server’s name', () => {
-    expect(typingLabel(['Mika'])).toBe('Mika is typing…')
-    expect(typingLabel(['Cosmic Panda'])).toBe('Cosmic Panda is typing…')
-  })
-
-  it('never uppercases a name and never leaves it blank', () => {
-    expect(typingLabel(['mika'])).toBe('mika is typing…')
-    expect(typingLabel([''])).toBe('Someone is typing…')
-    expect(typingLabel([])).toBe('Someone is typing…')
-  })
-
-  it('counts several people in the room', () => {
-    expect(typingLabel(['A', 'B', 'C'])).toBe('3 people are typing…')
-  })
+  // "{name} is typing" is the DS TypingIndicator's now (dsTypingIndicator.test.tsx); the room names a blank one "Someone".
 
   it('says hi by the server’s name, the param only as a first paint, and nothing without either', () => {
     expect(emptyThreadLine('Mika', 'Old name')).toBe('Say hi to Mika.')

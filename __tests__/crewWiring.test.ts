@@ -30,7 +30,8 @@ describe('crew and Blend rooms in the chat screen', () => {
     expect(chat).toContain('setClosedLine(null)')
     // Opened without a kind (an older push, a deep link): found in `rooms` (H2).
     expect(chat).toContain('roomKindParam(params.kind) ?? roomInfo.kind')
-    expect(chat).toContain('<RoomClosedNotice line={closedLine} onBack={goBack} />')
+    expect(chat).toContain("closedLine !== null\n      ? { kind: 'closed', line: closedLine }")
+    expect(src('components/chat/RoomFeed.tsx')).toContain("case 'closed':")
     // Opened from a push there may be nothing to go back to: then the Banter.
     expect(chat).toContain("router.canGoBack() ? router.back() : router.replace('/(tabs)/chat')")
   })
@@ -49,7 +50,7 @@ describe('the surfaces are wired', () => {
   it('the Banter lists open Blends under Live now', () => {
     const banter = src('app/(tabs)/chat.tsx')
     expect(banter).toContain('blendRooms.map((r) =>')
-    expect(banter).toContain('crewRoomsFrom(result.data)')
+    expect(src('lib/useBanterInbox.ts')).toContain('crewRoomsFrom(result.data)')
     expect(banter).toContain("r.kind === 'crew'")
   })
 

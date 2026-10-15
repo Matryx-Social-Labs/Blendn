@@ -16,6 +16,9 @@
 import { render, screen, waitFor } from '@testing-library/react-native'
 
 const mockParams: Record<string, string> = { conversationId: 'conv-board' }
+jest.mock('@react-native-async-storage/async-storage', () =>
+  require('@react-native-async-storage/async-storage/jest/async-storage-mock')
+)
 jest.mock('expo-router', () => {
   const React = require('react')
   return {

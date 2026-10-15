@@ -70,7 +70,7 @@ export function matchOpener(input: MatchOpenerInput): MatchOpener | null {
      * better answer. It must never say "Unknown", which reads as a data error.
      */
     body: name
-      ? `You and ${name} liked each other. Say something — they are waiting on the same screen.`
+      ? `You and ${name} liked each other. Say something — they’re on the same screen.`
       : 'You liked each other. Say something first.',
   }
 }

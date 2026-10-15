@@ -73,7 +73,6 @@ const GRADIENT_LEGACY = Object.fromEntries(
     'app/onboarding/basics.tsx',
     'app/onboarding/media.tsx',
     'components/NearbyEventCard.tsx',
-    'components/banter/BanterSections.tsx',
     'components/blendn/Face.tsx',
     'components/blendn/TonightView.tsx',
     'components/board/BoardSections.tsx',

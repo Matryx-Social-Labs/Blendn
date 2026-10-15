@@ -93,6 +93,8 @@ export type ButtonProps = {
    * (H.primary on a strong "Use at the door", H.select on Extend).
    */
   pressHaptic?: boolean | (() => void)
+  /** When the label alone is ambiguous on its screen ("Accept" on a list of requests): who it is for. */
+  accessibilityLabel?: string
   accessibilityHint?: string
   /** The design gallery only: draws a transient state with no finger or keyboard. */
   previewState?: 'pressed' | 'focused'
@@ -126,6 +128,7 @@ export function Button({
   refused = false,
   onGlass = false,
   pressHaptic = true,
+  accessibilityLabel,
   accessibilityHint,
   previewState,
   testID,
@@ -175,7 +178,7 @@ export function Button({
         onBlur={() => setFocused(false)}
         android_ripple={{ color: PRESSED_WASH.android, foreground: true }}
         accessibilityRole="button"
-        accessibilityLabel={label}
+        accessibilityLabel={accessibilityLabel ?? label}
         accessibilityHint={accessibilityHint}
         accessibilityState={{ disabled, busy: loading }}
         style={[

@@ -64,6 +64,18 @@ export interface PrivateMessage {
   clientId?: string
   /** What a send not yet confirmed replies to, so a retry replies too. */
   replyToId?: string
+  /** A photo (R9, R3-D5 5.9): the server's URL once it has it. */
+  mediaUrl?: string | null
+  mediaType?: string | null
+  /** Your photo on this phone while it uploads, and how far it has got (0–1). */
+  localUri?: string
+  progress?: number
+  /** The server's refusal, verbatim, on the bubble ("That file is too large to send."). */
+  failedLine?: string
+  /** Offline: held until the connection is back (R3-D5 5.8). */
+  waiting?: boolean
+  /** Removed by moderation: yours stays as the dashed placeholder. */
+  removed?: boolean
 }
 
 let localIdCounter = 0

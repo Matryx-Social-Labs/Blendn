@@ -257,7 +257,7 @@ describe('BD-CU03: a mark is seeded on the handle, never on a person', () => {
       const src = strip(readFileSync(join(__dirname, '..', file), 'utf8'))
       expect(src).not.toMatch(/OptimizedImage|expo-image|avatarUrl|photo|userId|user_id|authorId|author_id/)
       // Every mark goes through the one seed rule.
-      for (const m of src.matchAll(/(?:<BoardMark seed|markSeed)=\{([^}]*)\}/g)) {
+      for (const m of src.matchAll(/(?:<BoardMark seed|markSeed|<RequestFace pseudonym)=\{([^}]*)\}/g)) {
         expect(m[1]).toMatch(/^boardMarkSeed\(/)
         marks += 1
       }
@@ -292,7 +292,7 @@ describe('the board is on, now its safety half has shipped', () => {
     expect(src('components/screens/EventDetailScreen.tsx')).toContain(
       'event && BOARD_ENABLED && !boardClosed(event.start_time) ?'
     )
-    expect(src('app/(tabs)/chat.tsx')).toMatch(/\{BOARD_ENABLED \? \(\s*<BoardRequestsSection/)
+    expect(src('app/(tabs)/chat.tsx')).toMatch(/\{BOARD_ENABLED && !trimmed \? <BoardRequestsSection/)
     expect(src('app/board/[eventId].tsx')).toContain('if (!BOARD_ENABLED) return <Redirect href="/(tabs)/events" />')
   })
 })
@@ -347,18 +347,18 @@ describe('the Banter counts board requests as something to show', () => {
   const chat = () => readFileSync(join(__dirname, '..', 'app/(tabs)/chat.tsx'), 'utf8')
 
   it('does not claim an empty inbox under them', () => {
-    expect(chat()).toContain(
-      'const hasHeaderContent = liveRooms.length > 0 || blendRooms.length > 0 || incomingRequests.length > 0 || boardRequestCount > 0'
-    )
-    expect(chat()).toContain('onCount={setBoardRequestCount}')
+    expect(chat()).toContain('const hasHeaderContent = liveRooms.length + blendRooms.length + incomingRequests.length + invites.length + boardCount > 0')
+    expect(chat()).toContain('onCount={setBoardCount}')
   })
 
   it('reads them again on pull-to-refresh and on live sync', () => {
-    const src = chat()
+    // The Banter's loading lives in its hook (lib/useBanterInbox.ts) since the Flow 5 redesign.
+    const src = readFileSync(join(__dirname, '..', 'lib', 'useBanterInbox.ts'), 'utf8')
     const refresh = src.slice(src.indexOf('const onRefresh = useCallback'), src.indexOf('// Real-time private message updates'))
     expect(refresh).toContain('setBoardRefreshKey((k) => k + 1)')
     const sync = src.slice(src.indexOf('const socketStatus = useLiveSync({'), src.indexOf('const respondToRequest'))
     expect(sync).toContain('setBoardRefreshKey((k) => k + 1)')
     expect(sync).toContain('return loadChats(false, true)')
+    expect(chat()).toContain('refreshKey={inbox.boardRefreshKey}')
   })
 })

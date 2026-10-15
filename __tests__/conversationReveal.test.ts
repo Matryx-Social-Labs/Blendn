@@ -1,9 +1,8 @@
 import {
   BLUR_WIDTH,
   leaveConfirmation,
-  revealAction,
   revealConfirmation,
-  revealSubtitle,
+  revealView,
   type ConversationRevealState,
 } from '../lib/conversationReveal'
 
@@ -25,71 +24,45 @@ const state = (over: Partial<ConversationRevealState> = {}): ConversationRevealS
   ...over,
 })
 
-describe('revealAction', () => {
-  it('offers nothing on a conversation that was never pseudonymous', () => {
+describe('revealView (Flow 5 DM #01–#05)', () => {
+  it('shows nothing on a conversation that was never pseudonymous', () => {
     // An accepted message request has shown real names since it existed.
-    // "Reveal" there would be a control that does nothing.
-    expect(revealAction(state({ pseudonymous: false }))).toEqual({ kind: 'none' })
+    expect(revealView(state({ pseudonymous: false }))).toEqual({ bar: null, line: null, nudge: null })
   })
 
-  it('offers to reveal while you are anonymous', () => {
-    const a = revealAction(state())
-    expect(a.kind).toBe('reveal')
+  it('both anonymous: Show them and Ask them, and the eye-off line', () => {
+    expect(revealView(state())).toEqual({ bar: 'none', line: { seen: false, text: 'You’re both anonymous here' }, nudge: null })
+  })
+
+  it('once you ask, the Asked state — never a declined one', () => {
+    expect(revealView(state(), true)).toEqual({ bar: 'asked', line: { seen: false, text: 'You’re both anonymous here · asked' }, nudge: null })
   })
 
   it('surfaces that they asked, without making it a demand', () => {
-    /*
-     * Being asked is the only signal the other person can send, so hiding it
-     * would waste it. But asking twice writes the same flag -- there is no
-     * count to show, nothing to escalate, and nothing to feel nagged by.
-     */
-    const a = revealAction(state({ revealRequested: true }))
-    if (a.kind !== 'reveal') throw new Error('expected reveal')
-    expect(a.nudge).toContain('Wandering Kestrel')
-    expect(a.nudge?.toLowerCase()).not.toMatch(/again|reminder|\d+ times|waiting/)
+    const v = revealView(state({ revealRequested: true }))
+    expect(v.nudge).toBe('Wandering Kestrel asked to know who you are')
+    expect(v.nudge).not.toMatch(/must|need|waiting|\d/i)
   })
 
-  it('offers to ask only once you have revealed and they have not', () => {
-    const a = revealAction(state({ youRevealed: true }))
-    expect(a.kind).toBe('ask')
-    if (a.kind === 'ask') expect(a.label).toContain('Wandering Kestrel')
+  it('they revealed, you have not: Show them, and their side seen', () => {
+    expect(revealView(state({ theyRevealed: true })).bar).toBe('theyOnly')
+    expect(revealView(state({ theyRevealed: true })).line?.text).toBe('You can see their name. They can’t see yours.')
   })
 
-  it('never offers to ask somebody who has already revealed', () => {
-    // The server refuses this with a 400. Offering it would be a button whose
-    // only outcome is an error.
-    const a = revealAction(state({ youRevealed: true, theyRevealed: true }))
-    expect(a.kind).toBe('done')
+  it('you revealed, they have not: no button, they decide', () => {
+    const v = revealView(state({ youRevealed: true, revealRequested: true }))
+    expect(v.bar).toBe('youOnly')
+    expect(v.line?.text).toBe('They can see your name. You can’t see theirs yet.')
+    // Nothing left for you to answer.
+    expect(v.nudge).toBeNull()
   })
 
-  it('still offers to reveal even when they already have', () => {
-    // The asymmetric case: they were public in the room, so their side started
-    // revealed. Yours is still yours to give.
-    const a = revealAction(state({ theyRevealed: true }))
-    expect(a.kind).toBe('reveal')
-  })
-})
-
-describe('revealSubtitle', () => {
-  it('says nothing when there is nothing to say', () => {
-    expect(revealSubtitle(state({ pseudonymous: false }))).toBeNull()
-    expect(revealSubtitle(state({ youRevealed: true, theyRevealed: true }))).toBeNull()
-  })
-
-  it('describes both halves without judging either', () => {
-    // Never "they have not revealed yet", which frames waiting as a failing.
-    const one = revealSubtitle(state({ youRevealed: true }))
-    const other = revealSubtitle(state({ theyRevealed: true }))
-    expect(one).toBeTruthy()
-    expect(other).toBeTruthy()
-    expect(one).not.toBe(other)
-    for (const s of [one, other]) {
-      expect(s?.toLowerCase()).not.toMatch(/refus|declin|won't|hasn't bothered/)
-    }
-  })
-
-  it('says you are both anonymous when you are', () => {
-    expect(revealSubtitle(state())).toBe("You're both anonymous here")
+  it('both revealed: the bar goes for good and the line says so', () => {
+    expect(revealView(state({ youRevealed: true, theyRevealed: true }))).toEqual({
+      bar: null,
+      line: { seen: true, text: 'You can both see each other' },
+      nudge: null,
+    })
   })
 })
 
@@ -101,7 +74,7 @@ describe('revealConfirmation', () => {
      * has no path back to false, so the copy has to carry the whole warning.
      */
     const c = revealConfirmation('Wandering Kestrel')
-    expect(c.body.toLowerCase()).toContain("can't be undone")
+    expect(c.body.toLowerCase()).toContain('can’t be undone')
     expect(c.title).toContain('Wandering Kestrel')
   })
 

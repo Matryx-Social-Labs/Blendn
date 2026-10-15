@@ -136,6 +136,8 @@ export interface ServerToClientEvents {
   /** `moderation` + `userId` arrive on a moderation hide, so the sender can keep a placeholder. */
   "chat:messageDeleted": (data: { chatGroupId: string; messageId: string; moderation?: boolean; userId?: string }) => void
   "chat:memberBanned": (data: { chatGroupId: string; userId: string; banned: boolean }) => void
+  /** An organiser (or the pipeline) muted or unmuted a member; `reason` is the server's sentence. */
+  "chat:memberMuted": (data: { chatGroupId: string; userId: string; muted: boolean; reason?: string }) => void
   /** Somebody left the room themselves. `userId` is the room's handle for them. */
   "chat:memberLeft": (data: { chatGroupId: string; userId: string }) => void
   /**
@@ -208,6 +210,7 @@ type ChatReactionCallback = (data: ServerToClientEvents["chat:reaction"] extends
 type ChatMessageDeletedCallback = (data: ServerToClientEvents["chat:messageDeleted"] extends (data: infer D) => void ? D : never) => void
 type ChatMemberBannedCallback = (data: ServerToClientEvents["chat:memberBanned"] extends (data: infer D) => void ? D : never) => void
 type ChatMemberLeftCallback = (data: ServerToClientEvents["chat:memberLeft"] extends (data: infer D) => void ? D : never) => void
+type ChatMemberMutedCallback = (data: ServerToClientEvents["chat:memberMuted"] extends (data: infer D) => void ? D : never) => void
 type PrivateMessageCallback = (data: ServerToClientEvents["private:message"] extends (data: infer D) => void ? D : never) => void
 type PrivateTypingCallback = (data: ServerToClientEvents["private:typing"] extends (data: infer D) => void ? D : never) => void
 type PrivateReadCallback = (data: ServerToClientEvents["private:read"] extends (data: infer D) => void ? D : never) => void
@@ -297,6 +300,7 @@ const chatReactionSubscriptions = new Map<string, Set<ChatReactionCallback>>()
 const chatMessageDeletedSubscriptions = new Map<string, Set<ChatMessageDeletedCallback>>()
 const chatMemberBannedSubscriptions = new Map<string, Set<ChatMemberBannedCallback>>()
 const chatMemberLeftSubscriptions = new Map<string, Set<ChatMemberLeftCallback>>()
+const chatMemberMutedSubscriptions = new Map<string, Set<ChatMemberMutedCallback>>()
 /** One subscriber to a conversation: a callback per event kind, each getting only its own payload. */
 export interface ConversationHandlers {
   onMessage?: PrivateMessageCallback
@@ -536,6 +540,7 @@ export function disconnect(): void {
   chatMessageDeletedSubscriptions.clear()
   chatMemberBannedSubscriptions.clear()
   chatMemberLeftSubscriptions.clear()
+  chatMemberMutedSubscriptions.clear()
   conversationSubscriptions.clear()
   userSubscriptions.clear()
   roomMatchSubscriptions.clear()
@@ -687,6 +692,10 @@ function setupSocketHandlers(sock: TypedSocket): void {
 
   sock.on("chat:memberBanned", (data) => {
     chatMemberBannedSubscriptions.get(data.chatGroupId)?.forEach((cb) => cb(data))
+  })
+
+  sock.on("chat:memberMuted", (data) => {
+    chatMemberMutedSubscriptions.get(data.chatGroupId)?.forEach((cb) => cb(data))
   })
 
   // Private messaging updates
@@ -1000,6 +1009,14 @@ export function subscribeToChatMemberLeft(
   return subscribeIn(chatMemberLeftSubscriptions, chatGroupId, callback)
 }
 
+/** A member was muted or unmuted in this room: the composer flips in place (Flow 5 R2-D2). */
+export function subscribeToChatMemberMuted(
+  chatGroupId: string,
+  callback: ChatMemberMutedCallback
+): () => void {
+  return subscribeIn(chatMemberMutedSubscriptions, chatGroupId, callback)
+}
+
 /** A member was banned from, or unbanned in, this room. */
 export function subscribeToChatMemberBanned(
   chatGroupId: string,
@@ -1238,6 +1255,7 @@ export type {
   ChatMessageDeletedCallback,
   ChatMemberBannedCallback,
   ChatMemberLeftCallback,
+  ChatMemberMutedCallback,
   PrivateMessageCallback,
   PrivateTypingCallback,
   PrivateReadCallback,

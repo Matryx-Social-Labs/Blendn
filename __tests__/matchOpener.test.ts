@@ -74,7 +74,7 @@ describe('the header is a header, not an empty state', () => {
   })
 
   it('rides in ListHeaderComponent, above the oldest message', () => {
-    expect(DM()).toContain('ListHeaderComponent={ListHeader}')
+    expect(DM()).toMatch(/ListHeaderComponent=\{\s*<View>[\s\S]{0,200}<MatchOpenerCard/)
   })
 
   it('takes pseudonymous from the server, not from which fields arrived', () => {
@@ -179,7 +179,8 @@ describe("the match moment's opener becomes a draft, never a message", () => {
 
   it('the DM fills its composer once, on mount, and does not send it', () => {
     const dm = DM()
-    expect(dm).toContain('useState(() => draftParam(draft))')
+    // The route's opener first; else the draft this phone kept for the thread (R3-D5 5.8).
+    expect(dm).toContain('useState(() => draftParam(draft) || draftOf(thread))')
     // Read once, as the initial state: no effect re-applies it, and it never
     // reaches the send path on its own.
     expect(dm.match(/\bdraft\b/g)).toHaveLength(2)

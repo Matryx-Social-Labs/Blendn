@@ -24,3 +24,14 @@ export const formatTimeRange = (startIso: string, endIso: string, opts?: { inclu
     return ''
   }
 }
+
+/**
+ * A chat message's time: "9:38 PM", the one format every chat uses (Flow 5:
+ * Geist Mono, never the device locale's). Empty for a time it can't read.
+ */
+export function chatClock(time: string | number | Date): string {
+  const d = new Date(time)
+  if (Number.isNaN(d.getTime())) return ''
+  const h = d.getHours()
+  return `${h % 12 || 12}:${String(d.getMinutes()).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`
+}

@@ -22,7 +22,7 @@ import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
 import { CONTROL, EMBER, EMBER_RADIUS, ICON, OPACITY, SPACE } from '../../lib/theme'
 import { Face } from '../blendn/Face'
 import { PersonRow } from '../friends/PersonRow'
-import { EmberButton, EmberToggle } from '../onboarding/EmberControls'
+import { EmberToggle } from '../onboarding/EmberControls'
 import { Text } from '../ui/Text'
 
 /**
@@ -297,28 +297,8 @@ export function BlendSideCard({
   )
 }
 
-/**
- * A crew's or a Blend's room that is over for you: "This Blend has closed".
- * It replaces the feed and the composer — the server refuses both now — and
- * says nothing about why: a Blend closing, a block across its sides and a
- * member taken out all read the same from inside.
- */
-export function RoomClosedNotice({ line, onBack }: { line: string; onBack: () => void }) {
-  return (
-    <View style={styles.closed}>
-      <Ionicons name="moon-outline" size={ICON.lg} color={EMBER.textTertiary} />
-      <Text variant="heading" accessibilityRole="header" style={styles.closedText}>
-        {line}
-      </Text>
-      <EmberButton label="Back" variant="secondary" onPress={onBack} />
-    </View>
-  )
-}
-
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  closed: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: SPACE.lg, paddingHorizontal: SPACE.xl },
-  closedText: { textAlign: 'center' },
   pressed: { opacity: OPACITY.pressed },
   emblem: { borderRadius: EMBER_RADIUS.sm, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   consent: {

@@ -12,7 +12,16 @@ import { font, useBoldText, useIncreaseContrast } from './shared'
  * out over `base` (the page's "M.fade"). Increase Contrast: the hairline at
  * 50% and the word white. No haptic.
  */
-export function UnreadDivider({ count, testID }: { count?: number; testID?: string }) {
+export function UnreadDivider({
+  count,
+  word = 'new',
+  testID,
+}: {
+  count?: number
+  /** The flow's word: the DM frame says "2 UNREAD" (Flow 5 DM #11). */
+  word?: 'new' | 'unread'
+  testID?: string
+}) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const { duration } = useMotion()
@@ -29,12 +38,12 @@ export function UnreadDivider({ count, testID }: { count?: number; testID?: stri
       exiting={FadeOut.duration(duration.base).easing(Easing.bezier(...EASING.gentle)).reduceMotion(ReduceMotion.Never)}
       accessible
       accessibilityRole="header"
-      accessibilityLabel={count ? `${count} new messages` : 'New messages'}
+      accessibilityLabel={count ? `${count} ${word} messages` : word === 'new' ? 'New messages' : 'Unread messages'}
       style={styles.row}
     >
       <View testID={testID && `${testID}-line`} style={line} />
       <Text style={[font('label', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>
-        {count ? `${count} NEW` : 'NEW'}
+        {(count ? `${count} ${word}` : word).toUpperCase()}
       </Text>
       <View style={line} />
     </Animated.View>

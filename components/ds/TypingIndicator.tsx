@@ -47,7 +47,16 @@ function Dot({ clock, index, still, testID }: { clock: SharedValue<number>; inde
  *
  * Read once as "{name} is typing"; never a live region (§14). No haptic.
  */
-export function TypingIndicator({ people, testID }: { people: ChatPerson[]; testID?: string }) {
+export function TypingIndicator({
+  people,
+  surface = 'room',
+  testID,
+}: {
+  people: ChatPerson[]
+  /** `dm`: no face and no indent — the bubbles there have none (Flow 5 DM #16). */
+  surface?: 'room' | 'dm'
+  testID?: string
+}) {
   const bold = useBoldText()
   const reduceMotion = useReducedMotion()
   const clock = useSharedValue(0)
@@ -64,7 +73,7 @@ export function TypingIndicator({ people, testID }: { people: ChatPerson[]; test
 
   return (
     <View testID={testID} accessible accessibilityLabel={label} style={styles.row}>
-      {one ? (
+      {surface === 'dm' ? null : one ? (
         <View testID={testID && `${testID}-avatar`}>
           <Avatar {...avatarOf(people[0], BUBBLE.avatar)} />
         </View>

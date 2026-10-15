@@ -140,7 +140,7 @@ describe('<ChatBubble>', () => {
     const onLongPress = jest.fn()
     await render(bubble({ removed: true, onLongPress, onReply: jest.fn() }))
     expect(flat('b-bubble')).toMatchObject({ borderStyle: 'dashed', backgroundColor: 'transparent' })
-    expect(screen.getByText('This message was removed.', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByText('This message was removed by moderation.', { includeHiddenElements: true })).toBeTruthy()
     await act(async () => fireGestureHandler(getByGestureTestId('b-hold'), [{ state: State.BEGAN }, { state: State.ACTIVE }, { state: State.END }]))
     expect(onLongPress).not.toHaveBeenCalled()
   })

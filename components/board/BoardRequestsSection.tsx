@@ -2,7 +2,8 @@ import { router, useFocusEffect } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Pressable, StyleSheet, View } from 'react-native'
 
-import { BanterHeading, BanterRequest } from '../banter/BanterSections'
+import { RequestCard, RequestFace } from '../banter/BanterParts'
+import { SectionHeader } from '../ds/SectionHeader'
 import { inboxTimeLabel } from '../banter/inbox'
 import { useToast } from '../Toast'
 import { Text } from '../ui/Text'
@@ -171,18 +172,17 @@ export function BoardRequestsSection({
 
   return (
     <View style={styles.section}>
-      <BanterHeading
-        title="The Board"
-        detail={requests.incoming.length > 0 ? String(requests.incoming.length) : undefined}
-      />
+      <SectionHeader title="The Board" count={requests.incoming.length > 0 ? requests.incoming.length : undefined} />
       {requests.incoming.map((r) => (
-        <BanterRequest
+        <RequestCard
           key={r.id}
+          testID={`board-request-${r.id}`}
+          // The asker is a handle: their generated mark, never a photo (`boardMarkSeed`).
+          face={<RequestFace pseudonym={boardMarkSeed(r.counterpart, r.event.id, r.id)} />}
           name={r.counterpart}
-          markSeed={boardMarkSeed(r.counterpart, r.event.id, r.id)}
-          timeLabel={inboxTimeLabel(r.createdAt)}
-          message={incomingMessage(r)}
-          note={notes[r.id]}
+          note={incomingMessage(r)}
+          foot={notes[r.id]}
+          time={inboxTimeLabel(r.createdAt)}
           pending={busy.has(r.id)}
           onAccept={() => void answer(r, 'accept')}
           onDecline={() => void answer(r, 'decline')}

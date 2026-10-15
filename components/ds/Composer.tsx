@@ -19,6 +19,8 @@ const COUNT_FROM = 900
 const FIELD_MAX_HEIGHT = 132
 /** The locked reason's glyph well: the page's 40 pt circle. */
 const WELL = SIZE.control - SPACE.sm
+/** R3-D5 5.9: the attach control, 40 pt, narrowing the field by as much. */
+const ATTACH = SIZE.control - SPACE.sm
 
 export type ComposerState =
   | 'normal'
@@ -29,6 +31,8 @@ export type ComposerState =
   | 'closed'
   | 'ratelimited'
   | 'notcheckedin'
+  | 'notopen'
+  | 'hidden'
   | 'banned'
   | 'left'
   | 'ended'
@@ -47,6 +51,9 @@ const LOCKED: Record<Locked, { icon: IconName; title: string; body?: string }> =
   closed: { icon: 'door-closed', title: 'This chat has closed', body: 'Event chats stay open for 24 hours after the event ends.' },
   ratelimited: { icon: 'timer', title: 'Slow down a moment', body: 'Too many messages.' },
   notcheckedin: { icon: 'map-pin', title: 'RSVP to this event to join the chat' },
+  /* R2-D2: the server's CHAT_CLOSED reasons it words apart; the sentence is always the server's. */
+  notopen: { icon: 'clock', title: 'Not open yet', body: 'This chat opens 24 hours before the event starts.' },
+  hidden: { icon: 'eye-off', title: 'This room is hidden', body: 'This event is no longer available.' },
 }
 
 export type ComposerProps = {
@@ -68,6 +75,8 @@ export type ComposerProps = {
   action?: { label: string; onPress: () => void; loading?: boolean }
   placeholder?: string
   onFocus?: () => void
+  /** R3-D5 5.9: a DM once both have revealed (or are friends) — the 40 pt photo control before the field. */
+  onAttach?: () => void
   /** The design gallery only: draws a transient state with no finger or keyboard. */
   previewState?: 'pressed' | 'focused'
   testID?: string
@@ -105,6 +114,7 @@ export function Composer({
   action,
   placeholder = 'Say something to the room',
   onFocus,
+  onAttach,
   previewState,
   testID,
 }: ComposerProps) {
@@ -127,7 +137,15 @@ export function Composer({
         ) : (
           <>
             {reply ? <ReplyPreview name={reply.name} text={reply.text} onCancel={onCancelReply ?? (() => {})} /> : null}
-            <Field value={value} onChangeText={onChangeText} onSend={onSend} placeholder={placeholder} onFocus={onFocus} pressed={previewState === 'pressed'} />
+            <Field
+              value={value}
+              onChangeText={onChangeText}
+              onSend={onSend}
+              placeholder={placeholder}
+              onFocus={onFocus}
+              onAttach={onAttach}
+              pressed={previewState === 'pressed'}
+            />
             {state === 'failed' ? <Failed onRetry={onRetry} /> : null}
           </>
         )}
@@ -172,8 +190,9 @@ function Field({
   onSend,
   placeholder,
   onFocus,
+  onAttach,
   pressed,
-}: Pick<ComposerProps, 'value' | 'onChangeText' | 'onSend' | 'onFocus'> & { placeholder: string; pressed: boolean }) {
+}: Pick<ComposerProps, 'value' | 'onChangeText' | 'onSend' | 'onFocus' | 'onAttach'> & { placeholder: string; pressed: boolean }) {
   const android = Platform.OS === 'android'
   const bold = useBoldText()
   const [down, setDown] = useState(false)
@@ -182,7 +201,18 @@ function Field({
 
   return (
     <>
-      <View style={styles.row}>
+      <View style={[styles.row, onAttach && styles.rowAttach]}>
+        {onAttach ? (
+          <Pressable
+            onPress={onAttach}
+            hitSlop={(minTarget() - ATTACH) / 2}
+            accessibilityRole="button"
+            accessibilityLabel="Send a photo"
+            style={styles.attach}
+          >
+            <Icon name="image" size={ICON.control} color={COLOR.textSecondary} />
+          </Pressable>
+        ) : null}
         <TextInput
           value={value}
           onChangeText={onChangeText}
@@ -287,6 +317,9 @@ const styles = StyleSheet.create({
     paddingRight: (SIZE.input - SIZE.circleButton) / 2,
     paddingLeft: SPACE.lg,
   },
+  rowAttach: { paddingLeft: SPACE.xs },
+  // Centred on the Send disc beside it.
+  attach: { width: ATTACH, height: ATTACH, marginBottom: (SIZE.circleButton - ATTACH) / 2, alignItems: 'center', justifyContent: 'center' },
   field: {
     flex: 1,
     color: COLOR.textPrimary,
