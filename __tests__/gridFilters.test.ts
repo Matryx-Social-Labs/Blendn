@@ -31,7 +31,7 @@ describe('the rebuilt room kept what the old Grid had', () => {
      */
     expect(code('components', 'ds', 'PersonCard.tsx')).toContain("circle('ellipsis', `Block or report ${name}`, onMore)")
     const src = SCREEN()
-    expect(src).toContain('onMore={() => open && safety(open)}')
+    expect(src).toContain('onMore={() => card && safety(card)}')
     expect(src).toContain('showUserSafetyActions(p.name, p.id')
   })
 

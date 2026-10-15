@@ -260,7 +260,7 @@ describe('every door is this flow', () => {
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/^\s*\/\/.*$/gm, '')
 
-  it.each(['components/screens/EventDetailScreen.tsx', 'components/blendn/BlendnScreen.tsx'])(
+  it.each(['components/blendn/BlendnScreen.tsx'])(
     '%s runs it, draws its pour and lets it hear the tray close',
     (file) => {
       const src = read(file)
@@ -272,10 +272,13 @@ describe('every door is this flow', () => {
     }
   )
 
-  it('the event screen pushes its chat after the check-in, never replaces itself mid-pour (Android crash on #389)', () => {
+  it('the event page’s "Blend in" opens this event’s pass, never a check-in of its own (Flow 3 #04–#06)', () => {
     const src = read('components/screens/EventDetailScreen.tsx')
-    expect(src).toContain("onEnterRoom: () => openEventChat('push')")
-    expect(src).toMatch(/router\[how\]\(`\/chat\//)
+    expect(src).not.toContain('useCheckInFlow(')
+    expect(src).not.toContain('submitCheckIn(')
+    expect(src).toMatch(/openThisPass = \(\) =>[\s\S]{0,120}openPass\(\{/)
+    // To the tabs first: the overlay is under the root stack.
+    expect(src).toContain("router.dismissTo('/(tabs)/events')")
   })
 
   it('the Pulse’s "Blend in" opens the Blend’n pass rather than checking in on its own', () => {

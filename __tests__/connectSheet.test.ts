@@ -102,8 +102,8 @@ describe('the card keeps the two actions apart', () => {
     expect(src).toContain('onLike?: () => void')
     expect(src).toContain('onMessage?: () => void')
     const screen = stripComments(read('components/blendn/BlendnScreen.tsx'))
-    expect(screen).toContain('onLike={() => openPerson && void like(openPerson)}')
-    expect(screen).toMatch(/onMessage=\{\(\) => \{\s*if \(!open\) return\s*setConnectTo\(open\)/)
+    expect(screen).toContain('onLike={() => cardPerson && void like(cardPerson)}')
+    expect(screen).toMatch(/onMessage=\{\(\) => \{\s*if \(!card\) return\s*const to = card\s*closeCardThen\(\(\) => setConnectTo\(to\)\)/)
   })
 
   it('makes the like the prominent button', () => {

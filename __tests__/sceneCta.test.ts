@@ -176,12 +176,9 @@ describe('the event screen IS the Scene now, and kept what the CTA lacks', () =>
     expect(detail).not.toContain('secondaryRow')
     expect(detail).not.toContain('ellipsis-horizontal')
 
-    // The in-flight states the old morph showed.
-    /*
-     * Only check-in spins now: check out left this screen with the secondary
-     * row, so `checkingOut` was a state nothing could ever set.
-     */
-    expect(detail).toContain('checkingIn ? (')
+    // Nothing spins here now: the check-in is the pass's, in the Blend'n overlay (Flow 3 #04–#06, Flow 4).
+    expect(detail).not.toContain('checkingIn')
+    expect(detail).toContain('openPass({')
   })
 
   it('check out really is where this screen says it moved to', () => {

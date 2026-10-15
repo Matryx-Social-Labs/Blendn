@@ -78,24 +78,26 @@ export function Banner({ kind, text, icon, action, busy = false, testID }: Banne
 export type Visibility = 'named' | 'anon' | 'hidden' | 'blocked'
 
 /** §12: each state its own icon and sentence. Revealing is gated on a name and photo; going anonymous never is. */
-const VISIBILITY: Record<Visibility, { icon: IconName; text: (name: string, missing: string) => string; action: (missing: string) => string }> = {
+/** "as Night Cat", or plainly anonymous when the room's pseudonym for you isn't known on this phone. */
+const asName = (name?: string) => (name ? `in this room as ${name}` : 'anonymous in this room')
+
+const VISIBILITY: Record<Visibility, { icon: IconName; text: (name: string | undefined, missing: string) => string; action: (missing: string) => string }> = {
   named: {
     icon: 'eye',
     text: (name) => `You’re in this room as ${name}, with your photo. People here can see you.`,
     action: () => 'Go anonymous',
   },
-  anon: { icon: 'eye-off', text: (name) => `You’re in this room as ${name}. Nobody here sees your name or photo.`, action: () => 'Show who I am' },
+  anon: { icon: 'eye-off', text: (name) => `You’re ${asName(name)}. Nobody here sees your name or photo.`, action: () => 'Show who I am' },
   hidden: { icon: 'cloud-off', text: () => 'You’re not listed here. Show online status is off.', action: () => 'Turn it on' },
   blocked: {
     icon: 'eye-off',
-    text: (name, missing) => `You’re in this room as ${name}. Add ${missing} to your profile first; that’s what other people would see.`,
+    text: (name, missing) => `You’re ${asName(name)}. Add ${missing} to your profile first; that’s what other people would see.`,
     action: (missing) => `Add ${missing}`,
   },
 }
 
 /**
  * The always-on statement of how the room sees you (§12). It never collapses.
- * `name` is the name the room shows: yours when named, the pseudonym otherwise.
  */
 export function VisibilityBanner({
   state,
@@ -106,7 +108,8 @@ export function VisibilityBanner({
   testID,
 }: {
   state: Visibility
-  name: string
+  /** The name the room shows: yours when named, the pseudonym otherwise (omit when it isn't known). */
+  name?: string
   /** Blocked: what a reveal still needs ("a photo", "a name", "a name and a photo"; `revealReadiness`). */
   missing?: string
   onAction: () => void

@@ -7,9 +7,13 @@
  * somebody's name and face were in a room they did not picture.
  */
 
+import { render, screen } from '@testing-library/react-native'
+import React from 'react'
+
+import { VisibilityBanner } from '../components/ds/Banner'
 import {
   PUBLIC_CHECKIN_WARNING,
-  bannerText,
+  bannerState,
   roomVisibility,
   shouldWarnBeforePublicCheckIn,
 } from '../lib/roomVisibility'
@@ -28,64 +32,59 @@ describe('roomVisibility', () => {
   })
 })
 
-describe('the hidden banner', () => {
-  it('names the setting and offers the way to it, in the first person', () => {
-    const text = bannerText('hidden')
-    expect(text.title).toMatch(/^You're not listed here/)
-    expect(text.title).toContain('Show online status')
-    expect(text.action).toMatch(/turn it on/i)
+describe('bannerState', () => {
+  it('hidden outranks everything; named; anonymous with a way to reveal; blocked with nothing to reveal', () => {
+    expect(bannerState(true, false, true)).toBe('hidden')
+    expect(bannerState(true, true, false)).toBe('named')
+    expect(bannerState(false, true, true)).toBe('anon')
+    expect(bannerState(false, true, false)).toBe('blocked')
+  })
+
+  it('NEVER blocks going anonymous: named stays named whatever the profile', () => {
+    expect(bannerState(true, true, false)).toBe('named')
   })
 })
 
-describe('bannerText', () => {
-  it('only ever describes you, never anyone else', () => {
-    /*
-     * Carried here when `revealChipLabel` was deleted — it had no caller, and
-     * `bannerText` is what the room actually renders, so the rule had to move
-     * with the responsibility rather than be deleted alongside the dead code.
-     *
-     * `PLACEHOLDER_SCREENS.md`: showing who else has revealed "turns a personal
-     * choice into a count and makes the last holdout visible". The copy is
-     * first-person by construction, in both states.
-     */
-    for (const title of [
-      bannerText('named').title,
-      bannerText('anonymous').title,
-      bannerText('anonymous', 'Cosmic Panda').title,
-      bannerText('hidden').title,
-    ]) {
-      expect(title).not.toMatch(/\b\d+\s+(people|others|revealed)\b/i)
-      expect(title).toMatch(/^(You|People here)/)
+describe('the visibility line (ds VisibilityBanner)', () => {
+  const text = async (state: 'named' | 'anon' | 'hidden' | 'blocked', name?: string, missing?: string) => {
+    await render(<VisibilityBanner state={state} name={name} missing={missing} onAction={() => {}} />)
+    return screen
+  }
+
+  it('names the setting and offers the way to it, in the first person, when hidden', async () => {
+    const s = await text('hidden')
+    expect(s.getByText(/^You’re not listed here/)).toBeTruthy()
+    expect(s.getByText(/Show online status/)).toBeTruthy()
+    expect(s.getByRole('button', { name: 'Turn it on' })).toBeTruthy()
+  })
+
+  it('only ever describes you, never anyone else', async () => {
+    for (const [state, name] of [['named', 'Sam'], ['anon', 'Cosmic Panda'], ['anon', undefined], ['hidden', undefined], ['blocked', undefined]] as const) {
+      const s = await text(state, name)
+      const line = s.getByText(/^You’re/).props.children as string
+      expect(line).not.toMatch(/\b\d+\s+(people|others|revealed)\b/i)
     }
   })
 
-  it('names the pseudonym when anonymous', () => {
-    // The person can see their pseudonym on their own messages; the banner has
-    // to obviously be talking about the same thing.
-    expect(bannerText('anonymous', 'Cosmic Panda').title).toContain('Cosmic Panda')
+  it('names the pseudonym when anonymous, and still says something before it is known', async () => {
+    expect((await text('anon', 'Cosmic Panda')).getByText(/as Cosmic Panda/)).toBeTruthy()
+    const s = await text('anon')
+    expect(s.getByText(/^You’re anonymous in this room/)).toBeTruthy()
+    expect(s.queryByText(/undefined|null/)).toBeNull()
   })
 
-  it('still says something when the pseudonym has not arrived', () => {
-    // The roster is a network call and the banner renders before it lands.
-    // "You're anonymous in this room" is true with or without the name.
-    const text = bannerText('anonymous', null)
-    expect(text.title).toContain('anonymous')
-    expect(text.title).not.toContain('null')
+  it('says what is visible when named, and offers the opposite state, both ways', async () => {
+    const named = await text('named', 'Sam')
+    expect(named.getByText(/with your photo/)).toBeTruthy()
+    expect(named.getByRole('button', { name: 'Go anonymous' })).toBeTruthy()
+    expect((await text('anon', 'Night Cat')).getByRole('button', { name: 'Show who I am' })).toBeTruthy()
   })
 
-  it('says what is visible when named, not just that you are named', () => {
-    // "You are visible" leaves someone to guess what that means. Naming the
-    // name and the photo is the whole point.
-    const text = bannerText('named')
-    expect(text.title).toContain('name')
-    expect(text.title).toContain('photo')
-  })
-
-  it('offers the opposite state as the action, both ways', () => {
-    // A banner that only reports is a banner people learn to ignore. The way
-    // out has to be in the thing that tells you where you are.
-    expect(bannerText('named').action).toMatch(/anonymous/i)
-    expect(bannerText('anonymous').action).toMatch(/show/i)
+  it('blocked says why on screen, with what is missing, and offers the fix rather than a reveal', async () => {
+    const s = await text('blocked', undefined, 'a name and a photo')
+    expect(s.getByText(/Add a name and a photo to your profile first/)).toBeTruthy()
+    expect(s.getByRole('button', { name: 'Add a name and a photo' })).toBeTruthy()
+    expect(s.queryByRole('button', { name: 'Show who I am' })).toBeNull()
   })
 })
 

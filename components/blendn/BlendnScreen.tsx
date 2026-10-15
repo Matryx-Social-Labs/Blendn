@@ -15,6 +15,7 @@ import { useReducedMotion } from '../../lib/motion'
 import { everyoneHead, meetNext, reasonLine, reasonLines } from '../../lib/roomMoments'
 import { markRoomLeft } from '../../lib/roomMembership'
 import { roomRecap, type RoomRecap as Recap } from '../../lib/roomRecap'
+import { bannerState } from '../../lib/roomVisibility'
 import { newestWave, useRoomWaves, wavedAtYouLabel, waveShown } from '../../lib/roomWaves'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
 import { showSheet } from '../../lib/sheet'
@@ -516,7 +517,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
 
   const topInset = insets.top + TOP_CHROME
   const matchPerson = room.match?.person ?? null
-  const visibility: Visibility = !controls.listed ? 'hidden' : controls.revealed ? 'named' : controls.readiness.ok ? 'anon' : 'blocked'
+  const visibility: Visibility = bannerState(controls.revealed, controls.listed, controls.readiness.ok)
 
   // --- the card's variant and state ------------------------------------------------
   const cardVariant: PersonVariant = !cardPerson ? 'thin' : cardPerson.matched ? 'matched' : cardPerson.insideNow ? 'here' : 'was'
@@ -546,7 +547,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
             visibility={
               <VisibilityBanner
                 state={visibility}
-                name={controls.revealed ? myName : (myPseudonym ?? 'yourself, anonymously')}
+                name={controls.revealed ? myName : (myPseudonym ?? undefined)}
                 missing={controls.readiness.missing || undefined}
                 busy={controls.revealBusy}
                 onAction={
