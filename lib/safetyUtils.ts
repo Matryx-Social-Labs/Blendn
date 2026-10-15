@@ -32,84 +32,50 @@ export type MessageReportType =
   | 'other'
 
 /**
- * Block a user
+ * One safety call, answered as a `SafetyActionResult`: the server's sentence
+ * on a refusal, `fallback` when it sent none, and never a throw.
  */
-export const blockUser = async (
-  userId: string,
-  _reason?: string
+const safely = async (
+  what: string,
+  fallback: string,
+  done: string,
+  call: () => Promise<{ success: boolean; error?: string }>
 ): Promise<SafetyActionResult> => {
   try {
-    const result = await apiClient.blockUser(userId)
+    const result = await call()
     if (!result.success) {
-      Logger.error('general', 'Error blocking user', { error: result.error })
-      return { success: false, message: result.error || 'Failed to block user' }
+      Logger.error('general', `Error ${what}`, { error: result.error })
+      return { success: false, message: result.error || fallback }
     }
-    return { success: true, message: 'User blocked' }
+    return { success: true, message: done }
   } catch (error) {
-    Logger.error('general', 'Error blocking user', { error })
+    Logger.error('general', `Error ${what}`, { error })
     return { success: false, message: 'Something went wrong' }
   }
 }
 
-/**
- * Unblock a user
- */
-export const unblockUser = async (userId: string): Promise<SafetyActionResult> => {
-  try {
-    const result = await apiClient.unblockUser(userId)
-    if (!result.success) {
-      Logger.error('general', 'Error unblocking user', { error: result.error })
-      return { success: false, message: result.error || 'Failed to unblock user' }
-    }
-    return { success: true, message: 'User unblocked' }
-  } catch (error) {
-    Logger.error('general', 'Error unblocking user', { error })
-    return { success: false, message: 'Something went wrong' }
-  }
-}
+export const blockUser = (userId: string): Promise<SafetyActionResult> =>
+  safely('blocking user', 'Failed to block user', 'User blocked', () => apiClient.blockUser(userId))
 
-/**
- * Report a user
- */
-export const reportUser = async (
+export const unblockUser = (userId: string): Promise<SafetyActionResult> =>
+  safely('unblocking user', 'Failed to unblock user', 'User unblocked', () => apiClient.unblockUser(userId))
+
+export const reportUser = (
   userId: string,
   reportType: ReportType,
   description?: string
-): Promise<SafetyActionResult> => {
-  try {
-    const result = await apiClient.reportUser(userId, reportType, description)
-    if (!result.success) {
-      Logger.error('general', 'Error reporting user', { error: result.error })
-      return { success: false, message: result.error || 'Failed to submit report' }
-    }
-    return { success: true, message: 'Report submitted' }
-  } catch (error) {
-    Logger.error('general', 'Error reporting user', { error })
-    return { success: false, message: 'Something went wrong' }
-  }
-}
+): Promise<SafetyActionResult> =>
+  safely('reporting user', 'Failed to submit report', 'Report submitted', () =>
+    apiClient.reportUser(userId, reportType, description))
 
-/**
- * Report a message
- */
-export const reportMessage = async (
+export const reportMessage = (
   messageId: string,
   messageType: 'group' | 'private',
   reportType: MessageReportType,
   description?: string
-): Promise<SafetyActionResult> => {
-  try {
-    const result = await apiClient.reportMessage(messageId, messageType, reportType, description)
-    if (!result.success) {
-      Logger.error('general', 'Error reporting message', { error: result.error })
-      return { success: false, message: result.error || 'Failed to report message' }
-    }
-    return { success: true, message: 'Report submitted' }
-  } catch (error) {
-    Logger.error('general', 'Error reporting message', { error })
-    return { success: false, message: 'Something went wrong' }
-  }
-}
+): Promise<SafetyActionResult> =>
+  safely('reporting message', 'Failed to report message', 'Report submitted', () =>
+    apiClient.reportMessage(messageId, messageType, reportType, description))
 
 /**
  * Get list of blocked users
@@ -413,23 +379,13 @@ export type EventReportType =
   | 'not_real'
   | 'other'
 
-export const reportEvent = async (
+export const reportEvent = (
   eventId: string,
   reportType: EventReportType,
   description?: string
-): Promise<SafetyActionResult> => {
-  try {
-    const result = await apiClient.reportEvent(eventId, reportType, description)
-    if (!result.success) {
-      Logger.error('general', 'Error reporting event', { error: result.error })
-      return { success: false, message: result.error || 'Failed to submit report' }
-    }
-    return { success: true, message: 'Report submitted' }
-  } catch (error) {
-    Logger.error('general', 'Error reporting event', { error })
-    return { success: false, message: 'Something went wrong' }
-  }
-}
+): Promise<SafetyActionResult> =>
+  safely('reporting event', 'Failed to submit report', 'Report submitted', () =>
+    apiClient.reportEvent(eventId, reportType, description))
 
 /**
  * The reason list, straight from the control.
