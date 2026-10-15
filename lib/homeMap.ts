@@ -353,6 +353,18 @@ export function locateTarget(
   return { center: [fix.longitude, fix.latitude], zoom: MAP_THEME.camera.zoom, pitch: MAP_THEME.camera.pitch }
 }
 
+/**
+ * Where "my location" sits as the drawer moves (its top edge, `drawerTop`): a
+ * gap above it, fading out as it rises from half to full, like Google and
+ * Apple Maps. A worklet: it runs per frame on the UI thread.
+ */
+export function locateRide(drawerTop: number, drawer: { half: number; full: number }): { translateY: number; opacity: number } {
+  'worklet'
+  const { sizePx, gapPx } = MAP_THEME.locate
+  const shown = (drawerTop - drawer.full) / (drawer.half - drawer.full)
+  return { translateY: drawerTop - gapPx - sizePx, opacity: Math.min(1, Math.max(0, shown)) }
+}
+
 /** How far a fix must move before the camera follows it: past GPS jitter. */
 const FOLLOW_FIX_KM = 0.05
 

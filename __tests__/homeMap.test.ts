@@ -10,6 +10,7 @@ import {
   lightSignature,
   liveAt,
   loadPins,
+  locateRide,
   locateTarget,
   MAX_QUERY_RADIUS_KM,
   pinsFor,
@@ -219,12 +220,12 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
     expect(component).not.toMatch(/queryRenderedFeatures/)
   })
 
-  it("keeps OpenFreeMap's buildings extrudable and its attribution on", () => {
+  it("keeps OpenFreeMap's buildings extrudable, credited by our own corner credit (the native one is off)", () => {
     expect(CITY_BUILDINGS).toMatchObject({ id: 'blendn-buildings', source: 'openmaptiles', sourceLayer: 'building' })
     expect(layers).toMatch(/<CityBuildings \/>/)
     expect(EMBER_MAP_STYLE.sources).toHaveProperty('openmaptiles')
-    expect(component).toMatch(/\battribution\b(?!=\{false\})/)
-    expect(component).not.toMatch(/attribution=\{false\}/)
+    expect(component).toMatch(/attribution=\{false\}/)
+    expect(component).toMatch(/<MapCredit /)
   })
 })
 
@@ -411,6 +412,27 @@ describe('"my location"', () => {
 
   it('has nowhere to go without a fix: the button asks for one instead', () => {
     expect(locateTarget(null)).toBeNull()
+  })
+
+  it('rides a gap above the drawer wherever it is, fading out from half to full', () => {
+    const drawer = { half: 420, full: 120 }
+    const { sizePx, gapPx } = MAP_THEME.locate
+    for (const top of [700, 420, 300, 120]) expect(locateRide(top, drawer).translateY).toBe(top - gapPx - sizePx)
+    expect(locateRide(700, drawer).opacity).toBe(1) // peek
+    expect(locateRide(420, drawer).opacity).toBe(1) // half
+    expect(locateRide(270, drawer).opacity).toBe(0.5) // halfway up
+    expect(locateRide(120, drawer).opacity).toBe(0) // full
+    expect(locateRide(100, drawer).opacity).toBe(0) // dragged past full
+    expect(gapPx).toBeGreaterThan(0)
+  })
+
+  it('follows the drawer frame by frame: the shell hands the drawer and the button one animated value', () => {
+    const shell = code('components/home/HomeShell.tsx')
+    expect(shell).toMatch(/const drawerTop = useSharedValue\(points\[snap\]\)/)
+    expect(shell).toMatch(/<HomeDrawer\s+y=\{drawerTop\}/)
+    expect(shell).toMatch(/drawerTop=\{drawerTop\}/)
+    expect(code('components/home/HomeDrawer.tsx')).not.toMatch(/const y = useSharedValue/)
+    expect(code('components/home/LocateButton.tsx')).toMatch(/locateRide\(drawerTop\.get\(\), drawer\)/)
   })
 
   it('is wired: a tap with no fix asks through the Pulse, and every move takes the one camera rule', () => {

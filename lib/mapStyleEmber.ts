@@ -12,8 +12,9 @@
  * 2026-10-15). Every colour and size is `lib/mapTheme.ts`. The tiles carry no
  * Blendn data.
  *
- * Free, no key: OpenFreeMap. Its attribution stays on (`HomeMap.tsx`), as the
- * OpenStreetMap licence requires. OpenFreeMap has no SLA, so the style can be
+ * Free, no key: OpenFreeMap. Its credit is ours to show (`MAP_CREDITS`): the
+ * native attribution button is off, and the OpenStreetMap licence is met by a
+ * corner credit as the map opens plus About › Map data. OpenFreeMap has no SLA, so the style can be
  * moved without a release: `EXPO_PUBLIC_MAP_STYLE_URL` (a full style JSON URL,
  * e.g. this style self-hosted over our own tiles) replaces it when set. A
  * replacement must keep the `openmaptiles` source (its `building` layer is
@@ -165,20 +166,37 @@ export const CITY_BUILDINGS: {
 /* -------------------------------------------------------------------------- */
 
 /**
- * Credits for our building tiles, shown with OpenFreeMap's (Blendn-Admin
- * `scripts/map-buildings/README.md`: ODbL, with Google's heights under CC BY
- * 4.0). Each credit is a link: Android's attribution dialog lists only links
- * (`<a href>`), so plain text left our credits off Android entirely.
+ * Everything the home map is drawn from, credited, in one list (OSMF
+ * attribution guidelines, https://osmfoundation.org/wiki/Attribution). The
+ * native attribution button is off: a corner credit names what draws as the
+ * map opens and fades (`mapCreditLine`, `MapCredit.tsx`), and About › Map data
+ * lists every one with its link, so the licences stay findable. Our building
+ * tiles are ODbL with Google's heights under CC BY 4.0 (Blendn-Admin
+ * `scripts/map-buildings/README.md`); OpenFreeMap's own credit names
+ * OpenMapTiles, whose schema the basemap tiles follow.
  */
-export const OWN_BUILDINGS_CREDITS: { text: string; href: string }[] = [
-  { text: '© OpenStreetMap contributors', href: 'https://www.openstreetmap.org/copyright' },
-  { text: 'Overture Maps Foundation', href: 'https://docs.overturemaps.org/attribution/' },
-  { text: 'Google Open Buildings', href: 'https://sites.research.google/gr/open-buildings/' },
-  { text: 'Microsoft', href: 'https://github.com/microsoft/GlobalMLBuildingFootprints' },
-]
+export const MAP_CREDITS = {
+  openStreetMap: { text: '© OpenStreetMap contributors', href: 'https://www.openstreetmap.org/copyright', licence: 'ODbL' },
+  openFreeMap: { text: 'OpenFreeMap', href: 'https://openfreemap.org' },
+  openMapTiles: { text: '© OpenMapTiles', href: 'https://www.openmaptiles.org/' },
+  overture: { text: 'Overture Maps Foundation', href: 'https://docs.overturemaps.org/attribution/' },
+  googleOpenBuildings: { text: 'Google Open Buildings', href: 'https://sites.research.google/gr/open-buildings/', licence: 'CC BY 4.0' },
+  microsoft: { text: 'Microsoft', href: 'https://github.com/microsoft/GlobalMLBuildingFootprints' },
+} as const
 
-/** The credits as the source's attribution HTML, one link each. */
-export const OWN_BUILDINGS_ATTRIBUTION = OWN_BUILDINGS_CREDITS.map(({ text, href }) => `<a href="${href}">${text}</a>`).join(' · ')
+export type MapCredit = (typeof MAP_CREDITS)[keyof typeof MAP_CREDITS]
+
+/** What the basemap draws from: OpenFreeMap's tiles, in the OpenMapTiles schema, of OpenStreetMap. */
+const BASEMAP_CREDITS: MapCredit[] = [MAP_CREDITS.openFreeMap, MAP_CREDITS.openMapTiles, MAP_CREDITS.openStreetMap]
+
+/** What our building tiles draw from. */
+export const OWN_BUILDINGS_CREDITS: MapCredit[] = [MAP_CREDITS.openStreetMap, MAP_CREDITS.overture, MAP_CREDITS.googleOpenBuildings, MAP_CREDITS.microsoft]
+
+/** The corner credit: the basemap's sources, and our buildings' when our tiles draw. Each source once. */
+export function mapCreditLine(ownTiles: boolean): string {
+  const drawn = ownTiles ? [...BASEMAP_CREDITS, ...OWN_BUILDINGS_CREDITS] : BASEMAP_CREDITS
+  return [...new Set(drawn)].map((c) => c.text).join(' · ')
+}
 
 /**
  * The cities our tiles cover, by the box they were built for (Blendn-Admin

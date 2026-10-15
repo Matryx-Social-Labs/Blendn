@@ -14,7 +14,7 @@
  * have one source; the brand tokens the app theme does not carry are below.
  * A value that is not a token says why.
  */
-import { EMBER } from './theme'
+import { EMBER, SPACE } from './theme'
 
 /** Brand tokens `lib/theme.ts` does not carry, by their `colors.css` names. */
 const TOKEN = {
@@ -32,6 +32,9 @@ const ORCHID = '#D277C4'
 
 /** Not a token: a hotter step between orange and accent that reads as light on the dark ground. */
 const EMBER_GLOW = '#FF6A3D'
+
+/** Not a token: the map's lightest neutral, for names of places and the credit. 6.9:1 on the label halo. */
+const PLACE_GREY = '#9A98AA'
 
 export const MAP_THEME = {
   camera: {
@@ -74,7 +77,7 @@ export const MAP_THEME = {
     /** Street names (minor, service and pedestrian streets) from this zoom. */
     streetMinZoom: 15,
     /** Neighbourhood, suburb, town and city names. 6.9:1 on the halo. */
-    place: '#9A98AA',
+    place: PLACE_GREY,
     /** River and lake names, in italic. 5.3:1 on the halo. */
     water: '#6A89AD',
   },
@@ -198,6 +201,26 @@ export const MAP_THEME = {
     maxWidthPx: 200,
     /** The smallest target a finger can hit (44 pt). */
     minTouchPx: 44,
+  },
+
+  /**
+   * The corner credit (OSMF attribution guidelines): there as the map opens,
+   * gone on the first gesture or after `showForMs`; About › Map data keeps it.
+   */
+  credit: {
+    /** 6.5:1 on the ground. */
+    color: PLACE_GREY,
+    opacity: 0.9,
+    showForMs: 5000,
+    fadeMs: 400,
+  },
+
+  /** "My location": a round control riding a gap above the drawer, fading out past half. PLACEHOLDER (SCRUM-667). */
+  locate: {
+    /** Round, and the smallest target a finger can hit. */
+    sizePx: 44,
+    /** Clear of the drawer's top edge by this much. */
+    gapPx: SPACE.md,
   },
 } as const
 

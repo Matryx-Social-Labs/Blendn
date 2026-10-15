@@ -344,7 +344,16 @@ describe("the map theme is the one place for the map's look", () => {
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/\/\/.*$/gm, '')
 
-  it.each(['components/home/HomeMap.tsx', 'components/home/MapLitLayers.tsx', 'components/home/useMapLighting.ts', 'lib/homeMap.ts', 'lib/mapLit.ts', 'lib/mapStyleEmber.ts'])(
+  it.each([
+    'components/home/HomeMap.tsx',
+    'components/home/MapLitLayers.tsx',
+    'components/home/useMapLighting.ts',
+    'components/home/LocateButton.tsx',
+    'components/home/MapCredit.tsx',
+    'lib/homeMap.ts',
+    'lib/mapLit.ts',
+    'lib/mapStyleEmber.ts',
+  ])(
     '%s holds no colour of its own',
     (file) => {
       expect(read(file)).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(/)

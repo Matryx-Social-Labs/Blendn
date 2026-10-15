@@ -13,7 +13,7 @@ import {
 import { router } from 'expo-router'
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AppState, StyleSheet, useWindowDimensions, type NativeSyntheticEvent } from 'react-native'
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
+import Animated, { useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated'
 
 import { eventFromApi } from '../../lib/api'
 import { apiClient } from '../../lib/apiClient'
@@ -39,6 +39,7 @@ import {
   BUILDING_LAYER_ID,
   drawsOwnBuildings,
   homeMapStyle,
+  mapCreditLine,
   OWN_BUILDINGS_LAYER_ID,
   OWN_BUILDINGS_LIT_BY,
   parseOwnBuildingsUrl,
@@ -47,6 +48,7 @@ import {
 import { MAP_THEME } from '../../lib/mapTheme'
 import { SPACE } from '../../lib/theme'
 import { LocateButton } from './LocateButton'
+import { MapCredit } from './MapCredit'
 import { Chips, CityBuildings, GroundGlow, LitBuildings, OwnBuildings, useReduceMotion } from './MapLitLayers'
 import { useMapLighting, type Collection, type MapView, type Segment } from './useMapLighting'
 
@@ -126,6 +128,8 @@ export const HomeMap = memo(function HomeMap({
   cityPick,
   requestLocation,
   locateVisible,
+  drawerTop,
+  drawer,
   segment,
   topInset,
   bottomInset,
@@ -141,6 +145,9 @@ export const HomeMap = memo(function HomeMap({
   requestLocation: () => void
   /** The drawer leaves room for the "my location" button. */
   locateVisible: boolean
+  /** The drawer's top edge as it moves, and where it rests at half and full: the button rides on it. */
+  drawerTop: SharedValue<number>
+  drawer: { half: number; full: number }
   segment: Segment
   /** Where the top bar ends, so the attribution is not under it. */
   topInset: number
@@ -405,8 +412,8 @@ export const HomeMap = memo(function HomeMap({
         mapStyle={style}
         light={LIGHT}
         logo={false}
-        attribution
-        attributionPosition={{ top: topInset + SPACE.sm, left: SPACE.sm }}
+        // Off: the credit is ours to show (`MapCredit`, About › Map data), so no (i) sits on the map.
+        attribution={false}
         compass={false}
         onRegionDidChange={onRegionDidChange}
         onDidFinishLoadingMap={onLoaded}
@@ -469,8 +476,9 @@ export const HomeMap = memo(function HomeMap({
         </GeoJSONSource>
         <Chips chips={lit.chips} onOpen={open} />
       </Map>
+      <MapCredit text={mapCreditLine(ownTiles)} top={topInset + SPACE.sm} dismissed={moved} />
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.fade, fadeStyle]} />
-      <LocateButton visible={locateVisible} following={hasFix && !moved} bottom={bottomInset + SPACE.lg} onPress={locate} />
+      <LocateButton visible={locateVisible} following={hasFix && !moved} drawerTop={drawerTop} drawer={drawer} onPress={locate} />
     </>
   )
 })

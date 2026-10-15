@@ -1,6 +1,7 @@
 import { useIsFocused } from 'expo-router'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AccessibilityInfo, Keyboard, Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native'
+import { useSharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { tabBarTop } from '../../app/(tabs)/_layout'
@@ -57,6 +58,8 @@ export function HomeShell({
     [height, insets.top, insets.bottom]
   )
   const [snap, setSnap] = useState<DrawerSnap>('half')
+  // The drawer's top edge as it moves; "my location" rides on it.
+  const drawerTop = useSharedValue(points[snap])
   const restore = useRef<DrawerSnap | null>(null)
   const [segment, setSegment] = useState<Segment>('events')
   const [placesOpened, setPlacesOpened] = useState(false)
@@ -132,6 +135,8 @@ export function HomeShell({
           cityPick={browse.cityPick}
           requestLocation={browse.requestLocation}
           locateVisible={snap !== 'full'}
+          drawerTop={drawerTop}
+          drawer={points}
           segment={segment}
           topInset={insets.top + TOP_BAR_HEIGHT}
           bottomInset={height - points[snap]}
@@ -142,6 +147,7 @@ export function HomeShell({
       </View>
       <PulseTopBar actions={<NotificationBell />} />
       <HomeDrawer
+        y={drawerTop}
         points={points}
         snap={snap}
         onSnap={onSnap}
