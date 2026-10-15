@@ -168,10 +168,9 @@ export const MeetNext = memo(function MeetNext({
   onOpen: (p: RoomPerson) => void
 }) {
   const now = useNow(1000)
-  const { width } = useWindowDimensions()
+  const tile = useGridCell()
   const reduceMotion = useReducedMotion()
   if (picks.length === 0) return null
-  const tile = (width - GUTTER * 2 - SPACE.md * 2) / 3
 
   return (
     <View style={styles.section}>

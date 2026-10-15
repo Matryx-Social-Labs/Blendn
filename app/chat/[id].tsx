@@ -21,7 +21,7 @@ import { RoomGuidelinesBanner } from '../../components/chat/RoomGuidelinesBanner
 import { RoomLeftState } from '../../components/chat/RoomLeftState'
 import { ChatBubble } from '../../components/chat/ChatBubble'
 import { ChatComposer, type ComposerLock } from '../../components/chat/ChatComposer'
-import { ChatLoadFailed } from '../../components/chat/ChatLoadFailed'
+import { LoadError } from '../../components/LoadError'
 import { ReactionPicker } from '../../components/chat/ReactionPicker'
 import { SystemNotice } from '../../components/chat/SystemNotice'
 import { TypingIndicator, typingLabel } from '../../components/chat/TypingIndicator'
@@ -1142,8 +1142,8 @@ function GroupChatInner() {
           ListEmptyComponent={loading ? null : loadError ? (
             // Not the empty state: an empty room and one that failed to load
             // are different facts, and only one of them is an invitation.
-            <ChatLoadFailed
-              what="this chat"
+            <LoadError
+              title="Couldn't load this chat"
               onRetry={() => {
                 setLoadError(false)
                 setLoading(true)

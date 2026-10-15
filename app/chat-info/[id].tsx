@@ -5,7 +5,7 @@ import { FlatList, Linking, Pressable, StyleSheet, Text, View } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { AppHeader } from '../../components/AppHeader'
-import { ChatLoadFailed } from '../../components/chat/ChatLoadFailed'
+import { LoadError } from '../../components/LoadError'
 import { OptimizedImage } from '../../components/OptimizedImage'
 import { SkeletonCircle, SkeletonLine } from '../../components/Skeleton'
 import { apiClient } from '../../lib/apiClient'
@@ -326,8 +326,8 @@ function ChatInfoInner() {
               ))}
             </View>
           ) : failed ? (
-            <ChatLoadFailed
-              what="who's in this room"
+            <LoadError
+              title="Couldn't load who's in this room"
               onRetry={() => {
                 setFailed(false)
                 setLoading(true)

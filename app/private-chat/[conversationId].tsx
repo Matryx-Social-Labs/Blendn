@@ -25,7 +25,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import ActionTray, { type ActionTrayButton } from '../../components/ActionTray'
 import { ChatBubble } from '../../components/chat/ChatBubble'
 import { ChatComposer, type ComposerLock } from '../../components/chat/ChatComposer'
-import { ChatLoadFailed } from '../../components/chat/ChatLoadFailed'
+import { LoadError } from '../../components/LoadError'
 import { SystemNotice } from '../../components/chat/SystemNotice'
 import { TypingIndicator, typingLabel } from '../../components/chat/TypingIndicator'
 import { OptimizedImage } from '../../components/OptimizedImage'
@@ -1012,8 +1012,8 @@ function PrivateChatInner() {
           ) : !loading && loadError ? (
             // Not the empty state: a thread that failed to load is not an
             // invitation to "Start the conversation".
-            <ChatLoadFailed
-              what="this conversation"
+            <LoadError
+              title="Couldn't load this conversation"
               onRetry={() => {
                 setLoadError(false)
                 setLoading(true)

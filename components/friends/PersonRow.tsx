@@ -3,8 +3,9 @@ import { StyleSheet, View } from 'react-native'
 
 import ScalePress from '../motion/ScalePress'
 import { OptimizedImage } from '../OptimizedImage'
+import { SkeletonCircle, SkeletonLine } from '../Skeleton'
 import { Text } from '../ui/Text'
-import { EMBER, EMBER_RADIUS, SPACE } from '../../lib/theme'
+import { EMBER, EMBER_RADIUS, GUTTER, SPACE } from '../../lib/theme'
 import type { FriendPerson } from '../../lib/friends'
 
 /** The avatar's box and its decode hint, one number so they cannot drift. */
@@ -31,16 +32,7 @@ export function PersonRow({
 }) {
   const body = (
     <>
-      {/* Decorative: the name beside it says who this is. */}
-      <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-        {person.photo ? (
-          <OptimizedImage source={person.photo} style={styles.avatar} width={AVATAR} height={AVATAR} contentFit="cover" />
-        ) : (
-          <View style={[styles.avatar, styles.avatarEmpty]}>
-            <Text variant="heading">{(person.name[0] ?? '?').toUpperCase()}</Text>
-          </View>
-        )}
-      </View>
+      <PersonAvatar person={person} />
       <View style={styles.text}>
         <Text variant="bodyStrong" numberOfLines={1} maxFontSizeMultiplier={1.4}>{person.name}</Text>
         {detail ? <Text variant="meta" numberOfLines={1} maxFontSizeMultiplier={1.3}>{detail}</Text> : null}
@@ -65,7 +57,42 @@ export function PersonRow({
   )
 }
 
+/** Photo, or the name's initial. Decorative: the name beside it says who this is. */
+export function PersonAvatar({ person }: { person: FriendPerson }) {
+  return (
+    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      {person.photo ? (
+        <OptimizedImage source={person.photo} style={styles.avatar} width={AVATAR} height={AVATAR} contentFit="cover" />
+      ) : (
+        <View style={[styles.avatar, styles.avatarEmpty]}>
+          <Text variant="heading">{(person.name[0] ?? '?').toUpperCase()}</Text>
+        </View>
+      )}
+    </View>
+  )
+}
+
+/** Rows at `PersonRow`'s geometry while a list loads, so it does not jump when it lands. */
+export function PersonRowSkeleton() {
+  return (
+    <View style={styles.skeleton} accessibilityLabel="Loading">
+      {[0, 1, 2, 3].map((i) => (
+        <View key={i} style={styles.skeletonRow}>
+          <SkeletonCircle width={AVATAR} />
+          <View style={styles.skeletonText}>
+            <SkeletonLine width="45%" />
+            <SkeletonLine width="30%" />
+          </View>
+        </View>
+      ))}
+    </View>
+  )
+}
+
 const styles = StyleSheet.create({
+  skeleton: { paddingHorizontal: GUTTER, paddingVertical: SPACE.sm },
+  skeletonRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, paddingVertical: SPACE.md },
+  skeletonText: { flex: 1, gap: SPACE.sm },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

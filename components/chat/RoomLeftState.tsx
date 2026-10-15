@@ -83,7 +83,7 @@ export function RoomLeftState({
 
 const styles = StyleSheet.create({
   root: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: SPACE.xxl, gap: SPACE.sm },
-  // The glyph tile every empty and failed state in the app uses (ChatLoadFailed).
+  // The glyph tile every empty and failed state in the app uses (LoadState).
   glyph: {
     width: 80,
     height: 80,
