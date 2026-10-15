@@ -75,6 +75,20 @@ const KNOWN_ORPHANS: Record<string, string> = {
   'SettingsRow.tsx': 'redesign P0 component; adopted with the Settings flow (ROUND3 B4, D · 7)',
   'StateScreen.tsx': 'redesign P0 component; replaces LoadError and the empty states flow by flow (ROUND3 B4)',
   'ds/Toast.tsx': 'redesign P0 component; the toast provider (components/Toast.tsx) moves to it with its first redesigned flow (ROUND3 B4)',
+  /* The P1 inputs (ROUND3 B4), built ahead of their flows; each goes with the first flow that adopts it. */
+  'TextField.tsx': 'redesign P1 input (TextField, TextArea); adopted with sign-in and onboarding (Flows 1–2), then every form (ROUND3 B4)',
+  'DateField.tsx': 'redesign P1 input; the onboarding basics step (date of birth) adopts it (Flow 2, ROUND3 B4)',
+  'SearchField.tsx': 'redesign P1 input; adopted with the Pulse, the city sheet and the Banter (Flows 3, 5)',
+  'Chip.tsx': 'redesign P1 input (Chip, InterestChip); adopted with onboarding interests, the Pulse filters and the profile (Flows 2, 3, 6)',
+  'Toggle.tsx': 'redesign P1 input; drawn by SettingsRow (itself on this ledger), so it reaches a screen with the Settings flow (D · 7)',
+  'SegmentedControl.tsx': 'redesign P1 input; the sign-in screen adopts it (Flow 1, ROUND3 B4)',
+  'RadioCard.tsx': 'redesign P1 input; adopted with event preferences (Anonymous / Named) and the Board composer (Flows 3, 4)',
+  'LookingForCard.tsx': 'redesign P1 input; the onboarding preferences step adopts it in place of LookingForCards (Flow 2)',
+  'Stepper.tsx': 'redesign P1 input; the Board composer’s Spaces adopts it (Flow 4)',
+  'ProgressBar.tsx': 'redesign P1 input; the onboarding header adopts it (Flow 2)',
+  'TabBar.tsx': 'redesign P1 chrome; replaces the tab bar in app/(tabs)/_layout.tsx with the disc in Flow 4 (§11, §13)',
+  'TopBar.tsx': 'redesign P1 chrome; every pushed screen adopts it with its redesign (Flows 6, 7, 10)',
+  'MonoFamily.tsx': 'redesign P1 marks (Badge, PresenceDot, LivePill, TimeBadge, Price); adopted with the Pulse, the Banter and Blend’n+ (Flows 3, 5, 12)',
 }
 
 const sources = walk(join(ROOT, 'app'))

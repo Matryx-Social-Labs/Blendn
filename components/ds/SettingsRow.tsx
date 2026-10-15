@@ -1,5 +1,5 @@
 import { Children, Fragment, isValidElement, useEffect, useRef, useState, type ReactNode } from 'react'
-import { Platform, Pressable, StyleSheet, Switch, Text, View } from 'react-native'
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { Icon, type IconName } from '../ui/Icon'
 import { COLOR, ICON, MATERIAL, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
@@ -7,6 +7,7 @@ import { H } from '../../lib/haptics'
 import { OPACITY } from '../../lib/theme'
 import { Spinner } from './Loader'
 import { font, IC_HAIRLINE, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
+import { Toggle } from './Toggle'
 
 export type SettingsTrail = 'switch' | 'chevron' | 'external' | 'none'
 
@@ -51,11 +52,9 @@ function useRollbackHaptic(error: boolean) {
  * One element for a screen reader: "{title}, {hint}, switch, on" — the whole
  * row toggles, so the switch is drawn, not focused. It plays `H.toggle` (§10.2,
  * a switch changes); a chevron or external row is silent. Pressed: a 6% wash on
- * iOS, a ripple on Android; no scale on rows. Text scales freely and the row
- * grows. Increase Contrast whitens the trailing glyph.
- *
- * ponytail: the switch is React Native's, in the §4.7 colours, until the P1
- * Toggle lands (Material switch geometry on Android, the pressed thumb).
+ * iOS, a ripple on Android; no scale on rows, but the row's press reaches the
+ * <Toggle>'s thumb. Busy dims the toggle beside its spinner. Text scales
+ * freely and the row grows. Increase Contrast whitens the trailing glyph.
  */
 export function SettingsRow({
   icon,
@@ -108,33 +107,31 @@ export function SettingsRow({
         disabled && { opacity: OPACITY.disabled },
       ]}
     >
-      <Icon name={icon} size={ICON.control} color={ink} />
-      <View style={styles.text}>
-        <Text style={[font('bodyStrong', bold), { color: ink }]}>{title}</Text>
-        {hint ? <Text style={[font('meta', bold), { color: error ? COLOR.destructive : COLOR.textSecondary }]}>{hint}</Text> : null}
-      </View>
-      {busy ? <Spinner testID={testID && `${testID}-spinner`} size={18} /> : null}
-      {isSwitch ? (
-        <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-          <Switch
-            value={value}
-            disabled={disabled || busy}
-            trackColor={{ false: COLOR.switchOffTrack, true: COLOR.selectionFill }}
-            thumbColor={value ? COLOR.selectionInk : COLOR.textPrimary}
-            ios_backgroundColor={COLOR.switchOffTrack}
-          />
-        </View>
-      ) : null}
-      {trail === 'chevron' || trail === 'external' ? (
-        <Icon
-          name={trail === 'chevron' ? 'chevron-right' : 'external-link'}
-          size={ICON.inline}
-          color={contrast ? COLOR.textPrimary : COLOR.textTertiary}
-        />
-      ) : null}
-      {focused || previewState === 'focused' ? (
-        <View testID={testID && `${testID}-focus`} pointerEvents="none" style={styles.focus} />
-      ) : null}
+      {({ pressed }) => (
+        <>
+          <Icon name={icon} size={ICON.control} color={ink} />
+          <View style={styles.text}>
+            <Text style={[font('bodyStrong', bold), { color: ink }]}>{title}</Text>
+            {hint ? <Text style={[font('meta', bold), { color: error ? COLOR.destructive : COLOR.textSecondary }]}>{hint}</Text> : null}
+          </View>
+          {busy ? <Spinner testID={testID && `${testID}-spinner`} size={18} /> : null}
+          {isSwitch ? (
+            <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+              <Toggle value={value} disabled={busy} pressed={pressed || previewState === 'pressed'} testID={testID && `${testID}-toggle`} />
+            </View>
+          ) : null}
+          {trail === 'chevron' || trail === 'external' ? (
+            <Icon
+              name={trail === 'chevron' ? 'chevron-right' : 'external-link'}
+              size={ICON.inline}
+              color={contrast ? COLOR.textPrimary : COLOR.textTertiary}
+            />
+          ) : null}
+          {focused || previewState === 'focused' ? (
+            <View testID={testID && `${testID}-focus`} pointerEvents="none" style={styles.focus} />
+          ) : null}
+        </>
+      )}
     </Pressable>
   )
 }

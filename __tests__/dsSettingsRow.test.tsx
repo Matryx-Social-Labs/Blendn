@@ -57,6 +57,23 @@ describe('<SettingsRow>', () => {
     expect(toggle).toHaveBeenCalledWith(true)
   })
 
+  it('draws the P1 Toggle: on is the white track with the ink thumb (F1)', async () => {
+    await render(push())
+    expect(flat('r-toggle-on').backgroundColor).toBe(COLOR.selectionFill)
+    expect(flat('r-toggle-thumb-ink').backgroundColor).toBe(COLOR.selectionInk)
+  })
+
+  it('the row’s press reaches the toggle: its thumb widens under the finger', async () => {
+    await render(push({ previewState: 'pressed' }))
+    expect(flat('r-toggle-thumb').width).toBe(32)
+  })
+
+  it('busy dims the toggle, not the row', async () => {
+    await render(push({ busy: true }))
+    expect(flat('r-toggle').opacity).toBe(OPACITY.disabled)
+    expect(flat('r').opacity).toBeUndefined()
+  })
+
   it('a chevron row is a silent button; an external row is a link that says where it goes', async () => {
     const onPress = jest.fn()
     await render(<SettingsRow icon="shield" title="Blocked users" hint="3" trail="chevron" onPress={onPress} />)

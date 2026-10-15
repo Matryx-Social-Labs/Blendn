@@ -1,0 +1,109 @@
+/*
+ * The Geist Mono family (guidelines/components/MonoFamily.html): Badge,
+ * PresenceDot, LivePill, TimeBadge and Price. Small marks on the 12 pt floor
+ * that report and never act: none is tappable, none plays a haptic, and the
+ * first three are read with the element they decorate.
+ */
+import { act, render, screen } from '@testing-library/react-native'
+import React from 'react'
+import { AccessibilityInfo, StyleSheet } from 'react-native'
+
+import { Badge, LivePill, PresenceDot, Price, TimeBadge } from '../components/ds/MonoFamily'
+import { COLOR, FONT_FAMILY, MATERIAL, TYPE } from '../lib/design/tokens'
+
+const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id, { includeHiddenElements: true }).props.style)
+const text = (t: string) => screen.getByText(t, { includeHiddenElements: true })
+
+describe('<Badge>', () => {
+  it('is an 18 pt white pill with ink digits in Geist Mono 700, capped at 1.3×', async () => {
+    await render(<Badge text={3} testID="b" />)
+    expect(flat('b')).toMatchObject({ height: 18, minWidth: 18, backgroundColor: COLOR.textPrimary })
+    const digits = text('3')
+    expect(StyleSheet.flatten(digits.props.style)).toMatchObject({ color: COLOR.ink, fontFamily: FONT_FAMILY.mono[700] })
+    expect(digits.props.maxFontSizeMultiplier).toBe(1.3)
+  })
+
+  it('is a 22 pt pill as a label (“3 new”)', async () => {
+    await render(<Badge text="3 new" size={22} testID="b" />)
+    expect(flat('b')).toMatchObject({ height: 22, minWidth: 22 })
+  })
+
+  it('cuts out of what it sits on with a 2 pt ring in the ground colour', async () => {
+    await render(<Badge text={2} ring={COLOR.ink} testID="b" />)
+    expect(flat('b-ring')).toMatchObject({ padding: 2, backgroundColor: COLOR.ink })
+  })
+
+  it('is folded into its parent for a screen reader', async () => {
+    await render(<Badge text={3} testID="b" />)
+    expect(screen.queryByText('3')).toBeNull()
+  })
+})
+
+describe('<PresenceDot>', () => {
+  it('unread is a 10 pt white dot; live is the 8 pt live green; both are hidden', async () => {
+    await render(<PresenceDot testID="d" />)
+    expect(flat('d')).toMatchObject({ width: 10, height: 10, backgroundColor: COLOR.textPrimary })
+    await render(<PresenceDot kind="live" testID="d" />)
+    expect(flat('d')).toMatchObject({ width: 8, height: 8, backgroundColor: COLOR.live })
+    expect(screen.getByTestId('d', { includeHiddenElements: true }).props.accessibilityElementsHidden).toBe(true)
+  })
+
+  it('takes a size and a ring on a face', async () => {
+    await render(<PresenceDot kind="live" size={12} ring={COLOR.ink} testID="d" />)
+    expect(flat('d')).toMatchObject({ width: 12, borderColor: COLOR.ink })
+  })
+})
+
+describe('<LivePill> and <TimeBadge>', () => {
+  it('LivePill is the scrim pill with the live dot and the bucket word, read verbatim', async () => {
+    await render(<LivePill text="5–9 live" testID="p" />)
+    expect(flat('p')).toMatchObject({ height: 28, backgroundColor: MATERIAL.scrimPill, borderColor: COLOR.hairlineStrong })
+    expect(screen.getByTestId('p-dot', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByText('5–9 live')).toBeTruthy()
+  })
+
+  it('TimeBadge: “Live” takes the dot; a time is Geist Mono tabular', async () => {
+    await render(<TimeBadge when="Live" testID="t" />)
+    expect(screen.getByTestId('t-dot', { includeHiddenElements: true })).toBeTruthy()
+    await render(<TimeBadge when="10:30 PM" testID="t" />)
+    expect(screen.queryByTestId('t-dot', { includeHiddenElements: true })).toBeNull()
+    expect(StyleSheet.flatten(text('10:30 PM').props.style)).toMatchObject({
+      fontFamily: FONT_FAMILY.mono[500],
+      fontVariant: ['tabular-nums'],
+    })
+  })
+
+  it('Increase Contrast: the pill’s hairline goes to 1 pt at 50%', async () => {
+    jest.spyOn(AccessibilityInfo, 'isDarkerSystemColorsEnabled').mockResolvedValue(true)
+    await render(<LivePill text="20+ live" testID="p" />)
+    await act(async () => {})
+    expect(flat('p')).toMatchObject({ borderWidth: 1, borderColor: MATERIAL.hairlineIncreaseContrast })
+  })
+})
+
+describe('<Price>', () => {
+  it('Geist Mono 700, tabular, the ₹ in the string; the unit in Satoshi, textSecondary', async () => {
+    await render(<Price amount="₹199" per="/ month" size="md" />)
+    expect(StyleSheet.flatten(text('₹199').props.style)).toMatchObject({
+      fontFamily: FONT_FAMILY.mono[700],
+      fontVariant: ['tabular-nums'],
+      fontSize: TYPE.heading.fontSize,
+    })
+    expect(StyleSheet.flatten(text('/ month').props.style)).toMatchObject({
+      fontFamily: FONT_FAMILY.brand[400],
+      color: COLOR.textSecondary,
+    })
+  })
+
+  it('reads as words: “199 rupees a month”', async () => {
+    await render(<Price amount="₹199" per="/ month" testID="p" />)
+    expect(screen.getByLabelText('199 rupees a month')).toBeTruthy()
+    await render(<Price amount="Free" testID="p" />)
+    expect(screen.getByLabelText('Free')).toBeTruthy()
+  })
+
+  it('scales freely: no cap', async () => {
+    await render(<Price amount="₹49" per="tonight" size="lg" />)
+    expect(text('₹49').props.maxFontSizeMultiplier).toBeUndefined()
+  })
+})
