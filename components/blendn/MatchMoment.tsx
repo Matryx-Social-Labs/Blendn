@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons'
-import * as Haptics from 'expo-haptics'
 import React, { useCallback, useEffect } from 'react'
 import { Modal, Pressable, StyleSheet, View } from 'react-native'
 import Animated, {
@@ -18,6 +17,7 @@ import Animated, {
 import { scheduleOnRN } from 'react-native-worklets'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
+import { H } from '../../lib/haptics'
 import { MOTION_SPRING } from '../../lib/motion'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE } from '../../lib/theme'
 import ScalePress from '../motion/ScalePress'
@@ -76,9 +76,7 @@ export function MatchMoment({
   const bump = useSharedValue(1)
   const hearts = [useSharedValue(0), useSharedValue(0), useSharedValue(0)]
 
-  const landed = useCallback(() => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {})
-  }, [])
+  const landed = useCallback(() => H.match(), [])
 
   useEffect(() => {
     if (!visible) return

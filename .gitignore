@@ -57,3 +57,10 @@ ios/sentry.properties
 # undo. They live in the design tool, not the app repo.
 *.fig
 Blendn.pdf
+
+# Satoshi (ITF Free Font License v2.0): the app may embed it, but this repo is
+# public and the licence forbids publishing the files. A machine copies the
+# four unmodified OTFs in from the design export; an EAS build from GitHub
+# restores them from the SATOSHI_FONTS_PART_* secrets (scripts/check-satoshi.sh).
+# docs/RELEASING.md, "Satoshi". __tests__/fonts.test.ts fails if one is tracked.
+/assets/fonts/satoshi/

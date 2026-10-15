@@ -1,19 +1,26 @@
-import * as Haptics from 'expo-haptics'
-import React, { useCallback, useState } from 'react'
+import React, { useCallback } from 'react'
 import { Pressable, type GestureResponderEvent, type PressableProps, type StyleProp, type ViewStyle } from 'react-native'
-import Animated, { cubicBezier, useReducedMotion } from 'react-native-reanimated'
+import Animated, { ReduceMotion, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated'
+
+import { PRESS, SPRING } from '../../lib/motion'
 
 type ScalePressProps = PressableProps & {
   children: React.ReactNode
   style?: StyleProp<ViewStyle>
+  /** `PRESS.scale` (0.97) by default; the centre disc uses `PRESS.scaleDisc`. */
   pressedScale?: number
-  haptic?: boolean
+  /**
+   * A haptic from the vocabulary to play on press-in — `H.primary` on the
+   * screen's one primary, `H.disc` on the centre disc. None by default: most
+   * taps are silent (DESIGN-BRIEF §10.1 rule 5). `false` reads the same.
+   */
+  haptic?: false | (() => void)
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable)
 
-/** Strong ease-out: the shrink lands on the frame the finger does. */
-const EASE_OUT = cubicBezier(0.23, 1, 0.32, 1)
+/** `M.press`, run even under Reduce Motion: the squash is feedback, not decoration. */
+const PRESS_SPRING = { ...SPRING.press, reduceMotion: ReduceMotion.Never }
 
 /** A finger drifting this far off the control mid-press still counts. */
 const RETENTION = { top: 16, bottom: 16, left: 16, right: 16 }
@@ -23,60 +30,51 @@ const RETENTION = { top: 16, bottom: 16, left: 16, right: 16 }
  *
  * Feedback on press-in, not on release. Waiting for the tap to complete
  * before anything moves is the dead-button latency people actually feel.
- * `scale` takes the label and icons with it, which is what reads as physical.
+ * `scale` takes the label and icons with it, which is what reads as physical,
+ * and never opacity: a dim would fade any glass inside (§5.2 rule 6).
  *
- * A two-state change, so it's a CSS transition on the UI thread (120ms,
- * ease-out), not a spring on a shared value. There's no gesture to carry
- * velocity, so a spring would add nothing but overshoot. Releasing mid-shrink
- * retargets from wherever the scale is.
+ * The scale is a shared value on `M.press` (critically damped, no overshoot),
+ * so the animation runs on the UI thread and a press re-renders nothing.
+ * Releasing mid-shrink retargets from wherever the scale is.
  *
- * Reduce Motion: no scale. The haptic and the press itself still happen.
+ * Reduce Motion keeps the squash: it is a 3% answer to a finger, not a
+ * transition.
  */
 export default function ScalePress({
   children,
   style,
   onPressIn,
   onPressOut,
-  pressedScale = 0.97,
-  haptic = true,
+  pressedScale = PRESS.scale,
+  haptic,
   pressRetentionOffset = RETENTION,
   ...rest
 }: ScalePressProps) {
-  const reduceMotion = useReducedMotion()
-  const [pressed, setPressed] = useState(false)
+  const scale = useSharedValue(1)
+  const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.get() }] }))
 
   const handlePressIn = useCallback(
     (event: GestureResponderEvent) => {
-      setPressed(true)
-      if (haptic) {
-        Haptics.selectionAsync().catch(() => {})
-      }
+      scale.set(withSpring(pressedScale, PRESS_SPRING))
+      if (haptic) haptic()
       onPressIn?.(event)
     },
-    [haptic, onPressIn]
+    [scale, pressedScale, haptic, onPressIn]
   )
 
   const handlePressOut = useCallback(
     (event: GestureResponderEvent) => {
-      setPressed(false)
+      scale.set(withSpring(1, PRESS_SPRING))
       onPressOut?.(event)
     },
-    [onPressOut]
+    [scale, onPressOut]
   )
 
   return (
     <AnimatedPressable
       {...rest}
       pressRetentionOffset={pressRetentionOffset}
-      style={[
-        style,
-        {
-          transform: [{ scale: pressed && !reduceMotion ? pressedScale : 1 }],
-          transitionProperty: 'transform',
-          transitionDuration: 120,
-          transitionTimingFunction: EASE_OUT,
-        },
-      ]}
+      style={[style, animatedStyle]}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
     >

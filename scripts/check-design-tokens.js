@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 /* global __dirname */
 /*
- * Fails on UI values that bypass the design system in `lib/theme.ts`.
+ * Fails on UI values that bypass the design system: `lib/theme.ts` for the
+ * screens not yet redesigned, `lib/design/tokens.ts` (generated from
+ * `design/tokens.json`) for the redesign.
  *
  * Why a script and not an ESLint rule: the values live in `StyleSheet.create`
  * objects and JSX props, and a line-level check over source is enough to catch
@@ -13,11 +15,20 @@
  * - `fontWeight` — custom fonts ignore it on Android; weight is the family
  * - padding, margin or gap off `SPACE` (0 2 4 8 12 16 24 32 48)
  * - an icon `size={n}` other than 16, 20, 24, or a decorative 28+
- * - a raw colour (`'#hex'`, `rgba()`) — use `EMBER`, or `tint(EMBER.x, a)`
- * - a raw `borderRadius` — use `EMBER_RADIUS` (circles are `pill`)
+ * - a raw colour (`'#hex'`, `rgba()`) — use `COLOR` (or `EMBER` on an
+ *   unmigrated screen), or `tint(COLOR.x, a)`
+ * - a raw `borderRadius` — use `RADIUS` / `EMBER_RADIUS` (circles are capsules)
  * - a raw `lineHeight` or `textTransform` — the TYPE role sets both
- * - shadows and `BlurView` — surfaces are flat (tasks/lessons.md: no glows,
- *   no glass stacks)
+ * - shadows — content is flat (DESIGN-BRIEF §5.5)
+ * - glass and blur outside `<Material>`: `BlurView`, `expo-blur` and
+ *   `expo-glass-effect` belong to `components/ui/Material.tsx` alone (§5.4)
+ * - a gradient outside `<GradientFill>`: `expo-linear-gradient` belongs to
+ *   `components/ui/GradientFill.tsx` (and `<Material>`'s Tier B highlight);
+ *   the screens drawn before the redesign are listed in `GRADIENT_LEGACY`
+ * - a haptic outside the vocabulary: `expo-haptics` belongs to
+ *   `lib/haptics.ts` (§10), in `lib/` as well
+ * - an icon outside `<Icon>`: `lucide-react-native` belongs to
+ *   `components/ui/Icon.tsx`, which keeps the name map and the outline
  * - retired tokens: `EMBER_TYPE`, `EMBER_GRADIENT` and its `gradientFrom/To`,
  *   `EMBER_CONTROL_HEIGHT`, `EMBER_RADIUS.input` — use `TYPE`, a flat
  *   `EMBER.accent`, `CONTROL.lg`, `EMBER_RADIUS.pill`
@@ -41,12 +52,45 @@ const path = require('path')
 
 const ROOT = path.resolve(__dirname, '..')
 const DIRS = ['app', 'components']
-// `lib/` holds constants screens read (tray specs, map styles). Only the
-// legacy-palette rule applies there; `theme.ts` is where the tokens live.
+// `lib/` holds constants screens read (tray specs, map styles). Only the rules
+// marked `lib` apply there (the legacy palette, haptics); `theme.ts` is where
+// the old tokens live.
 const LIB_DIR = 'lib'
 const LIB_SKIP = new Set(['theme.ts'])
-const SPACE = new Set([0, 2, 4, 8, 12, 16, 24, 32, 48])
-const ICON = new Set([16, 20, 24])
+/* The scales come from the redesign's tokens; they are the scales `lib/theme.ts` already used. */
+const TOKENS = require('../design/tokens.json')
+const SPACE = new Set([0, ...Object.values(TOKENS.space)])
+const ICON = new Set([TOKENS.icon.inline, TOKENS.icon.control, TOKENS.icon.nav])
+
+/*
+ * Screens drawn before the redesign that use `expo-linear-gradient` directly
+ * (photo scrims, avatar discs, the old cards). Each moves to `<GradientFill>`,
+ * or to the redesign's own scrim, with its screen. Nothing new joins: the list
+ * only shrinks, and `npm run lint:design` names an entry that is clean.
+ */
+const GRADIENT_LEGACY = Object.fromEntries(
+  [
+    'app/onboarding/basics.tsx',
+    'app/onboarding/media.tsx',
+    'components/NearbyEventCard.tsx',
+    'components/banter/BanterSections.tsx',
+    'components/blendn/Face.tsx',
+    'components/blendn/TonightView.tsx',
+    'components/board/BoardSections.tsx',
+    'components/crews/CrewParts.tsx',
+    'components/onboarding/LookingForCards.tsx',
+    'components/onboarding/PermissionIllustration.tsx',
+    'components/profile/MemoryTile.tsx',
+    'components/profile/PhotoStack.tsx',
+    'components/profile/ProfileSections.tsx',
+    'components/scene/SceneHero.tsx',
+    'components/scene/SceneSections.tsx',
+    'components/screens/EventDetailScreen.tsx',
+  ].map((f) => [f, 'pre-redesign: moves to <GradientFill> or the redesign scrim with its screen'])
+)
+
+/** An import of `pkg` in any form: `from '…'`, `require('…')`, `import('…')`, spaces allowed. */
+const importOf = (pkg) => new RegExp(`(\\bfrom\\s*|\\b(require|import)\\s*\\(\\s*)['"]${pkg}`)
 
 const RULES = [
   {
@@ -57,22 +101,23 @@ const RULES = [
   {
     id: 'font-weight',
     test: /\bfontWeight:/,
-    message: 'fontWeight — pick the weight through the TYPE role / EMBER_FONTS family',
+    message: 'fontWeight — pick the weight through the TYPE role / FONT_FAMILY (EMBER_FONTS) family',
   },
   {
     id: 'legacy-palette',
     test: /\bAPP_(COLORS|SPACING|RADIUS|SIZE|CTA|ELEVATION)\b/,
     message: 'legacy APP_* token — use EMBER / SPACE / ICON / CONTROL / EMBER_RADIUS',
+    lib: true,
   },
   {
     id: 'raw-colour',
     test: /['"`]#[0-9a-fA-F]{3,8}['"`]|\brgba?\(/,
-    message: 'raw colour — use an EMBER token, or tint(EMBER.x, alpha)',
+    message: 'raw colour — use a COLOR token (EMBER on an unmigrated screen), or tint(COLOR.x, alpha)',
   },
   {
     id: 'raw-radius',
     test: /\bborder(TopLeft|TopRight|BottomLeft|BottomRight|TopStart|TopEnd|BottomStart|BottomEnd)?Radius(:\s*|=\{)[1-9]/,
-    message: 'raw borderRadius — use EMBER_RADIUS (a circle is EMBER_RADIUS.pill)',
+    message: 'raw borderRadius — use RADIUS / EMBER_RADIUS (a circle is RADIUS.capsule)',
   },
   {
     id: 'raw-line-height',
@@ -87,12 +132,33 @@ const RULES = [
   {
     id: 'shadow',
     test: /\bshadow(Color|Opacity|Radius|Offset):/,
-    message: 'shadow — surfaces are flat; separate with fill contrast or EMBER.separator',
+    message: 'shadow — content is flat; separate with surface steps or a hairline (COLOR.hairline)',
   },
   {
     id: 'blur',
-    test: /<BlurView\b/,
-    message: 'BlurView — no glass; use a flat EMBER surface',
+    test: new RegExp(`<BlurView\\b|${importOf("expo-(blur|glass-effect)['\"]").source}`),
+    message: 'glass or blur outside <Material> — use <Material role>',
+    allow: ['components/ui/Material.tsx'],
+  },
+  {
+    id: 'gradient',
+    test: importOf("expo-linear-gradient['\"]"),
+    message: 'gradient outside <GradientFill> — use <GradientFill gradient="fill" | "brand">',
+    allow: ['components/ui/GradientFill.tsx', 'components/ui/Material.tsx'],
+    legacy: GRADIENT_LEGACY,
+  },
+  {
+    id: 'haptics',
+    test: importOf("expo-haptics['\"]"),
+    message: 'expo-haptics outside lib/haptics.ts — use the vocabulary, H.* (DESIGN-BRIEF §10)',
+    allow: ['lib/haptics.ts'],
+    lib: true,
+  },
+  {
+    id: 'icon',
+    test: importOf('lucide-react-native'),
+    message: 'lucide-react-native outside <Icon> — use <Icon name> (add the glyph to its map)',
+    allow: ['components/ui/Icon.tsx'],
   },
   {
     id: 'retired-token',
@@ -137,7 +203,7 @@ const LATE_RULE_ALLOWLIST = {
 
 const SPACING_RE = /\b(padding|margin)(Top|Bottom|Left|Right|Horizontal|Vertical|Start|End)?:\s*(-?\d+(\.\d+)?)\b/g
 const GAP_RE = /\b(gap|rowGap|columnGap):\s*(\d+(\.\d+)?)\b/g
-const ICON_RE = /<(Ionicons|MaterialIcons|MaterialCommunityIcons|Feather|\w+Icon)\b[^>]*?\bsize=\{(\d+)\}/g
+const ICON_RE = /<(Ionicons|MaterialIcons|MaterialCommunityIcons|Feather|\w*Icon)\b[^>]*?\bsize=\{(\d+)\}/g
 
 function listFiles(dir) {
   const out = []
@@ -161,8 +227,13 @@ function excepted(lines, i) {
   return /design-exception:\s*\S/.test(lines[i]) || (i > 0 && /design-exception:\s*\S/.test(lines[i - 1]))
 }
 
+const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k)
+const ruleApplies = (rule, rel, libOnly) =>
+  (!libOnly || rule.lib) && !(rule.allow || []).includes(rel) && !has(rule.legacy || {}, rel)
+
 function checkSource(source, file, { libOnly = false } = {}) {
-  const lateAllowed = Object.prototype.hasOwnProperty.call(LATE_RULE_ALLOWLIST, file.split(path.sep).join('/'))
+  const rel = file.split(path.sep).join('/')
+  const lateAllowed = has(LATE_RULE_ALLOWLIST, rel)
   const lines = source.split('\n')
   const found = []
   const add = (i, message) => found.push({ file, line: i + 1, message, text: lines[i].trim() })
@@ -191,8 +262,7 @@ function checkSource(source, file, { libOnly = false } = {}) {
     if (!code.trim() || excepted(lines, i)) return
 
     for (const rule of RULES) {
-      if (libOnly && rule.id !== 'legacy-palette') continue
-      if (rule.test.test(code)) add(i, rule.message)
+      if (ruleApplies(rule, rel, libOnly) && rule.test.test(code)) add(i, rule.message)
     }
     if (libOnly) return
 
@@ -230,15 +300,20 @@ function findViolations(files) {
  * a stale allowance is a hole the next literal walks through unseen.
  */
 function staleAllowances() {
-  return Object.keys(LATE_RULE_ALLOWLIST).filter((rel) => {
+  const clean = (rel, rules) => {
     const abs = path.join(ROOT, rel)
     if (!fs.existsSync(abs)) return true
     const lines = fs.readFileSync(abs, 'utf8').split('\n')
-    return !lines.some((line, i) => !excepted(lines, i) && LATE_RULES.some((rule) => rule.test.test(line.replace(/(^|[^:])\/\/.*$/, '$1'))))
-  })
+    return !lines.some((line, i) => !excepted(lines, i) && rules.some((rule) => rule.test.test(line.replace(/(^|[^:])\/\/.*$/, '$1'))))
+  }
+  const gradient = RULES.find((r) => r.id === 'gradient')
+  return [
+    ...Object.keys(LATE_RULE_ALLOWLIST).filter((rel) => clean(rel, LATE_RULES)),
+    ...Object.keys(GRADIENT_LEGACY).filter((rel) => clean(rel, [gradient])),
+  ]
 }
 
-module.exports = { findViolations, checkSource, staleAllowances, LATE_RULE_ALLOWLIST }
+module.exports = { findViolations, checkSource, staleAllowances, LATE_RULE_ALLOWLIST, GRADIENT_LEGACY }
 
 if (require.main === module) {
   const args = process.argv.slice(2)
@@ -247,7 +322,7 @@ if (require.main === module) {
   const files = new Set(violations.map((v) => v.file)).size
   console.log(violations.length ? `\n${violations.length} violations in ${files} files` : 'design tokens: clean')
   if (!args.length) {
-    for (const rel of staleAllowances()) console.log(`note: ${rel} is clean — remove it from LATE_RULE_ALLOWLIST`)
+    for (const rel of staleAllowances()) console.log(`note: ${rel} is clean — remove its allowance (LATE_RULE_ALLOWLIST / GRADIENT_LEGACY)`)
   }
   process.exit(violations.length ? 1 : 0)
 }

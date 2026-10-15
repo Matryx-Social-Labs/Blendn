@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons'
-import * as Haptics from 'expo-haptics'
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { StyleSheet, View, type LayoutChangeEvent } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
@@ -15,6 +14,7 @@ import Animated, {
 } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
 
+import { H } from '../../lib/haptics'
 import { NIGHTS_WEEKS, nightsGrid } from '../../lib/meProfile'
 import { EMBER, EMBER_RADIUS, ICON, SPACE } from '../../lib/theme'
 import { MONTHS, WEEKDAYS } from '../../lib/time'
@@ -204,7 +204,7 @@ export function NightsOut({
       if (cell < 0 || cell === selected) return
       setDirection(cell > selected ? 1 : -1)
       setPicked(cell)
-      Haptics.selectionAsync().catch(() => {})
+      H.select()
     },
     [selected]
   )

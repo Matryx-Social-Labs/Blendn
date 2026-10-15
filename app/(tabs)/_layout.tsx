@@ -7,6 +7,7 @@ import Animated, { FadeIn } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { apiClient } from '../../lib/apiClient'
+import { H } from '../../lib/haptics'
 import { Logger } from '../../lib/logger'
 import {
   roomButtonAccessibilityLabel,
@@ -16,7 +17,7 @@ import {
 } from '../../lib/roomButton'
 import { getRoomSignal, subscribeRoomSignal } from '../../lib/roomSignal'
 import { subscribeCheckInChanged } from '../../lib/checkIn'
-import { MOTION_DURATION } from '../../lib/motion'
+import { MOTION_DURATION, PRESS } from '../../lib/motion'
 import { popIn, popOut } from '../../components/motion/presence'
 import ScalePress from '../../components/motion/ScalePress'
 import { BlendnScreen } from '../../components/blendn/BlendnScreen'
@@ -217,9 +218,11 @@ const RoomButton = memo(({ target }: { target: RoomButtonTarget }) => {
         /*
          * Squashes under the finger (Airbnb's tactile tab button): 0.9 on
          * press-in, eased back on release. The screen then opens *out of*
-         * this disc, so the press and the open read as one gesture.
+         * this disc, so the press and the open read as one gesture. `H.disc`
+         * on press-in is the only haptic the disc makes (§11.4).
          */
-        pressedScale={0.9}
+        pressedScale={PRESS.scaleDisc}
+        haptic={H.disc}
       >
         {/*
           Flat accent in every state (the fill lives on `centreButton`).

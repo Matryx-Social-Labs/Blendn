@@ -1,6 +1,6 @@
+import { H } from '../../lib/haptics'
 import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
-import * as Haptics from 'expo-haptics'
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useState } from 'react'
 import { Dimensions, Pressable, ScrollView, StyleSheet, View } from 'react-native'
@@ -392,7 +392,7 @@ function UserProfileInner() {
        * and the sheet stays open with the message still in it.
        */
       if (result.success || result.errorCode === 'CONFLICT') {
-        if (result.success) void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {})
+        if (result.success) H.success()
         setCtaMode('requested')
         setCtaMessage(CTA_HINT.requested)
         setConnectOpen(false)

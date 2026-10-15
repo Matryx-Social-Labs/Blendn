@@ -4,6 +4,7 @@ import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-na
 import Animated, { LayoutAnimationConfig } from 'react-native-reanimated'
 
 import type { FeedMediaItem } from '../../lib/feedMedia'
+import { H } from '../../lib/haptics'
 import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, OPACITY, SPACE, TYPE, tint } from '../../lib/theme'
 import { fadeInFast, fadeOutFast } from '../motion/presence'
@@ -359,7 +360,7 @@ export function ProfileActions({
         {onLike ? (
           <ScalePress
             onPress={onLike}
-            haptic={false}
+            haptic={H.like}
             disabled={liked || likeBusy}
             accessibilityRole="button"
             accessibilityLabel={

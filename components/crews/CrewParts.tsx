@@ -17,6 +17,7 @@ import {
   type CrewCard,
 } from '../../lib/crews'
 import type { FriendPerson } from '../../lib/friends'
+import { H } from '../../lib/haptics'
 import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
 import { CONTROL, EMBER, EMBER_RADIUS, ICON, OPACITY, SPACE } from '../../lib/theme'
 import { Face } from '../blendn/Face'
@@ -193,7 +194,10 @@ export function CrewCardView({
         </View>
       ) : null}
       <Pressable
-        onPress={onLike}
+        onPress={() => {
+          H.like()
+          onLike()
+        }}
         disabled={card.youLiked || liking}
         accessibilityRole="button"
         accessibilityLabel={card.youLiked ? `You liked ${card.name}` : `Like ${card.name}`}

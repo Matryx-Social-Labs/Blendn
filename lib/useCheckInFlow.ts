@@ -5,10 +5,10 @@ import { apiClient } from './apiClient'
 import { CONFETTI_PEAK_MS } from './confetti'
 import { askIntentRoute, revealOffer, submitCheckIn, type CheckInOutcome } from './checkIn'
 import { isExpectedRefusal } from './checkInRefusal'
+import { H } from './haptics'
 import { getCurrentLocation as getLocationFix, type CheckInLocation, type ShowTray } from './locationFix'
 import { Logger } from './logger'
 import { useAuth } from './useAuth'
-import { useInteractionFeedback } from './useInteractionFeedback'
 
 /**
  * The event screen's check-in, as a hook, so a second door runs it unchanged.
@@ -75,7 +75,6 @@ export function useCheckInFlow({
   afterSuccess = 'tray',
 }: UseCheckInFlowOptions) {
   const { user } = useAuth()
-  const feedback = useInteractionFeedback()
   const reduceMotion = useReducedMotion()
   const [checkingIn, setCheckingIn] = useState(false)
   /**
@@ -167,7 +166,7 @@ export function useCheckInFlow({
           Logger.journey('checkin', 'detail:alreadyCheckedIn')
           onCheckedIn?.(outcome)
         } else {
-          feedback.error()
+          H.error({ blocking: true })
         }
 
         showTray(
@@ -191,7 +190,7 @@ export function useCheckInFlow({
         return outcome.alreadyCheckedIn ? 'checkedIn' : 'refused'
       } else {
         Logger.journey('checkin', 'detail:success', { eventId })
-        feedback.success()
+        H.success({ important: true })
         setCelebrations((n) => n + 1)
         // Update check-in status directly - no need for another API call. Now,
         // not after the trays, so the button turns as the confetti pops.
@@ -260,7 +259,7 @@ export function useCheckInFlow({
       }
     } catch (error) {
       Logger.error('events', 'checkin:exception', { error: error as any })
-      feedback.error()
+      H.error({ blocking: true })
       showTray('Check-in failed', 'Something went wrong. Please try again.')
       return 'failed'
     } finally {

@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons'
-import * as Haptics from 'expo-haptics'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, StyleSheet, View, type LayoutChangeEvent } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
@@ -13,6 +12,7 @@ import Animated, {
 } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
 
+import { H } from '../../lib/haptics'
 import { MOTION_SPRING } from '../../lib/motion'
 import { CONTROL, EMBER, EMBER_RADIUS, ICON, SPACE, tint } from '../../lib/theme'
 import { Text } from '../ui/Text'
@@ -66,11 +66,15 @@ export function HoldToConfirm({
 
   const onLayout = (e: LayoutChangeEvent) => setWidth(Math.round(e.nativeEvent.layout.width))
 
-  const tick = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {})
-  }, [])
+  /*
+   * The hold's own haptics: a ramp at the quarters and `commit` at 100%.
+   * Success or error is the caller's, on the server's answer (§10.1 rule 3):
+   * this used to play Success here too, so a check-in buzzed Success twice,
+   * and a refused one Success then Error.
+   */
+  const tick = useCallback((quarter: 1 | 2 | 3) => H.tick(quarter), [])
   const done = useCallback(() => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {})
+    H.commit()
     onConfirm()
   }, [onConfirm])
 
@@ -79,7 +83,7 @@ export function HoldToConfirm({
     () => Math.floor(progress.get() * 4),
     (quarter, previous) => {
       if (previous !== null && quarter > previous && quarter > 0 && quarter < 4) {
-        scheduleOnRN(tick)
+        scheduleOnRN(tick, quarter as 1 | 2 | 3)
       }
     }
   )

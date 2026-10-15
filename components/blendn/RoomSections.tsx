@@ -11,6 +11,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated'
 
+import { H } from '../../lib/haptics'
 import { MOTION_SPRING, MOTION_STAGGER } from '../../lib/motion'
 import { hereNowStack, reasonLine, shuffleCountdownLabel, timeHereLabel } from '../../lib/roomMoments'
 import type { RoomPerson } from '../../lib/useRoom'
@@ -245,6 +246,7 @@ export const GridFace = memo(function GridFace({
     .runOnJS(true)
     .onEnd((_e, ok) => {
       if (!ok || !likeable) return
+      H.like()
       setPop((n) => n + 1)
       onLike(person)
     })
@@ -270,6 +272,7 @@ export const GridFace = memo(function GridFace({
           onAccessibilityAction={(e) => {
             if (e.nativeEvent.actionName === 'activate') onOpen(person)
             else if (e.nativeEvent.actionName === 'longpress' && likeable) {
+              H.like()
               setPop((n) => n + 1)
               onLike(person)
             }
