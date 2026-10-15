@@ -51,6 +51,7 @@ const PLAYS = [
   ...Object.keys(BLENDS).map((v) => `blend-${v}`),
   'ready',
   'pour',
+  'pour-held',
 ] as const
 
 const RECAPS: Record<string, Partial<MomentRecapProps>> = {
@@ -185,7 +186,8 @@ function Moment({ play, onEnd }: { play: (typeof PLAYS)[number]; onEnd: () => vo
   }
   if (play === 'ready') return <MomentReady testID="ds-moment-ready" name="Sam" onDone={onEnd} />
   // The pour clears itself and lets touches through; the next Play replaces it.
-  return <MomentPour testID="ds-moment-pour" venue="Toit" onDone={noop} />
+  // Held: no Room to hand off to yet, so it stays filled until a tap.
+  return <MomentPour testID="ds-moment-pour" venue="Toit" ready={play !== 'pour-held'} onDone={noop} />
 }
 
 function Section({ title, note, children }: { title: string; note?: string; children: ReactNode }) {

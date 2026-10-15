@@ -218,11 +218,14 @@ export function VenuePass({
   event,
   tasteMatchCount,
   busy,
+  youreIn = false,
   onHold,
 }: {
   event: TonightEvent
   tasteMatchCount: number | null
   busy: boolean
+  /** The server said yes: the full pill reads "You're in" until the room shows (Flow 4 delta R2-D1, "success"). */
+  youreIn?: boolean
   onHold: () => void
 }) {
   return (
@@ -253,7 +256,7 @@ export function VenuePass({
         label="Hold to blend in"
         icon="finger-print"
         busy={busy}
-        busyLabel="Checking you in…"
+        busyLabel={youreIn ? 'You’re in' : 'Checking you in…'}
         onConfirm={onHold}
         accessibilityHint="Checks you in and opens the room"
       />
@@ -278,6 +281,7 @@ export function TonightView({
   insideEvent,
   tasteMatchCount,
   checkingIn,
+  youreIn = false,
   onOpenEvent,
   onSeeAll,
   onBrowse,
@@ -293,6 +297,8 @@ export function TonightView({
   insideEvent: TonightEvent | null
   tasteMatchCount: number | null
   checkingIn: boolean
+  /** See `VenuePass`. */
+  youreIn?: boolean
   onOpenEvent: (id: string) => void
   onSeeAll: () => void
   onBrowse: () => void
@@ -406,6 +412,7 @@ export function TonightView({
             event={insideEvent}
             tasteMatchCount={tasteMatchCount}
             busy={checkingIn}
+            youreIn={youreIn}
             onHold={onCheckIn}
           />
         </View>

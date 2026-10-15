@@ -1,7 +1,8 @@
 import { router } from 'expo-router'
 import { useRef, useState } from 'react'
 import { apiClient } from './apiClient'
-import { askIntentRoute, revealOffer, submitCheckIn, type CheckInOutcome } from './checkIn'
+import { afterTrayDismissed } from '../components/ActionTray'
+import { askIntentRoute, revealOffer, submitCheckIn, untilIntentAnswered, type CheckInOutcome } from './checkIn'
 import { isExpectedRefusal } from './checkInRefusal'
 import { H } from './haptics'
 import { getCurrentLocation as getLocationFix, type CheckInLocation, type ShowTray } from './locationFix'
@@ -20,8 +21,10 @@ import { useAuth } from './useAuth'
  * they say, and when, lives here.
  *
  * No rules tray before it and no "Checked in" tray after (the owner's ask,
- * docs/redesign/SCREENS.md Flow 4): the press or the hold is the consent, and
- * a fresh check-in pours straight into the room.
+ * docs/redesign/SCREENS.md Flow 4): the press or the hold is the consent. A
+ * fresh check-in goes in Flow 4's order (Tonight #12–#14, motion #9): the
+ * pour, then the reveal offer and "Why do you go out?" if the server asks,
+ * then the room. Nothing navigates while any of it is still on screen.
  */
 
 export type CheckInFlowResult = 'checkedIn' | 'refused' | 'failed'
@@ -43,11 +46,10 @@ export type UseCheckInFlowOptions = {
   /** "Open Maps" on a refusal a map can fix. Without it the button only closes. */
   onOpenMaps?: () => void
   /**
-   * Into the room when the pour hands off, for a screen that is not the room:
-   * the event screen opens its chat. The Blend'n overlay passes none, because
-   * it turns into the Room under the pour by itself.
+   * Into the room, last, once the pour and the questions are done: the event
+   * screen pushes its chat; the Blend'n overlay settles once its Room is there.
    */
-  onOpenChat?: () => void | Promise<void>
+  onEnterRoom?: () => void | Promise<void>
   /** The fix the check-in was sent from, before it is sent. */
   onLocated?: (location: CheckInLocation) => void
 }
@@ -58,11 +60,18 @@ export function useCheckInFlow({
   closeTray,
   onCheckedIn,
   onOpenMaps,
-  onOpenChat,
+  onEnterRoom,
   onLocated,
 }: UseCheckInFlowOptions) {
   const { user } = useAuth()
+  /** The flow is running: from the press until the room is entered or the door said no. */
   const [checkingIn, setCheckingIn] = useState(false)
+  /**
+   * The server said yes and the room isn't on screen yet: the pass reads
+   * "You're in" (Flow 4 delta R2-D1 "success"), never a re-armed hold.
+   * `asks`: a question (the reveal offer, the intent) comes before the room.
+   */
+  const [arrival, setArrival] = useState<{ asks: boolean } | null>(null)
   /**
    * Counts fresh check-ins, for `<MomentPour key={pours} onDone={pourDone} />`
    * once it is above 0. It bumps when the server says yes, and the pour plays
@@ -75,6 +84,14 @@ export function useCheckInFlow({
   const pourDone = () => {
     pourHandedOff.current?.()
     pourHandedOff.current = null
+  }
+  /** The reveal offer's answer, while it is open. */
+  const revealAnswer = useRef<((yes: boolean) => void) | null>(null)
+  /** The tray's own close (its backdrop): the caller's `ActionTray onClose`, so an open offer counts as "no". */
+  const dismissTray = () => {
+    revealAnswer.current?.(false)
+    revealAnswer.current = null
+    closeTray()
   }
 
   // "Try Again" on a weak fix runs the check-in again; a fix alone went nowhere (step 5 review, H4).
@@ -156,11 +173,13 @@ export function useCheckInFlow({
         return outcome.alreadyCheckedIn ? 'checkedIn' : 'refused'
       } else {
         Logger.journey('checkin', 'detail:success', { eventId })
+        const { askIntent, revealSuggestion } = outcome
+        setArrival({ asks: askIntent || revealSuggestion })
         // Update check-in status directly - no need for another API call. Now,
         // not after the pour, so the button turns as it starts.
         onCheckedIn?.(outcome)
-        // The pour is the one ceremony (DESIGN-BRIEF §9.3 #9). A tray or a
-        // pushed screen would cover it, so the next step waits for its hand-off.
+        // The pour is the one ceremony (motion #9); it hands off at 700 ms, or
+        // later if the caller holds it for its room.
         await new Promise<void>((handOff) => {
           pourHandedOff.current = handOff
           setPours((n) => n + 1)
@@ -168,43 +187,40 @@ export function useCheckInFlow({
 
         // What follows a check-in is decided in `lib/checkIn.ts`, the same for
         // every door; only the trays are this screen's.
-        const { askIntent } = outcome
-        // Into the room, with "Why do you go out?" on top of it, so saving lands them there.
-        const enterRoom = async () => {
-          await onOpenChat?.()
-          if (askIntent) router.push(askIntentRoute(eventId))
-        }
-
-        if (outcome.revealSuggestion) {
+        let trayShown = false
+        if (revealSuggestion) {
           const offer = await revealOffer({
             id: user.id,
             firstName: user.name?.trim().split(/\s+/)[0] ?? null,
             image: user.image,
           })
-          showTray(offer.title, offer.message, [
-            {
-              label: offer.cancel,
-              onPress: () => {
-                closeTray()
-                void enterRoom()
-              },
-            },
-            {
-              label: offer.confirm,
-              variant: 'primary',
-              onPress: () => {
-                closeTray()
-                void enterRoom()
-                apiClient
-                  .setMatchPreferences(eventId, { revealed: true })
-                  .catch((e) => Logger.error('match', 'reveal from prompt failed', { error: e }))
-              },
-            },
-          ])
-        } else {
-          await enterRoom()
+          trayShown = true
+          const yes = await new Promise<boolean>((answer) => {
+            revealAnswer.current = answer
+            const reply = (value: boolean) => () => {
+              revealAnswer.current = null
+              closeTray()
+              answer(value)
+            }
+            showTray(offer.title, offer.message, [
+              { label: offer.cancel, onPress: reply(false) },
+              { label: offer.confirm, variant: 'primary', onPress: reply(true) },
+            ])
+          })
+          if (yes) {
+            apiClient
+              .setMatchPreferences(eventId, { revealed: true })
+              .catch((e) => Logger.error('match', 'reveal from prompt failed', { error: e }))
+          }
         }
-
+        if (askIntent) {
+          // iOS drops a push made while a tray is still leaving.
+          if (trayShown) await afterTrayDismissed()
+          const answered = untilIntentAnswered()
+          router.push(askIntentRoute(eventId))
+          await answered
+        }
+        await onEnterRoom?.()
         return 'checkedIn'
       }
     } catch (error) {
@@ -213,9 +229,10 @@ export function useCheckInFlow({
       showTray('Check-in failed', 'Something went wrong. Please try again.')
       return 'failed'
     } finally {
+      setArrival(null)
       setCheckingIn(false)
     }
   }
 
-  return { checkingIn, pours, pourDone, start, getCurrentLocation }
+  return { checkingIn, youreIn: arrival !== null, asks: arrival?.asks ?? false, pours, pourDone, dismissTray, start, getCurrentLocation }
 }

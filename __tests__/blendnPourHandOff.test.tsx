@@ -1,0 +1,204 @@
+/**
+ * The Blend'n overlay after a fresh check-in: the pour, then any question,
+ * then the Room — never a re-armed Tonight in between.
+ *
+ * Driven on #389 (Android 0.8 s, iOS 0.3 s): the pour handed off on a fixed
+ * 700 ms timer and cleared onto Tonight with a live "Hold to blend in",
+ * because the overlay only turns into the Room once the room has loaded; and
+ * "Why do you go out?" was pushed at the hand-off whatever was under it.
+ *
+ * Flow 4 Tonight #14 (and #12–#13) draws the question as a sheet over
+ * Tonight; motion #9 hands the pour off into the Room. So: with no question
+ * the pour holds, filled, until the Room is there and crossfades into it;
+ * with one, it clears onto Tonight with the pass still reading "You're in",
+ * the sheet rises over that, and the Room comes once it is answered.
+ */
+import { act, fireEvent, render, screen } from '@testing-library/react-native'
+import React from 'react'
+import { AccessibilityInfo } from 'react-native'
+
+import { BlendnScreen } from '../components/blendn/BlendnScreen'
+import { askIntentRoute, intentAnswered, submitCheckIn, type CheckInOutcome } from '../lib/checkIn'
+import { H } from '../lib/haptics'
+
+jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
+jest.mock('react-native-reanimated', () => ({ ...jest.requireActual('react-native-reanimated'), __esModule: true, useReducedMotion: () => false }))
+jest.mock('react-native-gesture-handler', () => ({
+  ...jest.requireActual('react-native-gesture-handler'),
+  GestureDetector: ({ children }: { children: React.ReactNode }) => children,
+}))
+jest.mock('expo-router', () => ({ router: { push: jest.fn(), navigate: jest.fn(), back: jest.fn(), replace: jest.fn() } }))
+jest.mock('../lib/logger', () => ({
+  Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn(), journey: jest.fn() },
+}))
+jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { id: 'u1', name: 'Sam Rao', image: null } }) }))
+jest.mock('../lib/apiClient', () => ({
+  apiClient: new Proxy({}, { get: () => jest.fn(async () => ({ success: false })) }),
+}))
+jest.mock('../lib/locationFix', () => ({ getCurrentLocation: jest.fn(async () => ({ latitude: 12.97, longitude: 77.59, accuracy: 8 })) }))
+jest.mock('../lib/roomVisibilityStorage', () => ({}))
+jest.mock('../lib/checkIn', () => ({ ...jest.requireActual('../lib/checkIn'), submitCheckIn: jest.fn(), revealOffer: jest.fn() }))
+jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn() }) }))
+
+/* The room, as a store the test moves: it loads when the test says so. */
+jest.mock('../lib/useRoom', () => {
+  const { useSyncExternalStore } = jest.requireActual('react')
+  const none = {
+    status: 'none', event: null, people: [], arrivals: [], hereCount: 0, hasMore: false, loadingMore: false,
+    checkedInAt: null, revealed: false, chatGroupId: null, match: null, wave: null, error: null, connection: 'connected',
+    clearMatch: () => {}, connect: async () => ({}), loadMore: async () => {}, retry: () => {}, like: async () => {},
+    sendWave: async () => 'sent', remove: () => {}, clearWave: () => {}, refresh: async () => {},
+  }
+  let state: Record<string, unknown> = none
+  const listeners = new Set<() => void>()
+  return {
+    useRoom: () => useSyncExternalStore((fn: () => void) => (listeners.add(fn), () => listeners.delete(fn)), () => state),
+    mockRoomLoads: () => {
+      state = { ...none, status: 'ready', event: { id: 'e1', title: 'Vinyl Night' } }
+      listeners.forEach((fn) => fn())
+    },
+    mockRoomReset: () => {
+      state = none
+    },
+  }
+})
+jest.mock('../lib/useTonight', () => ({
+  useTonight: () => ({
+    status: 'ready',
+    events: [{ id: 'e1', title: 'Vinyl Night', venue: 'Toit', hereCount: 3, tasteMatchCount: null }],
+    insideEventId: 'e1',
+    refresh: async () => {},
+  }),
+}))
+jest.mock('../lib/useRoomControls', () => ({
+  useRoomControls: () => ({
+    revealed: false, revealBusy: false, listed: true, readiness: { ok: true, missing: null },
+    toggleReveal: async () => {}, checkOut: async () => true, checkOutBusy: false,
+  }),
+}))
+/* Tonight as what it shows of the pass: every label it renders is kept. */
+const mockPassLabels: string[] = []
+jest.mock('../components/blendn/TonightView', () => {
+  const { Pressable, Text } = jest.requireActual('react-native')
+  return {
+    TonightView: ({ checkingIn, youreIn, onCheckIn }: { checkingIn: boolean; youreIn?: boolean; onCheckIn: () => void }) => {
+      const label = checkingIn ? (youreIn ? 'You’re in' : 'Checking you in…') : 'Hold to blend in'
+      mockPassLabels.push(label)
+      return (
+        <Pressable testID="tonight" onPress={onCheckIn}>
+          <Text>{label}</Text>
+        </Pressable>
+      )
+    },
+  }
+})
+jest.mock('../components/blendn/RoomStage', () => {
+  const { forwardRef } = jest.requireActual('react')
+  return {
+    RoomStage: forwardRef(({ children }: { children: React.ReactNode }, _ref: unknown) => children),
+    useStageScroll: () => ({ onScroll: undefined, native: {}, scrollEventThrottle: 16 }),
+  }
+})
+jest.mock('../components/blendn/RoomSections', () => {
+  const { View } = jest.requireActual('react-native')
+  return {
+    RoomHero: () => <View testID="room" />,
+    MeetNext: () => null,
+    FaceGridHead: () => null,
+    FaceGridMore: () => null,
+    GridFace: () => null,
+    useGridCell: () => 100,
+    useNow: () => Date.now(),
+    GRID_GAP: 12,
+    GRID_ROW_GAP: 16,
+  }
+})
+jest.mock('../components/crews/CrewsView', () => ({
+  useCrewsHere: () => ({ state: { status: 'loading' }, mine: [] }),
+  useCrewActions: () => ({ like: async () => {}, liking: null, report: () => {} }),
+  crewCards: () => [],
+  chooseCrew: async () => null,
+  openBlend: () => {},
+  CrewsHeader: () => null,
+  CrewsFooter: () => null,
+}))
+jest.mock('../components/crews/CrewParts', () => ({ CrewCardView: () => null }))
+jest.mock('../components/blendn/ChatDock', () => ({ ChatDock: () => null }))
+jest.mock('../components/blendn/MatchMoment', () => ({ MatchMoment: () => null }))
+jest.mock('../components/blendn/PersonCard', () => ({ PersonCard: () => null }))
+jest.mock('../components/blendn/RoomRecap', () => ({ RoomRecap: () => null }))
+jest.mock('../components/grid/ConnectSheet', () => ({ ConnectSheet: () => null }))
+jest.mock('../components/RealtimeStatusBanner', () => () => null)
+jest.mock('../components/RoomVisibilityBanner', () => ({ RoomVisibilityBanner: () => null }))
+
+const { router } = jest.requireMock('expo-router') as { router: { push: jest.Mock } }
+const { mockRoomLoads, mockRoomReset } = jest.requireMock('../lib/useRoom') as { mockRoomLoads: () => void; mockRoomReset: () => void }
+const submit = submitCheckIn as jest.Mock
+const HIDDEN = { includeHiddenElements: true }
+const advance = (ms: number) => act(async () => jest.advanceTimersByTime(ms))
+const fresh = (askIntent: boolean): CheckInOutcome => ({ kind: 'checkedIn', checkInId: 'c1', askIntent, revealSuggestion: false })
+const roomShowing = () => screen.queryByTestId('room', HIDDEN) !== null
+const tonightShowing = () => screen.queryByTestId('tonight', HIDDEN) !== null
+
+let success: jest.SpyInstance
+beforeEach(() => {
+  jest.useFakeTimers()
+  mockRoomReset()
+  mockPassLabels.length = 0
+  success = jest.spyOn(H, 'success').mockImplementation(() => {})
+  jest.spyOn(AccessibilityInfo, 'announceForAccessibilityWithOptions').mockImplementation(() => {})
+  jest.spyOn(AccessibilityInfo, 'isScreenReaderEnabled').mockResolvedValue(false)
+  jest.spyOn(AccessibilityInfo, 'isReduceTransparencyEnabled').mockResolvedValue(false)
+  jest.spyOn(AccessibilityInfo, 'isBoldTextEnabled').mockResolvedValue(false)
+})
+afterEach(() => jest.useRealTimers())
+
+async function holdToCheckIn(outcome: CheckInOutcome) {
+  submit.mockResolvedValue(outcome)
+  await render(<BlendnScreen />)
+  await act(async () => fireEvent.press(screen.getByTestId('tonight')))
+  mockPassLabels.length = 0
+}
+
+it('no question: the pour holds, filled, until the Room has loaded, then hands off into it', async () => {
+  await holdToCheckIn(fresh(false))
+  expect(screen.getByText('You’re in.', HIDDEN)).toBeTruthy()
+  // Past #9's 700 ms with no Room yet: still the pour over Tonight, the pass still "You're in".
+  await advance(1500)
+  expect(screen.getByTestId('blendn-pour', HIDDEN).props.pointerEvents).toBe('auto')
+  expect(roomShowing()).toBe(false)
+  expect(tonightShowing()).toBe(true)
+  await act(async () => mockRoomLoads())
+  await advance(0)
+  // Handed off: it lets every touch through to the Room crossfading in under it.
+  expect(screen.getByTestId('blendn-pour', HIDDEN).props.pointerEvents).toBe('none')
+  expect(roomShowing()).toBe(true)
+  expect(tonightShowing()).toBe(false)
+  // Never a re-armed pass between the server's yes and the Room.
+  expect(mockPassLabels).not.toContain('Hold to blend in')
+  expect(mockPassLabels.length).toBeGreaterThan(0)
+  expect(success).toHaveBeenCalledTimes(1)
+  expect(router.push).not.toHaveBeenCalled()
+})
+
+it('"Why do you go out?": the pour, then the sheet over Tonight (#14), then the Room', async () => {
+  let underTheSheet: { room: boolean; tonight: boolean } | null = null
+  router.push.mockImplementation(() => {
+    underTheSheet = { room: roomShowing(), tonight: tonightShowing() }
+  })
+  await holdToCheckIn(fresh(true))
+  // The room loads under the pour; it still waits its turn.
+  await advance(300)
+  await act(async () => mockRoomLoads())
+  expect(roomShowing()).toBe(false)
+  await advance(400)
+  expect(router.push).toHaveBeenCalledWith(askIntentRoute('e1'))
+  expect(underTheSheet).toEqual({ room: false, tonight: true })
+  // While the sheet is up: Tonight, the pass reading "You're in".
+  await advance(3000)
+  expect(roomShowing()).toBe(false)
+  await act(async () => intentAnswered())
+  await advance(0)
+  expect(roomShowing()).toBe(true)
+  expect(mockPassLabels).not.toContain('Hold to blend in')
+})

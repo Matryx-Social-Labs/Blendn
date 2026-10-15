@@ -3,10 +3,11 @@ import { router } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, BackHandler, Pressable, StyleSheet, View } from 'react-native'
 import { GestureDetector } from 'react-native-gesture-handler'
-import Animated, { FadeIn, FadeInUp, FadeOut, useReducedMotion } from 'react-native-reanimated'
+import Animated, { Easing, FadeIn, FadeInUp, FadeOut, useReducedMotion, withSpring } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { apiClient } from '../../lib/apiClient'
+import { DURATION, EASING, REDUCE_MOTION, RISE, SPRING, STAGGER } from '../../lib/design/tokens'
 import { crewMessage, crewsThatMayLikePeople, likeAs, type CrewCard } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
 import { H } from '../../lib/haptics'
@@ -20,6 +21,7 @@ import { sheetClosed } from '../../lib/sheet'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
 import { useCheckInFlow } from '../../lib/useCheckInFlow'
+import { useLatest } from '../../lib/useLatest'
 import { useRoom, type RoomPerson } from '../../lib/useRoom'
 import { useRoomControls } from '../../lib/useRoomControls'
 import { useTonight } from '../../lib/useTonight'
@@ -52,6 +54,31 @@ import { RoomStage, useStageScroll } from './RoomStage'
 import { TonightView } from './TonightView'
 
 const TOP_BAR = CONTROL.md
+/** How long the pour and the pass wait for the Room after a check-in before giving up on it. */
+const ROOM_WAIT_MS = 4000
+
+/*
+ * Motion #9, after the pour: the Room crossfades in over D.base (200 ms under
+ * Reduce Motion), its hero rises 12 on M.travel, its sections follow from
+ * +60 ms, 28 ms apart, rising 8 on the entrance ease.
+ */
+const HERO_RISE = 12
+const SECTIONS_AT = 60
+const gentle = Easing.bezier(...EASING.gentle)
+const pourRoomIn = (reduceMotion: boolean) =>
+  FadeIn.duration(reduceMotion ? REDUCE_MOTION.duration.base : DURATION.base).easing(gentle)
+const heroRise = () => {
+  'worklet'
+  return {
+    initialValues: { transform: [{ translateY: HERO_RISE }] },
+    animations: { transform: [{ translateY: withSpring(0, SPRING.travel) }] },
+  }
+}
+const sectionIn = (i: number) =>
+  FadeInUp.delay(SECTIONS_AT + i * STAGGER.base)
+    .duration(DURATION.base)
+    .easing(Easing.bezier(...EASING.entrance))
+    .withInitialValues({ opacity: 0, transform: [{ translateY: RISE.list }] })
 const CHECK_OUT_SLOP = { top: (CONTROL.md - CONTROL.sm) / 2, bottom: (CONTROL.md - CONTROL.sm) / 2, left: SPACE.xs, right: SPACE.xs }
 
 /** A first line built from what you share — something to say that isn't "hey". */
@@ -137,14 +164,6 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   }
   const roomOver = endedRecap !== null && endedRecap.eventId === dismissedRecap
 
-  const mode = recap
-    ? 'ended'
-    : room.status === 'ready' && !roomOver
-      ? 'room'
-      : room.status === 'none' || roomOver
-        ? 'tonight'
-        : room.status
-
   // --- trays (check-in flow) -------------------------------------------------
   const [tray, setTray] = useState<Tray>(NO_TRAY)
   const closeTray = useCallback(() => setTray(NO_TRAY), [])
@@ -160,13 +179,55 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   )
 
   const insideEvent = tonight.events.find((e) => e.id === tonight.insideEventId) ?? null
+  /*
+   * The Room is there to hand off to: loaded, or waited for long enough.
+   * ponytail: a fixed ceiling, so a room that doesn't load straight after the
+   * check-in (an empty `/checkins/active`, a slow roster) can't hold the pass
+   * at "You're in" for good; Tonight shows and the room's poll brings it in.
+   */
+  const [roomWaitOver, setRoomWaitOver] = useState(false)
+  /** The next Room to mount comes out of the pour, and enters as #9 draws it. */
+  const [pourEntrance, setPourEntrance] = useState(false)
+  const roomReady = room.status === 'ready' || roomWaitOver
+  const roomReadyNow = useLatest(roomReady)
+  const roomShown = useRef<(() => void) | null>(null)
+  useEffect(() => {
+    if (!roomReady) return
+    roomShown.current?.()
+    roomShown.current = null
+  }, [roomReady])
   const checkIn = useCheckInFlow({
     eventId: insideEvent?.id ?? '',
     showTray,
     closeTray,
-    // No `onOpenChat`: the overlay turns into the Room under the pour by itself.
+    onCheckedIn: (outcome) => {
+      if (outcome.kind !== 'checkedIn') return
+      setPourEntrance(true)
+      setRoomWaitOver(false)
+      setTimeout(() => setRoomWaitOver(true), ROOM_WAIT_MS)
+    },
+    // The overlay is the room: entering it is waiting for it.
+    onEnterRoom: () =>
+      new Promise<void>((resolve) => {
+        if (roomReadyNow.current) resolve()
+        else roomShown.current = resolve
+      }),
     onOpenMaps: () => insideEvent && router.push({ pathname: '/event/[id]', params: { id: insideEvent.id } as never }),
   })
+
+  /*
+   * Tonight holds while a check-in runs: through the pour and its questions
+   * the pass reads "You're in", and the Room crossfades in when the flow
+   * enters it (Flow 4: the pour, then the sheet, then the Room).
+   */
+  const mode = recap
+    ? 'ended'
+    : room.status === 'ready' && !roomOver && !checkIn.checkingIn
+      ? 'room'
+      : room.status === 'none' || roomOver || checkIn.checkingIn
+        ? 'tonight'
+        : room.status
+  const enter = pourEntrance && !reduceMotion
 
   // --- your controls in the room --------------------------------------------
   const controls = useRoomControls(room.event?.id ?? null, room.revealed)
@@ -379,7 +440,14 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   return (
     <View style={styles.fill}>
       {mode === 'room' && room.event ? (
-        <Animated.View key="room" style={styles.fill} entering={reduceMotion ? FadeIn : FadeInUp.duration(320)} exiting={FadeOut.duration(160)}>
+        <Animated.View
+          key="room"
+          style={styles.fill}
+          entering={pourEntrance ? pourRoomIn(reduceMotion) : reduceMotion ? FadeIn : FadeInUp.duration(320)}
+          exiting={FadeOut.duration(160)}
+          // Once: the header remounts with the People | Crews switch, and that is not an entrance.
+          onLayout={() => setPourEntrance(false)}
+        >
           <GestureDetector gesture={native}>
             <Animated.FlatList<RoomPerson | CrewCard>
               // Faces in threes, crews one to a row: a new list per view, since numColumns cannot change in place.
@@ -401,15 +469,17 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
                     sits still and looks quiet rather than broken.
                   */}
                   <RealtimeStatusBanner status={room.connection} style={styles.statusBanner} />
-                  <RoomHero
-                    title={room.event.title}
-                    hereCount={room.hereCount}
-                    checkedInAt={room.checkedInAt}
-                    me={me}
-                    arrivals={room.arrivals}
-                    people={room.people}
-                  />
-                  <View style={styles.banner}>
+                  <Animated.View entering={enter ? heroRise : undefined}>
+                    <RoomHero
+                      title={room.event.title}
+                      hereCount={room.hereCount}
+                      checkedInAt={room.checkedInAt}
+                      me={me}
+                      arrivals={room.arrivals}
+                      people={room.people}
+                    />
+                  </Animated.View>
+                  <Animated.View style={styles.banner} entering={enter ? sectionIn(0) : undefined}>
                     <RoomVisibilityBanner
                       revealed={controls.revealed}
                       onToggle={() => void controls.toggleReveal()}
@@ -419,12 +489,14 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
                       listed={controls.listed}
                       onUnhide={() => router.push('/settings')}
                     />
-                  </View>
-                  <GridTabs value={gridView} onChange={setGridView} />
+                  </Animated.View>
+                  <Animated.View entering={enter ? sectionIn(1) : undefined}>
+                    <GridTabs value={gridView} onChange={setGridView} />
+                  </Animated.View>
                   {gridView === 'crews' && eventId ? (
                     <CrewsHeader eventId={eventId} checkInKey={room.checkedInAt ?? ''} crews={crews} actions={crewActions} />
                   ) : (
-                    <>
+                    <Animated.View entering={enter ? sectionIn(2) : undefined}>
                       <MeetNext picks={shuffle.picks} nextShuffleAt={shuffle.nextShuffleAt} onOpen={setOpen} />
                       {/*
                         Everyone but you. The loaded page is 20 of a bigger room, so
@@ -432,7 +504,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
                         — see everyoneHead for when that number is the wrong one.
                       */}
                       <FaceGridHead title={head.title} count={head.count} empty={everyone.length === 0} />
-                    </>
+                    </Animated.View>
                   )}
                 </View>
               }
@@ -500,6 +572,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
             insideEvent={insideEvent}
             tasteMatchCount={insideEvent?.tasteMatchCount ?? null}
             checkingIn={checkIn.checkingIn}
+            youreIn={checkIn.youreIn}
             onOpenEvent={(id) => router.push({ pathname: '/event/[id]', params: { id } as never })}
             onSeeAll={() => router.push('/nearby-events')}
             onBrowse={() => {
@@ -644,14 +717,17 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
       />
 
       {/* Over Tonight, and over the Room as it takes over: the pour clears itself, so it stays mounted. */}
-      {checkIn.pours > 0 ? <MomentPour key={checkIn.pours} venue={insideEvent?.venue ?? ''} onDone={checkIn.pourDone} /> : null}
+      {/* Held, filled, until the Room is there; a question first clears it onto Tonight (Flow 4 #12–#14). */}
+      {checkIn.pours > 0 ? (
+        <MomentPour key={checkIn.pours} testID="blendn-pour" venue={insideEvent?.venue ?? ''} ready={roomReady || checkIn.asks} onDone={checkIn.pourDone} />
+      ) : null}
 
       <ActionTray
         visible={tray.visible}
         title={tray.title}
         message={tray.message}
         buttons={tray.buttons}
-        onClose={closeTray}
+        onClose={checkIn.dismissTray}
       />
     </View>
   )
