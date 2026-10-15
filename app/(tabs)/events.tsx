@@ -36,6 +36,7 @@ import { SectionHeader } from '../../components/pulse/SectionHeader'
 import { DayHeading } from '../../components/ui/DayHeading'
 import { HomeShell, type HomeBrowse } from '../../components/home/HomeShell'
 import { DRAWER_HEADER_HEIGHT } from '../../lib/home'
+import { H } from '../../lib/haptics'
 import { UPCOMING_THUMB, UpcomingCard } from '../../components/pulse/UpcomingCard'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
@@ -81,7 +82,6 @@ import { Logger } from '../../lib/logger'
 import { usePresence } from '../../lib/usePresence'
 import { getOptimizedImageUrl } from '../../lib/photoUtils'
 import { formatTimeRange } from '../../lib/time'
-import { useInteractionFeedback } from '../../lib/useInteractionFeedback'
 import { useLiveSync } from '../../lib/useLiveSync'
 import { useMinimumVisible } from '../../lib/useMinimumVisible'
 import { useAuth } from '../../lib/useAuth'
@@ -277,7 +277,6 @@ const proximityFor = (
 
 function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => void; visible: boolean }) {
   const { user, loading: authLoading } = useAuth()
-  const feedback = useInteractionFeedback()
   const insets = useSafeAreaInsets()
   // The hero card sits under the home drawer's header too (components/home/HomeDrawer.tsx).
   const cardInsets = useMemo(() => ({ top: insets.top + DRAWER_HEADER_HEIGHT, bottom: insets.bottom }), [insets.top, insets.bottom])
@@ -645,8 +644,8 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
         return
       }
 
+      // No press haptic: the server's answer plays one within a second (§10.2 H.primary).
       checkInFlightRef.current.add(event.id)
-      feedback.tap()
       previousStatus = latestCheckinStatusesRef.current[event.id]
 
       // Optimistic UI update
@@ -666,7 +665,7 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
         if (!alreadyIn) {
           // Rollback optimistic update
           setCheckinStatuses(restoreStatus(event.id, previousStatus))
-          feedback.error()
+          H.error({ blocking: true })
         }
         if (outcome.kind === 'timeout') {
           Logger.warn('events', 'Check-in timed out', { eventId: event.id })
@@ -710,7 +709,7 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
       }
 
       Logger.journey('checkin', 'success', { eventId: event.id })
-      feedback.success()
+      H.success({ important: true })
 
       /*
        * "Why do you go out?" — asked at the door of the first room.
@@ -812,7 +811,7 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
     } catch (error) {
       setCheckinStatuses(restoreStatus(event.id, previousStatus))
       Logger.error('events', 'Unexpected error', { error: error as any })
-      feedback.error()
+      H.error({ blocking: true })
       // Fixed copy: an exception's message is for the log, not for the person.
       showTray({
         title: 'Check-in failed',
@@ -822,7 +821,7 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
     } finally {
       checkInFlightRef.current.delete(event.id)
     }
-  }, [user, userLocation, feedback, showTray, closeTray, latestCheckinStatusesRef, userFirstName, loadCheckinStatusesBatch, loadCheckedInEvents])
+  }, [user, userLocation, showTray, closeTray, latestCheckinStatusesRef, userFirstName, loadCheckinStatusesBatch, loadCheckedInEvents])
 
   const toggleInterest = useCallback(async (event: Event) => {
     if (interestInFlightRef.current.has(event.id)) return
@@ -831,7 +830,7 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
     const fail = () => {
       setInterestStatuses(prev => ({ ...prev, [event.id]: prevInterested }))
       setInterestCounts(prev => ({ ...prev, [event.id]: prevCount }))
-      feedback.error()
+      H.error()
       showTray({
         title: prevInterested ? "Couldn't remove it" : "Couldn't save",
         message: prevInterested
@@ -856,7 +855,6 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
       }
       interestInFlightRef.current.add(event.id)
       setInterestPending((prev) => ({ ...prev, [event.id]: true }))
-      feedback.tap()
       prevInterested = !!latestInterestStatusesRef.current[event.id]
       prevCount = latestInterestCountsRef.current[event.id] ?? event.favorite_count ?? 0
       const optimisticCount = Math.max(0, prevInterested ? prevCount - 1 : prevCount + 1)
@@ -871,7 +869,8 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
       }
       setInterestStatuses(prev => ({ ...prev, [event.id]: result.data!.interested }))
       setInterestCounts(prev => ({ ...prev, [event.id]: result.data!.interestCount }))
-      // No second haptic here: the tap above already answered the finger.
+      // Outcome after truth: a save the server kept. Taking one back is silent.
+      if (result.data!.interested) H.success()
       Logger.journey('events', result.data!.interested ? 'interest:mark' : 'interest:unmark', { eventId: event.id })
     } catch {
       fail()
@@ -879,17 +878,19 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
       interestInFlightRef.current.delete(event.id)
       setInterestPending((prev) => ({ ...prev, [event.id]: false }))
     }
-  }, [user, feedback, showTray, closeTray, latestInterestStatusesRef, latestInterestCountsRef])
+  }, [user, showTray, closeTray, latestInterestStatusesRef, latestInterestCountsRef])
 
   const handleCheckOut = useCallback(async (event: Event) => {
     if (checkOutInFlightRef.current.has(event.id)) return
     checkOutInFlightRef.current.add(event.id)
-    feedback.tap()
+    // The confirm's "Check out" was just pressed: `H.destructive` (§10.2). A
+    // refusal answers with `H.error`; a success with the tray alone.
+    H.destructive()
 
     const previousStatus = latestCheckinStatusesRef.current[event.id]
     const fail = () => {
       setCheckinStatuses(restoreStatus(event.id, previousStatus))
-      feedback.error()
+      H.error()
       showTray({
         title: 'Check-out failed',
         message: "Couldn't check you out. Try again.",
@@ -904,7 +905,6 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
     try {
       const result = await checkOutOf(String(event.id))
       if (result.success) {
-        feedback.success()
         showTray({
           title: 'Checked out',
           message: 'You have been checked out of this event.',
@@ -921,7 +921,7 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
     } finally {
       checkOutInFlightRef.current.delete(event.id)
     }
-  }, [feedback, showTray, closeTray, latestCheckinStatusesRef, loadCheckedInEvents, loadCheckinStatusesBatch])
+  }, [showTray, closeTray, latestCheckinStatusesRef, loadCheckedInEvents, loadCheckinStatusesBatch])
 
   const handleEventPreview = useCallback((event: Event) => {
     markPreviewHintSeen()

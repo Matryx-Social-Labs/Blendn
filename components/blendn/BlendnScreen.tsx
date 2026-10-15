@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons'
-import * as Haptics from 'expo-haptics'
 import { router } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, BackHandler, Pressable, StyleSheet, View } from 'react-native'
@@ -10,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { apiClient } from '../../lib/apiClient'
 import { crewMessage, crewsThatMayLikePeople, likeAs, type CrewCard } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
+import { H } from '../../lib/haptics'
 import { markRoomLeft } from '../../lib/roomMembership'
 import { blendnClosed } from '../../lib/blendnOverlay'
 import { Logger } from '../../lib/logger'
@@ -351,11 +351,12 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
     }
   }
 
-  // Somebody waved: a nudge and a toast, once; the line is added above.
+  // Somebody waved: `H.arrive` and a toast, once; the line is added above. The
+  // only haptic for it — `useRoom` used to play a second one as it arrived.
   const incoming = room.wave
   useEffect(() => {
     if (!incoming) return
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {})
+    H.arrive()
     showToast(`${incoming.fromName} waved at you 👋`, 'info')
     clearWave()
   }, [incoming, showToast, clearWave])

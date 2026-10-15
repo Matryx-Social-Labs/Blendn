@@ -5,11 +5,11 @@ import { Platform } from 'react-native'
 import { apiClient, type GoLiveResult } from './apiClient'
 import { checkInChanged } from './checkIn'
 import { goLiveRefusal, rememberLiveSession, type GoLiveChoice, type GoLiveRefusal } from './goLive'
+import { H } from './haptics'
 import { getCurrentLocation, type ShowTray } from './locationFix'
 import { Logger } from './logger'
 import { openInMaps } from './openInMaps'
 import { useAuth } from './useAuth'
-import { useInteractionFeedback } from './useInteractionFeedback'
 import { afterTrayDismissed } from '../components/ActionTray'
 import { openPaywall } from './paywall'
 
@@ -152,7 +152,6 @@ export function useGoLive({
    */
   onPlusRequired?: (paywallOpened: boolean) => void
 }) {
-  const feedback = useInteractionFeedback()
   const { user } = useAuth()
   const userId = user?.id ?? null
   const busy = useGoLiveBusy()
@@ -173,7 +172,8 @@ export function useGoLive({
         ...choice,
       })
       if (result.success && result.data) {
-        feedback.success()
+        // Go Live is the check-in's twin (§21.5): the same important success.
+        H.success({ important: true })
         if (userId) {
           await rememberLiveSession({ userId, venueDayId: result.data.venueDayId, venueId: place.id, venueName: place.name, choice })
         }
@@ -184,7 +184,7 @@ export function useGoLive({
       // No code: a timeout or no network. The POST may have landed, so everything that shows it re-reads (M2).
       if (!result.errorCode) checkInChanged()
       const refusal = goLiveRefusal(result.errorCode, result.error, result.eventId, result.retryAfter)
-      if (refusal.kind === 'refused') feedback.error()
+      if (refusal.kind === 'refused') H.error({ blocking: true })
       Logger.info('events', 'go live refused', { code: result.errorCode })
       const seePlus = () => void openPaywall('go_live_expiry', { userInitiated: true })
       if (refusal.kind === 'plus') {

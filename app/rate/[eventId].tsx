@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons'
-import * as Haptics from 'expo-haptics'
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
@@ -23,6 +22,7 @@ import { fadeInFast } from '../../components/motion/presence'
 import { useToast } from '../../components/Toast'
 import { Text } from '../../components/ui/Text'
 import { apiClient, type PeerRatingIssue } from '../../lib/apiClient'
+import { H } from '../../lib/haptics'
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
 import { Logger } from '../../lib/logger'
 import { askAboutNight, ratePeople, type RatePerson } from '../../lib/ratePeople'
@@ -223,13 +223,13 @@ export default function RatePeers() {
   // One tick per changed answer. Re-tapping the current choice is not a change.
   const chooseRating = useCallback((n: number) => {
     setRating((prev) => {
-      if (prev !== n) Haptics.selectionAsync().catch(() => {})
+      if (prev !== n) H.select()
       return n
     })
   }, [])
   const chooseIssue = useCallback((value: PeerRatingIssue) => {
     setIssue((prev) => {
-      if (prev !== value) Haptics.selectionAsync().catch(() => {})
+      if (prev !== value) H.select()
       return value
     })
   }, [])
@@ -288,7 +288,7 @@ export default function RatePeers() {
   const rateNight = useCallback(
     async (n: number) => {
       if (submitting) return
-      Haptics.selectionAsync().catch(() => {})
+      H.select()
       setEventRating(n)
       setSubmitting(true)
       try {

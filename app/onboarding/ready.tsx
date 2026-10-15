@@ -1,10 +1,10 @@
 import { Ionicons } from '@expo/vector-icons'
-import * as Haptics from 'expo-haptics'
 import { router } from 'expo-router'
 import { StyleSheet, Text, View } from 'react-native'
 
 import { OptimizedImage } from '../../components/OptimizedImage'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
+import { H } from '../../lib/haptics'
 import { CONTROL, EMBER, EMBER_RADIUS, ICON, SPACE, TYPE } from '../../lib/theme'
 import { useOnboarding } from '../../lib/useOnboarding'
 
@@ -29,11 +29,11 @@ export default function ReadyScreen() {
   const complete = async () => {
     if (await finish()) {
       // Once per account, and it lands with the fade into the tabs.
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {})
+      H.success({ important: true })
       // "Bring your friends" first, then the app — see app/onboarding/friends.tsx.
       router.replace('/onboarding/friends')
     } else {
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {})
+      H.error({ blocking: true })
       // Kept here rather than pushed on regardless. This is the write that
       // decides whether the account is finished, and letting someone through
       // on a failure would leave them permanently mid-funnel with no screen

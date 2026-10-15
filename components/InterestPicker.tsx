@@ -1,9 +1,9 @@
-import * as Haptics from 'expo-haptics'
 import React, { useEffect, useMemo, useState } from 'react'
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 
 import { apiClient } from '../lib/apiClient'
 import { pickableItems, toPickerTree, type CategoryGroup, type CategoryNode } from '../lib/categories'
+import { H } from '../lib/haptics'
 import { Logger } from '../lib/logger'
 import { CONTROL, EMBER, EMBER_RADIUS, SPACE, TYPE } from '../lib/theme'
 
@@ -88,15 +88,14 @@ export function InterestPicker({
 
   const toggle = (id: string) => {
     if (selected.includes(id)) {
-      Haptics.selectionAsync().catch(() => {})
+      H.select()
       onChange(selected.filter((i) => i !== id))
       return
     }
-    if (selected.length >= MAX_INTERESTS) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {})
-      return
-    }
-    Haptics.selectionAsync().catch(() => {})
+    // At the cap the tap does nothing, silently: the counter already reads
+    // 10/10, and the vocabulary has no haptic for local validation (§10.2).
+    if (selected.length >= MAX_INTERESTS) return
+    H.select()
     onChange([...selected, id])
   }
 

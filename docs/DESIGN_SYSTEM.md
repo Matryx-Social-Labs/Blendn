@@ -8,7 +8,10 @@ run it directly with `npm run lint:design [files…]`). It checks:
 - raw `fontSize`, `fontWeight`, `lineHeight`, `textTransform`
 - padding, margin and gap off `SPACE`; icon sizes off `ICON` (any `*Icon` component too)
 - raw colours (`'#hex'`, `rgba()`) and raw `borderRadius`
-- shadows and `BlurView`
+- shadows; glass and blur outside `components/ui/Material.tsx`; a
+  gradient outside `components/ui/GradientFill.tsx` (screens drawn before the
+  redesign are listed in `GRADIENT_LEGACY` until they move); `expo-haptics`
+  outside `lib/haptics.ts`; `lucide-react-native` outside `components/ui/Icon.tsx`
 - retired tokens (`EMBER_TYPE`, `EMBER_GRADIENT`, `EMBER_CONTROL_HEIGHT`) and the
   `APP_*` palette — the last one in `lib/` too
 - a number added to a safe-area inset (`insets.bottom + 16` → `+ SPACE.lg`),
@@ -122,7 +125,9 @@ primary + secondary button pair is the one row where fills differ (accent +
 
 ## Surfaces are flat
 
-No shadows, no glows, no `BlurView` glass, no gradient fills. The primary
+No shadows, no glows, no ad-hoc glass, no ad-hoc gradient fills. (The redesign
+adds glass and its two gradients, each from one component: `<Material>` and
+`<GradientFill>`; see `docs/redesign/DESIGN-BRIEF.md` §4–§5.) The primary
 button is a flat `EMBER.accent`; a card or sheet separates from the page by
 its fill (`surface` on `bg`) or a `separator` hairline. Photo scrims (dark →
 clear `LinearGradient`) and generated pseudonym avatars (identity art from

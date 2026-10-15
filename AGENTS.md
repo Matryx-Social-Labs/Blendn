@@ -165,7 +165,21 @@ design-token check still bans the names.
 - `TYPE` / `<Text variant>`, `SPACE`, `GUTTER`, `ICON`, `CONTROL`, `EMBER_RADIUS`
 - `EMBER_FONTS` — Plus Jakarta Sans for display, Manrope for body.
   **A `fontFamily` naming an unloaded family renders the system font silently**
-- Surfaces are flat: no shadows, `BlurView`, glows or gradient fills (the check fails on them)
+- Surfaces are flat: no shadows, glows or ad-hoc glass or gradients (the check fails on them)
+
+**The redesign** (`docs/redesign/`, DESIGN-BRIEF §4–§11) has its foundation in
+place; screens move to it one at a time, and `EMBER` goes when the last has.
+
+- `lib/design/tokens.ts` — generated from `design/tokens.json` by `npm run tokens`;
+  never edit it. `COLOR`, `GRADIENT`, `MATERIAL`, `TYPE` (Satoshi + Geist Mono),
+  `SPACE`, `RADIUS`, `SIZE`, `ICON`, `SPRING` (the seven), `DURATION`, `EASING`,
+  `REDUCE_MOTION` (its own table — read it through `useMotion()` in `lib/motion.ts`)
+- `lib/haptics.ts` — `H.*`, the only way to play a haptic
+- `components/ui/Material.tsx` (glass/blur/solid), `GradientFill.tsx` (the two
+  brand gradients), `Icon.tsx` (Lucide, outlined) — the only places glass, a
+  gradient or a Lucide glyph may come from
+- Satoshi is gitignored (its licence; this repo is public): copy it in before
+  Metro runs — `docs/RELEASING.md`, "Satoshi"
 
 NativeWind (Tailwind) is configured but UI code predominantly uses `StyleSheet.create` with theme tokens.
 
@@ -174,7 +188,7 @@ NativeWind (Tailwind) is configured but UI code predominantly uses `StyleSheet.c
 - `components/screens/EventDetailScreen.tsx` — full event detail rendered inside the `event/[id]` modal sheet
 - `components/screens/MatchScreen.tsx` — people discovery UI
 - `components/OptimizedImage.tsx` — `expo-image` wrapper with placeholder and fallback
-- `components/motion/ScalePress.tsx` — use this for all tappable elements (haptic feedback + scale animation)
+- `components/motion/ScalePress.tsx` — use this for all tappable elements: a scale on `M.press`, on the UI thread, kept under Reduce Motion. No haptic unless you pass one from `lib/haptics.ts` (`haptic={H.primary}`); most taps are silent (DESIGN-BRIEF §10)
 - `components/Skeleton.tsx` — loading shimmer placeholder
 - `components/Toast.tsx` — global toast system (provider in `_layout.tsx`)
 - `components/RealtimeStatusBanner.tsx` — surfaces socket connection state

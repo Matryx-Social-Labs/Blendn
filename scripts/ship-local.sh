@@ -135,6 +135,10 @@ guards() {
     refuse "HEAD is $short and origin/stage is ${stage:0:7}. Ship from a checkout of it: git switch --detach origin/stage"
   [ -z "$(git status --porcelain)" ] ||
     refuse "the working tree has changes, and a local build would ship them. git status says what."
+  # Gitignored by licence, so a clean checkout of stage has no Satoshi; say so
+  # before a version counter moves, not from inside the build.
+  bash scripts/check-satoshi.sh >/dev/null ||
+    refuse "the Satoshi fonts are not in assets/fonts/satoshi/. docs/RELEASING.md, \"Satoshi\", says where they come from."
 
   # The check's name is read from the file, so a rename there cannot leave this
   # looking for a check that no longer exists.
@@ -349,6 +353,13 @@ smoke_ios() (
 
   echo "+ git worktree add --detach $src $short"
   git worktree add --quiet --detach "$src" "$sha" && cp -cR node_modules "$src/" || return 1
+  # Satoshi is gitignored (its licence), so the new worktree has none, and the
+  # Release build's bundle requires it.
+  [ -d assets/fonts/satoshi ] || {
+    echo "smoke ios: FAIL. assets/fonts/satoshi/ is missing here; copy the four Satoshi OTFs in first (docs/RELEASING.md, \"Satoshi\")."
+    return 1
+  }
+  mkdir -p "$src/assets/fonts" && cp -cR assets/fonts/satoshi "$src/assets/fonts/" || return 1
   # A Release build that segfaults in Hermes at launch picked up Debug Hermes,
   # which a stale .last_build_configuration causes. Sentry uploads stay off: this
   # binary is never released.

@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, View } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
+import { H } from '../../lib/haptics'
 import { reasonLine } from '../../lib/roomMoments'
 import type { RoomPerson } from '../../lib/useRoom'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE } from '../../lib/theme'
@@ -195,6 +196,7 @@ export function PersonCard({
           ) : (
             <ScalePress
               onPress={like}
+              haptic={H.like}
               disabled={p.liked}
               style={[styles.action, p.liked ? styles.neutral : styles.primary]}
               accessibilityRole="button"

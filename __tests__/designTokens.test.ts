@@ -8,7 +8,7 @@
  */
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { findViolations, checkSource, LATE_RULE_ALLOWLIST } = require('../scripts/check-design-tokens')
+const { findViolations, checkSource, staleAllowances, LATE_RULE_ALLOWLIST, GRADIENT_LEGACY } = require('../scripts/check-design-tokens')
 
 describe('design tokens', () => {
   it('app/ and components/ use only the design system', () => {
@@ -32,7 +32,7 @@ describe('design tokens', () => {
     expect(lines).toEqual([1, 2, 2, 3, 4])
   })
 
-  it('catches colours, radii, shadows, glass and retired tokens', () => {
+  it('catches colours, radii, shadows, blur and retired tokens', () => {
     const src = [
       "const a = { color: '#FFFFFF' }",
       "const b = { borderColor: 'rgba(255,255,255,0.08)' }",
@@ -82,9 +82,52 @@ describe('design tokens', () => {
     expect(found).toHaveLength(1)
   })
 
-  it('only holds lib/ to the legacy-palette rule', () => {
-    const src = ["const a = '#FFFFFF'", 'const b = APP_SPACING.md'].join('\n')
+  it('only holds lib/ to the legacy-palette and haptics rules', () => {
+    const src = ["const a = '#FFFFFF'", 'const b = APP_SPACING.md', "import { BlurView } from 'expo-blur'"].join('\n')
     const found = checkSource(src, 'lib/x.ts', { libOnly: true }).map((v: { line: number }) => v.line)
     expect(found).toEqual([2])
+  })
+
+  it('keeps glass and blur inside <Material>', () => {
+    const src = ['<BlurView tint="dark" />', "import { BlurView } from 'expo-blur'", "import { GlassView } from 'expo-glass-effect'"].join('\n')
+    expect(checkSource(src, 'components/x.tsx').map((v: { line: number }) => v.line)).toEqual([1, 2, 3])
+    expect(checkSource(src, 'components/ui/Material.tsx')).toEqual([])
+  })
+
+  it('keeps gradients inside <GradientFill>', () => {
+    const src = "import { LinearGradient } from 'expo-linear-gradient'"
+    expect(checkSource(src, 'components/x.tsx')).toHaveLength(1)
+    expect(checkSource(src, 'components/ui/GradientFill.tsx')).toEqual([])
+    // react-native-svg's own LinearGradient is drawing, not a surface fill.
+    expect(checkSource("import { LinearGradient } from 'react-native-svg'", 'components/x.tsx')).toEqual([])
+  })
+
+  it('lets the pre-redesign gradients stay only until their screens move', () => {
+    // The list only shrinks: every entry is a pre-redesign screen, and none is clean.
+    expect(Object.values(GRADIENT_LEGACY).every((why) => /^pre-redesign/.test(String(why)))).toBe(true)
+    expect(staleAllowances()).toEqual([])
+  })
+
+  it('keeps haptics in the vocabulary, in lib/ too', () => {
+    const src = "import * as Haptics from 'expo-haptics'"
+    expect(checkSource(src, 'components/x.tsx')).toHaveLength(1)
+    expect(checkSource("const Haptics = require('expo-haptics')", 'components/x.tsx')).toHaveLength(1)
+    expect(checkSource("const Haptics = require ( 'expo-haptics' )", 'components/x.tsx')).toHaveLength(1)
+    expect(checkSource("const Haptics = await import('expo-haptics')", 'components/x.tsx')).toHaveLength(1)
+    // The name alone is not an import.
+    expect(checkSource("const name = 'expo-haptics'", 'components/x.tsx')).toEqual([])
+    expect(checkSource(src, 'lib/x.ts', { libOnly: true })).toHaveLength(1)
+    expect(checkSource(src, 'lib/haptics.ts', { libOnly: true })).toEqual([])
+  })
+
+  it('holds <Icon> to the icon sizes too', () => {
+    expect(checkSource('<Icon name="heart" size={18} />', 'app/x.tsx')).toHaveLength(1)
+    expect(checkSource('<Icon name="heart" size={ICON.control} />', 'app/x.tsx')).toEqual([])
+  })
+
+  it('keeps Lucide behind <Icon>', () => {
+    const src = "import ChevronLeft from 'lucide-react-native/icons/chevron-left'"
+    expect(checkSource(src, 'app/x.tsx')).toHaveLength(1)
+    expect(checkSource(src, 'components/ui/Icon.tsx')).toEqual([])
   })
 })

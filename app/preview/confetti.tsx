@@ -5,8 +5,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { HoldToConfirm } from '../../components/blendn/HoldToConfirm'
 import { ConfettiBurst } from '../../components/motion/ConfettiBurst'
 import { Text } from '../../components/ui/Text'
+import { H } from '../../lib/haptics'
 import { CONTROL, EMBER, SPACE } from '../../lib/theme'
-import { useInteractionFeedback } from '../../lib/useInteractionFeedback'
 
 /**
  * The check-in confetti, on demand.
@@ -20,7 +20,6 @@ import { useInteractionFeedback } from '../../lib/useInteractionFeedback'
  */
 export default function ConfettiPreview() {
   const insets = useSafeAreaInsets()
-  const feedback = useInteractionFeedback()
   const [trigger, setTrigger] = useState(0)
   const [busy, setBusy] = useState(false)
 
@@ -29,7 +28,7 @@ export default function ConfettiPreview() {
     setBusy(true)
     setTimeout(() => {
       setBusy(false)
-      feedback.success()
+      H.success({ important: true })
       setTrigger((n) => n + 1)
     }, 400)
   }

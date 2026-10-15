@@ -1,5 +1,5 @@
 import * as Clipboard from 'expo-clipboard'
-import * as Haptics from 'expo-haptics'
+import { H } from '../../lib/haptics'
 import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
 import { router, useLocalSearchParams } from 'expo-router'
@@ -765,9 +765,8 @@ function PrivateChatInner() {
     actions.push({
       label: 'Copy',
       then: () => {
-        Clipboard.setStringAsync(message.text || '')
-          .then(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success))
-          .catch(() => {})
+        // No haptic: copying is silent (§10.2).
+        Clipboard.setStringAsync(message.text || '').catch(() => {})
       },
     })
     if (message.failed) {
@@ -801,7 +800,7 @@ function PrivateChatInner() {
   const openMessageMenu = useCallback((message: PrivateMessage) => {
     // The same press-and-hold answer the room's message menu gives, on the
     // frame the sheet opens — the hold has "caught".
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {})
+    H.longPress()
     messageMenuRef.current(message)
   }, [messageMenuRef])
 

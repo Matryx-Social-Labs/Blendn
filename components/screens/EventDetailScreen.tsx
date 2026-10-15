@@ -1,6 +1,7 @@
 import { LinearGradient } from 'expo-linear-gradient'
 import ScalePress from '../motion/ScalePress'
 import FadeInUp from '../motion/FadeInUp'
+import { H } from '../../lib/haptics'
 import { MOTION_DURATION, MOTION_STAGGER } from '../../lib/motion'
 import { HeartIcon } from '../motion/HeartIcon'
 import { ConfettiBurst } from '../motion/ConfettiBurst'
@@ -81,7 +82,6 @@ import { clipFirst, feedPlaylist } from '../../lib/feedMedia';
 import { highlightEntities } from '../../lib/entityHighlight';
 import { heroPillLabel } from '../../lib/scarcity';
 import { useAuth } from '../../lib/useAuth';
-import { useInteractionFeedback } from '../../lib/useInteractionFeedback';
 import { getEventDetailCache, setEventDetailCache } from '../../lib/eventDetailCache';
 import { claimUrlFrom } from '../../lib/claimLink';
 
@@ -209,7 +209,6 @@ export default function EventDetail() {
     scrollY.set(e.contentOffset.y)
   })
   const { user } = useAuth()
-  const feedback = useInteractionFeedback()
   const { showToast } = useToast()
   /** Out to the browser; the dashboard's claim page needs no account. */
   const openClaimPage = (url: string) => {
@@ -571,7 +570,6 @@ export default function EventDetail() {
         return
       }
       interestInFlight.current = true
-      feedback.tap()
       const prevInterested = userInterested
       setUserInterested(!prevInterested)
       setInterestCount((prev) => Math.max(0, prev + (prevInterested ? -1 : 1)))
@@ -580,19 +578,21 @@ export default function EventDetail() {
         // rollback
         setUserInterested(prevInterested)
         setInterestCount((prev) => Math.max(0, prev + (prevInterested ? 1 : -1)))
-        feedback.error()
+        H.error()
         showTray("Couldn't save the event", 'Try again.')
         return
       }
       setUserInterested(result.data.interested)
       setInterestCount(result.data.interestCount || 0)
+      // Outcome after truth: a save the server kept. Taking one back is silent.
+      if (result.data.interested) H.success()
     } catch {
-      feedback.error()
+      H.error()
       showTray("Couldn't save the event", 'Try again.')
     } finally {
       interestInFlight.current = false
     }
-  }, [id, user, userInterested, showTray, closeTray, feedback])
+  }, [id, user, userInterested, showTray, closeTray])
 
   /*
    * Taking it back. Split out of the toggle because it now sits behind a
@@ -607,12 +607,13 @@ export default function EventDetail() {
     const prevStatus = rsvpStatus
     try {
       if (!id) return
-      feedback.tap()
+      // Its confirm's destructive button was just pressed (§10.2).
+      H.destructive()
       setRsvpStatus(null)
       const result = await apiClient.cancelRsvp(String(id))
       if (!result.success) {
         setRsvpStatus(prevStatus)
-        feedback.error()
+        H.error()
         showTray("Couldn't cancel your RSVP", 'Try again.')
       } else if (typeof result.data?.rsvpCount === 'number') {
         // The server's count after the change, as on the RSVP below.
@@ -620,10 +621,10 @@ export default function EventDetail() {
       }
     } catch {
       setRsvpStatus(prevStatus)
-      feedback.error()
+      H.error()
       showTray("Couldn't update your RSVP", 'Try again.')
     }
-  }, [id, rsvpStatus, showTray, feedback])
+  }, [id, rsvpStatus, showTray])
 
   const confirmWithdrawRsvp = useCallback(() => {
     const waitlisted = rsvpStatus === 'waitlisted'
@@ -664,14 +665,15 @@ export default function EventDetail() {
         confirmWithdrawRsvp()
         return
       }
-      feedback.tap()
+      // No press haptic on I'm going: the answer plays one (§10.2, ROUND3 #45).
       setRsvpStatus('going')
       const result = await apiClient.rsvpToEvent(String(id), 'going')
       if (!result.success || !result.data) {
         setRsvpStatus(prevStatus)
-        feedback.error()
+        H.error()
         showTray("Couldn't RSVP", 'Try again.')
       } else {
+        H.success()
         setRsvpStatus(result.data.rsvpStatus)
         // The response carries the new count; without it "Going" stayed at 24
         // beside "You're going" until the screen was reopened.
@@ -698,10 +700,10 @@ export default function EventDetail() {
       }
     } catch {
       setRsvpStatus(prevStatus)
-      feedback.error()
+      H.error()
       showTray("Couldn't update your RSVP", 'Try again.')
     }
-  }, [id, user, event, rsvpStatus, showTray, closeTray, feedback, confirmWithdrawRsvp, showToast])
+  }, [id, user, event, rsvpStatus, showTray, closeTray, confirmWithdrawRsvp, showToast])
 
   /*
    * Checked in or out anywhere — this screen's CTA, the Pulse's tray, the
@@ -760,17 +762,17 @@ export default function EventDetail() {
     try {
       const result = await apiClient.sendAnnouncement(String(id), announcementText.trim())
       if (result.success) {
-        feedback.success()
+        H.success()
         setShowAnnouncementModal(false)
         setAnnouncementText('')
         showTray('Announcement sent', 'Your announcement has been broadcast to the event chat.')
       } else {
-        feedback.error()
+        H.error()
         showTray("Couldn't send the announcement", 'Try again.')
         setShowAnnouncementModal(false)
       }
     } catch {
-      feedback.error()
+      H.error()
       showTray("Couldn't send the announcement", 'Try again.')
       setShowAnnouncementModal(false)
     }
@@ -794,7 +796,7 @@ export default function EventDetail() {
         shortDescription: editShortDescription.trim(),
       })
       if (result.success) {
-        feedback.success()
+        H.success()
         setShowEditModal(false)
         setEvent((prev) =>
           prev
@@ -808,12 +810,12 @@ export default function EventDetail() {
         )
         showTray('Event updated', 'Your changes have been saved.')
       } else {
-        feedback.error()
+        H.error()
         showTray("Couldn't save your changes", 'Try again.')
         setShowEditModal(false)
       }
     } catch {
-      feedback.error()
+      H.error()
       showTray("Couldn't save your changes", 'Try again.')
       setShowEditModal(false)
     } finally {
@@ -836,14 +838,14 @@ export default function EventDetail() {
             try {
               const result = await apiClient.deleteEvent(String(id))
               if (!result.success) {
-                feedback.error()
+                H.error()
                 return { ok: false, error: "Couldn't delete the event. Try again." }
               }
             } catch {
-              feedback.error()
+              H.error()
               return { ok: false, error: "Couldn't delete the event. Try again." }
             }
-            feedback.success()
+            H.success()
             router.back()
             return { ok: true, toast: 'Event deleted' }
           },

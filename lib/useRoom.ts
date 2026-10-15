@@ -1,4 +1,3 @@
-import * as Haptics from 'expo-haptics'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { useToast } from '../components/Toast'
@@ -6,6 +5,7 @@ import type { Badge, Overlap } from './aboutYou'
 import type { AttendeeProfile } from './attendee'
 import { pickActiveRoom, extractEventId, type CheckinLike } from './activeRoom'
 import { apiClient } from './apiClient'
+import { H } from './haptics'
 import { markRoomJoined, markRoomLeft, rememberRoomMute } from './roomMembership'
 import { subscribeCheckInChanged } from './checkIn'
 import { likeRefusal } from './likeRefusal'
@@ -706,10 +706,8 @@ export function useRoom(): RoomState & RoomActions {
       if (!roomId) return 'refused'
       try {
         const result = await apiClient.sendWave(roomId, id)
-        if (result.success) {
-          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {})
-          return 'sent'
-        }
+        // No haptic on sending a wave: the hand's wiggle is the answer (ROUND3 #51).
+        if (result.success) return 'sent'
         if (result.errorCode === 'WAVE_TOO_SOON') return 'too-soon'
         const refusal = likeRefusal(result.errorCode, result.error)
         showToast(refusal.message, refusal.variant)
@@ -736,7 +734,7 @@ export function useRoom(): RoomState & RoomActions {
     try {
       const result = await apiClient.createMessageRequest(id, note)
       if (result.success) {
-        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {})
+        H.success()
       } else {
         Logger.warn('match', 'connect request failed', { error: result.error, code: result.errorCode })
       }
@@ -782,7 +780,7 @@ export function useRoom(): RoomState & RoomActions {
       // Only from this room, and never from somebody you blocked or removed.
       if (data.eventId !== eventRef.current?.id) return
       if (blockedRef.current.has(data.fromUserId) || removedRef.current[data.fromUserId]) return
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {})
+      // No haptic here: the Room plays `H.arrive` when it shows the wave (BlendnScreen).
       setWave({ fromUserId: data.fromUserId, fromName: data.fromName, at: Date.now() })
     })
   }, [userId, removedRef])
