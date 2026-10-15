@@ -107,7 +107,9 @@ describe('<CrewStrip>', () => {
 
   it('off: one quiet line and no action', async () => {
     await render(<CrewStrip crews={[nebula()]} off onTell={jest.fn()} />)
-    expect(screen.getByText('Crews are off at this event. The strip hides and “We’re here” is refused.')).toBeTruthy()
+    expect(screen.getByText('Crews are off at this event.')).toBeTruthy()
+    // The frame's second sentence is a designer's note, never shown.
+    expect(screen.queryByText(/The strip hides/)).toBeNull()
     expect(screen.queryByRole('button')).toBeNull()
   })
 })

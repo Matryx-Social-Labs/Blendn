@@ -30,8 +30,8 @@ export type StripCrew = {
 }
 
 const EMBLEM = 40
-/** The frame's sentence, verbatim (its second half reads like a note; flagged in the PR). */
-const OFF_LINE = 'Crews are off at this event. The strip hides and “We’re here” is refused.'
+/** Off (crews hidden at this event): one quiet line. The frame's second sentence ("The strip hides and “We’re here” is refused") is a note on behaviour, not copy (owner's ruling, PR #393). */
+const OFF_LINE = 'Crews are off at this event.'
 const ROW_MIN_HEIGHT = SIZE.primary + SPACE.sm
 /** The action and what it settles to: 44 pt capsules (Flow 10 · 10.6), 48 dp on Android; settled, a 1 pt edge at 14%. */
 const SETTLED_EDGE = 0.14
