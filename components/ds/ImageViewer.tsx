@@ -33,10 +33,24 @@ export type ImageViewerProps = {
   testID?: string
 }
 
-/** Zoomed in, the photo pans no further than its own overhang, so it can't leave the screen. */
-function clampPan(value: number, extent: number, zoom: number) {
+type Size = { width: number; height: number }
+
+/** The photo as `contain` draws it: the natural size scaled to fit the window. Unknown until it loads: the window. */
+export function fittedSize(natural: Size | null, window: Size): Size {
   'worklet'
-  const max = (extent * (zoom - 1)) / 2
+  if (!natural || !natural.width || !natural.height) return window
+  const scale = Math.min(window.width / natural.width, window.height / natural.height)
+  return { width: natural.width * scale, height: natural.height * scale }
+}
+
+/**
+ * Zoomed in, the photo pans no further than its own overhang past the window
+ * on that axis (none while it still fits), so a letterboxed photo can't leave
+ * the screen either.
+ */
+export function clampPan(value: number, fitted: number, window: number, zoom: number) {
+  'worklet'
+  const max = Math.max(0, (fitted * zoom - window) / 2)
   return Math.max(-max, Math.min(max, value))
 }
 
@@ -47,11 +61,12 @@ function useViewerGestures({
   onTap,
   testID,
 }: {
-  window: { width: number; height: number }
+  window: Size
   onClose: () => void
   onTap: () => void
   testID?: string
 }) {
+  const fitted = useSharedValue<Size>(window)
   const zoom = useSharedValue(1)
   const zoomFrom = useSharedValue(1)
   const panX = useSharedValue(0)
@@ -63,8 +78,8 @@ function useViewerGestures({
   const zoomTo = (to: number) => {
     'worklet'
     zoom.set(withSpring(to, SPRING.settle))
-    panX.set(withSpring(clampPan(panX.get(), window.width, to), SPRING.settle))
-    panY.set(withSpring(clampPan(panY.get(), window.height, to), SPRING.settle))
+    panX.set(withSpring(clampPan(panX.get(), fitted.get().width, window.width, to), SPRING.settle))
+    panY.set(withSpring(clampPan(panY.get(), fitted.get().height, window.height, to), SPRING.settle))
   }
   const reset = () => {
     zoom.set(1)
@@ -83,8 +98,8 @@ function useViewerGestures({
     .onUpdate((e) => {
       const z = zoom.get()
       if (z > 1) {
-        panX.set(clampPan(panFrom.get().x + e.translationX, window.width, z))
-        panY.set(clampPan(panFrom.get().y + e.translationY, window.height, z))
+        panX.set(clampPan(panFrom.get().x + e.translationX, fitted.get().width, window.width, z))
+        panY.set(clampPan(panFrom.get().y + e.translationY, fitted.get().height, window.height, z))
         return
       }
       drop.set(e.translationY)
@@ -103,7 +118,9 @@ function useViewerGestures({
     drag.withTestId(`${testID}-drag`)
     tap.withTestId(`${testID}-tap`)
   }
-  return { gesture: Gesture.Race(Gesture.Simultaneous(pinch, drag), tap), zoom, panX, panY, drop, reset, zoomTo }
+  /** The photo's natural size, once it has loaded. */
+  const loaded = (natural: Size) => fitted.set(fittedSize(natural, window))
+  return { gesture: Gesture.Race(Gesture.Simultaneous(pinch, drag), tap), zoom, panX, panY, drop, reset, zoomTo, loaded }
 }
 
 /**
@@ -141,7 +158,7 @@ export function ImageViewer({ visible, uri, sender, time, onClose, onMore, from,
   const open = useSharedValue(0)
   const travel = !!from && !reduceMotion
   const toggle = useCallback(() => setChrome((on) => !on), [])
-  const { gesture, zoom, panX, panY, drop, reset, zoomTo } = useViewerGestures({ window, onClose, onTap: toggle, testID })
+  const { gesture, zoom, panX, panY, drop, reset, zoomTo, loaded } = useViewerGestures({ window, onClose, onTap: toggle, testID })
 
   useEffect(() => {
     if (!visible) {
@@ -205,7 +222,13 @@ export function ImageViewer({ visible, uri, sender, time, onClose, onMore, from,
               onAccessibilityAction={(e) => zoomTo(e.nativeEvent.actionName === 'zoomIn' ? ZOOM_STEP : 1)}
               style={[StyleSheet.absoluteFill, photoStyle]}
             >
-              <Image source={{ uri }} style={styles.fill} contentFit="contain" accessible={false} />
+              <Image
+                source={{ uri }}
+                style={styles.fill}
+                contentFit="contain"
+                accessible={false}
+                onLoad={(e) => loaded({ width: e.source.width, height: e.source.height })}
+              />
             </Animated.View>
           </GestureDetector>
           {shown ? (

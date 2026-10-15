@@ -77,15 +77,16 @@ export const emojiOnly = (text: string) => EMOJI_ONLY.test(text.replace(/\s/g, '
 
 /*
  * Links are tappable text, never a preview (R3-D5 5.11, R10): anything with a
- * scheme, or a bare domain on a common TLD, with a path that does not swallow
- * the sentence's closing punctuation; never the domain of an email address.
+ * scheme, or a bare domain ending on a common TLD (bbc.co.uk whole, never cut
+ * to bbc.co), with a path that does not swallow the sentence's closing
+ * punctuation (a path's own parenthesis is kept); never an email's domain.
  * ponytail: the TLD list keeps "ok.thanks" and "Dr.Smith" as words; the
  * server, which counts links, is the authority, and its rule replaces this
  * when it ships one.
  */
 const PATH_END = `[^\\s.,;:!?)\\]'"]`
 const LINK = new RegExp(
-  `(?<![@\\w.])(?:https?:\\/\\/[^\\s]*${PATH_END}|(?:[a-z0-9-]+\\.)+(?:com|in|org|net|io|co|app|me|ly|gg|link|xyz|info|ai|dev|live|club|events)\\b(?:\\/[^\\s]*${PATH_END})?)`,
+  `(?<![@\\w.])(?:https?:\\/\\/[^\\s]*${PATH_END}|(?:[a-z0-9-]+\\.)+(?:com|in|org|net|io|co|uk|au|app|me|ly|gg|link|xyz|info|ai|dev|live|club|events)(?![\\w-]|\\.\\w)(?:\\/[^\\s]*${PATH_END})?)`,
   'gi'
 )
 export type TextPart = { text: string; url?: string }
@@ -94,9 +95,12 @@ export function linkParts(text: string): TextPart[] {
   let at = 0
   for (const m of text.matchAll(LINK)) {
     const start = m.index ?? 0
+    // A path's own closing parenthesis (Rumours_(album)) is kept; a sentence's is not.
+    const open = m[0].split('(').length - m[0].split(')').length
+    const link = open > 0 && text[start + m[0].length] === ')' ? `${m[0]})` : m[0]
     if (start > at) parts.push({ text: text.slice(at, start) })
-    parts.push({ text: m[0], url: /^https?:\/\//i.test(m[0]) ? m[0] : `https://${m[0]}` })
-    at = start + m[0].length
+    parts.push({ text: link, url: /^https?:\/\//i.test(link) ? link : `https://${link}` })
+    at = start + link.length
   }
   if (at < text.length) parts.push({ text: text.slice(at) })
   return parts

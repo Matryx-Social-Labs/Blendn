@@ -12,7 +12,7 @@ import { State } from 'react-native-gesture-handler'
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils'
 import * as Reanimated from 'react-native-reanimated'
 
-import { ImageViewer } from '../components/ds/ImageViewer'
+import { clampPan, fittedSize, ImageViewer } from '../components/ds/ImageViewer'
 import { SPRING } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 
@@ -52,6 +52,24 @@ const dragDown = (to: number, velocityY = 0) =>
 beforeEach(() => {
   reduceMotion.mockReturnValue(false)
   jest.spyOn(AccessibilityInfo, 'isScreenReaderEnabled').mockResolvedValue(false)
+})
+
+describe('the zoomed pan', () => {
+  const window = { width: 390, height: 844 }
+
+  it('a photo is fitted inside the window, the window until it loads', () => {
+    expect(fittedSize({ width: 4000, height: 3000 }, window)).toEqual({ width: 390, height: 292.5 })
+    expect(fittedSize(null, window)).toEqual(window)
+  })
+
+  it('pans no further than the fitted photo overhangs: a letterboxed photo stays on screen', () => {
+    const fitted = fittedSize({ width: 4000, height: 3000 }, window)
+    // At 2x a 4:3 landscape is still shorter than the window: no vertical pan at all.
+    expect(clampPan(200, fitted.height, window.height, 2)).toBe(0)
+    // At 4x it overhangs by (1170 - 844) / 2 = 163 each way.
+    expect(clampPan(500, fitted.height, window.height, 4)).toBe(163)
+    expect(clampPan(-900, fitted.width, window.width, 4)).toBe(-585)
+  })
 })
 
 describe('<ImageViewer>', () => {

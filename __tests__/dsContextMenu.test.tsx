@@ -20,6 +20,18 @@ jest.mock('react-native-reanimated', () => {
   const actual = jest.requireActual('react-native-reanimated')
   return { ...actual, __esModule: true, useReducedMotion: jest.fn(() => false), withSpring: jest.fn(actual.withSpring) }
 })
+/*
+ * RN's Modal stays mounted and presented on iOS after `visible` turns false,
+ * until the native dismissal (then `onDismiss`); the stock mock drops it at
+ * once. This one keeps the element, so a test can fire `dismiss` on it.
+ */
+jest.mock('react-native/Libraries/Modal/Modal', () => {
+  const { View } = jest.requireActual('react-native')
+  const Modal = ({ visible, children, ...props }: { visible?: boolean; children?: React.ReactNode }) => (
+    <View {...props}>{visible ? children : null}</View>
+  )
+  return { __esModule: true, default: Modal }
+})
 jest.mock('expo-glass-effect', () => {
   const { View } = jest.requireActual('react-native')
   return { GlassView: (props: object) => <View {...props} testID="glass" />, isGlassEffectAPIAvailable: () => true, isLiquidGlassAvailable: () => true }
@@ -139,6 +151,22 @@ describe('<LongPressMenu>', () => {
     expect(reply).not.toHaveBeenCalled()
     await fireEvent(screen.getByTestId('lp-modal'), 'dismiss')
     expect(reply).toHaveBeenCalledTimes(1)
+  })
+
+  it('iOS: a screen that closes it by clearing anchor and visible together still gets the item, once dismissed', async () => {
+    const reply = jest.fn()
+    const onClose = jest.fn()
+    await render(menu({ items: items({ reply }), onClose }))
+    await fireEvent.press(screen.getByRole('button', { name: 'Reply' }))
+    await screen.rerender(menu({ items: items({ reply }), onClose, visible: false, anchor: null }))
+    expect(reply).not.toHaveBeenCalled()
+    await fireEvent(screen.getByTestId('lp-modal'), 'dismiss')
+    expect(reply).toHaveBeenCalledTimes(1)
+  })
+
+  it('never opened (no anchor yet): nothing is mounted', async () => {
+    await render(menu({ visible: false, anchor: null }))
+    expect(screen.queryByTestId('lp-modal')).toBeNull()
   })
 
   it('Android: an item closes the menu and runs at once; a reaction too', async () => {

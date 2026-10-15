@@ -92,7 +92,7 @@ export function ContextMenu({ items, previewPressed, testID }: ContextMenuProps)
 
 export type LongPressMenuProps = {
   visible: boolean
-  /** The pressed item's frame in the window (`measureInWindow`). */
+  /** The pressed item's frame in the window. Clearing it closes the menu, as `visible` does. */
   anchor: Rect | null
   /** The edge the bar and menu line up with: `right` for your own message. */
   side: 'left' | 'right'
@@ -172,17 +172,25 @@ export function LongPressMenu({ visible, anchor, side, items, reactions, onClose
   const dim = useSharedValue(0)
   const estimate = items.length * SIZE.control
   const [menuHeight, setMenuHeight] = useState(estimate)
+  /*
+   * The frame it last opened at. A screen often closes it by clearing `anchor`
+   * with `visible`; the Modal stays mounted on it until iOS has dismissed it,
+   * or `onDismiss` (which runs the chosen item) would never come.
+   */
+  const [kept, setKept] = useState(anchor)
+  if (anchor && anchor !== kept) setKept(anchor)
+  const shown = visible && !!anchor
   // Each open starts from this menu's own estimate, not the last one's measure (state adjusted in render).
-  const [openedFor, setOpenedFor] = useState(visible)
-  if (visible !== openedFor) {
-    setOpenedFor(visible)
-    if (visible) setMenuHeight(estimate)
+  const [openedFor, setOpenedFor] = useState(shown)
+  if (shown !== openedFor) {
+    setOpenedFor(shown)
+    if (shown) setMenuHeight(estimate)
   }
   // An item to run once iOS has dismissed the menu.
   const pending = useRef<(() => void) | null>(null)
 
   useEffect(() => {
-    if (!visible) {
+    if (!shown) {
       // Back to where an open starts, so the next one's first frame is right.
       dim.set(0)
       lift.set(reduceMotion ? 1 : PRESS.scale)
@@ -193,17 +201,19 @@ export function LongPressMenu({ visible, anchor, side, items, reactions, onClose
     if (reduceMotion) return
     lift.set(withSequence(withTiming(PRESS.scale, { duration: 0 }), withSpring(LIFT, SPRING.settle)))
     pop.set(withSequence(withTiming(SPRING_FROM, { duration: 0 }), withSpring(1, SPRING.snap)))
-  }, [visible, reduceMotion, dim, lift, pop])
+  }, [shown, reduceMotion, dim, lift, pop])
 
   const dimStyle = useAnimatedStyle(() => ({ opacity: dim.get() }))
   const liftStyle = useAnimatedStyle(() => ({ transform: [{ scale: lift.get() }] }))
   const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.get() }] }))
 
-  if (!anchor) return null
+  const frame = anchor ?? kept
+  // Never opened: nothing to keep mounted.
+  if (!frame) return null
   const at = placeLongPress({
     window,
     insets,
-    anchor,
+    anchor: frame,
     side,
     bar: reactions ? { width: reactionBarWidth(), height: SIZE.control } : null,
     menu: { width: MENU_WIDTH, height: menuHeight },
@@ -222,7 +232,7 @@ export function LongPressMenu({ visible, anchor, side, items, reactions, onClose
   return (
     <Modal
       testID={testID && `${testID}-modal`}
-      visible={visible}
+      visible={shown}
       transparent
       animationType="none"
       statusBarTranslucent
@@ -244,7 +254,7 @@ export function LongPressMenu({ visible, anchor, side, items, reactions, onClose
           </Animated.View>
           <Animated.View
             testID={testID && `${testID}-item`}
-            style={[styles.place, { top: at.item, left: anchor.x, width: anchor.width, transformOrigin: `${side} center` }, liftStyle]}
+            style={[styles.place, { top: at.item, left: frame.x, width: frame.width, transformOrigin: `${side} center` }, liftStyle]}
           >
             {children}
           </Animated.View>

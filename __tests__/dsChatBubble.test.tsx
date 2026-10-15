@@ -59,6 +59,24 @@ describe('the rules', () => {
     expect(domainOf('https://toit.in/vinyl-night?x=1')).toBe('toit.in')
   })
 
+  it('links: a whole multi-part domain, never cut to a different one', () => {
+    const url = (t: string) => linkParts(t).find((p) => p.url)?.url
+    expect(url('news at bbc.co.uk/news today')).toBe('https://bbc.co.uk/news')
+    expect(url('tickets on foo.com.au')).toBe('https://foo.com.au')
+  })
+
+  it('links: a path keeps its own parenthesis, a sentence keeps its own', () => {
+    const url = (t: string) => linkParts(t).find((p) => p.url)?.url
+    expect(url('see en.wikipedia.org/wiki/Rumours_(album) first')).toBe('https://en.wikipedia.org/wiki/Rumours_(album)')
+    expect(url('(menu at toit.in/menu)')).toBe('https://toit.in/menu')
+    expect(url('set times are up: toit.in/vinyl.')).toBe('https://toit.in/vinyl')
+  })
+
+  it('links: not an email’s domain, not two words joined by a dot', () => {
+    expect(linkParts('write to me@gmail.com').some((p) => p.url)).toBe(false)
+    expect(linkParts('ask Dr.Smith, ok.thanks').some((p) => p.url)).toBe(false)
+  })
+
   it('#35: 1:1 to 56, then half speed to a stop at 96; never left', () => {
     expect([replyOffset(-20), replyOffset(30), replyOffset(56), replyOffset(96), replyOffset(300)]).toEqual([0, 30, 56, 76, 96])
   })
