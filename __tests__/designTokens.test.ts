@@ -112,8 +112,17 @@ describe('design tokens', () => {
     const src = "import * as Haptics from 'expo-haptics'"
     expect(checkSource(src, 'components/x.tsx')).toHaveLength(1)
     expect(checkSource("const Haptics = require('expo-haptics')", 'components/x.tsx')).toHaveLength(1)
+    expect(checkSource("const Haptics = require ( 'expo-haptics' )", 'components/x.tsx')).toHaveLength(1)
+    expect(checkSource("const Haptics = await import('expo-haptics')", 'components/x.tsx')).toHaveLength(1)
+    // The name alone is not an import.
+    expect(checkSource("const name = 'expo-haptics'", 'components/x.tsx')).toEqual([])
     expect(checkSource(src, 'lib/x.ts', { libOnly: true })).toHaveLength(1)
     expect(checkSource(src, 'lib/haptics.ts', { libOnly: true })).toEqual([])
+  })
+
+  it('holds <Icon> to the icon sizes too', () => {
+    expect(checkSource('<Icon name="heart" size={18} />', 'app/x.tsx')).toHaveLength(1)
+    expect(checkSource('<Icon name="heart" size={ICON.control} />', 'app/x.tsx')).toEqual([])
   })
 
   it('keeps Lucide behind <Icon>', () => {

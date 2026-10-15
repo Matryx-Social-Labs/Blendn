@@ -89,6 +89,9 @@ const GRADIENT_LEGACY = Object.fromEntries(
   ].map((f) => [f, 'pre-redesign: moves to <GradientFill> or the redesign scrim with its screen'])
 )
 
+/** An import of `pkg` in any form: `from '…'`, `require('…')`, `import('…')`, spaces allowed. */
+const importOf = (pkg) => new RegExp(`(\\bfrom\\s*|\\b(require|import)\\s*\\(\\s*)['"]${pkg}`)
+
 const RULES = [
   {
     id: 'raw-font-size',
@@ -133,27 +136,27 @@ const RULES = [
   },
   {
     id: 'blur',
-    test: /<BlurView\b|(from |require\()['"]expo-(blur|glass-effect)['"]/,
+    test: new RegExp(`<BlurView\\b|${importOf("expo-(blur|glass-effect)['\"]").source}`),
     message: 'glass or blur outside <Material> — use <Material role>',
     allow: ['components/ui/Material.tsx'],
   },
   {
     id: 'gradient',
-    test: /(from |require\()['"]expo-linear-gradient['"]/,
+    test: importOf("expo-linear-gradient['\"]"),
     message: 'gradient outside <GradientFill> — use <GradientFill gradient="fill" | "brand">',
     allow: ['components/ui/GradientFill.tsx', 'components/ui/Material.tsx'],
     legacy: GRADIENT_LEGACY,
   },
   {
     id: 'haptics',
-    test: /(from |require\()['"]expo-haptics['"]/,
+    test: importOf("expo-haptics['\"]"),
     message: 'expo-haptics outside lib/haptics.ts — use the vocabulary, H.* (DESIGN-BRIEF §10)',
     allow: ['lib/haptics.ts'],
     lib: true,
   },
   {
     id: 'icon',
-    test: /(from |require\()['"]lucide-react-native/,
+    test: importOf('lucide-react-native'),
     message: 'lucide-react-native outside <Icon> — use <Icon name> (add the glyph to its map)',
     allow: ['components/ui/Icon.tsx'],
   },
@@ -200,7 +203,7 @@ const LATE_RULE_ALLOWLIST = {
 
 const SPACING_RE = /\b(padding|margin)(Top|Bottom|Left|Right|Horizontal|Vertical|Start|End)?:\s*(-?\d+(\.\d+)?)\b/g
 const GAP_RE = /\b(gap|rowGap|columnGap):\s*(\d+(\.\d+)?)\b/g
-const ICON_RE = /<(Ionicons|MaterialIcons|MaterialCommunityIcons|Feather|\w+Icon)\b[^>]*?\bsize=\{(\d+)\}/g
+const ICON_RE = /<(Ionicons|MaterialIcons|MaterialCommunityIcons|Feather|\w*Icon)\b[^>]*?\bsize=\{(\d+)\}/g
 
 function listFiles(dir) {
   const out = []
