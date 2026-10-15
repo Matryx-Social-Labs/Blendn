@@ -108,7 +108,6 @@ const KNOWN_ORPHANS: Record<string, string> = {
   'PollBubble.tsx': 'redesign P3 component; the organiser poll in the room, adopted when the room renders polls (Flow 15 #8)',
   'SwipeRow.tsx': 'redesign P3 component; the Banter rows adopt it with the Banter redesign (ROUND3 D 5.11)',
   'ImageViewer.tsx': 'redesign P3 component; opens DM photos once they ship (ROUND3 D 5.9, motion #33)',
-  'CoachMark.tsx': 'redesign P3 component; the first coach mark (the centre button, the reveal bar, the swipe) adopts it (ROUND3 B4)',
   /* The P2 events and people (ROUND3 B4), built ahead of their flows; each goes with the first flow that adopts it. */
   'AmenityTile.tsx': 'redesign P2 (AmenityTile, AmenityGrid); the Scene bento and the venue page’s Good to know adopt it in place of SceneAmenity (Flow 3)',
   'EventCard.tsx': 'redesign P2 (hero, compact, row); the Pulse, Going, search and the Scene’s related events adopt it (Flow 3)',

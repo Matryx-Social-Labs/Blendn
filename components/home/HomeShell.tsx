@@ -52,7 +52,8 @@ type Segment = 'events' | 'places'
 export function HomeShell({
   renderEvents,
 }: {
-  renderEvents: (onBrowse: (browse: HomeBrowse) => void, visible: boolean) => ReactNode
+  /** `full`: the drawer all the way up, so the Pulse's first card is on screen (its coach mark waits for it). */
+  renderEvents: (onBrowse: (browse: HomeBrowse) => void, visible: boolean, full: boolean) => ReactNode
 }) {
   const insets = useSafeAreaInsets()
   const { height } = useWindowDimensions()
@@ -127,7 +128,8 @@ export function HomeShell({
 
   // The Pulse's media plays only while you can see it: its pane, the drawer open past peek, this tab.
   const pulseVisible = focused && segment === 'events' && snap !== 'peek'
-  const events = useMemo(() => renderEvents(setBrowse, pulseVisible), [renderEvents, pulseVisible])
+  const pulseFull = pulseVisible && snap === 'full'
+  const events = useMemo(() => renderEvents(setBrowse, pulseVisible, pulseFull), [renderEvents, pulseVisible, pulseFull])
 
   return (
     <View style={styles.root} onLayout={onLayout}>

@@ -224,3 +224,52 @@ Split by where each half is used:
 
 Neither ships until the social graph does. Nothing about codes, friends or
 mutual connections exists in the schema yet.
+
+---
+
+## Coach marks
+
+The app explains itself at most once per thing, and only what is not obvious
+(the design: `guidelines/components/CoachMark.html`). A surface card with a
+caret at the control, one sentence, Got it at the right: `components/ds/CoachMark.tsx`.
+Not a tour, no scrim, never a loop. Every screen decides "once" through
+`lib/coachMarks.ts`: `useCoachMark(id, { ready })` gives `{ visible, dismiss }`,
+and `markCoachUsed(id)` is called where the gesture it explains lands.
+
+**The rules**
+
+- **Once ever, per account, per mark.** Stored as `<id>_seen_<userId>`, written
+  the moment it appears; Got it, using the thing and leaving the screen all end it.
+- **Using the thing counts, even first.** `markCoachUsed` before the mark ever
+  showed means it never will: someone who already holds cards is not told to.
+- **One new mark per account per launch**, which also keeps it to one on screen.
+- **Never before `ready`:** what it points at is on screen, the data under it has
+  loaded, and none of the screen's own sheets is open. The screen folds all of
+  that into `ready`. Nothing records open sheets app-wide, so a sheet another
+  component owns (the Pulse's bell) is not counted; it covers the mark anyway.
+- **Signed out, nothing.**
+- **Leaving the screen ends it** (blur or unmount). Not ready for a moment, a
+  sheet over it, only hides it; it is back when the sheet closes.
+- **Out of the layout, after its target.** It never moves the list, never covers
+  the thing's tap target, never sits over the tab bar, and a screen reader meets
+  it after the thing it names. The component announces it once without taking
+  focus, plays no haptic, and drops the pop under Reduce Motion.
+
+The same sentences belong in the help centre, for whoever dismissed one.
+
+**The inventory.** Each flow places its own when its screen is rebuilt, adding
+the id to `CoachMarkId`.
+
+| Where | It explains | Sentence | Ended by use |
+|---|---|---|---|
+| **Pulse** (live) | holding a card | "Hold an event to save, share or preview it." | a long-press on any card |
+| **Flow 4**, the centre button | the first time it changes | "You’re at {venue}. Hold the button to check in." | the hold |
+| **Flow 4**, the Room | the reveal bar | "People here can’t see your name or photo until you choose to show them. You decide, per event." | showing yourself |
+| **Flow 5**, the Banter | swiping a row | "Swipe a chat left to mute it." | a swipe |
+
+The Pulse's is `events_preview_hint`, the key the old "Tip: Long-press any event
+card" banner stored, so whoever dismissed that is not taught again. It waits for
+the drawer to be all the way up and the list at its top (at half, the first card
+sits under the tab bar), then sits above the first card the page draws
+(Featured's first, or Upcoming's when nothing is featured), caret down, over the
+section heading.
