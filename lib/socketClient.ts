@@ -543,13 +543,6 @@ export function disconnect(): void {
 }
 
 /**
- * Check if socket is connected
- */
-export function isConnected(): boolean {
-  return socket?.connected ?? false
-}
-
-/**
  * Rejoin all rooms that have active subscriptions.
  * Called after every (re)connect so server-side room membership is restored.
  */
@@ -764,17 +757,6 @@ function setupSocketHandlers(sock: TypedSocket): void {
  * Handle reconnection with exponential backoff
  */
 async function handleReconnect(): Promise<void> {
-  if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-    Logger.error("socket", "Max reconnect attempts reached, giving up", { reconnectAttempts })
-    emitConnectionStatus({
-      state: "disconnected",
-      connected: false,
-      reconnectAttempts,
-      lastError: "Max reconnect attempts reached",
-    })
-    return
-  }
-
   reconnectAttempts++
   const delay = RECONNECT_DELAY_BASE * Math.pow(2, reconnectAttempts - 1)
 
@@ -901,17 +883,6 @@ export function subscribeToEventInterest(
   return subscribeToEventMap(eventId, callback, eventInterestSubscriptions)
 }
 
-/**
- * Backward-compatible helper.
- * Deprecated: prefer specific subscription helpers above.
- */
-export function subscribeToEvent(
-  eventId: string,
-  callback: EventCheckInCallback | EventCheckOutCallback | EventInterestCallback
-): () => void {
-  return subscribeToEventCheckIn(eventId, callback as EventCheckInCallback)
-}
-
 // === Chat Subscriptions ===
 
 function subscribeToChatMap<T>(
@@ -993,16 +964,6 @@ export function subscribeToChatReaction(
   return subscribeToChatMap(chatGroupId, callback, chatReactionSubscriptions)
 }
 
-/**
- * @deprecated Use subscribeToChatMessage, subscribeToChatTyping, or subscribeToChatReaction instead.
- * Kept for backward compatibility — routes to subscribeToChatMessage.
- */
-export function subscribeToChat(
-  chatGroupId: string,
-  callback: ChatMessageCallback | ChatTypingCallback | ChatReactionCallback
-): () => void {
-  return subscribeToChatMap(chatGroupId, callback as ChatMessageCallback, chatMessageSubscriptions)
-}
 
 /**
  * Subscribe to chat moderation events (message deleted, member banned)

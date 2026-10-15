@@ -31,17 +31,8 @@ function shouldLog(level: LogLevel): boolean {
 function baseLog(level: LogLevel, context: LogContext, message: string, details?: Record<string, unknown>) {
   if (!shouldLog(level)) return
   
-  const timestamp = new Date().toISOString()
   const contextEmoji = getContextEmoji(context)
-  
-  const payload = {
-    t: timestamp,
-    level,
-    context,
-    message,
-    ...(details ? { details } : {}),
-  }
-  
+
   // Keep console output human-friendly while remaining structured
   const line = `${contextEmoji} [${level.toUpperCase()}] ${context.toUpperCase()} :: ${message}${details ? '\n' + stringify(details) : ''}`
   
@@ -125,21 +116,6 @@ export const Logger = {
     }
     baseLog('info', contextMap[flow] || 'general', `JOURNEY:${flow} - ${step}`, details)
   },
-  // Convenience methods for common patterns
-  network: {
-    request: (endpoint: string, details?: Record<string, unknown>) => 
-      baseLog('debug', 'network', `Request: ${endpoint}`, details),
-    response: (endpoint: string, status: number, details?: Record<string, unknown>) => 
-      baseLog('debug', 'network', `Response: ${endpoint} [${status}]`, details),
-    error: (endpoint: string, error: unknown) => 
-      baseLog('error', 'network', `Network Error: ${endpoint}`, { error })
-  },
-  database: {
-    query: (table: string, operation: string, details?: Record<string, unknown>) => 
-      baseLog('debug', 'database', `${operation}: ${table}`, details),
-    error: (table: string, operation: string, error: unknown) => 
-      baseLog('error', 'database', `DB Error: ${operation} ${table}`, { error })
-  }
 }
 
 export type { LogContext, LogLevel }

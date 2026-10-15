@@ -221,6 +221,3 @@ export async function manageSubscriptionUrl(os: string = Platform.OS): Promise<s
     return fallback
   }
 }
-
-/** The store's own subscriptions page for this platform (the delete-account warning). */
-export const storeSubscriptionsUrl = (os: string = Platform.OS) => (os === 'android' ? STORE_SUBSCRIPTIONS.android : STORE_SUBSCRIPTIONS.ios)

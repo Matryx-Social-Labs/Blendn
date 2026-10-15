@@ -159,10 +159,6 @@ export default function PhotoManager({
           url: result.url,
           order: photos.length,
           isPrimary: photos.length === 0,
-          metadata: result.metadata ? {
-            ...result.metadata,
-            uploadedAt: new Date().toISOString()
-          } : undefined
         }
 
         setPhotos(prev => [...prev, newPhoto])

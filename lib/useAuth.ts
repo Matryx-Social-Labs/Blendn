@@ -362,11 +362,6 @@ export const getCurrentUser = async (): Promise<AuthUser | null> => {
   return globalAuthState.user
 }
 
-// Helper function to check if user is authenticated
-export const isAuthenticated = (): boolean => {
-  return !!globalAuthState.user
-}
-
 // Sign in with Google - called from login screen
 export const signInWithGoogle = async (
   idToken: string,

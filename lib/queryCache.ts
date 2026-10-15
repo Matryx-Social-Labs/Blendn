@@ -4,12 +4,10 @@ interface CacheEntry<T> {
   data: T
   timestamp: number
   ttl: number
-  key: string
 }
 
 class QueryCache {
   private cache = new Map<string, CacheEntry<any>>()
-  private readonly DEFAULT_TTL = 5 * 60 * 1000 // 5 minutes
   private readonly MAX_CACHE_SIZE = 500
 
   /**
@@ -32,7 +30,7 @@ class QueryCache {
   /**
    * Set cached data with TTL
    */
-  set<T>(key: string, data: T, ttl: number = this.DEFAULT_TTL): void {
+  set<T>(key: string, data: T, ttl: number): void {
     // Prevent cache from growing too large
     if (this.cache.size >= this.MAX_CACHE_SIZE) {
       this.evictOldest()
@@ -42,7 +40,6 @@ class QueryCache {
       data,
       timestamp: Date.now(),
       ttl,
-      key
     })
 
     Logger.debug('database', 'Cache set', { key, ttl })
@@ -69,26 +66,6 @@ class QueryCache {
   }
 
   /**
-   * Clear entire cache
-   */
-  clear(): void {
-    const size = this.cache.size
-    this.cache.clear()
-    Logger.info('database', 'Cache cleared', { previousSize: size })
-  }
-
-  /**
-   * Get cache statistics
-   */
-  getStats() {
-    return {
-      size: this.cache.size,
-      maxSize: this.MAX_CACHE_SIZE,
-      defaultTTL: this.DEFAULT_TTL
-    }
-  }
-
-  /**
    * Evict oldest cache entries
    */
   private evictOldest(): void {
@@ -107,5 +84,3 @@ class QueryCache {
 
 // Global cache instance
 export const queryCache = new QueryCache()
-
-export default queryCache

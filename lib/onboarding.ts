@@ -48,31 +48,6 @@ export const ONBOARDING_ROUTES: Record<OnboardingStep, string> = {
   ready: '/onboarding/ready',
 }
 
-/**
- * Steps a person may pass without answering.
- *
- * The two permission screens, because the OS dialog is the real decision and
- * "not now" has to be a valid answer to it — and `media`, because a photo is
- * the highest-friction thing asked for and refusing to let anyone in without
- * one loses more people than the empty avatars cost.
- *
- * `basics` is not skippable: the age gate needs a birth date, and `ready` is
- * where `onboarded` is written, so skipping it would leave the account looking
- * unfinished forever.
- */
-const SKIPPABLE: ReadonlySet<OnboardingStep> = new Set([
-  'notifications',
-  'location',
-  'media',
-  'preferences',
-  'journey',
-  'details',
-])
-
-export function isSkippable(step: OnboardingStep): boolean {
-  return SKIPPABLE.has(step)
-}
-
 export function stepIndex(step: OnboardingStep): number {
   return ONBOARDING_STEPS.indexOf(step)
 }

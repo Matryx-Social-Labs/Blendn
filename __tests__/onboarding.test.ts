@@ -16,7 +16,6 @@ import {
   anonymousByDefault,
   canContinue,
   isCompleteDateOfBirth,
-  isSkippable,
   joinDateOfBirth,
   nextStep,
   orientationConsent,
@@ -55,16 +54,6 @@ describe('the step list', () => {
     expect(nextStep('ready')).toBeNull()
     expect(previousStep('notifications')).toBe('basics')
     expect(previousStep('basics')).toBeNull()
-  })
-
-  it('will not let anyone skip the two steps that have to happen', () => {
-    // `basics` carries the birth date the age gate needs; `ready` is where
-    // `onboarded` is written, so skipping it leaves the account looking
-    // unfinished forever and the dashboard funnel counting it as a drop-off.
-    expect(isSkippable('basics')).toBe(false)
-    expect(isSkippable('ready')).toBe(false)
-    expect(isSkippable('notifications')).toBe(true)
-    expect(isSkippable('media')).toBe(true)
   })
 
   it('reports progress that starts above zero and ends at a hundred', () => {

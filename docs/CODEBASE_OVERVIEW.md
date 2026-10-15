@@ -224,7 +224,6 @@ Session is refreshed **every 10 minutes** via `setInterval` while the app is act
 | `signUp(email, pass, name)` | Registration |
 | `signOut(revokeAll?)` | Clears tokens + socket disconnect |
 | `getCurrentUser()` | Async helper (no hook required) |
-| `isAuthenticated()` | Synchronous check |
 | `reinitializeAuth()` | Force re-check (e.g. after deep link) |
 
 ### Token storage
@@ -302,7 +301,7 @@ PaginationMeta
 
 ### App state integration
 
-When the app goes to background, the request queue is cleared to avoid stale requests replaying when the app resumes. When app returns to active, `queryCache.clear()` and `apiClient.clearResponseCache()` are called from `_layout.tsx` to force fresh data.
+When the app goes to background, the request queue is cleared to avoid stale requests replaying when the app resumes. Returning to active clears no cache: every cached read is stale-while-revalidate (see the comment in `app/_layout.tsx`).
 
 ---
 

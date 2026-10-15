@@ -172,11 +172,6 @@ export function parseOwnBuildingsUrl(raw: string | undefined): { url: string | n
   return { url, problem: null }
 }
 
-/** `parseOwnBuildingsUrl` of this build's env. */
-export function ownBuildingsUrl(raw: string | undefined = process.env.EXPO_PUBLIC_BUILDINGS_TILES_URL): string | null {
-  return parseOwnBuildingsUrl(raw).url
-}
-
 type Box = [number, number, number, number]
 const inside = ([w, s, e, n]: Box, [bw, bs, be, bn]: Box, inset: number) => w >= bw + inset && s >= bs + inset && e <= be - inset && n <= bn - inset
 

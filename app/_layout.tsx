@@ -475,7 +475,7 @@ function RootLayout() {
    * the room, wait a few seconds, minimise, open it again, wait again" -- the
    * first half was `force: true` on mount, fixed separately.
    *
-   * It is also redundant. Every cached endpoint is `swr: true` with a TTL, so a
+   * It is also redundant. Every cached endpoint is stale-while-revalidate with a TTL, so a
    * read returns immediately and revalidates behind the paint, and an entry past
    * its TTL blocks and refetches on its own. Clearing turns every entry into the
    * second case unconditionally, including ones written a second ago.

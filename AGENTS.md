@@ -104,7 +104,7 @@ Resume reads the unfinished flow's progress from `AsyncStorage` (`lib/onboarding
 | `api.ts` | `getEvents` (0-based page in, snake_case events out) and `eventFromApi`, the event mapper. Everything else calls `apiClient` directly |
 | `socketClient.ts` | Socket.io client — typed events, room-based subscriptions, reconnect with exponential backoff |
 | `useAuth.ts` | Global auth state **singleton** (not React context) + `useAuth()` hook |
-| `queryCache.ts` | In-memory TTL/LRU cache (max 500 entries, 5 min default TTL) |
+| `queryCache.ts` | In-memory TTL cache (max 500 entries; every caller passes its TTL) |
 
 **API response format**: every `apiClient` method returns `{ success: boolean, data?: T, error?: string }`. Never throws — always check `result.success`.
 
@@ -140,7 +140,7 @@ useLiveSync({
 })
 ```
 
-On every app foreground, `_layout.tsx` calls `queryCache.clear()` and `apiClient.clearResponseCache()` to force fresh data.
+Foreground does not clear the caches: every cached read is stale-while-revalidate, so it paints at once and refreshes behind (see the comment in `app/_layout.tsx`). `apiClient.clearResponseCache()` runs on sign-out.
 
 ### Theme System (`lib/theme.ts`)
 

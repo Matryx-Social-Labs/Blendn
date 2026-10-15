@@ -3,17 +3,15 @@ export type LiveSyncDomain = 'chat' | 'events' | 'match'
 const dirtyDomains = new Set<LiveSyncDomain>()
 const subscribers = new Set<(domain: LiveSyncDomain) => void>()
 
-export function markDomainDirty(domain: LiveSyncDomain): void {
-  dirtyDomains.add(domain)
-  subscribers.forEach((cb) => {
-    try {
-      cb(domain)
-    } catch {}
-  })
-}
-
 export function markDomainsDirty(domains: LiveSyncDomain[]): void {
-  domains.forEach((domain) => markDomainDirty(domain))
+  domains.forEach((domain) => {
+    dirtyDomains.add(domain)
+    subscribers.forEach((cb) => {
+      try {
+        cb(domain)
+      } catch {}
+    })
+  })
 }
 
 export function isDomainDirty(domain: LiveSyncDomain): boolean {
@@ -22,10 +20,6 @@ export function isDomainDirty(domain: LiveSyncDomain): boolean {
 
 export function hasDirtyDomain(domains: LiveSyncDomain[]): boolean {
   return domains.some((domain) => dirtyDomains.has(domain))
-}
-
-export function clearDirtyDomain(domain: LiveSyncDomain): void {
-  dirtyDomains.delete(domain)
 }
 
 export function clearDirtyDomains(domains: LiveSyncDomain[]): void {

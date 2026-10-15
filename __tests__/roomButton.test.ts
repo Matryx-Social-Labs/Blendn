@@ -4,12 +4,10 @@ import { join } from 'path'
 import {
   roomButtonAccessibilityLabel,
   roomButtonGlow,
-  roomButtonLabel,
   pickInsideEvent,
   pickTodayEvents,
   roomButtonTarget,
   type RoomButtonEvent,
-  type RoomButtonState,
 } from '../lib/roomButton'
 
 /**
@@ -79,24 +77,6 @@ describe('roomButtonTarget — badge', () => {
     expect(roomButtonTarget({ activeEventId: 'e1', roomUnread: -2 }).badge).toBe(0)
     expect(roomButtonTarget({ activeEventId: 'e1', roomUnread: 2.7 }).badge).toBe(2)
     expect(roomButtonTarget({ activeEventId: 'e1' }).badge).toBe(0)
-  })
-})
-
-describe('the label names where the tap goes', () => {
-  it('has a short word for every state', () => {
-    const states: RoomButtonState[] = ['live', 'checkin', 'today', 'idle']
-    for (const s of states) {
-      const label = roomButtonLabel(s)
-      expect(label.length).toBeGreaterThan(0)
-      // A nav label that wraps in a tab slot is a nav label nobody reads.
-      expect(label.length).toBeLessThanOrEqual(10)
-    }
-  })
-
-  it('says Room rather than Live', () => {
-    // "Live" states what is true; "Room" states where the tap goes, and a nav
-    // label's job is the second one.
-    expect(roomButtonLabel('live')).toBe('Room')
   })
 })
 

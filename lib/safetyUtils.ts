@@ -128,19 +128,6 @@ export const getBlockedUsers = async (): Promise<BlockedUser[]> => {
   }
 }
 
-/**
- * Check if a user is blocked
- */
-export const isUserBlocked = async (userId: string): Promise<boolean> => {
-  try {
-    const blocked = await getBlockedUsers()
-    return blocked.some((b) => b.blocked_id === userId)
-  } catch (error) {
-    Logger.error('general', 'Error checking if user is blocked', { error })
-    return false
-  }
-}
-
 
 /*
  * Every sheet below goes through `lib/sheet.ts`, not `Alert.alert`.
@@ -189,6 +176,34 @@ const failed = (serverSays: string | undefined, fallback: string): SheetOutcome 
 }
 
 /**
+ * A conversation's ⋮ menu: the ordinary things first, leaving one step in.
+ *
+ * The ⋮ used to open the leave confirmation itself — "Unmatch Pooja Reddy?"
+ * with Unmatch as its first, red button — so the header's options icon was
+ * one mis-tap from ending a match, with nothing else behind it (simulator,
+ * 2026-09-29). Now it names the person, offers their profile when they are a
+ * name to you, and puts Unmatch (or End conversation) behind its own
+ * confirmation, unchanged.
+ */
+export const showConversationOptions = (
+  conversationId: string,
+  displayName: string,
+  theyKnowYou: boolean,
+  opts: { onLeft?: () => void; fromMatch?: boolean; onViewProfile?: () => void } = {}
+): void => {
+  const fromMatch = opts.fromMatch ?? true
+  const actions: SheetAction[] = []
+  if (opts.onViewProfile) actions.push({ label: 'View profile', then: opts.onViewProfile })
+  actions.push({
+    label: fromMatch ? 'Unmatch…' : 'End conversation…',
+    variant: 'destructive',
+    next: () => leaveConversationSheet(conversationId, displayName, theyKnowYou, opts.onLeft, fromMatch),
+  })
+  actions.push({ label: 'Cancel', cancel: true })
+  showSheet({ kind: 'actions', title: displayName, actions })
+}
+
+/**
  * Leaving a conversation: unmatch, or unmatch/block with a report.
  *
  * Distinct from `showUserSafetyActions`, which is the general "this person is a
@@ -218,45 +233,6 @@ const failed = (serverSays: string | undefined, fallback: string): SheetOutcome 
  * After, the app can close the channel and nothing more, and a sheet implying
  * otherwise sells a protection it cannot provide.
  */
-export const showLeaveConversationActions = (
-  conversationId: string,
-  displayName: string,
-  theyKnowYou: boolean,
-  onLeft?: () => void,
-  fromMatch = true
-): void => {
-  showSheet(leaveConversationSheet(conversationId, displayName, theyKnowYou, onLeft, fromMatch))
-}
-
-/**
- * A conversation's ⋮ menu: the ordinary things first, leaving one step in.
- *
- * The ⋮ used to open the leave confirmation itself — "Unmatch Pooja Reddy?"
- * with Unmatch as its first, red button — so the header's options icon was
- * one mis-tap from ending a match, with nothing else behind it (simulator,
- * 2026-09-29). Now it names the person, offers their profile when they are a
- * name to you, and puts Unmatch (or End conversation) behind its own
- * confirmation, unchanged.
- */
-export const showConversationOptions = (
-  conversationId: string,
-  displayName: string,
-  theyKnowYou: boolean,
-  opts: { onLeft?: () => void; fromMatch?: boolean; onViewProfile?: () => void } = {}
-): void => {
-  const fromMatch = opts.fromMatch ?? true
-  const actions: SheetAction[] = []
-  if (opts.onViewProfile) actions.push({ label: 'View profile', then: opts.onViewProfile })
-  actions.push({
-    label: fromMatch ? 'Unmatch…' : 'End conversation…',
-    variant: 'destructive',
-    next: () => leaveConversationSheet(conversationId, displayName, theyKnowYou, opts.onLeft, fromMatch),
-  })
-  actions.push({ label: 'Cancel', cancel: true })
-  showSheet({ kind: 'actions', title: displayName, actions })
-}
-
-/** The leave confirmation `showLeaveConversationActions` shows, as a step. */
 export const leaveConversationSheet = (
   conversationId: string,
   displayName: string,
@@ -365,15 +341,6 @@ export const userReportStep = (userName: string, userId: string, onComplete?: ()
   },
 })
 
-/** The block confirmation on its own, for a screen that already asked. */
-export const showBlockConfirmation = (
-  userName: string,
-  userId: string,
-  onComplete?: () => void
-): void => {
-  showSheet(blockStep(userName, userId, onComplete))
-}
-
 /** The user report reasons on their own. */
 export const showReportOptions = (
   userName: string,
@@ -383,18 +350,10 @@ export const showReportOptions = (
   showSheet(userReportStep(userName, userId, onComplete))
 }
 
-/** Report one message, from a chat's long-press menu. */
-export const showMessageReportOptions = (
-  messageId: string,
-  messageType: 'group' | 'private',
-  onComplete?: () => void
-): void => {
-  showSheet(messageReportStep(messageId, messageType, onComplete))
-}
-
 /**
- * The same step, for a menu that is already a sheet: it replaces the menu in
- * place rather than closing one and opening another.
+ * Report one message, from a chat's long-press menu. A step, because that menu
+ * is already a sheet: it replaces the menu in place rather than closing one
+ * and opening another.
  */
 export const messageReportStep = (
   messageId: string,
