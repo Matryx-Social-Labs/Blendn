@@ -111,6 +111,7 @@ describe('design tokens', () => {
   it('keeps haptics in the vocabulary, in lib/ too', () => {
     const src = "import * as Haptics from 'expo-haptics'"
     expect(checkSource(src, 'components/x.tsx')).toHaveLength(1)
+    expect(checkSource("const Haptics = require('expo-haptics')", 'components/x.tsx')).toHaveLength(1)
     expect(checkSource(src, 'lib/x.ts', { libOnly: true })).toHaveLength(1)
     expect(checkSource(src, 'lib/haptics.ts', { libOnly: true })).toEqual([])
   })
