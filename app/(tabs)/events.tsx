@@ -80,7 +80,7 @@ import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import { usePresence } from '../../lib/usePresence'
 import { getOptimizedImageUrl } from '../../lib/photoUtils'
-import { formatTimeRange as fmtRange } from '../../lib/time'
+import { formatTimeRange } from '../../lib/time'
 import { useInteractionFeedback } from '../../lib/useInteractionFeedback'
 import { useLiveSync } from '../../lib/useLiveSync'
 import { useMinimumVisible } from '../../lib/useMinimumVisible'
@@ -106,10 +106,8 @@ type EventsTrayState = {
   message?: string
   buttons: ActionTrayButton[]
   size?: TraySize
-  dismissible?: boolean
 }
 
-const COORDINATE_PATTERN = /^\s*-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?\s*$/
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
 /**
  * The page's rhythm, from the design system (`docs/DESIGN_SYSTEM.md`).
@@ -190,13 +188,9 @@ const formatCarouselCardDate = (iso: string) => {
   }
 }
 
-const isCoordinateLike = (value?: string | null) => {
-  if (!value) return false
-  const trimmed = value.trim()
-  if (!trimmed) return false
-  if (COORDINATE_PATTERN.test(trimmed)) return true
-  return /^-?\d+(\.\d+)?$/.test(trimmed)
-}
+/** "12.97" or "12.97, 77.59": a raw coordinate standing in for a place name. */
+const isCoordinateLike = (value?: string | null) =>
+  !!value && /^-?\d+(\.\d+)?(\s*,\s*-?\d+(\.\d+)?)?$/.test(value.trim())
 
 const resolveDisplayCity = (event: Event): string => {
   const cityRaw = event.city?.trim() || ''
@@ -223,12 +217,7 @@ const normalizeEvent = (event: Event): Event => ({
 const featuredKeyExtractor = (item: { id: string }) => `feat-${item.id}`
 const FeaturedSeparator = () => <View style={{ width: FEATURED_CARD_GAP }} />
 
-const getFirstName = (value?: string | null): string | null => {
-  if (!value) return null
-  const trimmed = value.trim()
-  if (!trimmed) return null
-  return trimmed.split(/\s+/)[0] || null
-}
+const getFirstName = (value?: string | null): string | null => value?.trim().split(/\s+/)[0] || null
 
 /*
  * Which events are close enough to check in to, and how far each one is.
@@ -237,6 +226,35 @@ const getFirstName = (value?: string | null): string | null => {
  * screen derives it during render. It used to be stored by an effect, which
  * left it one render behind the list it describes.
  */
+/** The interest, count and check-in maps one page of events carries. */
+const feedMaps = (list: Event[]) => {
+  const interests: { [eventId: string]: boolean } = {}
+  const counts: Record<string, number> = {}
+  const checkins: { [eventId: string]: any } = {}
+  for (const event of list) {
+    interests[event.id] = !!event.is_favorited
+    counts[event.id] = event.favorite_count || 0
+    if (event.user_checkin) {
+      checkins[event.id] = {
+        status: event.user_checkin.status,
+        checkInId: event.user_checkin.checkInId,
+        checkInTime: event.user_checkin.checkInTime,
+      }
+    }
+  }
+  return { interests, counts, checkins }
+}
+
+/** Puts one event's check-in status back as it was, or removes it if there was none. */
+const restoreStatus =
+  (id: string, previous: any) =>
+  (prev: { [eventId: string]: any }) => {
+    const next = { ...prev }
+    if (previous) next[id] = previous
+    else delete next[id]
+    return next
+  }
+
 const proximityFor = (
   events: Event[],
   at: { latitude: number; longitude: number }
@@ -448,7 +466,6 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
     message: '',
     buttons: [],
     size: 'default',
-    dismissible: true,
   })
   // Location permission status: 'checking' | 'granted' | 'denied' | 'undetermined'
   const [locationStatus, setLocationStatus] = useState<'checking' | 'granted' | 'denied' | 'undetermined'>('checking')
@@ -465,14 +482,7 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
   }, [])
 
   const showTray = useCallback((next: Omit<EventsTrayState, 'visible'>) => {
-    setTrayState({
-      visible: true,
-      title: next.title,
-      message: next.message,
-      buttons: next.buttons,
-      size: next.size || 'default',
-      dismissible: next.dismissible ?? true,
-    })
+    setTrayState({ ...next, visible: true })
   }, [])
 
   const previewHintKey = useMemo(
@@ -658,12 +668,7 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
         const alreadyIn = outcome.kind === 'refused' && outcome.alreadyCheckedIn
         if (!alreadyIn) {
           // Rollback optimistic update
-          setCheckinStatuses((prev) => {
-            const next = { ...prev }
-            if (previousStatus) next[event.id] = previousStatus
-            else delete next[event.id]
-            return next
-          })
+          setCheckinStatuses(restoreStatus(event.id, previousStatus))
           feedback.error()
         }
         if (outcome.kind === 'timeout') {
@@ -808,12 +813,7 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
       loadCheckinStatusesBatch()
       loadCheckedInEvents()
     } catch (error) {
-      setCheckinStatuses((prev) => {
-        const next = { ...prev }
-        if (previousStatus) next[event.id] = previousStatus
-        else delete next[event.id]
-        return next
-      })
+      setCheckinStatuses(restoreStatus(event.id, previousStatus))
       Logger.error('events', 'Unexpected error', { error: error as any })
       feedback.error()
       // Fixed copy: an exception's message is for the log, not for the person.
@@ -831,6 +831,19 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
     if (interestInFlightRef.current.has(event.id)) return
     let prevInterested = false
     let prevCount = 0
+    const fail = () => {
+      setInterestStatuses(prev => ({ ...prev, [event.id]: prevInterested }))
+      setInterestCounts(prev => ({ ...prev, [event.id]: prevCount }))
+      feedback.error()
+      showTray({
+        title: prevInterested ? "Couldn't remove it" : "Couldn't save",
+        message: prevInterested
+          ? "Couldn't remove this event from Saved. Try again."
+          : "Couldn't save this event. Try again.",
+        buttons: [{ label: 'Done', variant: 'primary', onPress: closeTray }],
+        size: 'compact',
+      })
+    }
     try {
       if (!user) {
         showTray({
@@ -856,18 +869,7 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
 
       const result = await apiClient.toggleInterest(event.id)
       if (!result.success || !result.data) {
-        // rollback
-        setInterestStatuses(prev => ({ ...prev, [event.id]: prevInterested }))
-        setInterestCounts(prev => ({ ...prev, [event.id]: prevCount }))
-        feedback.error()
-        showTray({
-          title: prevInterested ? "Couldn't remove it" : "Couldn't save",
-          message: prevInterested
-            ? "Couldn't remove this event from Saved. Try again."
-            : "Couldn't save this event. Try again.",
-          buttons: [{ label: 'Done', variant: 'primary', onPress: closeTray }],
-          size: 'compact',
-        })
+        fail()
         return
       }
       setInterestStatuses(prev => ({ ...prev, [event.id]: result.data!.interested }))
@@ -875,17 +877,7 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
       // No second haptic here: the tap above already answered the finger.
       Logger.journey('events', result.data!.interested ? 'interest:mark' : 'interest:unmark', { eventId: event.id })
     } catch {
-      setInterestStatuses(prev => ({ ...prev, [event.id]: prevInterested }))
-      setInterestCounts(prev => ({ ...prev, [event.id]: prevCount }))
-      feedback.error()
-      showTray({
-        title: prevInterested ? "Couldn't remove it" : "Couldn't save",
-        message: prevInterested
-          ? "Couldn't remove this event from Saved. Try again."
-          : "Couldn't save this event. Try again.",
-        buttons: [{ label: 'Done', variant: 'primary', onPress: closeTray }],
-        size: 'compact',
-      })
+      fail()
     } finally {
       interestInFlightRef.current.delete(event.id)
       setInterestPending((prev) => ({ ...prev, [event.id]: false }))
@@ -898,6 +890,16 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
     feedback.tap()
 
     const previousStatus = latestCheckinStatusesRef.current[event.id]
+    const fail = () => {
+      setCheckinStatuses(restoreStatus(event.id, previousStatus))
+      feedback.error()
+      showTray({
+        title: 'Check-out failed',
+        message: "Couldn't check you out. Try again.",
+        buttons: [{ label: 'Done', variant: 'primary', onPress: closeTray }],
+        size: 'compact',
+      })
+    }
 
     // Optimistic removal from checked-in state
     setCheckinStatuses((prev) => ({ ...prev, [event.id]: { status: 'not_checked_in' } }))
@@ -915,35 +917,10 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
         loadCheckedInEvents()
         loadCheckinStatusesBatch()
       } else {
-        // Rollback on failure
-        setCheckinStatuses((prev) => {
-          const next = { ...prev }
-          if (previousStatus) next[event.id] = previousStatus
-          else delete next[event.id]
-          return next
-        })
-        feedback.error()
-        showTray({
-          title: 'Check-out failed',
-          message: "Couldn't check you out. Try again.",
-          buttons: [{ label: 'Done', variant: 'primary', onPress: closeTray }],
-          size: 'compact',
-        })
+        fail()
       }
     } catch {
-      setCheckinStatuses((prev) => {
-        const next = { ...prev }
-        if (previousStatus) next[event.id] = previousStatus
-        else delete next[event.id]
-        return next
-      })
-      feedback.error()
-      showTray({
-        title: 'Check-out failed',
-        message: "Couldn't check you out. Try again.",
-        buttons: [{ label: 'Done', variant: 'primary', onPress: closeTray }],
-        size: 'compact',
-      })
+      fail()
     } finally {
       checkOutInFlightRef.current.delete(event.id)
     }
@@ -1074,16 +1051,15 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
     }
   }, [showTray, closeTray])
 
-  const requestLocationIfNeeded = useCallback((force = false) => {
+  const requestLocationIfNeeded = useCallback(() => {
     if (userLocation) return
     if (locationRequestInFlight.current) return
-    if (locationStatus === 'denied' && !force) return
     locationRequestInFlight.current = true
     getCurrentLocationQuietly()
       .finally(() => {
         locationRequestInFlight.current = false
       })
-  }, [userLocation, locationStatus, getCurrentLocationQuietly])
+  }, [userLocation, getCurrentLocationQuietly])
 
   // Check location permission status on mount (without requesting)
   useEffect(() => {
@@ -1236,23 +1212,10 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
       lastFetchLocationRef.current = lat && lon ? `${lat},${lon}` : 'none'
       initialLoadedRef.current = true
       if (eventsData) {
-        const interestMap: { [eventId: string]: boolean } = {}
-        const countMap: Record<string, number> = {}
-        const checkinMap: { [eventId: string]: any } = {}
-        eventsData.forEach((event) => {
-          interestMap[event.id] = !!event.is_favorited
-          countMap[event.id] = event.favorite_count || 0
-          if (event.user_checkin) {
-            checkinMap[event.id] = {
-              status: event.user_checkin.status === 'checked_in' ? 'checked_in' : event.user_checkin.status,
-              checkInId: event.user_checkin.checkInId,
-              checkInTime: event.user_checkin.checkInTime,
-            }
-          }
-        })
-        setInterestStatuses(interestMap)
-        setInterestCounts(countMap)
-        setCheckinStatuses(checkinMap)
+        const maps = feedMaps(eventsData)
+        setInterestStatuses(maps.interests)
+        setInterestCounts(maps.counts)
+        setCheckinStatuses(maps.checkins)
       }
       if (meta?.profile?.profile) {
         const profile = meta.profile.profile
@@ -1658,23 +1621,10 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
       })
       setEventsLoadedAt(Date.now())
       setPage(prev => prev + 1)
-      const interestMap: { [eventId: string]: boolean } = {}
-      const countMap: Record<string, number> = {}
-      const checkinMap: { [eventId: string]: any } = {}
-      received.forEach((event) => {
-        interestMap[event.id] = !!event.is_favorited
-        countMap[event.id] = event.favorite_count || 0
-        if (event.user_checkin) {
-          checkinMap[event.id] = {
-            status: event.user_checkin.status === 'checked_in' ? 'checked_in' : event.user_checkin.status,
-            checkInId: event.user_checkin.checkInId,
-            checkInTime: event.user_checkin.checkInTime,
-          }
-        }
-      })
-      setInterestStatuses((prev) => ({ ...prev, ...interestMap }))
-      setInterestCounts((prev) => ({ ...prev, ...countMap }))
-      setCheckinStatuses((prev) => ({ ...prev, ...checkinMap }))
+      const maps = feedMaps(received)
+      setInterestStatuses((prev) => ({ ...prev, ...maps.interests }))
+      setInterestCounts((prev) => ({ ...prev, ...maps.counts }))
+      setCheckinStatuses((prev) => ({ ...prev, ...maps.checkins }))
     } catch (error) {
       Logger.warn('events', 'fetchMore:failed', { error: error as any })
     } finally {
@@ -1747,9 +1697,7 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
       .map(x => x.e)
   }, [events, userLocation, proximityData])
 
-  const formatTimeRange = (startIso: string, endIso: string, opts?: { timezone?: string }) => fmtRange(startIso, endIso, { includeDate: true, timezone: opts?.timezone })
 
-  const filteredSortedEvents = useMemo(() => events, [events])
 
   /*
    * Featured, then Upcoming — the frame's two sections, from one sorted list.
@@ -1811,7 +1759,7 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
      * are hidden, so every id they claim is an id that appears nowhere — and
      * searching a venue's name would return it and then not show it.
      */
-    if (isNarrowed) return filteredSortedEvents
+    if (isNarrowed) return events
 
     /*
      * Subtract exactly what the three sections draw, and nothing else.
@@ -1829,8 +1777,8 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
     featuredItems.forEach(e => shown.add(e.id))
     upcomingStackItems.forEach(e => shown.add(e.id))
     nearbyItems.slice(0, 4).forEach(e => shown.add(e.id))
-    return filteredSortedEvents.filter(e => !shown.has(e.id))
-  }, [isNarrowed, filteredSortedEvents, featuredItems, upcomingStackItems, nearbyItems])
+    return events.filter(e => !shown.has(e.id))
+  }, [isNarrowed, events, featuredItems, upcomingStackItems, nearbyItems])
 
   const renderFeaturedRow = () => {
     if (featuredItems.length === 0) return null
@@ -1873,17 +1821,7 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
         */}
         {featuredItems.length === 1 ? (
           <View style={[styles.featuredBleed, { paddingHorizontal: featured.inset }]}>
-            <FeaturedCard
-              title={featuredItems[0].title}
-              tag={featuredItems[0].category || null}
-              playlist={feedPlaylist(featuredItems[0].media, featuredItems[0].cover_image_url)}
-              isActive={visible}
-              dateLabel={featuredDateLabel(featuredItems[0].start_time)}
-              placeLabel={placeLabel(featuredItems[0])}
-              width={featured.width}
-              onPress={() => handleEventPress(featuredItems[0])}
-              onLongPress={() => handleEventPreview(featuredItems[0])}
-            />
+            <FeaturedCard {...featuredCards[0]} isActive={visible} width={featured.width} />
           </View>
         ) : (
           <FlatList
@@ -1913,17 +1851,7 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
             viewabilityConfig={featuredViewability}
             onViewableItemsChanged={onFeaturedViewable}
             renderItem={({ item, index }) => (
-              <FeaturedCard
-                title={item.title}
-                tag={item.tag}
-                playlist={item.playlist}
-                isActive={visible && index === featuredActiveIndex}
-                dateLabel={item.dateLabel}
-                placeLabel={item.placeLabel}
-                width={featured.width}
-                onPress={item.onPress}
-                onLongPress={item.onLongPress}
-              />
+              <FeaturedCard {...item} isActive={visible && index === featuredActiveIndex} width={featured.width} />
             )}
             // Hoisted: an inline component is a new type every render, which
             // remounts every separator rather than reusing them.
@@ -2024,7 +1952,7 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
               onPress={handleEventPress as any}
               onLongPress={handleEventPreview as any}
               // The window the door goes by: a multi-day run's day, not the run.
-              timeLabel={formatTimeRange(liveWindow(ev).start_time, liveWindow(ev).end_time ?? ev.end_time, { timezone: ev.timezone })}
+              timeLabel={formatTimeRange(liveWindow(ev).start_time, liveWindow(ev).end_time ?? ev.end_time, { includeDate: true, timezone: ev.timezone })}
               /*
                 How far, when that means something.
 
@@ -2059,7 +1987,7 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
           if (locationStatus === 'denied') {
             try { (Linking as any)?.openSettings?.() } catch {}
           } else {
-            requestLocationIfNeeded(true)
+            requestLocationIfNeeded()
           }
         }}
         accessibilityRole="button"
@@ -2737,7 +2665,6 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
         buttons={trayState.buttons}
         onClose={closeTray}
         size={trayState.size}
-        dismissible={trayState.dismissible}
       />
     </View>
   )
