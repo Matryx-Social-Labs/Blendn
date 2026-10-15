@@ -21,6 +21,9 @@ export const YOURE_IN_AT = 200
 /** #9: the orbs lift once, `sin(πp)` over this long, to this peak. */
 export const ORBS_LIFT_MS = 600
 const ORBS_PEAK = 0.6
+/** A rect in the stage's frame: the docked pass the pour fills (Flow 4 delta R2-D1, "success"). */
+export type PourFrame = { x: number; y: number; width: number; height: number }
+
 /** #9: Tonight crossfades to the Room here, over `DURATION.base`. */
 export const ROOM_AT = 700
 /** #9: "You're in." is 900 28/32, −0.8: no TYPE role is (`moment` is 44/48). */
@@ -50,7 +53,24 @@ const YOURE_IN_TYPE = {
  * Reduce Motion: the panel crossfades to filled with "You're in." in 200 ms;
  * the same hand-off at 700 ms, over 200 ms; the same haptic.
  */
-export function MomentPour({ venue, onDone, ready = true, testID }: { venue: string; onDone: () => void; ready?: boolean; testID?: string }) {
+export function MomentPour({
+  venue,
+  onDone,
+  ready = true,
+  frame,
+  testID,
+}: {
+  venue: string
+  onDone: () => void
+  ready?: boolean
+  /**
+   * Where the pass is. The Tonight door passes its docked pass, so the flood
+   * fills exactly it (Flow 4); without one (the event screen has no pass) the
+   * panel is #9's own, inset under the top bar and over the home indicator.
+   */
+  frame?: PourFrame
+  testID?: string
+}) {
   const reduceMotion = useReducedMotion()
   const bold = useBoldText()
   const insets = useSafeAreaInsets()
@@ -61,7 +81,7 @@ export function MomentPour({ venue, onDone, ready = true, testID }: { venue: str
   const lift = useSharedValue(0)
   const orbs = useDerivedValue(() => Math.sin(lift.get() * Math.PI) * ORBS_PEAK)
   // Off the panel until it has measured itself.
-  const panelHeight = useSharedValue(screenHeight)
+  const panelHeight = useSharedValue(frame?.height ?? screenHeight)
   const flood = useSharedValue(reduceMotion ? 1 : 0)
   const floodOpacity = useSharedValue(reduceMotion ? 0 : 1)
   const text = useSharedValue(0)
@@ -122,7 +142,12 @@ export function MomentPour({ venue, onDone, ready = true, testID }: { venue: str
         <View
           testID={testID && `${testID}-panel`}
           onLayout={(e) => panelHeight.set(e.nativeEvent.layout.height)}
-          style={[styles.panel, { top: insets.top + PANEL_TOP, bottom: insets.bottom + SPACE.xl }]}
+          style={[
+            styles.panel,
+            frame
+              ? { left: frame.x, top: frame.y, width: frame.width, height: frame.height }
+              : { left: SPACE.md, right: SPACE.md, top: insets.top + PANEL_TOP, bottom: insets.bottom + SPACE.xl },
+          ]}
         >
           <Animated.View testID={testID && `${testID}-flood`} style={[StyleSheet.absoluteFill, floodStyle]}>
             <GradientFill gradient="fill" style={StyleSheet.absoluteFill} />
@@ -140,8 +165,8 @@ export function MomentPour({ venue, onDone, ready = true, testID }: { venue: str
 }
 
 const styles = StyleSheet.create({
-  /** #9: inset 12 at the sides, radius 24, the surface; the flood stays inside it. */
-  panel: { position: 'absolute', left: SPACE.md, right: SPACE.md, borderRadius: RADIUS.sheet, backgroundColor: COLOR.surface, overflow: 'hidden' },
+  /** The pass: radius 24, the surface; the flood stays inside it. #9's own is inset 12 at the sides. */
+  panel: { position: 'absolute', borderRadius: RADIUS.sheet, backgroundColor: COLOR.surface, overflow: 'hidden' },
   /** #9: top left, 16 in. White on the surface and on the fill alike. */
   venue: { position: 'absolute', left: SPACE.lg, right: SPACE.lg, top: SPACE.lg, color: COLOR.textOnGradient },
   /** #9: bottom left, 16 in and 24 up. */

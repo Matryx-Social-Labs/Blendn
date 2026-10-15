@@ -1,12 +1,13 @@
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
-import React, { useState } from 'react'
-import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native'
+import React, { useEffect, useState } from 'react'
+import { Pressable, StyleSheet, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native'
 import { GestureDetector } from 'react-native-gesture-handler'
 import Animated, { FadeInDown } from 'react-native-reanimated'
 
 import { startsLabel } from '../../lib/roomMoments'
 import type { TonightEvent } from '../../lib/useTonight'
+import type { PourFrame as PassFrame } from '../ds/MomentPour'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE } from '../../lib/theme'
 import ScalePress from '../motion/ScalePress'
 import { SwipeDeck, type DeckFan } from '../motion/SwipeDeck'
@@ -220,6 +221,7 @@ export function VenuePass({
   busy,
   youreIn = false,
   onHold,
+  onLayout,
 }: {
   event: TonightEvent
   tasteMatchCount: number | null
@@ -227,9 +229,10 @@ export function VenuePass({
   /** The server said yes: the full pill reads "You're in" until the room shows (Flow 4 delta R2-D1, "success"). */
   youreIn?: boolean
   onHold: () => void
+  onLayout?: (e: LayoutChangeEvent) => void
 }) {
   return (
-    <Animated.View entering={FadeInDown.duration(320)} style={styles.pass}>
+    <Animated.View testID="tonight-pass" entering={FadeInDown.duration(320)} style={styles.pass} onLayout={onLayout}>
       <View style={styles.passHead}>
         {event.photo ? (
           <OptimizedImage
@@ -282,6 +285,7 @@ export function TonightView({
   tasteMatchCount,
   checkingIn,
   youreIn = false,
+  onPassFrame,
   onOpenEvent,
   onSeeAll,
   onBrowse,
@@ -299,6 +303,8 @@ export function TonightView({
   checkingIn: boolean
   /** See `VenuePass`. */
   youreIn?: boolean
+  /** Where the docked pass is, in this view's frame: the pour fills exactly it (Flow 4 delta R2-D1, "success"). */
+  onPassFrame?: (frame: PassFrame) => void
   onOpenEvent: (id: string) => void
   onSeeAll: () => void
   onBrowse: () => void
@@ -308,6 +314,12 @@ export function TonightView({
 }) {
   const now = useNow(60_000)
   const { onScroll, native, scrollEventThrottle } = useStageScroll()
+  // The pass's frame is the dock's place plus the pass's place in it.
+  const [dockAt, setDockAt] = useState<PassFrame | null>(null)
+  const [passAt, setPassAt] = useState<PassFrame | null>(null)
+  useEffect(() => {
+    if (dockAt && passAt) onPassFrame?.({ x: dockAt.x + passAt.x, y: dockAt.y + passAt.y, width: passAt.width, height: passAt.height })
+  }, [dockAt, passAt, onPassFrame])
   /*
    * The deck is sized to the room it has, not to its width alone.
    *
@@ -407,8 +419,9 @@ export function TonightView({
       </GestureDetector>
 
       {insideEvent ? (
-        <View style={[styles.passDock, { paddingBottom: bottomInset + SPACE.md }]}>
+        <View testID="tonight-pass-dock" style={[styles.passDock, { paddingBottom: bottomInset + SPACE.md }]} onLayout={(e) => setDockAt(e.nativeEvent.layout)}>
           <VenuePass
+            onLayout={(e) => setPassAt(e.nativeEvent.layout)}
             event={insideEvent}
             tasteMatchCount={tasteMatchCount}
             busy={checkingIn}

@@ -15,7 +15,7 @@
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { AccessibilityInfo } from 'react-native'
+import { AccessibilityInfo, StyleSheet } from 'react-native'
 
 import { BlendnScreen } from '../components/blendn/BlendnScreen'
 import { askIntentRoute, intentAnswered, submitCheckIn, type CheckInOutcome } from '../lib/checkIn'
@@ -80,10 +80,23 @@ jest.mock('../lib/useRoomControls', () => ({
 const mockPassLabels: string[] = []
 jest.mock('../components/blendn/TonightView', () => {
   const { Pressable, Text } = jest.requireActual('react-native')
+  const { useEffect } = jest.requireActual('react')
   return {
-    TonightView: ({ checkingIn, youreIn, onCheckIn }: { checkingIn: boolean; youreIn?: boolean; onCheckIn: () => void }) => {
+    TonightView: ({
+      checkingIn,
+      youreIn,
+      onCheckIn,
+      onPassFrame,
+    }: {
+      checkingIn: boolean
+      youreIn?: boolean
+      onCheckIn: () => void
+      onPassFrame?: (f: object) => void
+    }) => {
       const label = checkingIn ? (youreIn ? 'You’re in' : 'Checking you in…') : 'Hold to blend in'
       mockPassLabels.push(label)
+      // The docked pass, as Tonight measures it: 12 in, at the bottom, 234 tall.
+      useEffect(() => onPassFrame?.({ x: 12, y: 584, width: 369, height: 234 }), [onPassFrame])
       return (
         <Pressable testID="tonight" onPress={onCheckIn}>
           <Text>{label}</Text>
@@ -163,6 +176,8 @@ async function holdToCheckIn(outcome: CheckInOutcome) {
 it('no question: the pour holds, filled, until the Room has loaded, then hands off into it', async () => {
   await holdToCheckIn(fresh(false))
   expect(screen.getByText('You’re in.', HIDDEN)).toBeTruthy()
+  // The flood fills the docked pass, not a panel of its own.
+  expect(StyleSheet.flatten(screen.getByTestId('blendn-pour-panel', HIDDEN).props.style)).toMatchObject({ left: 12, top: 584, width: 369, height: 234 })
   // Past #9's 700 ms with no Room yet: still the pour over Tonight, the pass still "You're in".
   await advance(1500)
   expect(screen.getByTestId('blendn-pour', HIDDEN).props.pointerEvents).toBe('auto')

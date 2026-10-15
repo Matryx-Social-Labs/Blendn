@@ -341,6 +341,20 @@ describe('<MomentPour> · the check-in success (motion #9)', () => {
     expect(announce).toHaveBeenCalledWith('You’re in. Toit.', { queue: true })
   })
 
+  it('on the Tonight door it fills the docked pass exactly: the flood in its bounds, “You’re in.” at its bottom left', async () => {
+    // Flow 4 delta R2-D1 "success": the pass docked 12 in at the bottom, 234 tall.
+    const pass = { x: 12, y: 584, width: 369, height: 234 }
+    await render(<MomentPour venue="Toit" onDone={onDone} testID="p" frame={pass} />)
+    expect(flat('p-panel')).toMatchObject({ position: 'absolute', left: 12, top: 584, width: 369, height: 234, borderRadius: RADIUS.sheet, overflow: 'hidden' })
+    expect(flat('p-panel').right).toBeUndefined()
+    expect(flat('p-panel').bottom).toBeUndefined()
+    const panel = screen.getByTestId('p-panel', HIDDEN)
+    expect(within(panel).getByTestId('p-flood', HIDDEN)).toBeTruthy()
+    expect(flat('p-flood')).toMatchObject({ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 })
+    expect(flat('p-youre-in')).toMatchObject({ left: 16, bottom: 24 })
+    expect(flat('p-venue')).toMatchObject({ left: 16, top: 16 })
+  })
+
   it('H.success once on the server’s answer, the flood on M.settle, the Room at 700 ms', async () => {
     await render(pour())
     expect(sprungWith('settle')).toBe(true)
@@ -466,6 +480,7 @@ describe('/preview/ds-p5', () => {
       ['ds-play-ready', 'ds-moment-ready'],
       ['ds-play-pour', 'ds-moment-pour'],
       ['ds-play-pour-held', 'ds-moment-pour'],
+      ['ds-play-pour-pass', 'ds-moment-pour'],
     ]) {
       await fireEvent.press(screen.getByTestId(button))
       expect(screen.getByTestId(moment, HIDDEN)).toBeTruthy()

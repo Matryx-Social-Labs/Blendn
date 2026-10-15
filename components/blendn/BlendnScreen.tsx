@@ -28,7 +28,7 @@ import { useTonight } from '../../lib/useTonight'
 import ActionTray, { type ActionTrayButton } from '../ActionTray'
 import { CrewCardView } from '../crews/CrewParts'
 import { chooseCrew, crewCards, CrewsFooter, CrewsHeader, openBlend, useCrewActions, useCrewsHere } from '../crews/CrewsView'
-import { MomentPour } from '../ds/MomentPour'
+import { MomentPour, type PourFrame } from '../ds/MomentPour'
 import { ConnectSheet } from '../grid/ConnectSheet'
 import ScalePress from '../motion/ScalePress'
 import RealtimeStatusBanner from '../RealtimeStatusBanner'
@@ -186,6 +186,8 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
    * at "You're in" for good; Tonight shows and the room's poll brings it in.
    */
   const [roomWaitOver, setRoomWaitOver] = useState(false)
+  /** The docked pass, measured: the pour fills exactly it (Flow 4 delta R2-D1, "success"). */
+  const [passFrame, setPassFrame] = useState<PourFrame | null>(null)
   /** The next Room to mount comes out of the pour, and enters as #9 draws it. */
   const [pourEntrance, setPourEntrance] = useState(false)
   const roomReady = room.status === 'ready' || roomWaitOver
@@ -573,6 +575,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
             tasteMatchCount={insideEvent?.tasteMatchCount ?? null}
             checkingIn={checkIn.checkingIn}
             youreIn={checkIn.youreIn}
+            onPassFrame={setPassFrame}
             onOpenEvent={(id) => router.push({ pathname: '/event/[id]', params: { id } as never })}
             onSeeAll={() => router.push('/nearby-events')}
             onBrowse={() => {
@@ -719,7 +722,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
       {/* Over Tonight, and over the Room as it takes over: the pour clears itself, so it stays mounted. */}
       {/* Held, filled, until the Room is there; a question first clears it onto Tonight (Flow 4 #12–#14). */}
       {checkIn.pours > 0 ? (
-        <MomentPour key={checkIn.pours} testID="blendn-pour" venue={insideEvent?.venue ?? ''} ready={roomReady || checkIn.asks} onDone={checkIn.pourDone} />
+        <MomentPour key={checkIn.pours} testID="blendn-pour" frame={passFrame ?? undefined} venue={insideEvent?.venue ?? ''} ready={roomReady || checkIn.asks} onDone={checkIn.pourDone} />
       ) : null}
 
       <ActionTray
