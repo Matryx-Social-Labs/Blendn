@@ -100,6 +100,7 @@ import MessageCircleOff from 'lucide-react-native/icons/message-circle-off'
 import MessageSquareDashed from 'lucide-react-native/icons/message-square-dashed'
 import MessageSquareOff from 'lucide-react-native/icons/message-square-off'
 import MicOff from 'lucide-react-native/icons/mic-off'
+import Minus from 'lucide-react-native/icons/minus'
 import Moon from 'lucide-react-native/icons/moon'
 import Music from 'lucide-react-native/icons/music'
 import Music2 from 'lucide-react-native/icons/music-2'
@@ -232,6 +233,7 @@ const ICONS = {
   'message-square-dashed': MessageSquareDashed,
   'message-square-off': MessageSquareOff,
   'mic-off': MicOff,
+  minus: Minus,
   moon: Moon,
   music: Music,
   'music-2': Music2,
