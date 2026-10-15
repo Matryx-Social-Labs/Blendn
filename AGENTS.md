@@ -189,6 +189,13 @@ place; screens move to it one at a time, and `EMBER` goes when the last has.
   `ProgressBar`, `TabBar` (hosts `Disc`), `TopBar`, and `MonoFamily` (`Badge`,
   `PresenceDot`, `LivePill`, `TimeBadge`, `Price`). Every state is on
   `/preview/ds-p1`
+- `components/ds/` P3, chat and gestures (ROUND3 B4): `ChatBubble`, `Composer`,
+  `ReactionBar`/`ReactionPill`, `ContextMenu`/`LongPressMenu`, `SwipeRow`,
+  `ImageViewer`, `PollBubble`, `BroadcastNotice`, `SystemNotice`/`SystemLine`,
+  `TypingIndicator`, `ReplyPreview`, `UnreadDivider`/`DayPill`, `ReceiptMark`,
+  `CoachMark`; the rules they share in `chatShared.ts`, the six reactions in
+  `lib/chatReactions.ts`. Every state, and a live room to drive the gestures,
+  on `/preview/ds-p3`
 - P5, sets and moments: `Orbs` and `Grain` (L0, the only ambient loop),
   `CrewEmblem`, and the five L4 moments `MomentMatch`, `MomentBlend`,
   `MomentReady`, `MomentPour`, `MomentRecap` on one `MomentStage`; each on
