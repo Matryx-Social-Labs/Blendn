@@ -63,16 +63,6 @@ export function SceneHeroMedia({
   onPress?: (index: number) => void
 }) {
   const [index, setIndex] = useState(0)
-  /*
-   * Where the pager has actually *come to rest*, which lags `index`.
-   *
-   * `index` changes the instant an advance starts, because the dots have to
-   * follow the gesture. Tearing the video down on that same tick unmounted it
-   * at the *beginning* of a ~300ms slide, so the poster underneath was revealed
-   * and slid across — an image appearing from nowhere just as the clip ended.
-   * The player stays up until the scroll has settled somewhere else.
-   */
-  const [settled, setSettled] = useState(0)
   const [manual, setManual] = useState(false)
   const reduceMotion = useReducedMotion()
   const scrollRef = useRef<ScrollView>(null)
@@ -85,13 +75,6 @@ export function SceneHeroMedia({
     const wrapped = ((next % playlist.length) + playlist.length) % playlist.length
     scrollRef.current?.scrollTo({ x: wrapped * width, animated: !reduceMotion })
     setIndex(wrapped)
-    /*
-     * `onMomentumScrollEnd` does not fire reliably for a programmatic
-     * `scrollTo` on iOS, so a settled state that waited only for it would
-     * strand the outgoing video mounted forever. 400ms comfortably outlasts
-     * the paging animation.
-     */
-    setTimeout(() => setSettled(wrapped), 400)
   }
   const goToRef = useRef(goTo)
 
@@ -138,7 +121,6 @@ export function SceneHeroMedia({
   const onMomentumEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const page = Math.round(e.nativeEvent.contentOffset.x / width)
     if (page !== index) setIndex(page)
-    setSettled(page)
   }
 
   return (
@@ -184,30 +166,16 @@ export function SceneHeroMedia({
               transition={0}
             />
             {/*
-              Mounted for the neighbours too, and playing only when active.
-
-              It used to mount on arrival, so opening the source, buffering and
-              the first frame *all* began the moment the page landed — and the
-              poster sat there for the whole of it. On a clip of any size that
-              is a visible wait at exactly the moment someone has just asked to
-              see it.
-
-              A window of one page either side means the load has already
-              happened by the time you get there. It costs at most one extra
-              decoder — bounded, unlike a feed, because a hero has one playlist
-              and the window is fixed.
-            */}
-            {/*
               Mounted only while it is the page in view — the Pulse's rule.
 
               This kept the clip mounted for the neighbours too, so its source
               was open and buffered before anyone swiped. That preload cost a
               correctness bug it took three attempts to kill: a mounted player
               that has played to its end sits on its final frame, and every
-              signal available for resetting it was unreliable. `active` is
+              signal available for resetting it was unreliable. `active` was
               `i === index || i === settled`, which on a TWO-item playlist never
-              goes false — moving to page 1 leaves `settled` lagging at 0, so
-              `i === settled` holds. Keying on `isCurrent` instead fixed some
+              went false — moving to page 1 left `settled` lagging at 0, so
+              `i === settled` held. Keying on `isCurrent` instead fixed some
               returns and not others.
 
               `FeedVideo` never had any of this, and the reason is structural
@@ -224,24 +192,6 @@ export function SceneHeroMedia({
               <HeroVideo
                 key={`${item.url}-${i}`}
                 source={item.url}
-                active={i === index || i === settled}
-                /*
-                  Which page the pager is actually ON, undiluted.
-
-                  `active` is `index || settled` so the clip keeps playing
-                  through a ~300ms slide rather than being torn down mid-
-                  transition. That is right for play/pause and useless as a
-                  reset signal: with a two-item playlist, moving to page 1 while
-                  `settled` still lags at 0 leaves `i === settled` true, so
-                  `active` never goes false and an effect keyed on it never
-                  runs again.
-
-                  That is the whole reason this bug survived on the Scene and
-                  never existed on the Pulse. `FeedVideo`'s reset is the
-                  *unmount* -- mount means play -- and an unmount always
-                  happens. Here the page stays mounted, so the reset needs a
-                  signal that actually toggles.
-                */
                 /*
                  * Loops exactly when nothing is going to advance past it.
                  *
@@ -315,25 +265,20 @@ const styles = StyleSheet.create({
 /**
  * A clip in the hero.
  *
- * Separate from `FeedVideo`, which encodes the *feed's* policy: mount means
- * play, and looping is inferred from whether a callback was passed. A hero
- * page has to be mounted while it is merely *next* — so that arriving on it is
- * instant — which makes "mounted" and "playing" two different states, and it
- * has to loop or advance depending on whether the viewer has taken over.
+ * Separate from `FeedVideo`, which infers looping from whether a callback was
+ * passed. A hero clip has to loop or advance depending on whether the viewer
+ * has taken over. Mount means play, as in the feed.
  *
  * Muted, like the feed. Sound belongs in the lightbox, where opening it is a
  * deliberate act.
  */
 function HeroVideo({
   source,
-  active,
   loop,
   onEnded,
   onFailed,
 }: {
   source: string
-  /** Whether this is the page in view. Mounted-but-inactive pages preload. */
-  active: boolean
   loop: boolean
   onEnded: () => void
   /**
@@ -358,16 +303,11 @@ function HeroVideo({
 
   useEffect(() => {
     /*
-     * Playing follows visibility, and mounting now follows it too.
-     *
-     * With the clip mounted only while it is the page in view, arriving on it
-     * constructs a new player at zero -- so there is nothing to reset and no
-     * `replay()` call. `active` still distinguishes the settle window, during
-     * which the page is leaving but should not be torn down mid-slide.
+     * Mounted only while it is the page in view, so arriving on it constructs
+     * a new player at zero -- there is nothing to reset and no `replay()` call.
      */
-    if (active) player.play()
-    else player.pause()
-  }, [active, player])
+    player.play()
+  }, [player])
 
   const endedRef = useRef(onEnded)
   const failedRef = useRef(onFailed)
@@ -391,11 +331,10 @@ function HeroVideo({
    *
    * The other is silence — a socket that opens and never delivers, or a
    * redirect to something that is not a video. Nothing errors and nothing
-   * plays, so only a clock notices. The timer is armed while this page is
-   * active and disarmed the moment the player says it is ready.
+   * plays, so only a clock notices. The timer is armed on mount and disarmed
+   * the moment the player says it is ready.
    */
   useEffect(() => {
-    if (!active) return
     let settled = false
 
     const give_up = () => {
@@ -419,7 +358,7 @@ function HeroVideo({
       clearTimeout(timer)
       sub.remove()
     }
-  }, [active, player])
+  }, [player])
 
   return (
     <VideoView

@@ -120,7 +120,6 @@ interface EventDetailData {
   session?: EventSession | null
   timezone?: string
   category: string
-  price_cents: number
   max_capacity: number
   current_capacity: number
   cover_image_url: string
@@ -236,7 +235,6 @@ export default function EventDetail() {
         description: String(descriptionParam || ''),
         short_description: '',
         address: '',
-        price_cents: 0,
         max_capacity: 0,
         current_capacity: 0,
         organizer: '',
@@ -347,6 +345,65 @@ export default function EventDetail() {
     }
   }
 
+  /*
+   * The detail payload (camelCase, or snake_case from an older cache entry)
+   * into the screen's state. One mapper for the fetch and the cache: a field
+   * carried by one path and not the other made a section appear and disappear
+   * depending on how you reached the screen.
+   */
+  const applyDetail = (d: NonNullable<Awaited<ReturnType<typeof apiClient.getEvent>>['data']>) => {
+    setEvent({
+      id: d.id,
+      title: d.title,
+      description: d.description || '',
+      short_description: d.shortDescription || d.short_description || '',
+      city: d.city || '',
+      venue_name: d.venueName || d.venue_name || '',
+      address: d.address || '',
+      start_time: d.startTime || d.start_time || '',
+      end_time: d.endTime || d.end_time || '',
+      session: sessionFromApi(d.session),
+      timezone: d.timezone,
+      category: d.categories?.[0]?.name || '',
+      max_capacity: d.maxCapacity || d.max_capacity || 0,
+      current_capacity: d.currentCapacity || d.current_capacity || 0,
+      cover_image_url: d.coverImageUrl || d.cover_image_url || '',
+      organizer: d.organizer?.name || '',
+      latitude: d.latitude ?? 0,
+      longitude: d.longitude ?? 0,
+      check_in_radius: d.checkInRadius || d.check_in_radius || 100,
+      media: Array.isArray(d.media) ? d.media : [],
+      amenities: Array.isArray(d.amenities) ? (d.amenities as EventAmenity[]) : [],
+      details: (d.details ?? undefined) as ServerEventDetails | undefined,
+      claim_url: claimUrlFrom(d.claim),
+    })
+    // Interest, check-in and RSVP from userStatus - no separate API call needed
+    if (d.userStatus) {
+      setUserInterested(d.userStatus.isFavorited || false)
+      setCheckInStatus({
+        success: true,
+        checked_in: d.userStatus.isCheckedIn || false,
+        status: d.userStatus.checkInStatus ?? null,
+        check_in_id: d.userStatus.checkInId,
+      })
+      setRsvpStatus((d.userStatus.rsvpStatus as RsvpStatus | null) || null)
+    }
+    if (d.stats) {
+      setInterestCount(d.stats.favoriteCount || 0)
+      // Both, because the Attendees block reports a different one either
+      // side of the doors -- see `attendeeBlock` below.
+      setCheckInCount(d.stats.checkInCount || 0)
+      setGoingCount(d.stats.rsvpCount || 0)
+    }
+    if (d.chatGroup?.id) {
+      setEventChatGroupId(d.chatGroup.id)
+    }
+    // Determine if current user is the organizer
+    if (user && d.organizer?.id) {
+      setIsOrganizer(d.organizer.id === user.id)
+    }
+  }
+
   const applyEventDetails = (result: Awaited<ReturnType<typeof apiClient.getEvent>>) => {
     if (!result.success || !result.data) {
       Logger.error('events', 'detail:fetch:error', { error: result.error })
@@ -359,59 +416,7 @@ export default function EventDetail() {
       const d = result.data
       lastFetchRef.current = Date.now()
       setEventDetailCache(String(id), d)
-      setEvent({
-        id: d.id,
-        title: d.title,
-        description: d.description || '',
-        short_description: d.shortDescription || d.short_description || '',
-        city: d.city || '',
-        venue_name: d.venueName || d.venue_name || '',
-        address: d.address || '',
-        start_time: d.startTime || d.start_time || '',
-        end_time: d.endTime || d.end_time || '',
-        session: sessionFromApi(d.session),
-        timezone: d.timezone,
-        category: d.categories?.[0]?.name || '',
-        price_cents: d.priceCents || d.price_cents || 0,
-        max_capacity: d.maxCapacity || d.max_capacity || 0,
-        current_capacity: d.currentCapacity || d.current_capacity || 0,
-        cover_image_url: d.coverImageUrl || d.cover_image_url || '',
-        organizer: d.organizer?.name || '',
-        latitude: d.latitude ?? 0,
-        longitude: d.longitude ?? 0,
-        check_in_radius: d.checkInRadius || d.check_in_radius || 100,
-        media: Array.isArray(d.media) ? d.media : [],
-        amenities: Array.isArray(d.amenities) ? (d.amenities as EventAmenity[]) : [],
-        details: (d.details ?? undefined) as ServerEventDetails | undefined,
-        claim_url: claimUrlFrom(d.claim),
-      })
-      // Set interest info and check-in status from userStatus
-      if (d.userStatus) {
-        setUserInterested(d.userStatus.isFavorited || false)
-        // Set check-in status from event detail response - no separate API call needed
-        setCheckInStatus({
-          success: true,
-          checked_in: d.userStatus.isCheckedIn || false,
-          status: d.userStatus.checkInStatus ?? null,
-          check_in_id: d.userStatus.checkInId,
-        })
-        setRsvpStatus((d.userStatus.rsvpStatus as RsvpStatus | null) || null)
-      }
-      if (d.stats) {
-        setInterestCount(d.stats.favoriteCount || 0)
-        // As the cached path does: the live fetch dropped these, so the
-        // Attendees count only ever showed what the cache last held.
-        setCheckInCount(d.stats.checkInCount || 0)
-        setGoingCount(d.stats.rsvpCount || 0)
-      }
-      // Set chat group ID if available
-      if (d.chatGroup?.id) {
-        setEventChatGroupId(d.chatGroup.id)
-      }
-      // Determine if current user is the organizer
-      if (user && d.organizer?.id) {
-        setIsOrganizer(d.organizer.id === user.id)
-      }
+      applyDetail(d)
       Logger.journey('events', 'detail:fetch:success', { eventId: d.id, isCheckedIn: d.userStatus?.isCheckedIn })
     }
   }
@@ -465,56 +470,7 @@ export default function EventDetail() {
       // Params are already handled in initial state - just check cache for more complete data
       const cached = getEventDetailCache<any>(String(id))
       if (cached) {
-        const d = cached
-        setEvent({
-          id: d.id,
-          title: d.title,
-          description: d.description || '',
-          short_description: d.shortDescription || d.short_description || '',
-          city: d.city || '',
-          venue_name: d.venueName || d.venue_name || '',
-          address: d.address || '',
-          start_time: d.startTime || d.start_time || '',
-          end_time: d.endTime || d.end_time || '',
-          session: sessionFromApi(d.session),
-          timezone: d.timezone,
-          category: d.categories?.[0]?.name || '',
-          price_cents: d.priceCents || d.price_cents || 0,
-          max_capacity: d.maxCapacity || d.max_capacity || 0,
-          current_capacity: d.currentCapacity || d.current_capacity || 0,
-          cover_image_url: d.coverImageUrl || d.cover_image_url || '',
-          organizer: d.organizer?.name || '',
-          latitude: d.latitude ?? 0,
-          longitude: d.longitude ?? 0,
-          check_in_radius: d.checkInRadius || d.check_in_radius || 100,
-          media: Array.isArray(d.media) ? d.media : [],
-          amenities: Array.isArray(d.amenities) ? (d.amenities as EventAmenity[]) : [],
-          details: (d.details ?? undefined) as ServerEventDetails | undefined,
-          claim_url: claimUrlFrom(d.claim),
-        })
-        if (d.stats) {
-          setInterestCount(d.stats.favoriteCount || 0)
-          // Both, because the Attendees block reports a different one either
-          // side of the doors -- see `attendeeBlock` below.
-          setCheckInCount(d.stats.checkInCount || 0)
-          setGoingCount(d.stats.rsvpCount || 0)
-        }
-        if (d.userStatus) {
-          setUserInterested(d.userStatus.isFavorited || false)
-          setCheckInStatus({
-            success: true,
-            checked_in: d.userStatus.isCheckedIn || false,
-            status: d.userStatus.checkInStatus ?? null,
-            check_in_id: d.userStatus.checkInId,
-          })
-          setRsvpStatus((d.userStatus.rsvpStatus as RsvpStatus | null) || null)
-        }
-        if (d.chatGroup?.id) {
-          setEventChatGroupId(d.chatGroup.id)
-        }
-        if (user && d.organizer?.id) {
-          setIsOrganizer(d.organizer.id === user.id)
-        }
+        applyDetail(cached)
         setLoading(false)
       }
     } else {
@@ -548,22 +504,6 @@ export default function EventDetail() {
       task?.cancel?.()
     }
   }, [id])
-
-  useEffect(() => {
-    const task = InteractionManager.runAfterInteractions(() => {})
-    return () => {
-      task?.cancel?.()
-    }
-  }, [id])
-
-  /*
-   * The progressive-hero effect is gone with the old render.
-   *
-   * It swapped a low-res cover for a high-res one after interactions settled.
-   * `SceneHero` hands its media to `expo-image` with `cachePolicy` and a
-   * transition, and `SceneHeroMedia` owns the pager -- so this was a second,
-   * cruder implementation of a thing the component already does.
-   */
 
   useEffect(() => {
     // Check proximity when user location changes
@@ -797,19 +737,6 @@ export default function EventDetail() {
     }, [id, loading])
   )
 
-  /*
-   * `handleCheckout` lived here and is gone -- the control moved, it was not
-   * dropped.
-   *
-   * The CTA is one slot whose subject changes with the clock, so there is no
-   * second control on this screen to hang it from. When you are checked in the
-   * CTA reads "You're in" and opens the room, and check out is in the room's
-   * top bar -- a tap and a confirm from here. The Pulse's long-press tray has it too.
-   *
-   * `apiClient.checkOut` is called from both of those, so this was the third
-   * copy of a flow with two homes already.
-   */
-
   // === ORGANIZER ACTIONS ===
 
   /*
@@ -943,28 +870,6 @@ export default function EventDetail() {
     } catch {}
   }
 
-
-
-
-  /**
-   * The hero's date, without the time.
-   *
-   * This used to return both in one string. The frame gives them separate
-   * slots with their own icons — a calendar and a clock — and a single blob
-   * under a calendar icon reads as the wrong label for half of what it says.
-   */
-
-  /**
-   * "21:00 — 02:00", or "21:00 — Late" when the end lands on another day.
-   *
-   * The frame draws "21:00 — Late", and "Late" is the honest word for it:
-   * printing "02:00" beside a 21:00 start reads as ending *before* it began
-   * unless you also print the date, which is more chrome than a hero meta row
-   * can carry. Rolling past midnight is the normal case for these events, so
-   * this is the common path rather than an edge case.
-   */
-
-  const isLoading = loading
   const isCheckedIn = checkInStatus?.checked_in || false
   /*
    * Were you here — not are you here now. A check-in row exists whatever the
@@ -1117,7 +1022,7 @@ export default function EventDetail() {
   }
 
 
-  if (!isLoading && !event) {
+  if (!loading && !event) {
     const offline = loadFailure === 'network'
     return (
       <SafeAreaView style={styles.errorContainer} edges={['top', 'bottom']}>
@@ -1245,16 +1150,6 @@ export default function EventDetail() {
         sync, and they would drift the first time one of them was touched.
       */}
       <PulseTopBar
-        /*
-          Zero, because `app/_layout.tsx` presents this route with
-          `presentation: 'modal'`.
-
-          `useSafeAreaInsets()` reads the *root* provider, so inside a sheet it
-          reports the device's notch even though iOS has already dropped the
-          sheet below it. The bar then pads by an inset that is not there and
-          the wordmark sits in a dark band. Same fault, same fix as `room.tsx`
-          -- see `topInset` on the bar.
-        */
         leading={<SceneBarButton icon="chevron-back" label="Back" onPress={() => router.back()} />}
         /*
           Back, heart, share -- exactly the harness, and nothing else.
@@ -1320,7 +1215,7 @@ export default function EventDetail() {
           doesn't fade — only the skeleton-to-hero swap does.
         */}
         <LayoutAnimationConfig skipEntering>
-        {isLoading && !event ? (
+        {loading && !event ? (
           <SkeletonBlock width="100%" height={sceneHeroHeight()} borderRadius={0} />
         ) : (
           <Animated.View entering={HERO_FADE_IN}>
@@ -1514,13 +1409,6 @@ export default function EventDetail() {
               </Pressable>
             </FadeInUp>
           ) : null}
-
-          {/*
-            No amenities row. `#244` added them server-side and the mobile
-            payload does not carry them yet, so the frame's two tiles would be
-            the interface asserting two facts it has not been told. They appear
-            the day `EventDetailSchema` returns them.
-          */}
         </View>
       </Animated.ScrollView>
 
