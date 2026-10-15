@@ -99,7 +99,7 @@ export function MomentPour({ venue, onDone, testID }: { venue: string; onDone: (
               <Stop offset={0} stopColor={COLOR.textPrimary} stopOpacity={0} />
               <Stop offset={1} stopColor={COLOR.textPrimary} stopOpacity={1} />
             </LinearGradient>
-            <Mask id="edge">
+            <Mask id="edge" x="0" y="0" width="100%" height="100%">
               <Rect width="100%" height="100%" fill="url(#feather)" />
             </Mask>
           </Defs>

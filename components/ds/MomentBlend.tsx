@@ -103,7 +103,8 @@ export function MomentBlend({ ours, theirs, facets, yourLike, onOpen, onLater, t
 
   const skipBeats = useBeats([
     { at: reduceMotion ? 0 : LAND_MS, run: () => yourLike && H.match() },
-    { at: reduceMotion ? duration.base : ACTIONS_AT, run: () => setLive(true) },
+    // Live once fully shown, so a skip tap at the foot of the screen never lands on a half-faded button.
+    { at: reduceMotion ? 2 * duration.base : ACTIONS_AT + DURATION.base, run: () => setLive(true) },
   ])
   const skip = () => {
     ;[scrim, orbs, art, text, actions].forEach((v) => v.set(1))
@@ -123,10 +124,14 @@ export function MomentBlend({ ours, theirs, facets, yourLike, onOpen, onLater, t
   const secondary = contrast ? COLOR.textPrimary : COLOR.textSecondary
 
   return (
-    <MomentStage testID={testID} label={`It’s a Blend. ${spoken}.`} scrimAlpha={SCRIM} scrim={scrim} orbs="moment" orbsOpacity={orbs} onSkip={skip} onBack={onLater}>
+    <MomentStage testID={testID} label={`It’s a Blend. ${spoken}.`} scrimAlpha={SCRIM} scrim={scrim} orbs="moment" orbsOpacity={orbs} onSkip={skip} onBack={() => {
+        skip()
+        onLater()
+      }}>
       <View pointerEvents="box-none" style={[styles.page, { paddingTop: insets.top }]}>
         <View pointerEvents="box-none" style={styles.body}>
-          <View style={styles.art} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          {/* Nothing here is a button: a tap on the emblems or the words falls through to skip. */}
+          <View testID={testID && `${testID}-art`} pointerEvents="none" style={styles.art} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
             <Animated.View style={[styles.left, leftStyle]}>
               <Piece side={ours} />
             </Animated.View>
@@ -134,7 +139,7 @@ export function MomentBlend({ ours, theirs, facets, yourLike, onOpen, onLater, t
               <Piece side={theirs} cut={ours.kind === 'crew' && theirs.kind === 'crew'} />
             </Animated.View>
           </View>
-          <Animated.View pointerEvents="box-none" style={[styles.copy, textStyle]}>
+          <Animated.View testID={testID && `${testID}-copy`} pointerEvents="none" style={[styles.copy, textStyle]}>
             <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.moment} style={[font('moment', bold), styles.centre]}>
               It’s a Blend
             </Text>

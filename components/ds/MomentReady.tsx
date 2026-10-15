@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import Animated, { useAnimatedStyle, useSharedValue, withSequence } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -28,6 +28,8 @@ const DONE_MS = 1300
 const DONE_MS_REDUCED = 500
 /** The circle that opens on the mark reaches 80% of the mark box's half-diagonal (the page's `circle(80%)`). */
 const REVEAL = 2 * 0.8 * Math.sqrt((MARK_WIDTH ** 2 + MARK_HEIGHT ** 2) / 2)
+/** The opening circle's smallest scale, so the mark's counter-scale never divides by zero. */
+const REVEAL_MIN = 0.001
 
 /**
  * The one celebration in onboarding (guidelines/components/MomentReady.html,
@@ -51,6 +53,7 @@ export function MomentReady({ name, onDone, testID }: { name?: string; onDone: (
   const orbs = useSharedValue(0)
   const mark = useSharedValue(reduceMotion ? 1 : MARK_FROM)
   const shown = useSharedValue(0)
+  const [done, setDone] = useState(false)
 
   useEffect(() => {
     if (reduceMotion) {
@@ -68,7 +71,13 @@ export function MomentReady({ name, onDone, testID }: { name?: string; onDone: (
 
   const skipBeats = useBeats([
     { at: reduceMotion ? 0 : MARK_DONE, run: () => H.success({ important: true }) },
-    { at: reduceMotion ? DONE_MS_REDUCED : DONE_MS, run: onDone },
+    {
+      at: reduceMotion ? DONE_MS_REDUCED : DONE_MS,
+      run: () => {
+        setDone(true)
+        onDone()
+      },
+    },
   ])
   const skip = () => {
     scrim.set(1)
@@ -80,21 +89,27 @@ export function MomentReady({ name, onDone, testID }: { name?: string; onDone: (
 
   const markStyle = useAnimatedStyle(() => ({ opacity: shown.get(), transform: [{ scale: mark.get() }] }))
   // The circle opens as the spring passes 0.6 → 1 (the page's clip-path), and stays open past it.
-  const revealStyle = useAnimatedStyle(() => {
-    const d = REVEAL * Math.min(1, Math.max(0, (mark.get() - MARK_FROM) / (1 - MARK_FROM)))
-    return { width: d, height: d, borderRadius: d / 2 }
-  })
+  // Scaled, not resized, so nothing is laid out per frame; the mark inside is counter-scaled to hold still.
+  const open = () => {
+    'worklet'
+    return Math.max(REVEAL_MIN, Math.min(1, (mark.get() - MARK_FROM) / (1 - MARK_FROM)))
+  }
+  const revealStyle = useAnimatedStyle(() => ({ transform: [{ scale: open() }] }))
+  const counterStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 / open() }] }))
 
   return (
-    <MomentStage testID={testID} label={`You’re all set${name ? `, ${name}` : ''}.`} scrimAlpha={SCRIM} scrim={scrim} orbs="brand" orbsOpacity={orbs} orbsOnInk={false} onSkip={skip}>
-      <View pointerEvents="box-none" style={[StyleSheet.absoluteFill, styles.centre]}>
+    <MomentStage testID={testID} label={`You’re all set${name ? `, ${name}` : ''}.`} scrimAlpha={SCRIM} scrim={scrim} orbs="brand" orbsOpacity={orbs} orbsOnInk={false} done={done} onSkip={skip}>
+      {/* Not a button: a tap on the mark falls through to skip. */}
+      <View testID={testID && `${testID}-centre`} pointerEvents="none" style={[StyleSheet.absoluteFill, styles.centre]}>
         <Animated.View testID={testID && `${testID}-mark`} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={markStyle}>
           {reduceMotion ? (
             <DiscMark height={MARK_HEIGHT} fill="gradient" />
           ) : (
             <View style={styles.box}>
               <Animated.View style={[styles.reveal, revealStyle]}>
-                <DiscMark height={MARK_HEIGHT} fill="gradient" />
+                <Animated.View style={counterStyle}>
+                  <DiscMark height={MARK_HEIGHT} fill="gradient" />
+                </Animated.View>
               </Animated.View>
             </View>
           )}
@@ -118,7 +133,7 @@ export function MomentReady({ name, onDone, testID }: { name?: string; onDone: (
 const styles = StyleSheet.create({
   centre: { alignItems: 'center', justifyContent: 'center' },
   box: { width: MARK_WIDTH, height: MARK_HEIGHT, alignItems: 'center', justifyContent: 'center' },
-  reveal: { overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  reveal: { width: REVEAL, height: REVEAL, borderRadius: REVEAL / 2, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   skip: { position: 'absolute', alignSelf: 'center' },
   hint: { color: COLOR.textSecondary },
 })

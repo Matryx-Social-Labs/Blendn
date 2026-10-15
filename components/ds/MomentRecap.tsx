@@ -41,6 +41,8 @@ export type MomentRecapProps = {
   onBack: () => void
   /** The overlay's close (chevron down), when the Recap is inside it. */
   onClose?: () => void
+  /** Hold the orbs' drift: the screen is not focused, or the overlay is closing over it. */
+  paused?: boolean
   testID?: string
 }
 
@@ -57,7 +59,7 @@ export type MomentRecapProps = {
  *
  * Reduce Motion: fade only.
  */
-export function MomentRecap({ face, title, venue, minutes, matches, rated, onRate, onBack, onClose, testID }: MomentRecapProps) {
+export function MomentRecap({ face, title, venue, minutes, matches, rated, onRate, onBack, onClose, paused = false, testID }: MomentRecapProps) {
   const reduceMotion = useReducedMotion()
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
@@ -71,14 +73,14 @@ export function MomentRecap({ face, title, venue, minutes, matches, rated, onRat
   }, [])
 
   const tiles: { label: string; value: string; spoken: string }[] = [
-    ...(minutes === null ? [] : [{ label: 'In the room', value: timeSpentLabel(minutes * 60_000), spoken: spokenMinutes(minutes) }]),
+    ...(minutes === null ? [] : [{ label: 'In the room', value: timeSpentLabel(minutes * 60_000), spoken: spokenMinutes(Math.floor(minutes)) }]),
     { label: 'Matches', value: String(matches), spoken: String(matches) },
   ]
   const blocks = (i: number) => ({ index: i, reduceMotion, testID: testID && `${testID}-block-${i}` })
 
   return (
     <View testID={testID} style={styles.page}>
-      <Orbs set="brand" />
+      <Orbs set="brand" paused={paused} />
       <Grain />
       {onClose ? (
         <View style={[styles.close, { top: insets.top + SPACE.sm }]}>

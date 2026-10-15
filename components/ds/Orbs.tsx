@@ -3,7 +3,6 @@ import { AppState, Platform, StyleSheet, View } from 'react-native'
 import Animated, {
   cancelAnimation,
   Easing,
-  FadeIn,
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
@@ -88,7 +87,7 @@ function drift(p: SharedValue<number>, leg: number) {
 
 /** Foreground or not, and the time-of-night set the clock asked for at launch or the last foreground (#53: never live). */
 function useForeground() {
-  const [state, setState] = useState(() => ({ active: true, time: orbTime(new Date()) }))
+  const [state, setState] = useState(() => ({ active: AppState.currentState !== 'background', time: orbTime(new Date()) }))
   useEffect(() => {
     const sub = AppState.addEventListener('change', (status) =>
       setState((prev) => {
@@ -102,16 +101,26 @@ function useForeground() {
   return state
 }
 
-/** The set on screen, and the one it is crossfading from (for `long`, iOS only, never under Reduce Motion). */
+/**
+ * The set on screen, and the one it is crossfading from: the new one fades
+ * in as the old one fades out, over `long` (iOS only, never under Reduce
+ * Motion); then the old one, at 0, goes.
+ */
 function useCrossfade(time: OrbTime, fade: boolean) {
   const [shown, setShown] = useState<{ now: OrbTime; before: OrbTime | null }>({ now: time, before: null })
+  // The previous set, remembered during render (React's "storing information from previous renders").
   if (shown.now !== time) setShown({ now: time, before: fade ? shown.now : null })
+  const incoming = useSharedValue(1)
   useEffect(() => {
     if (!shown.before) return
+    incoming.set(0)
+    incoming.set(withTiming(1, { duration: DURATION.long }))
     const timer = setTimeout(() => setShown((s) => ({ ...s, before: null })), DURATION.long)
     return () => clearTimeout(timer)
-  }, [shown.before])
-  return shown
+  }, [shown.before, incoming])
+  const nowStyle = useAnimatedStyle(() => ({ opacity: incoming.get() }))
+  const beforeStyle = useAnimatedStyle(() => ({ opacity: 1 - incoming.get() }))
+  return { ...shown, nowStyle, beforeStyle }
 }
 
 export type OrbsProps = {
@@ -172,8 +181,7 @@ export function Orbs({ set, time: pinned, paused = false, testID }: OrbsProps) {
       <Animated.View
         key={time}
         testID={testID && `${testID}-${time}`}
-        entering={current && shown.before ? FadeIn.duration(DURATION.long) : undefined}
-        style={StyleSheet.absoluteFill}
+        style={[StyleSheet.absoluteFill, current ? shown.nowStyle : shown.beforeStyle]}
       >
         {ORB_SETS[set][time].map((o, i) => (
           <OrbView key={i} orb={o} box={box} alpha={o.alpha * (contrast ? CONTRAST_SCALE : 1)} style={i ? styleB : styleA} testID={current && testID ? `${testID}-${i}` : undefined} />
@@ -188,7 +196,7 @@ export function Orbs({ set, time: pinned, paused = false, testID }: OrbsProps) {
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
       onLayout={(e) => setBox({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
-      style={StyleSheet.absoluteFill}
+      style={[StyleSheet.absoluteFill, styles.clip]}
     >
       {shown.before ? layer(shown.before, false) : null}
       {layer(shown.now, true)}
@@ -231,3 +239,8 @@ function OrbView({ orb: o, box, alpha, style, testID }: { orb: Orb; box: { width
     </Animated.View>
   )
 }
+
+const styles = StyleSheet.create({
+  /** The board covers the box and the orbs reach past it; Android does not clip by default. */
+  clip: { overflow: 'hidden' },
+})

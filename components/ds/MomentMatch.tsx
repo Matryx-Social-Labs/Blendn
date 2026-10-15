@@ -111,7 +111,8 @@ export function MomentMatch({ you, them, name, reason, opener, onSayHi, onClose,
 
   const skipBeats = useBeats([
     { at: reduceMotion ? 0 : LAND_MS, run: () => H.match() },
-    { at: reduceMotion ? duration.base : ACTIONS_AT, run: () => setLive(true) },
+    // Live once fully shown, so a skip tap at the foot of the screen never lands on a half-faded Say hi.
+    { at: reduceMotion ? 2 * duration.base : ACTIONS_AT + DURATION.quick, run: () => setLive(true) },
   ])
   const skip = () => {
     scrim.set(1)
@@ -136,10 +137,14 @@ export function MomentMatch({ you, them, name, reason, opener, onSayHi, onClose,
   const secondary = contrast ? COLOR.textPrimary : COLOR.textSecondary
 
   return (
-    <MomentStage testID={testID} label={label} scrimAlpha={SCRIM} scrim={scrim} orbs="moment" orbsOpacity={orbs} onSkip={skip} onBack={onClose}>
+    <MomentStage testID={testID} label={label} scrimAlpha={SCRIM} scrim={scrim} orbs="moment" orbsOpacity={orbs} onSkip={skip} onBack={() => {
+        skip()
+        onClose()
+      }}>
       <View pointerEvents="box-none" style={[styles.page, { paddingTop: insets.top }]}>
         <View pointerEvents="box-none" style={styles.body}>
-          <View style={styles.faces}>
+          {/* Nothing here is a button: a tap on the faces or the words falls through to skip. */}
+          <View testID={testID && `${testID}-faces`} pointerEvents="none" style={styles.faces}>
             <Animated.View style={[styles.you, youStyle]}>
               <Avatar {...you} size={FACE} ring={COLOR.ink} testID={testID && `${testID}-you`} />
             </Animated.View>
@@ -148,7 +153,7 @@ export function MomentMatch({ you, them, name, reason, opener, onSayHi, onClose,
             </Animated.View>
             {reduceMotion ? null : HEARTS.map((h, i) => <Heart key={i} progress={hearts[i]} lift={h.lift} size={h.size} testID={testID && `${testID}-heart-${i}`} />)}
           </View>
-          <Animated.View pointerEvents="box-none" style={[styles.copy, textStyle]}>
+          <Animated.View testID={testID && `${testID}-copy`} pointerEvents="none" style={[styles.copy, textStyle]}>
             <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.moment} style={[font('moment', bold), styles.centre]}>
               It’s mutual
             </Text>

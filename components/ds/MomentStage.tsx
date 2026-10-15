@@ -38,6 +38,10 @@ export type Beat = { at: number; run: () => void }
  * not decoration) and still hands off, and nothing plays twice.
  * The beats are read at mount (a moment plays once); their callbacks are read
  * fresh when they fire.
+ *
+ * ponytail: a JS timer, while the moves run on the UI thread; a JS thread busy
+ * mounting the moment can land a haptic a frame or two after its frame. Fire
+ * it from the animation's completion (`scheduleOnRN`) if a device shows it.
  */
 export function useBeats(beats: Beat[]) {
   const latest = useRef(beats)
@@ -83,7 +87,7 @@ export type MomentStageProps = {
   onBack?: () => void
   /** `false` for a moment that hands the screen back while it clears (the pour): drawn in place, not in a Modal. */
   modal?: boolean
-  /** Once it has handed off: every touch goes through to what is under it. */
+  /** Once it has handed off: every touch goes through to what is under it, the screen reader no longer finds it, the orbs stop. */
   done?: boolean
   testID?: string
   children: ReactNode
@@ -112,6 +116,8 @@ export function MomentStage({ label, scrimAlpha, scrim, orbs, orbsOpacity, orbsO
     <View
       testID={testID}
       pointerEvents={done ? 'none' : 'auto'}
+      accessibilityElementsHidden={done}
+      importantForAccessibility={done ? 'no-hide-descendants' : 'auto'}
       accessibilityViewIsModal={modal}
       onAccessibilityEscape={onBack}
       onMagicTap={onSkip}
@@ -120,7 +126,7 @@ export function MomentStage({ label, scrimAlpha, scrim, orbs, orbsOpacity, orbsO
       <Animated.View testID={testID && `${testID}-scrim`} style={[StyleSheet.absoluteFill, { backgroundColor: ink }, scrimStyle]} />
       {orbs ? (
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, orbsOnInk && styles.ink, orbStyle]}>
-          <Orbs set={orbs} />
+          <Orbs set={orbs} paused={done} />
           <Grain />
         </Animated.View>
       ) : null}

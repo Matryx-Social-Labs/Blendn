@@ -86,7 +86,7 @@ describe('<MomentMatch> · It’s mutual (#11, ROUND3 D · 4.4)', () => {
     expect(screen.getByText('You and Velvet Heron matched · Both into live music')).toBeTruthy()
     expect(screen.getByText('TRY')).toBeTruthy()
     expect(screen.getByText('“Which set are you here for?”')).toBeTruthy()
-    await advance(1100)
+    await advance(1260)
     await fireEvent.press(screen.getByRole('button', { name: 'Say hi' }))
     expect(p.onSayHi).toHaveBeenCalledTimes(1)
     await fireEvent.press(screen.getByRole('button', { name: 'Keep looking' }))
@@ -130,10 +130,11 @@ describe('<MomentMatch> · It’s mutual (#11, ROUND3 D · 4.4)', () => {
     expect(haptic.match).toHaveBeenCalledTimes(1)
   })
 
-  it('Say hi is tappable once visible (~1100 ms); with a screen reader, from t0', async () => {
+  it('Say hi is tappable once fully shown (1100 + 160 ms); with a screen reader, from t0', async () => {
     await render(match().el)
+    await advance(1259)
     expect(screen.getByTestId('m-actions', HIDDEN).props.pointerEvents).toBe('none')
-    await advance(1100)
+    await advance(1)
     expect(screen.getByTestId('m-actions', HIDDEN).props.pointerEvents).toBe('box-none')
     screenReader.mockResolvedValue(true)
     await render(match().el)
@@ -150,11 +151,18 @@ describe('<MomentMatch> · It’s mutual (#11, ROUND3 D · 4.4)', () => {
     expect(haptic.match).toHaveBeenCalledTimes(1)
   })
 
-  it('system back is Keep looking', async () => {
+  it('system back is Keep looking, and the haptic still lands (once)', async () => {
     const { p, el } = match()
     await render(el)
     await act(async () => screen.getByTestId('m-modal', HIDDEN).props.onRequestClose())
     expect(p.onClose).toHaveBeenCalledTimes(1)
+    expect(haptic.match).toHaveBeenCalledTimes(1)
+  })
+
+  it('a tap on the faces or the words skips: nothing over the skip area but the buttons is a hit target', async () => {
+    await render(match().el)
+    expect(screen.getByTestId('m-faces', HIDDEN).props.pointerEvents).toBe('none')
+    expect(screen.getByTestId('m-copy', HIDDEN).props.pointerEvents).toBe('none')
   })
 
   it('Reduce Transparency makes the scrim opaque; Increase Contrast lifts the line and rings the opener', async () => {
@@ -239,6 +247,16 @@ describe('<MomentBlend> · It’s a Blend (Flow 10.8, §21.5)', () => {
     await act(async () => screen.getByTestId('b-modal', HIDDEN).props.onRequestClose())
     expect(p.onLater).toHaveBeenCalledTimes(1)
   })
+
+  it('a tap on the emblems or the words skips; the buttons go live once fully shown', async () => {
+    await render(blend().el)
+    expect(screen.getByTestId('b-art', HIDDEN).props.pointerEvents).toBe('none')
+    expect(screen.getByTestId('b-copy', HIDDEN).props.pointerEvents).toBe('none')
+    await advance(820)
+    expect(screen.getByTestId('b-actions', HIDDEN).props.pointerEvents).toBe('none')
+    await advance(220)
+    expect(screen.getByTestId('b-actions', HIDDEN).props.pointerEvents).toBe('box-none')
+  })
 })
 
 describe('<MomentReady> · the one celebration (Flow 2)', () => {
@@ -256,6 +274,11 @@ describe('<MomentReady> · the one celebration (Flow 2)', () => {
     await advance(1)
     expect(onDone).toHaveBeenCalledTimes(1)
     expect(haptic.success).toHaveBeenCalledTimes(1)
+  })
+
+  it('a tap on the mark skips (it is not a hit target)', async () => {
+    await render(<MomentReady onDone={jest.fn()} testID="r" />)
+    expect(screen.getByTestId('r-centre', HIDDEN).props.pointerEvents).toBe('none')
   })
 
   it('tap to skip: the haptic and the hand-off now, once each', async () => {
@@ -294,8 +317,11 @@ describe('<MomentPour> · the check-in success (#9)', () => {
     expect(onDone).not.toHaveBeenCalled()
     await advance(1)
     expect(onDone).toHaveBeenCalledTimes(1)
-    // It clears itself and lets every touch through to the Room.
-    expect(screen.getByTestId('p', HIDDEN).props.pointerEvents).toBe('none')
+    // It clears itself: every touch goes through to the Room, and the screen reader no longer finds it.
+    const stage = screen.getByTestId('p', HIDDEN)
+    expect(stage.props.pointerEvents).toBe('none')
+    expect(stage.props.accessibilityElementsHidden).toBe(true)
+    expect(stage.props.importantForAccessibility).toBe('no-hide-descendants')
   })
 
   it('a tap skips to the Room', async () => {
