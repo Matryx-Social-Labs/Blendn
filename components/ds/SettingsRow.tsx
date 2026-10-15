@@ -1,0 +1,182 @@
+import { Children, Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
+import { Platform, Pressable, StyleSheet, Switch, Text, View } from 'react-native'
+
+import { Icon, type IconName } from '../ui/Icon'
+import { COLOR, ICON, MATERIAL, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { H } from '../../lib/haptics'
+import { OPACITY } from '../../lib/theme'
+import { Spinner } from './Loader'
+import { font, IC_HAIRLINE, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
+
+export type SettingsTrail = 'switch' | 'chevron' | 'external' | 'none'
+
+const ROW_MIN_HEIGHT = SIZE.primary
+const ROLE = { switch: 'switch', chevron: 'button', external: 'link', none: undefined } as const
+
+export type SettingsRowProps = {
+  icon: IconName
+  title: string
+  /** A line under the title; on a rollback, the sentence that names it. */
+  hint?: string
+  trail?: SettingsTrail
+  /** The switch's value (`trail="switch"`). */
+  value?: boolean
+  onValueChange?: (next: boolean) => void
+  /** A chevron or external row's action. */
+  onPress?: () => void
+  /** Saving: a spinner beside the switch, which holds still. */
+  busy?: boolean
+  disabled?: boolean
+  /** The server refused an optimistic change (#39): roll `value` back and say so in `hint`. Plays `H.error` as it turns on. */
+  error?: boolean
+  destructive?: boolean
+  /** The design gallery only: draws a transient state with no finger or keyboard. */
+  previewState?: 'pressed' | 'focused'
+  testID?: string
+}
+
+/** `H.error` when `error` turns on, not when a row mounts already in error. */
+function useRollbackHaptic(error: boolean) {
+  const was = useRef(error)
+  useEffect(() => {
+    if (error && !was.current) H.error()
+    was.current = error
+  }, [error])
+}
+
+/**
+ * A settings row (guidelines/components/SettingsRow.html): at least 56 pt, a
+ * 20 pt glyph, a title, a hint, and a switch, chevron or external-link trail.
+ *
+ * One element for a screen reader: "{title}, {hint}, switch, on" — the whole
+ * row toggles, so the switch is drawn, not focused. It plays `H.toggle` (§10.2,
+ * a switch changes); a chevron or external row is silent. Pressed: a 6% wash on
+ * iOS, a ripple on Android; no scale on rows. Text scales freely and the row
+ * grows. Increase Contrast whitens the trailing glyph.
+ *
+ * ponytail: the switch is React Native's, in the §4.7 colours, until the P1
+ * Toggle lands (Material switch geometry on Android, the pressed thumb).
+ */
+export function SettingsRow({
+  icon,
+  title,
+  hint,
+  trail = 'none',
+  value = false,
+  onValueChange,
+  onPress,
+  busy = false,
+  disabled = false,
+  error = false,
+  destructive = false,
+  previewState,
+  testID,
+}: SettingsRowProps) {
+  const bold = useBoldText()
+  const contrast = useIncreaseContrast()
+  const [focused, setFocused] = useState(false)
+  useRollbackHaptic(error)
+
+  const isSwitch = trail === 'switch'
+  const ink = destructive ? COLOR.destructive : COLOR.textPrimary
+  const press = isSwitch
+    ? () => {
+        H.toggle(!value)
+        onValueChange?.(!value)
+      }
+    : onPress
+  const external = trail === 'external' ? ', opens in browser' : ''
+
+  return (
+    <Pressable
+      testID={testID}
+      // A plain row has no action, but is not disabled: it must not read as dimmed.
+      onPress={trail === 'none' ? undefined : press}
+      disabled={disabled || busy}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      android_ripple={{ color: PRESSED_WASH.android }}
+      accessibilityRole={ROLE[trail]}
+      accessibilityLabel={`${title}${hint ? `, ${hint}` : ''}${external}`}
+      accessibilityState={{ disabled, busy, checked: isSwitch ? value : undefined }}
+      style={({ pressed }) => [
+        styles.row,
+        (pressed || previewState === 'pressed') && { backgroundColor: PRESSED_WASH[Platform.OS === 'android' ? 'android' : 'ios'] },
+        disabled && { opacity: OPACITY.disabled },
+      ]}
+    >
+      <Icon name={icon} size={ICON.control} color={ink} />
+      <View style={styles.text}>
+        <Text style={[font('bodyStrong', bold), { color: ink }]}>{title}</Text>
+        {hint ? <Text style={[font('meta', bold), { color: error ? COLOR.destructive : COLOR.textSecondary }]}>{hint}</Text> : null}
+      </View>
+      {busy ? <Spinner testID={testID && `${testID}-spinner`} size={18} /> : null}
+      {isSwitch ? (
+        <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          <Switch
+            value={value}
+            disabled={disabled || busy}
+            trackColor={{ false: COLOR.switchOffTrack, true: COLOR.selectionFill }}
+            thumbColor={value ? COLOR.selectionInk : COLOR.textPrimary}
+            ios_backgroundColor={COLOR.switchOffTrack}
+          />
+        </View>
+      ) : null}
+      {trail === 'chevron' || trail === 'external' ? (
+        <Icon
+          name={trail === 'chevron' ? 'chevron-right' : 'external-link'}
+          size={ICON.inline}
+          color={contrast ? COLOR.textPrimary : COLOR.textTertiary}
+        />
+      ) : null}
+      {(focused || previewState === 'focused') && !isSwitch ? (
+        <View testID={testID && `${testID}-focus`} pointerEvents="none" style={styles.focus} />
+      ) : null}
+    </Pressable>
+  )
+}
+
+/**
+ * Settings rows in a 24 pt surface card under a mono label (a heading), with
+ * hairlines from the text edge. Increase Contrast: the hairlines at 50% and
+ * 1 pt, the card outlined, the label white.
+ */
+export function SettingsGroup({ title, children, testID }: { title?: string; children: ReactNode; testID?: string }) {
+  const bold = useBoldText()
+  const contrast = useIncreaseContrast()
+  return (
+    <View testID={testID} style={styles.group}>
+      {title ? (
+        <Text accessibilityRole="header" style={[font('label', bold), styles.label, contrast && styles.labelContrast]}>
+          {title}
+        </Text>
+      ) : null}
+      <View testID={testID && `${testID}-card`} style={[styles.card, contrast && IC_HAIRLINE]}>
+        {Children.toArray(children).map((row, i) => (
+          <Fragment key={i}>
+            {i ? <View testID={testID && `${testID}-hairline`} accessibilityElementsHidden style={[styles.hairline, contrast && styles.hairlineContrast]} /> : null}
+            {row}
+          </Fragment>
+        ))}
+      </View>
+    </View>
+  )
+}
+
+const styles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACE.lg,
+    padding: SPACE.lg,
+    minHeight: ROW_MIN_HEIGHT,
+  },
+  text: { flex: 1, minWidth: 0, gap: SPACE.xxs },
+  focus: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, borderRadius: RADIUS.rowInCard, borderWidth: SPACE.xxs, borderColor: COLOR.focusRing },
+  group: { gap: SPACE.sm },
+  label: { color: COLOR.textSecondary, paddingLeft: SPACE.lg },
+  labelContrast: { color: COLOR.textPrimary },
+  card: { borderRadius: RADIUS.sheet, backgroundColor: COLOR.surface, overflow: 'hidden' },
+  hairline: { height: StyleSheet.hairlineWidth, backgroundColor: COLOR.hairline, marginLeft: SPACE.lg + ICON.control + SPACE.lg },
+  hairlineContrast: { height: 1, backgroundColor: MATERIAL.hairlineIncreaseContrast },
+})
