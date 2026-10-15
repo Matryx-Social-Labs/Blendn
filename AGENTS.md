@@ -189,6 +189,13 @@ place; screens move to it one at a time, and `EMBER` goes when the last has.
   `ProgressBar`, `TabBar` (hosts `Disc`), `TopBar`, and `MonoFamily` (`Badge`,
   `PresenceDot`, `LivePill`, `TimeBadge`, `Price`). Every state is on
   `/preview/ds-p1`
+- `components/ds/` P2, events and people (ROUND3 B4): `EventCard` (hero,
+  compact, row), `TonightCard`, `VenuePass`/`DoorCode`, `HoldToConfirm` (the
+  one hold: 900 ms, `H.tick` ×3, `H.commit`), `AmenityTile`/`AmenityGrid`,
+  `MapCard`/`MapPin`/`MapCluster`, `DayHeading`, `SectionHeader`,
+  `Facepile`/`FaceMark`, `PersonCard` (every D · 4.1 variant), `MeetNextCard`,
+  `GridFace`, `TimeRing`, `RevealBar`, `RollingNumber`. Every state is on
+  `/preview/ds-p2`
 - `components/ds/` P3, chat and gestures (ROUND3 B4): `ChatBubble`, `Composer`,
   `ReactionBar`/`ReactionPill`, `ContextMenu`/`LongPressMenu`, `SwipeRow`,
   `ImageViewer`, `PollBubble`, `BroadcastNotice`, `SystemNotice`/`SystemLine`,

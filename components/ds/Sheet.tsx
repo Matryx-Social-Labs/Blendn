@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ComponentRef, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ComponentRef, type ReactNode, type RefObject } from 'react'
 import {
   AccessibilityInfo,
   KeyboardAvoidingView,
@@ -65,7 +65,10 @@ export type SheetProps = {
   visible: boolean
   /** Asked for by the handle, the scrim, a drag or system back. Set `visible` false; the sheet animates out. */
   onClose: () => void
-  title: string
+  /** Omitted only when the content carries its own header (the PersonCard's name beside its face): pass `focusRef` then. */
+  title?: string
+  /** What a screen reader lands on as it opens, when there is no title: the content's own header. */
+  focusRef?: RefObject<ComponentRef<typeof View> | null>
   /** The consequence, above the buttons. */
   body?: string
   /** A decorative glyph well above the title. */
@@ -185,7 +188,7 @@ function useSheetMotion({
  * ponytail: focus is not handed back to the opener on close (the opener
  * knows what it was); the material does not grow more opaque near full height.
  */
-export function Sheet({ visible, onClose, title, body, icon, actions = [], detents, children, testID }: SheetProps) {
+export function Sheet({ visible, onClose, title, body, icon, actions = [], detents, children, focusRef, testID }: SheetProps) {
   const android = Platform.OS === 'android'
   const insets = useSafeAreaInsets()
   const window = useWindowDimensions()
@@ -204,7 +207,10 @@ export function Sheet({ visible, onClose, title, body, icon, actions = [], deten
   const { mounted, drag, placeStyle, scrimStyle, natural, fixedHeight } = useSheetMotion({ visible, heights, opening, busy, requestClose })
   if (testID) drag.withTestId(`${testID}-drag`)
   // Once the modal is on screen: iOS presents it a frame after mount and drops a focus sent earlier.
-  const focusTitle = () => titleRef.current && AccessibilityInfo.sendAccessibilityEvent(titleRef.current, 'focus')
+  const focusTitle = () => {
+    const target = titleRef.current ?? focusRef?.current
+    if (target) AccessibilityInfo.sendAccessibilityEvent(target, 'focus')
+  }
 
   const handle = android ? HANDLE.android : HANDLE.ios
 
@@ -255,9 +261,11 @@ export function Sheet({ visible, onClose, title, body, icon, actions = [], deten
                       <Icon name={icon} />
                     </View>
                   ) : null}
-                  <Text ref={titleRef} accessibilityRole="header" style={[font('title', bold), styles.title]}>
-                    {title}
-                  </Text>
+                  {title ? (
+                    <Text ref={titleRef} accessibilityRole="header" style={[font('title', bold), styles.title]}>
+                      {title}
+                    </Text>
+                  ) : null}
                   {body ? <Text style={[font('body', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{body}</Text> : null}
                 </View>
               </GestureDetector>

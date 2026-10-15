@@ -14,7 +14,8 @@ const GLYPH_FRACTION = 0.5
 const CREW_CORNER = 0.3
 
 export type AvatarProps = {
-  size: AvatarSize
+  /** One of the page's steps (`AvatarSize`), or a grid cell's face (the Room's GridFace, MeetNextCard). */
+  size: number
   /** The 2 pt cut-out ring, in the colour behind the avatar: `COLOR.ink` on the page, `COLOR.surface` in a card. */
   ring?: string
   /** Only when no name is beside it: the name (or pseudonym, or crew name) read instead of the picture. */
