@@ -114,3 +114,12 @@ export function focusRing(radius: number): ViewStyle[] {
   })
   return [ring(SPACE.xs, COLOR.focusRing), ring(SPACE.xxs, COLOR.ink)]
 }
+
+/**
+ * An outcome that appears in place ("Your crew knows", "Copied"), said once:
+ * announced on iOS; on Android the element that shows it carries
+ * `accessibilityLiveRegion="polite"` (as `<Toast>` does), so it is not read twice.
+ */
+export function announceOutcome(text: string) {
+  if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(text)
+}

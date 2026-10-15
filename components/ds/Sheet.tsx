@@ -22,7 +22,7 @@ import { H } from '../../lib/haptics'
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { tint } from '../../lib/theme'
-import { Button, type ButtonKind } from './Button'
+import { Button, type ButtonKind, type ButtonProps } from './Button'
 import { font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast } from './shared'
 
 export type Detent = 'short' | 'medium' | 'tall'
@@ -59,7 +59,10 @@ export function settleDetent(heights: number[], from: number, height: number, dr
   return nearest
 }
 
-export type SheetAction = { label: string; onPress: () => void; kind?: ButtonKind; loading?: boolean; disabled?: boolean }
+export type SheetAction = { label: string; onPress: () => void; kind?: ButtonKind; loading?: boolean; disabled?: boolean } & Pick<
+  ButtonProps,
+  'pressHaptic' | 'icon'
+>
 
 export type SheetProps = {
   visible: boolean
@@ -211,6 +214,13 @@ export function Sheet({ visible, onClose, title, body, icon, actions = [], deten
     const target = titleRef.current ?? focusRef?.current
     if (target) AccessibilityInfo.sendAccessibilityEvent(target, 'focus')
   }
+  // The same sheet turning into another (a session into its confirm, a dial into a refusal): its new title takes focus.
+  const shownTitle = useRef(title)
+  useEffect(() => {
+    if (shownTitle.current === title) return
+    shownTitle.current = title
+    if (visible && titleRef.current) AccessibilityInfo.sendAccessibilityEvent(titleRef.current, 'focus')
+  }, [title, visible])
 
   const handle = android ? HANDLE.android : HANDLE.ios
 
@@ -274,7 +284,7 @@ export function Sheet({ visible, onClose, title, body, icon, actions = [], deten
                 <View style={[styles.actions, fixedHeight && styles.pinned]}>
                   {sorted.map(({ kind = 'secondary', disabled, loading, ...action }) => (
                     <Button
-                      key={action.label}
+                      key={`${kind}-${action.label}`}
                       kind={kind}
                       loading={loading}
                       disabled={disabled || (busy && !loading)}

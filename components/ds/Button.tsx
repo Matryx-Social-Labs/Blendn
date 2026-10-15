@@ -15,6 +15,7 @@ import {
   focusRing,
   font,
   IC_HAIRLINE,
+  minTarget,
   PRESSED_WASH,
   SPINNER_GRACE_MS,
   useBoldText,
@@ -44,7 +45,7 @@ function fill(kind: ButtonKind, size: ButtonSize, onGlass: boolean) {
 const PRESS_HAPTIC: Partial<Record<ButtonKind, () => void>> = { primary: () => H.primary(), destructive: () => H.destructive() }
 
 /** The 300 ms grace before a busy control swaps its label for a spinner. */
-function useGrace(loading: boolean) {
+export function useGrace(loading: boolean) {
   const [shown, setShown] = useState(false)
   useEffect(() => {
     if (!loading) return
@@ -86,8 +87,12 @@ export type ButtonProps = {
   refused?: boolean
   /** A secondary sitting on glass (a sheet, a dock): 8% white instead of `surface` (no glass on glass). */
   onGlass?: boolean
-  /** `false` when the action's own outcome haptic follows within ~1 s (I'm going, §10.2). */
-  pressHaptic?: boolean
+  /**
+   * `false` when the action's own outcome haptic follows within ~1 s (I'm going, §10.2);
+   * a vocabulary cue to play on press-in instead of the kind's own, where a page names one
+   * (H.primary on a strong "Use at the door", H.select on Extend).
+   */
+  pressHaptic?: boolean | (() => void)
   accessibilityHint?: string
   /** The design gallery only: draws a transient state with no finger or keyboard. */
   previewState?: 'pressed' | 'focused'
@@ -160,7 +165,9 @@ export function Button({
         testID={testID}
         onPress={onPress}
         disabled={disabled || loading}
-        haptic={pressHaptic ? PRESS_HAPTIC[kind] : undefined}
+        // A 36 pt row action reaches the 44 / 48 target through slop, above and below only (pills sit side by side).
+        hitSlop={sm ? { top: (minTarget() - ROW_ACTION_HEIGHT) / 2, bottom: (minTarget() - ROW_ACTION_HEIGHT) / 2 } : undefined}
+        haptic={typeof pressHaptic === 'function' ? pressHaptic : pressHaptic ? PRESS_HAPTIC[kind] : undefined}
         pressedScale={android ? 1 : PRESS.scale}
         onPressIn={squareOff(RADIUS.pressedAndroid)}
         onPressOut={squareOff(rest)}

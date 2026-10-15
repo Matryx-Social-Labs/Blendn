@@ -125,6 +125,27 @@ const KNOWN_ORPHANS: Record<string, string> = {
   'ds/TimeRing.tsx': 'redesign P2; replaces components/blendn/TimeRing on your face in the Room (Flow 4)',
   'TonightCard.tsx': 'redesign P2; Tonight’s deck adopts it in place of TonightView’s EventDeck (Flow 4)',
   'VenuePass.tsx': 'redesign P2 (VenuePass, DoorCode); Tonight’s pass (Flow 4) and the offer’s door pass (Flow 13, ROUND3 G3) adopt it',
+  /* P4, the rest of R2-D0 (ROUND3 B4), built ahead of Flows 9–16; each goes with the first flow that adopts it. */
+  'NotificationRow.tsx': 'redesign P4 component (NotificationRow, NotificationVisual); replaces the bell rows in app/notifications with the Notifications redesign (Flow 9)',
+  'InAppBanner.tsx': 'redesign P4 component; the in-app push banner and the wave banner (R3 D 9.1) adopt it with Flow 9 and the Room redesign (Flow 4)',
+  'CountTicks.tsx': 'redesign P4 component; drawn by CrewCard and CrewStrip (both on this ledger), so it reaches a screen with the Crews redesign (Flow 10)',
+  'CrewCard.tsx': 'redesign P4 component (CrewCard, CrewRow); replaces CrewParts’ CrewCardView and the crew rows with the Crews redesign (Flow 10)',
+  'CrewStrip.tsx': 'redesign P4 component; the pass success and the Room adopt it with the Crews redesign (Flow 10 · 10.6)',
+  'LikingAsChip.tsx': 'redesign P4 component; beside “Crews here” in the Room with the Crews redesign (Flow 10 · 10.7)',
+  'RevealSheet.tsx': 'redesign P4 component (RevealSheet, RevealSide); the Blend room adopts it with the Crews redesign (Flow 10 · 10.9)',
+  'GoLiveSheet.tsx': 'redesign P4 component; replaces the Go Live sheet on the venue page with the Places-live redesign (Flow 11 · 11.2)',
+  'SessionSheet.tsx': 'redesign P4 component; opens from the live pill with the Places-live redesign (Flow 11 · 11.3)',
+  'ExpiryPrompt.tsx': 'redesign P4 component (ExpiryPrompt, NotLiveNotice); replaces LiveAtVenue’s expiry prompt with the Places-live redesign (Flow 11 · 11.4)',
+  'OverlapLine.tsx': 'redesign P4 component; the PersonCard and crew card face line adopt it with Matching v2 in the Room (Flow 14 · 14.1)',
+  'AchievementBadge.tsx': 'redesign P4 component; Me’s badges card and the room cards adopt it with Matching v2 (Flow 14 · 14.5)',
+  'TonightSheet.tsx': 'redesign P4 component; the contextual Blend’n+ sheet the client builds next (ROUND3 G2, Flow 12 · 12.1)',
+  'PlanCard.tsx': 'redesign P4 component (PlanCard, NightPassRow, PlanList); replaces the plan rows in app/plus.tsx with the Blend’n+ redesign (Flow 12)',
+  'NeverForSalePanel.tsx': 'redesign P4 component; the Blend’n+ page adopts it before the plans (Flow 12 · 12.2)',
+  'ManageStatusRow.tsx': 'redesign P4 component; Manage (Settings › Blend’n+) adopts it with the Blend’n+ redesign (Flow 12 · 12.3)',
+  'OfferCard.tsx': 'redesign P4 component; replaces the offer screen’s card with the Regulars redesign and the Passes & offers list (Flow 13, ROUND3 G3)',
+  'ShareSheet.tsx': 'redesign P4 component; replaces the plain-text share with the share tray once links ship (Flow 16 · 16.1)',
+  'LinkPreviewCard.tsx': 'redesign P4 component; drawn by ShareSheet (on this ledger); the OG image itself is the server’s (Flow 16 · 16.2)',
+  'StoryCard.tsx': 'redesign P4 component; the Instagram Story share adopts it with a view-capture module (Flow 16 · 16.3)',
 }
 
 const sources = walk(join(ROOT, 'app'))
