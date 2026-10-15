@@ -21,6 +21,7 @@ import type { Badge, Choice, Overlap, ProfileOptions } from './aboutYou'
 import { markSessionExpired, markSessionStarted } from './sessionEvents'
 import { noteServerDate } from './serverClock'
 import { getPushTokenRef, setPushTokenRef } from './pushTokenRef'
+import type { ChatReaction } from './chatReactions'
 
 // API Configuration
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL
@@ -462,9 +463,7 @@ export interface ReactionTally {
   mine: boolean
 }
 
-/** The six the server accepts. Anything else is a 400. */
-export const CHAT_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🔥'] as const
-export type ChatReaction = (typeof CHAT_REACTIONS)[number]
+export { CHAT_REACTIONS, type ChatReaction } from './chatReactions'
 
 export interface PresencePing {
   status: 'inside' | 'outside' | 'prompt' | 'checked_out' | 'not_checked_in'

@@ -79,6 +79,7 @@ import Ghost from 'lucide-react-native/icons/ghost'
 import Gift from 'lucide-react-native/icons/gift'
 import Hand from 'lucide-react-native/icons/hand'
 import Heart from 'lucide-react-native/icons/heart'
+import HeartOff from 'lucide-react-native/icons/heart-off'
 import Hourglass from 'lucide-react-native/icons/hourglass'
 import IdCard from 'lucide-react-native/icons/id-card'
 import Image from 'lucide-react-native/icons/image'
@@ -111,6 +112,7 @@ import Plus from 'lucide-react-native/icons/plus'
 import Radio from 'lucide-react-native/icons/radio'
 import Rainbow from 'lucide-react-native/icons/rainbow'
 import RefreshCw from 'lucide-react-native/icons/refresh-cw'
+import Reply from 'lucide-react-native/icons/reply'
 import RotateCcw from 'lucide-react-native/icons/rotate-ccw'
 import Scale from 'lucide-react-native/icons/scale'
 import ScanFace from 'lucide-react-native/icons/scan-face'
@@ -143,6 +145,7 @@ import UserX from 'lucide-react-native/icons/user-x'
 import Users from 'lucide-react-native/icons/users'
 import UsersRound from 'lucide-react-native/icons/users-round'
 import Utensils from 'lucide-react-native/icons/utensils'
+import Volume2 from 'lucide-react-native/icons/volume-2'
 import VolumeX from 'lucide-react-native/icons/volume-x'
 import Wifi from 'lucide-react-native/icons/wifi'
 import Wind from 'lucide-react-native/icons/wind'
@@ -212,6 +215,7 @@ const ICONS = {
   gift: Gift,
   hand: Hand,
   heart: Heart,
+  'heart-off': HeartOff,
   hourglass: Hourglass,
   'id-card': IdCard,
   image: Image,
@@ -244,6 +248,7 @@ const ICONS = {
   radio: Radio,
   rainbow: Rainbow,
   'refresh-cw': RefreshCw,
+  reply: Reply,
   'rotate-ccw': RotateCcw,
   scale: Scale,
   'scan-face': ScanFace,
@@ -276,6 +281,7 @@ const ICONS = {
   users: Users,
   'users-round': UsersRound,
   utensils: Utensils,
+  'volume-2': Volume2,
   'volume-x': VolumeX,
   wifi: Wifi,
   wind: Wind,

@@ -94,6 +94,21 @@ const KNOWN_ORPHANS: Record<string, string> = {
   'MomentBlend.tsx': 'redesign P5 moment (Flow 10.8); the crew like that makes a Blend opens it with the Crews redesign',
   'MomentReady.tsx': 'redesign P5 moment (Flow 2); /onboarding/ready plays it on the server’s yes with the onboarding redesign',
   'MomentRecap.tsx': 'redesign P5 moment (#43); replaces components/blendn/RoomRecap.tsx with the Room redesign (Flow 4)',
+  /* The P3 chat and gesture components (ROUND3 B4), built ahead of Flow 5; the room and the DM adopt them, the Banter takes SwipeRow. */
+  'ds/ChatBubble.tsx': 'redesign P3 component; replaces components/chat/ChatBubble.tsx (and SwipeToReply) in the room and the DM with Flow 5 (ROUND3 B4, D 5.1–5.2)',
+  'ds/BroadcastNotice.tsx': 'redesign P3 component; replaces components/chat/BroadcastNotice.tsx in the room with Flow 5, sponsored video included (ROUND3 D 5.5)',
+  'ds/SystemNotice.tsx': 'redesign P3 component; SystemLine and SystemNotice replace components/chat/SystemNotice.tsx and the guidelines banner with Flow 5 (ROUND3 B4)',
+  'ds/TypingIndicator.tsx': 'redesign P3 component; replaces components/chat/TypingIndicator.tsx in the room and the DM with Flow 5 (motion #14)',
+  'Composer.tsx': 'redesign P3 component; replaces components/chat/ChatComposer.tsx and ReplyBar with Flow 5, every lock in server copy (ROUND3 C2–C4, D 5.3–5.4)',
+  'ContextMenu.tsx': 'redesign P3 component; the long-press menu replaces the room and DM message sheets with Flow 5 (ROUND3 D 5.2, motion #36)',
+  'ReactionBar.tsx': 'redesign P3 component; replaces components/chat/ReactionPicker.tsx and the bubble reaction chips with Flow 5 (motion #37)',
+  'ReplyPreview.tsx': 'redesign P3 component; the quote in a bubble and above the composer, adopted with ChatBubble and Composer in Flow 5',
+  'ReceiptMark.tsx': 'redesign P3 component; the DM receipt, adopted with ChatBubble in the DM (Flow 5)',
+  'UnreadDivider.tsx': 'redesign P3 component; UnreadDivider and DayPill replace the DM divider and the day separators with Flow 5',
+  'PollBubble.tsx': 'redesign P3 component; the organiser poll in the room, adopted when the room renders polls (Flow 15 #8)',
+  'SwipeRow.tsx': 'redesign P3 component; the Banter rows adopt it with the Banter redesign (ROUND3 D 5.11)',
+  'ImageViewer.tsx': 'redesign P3 component; opens DM photos once they ship (ROUND3 D 5.9, motion #33)',
+  'CoachMark.tsx': 'redesign P3 component; the first coach mark (the centre button, the reveal bar, the swipe) adopts it (ROUND3 B4)',
 }
 
 const sources = walk(join(ROOT, 'app'))
