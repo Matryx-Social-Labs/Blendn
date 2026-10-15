@@ -1,9 +1,9 @@
 import { Tabs } from 'expo-router/js-tabs'
-import React, { memo, useCallback, useEffect, useState } from 'react'
+import React, { memo, useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { AppState, Platform, StyleSheet, View } from 'react-native'
 
 import { BlendnScreen } from '../../components/blendn/BlendnScreen'
-import { WaveToast } from '../../components/blendn/WaveToast'
+import { InAppBanner } from '../../components/ds/InAppBanner'
 import { TabBar, type Tab } from '../../components/ds/TabBar'
 import { apiClient } from '../../lib/apiClient'
 import { openBlendn, setLiveHint, useBlendnOpen } from '../../lib/blendnOverlay'
@@ -123,9 +123,11 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
     const read = async () => {
       try {
         const r = await apiClient.getActiveCheckins()
-        if (cancelled) return
-        const active = r.success ? r.data?.checkIns?.[0] : null
+        // A failed poll knows nothing new: keep the last answer (the disc, and the waves being heard) until one comes.
+        if (cancelled || !r.success) return
+        const active = r.data?.checkIns?.[0] ?? null
         activeEventId = active?.eventId ?? null
+        setActiveRoomTitle(active?.event?.title ?? null)
         recompute()
       } catch (e) {
         Logger.debug('navigation', 'room button poll failed', { error: e })
@@ -188,28 +190,56 @@ BlendnTabBar.displayName = 'BlendnTabBar'
 
 /**
  * A wave while you are checked in and the overlay is closed (SCRUM-630, ROUND3
- * R3 and D · 9.1): it lands at the top and opens the overlay at their card.
- * Inside the overlay the Room shows its own. `H.arrive` once, as it lands.
- *
- * ponytail: the Room's ✓ capsule stands in for P4's InAppBanner (kind "wave")
- * until that lands on dev; swap the component, keep the wiring.
+ * R3 and D · 9.1): the wave banner lands at the top ("Night Cat waved at you ·
+ * Vinyl Night · now", their creature) and opens the overlay at their card.
+ * Inside the overlay the Room shows its own ✓ capsule. `H.arrive` once, as it
+ * lands (the banner's). One banner per wave, keyed by it.
  */
-function WaveFromTheTabs() {
+function WaveFromTheTabs({ room }: { room: string | null }) {
   const blendnOpen = useBlendnOpen()
   const { latest } = useRoomWaves()
   if (blendnOpen || !latest) return null
   return (
-    <WaveToast
+    <InAppBanner
       key={`${latest.fromUserId}:${latest.at}`}
-      wave={latest}
-      onOpen={() => openBlendn(latest.fromUserId)}
-      onDone={() => waveShown(latest)}
+      kind="wave"
+      visual={{ type: 'creature', pseudonym: latest.fromName }}
+      title={`${latest.fromName} waved at you`}
+      context={room ? `${room} · now` : 'now'}
+      onPress={() => {
+        // Shown here: the Room must not toast it again as the overlay opens on their card.
+        waveShown(latest)
+        openBlendn(latest.fromUserId)
+      }}
+      onDismiss={() => waveShown(latest)}
+      testID="wave-banner"
     />
+  )
+}
+
+/** The room you're checked into, by title, for the wave banner's context line. Written by the bar's poll. */
+let activeRoomTitle: string | null = null
+const roomTitleListeners = new Set<() => void>()
+function setActiveRoomTitle(title: string | null) {
+  if (title === activeRoomTitle) return
+  activeRoomTitle = title
+  for (const fn of roomTitleListeners) fn()
+}
+function useActiveRoomTitle() {
+  return useSyncExternalStore(
+    (fn) => {
+      roomTitleListeners.add(fn)
+      return () => {
+        roomTitleListeners.delete(fn)
+      }
+    },
+    () => activeRoomTitle
   )
 }
 
 export default function TabLayout() {
   const blendnOpen = useBlendnOpen()
+  const activeRoom = useActiveRoomTitle()
   return (
     <View style={styles.host}>
     {/*
@@ -269,7 +299,7 @@ export default function TabLayout() {
           <BlendnScreen />
         </View>
       ) : null}
-      <WaveFromTheTabs />
+      <WaveFromTheTabs room={activeRoom} />
     </View>
   )
 }

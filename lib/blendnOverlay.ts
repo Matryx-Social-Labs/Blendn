@@ -1,5 +1,7 @@
 import { useSyncExternalStore } from 'react'
 
+import type { TonightEvent } from './useTonight'
+
 /**
  * Whether the Blend'n screen is open.
  *
@@ -23,6 +25,13 @@ import { useSyncExternalStore } from 'react'
 let open = false
 /** A PersonCard to open once the Room is there: a wave's banner opens the overlay at its sender (SCRUM-630). */
 let pendingPerson: string | null = null
+/**
+ * The pass to dock, asked for by an event's own "Blend in" (Flow 3 Discovery
+ * #04–#06): Tonight docks this event's VenuePass whether or not the fence says
+ * you're inside — the server is the gate, and outside it says "Not quite there
+ * yet". Kept while the overlay is open.
+ */
+let door: TonightEvent | null = null
 const listeners = new Set<() => void>()
 
 function notify() {
@@ -42,6 +51,25 @@ export function openBlendn(personId?: string): void {
     if (open) notify()
   }
   set(true)
+}
+
+/**
+ * Open the overlay at an event's pass: the only way an event page checks you
+ * in. From a pushed screen, get back to the tabs first (the overlay is under
+ * the root stack).
+ */
+export function openPass(event: TonightEvent): void {
+  door = event
+  if (open) notify()
+  set(true)
+}
+
+export function getDoor(): TonightEvent | null {
+  return door
+}
+
+export function useDoor(): TonightEvent | null {
+  return useSyncExternalStore(subscribe, getDoor, getDoor)
 }
 
 /** The card the overlay was asked to open at, once: reading it clears it. */
@@ -71,6 +99,7 @@ export function isLiveHint(): boolean {
 /** Called by the overlay once its closing transition has finished. */
 export function blendnClosed(): void {
   pendingPerson = null
+  door = null
   set(false)
 }
 

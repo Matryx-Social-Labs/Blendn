@@ -31,15 +31,12 @@ import ActionTray, { type ActionTrayButton } from '../ActionTray';
 import { showSheet } from '../../lib/sheet'
 import { useSingleFlight } from '../../lib/useSingleFlight'
 import { SkeletonBlock } from '../Skeleton';
-import { getDistanceMetres } from '../../lib/geo'
 import { liveWindow, sessionFromApi, type EventSession } from '../../lib/eventSession'
 import { featuredDateLabel, timeLabel as pulseTimeLabel } from '../../lib/pulse'
-import { useCheckInFlow } from '../../lib/useCheckInFlow'
-import { MomentPour } from '../ds/MomentPour'
 import { subscribeCheckInChanged } from '../../lib/checkIn'
 import { openInMaps as openPlaceInMaps } from '../../lib/openInMaps'
 import { addToCalendar } from '../../lib/calendar'
-import { openBlendn } from '../../lib/blendnOverlay'
+import { openBlendn, openPass } from '../../lib/blendnOverlay'
 import { useToast } from '../Toast'
 import { amenityTiles, type ServerAmenity } from '../../lib/amenityTile'
 import { eventDetailBlocks, type ServerEventDetails } from '../../lib/eventDetails'
@@ -252,7 +249,6 @@ export default function EventDetail() {
   const [hereNow, setHereNow] = useState<number | null>(null)
   // Don't show loading skeleton if we have params - show content immediately
   const [loading, setLoading] = useState(!hasParams)
-  const [userLocation, setUserLocation] = useState<{latitude: number, longitude: number} | null>(null)
   // Initialize from params for instant display
   const [checkInCount, setCheckInCount] = useState(0)
   const [goingCount, setGoingCount] = useState(0)
@@ -274,7 +270,6 @@ export default function EventDetail() {
    * event they had no seat at.
    */
   const [rsvpStatus, setRsvpStatus] = useState<RsvpStatus | null>(null)
-  const [eventChatGroupId, setEventChatGroupId] = useState<string | null>(null)
   const [showMapImage, setShowMapImage] = useState(false)
   const [trayState, setTrayState] = useState<EventDetailTrayState>({
     visible: false,
@@ -283,7 +278,6 @@ export default function EventDetail() {
     buttons: [],
   })
   const lastFetchRef = React.useRef<number>(0)
-  const [actionStage, setActionStage] = useState<'blend' | 'checked' | 'chat'>('blend')
   const [isOrganizer, setIsOrganizer] = useState(false)
   const [showAnnouncementModal, setShowAnnouncementModal] = useState(false)
   /** Which gallery item the lightbox is on, or null when it is closed. */
@@ -306,40 +300,6 @@ export default function EventDetail() {
       buttons: buttons && buttons.length > 0 ? buttons : [{ label: 'Done', variant: 'primary', onPress: closeTray }],
     })
   }, [closeTray])
-
-  // Above the effects that call them: React Compiler rejects a closure that
-  // reads a binding before its declaration.
-  const checkProximityStatus = async () => {
-    if (!userLocation || !event) return
-
-    try {
-      Logger.journey('proximity', 'detail:check:start', { eventId: event.id, lat: userLocation.latitude, lon: userLocation.longitude })
-      if (!user) return
-
-      // Calculate distance client-side for now
-      // TODO: Add proximity check API endpoint if needed
-      const distance = getDistanceMetres(
-        userLocation.latitude,
-        userLocation.longitude,
-        event.latitude,
-        event.longitude
-      )
-
-      /*
-       * Logged, not stored.
-       *
-       * `proximityStatus` was written here and read by nothing -- the old
-       * render showed a distance readout, the frame has none, and the CTA
-       * derives availability from the clock while the server re-validates the
-       * GPS on the actual check-in. Keeping the journey log: it is how a failed
-       * check-in gets diagnosed after the fact.
-       */
-      const isNearby = distance <= (event.check_in_radius || 100)
-      Logger.journey('proximity', 'detail:check:success', { distance, isNearby })
-    } catch (error) {
-      Logger.error('events', 'detail:check:exception', { error: error as any })
-    }
-  }
 
   /*
    * The detail payload (camelCase, or snake_case from an older cache entry)
@@ -390,9 +350,6 @@ export default function EventDetail() {
       // side of the doors -- see `attendeeBlock` below.
       setCheckInCount(d.stats.checkInCount || 0)
       setGoingCount(d.stats.rsvpCount || 0)
-    }
-    if (d.chatGroup?.id) {
-      setEventChatGroupId(d.chatGroup.id)
     }
     // Determine if current user is the organizer
     if (user && d.organizer?.id) {
@@ -500,16 +457,6 @@ export default function EventDetail() {
       task?.cancel?.()
     }
   }, [id])
-
-  useEffect(() => {
-    // Check proximity when user location changes
-    if (userLocation && event) {
-      checkProximityStatus()
-    }
-    // checkProximityStatus is redefined every render; only the listed values
-    // should trigger a proximity check.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userLocation, event])
 
   // Real-time event updates via Socket.io
   useEffect(() => {
@@ -909,77 +856,36 @@ export default function EventDetail() {
     }
   }, [id, isLive, checkInCount])
 
-  const eventTitle = event?.title
-  /**
-   * `push` from the check-in's hand-off: this screen stays mounted under the
-   * chat, so the pour clearing and the CTA settling after it never land in a
-   * screen that is being replaced (Android: "addViewAt … already has a
-   * parent", driven on #389). The CTA's own tap still replaces.
-   */
-  const openEventChat = useCallback(async (how: 'push' | 'replace' = 'replace') => {
-    try {
-      let chatId = eventChatGroupId
-      let chatName = eventTitle || 'Event Chat'
-
-      if (!chatId && id) {
-        const chatResult = await apiClient.getEventChat(String(id))
-        if (chatResult.success && chatResult.data?.chatGroupId) {
-          chatId = chatResult.data.chatGroupId
-          chatName = chatResult.data.chatGroupName || chatName
-        }
-      }
-
-      if (chatId) {
-        const query = `?roomName=${encodeURIComponent(chatName)}&eventTitle=${encodeURIComponent(eventTitle || '')}`
-        router[how](`/chat/${chatId}${query}` as any)
-        return
-      }
-    } catch (err) {
-      Logger.warn('events', 'openEventChat:failed', { error: err as any })
-    }
-
-    router[how]('/(tabs)/chat' as any)
-  }, [eventChatGroupId, eventTitle, id])
-
-  // The check-in itself, shared with the Blend'n room's hold-to-check-in.
-  const { checkingIn, pours, pourDone, asks, dismissTray, start: startCheckIn } = useCheckInFlow({
-    eventId: String(id),
-    showTray,
-    closeTray,
-    onLocated: setUserLocation,
-    onOpenMaps: openInMaps,
-    // Last, after the pour and its questions: this screen is not the room, its chat is.
-    onEnterRoom: () => openEventChat('push'),
-    // Update check-in status directly - no need for another API call
-    onCheckedIn: (outcome) =>
-      setCheckInStatus(
-        outcome.kind === 'checkedIn'
-          ? { success: true, checked_in: true, check_in_id: outcome.checkInId }
-          : { success: true, checked_in: true }
-      ),
-  })
 
   /*
-   * Checking in morphs the CTA: 'checked' at once, 'chat' 900ms later; checking
-   * out puts it back to 'blend'. The immediate step is taken during render when
-   * `isCheckedIn` changes; the effect owns only the delayed one. Starts from
-   * `false` because `actionStage` starts at 'blend', so a screen that mounts
-   * checked in still goes through 'checked'.
+   * The check-in is the pass's (Flow 3 Discovery #04–#06, Flow 4): "Blend in"
+   * opens this event's VenuePass in the Blend'n overlay, whose hold is the one
+   * check-in in the app; outside the fence the server refuses it there ("Not
+   * quite there yet"). Once checked in the CTA reads "You're in" and leads to
+   * the Room. Back to the tabs first: the overlay is under the root stack.
    */
-  const [stageCheckedIn, setStageCheckedIn] = useState(false)
-  if (stageCheckedIn !== isCheckedIn) {
-    setStageCheckedIn(isCheckedIn)
-    setActionStage(isCheckedIn ? 'checked' : 'blend')
+  const toTheOverlay = (open: () => void) => {
+    router.dismissTo('/(tabs)/events')
+    open()
   }
-
-  useEffect(() => {
-    if (!isCheckedIn) return
-    const timeout = setTimeout(() => {
-      setActionStage('chat')
-    }, 900)
-    return () => clearTimeout(timeout)
-  }, [isCheckedIn])
-
+  const openThisPass = () =>
+    event &&
+    toTheOverlay(() =>
+      openPass({
+        id: String(id),
+        title: event.title,
+        venue: event.venue_name,
+        photo: event.cover_image_url ?? null,
+        startsAt: event.start_time,
+        endsAt: event.end_time,
+        distanceKm: null,
+        hereCount: checkInCount,
+        capacity: null,
+        going: rsvpStatus === 'going',
+        tasteMatchCount: null,
+        goingCount: null,
+      })
+    )
 
   /*
    * Nothing after the end is disabled. Every other post-doors state routes
@@ -987,7 +893,6 @@ export default function EventDetail() {
    * the event is over — leaving it in charge here would disable the button for
    * anyone who had checked in, which is precisely everyone `rate` exists for.
    */
-  const primaryActionDisabled = isEnded ? false : checkingIn || actionStage === 'checked'
   const primaryActionPress = () => {
     /*
      * The night is over and you were here. `PLACEHOLDER_SCREENS.md` asks for
@@ -1008,23 +913,19 @@ export default function EventDetail() {
      * this page.
      */
     if (isEnded) {
-      router.dismissTo('/(tabs)/events')
-      openBlendn()
+      toTheOverlay(openBlendn)
       return
     }
-    if (checkingIn) return
     // Before the doors, the button is the RSVP and its own off-switch.
     if (!isCheckedIn && !hasStarted) {
       void handleToggleRsvp()
       return
     }
     if (!isCheckedIn) {
-      void startCheckIn()
+      openThisPass()
       return
     }
-    if (actionStage === 'chat') {
-      openEventChat()
-    }
+    toTheOverlay(openBlendn)
   }
 
 
@@ -1133,7 +1034,7 @@ export default function EventDetail() {
   const ctaIcon =
     ctaState === 'ended'
       ? 'arrow-forward'
-      : ctaState === 'rsvpd' ? 'checkmark' : actionStage === 'chat' ? 'chatbubbles-outline' : 'radio-outline'
+      : ctaState === 'rsvpd' ? 'checkmark' : 'radio-outline'
 
   /*
    * The Pulse's words for a date — "Today", "Tomorrow", "Oct 24" — so a card
@@ -1435,15 +1336,9 @@ export default function EventDetail() {
           <SceneCTA
             state={ctaState}
             alone={checkInCount <= 1}
-            onPress={primaryActionDisabled ? undefined : primaryActionPress}
-            iconKey={checkingIn ? 'busy' : ctaIcon}
-            icon={(color) =>
-              checkingIn ? (
-                <ActivityIndicator size="small" color={color} />
-              ) : (
-                <Ionicons name={ctaIcon} size={SCENE_CTA_ICON} color={color} />
-              )
-            }
+            onPress={primaryActionPress}
+            iconKey={ctaIcon}
+            icon={(color) => <Ionicons name={ctaIcon} size={SCENE_CTA_ICON} color={color} />}
           />
         </View>
       </View>
@@ -1615,14 +1510,13 @@ export default function EventDetail() {
         </View>
       </Modal>
 
-      {pours > 0 ? <MomentPour key={pours} venue={event?.venue_name ?? ''} asks={asks} onDone={pourDone} /> : null}
 
       <ActionTray
         visible={trayState.visible}
         title={trayState.title}
         message={trayState.message}
         buttons={trayState.buttons}
-        onClose={dismissTray}
+        onClose={closeTray}
       />
     </View>
   )

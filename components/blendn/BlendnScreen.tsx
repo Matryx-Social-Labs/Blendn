@@ -5,8 +5,8 @@ import Animated, { Easing, FadeIn, FadeInUp, FadeOut } from 'react-native-reanim
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { apiClient } from '../../lib/apiClient'
-import { blendnClosed, isLiveHint, takePendingPerson, usePendingPerson } from '../../lib/blendnOverlay'
-import { crewsThatMayLikePeople, likeAs, crewMessage, type BlendRef } from '../../lib/crews'
+import { blendnClosed, isLiveHint, openPass, takePendingPerson, useDoor, usePendingPerson } from '../../lib/blendnOverlay'
+import { crewsThatMayLikePeople, crewMessage, type BlendRef, type CrewsAtEvent } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
 import { COLOR, DURATION, EASING, FONT_FAMILY, PRESS, RADIUS, REDUCE_MOTION, SIZE, SPACE } from '../../lib/design/tokens'
 import type { TrayButton, TrayExtra } from '../../lib/locationFix'
@@ -17,13 +17,14 @@ import { markRoomLeft } from '../../lib/roomMembership'
 import { roomRecap, type RoomRecap as Recap } from '../../lib/roomRecap'
 import { newestWave, useRoomWaves, wavedAtYouLabel, waveShown } from '../../lib/roomWaves'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
+import { showSheet } from '../../lib/sheet'
 import { useAuth } from '../../lib/useAuth'
 import { useCheckInFlow } from '../../lib/useCheckInFlow'
 import { useLatest } from '../../lib/useLatest'
 import { useRoom, type RoomPerson } from '../../lib/useRoom'
 import { useRoomControls } from '../../lib/useRoomControls'
 import { useTonight } from '../../lib/useTonight'
-import { chooseCrew, crewCards, openBlend, useCrewActions, useCrewsHere } from '../crews/CrewsView'
+import { crewCards, openBlend, useCrewActions, useCrewsHere } from '../crews/CrewsView'
 import { VisibilityBanner, type Visibility } from '../ds/Banner'
 import type { Face } from '../ds/Facepile'
 import { IconButton } from '../ds/IconButton'
@@ -67,6 +68,23 @@ export function openerFor(p: RoomPerson): string {
 /** A Blend just made (Flow 10 · 10.8): both sides, as the moment draws them, and where it opens. */
 type Sides = { ours: BlendCrew; theirs: BlendCrew | BlendPerson } | { ours: BlendPerson; theirs: BlendCrew }
 type MadeBlend = { sides: Sides; ref: BlendRef; title: string }
+
+/** Ask who a like goes out as: a crew id, null for "Just me", undefined when they cancel. */
+function chooseAs(crews: CrewsAtEvent['myCrews'], title: string): Promise<string | null | undefined> {
+  return new Promise((resolve) =>
+    showSheet({
+      kind: 'actions',
+      title,
+      message: 'Your crew chat says who liked on its behalf.',
+      onDismiss: () => resolve(undefined),
+      actions: [
+        ...crews.map((c) => ({ label: c.name, then: () => resolve(c.crewId) })),
+        { label: 'Just me', then: () => resolve(null) },
+        { label: 'Cancel', cancel: true as const },
+      ],
+    })
+  )
+}
 
 type Tray = { visible: boolean; title: string; message: string; buttons: TrayButton[]; extra?: TrayExtra }
 const NO_TRAY: Tray = { visible: false, title: '', message: '', buttons: [] }
@@ -147,7 +165,14 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
     [closeTray]
   )
 
-  const insideEvent = tonight.events.find((e) => e.id === tonight.insideEventId) ?? null
+  /*
+   * The pass Tonight docks: the event an event page's "Blend in" asked for
+   * (Flow 3 #04–#06; the server is the gate, so it docks inside the fence or
+   * not), else the one whose fence you're standing in. Tonight's own copy of
+   * it wins when it has one: its counts are live.
+   */
+  const door = useDoor()
+  const insideEvent = (door ? (tonight.events.find((e) => e.id === door.id) ?? door) : tonight.events.find((e) => e.id === tonight.insideEventId)) ?? null
   /*
    * The Room is there to hand off to: loaded, or waited for long enough.
    * ponytail: a fixed ceiling, so a room that doesn't load straight after the
@@ -203,11 +228,14 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   // --- your controls in the room --------------------------------------------
   const controls = useRoomControls(room.event?.id ?? null, room.revealed)
   const [confirmingOut, setConfirmingOut] = useState(false)
+  /*
+   * The confirm closes first: a failure ("Couldn't check you out") is a toast,
+   * and a toast under a sheet is one nobody sees. `checkOut` is single-flight
+   * (`useRoomControls`); the overlay closes only once it stands.
+   */
   const checkOut = useCallback(async () => {
-    if (await controls.checkOut()) {
-      setConfirmingOut(false)
-      onClose()
-    }
+    setConfirmingOut(false)
+    if (await controls.checkOut()) onClose()
   }, [controls, onClose])
 
   const eventId = room.event?.id ?? null
@@ -226,15 +254,33 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   const crews = useCrewsHere(mode === 'room' ? eventId : null)
   const myCrewsHere = crews.state.status === 'ready' ? crews.state.data.myCrews : []
   const soloCrews = crewsThatMayLikePeople(myCrewsHere, crews.mine ?? [])
-  /** The Liking-as chip's choice: a crew id, null for "Just me", undefined to let the like decide. */
-  const [likingAsId, setLikingAsId] = useState<string | null | undefined>(undefined)
-  const defaultAs = likeAs(myCrewsHere)
-  const likingAsCrewId = likingAsId !== undefined ? likingAsId : defaultAs.as === 'crew' ? defaultAs.crewId : defaultAs.as === 'choose' ? myCrewsHere[0]?.crewId ?? null : null
-  const likingAsCrew = myCrewsHere.find((c) => c.crewId === likingAsCrewId) ?? null
+  /*
+   * Who a like goes out as. `likingAs` is the person's own choice: a crew id,
+   * null for "Just me", undefined before they make one. The app never picks a
+   * crew for somebody (lib/crews.ts): with one crew here that crew is the
+   * answer, with several the like asks, and the answer becomes the choice.
+   * Every label (the chip, "Like for {crew}", "Liked for {crew}") and every
+   * request reads these same values.
+   */
+  const [likingAs, setLikingAs] = useState<string | null | undefined>(undefined)
+  const chosen = likingAs === undefined ? undefined : likingAs === null ? null : (myCrewsHere.find((c) => c.crewId === likingAs) ?? undefined)
+  /** For a crew card: a crew, null (you), or 'ask'. */
+  const crewCardAs = chosen !== undefined ? chosen : myCrewsHere.length === 0 ? null : myCrewsHere.length === 1 ? myCrewsHere[0] : 'ask'
+  /** For a person: the crew that may like people as it, null (you), or 'ask' (several may). */
+  const personAs =
+    chosen === null
+      ? null
+      : chosen !== undefined
+        ? (soloCrews.find((c) => c.crewId === chosen.crewId) ?? null)
+        : soloCrews.length === 0
+          ? null
+          : soloCrews.length === 1
+            ? soloCrews[0]
+            : 'ask'
   const emblemOf = (crewId: string) => crews.mine?.find((m) => m.crewId === crewId)?.emblemSeed ?? crewId
   const [blend, setBlend] = useState<MadeBlend | null>(null)
   const crewActions = useCrewActions(eventId, crews, {
-    likeAsCrewId: likingAsId,
+    likeAsCrewId: crewCardAs === 'ask' ? undefined : (crewCardAs?.crewId ?? null),
     onBlend: (ref, card, asCrewId) => {
       const ours = myCrewsHere.find((c) => c.crewId === asCrewId)
       const theirs: BlendCrew = { kind: 'crew', name: card.name, emblemSeed: card.emblemSeed, count: card.presentCount }
@@ -247,10 +293,11 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
       })
     },
   })
-  const chooseLikingAs = async () => {
-    if (myCrewsHere.length === 0) return
-    const id = await chooseCrew(myCrewsHere, 'Liking as…')
-    if (id) setLikingAsId(id)
+  /** The chip's menu: your crews here and "Just me". Cancel changes nothing. */
+  const chooseLikingAs = async (among = myCrewsHere, title = 'Liking as…') => {
+    const answer = await chooseAs(among, title)
+    if (answer !== undefined) setLikingAs(answer)
+    return answer
   }
   const showSegments = crews.state.status === 'ready' && (crews.state.data.crews.length > 0 || myCrewsHere.length > 0 || (crews.mine?.length ?? 0) > 0)
   /** One like on a crew's behalf at a time: a fast second tap sends nothing. */
@@ -258,13 +305,40 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
 
   // --- people ---------------------------------------------------------------
   const [open, setOpen] = useState<OpenCard | null>(null)
+  /** The card as last opened: it keeps its person while it sinks, rather than emptying mid-exit. */
+  const [shownCard, setShownCard] = useState<OpenCard | null>(null)
+  if (open && open !== shownCard) setShownCard(open)
+  const card = open ?? shownCard
   const [connectTo, setConnectTo] = useState<OpenCard | null>(null)
   const [connecting, setConnecting] = useState(false)
   /** Waves you sent: on their way, or settled to "Waved" (a repeat inside ten minutes is "Waved" too). */
   const [sent, setSent] = useState<Record<string, 'busy' | 'waved'>>({})
-  /** A like or wave the server refused, said on that person's card (R3-D4 4.3). */
+  /** A like or wave the server refused, said on that person's card (R3-D4 4.3), until the next try or the card closes. */
   const [refusals, setRefusals] = useState<Record<string, { text: string; checkIn?: boolean }>>({})
-  const openPerson = open ? (room.people.find((p) => p.id === open.id) ?? null) : null
+  const forget = (id: string) =>
+    setRefusals((r) => {
+      if (!r[id]) return r
+      const next = { ...r }
+      delete next[id]
+      return next
+    })
+  const cardPerson = card ? (room.people.find((p) => p.id === card.id) ?? null) : null
+  /*
+   * What waits for the card to have left: Block / Report, the ConnectSheet, a
+   * crew chooser. iOS drops a Modal presented while another is still leaving,
+   * so a safety sheet opened in the same tick could silently not appear.
+   */
+  const afterCard = useRef<(() => void) | null>(null)
+  const closeCardThen = (next: () => void) => {
+    afterCard.current = next
+    setOpen(null)
+  }
+  const cardGone = () => {
+    setShownCard(null)
+    const next = afterCard.current
+    afterCard.current = null
+    next?.()
+  }
 
   // A wave's banner on the tabs opens the overlay at their card.
   const pending = usePendingPerson()
@@ -279,17 +353,21 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   const openCard = useCallback((p: OpenCard) => setOpen({ id: p.id, name: p.name }), [])
   const like = useCallback(
     async (p: RoomPerson) => {
+      forget(p.id)
       const answer = await room.like(p.id)
       if (answer.kind !== 'refused') return
       // The card's one neutral line when it is open on them; a toast when the like was a double tap (R3-D4 4.3). No haptic.
       if (open?.id === p.id) setRefusals((r) => ({ ...r, [p.id]: { text: answer.refusal.message, checkIn: answer.refusal.checkIn } }))
       else say(answer.refusal.message)
     },
+    // `forget` only sets state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [room, open?.id, say]
   )
   const wave = useCallback(
     async (id: string) => {
       if (sent[id]) return
+      forget(id)
       setSent((w) => ({ ...w, [id]: 'busy' }))
       const answer = await room.sendWave(id)
       if (answer.kind === 'refused') {
@@ -303,6 +381,8 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
       }
       setSent((w) => ({ ...w, [id]: 'waved' }))
     },
+    // `forget` only sets state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [room, sent]
   )
   const openProfile = useCallback(
@@ -324,13 +404,8 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
       params: { conversationId, otherUserName: p.name, otherUserId: p.id, ...(draft ? { draft } : {}) } as never,
     })
   }, [])
-  const safety = useCallback(
-    (p: OpenCard) => {
-      setOpen(null)
-      showUserSafetyActions(p.name, p.id, () => room.remove(p.id), () => room.remove(p.id))
-    },
-    [room]
-  )
+  /** Block and Report, once the card has left (`closeCardThen`). Either removes them, and their waves, from this room. */
+  const safety = (p: OpenCard) => closeCardThen(() => showUserSafetyActions(p.name, p.id, () => room.remove(p.id), () => room.remove(p.id)))
   /*
    * A like on your crew's behalf. The answer is `{ liked: true }` whatever the
    * server learned about them, so all this may say is that the like went,
@@ -340,7 +415,6 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
     if (!eventId || likingForCrew.current) return
     likingForCrew.current = true
     try {
-      setOpen(null)
       const result = await crewsApi.likePersonAsCrew(eventId, p.id, crewId)
       if (!result.success || !result.data) {
         say(crewMessage(result, 'card', 'Couldn’t send the like. Try again.'), 'error')
@@ -359,20 +433,49 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
     }
   }
   /*
-   * The crew "Like for {crew}" names is the crew the like is sent as: one
-   * value, read by the button and the request alike. "Just me" (null) is never
-   * a crew; a chosen crew that may not like people (closed to solo, or too
-   * big) leaves the plain Like, which is you. With no choice yet, your one
-   * crew here that may.
+   * The card's crew like. A definite crew likes as it; 'ask' closes the card,
+   * asks (your crews that may like people, and "Just me"), and the answer is
+   * both this like and the choice from now on.
    */
-  const crewForCard =
-    likingAsId === null
-      ? null
-      : likingAsId !== undefined
-        ? (soloCrews.find((c) => c.crewId === likingAsId) ?? null)
-        : soloCrews.length === 1
-          ? soloCrews[0]
-          : (soloCrews.find((c) => c.crewId === likingAsCrewId) ?? null)
+  const cardCrewLike = (p: RoomPerson) => {
+    if (personAs === 'ask') {
+      closeCardThen(() => {
+        void chooseLikingAs(soloCrews, `Like ${p.name} as…`).then((answer) => {
+          if (answer === null) void like(p)
+          else if (answer) void likeForCrew(p, answer)
+        })
+      })
+      return
+    }
+    if (personAs) closeCardThen(() => void likeForCrew(p, personAs.crewId))
+  }
+  /** The grid's double tap likes as the card would; when the card would ask, a double tap just opens it. */
+  const doubleTapLike = personAs === 'ask' ? null : personAs ? (p: RoomPerson) => void likeForCrew(p, personAs.crewId) : (p: RoomPerson) => void like(p)
+  /*
+   * "Check in" beside a lapsed check-in (R3-D4 4.3): back to the pass. This
+   * room's event is docked as the door and the room re-read; once the server
+   * says you're out, Tonight shows that pass to hold.
+   */
+  const checkInAgain = () => {
+    setOpen(null)
+    if (room.event) {
+      openPass({
+        id: room.event.id,
+        title: room.event.title,
+        venue: '',
+        photo: null,
+        startsAt: room.event.startsAt ?? '',
+        endsAt: room.event.endsAt ?? '',
+        distanceKm: null,
+        hereCount: room.hereCount,
+        capacity: null,
+        going: true,
+        tasteMatchCount: null,
+        goingCount: null,
+      })
+    }
+    void room.refresh()
+  }
 
   // --- the room chat ----------------------------------------------------------
   const openChat = useCallback(async () => {
@@ -416,8 +519,10 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   const visibility: Visibility = !controls.listed ? 'hidden' : controls.revealed ? 'named' : controls.readiness.ok ? 'anon' : 'blocked'
 
   // --- the card's variant and state ------------------------------------------------
-  const cardVariant: PersonVariant = !openPerson ? 'thin' : openPerson.matched ? 'matched' : openPerson.insideNow ? 'here' : 'was'
-  const refusal = open ? refusals[open.id] : undefined
+  const cardVariant: PersonVariant = !cardPerson ? 'thin' : cardPerson.matched ? 'matched' : cardPerson.insideNow ? 'here' : 'was'
+  const refusal = card ? refusals[card.id] : undefined
+  /** The chip shows a definite answer only: hidden while there is nothing to choose between (solo), or a like would still ask. */
+  const chipAs = crewCardAs === 'ask' || myCrewsHere.length === 0 ? undefined : crewCardAs
 
   return (
     <View style={styles.fill}>
@@ -442,6 +547,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
               <VisibilityBanner
                 state={visibility}
                 name={controls.revealed ? myName : (myPseudonym ?? 'yourself, anonymously')}
+                missing={controls.readiness.missing || undefined}
                 busy={controls.revealBusy}
                 onAction={
                   visibility === 'hidden'
@@ -463,14 +569,16 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
                   eventId={eventId}
                   checkInKey={room.checkedInAt ?? ''}
                   crews={crews}
-                  likingAs={likingAsCrew ? { name: likingAsCrew.name, emblemSeed: emblemOf(likingAsCrew.crewId) } : null}
+                  likingAs={chipAs === undefined ? undefined : chipAs ? { name: chipAs.name, emblemSeed: emblemOf(chipAs.crewId) } : null}
                   pseudonym={myPseudonym ?? myName}
                   onLikingAs={() => void chooseLikingAs()}
                 />
               ) : null
             }
             crewCards={crewCards(crews)}
-            renderCrew={(card, index) => <RoomCrewCard card={card} actions={crewActions} as={likingAsCrew?.name ?? null} index={index} />}
+            renderCrew={(crewCard, index) => (
+              <RoomCrewCard card={crewCard} actions={crewActions} as={crewCardAs && crewCardAs !== 'ask' ? crewCardAs.name : null} index={index} />
+            )}
             crewsFoot={<CrewsFoot crews={crews} />}
             picks={heldPicks}
             nextShuffleAt={shuffle.nextShuffleAt}
@@ -483,7 +591,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
             arrivingIds={arrivingIds}
             waveKeys={waveKeys}
             onOpen={openCard}
-            onLike={(p) => void like(p)}
+            onLike={doubleTapLike}
             chatGroupId={room.chatGroupId}
             myId={user?.id}
             dockWave={dockWave ? { kind: 'wave', id: `wave-${dockWave.fromUserId}`, fromUserId: dockWave.fromUserId, fromName: dockWave.fromName, at: dockWave.at } : null}
@@ -587,52 +695,43 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
 
       <PersonCard
         visible={open !== null}
-        onClose={() => setOpen(null)}
-        variant={cardVariant}
-        person={{
-          face: openPerson ? faceOf(openPerson) : { kind: 'creature', pseudonym: open?.name ?? '' },
-          name: openPerson?.name ?? open?.name ?? '',
-          age: openPerson?.age,
-          reason: openPerson ? (openPerson.matched ? 'You matched' : reasonLine(openPerson)) : undefined,
-          reasons: openPerson ? reasonLines(openPerson) : undefined,
-          chips: openPerson ? [...openPerson.interests.slice(0, 8), ...(openPerson.sign ? [openPerson.sign] : [])] : undefined,
-        }}
-        liked={!!openPerson && (openPerson.liked || openPerson.pending) && !openPerson.matched}
-        requested={!!openPerson?.requested}
-        waving={!!open && sent[open.id] === 'busy'}
-        waved={!!open && sent[open.id] === 'waved'}
-        wavedAtYou={open ? (wavedAtYouLabel(waves.received[open.id]?.at, now) ?? undefined) : undefined}
-        refusal={
-          refusal
-            ? {
-                text: refusal.text,
-                action: refusal.checkIn
-                  ? {
-                      label: 'Check in',
-                      onPress: () => {
-                        setOpen(null)
-                        void room.refresh()
-                      },
-                    }
-                  : undefined,
-              }
-            : undefined
-        }
-        crewLike={
-          openPerson && crewForCard && !openPerson.matched
-            ? { name: crewForCard.name, emblemSeed: emblemOf(crewForCard.crewId), onPress: () => void likeForCrew(openPerson, crewForCard.crewId) }
-            : undefined
-        }
-        onLike={() => openPerson && void like(openPerson)}
-        onWave={() => open && void wave(open.id)}
-        onMessage={() => {
-          if (!open) return
-          setConnectTo(open)
+        onClose={() => {
+          if (card) forget(card.id)
           setOpen(null)
         }}
-        onSayHi={() => openPerson?.conversationId && sayHi(openPerson.conversationId, openPerson)}
-        onMore={() => open && safety(open)}
-        onViewProfile={() => open && openProfile(open)}
+        onDismissed={cardGone}
+        variant={cardVariant}
+        person={{
+          face: cardPerson ? faceOf(cardPerson) : { kind: 'creature', pseudonym: card?.name ?? '' },
+          name: cardPerson?.name ?? card?.name ?? '',
+          age: cardPerson?.age,
+          reason: cardPerson ? (cardPerson.matched ? 'You matched' : reasonLine(cardPerson)) : undefined,
+          reasons: cardPerson ? reasonLines(cardPerson) : undefined,
+          chips: cardPerson ? [...cardPerson.interests.slice(0, 8), ...(cardPerson.sign ? [cardPerson.sign] : [])] : undefined,
+        }}
+        liked={!!cardPerson && (cardPerson.liked || cardPerson.pending) && !cardPerson.matched}
+        requested={!!cardPerson?.requested}
+        waving={!!card && sent[card.id] === 'busy'}
+        waved={!!card && sent[card.id] === 'waved'}
+        wavedAtYou={card ? (wavedAtYouLabel(waves.received[card.id]?.at, now) ?? undefined) : undefined}
+        refusal={refusal ? { text: refusal.text, action: refusal.checkIn ? { label: 'Check in', onPress: checkInAgain } : undefined } : undefined}
+        crewLike={
+          cardPerson && personAs && !cardPerson.matched
+            ? personAs === 'ask'
+              ? { name: 'your crew', onPress: () => cardCrewLike(cardPerson) }
+              : { name: personAs.name, emblemSeed: emblemOf(personAs.crewId), onPress: () => cardCrewLike(cardPerson) }
+            : undefined
+        }
+        onLike={() => cardPerson && void like(cardPerson)}
+        onWave={() => card && void wave(card.id)}
+        onMessage={() => {
+          if (!card) return
+          const to = card
+          closeCardThen(() => setConnectTo(to))
+        }}
+        onSayHi={() => cardPerson?.conversationId && sayHi(cardPerson.conversationId, cardPerson)}
+        onMore={() => card && safety(card)}
+        onViewProfile={() => card && openProfile(card)}
         testID="person-card"
       />
 

@@ -155,6 +155,12 @@ export function ChatDock({
           accessibilityRole="button"
           accessibilityLabel={label}
           accessibilityHint={waveRow ? 'Opens their card' : 'Opens the room chat'}
+          // While the row is a wave, the chat is still one action away (it is otherwise only the pull-up).
+          accessibilityActions={waveRow ? [{ name: 'activate' }, { name: 'openChat', label: 'Open room chat' }] : undefined}
+          onAccessibilityAction={(e) => {
+            if (e.nativeEvent.actionName === 'openChat') open()
+            else if (e.nativeEvent.actionName === 'activate' && waveRow) onOpenPerson((last as Extract<DockLine, { kind: 'wave' }>).fromUserId)
+          }}
           accessibilityLiveRegion="polite"
         >
           <Material role="bar" style={[styles.dock, contrast && IC_HAIRLINE]}>

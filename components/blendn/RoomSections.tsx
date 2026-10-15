@@ -203,9 +203,9 @@ export const RoomGridFace = memo(function RoomGridFace({
   arriving: boolean
   waveKey?: number
   onOpen: (p: RoomPerson) => void
-  onLike: (p: RoomPerson) => void
+  onLike: ((p: RoomPerson) => void) | null
 }) {
-  const likeable = !person.liked && !person.matched && !person.pending
+  const likeable = !!onLike && !person.liked && !person.matched && !person.pending
   return (
     <GridFace
       face={faceOf(person)}
@@ -216,7 +216,7 @@ export const RoomGridFace = memo(function RoomGridFace({
       liked={person.liked}
       matched={person.matched}
       onPress={() => onOpen(person)}
-      onLike={likeable ? () => onLike(person) : undefined}
+      onLike={likeable ? () => onLike?.(person) : undefined}
       arriving={arriving}
       waveKey={waveKey}
       testID={`room-face-${index}`}

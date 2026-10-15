@@ -80,8 +80,12 @@ describe("the room tells you when a like was refused", () => {
     .replace(/^\s*\/\/.*$/gm, "")
 
   it("surfaces the refusal instead of reverting in silence", () => {
+    // useRoom returns the sentence; the Room says it on the open card (R3-D4 4.3) or, off the card, as a toast.
     expect(code).toContain("likeRefusal(result.errorCode, result.error)")
-    expect(code).toMatch(/showToast\(refusal\.message, refusal\.variant\)/)
+    expect(code).toContain("return { kind: 'refused', refusal: likeRefusal(result.errorCode, result.error) }")
+    const screen = readFileSync(join(__dirname, "..", "components", "blendn", "BlendnScreen.tsx"), "utf8")
+    expect(screen).toContain("setRefusals((r) => ({ ...r, [p.id]: { text: answer.refusal.message, checkIn: answer.refusal.checkIn } }))")
+    expect(screen).toContain("else say(answer.refusal.message)")
   })
 
   it("keeps it a toast, not a tray", () => {

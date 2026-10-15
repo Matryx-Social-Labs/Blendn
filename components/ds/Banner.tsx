@@ -78,18 +78,18 @@ export function Banner({ kind, text, icon, action, busy = false, testID }: Banne
 export type Visibility = 'named' | 'anon' | 'hidden' | 'blocked'
 
 /** §12: each state its own icon and sentence. Revealing is gated on a name and photo; going anonymous never is. */
-const VISIBILITY: Record<Visibility, { icon: IconName; text: (name: string) => string; action: string }> = {
+const VISIBILITY: Record<Visibility, { icon: IconName; text: (name: string, missing: string) => string; action: (missing: string) => string }> = {
   named: {
     icon: 'eye',
     text: (name) => `You’re in this room as ${name}, with your photo. People here can see you.`,
-    action: 'Go anonymous',
+    action: () => 'Go anonymous',
   },
-  anon: { icon: 'eye-off', text: (name) => `You’re in this room as ${name}. Nobody here sees your name or photo.`, action: 'Show who I am' },
-  hidden: { icon: 'cloud-off', text: () => 'You’re not listed here. Show online status is off.', action: 'Turn it on' },
+  anon: { icon: 'eye-off', text: (name) => `You’re in this room as ${name}. Nobody here sees your name or photo.`, action: () => 'Show who I am' },
+  hidden: { icon: 'cloud-off', text: () => 'You’re not listed here. Show online status is off.', action: () => 'Turn it on' },
   blocked: {
     icon: 'eye-off',
-    text: (name) => `You’re in this room as ${name}. Add a photo to your profile first; that’s what other people would see.`,
-    action: 'Add a photo',
+    text: (name, missing) => `You’re in this room as ${name}. Add ${missing} to your profile first; that’s what other people would see.`,
+    action: (missing) => `Add ${missing}`,
   },
 }
 
@@ -100,19 +100,22 @@ const VISIBILITY: Record<Visibility, { icon: IconName; text: (name: string) => s
 export function VisibilityBanner({
   state,
   name,
+  missing = 'a photo',
   onAction,
   busy,
   testID,
 }: {
   state: Visibility
   name: string
+  /** Blocked: what a reveal still needs ("a photo", "a name", "a name and a photo"; `revealReadiness`). */
+  missing?: string
   onAction: () => void
   busy?: boolean
   testID?: string
 }) {
   const v = VISIBILITY[state]
   return (
-    <Banner kind="visibility" icon={v.icon} text={v.text(name)} action={{ label: v.action, onPress: onAction }} busy={busy} testID={testID} />
+    <Banner kind="visibility" icon={v.icon} text={v.text(name, missing)} action={{ label: v.action(missing), onPress: onAction }} busy={busy} testID={testID} />
   )
 }
 

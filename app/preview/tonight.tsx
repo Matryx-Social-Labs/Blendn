@@ -3,6 +3,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { RoomStage } from '../../components/blendn/RoomStage'
 import { TonightView } from '../../components/blendn/TonightView'
+import { SIZE, SPACE } from '../../lib/design/tokens'
 import type { TonightEvent } from '../../lib/useTonight'
 
 /**
@@ -32,6 +33,7 @@ const EVENTS: TonightEvent[] = [
     capacity: 80,
     going: true,
     tasteMatchCount: 4,
+    goingCount: 9,
   },
   {
     id: 'founders',
@@ -45,6 +47,7 @@ const EVENTS: TonightEvent[] = [
     capacity: 30,
     going: false,
     tasteMatchCount: null,
+    goingCount: 14,
   },
   {
     id: 'comedy',
@@ -58,6 +61,7 @@ const EVENTS: TonightEvent[] = [
     capacity: 120,
     going: false,
     tasteMatchCount: null,
+    goingCount: null,
   },
   {
     id: 'founders-2',
@@ -71,6 +75,7 @@ const EVENTS: TonightEvent[] = [
     capacity: 60,
     going: false,
     tasteMatchCount: 7,
+    goingCount: 31,
   },
 ]
 
@@ -84,13 +89,12 @@ export default function TonightPreview() {
         error={false}
         onRetry={() => {}}
         insideEvent={EVENTS[0]}
-        tasteMatchCount={4}
         checkingIn={false}
         onOpenEvent={() => {}}
         onSeeAll={() => {}}
         onBrowse={() => {}}
         onCheckIn={() => {}}
-        topInset={insets.top + 64}
+        topInset={insets.top + SPACE.sm + SIZE.circleButton + SPACE.lg + SPACE.xxs}
         bottomInset={insets.bottom}
       />
     </RoomStage>

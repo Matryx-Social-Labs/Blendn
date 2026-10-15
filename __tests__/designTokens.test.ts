@@ -71,7 +71,7 @@ describe('design tokens', () => {
 
   it('lets allowlisted files off the late rules only', () => {
     const src = 'const a = { opacity: 0.7, fontSize: 14 }'
-    const found = checkSource(src, 'app/preview/tonight.tsx').map((v: { message: string }) => v.message)
+    const found = checkSource(src, 'app/preview/profile.tsx').map((v: { message: string }) => v.message)
     expect(found).toEqual(['raw fontSize — use a TYPE role'])
   })
 

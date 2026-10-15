@@ -72,8 +72,8 @@ export function CrewsHead({
   /** The check-in this is about (its time): the switch is read once per check-in. */
   checkInKey: string
   crews: CrewsHereState
-  /** The crew a like goes out as, or null for "Just me". */
-  likingAs: { name: string; emblemSeed: string } | null
+  /** The crew a like goes out as, null for "Just me"; undefined hides the chip (nothing to choose, or a like would still ask). */
+  likingAs: { name: string; emblemSeed: string } | null | undefined
   /** Yours tonight, for "Just me"'s creature. */
   pseudonym: string
   onLikingAs: () => void
@@ -112,7 +112,7 @@ export function CrewsHead({
         count={ready ? state.data.total : undefined}
         testID="room-crews-head"
         right={
-          ready ? (
+          ready && likingAs !== undefined ? (
             <View style={styles.likingAs}>
               <Text style={[font('meta', bold), styles.secondary]}>Liking as</Text>
               <LikingAsChip crew={likingAs} pseudonym={pseudonym} onPress={onLikingAs} testID="room-liking-as" />
@@ -171,7 +171,8 @@ export function RoomCrewCard({
         compact
         crew={{ name: card.name, emblemSeed: card.emblemSeed, size: card.size, here: card.presentCount, bio: card.bio, tags: card.tags.map((t) => t.label) }}
         overlap={card.overlaps?.[0]?.text ?? null}
-        like={{ liked: card.youLiked, as, onPress: () => void actions.like(card) }}
+        // Liked: no crew named. Who sent it isn't known here, and the chip's current crew may not be it.
+        like={{ liked: card.youLiked, as: card.youLiked ? null : as, onPress: () => void actions.like(card) }}
         onMore={() => actions.report(card)}
         testID={`room-crew-${index}`}
       />

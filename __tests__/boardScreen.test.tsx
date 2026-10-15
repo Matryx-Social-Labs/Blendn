@@ -11,7 +11,7 @@ import { AccessibilityInfo } from 'react-native'
 const mockParams: Record<string, string> = {}
 const mockRedirect = jest.fn()
 jest.mock('expo-router', () => ({
-  router: { back: jest.fn(), push: jest.fn() },
+  router: { back: jest.fn(), push: jest.fn(), canDismiss: jest.fn(() => true), dismissAll: jest.fn() },
   useLocalSearchParams: () => mockParams,
   useFocusEffect: (effect: () => void) => {
     const { useEffect } = require('react')
@@ -153,7 +153,10 @@ describe('the two empty states', () => {
 
     expect(await screen.findByText("The board's closed")).toBeTruthy()
     await fireEvent.press(screen.getByLabelText('Open the room'))
-    expect(openBlendn).toHaveBeenCalled()
+    // To the tabs first: the overlay is under the root stack, so opened from here it was under the board (Flow 4 Board #14).
+    const { router } = jest.requireMock('expo-router') as { router: { dismissAll: jest.Mock } }
+    expect(router.dismissAll).toHaveBeenCalled()
+    expect(openBlendn).toHaveBeenCalledWith()
     expect(screen.queryByText(OFFER.body)).toBeNull()
   })
 

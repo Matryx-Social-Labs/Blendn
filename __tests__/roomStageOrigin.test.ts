@@ -10,14 +10,9 @@ jest.mock('../lib/socketClient', () => ({}))
 jest.mock('../components/blendn/BlendnScreen', () => ({ BlendnScreen: () => null }))
 jest.mock('expo-router/js-tabs', () => ({ Tabs: () => null }))
 
-import {
-  TAB_BAR_LINE,
-  TAB_BAR_PADDING_TOP,
-  tabBarBottomPadding,
-  tabBarTop,
-} from '../app/(tabs)/_layout'
+import { tabBarBottomGap, tabBarTop } from '../app/(tabs)/_layout'
 import { centreButtonOrigin } from '../components/blendn/RoomStage'
-import { CONTROL } from '../lib/theme'
+import { SIZE } from '../lib/design/tokens'
 
 /**
  * The Blend'n screen opens *out of* the centre button, so the disc must start
@@ -42,15 +37,14 @@ describe('centreButtonOrigin sits on the centre button', () => {
     const origin = centreButtonOrigin(width, height, inset)
     // Horizontally, the middle of the bar.
     expect(origin.x).toBe(width / 2)
-    // Vertically, the middle of the button's line — below the bar's top edge
-    // and its top padding, half a line down.
-    expect(origin.y).toBe(tabBarTop(height, inset) + TAB_BAR_PADDING_TOP + TAB_BAR_LINE / 2)
-    // Said the other way up: half a line above the bar's bottom padding.
-    expect(origin.y).toBe(height - tabBarBottomPadding(inset) - TAB_BAR_LINE / 2)
+    // Vertically, the middle of the 64 pt capsule the disc is centred in.
+    expect(origin.y).toBe(tabBarTop(height, inset) + SIZE.tabBar / 2)
+    // Said the other way up: half the capsule above its bottom gap.
+    expect(origin.y).toBe(height - tabBarBottomGap(inset) - SIZE.tabBar / 2)
   })
 
-  it('starts the disc at the button’s own size', () => {
-    // `RoomStage` scales the disc from `CONTROL.lg`; the line is the button.
-    expect(TAB_BAR_LINE).toBe(CONTROL.lg)
+  it('starts the circle at the disc’s own size', () => {
+    // `RoomStage` scales from `SIZE.disc`, centred in the capsule.
+    expect(SIZE.disc).toBeLessThanOrEqual(SIZE.tabBar)
   })
 })

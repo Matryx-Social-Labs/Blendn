@@ -60,7 +60,7 @@ export type PersonCardContentProps = {
    * "Like for {crew}" with its emblem, and "Like as yourself" (`onLike`) under
    * the row. The note says who they would see.
    */
-  crewLike?: { name: string; emblemSeed: string; onPress: () => void }
+  crewLike?: { name: string; emblemSeed?: string; onPress: () => void }
   onLike?: () => void
   onWave?: () => void
   /** The ConnectSheet: a request that reveals you; a friend's DM for a friend. */
@@ -275,7 +275,8 @@ export function PersonCardContent({
           ) : crewLike ? (
             <Button
               label={`Like for ${crewLike.name}`}
-              leading={<CrewEmblem seed={crewLike.emblemSeed} size={ICON.nav} />}
+              leading={crewLike.emblemSeed ? <CrewEmblem seed={crewLike.emblemSeed} size={ICON.nav} /> : undefined}
+              icon={crewLike.emblemSeed ? undefined : 'heart'}
               pressHaptic={false}
               accessibilityHint={`${name} sees ${crewLike.name}, never you, and only if they like back.`}
               onPress={() => {
@@ -336,7 +337,15 @@ export function PersonCardContent({
             </Text>
           </View>
         ) : (
-          <Button label="Message" kind="secondary" onGlass onPress={onMessage} style={styles.grow} testID={id('message')} />
+          <Button
+            label="Message"
+            kind="secondary"
+            onGlass
+            accessibilityHint={variant === 'friend' ? undefined : 'Sends a request, which shows them your name and photo.'}
+            onPress={onMessage}
+            style={styles.grow}
+            testID={id('message')}
+          />
         )}
 
         <View style={styles.end}>{circle('ellipsis', `Block or report ${name}`, onMore)}</View>
@@ -457,10 +466,16 @@ function TextAction({ label, onPress, testID }: { label: string; onPress?: () =>
  * on opening; it rises on `M.travel` (the Sheet). The face's travel from the
  * grid cell (#33) is the screen's.
  */
-export function PersonCard({ visible, onClose, testID, ...card }: PersonCardContentProps & { visible: boolean; onClose: () => void }) {
+export function PersonCard({
+  visible,
+  onClose,
+  onDismissed,
+  testID,
+  ...card
+}: PersonCardContentProps & { visible: boolean; onClose: () => void; onDismissed?: () => void }) {
   const head = useRef<ComponentRef<typeof View>>(null)
   return (
-    <Sheet visible={visible} onClose={onClose} detents={['medium', 'tall']} focusRef={head} testID={testID}>
+    <Sheet visible={visible} onClose={onClose} onDismissed={onDismissed} detents={['medium', 'tall']} focusRef={head} testID={testID}>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollBody}>
         <PersonCardContent {...card} onClose={onClose} headRef={head} testID={testID && `${testID}-card`} />
       </ScrollView>

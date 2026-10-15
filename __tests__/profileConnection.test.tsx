@@ -46,13 +46,11 @@ jest.mock('../components/grid/ConnectSheet', () => ({
       : null
   },
 }))
-jest.mock('../components/blendn/MatchMoment', () => ({
-  MatchMoment: (p: { visible: boolean; them: { name: string }; onSayHi: () => void }) => {
+jest.mock('../components/ds/MomentMatch', () => ({
+  MomentMatch: (p: { name: string; onSayHi: () => void }) => {
     const React = require('react')
     const { Pressable, Text } = require('react-native')
-    return p.visible
-      ? React.createElement(Pressable, { onPress: p.onSayHi }, React.createElement(Text, null, `You and ${p.them.name} matched`))
-      : null
+    return React.createElement(Pressable, { onPress: p.onSayHi }, React.createElement(Text, null, `You and ${p.name} matched`))
   },
 }))
 jest.mock('../components/profile/ProfileSections', () => {

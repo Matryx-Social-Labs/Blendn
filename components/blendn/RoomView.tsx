@@ -96,8 +96,8 @@ export type RoomViewProps = {
   /** Bumps per person when they wave at you (#51). */
   waveKeys: Readonly<Record<string, number>>
   onOpen: (p: RoomPerson) => void
-  onLike: (p: RoomPerson) => void
-  /** The chat dock. */
+  /** The double tap's like, or null when a like would have to ask first (then a double tap just opens the card). */
+  onLike: ((p: RoomPerson) => void) | null
   chatGroupId: string | null
   myId?: string
   dockWave: Extract<DockLine, { kind: 'wave' }> | null

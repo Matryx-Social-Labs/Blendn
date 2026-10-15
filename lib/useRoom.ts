@@ -618,7 +618,7 @@ export function useRoom(): RoomState & RoomActions {
     if (celebratedRef.current.has(next.conversationId)) return
     celebratedRef.current.add(next.conversationId)
     /*
-     * No haptic here. The match moment (`components/blendn/MatchMoment.tsx`)
+     * No haptic here. The match moment (`components/ds/MomentMatch.tsx`)
      * fires the success notification on the frame the last heart lands in
      * their face — the beat the animation builds to — and a second one as the
      * overlay rises would spend it early.
@@ -693,6 +693,8 @@ export function useRoom(): RoomState & RoomActions {
   const sendWave = useCallback(async (id: string): Promise<RoomAnswer<'sent' | 'too-soon'>> => {
     const roomId = eventRef.current?.id
     if (!roomId) return { kind: 'refused', refusal: likeRefusal('NOT_CHECKED_IN', undefined) }
+    // Only someone on the roster, as `like`: never a removed person, never an id from elsewhere.
+    if (!findAttendee(id)) return { kind: 'refused', refusal: likeRefusal('NOT_FOUND', undefined) }
     try {
       const result = await apiClient.sendWave(roomId, id)
       // No haptic on sending a wave: the hand's wiggle is the answer (ROUND3 #51).
@@ -703,7 +705,7 @@ export function useRoom(): RoomState & RoomActions {
       Logger.error('match', 'wave failed', { error: e })
       return { kind: 'refused', refusal: likeRefusal(undefined, undefined) }
     }
-  }, [])
+  }, [findAttendee])
 
   /**
    * A message request — the action that reveals you.

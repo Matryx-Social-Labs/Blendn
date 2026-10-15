@@ -95,13 +95,14 @@ describe("the entry point to peer rating", () => {
     expect(DETAIL).toMatch(/alone=\{checkInCount <= 1\}/)
     // Nothing after the end is disabled: `rate` rates, `ended` offers tonight.
     expect(CTA).toMatch(/const disabled = !onPress/)
-    expect(DETAIL).toMatch(/const primaryActionDisabled = isEnded \? false/)
+    // The CTA is never disabled now: a check-in is the pass's, so there is no busy state here (Flow 4).
+    expect(DETAIL).toMatch(/onPress=\{primaryActionPress\}/)
   })
 
   it("sends somebody who wasn't there to tonight, not to a dead pill", () => {
     const press = DETAIL.slice(DETAIL.indexOf("const primaryActionPress"))
     const rate = press.indexOf("'/rate/[eventId]'")
-    const tonight = press.indexOf("openBlendn()")
+    const tonight = press.indexOf("toTheOverlay(openBlendn)")
     // After the rate branch: attending wins.
     expect(rate).toBeGreaterThan(-1)
     expect(tonight).toBeGreaterThan(rate)
