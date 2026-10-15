@@ -2,7 +2,7 @@ import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
 import * as Clipboard from 'expo-clipboard'
 import * as Haptics from 'expo-haptics'
-import { router, Stack, useLocalSearchParams } from 'expo-router'
+import { router, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ActivityIndicator,
@@ -21,7 +21,7 @@ import { RoomGuidelinesBanner } from '../../components/chat/RoomGuidelinesBanner
 import { RoomLeftState } from '../../components/chat/RoomLeftState'
 import { ChatBubble } from '../../components/chat/ChatBubble'
 import { ChatComposer, type ComposerLock } from '../../components/chat/ChatComposer'
-import { ChatLoadFailed } from '../../components/chat/ChatLoadFailed'
+import { LoadError } from '../../components/LoadError'
 import { ReactionPicker } from '../../components/chat/ReactionPicker'
 import { SystemNotice } from '../../components/chat/SystemNotice'
 import { TypingIndicator, typingLabel } from '../../components/chat/TypingIndicator'
@@ -31,6 +31,7 @@ import { useToast } from '../../components/Toast'
 import { queryCache } from '../../lib/queryCache'
 import { emitChatListUpdate } from '../../lib/chatListUpdates'
 import { markDomainsDirty } from '../../lib/liveSyncState'
+import { withDaySeparators } from '../../lib/unreadDivider'
 import { apiClient, type ChatReaction } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import { subscribeToLiveEnded, subscribeToChatMessage, subscribeToChatTyping, subscribeToChatReaction, subscribeToChatMessageDeleted, subscribeToChatMemberBanned, subscribeToChatMemberLeft, rejoinChatSocket, startTyping, stopTyping, ChatMessageCallback, ChatTypingCallback, ChatReactionCallback, ChatMessageDeletedCallback, ChatMemberBannedCallback } from '../../lib/socketClient'
@@ -84,22 +85,6 @@ type ChatListItem =
 
 let _tempIdCounter = 0
 const MESSAGES_CACHE_TTL = 60 * 1000
-
-const toDayKey = (iso: string) => {
-  const d = new Date(iso)
-  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
-}
-
-const formatDayLabel = (iso: string) => {
-  const d = new Date(iso)
-  const today = new Date()
-  const yesterday = new Date(); yesterday.setDate(today.getDate() - 1)
-  const same = (a: Date, b: Date) =>
-    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
-  if (same(d, today)) return 'Today'
-  if (same(d, yesterday)) return 'Yesterday'
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: d.getFullYear() !== today.getFullYear() ? 'numeric' : undefined })
-}
 
 const formatTime = (iso: string) => {
   const d = new Date(iso)
@@ -900,16 +885,7 @@ function GroupChatInner() {
     else router.push(`/venue/${venueId}` as never)
   }
 
-  const chatItems: ChatListItem[] = React.useMemo(() => {
-    const items: ChatListItem[] = []
-    let lastDay: string | null = null
-    for (const m of messages) {
-      const day = toDayKey(m.created_at)
-      if (day !== lastDay) { items.push({ kind: 'separator', id: `sep-${day}`, label: formatDayLabel(m.created_at) }); lastDay = day }
-      items.push({ kind: 'message', ...m })
-    }
-    return items
-  }, [messages])
+  const chatItems: ChatListItem[] = React.useMemo(() => withDaySeparators(messages, (m) => m.created_at), [messages])
 
   const socketStatus = useLiveSync({
     enabled: !!chatRoomId && !!currentUser && !outside,
@@ -1080,7 +1056,6 @@ function GroupChatInner() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <Stack.Screen options={{ headerShown: false }} />
       <KeyboardAvoidingView style={styles.flex} behavior={KEYBOARD_BEHAVIOR}>
         <GroupChatHeader
             name={roomName || defaultRoomName(roomKind)}
@@ -1142,8 +1117,8 @@ function GroupChatInner() {
           ListEmptyComponent={loading ? null : loadError ? (
             // Not the empty state: an empty room and one that failed to load
             // are different facts, and only one of them is an invitation.
-            <ChatLoadFailed
-              what="this chat"
+            <LoadError
+              title="Couldn't load this chat"
               onRetry={() => {
                 setLoadError(false)
                 setLoading(true)
@@ -1254,21 +1229,6 @@ const styles = StyleSheet.create({
   // A text action: `label` in `textPrimary` (docs/DESIGN_SYSTEM.md).
   loadMoreText: { ...TYPE.label, color: EMBER.textPrimary },
   pressed: { opacity: OPACITY.pressed },
-
-  // System / announcement messages
-
-  // Messages
-
-
-
-
-  // Day separator
-
-  // Typing
-
-
-
-  // Input bar
 
   // Scroll to bottom
   scrollToBottomHit: { flex: 1, alignItems: 'center', justifyContent: 'center' },

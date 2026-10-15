@@ -6,6 +6,8 @@
  * disagree with, and a rule inside a `<Text>` is a rule nobody can test.
  */
 
+import { MONTHS, WEEKDAYS } from './time'
+
 /**
  * The heading over one day of the Upcoming list: "Today" / "Thursday".
  *
@@ -84,17 +86,7 @@ export function timeLabel(startTime: string): string {
  * around two and starts being vague.
  */
 export function featuredDateLabel(startTime: string, now: Date = new Date()): string {
-  const d = new Date(startTime)
-  if (Number.isNaN(d.getTime())) return ''
-
-  const days = calendarDaysBetween(now, d)
-  if (days === 0) return 'Today'
-  if (days === 1) return 'Tomorrow'
-
-  if (d.getFullYear() !== now.getFullYear()) {
-    return `${shortMonth(d)} ${d.getDate()}, ${d.getFullYear()}`
-  }
-  return `${shortMonth(d)} ${d.getDate()}`
+  return dayGroupLabel(startTime, now)?.title ?? ''
 }
 
 /** What `nextUpLabel` says while the event is on — the Going hero draws a live dot beside it. */
@@ -183,9 +175,7 @@ function shortMonth(d: Date): string {
     // `toLocaleString` with options throws on a JS engine built without ICU,
     // which is a real configuration on older Android RN builds rather than a
     // hypothetical. A three-letter month is recoverable without it.
-    return ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][
-      d.getMonth()
-    ]
+    return MONTHS[d.getMonth()]
   }
 }
 
@@ -193,7 +183,7 @@ function shortWeekday(d: Date): string {
   try {
     return d.toLocaleString(undefined, { weekday: 'short' })
   } catch {
-    return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()]
+    return WEEKDAYS[d.getDay()]
   }
 }
 

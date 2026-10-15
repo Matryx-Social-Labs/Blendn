@@ -162,7 +162,6 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   const insideEvent = tonight.events.find((e) => e.id === tonight.insideEventId) ?? null
   const checkIn = useCheckInFlow({
     eventId: insideEvent?.id ?? '',
-    eventTitle: insideEvent?.title,
     showTray,
     closeTray,
     // The room *is* the success state: no "Checked in / Go to chat" tray.

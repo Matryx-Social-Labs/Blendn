@@ -43,28 +43,25 @@ export function useToast() {
   return useContext(ToastContext)
 }
 
-const VARIANT_CONFIG: Record<ToastVariant, { icon: string; bg: string; border: string }> = {
+const VARIANT_CONFIG: Record<ToastVariant, { icon: string; iconColor: string; bg: string; border: string }> = {
   success: {
     icon: 'checkmark-circle',
+    iconColor: EMBER.success,
     bg: tint(EMBER.success, 0.15),
     border: tint(EMBER.success, 0.4),
   },
   error: {
     icon: 'alert-circle',
+    iconColor: EMBER.destructive,
     bg: tint(EMBER.destructive, 0.15),
     border: tint(EMBER.destructive, 0.4),
   },
   info: {
     icon: 'information-circle',
+    iconColor: EMBER.textSecondary,
     bg: EMBER.surface,
     border: EMBER.separator,
   },
-}
-
-const VARIANT_ICON_COLOR: Record<ToastVariant, string> = {
-  success: EMBER.success,
-  error: EMBER.destructive,
-  info: EMBER.textSecondary,
 }
 
 let nextId = 0
@@ -134,7 +131,7 @@ function ToastItem({ toast, onHide }: { toast: ToastMessage; onHide: () => void 
       <Ionicons
         name={config.icon as any}
         size={ICON.md}
-        color={VARIANT_ICON_COLOR[toast.variant]}
+        color={config.iconColor}
         style={styles.icon}
       />
       <Text style={styles.message} numberOfLines={3}>{toast.message}</Text>

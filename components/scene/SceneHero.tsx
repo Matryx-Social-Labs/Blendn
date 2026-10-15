@@ -72,10 +72,8 @@ export function SceneHero({
    * yet and is a schema change, not a label.
    */
   scarcity,
-  height,
   onPressMedia,
   scrollY,
-  children,
 }: {
   source: React.ComponentProps<typeof Image>['source']
   /**
@@ -94,7 +92,6 @@ export function SceneHero({
   dateLabel: string
   timeLabel: string
   scarcity?: string | null
-  height?: number
   /** Opens the lightbox at the item currently shown. */
   onPressMedia?: (index: number) => void
   /**
@@ -104,10 +101,8 @@ export function SceneHero({
    * thread. Absent (the preview harness), the hero is still.
    */
   scrollY?: SharedValue<number>
-  /** The title is a shared element on the real screen; the harness passes none. */
-  children?: React.ReactNode
 }) {
-  const h = height ?? sceneHeroHeight()
+  const h = sceneHeroHeight()
   const reduceMotion = useReducedMotion()
 
   /*
@@ -243,24 +238,22 @@ export function SceneHero({
           </View>
         ) : null}
 
-        {children ?? (
-          /*
-            Capped at 1.2, and this is the one place in the app where the cap is
-            not optional.
-            React Native **clips** a glyph to its `lineHeight` where CSS lets it
-            overflow. At Accessibility XXXL iOS scales text by about 3.1x, which
-            would render two rows of sliced letterforms over a photograph.
-            `numberOfLines={2}` truncates, it does not rescue the line box.
+        {/*
+          Capped at 1.2, and this is the one place in the app where the cap is
+          not optional.
+          React Native **clips** a glyph to its `lineHeight` where CSS lets it
+          overflow. At Accessibility XXXL iOS scales text by about 3.1x, which
+          would render two rows of sliced letterforms over a photograph.
+          `numberOfLines={2}` truncates, it does not rescue the line box.
 
-            1.2 is the largest step whose glyphs still fit the line.
-            Somebody who needs bigger type than that gets it everywhere else on
-            this screen; the hero title is a display element with the same words
-            in the accessible label below.
-          */
-          <Text style={styles.title} numberOfLines={2} maxFontSizeMultiplier={1.2}>
-            {title}
-          </Text>
-        )}
+          1.2 is the largest step whose glyphs still fit the line.
+          Somebody who needs bigger type than that gets it everywhere else on
+          this screen; the hero title is a display element with the same words
+          in the accessible label below.
+        */}
+        <Text style={styles.title} numberOfLines={2} maxFontSizeMultiplier={1.2}>
+          {title}
+        </Text>
 
         {/*
           Date and time side by side, each with its own icon.
@@ -297,18 +290,6 @@ export function SceneHero({
   )
 }
 
-/**
- * The title: the screen's one `display`.
- *
- * ## No text shadow
- *
- * The frame specifies `0 0 30px rgba(255,144,109,0.3)`, a soft warm bloom. RN's
- * `textShadow` is not CSS's: at radius 30 it renders as a flat warm rectangle
- * sitting behind the words — a visible brown box, not a glow. The gradient over
- * the hero is already what makes the title legible.
- */
-export const sceneHeroTitleStyle = TYPE.display
-
 const styles = StyleSheet.create({
   hero: { width: '100%' },
   /*
@@ -343,7 +324,13 @@ const styles = StyleSheet.create({
   // Uppercased in the string, not by `textTransform`, so the tracking lands on
   // the real glyphs.
   pillText: { ...TYPE.label, color: EMBER.textPrimary },
-  title: sceneHeroTitleStyle,
+  /*
+   * The screen's one `display`, with no text shadow. The frame specifies
+   * `0 0 30px rgba(255,144,109,0.3)`, a soft warm bloom; RN's `textShadow` at
+   * radius 30 renders as a flat warm rectangle behind the words — a visible
+   * brown box, not a glow. The gradient over the hero already makes it legible.
+   */
+  title: TYPE.display,
   metaRow: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.xl },
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   metaText: { ...TYPE.meta, flexShrink: 1 },

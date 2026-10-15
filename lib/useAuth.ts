@@ -41,8 +41,12 @@ export interface AuthState {
   unreachable: boolean
 }
 
-// Global auth state to prevent duplicate checks
-let globalAuthState: AuthState = {
+/*
+ * Before anything is known. Also what a reset returns to: a resumed or
+ * restarted app is not a freshly created account, and re-prompting on resume
+ * would be a trap.
+ */
+const UNINITIALIZED: AuthState = {
   session: null,
   user: null,
   isNewAccount: false,
@@ -50,6 +54,9 @@ let globalAuthState: AuthState = {
   loading: true,
   initialized: false,
 }
+
+// Global auth state to prevent duplicate checks
+let globalAuthState: AuthState = { ...UNINITIALIZED }
 
 let authStateListeners: ((state: AuthState) => void)[] = []
 // `ReturnType<typeof setInterval>`, not `NodeJS.Timeout`: in React Native the
@@ -362,11 +369,6 @@ export const getCurrentUser = async (): Promise<AuthUser | null> => {
   return globalAuthState.user
 }
 
-// Helper function to check if user is authenticated
-export const isAuthenticated = (): boolean => {
-  return !!globalAuthState.user
-}
-
 // Sign in with Google - called from login screen
 export const signInWithGoogle = async (
   idToken: string,
@@ -632,16 +634,7 @@ export const clearNewAccountFlag = () => {
 export const cleanupAuth = () => {
   stopSessionRefresh()
   authStateListeners = []
-  globalAuthState = {
-    session: null,
-    user: null,
-    loading: true,
-    initialized: false,
-    // Cleared with everything else: a resumed or restarted app is not a
-    // freshly created account, and re-prompting on resume would be a trap.
-    isNewAccount: false,
-    unreachable: false,
-  }
+  globalAuthState = { ...UNINITIALIZED }
 }
 
 /**
@@ -660,15 +653,6 @@ export const retryAuth = async (): Promise<AuthState> => {
 
 // Reinitialize auth (useful after background refresh or app resume)
 export const reinitializeAuth = async (): Promise<AuthState> => {
-  globalAuthState = {
-    session: null,
-    user: null,
-    loading: true,
-    initialized: false,
-    // Cleared with everything else: a resumed or restarted app is not a
-    // freshly created account, and re-prompting on resume would be a trap.
-    isNewAccount: false,
-    unreachable: false,
-  }
+  globalAuthState = { ...UNINITIALIZED }
   return initializeAuth()
 }

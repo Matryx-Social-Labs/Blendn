@@ -9,16 +9,13 @@ import { getCurrentUser } from '../lib/useAuth'
 
 interface Props {
   children: ReactNode
-  fallback?: ReactNode
   /** `errorId` is the one this screen shows and puts in the support email. */
   onError?: (error: Error, errorInfo: ErrorInfo, errorId: string) => void
-  resetOnPropsChange?: any[]
 }
 
 interface State {
   hasError: boolean
   error: Error | null
-  errorInfo: ErrorInfo | null
   errorId: string | null
   /** No mail app answered, so the address is shown to copy instead. */
   showAddress: boolean
@@ -40,7 +37,6 @@ export class ErrorBoundary extends Component<Props, State> {
     this.state = {
       hasError: false,
       error: null,
-      errorInfo: null,
       errorId: null,
       showAddress: false,
     }
@@ -73,7 +69,6 @@ export class ErrorBoundary extends Component<Props, State> {
 
     this.setState({
       error,
-      errorInfo,
       errorId,
     })
 
@@ -81,24 +76,10 @@ export class ErrorBoundary extends Component<Props, State> {
     this.props.onError?.(error, errorInfo, errorId)
   }
 
-  componentDidUpdate(prevProps: Props) {
-    // Reset error boundary when specified props change
-    if (this.props.resetOnPropsChange && this.state.hasError) {
-      const hasChanged = this.props.resetOnPropsChange.some(
-        (prop, index) => prop !== prevProps.resetOnPropsChange?.[index]
-      )
-
-      if (hasChanged) {
-        this.resetErrorBoundary()
-      }
-    }
-  }
-
   resetErrorBoundary = () => {
     this.setState({
       hasError: false,
       error: null,
-      errorInfo: null,
       errorId: null,
       showAddress: false,
     })
@@ -120,11 +101,6 @@ export class ErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.hasError) {
-      // Custom fallback UI or default error UI
-      if (this.props.fallback) {
-        return this.props.fallback
-      }
-
       return (
         <View style={styles.container}>
           <Ionicons name="warning-outline" size={48} color={EMBER.destructive} />
@@ -174,21 +150,6 @@ export class ErrorBoundary extends Component<Props, State> {
 
     return this.props.children
   }
-}
-
-// Convenience wrapper for functional components
-export function withErrorBoundary<T extends object>(
-  Component: React.ComponentType<T>,
-  errorBoundaryProps?: Omit<Props, 'children'>
-) {
-  const WrappedComponent = (props: T) => (
-    <ErrorBoundary {...errorBoundaryProps}>
-      <Component {...props} />
-    </ErrorBoundary>
-  )
-
-  WrappedComponent.displayName = `withErrorBoundary(${Component.displayName || Component.name})`
-  return WrappedComponent
 }
 
 const styles = StyleSheet.create({

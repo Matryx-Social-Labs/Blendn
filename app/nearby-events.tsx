@@ -27,24 +27,6 @@ import { featuredDateLabel, timeLabel } from '../lib/pulse'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../lib/theme'
 import { useMinimumVisible } from '../lib/useMinimumVisible'
 
-/*
- * One shared definition, in `lib/api.ts`, derived from the API mapping itself.
- *
- * This was a hand-written interface duplicated across three files that pass
- * events to each other. TypeScript compared them structurally, so they drifted
- * silently until a correction in one broke a call site in another.
- */
-type Event = BlendnEvent
-
-/*
- * `getDistanceKm` now comes from `lib/geo.ts`.
- *
- * This file had its own copy — the same haversine, written out again and
- * untested. Two implementations of one formula do not stay identical: the
- * shared one already carries the correction that this one never got, where the
- * metres/kilometres confusion made check-in distances wrong by 1000x.
- */
-
 const screenW = Dimensions.get('window').width
 
 /** An empty state's illustration, not an inline icon (DESIGN_SYSTEM: 28+). */
@@ -71,7 +53,7 @@ function RevealRow({ animate, delay, children }: { animate: boolean; delay: numb
 
 export default function NearbyEventsScreen() {
   const [loading, setLoading] = useState(true)
-  const [events, setEvents] = useState<Event[]>([])
+  const [events, setEvents] = useState<BlendnEvent[]>([])
   const [refreshing, setRefreshing] = useState(false)
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null)
   const [locationDenied, setLocationDenied] = useState(false)
@@ -215,7 +197,7 @@ export default function NearbyEventsScreen() {
     setRefreshing(false)
   }, [loadEvents])
 
-  const handleEventPress = useCallback((event: Event) => {
+  const handleEventPress = useCallback((event: BlendnEvent) => {
     apiClient.getEvent(event.id, {
       lat: userLocation?.latitude,
       lon: userLocation?.longitude,
@@ -248,7 +230,7 @@ export default function NearbyEventsScreen() {
   const innerW = Math.max(0, screenW - containerPadding)
   const cardWidth = Math.min(420, innerW)
 
-  const renderItem = useCallback(({ item, index }: { item: Event; index: number }) => {
+  const renderItem = useCallback(({ item, index }: { item: BlendnEvent; index: number }) => {
     const dist = (item as any)._distance
     // Shared with the home screen's Nearby cards, so the same event does not
     // read "1.2km away" on one screen and "1km away" on the other.
@@ -271,7 +253,7 @@ export default function NearbyEventsScreen() {
     )
   }, [cardWidth, handleEventPress])
 
-  const keyExtractor = useCallback((item: Event) => item.id, [])
+  const keyExtractor = useCallback((item: BlendnEvent) => item.id, [])
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>

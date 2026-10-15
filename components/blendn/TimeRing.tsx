@@ -21,14 +21,12 @@ export const TimeRing = memo(function TimeRing({
   text,
   size,
   children,
-  color = EMBER.textSecondary,
 }: {
   /** Upper-case reads best on a curve. Kept short: ~24 characters fills a 120pt ring. */
   text: string
   /** Outer diameter; the glyphs sit just inside it. */
   size: number
   children: React.ReactNode
-  color?: string
 }) {
   const glyph = TYPE.caption.fontSize
   const radius = size / 2 - glyph / 2 - 1
@@ -59,7 +57,7 @@ export const TimeRing = memo(function TimeRing({
               RN's Text with scaling off, not the role wrapper: a glyph on a
               ring that grows with Dynamic Type collides with its neighbours.
             */}
-            <Text allowFontScaling={false} style={[styles.glyph, { color }]}>
+            <Text allowFontScaling={false} style={[styles.glyph, { color: EMBER.textSecondary }]}>
               {c}
             </Text>
           </View>

@@ -27,14 +27,10 @@ describe('the overlay header, frame 1141:4819', () => {
      * The frame is a 390pt artboard with no notch. Taking its height literally
      * is what put "The Pulse" underneath the clock on a real device.
      *
-     * `topInset ?? insets.top` rather than `insets.top`: a screen presented as
-     * a sheet is already below the notch, and `useSafeAreaInsets()` reads the
-     * root provider, so it would otherwise pad by an inset that is not there.
-     * The Grid did exactly that and drew a black band above its header. Every
-     * pushed screen still takes the device inset, which is why this is a
-     * defaulted override rather than a required prop.
+     * Every screen with the bar is pushed full screen (the sheet that once
+     * needed a `topInset` override is gone), so the device inset always applies.
      */
-    expect(TOP_BAR()).toContain('(topInset ?? insets.top) + TOP_BAR_HEIGHT')
+    expect(TOP_BAR()).toContain('insets.top + TOP_BAR_HEIGHT')
   })
 
   it('owns no control of its own', () => {

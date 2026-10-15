@@ -101,14 +101,6 @@ export async function ensureNotificationChannels(): Promise<void> {
   ])
 }
 
-// Types for different notification types
-export interface NotificationData {
-  type: 'match' | 'message' | 'event_reminder' | 'check_in'
-  title: string
-  body: string
-  data?: Record<string, any>
-}
-
 // Register for push notifications and get the Expo push token.
 // `prompt: false` never shows the OS dialog: it registers only when the
 // permission is already granted (see lib/pushDecline.ts).
@@ -197,13 +189,6 @@ export async function savePushTokenToProfile(token: string): Promise<boolean> {
   }
 }
 
-// The token itself lives in lib/pushTokenRef.ts, because apiClient needs to
-// read it at sign-out and this module already imports apiClient. Kept under the
-// original name so existing call sites are unchanged.
-export function setCurrentPushToken(token: string | null) {
-  setPushTokenRef(token)
-}
-
 // Remove push token when user logs out
 export async function removePushTokenFromProfile(): Promise<boolean> {
   try {
@@ -232,79 +217,6 @@ export async function removePushTokenFromProfile(): Promise<boolean> {
   }
 }
 
-// Send a notification to a specific user (for backend use)
-// Note: This is typically handled server-side, not from the mobile app
-export async function sendNotificationToUser(
-  userId: string,
-  notification: NotificationData
-): Promise<boolean> {
-  // Notifications are handled by the backend via Socket.io or push services
-  // This function is a stub for compatibility
-  Logger.debug('notifications', 'sendNotificationToUser called (handled by backend)', { userId, type: notification.type })
-  return true
-}
-
-// Helper functions for specific notification types
-export const NotificationHelpers = {
-  // Send match notification
-  matchNotification: (matchedUserName: string, userId: string) => {
-    return sendNotificationToUser(userId, {
-      type: 'match',
-      title: '🎉 New Match!',
-      body: `You and ${matchedUserName} liked each other!`,
-      data: { screen: 'chat' }
-    })
-  },
-
-  // Send new message notification
-  messageNotification: (senderName: string, message: string, userId: string, conversationId?: string) => {
-    return sendNotificationToUser(userId, {
-      type: 'message',
-      title: `${senderName}`,
-      body: message.length > 50 ? message.substring(0, 47) + '...' : message,
-      data: { 
-        screen: 'chat',
-        conversationId 
-      }
-    })
-  },
-
-  // Send event reminder notification
-  eventReminderNotification: (eventTitle: string, userId: string, eventId: string) => {
-    return sendNotificationToUser(userId, {
-      type: 'event_reminder',
-      title: '📅 Event Starting Soon',
-      body: `${eventTitle} starts in 30 minutes!`,
-      data: { 
-        screen: 'event',
-        eventId 
-      }
-    })
-  },
-
-  // Send check-in success notification
-  checkInNotification: (eventTitle: string, userId: string) => {
-    return sendNotificationToUser(userId, {
-      type: 'check_in',
-      title: '✅ Checked In!',
-      body: `You're now checked into ${eventTitle}. Start matching!`,
-      data: { screen: 'match' }
-    })
-  }
-}
-
-// Handle notification received while app is in foreground
-export function setupNotificationListener(
-  onNotificationReceived?: (notification: Notifications.Notification) => void
-) {
-  const subscription = Notifications.addNotificationReceivedListener(notification => {
-    Logger.debug('notifications', 'Notification received', { id: notification.request.identifier })
-    onNotificationReceived?.(notification)
-  })
-
-  return subscription
-}
-
 /**
  * Where a notification's payload should take you, or `null` for nowhere.
  *
@@ -322,10 +234,43 @@ export function notificationTarget(data: Record<string, any> | undefined): Href 
 
   let target: Href | null = null
   switch (notifType) {
-    // Backend types
-    case 'private_message': {
+    /*
+     * One pairing, so its conversation. `chat` is a legacy local type.
+     *
+     * `match` pushed `/room` once, on the reasoning that "a match is about
+     * somebody in a room". That was true when the Grid was the only place a
+     * match existed. It is not any more: a mutual like opens the conversation
+     * server-side (`lib/matches.ts`) and it is in the Banter from that moment,
+     * with its own opener. `/room` is a *place*, and you stop being in it.
+     * Match at an event, leave, get checked out by the presence monitor — and
+     * the push about your match landed you on "Not Checked In Yet". The
+     * notification was about a person and it opened a venue you had left.
+     * `notifyMatch` has always sent the id (`push-notifications.ts`).
+     *
+     * Reveal is the clearest case — it is the moment their name appears in
+     * that thread, so the thread is the only place the news means anything.
+     *
+     * Still deliberately **not** a profile route keyed on `senderId`. The
+     * reveal gate decides what you may see of somebody and is enforced by
+     * the screens that ask the server; deep-linking to a profile would be
+     * the app asserting an entitlement the server has not granted. The
+     * conversation has no such problem — it is gated server-side already,
+     * and the thread header resolves the name through the same rule.
+     *
+     * A board request is answered in the Banter; an acceptance opens the
+     * conversation it made.
+     */
+    case 'reveal_request':
+    case 'reveal':
+    case 'private_message':
+    case 'chat':
+    case 'match':
+    case 'board_request_accepted': {
       if (data.conversationId) {
-        target = { pathname: '/private-chat/[conversationId]', params: { conversationId: String(data.conversationId) } as any }
+        target = {
+          pathname: '/private-chat/[conversationId]',
+          params: { conversationId: String(data.conversationId) } as any,
+        }
       } else {
         target = '/(tabs)/chat'
       }
@@ -364,101 +309,46 @@ export function notificationTarget(data: Record<string, any> | undefined): Href 
       }
       break
     }
+    /*
+     * The event itself. `event` is a legacy local type, and `event_reminder`
+     * an earlier build's local one-hour reminder, which may still be in the
+     * tray after an update — it had no case here and opened nothing. "A place
+     * opened up" (`waitlist_promoted`) is only actionable on the event.
+     */
     case 'event_checkin':
-    case 'event_update': {
-      if (data.eventId) {
-        target = { pathname: '/event/[id]', params: { id: String(data.eventId) } as any }
-      } else {
-        target = '/(tabs)/events'
-      }
-      break
-    }
-    // Legacy local types (from NotificationHelpers)
-    case 'chat': {
-      if (data.conversationId) {
-        target = { pathname: '/private-chat/[conversationId]', params: { conversationId: String(data.conversationId) } as any }
-      } else {
-        target = '/(tabs)/chat'
-      }
-      break
-    }
-    // An earlier build's local one-hour reminder, which may still be in the
-    // tray after an update. It had no case here and opened nothing.
+    case 'event_update':
     case 'event_reminder':
-    case 'event': {
+    case 'event':
+    case 'waitlist_promoted': {
       if (data.eventId) {
         target = { pathname: '/event/[id]', params: { id: String(data.eventId) } as any }
       } else {
         target = '/(tabs)/events'
-      }
-      break
-    }
-    case 'match': {
-      /*
-       * The conversation, not the room.
-       *
-       * This pushed `/room` on the reasoning that "a match is about somebody
-       * in a room". That was true when the Grid was the only place a match
-       * existed. It is not any more: a mutual like opens the conversation
-       * server-side (`lib/matches.ts`) and it is in the Banter from that
-       * moment, with its own opener.
-       *
-       * `/room` is a *place*, and you stop being in it. Match at an event,
-       * leave, get checked out by the presence monitor — and the push about
-       * your match lands you on "Not Checked In Yet". The notification was
-       * about a person and it opened a venue you had left.
-       *
-       * `notifyMatch` has always sent the id (`push-notifications.ts`); this
-       * branch simply threw it away, while the `chat` case ten lines above
-       * did the right thing with the same field.
-       */
-      if (data.conversationId) {
-        target = {
-          pathname: '/private-chat/[conversationId]',
-          params: { conversationId: String(data.conversationId) } as any,
-        }
-      } else {
-        target = '/(tabs)/chat'
       }
       break
     }
     /*
-     * The five below fell straight through this switch and navigated
-     * nowhere. Every one is a kind `sendPushNotification` actually emits —
-     * they are in `NotificationData["type"]` and in the `notification_kind`
-     * enum — so tapping any of these pushes opened the app and left you
-     * wherever you were, which reads as the notification being broken.
+     * Message requests fell straight through this switch and navigated
+     * nowhere, though `sendPushNotification` emits them — they are in
+     * `NotificationData["type"]` and in the `notification_kind` enum — so
+     * tapping one opened the app and left you wherever you were. Found while
+     * wiring the notifications centre, which routes through this same
+     * function rather than carrying a second copy of it.
      *
-     * Found while wiring the notifications centre, which routes through this
-     * same function rather than carrying a second copy of it.
+     * The Banter tab, which is where requests are listed (`app/(tabs)/chat.tsx`
+     * loads them) — there is no dedicated route. Deliberately not the sender's
+     * profile: the decision is accept-or-decline, and a request from somebody
+     * you have not accepted must not deep-link to a profile you are not yet
+     * entitled to see.
+     *
+     * The board's push says only that something happened — no handle, no
+     * words, because a lock screen is read by other people — so the client
+     * draws nothing from it either.
      */
     case 'message_request':
-    case 'message_request_response': {
-      /*
-       * The Banter tab, which is where requests are listed
-       * (`app/(tabs)/chat.tsx` loads them) — there is no dedicated route.
-       *
-       * Deliberately not the sender's profile: the decision is
-       * accept-or-decline, and a request from somebody you have not accepted
-       * must not deep-link to a profile you are not yet entitled to see.
-       */
-      target = '/(tabs)/chat'
-      break
-    }
-    /*
-     * The board. The push says only that something happened — no handle, no
-     * words, because a lock screen is read by other people — so the client
-     * draws nothing from it either. A request is answered in the Banter;
-     * an acceptance opens the conversation it made.
-     */
+    case 'message_request_response':
     case 'board_request': {
       target = '/(tabs)/chat'
-      break
-    }
-    case 'board_request_accepted': {
-      target = data.conversationId
-        ? { pathname: '/private-chat/[conversationId]', params: { conversationId: String(data.conversationId) } as any }
-        : '/(tabs)/chat'
       break
     }
     /*
@@ -532,40 +422,6 @@ export function notificationTarget(data: Record<string, any> | undefined): Href 
       }
       break
     }
-    case 'waitlist_promoted': {
-      // "A place opened up" is only actionable on the event itself.
-      if (data.eventId) {
-        target = { pathname: '/event/[id]', params: { id: String(data.eventId) } as any }
-      } else {
-        target = '/(tabs)/events'
-      }
-      break
-    }
-    case 'reveal_request':
-    case 'reveal': {
-      /*
-       * Same destination as `match`, and for the same reason: all three are
-       * about one pairing, and the pairing is the conversation. Reveal is the
-       * clearest case — it is the moment their name appears in that thread,
-       * so the thread is the only place the news means anything.
-       *
-       * Still deliberately **not** a profile route keyed on `senderId`. The
-       * reveal gate decides what you may see of somebody and is enforced by
-       * the screens that ask the server; deep-linking to a profile would be
-       * the app asserting an entitlement the server has not granted. The
-       * conversation has no such problem — it is gated server-side already,
-       * and the thread header resolves the name through the same rule.
-       */
-      if (data.conversationId) {
-        target = {
-          pathname: '/private-chat/[conversationId]',
-          params: { conversationId: String(data.conversationId) } as any,
-        }
-      } else {
-        target = '/(tabs)/chat'
-      }
-      break
-    }
   }
   return target
 }
@@ -633,7 +489,7 @@ export async function initializePushNotifications(
 
     if (token) {
       // Store token for removal on logout
-      setCurrentPushToken(token)
+      setPushTokenRef(token)
 
       // Only register real tokens with the backend
       if (!token.startsWith('development-token-') && !token.startsWith('simulator-token-')) {

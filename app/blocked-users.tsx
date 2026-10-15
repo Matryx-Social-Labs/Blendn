@@ -13,18 +13,6 @@ import { getReportTypeLabel, unblockUser, type BlockedUser, type ReportType } fr
 import { showSheet } from '../lib/sheet'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, OPACITY, SPACE } from '../lib/theme'
 
-/** The reasons `getReportTypeLabel` can name; anything else is not shown. */
-const KNOWN_REASONS = new Set<string>([
-  'inappropriate_messages',
-  'fake_profile',
-  'harassment',
-  'spam',
-  'inappropriate_photos',
-  'inappropriate_content',
-  'hate_speech',
-  'other',
-])
-
 /**
  * "Blocked Sep 12 · Harassment".
  *
@@ -40,7 +28,9 @@ function blockedDetail(user: Pick<BlockedUser, 'blocked_at' | 'reason'>, now = n
         day: 'numeric',
         year: at.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
       })
-  const reason = user.reason && KNOWN_REASONS.has(user.reason) ? getReportTypeLabel(user.reason as ReportType) : null
+  // A reason `getReportTypeLabel` cannot name is not shown.
+  const label = user.reason ? getReportTypeLabel(user.reason as ReportType) : null
+  const reason = label === 'Unknown' ? null : label
   return [when ? `Blocked ${when}` : 'Blocked', reason].filter(Boolean).join(' · ')
 }
 

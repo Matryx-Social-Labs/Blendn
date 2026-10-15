@@ -1,13 +1,10 @@
 import { Pressable, StyleSheet, View } from 'react-native'
 
-import { OptimizedImage } from '../OptimizedImage'
 import { REQUEST_HIT_SLOP } from '../banter/BanterSections'
 import { Text } from '../ui/Text'
 import type { FriendRequest } from '../../lib/friends'
 import { CONTROL, EMBER, EMBER_RADIUS, OPACITY, SPACE } from '../../lib/theme'
-
-/** The avatar's box and decode hint — `PersonRow`'s, so the two lists line up. */
-const AVATAR = 48
+import { PersonAvatar } from './PersonRow'
 
 /**
  * Somebody asking to be your friend: Not now, or Accept.
@@ -34,16 +31,8 @@ export function IncomingRequestRow({
   const { person } = request
   return (
     <View style={styles.row}>
-      {/* Decorative: the name beside it says who this is. */}
-      <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-        {person.photo ? (
-          <OptimizedImage source={person.photo} style={styles.avatar} width={AVATAR} height={AVATAR} contentFit="cover" />
-        ) : (
-          <View style={[styles.avatar, styles.avatarEmpty]}>
-            <Text variant="heading">{(person.name[0] ?? '?').toUpperCase()}</Text>
-          </View>
-        )}
-      </View>
+      {/* `PersonRow`'s avatar, so the two lists line up. */}
+      <PersonAvatar person={person} />
       <View style={styles.body}>
         <Text variant="bodyStrong" numberOfLines={1} maxFontSizeMultiplier={1.4}>{person.name}</Text>
         <View style={styles.actions}>
@@ -77,8 +66,6 @@ export function IncomingRequestRow({
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.md, paddingVertical: SPACE.md },
-  avatar: { width: AVATAR, height: AVATAR, borderRadius: EMBER_RADIUS.pill },
-  avatarEmpty: { backgroundColor: EMBER.surface, alignItems: 'center', justifyContent: 'center' },
   body: { flex: 1, gap: SPACE.sm },
   actions: { flexDirection: 'row', gap: SPACE.md },
   pill: {

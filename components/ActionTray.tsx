@@ -17,8 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { scheduleOnRN } from 'react-native-worklets'
 import { KEYBOARD_BEHAVIOR } from '../lib/keyboard'
 import { MOTION_DURATION, MOTION_EASING } from '../lib/motion'
-import { CONTROL, EMBER, EMBER_RADIUS, OPACITY, SPACE } from '../lib/theme'
-import { TRAY_SPECS, type TraySize } from '../lib/uxStandards'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, OPACITY, SPACE } from '../lib/theme'
 import { Grabber } from './ui/Grabber'
 import { Text } from './ui/Text'
 
@@ -28,6 +27,14 @@ export type ActionTrayButton = {
   variant?: 'primary' | 'secondary' | 'destructive'
   loading?: boolean
   disabled?: boolean
+}
+
+export type TraySize = 'compact' | 'default' | 'expanded'
+
+const TRAY_SPECS: Record<TraySize, { maxHeightPercent: number; topInset: number }> = {
+  compact: { maxHeightPercent: 0.35, topInset: SPACE.xxxl },
+  default: { maxHeightPercent: 0.55, topInset: SPACE.xxxl },
+  expanded: { maxHeightPercent: 0.8, topInset: SPACE.xxl },
 }
 
 /*
@@ -207,12 +214,12 @@ export default function ActionTray({
               style={[
                 styles.tray,
                 {
-                  paddingHorizontal: config.horizontalPadding,
+                  paddingHorizontal: GUTTER,
                   // Clear of the home indicator: the last button used to sit
                   // under it, where a tap on its centre is the system's.
                   paddingBottom: insets.bottom + SPACE.lg,
-                  borderTopLeftRadius: config.cornerRadius,
-                  borderTopRightRadius: config.cornerRadius,
+                  borderTopLeftRadius: EMBER_RADIUS.lg,
+                  borderTopRightRadius: EMBER_RADIUS.lg,
                 },
                 dragStyle,
               ]}

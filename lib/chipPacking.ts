@@ -24,26 +24,6 @@
  */
 
 /**
- * Roughly how wide a chip will be. **Unused by the row**, which measures.
- *
- * Kept because it is the only way to reason about packing in a test without a
- * renderer, and the ordering tests are worth more than the function costs.
- *
- * Manrope Medium at 16pt averages a little under half its point size per
- * character across mixed-case English. 7.6 rather than the 8.2 first used: the
- * longer labels are full of narrow letters — "Prefer not to say" is mostly f,
- * t, i and spaces — so a flat average tuned on short words overestimates them
- * badly, and overestimating is the direction that wastes space. A chip judged
- * too wide is held back from a row it would have fitted.
- *
- * `padding` is the chip's own horizontal padding plus its margin, which the
- * caller knows and this file should not.
- */
-export function estimateChipWidth(label: string, padding: number): number {
-  return Math.ceil(label.length * 7.6) + padding
-}
-
-/**
  * Catch-all options belong at the end, whatever packs best.
  *
  * "Prefer not to say", "Other", "Something else" — these are the answer you

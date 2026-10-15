@@ -55,7 +55,7 @@ export function CityArtCard({ city, art, eventCount, active, here, onPress }: Ca
       accessibilityLabel={`${city}${here ? ', your current location' : ''}, ${events}`}
     >
       <View style={styles.art} onLayout={onLayout}>
-        <CityScene city={art.key} width={width} height={Math.round(width * 0.5)} fit="slice" tod={tod} />
+        <CityScene city={art.key} width={width} height={Math.round(width * 0.5)} tod={tod} />
         <View style={styles.label} pointerEvents="none">
           <Text style={[styles.name, { color: ink }]} numberOfLines={1}>{city}</Text>
           <Text style={[styles.script, { color: ink }]}>{art.script}</Text>
@@ -84,7 +84,7 @@ export function CityArtBanner({ art, height }: { art: CityArtInfo; height: numbe
   const [width, onLayout] = useWidth()
   return (
     <View style={[styles.banner, { height }]} onLayout={onLayout}>
-      <CityScene city={art.key} width={width} height={height} fit="slice" />
+      <CityScene city={art.key} width={width} height={height} />
     </View>
   )
 }

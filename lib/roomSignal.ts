@@ -9,8 +9,7 @@ import { pickInsideEvent, pickTodayEvents, type RoomButtonEvent } from './roomBu
  * tonight — and re-fetching them there would mean a second location permission
  * dance and a second copy of the events list on a timer.
  *
- * Same shape as `lib/unread.ts`, which solves the identical problem for message
- * counts: a module-level cache with subscribers, rather than a context provider
+ * A module-level cache with subscribers, rather than a context provider
  * threaded through a tree the tab bar is not inside.
  *
  * **Nothing here is authoritative.** The button it feeds only ever *offers* an

@@ -88,26 +88,6 @@ export function roomButtonTarget(input: RoomButtonInput): RoomButtonTarget {
 }
 
 /**
- * The label under the button.
- *
- * Short enough not to wrap at the width of a tab slot, and it names the
- * *destination* rather than the state. "Live" tells you what is true; "Room"
- * tells you where the tap goes, and a nav label's job is the second one.
- */
-export function roomButtonLabel(state: RoomButtonState): string {
-  switch (state) {
-    case 'live':
-      return 'Room'
-    case 'checkin':
-      return 'Check in'
-    case 'today':
-      return 'Tonight'
-    case 'idle':
-      return "What's on"
-  }
-}
-
-/**
  * Which live dot the button wears — two different marks, not one at two volumes.
  *
  * The Pulse used to carry a **"You're checked in"** carousel: a section header,

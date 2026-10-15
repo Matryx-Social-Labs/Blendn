@@ -32,84 +32,50 @@ export type MessageReportType =
   | 'other'
 
 /**
- * Block a user
+ * One safety call, answered as a `SafetyActionResult`: the server's sentence
+ * on a refusal, `fallback` when it sent none, and never a throw.
  */
-export const blockUser = async (
-  userId: string,
-  _reason?: string
+const safely = async (
+  what: string,
+  fallback: string,
+  done: string,
+  call: () => Promise<{ success: boolean; error?: string }>
 ): Promise<SafetyActionResult> => {
   try {
-    const result = await apiClient.blockUser(userId)
+    const result = await call()
     if (!result.success) {
-      Logger.error('general', 'Error blocking user', { error: result.error })
-      return { success: false, message: result.error || 'Failed to block user' }
+      Logger.error('general', `Error ${what}`, { error: result.error })
+      return { success: false, message: result.error || fallback }
     }
-    return { success: true, message: 'User blocked' }
+    return { success: true, message: done }
   } catch (error) {
-    Logger.error('general', 'Error blocking user', { error })
+    Logger.error('general', `Error ${what}`, { error })
     return { success: false, message: 'Something went wrong' }
   }
 }
 
-/**
- * Unblock a user
- */
-export const unblockUser = async (userId: string): Promise<SafetyActionResult> => {
-  try {
-    const result = await apiClient.unblockUser(userId)
-    if (!result.success) {
-      Logger.error('general', 'Error unblocking user', { error: result.error })
-      return { success: false, message: result.error || 'Failed to unblock user' }
-    }
-    return { success: true, message: 'User unblocked' }
-  } catch (error) {
-    Logger.error('general', 'Error unblocking user', { error })
-    return { success: false, message: 'Something went wrong' }
-  }
-}
+export const blockUser = (userId: string): Promise<SafetyActionResult> =>
+  safely('blocking user', 'Failed to block user', 'User blocked', () => apiClient.blockUser(userId))
 
-/**
- * Report a user
- */
-export const reportUser = async (
+export const unblockUser = (userId: string): Promise<SafetyActionResult> =>
+  safely('unblocking user', 'Failed to unblock user', 'User unblocked', () => apiClient.unblockUser(userId))
+
+export const reportUser = (
   userId: string,
   reportType: ReportType,
   description?: string
-): Promise<SafetyActionResult> => {
-  try {
-    const result = await apiClient.reportUser(userId, reportType, description)
-    if (!result.success) {
-      Logger.error('general', 'Error reporting user', { error: result.error })
-      return { success: false, message: result.error || 'Failed to submit report' }
-    }
-    return { success: true, message: 'Report submitted' }
-  } catch (error) {
-    Logger.error('general', 'Error reporting user', { error })
-    return { success: false, message: 'Something went wrong' }
-  }
-}
+): Promise<SafetyActionResult> =>
+  safely('reporting user', 'Failed to submit report', 'Report submitted', () =>
+    apiClient.reportUser(userId, reportType, description))
 
-/**
- * Report a message
- */
-export const reportMessage = async (
+export const reportMessage = (
   messageId: string,
   messageType: 'group' | 'private',
   reportType: MessageReportType,
   description?: string
-): Promise<SafetyActionResult> => {
-  try {
-    const result = await apiClient.reportMessage(messageId, messageType, reportType, description)
-    if (!result.success) {
-      Logger.error('general', 'Error reporting message', { error: result.error })
-      return { success: false, message: result.error || 'Failed to report message' }
-    }
-    return { success: true, message: 'Report submitted' }
-  } catch (error) {
-    Logger.error('general', 'Error reporting message', { error })
-    return { success: false, message: 'Something went wrong' }
-  }
-}
+): Promise<SafetyActionResult> =>
+  safely('reporting message', 'Failed to report message', 'Report submitted', () =>
+    apiClient.reportMessage(messageId, messageType, reportType, description))
 
 /**
  * Get list of blocked users
@@ -125,19 +91,6 @@ export const getBlockedUsers = async (): Promise<BlockedUser[]> => {
   } catch (error) {
     Logger.error('general', 'Error fetching blocked users', { error })
     return []
-  }
-}
-
-/**
- * Check if a user is blocked
- */
-export const isUserBlocked = async (userId: string): Promise<boolean> => {
-  try {
-    const blocked = await getBlockedUsers()
-    return blocked.some((b) => b.blocked_id === userId)
-  } catch (error) {
-    Logger.error('general', 'Error checking if user is blocked', { error })
-    return false
   }
 }
 
@@ -189,6 +142,34 @@ const failed = (serverSays: string | undefined, fallback: string): SheetOutcome 
 }
 
 /**
+ * A conversation's ⋮ menu: the ordinary things first, leaving one step in.
+ *
+ * The ⋮ used to open the leave confirmation itself — "Unmatch Pooja Reddy?"
+ * with Unmatch as its first, red button — so the header's options icon was
+ * one mis-tap from ending a match, with nothing else behind it (simulator,
+ * 2026-09-29). Now it names the person, offers their profile when they are a
+ * name to you, and puts Unmatch (or End conversation) behind its own
+ * confirmation, unchanged.
+ */
+export const showConversationOptions = (
+  conversationId: string,
+  displayName: string,
+  theyKnowYou: boolean,
+  opts: { onLeft?: () => void; fromMatch?: boolean; onViewProfile?: () => void } = {}
+): void => {
+  const fromMatch = opts.fromMatch ?? true
+  const actions: SheetAction[] = []
+  if (opts.onViewProfile) actions.push({ label: 'View profile', then: opts.onViewProfile })
+  actions.push({
+    label: fromMatch ? 'Unmatch…' : 'End conversation…',
+    variant: 'destructive',
+    next: () => leaveConversationSheet(conversationId, displayName, theyKnowYou, opts.onLeft, fromMatch),
+  })
+  actions.push({ label: 'Cancel', cancel: true })
+  showSheet({ kind: 'actions', title: displayName, actions })
+}
+
+/**
  * Leaving a conversation: unmatch, or unmatch/block with a report.
  *
  * Distinct from `showUserSafetyActions`, which is the general "this person is a
@@ -218,45 +199,6 @@ const failed = (serverSays: string | undefined, fallback: string): SheetOutcome 
  * After, the app can close the channel and nothing more, and a sheet implying
  * otherwise sells a protection it cannot provide.
  */
-export const showLeaveConversationActions = (
-  conversationId: string,
-  displayName: string,
-  theyKnowYou: boolean,
-  onLeft?: () => void,
-  fromMatch = true
-): void => {
-  showSheet(leaveConversationSheet(conversationId, displayName, theyKnowYou, onLeft, fromMatch))
-}
-
-/**
- * A conversation's ⋮ menu: the ordinary things first, leaving one step in.
- *
- * The ⋮ used to open the leave confirmation itself — "Unmatch Pooja Reddy?"
- * with Unmatch as its first, red button — so the header's options icon was
- * one mis-tap from ending a match, with nothing else behind it (simulator,
- * 2026-09-29). Now it names the person, offers their profile when they are a
- * name to you, and puts Unmatch (or End conversation) behind its own
- * confirmation, unchanged.
- */
-export const showConversationOptions = (
-  conversationId: string,
-  displayName: string,
-  theyKnowYou: boolean,
-  opts: { onLeft?: () => void; fromMatch?: boolean; onViewProfile?: () => void } = {}
-): void => {
-  const fromMatch = opts.fromMatch ?? true
-  const actions: SheetAction[] = []
-  if (opts.onViewProfile) actions.push({ label: 'View profile', then: opts.onViewProfile })
-  actions.push({
-    label: fromMatch ? 'Unmatch…' : 'End conversation…',
-    variant: 'destructive',
-    next: () => leaveConversationSheet(conversationId, displayName, theyKnowYou, opts.onLeft, fromMatch),
-  })
-  actions.push({ label: 'Cancel', cancel: true })
-  showSheet({ kind: 'actions', title: displayName, actions })
-}
-
-/** The leave confirmation `showLeaveConversationActions` shows, as a step. */
 export const leaveConversationSheet = (
   conversationId: string,
   displayName: string,
@@ -365,15 +307,6 @@ export const userReportStep = (userName: string, userId: string, onComplete?: ()
   },
 })
 
-/** The block confirmation on its own, for a screen that already asked. */
-export const showBlockConfirmation = (
-  userName: string,
-  userId: string,
-  onComplete?: () => void
-): void => {
-  showSheet(blockStep(userName, userId, onComplete))
-}
-
 /** The user report reasons on their own. */
 export const showReportOptions = (
   userName: string,
@@ -383,18 +316,10 @@ export const showReportOptions = (
   showSheet(userReportStep(userName, userId, onComplete))
 }
 
-/** Report one message, from a chat's long-press menu. */
-export const showMessageReportOptions = (
-  messageId: string,
-  messageType: 'group' | 'private',
-  onComplete?: () => void
-): void => {
-  showSheet(messageReportStep(messageId, messageType, onComplete))
-}
-
 /**
- * The same step, for a menu that is already a sheet: it replaces the menu in
- * place rather than closing one and opening another.
+ * Report one message, from a chat's long-press menu. A step, because that menu
+ * is already a sheet: it replaces the menu in place rather than closing one
+ * and opening another.
  */
 export const messageReportStep = (
   messageId: string,
@@ -454,23 +379,13 @@ export type EventReportType =
   | 'not_real'
   | 'other'
 
-export const reportEvent = async (
+export const reportEvent = (
   eventId: string,
   reportType: EventReportType,
   description?: string
-): Promise<SafetyActionResult> => {
-  try {
-    const result = await apiClient.reportEvent(eventId, reportType, description)
-    if (!result.success) {
-      Logger.error('general', 'Error reporting event', { error: result.error })
-      return { success: false, message: result.error || 'Failed to submit report' }
-    }
-    return { success: true, message: 'Report submitted' }
-  } catch (error) {
-    Logger.error('general', 'Error reporting event', { error })
-    return { success: false, message: 'Something went wrong' }
-  }
-}
+): Promise<SafetyActionResult> =>
+  safely('reporting event', 'Failed to submit report', 'Report submitted', () =>
+    apiClient.reportEvent(eventId, reportType, description))
 
 /**
  * The reason list, straight from the control.

@@ -35,48 +35,23 @@ export interface EventMediaItem {
   order?: number | null
 }
 
-export interface FeedClip {
-  videoUrl: string
-  /** Painted underneath the player, always. Never null — see above. */
-  posterUrl: string
-}
-
 /** One thing a card can show. */
 export type FeedMediaItem =
   | { kind: 'image'; url: string }
   | { kind: 'video'; url: string; posterUrl: string }
 
 /**
- * The clip a card should play, or `null` for a still card.
+ * Media with a URL, by `order` rather than array position.
  *
- * `coverImageUrl` is the event's own cover, used when the clip carries no
- * thumbnail of its own.
+ * The API sorts by `order` today, so the two agree — but this receives a plain
+ * array through `eventFromApi`, and a caller that merges or filters media
+ * would silently change what plays. Sorting here costs nothing on a list
+ * capped at five and makes the choice independent of how it arrived.
  */
-export function feedClip(
-  media: readonly EventMediaItem[] | null | undefined,
-  coverImageUrl?: string | null
-): FeedClip | null {
-  if (!Array.isArray(media)) return null
-
-  /*
-   * `order` decides, not array position.
-   *
-   * The API sorts by `order` today, so the two agree — but this receives a
-   * plain array through `eventFromApi`, and a caller that merges or filters
-   * media would silently change which clip plays. Sorting here costs nothing on
-   * a list capped at five and makes the choice independent of how it arrived.
-   */
-  const videos = media
-    .filter((m) => m?.type === 'video' && typeof m.url === 'string' && m.url.length > 0)
+function byOrder(media: readonly EventMediaItem[]): EventMediaItem[] {
+  return [...media]
+    .filter((m) => typeof m?.url === 'string' && m.url.length > 0)
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-
-  const clip = videos[0]
-  if (!clip?.url) return null
-
-  const posterUrl = clip.thumbnail_url || coverImageUrl
-  if (!posterUrl) return null
-
-  return { videoUrl: clip.url, posterUrl }
 }
 
 /**
@@ -93,9 +68,7 @@ export function feedPoster(
   if (coverImageUrl) return coverImageUrl
   if (!Array.isArray(media)) return null
 
-  const sorted = [...media]
-    .filter((m) => typeof m?.url === 'string' && m.url.length > 0)
-    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+  const sorted = byOrder(media)
 
   const image = sorted.find((m) => m.type === 'image')
   if (image?.url) return image.url
@@ -119,7 +92,7 @@ export function feedPoster(
  *
  * ## A video with no poster is dropped, not skipped-with-a-gap
  *
- * Same rule as `feedClip`: the still under a player is what shows while the
+ * The still under a player is what shows while the
  * first frame decodes, so a video we cannot poster is a black rectangle mid-loop
  * — worse in a carousel than as a static card, because it arrives while
  * somebody is already watching.
@@ -138,9 +111,7 @@ export function feedPlaylist(
 
   if (!Array.isArray(media)) return out
 
-  const sorted = [...media]
-    .filter((m) => typeof m?.url === 'string' && m.url.length > 0)
-    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+  const sorted = byOrder(media)
 
   for (const m of sorted) {
     if (m.url === coverImageUrl) continue

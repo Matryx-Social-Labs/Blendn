@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons'
 import { Tabs } from 'expo-router/js-tabs'
-import React, { memo, useCallback, useEffect, useMemo, useState } from 'react'
+import React, { memo, useCallback, useEffect, useState } from 'react'
 import { AppState, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Image } from 'expo-image'
 import Animated, { FadeIn } from 'react-native-reanimated'
@@ -422,18 +422,11 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
     [navigation]
   )
 
-  const byName = useMemo(() => {
-    const map: Record<string, { key: string; index: number }> = {}
-    state.routes.forEach((r, i) => {
-      map[r.name] = { key: r.key, index: i }
-    })
-    return map
-  }, [state.routes])
-
   const renderTab = (tab: (typeof TABS)[number]) => {
-    const route = byName[tab.name]
-    if (!route) return null
-    const isFocused = state.index === route.index
+    const index = state.routes.findIndex((r) => r.name === tab.name)
+    if (index === -1) return null
+    const route = state.routes[index]
+    const isFocused = state.index === index
     return (
       <TabButton
         key={tab.name}

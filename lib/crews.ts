@@ -18,7 +18,7 @@
  */
 
 /** The server's `CREW` constants (blendn-admin lib/constants.ts). */
-import type { Badge, Overlap } from './aboutYou'
+import { toggleLanguage, type Badge, type Overlap } from './aboutYou'
 
 export const CREW_MAX_MEMBERS = 12
 export const CREW_NAME_MIN = 2
@@ -365,8 +365,7 @@ export function createCrewBody(form: CrewForm, consent: ConsentState): CreateCre
 
 /** Toggle a tag, holding the cap: a fourth tap does nothing rather than drop the first. */
 export function toggleTag(tags: readonly string[], slug: string): string[] {
-  if (tags.includes(slug)) return tags.filter((t) => t !== slug)
-  return tags.length >= CREW_MAX_TAGS ? [...tags] : [...tags, slug]
+  return toggleLanguage(tags, slug, CREW_MAX_TAGS)
 }
 
 /* -------------------------------------------------------------------------- */

@@ -44,8 +44,8 @@ describe('safety sheets', () => {
 
 describe('the chat screens say what failed', () => {
   it('shows a load failure, not the empty state, in both', () => {
-    expect(read('app/chat/[id].tsx')).toMatch(/loadError \? \([\s\S]{0,80}<ChatLoadFailed/)
-    expect(read('app/private-chat/[conversationId].tsx')).toMatch(/loadError \? \([\s\S]{0,80}<ChatLoadFailed/)
+    expect(read('app/chat/[id].tsx')).toMatch(/loadError \? \([\s\S]{0,80}<LoadError/)
+    expect(read('app/private-chat/[conversationId].tsx')).toMatch(/loadError \? \([\s\S]{0,80}<LoadError/)
   })
 
   it('keeps a failed send as a marked bubble in both', () => {

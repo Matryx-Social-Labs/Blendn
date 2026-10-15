@@ -15,7 +15,6 @@ import {
   OWN_BUILDINGS_LAYER_ID,
   OWN_BUILDINGS_LIT_BY,
   OWN_BUILDINGS_TILE_ZOOM,
-  ownBuildingsUrl,
   parseOwnBuildingsUrl,
 } from '../lib/mapStyleEmber'
 import { MAP_THEME } from '../lib/mapTheme'
@@ -30,8 +29,8 @@ const V2 = 'https://blendn-media-staging.fly.storage.tigris.dev/map/buildings/v2
 
 describe('the tiles URL (review M7)', () => {
   it('takes an https {z}/{x}/{y} template from the env', () => {
-    expect(ownBuildingsUrl(V2)).toBe(V2)
-    expect(ownBuildingsUrl(`  ${V2}\n`)).toBe(V2)
+    expect(parseOwnBuildingsUrl(V2).url).toBe(V2)
+    expect(parseOwnBuildingsUrl(`  ${V2}\n`).url).toBe(V2)
   })
 
   it('is no URL, quietly, when unset or blank', () => {

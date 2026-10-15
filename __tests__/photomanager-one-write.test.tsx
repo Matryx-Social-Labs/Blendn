@@ -52,7 +52,7 @@ beforeEach(() => {
 it("makes the new photo main by the URL the server stored, not the upload it deleted", async () => {
   pu.reorderPhotos.mockResolvedValueOnce({ ok: true, photos: [A, SEALED] }).mockResolvedValueOnce({ ok: true, photos: [SEALED, A] })
 
-  await render(<PhotoManager userId="u" editable />)
+  await render(<PhotoManager userId="u" />)
   await screen.findByText('Add photo')
   await fireEvent.press(screen.getByText('Add photo'))
   await waitFor(() => expect(pu.reorderPhotos).toHaveBeenCalledTimes(1))
@@ -75,7 +75,7 @@ it("refuses Make main while the add's write is open, then makes it main by the s
   const add = deferred()
   pu.reorderPhotos.mockReturnValueOnce(add.promise).mockResolvedValueOnce({ ok: true, photos: [SEALED, A] })
 
-  await render(<PhotoManager userId="u" editable />)
+  await render(<PhotoManager userId="u" />)
   await screen.findByText('Add photo')
   await act(async () => {
     fireEvent.press(screen.getByText('Add photo'))
@@ -106,7 +106,7 @@ it("refuses Remove and Add while Make main's write is open", async () => {
   const makeMain = deferred()
   pu.reorderPhotos.mockReturnValueOnce(makeMain.promise)
 
-  await render(<PhotoManager userId="u" editable />)
+  await render(<PhotoManager userId="u" />)
   await screen.findByLabelText('Photo 2 of 2')
   await act(async () => {
     fireEvent.press(screen.getByLabelText('Make this my main photo'))
@@ -134,7 +134,7 @@ it('refuses a second Make main inside one frame, before the button can show it i
   const makeMain = deferred()
   pu.reorderPhotos.mockReturnValueOnce(makeMain.promise)
 
-  await render(<PhotoManager userId="u" editable />)
+  await render(<PhotoManager userId="u" />)
   await screen.findByLabelText('Photo 2 of 2')
   const button = screen.getByLabelText('Make this my main photo')
   // One outer act: React renders once at its end, so the second press meets the
@@ -165,7 +165,7 @@ it('Remove lets go of the grid when its write ends: refused, then held', async (
     await act(() => sheet.actions[0].then())
   }
 
-  await render(<PhotoManager userId="u" editable />)
+  await render(<PhotoManager userId="u" />)
   await screen.findByLabelText('Photo 2 of 2')
 
   // Refused: the grid as it was, and free again.

@@ -1,33 +1,9 @@
-export type DateStyle = 'short' | 'medium' | 'long';
-
-export const formatEventDateTime = (iso: string, opts?: { dateStyle?: DateStyle; showTimezoneIfDifferent?: boolean; timezone?: string }) => {
-  try {
-    const date = new Date(iso)
-    const dateStyle = opts?.dateStyle || 'medium'
-    const eventTz = opts?.timezone
-    const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone
-
-    const tzOptions = eventTz ? { timeZone: eventTz } : {}
-
-    const datePart = date.toLocaleDateString(undefined, {
-      year: 'numeric',
-      month: dateStyle === 'short' ? 'short' : dateStyle === 'long' ? 'long' : 'short',
-      day: 'numeric',
-      ...tzOptions,
-    })
-    const timePart = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', ...tzOptions })
-
-    let tzSuffix = ''
-    if (opts?.showTimezoneIfDifferent && eventTz && eventTz !== localTz) {
-      const tzName = getShortTimeZoneName(date, eventTz)
-      if (tzName) tzSuffix = ` ${tzName}`
-    }
-
-    return `${datePart} • ${timePart}${tzSuffix}`
-  } catch {
-    return ''
-  }
-}
+/**
+ * Fixed English short names, for labels that must not change shape with the
+ * device's locale or ICU build ("Sept" in en-GB on one engine, "Sep" on another).
+ */
+export const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+export const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 export const formatTimeRange = (startIso: string, endIso: string, opts?: { includeDate?: boolean; timezone?: string }) => {
   try {
@@ -44,16 +20,6 @@ export const formatTimeRange = (startIso: string, endIso: string, opts?: { inclu
       return `${time}, ${datePart}`
     }
     return time
-  } catch {
-    return ''
-  }
-}
-
-const getShortTimeZoneName = (date: Date, timezone?: string): string => {
-  try {
-    const parts = new Intl.DateTimeFormat(undefined, { timeZoneName: 'short', ...(timezone ? { timeZone: timezone } : {}) }).formatToParts(date)
-    const tz = parts.find(p => p.type === 'timeZoneName')?.value
-    return tz || ''
   } catch {
     return ''
   }

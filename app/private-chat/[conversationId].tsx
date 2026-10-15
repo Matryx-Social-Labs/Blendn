@@ -2,7 +2,7 @@ import * as Clipboard from 'expo-clipboard'
 import * as Haptics from 'expo-haptics'
 import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
-import { router, Stack, useLocalSearchParams } from 'expo-router'
+import { router, useLocalSearchParams } from 'expo-router'
 import {
   revealAction,
   revealConfirmation,
@@ -25,7 +25,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import ActionTray, { type ActionTrayButton } from '../../components/ActionTray'
 import { ChatBubble } from '../../components/chat/ChatBubble'
 import { ChatComposer, type ComposerLock } from '../../components/chat/ChatComposer'
-import { ChatLoadFailed } from '../../components/chat/ChatLoadFailed'
+import { LoadError } from '../../components/LoadError'
 import { SystemNotice } from '../../components/chat/SystemNotice'
 import { TypingIndicator, typingLabel } from '../../components/chat/TypingIndicator'
 import { OptimizedImage } from '../../components/OptimizedImage'
@@ -56,14 +56,13 @@ import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, TYPE } from
 import { useLiveSync } from '../../lib/useLiveSync'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useAuth } from '../../lib/useAuth'
-import { setConversationLastRead } from '../../lib/unread'
 import { useActiveThread } from '../../lib/notifications'
 import { initialsOf } from '../../lib/initials'
 import { scrollListToEnd, useFollowEnd } from '../../lib/useFollowEnd'
 import { mergeNewestPage } from '../../lib/mergeNewestPage'
 import { newClientId } from '../../lib/clientId'
 import { receiptFor } from '../../lib/receipts'
-import { withUnreadDivider, type UnreadDivider } from '../../lib/unreadDivider'
+import { withDaySeparators, withUnreadDivider, type UnreadDivider } from '../../lib/unreadDivider'
 import type { DmReplyQuote } from '../../lib/apiClient'
 import { ReplyBar } from '../../components/chat/ReplyBar'
 import { SwipeToReply } from '../../components/chat/SwipeToReply'
@@ -106,22 +105,6 @@ const quoteFrom = (m: PrivateMessage): DmReplyQuote => ({
 const formatTime = (iso: string) => {
   const d = new Date(iso)
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-}
-
-const toDayKey = (iso: string) => {
-  const d = new Date(iso)
-  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
-}
-
-const formatDayLabel = (iso: string) => {
-  const d = new Date(iso)
-  const today = new Date()
-  const yesterday = new Date(); yesterday.setDate(today.getDate() - 1)
-  const same = (a: Date, b: Date) =>
-    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
-  if (same(d, today)) return 'Today'
-  if (same(d, yesterday)) return 'Yesterday'
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: d.getFullYear() !== today.getFullYear() ? 'numeric' : undefined })
 }
 
 
@@ -554,9 +537,6 @@ function PrivateChatInner() {
             setHasMore(result.data.hasMore)
             setOldestCursor(result.data.nextCursor)
           }
-          if (conversationId && !cursor) {
-            setConversationLastRead(String(conversationId)).catch(() => {})
-          }
         }
       })
       .catch((err) => {
@@ -749,16 +729,10 @@ function PrivateChatInner() {
     void deliver(message.id, message.text, { clientId: message.clientId ?? newClientId(), replyToId: message.replyToId })
   }
 
-  const chatItems: ChatListItem[] = React.useMemo(() => {
-    const items: ChatListItem[] = []
-    let lastDay: string | null = null
-    for (const m of messages) {
-      const day = toDayKey(m.createdAt)
-      if (day !== lastDay) { items.push({ kind: 'separator', id: `sep-${day}`, label: formatDayLabel(m.createdAt) }); lastDay = day }
-      items.push({ kind: 'message', ...m })
-    }
-    return withUnreadDivider(items, unread?.firstId, unread?.count ?? 0)
-  }, [messages, unread])
+  const chatItems: ChatListItem[] = React.useMemo(
+    () => withUnreadDivider(withDaySeparators(messages, (m) => m.createdAt), unread?.firstId, unread?.count ?? 0),
+    [messages, unread]
+  )
 
   /*
    * Scroll to "N unread messages" once it is in the list (SCRUM-406). Once per
@@ -920,7 +894,6 @@ function PrivateChatInner() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <Stack.Screen options={{ headerShown: false }} />
       <KeyboardAvoidingView style={styles.flex} behavior={KEYBOARD_BEHAVIOR}>
         <ChatHeader
           // Server-resolved. A pseudonym until they reveal, and the route param
@@ -1016,8 +989,8 @@ function PrivateChatInner() {
           ) : !loading && loadError ? (
             // Not the empty state: a thread that failed to load is not an
             // invitation to "Start the conversation".
-            <ChatLoadFailed
-              what="this conversation"
+            <LoadError
+              title="Couldn't load this conversation"
               onRetry={() => {
                 setLoadError(false)
                 setLoading(true)
@@ -1151,15 +1124,6 @@ const styles = StyleSheet.create({
   matchOpenerBody: { ...TYPE.body, color: EMBER.textSecondary },
   // A text action: `label` in `textPrimary` (docs/DESIGN_SYSTEM.md).
   loadMoreText: { ...TYPE.label, color: EMBER.textPrimary },
-
-  // Messages
-
-
-  // Day separator
-
-  // Typing
-
-  // Input bar — WhatsApp style: simple, no icons
 
   // Scroll to bottom
   scrollToBottomHit: { flex: 1, alignItems: 'center', justifyContent: 'center' },

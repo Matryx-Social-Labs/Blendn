@@ -101,10 +101,10 @@ Resume reads the unfinished flow's progress from `AsyncStorage` (`lib/onboarding
 | File | Purpose |
 |------|---------|
 | `apiClient.ts` | Core HTTP client — JWT auth, token refresh, priority request queue, SWR-style response cache |
-| `api.ts` | Legacy wrappers over `apiClient` with camelCase→snake_case transform; prefer `apiClient` directly for new code |
+| `api.ts` | `getEvents` (0-based page in, snake_case events out) and `eventFromApi`, the event mapper. Everything else calls `apiClient` directly |
 | `socketClient.ts` | Socket.io client — typed events, room-based subscriptions, reconnect with exponential backoff |
 | `useAuth.ts` | Global auth state **singleton** (not React context) + `useAuth()` hook |
-| `queryCache.ts` | In-memory TTL/LRU cache (max 500 entries, 5 min default TTL) |
+| `queryCache.ts` | In-memory TTL cache (max 500 entries; every caller passes its TTL) |
 
 **API response format**: every `apiClient` method returns `{ success: boolean, data?: T, error?: string }`. Never throws — always check `result.success`.
 
@@ -140,7 +140,7 @@ useLiveSync({
 })
 ```
 
-On every app foreground, `_layout.tsx` calls `queryCache.clear()` and `apiClient.clearResponseCache()` to force fresh data.
+Foreground does not clear the caches: every cached read is stale-while-revalidate, so it paints at once and refreshes behind (see the comment in `app/_layout.tsx`). `apiClient.clearResponseCache()` runs on sign-out.
 
 ### Theme System (`lib/theme.ts`)
 
@@ -155,8 +155,8 @@ font sizes or spacing**. Read `docs/DESIGN_SYSTEM.md` before touching UI.
   `// design-exception: <reason>`.
 - One accent (orange) per screen, plus the active tab.
 
-**`EMBER` is the palette. `APP_*` tokens are legacy** and banned in `app/` and
-`components/` by the design-token check.
+**`EMBER` is the palette.** The legacy `APP_*` tokens are deleted, and the
+design-token check still bans the names.
 
 - `EMBER` — `bg` (`#0F0E0E`), `surface`, `surfaceSunken`, `surfaceMedia`,
   `textPrimary/Secondary/Tertiary/Placeholder`, `accent` (`#FF906D`), `onGradient`,
@@ -166,13 +166,6 @@ font sizes or spacing**. Read `docs/DESIGN_SYSTEM.md` before touching UI.
 - `EMBER_FONTS` — Plus Jakarta Sans for display, Manrope for body.
   **A `fontFamily` naming an unloaded family renders the system font silently**
 - Surfaces are flat: no shadows, `BlurView`, glows or gradient fills (the check fails on them)
-- `APP_COLORS` — legacy. `#000` background, `#0A84FF` accent. Not the design
-- `APP_SPACING` — xxs/xs/sm/md/lg/xl/2xl/3xl/4xl (4–48 px)
-- `APP_RADIUS` — xs/sm/md/lg/xl/pill
-- `APP_SIZE` — touch target (44 px), icon sizes
-- `APP_ELEVATION` — low/medium/high shadow presets
-- `APP_MOTION` — duration (instant/fast/normal/slow) + easing (entrance/exit/standard)
-- `APP_CTA` — primary/secondary/destructive button style objects
 
 NativeWind (Tailwind) is configured but UI code predominantly uses `StyleSheet.create` with theme tokens.
 
@@ -192,5 +185,4 @@ NativeWind (Tailwind) is configured but UI code predominantly uses `StyleSheet.c
 - **Logging**: use `Logger.info/warn/error('module', 'message', data)` from `lib/logger.ts` — never `console.log`.
 - **Auth singleton**: `useAuth.ts` stores state in a module-level variable, not React context. All components share one instance; calling `useAuth()` subscribes to updates.
 - **Socket lifecycle**: managed in `_layout.tsx` — connects on login via `initSocketWithAppState()`, disconnects on logout, auto-reconnects on foreground. Rooms are automatically rejoined after every reconnect.
-- **`lib/globalText.ts`**: imported once in `_layout.tsx` to patch the global `Text` component (font family, disable font scaling).
 - **camelCase vs snake_case**: the REST API returns camelCase. `EventApiItem` in `apiClient.ts` documents both forms for historical compatibility — use camelCase in new code.

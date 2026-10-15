@@ -2,7 +2,7 @@ import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
 import * as Haptics from 'expo-haptics'
 import { router, useLocalSearchParams } from 'expo-router'
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { Dimensions, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
@@ -22,6 +22,7 @@ import {
 import PhotoLightbox from '../../components/PhotoLightbox'
 import { apiClient, type UserProfileData } from '../../lib/apiClient'
 import { likeRefusal } from '../../lib/likeRefusal'
+import { interestNames } from '../../lib/meProfile'
 import { profileIdentity, withheldUnlessVisible } from '../../lib/profileIdentity'
 import { aboutLine } from '../../lib/aboutYou'
 import { isGone } from '../../lib/loadFailure'
@@ -58,12 +59,6 @@ interface UserProfileView {
    */
   sharedInterests?: string[]
   photos?: string[]
-  stats?: {
-    eventsAttended: number
-    eventsFavorited: number
-    eventsOrganized: number
-  }
-  memberSince?: string
   /**
    * "Speaks Malayalam · From Kerala · Leo ♌" (matching v2). The server sends
    * languages, home state and sign only when you may see who this is — they
@@ -75,6 +70,12 @@ interface UserProfileView {
 }
 
 type ProfileCtaMode = 'self' | 'connect' | 'requested' | 'message'
+const CTA_LABEL: Record<ProfileCtaMode, string> = {
+  self: 'You',
+  requested: 'Requested',
+  message: 'Message',
+  connect: 'Connect',
+}
 
 /** The line under the action, said the way a person would. */
 const CTA_HINT = {
@@ -141,13 +142,11 @@ function UserProfileInner() {
     if (!authUser) {
       setCtaMode('connect')
       setCtaMessage('Sign in to connect.')
-      setConversationId(null)
       return
     }
     if (authUser.id === targetUserId) {
       setCtaMode('self')
       setCtaMessage('This is your profile.')
-      setConversationId(null)
       return
     }
 
@@ -172,11 +171,9 @@ function UserProfileInner() {
         setCtaMode('message')
         setCtaMessage(CTA_HINT.message)
       } else if (connection.request) {
-        setConversationId(null)
         setCtaMode('requested')
         setCtaMessage(CTA_HINT.requested)
       } else {
-        setConversationId(null)
         setCtaMode('connect')
         setCtaMessage(CTA_HINT.connect)
       }
@@ -215,15 +212,12 @@ function UserProfileInner() {
               || (senderId === targetUserId && (!recipientId || recipientId === authUser.id)))
         })
         if (hasPending) {
-          setConversationId(null)
           setCtaMode('requested')
           setCtaMessage(CTA_HINT.requested)
           return
         }
       }
     } catch {}
-
-    setConversationId(null)
     setCtaMode('connect')
     setCtaMessage(CTA_HINT.connect)
   }, [authUser])
@@ -242,11 +236,7 @@ function UserProfileInner() {
           const data = result.data
           connection = data.connection
           const photos = data.photos || data.profile_photos || []
-          // Map interests: API returns objects {id, name, slug, icon} — extract names
-          const interests = Array.isArray(data.interests)
-            ? data.interests.map((i: any) => (typeof i === 'string' ? i : i?.name || ''))
-                .filter((n: string) => n)
-            : []
+          const interests = interestNames(data.interests)
           nextProfile = {
             user_id: id,
             name: data.name || data.display_name,
@@ -268,8 +258,6 @@ function UserProfileInner() {
             sharedInterests: Array.isArray((data as { sharedInterests?: string[] }).sharedInterests)
               ? (data as { sharedInterests?: string[] }).sharedInterests
               : [],
-            stats: data.stats,
-            memberSince: data.memberSince,
             about: aboutLine(data as { languages?: string[]; homeState?: string | null; sign?: string | null }),
             identityVisible: data.identityVisible === true || data.isOwnProfile === true,
           }
@@ -280,10 +268,7 @@ function UserProfileInner() {
           if (fallbackResult.success && fallbackResult.data) {
             const data = fallbackResult.data
             const photos = data.photos || data.profile_photos || []
-            const interests = Array.isArray(data.interests)
-              ? data.interests.map((i: any) => (typeof i === 'string' ? i : i?.name || ''))
-                  .filter((n: string) => n)
-              : []
+            const interests = interestNames(data.interests)
             nextProfile = {
               user_id: id,
               name: data.name,
@@ -429,13 +414,6 @@ function UserProfileInner() {
     showUserSafetyActions(identity.title, profile.user_id, () => router.back())
   }
 
-  const isLoading = loading
-  const ctaLabel = useMemo(() => {
-    if (ctaMode === 'self') return 'You'
-    if (ctaMode === 'requested') return 'Requested'
-    if (ctaMode === 'message') return 'Message'
-    return 'Connect'
-  }, [ctaMode])
   const ctaDisabled = ctaMode === 'self' || ctaMode === 'requested'
 
   if (!loading && !profile) {
@@ -508,7 +486,7 @@ function UserProfileInner() {
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + SPACE.xxxl }]}
         showsVerticalScrollIndicator={false}
       >
-        {isLoading ? (
+        {loading ? (
           <ProfileSkeleton width={WINDOW_WIDTH} />
         ) : (
           <>
@@ -590,10 +568,10 @@ function UserProfileInner() {
                 </View>
               ) : null}
 
-              {!isLoading && profile && ctaMode !== 'self' ? (
+              {!loading && profile && ctaMode !== 'self' ? (
                 <ProfileActions
                   name={heroTitle}
-                  label={ctaLabel}
+                  label={CTA_LABEL[ctaMode]}
                   onPress={ctaMode === 'connect' ? () => setConnectOpen(true) : handleConnect}
                   disabled={ctaDisabled}
                   hint={ctaMessage || null}

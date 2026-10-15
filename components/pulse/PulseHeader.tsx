@@ -58,8 +58,6 @@ interface Props {
   onPressCity: () => void
   query: string
   onChangeQuery: (next: string) => void
-  onSubmitQuery?: () => void
-  placeholder?: string
   /**
    * A search or filter refetch is in flight, quietly, against a list already
    * on screen — see `events.tsx`'s `refining`. Swaps the search glyph for a
@@ -83,8 +81,6 @@ export function PulseHeader({
   onPressCity,
   query,
   onChangeQuery,
-  onSubmitQuery,
-  placeholder = 'Search events…',
   searching = false,
   onPressFilter,
   activeFilterCount = 0,
@@ -183,8 +179,7 @@ export function PulseHeader({
         <TextInput
           value={query}
           onChangeText={onChangeQuery}
-          onSubmitEditing={onSubmitQuery}
-          placeholder={placeholder}
+          placeholder="Search events…"
           placeholderTextColor={EMBER.textPlaceholder}
           returnKeyType="search"
           autoCorrect={false}

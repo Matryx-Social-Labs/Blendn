@@ -49,14 +49,12 @@ export function likeRefusal(
       // an API caller, and this one is for somebody enjoying themselves.
       return { message: "Slow down a moment, then try again.", variant: "info" }
 
+    /*
+     * FORBIDDEN is almost always the lapsed check-in. The server's sentence —
+     * "Check in before liking anyone here" — already says the useful thing,
+     * and it is about the room rather than about them.
+     */
     case "FORBIDDEN":
-      /*
-       * Almost always the lapsed check-in. The server's sentence — "Check in
-       * before liking anyone here" — already says the useful thing, and it is
-       * about the room rather than about them.
-       */
-      return { message: message || "Check in before liking anyone here.", variant: "info" }
-
     case "NOT_CHECKED_IN":
       return { message: message || "Check in before liking anyone here.", variant: "info" }
 

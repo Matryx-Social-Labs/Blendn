@@ -29,12 +29,6 @@ export interface PhotoUploadResult {
    * changing; another string would not be.
    */
   cancelled?: true
-  metadata?: {
-    size: number
-    width: number
-    height: number
-    format: string
-  }
 }
 
 export interface PhotoCacheEntry {
@@ -57,13 +51,6 @@ export interface ProfilePhoto {
   order: number
   isVerified?: boolean
   isPrimary?: boolean
-  metadata?: {
-    size: number
-    width: number
-    height: number
-    format: string
-    uploadedAt: string
-  }
 }
 
 export interface PhotoOptions {
@@ -391,44 +378,6 @@ export const deletePhoto = async (photoUrl: string): Promise<boolean> => {
   } catch (error) {
     Logger.error('profile', 'Error deleting photo', { error })
     return false
-  }
-}
-
-/**
- * Upload multiple photos with progress tracking
- */
-export const uploadMultiplePhotos = async (
-  imageUris: string[],
-  userId: string,
-  onProgress?: (completed: number, total: number) => void
-): Promise<PhotoUploadResult[]> => {
-  const results: PhotoUploadResult[] = []
-  
-  for (let i = 0; i < imageUris.length; i++) {
-    const result = await uploadPhoto(imageUris[i], userId, `profile_${i + 1}_${Date.now()}.jpg`)
-    results.push(result)
-    
-    if (onProgress) {
-      onProgress(i + 1, imageUris.length)
-    }
-  }
-  
-  return results
-}
-
-/**
- * Get optimized photo dimensions for different use cases
- */
-export const getPhotoDimensions = (usage: 'profile' | 'thumbnail' | 'fullscreen') => {
-  switch (usage) {
-    case 'profile':
-      return { width: 800, height: 800 }
-    case 'thumbnail':
-      return { width: 200, height: 200 }
-    case 'fullscreen':
-      return { width: 1200, height: 1600 }
-    default:
-      return { width: 800, height: 800 }
   }
 }
 
@@ -783,18 +732,7 @@ export const selectAndUploadPhoto = async (userId: string): Promise<PhotoUploadR
     }
 
     // Upload image
-    const result = await uploadPhoto(asset.uri, userId)
-    
-    if (result.success && result.url) {
-      result.metadata = {
-        size: asset.fileSize || 0,
-        width: asset.width,
-        height: asset.height,
-        format: asset.type || 'image'
-      }
-    }
-    
-    return result
+    return await uploadPhoto(asset.uri, userId)
   } catch (error) {
     Logger.error('profile', 'photoUtils: Photo selection error', { error })
     return { 

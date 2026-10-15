@@ -1,6 +1,6 @@
 import { LinearGradient } from 'expo-linear-gradient'
 import React, { memo } from 'react'
-import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 
 import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
 import { EMBER, EMBER_RADIUS } from '../../lib/theme'
@@ -26,15 +26,11 @@ export const Face = memo(function Face({
   photo,
   size,
   ring = false,
-  ringColor = EMBER.bg,
-  style,
 }: {
   name: string
   photo: string | null | undefined
   size: number
   ring?: boolean
-  ringColor?: string
-  style?: StyleProp<ViewStyle>
 }) {
   const disc = { width: size, height: size, borderRadius: EMBER_RADIUS.pill }
   const inner = photo ? (
@@ -50,9 +46,9 @@ export const Face = memo(function Face({
     <Mark name={name} size={size} />
   )
 
-  if (!ring) return <View style={[disc, styles.clip, style]}>{inner}</View>
+  if (!ring) return <View style={[disc, styles.clip]}>{inner}</View>
   return (
-    <View style={[styles.ring, { borderRadius: EMBER_RADIUS.pill, backgroundColor: ringColor }, style]}>
+    <View style={[styles.ring, { borderRadius: EMBER_RADIUS.pill, backgroundColor: EMBER.bg }]}>
       <View style={[disc, styles.clip]}>{inner}</View>
     </View>
   )

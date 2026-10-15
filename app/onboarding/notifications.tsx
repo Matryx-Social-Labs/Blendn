@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import { SettingsTray } from '../../components/onboarding/SettingsTray'
 import { NotificationIllustration } from '../../components/onboarding/PermissionIllustration'
+import { askOsPermission } from '../../lib/onboarding'
 import { clearPushDeclined, markPushDeclined } from '../../lib/pushDecline'
 import { useAuth } from '../../lib/useAuth'
 import { useOnboarding } from '../../lib/useOnboarding'
@@ -41,39 +42,13 @@ export default function NotificationsScreen() {
 
   const ask = async () => {
     setAsking(true)
-    let granted = false
-    let canAskAgain = true
-    let broken = false
-    try {
-      // Existing permission first: asking again when it is already decided
-      // returns the standing answer without a dialog, and calling `request`
-      // unconditionally is what produces the "the prompt never appeared" bug
-      // reports on a reinstall over an existing grant.
-      const existing = await Notifications.getPermissionsAsync()
-      canAskAgain = existing.canAskAgain
-      granted =
-        existing.granted ||
-        (existing.canAskAgain && (await Notifications.requestPermissionsAsync()).granted)
-    } catch {
-      // A permissions call that throws is a broken build, not a refusal. Treat
-      // it as "not granted" and carry on rather than stranding the flow. No
-      // Settings prompt either — we do not know that Settings is the problem.
-      granted = false
-      canAskAgain = false
-      broken = true
-    }
+    const { granted, blocked } = await askOsPermission(
+      () => Notifications.getPermissionsAsync(),
+      async () => (await Notifications.requestPermissionsAsync()).granted
+    )
     setAsking(false)
 
-    /*
-     * The OS asks once per install, not once per account.
-     *
-     * Deleting an account and signing up again does not reset it — so someone
-     * who declined months ago taps this button and *nothing happens*, which
-     * reads as a broken button rather than as a decision they already made.
-     * `canAskAgain` is false in exactly that case, and Settings is the only
-     * way back.
-     */
-    if (!granted && !canAskAgain && !broken) {
+    if (blocked) {
       // The answer comes from the tray; the step waits for it.
       setSettingsPrompt(true)
       return

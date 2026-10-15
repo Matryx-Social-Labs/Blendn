@@ -75,7 +75,8 @@ maps that change whenever anybody checks in, moves, or taps a heart, so every
 change gives `renderItem` a new identity and `FlatList` re-renders every mounted
 row.
 
-`useWhyRender` puts a number on it: **six state objects change identity together,
+`useWhyRender` (a diagnostic since deleted from `lib/perf.tsx`; restore it from
+git history to measure again) put a number on it: **six state objects change identity together,
 seventeen times in one visit** — `events`, `checkinStatuses`, `proximityData`,
 `interestStatuses`, `interestCounts`, `checkedInEvents`. Together, because
 `fetchEvents` sets five of them after one `await` and React batches them, and

@@ -76,12 +76,16 @@ describe("the entry point to peer rating", () => {
      * Two fetch paths populate `checkInStatus` — the cached read and the live
      * one — and a control that removed only the first still passed, because the
      * assertion merely looked for the string. Both must read it or the button
-     * appears or vanishes depending on which path ran.
+     * appears or vanishes depending on which path ran. They share one mapper,
+     * `applyDetail`: the read is pinned there, and both paths to calling it.
      */
-    const reads = DETAIL.match(/status: d\.userStatus\.checkInStatus/g) ?? []
-    const writes = DETAIL.match(/setCheckInStatus\(\{\s*\n\s*success: true,\s*\n\s*checked_in: d\.userStatus/g) ?? []
-    expect(reads.length).toBe(writes.length)
-    expect(reads.length).toBeGreaterThan(1)
+    const mapper = DETAIL.slice(DETAIL.indexOf("const applyDetail = "), DETAIL.indexOf("const applyEventDetails = "))
+    expect(mapper).toMatch(/status: d\.userStatus\.checkInStatus/)
+    expect(mapper).toMatch(/setCheckInStatus\(\{\s*\n\s*success: true,\s*\n\s*checked_in: d\.userStatus/)
+    const fetchPath = DETAIL.slice(DETAIL.indexOf("const applyEventDetails = "), DETAIL.indexOf("const fetchEventDetails = "))
+    expect(fetchPath).toContain("applyDetail(d)")
+    const cachePath = DETAIL.slice(DETAIL.indexOf("const cached = getEventDetailCache"), DETAIL.indexOf("Logger.journey('events', 'detail:mount'"))
+    expect(cachePath).toContain("applyDetail(cached)")
   })
 
   it("is a live control", () => {

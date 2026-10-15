@@ -30,8 +30,6 @@ const REQUESTS_SWR_TTL = 30 * 1000
 const CHECKINS_SWR_TTL = 30 * 1000
 const CATEGORIES_SWR_TTL = 10 * 60 * 1000
 const PARTICIPANTS_SWR_TTL = 30 * 1000
-const INTERESTED_USERS_SWR_TTL = 30 * 1000
-const EVENT_CHECKINS_SWR_TTL = 30 * 1000
 
 if (!API_BASE_URL) {
   throw new Error(
@@ -198,6 +196,16 @@ class RequestQueue {
 }
 
 const requestQueue = new RequestQueue()
+
+/** `?a=1&b=2` from the fields that are set, or '' when none are. */
+function toQuery(params: object = {}): string {
+  const searchParams = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null) searchParams.append(key, String(value))
+  }
+  const query = searchParams.toString()
+  return query ? `?${query}` : ''
+}
 
 // expo-secure-store has no web implementation and always throws there, so on
 // web we go straight to AsyncStorage (unencrypted) rather than eating a
@@ -445,38 +453,6 @@ export interface LikeOutcome {
 export interface RoomPreview {
   hereCount: number
   tasteMatchCount: number | null
-}
-
-/** `null` means "withheld", never "zero" — see the server's `lib/disclosure.ts`. */
-export type Disclosed<T> = T | null
-
-export interface PollOption {
-  id: string
-  label: string
-  position: number
-  votes: Disclosed<number>
-}
-
-/**
- * One poll as this reader may see it.
- *
- * Counts arrive already disclosed. A client that increments them locally after
- * a vote would show a number the disclosure floor withheld, so the vote call
- * returns this same shape and the screen renders that instead.
- */
-export interface PollResults {
-  id: string
-  question: string
-  closesAt: string | null
-  closed: boolean
-  resultsVisible: boolean
-  options: PollOption[]
-  total: Disclosed<number>
-  suppressed: boolean
-  /** What to render in place of the numbers. Null when nothing is withheld. */
-  suppressedLabel: string | null
-  /** Which option you chose, if any. */
-  myVote: string | null
 }
 
 /** Counts and whether *you* reacted — never who else did. */
@@ -836,26 +812,6 @@ export interface GoLiveResult {
   intentNeeded: boolean
 }
 
-export interface CheckinPagination {
-  page: number
-  limit: number
-  totalCount: number
-  hasMore: boolean
-}
-
-export interface CheckinAttendee {
-  id: string
-  userId: string
-  eventId: string
-  checkInTime: string
-  user?: {
-    id: string
-    name: string | null
-    image: string | null
-  }
-  [key: string]: unknown
-}
-
 export interface UserProfileData {
   id?: string
   user_id?: string
@@ -1005,7 +961,6 @@ export interface AuthResult {
 }
 
 // Token refresh state
-let isRefreshing = false
 let refreshPromise: Promise<RefreshOutcome> | null = null
 
 /**
@@ -1151,13 +1106,10 @@ class ApiClientClass {
    */
   forgetEventMatches(eventId: string): void {
     const room = `:/api/mobile/events/${eventId}`
-    const isRoom = (key: string) =>
-      key.includes(`${room}/matches:`) || key.includes(`${room}/matches?`) || key.includes(`${room}/room-preview:`)
-    this.cacheEpoch++
-    for (const key of this.responseCache.keys()) if (isRoom(key)) this.responseCache.delete(key)
     // A read already on the wire was answered before the event: the next one
     // must not join it.
-    for (const key of this.inFlight.keys()) if (isRoom(key)) this.inFlight.delete(key)
+    this.forgetMatching((key) =>
+      key.includes(`${room}/matches:`) || key.includes(`${room}/matches?`) || key.includes(`${room}/room-preview:`))
   }
 
   private setCache<T>(key: string, data: ApiResponse<T>, ttl: number) {
@@ -1200,16 +1152,9 @@ class ApiClientClass {
     }
   }
 
-  private refreshCacheInBackground<T>(
-    endpoint: string,
-    options: RequestInit,
-    requireAuth: boolean,
-    priority: number,
-    key: string,
-    ttl: number
-  ) {
+  private refreshCacheInBackground<T>(endpoint: string, key: string, ttl: number) {
     const epoch = this.cacheEpoch
-    this.queuedRequest<T>(endpoint, options, requireAuth, priority).then((result) => {
+    this.queuedRequest<T>(endpoint).then((result) => {
       if (result.success && epoch === this.cacheEpoch) {
         this.setCache(key, result, ttl)
       }
@@ -1410,11 +1355,10 @@ class ApiClientClass {
   private async refreshTokens(): Promise<RefreshOutcome> {
     // If a refresh is already in flight, join it — don't start a second one.
     // We return the existing promise so all concurrent callers share one result.
-    if (isRefreshing && refreshPromise) {
+    if (refreshPromise) {
       return refreshPromise
     }
 
-    isRefreshing = true
     // Store promise BEFORE any await so concurrent callers see it immediately.
     const p: Promise<RefreshOutcome> = (async () => {
       try {
@@ -1424,7 +1368,7 @@ class ApiClientClass {
         }
 
         // Deliberately on a deadline too. A hung refresh is the worst version
-        // of this bug: `isRefreshing` gates every other caller behind one
+        // of this bug: `refreshPromise` gates every other caller behind one
         // promise, so a single stalled refresh silently blocks re-auth for the
         // whole app until it is killed.
         const { response, body: raw } = await fetchWithTimeout(`${this.baseUrl}/api/mobile/auth/refresh`, {
@@ -1465,7 +1409,6 @@ class ApiClientClass {
 
     // Reset flags after all awaiting callers have received the result (next microtask).
     p.finally(() => {
-      isRefreshing = false
       refreshPromise = null
     })
 
@@ -1523,61 +1466,47 @@ class ApiClientClass {
     return promise
   }
 
-  async cachedRequest<T>(
-    endpoint: string,
-    cache: { ttl: number; swr?: boolean; key?: string },
-    options: RequestInit = {},
-    requireAuth: boolean = true,
-    priority: number = 5
-  ): Promise<ApiResponse<T>> {
-    const method = (options.method || 'GET').toUpperCase()
-    if (method !== 'GET') {
-      return this.queuedRequest<T>(endpoint, options, requireAuth, priority)
-    }
-
-    const key = cache.key || this.buildRequestKey(endpoint, options, requireAuth)
+  /** An authed GET, stale-while-revalidate: a stale entry is served while it refreshes. */
+  async cachedRequest<T>(endpoint: string, ttl: number): Promise<ApiResponse<T>> {
+    const key = this.buildRequestKey(endpoint, {}, true)
     const cached = this.getCached<T>(key)
 
     if (cached) {
-      if (cached.isFresh) {
-        return cached.data
-      }
-
-      if (cache.swr) {
-        this.refreshCacheInBackground<T>(endpoint, options, requireAuth, priority, key, cache.ttl)
-        return cached.data
-      }
+      if (!cached.isFresh) this.refreshCacheInBackground<T>(endpoint, key, ttl)
+      return cached.data
     }
 
     const epoch = this.cacheEpoch
-    const result = await this.queuedRequest<T>(endpoint, options, requireAuth, priority)
+    const result = await this.queuedRequest<T>(endpoint)
     if (result.success && epoch === this.cacheEpoch) {
-      this.setCache(key, result, cache.ttl)
+      this.setCache(key, result, ttl)
     }
     return result
   }
 
   // === AUTH ENDPOINTS ===
 
+  /** Store the tokens and user of a successful sign-in or sign-up. */
+  private async keepSession(result: ApiResponse<AuthResult>): Promise<ApiResponse<AuthResult>> {
+    if (result.success && result.data) {
+      await TokenStorage.setTokens(result.data.accessToken, result.data.refreshToken)
+      await TokenStorage.setUser(result.data.user)
+    }
+    return result
+  }
+
   async signInWithGoogle(
     idToken: string,
     deviceInfo?: { platform?: string; device?: string; appVersion?: string }
   ): Promise<ApiResponse<AuthResult>> {
-    const result = await this.request<AuthResult>(
+    return this.keepSession(await this.request<AuthResult>(
       '/api/mobile/auth/google',
       {
         method: 'POST',
         body: JSON.stringify({ idToken, deviceInfo }),
       },
       false
-    )
-
-    if (result.success && result.data) {
-      await TokenStorage.setTokens(result.data.accessToken, result.data.refreshToken)
-      await TokenStorage.setUser(result.data.user)
-    }
-
-    return result
+    ))
   }
 
   async signInWithApple(
@@ -1585,21 +1514,14 @@ class ApiClientClass {
     fullName?: { givenName?: string | null; familyName?: string | null },
     deviceInfo?: { platform?: string; device?: string; appVersion?: string }
   ): Promise<ApiResponse<AuthResult>> {
-    const result = await this.request<AuthResult>(
+    return this.keepSession(await this.request<AuthResult>(
       '/api/mobile/auth/apple',
       {
         method: 'POST',
         body: JSON.stringify({ identityToken, fullName, deviceInfo }),
       },
       false
-    )
-
-    if (result.success && result.data) {
-      await TokenStorage.setTokens(result.data.accessToken, result.data.refreshToken)
-      await TokenStorage.setUser(result.data.user)
-    }
-
-    return result
+    ))
   }
 
   async signInWithEmail(
@@ -1607,21 +1529,14 @@ class ApiClientClass {
     password: string,
     deviceInfo?: { platform?: string; device?: string; appVersion?: string }
   ): Promise<ApiResponse<AuthResult>> {
-    const result = await this.request<AuthResult>(
+    return this.keepSession(await this.request<AuthResult>(
       '/api/mobile/auth/signin',
       {
         method: 'POST',
         body: JSON.stringify({ email, password, deviceInfo }),
       },
       false
-    )
-
-    if (result.success && result.data) {
-      await TokenStorage.setTokens(result.data.accessToken, result.data.refreshToken)
-      await TokenStorage.setUser(result.data.user)
-    }
-
-    return result
+    ))
   }
 
   async signUp(
@@ -1638,21 +1553,14 @@ class ApiClientClass {
      */
     age?: number
   ): Promise<ApiResponse<AuthResult>> {
-    const result = await this.request<AuthResult>(
+    return this.keepSession(await this.request<AuthResult>(
       '/api/mobile/auth/signup',
       {
         method: 'POST',
         body: JSON.stringify({ email, password, name, age, deviceInfo }),
       },
       false
-    )
-
-    if (result.success && result.data) {
-      await TokenStorage.setTokens(result.data.accessToken, result.data.refreshToken)
-      await TokenStorage.setUser(result.data.user)
-    }
-
-    return result
+    ))
   }
 
   /**
@@ -1798,20 +1706,11 @@ class ApiClientClass {
     include?: string
     interestedPreviewLimit?: number
   }, options?: { force?: boolean }): Promise<ApiResponse<EventsListResponse>> {
-    const searchParams = new URLSearchParams()
-    if (params) {
-      Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined && value !== null) {
-          searchParams.append(key, String(value))
-        }
-      })
-    }
-    const query = searchParams.toString()
-    const endpoint = `/api/mobile/events${query ? `?${query}` : ''}`
+    const endpoint = `/api/mobile/events${toQuery(params)}`
     if (options?.force) {
       return this.queuedRequest<EventsListResponse>(endpoint)
     }
-    return this.cachedRequest<EventsListResponse>(endpoint, { ttl: EVENTS_LIST_SWR_TTL, swr: true })
+    return this.cachedRequest<EventsListResponse>(endpoint, EVENTS_LIST_SWR_TTL)
   }
 
   /**
@@ -1823,14 +1722,9 @@ class ApiClientClass {
     params: { page?: number; limit?: number; city?: string; lat?: number; lon?: number; sortBy?: 'name' | 'distance' },
     options?: { force?: boolean }
   ): Promise<ApiResponse<VenuesListResponse>> {
-    const searchParams = new URLSearchParams()
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== null) searchParams.append(key, String(value))
-    })
-    const query = searchParams.toString()
-    const endpoint = `/api/mobile/venues${query ? `?${query}` : ''}`
+    const endpoint = `/api/mobile/venues${toQuery(params)}`
     if (options?.force) return this.queuedRequest<VenuesListResponse>(endpoint)
-    return this.cachedRequest<VenuesListResponse>(endpoint, { ttl: EVENTS_LIST_SWR_TTL, swr: true })
+    return this.cachedRequest<VenuesListResponse>(endpoint, EVENTS_LIST_SWR_TTL)
   }
 
   /** One venue — `GET /venues/:venueId`. Not cached: it carries the live count. */
@@ -1869,7 +1763,7 @@ class ApiClientClass {
   async getEventCities(): Promise<ApiResponse<{ cities: CityOption[] }>> {
     return this.cachedRequest<{ cities: CityOption[] }>(
       '/api/mobile/events/cities',
-      { ttl: 5 * 60 * 1000, swr: true }
+      5 * 60 * 1000
     )
   }
 
@@ -1910,7 +1804,7 @@ class ApiClientClass {
     const query = searchParams.toString()
     return this.cachedRequest<EventApiItem>(
       `/api/mobile/events/${eventId}${query ? `?${query}` : ''}`,
-      { ttl: 30 * 1000, swr: true }
+      30 * 1000
     )
   }
 
@@ -1938,16 +1832,6 @@ class ApiClientClass {
       true,
       2 // High priority
     )
-  }
-
-  async getEventCheckins(eventId: string, options?: { force?: boolean; page?: number; limit?: number }): Promise<ApiResponse<{ attendees: CheckinAttendee[]; pagination: CheckinPagination }>> {
-    const page = options?.page ?? 1
-    const limit = options?.limit ?? 20
-    const endpoint = `/api/mobile/events/${eventId}/checkins?page=${page}&limit=${limit}`
-    if (options?.force || page > 1) {
-      return this.queuedRequest(endpoint)
-    }
-    return this.cachedRequest(endpoint, { ttl: EVENT_CHECKINS_SWR_TTL, swr: true })
   }
 
   /**
@@ -2347,7 +2231,7 @@ class ApiClientClass {
     if (options?.force) {
       return this.queuedRequest<Array<Record<string, unknown>>>(endpoint)
     }
-    return this.cachedRequest<Array<Record<string, unknown>>>(endpoint, { ttl: CHAT_LIST_SWR_TTL, swr: true })
+    return this.cachedRequest<Array<Record<string, unknown>>>(endpoint, CHAT_LIST_SWR_TTL)
   }
 
   async getEventChat(eventId: string): Promise<ApiResponse<EventChatData>> {
@@ -2431,10 +2315,9 @@ class ApiClientClass {
   ): Promise<ApiResponse<{ matches: MatchCard[] }>> {
     const query = options?.limit ? `?limit=${options.limit}` : ''
     const endpoint = `/api/mobile/events/${eventId}/matches${query}`
-    // Same idiom as getEventCheckins: force bypasses the cache rather than
-    // being passed into it.
+    // force bypasses the cache rather than being passed into it.
     if (options?.force) return this.queuedRequest<{ matches: MatchCard[] }>(endpoint)
-    return this.cachedRequest<{ matches: MatchCard[] }>(endpoint, { ttl: 30_000, swr: true })
+    return this.cachedRequest<{ matches: MatchCard[] }>(endpoint, 30_000)
   }
 
   /**
@@ -2466,7 +2349,7 @@ class ApiClientClass {
   ): Promise<ApiResponse<RoomPreview>> {
     const endpoint = `/api/mobile/events/${eventId}/room-preview`
     if (options?.force) return this.queuedRequest<RoomPreview>(endpoint)
-    return this.cachedRequest<RoomPreview>(endpoint, { ttl: 15_000, swr: true })
+    return this.cachedRequest<RoomPreview>(endpoint, 15_000)
   }
 
   /**
@@ -2483,29 +2366,6 @@ class ApiClientClass {
       { method: 'POST', body: JSON.stringify({ toUserId }) },
       true,
       3
-    )
-  }
-
-  /** One poll, disclosed for you. 403 when you are not in the room. */
-  async getPoll(eventId: string, pollId: string): Promise<ApiResponse<PollResults>> {
-    return this.queuedRequest<PollResults>(`/api/mobile/events/${eventId}/polls/${pollId}`)
-  }
-
-  /**
-   * Cast or change your vote. Answers with the poll's disclosed state, which
-   * is what the screen should render — never a locally incremented count.
-   * 409 carries a sentence the voter can act on ("This poll has closed").
-   */
-  async votePoll(
-    eventId: string,
-    pollId: string,
-    optionId: string
-  ): Promise<ApiResponse<PollResults>> {
-    return this.queuedRequest<PollResults>(
-      `/api/mobile/events/${eventId}/polls/${pollId}/vote`,
-      { method: 'POST', body: JSON.stringify({ optionId }) },
-      true,
-      2
     )
   }
 
@@ -2729,7 +2589,7 @@ class ApiClientClass {
     return namedList(
       await this.cachedRequest<NamedList<'categories'>>(
         '/api/mobile/categories',
-        { ttl: CATEGORIES_SWR_TTL, swr: true }
+        CATEGORIES_SWR_TTL
       ),
       'categories'
     )
@@ -2745,7 +2605,7 @@ class ApiClientClass {
    */
   /** Matching v2's vocabulary: languages, home states, signs, this-or-that. Static; cached like work fields. */
   async getProfileOptions(): Promise<ApiResponse<ProfileOptions>> {
-    return this.cachedRequest<ProfileOptions>('/api/mobile/profile-options', { ttl: CATEGORIES_SWR_TTL, swr: true })
+    return this.cachedRequest<ProfileOptions>('/api/mobile/profile-options', CATEGORIES_SWR_TTL)
   }
 
   /** Your this-or-that answers, question slug → "a" | "b". */
@@ -2766,7 +2626,7 @@ class ApiClientClass {
   async getWorkFields(): Promise<ApiResponse<{ workFields: { slug: string; label: string }[] }>> {
     return this.cachedRequest<{ workFields: { slug: string; label: string }[] }>(
       '/api/mobile/work-fields',
-      { ttl: CATEGORIES_SWR_TTL, swr: true }
+      CATEGORIES_SWR_TTL
     )
   }
 
@@ -2869,25 +2729,8 @@ class ApiClientClass {
       return namedList(await this.queuedRequest<NamedList<'conversations'>>(endpoint), 'conversations')
     }
     return namedList(
-      await this.cachedRequest<NamedList<'conversations'>>(endpoint, { ttl: CHAT_LIST_SWR_TTL, swr: true }),
+      await this.cachedRequest<NamedList<'conversations'>>(endpoint, CHAT_LIST_SWR_TTL),
       'conversations'
-    )
-  }
-
-  async getOrCreateConversation(otherUserId: string): Promise<ApiResponse<{
-    id: string
-    otherUser: { id: string; name: string | null; image: string | null }
-    createdAt: string
-    isNew: boolean
-  }>> {
-    return this.queuedRequest(
-      '/api/mobile/conversations',
-      {
-        method: 'POST',
-        body: JSON.stringify({ otherUserId }),
-      },
-      true,
-      2
     )
   }
 
@@ -3049,15 +2892,6 @@ class ApiClientClass {
     )
   }
 
-  async deleteConversation(conversationId: string): Promise<ApiResponse<{ deleted: boolean }>> {
-    return this.queuedRequest(
-      `/api/mobile/conversations/${conversationId}`,
-      { method: 'DELETE' },
-      true,
-      5
-    )
-  }
-
   // === BATCH ENDPOINTS ===
 
   async getBatchCheckinStatuses(eventIds: string[]): Promise<ApiResponse<{
@@ -3113,49 +2947,7 @@ class ApiClientClass {
     if (options?.force) {
       return this.queuedRequest(endpoint)
     }
-    return this.cachedRequest(endpoint, { ttl: CHECKINS_SWR_TTL, swr: true })
-  }
-
-  async getBatchInterestStatuses(eventIds: string[]): Promise<ApiResponse<{
-    interests: { [eventId: string]: boolean }
-  }>> {
-    return this.queuedRequest(
-      '/api/mobile/events/interests/batch',
-      {
-        method: 'POST',
-        body: JSON.stringify({ eventIds }),
-      },
-      true,
-      4
-    )
-  }
-
-  async getBatchInterestCounts(eventIds: string[]): Promise<ApiResponse<{
-    counts: { [eventId: string]: number }
-  }>> {
-    return this.queuedRequest(
-      '/api/mobile/events/interest-counts/batch',
-      {
-        method: 'POST',
-        body: JSON.stringify({ eventIds }),
-      },
-      true,
-      4
-    )
-  }
-
-  async getInterestedUsers(eventId: string, params?: { limit?: number; offset?: number }): Promise<ApiResponse<{
-    users: Array<{ id: string; name: string | null; avatar: string | null }>
-    totalCount: number
-  }>> {
-    const searchParams = new URLSearchParams()
-    if (params?.limit) searchParams.append('limit', String(params.limit))
-    if (params?.offset) searchParams.append('offset', String(params.offset))
-    const query = searchParams.toString()
-    return this.cachedRequest(
-      `/api/mobile/events/${eventId}/interested-users${query ? `?${query}` : ''}`,
-      { ttl: INTERESTED_USERS_SWR_TTL, swr: true }
-    )
+    return this.cachedRequest(endpoint, CHECKINS_SWR_TTL)
   }
 
   async getChatParticipants(chatGroupId: string, params?: { limit?: number; offset?: number }): Promise<ApiResponse<{
@@ -3175,7 +2967,7 @@ class ApiClientClass {
     const query = searchParams.toString()
     return this.cachedRequest(
       `/api/mobile/chat/groups/${chatGroupId}/participants${query ? `?${query}` : ''}`,
-      { ttl: PARTICIPANTS_SWR_TTL, swr: true }
+      PARTICIPANTS_SWR_TTL
     )
   }
 
@@ -3237,7 +3029,7 @@ class ApiClientClass {
     if (options?.force) {
       return this.queuedRequest(endpoint)
     }
-    return this.cachedRequest(endpoint, { ttl: REQUESTS_SWR_TTL, swr: true })
+    return this.cachedRequest(endpoint, REQUESTS_SWR_TTL)
   }
 
   async respondToMessageRequest(
@@ -3550,19 +3342,6 @@ class ApiClientClass {
     return TokenStorage.getUser()
   }
 
-  async isAuthenticated(): Promise<boolean> {
-    const token = await TokenStorage.getAccessToken()
-    return !!token
-  }
-
-  getQueueStats() {
-    return requestQueue.getStats()
-  }
-
-  clearQueue() {
-    requestQueue.clear()
-  }
-
   clearResponseCache() {
     this.responseCache.clear()
     this.inFlight.clear()
@@ -3577,24 +3356,19 @@ export const apiClient = new ApiClientClass(API_BASE_URL)
 export { TokenStorage }
 
 // App state listener for queue management
-let appStateListenerRegistered = false
-
 const registerAppStateListener = () => {
-  if (appStateListenerRegistered) return
-
   try {
     AppState.addEventListener('change', (state) => {
       try {
         Logger.info('api', `App state changed to: ${state}`)
         if (state !== 'active') {
           // Clear request queue on background to prevent stale requests
-          apiClient.clearQueue()
+          requestQueue.clear()
         }
       } catch (error) {
         Logger.error('api', 'Error handling app state change', { error })
       }
     })
-    appStateListenerRegistered = true
     Logger.info('api', 'App state listener registered for API client')
   } catch (error) {
     Logger.error('api', 'Failed to register app state listener', { error })

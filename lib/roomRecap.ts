@@ -33,11 +33,6 @@ export function endsAtMs(endsAt: string | null | undefined): number | null {
   return Number.isFinite(ms) ? ms : null
 }
 
-export function roomHasEnded(endsAt: string | null | undefined, now: number): boolean {
-  const end = endsAtMs(endsAt)
-  return end !== null && end <= now
-}
-
 /**
  * How long you were in the room, uncapped.
  *

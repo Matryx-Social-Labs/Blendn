@@ -10,6 +10,8 @@
  * sent, and when there is nothing true to say the fallback is presence.
  */
 
+import { fnv1a } from './pseudonymAvatar'
+
 /** A reason line has to fit under a face in a three-column grid. */
 export const REASON_MAX = 24
 
@@ -50,7 +52,7 @@ function shortest(long: string, short: string): string {
 /**
  * One short reason to walk over.
  *
- * The same priority as the Grid card's box (`lib/gridCardContent.ts`) —
+ * The same priority the old Grid card's box used —
  * rarest and most actionable first — with dating ahead of it, because it only
  * appears when the server has already checked that it is mutual and it is the
  * one thing somebody would most want to know before crossing a room.
@@ -152,16 +154,6 @@ export interface MeetNextResult<T> {
   nextShuffleAt: number
 }
 
-/** FNV-1a. Small, stable across engines, and enough to spread event ids. */
-function hash(text: string): number {
-  let h = 0x811c9dc5
-  for (let i = 0; i < text.length; i++) {
-    h ^= text.charCodeAt(i)
-    h = Math.imul(h, 0x01000193)
-  }
-  return h >>> 0
-}
-
 /**
  * The three people to meet next.
  *
@@ -196,7 +188,7 @@ export function meetNext<T extends { id: string; matched?: boolean; insideNow?: 
   if (candidates.length <= size) return { picks: candidates, nextShuffleAt }
 
   const n = candidates.length
-  const offset = (hash(eventId) + window * size) % n
+  const offset = ((fnv1a(eventId) >>> 0) + window * size) % n
   const indices: number[] = []
   for (let i = 0; i < size; i++) indices.push((offset + i) % n)
   indices.sort((a, b) => a - b)

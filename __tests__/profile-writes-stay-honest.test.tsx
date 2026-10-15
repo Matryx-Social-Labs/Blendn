@@ -57,7 +57,7 @@ describe('adding a photo', () => {
     pu.selectAndUploadPhoto.mockResolvedValue({ success: true, url: 'https://cdn/c.jpg' })
     pu.reorderPhotos.mockResolvedValue({ ok: false, error: 'That looks like a blank image. Pick a photo of yourself.' })
 
-    await render(<PhotoManager userId="u" editable />)
+    await render(<PhotoManager userId="u" />)
     await screen.findByText('Add photo')
     fireEvent.press(screen.getByText('Add photo'))
 
@@ -72,7 +72,7 @@ describe('adding a photo', () => {
     pu.selectAndUploadPhoto.mockResolvedValue({ success: true, url: 'https://cdn/c.jpg' })
     pu.reorderPhotos.mockResolvedValue({ ok: true })
 
-    await render(<PhotoManager userId="u" editable />)
+    await render(<PhotoManager userId="u" />)
     await screen.findByText('Add photo')
     fireEvent.press(screen.getByText('Add photo'))
 
@@ -84,7 +84,7 @@ describe('adding a photo', () => {
 describe('making a photo the main one', () => {
   it('reorders under the finger and keeps it when the write holds', async () => {
     pu.reorderPhotos.mockResolvedValue({ ok: true })
-    await render(<PhotoManager userId="u" editable />)
+    await render(<PhotoManager userId="u" />)
     await screen.findByLabelText('Photo 2 of 2')
     fireEvent.press(screen.getAllByLabelText('Make this my main photo')[0])
 
@@ -96,7 +96,7 @@ describe('making a photo the main one', () => {
 
   it('puts the order back and says why when the write is refused', async () => {
     pu.reorderPhotos.mockResolvedValue({ ok: false, error: 'Could not save your photos' })
-    await render(<PhotoManager userId="u" editable />)
+    await render(<PhotoManager userId="u" />)
     await screen.findByLabelText('Photo 2 of 2')
     fireEvent.press(screen.getAllByLabelText('Make this my main photo')[0])
 
@@ -117,7 +117,7 @@ describe('removing a photo', () => {
 
   it('does NOT delete the object when the profile write fails, and restores the grid', async () => {
     pu.reorderPhotos.mockResolvedValue({ ok: false, error: 'That looks like a blank image. Pick a photo of yourself.' })
-    await render(<PhotoManager userId="u" editable />)
+    await render(<PhotoManager userId="u" />)
     await screen.findByLabelText('Remove photo 2')
     fireEvent.press(screen.getByLabelText('Remove photo 2'))
     confirmRemove()
@@ -130,7 +130,7 @@ describe('removing a photo', () => {
   it('deletes the object only after the profile no longer lists it', async () => {
     pu.reorderPhotos.mockResolvedValue({ ok: true })
     pu.deletePhoto.mockResolvedValue(true)
-    await render(<PhotoManager userId="u" editable />)
+    await render(<PhotoManager userId="u" />)
     await screen.findByLabelText('Remove photo 2')
     fireEvent.press(screen.getByLabelText('Remove photo 2'))
     confirmRemove()

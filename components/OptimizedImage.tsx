@@ -10,17 +10,11 @@ interface OptimizedImageProps {
   style?: ViewStyle | ViewStyle[]
   contentFit?: ImageContentFit
   placeholder?: ImageSource
-  fallback?: ImageSource
   width?: number
   height?: number
   quality?: number
-  enableWebP?: boolean
   enableProgressive?: boolean
   priority?: 'low' | 'normal' | 'high'
-  disableOptimization?: boolean
-  onLoad?: () => void
-  onError?: (error: any) => void
-  blurRadius?: number
   transition?: number
   cachePolicy?: 'none' | 'disk' | 'memory' | 'memory-disk'
   /**
@@ -42,7 +36,6 @@ interface OptimizedImageProps {
    * Pass the image's own URL. Anything stable and unique per picture works.
    */
   recyclingKey?: string
-  testID?: string
   accessibilityLabel?: string
   accessibilityRole?: string
   /** Make the wrapper an accessibility element (it is not by default). */
@@ -60,21 +53,14 @@ export const OptimizedImage = memo<OptimizedImageProps>(({
   style,
   contentFit = 'cover',
   placeholder,
-  fallback,
   width,
   height,
   quality = 75,
-  enableWebP = true,
   enableProgressive = false, // Disabled by default - causes double loads
   priority = 'normal',
-  disableOptimization = false,
-  onLoad,
-  onError,
-  blurRadius,
   transition = 200, // Faster transition
   cachePolicy = 'memory-disk',
   recyclingKey,
-  testID,
   accessibilityLabel,
   accessible,
   accessibilityRole,
@@ -85,7 +71,6 @@ export const OptimizedImage = memo<OptimizedImageProps>(({
     hasError: false
   })
   
-  const [opacity] = useState(new Animated.Value(0))
   const [lowQualityOpacity] = useState(new Animated.Value(0))
 
   const effectiveEnableProgressive = enableProgressive && (!width || !height || Math.max(width, height) >= 220)
@@ -96,9 +81,7 @@ export const OptimizedImage = memo<OptimizedImageProps>(({
     width,
     height,
     quality,
-    enableWebP,
-    effectiveEnableProgressive,
-    disableOptimization
+    effectiveEnableProgressive
   )
 
   const fadeIn = useCallback((animatedValue: Animated.Value, duration: number = transition) => {
@@ -125,13 +108,10 @@ export const OptimizedImage = memo<OptimizedImageProps>(({
   const handleHighQualityLoad = useCallback(() => {
     setLoadingState(prev => ({ ...prev, highQualityLoaded: true }))
     fadeOut(lowQualityOpacity)
-    fadeIn(opacity)
-    onLoad?.()
-  }, [opacity, lowQualityOpacity, fadeIn, fadeOut, onLoad])
+  }, [lowQualityOpacity, fadeOut])
 
   const handleError = useCallback((error: any) => {
     setLoadingState(prev => ({ ...prev, hasError: true }))
-    onError?.(error)
     // Only log errors for non-empty sources
     if (highQualityUrl) {
       Logger.warn('general', 'Image loading failed', {
@@ -140,7 +120,7 @@ export const OptimizedImage = memo<OptimizedImageProps>(({
         nativeError: JSON.stringify(error)
       })
     }
-  }, [onError, highQualityUrl])
+  }, [highQualityUrl])
 
   // Reset state when source changes: the flags during render, so a new source
   // never renders with the last one's; the animated values after commit.
@@ -154,26 +134,12 @@ export const OptimizedImage = memo<OptimizedImageProps>(({
     })
   }
   useEffect(() => {
-    opacity.setValue(0)
     lowQualityOpacity.setValue(0)
-  }, [source, opacity, lowQualityOpacity])
+  }, [source, lowQualityOpacity])
 
   const hasSource = (typeof source === 'string' ? source : (source as { uri?: string } | null)?.uri ?? '') !== ''
 
   const renderContent = () => {
-    if ((loadingState.hasError || !hasSource) && fallback) {
-      return (
-        <Image
-          source={fallback}
-          style={[StyleSheet.absoluteFill]}
-          contentFit={contentFit}
-          cachePolicy={cachePolicy}
-          recyclingKey={recyclingKey}
-          testID={`${testID}-fallback`}
-        />
-      )
-    }
-
     return (
       <>
         {/* Placeholder */}
@@ -182,8 +148,6 @@ export const OptimizedImage = memo<OptimizedImageProps>(({
             source={placeholder}
             style={[StyleSheet.absoluteFill]}
             contentFit={contentFit}
-            blurRadius={blurRadius}
-            testID={`${testID}-placeholder`}
           />
         )}
 
@@ -199,8 +163,7 @@ export const OptimizedImage = memo<OptimizedImageProps>(({
               cachePolicy={cachePolicy}
               priority={priority}
               recyclingKey={recyclingKey}
-              blurRadius={blurRadius ? blurRadius + 2 : 4}
-              testID={`${testID}-low-quality`}
+              blurRadius={4}
             />
           </Animated.View>
         )}
@@ -227,8 +190,6 @@ export const OptimizedImage = memo<OptimizedImageProps>(({
               cachePolicy={cachePolicy}
               recyclingKey={recyclingKey}
               priority={priority}
-              blurRadius={blurRadius}
-              testID={`${testID}-high-quality`}
             />
           </Animated.View>
         ) : null}
@@ -248,7 +209,6 @@ export const OptimizedImage = memo<OptimizedImageProps>(({
   return (
     <View
       style={[styles.container, style]}
-      testID={testID}
       accessible={accessible}
       accessibilityLabel={accessibilityLabel}
       accessibilityRole={accessibilityRole as any}
@@ -266,9 +226,7 @@ const useOptimizedUrls = (
   width?: number,
   height?: number,
   quality: number = 75,
-  enableWebP: boolean = true,
-  enableProgressive: boolean = true,
-  disableOptimization: boolean = false
+  enableProgressive: boolean = true
 ) => {
   const [urls, setUrls] = React.useState<{ lowQualityUrl: string; highQualityUrl: string }>({ lowQualityUrl: '', highQualityUrl: '' })
 
@@ -285,11 +243,6 @@ const useOptimizedUrls = (
         const baseOptions = { width, height, resize: 'cover' as const }
         const progressiveEnabled = enableProgressive && (!width || !height || Math.max(width, height) >= 220)
 
-        if (disableOptimization) {
-          if (!cancelled) setUrls({ lowQualityUrl: '', highQualityUrl: sourceStr })
-          return
-        }
-
         // If the source is already a URL, use public optimizer
         if (/^https?:\/\//i.test(sourceStr)) {
           // Only optimize URLs from our own storage (Tigris/t3.storage.dev)
@@ -303,7 +256,7 @@ const useOptimizedUrls = (
             : getOptimizedImageUrl(sourceStr, {
                 ...baseOptions,
                 quality,
-                format: enableWebP ? 'webp' : 'jpg'
+                format: 'webp'
               })
           Logger.info('general', 'OptimizedImage URL resolved', {
             original: sourceStr.substring(0, 80),
@@ -313,7 +266,7 @@ const useOptimizedUrls = (
           const lowQualityUrl = progressiveEnabled && !isExternalUrl ? getOptimizedImageUrl(sourceStr, {
             ...baseOptions,
             quality: Math.max(20, quality - 50),
-            format: enableWebP ? 'webp' : 'jpg',
+            format: 'webp',
             width: width ? Math.floor(width / 3) : undefined,
             height: height ? Math.floor(height / 3) : undefined,
           }) : ''
@@ -330,7 +283,7 @@ const useOptimizedUrls = (
 
     resolveUrls()
     return () => { cancelled = true }
-  }, [source, width, height, quality, enableWebP, enableProgressive, disableOptimization])
+  }, [source, width, height, quality, enableProgressive])
 
   return urls
 }
@@ -344,12 +297,6 @@ export const preloadImages = (urls: string[], priority: 'low' | 'normal' | 'high
   )
 }
 
-// Image cache management
-export const clearImageCache = () => {
-  Logger.info('general', 'Clearing image cache')
-  return Image.clearMemoryCache()
-}
-
 const styles = StyleSheet.create({
   container: {
     overflow: 'hidden',
@@ -361,5 +308,3 @@ const styles = StyleSheet.create({
     backgroundColor: tint(EMBER.bg, 0.1),
   }
 })
-
-export default OptimizedImage

@@ -43,8 +43,6 @@ export function centreButtonOrigin(width: number, height: number, bottomInset: n
 }
 
 interface StageApi {
-  /** Runs the close (back into the button) and then calls `onClosed`. */
-  close(): void
   /** For a scroll view inside, so the drag-to-close waits for it to reach the top. */
   scrollY: SharedValue<number>
   /** Pass to the scroll view's `simultaneousHandlers` / a `Gesture.Native()`. */
@@ -127,15 +125,13 @@ export const RoomStage = React.forwardRef<{ close(): void }, {
     open.set(withTiming(1, { duration: reduceMotion ? 200 : OPEN_MS, easing: EASE }))
   }, [open, reduceMotion])
 
-  const finish = useCallback(() => onClosed(), [onClosed])
-
   const close = useCallback(() => {
     open.set(
       withTiming(0, { duration: reduceMotion ? 200 : CLOSE_MS, easing: EASE }, (done) => {
-        if (done) scheduleOnRN(finish)
+        if (done) scheduleOnRN(onClosed)
       })
     )
-  }, [finish, open, reduceMotion])
+  }, [onClosed, open, reduceMotion])
 
   useImperativeHandle(ref, () => ({ close }), [close])
 
@@ -196,7 +192,7 @@ export const RoomStage = React.forwardRef<{ close(): void }, {
     opacity: interpolate(drag.get(), [0, height * 0.5], [1, 0], Extrapolation.CLAMP),
   }))
 
-  const api = useMemo<StageApi>(() => ({ close, scrollY, pan }), [close, scrollY, pan])
+  const api = useMemo<StageApi>(() => ({ scrollY, pan }), [scrollY, pan])
 
   return (
     <StageContext.Provider value={api}>

@@ -22,8 +22,3 @@ export function noteServerDate(dateHeader: string | null | undefined, receivedAt
 export function serverNow(): number {
   return Date.now() + offsetMs
 }
-
-/** For tests. */
-export function resetServerClock(): void {
-  offsetMs = 0
-}

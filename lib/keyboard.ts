@@ -1,5 +1,3 @@
-import { Platform } from 'react-native'
-
 /**
  * How every screen avoids the keyboard — on BOTH platforms.
  *
@@ -16,6 +14,3 @@ import { Platform } from 'react-native'
  * place, rather than a per-screen guess that is right on one platform.
  */
 export const KEYBOARD_BEHAVIOR = 'padding' as const
-
-/** Kept for the two screens that pass an offset; iOS-only today. */
-export const keyboardOffset = (top: number) => (Platform.OS === 'ios' ? top : 0)
