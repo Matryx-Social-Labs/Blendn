@@ -182,7 +182,7 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
   })
 
   it('moves the camera only with the drawer padding, so the centre stays above the drawer', () => {
-    const moves = component.split('\n').filter((line) => /\.(easeTo|flyTo|jumpTo)\(/.test(line))
+    const moves = component.split('\n').filter((line) => /\.(easeTo|flyTo|jumpTo|zoomTo)\(/.test(line))
     expect(moves.length).toBeGreaterThan(0)
     for (const line of moves) expect(line).toMatch(/padding:/)
     // …and the first frame has it too: a padding-only camera change is a no-op on Android (review H3).
@@ -416,6 +416,12 @@ describe('"my location"', () => {
   it('is wired: a tap with no fix asks through the Pulse, and every move takes the one camera rule', () => {
     expect(component).toMatch(/const target = locateTarget\(center\)\s*if \(!target\) \{\s*requestLocation\(\)/)
     expect(component).toMatch(/cameraMove\(view\.current\.centre, move\.to/)
+    // MapLibre iOS jumps (drive, 2026-10-15): flat first, or a tilted camera put Bengaluru a kilometre from
+    // Saarbrücken; the zoom last, once tilted, or it lands a step out. And the opening zoom set again once tilted.
+    expect(component).toMatch(
+      /zoomTo\(view\.current\.zoom, \{ pitch: 0, [^}]*\}\)\s*camera\.current\?\.easeTo\(\{ center: move\.to, pitch: [^}]*duration: 0 \}\)\s*camera\.current\?\.zoomTo\(move\.at\?\.zoom \?\? view\.current\.zoom/
+    )
+    expect(component).toMatch(/ready\.current = true[\s\S]{0,200}zoomTo\(MAP_THEME\.camera\.zoom, \{ padding: padding\.current, duration: 0 \}\)/)
     // Hidden while the drawer is full.
     expect(code('components/home/HomeShell.tsx')).toMatch(/locateVisible=\{snap !== 'full'\}/)
     // A re-pick changes no coordinates: the effect is keyed on the pick itself.

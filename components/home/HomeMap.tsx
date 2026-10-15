@@ -196,7 +196,22 @@ export const HomeMap = memo(function HomeMap({
       fade.set(1)
       fade.set(withTiming(0, { duration: MAP_THEME.camera.fadeMs }))
     }
-    camera.current?.easeTo({ center: move.to, ...move.at, padding: padding.current, duration })
+    if (duration > 0) {
+      camera.current?.easeTo({ center: move.to, ...move.at, padding: padding.current, duration })
+      return
+    }
+    /*
+     * A jump, in three stops (MLRN runs them in order). MapLibre iOS
+     * (`CameraUpdateItem._makeCamera`) places a centre by projecting it through
+     * the camera as it is: tilted, a point a continent away projects to nonsense
+     * (the first drive's jump from Saarbrücken to Bengaluru landed a kilometre up
+     * the road), so the camera goes flat first. And it turns a zoom into a height
+     * at the tilt it starts from and keeps that height across latitudes, so the
+     * zoom goes last, once the camera is there and tilted.
+     */
+    camera.current?.zoomTo(view.current.zoom, { pitch: 0, padding: padding.current, duration: 0 })
+    camera.current?.easeTo({ center: move.to, pitch: move.at?.pitch ?? view.current.pitch, padding: padding.current, duration: 0 })
+    camera.current?.zoomTo(move.at?.zoom ?? view.current.zoom, { padding: padding.current, duration: 0 })
   }
 
   const [query, setQuery] = useState<PinQuery | null>(null)
@@ -306,6 +321,8 @@ export const HomeMap = memo(function HomeMap({
   // Before anybody moves the map there is no region change to ask from: seed it once the map is up.
   const onLoaded = () => {
     ready.current = true
+    // The first frame's zoom was turned into a height before it was tilted (see `moveTo`): it opened near z15. Again, tilted.
+    camera.current?.zoomTo(MAP_THEME.camera.zoom, { padding: padding.current, duration: 0 })
     const held = pendingMove.current
     pendingMove.current = null
     if (held) moveTo(held)
