@@ -9,6 +9,7 @@ import Constants from 'expo-constants'
 import { router } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
+import { assetAspect } from '../components/onboarding/authForm'
 import { EmberButton } from '../components/onboarding/EmberControls'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LegalLine } from '../components/LegalLine'
@@ -46,10 +47,6 @@ const lockup = require('../assets/logo/lockup-hero.png')
  * the art cannot silently distort the layout — a hardcoded ratio is a number
  * that is correct exactly once.
  */
-function assetAspect(mod: number, fallback: number): number {
-  const s = Image.resolveAssetSource(mod)
-  return s?.width && s?.height ? s.width / s.height : fallback
-}
 
 const MONOGRAM_ASPECT = assetAspect(monogram, 453 / 534)
 // Fallback only — the real ratio comes from the bundler. Kept close to the

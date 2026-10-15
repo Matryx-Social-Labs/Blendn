@@ -18,28 +18,14 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { LegalLine } from '../components/LegalLine'
 import { Logger } from '../lib/logger'
+import { AUTH_FORM_STYLES, AUTH_LOCKUP } from '../components/onboarding/authForm'
 import { EmberButton } from '../components/onboarding/EmberControls'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, MAX_FONT_SCALE, OPACITY, SPACE, TYPE } from '../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, ICON, MAX_FONT_SCALE, SPACE, TYPE } from '../lib/theme'
 import { signInWithEmail, signUp } from '../lib/useAuth'
 import { KEYBOARD_BEHAVIOR } from '../lib/keyboard'
 import { accountAgeError } from '../lib/onboarding'
 import { PendingInvite } from '../components/friends/PendingInvite'
 
-// The same lockup as the entry screen, so the brand does not change colour
-// between the two taps of signing in (this was the all-white `lockup-white`).
-const lockup = require('../assets/logo/lockup-hero.png')
-/*
- * Fixed height, width derived from the file. Not `width: '<pct>%'` plus
- * `aspectRatio` — that combination rendered the lockup several times too large
- * on device, overflowing the screen, because a percentage width resolving
- * against a percentage-width parent inside a flex column did not match the
- * arithmetic. A number for the height removes the ambiguity.
- */
-const LOCKUP_ASPECT = (() => {
-  const s = Image.resolveAssetSource(lockup)
-  return s?.width && s?.height ? s.width / s.height : 674 / 202
-})()
-const LOCKUP_HEIGHT = 40
 
 /**
  * Email sign-in and account creation.
@@ -230,7 +216,7 @@ export default function SignIn() {
             before the first thing you can act on.
           */}
           <Image
-            source={lockup}
+            source={AUTH_LOCKUP}
             style={styles.lockup}
             resizeMode="contain"
             accessibilityElementsHidden
@@ -439,19 +425,7 @@ const SEGMENTED_PADDING = SPACE.xs
 const SEGMENT_EASE = Easing.bezier(0.77, 0, 0.175, 1)
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: 'transparent' },
-  flex: { flex: 1 },
-  scroll: { paddingHorizontal: GUTTER, paddingBottom: SPACE.xxl, gap: SPACE.lg },
-  back: { alignSelf: 'flex-start', paddingVertical: SPACE.sm, marginLeft: -SPACE.xs },
-  lockup: {
-    height: LOCKUP_HEIGHT,
-    width: LOCKUP_HEIGHT * LOCKUP_ASPECT,
-    maxWidth: '80%',
-    alignSelf: 'center',
-    marginTop: SPACE.sm,
-    marginBottom: SPACE.md,
-  },
-
+  ...AUTH_FORM_STYLES,
   segmented: {
     flexDirection: 'row',
     height: CONTROL.md,
@@ -472,27 +446,10 @@ const styles = StyleSheet.create({
   segmentText: { ...TYPE.bodyStrong, color: EMBER.textSecondary },
   segmentTextActive: { color: EMBER.bg },
 
-  field: { gap: SPACE.sm },
-  label: TYPE.label,
-  input: {
-    height: CONTROL.lg,
-    backgroundColor: EMBER.surface,
-    borderRadius: EMBER_RADIUS.pill,
-    paddingHorizontal: SPACE.xl,
-    ...TYPE.body,
-  },
   passwordRow: { justifyContent: 'center' },
   passwordInput: { paddingRight: SPACE.xxxl },
   reveal: { position: 'absolute', right: SPACE.lg, padding: SPACE.xs },
 
-  error: { ...TYPE.meta, color: EMBER.destructive },
-
-  primary: { marginTop: SPACE.sm },
-  pressed: { opacity: OPACITY.pressed },
-
-  linkButton: { alignItems: 'center', paddingVertical: SPACE.md },
-  // A text action, so it reads as one: primary, not the grey of a caption.
-  link: { ...TYPE.label, color: EMBER.textPrimary },
   legal: { marginTop: SPACE.xs },
   notice: { ...TYPE.meta, color: EMBER.textSecondary, textAlign: 'center' },
 })

@@ -18,18 +18,11 @@ import { useToast } from '../components/Toast'
 import { apiClient } from '../lib/apiClient'
 import { Logger } from '../lib/logger'
 import { forgotPasswordMessage } from '../lib/signInRefusal'
+import { AUTH_FORM_STYLES, AUTH_LOCKUP } from '../components/onboarding/authForm'
 import { EmberButton } from '../components/onboarding/EmberControls'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, MAX_FONT_SCALE, SPACE, TYPE } from '../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, ICON, MAX_FONT_SCALE, SPACE, TYPE } from '../lib/theme'
 import { KEYBOARD_BEHAVIOR } from '../lib/keyboard'
 
-const lockup = require('../assets/logo/lockup-hero.png')
-// Same lockup, same arithmetic as `sign-in.tsx`: this is the next screen of
-// that form and should look like it, not like a different app.
-const LOCKUP_ASPECT = (() => {
-  const s = Image.resolveAssetSource(lockup)
-  return s?.width && s?.height ? s.width / s.height : 674 / 202
-})()
-const LOCKUP_HEIGHT = 40
 
 /**
  * How long before Resend works again. Long enough that an impatient second
@@ -169,7 +162,7 @@ export default function ForgotPassword() {
 
           {/* Decorative, as on sign-in: the buttons say what the screen does. */}
           <Image
-            source={lockup}
+            source={AUTH_LOCKUP}
             style={styles.lockup}
             resizeMode="contain"
             accessibilityElementsHidden
@@ -270,37 +263,11 @@ export default function ForgotPassword() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: 'transparent' },
-  flex: { flex: 1 },
-  scroll: { paddingHorizontal: GUTTER, paddingBottom: SPACE.xxl, gap: SPACE.lg },
-  back: { alignSelf: 'flex-start', paddingVertical: SPACE.sm, marginLeft: -SPACE.xs },
-  lockup: {
-    height: LOCKUP_HEIGHT,
-    width: LOCKUP_HEIGHT * LOCKUP_ASPECT,
-    maxWidth: '80%',
-    alignSelf: 'center',
-    marginTop: SPACE.sm,
-    marginBottom: SPACE.md,
-  },
-
+  ...AUTH_FORM_STYLES,
   headline: { gap: SPACE.sm },
   title: TYPE.title,
   body: { ...TYPE.body, color: EMBER.textSecondary },
   address: { color: EMBER.textPrimary },
-
-  field: { gap: SPACE.sm },
-  label: TYPE.label,
-  input: {
-    height: CONTROL.lg,
-    backgroundColor: EMBER.surface,
-    borderRadius: EMBER_RADIUS.pill,
-    paddingHorizontal: SPACE.xl,
-    ...TYPE.body,
-  },
-
-  error: { ...TYPE.meta, color: EMBER.destructive },
-
-  primary: { marginTop: SPACE.sm },
 
   sent: { gap: SPACE.lg },
   // A decorative well: `surface` fill, `textPrimary` glyph (DESIGN_SYSTEM.md).
@@ -312,8 +279,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-
-  linkButton: { alignItems: 'center', paddingVertical: SPACE.md },
-  // A text action, so it reads as one: primary, not the grey of a caption.
-  link: { ...TYPE.label, color: EMBER.textPrimary },
 })

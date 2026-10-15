@@ -567,3 +567,35 @@ export function isUnder18(dateOfBirth: string | undefined, now: Date = new Date(
   if (beforeBirthday) years -= 1
   return years < 18
 }
+
+/**
+ * One of the onboarding steps' OS permission asks: the standing answer first,
+ * then the dialog only if it can still show.
+ *
+ * Existing permission first: asking again when it is already decided returns
+ * the standing answer without a dialog, and calling `request` unconditionally
+ * is what produces the "the prompt never appeared" bug reports on a reinstall
+ * over an existing grant.
+ *
+ * `blocked` is a refusal the OS will not ask about again. It asks once per
+ * install, not once per account: deleting an account and signing up again
+ * does not reset it — so someone who declined months ago taps the button and
+ * *nothing happens*, which reads as a broken button rather than as a decision
+ * they already made. Settings is the only way back.
+ *
+ * A permissions call that throws is a broken build, not a refusal: not
+ * granted, and not blocked either, since Settings is not known to be the
+ * problem.
+ */
+export async function askOsPermission(
+  get: () => Promise<{ granted: boolean; canAskAgain: boolean }>,
+  request: () => Promise<boolean>
+): Promise<{ granted: boolean; blocked: boolean }> {
+  try {
+    const existing = await get()
+    const granted = existing.granted || (existing.canAskAgain && (await request()))
+    return { granted, blocked: !granted && !existing.canAskAgain }
+  } catch {
+    return { granted: false, blocked: false }
+  }
+}

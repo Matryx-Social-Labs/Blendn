@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import { SettingsTray } from '../../components/onboarding/SettingsTray'
 import { LocationIllustration } from '../../components/onboarding/PermissionIllustration'
+import { askOsPermission } from '../../lib/onboarding'
 import { useOnboarding } from '../../lib/useOnboarding'
 
 /**
@@ -33,35 +34,13 @@ export default function LocationScreen() {
 
   const ask = async () => {
     setAsking(true)
-    let granted = false
-    let canAskAgain = true
-    // A permissions call that throws is a broken build, not a refusal: no
-    // Settings prompt, since Settings is not known to be the problem.
-    let broken = false
-    try {
-      const existing = await Location.getForegroundPermissionsAsync()
-      canAskAgain = existing.canAskAgain
-      granted =
-        existing.granted ||
-        (existing.canAskAgain &&
-          (await Location.requestForegroundPermissionsAsync()).status === 'granted')
-    } catch {
-      granted = false
-      canAskAgain = false
-      broken = true
-    }
+    const { granted, blocked } = await askOsPermission(
+      () => Location.getForegroundPermissionsAsync(),
+      async () => (await Location.requestForegroundPermissionsAsync()).status === 'granted'
+    )
     setAsking(false)
 
-    /*
-     * The OS asks once per install, not once per account.
-     *
-     * Deleting an account and signing up again does not reset it — so someone
-     * who declined months ago taps this button and *nothing happens*, which
-     * reads as a broken button rather than as a decision they already made.
-     * `canAskAgain` is false in exactly that case, and Settings is the only
-     * way back.
-     */
-    if (!granted && !canAskAgain && !broken) {
+    if (blocked) {
       // The answer comes from the tray; the step waits for it.
       setSettingsPrompt(true)
       return

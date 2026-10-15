@@ -11,6 +11,7 @@
 
 import {
   ONBOARDING_ROUTES,
+  askOsPermission,
   ONBOARDING_STEPS,
   advance,
   anonymousByDefault,
@@ -343,5 +344,32 @@ describe('anonymousByDefault', () => {
 
   it('is the only case that is not anonymous: an explicit yes', () => {
     expect(anonymousByDefault({ reveal_by_default: true })).toBe(false)
+  })
+})
+
+describe('askOsPermission', () => {
+  const get = (granted: boolean, canAskAgain: boolean) => async () => ({ granted, canAskAgain })
+
+  it('takes a standing answer without asking again', async () => {
+    const request = jest.fn(async () => false)
+    await expect(askOsPermission(get(true, false), request)).resolves.toEqual({ granted: true, blocked: false })
+    expect(request).not.toHaveBeenCalled()
+  })
+
+  it('asks when the OS still can', async () => {
+    await expect(askOsPermission(get(false, true), async () => true)).resolves.toEqual({ granted: true, blocked: false })
+    await expect(askOsPermission(get(false, true), async () => false)).resolves.toEqual({ granted: false, blocked: false })
+  })
+
+  it('is blocked when the OS will not ask again, so Settings is the way back', async () => {
+    const request = jest.fn(async () => true)
+    await expect(askOsPermission(get(false, false), request)).resolves.toEqual({ granted: false, blocked: true })
+    expect(request).not.toHaveBeenCalled()
+  })
+
+  it('treats a throwing permissions call as a broken build, not a refusal', async () => {
+    const boom = async (): Promise<never> => { throw new Error('no module') }
+    await expect(askOsPermission(boom, async () => true)).resolves.toEqual({ granted: false, blocked: false })
+    await expect(askOsPermission(get(false, true), boom)).resolves.toEqual({ granted: false, blocked: false })
   })
 })
