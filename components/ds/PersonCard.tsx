@@ -1,0 +1,367 @@
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+
+import ScalePress from '../motion/ScalePress'
+import { Icon, type IconName } from '../ui/Icon'
+import { COLOR, FONT_FAMILY, ICON, MATERIAL, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { H } from '../../lib/haptics'
+import { Avatar } from './Avatar'
+import { Button } from './Button'
+import { InterestChip } from './Chip'
+import type { Face } from './Facepile'
+import { Spinner } from './Loader'
+import { PresenceDot } from './MonoFamily'
+import { Sheet } from './Sheet'
+import { CONTROL_FONT_CAP, font, minTarget, useBoldText, useIncreaseContrast } from './shared'
+import { StateScreen } from './StateScreen'
+
+/** ROUND3 D · 4.1: here now · was here · pre-event room · matched · friend · unavailable · thin. */
+export type PersonVariant = 'here' | 'was' | 'pre' | 'matched' | 'friend' | 'gone' | 'thin'
+export type PersonState = 'none' | 'liked' | 'requested' | 'waveBusy' | 'waved'
+
+export type PersonCardPerson = {
+  face: Face
+  /** The name the room shows you: the pseudonym unless they're named to you. */
+  name: string
+  age?: number
+  /** Why they're here, the top reason ("Both into vinyl"). */
+  reason?: string
+  /** The thin card's city. */
+  city?: string
+  /** Every reason, in the server's order: the panel. */
+  reasons?: string[]
+  chips?: string[]
+}
+
+export type PersonCardContentProps = {
+  person: PersonCardPerson
+  variant: PersonVariant
+  state?: PersonState
+  /** They waved at you this long ago ("2 min"): the still chip, and Wave reads Wave back (4.2). Kept on the phone, gone after 10 minutes. */
+  wavedAtYou?: string
+  /** A like or wave the server refused (4.3): one neutral line, never naming the action, maybe with its action. No haptic. */
+  refusal?: { text: string; action?: { label: string; onPress: () => void } }
+  onLike?: () => void
+  onWave?: () => void
+  /** The ConnectSheet: a request that reveals you; a friend's DM for a friend. */
+  onMessage?: () => void
+  onSayHi?: () => void
+  /** ⋯: Block and Report. */
+  onMore?: () => void
+  onViewProfile?: () => void
+  /** The unavailable card's Close. */
+  onClose?: () => void
+  testID?: string
+}
+
+const FACE = 112
+/** Flow 15 #18's still "Waved": a 1.5 pt outline (the export's 35% white; `inputBorder` is the token at 38%). */
+const WAVED_EDGE = 1.5
+const PRE_EVENT = 'You can only message people from an event you have both attended.'
+
+/**
+ * Everything worth knowing before you walk over (guidelines/components/PersonCard.html,
+ * ROUND3 D · 4.1–4.3, the R3-D4 delta): the 112 pt face, name and age, why
+ * they're here and the presence line, the reasons panel, their chips, then
+ * the actions in one row and the consequence under them. The same card from
+ * every entry point (a grid face, Meet next, a chat name, a long-press, a room
+ * member, the wave row and banner). What the row offers depends on who they
+ * are to you, never on why the roster didn't list them (the thin card).
+ *
+ * - Like: the gradient primary (there is always an event here: here and was),
+ *   `H.like` once; Liked is a still white pill. Say hi (matched): `H.primary`.
+ * - Wave (here now only): none on the press (#51; the server can't promise
+ *   delivery). Busy while it goes; then a still "Waved" with the word
+ *   (Flow 15 #18). Waved at you: a still chip and Wave back.
+ * - Message (secondary; the ConnectSheet reveals you) or a still Requested.
+ *   ⋯ is Block / Report. View profile on every variant but unavailable.
+ *
+ * Read: "{name}, {age}, {reason}, here now", then the actions as buttons.
+ * The row wraps rather than truncating a label at 2× text or on a narrow
+ * phone. iOS draws its panels in 8% white on the glass sheet, Android in
+ * surfaceSunken on the solid one.
+ */
+export function PersonCardContent({
+  person,
+  variant,
+  state = 'none',
+  wavedAtYou,
+  refusal,
+  onLike,
+  onWave,
+  onMessage,
+  onSayHi,
+  onMore,
+  onViewProfile,
+  onClose,
+  testID,
+}: PersonCardContentProps) {
+  const bold = useBoldText()
+  const contrast = useIncreaseContrast()
+  const panel = Platform.OS === 'android' ? COLOR.surfaceSunken : MATERIAL.fillOnGlass
+  const quiet = contrast ? COLOR.textPrimary : COLOR.textSecondary
+  const { name, age } = person
+  const id = (part: string) => testID && `${testID}-${part}`
+
+  if (variant === 'gone') {
+    return (
+      <StateScreen
+        icon="user"
+        title="This profile isn’t available."
+        body="It may have been removed, or one of you has blocked the other."
+        actions={[{ label: 'Close', kind: 'secondary', onPress: () => onClose?.() }]}
+        testID={testID}
+      />
+    )
+  }
+
+  const thin = variant === 'thin'
+  const line = thin ? person.city : variant === 'friend' ? 'Friend' : person.reason
+  const presence = variant === 'was' ? 'Was here' : variant === 'pre' ? 'Going' : thin ? null : 'Here now'
+  const heading = [name, age, line, presence?.toLowerCase()].filter((p) => p != null && p !== '').join(', ')
+  const showReasons = !thin && variant !== 'pre' && !!person.reasons?.length
+  const note =
+    variant === 'pre'
+      ? PRE_EVENT
+      : variant === 'matched'
+        ? null
+        : variant === 'friend'
+          ? `Message opens your chat with ${name}.`
+          : state === 'requested'
+            ? `Request sent to ${name}. They’ll see your name and photo.`
+            : `${state === 'waved' && variant === 'here' ? 'Waved. ' : ''}Message sends a request and reveals you to ${name}.`
+
+  const circle = (icon: IconName, label: string, onPress?: () => void, busy = false) => (
+    <ScalePress
+      testID={id(icon)}
+      onPress={onPress}
+      disabled={busy}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ busy, disabled: busy }}
+      style={[styles.circle, { backgroundColor: panel }]}
+    >
+      {busy ? <Spinner /> : <Icon name={icon} size={ICON.control} />}
+    </ScalePress>
+  )
+
+  return (
+    <View testID={testID} style={styles.card}>
+      {wavedAtYou ? (
+        <View style={[styles.waveChip, { backgroundColor: panel }]}>
+          <Icon name="hand" size={ICON.inline} />
+          <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), styles.ink]}>{`Waved at you · ${wavedAtYou}`}</Text>
+        </View>
+      ) : null}
+
+      <View accessible accessibilityRole="header" accessibilityLabel={heading} style={styles.head}>
+        <Avatar size={FACE} ring={COLOR.ink} testID={id('face')} {...person.face} />
+        <View style={styles.headText}>
+          <Text style={[font('title', bold), styles.ink]}>
+            {name}
+            {age ? (
+              <>
+                {', '}
+                <Text style={[font('title', bold, FONT_FAMILY.mono[700]), styles.tabular]}>{age}</Text>
+              </>
+            ) : null}
+          </Text>
+          {line ? (
+            <View style={styles.inline}>
+              {variant === 'friend' ? <Icon name="user-check" size={ICON.inline} color={COLOR.textSecondary} /> : null}
+              <Text style={[font('meta', bold), { color: quiet }]}>{line}</Text>
+            </View>
+          ) : null}
+          {presence ? (
+            <View style={styles.inline}>
+              {variant === 'was' ? (
+                <Icon name="clock" size={ICON.inline} color={COLOR.textSecondary} />
+              ) : variant === 'pre' ? (
+                <Icon name="calendar" size={ICON.inline} color={COLOR.textSecondary} />
+              ) : (
+                <PresenceDot kind="live" testID={id('presence-dot')} />
+              )}
+              <Text style={[font('caption', bold), { color: quiet }]}>{presence}</Text>
+            </View>
+          ) : null}
+        </View>
+      </View>
+
+      {showReasons ? (
+        <View testID={id('reasons')} style={[styles.reasons, { backgroundColor: panel }]}>
+          {person.reasons!.map((r) => (
+            <View key={r} style={styles.reason}>
+              <Icon name="check" size={ICON.inline} color={COLOR.textSecondary} />
+              <Text style={[font('body', bold), styles.ink, styles.shrink]}>{r}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+
+      {!thin && person.chips?.length ? (
+        <View style={styles.chips}>
+          {person.chips.map((c) => (
+            <InterestChip key={c} label={c} />
+          ))}
+        </View>
+      ) : null}
+
+      <View style={styles.actions}>
+        {variant === 'matched' ? (
+          <Button label="Say hi" onPress={onSayHi} style={styles.grow} testID={id('say-hi')} />
+        ) : variant === 'here' || variant === 'was' ? (
+          state === 'liked' ? (
+            <View
+              testID={id('liked')}
+              accessible
+              accessibilityRole="button"
+              accessibilityLabel="Liked"
+              accessibilityState={{ selected: true }}
+              style={[styles.pill, styles.grow, styles.liked]}
+            >
+              <Icon name="heart" size={ICON.control} color={COLOR.ink} active />
+              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('button', bold), styles.onWhite]}>
+                Liked
+              </Text>
+            </View>
+          ) : (
+            <Button
+              label="Like"
+              icon="heart"
+              pressHaptic={false}
+              accessibilityHint="They’re only told if they like you back."
+              onPress={() => {
+                H.like()
+                onLike?.()
+              }}
+              style={styles.grow}
+              testID={id('like')}
+            />
+          )
+        ) : null}
+
+        {variant === 'here' ? (
+          state === 'waved' ? (
+            <View testID={id('waved')} accessible accessibilityLabel="Waved" style={[styles.pill, styles.waved]}>
+              <Icon name="hand" size={ICON.control} />
+              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('button', bold), styles.ink]}>
+                Waved
+              </Text>
+            </View>
+          ) : wavedAtYou && state !== 'waveBusy' ? (
+            <ScalePress
+              testID={id('wave-back')}
+              onPress={onWave}
+              accessibilityRole="button"
+              accessibilityLabel={`Wave back at ${name}`}
+              style={[styles.pill, { backgroundColor: panel }]}
+            >
+              <Icon name="hand" size={ICON.control} />
+              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('button', bold), styles.ink]}>
+                Wave back
+              </Text>
+            </ScalePress>
+          ) : (
+            circle('hand', `Wave at ${name}`, onWave, state === 'waveBusy')
+          )
+        ) : null}
+
+        {variant === 'pre' || variant === 'matched' ? null : state === 'requested' ? (
+          <View accessible accessibilityLabel={`Request sent to ${name}`} style={[styles.pill, styles.grow, { backgroundColor: panel }]}>
+            <Icon name="check" size={ICON.control} color={COLOR.textSecondary} />
+            <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('button', bold), styles.secondary]}>
+              Requested
+            </Text>
+          </View>
+        ) : (
+          <Button label="Message" kind="secondary" onGlass onPress={onMessage} style={styles.grow} testID={id('message')} />
+        )}
+
+        <View style={styles.end}>{circle('ellipsis', `Block or report ${name}`, onMore)}</View>
+      </View>
+
+      {refusal ? (
+        <View style={styles.refusal}>
+          <Text style={[font('meta', bold), styles.ink, styles.shrink]}>{refusal.text}</Text>
+          {refusal.action ? <TextAction label={refusal.action.label} onPress={refusal.action.onPress} /> : null}
+        </View>
+      ) : null}
+
+      {note ? <Text style={[font('caption', bold), styles.note, { color: quiet }]}>{note}</Text> : null}
+
+      <View style={styles.center}>
+        <TextAction label="View profile" onPress={onViewProfile} />
+      </View>
+    </View>
+  )
+}
+
+/** A row-scale text action: 700 14 white on a 44 / 48 target (the R3 ruling). Silent. */
+function TextAction({ label, onPress }: { label: string; onPress?: () => void }) {
+  const bold = useBoldText()
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} style={[styles.textAction, { minHeight: minTarget() }]}>
+      <Text style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>{label}</Text>
+    </Pressable>
+  )
+}
+
+/**
+ * The PersonCard as the L3 sheet: glass at a partial height on iOS (medium,
+ * draggable to tall), solid on Android; it scrolls past its height. No haptic
+ * on opening; it rises on `M.travel` (the Sheet). The face's travel from the
+ * grid cell (#33) is the screen's.
+ */
+export function PersonCard({ visible, onClose, testID, ...card }: PersonCardContentProps & { visible: boolean; onClose: () => void }) {
+  return (
+    <Sheet visible={visible} onClose={onClose} detents={['medium', 'tall']} testID={testID}>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollBody}>
+        <PersonCardContent {...card} onClose={onClose} testID={testID && `${testID}-card`} />
+      </ScrollView>
+    </Sheet>
+  )
+}
+
+const styles = StyleSheet.create({
+  card: { gap: SPACE.lg },
+  waveChip: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACE.sm,
+    height: SIZE.tag,
+    paddingHorizontal: SPACE.md,
+    borderRadius: RADIUS.capsule,
+  },
+  head: { flexDirection: 'row', alignItems: 'center', gap: SPACE.lg },
+  headText: { flex: 1, minWidth: 0, gap: SPACE.xs },
+  inline: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
+  ink: { color: COLOR.textPrimary },
+  secondary: { color: COLOR.textSecondary },
+  onWhite: { color: COLOR.ink },
+  tabular: { fontVariant: ['tabular-nums'] },
+  shrink: { flexShrink: 1 },
+  reasons: { borderRadius: RADIUS.rowInCard, paddingVertical: SPACE.xs },
+  reason: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, minHeight: SIZE.targetIos, paddingHorizontal: SPACE.lg },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm, marginTop: SPACE.sm },
+  grow: { flexGrow: 1 },
+  end: { marginLeft: 'auto' },
+  circle: { width: SIZE.primary, height: SIZE.primary, borderRadius: RADIUS.capsule, alignItems: 'center', justifyContent: 'center' },
+  pill: {
+    height: SIZE.primary,
+    borderRadius: RADIUS.capsule,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACE.sm,
+    paddingHorizontal: SPACE.lg,
+  },
+  liked: { backgroundColor: COLOR.textPrimary },
+  waved: { borderWidth: WAVED_EDGE, borderColor: COLOR.inputBorder, backgroundColor: COLOR.surface },
+  refusal: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.md },
+  note: { textAlign: 'center' },
+  center: { alignItems: 'center' },
+  textAction: { justifyContent: 'center', paddingHorizontal: SPACE.lg },
+  scroll: { flex: 1 },
+  scrollBody: { paddingBottom: SPACE.xl },
+})

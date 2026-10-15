@@ -1,0 +1,191 @@
+import { Image } from 'expo-image'
+import { useState } from 'react'
+import { Platform, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
+
+import ScalePress from '../motion/ScalePress'
+import { PhotoScrim } from '../ui/GradientFill'
+import { COLOR, FONT_FAMILY, PRESS, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { ScrimPill, TimeBadge } from './MonoFamily'
+import { CONTROL_FONT_CAP, focusRing, font, IC_HAIRLINE, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
+
+export type EventCardKind = 'hero' | 'compact' | 'row'
+
+export type EventCardProps = {
+  kind: EventCardKind
+  title: string
+  /** The time badge, in the one date grammar: "Live", "In 25 min", "9 PM". */
+  time: string
+  venue: string
+  /** "1.2 km". */
+  distance?: string
+  going?: number
+  cover?: string | null
+  /** You're going: the ribbon reads "You're going · {saved}" ("9 PM"). */
+  saved?: string
+  onPress?: () => void
+  /** The design gallery only: draws a transient state with no finger or keyboard. */
+  previewState?: 'pressed' | 'focused'
+  testID?: string
+  /** Size and placement (hero and compact take their width and height from here); never the look. */
+  style?: StyleProp<ViewStyle>
+}
+
+/** The page's sizes, when the caller gives none: hero 300 tall, compact 240 × 170. */
+const DEFAULT_SIZE: Record<'hero' | 'compact', ViewStyle> = { hero: { height: 300 }, compact: { width: 240, height: 170 } }
+/** The scrim covers the lower 62% of the photo (the page). */
+const SCRIM_HEIGHT = '62%'
+const ROW_HEIGHT = 64
+const PILL_HEIGHT = 28
+
+/** "{You're going, }{title}, {time}, at {venue}, {distance}, {N} going": the pills are not separate elements. */
+export function eventLabel({ title, time, venue, distance, going, saved }: Pick<EventCardProps, 'title' | 'time' | 'venue' | 'distance' | 'going' | 'saved'>) {
+  return [saved ? 'You’re going' : null, title, time, `at ${venue}`, distance, going ? `${going} going` : null].filter(Boolean).join(', ')
+}
+
+/**
+ * One card, three sizes (guidelines/components/EventCard.html, the Lantern
+ * composition the journey approved).
+ *
+ * - `hero` (radius 32) and `compact` (radius 24): the words on the photo over
+ *   the 62% ink scrim; the time badge and "N going" top-left as scrim pills;
+ *   the title in two lines at most, then "at {venue} · {distance}". Saved adds
+ *   the white "You're going · 9 PM" ribbon. Their text scales freely.
+ * - `row`: the list form, 64 pt: a 56 pt thumb, the title, venue · distance ·
+ *   the time in Geist Mono, one line each, capped at 1.3×.
+ *
+ * One button, "{title}, {time}, at {venue}, {distance}, {N} going" (saved:
+ * "You're going" first). A tap is a push, so no haptic. iOS presses scale to
+ * 0.97 (a row highlights); Android ripples. Increase Contrast: the 50% hairline
+ * on the card and the scrim 20% deeper.
+ */
+export function EventCard(props: EventCardProps) {
+  const { kind, title, time, venue, distance, going, cover, saved, onPress, previewState, testID, style } = props
+  const bold = useBoldText()
+  const contrast = useIncreaseContrast()
+  const android = Platform.OS === 'android'
+  const [focused, setFocused] = useState(false)
+  const label = eventLabel(props)
+  const ring = focused || previewState === 'focused'
+  const a11y = { accessibilityRole: 'button' as const, accessibilityLabel: label }
+
+  if (kind === 'row') {
+    return (
+      <View style={style}>
+        <Pressable
+          testID={testID}
+          onPress={onPress}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          android_ripple={{ color: PRESSED_WASH.android }}
+          {...a11y}
+          style={({ pressed }) => [styles.row, (pressed || previewState === 'pressed') && !android && styles.rowPressed]}
+        >
+          <View testID={testID && `${testID}-thumb`} style={styles.thumb}>
+            {cover ? <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} /> : null}
+          </View>
+          <View style={styles.rowText}>
+            <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold), styles.ink]}>
+              {title}
+            </Text>
+            <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary]}>
+              {[venue, distance].filter(Boolean).join(' · ')} ·{' '}
+              <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{time}</Text>
+            </Text>
+          </View>
+        </Pressable>
+        {ring ? <Ring radius={RADIUS.rowInCard} testID={testID} /> : null}
+      </View>
+    )
+  }
+
+  const hero = kind === 'hero'
+  const radius = hero ? RADIUS.card : RADIUS.mediaInCard
+  return (
+    <View
+      testID={testID && `${testID}-scale`}
+      style={[DEFAULT_SIZE[kind], style, previewState === 'pressed' && !android && styles.pressed]}
+    >
+      <ScalePress
+        testID={testID}
+        onPress={onPress}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        pressedScale={android ? 1 : PRESS.scale}
+        android_ripple={{ color: PRESSED_WASH.android, foreground: true }}
+        {...a11y}
+        style={[styles.card, { borderRadius: radius }]}
+      >
+        {cover ? <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} /> : null}
+        <PhotoScrim testID={testID && `${testID}-scrim`} contrast={contrast} style={styles.scrim} />
+        <View style={styles.pills}>
+          <TimeBadge when={time} />
+          {going ? (
+            <ScrimPill>
+              <Text style={[font('caption', bold), styles.ink]} maxFontSizeMultiplier={CONTROL_FONT_CAP}>
+                {`${going} going`}
+              </Text>
+            </ScrimPill>
+          ) : null}
+        </View>
+        {saved ? (
+          <View testID={testID && `${testID}-saved`} style={styles.saved}>
+            <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), styles.onWhite]}>
+              You’re going · <Text style={[font('caption', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{saved}</Text>
+            </Text>
+          </View>
+        ) : null}
+        <View style={[styles.foot, hero ? styles.footHero : styles.footCompact]}>
+          <Text numberOfLines={2} style={[font(hero ? 'title' : 'bodyStrong', bold), styles.ink]}>
+            {title}
+          </Text>
+          <Text numberOfLines={1} style={[font('meta', bold), styles.ink]}>
+            {[`at ${venue}`, distance].filter(Boolean).join(' · ')}
+          </Text>
+        </View>
+        {/* Android's live press is the ripple; the wash stands in for it only in the gallery. */}
+        {previewState === 'pressed' && android ? <View testID={testID && `${testID}-wash`} style={[StyleSheet.absoluteFill, styles.wash]} /> : null}
+        {contrast ? <View testID={testID && `${testID}-contrast`} pointerEvents="none" style={[StyleSheet.absoluteFill, IC_HAIRLINE, { borderRadius: radius }]} /> : null}
+      </ScalePress>
+      {ring ? <Ring radius={radius} testID={testID} /> : null}
+    </View>
+  )
+}
+
+function Ring({ radius, testID }: { radius: number; testID?: string }) {
+  return (
+    <>
+      {focusRing(radius).map((ring, i) => (
+        <View key={i} testID={i ? undefined : testID && `${testID}-focus`} pointerEvents="none" style={ring} />
+      ))}
+    </>
+  )
+}
+
+const styles = StyleSheet.create({
+  pressed: { transform: [{ scale: PRESS.scale }] },
+  card: { flex: 1, overflow: 'hidden', backgroundColor: COLOR.surface },
+  scrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: SCRIM_HEIGHT },
+  pills: { position: 'absolute', top: SPACE.md, left: SPACE.md, flexDirection: 'row', gap: SPACE.sm },
+  saved: {
+    position: 'absolute',
+    top: SPACE.md + PILL_HEIGHT + SPACE.sm,
+    left: SPACE.md,
+    height: PILL_HEIGHT,
+    paddingHorizontal: SPACE.md,
+    borderRadius: RADIUS.capsule,
+    backgroundColor: COLOR.textPrimary,
+    justifyContent: 'center',
+  },
+  onWhite: { color: COLOR.ink },
+  foot: { position: 'absolute', gap: SPACE.xxs },
+  footHero: { left: SPACE.xl, right: SPACE.xl, bottom: SPACE.xl },
+  footCompact: { left: SPACE.lg, right: SPACE.lg, bottom: SPACE.lg },
+  ink: { color: COLOR.textPrimary },
+  secondary: { color: COLOR.textSecondary },
+  tabular: { fontVariant: ['tabular-nums'] },
+  wash: { backgroundColor: PRESSED_WASH.android },
+  row: { height: ROW_HEIGHT, flexDirection: 'row', alignItems: 'center', gap: SPACE.md, borderRadius: RADIUS.rowInCard },
+  rowPressed: { backgroundColor: PRESSED_WASH.ios },
+  thumb: { width: SIZE.primary, height: SIZE.primary, borderRadius: RADIUS.thumb, overflow: 'hidden', backgroundColor: COLOR.surface },
+  rowText: { flex: 1, minWidth: 0 },
+})

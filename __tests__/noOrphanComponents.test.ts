@@ -109,6 +109,22 @@ const KNOWN_ORPHANS: Record<string, string> = {
   'SwipeRow.tsx': 'redesign P3 component; the Banter rows adopt it with the Banter redesign (ROUND3 D 5.11)',
   'ImageViewer.tsx': 'redesign P3 component; opens DM photos once they ship (ROUND3 D 5.9, motion #33)',
   'CoachMark.tsx': 'redesign P3 component; the first coach mark (the centre button, the reveal bar, the swipe) adopts it (ROUND3 B4)',
+  /* The P2 events and people (ROUND3 B4), built ahead of their flows; each goes with the first flow that adopts it. */
+  'AmenityTile.tsx': 'redesign P2 (AmenityTile, AmenityGrid); the Scene bento and the venue page’s Good to know adopt it in place of SceneAmenity (Flow 3)',
+  'EventCard.tsx': 'redesign P2 (hero, compact, row); the Pulse, Going, search and the Scene’s related events adopt it (Flow 3)',
+  'ds/DayHeading.tsx': 'redesign P2; replaces components/ui/DayHeading on the Pulse’s Upcoming and Going (Flow 3)',
+  'Facepile.tsx': 'redesign P2 (Facepile, FaceMark); the Room’s hero stack adopts it (Flow 4)',
+  'GridFace.tsx': 'redesign P2; the Room’s Everyone here grid and People from tonight adopt it in place of RoomSections’ GridFace (Flow 4)',
+  'ds/HoldToConfirm.tsx': 'redesign P2; replaces components/blendn/HoldToConfirm with the VenuePass and the Go Live hold (Flows 4, 11)',
+  'MeetNextCard.tsx': 'redesign P2; the Room’s Meet next row adopts it (Flow 4)',
+  'MapCard.tsx': 'redesign P2 (MapCard, MapPin, MapCluster); the Scene and venue page’s map band, then the home map’s pins (Flows 3, 11)',
+  'ds/PersonCard.tsx': 'redesign P2; replaces components/blendn/PersonCard from every entry point (Flow 4, R3-D4)',
+  'ds/RollingNumber.tsx': 'redesign P2; the Room’s count and the recap tiles adopt it in place of components/profile/RollingNumber (Flow 4)',
+  'RevealBar.tsx': 'redesign P2; the anonymous DM adopts it (Flow 5)',
+  'ds/SectionHeader.tsx': 'redesign P2; replaces components/pulse/SectionHeader and the Room’s and profile’s heading rows (Flows 3, 4, 6, 10)',
+  'ds/TimeRing.tsx': 'redesign P2; replaces components/blendn/TimeRing on your face in the Room (Flow 4)',
+  'TonightCard.tsx': 'redesign P2; Tonight’s deck adopts it in place of TonightView’s EventDeck (Flow 4)',
+  'VenuePass.tsx': 'redesign P2 (VenuePass, DoorCode); Tonight’s pass (Flow 4) and the offer’s door pass (Flow 13, ROUND3 G3) adopt it',
 }
 
 const sources = walk(join(ROOT, 'app'))
@@ -127,7 +143,18 @@ function key(full: string) {
   const file = basename(full)
   return componentFiles.filter((f) => basename(f) === file).length > 1 ? `${basename(dirname(full))}/${file}` : file
 }
-const importsOf = (file: string) => new RegExp(`['"][^'"]*/${file.replace(/\.tsx$/, '')}['"]`)
+/**
+ * Whether `importer` imports the component keyed `file`. A `dir/File` key also
+ * matches a bare `./File` from a file in that same directory: `TonightView`'s
+ * `./HoldToConfirm` is `blendn/HoldToConfirm`, not `ds/HoldToConfirm`.
+ */
+function imports(importer: string, file: string) {
+  const src = readFileSync(importer, 'utf8')
+  const name = file.replace(/\.tsx$/, '')
+  if (new RegExp(`['"][^'"]*/${name}['"]`).test(src)) return true
+  const [dir, base] = name.split('/')
+  return !!base && basename(dirname(importer)) === dir && new RegExp(`['"]\\./${base}['"]`).test(src)
+}
 
 /*
  * Importers that are not a screen: the preview harness, and a component on the
@@ -140,7 +167,7 @@ describe('no component is reachable only from the preview harness', () => {
   it.each(componentFiles.map((f) => [f.replace(`${ROOT}/`, ''), f]))(
     '%s reaches a real screen',
     (rel, full) => {
-      const importers = nonPreview.filter((f) => f !== full && importsOf(key(full)).test(readFileSync(f, 'utf8')))
+      const importers = nonPreview.filter((f) => f !== full && imports(f, key(full)))
 
       if (importers.length > 0) return
 
@@ -170,7 +197,7 @@ describe('the orphan ledger stays honest', () => {
      * undone and gets done twice.
      */
     for (const file of Object.keys(KNOWN_ORPHANS)) {
-      const importers = nonPreview.filter((f) => !f.endsWith(`/${file}`) && importsOf(file).test(readFileSync(f, 'utf8')))
+      const importers = nonPreview.filter((f) => !f.endsWith(`/${file}`) && imports(f, file))
       expect({ file, importers: importers.map((f) => f.replace(`${ROOT}/`, '')) }).toEqual({
         file,
         importers: [],
