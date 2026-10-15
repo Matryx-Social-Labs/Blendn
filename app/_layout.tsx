@@ -102,7 +102,8 @@ function RootLayout() {
    * bad but working fallback, so a failure counts as done below.
    */
   const [fontsLoaded, fontError] = useFonts(EMBER_FONT_MODULES);
-  const assetsReady = imagesReady && (fontsLoaded || !!fontError);
+  const fontsReady = fontsLoaded || !!fontError;
+  const assetsReady = imagesReady && fontsReady;
   const [showIntro, setShowIntro] = useState(true);
 
   /*
@@ -140,6 +141,9 @@ function RootLayout() {
    * alternative is visible: the first screen paints in the system font and
    * reflows to Plus Jakarta Sans a beat later, and at 56pt with -2.8 tracking
    * that reflow moves the headline by most of a line.
+   *
+   * Hiding the paint is not enough on its own, which is why no route renders
+   * before the fonts either (`fontsReady`, at the return below).
    *
    * Auth resolution is a network round trip. Gating the splash on it means a
    * user on bad wifi stares at a frozen splash for as long as the request
@@ -487,6 +491,27 @@ function RootLayout() {
    * What must still be cleared on **sign-out** is a different question with a
    * different answer, and `clearResponseCache` is still there for it.
    */
+
+  /*
+   * Nothing renders until the fonts are in (SCRUM-619).
+   *
+   * Text is measured when it mounts, and React Native caches the measurement
+   * by the family *name*, not by the font that name resolved to. A screen
+   * mounted under the splash before Plus Jakarta Sans registered was measured
+   * in the system font, which is narrower, and every later text with the same
+   * string and style was handed that cached box for the life of the process:
+   * the wordmark drew as "Blend'r" and "I'm going" as "I'm goi…", on every
+   * screen, until the app was killed.
+   *
+   * Only a cold start by a link hit it. A plain launch opens on `/`, which
+   * shows a logo and no text until auth resolves, and the fonts (local files)
+   * are in long before a network round trip. A link opens straight on its
+   * screen, with all its text, on the first render.
+   *
+   * The splash is still not gated on auth, and this costs no visible time:
+   * the native splash already waits on the fonts (`assetsReady`).
+   */
+  if (!fontsReady) return null;
 
   return (
     <ErrorBoundary
