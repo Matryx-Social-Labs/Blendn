@@ -51,12 +51,17 @@ function walk(dir: string, out: string[] = []): string[] {
  */
 const KNOWN_ORPHANS: Record<string, string> = {
   /*
-   * Empty, and that is the point.
-   *
    * It held the three Scene files while the event route still rendered
    * the old screen. The render swap closed that, so the entries went with it —
    * which is the lifecycle an entry here is supposed to have.
+   *
+   * The redesign's primitives, below, are built ahead of their screens on
+   * purpose (Phase 1, the foundation: no screen changes). Each entry goes with
+   * the first screen that adopts it.
    */
+  'Material.tsx': 'redesign Phase 1 foundation; the tab bar adopts it first (DESIGN-BRIEF §5.3), after the native rebuild that adds expo-glass-effect',
+  'GradientFill.tsx': 'redesign Phase 1 foundation; the primary button and the centre disc adopt it with their redesign (§4.3, §11)',
+  'Icon.tsx': 'redesign Phase 1 foundation; screens move from Ionicons to it one at a time as they are redesigned (§8)',
 }
 
 const sources = walk(join(ROOT, 'app'))
