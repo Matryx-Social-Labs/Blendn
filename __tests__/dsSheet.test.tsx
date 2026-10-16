@@ -11,7 +11,7 @@ import { State } from 'react-native-gesture-handler'
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils'
 import * as Reanimated from 'react-native-reanimated'
 
-import { settleDetent, Sheet } from '../components/ds/Sheet'
+import { settleDetent, Sheet, sheetBottomPadding } from '../components/ds/Sheet'
 import { COLOR, MATERIAL, SPRING } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 
@@ -241,5 +241,30 @@ describe('onDismissed: the next sheet waits for this one to have left', () => {
     await act(async () => jest.advanceTimersByTime(1000))
     expect(onDismissed).toHaveBeenCalledTimes(1)
     jest.useRealTimers()
+  })
+})
+
+describe('the foot over a keyboard (Board composer drive: a dead band between Cancel and the keys)', () => {
+  it('keeps the home-indicator inset without a keyboard and drops it under one', () => {
+    expect(sheetBottomPadding(34, false)).toBe(34 + 8)
+    expect(sheetBottomPadding(34, true)).toBe(8)
+  })
+
+  it('follows the keyboard as it shows and hides', async () => {
+    const { Keyboard } = require('react-native')
+    const handlers: Record<string, () => void> = {}
+    const spy = jest.spyOn(Keyboard, 'addListener').mockImplementation(((event: string, fn: () => void) => {
+      handlers[event] = fn
+      return { remove: () => {} }
+    }) as never)
+    await render(signOut())
+    // The sheet's own glass (the mock names it 'glass'): its padding is the foot.
+    const pad = () => flat('glass').paddingBottom
+    const resting = pad()
+    await act(async () => handlers.keyboardWillShow())
+    expect(pad()).toBe(8)
+    await act(async () => handlers.keyboardWillHide())
+    expect(pad()).toBe(resting)
+    spy.mockRestore()
   })
 })

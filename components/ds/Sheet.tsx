@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ComponentRef, type ReactNode, type RefObject } from 'react'
 import {
   AccessibilityInfo,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -57,6 +58,31 @@ export function settleDetent(heights: number[], from: number, height: number, dr
     if (Math.abs(h - height) < Math.abs(heights[nearest] - height)) nearest = i
   })
   return nearest
+}
+
+/**
+ * The sheet's foot. With the keyboard up the home indicator is under the
+ * keyboard, and the avoiding view already lifts the sheet by the keyboard's
+ * full height, so the safe-area inset would only leave a dead band between
+ * the last button and the keys (Board composer drive).
+ */
+export function sheetBottomPadding(insetBottom: number, keyboardUp: boolean) {
+  return (keyboardUp ? 0 : insetBottom) + SPACE.sm
+}
+
+/** Whether a keyboard is up: iOS on `will` (in step with the avoiding view), Android on `did` (it has no `will`). */
+function useKeyboardUp() {
+  const [up, setUp] = useState(false)
+  useEffect(() => {
+    const ios = Platform.OS === 'ios'
+    const show = Keyboard.addListener(ios ? 'keyboardWillShow' : 'keyboardDidShow', () => setUp(true))
+    const hide = Keyboard.addListener(ios ? 'keyboardWillHide' : 'keyboardDidHide', () => setUp(false))
+    return () => {
+      show.remove()
+      hide.remove()
+    }
+  }, [])
+  return up
 }
 
 export type SheetAction = { label: string; onPress: () => void; kind?: ButtonKind; loading?: boolean; disabled?: boolean } & Pick<
@@ -209,6 +235,7 @@ export function Sheet({ visible, onClose, title, body, icon, actions = [], deten
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const titleRef = useRef<ComponentRef<typeof Text>>(null)
+  const keyboardUp = useKeyboardUp()
 
   const busy = actions.some((a) => a.loading)
   const sorted = [...actions].sort((a, b) => ORDER.indexOf(a.kind ?? 'secondary') - ORDER.indexOf(b.kind ?? 'secondary'))
@@ -275,7 +302,7 @@ export function Sheet({ visible, onClose, title, body, icon, actions = [], deten
               testID={testID}
               role="sheet"
               onLayout={(e) => natural.set(e.nativeEvent.layout.height)}
-              style={[styles.sheet, fixedHeight && styles.fill, { paddingBottom: insets.bottom + SPACE.sm }, contrast && IC_HAIRLINE]}
+              style={[styles.sheet, fixedHeight && styles.fill, { paddingBottom: sheetBottomPadding(insets.bottom, keyboardUp) }, contrast && IC_HAIRLINE]}
             >
               <GestureDetector gesture={drag}>
                 <View style={styles.head}>

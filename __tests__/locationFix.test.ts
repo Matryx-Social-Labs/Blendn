@@ -8,10 +8,12 @@
  * stops at the deadline instead of spinning.
  */
 jest.mock('expo-location', () => ({
-  Accuracy: { BestForNavigation: 6 },
+  Accuracy: { High: 4, BestForNavigation: 6 },
   hasServicesEnabledAsync: jest.fn(),
   requestForegroundPermissionsAsync: jest.fn(),
+  getForegroundPermissionsAsync: jest.fn(),
   getCurrentPositionAsync: jest.fn(),
+  getLastKnownPositionAsync: jest.fn(),
 }))
 jest.mock('../lib/logger', () => ({
   Logger: { warn: jest.fn(), error: jest.fn(), journey: jest.fn() },
@@ -35,6 +37,8 @@ beforeEach(() => {
   jest.clearAllMocks()
   loc.hasServicesEnabledAsync.mockResolvedValue(true)
   loc.requestForegroundPermissionsAsync.mockResolvedValue({ status: 'granted' } as any)
+  loc.getForegroundPermissionsAsync.mockResolvedValue({ status: 'granted' } as any)
+  loc.getLastKnownPositionAsync.mockResolvedValue(null)
 })
 
 describe('getCurrentLocation', () => {
@@ -117,5 +121,60 @@ describe('getCurrentLocation', () => {
       expect.any(Array),
       { icon: 'locate-off', detail: 'Settings › Blend’n › Location › Precise Location' }
     )
+  })
+})
+
+/*
+ * The wait between "Checking you in…" and "You're in" was a cold
+ * BestForNavigation fix started only once the hold ended: seconds, up to the
+ * 15 s deadline. A fix is now started when the pass shows, and a recent one
+ * good enough for the door is used instead of asking again.
+ */
+describe('a fix that is already there', () => {
+  const recentFix = (accuracy: number, ageMs = 0) =>
+    ({ coords: { latitude: 12.97, longitude: 77.59, accuracy }, timestamp: Date.now() - ageMs }) as any
+
+  /** A fresh copy of the module: the warmed fix is module state. */
+  function fresh() {
+    let mod!: typeof import('../lib/locationFix')
+    jest.isolateModules(() => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      mod = require('../lib/locationFix')
+    })
+    return mod
+  }
+
+  it('the hold uses the fix warmed when the pass showed, and asks for no other', async () => {
+    const { warmLocationFix, getCurrentLocation: locate } = fresh()
+    loc.getCurrentPositionAsync.mockResolvedValue(recentFix(9))
+    await warmLocationFix()
+    expect(loc.getCurrentPositionAsync).toHaveBeenCalledTimes(1)
+
+    expect(await locate(trays())).toEqual({ latitude: 12.97, longitude: 77.59, accuracy: 9 })
+    expect(loc.getCurrentPositionAsync).toHaveBeenCalledTimes(1)
+  })
+
+  it('warming never asks for permission: without it, nothing starts', async () => {
+    const { warmLocationFix } = fresh()
+    loc.getForegroundPermissionsAsync.mockResolvedValue({ status: 'undetermined' } as any)
+    await warmLocationFix()
+    expect(loc.requestForegroundPermissionsAsync).not.toHaveBeenCalled()
+    expect(loc.getCurrentPositionAsync).not.toHaveBeenCalled()
+  })
+
+  it('takes the phone’s last fix when it is recent and inside 50 m', async () => {
+    const { getCurrentLocation: locate, FRESH_FIX_MAX_AGE_MS } = fresh()
+    loc.getLastKnownPositionAsync.mockResolvedValue(recentFix(20, 5_000))
+    expect(await locate(trays())).toEqual({ latitude: 12.97, longitude: 77.59, accuracy: 20 })
+    expect(loc.getLastKnownPositionAsync).toHaveBeenCalledWith({ maxAge: FRESH_FIX_MAX_AGE_MS, requiredAccuracy: 50 })
+    expect(loc.getCurrentPositionAsync).not.toHaveBeenCalled()
+  })
+
+  it('a stale or weak last fix is not used: a new one is asked for', async () => {
+    const { getCurrentLocation: locate, FRESH_FIX_MAX_AGE_MS } = fresh()
+    loc.getLastKnownPositionAsync.mockResolvedValue(recentFix(20, FRESH_FIX_MAX_AGE_MS + 1))
+    loc.getCurrentPositionAsync.mockResolvedValue(recentFix(11))
+    expect(await locate(trays())).toEqual({ latitude: 12.97, longitude: 77.59, accuracy: 11 })
+    expect(loc.getCurrentPositionAsync).toHaveBeenCalledWith({ accuracy: Location.Accuracy.High, mayShowUserSettingsDialog: true })
   })
 })

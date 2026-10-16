@@ -1,5 +1,6 @@
+import * as Notifications from 'expo-notifications'
 import { Redirect, router, useFocusEffect, useLocalSearchParams } from 'expo-router'
-import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native'
 
 import { Button } from '../../components/ds/Button'
@@ -31,6 +32,7 @@ import {
 } from '../../lib/board'
 import { openBlendn } from '../../lib/blendnOverlay'
 import { Logger } from '../../lib/logger'
+import { useLiveSync } from '../../lib/useLiveSync'
 import { boardSafetySheet } from '../../lib/safetyUtils'
 import { showSheet } from '../../lib/sheet'
 import { COLOR, RADIUS, SPACE } from '../../lib/design/tokens'
@@ -164,6 +166,28 @@ export function BoardScreen() {
       })
     }, [fetchBoard])
   )
+
+  /*
+   * Live while you look (PR #401 drive: an ask showed as "1 asked" only after
+   * leaving and coming back). There is no board socket event, so: the
+   * `board_request` push as it lands in the foreground, and a quiet read every
+   * 30 s while the board is focused for when pushes are off. Focus reads it too.
+   */
+  useEffect(() => {
+    const sub = Notifications.addNotificationReceivedListener((n) => {
+      if (n.request.content.data?.type === 'board_request') void fetchBoard()
+    })
+    return () => sub.remove()
+  }, [fetchBoard])
+  useLiveSync({
+    enabled: !!eventId,
+    onSync: async () => {
+      await fetchBoard()
+    },
+    syncOnFocus: false,
+    connectedIntervalMs: BOARD_POLL_MS,
+    disconnectedIntervalMs: BOARD_POLL_MS,
+  })
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
@@ -417,6 +441,9 @@ function BoardSkeleton() {
     </View>
   )
 }
+
+/** A focused board re-reads this often when no push says an ask arrived. */
+const BOARD_POLL_MS = 30_000
 
 /** flow4.js board `loading`: three 168 pt cards. */
 const SKELETON_CARD = 168

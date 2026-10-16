@@ -43,6 +43,13 @@ jest.mock('../lib/apiClient', () => ({
   },
 }))
 jest.mock('../lib/blendnOverlay', () => ({ openBlendn: jest.fn() }))
+const mockPushListeners: ((n: { request: { content: { data: Record<string, unknown> } } }) => void)[] = []
+jest.mock('expo-notifications', () => ({
+  addNotificationReceivedListener: (fn: (typeof mockPushListeners)[number]) => {
+    mockPushListeners.push(fn)
+    return { remove: () => mockPushListeners.splice(mockPushListeners.indexOf(fn), 1) }
+  },
+}))
 jest.mock('../lib/sheet', () => ({ showSheet: jest.fn() }))
 jest.mock('../lib/logger', () => ({
   Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() },
@@ -619,4 +626,25 @@ it('is the Flow 4 design now: no placeholder banner, the composer kinds are Radi
   await fireEvent.press(screen.getByLabelText('Write a post'))
   expect(screen.getByLabelText('I have space, You’re offering a ride or a table.')).toBeTruthy()
   expect(screen.getByLabelText('I’m looking, You want to join someone’s.')).toBeTruthy()
+})
+
+describe('your post, live (PR #401 drive: "1 asked" only after reopening the board)', () => {
+  const MINE: BoardPost = { ...OFFER, id: 'p-mine', author: 'Lunar Fox', mine: true, requestCount: 0 }
+
+  it('re-reads the board the moment a board_request push lands, and says the new count', async () => {
+    api.getBoard.mockResolvedValueOnce(board([MINE])).mockResolvedValue(board([{ ...MINE, requestCount: 1 }]))
+    await render(<BoardScreen />)
+    expect(await screen.findByText('Nobody has asked yet')).toBeTruthy()
+    await act(async () => mockPushListeners.forEach((fn) => fn({ request: { content: { data: { type: 'board_request' } } } })))
+    expect(await screen.findByText('1 asked. Answer in the Banter.')).toBeTruthy()
+  })
+
+  it('ignores any other push', async () => {
+    api.getBoard.mockResolvedValue(board([MINE]))
+    await render(<BoardScreen />)
+    await screen.findByText('Nobody has asked yet')
+    const reads = api.getBoard.mock.calls.length
+    await act(async () => mockPushListeners.forEach((fn) => fn({ request: { content: { data: { type: 'private_message' } } } })))
+    expect(api.getBoard.mock.calls.length).toBe(reads)
+  })
 })

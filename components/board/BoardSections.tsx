@@ -21,8 +21,8 @@ import { EMBER, EMBER_RADIUS, ICON, OPACITY } from '../../lib/theme'
  * with one accent, the counter never the only difference, no confirm on Ask.
  */
 
-/** An offer's mark is 40; a seeking's is quieter (the frame's 28, on the Avatar scale's 32). */
-const MARK = { offer: 40, seeking: 32 } as const
+/** An offer's mark is 40; a seeking's is quieter, 28 (flow4.js `post`). */
+const MARK = { offer: 40, seeking: 28 } as const
 
 /** Up to this many spaces on an offer — the server's own bound. */
 export const MAX_SPACES = 20

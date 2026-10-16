@@ -8,7 +8,6 @@ import { EventCover } from '../../components/EventCover'
 import { SkeletonBlock } from '../../components/Skeleton'
 import FadeInUp from '../../components/motion/FadeInUp'
 import ScalePress from '../../components/motion/ScalePress'
-import { DayHeading } from '../../components/ds/DayHeading'
 import { EventCard } from '../../components/ds/EventCard'
 import { PresenceDot, TimeBadge } from '../../components/ds/MonoFamily'
 import { SectionHeader } from '../../components/ds/SectionHeader'
@@ -294,7 +293,7 @@ function GoingScreenInner() {
     const cancelled = row.status === 'cancelled'
     const waitlisted = !cancelled && row.rsvpStatus === 'waitlisted'
     return (
-      <View style={styles.inset}>
+      <View style={[styles.inset, styles.next]}>
         <SectionLabel text="Next up" />
         <View style={styles.hero}>
           <ScalePress
@@ -367,7 +366,8 @@ function GoingScreenInner() {
     if (item.kind === 'day') {
       return (
         <View style={[styles.inset, styles.heading, first && styles.flush]}>
-          <DayHeading date={item.title} weekday={item.weekday || undefined} />
+          {/* flow4.js going `dayH`: the date alone, at the heading's 20, like every group on the tab. */}
+          <SectionHeader title={item.title} />
         </View>
       )
     }
@@ -491,7 +491,7 @@ function GoingScreenInner() {
         <View accessibilityLabel="Loading your events" accessible style={styles.inset}>
           <SkeletonBlock width="100%" height={SKELETON_HERO} borderRadius={RADIUS.card} />
           {[0, 1].map((i) => (
-            <SkeletonBlock key={i} width="100%" height={SKELETON_ROW} borderRadius={RADIUS.rowInCard} style={styles.skeletonRow} />
+            <SkeletonBlock key={i} width="100%" height={SKELETON_ROW} borderRadius={RADIUS.rowInCard} style={i ? styles.skeletonRow : styles.skeletonFirstRow} />
           ))}
         </View>
       ) : items.length === 0 && loadFailed ? (
@@ -705,15 +705,20 @@ const styles = StyleSheet.create({
   pressed: { opacity: OPACITY.pressed },
   list: { flex: 1 },
   inset: { marginHorizontal: SPACE.gutter },
-  heading: { marginTop: SPACE.xl, marginBottom: SPACE.xs },
+  // flow4.js going `dayH`: 8 above a heading after a row's own 4, 12 under it before the next row's 4.
+  heading: { marginTop: SPACE.md, marginBottom: SPACE.sm },
+  // The card's 20 below it, then the heading's 8.
+  next: { marginBottom: SPACE.lg },
   flush: { marginTop: 0 },
   label: { marginBottom: SPACE.sm },
-  row: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, marginTop: SPACE.xs },
+  // 72 pt rows, 4 apart (the frame steps 76).
+  row: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, minHeight: SKELETON_ROW, marginTop: SPACE.xs },
   // Next up: a solid ticket, the photo inset 8 inside the card's 32 corner.
-  hero: { padding: SPACE.sm, gap: SPACE.md, backgroundColor: COLOR.surface, borderRadius: RADIUS.card },
+  hero: { padding: SPACE.sm, backgroundColor: COLOR.surface, borderRadius: RADIUS.card },
   heroPhoto: { borderRadius: RADIUS.mediaInCard, overflow: 'hidden' },
   heroBadge: { position: 'absolute', left: SPACE.md, top: SPACE.md },
-  heroBody: { paddingTop: SPACE.xs, paddingHorizontal: SPACE.md, gap: SPACE.xs + SPACE.xxs },
+  // 12 under the photo, then the details' 4 / 12 / 6 (flow4.js going `det`).
+  heroBody: { marginTop: SPACE.md, paddingTop: SPACE.xs, paddingHorizontal: SPACE.md, gap: SPACE.xs + SPACE.xxs },
   heroWhen: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   heroPlace: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs + SPACE.xxs },
   tag: {
@@ -725,7 +730,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.sm + SPACE.xxs,
     borderRadius: RADIUS.capsule,
   },
-  heroActions: { flexDirection: 'row', gap: SPACE.sm, paddingHorizontal: SPACE.md, paddingBottom: SPACE.sm },
+  // The details' 6 gap plus the group's 4 above it; the details' 8 below.
+  heroActions: { flexDirection: 'row', gap: SPACE.sm, marginTop: SPACE.sm + SPACE.xxs, paddingHorizontal: SPACE.md, paddingBottom: SPACE.sm },
   heroAction: {
     height: SIZE.control,
     flexDirection: 'row',
@@ -737,6 +743,8 @@ const styles = StyleSheet.create({
   },
   heroActionWide: { flex: 1, paddingHorizontal: SPACE.lg },
   heroActionIcon: { width: SIZE.control },
+  // 24 under the hero, 12 between rows (flow4.js going `loading`).
+  skeletonFirstRow: { marginTop: SPACE.xl },
   skeletonRow: { marginTop: SPACE.md },
   locked: {
     flexDirection: 'row',

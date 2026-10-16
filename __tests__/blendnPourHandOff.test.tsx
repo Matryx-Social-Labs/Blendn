@@ -18,7 +18,7 @@ import React from 'react'
 import { AccessibilityInfo, StyleSheet } from 'react-native'
 
 import { BlendnScreen } from '../components/blendn/BlendnScreen'
-import { ASK_AT, ROOM_AT } from '../components/ds/MomentPour'
+import { ASK_AT, ORBS_LIFT_MS, ROOM_AT } from '../components/ds/MomentPour'
 import { DURATION } from '../lib/design/tokens'
 import { askIntentRoute, intentAnswered, submitCheckIn, type CheckInOutcome } from '../lib/checkIn'
 import { H } from '../lib/haptics'
@@ -37,7 +37,7 @@ jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { id: 'u1', name: '
 jest.mock('../lib/apiClient', () => ({
   apiClient: new Proxy({}, { get: () => jest.fn(async () => ({ success: false })) }),
 }))
-jest.mock('../lib/locationFix', () => ({ getCurrentLocation: jest.fn(async () => ({ latitude: 12.97, longitude: 77.59, accuracy: 8 })) }))
+jest.mock('../lib/locationFix', () => ({ warmLocationFix: jest.fn(async () => {}), getCurrentLocation: jest.fn(async () => ({ latitude: 12.97, longitude: 77.59, accuracy: 8 })) }))
 jest.mock('../lib/roomVisibilityStorage', () => ({}))
 // Coach marks have their own tests (coachMarks, pulseCoachMark); here they never show.
 jest.mock('../lib/coachMarks', () => ({ useCoachMark: () => ({ visible: false, dismiss: () => {} }), markCoachUsed: () => {} }))
@@ -58,7 +58,12 @@ jest.mock('../lib/useRoom', () => {
   return {
     useRoom: () => useSyncExternalStore((fn: () => void) => (listeners.add(fn), () => listeners.delete(fn)), () => state),
     mockRoomLoads: () => {
-      state = { ...none, status: 'ready', event: { id: 'e1', title: 'Vinyl Night' } }
+      state = { ...none, status: 'ready', settled: true, event: { id: 'e1', title: 'Vinyl Night' } }
+      listeners.forEach((fn) => fn())
+    },
+    /* Ready, but its count and chat haven't answered: the Room must not be revealed yet. */
+    mockRoomReadyUnsettled: () => {
+      state = { ...none, status: 'ready', settled: false, event: { id: 'e1', title: 'Vinyl Night' } }
       listeners.forEach((fn) => fn())
     },
     mockRoomReset: () => {
@@ -139,7 +144,11 @@ jest.mock('../components/ds/PersonCard', () => ({ PersonCard: () => null }))
 jest.mock('../components/grid/ConnectSheet', () => ({ ConnectSheet: () => null }))
 
 const { router } = jest.requireMock('expo-router') as { router: { push: jest.Mock } }
-const { mockRoomLoads, mockRoomReset } = jest.requireMock('../lib/useRoom') as { mockRoomLoads: () => void; mockRoomReset: () => void }
+const { mockRoomLoads, mockRoomReset, mockRoomReadyUnsettled } = jest.requireMock('../lib/useRoom') as {
+  mockRoomLoads: () => void
+  mockRoomReset: () => void
+  mockRoomReadyUnsettled: () => void
+}
 const submit = submitCheckIn as jest.Mock
 const HIDDEN = { includeHiddenElements: true }
 const advance = (ms: number) => act(async () => jest.advanceTimersByTime(ms))
@@ -216,4 +225,59 @@ it('"Why do you go out?": the pour plays out and clears, then the sheet over Ton
   await advance(0)
   expect(roomShowing()).toBe(true)
   expect(mockPassLabels).not.toContain('Hold to blend in')
+})
+
+describe('smooth: nothing heavy mounts while the pour moves (owner defect, Debug iOS drive)', () => {
+  const stage = () => screen.queryByTestId('room-stage', HIDDEN)
+  const pourReleased = () => screen.getByTestId('blendn-pour', HIDDEN).props.pointerEvents === 'none'
+
+  it('the Room loaded mid-flood mounts hidden only once the pour holds still, and the hand-off comes after that mount', async () => {
+    await holdToCheckIn(fresh(false))
+    // The room answers 100 ms into the flood.
+    await advance(100)
+    await act(async () => mockRoomLoads())
+    await advance(0)
+    // Still moving (flood, "You're in.", the orbs' lift): no Room tree yet.
+    expect(stage()).toBeNull()
+    await advance(ORBS_LIFT_MS - 100 - 1)
+    expect(stage()).toBeNull()
+    await advance(1)
+    // Still: the Room is mounted under the pour, hidden and untouchable; Tonight is still up.
+    expect(stage()).not.toBeNull()
+    expect(stage()!.props.pointerEvents).toBe('none')
+    expect(stage()!.props.accessibilityElementsHidden).toBe(true)
+    expect(tonightShowing()).toBe(true)
+    expect(pourReleased()).toBe(false)
+    // #9's 700 ms: the hand-off, into the Room that is already there.
+    await advance(ROOM_AT - ORBS_LIFT_MS)
+    expect(pourReleased()).toBe(true)
+    expect(stage()!.props.pointerEvents).toBe('auto')
+    expect(tonightShowing()).toBe(false)
+    expect(success).toHaveBeenCalledTimes(1)
+  })
+
+  it('a Room whose count and chat have not answered is not revealed: the pour holds until they have', async () => {
+    await holdToCheckIn(fresh(false))
+    await advance(100)
+    await act(async () => mockRoomReadyUnsettled())
+    await advance(ROOM_AT)
+    // Past 700 ms: no Room mounted, the pour still holding over Tonight.
+    expect(stage()).toBeNull()
+    expect(pourReleased()).toBe(false)
+    await act(async () => mockRoomLoads())
+    await advance(0)
+    expect(stage()).not.toBeNull()
+    expect(pourReleased()).toBe(true)
+  })
+
+  it('one hold is one check-in: a second activation while it runs sends nothing', async () => {
+    submit.mockResolvedValue(fresh(false))
+    await render(<BlendnScreen />)
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('tonight'))
+      fireEvent.press(screen.getByTestId('tonight'))
+    })
+    await advance(0)
+    expect(submit).toHaveBeenCalledTimes(1)
+  })
 })

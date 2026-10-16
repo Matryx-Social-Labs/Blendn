@@ -315,7 +315,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: SPACE.md,
     paddingHorizontal: SPACE.lg,
-    marginHorizontal: SPACE.sm,
+    // 24 from the screen edges, inside the dock's 12 (ROUND4 8.3 #08).
+    marginHorizontal: SPACE.md,
     borderRadius: RADIUS.rowInCard,
     backgroundColor: COLOR.surface,
   },

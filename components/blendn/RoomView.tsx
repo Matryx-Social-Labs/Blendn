@@ -1,7 +1,7 @@
-import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { StyleSheet, View } from 'react-native'
 import { GestureDetector } from 'react-native-gesture-handler'
-import Animated, { Easing, FadeInUp, withSpring } from 'react-native-reanimated'
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming, type SharedValue } from 'react-native-reanimated'
 
 import { DURATION, EASING, RISE, SPACE, SPRING, STAGGER } from '../../lib/design/tokens'
 import type { CrewCard } from '../../lib/crews'
@@ -23,18 +23,35 @@ import { useStageScroll } from './RoomStage'
  */
 const HERO_RISE = SPACE.md
 const SECTIONS_AT = 60
-const heroRise = () => {
-  'worklet'
-  return {
-    initialValues: { transform: [{ translateY: HERO_RISE }] },
-    animations: { transform: [{ translateY: withSpring(0, SPRING.travel) }] },
-  }
+
+/**
+ * #9's entrance on shared values, not layout animations: the Room can be
+ * mounted, hidden, under the pour (so its mount cost is paid while the pour
+ * holds still) and still enter when it is revealed. Latched at mount: a
+ * later `enter` change (or a header part remounting with People | Crews)
+ * never replays it.
+ */
+function useEntrance(enter: boolean, hidden: boolean) {
+  const [entering] = useState(enter)
+  const hero = useSharedValue(entering ? HERO_RISE : 0)
+  const s0 = useSharedValue(entering ? 0 : 1)
+  const s1 = useSharedValue(entering ? 0 : 1)
+  const s2 = useSharedValue(entering ? 0 : 1)
+  const started = useRef(false)
+  useEffect(() => {
+    if (!entering || hidden || started.current) return
+    started.current = true
+    hero.set(withSpring(0, SPRING.travel))
+    const ease = Easing.bezier(...EASING.entrance)
+    ;[s0, s1, s2].forEach((s, i) => s.set(withDelay(SECTIONS_AT + i * STAGGER.base, withTiming(1, { duration: DURATION.base, easing: ease }))))
+  }, [entering, hidden, hero, s0, s1, s2])
+  const heroStyle = useAnimatedStyle(() => ({ transform: [{ translateY: hero.get() }] }))
+  return { heroStyle, sections: [useSection(s0), useSection(s1), useSection(s2)] as const }
 }
-const sectionIn = (i: number) =>
-  FadeInUp.delay(SECTIONS_AT + i * STAGGER.base)
-    .duration(DURATION.base)
-    .easing(Easing.bezier(...EASING.entrance))
-    .withInitialValues({ opacity: 0, transform: [{ translateY: RISE.list }] })
+
+function useSection(p: SharedValue<number>) {
+  return useAnimatedStyle(() => ({ opacity: p.get(), transform: [{ translateY: (1 - p.get()) * RISE.list }] }))
+}
 
 /**
  * The Room's two status banners (Flow 4 Room #12, #13): "Offline." in the
@@ -103,8 +120,10 @@ export type RoomViewProps = {
   dockWave: Extract<DockLine, { kind: 'wave' }> | null
   onOpenChat: () => void
   onOpenPerson: (userId: string) => void
-  /** Fresh out of the pour: the hero rises and the sections follow (#9). */
+  /** Fresh out of the pour: the hero rises and the sections follow (#9). Read at mount. */
   enter: boolean
+  /** Mounted under the pour, not yet shown: the entrance waits for this to turn false. */
+  hidden?: boolean
   topInset: number
   bottomInset: number
 }
@@ -119,7 +138,8 @@ export type RoomViewProps = {
 export function RoomView(props: RoomViewProps) {
   const { onScroll, native, scrollEventThrottle } = useStageScroll()
   const cell = useGridCell()
-  const { view, people, enter } = props
+  const { view, people, enter, hidden = false } = props
+  const entrance = useEntrance(enter, hidden)
   const crewsView = view === 'crews'
   const empty = people.length === 0
 
@@ -128,7 +148,7 @@ export function RoomView(props: RoomViewProps) {
       <View style={styles.gutter}>
         <RoomStatus status={props.connection} />
       </View>
-      <Animated.View entering={enter ? heroRise : undefined}>
+      <Animated.View style={entrance.heroStyle}>
         <RoomHero
           title={props.title}
           hereCount={props.hereCount}
@@ -138,11 +158,11 @@ export function RoomView(props: RoomViewProps) {
           people={people}
         />
       </Animated.View>
-      <Animated.View style={styles.gutter} entering={enter ? sectionIn(0) : undefined}>
+      <Animated.View style={[styles.gutter, entrance.sections[0]]}>
         {props.visibility}
       </Animated.View>
       {props.segments ? (
-        <Animated.View style={styles.gutter} entering={enter ? sectionIn(1) : undefined}>
+        <Animated.View style={[styles.gutter, entrance.sections[1]]}>
           <SegmentedControl
             items={['People', 'Crews']}
             selected={crewsView ? 1 : 0}
@@ -154,7 +174,7 @@ export function RoomView(props: RoomViewProps) {
       {crewsView ? (
         props.crewsHead
       ) : (
-        <Animated.View style={styles.sections} entering={enter ? sectionIn(2) : undefined}>
+        <Animated.View style={[styles.sections, entrance.sections[2]]}>
           {props.crewStrip}
           {empty ? (
             <View style={styles.empty}>

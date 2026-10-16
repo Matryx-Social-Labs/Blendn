@@ -95,7 +95,9 @@ const styles = StyleSheet.create({
   slot: { flex: 1 },
   pressedIos: { transform: [{ scale: PRESS.scale }] },
   card: {
-    flex: 1,
+    // Grows to the slot (the taller card in the row), never shrinks below its content: `flex: 1` gave it a zero
+    // basis in an auto-height row and collapsed it to its padding, the well and words spilling out (Board drive).
+    flexGrow: 1,
     borderRadius: RADIUS.sheet,
     backgroundColor: COLOR.surface,
     padding: SPACE.lg,

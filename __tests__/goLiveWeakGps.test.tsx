@@ -11,7 +11,8 @@ jest.mock('expo-location', () => ({
   hasServicesEnabledAsync: jest.fn(async () => true),
   requestForegroundPermissionsAsync: jest.fn(async () => ({ status: 'granted' })),
   getCurrentPositionAsync: jest.fn(),
-  Accuracy: { BestForNavigation: 6 },
+  getLastKnownPositionAsync: jest.fn(async () => null),
+  Accuracy: { High: 4, BestForNavigation: 6 },
 }))
 
 /* eslint-disable import/first */

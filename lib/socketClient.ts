@@ -655,6 +655,7 @@ function setupSocketHandlers(sock: TypedSocket): void {
     markDomainsDirty(["events", "match"])
     const callbacks = eventCheckOutSubscriptions.get(data.eventId)
     callbacks?.forEach((cb) => cb(data))
+    void ifItWasMe(data)
   })
 
   sock.on("event:interestUpdate", (data) => {
@@ -1243,4 +1244,24 @@ export type {
   PrivateReadCallback,
   RoomMatchCallback,
   RoomWaveCallback,
+}
+
+/**
+ * Your own check-out, heard on the socket. The server sends your own id
+ * unhandled to you (`emitAsSeenBy`), so a check-out this device did not make
+ * — the sweeper's, another device's — is recognisable, and everything that
+ * shows "am I in" (the Banter's Live now, the centre button, the Room) hears
+ * it now rather than on its next 30 s poll.
+ */
+export async function ifItWasMe(data: { eventId: string; userId: string }): Promise<void> {
+  try {
+    const me = await TokenStorage.getUser()
+    if (!me?.id || data.userId !== me.id) return
+    // Loaded here, not at the top: `./checkIn` pulls in storage this module (and its tests) must not load.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { checkInChanged } = require("./checkIn") as typeof import("./checkIn")
+    checkInChanged(data.eventId)
+  } catch (e) {
+    Logger.warn("socket", "checkout self-check failed", { error: e })
+  }
 }
