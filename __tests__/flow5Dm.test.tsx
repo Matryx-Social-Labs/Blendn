@@ -4,7 +4,8 @@
  * the next one's, the reveal bar's states, the photo gate, and the thread's
  * empty, failed and ended states.
  */
-import { act, fireEvent, render, screen } from '@testing-library/react-native'
+import { act, fireEvent, render, screen, within } from '@testing-library/react-native'
+import { StyleSheet } from 'react-native'
 
 let mockParams: Record<string, string> = { conversationId: 'c1' }
 jest.mock('@react-native-async-storage/async-storage', () =>
@@ -195,5 +196,23 @@ describe('the thread’s states', () => {
     expect(screen.getByText('This conversation has ended')).toBeTruthy()
     expect(screen.queryByLabelText('Message')).toBeNull()
     expect(screen.queryByText(/block/i)).toBeNull()
+  })
+})
+
+describe('the composer rides the keyboard', () => {
+  /*
+   * The floating dock is absolutely positioned. Directly inside the
+   * KeyboardAvoidingView it ignored the avoider's padding (an absolute child
+   * sits against the padding box) and stayed under the keyboard; it must sit
+   * in the View the padding shrinks.
+   */
+  it('the DM’s composer is inside the frame the keyboard padding shrinks', async () => {
+    await open()
+    const frame = screen.getByTestId('chat-keyboard-dock-frame')
+    // Its parent is the avoider's own View — the one that takes the keyboard's padding.
+    const avoider = frame.parent
+    expect(StyleSheet.flatten(avoider?.props.style)).toHaveProperty('paddingBottom')
+    expect(avoider?.parent?.props.testID).toBe('chat-keyboard-frame')
+    expect(within(frame).getByTestId('dm-composer')).toBeTruthy()
   })
 })

@@ -1,10 +1,11 @@
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { FlatList, KeyboardAvoidingView, Platform, StyleSheet, useWindowDimensions, View } from 'react-native'
+import { FlatList, Platform, StyleSheet, useWindowDimensions, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { ChatHeader, chatHeaderBottom, SubtitleText } from '../../components/chat/ChatHeader'
 import { BrokenLink } from '../../components/chat/BrokenLink'
+import { KeyboardFrame } from '../../components/chat/KeyboardFrame'
 import { CountLine, FeedSkeleton, JustMutedLine, LoadOlder, NewestChip, ReactionFlight, RoomCover, type Flight } from '../../components/chat/ChatParts'
 import { RoomGuidelinesBanner } from '../../components/chat/RoomGuidelinesBanner'
 import { RoomMessageRow, RoomOutside, senderOf, type Outside, type RowHandlers } from '../../components/chat/RoomFeed'
@@ -33,7 +34,7 @@ import { newClientId } from '../../lib/clientId'
 import { defaultRoomName, roomClosedLine, roomKindParam } from '../../lib/crews'
 import { COLOR, SIZE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
-import { KEYBOARD_BEHAVIOR, useKeyboardShown } from '../../lib/keyboard'
+import { useKeyboardShown } from '../../lib/keyboard'
 import { markDomainsDirty } from '../../lib/liveSyncState'
 import { Logger } from '../../lib/logger'
 import { mergeNewestPage } from '../../lib/mergeNewestPage'
@@ -726,7 +727,7 @@ function GroupChatInner() {
     <View style={styles.screen}>
       <Orbs set="brand" paused={keyboardUp} />
       <Grain />
-      <KeyboardAvoidingView style={styles.fill} behavior={KEYBOARD_BEHAVIOR}>
+      <KeyboardFrame>
         {outside ? (
           <RoomOutside outside={outside} rejoining={rejoining} onRejoin={() => void rejoin()} onGoLive={goLiveAgain} onBack={goBack} />
         ) : (
@@ -844,7 +845,7 @@ function GroupChatInner() {
             </View>
           </>
         )}
-      </KeyboardAvoidingView>
+      </KeyboardFrame>
 
       <ChatHeader
         testID="room-header"

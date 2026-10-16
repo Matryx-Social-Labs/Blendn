@@ -1,10 +1,11 @@
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { FlatList, KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native'
+import { FlatList, Platform, StyleSheet, View } from 'react-native'
 import Animated, { Easing, FadeIn, FadeOut } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { BrokenLink } from '../../components/chat/BrokenLink'
+import { KeyboardFrame } from '../../components/chat/KeyboardFrame'
 import { ChatHeader, chatHeaderBottom } from '../../components/chat/ChatHeader'
 import { FeedSkeleton, HEADER_FACE, LoadOlder, NewestChip } from '../../components/chat/ChatParts'
 import { DmMessageRow, MatchOpenerCard, NudgeLine, PhotoPreviewSheet, quoteText, RevealLine, RevealSheets, SayHi, type DmRowHandlers } from '../../components/chat/DmParts'
@@ -43,7 +44,7 @@ import {
   type PrivateMessage,
 } from '../../lib/directThread'
 import { H } from '../../lib/haptics'
-import { KEYBOARD_BEHAVIOR, useKeyboardShown } from '../../lib/keyboard'
+import { useKeyboardShown } from '../../lib/keyboard'
 import { markDomainsDirty } from '../../lib/liveSyncState'
 import { Logger } from '../../lib/logger'
 import { draftParam, matchOpener } from '../../lib/matchOpener'
@@ -620,7 +621,7 @@ function PrivateChatInner() {
     <View style={styles.screen}>
       <Orbs set="brand" paused={keyboardUp} />
       <Grain />
-      <KeyboardAvoidingView style={styles.fill} behavior={KEYBOARD_BEHAVIOR}>
+      <KeyboardFrame>
         {ended ? (
           // The composer goes; it never says whether you were blocked (Flow 5 DM #14).
           <StateScreen
@@ -734,7 +735,7 @@ function PrivateChatInner() {
             </View>
           </>
         )}
-      </KeyboardAvoidingView>
+      </KeyboardFrame>
 
       <ChatHeader
         testID="dm-header"
