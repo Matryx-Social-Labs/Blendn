@@ -124,30 +124,23 @@ describe('Increase Contrast and Bold Text', () => {
   })
 })
 
-describe('geometry: the design’s grid, 1fr 1fr 56 1fr 1fr inside 16 + 4 pt (owner defect on #401)', () => {
+describe('geometry: five equal slots, the disc in the middle one (owner override on #401)', () => {
   const { tabBarGeometry } = require('../components/ds/TabBar') as typeof import('../components/ds/TabBar')
 
-  it.each([360, 393, 430])('at %i pt the four tabs sit symmetric about the disc, with equal gaps', (width) => {
+  it.each([360, 393, 430, 440])('at %i pt all five centres are equally spaced, the disc at the middle of the screen', (width) => {
     const { cell, centres } = tabBarGeometry(width)
-    const [pulse, going, disc, banter, me] = centres
-    expect(cell).toBeCloseTo((width - 40 - 56) / 4, 6)
-    expect(disc).toBeCloseTo(width / 2, 6)
-    // Inner pair and outer pair, mirrored.
-    expect(banter - disc).toBeCloseTo(disc - going, 6)
-    expect(me - disc).toBeCloseTo(disc - pulse, 6)
-    // Neighbouring tabs one cell apart on each side; the disc's slot is its own 56.
-    expect(going - pulse).toBeCloseTo(cell, 6)
-    expect(me - banter).toBeCloseTo(cell, 6)
-    expect(banter - going).toBeCloseTo(cell + 56, 6)
-    // Every tab's 56 pt target fits its cell, so no label can widen one.
+    expect(cell).toBeCloseTo((width - 40) / 5, 6)
+    expect(centres[2]).toBeCloseTo(width / 2, 6)
+    const gaps = centres.slice(1).map((c, i) => c - centres[i])
+    gaps.forEach((g) => expect(g).toBeCloseTo(cell, 6))
+    // Every 56 pt target, and the 56 pt disc, fits its slot.
     expect(cell).toBeGreaterThanOrEqual(56)
   })
 
-  it('draws every tab cell at the same width, whatever its label, and the disc slot at 56', async () => {
+  it('draws all five slots at the same width, the disc slot included', async () => {
     await draw()
     const width = (id: string) => StyleSheet.flatten(screen.getByTestId(id).props.style).width
-    const cells = ['pulse', 'going', 'banter', 'me'].map((k) => width(`tabs-${k}-cell`))
-    expect(new Set(cells).size).toBe(1)
-    expect(width('tabs-disc-slot')).toBe(56)
+    const slots = ['pulse', 'going', 'banter', 'me'].map((k) => width(`tabs-${k}-cell`)).concat(width('tabs-disc-slot'))
+    expect(new Set(slots).size).toBe(1)
   })
 })

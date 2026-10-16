@@ -288,7 +288,8 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   if (pourEntrance && mode === 'tonight' && !checkIn.checkingIn && !pourPlaying) setPourEntrance(false)
   /** This check-in's Room is loaded: it can be mounted under the pour, once the pour holds still. */
   const roomIsThisOne = room.status === 'ready' && !!room.event && room.event.id === insideEvent?.id && !switchFrom
-  const premount = pourPlaying && pourStill && !checkIn.asks && roomIsThisOne
+  // With its data: the count and the chat have answered too, so the Room reveals whole, never filling in after.
+  const premount = pourPlaying && pourStill && !checkIn.asks && roomIsThisOne && room.settled
   // Latched: the Room stays mounted from here to the hand-off. The pour's own hand-off effect runs after the
   // commit that mounts it, so the crossfade never pays for the mount.
   if (premount && !roomPremounted) setRoomPremounted(true)

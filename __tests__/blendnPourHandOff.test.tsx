@@ -56,7 +56,12 @@ jest.mock('../lib/useRoom', () => {
   return {
     useRoom: () => useSyncExternalStore((fn: () => void) => (listeners.add(fn), () => listeners.delete(fn)), () => state),
     mockRoomLoads: () => {
-      state = { ...none, status: 'ready', event: { id: 'e1', title: 'Vinyl Night' } }
+      state = { ...none, status: 'ready', settled: true, event: { id: 'e1', title: 'Vinyl Night' } }
+      listeners.forEach((fn) => fn())
+    },
+    /* Ready, but its count and chat haven't answered: the Room must not be revealed yet. */
+    mockRoomReadyUnsettled: () => {
+      state = { ...none, status: 'ready', settled: false, event: { id: 'e1', title: 'Vinyl Night' } }
       listeners.forEach((fn) => fn())
     },
     mockRoomReset: () => {
@@ -137,7 +142,11 @@ jest.mock('../components/ds/PersonCard', () => ({ PersonCard: () => null }))
 jest.mock('../components/grid/ConnectSheet', () => ({ ConnectSheet: () => null }))
 
 const { router } = jest.requireMock('expo-router') as { router: { push: jest.Mock } }
-const { mockRoomLoads, mockRoomReset } = jest.requireMock('../lib/useRoom') as { mockRoomLoads: () => void; mockRoomReset: () => void }
+const { mockRoomLoads, mockRoomReset, mockRoomReadyUnsettled } = jest.requireMock('../lib/useRoom') as {
+  mockRoomLoads: () => void
+  mockRoomReset: () => void
+  mockRoomReadyUnsettled: () => void
+}
 const submit = submitCheckIn as jest.Mock
 const HIDDEN = { includeHiddenElements: true }
 const advance = (ms: number) => act(async () => jest.advanceTimersByTime(ms))
@@ -243,6 +252,20 @@ describe('smooth: nothing heavy mounts while the pour moves (owner defect, Debug
     expect(stage()!.props.pointerEvents).toBe('auto')
     expect(tonightShowing()).toBe(false)
     expect(success).toHaveBeenCalledTimes(1)
+  })
+
+  it('a Room whose count and chat have not answered is not revealed: the pour holds until they have', async () => {
+    await holdToCheckIn(fresh(false))
+    await advance(100)
+    await act(async () => mockRoomReadyUnsettled())
+    await advance(ROOM_AT)
+    // Past 700 ms: no Room mounted, the pour still holding over Tonight.
+    expect(stage()).toBeNull()
+    expect(pourReleased()).toBe(false)
+    await act(async () => mockRoomLoads())
+    await advance(0)
+    expect(stage()).not.toBeNull()
+    expect(pourReleased()).toBe(true)
   })
 
   it('one hold is one check-in: a second activation while it runs sends nothing', async () => {

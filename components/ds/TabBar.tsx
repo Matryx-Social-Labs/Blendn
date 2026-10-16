@@ -22,17 +22,20 @@ const TABS: readonly { key: Tab; label: string; icon: IconName }[] = [
 const INDICATOR = { width: SIZE.primary, height: SIZE.tag, alpha: 0.1 } as const
 
 /**
- * The bar's geometry (journey/ui.js `JU.tabbar`, TabBar.html): the capsule
- * 16 pt in from each edge, 4 pt of padding inside it, then the grid
- * `1fr 1fr 56px 1fr 1fr` — four equal tab cells and the disc's 56 pt slot,
- * each item centred in its column. So the gaps are equal, the pairs sit
- * symmetric about the disc, and a label's length never moves its tab.
- * `centres` are in screen x, Pulse · Going · disc · Banter · Me.
+ * The bar's geometry. The capsule sits 16 pt in from each edge with 4 pt of
+ * padding inside it, and the row is FIVE EQUAL SLOTS: Pulse · Going · the
+ * disc · Banter · Me. Each item is centred in its slot, and the disc keeps
+ * its 56 pt inside the middle one.
+ *
+ * Owner override (2026-10-17, PR #401 drive): the design's grid,
+ * `1fr 1fr 56px 1fr 1fr` (journey/ui.js `JU.tabbar`), measured 86/71/71/86
+ * between centres on iOS, and the inner tabs read as crowding the disc.
+ * Owner ruling: all five centres equally spaced. `centres` are in screen x.
  */
 export function tabBarGeometry(screenWidth: number) {
   const left = SPACE.tabBarInset + SPACE.xs
-  const cell = Math.max(0, (screenWidth - 2 * left - SIZE.disc) / 4)
-  const centres = [left + cell / 2, left + cell * 1.5, left + cell * 2 + SIZE.disc / 2, left + cell * 2.5 + SIZE.disc, left + cell * 3.5 + SIZE.disc]
+  const cell = Math.max(0, (screenWidth - 2 * left) / 5)
+  const centres = [0, 1, 2, 3, 4].map((i) => left + cell * (i + 0.5))
   return { cell, centres }
 }
 
@@ -106,7 +109,7 @@ export function TabBar({ selected, onSelect, disc, mePhoto, testID = 'tabs' }: T
       <Material role="bar" style={[StyleSheet.absoluteFill, styles.round]} />
       <View testID={`${testID}-row`} accessibilityRole="tablist" style={styles.row}>
         {TABS.slice(0, 2).map(tab)}
-        <View testID={`${testID}-disc-slot`} style={styles.slot}>
+        <View testID={`${testID}-disc-slot`} style={[styles.slot, { width: cell }]}>
           <Disc {...disc} />
         </View>
         {TABS.slice(2).map(tab)}
@@ -127,7 +130,8 @@ const styles = StyleSheet.create({
   round: { borderRadius: RADIUS.tabBar },
   row: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACE.xs },
   cell: { alignItems: 'center' },
-  slot: { width: SIZE.disc, height: SIZE.disc },
+  // The middle slot is a tab slot's width; the disc keeps its 56 pt, centred in it.
+  slot: { height: SIZE.disc, alignItems: 'center', justifyContent: 'center' },
   tab: { width: SIZE.primary, maxWidth: '100%', height: SIZE.primary, alignItems: 'center', justifyContent: 'center', gap: SPACE.xxs },
   pill: { ...StyleSheet.absoluteFill, borderRadius: RADIUS.capsule, backgroundColor: COLOR.tabCapsule },
   indicator: {

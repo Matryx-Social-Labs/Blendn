@@ -97,6 +97,12 @@ export interface RoomPerson {
 
 export interface RoomState {
   status: 'loading' | 'none' | 'ready' | 'error'
+  /**
+   * Ready, and its first count and chat have answered too (or failed): what
+   * the Room needs to reveal without a number jumping or the dock arriving
+   * late after a check-in's pour (PR #401 drive).
+   */
+  settled: boolean
   event: { id: string; title: string; startsAt?: string; endsAt?: string } | null
   checkedInAt: string | null
   /**
@@ -159,6 +165,19 @@ const displayName = (name?: string) => {
 
 type RoomEvent = NonNullable<RoomState['event']>
 
+/** The here count's candidates: the room preview (the server's own "here now"), else the event's occupancy. */
+async function countCandidates(eventId: string, force: boolean): Promise<unknown[]> {
+  try {
+    const preview = await apiClient.getRoomPreview(eventId, { force })
+    if (preview.success && preview.data) return [preview.data.hereCount]
+    const detail = await apiClient.getEvent(eventId)
+    return [detail.data?.currentCapacity, detail.data?.stats?.checkInCount]
+  } catch (e) {
+    Logger.warn('match', 'Could not seed the here count', { error: e })
+    return []
+  }
+}
+
 export function useRoom(): RoomState & RoomActions {
   const { user: authUser, initialized: authInitialized } = useAuth()
   const userId = authUser?.id ?? null
@@ -174,6 +193,11 @@ export function useRoom(): RoomState & RoomActions {
   const [loadingMore, setLoadingMore] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [chatGroupId, setChatGroupId] = useState<string | null>(null)
+  /** The room whose first count, and whose chat lookup, have answered. */
+  const [seededFor, setSeededFor] = useState<string | null>(null)
+  const [chatFor, setChatFor] = useState<string | null>(null)
+  /** The chat lookup started with the check-ins read, before the roster: the chat effect takes it over. */
+  const chatEarly = useRef<{ eventId: string; result: ReturnType<typeof apiClient.getEventChat> } | null>(null)
 
   /*
    * Session knowledge about people in this room. All of it belongs to an
@@ -237,20 +261,10 @@ export function useRoom(): RoomState & RoomActions {
    * server's own "here now"; an older server 404s it and the event detail's
    * occupancy stands in.
    */
-  const seedCount = useCallback(async (eventId: string, force: boolean, loadId: number) => {
-    let candidates: unknown[] = []
-    try {
-      const preview = await apiClient.getRoomPreview(eventId, { force })
-      if (preview.success && preview.data) {
-        candidates = [preview.data.hereCount]
-      } else {
-        const detail = await apiClient.getEvent(eventId)
-        candidates = [detail.data?.currentCapacity, detail.data?.stats?.checkInCount]
-      }
-    } catch (e) {
-      Logger.warn('match', 'Could not seed the here count', { error: e })
-    }
+  const seedCount = useCallback(async (eventId: string, force: boolean, loadId: number, early?: Promise<unknown[]>) => {
+    const candidates = await (early ?? countCandidates(eventId, force))
     if (loadId !== loadIdRef.current || eventRef.current?.id !== eventId) return
+    setSeededFor(eventId)
     setLive((prev) => {
       const hereCount = seedHereCount(candidates, prev.attendees)
       return hereCount === prev.hereCount ? prev : { ...prev, hereCount }
@@ -278,6 +292,15 @@ export function useRoom(): RoomState & RoomActions {
 
         // First paint: the remembered roster, once we know which room it is.
         const firstId = extractEventId(checkins[0])
+        /*
+         * The count and the chat, started now rather than after the roster: a
+         * check-in's Room is mounted under the pour and revealed once these
+         * answer too, so they must not add two more round trips after it.
+         */
+        const earlyCount = firstId ? countCandidates(firstId, force) : undefined
+        if (firstId && chatResolvedForRef.current !== firstId && chatEarly.current?.eventId !== firstId) {
+          chatEarly.current = { eventId: firstId, result: apiClient.getEventChat(firstId) }
+        }
         const remembered = recallRoster(firstId)
         if (remembered && firstId && liveRef.current.attendees.length === 0) {
           setLive((prev) => withRoster(prev, remembered.attendees, remembered.attendees.length >= PAGE))
@@ -391,7 +414,7 @@ export function useRoom(): RoomState & RoomActions {
         // Memory only — `lib/rosterMemory.ts` says why this never reaches disk.
         rememberRoster(outcome.eventId, attendees, outcome.eventTitle)
 
-        void seedCount(outcome.eventId, force, loadId)
+        void seedCount(outcome.eventId, force, loadId, outcome.eventId === firstId ? earlyCount : undefined)
       } catch (e) {
         Logger.error('match', 'Failed to load the room', { error: e })
         if (superseded()) return
@@ -525,8 +548,9 @@ export function useRoom(): RoomState & RoomActions {
     if (!eventId || chatResolvedForRef.current === eventId) return
     chatResolvedForRef.current = eventId
     let cancelled = false
-    apiClient
-      .getEventChat(eventId)
+    const early = chatEarly.current?.eventId === eventId ? chatEarly.current.result : null
+    chatEarly.current = null
+    ;(early ?? apiClient.getEventChat(eventId))
       .then((result) => {
         if (cancelled || eventRef.current?.id !== eventId) return
         const id = result.data?.chatGroupId ?? result.data?.id
@@ -551,6 +575,10 @@ export function useRoom(): RoomState & RoomActions {
       .catch((e) => {
         Logger.warn('match', 'Chat group lookup failed', { error: e })
         if (!cancelled) chatResolvedForRef.current = null
+      })
+      // Answered either way: the Room may reveal (a failed lookup is the dock's "not open", not a wait).
+      .finally(() => {
+        if (!cancelled) setChatFor(eventId)
       })
     return () => {
       cancelled = true
@@ -781,6 +809,7 @@ export function useRoom(): RoomState & RoomActions {
 
   return {
     status,
+    settled: status === 'ready' && !!event && seededFor === event.id && chatFor === event.id,
     event,
     checkedInAt,
     revealed,
