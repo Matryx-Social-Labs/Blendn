@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import Animated, { useAnimatedStyle, useDerivedValue, useSharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -65,7 +65,7 @@ const YOURE_IN_TYPE = {
  * Reduce Motion: the panel crossfades to filled with "You're in." in 200 ms;
  * the same hand-off at 700 ms (or `ASK_AT`), over 200 ms; the same haptic.
  */
-export function MomentPour({
+export const MomentPour = memo(function MomentPour({
   venue,
   onDone,
   ready = true,
@@ -88,6 +88,12 @@ export function MomentPour({
 }) {
   const reduceMotion = useReducedMotion()
   const bold = useBoldText()
+  /*
+   * The pass as it was when the pour began. Read once: the pass changing
+   * under it (its "You're in" label, a crew row) must not move or resize the
+   * panel mid-flood, which jumped the flood's translate with it.
+   */
+  const [frameAtStart] = useState(frame)
   const insets = useSafeAreaInsets()
   const { height: screenHeight } = useWindowDimensions()
   const { duration } = motionTokens(reduceMotion)
@@ -96,7 +102,7 @@ export function MomentPour({
   const lift = useSharedValue(0)
   const orbs = useDerivedValue(() => Math.sin(lift.get() * Math.PI) * ORBS_PEAK)
   // Off the panel until it has measured itself.
-  const panelHeight = useSharedValue(frame?.height ?? screenHeight)
+  const panelHeight = useSharedValue(frameAtStart?.height ?? screenHeight)
   const flood = useSharedValue(reduceMotion ? 1 : 0)
   const floodOpacity = useSharedValue(reduceMotion ? 0 : 1)
   const text = useSharedValue(0)
@@ -171,15 +177,15 @@ export function MomentPour({
   const textStyle = useAnimatedStyle(() => ({ opacity: text.get() }))
 
   return (
-    <MomentStage testID={testID} modal={false} done={done} label={`You’re in. ${venue}.`} scrimAlpha={0} scrim={scrim} orbs="moment" orbsOpacity={orbs} onSkip={skip}>
+    <MomentStage testID={testID} modal={false} done={done} label={`You’re in. ${venue}.`} scrimAlpha={0} scrim={scrim} orbs="moment" orbsOpacity={orbs} orbsOnInk={false} onSkip={skip}>
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, stageStyle]}>
         <View
           testID={testID && `${testID}-panel`}
-          onLayout={(e) => panelHeight.set(e.nativeEvent.layout.height)}
+          onLayout={frameAtStart ? undefined : (e) => panelHeight.set(e.nativeEvent.layout.height)}
           style={[
             styles.panel,
-            frame
-              ? { left: frame.x, top: frame.y, width: frame.width, height: frame.height }
+            frameAtStart
+              ? { left: frameAtStart.x, top: frameAtStart.y, width: frameAtStart.width, height: frameAtStart.height }
               : { left: SPACE.md, right: SPACE.md, top: insets.top + PANEL_TOP, bottom: insets.bottom + SPACE.xl },
           ]}
         >
@@ -196,7 +202,7 @@ export function MomentPour({
       </Animated.View>
     </MomentStage>
   )
-}
+})
 
 const styles = StyleSheet.create({
   /** The pass: radius 24, the surface; the flood stays inside it. #9's own is inset 12 at the sides. */

@@ -1,17 +1,17 @@
 import { router } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BackHandler, StyleSheet, Text, View } from 'react-native'
-import Animated, { Easing, FadeIn, FadeInUp, FadeOut } from 'react-native-reanimated'
+import Animated, { Easing, FadeIn, FadeInUp, FadeOut, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { apiClient } from '../../lib/apiClient'
 import { blendnClosed, isLiveHint, openPass, takePendingPerson, useDoor, usePendingPerson } from '../../lib/blendnOverlay'
 import { crewsThatMayLikePeople, crewMessage, type BlendRef, type CrewsAtEvent } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
-import { COLOR, DURATION, EASING, FONT_FAMILY, PRESS, RADIUS, REDUCE_MOTION, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, PRESS, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import type { TrayButton, TrayExtra } from '../../lib/locationFix'
 import { Logger } from '../../lib/logger'
-import { useReducedMotion } from '../../lib/motion'
+import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { everyoneHead, meetNext, reasonLine, reasonLines } from '../../lib/roomMoments'
 import { markRoomLeft } from '../../lib/roomMembership'
 import { roomRecap, type RoomRecap as Recap } from '../../lib/roomRecap'
@@ -31,7 +31,7 @@ import type { Face } from '../ds/Facepile'
 import { IconButton } from '../ds/IconButton'
 import { MomentBlend, type BlendCrew, type BlendPerson } from '../ds/MomentBlend'
 import { MomentMatch } from '../ds/MomentMatch'
-import { MomentPour, type PourFrame } from '../ds/MomentPour'
+import { MomentPour, ORBS_LIFT_MS, type PourFrame } from '../ds/MomentPour'
 import { MomentRecap } from '../ds/MomentRecap'
 import { PersonCard, type PersonVariant } from '../ds/PersonCard'
 import { Sheet } from '../ds/Sheet'
@@ -65,7 +65,6 @@ const glassRise = FadeInUp.duration(DURATION.base)
   .easing(Easing.bezier(...EASING.entrance))
   .withInitialValues({ opacity: 1, transform: [{ translateY: GLASS_RISE }] })
 const glassContentsIn = FadeIn.duration(DURATION.base).easing(gentle)
-const pourRoomIn = (reduceMotion: boolean) => FadeIn.duration(reduceMotion ? REDUCE_MOTION.duration.base : DURATION.base).easing(gentle)
 
 /** A first line built from what you share — something to say that isn't "hey". */
 export function openerFor(p: RoomPerson): string {
@@ -211,6 +210,19 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   /** The next Room to mount comes out of the pour, and enters as #9 draws it. */
   const [pourEntrance, setPourEntrance] = useState(false)
   /*
+   * The pour's timeline, kept off the pour itself (motion #9): playing from the
+   * server's yes to the hand-off; still once the flood, "You're in." and the
+   * orbs' lift are done (ORBS_LIFT_MS), the one window in which mounting the
+   * Room costs no visible frame. The Room is mounted there, hidden, and the
+   * hand-off waits for it, so the crossfade moves opacity only.
+   */
+  const [pourPlaying, setPourPlaying] = useState(false)
+  const [pourStill, setPourStill] = useState(false)
+  const [roomPremounted, setRoomPremounted] = useState(false)
+  /** The Room's crossfade in (#9: D.base), on the UI thread. 1 unless a pour is handing off into it. */
+  const roomFade = useSharedValue(1)
+  const roomFadeStyle = useAnimatedStyle(() => ({ opacity: roomFade.get() }))
+  /*
    * Inside more than one place (ROUND4 R15, part 8.3, #06–#07): in one room and
    * holding another event's pass. The server keeps one room at a time, so the
    * check-in is a switch: "Hold to switch", "You'll leave {room}", then "You
@@ -240,7 +252,13 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
       const from = switchFromNow.current
       leftRoom.current = from && insideEventNow.current ? { title: from.title, toId: insideEventNow.current.id } : null
       setPourEntrance(true)
+      setPourPlaying(true)
+      setPourStill(false)
+      setRoomPremounted(false)
+      // Hidden from here, before the Room exists: it never shows a frame under Tonight.
+      roomFade.set(0)
       setRoomWaitOver(false)
+      setTimeout(() => setPourStill(true), ORBS_LIFT_MS)
       setTimeout(() => setRoomWaitOver(true), ROOM_WAIT_MS)
     },
     // The overlay is the room: entering it is waiting for it.
@@ -266,6 +284,27 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
         ? 'loading'
         : 'tonight'
   const enter = pourEntrance && !reduceMotion
+  // A check-out (or any way back to Tonight outside a check-in) ends the pour's claim on the next Room.
+  if (pourEntrance && mode === 'tonight' && !checkIn.checkingIn && !pourPlaying) setPourEntrance(false)
+  /** This check-in's Room is loaded: it can be mounted under the pour, once the pour holds still. */
+  const roomIsThisOne = room.status === 'ready' && !!room.event && room.event.id === insideEvent?.id && !switchFrom
+  const premount = pourPlaying && pourStill && !checkIn.asks && roomIsThisOne
+  // Latched: the Room stays mounted from here to the hand-off. The pour's own hand-off effect runs after the
+  // commit that mounts it, so the crossfade never pays for the mount.
+  if (premount && !roomPremounted) setRoomPremounted(true)
+  const showRoom = !!room.event && (mode === 'room' || premount || (roomPremounted && checkIn.checkingIn))
+  // The hand-off: the Room, already mounted, crossfades in while the pour fades (#9: D.base, gentle).
+  useEffect(() => {
+    if (mode !== 'room' || roomFade.get() === 1) return
+    roomFade.set(withTiming(1, { duration: motionTokens(reduceMotion).duration.base, easing: gentle }))
+  }, [mode, reduceMotion, roomFade])
+  /** The pour may hand off: into a Room mounted under it, or (as before) one that never came or isn't this one. */
+  const pourMayHandOff = roomPremounted || roomWaitOver || checkIn.asks || (roomReady && !roomIsThisOne)
+  const pourDoneNow = useLatest(checkIn.pourDone)
+  const onPourDone = useCallback(() => {
+    setPourPlaying(false)
+    pourDoneNow.current()
+  }, [pourDoneNow])
   // #07: the switch landed: an info toast, no haptic.
   const roomEventId = room.event?.id ?? null
   useEffect(() => {
@@ -581,14 +620,17 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
 
   return (
     <View style={styles.fill}>
-      {mode === 'room' && room.event ? (
+      {showRoom && room.event ? (
         <Animated.View
           key="room"
-          style={styles.fill}
-          entering={pourEntrance ? pourRoomIn(reduceMotion) : reduceMotion ? FadeIn : FadeInUp.duration(DURATION.medium)}
+          testID="room-stage"
+          style={[styles.fill, roomFadeStyle]}
+          // Out of a pour the crossfade is `roomFade`'s; otherwise the Room's own entrance.
+          entering={pourEntrance ? undefined : reduceMotion ? FadeIn : FadeInUp.duration(DURATION.medium)}
           exiting={FadeOut.duration(DURATION.quick)}
-          // Once: the header remounts with the People | Crews switch, and that is not an entrance.
-          onLayout={() => setPourEntrance(false)}
+          pointerEvents={mode === 'room' ? 'auto' : 'none'}
+          accessibilityElementsHidden={mode !== 'room'}
+          importantForAccessibility={mode === 'room' ? 'auto' : 'no-hide-descendants'}
         >
           <RoomView
             title={room.event.title}
@@ -653,11 +695,13 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
             onOpenChat={() => void openChat()}
             onOpenPerson={(id) => openCard({ id, name: waves.received[id]?.fromName ?? 'Someone' })}
             enter={enter}
+            hidden={mode !== 'room'}
             topInset={topInset}
             bottomInset={insets.bottom}
           />
         </Animated.View>
-      ) : mode === 'ended' && recap ? (
+      ) : null}
+      {mode === 'room' ? null : mode === 'ended' && recap ? (
         <Animated.View key="ended" style={styles.fill} entering={FadeIn.duration(DURATION.base)} exiting={FadeOut.duration(DURATION.quick)}>
           <MomentRecap
             face={myFace}
@@ -698,7 +742,8 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
             }}
             onCheckIn={() => void checkIn.start()}
             onRoomRetry={room.status === 'error' ? room.retry : undefined}
-            crewStrip={<PeopleCrewStrip myCrews={myCrewsHere} mine={crews.mine} eventTitle={insideEvent?.title ?? ''} actions={crewActions} inset={false} />}
+            // Not while the pour plays: the pass growing under it moved the flood (R2-D1's row comes after).
+            crewStrip={pourPlaying ? null : <PeopleCrewStrip myCrews={myCrewsHere} mine={crews.mine} eventTitle={insideEvent?.title ?? ''} actions={crewActions} inset={false} />}
             topInset={topInset}
             bottomInset={insets.bottom}
           />
@@ -851,7 +896,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
       {/* Over Tonight, and over the Room as it takes over: the pour clears itself, so it stays mounted. */}
       {/* Held, filled, until the Room is there; a question first plays it out and clears it onto Tonight (Flow 4 #12–#14). */}
       {checkIn.pours > 0 ? (
-        <MomentPour key={checkIn.pours} testID="blendn-pour" frame={passFrame ?? undefined} venue={insideEvent?.venue ?? ''} ready={roomReady || checkIn.asks} asks={checkIn.asks} onDone={checkIn.pourDone} />
+        <MomentPour key={checkIn.pours} testID="blendn-pour" frame={passFrame ?? undefined} venue={insideEvent?.venue ?? ''} ready={pourMayHandOff} asks={checkIn.asks} onDone={onPourDone} />
       ) : null}
 
       <Sheet

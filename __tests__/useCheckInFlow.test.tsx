@@ -312,7 +312,9 @@ describe('every door is this flow', () => {
     (file) => {
       const src = read(file)
       expect(src).toContain('useCheckInFlow({')
-      expect(src).toMatch(/<MomentPour[^>]*key=\{(checkIn\.)?pours\}[^>]*onDone=\{(checkIn\.)?pourDone\}/)
+      expect(src).toMatch(/<MomentPour[^>]*key=\{(checkIn\.)?pours\}[^>]*onDone=\{(?:(checkIn\.)?pourDone|onPourDone)\}/)
+      // The overlay's wrapper (the pour's timeline, for the hidden Room mount) still hands the flow its pourDone.
+      if (src.includes('onDone={onPourDone}')) expect(src).toMatch(/useLatest\(checkIn\.pourDone\)[\s\S]*pourDoneNow\.current\(\)/)
       // Without it a question comes up over a pour still on screen (the bug ASK_AT fixed).
       expect(src).toMatch(/<MomentPour[^>]*asks=\{(checkIn\.)?asks\}/)
       expect(src).toMatch(/onClose=\{(checkIn\.)?dismissTray\}/)

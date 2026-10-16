@@ -18,7 +18,7 @@ import React from 'react'
 import { AccessibilityInfo, StyleSheet } from 'react-native'
 
 import { BlendnScreen } from '../components/blendn/BlendnScreen'
-import { ASK_AT, ROOM_AT } from '../components/ds/MomentPour'
+import { ASK_AT, ORBS_LIFT_MS, ROOM_AT } from '../components/ds/MomentPour'
 import { DURATION } from '../lib/design/tokens'
 import { askIntentRoute, intentAnswered, submitCheckIn, type CheckInOutcome } from '../lib/checkIn'
 import { H } from '../lib/haptics'
@@ -214,4 +214,45 @@ it('"Why do you go out?": the pour plays out and clears, then the sheet over Ton
   await advance(0)
   expect(roomShowing()).toBe(true)
   expect(mockPassLabels).not.toContain('Hold to blend in')
+})
+
+describe('smooth: nothing heavy mounts while the pour moves (owner defect, Debug iOS drive)', () => {
+  const stage = () => screen.queryByTestId('room-stage', HIDDEN)
+  const pourReleased = () => screen.getByTestId('blendn-pour', HIDDEN).props.pointerEvents === 'none'
+
+  it('the Room loaded mid-flood mounts hidden only once the pour holds still, and the hand-off comes after that mount', async () => {
+    await holdToCheckIn(fresh(false))
+    // The room answers 100 ms into the flood.
+    await advance(100)
+    await act(async () => mockRoomLoads())
+    await advance(0)
+    // Still moving (flood, "You're in.", the orbs' lift): no Room tree yet.
+    expect(stage()).toBeNull()
+    await advance(ORBS_LIFT_MS - 100 - 1)
+    expect(stage()).toBeNull()
+    await advance(1)
+    // Still: the Room is mounted under the pour, hidden and untouchable; Tonight is still up.
+    expect(stage()).not.toBeNull()
+    expect(stage()!.props.pointerEvents).toBe('none')
+    expect(stage()!.props.accessibilityElementsHidden).toBe(true)
+    expect(tonightShowing()).toBe(true)
+    expect(pourReleased()).toBe(false)
+    // #9's 700 ms: the hand-off, into the Room that is already there.
+    await advance(ROOM_AT - ORBS_LIFT_MS)
+    expect(pourReleased()).toBe(true)
+    expect(stage()!.props.pointerEvents).toBe('auto')
+    expect(tonightShowing()).toBe(false)
+    expect(success).toHaveBeenCalledTimes(1)
+  })
+
+  it('one hold is one check-in: a second activation while it runs sends nothing', async () => {
+    submit.mockResolvedValue(fresh(false))
+    await render(<BlendnScreen />)
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('tonight'))
+      fireEvent.press(screen.getByTestId('tonight'))
+    })
+    await advance(0)
+    expect(submit).toHaveBeenCalledTimes(1)
+  })
 })
