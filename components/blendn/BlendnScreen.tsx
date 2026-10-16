@@ -293,9 +293,9 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
     setPouring(false)
     checkIn.pourDone()
   }
-  // The Room's coach mark: once the pour has handed off, with nothing over the Room.
+  // The Room's coach mark: once the pour has handed off, with nothing over the Room; never to someone already shown.
   const roomCoach = useCoachMark('room_reveal', {
-    ready: mode === 'room' && !pouring && !tray.visible && !open && !connectTo && !room.match,
+    ready: mode === 'room' && !controls.revealed && !pouring && !tray.visible && !open && !connectTo && !room.match,
   })
   // The card follows the live person, so a like updates it in place.
   const openLive = open ? room.people.find((p) => p.id === open.id) ?? open : null

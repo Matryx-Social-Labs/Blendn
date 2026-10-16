@@ -9,9 +9,10 @@ import { currentUserId, useAuth } from './useAuth'
  * Coach marks: the app explaining one thing, once (`components/ds/CoachMark`,
  * the rules and the inventory in docs/NAVIGATION.md, "Coach marks").
  *
- * - Once ever, per account, per mark. Seen is written the moment it appears, so
- *   Got it, using the thing, leaving the screen (or the app being killed) all
- *   leave it seen.
+ * - Once ever, per account, per mark. Seen is written once it has stayed on
+ *   screen for `COACH_SEEN_DWELL_MS` (or on Got it, or on use), so leaving the
+ *   screen or the app being killed after that leaves it seen. Gone within the
+ *   dwell, it is done for this launch only.
  * - Used first, never shown: `markCoachUsed` before it ever appeared counts.
  * - One new mark per account per launch, which also makes it one on screen at
  *   a time: a new person is not taught three things in their first minute.
@@ -43,6 +44,9 @@ const phases = new Map<string, Phase>()
 const listeners = new Set<() => void>()
 /** Accounts that have been shown a mark this launch. */
 const taughtThisLaunch = new Set<string>()
+
+/** How long a mark must stay on screen before it counts as seen for good. */
+export const COACH_SEEN_DWELL_MS = 1000
 
 const storageKey = (id: CoachMarkId, userId: string) => `${id}_seen_${userId}`
 
@@ -99,8 +103,15 @@ export function useCoachMark(id: CoachMarkId, { ready }: { ready: boolean }) {
     if (!key || !userId || phase !== 'unseen' || !ready || !focused || taughtThisLaunch.has(userId)) return
     taughtThisLaunch.add(userId)
     setPhase(key, 'showing')
-    persistSeen(key)
   }, [key, userId, phase, ready, focused])
+
+  const visible = phase === 'showing' && ready && focused
+  // Seen once it has been on screen for the dwell: a mark gone within a frame (a scroll, a sheet) is not spent.
+  useEffect(() => {
+    if (!key || !visible) return
+    const timer = setTimeout(() => persistSeen(key), COACH_SEEN_DWELL_MS)
+    return () => clearTimeout(timer)
+  }, [key, visible])
 
   // Leaving the screen, or the screen going, ends it.
   useEffect(() => {
@@ -111,8 +122,10 @@ export function useCoachMark(id: CoachMarkId, { ready }: { ready: boolean }) {
   }, [key, focused])
 
   const dismiss = useCallback(() => {
-    if (key) setPhase(key, 'done')
+    if (!key) return
+    setPhase(key, 'done')
+    persistSeen(key)
   }, [key])
 
-  return { visible: phase === 'showing' && ready && focused, dismiss }
+  return { visible, dismiss }
 }

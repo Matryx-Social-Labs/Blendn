@@ -52,7 +52,7 @@ type Segment = 'events' | 'places'
 export function HomeShell({
   renderEvents,
 }: {
-  /** `full`: the drawer all the way up, so the Pulse's first card is on screen (its coach mark waits for it). */
+  /** `full`: the drawer all the way up and no keyboard, so the Pulse's first card is on screen and nobody is typing (its coach mark waits for it). */
   renderEvents: (onBrowse: (browse: HomeBrowse) => void, visible: boolean, full: boolean) => ReactNode
 }) {
   const insets = useSafeAreaInsets()
@@ -98,20 +98,26 @@ export function HomeShell({
     return () => sub.remove()
   }, [])
 
+  /** Someone is typing (the Pulse's search): its coach mark never pops over them. */
+  const [keyboardUp, setKeyboardUp] = useState(false)
   // The Pulse's search sits in the drawer: typing opens it fully, so the field is not under the keyboard.
   useEffect(() => {
     if (!focused) return
-    const move = (event: 'show' | 'hide') =>
+    const move = (event: 'show' | 'hide') => {
+      setKeyboardUp(event === 'show')
       setSnap((current) => {
         const next = snapOnKeyboard({ snap: current, restore: restore.current }, event)
         restore.current = next.restore
         return next.snap
       })
+    }
     const show = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', () => move('show'))
     const hide = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => move('hide'))
     return () => {
       show.remove()
       hide.remove()
+      // A hide missed while away must not keep the mark waiting for good.
+      setKeyboardUp(false)
     }
   }, [focused])
 
@@ -128,7 +134,7 @@ export function HomeShell({
 
   // The Pulse's media plays only while you can see it: its pane, the drawer open past peek, this tab.
   const pulseVisible = focused && segment === 'events' && snap !== 'peek'
-  const pulseFull = pulseVisible && snap === 'full'
+  const pulseFull = pulseVisible && snap === 'full' && !keyboardUp
   const events = useMemo(() => renderEvents(setBrowse, pulseVisible, pulseFull), [renderEvents, pulseVisible, pulseFull])
 
   return (

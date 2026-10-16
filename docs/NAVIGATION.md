@@ -239,7 +239,9 @@ and `markCoachUsed(id)` is called where the gesture it explains lands.
 **The rules**
 
 - **Once ever, per account, per mark.** Stored as `<id>_seen_<userId>`, written
-  the moment it appears; Got it, using the thing and leaving the screen all end it.
+  once it has stayed on screen for a second (or on Got it, or on use); a mark gone
+  within that is done for this launch only. Got it, using the thing and leaving
+  the screen all end it.
 - **Using the thing counts, even first.** `markCoachUsed` before the mark ever
   showed means it never will: someone who already holds cards is not told to.
 - **One new mark per account per launch**, which also keeps it to one on screen.

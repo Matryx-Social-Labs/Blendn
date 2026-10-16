@@ -25,7 +25,7 @@ jest.mock('../lib/useAuth', () => ({
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() } }))
 
 /* eslint-disable import/first */
-import { markCoachUsed, useCoachMark, type CoachMarkId } from '../lib/coachMarks'
+import { COACH_SEEN_DWELL_MS, markCoachUsed, useCoachMark, type CoachMarkId } from '../lib/coachMarks'
 /* eslint-enable import/first */
 
 const PULSE: CoachMarkId = 'events_preview_hint'
@@ -46,13 +46,18 @@ async function mount(id: CoachMarkId, ready = true) {
   return hook
 }
 
+/** The mark stays on screen long enough to count as seen. */
+const dwell = () => act(async () => jest.advanceTimersByTime(COACH_SEEN_DWELL_MS))
+
 beforeEach(async () => {
   mockFocused = true
+  jest.useFakeTimers()
   await AsyncStorage.clear()
 })
+afterEach(() => jest.useRealTimers())
 
 describe('useCoachMark', () => {
-  it('waits for ready, appears once, and is written as seen the moment it does', async () => {
+  it('waits for ready, appears once, and is written as seen once it has stayed for the dwell', async () => {
     const userId = signIn()
     const hook = await mount(PULSE, false)
     expect(hook.result.current.visible).toBe(false)
@@ -60,6 +65,8 @@ describe('useCoachMark', () => {
 
     await hook.rerender({ ready: true })
     expect(hook.result.current.visible).toBe(true)
+    expect(await stored(PULSE, userId)).toBeNull()
+    await dwell()
     expect(await stored(PULSE, userId)).toBe('1')
   })
 
@@ -77,6 +84,7 @@ describe('useCoachMark', () => {
     const userId = signIn()
     const first = await mount(PULSE)
     expect(first.result.current.visible).toBe(true)
+    await dwell()
     // The app is killed while it shows: no Got it, no use.
     await first.unmount()
 
@@ -91,6 +99,15 @@ describe('useCoachMark', () => {
     await act(async () => {})
     expect(again.result.current.visible).toBe(false)
     expect(await stored(PULSE, userId)).toBe('1')
+  })
+
+  it('gone within the dwell (a frame, then a scroll), it is not spent for good', async () => {
+    const userId = signIn()
+    const flash = await mount(PULSE)
+    expect(flash.result.current.visible).toBe(true)
+    await flash.unmount()
+    await dwell()
+    expect(await stored(PULSE, userId)).toBeNull()
   })
 
   it('a mark this account has seen on this phone never appears (the old banner’s key counts)', async () => {
@@ -172,6 +189,7 @@ describe('useCoachMark', () => {
     const second = signIn()
     const b = await mount(PULSE)
     expect(b.result.current.visible).toBe(true)
+    await dwell()
     expect(await stored(PULSE, second)).toBe('1')
   })
 
