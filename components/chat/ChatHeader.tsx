@@ -17,6 +17,19 @@ export function chatHeaderBottom(insetTop: number) {
 }
 
 /**
+ * The feed's frame under the capsule. The Flow 5 room and DM frames draw
+ * nothing behind the status bar: the feed's window starts under it (ink
+ * there), and only the floating capsule has messages passing beneath it. A
+ * list that started at y 0 with a top padding alone opened on a long room
+ * scrolled to the newest, its older messages up behind the clock.
+ * `extra`: what sits under the capsule before the first message (the DM's
+ * reveal bar).
+ */
+export function chatFeedFrame(insetTop: number, extra = 0) {
+  return { style: { marginTop: insetTop }, paddingTop: chatHeaderBottom(insetTop) - insetTop + extra }
+}
+
+/**
  * The room's and the DM's header (Flow 5 room and DM frames): a floating
  * bar-glass capsule, 56 tall and 28 round, 16 in from the edges, that the
  * feed scrolls under. Back · the room's square cover or the person's round

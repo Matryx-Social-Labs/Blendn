@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { FlatList, Platform, StyleSheet, useWindowDimensions, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { ChatHeader, chatHeaderBottom, SubtitleText } from '../../components/chat/ChatHeader'
+import { ChatHeader, chatFeedFrame, chatHeaderBottom, SubtitleText } from '../../components/chat/ChatHeader'
 import { BrokenLink } from '../../components/chat/BrokenLink'
 import { KeyboardFrame } from '../../components/chat/KeyboardFrame'
 import { CountLine, FeedSkeleton, JustMutedLine, LoadOlder, NewestChip, ReactionFlight, RoomCover, type Flight } from '../../components/chat/ChatParts'
@@ -738,8 +738,8 @@ function GroupChatInner() {
               data={loading && !messages.length ? [] : chatItems}
               renderItem={renderChatItem}
               keyExtractor={(item) => (item.kind === 'separator' ? item.id : item.message_id)}
-              style={styles.fill}
-              contentContainerStyle={[styles.listContent, { paddingTop: top, paddingBottom: dockHeight + dockBottom + SPACE.md }]}
+              style={[styles.fill, chatFeedFrame(insets.top).style]}
+              contentContainerStyle={[styles.listContent, { paddingTop: chatFeedFrame(insets.top).paddingTop, paddingBottom: dockHeight + dockBottom + SPACE.md }]}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode={KEYBOARD_DISMISS}

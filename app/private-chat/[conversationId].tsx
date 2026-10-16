@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { BrokenLink } from '../../components/chat/BrokenLink'
 import { KeyboardFrame } from '../../components/chat/KeyboardFrame'
-import { ChatHeader, chatHeaderBottom } from '../../components/chat/ChatHeader'
+import { ChatHeader, chatFeedFrame, chatHeaderBottom } from '../../components/chat/ChatHeader'
 import { FeedSkeleton, HEADER_FACE, LoadOlder, NewestChip } from '../../components/chat/ChatParts'
 import { DmMessageRow, MatchOpenerCard, NudgeLine, PhotoPreviewSheet, quoteText, RevealLine, RevealSheets, SayHi, type DmRowHandlers } from '../../components/chat/DmParts'
 import { Avatar } from '../../components/ds/Avatar'
@@ -640,8 +640,8 @@ function PrivateChatInner() {
               data={loading && !messages.length ? [] : chatItems}
               keyExtractor={(item) => item.id}
               renderItem={renderChatItem}
-              style={styles.fill}
-              contentContainerStyle={[styles.listContent, { paddingTop: top + barSpace, paddingBottom: dockHeight + dockBottom + SPACE.md }]}
+              style={[styles.fill, chatFeedFrame(insets.top).style]}
+              contentContainerStyle={[styles.listContent, { paddingTop: chatFeedFrame(insets.top, barSpace).paddingTop, paddingBottom: dockHeight + dockBottom + SPACE.md }]}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode={KEYBOARD_DISMISS}

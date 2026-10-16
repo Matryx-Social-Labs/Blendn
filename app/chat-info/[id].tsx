@@ -1,7 +1,7 @@
 import { Image } from 'expo-image'
 import { router, useLocalSearchParams } from 'expo-router'
-import React, { useCallback, useEffect, useState } from 'react'
-import { Linking, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { Animated, Linking, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { BrokenLink } from '../../components/chat/BrokenLink'
@@ -15,7 +15,7 @@ import { SettingsGroup, SettingsRow } from '../../components/ds/SettingsRow'
 import { font, minTarget, useBoldText } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { Icon } from '../../components/ui/Icon'
-import { PhotoScrim } from '../../components/ui/GradientFill'
+import { PhotoScrim, StatusScrim } from '../../components/ui/GradientFill'
 import { apiClient } from '../../lib/apiClient'
 import { COMMUNITY_GUIDELINES_URL } from '../../lib/communityGuidelines'
 import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
@@ -35,6 +35,8 @@ type Member = { userId: string; name: string | null; role: string }
 const PAGE = 100
 /** The hero: the cover, 300 tall (Room info frame). */
 const HERO_HEIGHT = 300
+/** The hero's head scrim (Flow 5 Room info: 160 tall on the frame). */
+const STATUS_SCRIM_HEIGHT = 160
 /** The crowd grid: four across, 12 apart, the creature 8 smaller than its cell. */
 const COLUMNS = 4
 const CELL_GAP = SPACE.md
@@ -102,6 +104,7 @@ function ChatInfoInner() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [sheet, setSheet] = useState<'mute' | 'leave' | null>(null)
   const [cardFor, setCardFor] = useState<Sender | null>(null)
+  const scrollY = useRef(new Animated.Value(0)).current
 
   const loadMembers = useCallback(
     (offset = 0) =>
@@ -162,9 +165,14 @@ function ChatInfoInner() {
 
   return (
     <View style={styles.screen}>
-      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + SPACE.xxl }}>
+      <Animated.ScrollView
+        contentContainerStyle={{ paddingBottom: insets.bottom + SPACE.xxl }}
+        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
+        scrollEventThrottle={16}
+      >
         <View style={styles.hero}>
           {cover ? <Image source={{ uri: cover }} contentFit="cover" style={StyleSheet.absoluteFill} accessible={false} /> : null}
+          <StatusScrim style={styles.headScrim} />
           <PhotoScrim style={styles.scrim} />
           <View style={styles.heroText}>
             {row?.live || muted ? (
@@ -315,7 +323,18 @@ function ChatInfoInner() {
             </View>
           </Pressable>
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
+
+      {/*
+       * The status bar's shield: clear over the hero (the design draws the
+       * cover under the clock, behind its head scrim), solid ink by the time
+       * the rows reach it — they never scroll behind the clock.
+       */}
+      <Animated.View
+        pointerEvents="none"
+        testID="info-status-shield"
+        style={[styles.shield, { height: insets.top, opacity: scrollY.interpolate({ inputRange: [HERO_HEIGHT - 2 * insets.top, HERO_HEIGHT - insets.top], outputRange: [0, 1], extrapolate: 'clamp' }) }]}
+      />
 
       <View style={[styles.back, { top: insets.top + SPACE.sm }]}>
         <IconButton icon="chevron-left" tier="media" accessibilityLabel="Back" onPress={() => router.back()} testID="info-back" />
@@ -365,6 +384,8 @@ const styles = StyleSheet.create({
   pressed: { opacity: OPACITY.pressed },
   leaveText: { flex: 1, paddingVertical: SPACE.md },
   back: { position: 'absolute', left: SPACE.lg },
+  shield: { position: 'absolute', left: 0, right: 0, top: 0, backgroundColor: COLOR.ink },
+  headScrim: { position: 'absolute', left: 0, right: 0, top: 0, height: STATUS_SCRIM_HEIGHT },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
   tabular: { fontVariant: ['tabular-nums'] },
