@@ -63,14 +63,10 @@ const KNOWN_ORPHANS: Record<string, string> = {
   /* The P0 system components (ROUND3 B4), built ahead of their flows; each goes with the first flow that adopts it. */
   'SettingsRow.tsx': 'redesign P0 component; adopted with the Settings flow (ROUND3 B4, D · 7)',
   /* The P1 inputs (ROUND3 B4), built ahead of their flows; each goes with the first flow that adopts it. */
-  'TextField.tsx': 'redesign P1 input (TextField, TextArea); adopted with sign-in and onboarding (Flows 1–2), then every form (ROUND3 B4)',
   'DateField.tsx': 'redesign P1 input; the onboarding basics step (date of birth) adopts it (Flow 2, ROUND3 B4)',
   'SearchField.tsx': 'redesign P1 input; adopted with the Pulse, the city sheet and the Banter (Flows 3, 5)',
-  'RadioCard.tsx': 'redesign P1 input; adopted with event preferences (Anonymous / Named) and the Board composer (Flows 3, 4)',
   'LookingForCard.tsx': 'redesign P1 input; the onboarding preferences step adopts it in place of LookingForCards (Flow 2)',
-  'Stepper.tsx': 'redesign P1 input; the Board composer’s Spaces adopts it (Flow 4)',
   'ProgressBar.tsx': 'redesign P1 input; the onboarding header adopts it (Flow 2)',
-  'TopBar.tsx': 'redesign P1 chrome; every pushed screen adopts it with its redesign (Flows 6, 7, 10)',
   /* P5, sets and moments (ROUND3 B4), built ahead of their flows; each goes with the first flow that adopts it. */
   'MomentReady.tsx': 'redesign P5 moment (Flow 2); /onboarding/ready plays it on the server’s yes with the onboarding redesign',
   /* The P3 chat and gesture components (ROUND3 B4), built ahead of Flow 5; the room and the DM adopt them, the Banter takes SwipeRow. */
@@ -90,7 +86,6 @@ const KNOWN_ORPHANS: Record<string, string> = {
   'CoachMark.tsx': 'redesign P3 component; the first coach mark (the centre button, the reveal bar, the swipe) adopts it (ROUND3 B4)',
   /* The P2 events and people (ROUND3 B4), built ahead of their flows; each goes with the first flow that adopts it. */
   'AmenityTile.tsx': 'redesign P2 (AmenityTile, AmenityGrid); the Scene bento and the venue page’s Good to know adopt it in place of SceneAmenity (Flow 3)',
-  'ds/DayHeading.tsx': 'redesign P2; replaces components/ui/DayHeading on the Pulse’s Upcoming and Going (Flow 3)',
   'MapCard.tsx': 'redesign P2 (MapCard, MapPin, MapCluster); the Scene and venue page’s map band, then the home map’s pins (Flows 3, 11)',
   'RevealBar.tsx': 'redesign P2; the anonymous DM adopts it (Flow 5)',
   /* P4, the rest of R2-D0 (ROUND3 B4), built ahead of Flows 9–16; each goes with the first flow that adopts it. */

@@ -55,6 +55,16 @@ const MORE_STEP = 20
 
 const gentle = Easing.bezier(...EASING.gentle)
 /** Motion #9, after the pour: the Room crossfades in over D.base (200 ms under Reduce Motion). */
+/**
+ * B8 (Prompt 10, approved): a glass pill enters as a 16 pt rise over `base`;
+ * the glass stays opaque throughout and only its contents fade. Reduce Motion:
+ * it is simply there, and the contents fade.
+ */
+const GLASS_RISE = SPACE.lg
+const glassRise = FadeInUp.duration(DURATION.base)
+  .easing(Easing.bezier(...EASING.entrance))
+  .withInitialValues({ opacity: 1, transform: [{ translateY: GLASS_RISE }] })
+const glassContentsIn = FadeIn.duration(DURATION.base).easing(gentle)
 const pourRoomIn = (reduceMotion: boolean) => FadeIn.duration(reduceMotion ? REDUCE_MOTION.duration.base : DURATION.base).easing(gentle)
 
 /** A first line built from what you share — something to say that isn't "hey". */
@@ -150,6 +160,22 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
     room.status === 'ready' && room.event ? roomRecap({ event: room.event, checkedInAt: room.checkedInAt, people: room.people }, now) : null
   if (endedRecap && endedRecap.eventId !== dismissedRecap && recap?.eventId !== endedRecap.eventId) setRecap(endedRecap)
   const roomOver = endedRecap !== null && endedRecap.eventId === dismissedRecap
+  // Recap #04: rated already, so "You rated this night. Thanks." and no primary. Unknown (a failed read) offers Rate.
+  const [ratedEvent, setRatedEvent] = useState<string | null>(null)
+  const recapEventId = recap?.eventId ?? null
+  useEffect(() => {
+    if (!recapEventId) return
+    let live = true
+    apiClient
+      .getMyEventRating(recapEventId)
+      .then((r) => {
+        if (live && r.success && r.data?.ratedAt) setRatedEvent(recapEventId)
+      })
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [recapEventId])
 
   // --- sheets (check-in flow) -------------------------------------------------
   const [tray, setTray] = useState<Tray>(NO_TRAY)
@@ -184,7 +210,18 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   const [passFrame, setPassFrame] = useState<PourFrame | null>(null)
   /** The next Room to mount comes out of the pour, and enters as #9 draws it. */
   const [pourEntrance, setPourEntrance] = useState(false)
-  const roomReady = room.status === 'ready' || roomWaitOver
+  /*
+   * Inside more than one place (ROUND4 R15, part 8.3, #06–#07): in one room and
+   * holding another event's pass. The server keeps one room at a time, so the
+   * check-in is a switch: "Hold to switch", "You'll leave {room}", then "You
+   * left {room}." once the new room is up. The chooser, "2 here · Switch" and
+   * the disc's "Check in · 2 here" (#01–#05) are not built: they need "which
+   * places am I inside" from the server (SCRUM-704).
+   */
+  const switchFrom = room.status === 'ready' && room.event && door && door.id !== room.event.id && !roomOver ? room.event : null
+  const switchFromNow = useLatest(switchFrom)
+  const leftRoom = useRef<string | null>(null)
+  const roomReady = (room.status === 'ready' && !switchFrom) || roomWaitOver
   const roomReadyNow = useLatest(roomReady)
   const roomShown = useRef<(() => void) | null>(null)
   useEffect(() => {
@@ -198,6 +235,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
     closeTray,
     onCheckedIn: (outcome) => {
       if (outcome.kind !== 'checkedIn') return
+      leftRoom.current = switchFromNow.current?.title ?? null
       setPourEntrance(true)
       setRoomWaitOver(false)
       setTimeout(() => setRoomWaitOver(true), ROOM_WAIT_MS)
@@ -219,12 +257,18 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
    */
   const mode = recap
     ? 'ended'
-    : room.status === 'ready' && !roomOver && !checkIn.checkingIn
+    : room.status === 'ready' && !roomOver && !checkIn.checkingIn && !switchFrom
       ? 'room'
       : room.status === 'loading' && !checkIn.checkingIn && isLiveHint()
         ? 'loading'
         : 'tonight'
   const enter = pourEntrance && !reduceMotion
+  // #07: the switch landed: an info toast, no haptic.
+  useEffect(() => {
+    if (mode !== 'room' || !leftRoom.current) return
+    say(`You left ${leftRoom.current}.`)
+    leftRoom.current = null
+  }, [mode, say])
 
   // --- your controls in the room --------------------------------------------
   const controls = useRoomControls(room.event?.id ?? null, room.revealed)
@@ -610,7 +654,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
             title={recap.title}
             minutes={recap.minutes}
             matches={recap.matched}
-            rated={false}
+            rated={ratedEvent === recap.eventId}
             onRate={() => router.push({ pathname: '/rate/[eventId]', params: { eventId: recap.eventId } as never })}
             onBack={() => {
               setDismissedRecap(recap.eventId)
@@ -632,6 +676,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
             location={tonight.location}
             onRetry={() => void tonight.refresh()}
             insideEvent={insideEvent}
+            switchFrom={switchFrom?.title}
             checkingIn={checkIn.checkingIn}
             youreIn={checkIn.youreIn}
             onPassFrame={setPassFrame}
@@ -655,7 +700,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
         <View style={[styles.topBar, { top: insets.top + SPACE.sm }]} pointerEvents="box-none">
           <IconButton icon="chevron-down" accessibilityLabel="Close Blend’n" onPress={onClose} testID="blendn-close" />
           {mode === 'room' && room.event ? (
-            <Animated.View entering={FadeIn.duration(DURATION.quick)} style={styles.topActions}>
+            <Animated.View entering={reduceMotion ? undefined : glassRise} style={styles.topActions}>
               <ScalePress
                 onPress={() => setConfirmingOut(true)}
                 pressedScale={PRESS.scale}
@@ -666,9 +711,9 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
                 testID="room-check-out"
                 style={styles.checkOut}
               >
-                <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>
+                <Animated.Text entering={glassContentsIn} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>
                   Check out
-                </Text>
+                </Animated.Text>
               </ScalePress>
               <IconButton
                 icon="settings-2"

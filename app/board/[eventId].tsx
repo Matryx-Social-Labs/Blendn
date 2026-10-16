@@ -1,9 +1,11 @@
 import { Redirect, router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react'
-import { FlatList, KeyboardAvoidingView, Pressable, RefreshControl, StyleSheet, View } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native'
 
-import { AppHeader } from '../../components/AppHeader'
+import { Button } from '../../components/ds/Button'
+import { font, useBoldText } from '../../components/ds/shared'
+import { StateScreen } from '../../components/ds/StateScreen'
+import { TopBar } from '../../components/ds/TopBar'
 import {
   announce,
   BoardComposer,
@@ -12,10 +14,7 @@ import {
   type AskState,
   type BoardDraft,
 } from '../../components/board/BoardSections'
-import { LoadError, LoadState } from '../../components/LoadError'
 import { SkeletonBlock } from '../../components/Skeleton'
-import { PlaceholderBanner } from '../../components/ui/PlaceholderBanner'
-import { Text } from '../../components/ui/Text'
 import { apiClient } from '../../lib/apiClient'
 import {
   askConflictLine,
@@ -31,14 +30,13 @@ import {
   type BoardPost,
 } from '../../lib/board'
 import { openBlendn } from '../../lib/blendnOverlay'
-import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
 import { Logger } from '../../lib/logger'
 import { boardSafetySheet } from '../../lib/safetyUtils'
 import { showSheet } from '../../lib/sheet'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, OPACITY, SPACE } from '../../lib/theme'
+import { COLOR, RADIUS, SPACE } from '../../lib/design/tokens'
 
 /**
- * The Board — PLACEHOLDER DESIGN (docs/PLACEHOLDER_SCREENS.md §6).
+ * The Board (Flow 4 Board, flow4.js `board`; the rules in docs/PLACEHOLDER_SCREENS.md §6).
  *
  * Going alone, and looking for somebody to go with. Posts before doors, by
  * pseudonym; an ask is one tap; the answer arrives in the Banter. Every gate is
@@ -70,6 +68,7 @@ const REFUSED_TITLE: Record<string, string> = {
 
 export function BoardScreen() {
   const { eventId } = useLocalSearchParams<{ eventId: string }>()
+  const bold = useBoldText()
   const [load, setLoad] = useState<Load>({ kind: 'loading' })
   const [event, setEvent] = useState<EventFacts | null>(null)
   const [refreshing, setRefreshing] = useState(false)
@@ -317,31 +316,11 @@ export function BoardScreen() {
 
   const header = (
     <View style={styles.header}>
-      <PlaceholderBanner />
-      {composing ? (
-        <BoardComposer
-          posting={posting}
-          refusal={refusal}
-          onPost={(draft) => void submit(draft)}
-          onCancel={() => {
-            setComposing(false)
-            setRefusal(null)
-          }}
-        />
-      ) : load.kind === 'ready' && load.posts.length > 0 ? (
-        <Pressable
-          onPress={() => setComposing(true)}
-          accessibilityRole="button"
-          accessibilityLabel="Write a post"
-          style={({ pressed }) => [styles.compose, pressed && styles.pressed]}
-        >
-          <Text variant="button" color={EMBER.onGradient}>
-            Write a post
-          </Text>
-        </Pressable>
-      ) : null}
       {refreshFailed && load.kind === 'ready' ? (
-        <Text variant="meta">The board didn&apos;t refresh. Pull down to try again.</Text>
+        <Text style={[font('meta', bold), styles.secondary, styles.centre]}>The board didn&apos;t refresh. Pull down to try again.</Text>
+      ) : null}
+      {load.kind === 'ready' && load.posts.length > 0 && !posts.some((p) => p.mine) ? (
+        <Button label="Write a post" onPress={() => setComposing(true)} />
       ) : null}
     </View>
   )
@@ -349,27 +328,37 @@ export function BoardScreen() {
   let content: ReactNode
   if (closed) {
     content = (
-      <LoadState
-        icon="lock-closed-outline"
+      <StateScreen
+        icon="lock"
         title="The board's closed"
-        message="The doors are open — the room is open instead."
+        body="The doors are open, so the room is open instead."
         // To the tabs first: the overlay is under the root stack, so opened from here it was under the board (Flow 4 Board #14).
-        action={{ label: 'Open the room', onPress: openRoomFromBoard }}
+        actions={[{ label: 'Open the room', onPress: openRoomFromBoard }]}
+        testID="board-closed"
       />
     )
   } else if (load.kind === 'loading') {
     content = <BoardSkeleton />
   } else if (load.kind === 'refused') {
     content = (
-      <LoadState
-        icon="people-outline"
+      <StateScreen
+        icon="circle-slash"
         title={(load.code && REFUSED_TITLE[load.code]) || 'Not on this board yet'}
-        message={load.line}
-        action={{ label: 'Back to the event', onPress: () => router.back() }}
+        body={load.line}
+        actions={[{ label: 'Back to the event', kind: 'secondary', onPress: () => router.back() }]}
+        testID="board-refused"
       />
     )
   } else if (load.kind === 'failed') {
-    content = <LoadError title="The board didn't load" onRetry={() => void onRefresh()} retrying={refreshing} />
+    content = (
+      <StateScreen
+        icon="cloud-off"
+        title="The board didn't load"
+        body="Check your connection and try again."
+        actions={[{ label: 'Try again', onPress: () => void onRefresh(), loading: refreshing }]}
+        testID="board-failed"
+      />
+    )
   } else {
     content = (
       <FlatList
@@ -381,71 +370,60 @@ export function BoardScreen() {
         extraData={askFor}
         ListHeaderComponent={header}
         ListEmptyComponent={
-          composing ? null : (
-            <LoadState
-              icon="chatbubbles-outline"
-              title="Nobody's posted yet"
-              message="Say what you're looking for, and people on their way will see it."
-              action={{ label: 'Write a post', onPress: () => setComposing(true) }}
-            />
-          )
+          <StateScreen
+            icon="message-square-dashed"
+            title="Nobody's posted yet"
+            body="Say what you're looking for, and people on their way will see it."
+            actions={[{ label: 'Write a post', onPress: () => setComposing(true) }]}
+            testID="board-empty"
+          />
         }
         contentContainerStyle={styles.list}
         keyboardShouldPersistTaps="handled"
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={EMBER.textSecondary}
-          />
-        }
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLOR.textSecondary} />}
       />
     )
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <AppHeader title="The Board" subtitle={event?.title} onBack={() => router.back()} />
-      <KeyboardAvoidingView style={styles.flex} behavior={KEYBOARD_BEHAVIOR}>
-        {load.kind === 'ready' && !closed ? (
-          content
-        ) : (
-          <View style={styles.state}>
-            <PlaceholderBanner />
-            <View style={styles.stateBody}>{content}</View>
-          </View>
-        )}
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+    <View style={styles.container}>
+      <TopBar title="The Board" sub={event?.title} onBack={() => router.back()} testID="board-top" />
+      {load.kind === 'ready' && !closed ? content : <View style={styles.state}>{content}</View>}
+      <BoardComposer
+        visible={composing}
+        posting={posting}
+        refusal={refusal}
+        onPost={(draft) => void submit(draft)}
+        onCancel={() => {
+          setComposing(false)
+          setRefusal(null)
+        }}
+      />
+    </View>
   )
 }
 
-/** Card-shaped, so the list does not jump when it lands. */
+/** Card-shaped (three offer cards), so the list does not jump when it lands. */
 function BoardSkeleton() {
   return (
     <View style={styles.skeleton} accessibilityLabel="Loading the board">
       {[0, 1, 2].map((i) => (
-        <SkeletonBlock key={i} width="100%" height={CONTROL.lg * 3} borderRadius={EMBER_RADIUS.md} />
+        <SkeletonBlock key={i} width="100%" height={SKELETON_CARD} borderRadius={RADIUS.card} />
       ))}
     </View>
   )
 }
 
+/** flow4.js board `loading`: three 168 pt cards. */
+const SKELETON_CARD = 168
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: EMBER.bg },
-  flex: { flex: 1 },
-  pressed: { opacity: OPACITY.pressed },
+  container: { flex: 1, backgroundColor: COLOR.ink },
+  secondary: { color: COLOR.textSecondary },
+  centre: { textAlign: 'center' },
   header: { gap: SPACE.lg, marginBottom: SPACE.lg },
-  list: { paddingHorizontal: GUTTER, paddingBottom: SPACE.xxl, gap: SPACE.lg },
-  state: { flex: 1, paddingHorizontal: GUTTER, gap: SPACE.lg },
-  stateBody: { flex: 1, justifyContent: 'center' },
-  compose: {
-    minHeight: CONTROL.lg,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  list: { paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.xxl, gap: SPACE.lg },
+  state: { flex: 1, paddingHorizontal: SPACE.gutter, justifyContent: 'center' },
   skeleton: { gap: SPACE.lg },
 })
 

@@ -179,8 +179,17 @@ describe('the pass (#06, #07)', () => {
 
   it('approximate location: one quiet line instead, and no pass (R3-D4 4.7)', async () => {
     await draw({ insideEvent: event('door'), location: 'approximate' })
-    expect(screen.getByText('Approximate location. Check-in needs precise.')).toBeTruthy()
+    expect(screen.getByText('Approximate location. Check-in needs your exact spot: turn on Precise Location for Blend’n.')).toBeTruthy()
     expect(screen.queryByTestId('tonight-pass', HIDDEN)).toBeNull()
+    // ROUND4 8.3 #08: where the pass would dock, why, and Turn on.
+    expect(screen.getByText('No pass without precise location', HIDDEN)).toBeTruthy()
+    expect(screen.getByLabelText('Turn on Precise Location', HIDDEN)).toBeTruthy()
+  })
+
+  it('in another room already: the hold is a switch out of it (ROUND4 8.3 #06)', async () => {
+    await draw({ insideEvent: event('door'), switchFrom: 'Vinyl Night' })
+    expect(screen.getAllByText('Hold to switch', HIDDEN).length).toBeGreaterThan(0)
+    expect(screen.getByText('You’ll leave Vinyl Night', HIDDEN)).toBeTruthy()
   })
 
   it('after the server’s yes the pass holds "You’re in" and Tell your crew (R2-D1 "success")', async () => {

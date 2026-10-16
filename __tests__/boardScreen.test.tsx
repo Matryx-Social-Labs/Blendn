@@ -143,7 +143,7 @@ describe('the two empty states', () => {
     expect(await screen.findByText("Nobody's posted yet")).toBeTruthy()
     await fireEvent.press(screen.getByLabelText('Write a post'))
     expect(screen.getByLabelText('Your post')).toBeTruthy()
-    expect(screen.getByText('0/500')).toBeTruthy()
+    expect(screen.getByText('0/500', { includeHiddenElements: true })).toBeTruthy()
   })
 
   it('is closed once the server says the doors have opened, and offers the room', async () => {
@@ -215,7 +215,7 @@ describe('BD-CU01 on screen: a refused post names its gate', () => {
 
     await fireEvent.press(await screen.findByLabelText('Write a post'))
     await fireEvent.changeText(screen.getByLabelText('Your post'), 'Two seats from Indiranagar')
-    await fireEvent.press(screen.getByLabelText('Post to the board'))
+    await fireEvent.press(screen.getByLabelText('Post'))
 
     expect(await screen.findByText(reason)).toBeTruthy()
     expect(api.postToBoard).toHaveBeenCalledWith('e1', { kind: 'offer', body: 'Two seats from Indiranagar', spacesLeft: 1 })
@@ -233,7 +233,7 @@ describe('BD-CU01 on screen: a refused post names its gate', () => {
 
     await fireEvent.press(await screen.findByLabelText('Write a post'))
     await fireEvent.changeText(screen.getByLabelText('Your post'), 'Anyone?')
-    await fireEvent.press(screen.getByLabelText('Post to the board'))
+    await fireEvent.press(screen.getByLabelText('Post'))
     expect(await screen.findByText(doors)).toBeTruthy()
   })
 })
@@ -253,9 +253,9 @@ describe('posting', () => {
     await render(<BoardScreen />)
 
     await fireEvent.press(await screen.findByLabelText('Write a post'))
-    await fireEvent.press(screen.getByLabelText("I'm looking"))
+    await fireEvent.press(screen.getByLabelText(/^I’m looking/))
     await fireEvent.changeText(screen.getByLabelText('Your post'), 'Me too, from HSR')
-    await fireEvent.press(screen.getByLabelText('Post to the board'))
+    await fireEvent.press(screen.getByLabelText('Post'))
 
     await waitFor(() => expect(screen.getAllByText(/Me too, from HSR|Driving from/)[0].props.children).toBe('Me too, from HSR'))
     expect(api.postToBoard).toHaveBeenCalledWith('e1', { kind: 'seeking', body: 'Me too, from HSR' })
@@ -274,7 +274,7 @@ describe('posting', () => {
 
     await fireEvent.press(await screen.findByLabelText('Write a post'))
     await fireEvent.changeText(screen.getByLabelText('Your post'), 'Anyone?')
-    const post = screen.getByLabelText('Post to the board')
+    const post = screen.getByLabelText('Post')
     await fireEvent.press(post)
     await fireEvent.press(post)
     settle({ success: false, errorCode: 'FORBIDDEN', error: 'Mark yourself as going to post here' })
@@ -496,7 +496,7 @@ describe('your own post', () => {
   it('counts the asks and points to where they are answered', async () => {
     api.getBoard.mockResolvedValue(board([MINE]))
     await render(<BoardScreen />)
-    expect(await screen.findByText('2 asked — answer in the Banter')).toBeTruthy()
+    expect(await screen.findByText('2 asked. Answer in the Banter.')).toBeTruthy()
     expect(screen.queryByLabelText('Ask to join, Lunar Fox')).toBeNull()
   })
 
@@ -582,8 +582,12 @@ describe('report and block, by the post', () => {
   })
 })
 
-it('carries the placeholder banner in every state', async () => {
+it('is the Flow 4 design now: no placeholder banner, the composer kinds are RadioCards (A61)', async () => {
   api.getBoard.mockResolvedValue(board([OFFER]))
   await render(<BoardScreen />)
-  expect(await screen.findByText(/PLACEHOLDER DESIGN/)).toBeTruthy()
+  await screen.findByText(OFFER.body)
+  expect(screen.queryByText(/PLACEHOLDER DESIGN/)).toBeNull()
+  await fireEvent.press(screen.getByLabelText('Write a post'))
+  expect(screen.getByLabelText('I have space, You’re offering a ride or a table.')).toBeTruthy()
+  expect(screen.getByLabelText('I’m looking, You want to join someone’s.')).toBeTruthy()
 })

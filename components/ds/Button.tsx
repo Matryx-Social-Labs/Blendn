@@ -96,6 +96,8 @@ export type ButtonProps = {
    */
   pressHaptic?: boolean | (() => void)
   accessibilityHint?: string
+  /** Only when the label alone is ambiguous on its screen ("Ask to join, Velvet Heron"): it must start with the label (WCAG 2.5.3). */
+  accessibilityLabel?: string
   /** The design gallery only: draws a transient state with no finger or keyboard. */
   previewState?: 'pressed' | 'focused'
   testID?: string
@@ -130,6 +132,7 @@ export function Button({
   onGlass = false,
   pressHaptic = true,
   accessibilityHint,
+  accessibilityLabel,
   previewState,
   testID,
   style,
@@ -178,7 +181,7 @@ export function Button({
         onBlur={() => setFocused(false)}
         android_ripple={{ color: PRESSED_WASH.android, foreground: true }}
         accessibilityRole="button"
-        accessibilityLabel={label}
+        accessibilityLabel={accessibilityLabel ?? label}
         accessibilityHint={accessibilityHint}
         accessibilityState={{ disabled, busy: loading }}
         style={[

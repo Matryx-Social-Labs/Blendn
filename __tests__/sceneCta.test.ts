@@ -68,6 +68,22 @@ describe('the pill keeps its height between states', () => {
   })
 })
 
+describe('"I’m going" → "You’re going" is one sequence (A78, Prompt 10)', () => {
+  it('fades the gradient to 8% white under the label, and the old label leaves as the new one arrives', () => {
+    const src = SRC()
+    expect(src).toContain('<GradientFill')
+    expect(src).toMatch(/ctaFillQuiet: \{\s*backgroundColor: MATERIAL\.fillOnGlass/)
+    expect(src).toMatch(/loud\.set\(withTiming\(quiet \? 0 : 1, \{ duration: DURATION\.base/)
+    expect(src).toContain('exiting={reduceMotion ? ctaFadeOut : ctaLabelOut}')
+    // Full width already, so nothing settles: no content-width padding, the dock stretches it.
+    expect(DETAIL()).not.toMatch(/ctaDockInner: \{[^}]*alignItems: 'center'/)
+  })
+
+  it('carries the check on "You’re going" and no glyph on "I’m going"', () => {
+    expect(DETAIL()).toContain("ctaState === 'rsvpd' ? 'checkmark' : ctaState === 'rsvp' ? null")
+  })
+})
+
 describe('what the button says', () => {
   it('says Blend in, and no state is a dead end', () => {
     const src = SRC()

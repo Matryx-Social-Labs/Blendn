@@ -316,8 +316,10 @@ describe('a post’s length', () => {
   it('is the server’s, named once', () => {
     expect(BOARD_MAX_POST_LENGTH).toBe(500)
     const composer = readFileSync(join(__dirname, '..', 'components/board/BoardSections.tsx'), 'utf8')
-    expect(composer).toContain('maxLength={BOARD_MAX_POST_LENGTH}')
-    expect(composer).not.toMatch(/maxLength=\{\d/)
+    // The TextArea counts against it and Post refuses past it (ds: never enforced by truncation).
+    expect(composer).toContain('limit={BOARD_MAX_POST_LENGTH}')
+    expect(composer).toContain('> BOARD_MAX_POST_LENGTH')
+    expect(composer).not.toMatch(/(maxLength|limit)=\{\d/)
   })
 })
 

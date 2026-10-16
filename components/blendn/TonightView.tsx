@@ -3,7 +3,7 @@ import { Linking, Pressable, StyleSheet, Text, useWindowDimensions, View } from 
 import { GestureDetector } from 'react-native-gesture-handler'
 import Animated from 'react-native-reanimated'
 
-import { COLOR, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { clockTime, startsLabel } from '../../lib/roomMoments'
 import type { TonightEvent, TonightLocation } from '../../lib/useTonight'
 import { Banner } from '../ds/Banner'
@@ -92,6 +92,8 @@ export type TonightViewProps = {
   location?: TonightLocation
   onRetry: () => void
   insideEvent: TonightEvent | null
+  /** In another event's room already: the pass's hold is a switch out of it (ROUND4 8.3 #06). */
+  switchFrom?: string
   checkingIn: boolean
   /** The server said yes: the hold stays full under "You’re in" until the Room is there (motion #9). */
   youreIn?: boolean
@@ -128,6 +130,7 @@ export function TonightView({
   location = 'on',
   onRetry,
   insideEvent,
+  switchFrom,
   checkingIn,
   youreIn = false,
   onPassFrame,
@@ -159,7 +162,7 @@ export function TonightView({
   const deckRoom = viewport ? viewport - topInset - headHeight - SPACE.xl : 0
   const sub =
     location === 'approximate'
-      ? 'Approximate location. Check-in needs precise.'
+      ? 'Approximate location. Check-in needs your exact spot: turn on Precise Location for Blend’n.'
       : door
         ? 'You’re at an event. Hold the pass below to check in.'
         : 'Check in at an event to open its room.'
@@ -255,12 +258,31 @@ export function TonightView({
               hereCount={door.hereCount}
               tasteCount={door.tasteMatchCount}
               onConfirm={onCheckIn}
+              holdLabel={switchFrom ? 'Hold to switch' : undefined}
+              note={switchFrom ? `You’ll leave ${switchFrom}` : undefined}
               busy={checkingIn && !youreIn}
               confirmed={youreIn}
               testID="tonight-pass"
             >
               {youreIn ? crewStrip : null}
             </VenuePass>
+          </View>
+        </View>
+      ) : location === 'approximate' ? (
+        // ROUND4 8.3 #08: no pass at all; where it would dock, why, and the way to fix it.
+        <View testID="tonight-approximate" style={[styles.passDock, { paddingBottom: bottomInset + SPACE.md }]}>
+          <View style={styles.approx}>
+            <Icon name="locate-off" size={ICON.control} color={COLOR.textPrimary} />
+            <Text style={[font('meta', bold), styles.ink, styles.grow]}>No pass without precise location</Text>
+            <Pressable
+              onPress={() => void Linking.openSettings().catch(() => {})}
+              hitSlop={(minTarget() - SPACE.xl) / 2}
+              accessibilityRole="button"
+              accessibilityLabel="Turn on Precise Location"
+              testID="tonight-approximate-turn-on"
+            >
+              <Text style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>Turn on</Text>
+            </Pressable>
           </View>
         </View>
       ) : null}
@@ -287,4 +309,15 @@ const styles = StyleSheet.create({
   state: { paddingHorizontal: SPACE.gutter, paddingTop: STATE_TOP },
   skeleton: { borderRadius: RADIUS.card, backgroundColor: COLOR.surfaceSunken },
   passDock: { paddingHorizontal: SPACE.md, paddingTop: SPACE.md },
+  approx: {
+    height: SIZE.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACE.md,
+    paddingHorizontal: SPACE.lg,
+    marginHorizontal: SPACE.sm,
+    borderRadius: RADIUS.rowInCard,
+    backgroundColor: COLOR.surface,
+  },
+  grow: { flex: 1 },
 })

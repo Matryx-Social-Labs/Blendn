@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
-import Animated, { Easing, useAnimatedReaction, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated'
+import Animated, { Easing, ReduceMotion, useAnimatedReaction, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
 
 import { GradientFill } from '../ui/GradientFill'
@@ -123,7 +123,8 @@ export function HoldToConfirm({
     .maxDistance(MAX_DRIFT)
     .shouldCancelWhenOutside(false)
     .onBegin(() => {
-      progress.set(withTiming(1, { duration: DURATION.hold, easing: Easing.linear }))
+      // Never: the fill's speed is the hold's information; under Reduce Motion the default would jump straight to full.
+      progress.set(withTiming(1, { duration: DURATION.hold, easing: Easing.linear, reduceMotion: ReduceMotion.Never }))
     })
     .onStart(() => {
       progress.set(1)

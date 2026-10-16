@@ -259,3 +259,14 @@ describe('the chat dock, one row (R3-0 02′, R3-D4 13′)', () => {
     expect(onOpen).toHaveBeenCalled()
   })
 })
+
+describe('B8 (Prompt 10): the Room’s glass pills rise; the glass never fades', () => {
+  const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'components', 'blendn', 'BlendnScreen.tsx'), 'utf8') as string
+
+  it('enters as a 16 pt rise over base with the glass opaque throughout; only the contents fade', () => {
+    expect(src).toContain('const GLASS_RISE = SPACE.lg')
+    expect(src).toMatch(/withInitialValues\(\{ opacity: 1, transform: \[\{ translateY: GLASS_RISE \}\] \}\)/)
+    expect(src).toContain('entering={reduceMotion ? undefined : glassRise} style={styles.topActions}')
+    expect(src).toContain('<Animated.Text entering={glassContentsIn}')
+  })
+})

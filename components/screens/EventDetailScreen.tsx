@@ -1031,10 +1031,11 @@ export default function EventDetail() {
         : 'join'
 
 
+  // "I'm going" carries no glyph; "You're going" carries the check (A78).
   const ctaIcon =
     ctaState === 'ended'
       ? 'arrow-forward'
-      : ctaState === 'rsvpd' ? 'checkmark' : 'radio-outline'
+      : ctaState === 'rsvpd' ? 'checkmark' : ctaState === 'rsvp' ? null : 'radio-outline'
 
   /*
    * The Pulse's words for a date — "Today", "Tomorrow", "Oct 24" — so a card
@@ -1337,8 +1338,8 @@ export default function EventDetail() {
             state={ctaState}
             alone={checkInCount <= 1}
             onPress={primaryActionPress}
-            iconKey={ctaIcon}
-            icon={(color) => <Ionicons name={ctaIcon} size={SCENE_CTA_ICON} color={color} />}
+            iconKey={ctaIcon ?? undefined}
+            icon={ctaIcon ? (color) => <Ionicons name={ctaIcon} size={SCENE_CTA_ICON} color={color} /> : undefined}
           />
         </View>
       </View>
@@ -1602,12 +1603,7 @@ const styles = StyleSheet.create({
     // See SCENE_CTA_HEIGHT for the chrome arithmetic.
     paddingTop: SPACE.md,
     paddingBottom: SPACE.lg,
-    /*
-     * Centres the content-width pill. Without this it stretches to the dock and
-     * `paddingHorizontal: 32` on the fill buys nothing — which is exactly what
-     * this screen shipped: a full-bleed slab instead of the frame's pill.
-     */
-    alignItems: 'center',
+    // The pill is full width (Flow 3's dock, A78): it stretches to the inset.
     justifyContent: 'center',
   },
   organiserBar: {
