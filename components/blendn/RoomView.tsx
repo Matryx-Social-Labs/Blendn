@@ -138,8 +138,7 @@ export function RoomView(props: RoomViewProps) {
           people={people}
         />
       </Animated.View>
-      {/* Over what follows: the Room's coach mark hangs below the visibility line. */}
-      <Animated.View style={[styles.gutter, styles.raised]} entering={enter ? sectionIn(0) : undefined}>
+      <Animated.View style={styles.gutter} entering={enter ? sectionIn(0) : undefined}>
         {props.visibility}
       </Animated.View>
       {props.segments ? (
@@ -228,7 +227,6 @@ export function RoomView(props: RoomViewProps) {
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   header: { gap: SPACE.lg, marginBottom: SPACE.md },
-  raised: { zIndex: 1 },
   gutter: { paddingHorizontal: SPACE.gutter },
   sections: { gap: SPACE.xl },
   empty: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.xl },

@@ -32,11 +32,12 @@ export type CoachMarkProps = {
 /**
  * The app explaining one thing, once (guidelines/components/CoachMark.html):
  * a surface card with a caret at the control it names, one sentence in meta,
- * "Got it" at the right. One at a time, never a tour, never a scrim, never a
- * loop; the screen places it after the element it points at and decides
- * "once".
+ * "Got it" at the right. One at a time, never a tour, never a
+ * loop. Screens never draw it themselves: they register a target with
+ * `useCoachMarkSpot` and the root's `CoachMarkHost` draws it over the app with
+ * the spotlight dim (the owner's ruling, 2026-10-16, over the page's "no scrim").
  *
- * Announced once as it appears, never taking focus. No haptic. It pops in on
+ * Announced once as it appears; the host moves focus to it. No haptic. It pops in on
  * `M.pop`; under Reduce Motion it fades in without the pop. Increase Contrast:
  * the 50% hairline. The page's drop shadow is not drawn: surfaces are flat.
  */

@@ -46,7 +46,7 @@ import { RoomView } from './RoomView'
 import { TonightView } from './TonightView'
 import { WaveToast } from './WaveToast'
 import { markCoachUsed, useCoachMark } from '../../lib/coachMarks'
-import { COACH_MARK_MAX_WIDTH, CoachMark } from '../ds/CoachMark'
+import { useCoachMarkSpot } from '../ds/CoachMarkHost'
 
 /** Under the top bar's 44 pt circles: Flow 4 sets the title 70 below the safe area (124 on a 54 pt status bar). */
 const TOP_CHROME = SPACE.sm + SIZE.circleButton + SPACE.lg + SPACE.xxs
@@ -382,6 +382,17 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   const roomCoach = useCoachMark('room_reveal', {
     ready: mode === 'room' && !controls.revealed && !pouring && !tray.visible && !open && !connectTo && !room.match,
   })
+  // Drawn by the root's CoachMarkHost: the visibility line is the hole, the tip under it (round4/r4.js, "The Room").
+  const roomCoachTarget = useRef<View>(null)
+  useCoachMarkSpot(roomCoach.visible, {
+    target: roomCoachTarget,
+    text: ROOM_COACH_TEXT,
+    place: 'below',
+    radius: RADIUS.rowInCard,
+    onDismiss: roomCoach.dismiss,
+    onLost: roomCoach.lose,
+    testID: 'room-coach-mark',
+  })
   /** Waves you sent: on their way, or settled to "Waved" (a repeat inside ten minutes is "Waved" too). */
   const [sent, setSent] = useState<Record<string, 'busy' | 'waved'>>({})
   /** A like or wave the server refused, said on that person's card (R3-D4 4.3), until the next try or the card closes. */
@@ -614,7 +625,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
             arrivals={room.arrivals}
             connection={room.connection}
             visibility={
-              <View>
+              <View ref={roomCoachTarget}>
                 <VisibilityBanner
                   state={visibility}
                   name={controls.revealed ? myName : (myPseudonym ?? undefined)}
@@ -632,12 +643,6 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
                   }
                   testID="room-visibility"
                 />
-                {roomCoach.visible ? (
-                  // Under the visibility line, caret up (round4/r4.js, "The Room"): out of the layout, after it.
-                  <View style={styles.coachMark} pointerEvents="box-none">
-                    <CoachMark text={ROOM_COACH_TEXT} onDismiss={roomCoach.dismiss} testID="room-coach-mark" />
-                  </View>
-                ) : null}
               </View>
             }
             segments={showSegments}
@@ -911,7 +916,6 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  coachMark: { position: 'absolute', left: 0, right: 0, top: '100%', paddingTop: SPACE.sm, maxWidth: COACH_MARK_MAX_WIDTH },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
   topBar: {

@@ -88,7 +88,7 @@ import { useLiveSync } from '../../lib/useLiveSync'
 import { useMinimumVisible } from '../../lib/useMinimumVisible'
 import { useAuth } from '../../lib/useAuth'
 import { markCoachUsed, useCoachMark } from '../../lib/coachMarks'
-import { COACH_MARK_MAX_WIDTH, CoachMark } from '../../components/ds/CoachMark'
+import { useCoachMarkSpot } from '../../components/ds/CoachMarkHost'
 import { CONTROL, EMBER, EMBER_FONTS, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE, tint } from '../../lib/theme'
 import { RisingSheet, SheetFlatList, SheetModal } from '../../components/motion/RisingSheet'
 import { Grabber } from '../../components/ui/Grabber'
@@ -392,6 +392,8 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
    */
   const [listAtTop, setListAtTop] = useState(true)
   const listOffsetRef = useRef(0)
+  /** The first card the page draws: the coach mark's hole. */
+  const coachTarget = useRef<View>(null)
   const coachShowingRef = useRef(false)
   const onListScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
     listOffsetRef.current = e.nativeEvent.contentOffset.y
@@ -1562,7 +1564,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       bannersHeight
     )
     return (
-      <View style={[styles.pulseSection, coachRaised]}>
+      <View style={styles.pulseSection}>
         {/*
           No "VIEW ALL". It opened the Nearby list, sorted by distance, which is
           not the featured events it sat above; and every event not in a section
@@ -1580,7 +1582,9 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
         <View>
           {featuredItems.length === 1 ? (
             <View style={[styles.featuredBleed, { paddingHorizontal: featured.inset }]}>
-              <FeaturedCard {...featuredCards[0]} isActive={visible} width={featured.width} />
+              <View ref={coachTarget}>
+                <FeaturedCard {...featuredCards[0]} isActive={visible} width={featured.width} />
+              </View>
             </View>
           ) : (
             <FlatList
@@ -1610,14 +1614,16 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
               viewabilityConfig={featuredViewability}
               onViewableItemsChanged={onFeaturedViewable}
               renderItem={({ item, index }) => (
-                <FeaturedCard {...item} isActive={visible && index === featuredActiveIndex} width={featured.width} />
+                // The first card is the coach mark's target.
+                <View ref={index === 0 ? coachTarget : undefined}>
+                  <FeaturedCard {...item} isActive={visible && index === featuredActiveIndex} width={featured.width} />
+                </View>
               )}
               // Hoisted: an inline component is a new type every render, which
               // remounts every separator rather than reusing them.
               ItemSeparatorComponent={FeaturedSeparator}
             />
           )}
-          {coachMark}
         </View>
       </View>
     )
@@ -1626,7 +1632,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   const renderUpcomingStack = () => {
     if (upcomingStackItems.length === 0) return null
     return (
-      <View style={[styles.pulseSection, featuredItems.length === 0 && coachRaised]}>
+      <View style={styles.pulseSection}>
         {/*
           No prev/next arrows. The frame draws a pair beside this heading, and
           they belong to a horizontal row — this is a vertical stack, so they
@@ -1640,11 +1646,11 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
         */}
         <View style={styles.dayGroups}>
           {groupByDay(upcomingStackItems).map((group, groupIndex) => (
-            <View key={group.key} style={[styles.dayGroup, groupIndex === 0 && coachRaised]}>
+            <View key={group.key} style={styles.dayGroup}>
               <DayHeading title={group.title} detail={group.weekday} />
               {group.items.map((item, index) => (
-                // The page's first card when nothing is featured: it carries the coach mark.
-                <View key={`up-${item.id}`} style={index === 0 && coachRaised}>
+                // The page's first card when nothing is featured: the coach mark's target.
+                <View key={`up-${item.id}`} ref={featuredItems.length === 0 && groupIndex === 0 && index === 0 ? coachTarget : undefined}>
                   <UpcomingCard
                     title={item.title}
                     category={item.category || null}
@@ -1662,7 +1668,6 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
                     favoriteBusy={!!interestPending[item.id]}
                     onToggleFavorite={() => toggleInterest(item)}
                   />
-                  {featuredItems.length === 0 && groupIndex === 0 && index === 0 ? coachMark : null}
                 </View>
               ))}
             </View>
@@ -1794,24 +1799,21 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     coachShowingRef.current = coach.visible
   }, [coach.visible])
   /*
-   * Below the featured card it would sit on the tab bar (that card is sized to
-   * reach it), so the list scrolls the card up by the overlap first.
+   * Drawn by the root's CoachMarkHost, over everything, with the first card as
+   * the hole. Below the featured card it would sit on the tab bar (that card is
+   * sized to reach it), so the list scrolls the card up by the overlap first.
    */
-  const coachRef = useRef<View>(null)
-  const onCoachLayout = useCallback(() => {
-    coachRef.current?.measureInWindow((_x, y, _w, h) => {
-      const overlap = y + h + SPACE.sm - tabBarTop(SCREEN_HEIGHT, insets.bottom)
-      if (overlap > 0) listRef.current?.scrollToOffset({ offset: listOffsetRef.current + overlap, animated: true })
-    })
-  }, [insets.bottom])
-  // Out of the flow and under the card, so nothing moves and the card stays tappable; after it, for a screen reader.
-  const coachMark = coach.visible ? (
-    <View ref={coachRef} onLayout={onCoachLayout} style={styles.coachMark} pointerEvents="box-none">
-      <CoachMark text={PULSE_COACH_TEXT} caret="top" onDismiss={coach.dismiss} testID="pulse-coach-mark" />
-    </View>
-  ) : null
-  // Its section and card are drawn over the siblings after them, which the mark overlaps.
-  const coachRaised = coach.visible ? styles.coachRaised : null
+  useCoachMarkSpot(coach.visible, {
+    target: coachTarget,
+    text: PULSE_COACH_TEXT,
+    place: 'below',
+    radius: featuredItems.length > 0 ? EMBER_RADIUS.card : EMBER_RADIUS.md,
+    onDismiss: coach.dismiss,
+    onLost: coach.lose,
+    bottomLimit: tabBarTop(SCREEN_HEIGHT, insets.bottom),
+    onOverflow: (px) => listRef.current?.scrollToOffset({ offset: listOffsetRef.current + px, animated: true }),
+    testID: 'pulse-coach-mark',
+  })
   useEffect(() => {
     if (!showLoadingSkeleton && mainListData.length > 0) mainRowsRevealPending.current = false
   }, [showLoadingSkeleton, mainListData.length])
@@ -2556,8 +2558,6 @@ const styles = StyleSheet.create({
   dayGroups: { gap: SPACE.xl },
   dayGroup: { gap: SPACE.md },
   /** The coach mark, under the card it names: its caret's tip just clear of the card's edge; the design's 300 at most. */
-  coachMark: { position: 'absolute', left: 0, right: 0, top: '100%', paddingTop: SPACE.sm, maxWidth: COACH_MARK_MAX_WIDTH },
-  coachRaised: { zIndex: 1 },
   /** A row in the list under the sections: the Upcoming stack's spacing. */
   mainRow: { paddingBottom: SPACE.md },
   /**

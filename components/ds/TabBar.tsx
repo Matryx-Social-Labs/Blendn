@@ -1,3 +1,4 @@
+import type { Ref } from 'react'
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -29,6 +30,8 @@ export type TabBarProps = {
   disc: DiscProps
   /** Your own face on Me; the outlined person until there is one. */
   mePhoto?: string
+  /** The disc's slot, for whoever points at it (the centre button's coach mark). */
+  discRef?: Ref<View>
   testID?: string
 }
 
@@ -46,7 +49,7 @@ export type TabBarProps = {
  * Increase Contrast: the 50% outline on the capsule. Bold Text: every label
  * 700, so the pill alone tells selected from not.
  */
-export function TabBar({ selected, onSelect, disc, mePhoto, testID = 'tabs' }: TabBarProps) {
+export function TabBar({ selected, onSelect, disc, mePhoto, discRef, testID = 'tabs' }: TabBarProps) {
   const android = Platform.OS === 'android'
   const insets = useSafeAreaInsets()
   const bold = useBoldText()
@@ -90,7 +93,7 @@ export function TabBar({ selected, onSelect, disc, mePhoto, testID = 'tabs' }: T
       <Material role="bar" style={[StyleSheet.absoluteFill, styles.round]} />
       <View testID={`${testID}-row`} accessibilityRole="tablist" style={styles.row}>
         {TABS.slice(0, 2).map(tab)}
-        <View style={styles.slot}>
+        <View ref={discRef} style={styles.slot}>
           <Disc {...disc} />
         </View>
         {TABS.slice(2).map(tab)}

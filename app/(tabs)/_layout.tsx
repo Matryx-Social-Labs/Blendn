@@ -1,12 +1,11 @@
 import { Tabs } from 'expo-router/js-tabs'
-import React, { memo, useCallback, useEffect, useState, useSyncExternalStore } from 'react'
-import { AppState, Platform, StyleSheet, useWindowDimensions, View } from 'react-native'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import React, { memo, useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { AppState, Platform, StyleSheet, View } from 'react-native'
 
 import { BlendnScreen } from '../../components/blendn/BlendnScreen'
 import { InAppBanner } from '../../components/ds/InAppBanner'
 import { TabBar, type Tab } from '../../components/ds/TabBar'
-import { COACH_MARK_CARET, COACH_MARK_MAX_WIDTH, CoachMark } from '../../components/ds/CoachMark'
+import { useCoachMarkSpot } from '../../components/ds/CoachMarkHost'
 import { markCoachUsed, useCoachMark } from '../../lib/coachMarks'
 import { apiClient } from '../../lib/apiClient'
 import { openBlendn, setLiveHint, useBlendnOpen } from '../../lib/blendnOverlay'
@@ -37,13 +36,6 @@ import { listenForWaves, useRoomWaves, waveShown } from '../../lib/roomWaves'
 // types publicly, so take the tab bar's props from the Tabs component itself.
 type BottomTabBarProps = Parameters<NonNullable<React.ComponentProps<typeof Tabs>['tabBar']>>[0]
 
-/**
- * How far (c)'s "Check in · {venue}" pill rises above the bar's top edge: the
- * disc is centred in the bar, the pill sits `SPACE.sm` over the disc and is a
- * `SIZE.tag` tall (components/ds/Disc.tsx). The coach mark goes above it.
- */
-const CHECK_IN_LABEL_RISE = SIZE.disc + SPACE.sm + SIZE.tag - (SIZE.tabBar + SIZE.disc) / 2
-
 /** The routes behind the bar's four tabs (`docs/NAVIGATION.md`). */
 const ROUTE: Record<Tab, string> = { pulse: 'events', going: 'going', banter: 'chat', me: 'profile' }
 const TAB_OF: Record<string, Tab> = { events: 'pulse', going: 'going', chat: 'banter', profile: 'me' }
@@ -68,9 +60,6 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
    * can check in, naming the place, above (c)'s label. Not while Blend'n is
    * open over it; being checked in (however you got there) is using it.
    */
-  const insets = useSafeAreaInsets()
-  const { width } = useWindowDimensions()
-  const coachWidth = Math.min(width - 2 * SPACE.lg, COACH_MARK_MAX_WIDTH)
   const blendnOpen = useBlendnOpen()
   const checkInVenue = target.state === 'checkin' && venue ? venue : null
   const centreCoach = useCoachMark('centre_button_checkin', { ready: checkInVenue !== null && !blendnOpen })
@@ -78,7 +67,18 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
   useEffect(() => {
     if (target.state === 'live' || (blendnOpen && target.state === 'checkin')) markCoachUsed('centre_button_checkin')
   }, [target.state, blendnOpen])
-  const barBottom = insets.bottom + (Platform.OS === 'android' ? SPACE.tabBarBottomGapAndroid : 0)
+  // Drawn by the root's CoachMarkHost: the disc is the hole, the tip above (c)'s "Check in · {venue}" pill, a `SIZE.tag` tall.
+  const discRef = useRef<View>(null)
+  useCoachMarkSpot(centreCoach.visible && checkInVenue !== null, {
+    target: discRef,
+    text: `You’re at ${checkInVenue}. Tap the button, then hold to check in.`,
+    place: 'above',
+    radius: SIZE.disc / 2,
+    gap: SIZE.tag + SPACE.sm,
+    onDismiss: centreCoach.dismiss,
+    onLost: centreCoach.lose,
+    testID: 'centre-coach-mark',
+  })
 
   /*
    * Your photo for the Me tab.
@@ -204,32 +204,13 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
   )
 
   return (
-    <>
       <TabBar
         selected={TAB_OF[state.routes[state.index]?.name] ?? 'pulse'}
         onSelect={select}
         disc={{ target, onPress: () => openBlendn(), venue: venue ?? undefined }}
         mePhoto={avatarUrl ?? undefined}
+        discRef={discRef}
       />
-      {centreCoach.visible && checkInVenue ? (
-        // Above the bar and (c)'s label, centred on the disc, caret down.
-        <View
-          style={[
-            styles.centreCoach,
-            { bottom: barBottom + SIZE.tabBar + CHECK_IN_LABEL_RISE + SPACE.sm, left: (width - coachWidth) / 2, width: coachWidth },
-          ]}
-          pointerEvents="box-none"
-        >
-          <CoachMark
-            text={`You’re at ${checkInVenue}. Tap the button, then hold to check in.`}
-            caret="bottom"
-            caretOffset={coachWidth / 2 - COACH_MARK_CARET / 2}
-            onDismiss={centreCoach.dismiss}
-            testID="centre-coach-mark"
-          />
-        </View>
-      ) : null}
-    </>
   )
 })
 
@@ -380,5 +361,4 @@ export const TAB_BAR_CLEARANCE = SIZE.tabBar + HOME_INDICATOR_INSET
 const styles = StyleSheet.create({
   host: { flex: 1, backgroundColor: COLOR.ink },
   tabs: { flex: 1 },
-  centreCoach: { position: 'absolute' },
 })

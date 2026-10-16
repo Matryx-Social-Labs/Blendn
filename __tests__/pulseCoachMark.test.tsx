@@ -148,6 +148,7 @@ jest.mock('../lib/useAuth', () => ({
 
 /* eslint-disable import/first */
 import Events from '../app/(tabs)/events'
+import { CoachMarkHost, spotlightMeasure } from '../components/ds/CoachMarkHost'
 import { getEvents } from '../lib/api'
 /* eslint-enable import/first */
 
@@ -176,8 +177,17 @@ const seen = (userId: string) => AsyncStorage.getItem(`events_preview_hint_seen_
 async function settle() {
   for (let i = 0; i < 4; i += 1) await act(async () => {})
 }
+/** The app's root: the screen, then the coach-mark layer over it. */
+const App = () => (
+  <>
+    <Events />
+    <CoachMarkHost />
+  </>
+)
+/** What the host measured: the target's instance. Every target is on screen at a fixed rect. */
+let measuredNode: { props: { children: { props: { title?: string } } } } | null = null
 async function mount() {
-  const view = await render(<Events />)
+  const view = await render(<App />)
   await settle()
   return view
 }
@@ -185,12 +195,17 @@ async function mount() {
 async function shell(view: Awaited<ReturnType<typeof render>>, next: { full?: boolean; focused?: boolean }) {
   if (next.full !== undefined) mockFull = next.full
   if (next.focused !== undefined) mockFocused = next.focused
-  await view.rerender(<Events />)
+  await view.rerender(<App />)
   await settle()
 }
 const mark = () => screen.queryByText(TEXT)
 
 beforeEach(async () => {
+  measuredNode = null
+  spotlightMeasure.inWindow = (node, done) => {
+    measuredNode = node as never
+    done({ x: 24, y: 200, width: 300, height: 300 })
+  }
   mockFocused = true
   mockVisible = true
   mockFull = false
@@ -211,20 +226,19 @@ describe('the Pulse’s coach mark', () => {
     expect(mark()).toBeTruthy()
   })
 
-  it('sits out of the layout, below the first card (R4.1), after it in the reading order', async () => {
+  it('is drawn by the root host, never inline, with the first featured card as the hole and the tip below it (R4.1)', async () => {
     signIn()
     mockFull = true
     await mount()
-    let anchor = screen.getByTestId('pulse-coach-mark').parent
-    while (anchor && StyleSheet.flatten(anchor.props.style)?.position !== 'absolute') anchor = anchor.parent
-    expect(StyleSheet.flatten(anchor!.props.style)).toMatchObject({ position: 'absolute', top: '100%', maxWidth: 300 })
-    // Caret up, at the card above it.
+    expect(within(screen.getByTestId('coach-mark-host')).getByTestId('pulse-coach-mark')).toBeTruthy()
+    expect(measuredNode?.props.children.props.title).toBe('Event e1')
+    // Caret up, at the card above it; the tip starts under the hole (200 + 300 + the 8 pad + the 8 gap).
     expect(StyleSheet.flatten(screen.getByTestId('pulse-coach-mark-caret').props.style)).toMatchObject({ top: -6 })
-    expect(screen.getByText('Hold an event to save, share or preview it.')).toBeTruthy()
-    // Its wrapper holds the cards first and the mark last.
-    const [cards, ...rest] = anchor!.parent!.children.filter((c) => typeof c !== 'string')
-    expect(within(cards as never).getByTestId('card-e1')).toBeTruthy()
-    expect(rest.at(-1)).toBe(anchor)
+    let tip = screen.getByTestId('pulse-coach-mark').parent
+    while (tip && StyleSheet.flatten(tip.props.style)?.position !== 'absolute') tip = tip.parent
+    expect(StyleSheet.flatten(tip!.props.style)).toMatchObject({ top: 516 })
+    // Four dim rects, none over the card.
+    expect(screen.getAllByTestId(/^coach-mark-dim-/, { includeHiddenElements: true })).toHaveLength(4)
   })
 
   it('Got it: gone, written as seen, and not back on a remount', async () => {
@@ -304,10 +318,8 @@ describe('the Pulse’s coach mark', () => {
     mockFull = true
     await mount()
     expect(mark()).toBeTruthy()
-    // Inside the first row's own wrapper, not the section's.
-    const wrapper = screen.getByTestId('row-Event u1').parent!
-    expect(within(wrapper).getByTestId('pulse-coach-mark')).toBeTruthy()
-    expect(within(screen.getByTestId('row-Event u2').parent!).queryByTestId('pulse-coach-mark')).toBeNull()
+    // The first row is the hole, not the section.
+    expect(measuredNode?.props.children.props.title).toBe('Event u1')
   })
 
   it('a sheet or tray over it hides it; closed, it is back (still the one showing)', async () => {

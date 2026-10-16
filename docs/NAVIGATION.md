@@ -232,7 +232,7 @@ mutual connections exists in the schema yet.
 The app explains itself at most once per thing, and only what is not obvious
 (the design: `guidelines/components/CoachMark.html`). A surface card with a
 caret at the control, one sentence, Got it at the right: `components/ds/CoachMark.tsx`.
-Not a tour, no scrim, never a loop. Every screen decides "once" through
+Not a tour, never a loop. Every screen decides "once" through
 `lib/coachMarks.ts`: `useCoachMark(id, { ready })` gives `{ visible, dismiss }`,
 and `markCoachUsed(id)` is called where the gesture it explains lands.
 
@@ -252,10 +252,15 @@ and `markCoachUsed(id)` is called where the gesture it explains lands.
 - **Signed out, nothing.**
 - **Leaving the screen ends it** (blur or unmount). Not ready for a moment, a
   sheet over it, only hides it; it is back when the sheet closes.
-- **Out of the layout, after its target.** It never moves the list, never covers
-  the thing's tap target, never sits over the tab bar, and a screen reader meets
-  it after the thing it names. The component announces it once without taking
-  focus, plays no haptic, and drops the pop under Reduce Motion.
+- **On the top layer, with a spotlight.** A screen never draws a mark: it passes
+  its target's ref to `useCoachMarkSpot` and the one `CoachMarkHost`, last in
+  `app/_layout.tsx`, draws it over everything (tab bar, drawer, lists). The host
+  measures the target in window coordinates (and re-measures on rotation and
+  scroll), dims the rest as four `scrim` rects with a rounded hole, and fades on
+  `base` (at once under Reduce Motion). A tap on the dim does nothing; Got it or
+  Android back closes it; the target in the hole stays usable and using it counts.
+  The target gone or scrolled off ends it without spending it before the dwell.
+  The tip takes focus first; the dim is not focusable. No haptic.
 
 The same sentences belong in the help centre, for whoever dismissed one.
 

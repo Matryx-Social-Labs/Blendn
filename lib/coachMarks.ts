@@ -127,5 +127,10 @@ export function useCoachMark(id: CoachMarkId, { ready }: { ready: boolean }) {
     persistSeen(key)
   }, [key])
 
-  return { visible, dismiss }
+  /** What it points at went (unmounted, scrolled off): it ends, seen only if the dwell already passed. */
+  const lose = useCallback(() => {
+    if (key) setPhase(key, 'done')
+  }, [key])
+
+  return { visible, dismiss, lose }
 }
