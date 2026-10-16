@@ -86,6 +86,7 @@ const KNOWN_ORPHANS: Record<string, string> = {
   'CoachMark.tsx': 'redesign P3 component; the first coach mark (the centre button, the reveal bar, the swipe) adopts it (ROUND3 B4)',
   /* The P2 events and people (ROUND3 B4), built ahead of their flows; each goes with the first flow that adopts it. */
   'AmenityTile.tsx': 'redesign P2 (AmenityTile, AmenityGrid); the Scene bento and the venue page’s Good to know adopt it in place of SceneAmenity (Flow 3)',
+  'ds/DayHeading.tsx': 'redesign P2; replaces components/ui/DayHeading on the Pulse’s Upcoming (Flow 3). Going draws its day groups at the heading’s 20 (flow4.js `dayH`), so it uses SectionHeader',
   'MapCard.tsx': 'redesign P2 (MapCard, MapPin, MapCluster); the Scene and venue page’s map band, then the home map’s pins (Flows 3, 11)',
   'RevealBar.tsx': 'redesign P2; the anonymous DM adopts it (Flow 5)',
   /* P4, the rest of R2-D0 (ROUND3 B4), built ahead of Flows 9–16; each goes with the first flow that adopts it. */

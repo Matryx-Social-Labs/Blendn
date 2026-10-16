@@ -1,4 +1,4 @@
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Icon, type IconName } from '../ui/Icon'
@@ -20,6 +20,21 @@ const TABS: readonly { key: Tab; label: string; icon: IconName }[] = [
 
 /** Android's indicator: a 56 × 32 pill at 10% white behind the glyph (§13), not iOS's whole-tab capsule. */
 const INDICATOR = { width: SIZE.primary, height: SIZE.tag, alpha: 0.1 } as const
+
+/**
+ * The bar's geometry (journey/ui.js `JU.tabbar`, TabBar.html): the capsule
+ * 16 pt in from each edge, 4 pt of padding inside it, then the grid
+ * `1fr 1fr 56px 1fr 1fr` — four equal tab cells and the disc's 56 pt slot,
+ * each item centred in its column. So the gaps are equal, the pairs sit
+ * symmetric about the disc, and a label's length never moves its tab.
+ * `centres` are in screen x, Pulse · Going · disc · Banter · Me.
+ */
+export function tabBarGeometry(screenWidth: number) {
+  const left = SPACE.tabBarInset + SPACE.xs
+  const cell = Math.max(0, (screenWidth - 2 * left - SIZE.disc) / 4)
+  const centres = [left + cell / 2, left + cell * 1.5, left + cell * 2 + SIZE.disc / 2, left + cell * 2.5 + SIZE.disc, left + cell * 3.5 + SIZE.disc]
+  return { cell, centres }
+}
 
 export type TabBarProps = {
   selected: Tab
@@ -51,13 +66,14 @@ export function TabBar({ selected, onSelect, disc, mePhoto, testID = 'tabs' }: T
   const insets = useSafeAreaInsets()
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
+  const { cell } = tabBarGeometry(useWindowDimensions().width)
 
   const tab = ({ key, label, icon }: (typeof TABS)[number]) => {
     const on = key === selected
     const ink = on ? COLOR.textPrimary : COLOR.textSecondary
     const family = bold || (on && !android) ? FONT_FAMILY.brand[700] : FONT_FAMILY.brand[500]
     return (
-      <View key={key} style={styles.cell}>
+      <View key={key} testID={`${testID}-${key}-cell`} style={[styles.cell, { width: cell }]}>
         <Pressable
           testID={`${testID}-${key}`}
           onPress={() => onSelect(key)}
@@ -90,7 +106,7 @@ export function TabBar({ selected, onSelect, disc, mePhoto, testID = 'tabs' }: T
       <Material role="bar" style={[StyleSheet.absoluteFill, styles.round]} />
       <View testID={`${testID}-row`} accessibilityRole="tablist" style={styles.row}>
         {TABS.slice(0, 2).map(tab)}
-        <View style={styles.slot}>
+        <View testID={`${testID}-disc-slot`} style={styles.slot}>
           <Disc {...disc} />
         </View>
         {TABS.slice(2).map(tab)}
@@ -110,7 +126,7 @@ const styles = StyleSheet.create({
   },
   round: { borderRadius: RADIUS.tabBar },
   row: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACE.xs },
-  cell: { flex: 1, alignItems: 'center' },
+  cell: { alignItems: 'center' },
   slot: { width: SIZE.disc, height: SIZE.disc },
   tab: { width: SIZE.primary, maxWidth: '100%', height: SIZE.primary, alignItems: 'center', justifyContent: 'center', gap: SPACE.xxs },
   pill: { ...StyleSheet.absoluteFill, borderRadius: RADIUS.capsule, backgroundColor: COLOR.tabCapsule },

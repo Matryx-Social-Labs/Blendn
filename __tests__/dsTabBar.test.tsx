@@ -123,3 +123,31 @@ describe('Increase Contrast and Bold Text', () => {
     expect(label('Going').fontFamily).toBe(FONT_FAMILY.brand[700])
   })
 })
+
+describe('geometry: the design’s grid, 1fr 1fr 56 1fr 1fr inside 16 + 4 pt (owner defect on #401)', () => {
+  const { tabBarGeometry } = require('../components/ds/TabBar') as typeof import('../components/ds/TabBar')
+
+  it.each([360, 393, 430])('at %i pt the four tabs sit symmetric about the disc, with equal gaps', (width) => {
+    const { cell, centres } = tabBarGeometry(width)
+    const [pulse, going, disc, banter, me] = centres
+    expect(cell).toBeCloseTo((width - 40 - 56) / 4, 6)
+    expect(disc).toBeCloseTo(width / 2, 6)
+    // Inner pair and outer pair, mirrored.
+    expect(banter - disc).toBeCloseTo(disc - going, 6)
+    expect(me - disc).toBeCloseTo(disc - pulse, 6)
+    // Neighbouring tabs one cell apart on each side; the disc's slot is its own 56.
+    expect(going - pulse).toBeCloseTo(cell, 6)
+    expect(me - banter).toBeCloseTo(cell, 6)
+    expect(banter - going).toBeCloseTo(cell + 56, 6)
+    // Every tab's 56 pt target fits its cell, so no label can widen one.
+    expect(cell).toBeGreaterThanOrEqual(56)
+  })
+
+  it('draws every tab cell at the same width, whatever its label, and the disc slot at 56', async () => {
+    await draw()
+    const width = (id: string) => StyleSheet.flatten(screen.getByTestId(id).props.style).width
+    const cells = ['pulse', 'going', 'banter', 'me'].map((k) => width(`tabs-${k}-cell`))
+    expect(new Set(cells).size).toBe(1)
+    expect(width('tabs-disc-slot')).toBe(56)
+  })
+})
