@@ -22,6 +22,8 @@ import { Icon } from '../ui/Icon'
  *
  * Nothing renders until the flag has been read, so a room you already
  * dismissed in does not flash the banner on the way in.
+ *
+ * Owner override of Flow 5 room #04 (2026-10-16): centred — the glyph above, the sentence and its actions centred under it.
  */
 export function RoomGuidelinesBanner({ userId, chatRoomId }: { userId?: string; chatRoomId?: string }) {
   // The room it is showing for: a different room is hidden until its own read lands.
@@ -56,7 +58,7 @@ export function RoomGuidelinesBanner({ userId, chatRoomId }: { userId?: string; 
     <View style={styles.root} testID="room-guidelines-banner" accessibilityRole="summary">
       <Icon name="shield" size={ICON.control} />
       <View style={styles.copy}>
-        <Text style={[font('meta', bold), styles.ink]}>This room is anonymous. Be kind, keep it safe — people here are real.</Text>
+        <Text textBreakStrategy="balanced" style={[font('meta', bold), styles.ink, styles.centre]}>This room is anonymous. Be kind, keep it safe — people here are real.</Text>
         <View style={styles.actions}>
           <Pressable
             onPress={openGuidelines}
@@ -83,18 +85,18 @@ export function RoomGuidelinesBanner({ userId, chatRoomId }: { userId?: string; 
 }
 
 const styles = StyleSheet.create({
-  // Flow 5 room #04: a surface card in the feed's column, never over a message.
+  // Flow 5 room #04: a surface card in the feed's column, never over a message; centred (owner override).
   root: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: SPACE.md,
     paddingVertical: SPACE.md,
     paddingHorizontal: SPACE.lg,
     borderRadius: RADIUS.rowInCard,
     backgroundColor: COLOR.surface,
   },
-  copy: { flex: 1, gap: SPACE.sm },
-  actions: { flexDirection: 'row', gap: SPACE.lg },
+  copy: { alignSelf: 'stretch', alignItems: 'center', gap: SPACE.sm },
+  centre: { textAlign: 'center' },
+  actions: { flexDirection: 'row', justifyContent: 'center', gap: SPACE.lg },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
 })
