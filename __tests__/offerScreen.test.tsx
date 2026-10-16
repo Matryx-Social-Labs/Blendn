@@ -1,7 +1,16 @@
 import React from 'react'
 import { act, render, screen, fireEvent } from '@testing-library/react-native'
 
+/*
+ * The clock is pinned (`jest.useFakeTimers({ now: NOW })` fakes Date too), so
+ * the fixtures' 20:00Z turn never meets the wall clock. What did flake was
+ * time on the CPU: the tests that walk the clock a second at a time take
+ * ~0.5 s alone and 3–4 s on a loaded machine (a full parallel jest run), next
+ * to jest's 5 s default — and one that timed out kept acting into the tests
+ * after it. They get room.
+ */
 const NOW = Date.parse('2026-10-11T20:00:10.000Z')
+const CLOCK_WALK_TIMEOUT_MS = 30_000
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
@@ -139,7 +148,7 @@ it('keeps asking until the code has turned, when the ask before the turn returns
   await seconds(25)
   expect(screen.getByText('P3W 8R5')).toBeTruthy()
   expect(screen.queryByText('Getting a fresh code…')).toBeNull()
-})
+}, CLOCK_WALK_TIMEOUT_MS)
 
 it('a refresh that failed is tried again, and the pass comes back when the server does', async () => {
   await mount()
@@ -149,7 +158,7 @@ it('a refresh that failed is tried again, and the pass comes back when the serve
   request.mockImplementation(() => Promise.resolve(offer('live', { code: 'P3W8R5', rotatesAt: '2026-10-11T20:01:00.000Z' })))
   await seconds(3)
   expect(screen.getByText('P3W 8R5')).toBeTruthy()
-})
+}, CLOCK_WALK_TIMEOUT_MS)
 
 it('"Maybe later" is remembered for the place (L9)', async () => {
   await mount()
