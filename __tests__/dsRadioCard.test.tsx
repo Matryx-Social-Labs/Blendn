@@ -124,3 +124,14 @@ describe('Increase Contrast', () => {
     expect(flat('l-ring')).toMatchObject({ borderWidth: 1, borderColor: MATERIAL.hairlineIncreaseContrast })
   })
 })
+
+describe('<RadioCard> in a row of two (the Board composer, A61)', () => {
+  it('grows to its slot but never takes a zero basis: it is as tall as its well, title and consequence', async () => {
+    await render(card())
+    const style = StyleSheet.flatten(screen.getByTestId('r').props.style)
+    // `flex: 1` collapsed it to its padding in an auto-height row; the well and the words spilled out.
+    expect(style.flexGrow).toBe(1)
+    expect(style.flex).toBeUndefined()
+    expect(style.flexBasis).toBeUndefined()
+  })
+})
