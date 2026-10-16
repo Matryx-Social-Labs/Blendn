@@ -1,6 +1,6 @@
 import { Image } from 'expo-image'
 import { router, useLocalSearchParams } from 'expo-router'
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { Animated, Linking, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -104,7 +104,8 @@ function ChatInfoInner() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [sheet, setSheet] = useState<'mute' | 'leave' | null>(null)
   const [cardFor, setCardFor] = useState<Sender | null>(null)
-  const scrollY = useRef(new Animated.Value(0)).current
+  // One value for the screen's life; a lazy state, so nothing reads a ref while rendering.
+  const [scrollY] = useState(() => new Animated.Value(0))
 
   const loadMembers = useCallback(
     (offset = 0) =>
