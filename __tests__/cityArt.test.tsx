@@ -78,7 +78,7 @@ describe("buildScene", () => {
 describe("rendering", () => {
   it("labels the picker card with the city and its count, not the drawing", async () => {
     await render(
-      <CityArtCard city="Bengaluru" art={cityArtFor("Bengaluru")!} eventCount={26} active here onPress={() => {}} />,
+      <CityArtCard city="Bengaluru" art={cityArtFor("Bengaluru")!} countLabel="26 events" active here onPress={() => {}} />,
     )
     expect(screen.getByLabelText("Bengaluru, your current location, 26 events")).toBeTruthy()
   })

@@ -48,8 +48,20 @@ export interface StoredCity {
 export interface CityOption {
   city: string
   eventCount: number
+  /**
+   * Listed places in the city. A city can be listed with places and no events
+   * (venues are seeded before organisers arrive); absent from an older server.
+   */
+  placeCount?: number
   /** Where the home map goes when this city is picked; null (or absent, an older server) leaves it. */
   centre?: { latitude: number; longitude: number } | null
+}
+
+/** What a picker row says a city holds: its events, or its places when it has no events. */
+export function cityCountLabel(option: Pick<CityOption, 'eventCount' | 'placeCount'>): string {
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
+  if (option.eventCount === 0 && option.placeCount) return plural(option.placeCount, 'place')
+  return plural(option.eventCount, 'event')
 }
 
 /**
@@ -73,7 +85,7 @@ function canonical(city: string, available: readonly CityOption[]): string {
  *
  * 1. **What they chose last time.** A selection that does not survive a restart
  *    is not a selection.
- * 2. **Where the device is**, if that city has events — inferred, so a later
+ * 2. **Where the device is**, if that city is listed (events or places) — inferred, so a later
  *    launch somewhere else may replace it.
  * 3. **The busiest city**, also inferred, so a cold install with location denied
  *    still lands somewhere populated rather than on an empty screen.
@@ -133,7 +145,7 @@ export function cityOnResume(input: {
 /**
  * Should we offer to switch to the city the device is in?
  *
- * Only when we know where the device is, that city has events, and it is not
+ * Only when we know where the device is, that city is listed, and it is not
  * already the one being browsed. A prompt whose only outcome is an empty screen
  * is worse than no prompt — and for that case the picker's "use my current
  * location" is the honest route, because it is a decision rather than a nudge.
@@ -154,7 +166,7 @@ export function shouldOfferSwitch(input: {
 /**
  * Say where you are, when there is nothing to be done about it.
  *
- * `shouldOfferSwitch` only speaks when the device's city has events — because a
+ * `shouldOfferSwitch` only speaks when the device's city is listed — because a
  * prompt whose only outcome is an empty screen is worse than no prompt. The
  * consequence, found on a device in Saarbrücken, is that someone standing in a
  * city we have not launched in gets **total silence about their own location**:
@@ -179,7 +191,7 @@ export function awayNotice(input: {
 
   if (!deviceCity || !selected) return null
   if (sameCity(selected, deviceCity)) return null
-  // If the device's city has events, the switch offer is the right message and
+  // If the device's city is listed, the switch offer is the right message and
   // this one must stay quiet. Never both.
   if (available.some((option) => sameCity(option.city, deviceCity))) return null
 
