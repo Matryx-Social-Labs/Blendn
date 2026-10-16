@@ -24,6 +24,7 @@ jest.mock('expo-router', () => {
   return {
     router: { back: jest.fn(), push: jest.fn() },
     useLocalSearchParams: () => mockParams,
+    useFocusEffect: (cb: () => void | (() => void)) => React.useEffect(cb, [cb]),
     Stack: { Screen: () => React.createElement(React.Fragment) },
   }
 })
