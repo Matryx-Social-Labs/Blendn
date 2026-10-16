@@ -266,6 +266,35 @@ describe('posting', () => {
     expect(screen.getByText('Looking · yours')).toBeTruthy()
   })
 
+  it('opens the next post on an empty draft: text, kind and spaces all reset (PR #401 review)', async () => {
+    api.getBoard.mockResolvedValue(board([]))
+    api.postToBoard.mockResolvedValue({
+      success: true,
+      data: { id: 'p-new', kind: 'seeking', body: 'Me too, from HSR', spacesLeft: null, createdAt: '2026-10-01T11:00:00Z' },
+    })
+    api.withdrawBoardPost.mockResolvedValue({ success: true, data: { id: 'p-new', withdrawn: true } } as never)
+    await render(<BoardScreen />)
+
+    await fireEvent.press(await screen.findByLabelText('Write a post'))
+    await fireEvent.press(screen.getByLabelText(/^I’m looking/))
+    await fireEvent.changeText(screen.getByLabelText('Your post'), 'Me too, from HSR')
+    await fireEvent.press(screen.getByLabelText('Post'))
+    await screen.findByText('Looking · yours')
+
+    // Take it down, so the board offers Write a post again.
+    await fireEvent.press(screen.getByLabelText('Take down your post'))
+    const sheet = (showSheet as jest.Mock).mock.calls.at(-1)[0] as ActionSheet
+    const run = (sheet.actions.find((a) => a.label === 'Take down') as { run: () => Promise<unknown> }).run
+    await act(async () => {
+      await run()
+    })
+
+    await fireEvent.press(await screen.findByLabelText('Write a post'))
+    expect(screen.getByLabelText('Your post').props.value).toBe('')
+    expect(screen.getByLabelText(/^I have space/).props.accessibilityState).toEqual(expect.objectContaining({ checked: true }))
+    expect(screen.getByLabelText('Spaces').props.accessibilityValue).toEqual(expect.objectContaining({ now: 1 }))
+  })
+
   it('sends one post for two taps', async () => {
     api.getBoard.mockResolvedValue(board([]))
     let settle: (v: unknown) => void = () => {}

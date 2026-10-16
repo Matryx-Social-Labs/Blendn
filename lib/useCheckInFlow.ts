@@ -142,8 +142,21 @@ export function useCheckInFlow({
     return [{ ...close, kind: 'secondary' }]
   }
 
+  /** One check-in at a time: a second hold (or activation) while one runs is ignored, not sent. */
+  const inFlight = useRef(false)
+
   /** Run the check-in: straight to the position and the request, no tray first. */
   const start = async (): Promise<CheckInFlowResult> => {
+    if (inFlight.current) return 'failed'
+    inFlight.current = true
+    try {
+      return await run()
+    } finally {
+      inFlight.current = false
+    }
+  }
+
+  const run = async (): Promise<CheckInFlowResult> => {
     trayHolds.current = false
     setCheckingIn(true)
 

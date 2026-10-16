@@ -73,6 +73,7 @@ import {
   SceneLocationCard,
   SceneMap,
   SceneDetails,
+  rsvpCtaState,
   type SceneCTAState,
 } from '../scene/SceneSections';
 import { clipFirst, feedPlaylist } from '../../lib/feedMedia';
@@ -547,11 +548,18 @@ export default function EventDetail() {
    * "You're going" used to cancel with nothing said — and on a full event it
    * gave your waitlist place to the next person, with no way back to it.
    */
+  /** An RSVP or a cancel is out: the CTA spins and nothing else is sent, or offered (the cancel tray). */
+  const rsvpInFlight = useRef(false)
+  const [rsvpPending, setRsvpPending] = useState(false)
+
   const withdrawRsvp = useCallback(async () => {
     // Hoisted out of the `try` so the `catch` can put it back: a thrown
     // request (timeout, no network) left the optimistic state on screen with
     // no row behind it. Seen on the simulator when the RSVP call timed out.
     const prevStatus = rsvpStatus
+    // One request at a time: a second confirm, or an RSVP, waits for this one.
+    if (rsvpInFlight.current) return
+    rsvpInFlight.current = true
     try {
       if (!id) return
       // Its confirm's destructive button was just pressed (§10.2).
@@ -570,6 +578,8 @@ export default function EventDetail() {
       setRsvpStatus(prevStatus)
       H.error()
       showTray("Couldn't update your RSVP", 'Try again.')
+    } finally {
+      rsvpInFlight.current = false
     }
   }, [id, rsvpStatus, showTray])
 
@@ -596,6 +606,8 @@ export default function EventDetail() {
 
   const handleToggleRsvp = useCallback(async () => {
     const prevStatus = rsvpStatus
+    if (rsvpInFlight.current) return
+    let sent = false
     try {
       if (!id) return
       if (!user) {
@@ -612,8 +624,14 @@ export default function EventDetail() {
         confirmWithdrawRsvp()
         return
       }
-      // No press haptic on I'm going: the answer plays one (§10.2, ROUND3 #45).
-      setRsvpStatus('going')
+      /*
+       * No press haptic on I'm going: the answer plays one (§10.2, ROUND3 #45).
+       * Not optimistic: the label stays and the pill spins until the server
+       * answers, then the "You're going" (or "On the waitlist") sequence runs.
+       */
+      rsvpInFlight.current = true
+      sent = true
+      setRsvpPending(true)
       const result = await apiClient.rsvpToEvent(String(id), 'going')
       if (!result.success || !result.data) {
         setRsvpStatus(prevStatus)
@@ -649,6 +667,12 @@ export default function EventDetail() {
       setRsvpStatus(prevStatus)
       H.error()
       showTray("Couldn't update your RSVP", 'Try again.')
+    } finally {
+      // Only this handler's own request: the confirm-tray path never sent one.
+      if (sent) {
+        rsvpInFlight.current = false
+        setRsvpPending(false)
+      }
     }
   }, [id, user, event, rsvpStatus, showTray, closeTray, confirmWithdrawRsvp, showToast])
 
@@ -1002,7 +1026,6 @@ export default function EventDetail() {
    * this screen briefly grew: RSVP was never a second action alongside
    * checking in, it is the same slot at an earlier hour.
    */
-  const rsvpd = rsvpStatus === 'going' || rsvpStatus === 'waitlisted'
 
   /*
    * The count means two different things either side of the doors.
@@ -1027,7 +1050,7 @@ export default function EventDetail() {
     : isCheckedIn
       ? 'going'
       : !hasStarted
-        ? (rsvpd ? 'rsvpd' : 'rsvp')
+        ? rsvpCtaState(rsvpStatus)
         : 'join'
 
 
@@ -1035,7 +1058,7 @@ export default function EventDetail() {
   const ctaIcon =
     ctaState === 'ended'
       ? 'arrow-forward'
-      : ctaState === 'rsvpd' ? 'checkmark' : ctaState === 'rsvp' ? null : 'radio-outline'
+      : ctaState === 'rsvpd' ? 'checkmark' : ctaState === 'waitlisted' ? 'time-outline' : ctaState === 'rsvp' ? null : 'radio-outline'
 
   /*
    * The Pulse's words for a date — "Today", "Tomorrow", "Oct 24" — so a card
@@ -1336,6 +1359,7 @@ export default function EventDetail() {
         <View style={styles.ctaDockInner} pointerEvents="box-none">
           <SceneCTA
             state={ctaState}
+            pending={rsvpPending}
             alone={checkInCount <= 1}
             onPress={primaryActionPress}
             iconKey={ctaIcon ?? undefined}

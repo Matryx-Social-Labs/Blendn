@@ -220,7 +220,9 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
    */
   const switchFrom = room.status === 'ready' && room.event && door && door.id !== room.event.id && !roomOver ? room.event : null
   const switchFromNow = useLatest(switchFrom)
-  const leftRoom = useRef<string | null>(null)
+  const insideEventNow = useLatest(insideEvent)
+  /** The room a switch left, and the event it switched into: the toast is for that landing only. */
+  const leftRoom = useRef<{ title: string; toId: string } | null>(null)
   const roomReady = (room.status === 'ready' && !switchFrom) || roomWaitOver
   const roomReadyNow = useLatest(roomReady)
   const roomShown = useRef<(() => void) | null>(null)
@@ -235,7 +237,8 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
     closeTray,
     onCheckedIn: (outcome) => {
       if (outcome.kind !== 'checkedIn') return
-      leftRoom.current = switchFromNow.current?.title ?? null
+      const from = switchFromNow.current
+      leftRoom.current = from && insideEventNow.current ? { title: from.title, toId: insideEventNow.current.id } : null
       setPourEntrance(true)
       setRoomWaitOver(false)
       setTimeout(() => setRoomWaitOver(true), ROOM_WAIT_MS)
@@ -264,11 +267,18 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
         : 'tonight'
   const enter = pourEntrance && !reduceMotion
   // #07: the switch landed: an info toast, no haptic.
+  const roomEventId = room.event?.id ?? null
   useEffect(() => {
-    if (mode !== 'room' || !leftRoom.current) return
-    say(`You left ${leftRoom.current}.`)
+    const left = leftRoom.current
+    if (mode !== 'room' || !left) return
+    if (roomEventId === left.toId) say(`You left ${left.title}.`)
     leftRoom.current = null
-  }, [mode, say])
+  }, [mode, roomEventId, say])
+  // The pass moved on (another door, or none): a switch it was carrying is no longer this one.
+  const doorId = door?.id ?? null
+  useEffect(() => {
+    if (leftRoom.current && leftRoom.current.toId !== doorId) leftRoom.current = null
+  }, [doorId])
 
   // --- your controls in the room --------------------------------------------
   const controls = useRoomControls(room.event?.id ?? null, room.revealed)

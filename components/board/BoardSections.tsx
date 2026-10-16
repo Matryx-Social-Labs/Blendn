@@ -27,6 +27,9 @@ const MARK = { offer: 40, seeking: 32 } as const
 /** Up to this many spaces on an offer — the server's own bound. */
 export const MAX_SPACES = 20
 
+/** The server's zod `max(500)` counts UTF-16 units, so the counter and the cap do too. */
+const utf16Length = (value: string) => value.length
+
 /** The composer's text box: the frame's 112, not the TextArea's 160 default. */
 const COMPOSER_MIN_HEIGHT = 112
 
@@ -278,7 +281,8 @@ export function BoardComposer({
   const [body, setBody] = useState('')
   const [spaces, setSpaces] = useState(1)
   const empty = body.trim().length === 0
-  const tooLong = [...body].length > BOARD_MAX_POST_LENGTH
+  // UTF-16 units, as the server's zod `max(500)` counts them (an emoji is two).
+  const tooLong = utf16Length(body.trim()) > BOARD_MAX_POST_LENGTH
 
   return (
     <Sheet
@@ -316,6 +320,7 @@ export function BoardComposer({
           value={body}
           onChangeText={setBody}
           limit={BOARD_MAX_POST_LENGTH}
+          measure={utf16Length}
           minHeight={COMPOSER_MIN_HEIGHT}
           error={refusal ?? undefined}
           placeholder={kind === 'offer' ? 'Driving over from Indiranagar at 8 — room for two.' : 'Going alone. Anyone heading over from Koramangala?'}

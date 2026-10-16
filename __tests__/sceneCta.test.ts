@@ -80,7 +80,7 @@ describe('"I’m going" → "You’re going" is one sequence (A78, Prompt 10)', 
   })
 
   it('carries the check on "You’re going" and no glyph on "I’m going"', () => {
-    expect(DETAIL()).toContain("ctaState === 'rsvpd' ? 'checkmark' : ctaState === 'rsvp' ? null")
+    expect(DETAIL()).toContain("ctaState === 'rsvpd' ? 'checkmark' : ctaState === 'waitlisted' ? 'time-outline' : ctaState === 'rsvp' ? null")
   })
 })
 
@@ -178,14 +178,14 @@ describe('the event screen IS the Scene now, and kept what the CTA lacks', () =>
     // The CTA is time-aware. "Blend in" before the event cannot succeed --
     // check-in requires the event to be running -- so it must not be offered.
     expect(detail).toContain('hasStarted')
-    expect(detail).toContain("? (rsvpd ? 'rsvpd' : 'rsvp')")
+    expect(detail).toContain('? rsvpCtaState(rsvpStatus)')
     expect(detail).toContain('handleToggleRsvp')
 
     // A thrown RSVP request puts the old status back. The optimistic
     // "You're going" used to survive a timeout with no row behind it —
     // `prevStatus` lived inside the `try`, so the `catch` could not reach it.
     const handler = detail.slice(detail.indexOf('const handleToggleRsvp'), detail.indexOf('}, [id, user, rsvpStatus'))
-    expect(handler).toMatch(/const prevStatus = rsvpStatus\s*\n\s*try \{/)
+    expect(handler).toMatch(/const prevStatus = rsvpStatus\s*\n(?:\s*(?:if \(rsvpInFlight\.current\) return|let sent = false)\s*\n)*\s*try \{/)
     expect(handler).toMatch(/\} catch \{\s*setRsvpStatus\(prevStatus\)/)
 
     // No second control, and no overflow in the bar.

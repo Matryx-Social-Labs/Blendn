@@ -25,8 +25,10 @@ import {
   rsvpEventRows,
   savedEventRows,
   withLockedNights,
+  withPendingSaves,
   type AttendancePayload,
   type GoingItem,
+  type PendingSave,
   type RsvpEventRow,
   type SavedEventRow as EventRow,
 } from '../../lib/savedEvents'
@@ -85,6 +87,19 @@ function GoingScreenInner() {
   // Tapping Going while already on it goes back to the top (the bar emits `tabPress`).
   const listRef = useRef<FlatList<GoingItem>>(null)
   useScrollToTop(listRef)
+  // The newest read wins: focus, AppState, a pull and Try again can overlap.
+  const loadId = useRef(0)
+  // Removes and Undos a read may not have seen yet (lib/savedEvents.ts `withPendingSaves`).
+  const pendingSaves = useRef(new Map<string, PendingSave>())
+  const markSave = useCallback((row: EventRow, saved: boolean) => {
+    pendingSaves.current.set(row.id, { saved, row, settledAt: Infinity })
+  }, [])
+  const settleSave = useCallback((id: string, ok: boolean) => {
+    const op = pendingSaves.current.get(id)
+    if (!op) return
+    if (ok) pendingSaves.current.set(id, { ...op, settledAt: loadId.current })
+    else pendingSaves.current.delete(id)
+  }, [])
 
   const loadInterestedEvents = useCallback(async (): Promise<void> => {
     // No `setLoading(true)` here: `loading` starts true for the first load, and
@@ -105,18 +120,20 @@ function GoingScreenInner() {
        * blank the other two — and a server that predates `/me/rsvps` (404)
        * simply has no Going section. Only all three failing is "couldn't load".
        */
+      const id = ++loadId.current
       const [saved, rsvps, past] = await Promise.all([
         apiClient.getUserFavorites(authUser.id),
         apiClient.getMyRsvps(),
         apiClient.getMyAttendance(),
       ])
+      if (id !== loadId.current) return
 
       // `{ events, pagination }` — see lib/savedEvents.ts for why this is not
       // mapped inline any more.
       const rowCount =
         (saved.data?.events?.length ?? 0) + (rsvps.data?.events?.length ?? 0) + (past.data?.events?.length ?? 0)
       if (rowCount > 0) hadRowsRef.current = true
-      if (saved.success && saved.data) setEvents(savedEventRows(saved.data))
+      if (saved.success && saved.data) setEvents(withPendingSaves(savedEventRows(saved.data), pendingSaves.current, id))
       else Logger.debug('interested', 'Failed to load favorites', { error: saved.error })
       if (rsvps.success && rsvps.data) setGoing(rsvpEventRows(rsvps.data))
       else Logger.debug('interested', 'Failed to load RSVPs', { error: rsvps.error })
@@ -208,12 +225,15 @@ function GoingScreenInner() {
     const index = events.findIndex(e => e.id === event.id)
     setRestoredId(null)
     setEvents(prev => prev.filter(e => e.id !== event.id))
+    markSave(event, false)
     try {
       // DELETE, not the POST upsert this used to send — that one never
       // removed anything, and the card came back on the next refresh.
       const result = await apiClient.removeFavorite(event.id)
       if (!result.success) throw new Error(result.error || 'remove refused')
+      settleSave(event.id, true)
     } catch (e) {
+      settleSave(event.id, false)
       Logger.warn('interested', 'Failed to remove favorite', { error: e })
       restoreRow(event, index)
       showToast(`Couldn't remove ${event.title}. Try again.`, 'error')
@@ -225,19 +245,22 @@ function GoingScreenInner() {
         label: 'Undo',
         onPress: () => {
           restoreRow(event, index)
+          markSave(event, true)
           apiClient
             .addFavorite(event.id)
             .then((res) => {
               if (!res.success) throw new Error(res.error || 'save refused')
+              settleSave(event.id, true)
             })
             .catch(() => {
+              settleSave(event.id, false)
               setEvents(prev => prev.filter(e => e.id !== event.id))
               showToast(`Couldn't save ${event.title} again.`, 'error')
             })
         },
       },
     })
-  }, [events, restoreRow, showToast])
+  }, [events, restoreRow, showToast, markSave, settleSave])
 
   const shareEvent = useCallback(async (event: EventRow) => {
     try {

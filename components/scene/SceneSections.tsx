@@ -3,6 +3,7 @@ import { MaterialIcons } from '@expo/vector-icons'
 import { Image } from 'expo-image'
 import { LinearGradient } from 'expo-linear-gradient'
 import {
+  ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
@@ -643,7 +644,7 @@ export function SceneAmenity({
  * inventing a commitment the product cannot honour. The label says joining,
  * which is what actually happens.
  */
-export type SceneCTAState = 'rsvp' | 'rsvpd' | 'join' | 'going' | 'ended' | 'rate'
+export type SceneCTAState = 'rsvp' | 'rsvpd' | 'waitlisted' | 'join' | 'going' | 'ended' | 'rate'
 
 /**
  * What the button says, per state.
@@ -679,6 +680,8 @@ export type SceneCTAState = 'rsvp' | 'rsvpd' | 'join' | 'going' | 'ended' | 'rat
 const CTA_LABEL: Record<SceneCTAState, string> = {
   rsvp: "I'm going",
   rsvpd: "You're going",
+  // A waitlist place is not a seat: never "You're going" (A78 review).
+  waitlisted: 'On the waitlist',
   join: 'Blend in',
   going: "You're in",
   ended: "See what's on tonight",
@@ -709,7 +712,12 @@ export function sceneCtaLabel(state: SceneCTAState, alone = false): string {
  * the same reason `going` is not accompanied by a "leave" button: one slot,
  * one subject, and the state tells you which way the tap goes.
  */
-const CTA_QUIET: readonly SceneCTAState[] = ['rsvpd', 'going', 'ended']
+const CTA_QUIET: readonly SceneCTAState[] = ['rsvpd', 'waitlisted', 'going', 'ended']
+
+/** Before the doors: the RSVP slot's state from the server's answer. */
+export function rsvpCtaState(status: string | null | undefined): 'rsvp' | 'rsvpd' | 'waitlisted' {
+  return status === 'going' ? 'rsvpd' : status === 'waitlisted' ? 'waitlisted' : 'rsvp'
+}
 
 /*
  * The CTA's motion (#45 as A78 settled it): a press scale; on a change the old
@@ -725,8 +733,11 @@ export function SceneCTA({
   iconKey,
   onPress,
   alone = false,
+  pending = false,
 }: {
   state?: SceneCTAState
+  /** The request is out: a spinner in the icon's place, the label unchanged, nothing pressable (#45). The sequence runs on the answer. */
+  pending?: boolean
   /** Nobody but you checked in: `rate` then asks about the night, not people. */
   alone?: boolean
   /** Drawn in the colour the pill hands it — dark on the accent fill, `textPrimary` on the quiet one. */
@@ -735,8 +746,8 @@ export function SceneCTA({
   iconKey?: string
   onPress?: () => void
 }) {
-  // Only while a handler is busy (checking in); no state is a dead end.
-  const disabled = !onPress
+  // Only while a handler is busy; no state is a dead end.
+  const disabled = !onPress || pending
   /*
    * Quiet once you have already said yes. The accent is for the thing that
    * still needs doing; a fully lit pill that only un-does something reads as
@@ -768,7 +779,7 @@ export function SceneCTA({
       onPress={onPress}
       disabled={disabled}
       accessibilityRole="button"
-      accessibilityState={{ disabled, selected: state === 'going' }}
+      accessibilityState={{ disabled, busy: pending, selected: state === 'going' }}
       accessibilityLabel={sceneCtaLabel(state, alone)}
     >
       {/*
@@ -784,7 +795,9 @@ export function SceneCTA({
         </Animated.View>
         {/* Skips the entrance on first paint; only a *change* of icon or label animates. */}
         <LayoutAnimationConfig skipEntering>
-          {icon ? (
+          {pending ? (
+            <ActivityIndicator testID="scene-cta-pending" color={COLOR.textOnGradient} />
+          ) : icon ? (
             <Animated.View key={iconKey} entering={reduceMotion ? changeFade : popIn}>
               {icon(COLOR.textOnGradient)}
             </Animated.View>

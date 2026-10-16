@@ -87,6 +87,8 @@ export function BoardScreen() {
   const [posting, setPosting] = useState(false)
   const postingRef = useRef(false)
   const [refusal, setRefusal] = useState<string | null>(null)
+  /** Posts made here: the composer is keyed on it, so the next one opens on an empty draft. */
+  const [posted, setPosted] = useState(0)
 
   /*
    * A read is sequenced, and it merges rather than replaces.
@@ -261,6 +263,7 @@ export function BoardScreen() {
         created.current.set(mine.id, mine)
         setLoad((prev) => (prev.kind === 'ready' ? { kind: 'ready', posts: [mine, ...prev.posts] } : prev))
         setComposing(false)
+        setPosted((n) => n + 1)
         announce('Posted')
         void fetchBoard()
       } catch {
@@ -390,6 +393,7 @@ export function BoardScreen() {
       <TopBar title="The Board" sub={event?.title} onBack={() => router.back()} testID="board-top" />
       {load.kind === 'ready' && !closed ? content : <View style={styles.state}>{content}</View>}
       <BoardComposer
+        key={posted}
         visible={composing}
         posting={posting}
         refusal={refusal}
