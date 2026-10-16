@@ -23,12 +23,17 @@ import {
 } from './shared'
 
 export type ButtonKind = 'primary' | 'strong' | 'secondary' | 'tertiary' | 'destructive'
-export type ButtonSize = 'lg' | 'md' | 'sm'
+export type ButtonSize = 'lg' | 'md' | 'sm' | 'raised'
 
-/** 56 the screen primary and dock actions · 48 a secondary in a dock · 36 an inline row action. */
+/**
+ * 56 the screen primary and dock actions · 48 a secondary in a dock · 36 an
+ * inline row action · 44 `raised`, a secondary on `surfaceRaised` inside a card
+ * (A31: the crew strip's action). Under the 44 / 48 target, slop reaches it.
+ */
 const ROW_ACTION_HEIGHT = 36
+const RAISED_HEIGHT = 44
 const ROW_ACTION_MIN_WIDTH = 72
-const HEIGHT: Record<ButtonSize, number> = { lg: SIZE.primary, md: SIZE.control, sm: ROW_ACTION_HEIGHT }
+const HEIGHT: Record<ButtonSize, number> = { lg: SIZE.primary, md: SIZE.control, sm: ROW_ACTION_HEIGHT, raised: RAISED_HEIGHT }
 
 /** #20: translateX 0, −8, 8, −6, 6, −3, 0, as fractions of `SHAKE.distance`. */
 const SHAKE_STEPS = [-1, 1, -0.75, 0.75, -0.375, 0]
@@ -37,7 +42,7 @@ const PRESS_SPRING = { ...SPRING.press, reduceMotion: ReduceMotion.Never }
 function fill(kind: ButtonKind, size: ButtonSize, onGlass: boolean) {
   if (kind === 'strong') return COLOR.textPrimary
   if (kind === 'destructive') return COLOR.destructiveFill
-  if (kind === 'secondary') return onGlass ? MATERIAL.fillOnGlass : size === 'sm' ? COLOR.surfaceRaised : COLOR.surface
+  if (kind === 'secondary') return onGlass ? MATERIAL.fillOnGlass : size === 'sm' || size === 'raised' ? COLOR.surfaceRaised : COLOR.surface
   return 'transparent'
 }
 
@@ -78,7 +83,7 @@ export type ButtonProps = {
   onPress?: () => void
   kind?: ButtonKind
   size?: ButtonSize
-  /** A leading glyph: 20 pt, 16 at `sm`. */
+  /** A leading glyph: 20 pt, 16 at `sm` and `raised`. */
   icon?: IconName
   disabled?: boolean
   /** Busy: the label stays (for width, and as the name read), a spinner covers it after 300 ms. */
@@ -156,6 +161,9 @@ export function Button({
 
   const ink = kind === 'strong' ? COLOR.ink : COLOR.textOnGradient
   const sm = size === 'sm'
+  /** Small glyphs: the row action and the raised action. */
+  const compact = sm || size === 'raised'
+  const slop = (minTarget() - height) / 2
   const labelFont = sm ? font('meta', bold, FONT_FAMILY.brand[700]) : font('button', bold)
   const outlined = contrast && (kind === 'secondary' || kind === 'tertiary')
 
@@ -165,8 +173,8 @@ export function Button({
         testID={testID}
         onPress={onPress}
         disabled={disabled || loading}
-        // A 36 pt row action reaches the 44 / 48 target through slop, above and below only (pills sit side by side).
-        hitSlop={sm ? { top: (minTarget() - ROW_ACTION_HEIGHT) / 2, bottom: (minTarget() - ROW_ACTION_HEIGHT) / 2 } : undefined}
+        // Under the 44 / 48 target, slop reaches it, above and below only (pills sit side by side).
+        hitSlop={slop > 0 ? { top: slop, bottom: slop } : undefined}
         haptic={typeof pressHaptic === 'function' ? pressHaptic : pressHaptic ? PRESS_HAPTIC[kind] : undefined}
         pressedScale={android ? 1 : PRESS.scale}
         onPressIn={squareOff(RADIUS.pressedAndroid)}
@@ -189,7 +197,7 @@ export function Button({
         {kind === 'primary' ? <GradientFill style={StyleSheet.absoluteFill} /> : null}
         {pressed && android ? <View style={[StyleSheet.absoluteFill, { backgroundColor: PRESSED_WASH.android }]} /> : null}
         <View style={[styles.content, spinner && styles.hidden]}>
-          {icon ? <Icon name={icon} size={sm ? ICON.inline : ICON.control} color={ink} /> : null}
+          {icon ? <Icon name={icon} size={compact ? ICON.inline : ICON.control} color={ink} /> : null}
           <Text
             style={[labelFont, { color: ink }]}
             maxFontSizeMultiplier={CONTROL_FONT_CAP}
@@ -200,7 +208,7 @@ export function Button({
         </View>
         {spinner ? (
           <View style={[StyleSheet.absoluteFill, styles.center]}>
-            <Spinner testID={testID && `${testID}-spinner`} size={sm ? 16 : 20} dark={kind === 'strong'} />
+            <Spinner testID={testID && `${testID}-spinner`} size={compact ? 16 : 20} dark={kind === 'strong'} />
           </View>
         ) : null}
         {outlined || (refused && kind !== 'tertiary') ? (

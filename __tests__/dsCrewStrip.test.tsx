@@ -56,21 +56,23 @@ describe('<CrewStrip>', () => {
     expect(screen.getByText('everyone')).toBeTruthy()
   })
 
-  it('the action reaches 44 pt on iOS and 48 dp on Android', async () => {
+  it('the action is the raised 44 Button (A31): 44 pt on iOS, slop to 48 dp on Android', async () => {
     await render(<CrewStrip crews={[nebula()]} onTell={jest.fn()} testID="s" />)
-    expect(StyleSheet.flatten(screen.getByTestId('s-n-tell').props.style).minHeight).toBe(44)
+    expect(StyleSheet.flatten(screen.getByTestId('s-n-tell').props.style).height).toBe(44)
+    expect(screen.getByTestId('s-n-tell').props.hitSlop).toBeUndefined()
     Object.defineProperty(Platform, 'OS', { value: 'android', configurable: true })
     await render(<CrewStrip crews={[nebula()]} onTell={jest.fn()} testID="s" />)
-    expect(StyleSheet.flatten(screen.getByTestId('s-n-tell').props.style).minHeight).toBe(48)
+    expect(screen.getByTestId('s-n-tell').props.hitSlop).toMatchObject({ top: 2, bottom: 2 })
     Object.defineProperty(Platform, 'OS', { value: 'ios', configurable: true })
   })
 
   it('sending: busy at once, the spinner only after 300 ms', async () => {
     jest.useFakeTimers()
-    await render(<CrewStrip crews={[nebula({ told: 'sending' })]} onTell={jest.fn()} />)
-    expect(screen.getByText('Tell your crew — We’re here')).toBeTruthy()
+    await render(<CrewStrip crews={[nebula({ told: 'sending' })]} onTell={jest.fn()} testID="s" />)
+    expect(screen.getByRole('button', { name: 'Tell your crew — We’re here' }).props.accessibilityState).toMatchObject({ busy: true })
+    expect(screen.queryByTestId('s-n-tell-spinner', { includeHiddenElements: true })).toBeNull()
     await act(async () => jest.advanceTimersByTime(350))
-    expect(screen.queryByText('Tell your crew — We’re here')).toBeNull()
+    expect(screen.getByTestId('s-n-tell-spinner', { includeHiddenElements: true })).toBeTruthy()
     jest.useRealTimers()
   })
 

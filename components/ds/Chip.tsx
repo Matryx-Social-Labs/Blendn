@@ -5,11 +5,15 @@ import ScalePress from '../motion/ScalePress'
 import { Icon, type IconName } from '../ui/Icon'
 import { COLOR, FONT_FAMILY, ICON, MATERIAL, PRESS, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
-import { OPACITY } from '../../lib/theme'
+import { OPACITY, tint } from '../../lib/theme'
 import { CONTROL_FONT_CAP, focusRing, font, minTarget, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
 
 /** The off chip's edge: a 0.5 pt hairline (1 pt at 50% under Increase Contrast). */
 const HAIRLINE = 0.5
+/** `outline`: clear, with a 1 pt edge at 22% white (A31: crew tags, overlap labels). */
+const OUTLINE_EDGE = { borderWidth: 1, borderColor: tint(COLOR.textPrimary, 0.22) } as const
+
+export type ChipVariant = 'default' | 'outline'
 
 export type ChipProps = {
   label: string
@@ -28,6 +32,10 @@ export type ChipProps = {
   disabled?: boolean
   /** A read-only interest you share: a 1 pt white outline, no colour, never counted. */
   shared?: boolean
+  /** `outline`: no fill, a 1 pt edge at 22% white; read-only labels on a card (A31). */
+  variant?: ChipVariant
+  /** Read-only only: what it is read as, when that is more than the label ("Jazz, shared"). */
+  accessibilityLabel?: string
   /** The design gallery only: draws a transient state with no finger or keyboard. */
   previewState?: 'pressed' | 'focused'
   testID?: string
@@ -55,9 +63,12 @@ export function Chip({
   capHint,
   disabled = false,
   shared = false,
+  variant = 'default',
+  accessibilityLabel,
   previewState,
   testID,
 }: ChipProps) {
+  const outline = variant === 'outline' && !selected
   const android = Platform.OS === 'android'
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
@@ -75,7 +86,9 @@ export function Chip({
       ? null
       : contrast
         ? { borderWidth: 1, borderColor: MATERIAL.hairlineIncreaseContrast }
-        : { borderWidth: HAIRLINE, borderColor: COLOR.hairline }
+        : outline
+          ? OUTLINE_EDGE
+          : { borderWidth: HAIRLINE, borderColor: COLOR.hairline }
 
   const body = (
     <>
@@ -91,13 +104,13 @@ export function Chip({
   )
   const look = [
     styles.chip,
-    { borderRadius: radius, backgroundColor: selected ? COLOR.selectionFill : COLOR.surface },
+    { borderRadius: radius, backgroundColor: selected ? COLOR.selectionFill : outline ? 'transparent' : COLOR.surface },
     (dimmed || disabled) && { opacity: OPACITY.disabled },
   ]
 
   if (!act) {
     return (
-      <View testID={testID} accessible accessibilityLabel={shared ? `${label}, shared` : label} style={look}>
+      <View testID={testID} accessible accessibilityLabel={accessibilityLabel ?? (shared ? `${label}, shared` : label)} style={look}>
         {body}
       </View>
     )
