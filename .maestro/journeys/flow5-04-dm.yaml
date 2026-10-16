@@ -1,0 +1,50 @@
+# Flow 5 · a DM (feat(flow-5)): send, the receipt under your last message,
+# then show them who you are — the confirm says it can't be undone first.
+# Needs: a DM from a match where the phone's account has NOT revealed (PEER).
+# Revealing needs a name and a photo on the profile, or the server answers
+# with the Not yet sheet (also a pass: it is the photo gate, verbatim).
+# Env: MAESTRO_EMAIL, MAESTRO_PASSWORD (environment variables; delete
+# ~/.maestro/tests/<run> afterwards). With -e: PEER (a regex for the DM row's
+# name), MESSAGE (unique per run).
+# Read back (blendn-admin):
+#   npm run -s qa sq "SELECT c.user1_revealed, c.user2_revealed, (SELECT count(*) FROM private_messages pm WHERE pm.conversation_id = c.id AND pm.text = '<MESSAGE>') AS sent FROM private_conversations c JOIN \"User\" u ON u.id IN (c.user1_id, c.user2_id) WHERE u.email = '<email>' ORDER BY c.last_message_at DESC NULLS LAST LIMIT 1"
+#   sent 1, and the phone's side revealed true (unless Not yet showed).
+appId: com.matryxsociallabs.blendn
+tags:
+  - flow-5
+---
+- runFlow: ../subflows/flow5-open.yaml
+- scrollUntilVisible:
+    element: ${PEER}
+    direction: DOWN
+    timeout: 20000
+- tapOn: ${PEER}
+- extendedWaitUntil:
+    visible: "Message .*"
+    timeout: 20000
+
+# --- Send, and the receipt under it ---
+- tapOn: "Message .*"
+- inputText: ${MESSAGE}
+- tapOn: "Send"
+- extendedWaitUntil:
+    visible: ${MESSAGE}
+    timeout: 10000
+- extendedWaitUntil:
+    visible: ".*(Sent|Delivered|Read).*"
+    timeout: 10000
+- takeScreenshot: flow5-04-sent
+
+# --- The reveal (Flow 5 DM #06, #23) ---
+- assertVisible: "Show them who you are"
+- tapOn: "Show them who you are"
+- extendedWaitUntil:
+    visible: "Show .* who you are\\?"
+    timeout: 5000
+- assertVisible: ".*can’t be undone.*"
+- takeScreenshot: flow5-04-reveal-confirm
+- tapOn: "Show them"
+- extendedWaitUntil:
+    visible: ".*(They can see your name|You can both see each other|Not yet).*"
+    timeout: 15000
+- takeScreenshot: flow5-04-revealed

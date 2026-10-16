@@ -129,9 +129,9 @@ describe('force is user intent, never a mount', () => {
     expect(refresh.slice(0, 300)).toContain('await load(userId, true)')
     const retry = room.slice(room.indexOf('const retry = useCallback'))
     expect(retry.slice(0, 300)).toContain('load(userId, true)')
-    // …and the screen's Try again is that retry.
+    // …and the screen's Try again is that retry: the quiet line over Tonight (Flow 4 Room #15).
     expect(
       stripComments(readFileSync(join(ROOT, 'components/blendn/BlendnScreen.tsx'), 'utf8'))
-    ).toContain('onPress={room.retry}')
+    ).toContain("onRoomRetry={room.status === 'error' ? room.retry : undefined}")
   })
 })

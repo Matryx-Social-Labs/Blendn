@@ -32,7 +32,9 @@ describe('roomStateLine', () => {
 describe('the Banter list', () => {
   const src = readFileSync(join(__dirname, '..', 'app', '(tabs)', 'chat.tsx'), 'utf8')
   it('prefers the state line to the last message on a conversation row', () => {
-    expect(src).toMatch(/const preview =\s*roomStateLine\(c\.room_state\) \?\?/)
-    expect(src).toContain('room_state: roomStateFrom(room)')
+    // As a status chip, before any last message (Flow 5 #08).
+    expect(src).toContain('const stateLine = roomStateLine(c.room_state)')
+    expect(src).toContain("line: state ?? lineFor(")
+    expect(readFileSync(join(__dirname, '..', 'lib', 'useBanterInbox.ts'), 'utf8')).toContain('room_state: roomStateFrom(room)')
   })
 })

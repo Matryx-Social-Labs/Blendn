@@ -11,7 +11,8 @@ jest.mock('expo-location', () => ({
   hasServicesEnabledAsync: jest.fn(async () => true),
   requestForegroundPermissionsAsync: jest.fn(async () => ({ status: 'granted' })),
   getCurrentPositionAsync: jest.fn(),
-  Accuracy: { BestForNavigation: 6 },
+  getLastKnownPositionAsync: jest.fn(async () => null),
+  Accuracy: { High: 4, BestForNavigation: 6 },
 }))
 
 /* eslint-disable import/first */
@@ -54,7 +55,7 @@ it('a fix past the server ceiling, then "Try Again" with a good one, goes live (
   expect(apiClient.goLive).not.toHaveBeenCalled()
   const buttons = showTray.mock.calls[0][2] as { label: string; onPress: () => void }[]
   await act(async () => {
-    buttons.find((b) => b.label === 'Try Again')!.onPress()
+    buttons.find((b) => b.label === 'Try again')!.onPress()
     await new Promise((r) => setTimeout(r, 0))
   })
   expect(apiClient.goLive).toHaveBeenCalledTimes(1)
@@ -64,6 +65,6 @@ it('iOS Precise Location off is said as such, not "move for a better signal" (H4
   ;(Location.requestForegroundPermissionsAsync as jest.Mock).mockResolvedValueOnce({ status: 'granted', ios: { scope: 'whenInUse', accuracy: 'reduced' } })
   const showTray = jest.fn()
   await goLiveOnce(showTray)
-  expect(showTray.mock.calls[0][0]).toBe('Turn on Precise Location')
+  expect(showTray.mock.calls[0][0]).toBe('Precise location is off')
   expect(apiClient.goLive).not.toHaveBeenCalled()
 })

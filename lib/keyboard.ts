@@ -1,3 +1,6 @@
+import { useEffect, useState } from 'react'
+import { Keyboard, Platform } from 'react-native'
+
 /**
  * How every screen avoids the keyboard — on BOTH platforms.
  *
@@ -14,3 +17,20 @@
  * place, rather than a per-screen guess that is right on one platform.
  */
 export const KEYBOARD_BEHAVIOR = 'padding' as const
+
+/**
+ * Whether the keyboard is up (iOS as it starts to rise, Android once shown):
+ * the chat's dock drops its safe-area padding over it and the orbs pause (#34).
+ */
+export function useKeyboardShown(): boolean {
+  const [shown, setShown] = useState(false)
+  useEffect(() => {
+    const show = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', () => setShown(true))
+    const hide = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => setShown(false))
+    return () => {
+      show.remove()
+      hide.remove()
+    }
+  }, [])
+  return shown
+}

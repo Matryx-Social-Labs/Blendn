@@ -7,7 +7,7 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
-import { Linking } from 'react-native'
+import { Linking, StyleSheet } from 'react-native'
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
@@ -80,6 +80,22 @@ it('shows on the first open of a room', async () => {
   expect(screen.getByText('This room is anonymous. Be kind, keep it safe — people here are real.')).toBeTruthy()
   expect(screen.getByRole('link', { name: 'Community guidelines' })).toBeTruthy()
   expect(screen.getByRole('button', { name: 'Got it' })).toBeTruthy()
+})
+
+it('"community guidelines" in the copy is the one link: white, underlined, and it opens the page', async () => {
+  await openRoom('u_me', 'room_a')
+  const words = screen.getByText('community guidelines')
+  expect(StyleSheet.flatten(words.props.style)).toMatchObject({ color: '#FFFFFF', textDecorationLine: 'underline' })
+  expect(screen.getAllByRole('link')).toHaveLength(1)
+  await fireEvent.press(words)
+  expect(Linking.openURL).toHaveBeenCalledWith(COMMUNITY_GUIDELINES_URL)
+})
+
+it('is centred, the copy unchanged (owner override of room #04)', async () => {
+  await openRoom('u_me', 'room_a')
+  const sentence = screen.getByText('This room is anonymous. Be kind, keep it safe — people here are real.')
+  expect(StyleSheet.flatten(sentence.props.style).textAlign).toBe('center')
+  expect(StyleSheet.flatten(screen.getByTestId(BANNER).props.style).alignItems).toBe('center')
 })
 
 it('"Got it" hides it, and it stays hidden when that room opens again', async () => {

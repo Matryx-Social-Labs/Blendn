@@ -23,6 +23,8 @@ export interface RoomRecap {
   title: string
   /** "2h 15m", or null when the check-in time is unknown. */
   timeSpent: string | null
+  /** The same, in whole minutes, for the Recap's tile (`MomentRecap`); null when unknown. */
+  minutes: number | null
   matched: number
 }
 
@@ -59,10 +61,12 @@ export function roomRecap(source: RecapSource, now: number): RoomRecap | null {
   const end = endsAtMs(source.event.endsAt)
   if (end === null || end > now) return null
   const inAt = source.checkedInAt ? new Date(source.checkedInAt).getTime() : NaN
+  const spent = Number.isFinite(inAt) ? Math.max(0, Math.min(end, now) - inAt) : null
   return {
     eventId: source.event.id,
     title: source.event.title,
-    timeSpent: Number.isFinite(inAt) ? timeSpentLabel(Math.min(end, now) - inAt) : null,
+    timeSpent: spent === null ? null : timeSpentLabel(spent),
+    minutes: spent === null ? null : Math.floor(spent / 60_000),
     matched: source.people.filter((p) => p.matched).length,
   }
 }

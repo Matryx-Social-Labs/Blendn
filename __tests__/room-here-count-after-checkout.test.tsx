@@ -173,3 +173,23 @@ it('three in one burst, each landing while the last one\'s sync is still reading
   expect(room.current.hereCount).toBe(7)
   unmount()
 })
+
+it('asks for the count and the chat with the check-ins, before the roster, and is settled once both answer (PR #401 drive)', async () => {
+  const order: string[] = []
+  const inner = global.fetch as jest.Mock
+  global.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = String(input).replace(/^https?:\/\/[^/]+/, '').split('?')[0]
+    order.push(path)
+    return inner(input, init)
+  }) as typeof fetch
+  const { room, unmount } = await openRoom('e401-early', 5)
+  await waitFor(() => expect(room.current.settled).toBe(true))
+  const at = (end: string) => order.findIndex((p) => p.endsWith(end))
+  const roster = at('/e401-early/matches')
+  expect(at('/e401-early/room-preview')).toBeGreaterThan(-1)
+  expect(at('/e401-early/room-preview')).toBeLessThan(roster)
+  expect(at('/e401-early/chat')).toBeLessThan(roster)
+  // Once each: the effect took the early lookup over rather than asking again.
+  expect(order.filter((p) => p.endsWith('/e401-early/chat'))).toHaveLength(1)
+  unmount()
+})

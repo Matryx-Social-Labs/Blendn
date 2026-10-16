@@ -90,7 +90,10 @@ describe('both chat screens use it', () => {
     ['app', 'private-chat', '[conversationId].tsx'],
     ['app', 'chat', '[id].tsx'],
   ])('%s/%s/%s closes the keyboard on a drag', (...p) => {
-    expect(read(...p)).toMatch(/keyboardDismissMode="on-drag"/)
+    // iOS interactively, with the drag; Android on the drag (R3-D5 5.3).
+    const src = read(...p)
+    expect(src).toContain("const KEYBOARD_DISMISS = Platform.OS === 'ios' ? 'interactive' : 'on-drag'")
+    expect(src).toContain('keyboardDismissMode={KEYBOARD_DISMISS}')
   })
 })
 
@@ -98,12 +101,15 @@ describe('the reply quote', () => {
   it('widens a short reply to fit, rather than wrapping in the width "Ok" leaves', () => {
     // flex: 1 is a zero basis: the quote never asked for width, and a reply
     // saying "Repro" drew its quote as "Vikra… / unrea / d se…" (simulator, 2026-09-28).
-    expect(read('components', 'chat', 'ChatBubble.tsx')).toMatch(/quoteBody: \{ flexShrink: 1,/)
+    // The DS quote asks for its width (no zero-basis flex) and stays one line.
+    const quote = read('components', 'ds', 'ReplyPreview.tsx')
+    expect(quote).toMatch(/quote: \{ borderLeftWidth: 2,/)
+    expect(quote).not.toMatch(/quote: \{[^}]*flex: 1/)
   })
 })
 
 describe('the read tick', () => {
   it('is white, not the grey delivered wears — two greys a step apart read as one on the phone', () => {
-    expect(read('components', 'chat', 'ChatBubble.tsx')).toMatch(/receiptRead: \{ color: EMBER\.textPrimary \}/)
+    expect(read('components', 'ds', 'ReceiptMark.tsx')).toContain("const color = state === 'read' ? COLOR.textPrimary : COLOR.textTertiary")
   })
 })

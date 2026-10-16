@@ -95,13 +95,14 @@ describe("the entry point to peer rating", () => {
     expect(DETAIL).toMatch(/alone=\{checkInCount <= 1\}/)
     // Nothing after the end is disabled: `rate` rates, `ended` offers tonight.
     expect(CTA).toMatch(/const disabled = !onPress/)
-    expect(DETAIL).toMatch(/const primaryActionDisabled = isEnded \? false/)
+    // The CTA is never disabled now: a check-in is the pass's, so there is no busy state here (Flow 4).
+    expect(DETAIL).toMatch(/onPress=\{primaryActionPress\}/)
   })
 
   it("sends somebody who wasn't there to tonight, not to a dead pill", () => {
     const press = DETAIL.slice(DETAIL.indexOf("const primaryActionPress"))
     const rate = press.indexOf("'/rate/[eventId]'")
-    const tonight = press.indexOf("openBlendn()")
+    const tonight = press.indexOf("toTheOverlay(openBlendn)")
     // After the rate branch: attending wins.
     expect(rate).toBeGreaterThan(-1)
     expect(tonight).toBeGreaterThan(rate)
@@ -114,10 +115,10 @@ describe("the Going tab's way in to peer rating", () => {
    * rating does not depend on reopening an old event. Past is only events you
    * attended that have ended (`pastEventRows`), the same gate as the CTA above.
    */
-  it("puts RATE WHO YOU MET on the Past row, to the rating screen", () => {
+  it("puts Rate who you met on the Past row, to the rating screen", () => {
     const past = GOING.slice(GOING.indexOf("item.kind === 'past'"))
-    expect(past).toMatch(/label: 'RATE WHO YOU MET'/)
+    expect(past).toMatch(/label="Rate who you met"/)
     expect(past).toMatch(/pathname: '\/rate\/\[eventId\]', params: \{ eventId: row\.id \}/)
-    expect(past).toMatch(/accessibilityLabel: `Rate who you met at \$\{row\.title\}`/)
+    expect(past).toMatch(/accessibilityLabel=\{`Rate who you met at \$\{row\.title\}`\}/)
   })
 })

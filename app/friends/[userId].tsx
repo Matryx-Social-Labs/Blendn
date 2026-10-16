@@ -97,7 +97,6 @@ export default function FriendProfileScreen() {
         conversationId,
         otherUserName: friend.name,
         otherUserId: friend.userId,
-        otherUserAvatar: friend.photos[0] ?? '',
       },
     })
   }

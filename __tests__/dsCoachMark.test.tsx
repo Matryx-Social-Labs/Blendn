@@ -46,6 +46,12 @@ describe('<CoachMark>', () => {
     expect(flat('c-caret')).toMatchObject({ left: 40, bottom: expect.any(Number) })
   })
 
+  it('text and Got it are centred (owner override)', async () => {
+    await render(<CoachMark text="Hold an event to save, share or preview it." onDismiss={jest.fn()} />)
+    expect(StyleSheet.flatten(screen.getByText('Hold an event to save, share or preview it.').props.style)).toMatchObject({ textAlign: 'center' })
+    expect(StyleSheet.flatten(screen.getByRole('button', { name: 'Got it' }).props.style)).toMatchObject({ alignSelf: 'center' })
+  })
+
   it('without an action: no button (it goes when the thing is used)', async () => {
     await render(<CoachMark text="Tap a face to see who’s here." action={false} onDismiss={jest.fn()} />)
     expect(screen.queryByRole('button')).toBeNull()

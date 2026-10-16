@@ -1,0 +1,74 @@
+# Flow 5 · a photo in a DM (feat(flow-5), R9, R3-D5 5.9): the attach control
+# exists only once both have revealed; the preview takes a caption and says
+# the photo is re-encoded on the phone; it uploads with a ring and lands;
+# tapping it opens the viewer.
+# Needs: a DM (PEER, CONVERSATION_ID) where the phone's account has revealed
+# (run flow5-04 first); the other side reveals through the API here.
+# Env: MAESTRO_EMAIL, MAESTRO_PASSWORD, MAESTRO_PEER_TOKEN (environment
+# variables; `npm run -s qa token <peer>`; delete ~/.maestro/tests/<run>
+# afterwards). With -e: PEER, CONVERSATION_ID, API (https://staging-api.blendn.app),
+# CAPTION (unique per run).
+# The picker is the system's: the first photo is tapped by point, and the point
+# may need adjusting for a different simulator or emulator.
+# Read back (blendn-admin):
+#   npm run -s qa sq "SELECT pm.text, pm.media_type, (pm.media_url IS NOT NULL) AS has_media FROM private_messages pm WHERE pm.conversation_id = '<CONVERSATION_ID>' AND pm.text = '<CAPTION>'"
+#   one row: media_type image, has_media true.
+appId: com.matryxsociallabs.blendn
+tags:
+  - flow-5
+---
+- runScript:
+    file: ../scripts/dm-reveal.js
+    env:
+      TOKEN: ${MAESTRO_PEER_TOKEN}
+- addMedia:
+    - "../../assets/onboarding/looking-friendship.jpg"
+- runFlow: ../subflows/flow5-open.yaml
+- scrollUntilVisible:
+    element: ${PEER}
+    direction: DOWN
+    timeout: 20000
+- tapOn: ${PEER}
+- extendedWaitUntil:
+    visible: "Send a photo"
+    timeout: 20000
+- tapOn: "Send a photo"
+# The system photo picker: the newest photo, top left.
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - extendedWaitUntil:
+          visible: ".*(Photos|Cancel).*"
+          timeout: 10000
+      - tapOn:
+          point: "17%, 24%"
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - tapOn:
+          point: "17%, 30%"
+- extendedWaitUntil:
+    visible: "Send to .*"
+    timeout: 15000
+- assertVisible: ".*Re-encoded on your phone before upload.*"
+- tapOn: "Add a caption"
+- inputText: ${CAPTION}
+- takeScreenshot: flow5-05-preview
+- tapOn:
+    id: "dm-photo-send"
+- extendedWaitUntil:
+    visible: ${CAPTION}
+    timeout: 30000
+- extendedWaitUntil:
+    notVisible: "Sending photo"
+    timeout: 60000
+- takeScreenshot: flow5-05-sent
+# The photo opens the viewer, and Close puts it away.
+- tapOn: "You, Photo.*"
+- extendedWaitUntil:
+    visible: "Close"
+    timeout: 10000
+- takeScreenshot: flow5-05-viewer
+- tapOn: "Close"

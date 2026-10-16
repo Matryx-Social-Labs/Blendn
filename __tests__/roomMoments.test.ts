@@ -235,31 +235,31 @@ describe('shuffleCountdownLabel', () => {
 })
 
 describe('startsLabel', () => {
-  it('LIVE while running, ENDED after', () => {
+  it('Live while running, Ended after', () => {
     expect(startsLabel({ startsAt: minutesAgo(30), endsAt: minutesFromNow(60) }, NOW)).toEqual({
       kind: 'live',
-      text: 'LIVE',
+      text: 'Live',
     })
     expect(startsLabel({ startsAt: minutesAgo(120), endsAt: minutesAgo(1) }, NOW)).toEqual({
       kind: 'ended',
-      text: 'ENDED',
+      text: 'Ended',
     })
   })
 
-  it('minutes under an hour, rounded up', () => {
-    expect(startsLabel({ startsAt: minutesFromNow(25) }, NOW)).toEqual({ kind: 'soon', text: 'IN 25M' })
-    expect(startsLabel({ startsAt: new Date(NOW + 20_000).toISOString() }, NOW).text).toBe('IN 1M')
+  it('minutes under an hour, rounded up (Flow 4 Tonight: "In 25 min")', () => {
+    expect(startsLabel({ startsAt: minutesFromNow(25) }, NOW)).toEqual({ kind: 'soon', text: 'In 25 min' })
+    expect(startsLabel({ startsAt: new Date(NOW + 20_000).toISOString() }, NOW).text).toBe('In 1 min')
   })
 
-  it('hours up to six, then the clock time', () => {
-    expect(startsLabel({ startsAt: minutesFromNow(120) }, NOW)).toEqual({ kind: 'later', text: 'IN 2H' })
-    expect(startsLabel({ startsAt: minutesFromNow(110) }, NOW).text).toBe('IN 2H')
+  it('the clock time from an hour out, without ":00" on the hour', () => {
+    const nineTomorrow = new Date(2026, 8, 29, 21, 0).toISOString()
+    expect(startsLabel({ startsAt: nineTomorrow }, NOW)).toEqual({ kind: 'later', text: '9 PM' })
     const eightThirtyTomorrow = new Date(2026, 8, 29, 20, 30).toISOString()
     expect(startsLabel({ startsAt: eightThirtyTomorrow }, NOW)).toEqual({ kind: 'later', text: '8:30 PM' })
     const morning = new Date(2026, 8, 29, 9, 5).toISOString()
     expect(startsLabel({ startsAt: morning }, NOW).text).toBe('9:05 AM')
     const midnight = new Date(2026, 8, 29, 0, 0).toISOString()
-    expect(startsLabel({ startsAt: midnight, endsAt: null }, NOW - 12 * 3600_000).text).toBe('12:00 AM')
+    expect(startsLabel({ startsAt: midnight, endsAt: null }, NOW - 12 * 3600_000).text).toBe('12 AM')
   })
 
   it('has nothing to say about a missing start', () => {

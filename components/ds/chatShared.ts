@@ -98,15 +98,45 @@ export function linkParts(text: string): TextPart[] {
     // A path's own closing parenthesis (Rumours_(album)) is kept; a sentence's is not.
     const open = m[0].split('(').length - m[0].split(')').length
     const link = open > 0 && text[start + m[0].length] === ')' ? `${m[0]})` : m[0]
+    // The scheme lower-cased, so `HTTPS://toit.in` parses on React Native's shim and opens everywhere.
+    const url = /^https?:\/\//i.test(link) ? link.replace(/^https?/i, (m) => m.toLowerCase()) : `https://${link}`
     if (start > at) parts.push({ text: text.slice(at, start) })
-    parts.push({ text: link, url: /^https?:\/\//i.test(link) ? link : `https://${link}` })
+    // A link whose host can't be told for certain stays words: nothing to tap.
+    parts.push(linkHost(url) ? { text: link, url } : { text: link })
     at = start + link.length
   }
   if (at < text.length) parts.push({ text: text.slice(at) })
   return parts
 }
-/** "toit.in" from "https://toit.in/vinyl": what the link sheet and its action name. */
-export const domainOf = (url: string) => url.replace(/^https?:\/\//i, '').split(/[/?#]/)[0]
+
+/**
+ * "toit.in" from "https://toit.in/vinyl": the host the link really goes to,
+ * from the parsed URL — never the link's own text — or null when it is not an
+ * http(s) link to a plain named host. The authority is allowlisted (ASCII
+ * letters, digits, dots, hyphens, an optional numeric port) and its last label
+ * must be a name, so userinfo, backslashes, percent-escapes, ideographic dots,
+ * fullwidth look-alikes, raw IPv4/IPv6 and hex hosts are all refused: forms
+ * where React Native's URL shim, WHATWG and the OS browser can disagree. A
+ * refused link is words with nothing to tap, so the sheet's name is always
+ * where the link goes.
+ * Non-ASCII hosts are refused (plain text); `xn--` hosts show as they are.
+ */
+const AUTHORITY = /^[a-z0-9.-]+(:\d{1,5})?$/i
+const NAMED_TLD = /\.(?:[a-z]{2,63}|xn--[a-z0-9-]{1,59})$/i
+export function linkHost(url: string): string | null {
+  const scheme = /^(https?):\/\//i.exec(url)?.[1]?.toLowerCase()
+  if (!scheme) return null
+  const authority = url.slice(scheme.length + 3).split(/[/?#]/)[0]
+  const name = authority.replace(/:\d+$/, '')
+  if (!AUTHORITY.test(authority) || !NAMED_TLD.test(name)) return null
+  // The clean authority alone, parsed: React Native's URL shim misreads an `@`
+  // later in the path (medium.com/@someone) as userinfo; this way both agree.
+  try {
+    return new URL(`${scheme}://${authority}/`).hostname.toLowerCase() || null
+  } catch {
+    return null
+  }
+}
 
 /** #35: the drag tracks 1:1 to 56 pt, arms there, then rubber-bands at 0.5× to 96 pt. */
 export const REPLY_SWIPE = { trigger: 56, max: 96, rubber: 0.5 } as const

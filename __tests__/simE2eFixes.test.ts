@@ -49,7 +49,7 @@ describe('the conversation ⋮ menu', () => {
   const src = read('lib', 'safetyUtils.ts')
   it('opens a neutral menu with leaving one step in', () => {
     expect(src).toMatch(/export const showConversationOptions/)
-    expect(src).toMatch(/label: fromMatch \? 'Unmatch…' : 'End conversation…',\s*variant: 'destructive',\s*next: \(\) => leaveConversationSheet/)
+    expect(src).toMatch(/label: fromMatch \? 'Unmatch…' : 'End conversation…',\s*icon: 'heart-off',\s*variant: 'destructive',\s*next: \(\) => leaveConversationSheet/)
     expect(read('app', 'private-chat', '[conversationId].tsx')).toContain('showConversationOptions(')
   })
 })

@@ -29,6 +29,8 @@
  * it is exactly how the dead branch came to print "0m away".
  */
 
+import type { IconName } from "../components/ui/Icon"
+
 /** Codes `lib/api-response.ts` can attach to a refused check-in. */
 export const CHECK_IN_CODES = {
   OUT_OF_RANGE: "OUT_OF_RANGE",
@@ -52,6 +54,8 @@ export function isExpectedRefusal(errorCode: string | undefined): boolean {
 export type CheckInRefusal = {
   title: string
   message: string
+  /** The sheet's glyph (Flow 4 Tonight #16–#22): an affordance, so the client's. */
+  icon?: IconName
   /**
    * Whether to offer directions.
    *
@@ -77,15 +81,17 @@ export function checkInRefusal(
         // The server's sentence carries the shortfall in metres. Ours cannot.
         message,
         offerDirections: true,
+        icon: "map-pin",
       }
     case CHECK_IN_CODES.EVENT_NOT_STARTED:
-      return { title: "Doors aren't open", message, offerDirections: false }
+      return { title: "Doors aren't open", message, offerDirections: false, icon: "door-closed" }
     case CHECK_IN_CODES.EVENT_ENDED:
-      return { title: "This one's over", message, offerDirections: false }
+      return { title: "This one's over", message, offerDirections: false, icon: "moon" }
     case CHECK_IN_CODES.AGE_RESTRICTED:
-      return { title: "Not open to you", message, offerDirections: false }
+      return { title: "Not open to you", message, offerDirections: false, icon: "circle-slash" }
     case CHECK_IN_CODES.EVENT_FULL:
-      return { title: "At capacity", message, offerDirections: false }
+      // ROUND3 C12 deleted this sheet: the server never sends it. Kept so a stray code still reads right.
+      return { title: "At capacity", message, offerDirections: false, icon: "users" }
     case CHECK_IN_CODES.ALREADY_CHECKED_IN:
       /*
        * Kept although the check-in route is idempotent and does not currently
@@ -100,6 +106,6 @@ export function checkInRefusal(
        * specific than anything written here, and one refusal ("Event is at full
        * capacity") ships with no code at all.
        */
-      return { title: "Check-in failed", message, offerDirections: false }
+      return { title: "Check-in failed", message, offerDirections: false, icon: "cloud-off" }
   }
 }

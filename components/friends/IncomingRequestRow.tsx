@@ -1,15 +1,17 @@
 import { Pressable, StyleSheet, View } from 'react-native'
 
-import { REQUEST_HIT_SLOP } from '../banter/BanterSections'
 import { Text } from '../ui/Text'
 import type { FriendRequest } from '../../lib/friends'
 import { CONTROL, EMBER, EMBER_RADIUS, OPACITY, SPACE } from '../../lib/theme'
 import { PersonAvatar } from './PersonRow'
 
+/** The two 32 pt pills reach a 44 pt target. */
+const REQUEST_HIT_SLOP = { top: 6, bottom: 6, left: 4, right: 4 }
+
 /**
  * Somebody asking to be your friend: Not now, or Accept.
  *
- * The Banter's request layout (`BanterRequest`): face, name, and the two
+ * The request layout the Banter used before Flow 5's redesign: face, name, and the two
  * answers as 32pt pills *under* the name. They used to sit at the row's right
  * edge, where two pills and a long name shared one line and the name lost.
  *

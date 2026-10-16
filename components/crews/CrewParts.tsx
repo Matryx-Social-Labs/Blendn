@@ -1,28 +1,24 @@
-import { Ionicons, MaterialIcons } from '@expo/vector-icons'
+import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import React, { memo } from 'react'
-import { ActivityIndicator, Pressable, StyleSheet, Text as RNText, View } from 'react-native'
+import { Pressable, StyleSheet, Text as RNText, View } from 'react-native'
 
 import {
   CONSENT_AGREE,
   CONSENT_LINE,
   KEEP_ANONYMOUS_HELPER,
   KEEP_ANONYMOUS_LABEL,
-  hereNowLine,
   sideView,
-  sizeLine,
   type BlendPerson,
   type BlendSide,
   type ConsentState,
-  type CrewCard,
 } from '../../lib/crews'
 import type { FriendPerson } from '../../lib/friends'
-import { H } from '../../lib/haptics'
 import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
 import { CONTROL, EMBER, EMBER_RADIUS, ICON, OPACITY, SPACE } from '../../lib/theme'
 import { Face } from '../blendn/Face'
 import { PersonRow } from '../friends/PersonRow'
-import { EmberButton, EmberToggle } from '../onboarding/EmberControls'
+import { EmberToggle } from '../onboarding/EmberControls'
 import { Text } from '../ui/Text'
 
 /**
@@ -120,110 +116,6 @@ export function FriendPickRow({
   )
 }
 
-/**
- * A crew here now, as a card in the Grid's Crews view.
- *
- * **Counts, never people.** The server sends no name, photo or pseudonym of
- * anybody on a crew card (a list of pseudonyms beside a crew that later
- * reveals would single out the ones who stayed anonymous), so the card is the
- * emblem, the name, "Crew of N", how many are here, its tags and its bio.
- * The people appear inside a Blend.
- */
-export function CrewCardView({
-  card,
-  liking,
-  onLike,
-  onMore,
-}: {
-  card: CrewCard
-  liking: boolean
-  onLike: () => void
-  onMore: () => void
-}) {
-  return (
-    <View style={styles.card}>
-      <View style={styles.cardHead}>
-        <CrewEmblem seed={card.emblemSeed} size={CONTROL.lg} />
-        <View style={styles.cardTitle}>
-          <Text variant="heading" numberOfLines={1}>
-            {card.name}
-          </Text>
-          <Text variant="meta">
-            {sizeLine(card.size)} · {hereNowLine(card)}
-          </Text>
-        </View>
-        <Pressable
-          onPress={onMore}
-          hitSlop={SPACE.md}
-          accessibilityRole="button"
-          accessibilityLabel={`Report ${card.name}`}
-          style={styles.more}
-        >
-          <MaterialIcons name="more-horiz" size={ICON.md} color={EMBER.textTertiary} />
-        </Pressable>
-      </View>
-      {card.bio ? <Text variant="body">{card.bio}</Text> : null}
-      {/*
-        What this crew holds in common with your side, crew-held and counts-free
-        ("Both crews are into Techno") — the server's lines, never a member.
-      */}
-      {card.overlaps?.length ? (
-        <View style={styles.overlaps}>
-          {card.overlaps.map((o) => (
-            <Text key={o.text} variant="body" color={EMBER.textSecondary}>
-              {o.text}
-            </Text>
-          ))}
-        </View>
-      ) : null}
-      {card.tags.length || card.badges?.length ? (
-        <View style={styles.chips}>
-          {card.tags.map((t) => (
-            <View key={t.slug} style={styles.chip}>
-              <Text variant="meta" color={EMBER.textPrimary}>
-                {t.label}
-              </Text>
-            </View>
-          ))}
-          {card.badges?.map((b) => (
-            <View key={b.kind} style={[styles.chip, styles.badge]}>
-              <Ionicons name="ribbon-outline" size={ICON.sm} color={EMBER.textSecondary} />
-              <Text variant="meta">{b.label}</Text>
-            </View>
-          ))}
-        </View>
-      ) : null}
-      <Pressable
-        onPress={() => {
-          H.like()
-          onLike()
-        }}
-        disabled={card.youLiked || liking}
-        accessibilityRole="button"
-        accessibilityLabel={card.youLiked ? `You liked ${card.name}` : `Like ${card.name}`}
-        accessibilityHint="They are only told if they like you back"
-        accessibilityState={{ disabled: card.youLiked || liking, busy: liking }}
-        style={({ pressed }) => [styles.like, card.youLiked ? styles.liked : styles.likeOn, pressed && styles.pressed]}
-      >
-        {liking ? (
-          <ActivityIndicator color={EMBER.onGradient} />
-        ) : (
-          <>
-            <Ionicons
-              name={card.youLiked ? 'heart' : 'heart-outline'}
-              size={ICON.md}
-              color={card.youLiked ? EMBER.textPrimary : EMBER.onGradient}
-            />
-            <Text variant="button" color={card.youLiked ? EMBER.textPrimary : EMBER.onGradient}>
-              {card.youLiked ? 'Liked' : 'Like'}
-            </Text>
-          </>
-        )}
-      </Pressable>
-    </View>
-  )
-}
-
 /** A face in a Blend side: big enough to recognise, small enough for twelve. */
 const SIDE_FACE = CONTROL.md
 
@@ -297,28 +189,8 @@ export function BlendSideCard({
   )
 }
 
-/**
- * A crew's or a Blend's room that is over for you: "This Blend has closed".
- * It replaces the feed and the composer — the server refuses both now — and
- * says nothing about why: a Blend closing, a block across its sides and a
- * member taken out all read the same from inside.
- */
-export function RoomClosedNotice({ line, onBack }: { line: string; onBack: () => void }) {
-  return (
-    <View style={styles.closed}>
-      <Ionicons name="moon-outline" size={ICON.lg} color={EMBER.textTertiary} />
-      <Text variant="heading" accessibilityRole="header" style={styles.closedText}>
-        {line}
-      </Text>
-      <EmberButton label="Back" variant="secondary" onPress={onBack} />
-    </View>
-  )
-}
-
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  closed: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: SPACE.lg, paddingHorizontal: SPACE.xl },
-  closedText: { textAlign: 'center' },
   pressed: { opacity: OPACITY.pressed },
   emblem: { borderRadius: EMBER_RADIUS.sm, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   consent: {
@@ -328,29 +200,6 @@ const styles = StyleSheet.create({
     backgroundColor: EMBER.surfaceSunken,
   },
   agree: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, minHeight: CONTROL.md },
-  card: { gap: SPACE.md, padding: SPACE.lg, borderRadius: EMBER_RADIUS.md, backgroundColor: EMBER.surfaceSunken },
-  cardHead: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
-  cardTitle: { flex: 1, gap: SPACE.xxs },
-  more: { width: CONTROL.sm, height: CONTROL.sm, alignItems: 'center', justifyContent: 'center' },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
-  overlaps: { gap: SPACE.xxs },
-  badge: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs },
-  chip: {
-    paddingHorizontal: SPACE.md,
-    paddingVertical: SPACE.xs,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.surface,
-  },
-  like: {
-    height: CONTROL.md,
-    borderRadius: EMBER_RADIUS.pill,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: SPACE.sm,
-  },
-  likeOn: { backgroundColor: EMBER.accent },
-  liked: { backgroundColor: EMBER.surface },
   side: { gap: SPACE.sm, padding: SPACE.lg, borderRadius: EMBER_RADIUS.md, backgroundColor: EMBER.surfaceSunken },
   sideHead: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   people: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.md },

@@ -20,7 +20,8 @@ jest.mock('expo-router', () => ({
   Stack: { Screen: () => null },
   useLocalSearchParams: () => mockParams,
 }))
-jest.mock('react-native-safe-area-context', () => ({ SafeAreaView: require('react-native').View, useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }))
+jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
+jest.mock('expo-video', () => ({ useVideoPlayer: () => ({ addListener: () => ({ remove: () => {} }), play: () => {} }), VideoView: () => null }))
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }))
 jest.mock('../lib/perf', () => ({ ScreenProfiler: ({ children }: { children: React.ReactNode }) => children }))
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn(), journey: jest.fn() } }))
@@ -49,6 +50,7 @@ jest.mock('../lib/socketClient', () => {
     subscribeToChatMessageDeleted: noop,
     subscribeToChatMemberBanned: noop,
     subscribeToChatMemberLeft: noop,
+    subscribeToChatMemberMuted: noop,
     rejoinChatSocket: (...a: unknown[]) => mockRejoin(...a),
     startTyping: jest.fn(),
     stopTyping: jest.fn(),
@@ -74,7 +76,7 @@ import GroupChat from '../app/chat/[id]'
 import { apiClient } from '../lib/apiClient'
 /* eslint-enable import/first */
 
-const refused = { success: false, errorCode: 'NOT_LIVE', error: "You're not live here any more. Go live at the venue to join today's room." }
+const refused = { success: false, errorCode: 'NOT_LIVE', error: "You’re not live here any more. Go live at the venue to join today's room." }
 const served = { success: true, data: { messages: [], pagination: { hasMore: false, nextCursor: null } } }
 const placeRow = { id: 'g1', name: 'Cubbon Park Bandstand', memberCount: null, event: { id: 'day-1', kind: 'venue_day', venueId: 'v1', title: 'Venue day · Cubbon Park Bandstand · 2026-10-09' } }
 
@@ -95,19 +97,19 @@ it('the window ends: the room becomes "not live", and comes back — socket rejo
   ;(apiClient.getChatMessages as jest.Mock).mockResolvedValue(served)
   await render(<GroupChat />)
   await flush()
-  expect(screen.queryByText("You're not live here any more")).toBeNull()
+  expect(screen.queryByText("You’re not live here any more")).toBeNull()
 
   ;(apiClient.getChatMessages as jest.Mock).mockResolvedValue(refused)
   await act(async () => mockEnded.forEach((f) => f({ eventId: 'day-1', reason: 'expired' })))
   await flush()
-  expect(screen.getByText("You're not live here any more")).toBeTruthy()
+  expect(screen.getByText("You’re not live here any more")).toBeTruthy()
   // Out of the room: no live sync (and no socket join) for a room that refuses you (X3).
   expect(mockLiveSync.mock.calls[mockLiveSync.mock.calls.length - 1][0].enabled).toBe(false)
 
   ;(apiClient.getChatMessages as jest.Mock).mockResolvedValue(served)
   await act(async () => mockChanged.forEach((f) => f()))
   await flush()
-  expect(screen.queryByText("You're not live here any more")).toBeNull()
+  expect(screen.queryByText("You’re not live here any more")).toBeNull()
   expect(mockRejoin).toHaveBeenCalledWith('g1')
 })
 

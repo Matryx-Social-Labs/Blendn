@@ -33,61 +33,34 @@ export interface ConversationRevealState {
   fromMatch?: boolean
 }
 
-export type RevealAction =
-  /** Nothing to do — this conversation never hid anything. */
-  | { kind: 'none' }
-  /** You are anonymous to them. Offer to reveal. */
-  | { kind: 'reveal'; label: string; nudge: string | null }
-  /** You have revealed and they have not. Offer to ask. */
-  | { kind: 'ask'; label: string }
-  /** Both sides are visible. */
-  | { kind: 'done'; label: string }
-
 /**
- * The single control at the top of a conversation.
+ * What the DM shows about who can see whom (Flow 5 DM #01–#05, RevealBar):
+ * the two-sided bar's state (or none), the header's eye line, and the nudge
+ * under the bar when they asked you.
  *
- * One control, not two: at any moment there is exactly one thing worth
- * offering, and a screen with both "Reveal" and "Ask them to reveal" makes the
- * person work out which applies to them.
+ * - Both anonymous: Show them · Ask them. Once you ask (this session — the
+ *   server keeps no "you asked"), the Asked state; there is no declined state.
+ * - They revealed, you haven't: Show them, and their name.
+ * - You revealed, they haven't: no button; they decide.
+ * - Both revealed: the bar is gone for good and the header becomes a button.
+ * - An accepted message request was never pseudonymous: no bar, no line.
  */
-export function revealAction(state: ConversationRevealState): RevealAction {
-  if (!state.pseudonymous) return { kind: 'none' }
-
-  if (!state.youRevealed) {
-    return {
-      kind: 'reveal',
-      label: 'Show them who you are',
-      /*
-       * Being asked is worth surfacing, because it is the only signal the
-       * other person can send. It is deliberately not a demand and carries no
-       * count -- asking twice writes the same flag, so there is nothing to
-       * escalate and nothing to feel nagged by.
-       */
-      nudge: state.revealRequested ? `${state.displayName} asked to know who you are` : null,
-    }
-  }
-
-  if (!state.theyRevealed) {
-    return { kind: 'ask', label: `Ask ${state.displayName} to reveal` }
-  }
-
-  return { kind: 'done', label: 'You both revealed' }
+export type RevealView = {
+  bar: 'none' | 'youOnly' | 'theyOnly' | 'asked' | null
+  line: { seen: boolean; text: string } | null
+  nudge: string | null
 }
 
-/**
- * The line under the name.
- *
- * Somebody has to be able to tell, at a glance, whether the person they are
- * talking to knows who they are. Not knowing is the state that makes people
- * close the app — and unlike the room chip, this one describes a pair, so it
- * has to say both halves without turning either into a status to be judged.
- */
-export function revealSubtitle(state: ConversationRevealState): string | null {
-  if (!state.pseudonymous) return null
-  if (state.youRevealed && state.theyRevealed) return null
-  if (state.youRevealed) return "They can see your name. You can't see theirs yet."
-  if (state.theyRevealed) return "You can see their name. They can't see yours."
-  return "You're both anonymous here"
+export function revealView(state: ConversationRevealState, askedHere = false): RevealView {
+  if (!state.pseudonymous) return { bar: null, line: null, nudge: null }
+  if (state.youRevealed && state.theyRevealed) return { bar: null, line: { seen: true, text: 'You can both see each other' }, nudge: null }
+  // Being asked is the only signal the other person can send: surfaced, never a demand, never counted.
+  const nudge = !state.youRevealed && state.revealRequested ? `${state.displayName} asked to know who you are` : null
+  if (state.youRevealed) return { bar: 'youOnly', line: { seen: false, text: 'They can see your name. You can’t see theirs yet.' }, nudge: null }
+  if (state.theyRevealed) return { bar: 'theyOnly', line: { seen: false, text: 'You can see their name. They can’t see yours.' }, nudge }
+  return askedHere
+    ? { bar: 'asked', line: { seen: false, text: 'You’re both anonymous here · asked' }, nudge }
+    : { bar: 'none', line: { seen: false, text: 'You’re both anonymous here' }, nudge }
 }
 
 /**
@@ -104,7 +77,7 @@ export function revealConfirmation(displayName: string): {
 } {
   return {
     title: `Show ${displayName} who you are?`,
-    body: "They'll see your name and photos. This can't be undone — you can block them, but you can't take it back.",
+    body: 'They’ll see your name and photos. This can’t be undone — you can block them, but you can’t take it back.',
     confirm: 'Show them',
   }
 }

@@ -101,8 +101,8 @@ type FieldProps = Omit<
 }
 
 /** What a screen reader hears after the label and value: the error, the count, the hint. */
-const spokenHint = (error?: string, value?: string, limit?: number, hint?: string) =>
-  [error, limit ? `${count(value ?? '')} of ${limit} characters` : undefined, hint].filter(Boolean).join('. ') || undefined
+const spokenHint = (error?: string, value?: string, limit?: number, hint?: string, measure: (v: string) => number = count) =>
+  [error, limit ? `${measure(value ?? '')} of ${limit} characters` : undefined, hint].filter(Boolean).join('. ') || undefined
 
 /**
  * The text field (DESIGN-BRIEF §12, guidelines/components/TextField.html): a
@@ -224,24 +224,29 @@ export function TextArea({
   hint,
   disabled = false,
   limit,
+  measure = count,
   minHeight = AREA_MIN_HEIGHT,
   previewState,
   testID,
   onFocus,
   onBlur,
   ...rest
-}: FieldProps & { minHeight?: number }) {
+}: FieldProps & {
+  minHeight?: number
+  /** How the limit counts, when the server's rule is not characters: `(v) => v.length` for a zod `max()` (UTF-16 units). */
+  measure?: (value: string) => number
+}) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const focus = useFocus({ onFocus, onBlur })
   const input = useRef<TextInput>(null)
-  const near = limit !== undefined && limit - count(value) < COUNTER_WARN_AT
+  const near = limit !== undefined && limit - measure(value) < COUNTER_WARN_AT
 
   let counter: ReactNode = null
   if (limit !== undefined) {
     counter = (
       <Text accessibilityElementsHidden importantForAccessibility="no" style={[monoCaption(bold), { color: near ? COLOR.warning : COLOR.textTertiary }]}>
-        {`${count(value)}/${limit}`}
+        {`${measure(value)}/${limit}`}
       </Text>
     )
   }
@@ -270,7 +275,7 @@ export function TextArea({
           cursorColor={COLOR.textPrimary}
           textAlignVertical="top"
           accessibilityLabel={label ?? rest.placeholder}
-          accessibilityHint={spokenHint(error, value, limit, hint)}
+          accessibilityHint={spokenHint(error, value, limit, hint, measure)}
           accessibilityState={{ disabled }}
           style={[font('body', bold), styles.input, styles.grow]}
         />

@@ -33,9 +33,12 @@ export type LikeRefusal = {
    * a free action feel like a violation.
    */
   variant: "error" | "info"
+  /** A lapsed check-in: the card offers Check in beside the line (R3-D4 4.3). */
+  checkIn?: boolean
 }
 
-const GENERIC = "That didn't go through. Try again."
+/** R3-D4 4.3: the line for every same-for-everyone answer. It never names the action, or them. */
+const GENERIC = "That didn’t go through."
 
 export function likeRefusal(
   errorCode: string | undefined,
@@ -56,7 +59,16 @@ export function likeRefusal(
      */
     case "FORBIDDEN":
     case "NOT_CHECKED_IN":
-      return { message: message || "Check in before liking anyone here.", variant: "info" }
+      return { message: message || "Check in before liking anyone here.", variant: "info", checkIn: true }
+
+    /*
+     * A like's 404 and a wave's "They're not in the room right now" are the
+     * same answer for everyone, and the second names them: so neither is
+     * passed through (R3-D4 4.3).
+     */
+    case "NOT_FOUND":
+    case "RECIPIENT_NOT_HERE":
+      return { message: GENERIC, variant: "info" }
 
     default:
       return { message: message || GENERIC, variant: "error" }

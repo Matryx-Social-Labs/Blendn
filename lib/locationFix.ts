@@ -1,6 +1,9 @@
 import * as Location from 'expo-location'
-import { Linking } from 'react-native'
+import { Linking, Platform } from 'react-native'
 import type { ActionTrayButton } from '../components/ActionTray'
+import type { ButtonKind } from '../components/ds/Button'
+import type { IconName } from '../components/ui/Icon'
+import { H } from './haptics'
 import { Logger } from './logger'
 
 /**
@@ -15,8 +18,59 @@ import { Logger } from './logger'
 /** How long a check-in waits for a GPS fix before saying so. */
 export const LOCATION_FIX_TIMEOUT_MS = 15_000
 
-/** The screen's tray, as `EventDetailScreen` and `ActionTray` define it. */
-export type ShowTray = (title: string, message: string, buttons?: ActionTrayButton[]) => void
+/**
+ * How old a fix may be and still say where you are standing. Twenty seconds
+ * at walking pace is under 30 m, inside the 50 m the door already allows.
+ */
+export const FRESH_FIX_MAX_AGE_MS = 20_000
+
+/** The fix asked for when the pass showed, so the hold does not start one cold. */
+let warming: { startedAt: number; fix: Promise<Location.LocationObject | null> } | null = null
+
+/**
+ * Start a fix now, before anybody holds: a cold GPS fix takes seconds, and the
+ * hold is under one. Never prompts — without permission (or with Precise off)
+ * it does nothing, and the hold's own path asks and explains as before.
+ */
+export async function warmLocationFix(): Promise<void> {
+  if (warming && Date.now() - warming.startedAt < FRESH_FIX_MAX_AGE_MS) return
+  const permission = await Location.getForegroundPermissionsAsync().catch(() => null)
+  if (permission?.status !== 'granted' || permission.ios?.accuracy === 'reduced') return
+  warming = {
+    startedAt: Date.now(),
+    fix: Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High }).catch(() => null),
+  }
+}
+
+/** Recent, and as good as the door asks: a fix that can stand in for a new one. */
+function usable(fix: Location.LocationObject | null, maxAccuracyM: number): Location.LocationObject | null {
+  if (!fix || Date.now() - fix.timestamp > FRESH_FIX_MAX_AGE_MS) return null
+  return (fix.coords.accuracy ?? Infinity) <= maxAccuracyM ? fix : null
+}
+
+/** The warmed fix, else the OS's last one if it is fresh and good enough, else a new one. */
+async function freshFix(maxAccuracyM: number): Promise<Location.LocationObject> {
+  const warmed = usable((await warming?.fix) ?? null, maxAccuracyM)
+  if (warmed) return warmed
+  const last = await Location.getLastKnownPositionAsync({ maxAge: FRESH_FIX_MAX_AGE_MS, requiredAccuracy: maxAccuracyM }).catch(() => null)
+  return (
+    usable(last, maxAccuracyM) ??
+    Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High, mayShowUserSettingsDialog: true })
+  )
+}
+
+/**
+ * A tray button. `kind` is the redesign's (`<Sheet>`, Flow 4 Tonight #15–#26:
+ * Open Settings is the strong neutral, Not now and Cancel are text); a screen
+ * still on `ActionTray` reads `variant` and ignores it.
+ */
+export type TrayButton = ActionTrayButton & { kind?: ButtonKind }
+
+/** What a redesigned tray draws besides its words: the glyph well, a Geist Mono path line (R3-D4 4.7). */
+export type TrayExtra = { icon?: IconName; detail?: string }
+
+/** The screen's tray, as `EventDetailScreen` and `ActionTray` define it; the Blend'n overlay draws it as a `<Sheet>`. */
+export type ShowTray = (title: string, message: string, buttons?: TrayButton[], extra?: TrayExtra) => void
 
 export type CheckInTrays = {
   showTray: ShowTray
@@ -28,24 +82,36 @@ export type CheckInTrays = {
    */
   maxAccuracyM?: number
   /**
-   * What "Try Again" on the weak-fix tray does. A fix on its own goes nowhere:
-   * the action that wanted it must run again, or the retry is a dead end
-   * (step 5 review, H4).
+   * What "Try again" on the weak-fix and timed-out trays does. A fix on its
+   * own goes nowhere: the action that wanted it must run again, or the retry
+   * is a dead end (step 5 review, H4; Flow 4 Tonight #25, #26).
    */
   onRetry?: () => void
+  /** Whose words the trays use: a check-in's (the default) or a Go Live's. */
+  purpose?: 'checkIn' | 'goLive'
 }
 
 /** The event door's floor for a usable fix. */
 export const CHECK_IN_MAX_ACCURACY_M = 50
 
 /**
- * iOS "Precise Location" switched off: every fix is kilometres wide, so
- * "move somewhere with better signal" is the wrong advice; the switch is.
+ * Precise location switched off: every fix is kilometres wide, so "move
+ * somewhere with better signal" is the wrong advice; the switch is (R3-D4
+ * 4.7). The path to it, per platform, in Geist Mono under the body.
  */
 export const PRECISE_OFF = {
-  title: 'Turn on Precise Location',
-  message: "Blend'n only has your approximate location, which can't tell which place you're at. Turn on Precise Location for Blend'n in Settings.",
+  title: 'Precise location is off',
+  message: (purpose: 'checkIn' | 'goLive') =>
+    `${purpose === 'goLive' ? 'Going live' : 'Check-in'} needs your exact spot to confirm you’re inside. Turn on Precise Location for Blend’n.`,
+  path: () =>
+    Platform.OS === 'android'
+      ? 'App info › Permissions › Location › Use precise location'
+      : 'Settings › Blend’n › Location › Precise Location',
 } as const
+
+/** "to check you in here" / "to go live here": the one phrase that differs between the two doors. */
+const TO = { checkIn: 'to check you in here', goLive: 'to go live here' } as const
+const VERB = { checkIn: 'to check in here', goLive: 'to go live here' } as const
 
 export type CheckInLocation = {
   latitude: number
@@ -61,46 +127,57 @@ export async function getCurrentLocation({
   closeTray,
   maxAccuracyM = CHECK_IN_MAX_ACCURACY_M,
   onRetry,
+  purpose = 'checkIn',
 }: CheckInTrays): Promise<CheckInLocation | null> {
-  const settingsButtons: ActionTrayButton[] = [
-    { label: 'Cancel', onPress: closeTray },
+  const settingsButtons: TrayButton[] = [
+    { label: 'Not now', kind: 'tertiary', onPress: closeTray },
     {
       label: 'Open Settings',
       variant: 'primary',
+      kind: 'strong',
       onPress: () => {
         closeTray()
         Linking.openSettings().catch(() => {})
       },
     },
   ]
+  // "Try again" resumes what wanted the fix (Flow 4 Tonight #25–#26); without one, it asks for a fix again.
+  const retryButtons: TrayButton[] = [
+    { label: 'Cancel', kind: 'tertiary', onPress: closeTray },
+    {
+      label: 'Try again',
+      variant: 'primary',
+      kind: 'primary',
+      onPress: () => {
+        closeTray()
+        if (onRetry) onRetry()
+        else getCurrentLocation({ showTray, closeTray, maxAccuracyM, purpose }).catch(() => {})
+      },
+    },
+  ]
   try {
-    // Check if location services are enabled
-    const serviceEnabled = await Location.hasServicesEnabledAsync()
+    // Services and permission are asked together: neither waits on the other.
+    const [serviceEnabled, permission] = await Promise.all([
+      Location.hasServicesEnabledAsync(),
+      Location.requestForegroundPermissionsAsync(),
+    ])
     if (!serviceEnabled) {
       Logger.warn('events', 'location:servicesDisabled')
-      showTray(
-        'Location services disabled',
-        'Please enable location services in your device settings to check in to events.',
-        settingsButtons
-      )
+      showTray('Location Services are off', `Turn on Location Services ${VERB[purpose]}.`, settingsButtons, { icon: 'map-pin-off' })
       return null
     }
 
-    // Request permission with better messaging
-    const permission = await Location.requestForegroundPermissionsAsync()
     const { status } = permission
     if (status === 'granted' && permission.ios?.accuracy === 'reduced') {
       Logger.warn('events', 'location:preciseOff')
-      showTray(PRECISE_OFF.title, PRECISE_OFF.message, settingsButtons)
+      // R3-D4 4.7: the attempt failed, about you, so its one H.error.
+      H.error()
+      showTray(PRECISE_OFF.title, PRECISE_OFF.message(purpose), settingsButtons, { icon: 'locate-off', detail: PRECISE_OFF.path() })
       return null
     }
     if (status !== 'granted') {
       Logger.warn('events', 'location:permissionDenied')
-      showTray(
-        'Location permission required',
-        'Blendn needs location access to verify you are at events. This keeps check-ins authentic.',
-        settingsButtons
-      )
+      showTray('Location permission needed', `Blend’n needs your location once, ${TO[purpose]}.`, settingsButtons, { icon: 'map-pin' })
       return null
     }
 
@@ -112,16 +189,19 @@ export async function getCurrentLocation({
      * "Location timeout" tray below was unreachable. Driven on an emulator
      * with no GPS stream: five minutes of spinner. Fifteen seconds is
      * longer than any fix worth waiting for at a venue door.
+     *
+     * And no fresh BestForNavigation fix started at the end of the hold: that
+     * was the wait between "Checking you in…" and "You're in" (seconds cold,
+     * up to this deadline). The fix warmed when the pass showed, or a recent
+     * one as good as the door asks, is used; High, not BestForNavigation,
+     * when a new one is needed — the door asks 50 m, not lane-level.
      */
     const location = await new Promise<Location.LocationObject>((resolve, reject) => {
       const timer = setTimeout(
         () => reject(Object.assign(new Error('Location timed out'), { code: 'E_LOCATION_TIMEOUT' })),
         LOCATION_FIX_TIMEOUT_MS
       )
-      Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.BestForNavigation,
-        mayShowUserSettingsDialog: true,
-      })
+      freshFix(maxAccuracyM)
         .then((fix) => { clearTimeout(timer); resolve(fix) })
         .catch((err) => { clearTimeout(timer); reject(err) })
     })
@@ -130,22 +210,7 @@ export async function getCurrentLocation({
     const accuracy = location.coords.accuracy || 999
     if (accuracy > maxAccuracyM) {
       Logger.warn('events', 'location:lowAccuracy', { accuracy })
-      showTray(
-        'GPS signal weak',
-        `GPS accuracy is ${Math.round(accuracy)}m. Move to a location with better GPS signal for accurate check-ins.`,
-        [
-          { label: 'Cancel', onPress: closeTray },
-          {
-            label: 'Try Again',
-            variant: 'primary',
-            onPress: () => {
-              closeTray()
-              if (onRetry) onRetry()
-              else getCurrentLocation({ showTray, closeTray, maxAccuracyM }).catch(() => {})
-            },
-          },
-        ]
-      )
+      showTray('GPS signal is weak', `Accuracy is ${Math.round(accuracy)} m. Step away from walls and try again.`, retryButtons, { icon: 'radar' })
       return null
     }
 
@@ -181,11 +246,11 @@ export async function getCurrentLocation({
     // Handle specific location errors for production
     const errorCode = (error as any)?.code
     if (errorCode === 'E_LOCATION_TIMEOUT') {
-      showTray('Location timeout', 'Unable to get your location. Please try again or move to an area with better GPS signal.')
+      showTray('Location timed out', `We couldn’t get a fix in ${LOCATION_FIX_TIMEOUT_MS / 1000} seconds.`, retryButtons, { icon: 'hourglass' })
     } else if (errorCode === 'E_LOCATION_UNAVAILABLE') {
-      showTray('Location unavailable', 'Location services are temporarily unavailable. Please try again.')
+      showTray('Location unavailable', 'Location services are temporarily unavailable. Try again in a moment.', retryButtons, { icon: 'map-pin-off' })
     } else {
-      showTray('Location error', 'Failed to get your current location. Please check your GPS settings and try again.')
+      showTray('Couldn’t get your location', 'Check your location settings and try again.', retryButtons, { icon: 'map-pin-off' })
     }
     return null
   }

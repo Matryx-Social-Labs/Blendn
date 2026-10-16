@@ -1,150 +1,61 @@
-# The Banter — designer notes
+# The Banter
 
-Frame `1141:5247` on the **Updates** canvas. The screen the app shipped before
-this was a different design entirely; it was deleted rather than adapted.
+**Design:** Claude Design, `guidelines/flow-5/` — the Banter frames
+(`flow5.js` `banter`), #27 in `flow5-proto.js`, and the deltas R3-D5 (5.6,
+5.7, 5.8, 5.11), R3-0 (C5, C11) and R2-D2 (crews, invites, Blends, the bell).
+See `docs/CHAT.md` for the precedence.
 
-Components live in `components/banter/BanterSections.tsx`, pure helpers in
-`components/banter/inbox.ts`. The screen is
-`app/(tabs)/chat.tsx`. `app/preview/banter.tsx` renders the pieces
-against fixtures — deep-link `exp+blendn:///preview/banter` — so layout can be
-looked at without a login, a socket or a conversation that exists.
-
----
-
-## What the screen is for
-
-Two kinds of conversation, and they are not the same kind of thing:
-
-1. **Matches.** A direct message with someone you met. Permanent, named, with a
-   face.
-2. **Event rooms.** The temporary, anonymous room for an event. It exists while
-   the event does. Everyone in it is a pseudonym and an animal (see
-   `lib/pseudonymAvatar.ts`), which is the point — you can talk to the room
-   before you have decided to talk to a person.
-
-A room you are **checked into right now** is the live one. That distinction
-drives the layout.
+The screen is `app/(tabs)/chat.tsx`; its pieces `components/banter/BanterParts.tsx`;
+its data `lib/useBanterInbox.ts` (rooms, crew chats and Blends, DMs, requests —
+loaded together, cached, kept live) and `lib/useCrewInbox.ts` (crew invites,
+emblems, Blend sides); its pure helpers `components/banter/inbox.ts`.
 
 ---
 
-## Layout, top to bottom
+## Top to bottom
 
-| Section | Shown when | Built |
-|---|---|---|
-| Top bar | always | `PulseTopBar` "The Banter" + the notification bell. No menu button, no compose. |
-| Search | always | `BanterSearch`, a `surface` pill. Filters titles, previews and a room's last sender in place. |
-| **Live now** | you are checked into a room | One full-width row per room: `surfaceSunken`, radius `md`, padding 16. 56pt square event cover (radius `sm`; a glyph on `surface` when there is none), title, and a still 8pt `success` dot + "You're here · N in the room" (count left off when 0). Rows 12 apart. Tapping opens the room. |
-| **Requests** | a request is pending | Heading + count in `meta`. Each request is a conversation row — sender's photo (or a glyph disc on `surface`), name, time, two lines of message — with **Decline** (`surface`) and **Accept** (`textPrimary` fill, `bg` text) 32pt pills under it, then a 32pt `surface` **More** disc (Block, or Report — which also declines). The photo and name open the sender's profile. |
-| **The Board** | you have a live board ask, either way | `components/board/BoardRequestsSection.tsx`, **placeholder design** (docs/PLACEHOLDER_SCREENS.md §6). Asks waiting on you as request rows with the asker's generated mark (never a photo), Decline / Accept — Accept opens the conversation it made. Your own asks under "YOU ASKED", quieter: *Waiting on them* + Withdraw (a declined ask reads the same), *They said yes*, or *Closed* once the night is over — never "declined". Off behind `BOARD_ENABLED` until the board's server half ships. |
-| **Conversations** | always (headings hidden when empty) | Bucketed **Today / This week / Earlier** by last activity with `DayHeading`. "MARK ALL READ" on the right of the first heading. |
+| | |
+|---|---|
+| **Header** | Bar glass: "Banter", then the bell (Notifications), search, Mark all read (dimmed when no DM is unread). Search opens a field under it that filters in place. |
+| **Live now** | The room you're standing in as the hero: its cover under a scrim, a still Live badge, a rolling "N in the room", the last line — or "Locked by the organiser · read only". An open Blend under it: the two sides' emblems, "Open now · closes 4 AM". |
+| **Requests** | Solid cards that need an answer: the asker, their note verbatim (two lines), the time, ⋯ (Block · Report · Cancel), then Decline and Accept at 48 — Decline first. Accept's `H.success` comes with the server's answer and opens the DM. A crew invite is the same card with Join (the consent screen) and Decline. The Board's asks sit beside them. |
+| **Crews** | Crew chats, each its emblem in a rounded square. |
+| **People** | DMs, round: a photo once they're a name to you, else their creature. "Mark all read" on the heading. "Asked to reveal names" is a chip until you open the thread. |
+| **Past rooms** | Rooms you're not standing in, as their covers. A locked or muted room says so as a status chip, never as speech. |
 
-Checked-in rooms are **lifted out** of the conversations rather than repeated.
+Rows are 64 tall with no hairlines. **Unread is three changes and a dot,
+never a height change**: line 2 goes white and medium, the time white, and the
+dot pops into a slot every row keeps. Muted is a bell-slash (rooms only — a DM
+can't be muted). Line 2, in order: a status chip; "Not sent · Tap to retry"
+(with a circle-alert, never colour alone); "Draft · …"; the last message ("You:
+…", "Cosmic Panda: …"; a photo is "Photo", an announcement "Announcement ·
+Toit: …", a sponsored message never).
 
-### A conversation row
+**Swipes** (5.11): a room row — Mute · Leave (the confirm plays
+`H.destructive`); a crew row — Mute; an unread DM — Mark read.
 
-Fixed height — 56pt avatar, 12 above and below, 16 to the text, **no
-hairlines**. A person is round (photo, or the generated mark before they
-reveal); a room is its event's cover in a square, radius `sm`.
+**Reorder** (#27): a row a message lands in moves on `M.settle`. With a finger
+on the list the order holds and a glass "↑ New" pill offers the way up.
 
-- Line 1: name `bodyStrong`, time `meta` on the right.
-- Line 2: one line of preview, `body` `textSecondary`, prefixed "You: " for your
-  own message and "Name: " for someone else's in a room (their room
-  pseudonym).
-- **Unread** is three changes and never a height change: the preview goes
-  `bodyStrong` `textPrimary`, the time goes `textPrimary`, and a 10pt
-  `textPrimary` dot appears under the time. The dot's slot is reserved on read
-  rows so nothing shifts when a row is read. No counts on rows — the total is
-  on the bell.
-- Someone asked you to reveal: the preview reads **"Asked to reveal names"** in
-  `textPrimary` until you open the thread (this session; the server keeps the
-  flag until you answer, so it returns after a relaunch).
-
-### Timestamps
-
-`components/banter/inbox.ts`, pure and tested: `now`, `5m`, `3h` (earlier
-today), `Yesterday`, a weekday (`Tue`) within the week, `Oct 4` this year,
-`Oct 4, 2025` before. Never the device locale's date format.
-
-### States
-
-- **Loading** — four skeleton rows at the row's geometry, round and square.
-- **Empty** — no bucket headings; the glyph tile, "No conversations yet", and
-  an "Explore events" accent button. Not shown when Live now or Requests has
-  something in it.
-- **Failed** — "Couldn't load your chats" + Retry. If one of the two lists
-  failed and the other loaded, a `meta` line above says so.
-
-### Colour
-
-No accent on a populated inbox. **Accept** is the strong-neutral
-(`textPrimary` fill, `bg` text): as the accent, a list of three requests was a
-column of orange. The empty state's "Explore events" is that state's one
-accent action. Unread is `textPrimary`, presence is `success`.
-
-### Unread in rooms, and "Mark all read"
-
-Room unread comes from `GET /chat/groups`' `unreadCount`, plus one locally for
-each message someone else sends to a room you are not reading.
-
-**Mark all read covers DMs only.** No endpoint marks a room read: the only
-writer of `chat_group_members.last_read_message_id` is `GET
-/events/[eventId]/chat`, and the room screen (`app/chat/[id].tsx`) reads
-through `GET /chat/groups/[id]/messages`, which does not move it. Opening a
-room clears its dot locally, but the next refresh can bring it back. **Needs
-a server change**: have the messages GET (without `before`) advance the
-reader's last-read, and add a group equivalent of `POST /conversations/read`
-if rooms should join Mark all read.
-
----
-
-## Why it departs from the original frame (`1141:5247`)
-
-- **"Live now", not "Pinned".** Nothing in the product can pin a
-  conversation. What *is* pinned, by circumstance, is the event you are
-  standing in — temporary, anonymous, only useful while you are there. The
-  frame's horizontal rail of 64pt discs became full-width rows so the room's
-  name and headcount fit.
-- **No compose button.** A DM starts from a person, and every route to one
-  already goes through a profile.
-- **Requests exist.** The frame has no slot for them; building it exactly
-  would have left the endpoint with nothing calling it.
-- **No hairlines, no taller unread row.** The frame ruled read rows and gave
-  the unread one extra top padding; a list that changes height as you read it
-  moves under your thumb.
-
----
+**States:** loading (four rows at the real geometry — round, square, round,
+round); empty ("No conversations yet", Explore events); failed ("Couldn't load
+your chats", Try again); partial failure (one line above the list); a search
+with nothing ("No chats match …", Clear search); offline and paused banners.
 
 ## Anonymity in the inbox
 
-A DM that opens from a mutual like carries **the pseudonym the match card
-showed**. The real name appears only when that person reveals.
+A DM from a match carries the pseudonym the match card showed; the server
+sends no name and no photo until that person reveals (`lib/conversation-identity.ts`
+in blendn-admin), so the inbox can't leak one. An unrevealed match is drawn as
+their creature, seeded on the pseudonym — never on an id.
 
-The gate is entirely server-side (`lib/conversation-identity.ts` in
-blendn-admin): before a reveal, `name` *is* the pseudonym and `image` is `null`,
-so the inbox cannot leak a name it was never sent. Every surface that names a
-participant — the list, the thread, typing indicators, push titles — resolves
-through the same function.
+## Still open (server)
 
-What the inbox can still get wrong is **drawing** that state. A null photo
-through the ordinary avatar is an empty grey circle, which reads as a broken row
-rather than as anonymity working. So an unrevealed match gets the generated
-mark: the same `pseudonymAvatar` the Scene's attendee discs and the room use,
-seeded on **the pseudonym**, so one person is one colour and one creature
-everywhere they appear under that name.
-
-Three states, and the middle one is the new drawing:
-
-| Conversation | Name shown | Avatar |
-|---|---|---|
-| Accepted message request — never pseudonymous | Real name | Photograph |
-| Match, not yet revealed | Pseudonym | **Generated disc** |
-| Match, revealed | Real name | Photograph |
-
-> **Never seed the mark with a user id.** That is stable forever and would
-> rebuild exactly the cross-surface identity the pseudonyms exist to prevent.
-
-## Still open
-
-- **Message-body search** needs a server endpoint; search covers what the list
-  already holds.
-- **Room read state** needs the server change above.
+- **Room read state:** no endpoint marks a room read, so Mark all read covers
+  DMs only, and a DM's "Mark read" swipe reads the thread's first page (which is
+  what opens it on the server).
+- **Previews:** the server writes "📢 [Announcement from …]" and "[image]" into
+  the content and can't say a message was a poll (SCRUM-625).
+- **Crew emblems** come from `GET /crews`; `GET /chat/groups` could carry
+  `emblemSeed` on its `rooms`.
+- **Message-body search** needs an endpoint; search covers what the list holds.

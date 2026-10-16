@@ -6,7 +6,7 @@ import React, { useCallback, useEffect, useState } from 'react'
 import { Dimensions, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
-import { MatchMoment } from '../../components/blendn/MatchMoment'
+import { MomentMatch } from '../../components/ds/MomentMatch'
 import { LoadError, LoadState } from '../../components/LoadError'
 import { useToast } from '../../components/Toast'
 import { ConnectSheet } from '../../components/grid/ConnectSheet'
@@ -632,16 +632,20 @@ function UserProfileInner() {
         A mutual like made from here. Your side is your pseudonym in that room,
         as the room's own moment draws it; theirs is what this page shows.
       */}
-      <MatchMoment
-        visible={match !== null}
-        me={{ name: match?.you ?? 'You', photo: null }}
-        them={{ name: heroTitle, photo: revealed ? photos[0] ?? null : null }}
-        onClose={() => setMatch(null)}
-        onSayHi={() => {
-          setMatch(null)
-          handleConnect()
-        }}
-      />
+      {/* The Match (D · 4.4): faces only where earned. Yours is your creature here; theirs a photo only if they revealed. */}
+      {match ? (
+        <MomentMatch
+          you={{ kind: 'creature', pseudonym: match.you ?? 'You' }}
+          them={revealed && photos[0] ? { kind: 'photo', uri: photos[0] } : { kind: 'creature', pseudonym: heroTitle }}
+          name={heroTitle}
+          onClose={() => setMatch(null)}
+          onSayHi={() => {
+            setMatch(null)
+            handleConnect()
+          }}
+          testID="profile-match"
+        />
+      ) : null}
 
       <View style={[styles.topBar, { paddingTop: insets.top + SPACE.md }]} pointerEvents="box-none">
         <Pressable

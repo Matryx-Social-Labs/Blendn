@@ -1,44 +1,62 @@
 import { useState } from 'react'
-import { Pressable, ScrollView, StyleSheet, TextInput } from 'react-native'
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { closeSheet, dismissSheet, showSheet, useSheet, type Sheet, type SheetAction, type SheetOutcome } from '../lib/sheet'
-import { CONTROL, EMBER, EMBER_RADIUS, OPACITY, SPACE, TYPE } from '../lib/theme'
-import ActionTray, { type ActionTrayButton } from './ActionTray'
+import { COLOR, ICON, MATERIAL, SIZE, SPACE } from '../lib/design/tokens'
+import { OPACITY } from '../lib/theme'
+import type { ButtonKind } from './ds/Button'
+import { Spinner } from './ds/Loader'
+import { Sheet as DsSheet, type SheetAction as DsAction } from './ds/Sheet'
+import { font, PRESSED_WASH, useBoldText, useIncreaseContrast } from './ds/shared'
+import { TextArea } from './ds/TextField'
+import { Icon, type IconName } from './ui/Icon'
 import { useToast } from './Toast'
-import { Text } from './ui/Text'
 
 /** Long enough for "what happened", short of an essay. The leave route caps at 2000. */
 const NOTE_MAX = 500
 
+/** lib/sheet's variants as the DS Sheet's kinds: an affirmative in a sheet is the strong white, never the gradient. */
+const KIND: Record<NonNullable<SheetAction['variant']>, ButtonKind> = {
+  primary: 'strong',
+  secondary: 'secondary',
+  destructive: 'destructive',
+}
+const kindOf = (action: SheetAction): ButtonKind => ('cancel' in action ? 'tertiary' : KIND[action.variant ?? 'secondary'])
+
 /**
- * Draws whatever `lib/sheet.ts` holds. Mounted once, inside `ToastProvider`,
- * so a finished step can say what it did.
+ * Draws whatever `lib/sheet.ts` holds, on the DS Sheet (guidelines/components/Sheet.html).
+ * Mounted once, inside `ToastProvider`, so a finished step can say what it did.
  *
- * One `ActionTray` for every step, never remounted: a step that remounted the
- * tray would close one `Modal` and open another, which is the chaining this
- * exists to avoid. Only the step's own state resets when the step changes.
+ * One Sheet for every step, never remounted: a step that remounted it would
+ * close one `Modal` and open another, which is the chaining this exists to
+ * avoid. Only the step's own state resets when the step changes.
+ *
+ * A reason step is the design's list (Flow 5 #17, Room info #05): a tap on a
+ * reason sends the report; "Something else" asks for a note first (R3-D5
+ * 5.7). A failed step keeps its place and says why.
  */
 export function SheetHost() {
   const { sheet, key } = useSheet()
   const { showToast } = useToast()
   /*
-   * The last sheet stays drawn while the Modal fades out, so closing does not
-   * blank the tray for its final frames.
+   * The last sheet stays drawn while the Sheet slides out, so closing does not
+   * blank it for its final frames.
    */
   const [shown, setShown] = useState<Sheet | null>(null)
   const [stepKey, setStepKey] = useState(key)
   const [busy, setBusy] = useState<number | null>(null)
   const [error, setError] = useState<{ index: number; text: string } | null>(null)
-  const [reason, setReason] = useState<string | null>(null)
+  /** "Something else": the reason waiting for its note. */
+  const [noting, setNoting] = useState<string | null>(null)
   const [note, setNote] = useState('')
 
-  // A new step starts clean: no choice, note, error or spinner carried over.
+  // A new step starts clean: no note, error or spinner carried over.
   // Adjusted in render, on the same change the store makes.
   if (stepKey !== key) {
     setStepKey(key)
     setBusy(null)
     setError(null)
-    setReason(null)
+    setNoting(null)
     setNote('')
   }
   if (sheet && sheet !== shown) setShown(sheet)
@@ -75,131 +93,174 @@ export function SheetHost() {
   }
 
   if (current.kind === 'actions') {
-    const buttons: ActionTrayButton[] = current.actions.map((action, index) => ({
+    const rows = current.layout === 'rows'
+    const asButton = (action: SheetAction, index: number): DsAction => ({
       // A failed step keeps its place and says what to do about it.
       label: error?.index === index ? 'Try again' : action.label,
-      variant: action.variant,
+      kind: kindOf(action),
       loading: busy === index,
       disabled: busy !== null && busy !== index,
+      // The confirm plays H.destructive; a step that only leads to one does not.
+      pressHaptic: !('next' in action),
       onPress: () => perform(action, index),
-    }))
+    })
     return (
-      <ActionTray
+      <DsSheet
         visible={sheet !== null}
-        title={current.title}
-        message={current.message}
-        buttons={buttons}
-        layout="stack"
         onClose={dismissSheet}
+        title={current.title}
+        body={current.message}
+        icon={current.icon}
+        actions={current.actions.flatMap((a, i) => (rows && !('cancel' in a) ? [] : [asButton(a, i)]))}
+        testID="sheet-host"
       >
         {current.content}
+        {rows ? (
+          <OptionRows
+            rows={current.actions.flatMap((a, i) =>
+              'cancel' in a
+                ? []
+                : [
+                    {
+                      key: a.label,
+                      label: a.label,
+                      icon: a.icon,
+                      destructive: a.variant === 'destructive',
+                      chevron: 'next' in a,
+                      busy: busy === i,
+                      disabled: busy !== null && busy !== i,
+                      onPress: () => perform(a, i),
+                    },
+                  ]
+            )}
+          />
+        ) : null}
         {error ? <ErrorLine text={error.text} /> : null}
-      </ActionTray>
+      </DsSheet>
     )
   }
 
   const reasonSheet = current
-  const submit = () => {
-    if (!reason) return
-    const trimmed = note.trim()
-    begin(0, () => reasonSheet.run(reason, trimmed ? trimmed : undefined))
+  const send = (reason: string, index: number, text?: string) => {
+    const trimmed = text?.trim()
+    begin(index, () => reasonSheet.run(reason, trimmed ? trimmed : undefined))
+  }
+
+  if (noting !== null) {
+    return (
+      <DsSheet
+        visible={sheet !== null}
+        onClose={closeSheet}
+        title="Something else"
+        body={
+          reasonSheet.about
+            ? `Tell us what happened. ${reasonSheet.about} isn’t told who sent this.`
+            : 'Tell us what happened. Nobody is told who sent it.'
+        }
+        actions={[
+          {
+            label: error ? 'Try again' : 'Send report',
+            kind: 'strong',
+            loading: busy !== null,
+            disabled: !note.trim(),
+            onPress: () => send(noting, 0, note),
+          },
+          { label: 'Cancel', kind: 'tertiary', onPress: closeSheet },
+        ]}
+        testID="sheet-host"
+      >
+        <TextArea value={note} onChangeText={setNote} placeholder="What happened?" limit={NOTE_MAX} disabled={busy !== null} />
+        {error ? <ErrorLine text={error.text} /> : null}
+      </DsSheet>
+    )
   }
 
   return (
-    <ActionTray
+    <DsSheet
       visible={sheet !== null}
-      title={current.title}
-      message={current.message}
-      size="expanded"
       onClose={closeSheet}
-      buttons={[
-        { label: 'Cancel', onPress: closeSheet, disabled: busy !== null },
-        {
-          label: error ? 'Try again' : current.submitLabel,
-          // The sheet's one primary action, so its one accent.
-          variant: 'primary',
-          loading: busy !== null,
-          disabled: !reason,
-          onPress: submit,
-        },
-      ]}
+      title={current.title}
+      body={current.message}
+      actions={[{ label: 'Cancel', kind: 'tertiary', onPress: closeSheet, disabled: busy !== null }]}
+      testID="sheet-host"
     >
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.reasons}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        {current.reasons.map((option) => {
-          const selected = option.value === reason
-          return (
-            <Pressable
-              key={option.value}
-              onPress={() => setReason(option.value)}
-              disabled={busy !== null}
-              accessibilityRole="radio"
-              accessibilityLabel={option.label}
-              accessibilityState={{ selected, disabled: busy !== null }}
-              style={({ pressed }) => [
-                styles.reason,
-                selected && styles.reasonSelected,
-                pressed && !selected && styles.pressed,
-              ]}
-            >
-              <Text variant="bodyStrong" color={selected ? EMBER.bg : EMBER.textPrimary}>
-                {option.label}
-              </Text>
-            </Pressable>
-          )
-        })}
-        <TextInput
-          value={note}
-          onChangeText={setNote}
-          editable={busy === null}
-          placeholder="Add details (optional)"
-          placeholderTextColor={EMBER.textPlaceholder}
-          accessibilityLabel="Add details, optional"
-          multiline
-          maxLength={NOTE_MAX}
-          style={styles.note}
-        />
-      </ScrollView>
+      <OptionRows
+        rows={current.reasons.map((option, i) => ({
+          key: option.value,
+          label: option.label,
+          chevron: true,
+          busy: busy === i,
+          disabled: busy !== null && busy !== i,
+          onPress: () => (option.value === 'other' ? setNoting(option.value) : send(option.value, i)),
+        }))}
+      />
       {error ? <ErrorLine text={error.text} /> : null}
-    </ActionTray>
+    </DsSheet>
+  )
+}
+
+type OptionRow = {
+  key: string
+  label: string
+  icon?: IconName
+  destructive?: boolean
+  /** It opens another step. */
+  chevron?: boolean
+  busy?: boolean
+  disabled?: boolean
+  onPress: () => void
+}
+
+/** The design's sheet list: 48 pt rows, a hairline between, a chevron on a row that goes further. */
+export function OptionRows({ rows }: { rows: OptionRow[] }) {
+  const bold = useBoldText()
+  const contrast = useIncreaseContrast()
+  return (
+    <View>
+      {rows.map((row, i) => {
+        const color = row.destructive ? COLOR.destructive : COLOR.textPrimary
+        return (
+          <Pressable
+            key={row.key}
+            onPress={row.onPress}
+            disabled={row.disabled || row.busy}
+            accessibilityRole="button"
+            accessibilityLabel={row.label}
+            accessibilityState={{ disabled: !!row.disabled, busy: !!row.busy }}
+            android_ripple={{ color: PRESSED_WASH.android }}
+            style={({ pressed }) => [
+              styles.row,
+              i > 0 && (contrast ? styles.hairlineContrast : styles.hairline),
+              pressed && Platform.OS === 'ios' && styles.pressed,
+              row.disabled && styles.dim,
+            ]}
+          >
+            {row.icon ? <Icon name={row.icon} size={ICON.inline} color={color} /> : null}
+            <Text style={[font('body', bold), styles.label, { color }]}>{row.label}</Text>
+            {row.busy ? <Spinner size={16} /> : row.chevron ? <Icon name="chevron-right" size={ICON.inline} color={COLOR.textSecondary} /> : null}
+          </Pressable>
+        )
+      })}
+    </View>
   )
 }
 
 /** What failed, in the server's words where it gave some. */
 function ErrorLine({ text }: { text: string }) {
+  const bold = useBoldText()
   return (
-    <Text variant="meta" color={EMBER.destructive} accessibilityLiveRegion="polite">
+    <Text accessibilityLiveRegion="polite" style={[font('meta', bold), styles.error]}>
       {text}
     </Text>
   )
 }
 
 const styles = StyleSheet.create({
-  scroll: { flexShrink: 1 },
-  reasons: { gap: SPACE.sm },
-  // One row, one height: every reason is a 48pt row on `surface`.
-  reason: {
-    minHeight: CONTROL.md,
-    justifyContent: 'center',
-    paddingHorizontal: SPACE.lg,
-    borderRadius: EMBER_RADIUS.md,
-    backgroundColor: EMBER.surface,
-  },
-  // Selected option: `textPrimary` fill, `bg` text (docs/DESIGN_SYSTEM.md).
-  reasonSelected: { backgroundColor: EMBER.textPrimary },
-  pressed: { opacity: OPACITY.pressed },
-  note: {
-    ...TYPE.body,
-    minHeight: CONTROL.lg + CONTROL.sm,
-    marginTop: SPACE.sm,
-    paddingHorizontal: SPACE.lg,
-    paddingVertical: SPACE.md,
-    borderRadius: EMBER_RADIUS.md,
-    backgroundColor: EMBER.surface,
-    textAlignVertical: 'top',
-  },
+  row: { minHeight: SIZE.control, flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
+  hairline: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: COLOR.hairline },
+  hairlineContrast: { borderTopWidth: 1, borderTopColor: MATERIAL.hairlineIncreaseContrast },
+  pressed: { backgroundColor: PRESSED_WASH.ios },
+  dim: { opacity: OPACITY.disabled },
+  label: { flex: 1 },
+  error: { color: COLOR.destructive },
 })

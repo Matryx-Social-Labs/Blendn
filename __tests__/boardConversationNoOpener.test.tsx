@@ -16,11 +16,15 @@
 import { render, screen, waitFor } from '@testing-library/react-native'
 
 const mockParams: Record<string, string> = { conversationId: 'conv-board' }
+jest.mock('@react-native-async-storage/async-storage', () =>
+  require('@react-native-async-storage/async-storage/jest/async-storage-mock')
+)
 jest.mock('expo-router', () => {
   const React = require('react')
   return {
     router: { back: jest.fn(), push: jest.fn() },
     useLocalSearchParams: () => mockParams,
+    useFocusEffect: (cb: () => void | (() => void)) => React.useEffect(cb, [cb]),
     Stack: { Screen: () => React.createElement(React.Fragment) },
   }
 })

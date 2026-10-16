@@ -14,7 +14,9 @@ says so to testers. `app/forgot-password.tsx` is no longer a placeholder: it
 was designed to match sign-in on 2026-09-28, with a "Check your inbox" state
 (Open mail app, Resend with a 30-second cooldown). `app/rate/[eventId].tsx` and
 `app/event-preferences/[eventId].tsx` are no longer placeholders either (both
-2026-09-28); their sections below say what was decided.
+2026-09-28); their sections below say what was decided. The Board
+(`app/board/[eventId].tsx`, §6) took the Flow 4 design on 2026-10-16; its rules
+below still hold.
 
 **Read `blendn-admin/docs/DESIGN_HANDOFF.md` first.** It explains the product's
 five non-negotiable rules and why they exist. This file is the per-screen
