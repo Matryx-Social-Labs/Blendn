@@ -1,4 +1,4 @@
-import { allReasons } from '../components/blendn/PersonCard'
+import { reasonLines } from '../lib/roomMoments'
 import {
   aboutLine,
   aboutYouFrom,
@@ -14,8 +14,6 @@ import {
 import { withheldUnlessVisible } from '../lib/profileIdentity'
 import type { RoomPerson } from '../lib/useRoom'
 
-jest.mock('../components/blendn/Face', () => ({ Face: () => null }))
-jest.mock('../components/blendn/HeartPop', () => ({ HeartPop: () => null }))
 
 /**
  * Matching v2 on the app (step 10, MV-CU01..CU04): the about-you editor sends
@@ -98,7 +96,7 @@ describe('a person card prints the server\'s lines (MV-CU02)', () => {
     }) as unknown as RoomPerson
 
   it('every overlap, as sent, after the reasons that were there before', () => {
-    const reasons = allReasons(
+    const reasons = reasonLines(
       person({
         sharedIntents: ['friends'],
         overlaps: [
@@ -106,12 +104,12 @@ describe('a person card prints the server\'s lines (MV-CU02)', () => {
           { kind: 'home_state', text: 'Both from Kerala' },
         ],
       })
-    ).map((r) => r.text)
+    )
     expect(reasons).toEqual(['Both here to make friends', 'Both CSK — in RCB country 💛', 'Both from Kerala'])
   })
 
   it('invents nothing when the server sent nothing', () => {
-    expect(allReasons(person({}))).toEqual([])
+    expect(reasonLines(person({}))).toEqual([])
   })
 })
 

@@ -19,7 +19,7 @@ import { Icon, type IconName } from '../ui/Icon'
 import { Material } from '../ui/Material'
 import { COLOR, EASING, MATERIAL, RADIUS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
-import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
+import { KEYBOARD_BEHAVIOR, useKeyboardShown } from '../../lib/keyboard'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { tint } from '../../lib/theme'
 import { Button, type ButtonKind, type ButtonProps } from './Button'
@@ -59,6 +59,16 @@ export function settleDetent(heights: number[], from: number, height: number, dr
   return nearest
 }
 
+/**
+ * The sheet's foot. With the keyboard up the home indicator is under the
+ * keyboard, and the avoiding view already lifts the sheet by the keyboard's
+ * full height, so the safe-area inset would only leave a dead band between
+ * the last button and the keys (Board composer drive).
+ */
+export function sheetBottomPadding(insetBottom: number, keyboardUp: boolean) {
+  return (keyboardUp ? 0 : insetBottom) + SPACE.sm
+}
+
 export type SheetAction = {
   label: string
   onPress: () => void
@@ -86,6 +96,11 @@ export type SheetProps = {
   detents?: readonly Detent[]
   /** Between the body and the actions: a reason list, a form. Scroll it yourself if it can outgrow the detent. */
   children?: ReactNode
+  /**
+   * Once it has left the screen. iOS drops a Modal presented while another is
+   * still leaving, so the next sheet (Block / Report, a composer) waits for this.
+   */
+  onDismissed?: () => void
   testID?: string
 }
 
@@ -100,6 +115,7 @@ function useSheetMotion({
   opening,
   busy,
   requestClose,
+  onGone,
 }: {
   visible: boolean
   /** Lowest first. */
@@ -108,6 +124,8 @@ function useSheetMotion({
   opening: number
   busy: boolean
   requestClose: () => void
+  /** It has unmounted (Android); iOS reports through the Modal's own `onDismiss`. */
+  onGone: () => void
 }) {
   const window = useWindowDimensions()
   const reduceMotion = useReducedMotion()
@@ -136,7 +154,10 @@ function useSheetMotion({
     const out = { duration: fade, easing: Easing.bezier(...EASING.sheet) }
     if (!reduceMotion) offset.set(withTiming(window.height, out))
     scrim.set(withTiming(0, out))
-    const timer = setTimeout(() => setMounted(false), fade)
+    const timer = setTimeout(() => {
+      setMounted(false)
+      onGone()
+    }, fade)
     return () => clearTimeout(timer)
     // On `visible` only: the rest is read as it stood when the sheet opened or closed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -195,13 +216,14 @@ function useSheetMotion({
  * ponytail: focus is not handed back to the opener on close (the opener
  * knows what it was); the material does not grow more opaque near full height.
  */
-export function Sheet({ visible, onClose, title, body, icon, actions = [], detents, children, focusRef, testID }: SheetProps) {
+export function Sheet({ visible, onClose, title, body, icon, actions = [], detents, children, focusRef, onDismissed, testID }: SheetProps) {
   const android = Platform.OS === 'android'
   const insets = useSafeAreaInsets()
   const window = useWindowDimensions()
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const titleRef = useRef<ComponentRef<typeof Text>>(null)
+  const keyboardUp = useKeyboardShown()
 
   const busy = actions.some((a) => a.loading)
   const sorted = [...actions].sort((a, b) => ORDER.indexOf(a.kind ?? 'secondary') - ORDER.indexOf(b.kind ?? 'secondary'))
@@ -211,7 +233,21 @@ export function Sheet({ visible, onClose, title, body, icon, actions = [], deten
   const stops = [...new Set(detents)].sort((a, b) => DETENT[a] - DETENT[b])
   const heights = stops.map((d) => Math.round(window.height * DETENT[d]))
   const opening = detents ? stops.indexOf(detents[0]) : 0
-  const { mounted, drag, placeStyle, scrimStyle, natural, fixedHeight } = useSheetMotion({ visible, heights, opening, busy, requestClose })
+  const dismissed = useRef(onDismissed)
+  useEffect(() => {
+    dismissed.current = onDismissed
+  })
+  const ios = Platform.OS === 'ios'
+  const { mounted, drag, placeStyle, scrimStyle, natural, fixedHeight } = useSheetMotion({
+    visible,
+    heights,
+    opening,
+    busy,
+    requestClose,
+    onGone: () => {
+      if (!ios) dismissed.current?.()
+    },
+  })
   if (testID) drag.withTestId(`${testID}-drag`)
   // Once the modal is on screen: iOS presents it a frame after mount and drops a focus sent earlier.
   const focusTitle = () => {
@@ -238,6 +274,7 @@ export function Sheet({ visible, onClose, title, body, icon, actions = [], deten
       navigationBarTranslucent
       onRequestClose={requestClose}
       onShow={focusTitle}
+      onDismiss={ios ? () => dismissed.current?.() : undefined}
     >
       {/* A Modal is its own native root: gestures inside it need their own root view. */}
       <GestureHandlerRootView testID={testID && `${testID}-root`} pointerEvents={visible ? 'auto' : 'none'} style={styles.fill}>
@@ -253,7 +290,7 @@ export function Sheet({ visible, onClose, title, body, icon, actions = [], deten
               testID={testID}
               role="sheet"
               onLayout={(e) => natural.set(e.nativeEvent.layout.height)}
-              style={[styles.sheet, fixedHeight && styles.fill, { paddingBottom: insets.bottom + SPACE.sm }, contrast && IC_HAIRLINE]}
+              style={[styles.sheet, fixedHeight && styles.fill, { paddingBottom: sheetBottomPadding(insets.bottom, keyboardUp) }, contrast && IC_HAIRLINE]}
             >
               <GestureDetector gesture={drag}>
                 <View style={styles.head}>

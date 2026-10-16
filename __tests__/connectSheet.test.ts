@@ -15,8 +15,8 @@ const stripComments = (src: string) =>
   src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 
 const SHEET = () => stripComments(read('components/grid/ConnectSheet.tsx'))
-// The Grid card is gone; one face opens `PersonCard`, which carries the actions now.
-const CARD = () => stripComments(read('components/blendn/PersonCard.tsx'))
+// One face opens the redesign's `PersonCard` (components/ds), which carries the actions now.
+const CARD = () => stripComments(read('components/ds/PersonCard.tsx'))
 
 describe('the disclosure names people the way the server does', () => {
   it('uses the pseudonym when they have not revealed', () => {
@@ -99,27 +99,28 @@ describe('the cost is stated before the effort', () => {
 describe('the card keeps the two actions apart', () => {
   it('takes both handlers, and they are not the same one', () => {
     const src = CARD()
-    expect(src).toContain('onLike: (p: RoomPerson) => void')
-    expect(src).toContain('onMessage: (p: RoomPerson) => void')
+    expect(src).toContain('onLike?: () => void')
+    expect(src).toContain('onMessage?: () => void')
+    const screen = stripComments(read('components/blendn/BlendnScreen.tsx'))
+    expect(screen).toContain('onLike={() => cardPerson && void like(cardPerson)}')
+    expect(screen).toMatch(/onMessage=\{\(\) => \{\s*if \(!card\) return\s*const to = card\s*closeCardThen\(\(\) => setConnectTo\(to\)\)/)
   })
 
   it('makes the like the prominent button', () => {
     /*
      * The safe, symmetric, reversible action is the easy one. Making the button
      * with a cost the more attractive one is how people reveal themselves by
-     * reflex.
+     * reflex. Like is the gradient primary; Message a secondary after it.
      */
     const src = CARD()
-    const actions = src.slice(src.indexOf('<View style={styles.actions}>'))
-    expect(actions.indexOf('onPress={like}')).toBeLessThan(actions.indexOf('onPress={() => onMessage(p)}'))
-    const like = actions.slice(actions.indexOf('onPress={like}'), actions.indexOf('onPress={() => onMessage(p)}'))
-    // The accent fill, flat (no gradient fills — docs/DESIGN_SYSTEM.md).
-    expect(like).toContain('styles.primary')
-    expect(src).toContain('primary: { flex: 1, backgroundColor: EMBER.accent }')
-    expect(like).not.toContain('EMBER_GRADIENT')
-    // …and Message is never the accent.
-    const message = actions.slice(actions.indexOf('onPress={() => onMessage(p)}'))
-    expect(message.slice(0, message.indexOf('</ScalePress>'))).not.toContain('styles.primary')
+    const actions = src.slice(src.indexOf("testID={id('actions')}"))
+    const like = actions.indexOf('label="Like"')
+    const message = actions.indexOf('label="Message"')
+    expect(like).toBeGreaterThan(-1)
+    expect(like).toBeLessThan(message)
+    // The Button's default kind is primary (the gradient); Message says secondary.
+    expect(actions.slice(like, actions.indexOf('/>', like))).not.toContain('kind=')
+    expect(actions.slice(message, actions.indexOf('/>', message))).toContain('kind="secondary"')
   })
 
   it('tells a screen reader what each one costs', () => {
@@ -128,7 +129,7 @@ describe('the card keeps the two actions apart', () => {
      * meaning "I want to talk", one of which publishes your identity.
      */
     const src = CARD()
-    expect(src).toContain('They are only told if they like you back')
+    expect(src).toContain('They’re only told if they like you back.')
     expect(src).toContain('shows them your name and photo')
   })
 })

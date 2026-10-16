@@ -318,3 +318,54 @@ it('<PersonCard>: the unavailable card’s Close closes the sheet', async () => 
   await fireEvent.press(screen.getByRole('button', { name: 'Close' }))
   expect(onClose).toHaveBeenCalledTimes(1)
 })
+
+describe('Flow 4: the room’s card (R2-D1, R3-D4, #51)', () => {
+  it('a wave on its way: the hand waves ±14° (#51), never a spinner, and is busy', async () => {
+    await draw({ waving: true, testID: 'c' })
+    expect(query('c-hand-waving')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Wave at Priya' }).props.accessibilityState).toMatchObject({ busy: true, disabled: true })
+    silent()
+  })
+
+  it('Reduce Motion: the hand stays still while the wave goes', async () => {
+    reduceMotion.mockReturnValue(true)
+    await draw({ waving: true, testID: 'c' })
+    expect(Reanimated.getAnimatedStyle(screen.getByTestId('c-hand-waving', { includeHiddenElements: true })).transform).toEqual([{ rotate: '0deg' }])
+  })
+
+  it('liked, requested and waved are each their own: one never hides another', async () => {
+    await draw({ liked: true, requested: true, waved: true, testID: 'c' })
+    expect(query('c-liked')).toBeTruthy()
+    expect(query('c-waved')).toBeTruthy()
+    expect(screen.getByLabelText('Request sent to Priya')).toBeTruthy()
+  })
+
+  it('Message says what it costs to a screen reader', async () => {
+    await draw({ testID: 'c' })
+    expect(screen.getByRole('button', { name: 'Message' }).props.accessibilityHint).toBe('Sends a request, which shows them your name and photo.')
+  })
+
+  it('a crew here: "Like for Nebula" with its emblem, "Like as yourself" under the row, and who they see', async () => {
+    const crewLike = jest.fn()
+    const onLike = jest.fn()
+    await draw({ crewLike: { name: 'Nebula', emblemSeed: 'nebula', onPress: crewLike }, onLike, testID: 'c' })
+    await fireEvent.press(screen.getByRole('button', { name: 'Like for Nebula' }))
+    expect(crewLike).toHaveBeenCalledTimes(1)
+    expect(onLike).not.toHaveBeenCalled()
+    expect(haptics.like).toHaveBeenCalledTimes(1)
+    expect(text('A crew like is shown to Priya as Nebula, never as you.')).toBeTruthy()
+    await fireEvent.press(screen.getByRole('button', { name: 'Like as yourself' }))
+    expect(onLike).toHaveBeenCalledTimes(1)
+  })
+
+  it('several crews may like: "Like for your crew", a heart rather than an emblem', async () => {
+    await draw({ crewLike: { name: 'your crew', onPress: jest.fn() }, testID: 'c' })
+    expect(screen.getByRole('button', { name: 'Like for your crew' })).toBeTruthy()
+  })
+
+  it('once liked, no crew like is offered again', async () => {
+    await draw({ liked: true, crewLike: { name: 'Nebula', emblemSeed: 'nebula', onPress: jest.fn() }, testID: 'c' })
+    expect(screen.queryByRole('button', { name: 'Like for Nebula' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Like as yourself' })).toBeNull()
+  })
+})

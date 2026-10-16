@@ -370,6 +370,9 @@ export function useAuth(): AuthState {
   return authState
 }
 
+/** The signed-in account's id, synchronously: for code that acts on a tap outside a hook (`markCoachUsed`). */
+export const currentUserId = (): string | null => globalAuthState.user?.id ?? null
+
 // Helper function to get current user without hooks
 export const getCurrentUser = async (): Promise<AuthUser | null> => {
   if (!globalAuthState.initialized) {

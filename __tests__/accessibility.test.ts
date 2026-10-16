@@ -29,7 +29,7 @@ const read = (...p: string[]) => readFileSync(join(__dirname, '..', ...p), 'utf8
 describe('text in a fixed-height box is capped', () => {
   const FIXED_BOXES: Array<[string, string[]]> = [
     ['onboarding button + input (CONTROL.lg)', ['components', 'onboarding', 'EmberControls.tsx']],
-    ['the tab bar label (TAB_BAR_LINE)', ['app', '(tabs)', '_layout.tsx']],
+    ['the tab bar label (the 64 pt capsule)', ['components', 'ds', 'TabBar.tsx']],
     ['the featured card (fixed aspect)', ['components', 'pulse', 'FeaturedCard.tsx']],
     ['the hero title (48/56)', ['components', 'scene', 'SceneHero.tsx']],
     ['the amenity tiles (126pt)', ['components', 'scene', 'SceneSections.tsx']],
@@ -40,14 +40,15 @@ describe('text in a fixed-height box is capped', () => {
     expect(read(...parts)).toContain('maxFontSizeMultiplier')
   })
 
-  it('the tab bar is the tightest, because its height is a constant others read', () => {
+  it('the tab bar caps its labels, because its height is a constant others read', () => {
     /*
-     * `tabBarTop` derives the bar's height from `TAB_BAR_LINE`. A label that
+     * `tabBarTop` derives the bar's height from `SIZE.tabBar`. A label that
      * grows does not make the bar taller — it overflows a box whose size
      * something else decided, and drags the Pulse's hero card sizing with it,
-     * since that measures against the same number.
+     * since that measures against the same number. The redesign caps fixed
+     * controls at 1.3× (CONTROL_FONT_CAP, the TabBar page).
      */
-    expect(read('app', '(tabs)', '_layout.tsx')).toContain('maxFontSizeMultiplier={1.2}')
+    expect(read('components', 'ds', 'TabBar.tsx')).toContain('maxFontSizeMultiplier={CONTROL_FONT_CAP}')
   })
 })
 

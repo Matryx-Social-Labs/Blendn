@@ -123,3 +123,24 @@ describe('Increase Contrast and Bold Text', () => {
     expect(label('Going').fontFamily).toBe(FONT_FAMILY.brand[700])
   })
 })
+
+describe('geometry: five equal slots, the disc in the middle one (owner override on #401)', () => {
+  const { tabBarGeometry } = require('../components/ds/TabBar') as typeof import('../components/ds/TabBar')
+
+  it.each([360, 393, 430, 440])('at %i pt all five centres are equally spaced, the disc at the middle of the screen', (width) => {
+    const { cell, centres } = tabBarGeometry(width)
+    expect(cell).toBeCloseTo((width - 40) / 5, 6)
+    expect(centres[2]).toBeCloseTo(width / 2, 6)
+    const gaps = centres.slice(1).map((c, i) => c - centres[i])
+    gaps.forEach((g) => expect(g).toBeCloseTo(cell, 6))
+    // Every 56 pt target, and the 56 pt disc, fits its slot.
+    expect(cell).toBeGreaterThanOrEqual(56)
+  })
+
+  it('draws all five slots at the same width, the disc slot included', async () => {
+    await draw()
+    const width = (id: string) => StyleSheet.flatten(screen.getByTestId(id).props.style).width
+    const slots = ['pulse', 'going', 'banter', 'me'].map((k) => width(`tabs-${k}-cell`)).concat(width('tabs-disc-slot'))
+    expect(new Set(slots).size).toBe(1)
+  })
+})

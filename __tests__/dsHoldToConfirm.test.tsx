@@ -109,6 +109,8 @@ describe('the hold', () => {
     await draw()
     await hold('begin')
     expect(Reanimated.withTiming).toHaveBeenCalledWith(1, expect.objectContaining({ duration: DURATION.hold }))
+    // The system setting must not reach the fill: Reanimated's default (System) would jump it straight to full.
+    expect(Reanimated.withTiming).toHaveBeenCalledWith(1, expect.objectContaining({ reduceMotion: Reanimated.ReduceMotion.Never }))
   })
 
   it('H.tick at each quarter, in order, then H.commit and the confirm at the edge', async () => {

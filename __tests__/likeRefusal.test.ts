@@ -49,9 +49,22 @@ describe("a refused like", () => {
     )
   })
 
-  it("falls back to a sentence when the server sends none", () => {
-    expect(likeRefusal(undefined, undefined).message).toMatch(/try again/i)
-    expect(likeRefusal(undefined, "  ").message).toMatch(/try again/i)
+  it("falls back to a sentence when the server sends none (R3-D4 4.3)", () => {
+    expect(likeRefusal(undefined, undefined).message).toBe("That didn’t go through.")
+    expect(likeRefusal(undefined, "  ").message).toBe("That didn’t go through.")
+  })
+
+  it("never passes through a sentence that names them, or a 404 (R3-D4 4.3)", () => {
+    expect(likeRefusal("RECIPIENT_NOT_HERE", "They're not in the room right now").message).toBe("That didn’t go through.")
+    expect(likeRefusal("NOT_FOUND", "User not found").message).toBe("That didn’t go through.")
+  })
+
+  it("offers Check in beside a lapsed check-in, in the server's words", () => {
+    expect(likeRefusal("NOT_CHECKED_IN", "Check in to wave at people here")).toEqual({
+      message: "Check in to wave at people here",
+      variant: "info",
+      checkIn: true,
+    })
   })
 })
 
@@ -67,8 +80,12 @@ describe("the room tells you when a like was refused", () => {
     .replace(/^\s*\/\/.*$/gm, "")
 
   it("surfaces the refusal instead of reverting in silence", () => {
+    // useRoom returns the sentence; the Room says it on the open card (R3-D4 4.3) or, off the card, as a toast.
     expect(code).toContain("likeRefusal(result.errorCode, result.error)")
-    expect(code).toMatch(/showToast\(refusal\.message, refusal\.variant\)/)
+    expect(code).toContain("return { kind: 'refused', refusal: likeRefusal(result.errorCode, result.error) }")
+    const screen = readFileSync(join(__dirname, "..", "components", "blendn", "BlendnScreen.tsx"), "utf8")
+    expect(screen).toContain("setRefusals((r) => ({ ...r, [p.id]: { text: answer.refusal.message, checkIn: answer.refusal.checkIn } }))")
+    expect(screen).toContain("else say(answer.refusal.message)")
   })
 
   it("keeps it a toast, not a tray", () => {

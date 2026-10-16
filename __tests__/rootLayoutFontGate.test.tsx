@@ -69,6 +69,7 @@ jest.mock('../components/IntroAnimation', () => ({ IntroAnimation: () => null })
 jest.mock('../components/PresenceMonitor', () => ({ PresenceMonitor: () => null }))
 jest.mock('../components/LiveAtVenue', () => ({ LiveAtVenue: () => null }))
 jest.mock('../components/SheetHost', () => ({ SheetHost: () => null }))
+jest.mock('../components/ds/CoachMarkHost', () => ({ CoachMarkHost: () => null }))
 jest.mock('expo-asset', () => ({ Asset: { loadAsync: jest.fn(async () => []) } }))
 jest.mock('expo-splash-screen', () => ({
   preventAutoHideAsync: jest.fn(async () => {}),

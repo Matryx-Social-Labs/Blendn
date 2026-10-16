@@ -109,6 +109,7 @@ import Navigation from 'lucide-react-native/icons/navigation'
 import Pencil from 'lucide-react-native/icons/pencil'
 import Play from 'lucide-react-native/icons/play'
 import Plus from 'lucide-react-native/icons/plus'
+import Radar from 'lucide-react-native/icons/radar'
 import Radio from 'lucide-react-native/icons/radio'
 import Rainbow from 'lucide-react-native/icons/rainbow'
 import RefreshCw from 'lucide-react-native/icons/refresh-cw'
@@ -118,6 +119,7 @@ import Scale from 'lucide-react-native/icons/scale'
 import ScanFace from 'lucide-react-native/icons/scan-face'
 import Search from 'lucide-react-native/icons/search'
 import Send from 'lucide-react-native/icons/send'
+import Settings2 from 'lucide-react-native/icons/settings-2'
 import Share from 'lucide-react-native/icons/share'
 import Shield from 'lucide-react-native/icons/shield'
 import ShieldAlert from 'lucide-react-native/icons/shield-alert'
@@ -246,6 +248,7 @@ const ICONS = {
   pencil: Pencil,
   play: Play,
   plus: Plus,
+  radar: Radar,
   radio: Radio,
   rainbow: Rainbow,
   'refresh-cw': RefreshCw,
@@ -255,6 +258,7 @@ const ICONS = {
   'scan-face': ScanFace,
   search: Search,
   send: Send,
+  'settings-2': Settings2,
   share: Share,
   shield: Shield,
   'shield-alert': ShieldAlert,

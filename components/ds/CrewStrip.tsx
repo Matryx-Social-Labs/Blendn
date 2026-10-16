@@ -1,18 +1,16 @@
 import { Fragment, useEffect, useRef } from 'react'
-import { Platform, StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 import Animated, { FadeIn } from 'react-native-reanimated'
 
 import { Icon, type IconName } from '../ui/Icon'
-import { COLOR, FONT_FAMILY, ICON, MATERIAL, PRESS, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, MATERIAL, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { tint } from '../../lib/theme'
-import ScalePress from '../motion/ScalePress'
-import { useGrace } from './Button'
-import { Spinner } from './Loader'
+import { Button } from './Button'
 import { CountTicks } from './CountTicks'
 import { CrewEmblem } from './CrewEmblem'
-import { announceOutcome, CONTROL_FONT_CAP, font, IC_HAIRLINE, minTarget, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
+import { announceOutcome, CONTROL_FONT_CAP, font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast } from './shared'
 
 /** "We're here": not yet · on its way · the server said OK · someone already told them. */
 export type TellState = 'no' | 'sending' | 'yes' | 'already'
@@ -118,36 +116,19 @@ function CrewStripRow({ crew, onTell, testID }: { crew: StripCrew; onTell: (id: 
   )
 }
 
-/** "Tell your crew — We're here": raised, 44 pt, `H.primary` on press-in; busy, a spinner in its place. */
+/** "Tell your crew — We're here": the raised 44 Button (A31), `H.primary` on press-in; busy, a spinner in its place. */
 function TellButton({ sending, onPress, testID }: { sending: boolean; onPress: () => void; testID?: string }) {
-  const android = Platform.OS === 'android'
-  const bold = useBoldText()
-  const contrast = useIncreaseContrast()
-  const spinner = useGrace(sending)
   return (
-    <ScalePress
-      testID={testID}
+    <Button
+      kind="secondary"
+      size="raised"
+      icon="hand"
+      label="Tell your crew — We’re here"
+      loading={sending}
+      pressHaptic={H.primary}
       onPress={onPress}
-      disabled={sending}
-      haptic={H.primary}
-      pressedScale={android ? 1 : PRESS.scale}
-      android_ripple={{ color: PRESSED_WASH.android, foreground: true }}
-      accessibilityRole="button"
-      accessibilityLabel="Tell your crew — We’re here"
-      accessibilityState={{ busy: sending }}
-      style={[styles.settled, { minHeight: minTarget() }, styles.raised, contrast && styles.contrastEdge]}
-    >
-      {spinner ? (
-        <Spinner size={16} />
-      ) : (
-        <>
-          <Icon name="hand" size={ICON.inline} />
-          <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('button', bold), styles.ink]}>
-            Tell your crew — We’re here
-          </Text>
-        </>
-      )}
-    </ScalePress>
+      testID={testID}
+    />
   )
 }
 

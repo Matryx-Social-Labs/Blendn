@@ -10,6 +10,10 @@ import { font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast } from '
 const CARET = { size: 12, radius: 2 } as const
 /** It pops from 90% (the page's "pop"; M.pop). */
 const POP_FROM = 0.9
+/** The design's width: min(screen − 32, 300) (round4/r4.js). At 360 dp a tip's sentence is two lines. */
+export const COACH_MARK_MAX_WIDTH = 300
+/** The caret's size, for a screen that centres it on what it names. */
+export const COACH_MARK_CARET = CARET.size
 
 export type CoachMarkProps = {
   /** One sentence. The same text lives in the help screen for people who dismissed it. */
@@ -28,11 +32,14 @@ export type CoachMarkProps = {
 /**
  * The app explaining one thing, once (guidelines/components/CoachMark.html):
  * a surface card with a caret at the control it names, one sentence in meta,
- * "Got it" at the right. One at a time, never a tour, never a scrim, never a
- * loop; the screen places it after the element it points at and decides
- * "once".
+ * "Got it" at the right. One at a time, never a tour, never a
+ * loop. Screens never draw it themselves: they register a target with
+ * `useCoachMarkSpot` and the root's `CoachMarkHost` draws it over the app with
+ * the spotlight dim (the owner's ruling, 2026-10-16, over the page's "no scrim").
  *
- * Announced once as it appears, never taking focus. No haptic. It pops in on
+ * Text and Got it are centred: the owner's override (2026-10-16) of the page's left text and right action.
+ *
+ * Announced once as it appears; the host moves focus to it. No haptic. It pops in on
  * `M.pop`; under Reduce Motion it fades in without the pop. Increase Contrast:
  * the 50% hairline. The page's drop shadow is not drawn: surfaces are flat.
  */
@@ -95,6 +102,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.lg,
     gap: SPACE.sm,
   },
-  text: { color: COLOR.textPrimary },
-  action: { alignSelf: 'flex-end' },
+  text: { color: COLOR.textPrimary, textAlign: 'center' },
+  action: { alignSelf: 'center' },
 })

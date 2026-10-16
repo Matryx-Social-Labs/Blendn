@@ -25,6 +25,8 @@ jest.mock('../lib/apiClient', () => ({
   },
 }))
 jest.mock('../lib/checkIn', () => ({ subscribeCheckInChanged: () => () => {} }))
+// Coach marks have their own tests (coachMarks, pulseCoachMark); here they never show.
+jest.mock('../lib/coachMarks', () => ({ useCoachMark: () => ({ visible: false, dismiss: () => {} }), markCoachUsed: () => {} }))
 jest.mock('../components/blendn/BlendnScreen', () => ({ BlendnScreen: () => null }))
 
 /*
@@ -37,6 +39,8 @@ jest.mock('../components/blendn/BlendnScreen', () => ({ BlendnScreen: () => null
   const mocked = require('react-native-reanimated')
   const actual = jest.requireActual('react-native-reanimated')
   for (const k of Object.keys(actual)) if (!(k in mocked)) mocked[k] = actual[k]
+  // The disc's values are `makeMutable`s read with `.get()`, which the old mock's plain values lack.
+  mocked.makeMutable = actual.makeMutable
 }
 
 const mockScrolls: Record<string, jest.Mock> = {}

@@ -1,14 +1,10 @@
 import { router, useFocusEffect } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native'
 
 import { subscribeCheckInChanged } from '../../lib/checkIn'
 import {
   CREW_REPORT_REASONS,
-  OPEN_TO_CREWS_HELPER,
-  OPEN_TO_CREWS_LABEL,
   crewMessage,
-  hereLine,
   likeAs,
   mergeCrewPage,
   nextCrewOffset,
@@ -19,11 +15,8 @@ import {
 } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
 import { showSheet } from '../../lib/sheet'
-import { EMBER, GUTTER, OPACITY, SPACE } from '../../lib/theme'
-import { EmberButton, EmberToggle } from '../onboarding/EmberControls'
+import type { TellState } from '../ds/CrewStrip'
 import { useToast } from '../Toast'
-import { PlaceholderBanner } from '../ui/PlaceholderBanner'
-import { Text } from '../ui/Text'
 
 /** A page of cards: the server's default, well under its 50. */
 const PAGE = 30
@@ -157,26 +150,35 @@ export function chooseCrew(myCrews: CrewsAtEvent['myCrews'], title: string): Pro
 
 /**
  * Liking and reporting a card, and "We're here" — the Crews view's writes.
- * Each guarded by a ref, so a fast second tap sends nothing.
+ * Each guarded by a ref, so a fast second tap sends nothing. `onBlend` plays
+ * the Blend moment when a like makes one (Flow 10 · 10.8); without it the
+ * Blend opens directly.
  */
-export function useCrewActions(eventId: string | null, crews: CrewsHereState) {
+export function useCrewActions(
+  eventId: string | null,
+  crews: CrewsHereState,
+  { onBlend, likeAsCrewId }: { onBlend?: (blend: BlendRef, card: CrewCard, asCrewId: string | null) => void; likeAsCrewId?: string | null } = {}
+) {
   const { showToast } = useToast()
   const [liking, setLiking] = useState<string | null>(null)
-  const [hereBusy, setHereBusy] = useState<string | null>(null)
-  const [hereLines, setHereLines] = useState<Record<string, string>>({})
+  /** "We're here" per crew (Flow 10 · 10.6, CrewStrip): on its way, told, or already told tonight. */
+  const [told, setTold] = useState<Record<string, TellState>>({})
   const inFlight = useRef(false)
   const { markLiked, reload } = crews
   const myCrewsHere = crews.state.status === 'ready' ? crews.state.data.myCrews : []
 
-  const here = async (crew: Crew) => {
+  const here = async (crew: Pick<Crew, 'crewId'>) => {
     if (!eventId || inFlight.current) return
     inFlight.current = true
-    setHereBusy(crew.crewId)
+    setTold((t) => ({ ...t, [crew.crewId]: 'sending' }))
     const result = await crewsApi.here(crew.crewId, eventId)
     inFlight.current = false
-    setHereBusy(null)
-    const text = result.success && result.data ? hereLine(result.data) : crewMessage(result, 'crew', 'Couldn’t tell your crew. Try again.')
-    setHereLines((l) => ({ ...l, [crew.crewId]: text }))
+    if (result.success && result.data) {
+      setTold((t) => ({ ...t, [crew.crewId]: result.data!.repeated ? 'already' : 'yes' }))
+      return
+    }
+    setTold((t) => ({ ...t, [crew.crewId]: 'no' }))
+    showToast(crewMessage(result, 'crew', 'Couldn’t tell your crew. Try again.'), 'error')
   }
 
   const like = async (card: CrewCard) => {
@@ -184,8 +186,16 @@ export function useCrewActions(eventId: string | null, crews: CrewsHereState) {
     inFlight.current = true
     try {
       const as = likeAs(myCrewsHere)
-      const asCrewId = as.as === 'crew' ? as.crewId : as.as === 'choose' ? await chooseCrew(myCrewsHere, `Like ${card.name} as…`) : undefined
-      if (as.as === 'choose' && !asCrewId) return
+      // The Liking-as chip's choice wins; otherwise the one crew here, or ask.
+      const asCrewId =
+        likeAsCrewId !== undefined
+          ? likeAsCrewId
+          : as.as === 'crew'
+            ? as.crewId
+            : as.as === 'choose'
+              ? await chooseCrew(myCrewsHere, `Like ${card.name} as…`)
+              : undefined
+      if (likeAsCrewId === undefined && as.as === 'choose' && !asCrewId) return
       setLiking(card.crewId)
       const result = await crewsApi.likeCrew(eventId, card.crewId, asCrewId ?? undefined)
       setLiking(null)
@@ -196,8 +206,11 @@ export function useCrewActions(eventId: string | null, crews: CrewsHereState) {
       }
       markLiked(card.crewId)
       if (result.data.blend) {
-        showToast("It's a Blend", 'success')
-        openBlend(result.data.blend, `Blend with ${card.name}`)
+        if (onBlend) onBlend(result.data.blend, card, asCrewId ?? null)
+        else {
+          showToast("It's a Blend", 'success')
+          openBlend(result.data.blend, `Blend with ${card.name}`)
+        }
       }
     } finally {
       inFlight.current = false
@@ -221,7 +234,7 @@ export function useCrewActions(eventId: string | null, crews: CrewsHereState) {
       },
     })
 
-  return { liking, like, report, here, hereBusy, hereLines }
+  return { liking, like, report, here, told }
 }
 
 export type CrewActions = ReturnType<typeof useCrewActions>
@@ -232,7 +245,7 @@ export type CrewActions = ReturnType<typeof useCrewActions>
  * the switch holds still while a write is in flight. A failed read keeps the
  * switch on screen (off) with a retry, rather than hiding it.
  */
-function useOpenToCrews(eventId: string, checkInKey: string) {
+export function useOpenToCrews(eventId: string, checkInKey: string) {
   const { showToast } = useToast()
   const key = `${eventId}:${checkInKey}`
   const [value, setValue] = useState<boolean | null>(() => openToCrewsByCheckIn.get(key) ?? null)
@@ -298,143 +311,3 @@ function useOpenToCrews(eventId: string, checkInKey: string) {
 
   return { value, readFailed, busy, set, read }
 }
-
-/**
- * The Grid's Crews view, above its cards (placeholder design —
- * docs/PLACEHOLDER_SCREENS.md §14): your crews with "We're here", the
- * open-to-crews switch when no crew of yours is here, and the state of the
- * list. The cards themselves are rows of the Room's own list (virtualised);
- * `CrewsFooter` is under them.
- */
-export function CrewsHeader({
-  eventId,
-  checkInKey,
-  crews,
-  actions,
-}: {
-  eventId: string
-  /** The check-in this is about (its time): the switch is read once per check-in. */
-  checkInKey: string
-  crews: CrewsHereState
-  actions: CrewActions
-}) {
-  const { state, mine, reload } = crews
-  const open = useOpenToCrews(eventId, checkInKey)
-  const myCrewsHere = state.status === 'ready' ? state.data.myCrews : []
-
-  return (
-    <View style={styles.view}>
-      <PlaceholderBanner />
-
-      <View style={styles.block}>
-        <Text variant="heading" accessibilityRole="header">
-          Your crews
-        </Text>
-        {mine === null ? (
-          <ActivityIndicator color={EMBER.textSecondary} />
-        ) : mine.length === 0 ? (
-          <Pressable onPress={() => router.push('/crews/new')} accessibilityRole="button" style={({ pressed }) => pressed && styles.pressed}>
-            <Text variant="body" color={EMBER.textSecondary}>
-              No crew yet — make one from your friends.
-            </Text>
-          </Pressable>
-        ) : (
-          mine.map((c) => (
-            <View key={c.crewId} style={styles.mine}>
-              <Text variant="bodyStrong" numberOfLines={1}>
-                {c.name}
-              </Text>
-              <EmberButton
-                label="We’re here"
-                variant="secondary"
-                onPress={() => void actions.here(c)}
-                busy={actions.hereBusy === c.crewId}
-                accessibilityHint="Tells your crew you’re here. It checks nobody else in."
-              />
-              {actions.hereLines[c.crewId] ? (
-                <Text variant="meta" accessibilityLiveRegion="polite">
-                  {actions.hereLines[c.crewId]}
-                </Text>
-              ) : null}
-            </View>
-          ))
-        )}
-      </View>
-
-      {myCrewsHere.length === 0 ? (
-        <View style={styles.block}>
-          <EmberToggle
-            label={OPEN_TO_CREWS_LABEL}
-            helper={OPEN_TO_CREWS_HELPER}
-            value={open.value ?? false}
-            onValueChange={(v) => void open.set(v)}
-            disabled={open.busy || (open.value === null && !open.readFailed)}
-          />
-          {open.readFailed ? (
-            <Pressable onPress={() => void open.read()} accessibilityRole="button">
-              <Text variant="meta">Couldn’t check whether this is on. Tap to try again.</Text>
-            </Pressable>
-          ) : null}
-        </View>
-      ) : null}
-
-      <View style={styles.block}>
-        <Text variant="heading" accessibilityRole="header">
-          Crews here
-        </Text>
-        {state.status === 'loading' ? (
-          <ActivityIndicator color={EMBER.textSecondary} />
-        ) : state.status === 'not_here' ? (
-          <Text variant="body" color={EMBER.textSecondary}>
-            Check in to see the crews here.
-          </Text>
-        ) : state.status === 'error' ? (
-          <Pressable onPress={() => void reload()} accessibilityRole="button">
-            <Text variant="body" color={EMBER.textSecondary}>
-              The crews didn’t load. Tap to try again.
-            </Text>
-          </Pressable>
-        ) : !state.data.crewsEnabled ? (
-          <Text variant="body" color={EMBER.textSecondary}>
-            The host has turned crews off for this event.
-          </Text>
-        ) : state.data.crews.length === 0 ? (
-          <Text variant="body" color={EMBER.textSecondary}>
-            {myCrewsHere.length === 0 && !open.value
-              ? 'Turn on “Open to joining a crew tonight” to see crews with room for one more.'
-              : 'No other crews here yet. A crew shows once two of them have checked in.'}
-          </Text>
-        ) : null}
-      </View>
-    </View>
-  )
-}
-
-/** Under the cards: the next page, or why it did not come. */
-export function CrewsFooter({ crews }: { crews: CrewsHereState }) {
-  const { state, loadMore, loadingMore, pageFailed } = crews
-  if (state.status !== 'ready' || !state.data.hasMore) return null
-  return (
-    <View style={styles.footer}>
-      {pageFailed ? (
-        <Text variant="meta" accessibilityLiveRegion="polite">
-          More crews didn’t load.
-        </Text>
-      ) : null}
-      <EmberButton
-        label={pageFailed ? 'Try again' : 'More crews'}
-        variant="secondary"
-        onPress={() => void loadMore()}
-        busy={loadingMore}
-      />
-    </View>
-  )
-}
-
-const styles = StyleSheet.create({
-  view: { paddingHorizontal: GUTTER, gap: SPACE.xl },
-  block: { gap: SPACE.md },
-  mine: { gap: SPACE.sm },
-  footer: { paddingHorizontal: GUTTER, gap: SPACE.sm, paddingTop: SPACE.md },
-  pressed: { opacity: OPACITY.pressed },
-})

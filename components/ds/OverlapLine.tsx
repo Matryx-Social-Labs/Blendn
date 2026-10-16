@@ -1,18 +1,14 @@
 import { StyleSheet, Text, View } from 'react-native'
 
-import { COLOR, FONT_FAMILY, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
-import { tint } from '../../lib/theme'
-import { CONTROL_FONT_CAP, font, useBoldText } from './shared'
+import { COLOR, SPACE } from '../../lib/design/tokens'
+import { Chip } from './Chip'
+import { font, useBoldText } from './shared'
 
 export type OverlapLabel = { text: string; shared?: boolean }
 
 /** ROUND3 G4: labels on a card, 2 before a reveal and 4 after (admin `lib/matching.ts`). */
 const LABELS_BEFORE_REVEAL = 2
 const LABELS_AFTER_REVEAL = 4
-/** Flow 14: a shared label is the chip with a 1.5 pt edge at 35% white in place of its hairline. */
-const SHARED_EDGE = 1.5
-const SHARED_ALPHA = 0.35
-const HAIRLINE = 0.5
 
 /**
  * What two people (or your side and a crew) share, as one sentence, never a
@@ -47,17 +43,14 @@ export function OverlapLine({
       {shown.length ? (
         <View style={styles.labels}>
           {shown.map((l) => (
-            <View
+            // Flow 14: the chip; a shared label is the outline chip (A31).
+            <Chip
               key={l.text}
               testID={testID && `${testID}-label`}
-              accessible
+              label={l.text}
+              variant={l.shared ? 'outline' : 'default'}
               accessibilityLabel={l.shared ? `${l.text}, shared` : l.text}
-              style={[styles.label, l.shared ? styles.shared : styles.hairline]}
-            >
-              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} numberOfLines={1} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.ink]}>
-                {l.text}
-              </Text>
-            </View>
+            />
           ))}
         </View>
       ) : null}
@@ -69,7 +62,4 @@ const styles = StyleSheet.create({
   column: { gap: SPACE.md },
   ink: { color: COLOR.textPrimary },
   labels: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
-  label: { height: SIZE.tag, justifyContent: 'center', paddingHorizontal: SPACE.md, borderRadius: RADIUS.capsule, backgroundColor: COLOR.surface },
-  hairline: { borderWidth: HAIRLINE, borderColor: COLOR.hairline },
-  shared: { borderWidth: SHARED_EDGE, borderColor: tint(COLOR.textPrimary, SHARED_ALPHA) },
 })

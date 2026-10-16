@@ -74,8 +74,6 @@ const GRADIENT_LEGACY = Object.fromEntries(
     'app/onboarding/media.tsx',
     'components/NearbyEventCard.tsx',
     'components/blendn/Face.tsx',
-    'components/blendn/TonightView.tsx',
-    'components/board/BoardSections.tsx',
     'components/crews/CrewParts.tsx',
     'components/onboarding/LookingForCards.tsx',
     'components/onboarding/PermissionIllustration.tsx',
@@ -196,7 +194,6 @@ const LATE_RULES = [
 ]
 
 const LATE_RULE_ALLOWLIST = {
-  'app/preview/tonight.tsx': 'dev-only design preview, not shipped',
   'app/preview/profile.tsx': 'dev-only design preview, not shipped',
 }
 

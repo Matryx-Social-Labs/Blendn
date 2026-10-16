@@ -11,7 +11,7 @@ import { AccessibilityInfo } from 'react-native'
 const mockParams: Record<string, string> = {}
 const mockRedirect = jest.fn()
 jest.mock('expo-router', () => ({
-  router: { back: jest.fn(), push: jest.fn() },
+  router: { back: jest.fn(), push: jest.fn(), canDismiss: jest.fn(() => true), dismissAll: jest.fn() },
   useLocalSearchParams: () => mockParams,
   useFocusEffect: (effect: () => void) => {
     const { useEffect } = require('react')
@@ -43,6 +43,13 @@ jest.mock('../lib/apiClient', () => ({
   },
 }))
 jest.mock('../lib/blendnOverlay', () => ({ openBlendn: jest.fn() }))
+const mockPushListeners: ((n: { request: { content: { data: Record<string, unknown> } } }) => void)[] = []
+jest.mock('expo-notifications', () => ({
+  addNotificationReceivedListener: (fn: (typeof mockPushListeners)[number]) => {
+    mockPushListeners.push(fn)
+    return { remove: () => mockPushListeners.splice(mockPushListeners.indexOf(fn), 1) }
+  },
+}))
 jest.mock('../lib/sheet', () => ({ showSheet: jest.fn() }))
 jest.mock('../lib/logger', () => ({
   Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() },
@@ -143,7 +150,7 @@ describe('the two empty states', () => {
     expect(await screen.findByText("Nobody's posted yet")).toBeTruthy()
     await fireEvent.press(screen.getByLabelText('Write a post'))
     expect(screen.getByLabelText('Your post')).toBeTruthy()
-    expect(screen.getByText('0/500')).toBeTruthy()
+    expect(screen.getByText('0/500', { includeHiddenElements: true })).toBeTruthy()
   })
 
   it('is closed once the server says the doors have opened, and offers the room', async () => {
@@ -153,7 +160,10 @@ describe('the two empty states', () => {
 
     expect(await screen.findByText("The board's closed")).toBeTruthy()
     await fireEvent.press(screen.getByLabelText('Open the room'))
-    expect(openBlendn).toHaveBeenCalled()
+    // To the tabs first: the overlay is under the root stack, so opened from here it was under the board (Flow 4 Board #14).
+    const { router } = jest.requireMock('expo-router') as { router: { dismissAll: jest.Mock } }
+    expect(router.dismissAll).toHaveBeenCalled()
+    expect(openBlendn).toHaveBeenCalledWith()
     expect(screen.queryByText(OFFER.body)).toBeNull()
   })
 
@@ -212,7 +222,7 @@ describe('BD-CU01 on screen: a refused post names its gate', () => {
 
     await fireEvent.press(await screen.findByLabelText('Write a post'))
     await fireEvent.changeText(screen.getByLabelText('Your post'), 'Two seats from Indiranagar')
-    await fireEvent.press(screen.getByLabelText('Post to the board'))
+    await fireEvent.press(screen.getByLabelText('Post'))
 
     expect(await screen.findByText(reason)).toBeTruthy()
     expect(api.postToBoard).toHaveBeenCalledWith('e1', { kind: 'offer', body: 'Two seats from Indiranagar', spacesLeft: 1 })
@@ -230,7 +240,7 @@ describe('BD-CU01 on screen: a refused post names its gate', () => {
 
     await fireEvent.press(await screen.findByLabelText('Write a post'))
     await fireEvent.changeText(screen.getByLabelText('Your post'), 'Anyone?')
-    await fireEvent.press(screen.getByLabelText('Post to the board'))
+    await fireEvent.press(screen.getByLabelText('Post'))
     expect(await screen.findByText(doors)).toBeTruthy()
   })
 })
@@ -250,9 +260,9 @@ describe('posting', () => {
     await render(<BoardScreen />)
 
     await fireEvent.press(await screen.findByLabelText('Write a post'))
-    await fireEvent.press(screen.getByLabelText("I'm looking"))
+    await fireEvent.press(screen.getByLabelText(/^I’m looking/))
     await fireEvent.changeText(screen.getByLabelText('Your post'), 'Me too, from HSR')
-    await fireEvent.press(screen.getByLabelText('Post to the board'))
+    await fireEvent.press(screen.getByLabelText('Post'))
 
     await waitFor(() => expect(screen.getAllByText(/Me too, from HSR|Driving from/)[0].props.children).toBe('Me too, from HSR'))
     expect(api.postToBoard).toHaveBeenCalledWith('e1', { kind: 'seeking', body: 'Me too, from HSR' })
@@ -263,6 +273,35 @@ describe('posting', () => {
     expect(screen.getByText('Looking · yours')).toBeTruthy()
   })
 
+  it('opens the next post on an empty draft: text, kind and spaces all reset (PR #401 review)', async () => {
+    api.getBoard.mockResolvedValue(board([]))
+    api.postToBoard.mockResolvedValue({
+      success: true,
+      data: { id: 'p-new', kind: 'seeking', body: 'Me too, from HSR', spacesLeft: null, createdAt: '2026-10-01T11:00:00Z' },
+    })
+    api.withdrawBoardPost.mockResolvedValue({ success: true, data: { id: 'p-new', withdrawn: true } } as never)
+    await render(<BoardScreen />)
+
+    await fireEvent.press(await screen.findByLabelText('Write a post'))
+    await fireEvent.press(screen.getByLabelText(/^I’m looking/))
+    await fireEvent.changeText(screen.getByLabelText('Your post'), 'Me too, from HSR')
+    await fireEvent.press(screen.getByLabelText('Post'))
+    await screen.findByText('Looking · yours')
+
+    // Take it down, so the board offers Write a post again.
+    await fireEvent.press(screen.getByLabelText('Take down your post'))
+    const sheet = (showSheet as jest.Mock).mock.calls.at(-1)[0] as ActionSheet
+    const run = (sheet.actions.find((a) => a.label === 'Take down') as { run: () => Promise<unknown> }).run
+    await act(async () => {
+      await run()
+    })
+
+    await fireEvent.press(await screen.findByLabelText('Write a post'))
+    expect(screen.getByLabelText('Your post').props.value).toBe('')
+    expect(screen.getByLabelText(/^I have space/).props.accessibilityState).toEqual(expect.objectContaining({ checked: true }))
+    expect(screen.getByLabelText('Spaces').props.accessibilityValue).toEqual(expect.objectContaining({ now: 1 }))
+  })
+
   it('sends one post for two taps', async () => {
     api.getBoard.mockResolvedValue(board([]))
     let settle: (v: unknown) => void = () => {}
@@ -271,7 +310,7 @@ describe('posting', () => {
 
     await fireEvent.press(await screen.findByLabelText('Write a post'))
     await fireEvent.changeText(screen.getByLabelText('Your post'), 'Anyone?')
-    const post = screen.getByLabelText('Post to the board')
+    const post = screen.getByLabelText('Post')
     await fireEvent.press(post)
     await fireEvent.press(post)
     settle({ success: false, errorCode: 'FORBIDDEN', error: 'Mark yourself as going to post here' })
@@ -493,7 +532,7 @@ describe('your own post', () => {
   it('counts the asks and points to where they are answered', async () => {
     api.getBoard.mockResolvedValue(board([MINE]))
     await render(<BoardScreen />)
-    expect(await screen.findByText('2 asked — answer in the Banter')).toBeTruthy()
+    expect(await screen.findByText('2 asked. Answer in the Banter.')).toBeTruthy()
     expect(screen.queryByLabelText('Ask to join, Lunar Fox')).toBeNull()
   })
 
@@ -579,8 +618,33 @@ describe('report and block, by the post', () => {
   })
 })
 
-it('carries the placeholder banner in every state', async () => {
+it('is the Flow 4 design now: no placeholder banner, the composer kinds are RadioCards (A61)', async () => {
   api.getBoard.mockResolvedValue(board([OFFER]))
   await render(<BoardScreen />)
-  expect(await screen.findByText(/PLACEHOLDER DESIGN/)).toBeTruthy()
+  await screen.findByText(OFFER.body)
+  expect(screen.queryByText(/PLACEHOLDER DESIGN/)).toBeNull()
+  await fireEvent.press(screen.getByLabelText('Write a post'))
+  expect(screen.getByLabelText('I have space, You’re offering a ride or a table.')).toBeTruthy()
+  expect(screen.getByLabelText('I’m looking, You want to join someone’s.')).toBeTruthy()
+})
+
+describe('your post, live (PR #401 drive: "1 asked" only after reopening the board)', () => {
+  const MINE: BoardPost = { ...OFFER, id: 'p-mine', author: 'Lunar Fox', mine: true, requestCount: 0 }
+
+  it('re-reads the board the moment a board_request push lands, and says the new count', async () => {
+    api.getBoard.mockResolvedValueOnce(board([MINE])).mockResolvedValue(board([{ ...MINE, requestCount: 1 }]))
+    await render(<BoardScreen />)
+    expect(await screen.findByText('Nobody has asked yet')).toBeTruthy()
+    await act(async () => mockPushListeners.forEach((fn) => fn({ request: { content: { data: { type: 'board_request' } } } })))
+    expect(await screen.findByText('1 asked. Answer in the Banter.')).toBeTruthy()
+  })
+
+  it('ignores any other push', async () => {
+    api.getBoard.mockResolvedValue(board([MINE]))
+    await render(<BoardScreen />)
+    await screen.findByText('Nobody has asked yet')
+    const reads = api.getBoard.mock.calls.length
+    await act(async () => mockPushListeners.forEach((fn) => fn({ request: { content: { data: { type: 'private_message' } } } })))
+    expect(api.getBoard.mock.calls.length).toBe(reads)
+  })
 })

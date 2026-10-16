@@ -11,7 +11,7 @@ import { State } from 'react-native-gesture-handler'
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils'
 import * as Reanimated from 'react-native-reanimated'
 
-import { settleDetent, Sheet } from '../components/ds/Sheet'
+import { settleDetent, Sheet, sheetBottomPadding } from '../components/ds/Sheet'
 import { COLOR, MATERIAL, SPRING } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 
@@ -217,5 +217,54 @@ describe('<Sheet>', () => {
     // The sheet is iOS 26 glass here (the mock names it `glass`).
     expect(flat('glass').borderColor).toBe(MATERIAL.hairlineIncreaseContrast)
     expect(StyleSheet.flatten(screen.getByText(/sign in again/).props.style).color).toBe(COLOR.textPrimary)
+  })
+})
+
+describe('onDismissed: the next sheet waits for this one to have left', () => {
+  it('iOS: it is the Modal’s own onDismiss, so a sheet opened after it is not dropped', async () => {
+    const onDismissed = jest.fn()
+    await render(signOut({ onDismissed }))
+    const modal = screen.getByTestId('s-modal', { includeHiddenElements: true })
+    expect(onDismissed).not.toHaveBeenCalled()
+    await act(async () => modal.props.onDismiss())
+    expect(onDismissed).toHaveBeenCalledTimes(1)
+  })
+
+  it('Android: once it has unmounted, after its fade', async () => {
+    on('android')
+    jest.useFakeTimers()
+    const onDismissed = jest.fn()
+    const view = await render(signOut({ onDismissed }))
+    expect(screen.getByTestId('s-modal', { includeHiddenElements: true }).props.onDismiss).toBeUndefined()
+    await view.rerender(signOut({ onDismissed, visible: false }))
+    expect(onDismissed).not.toHaveBeenCalled()
+    await act(async () => jest.advanceTimersByTime(1000))
+    expect(onDismissed).toHaveBeenCalledTimes(1)
+    jest.useRealTimers()
+  })
+})
+
+describe('the foot over a keyboard (Board composer drive: a dead band between Cancel and the keys)', () => {
+  it('keeps the home-indicator inset without a keyboard and drops it under one', () => {
+    expect(sheetBottomPadding(34, false)).toBe(34 + 8)
+    expect(sheetBottomPadding(34, true)).toBe(8)
+  })
+
+  it('follows the keyboard as it shows and hides', async () => {
+    const { Keyboard } = require('react-native')
+    const handlers: Record<string, () => void> = {}
+    const spy = jest.spyOn(Keyboard, 'addListener').mockImplementation(((event: string, fn: () => void) => {
+      handlers[event] = fn
+      return { remove: () => {} }
+    }) as never)
+    await render(signOut())
+    // The sheet's own glass (the mock names it 'glass'): its padding is the foot.
+    const pad = () => flat('glass').paddingBottom
+    const resting = pad()
+    await act(async () => handlers.keyboardWillShow())
+    expect(pad()).toBe(8)
+    await act(async () => handlers.keyboardWillHide())
+    expect(pad()).toBe(resting)
+    spy.mockRestore()
   })
 })
