@@ -19,6 +19,47 @@ import { Logger } from './logger'
 export const LOCATION_FIX_TIMEOUT_MS = 15_000
 
 /**
+ * How old a fix may be and still say where you are standing. Twenty seconds
+ * at walking pace is under 30 m, inside the 50 m the door already allows.
+ */
+export const FRESH_FIX_MAX_AGE_MS = 20_000
+
+/** The fix asked for when the pass showed, so the hold does not start one cold. */
+let warming: { startedAt: number; fix: Promise<Location.LocationObject | null> } | null = null
+
+/**
+ * Start a fix now, before anybody holds: a cold GPS fix takes seconds, and the
+ * hold is under one. Never prompts — without permission (or with Precise off)
+ * it does nothing, and the hold's own path asks and explains as before.
+ */
+export async function warmLocationFix(): Promise<void> {
+  if (warming && Date.now() - warming.startedAt < FRESH_FIX_MAX_AGE_MS) return
+  const permission = await Location.getForegroundPermissionsAsync().catch(() => null)
+  if (permission?.status !== 'granted' || permission.ios?.accuracy === 'reduced') return
+  warming = {
+    startedAt: Date.now(),
+    fix: Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High }).catch(() => null),
+  }
+}
+
+/** Recent, and as good as the door asks: a fix that can stand in for a new one. */
+function usable(fix: Location.LocationObject | null, maxAccuracyM: number): Location.LocationObject | null {
+  if (!fix || Date.now() - fix.timestamp > FRESH_FIX_MAX_AGE_MS) return null
+  return (fix.coords.accuracy ?? Infinity) <= maxAccuracyM ? fix : null
+}
+
+/** The warmed fix, else the OS's last one if it is fresh and good enough, else a new one. */
+async function freshFix(maxAccuracyM: number): Promise<Location.LocationObject> {
+  const warmed = usable((await warming?.fix) ?? null, maxAccuracyM)
+  if (warmed) return warmed
+  const last = await Location.getLastKnownPositionAsync({ maxAge: FRESH_FIX_MAX_AGE_MS, requiredAccuracy: maxAccuracyM }).catch(() => null)
+  return (
+    usable(last, maxAccuracyM) ??
+    Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High, mayShowUserSettingsDialog: true })
+  )
+}
+
+/**
  * A tray button. `kind` is the redesign's (`<Sheet>`, Flow 4 Tonight #15–#26:
  * Open Settings is the strong neutral, Not now and Cancel are text); a screen
  * still on `ActionTray` reads `variant` and ignores it.
@@ -115,16 +156,17 @@ export async function getCurrentLocation({
     },
   ]
   try {
-    // Check if location services are enabled
-    const serviceEnabled = await Location.hasServicesEnabledAsync()
+    // Services and permission are asked together: neither waits on the other.
+    const [serviceEnabled, permission] = await Promise.all([
+      Location.hasServicesEnabledAsync(),
+      Location.requestForegroundPermissionsAsync(),
+    ])
     if (!serviceEnabled) {
       Logger.warn('events', 'location:servicesDisabled')
       showTray('Location Services are off', `Turn on Location Services ${VERB[purpose]}.`, settingsButtons, { icon: 'map-pin-off' })
       return null
     }
 
-    // Request permission with better messaging
-    const permission = await Location.requestForegroundPermissionsAsync()
     const { status } = permission
     if (status === 'granted' && permission.ios?.accuracy === 'reduced') {
       Logger.warn('events', 'location:preciseOff')
@@ -147,16 +189,19 @@ export async function getCurrentLocation({
      * "Location timeout" tray below was unreachable. Driven on an emulator
      * with no GPS stream: five minutes of spinner. Fifteen seconds is
      * longer than any fix worth waiting for at a venue door.
+     *
+     * And no fresh BestForNavigation fix started at the end of the hold: that
+     * was the wait between "Checking you in…" and "You're in" (seconds cold,
+     * up to this deadline). The fix warmed when the pass showed, or a recent
+     * one as good as the door asks, is used; High, not BestForNavigation,
+     * when a new one is needed — the door asks 50 m, not lane-level.
      */
     const location = await new Promise<Location.LocationObject>((resolve, reject) => {
       const timer = setTimeout(
         () => reject(Object.assign(new Error('Location timed out'), { code: 'E_LOCATION_TIMEOUT' })),
         LOCATION_FIX_TIMEOUT_MS
       )
-      Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.BestForNavigation,
-        mayShowUserSettingsDialog: true,
-      })
+      freshFix(maxAccuracyM)
         .then((fix) => { clearTimeout(timer); resolve(fix) })
         .catch((err) => { clearTimeout(timer); reject(err) })
     })

@@ -1,11 +1,11 @@
 import { router } from 'expo-router'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { apiClient } from './apiClient'
 import { afterTrayDismissed } from '../components/ActionTray'
 import { askIntentRoute, revealOffer, submitCheckIn, untilIntentAnswered, type CheckInOutcome } from './checkIn'
 import { isExpectedRefusal, type CheckInRefusal } from './checkInRefusal'
 import { H } from './haptics'
-import { getCurrentLocation as getLocationFix, type CheckInLocation, type ShowTray, type TrayButton } from './locationFix'
+import { getCurrentLocation as getLocationFix, warmLocationFix, type CheckInLocation, type ShowTray, type TrayButton } from './locationFix'
 import { Logger } from './logger'
 import { useAuth } from './useAuth'
 
@@ -64,6 +64,10 @@ export function useCheckInFlow({
   onLocated,
 }: UseCheckInFlowOptions) {
   const { user } = useAuth()
+  // The pass is up for this door: start the fix now, so the hold finds one waiting.
+  useEffect(() => {
+    if (eventId) void warmLocationFix()
+  }, [eventId])
   /** The flow is running: from the press until the room is entered or the door said no. */
   const [checkingIn, setCheckingIn] = useState(false)
   /**
