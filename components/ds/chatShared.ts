@@ -98,7 +98,8 @@ export function linkParts(text: string): TextPart[] {
     // A path's own closing parenthesis (Rumours_(album)) is kept; a sentence's is not.
     const open = m[0].split('(').length - m[0].split(')').length
     const link = open > 0 && text[start + m[0].length] === ')' ? `${m[0]})` : m[0]
-    const url = /^https?:\/\//i.test(link) ? link : `https://${link}`
+    // The scheme lower-cased, so `HTTPS://toit.in` parses on React Native's shim and opens everywhere.
+    const url = /^https?:\/\//i.test(link) ? link.replace(/^https?/i, (m) => m.toLowerCase()) : `https://${link}`
     if (start > at) parts.push({ text: text.slice(at, start) })
     // A link whose host can't be told for certain stays words: nothing to tap.
     parts.push(linkHost(url) ? { text: link, url } : { text: link })
@@ -111,22 +112,27 @@ export function linkParts(text: string): TextPart[] {
 /**
  * "toit.in" from "https://toit.in/vinyl": the host the link really goes to,
  * from the parsed URL — never the link's own text — or null when it is not an
- * http(s) link with a plain host. Null too for any authority where parsers
- * disagree about the host: userinfo (`toit.in@evil.example`), a backslash
- * (`evil.example\@toit.in` opens evil.example in a browser, while React
- * Native's URL shim reads toit.in), whitespace or invisible characters. Such a
- * link is not offered at all, so the name on the sheet is always where it goes.
- * TODO(owner decision): show an IDN host as Unicode or as punycode (xn--…);
- * this returns whatever the runtime's URL gives, unchanged.
+ * http(s) link to a plain named host. The authority is allowlisted (ASCII
+ * letters, digits, dots, hyphens, an optional numeric port) and its last label
+ * must be a name, so userinfo, backslashes, percent-escapes, ideographic dots,
+ * fullwidth look-alikes, raw IPv4/IPv6 and hex hosts are all refused: forms
+ * where React Native's URL shim, WHATWG and the OS browser can disagree. A
+ * refused link is words with nothing to tap, so the sheet's name is always
+ * where the link goes.
+ * Non-ASCII hosts are refused (plain text); `xn--` hosts show as they are.
  */
+const AUTHORITY = /^[a-z0-9.-]+(:\d{1,5})?$/i
+const NAMED_TLD = /\.(?:[a-z]{2,63}|xn--[a-z0-9-]{1,59})$/i
 export function linkHost(url: string): string | null {
-  const scheme = /^(https?):\/\//i.exec(url)?.[1]
-  const authority = url.slice((scheme?.length ?? 0) + 3).split(/[/?#]/)[0]
-  if (!scheme || !authority || /[@\\\s\p{Cc}\p{Cf}]/u.test(authority)) return null
+  const scheme = /^(https?):\/\//i.exec(url)?.[1]?.toLowerCase()
+  if (!scheme) return null
+  const authority = url.slice(scheme.length + 3).split(/[/?#]/)[0]
+  const name = authority.replace(/:\d+$/, '')
+  if (!AUTHORITY.test(authority) || !NAMED_TLD.test(name)) return null
   // The clean authority alone, parsed: React Native's URL shim misreads an `@`
   // later in the path (medium.com/@someone) as userinfo; this way both agree.
   try {
-    return new URL(`${scheme}://${authority}/`).hostname || null
+    return new URL(`${scheme}://${authority}/`).hostname.toLowerCase() || null
   } catch {
     return null
   }

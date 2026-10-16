@@ -8,6 +8,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native'
  * words, and a mute that lands while you are here.
  */
 let mockParams: Record<string, string> = { id: 'g1' }
+const mockMessage: Array<(d: { message: Record<string, unknown> }) => void> = []
 const mockMuted: Array<(d: { userId: string; muted: boolean; reason?: string }) => void> = []
 
 jest.mock('@react-native-async-storage/async-storage', () =>
@@ -39,7 +40,10 @@ jest.mock('../lib/socketClient', () => {
   const noop = () => () => {}
   return {
     subscribeToLiveEnded: noop,
-    subscribeToChatMessage: noop,
+    subscribeToChatMessage: (_room: string, cb: never) => {
+      mockMessage.push(cb)
+      return () => {}
+    },
     subscribeToChatTyping: noop,
     subscribeToChatReaction: noop,
     subscribeToChatMessageDeleted: noop,
@@ -108,6 +112,7 @@ beforeEach(() => {
   clearOutbox()
   resetRoomMembership()
   mockMuted.length = 0
+  mockMessage.length = 0
   mockParams = { id: 'g1' }
   mockAuth.user = { id: 'u-a', name: 'Asha' }
   api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [eventRow] } } as never)
@@ -233,4 +238,29 @@ it('a mute that lands while you are here flips the composer, and says it just ha
   await act(async () => mockMuted.forEach((f) => f({ userId: 'u-a', muted: true })))
   expect(screen.queryByLabelText('Message')).toBeNull()
   expect(screen.getByText('Just now · the organiser muted you')).toBeTruthy()
+})
+
+describe('the newest chip counts a message once', () => {
+  it('a redelivered message, or one history already brought, is not new', async () => {
+    // Arrange: reading back, away from the end.
+    await open()
+    await act(async () =>
+      fireEvent.scroll(screen.getByTestId('room-feed'), {
+        nativeEvent: { contentOffset: { y: 0 }, contentSize: { height: 4000, width: 400 }, layoutMeasurement: { height: 800, width: 400 } },
+      })
+    )
+    const deliver = (id: string) => {
+      const message = { id, userId: 'u-c', userName: 'Cosmic Panda', content: `hi ${id}`, type: 'text', createdAt: '2026-10-15T19:05:00.000Z' }
+      mockMessage.forEach((cb) => cb({ message }))
+    }
+    // Act: one new message delivered twice, and the history's m1 again.
+    await act(async () => {
+      deliver('m2')
+      deliver('m2')
+      deliver('m1')
+    })
+    await flush()
+    // Assert
+    expect(screen.getByLabelText('1 new, jump to the newest')).toBeTruthy()
+  })
 })

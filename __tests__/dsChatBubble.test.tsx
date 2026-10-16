@@ -80,6 +80,8 @@ describe('the rules', () => {
       expect(linkHost('https://toit.in/vinyl-night?x=1')).toBe('toit.in')
       expect(linkHost('http://toit.in:8080/@someone?a=b@c')).toBe('toit.in')
       expect(linkHost('https://evil.example/x@toit.in')).toBe('evil.example')
+      expect(linkHost('HtTpS://Toit.IN/vinyl')).toBe('toit.in') // a mixed-case scheme
+      expect(linkHost('https://xn--80ak6aa92e.com/')).toBe('xn--80ak6aa92e.com') // punycode shows as it is
     })
 
     it('refuses every spoofable or non-web link', () => {
@@ -93,6 +95,15 @@ describe('the rules', () => {
         'intent://toit.in#Intent;end',
         'blendn://chat/1',
         'https://',
+        'https://t\u043Eit.in/', // a Cyrillic о: a homograph of toit.in
+        'https://toit.in%2eevil.com/',
+        'https://toit.in\u3002evil.com/', // an ideographic full stop
+        'https://toit.in\uFF20evil.com/', // fullwidth ＠
+        'https://evil.com\uFF0Ftoit.in', // fullwidth ／
+        'https://0x7f.1/',
+        'https://127.0.0.1/',
+        'https://[::1]/',
+        'https://toit.in:abc/', // a port that is not a number
       ]) {
         expect([url, linkHost(url)]).toEqual([url, null])
       }
@@ -101,6 +112,7 @@ describe('the rules', () => {
     it('a refused link is words, with nothing to tap', () => {
       expect(linkParts('menu: https://toit.in@evil.example/menu').some((p) => p.url)).toBe(false)
       expect(linkParts('menu: https://evil.example\\@toit.in').some((p) => p.url)).toBe(false)
+      expect(linkParts('menu: HTTPS://toit.in/menu').find((p) => p.url)?.url).toBe('https://toit.in/menu')
     })
   })
 

@@ -71,9 +71,10 @@ LongPressMenu · ReactionFlight · SenderCard
   a closed crew chat or Blend (Back). Each replaces the feed and the composer.
 - **Links** are tappable and open through a sheet that names the host, never
   a preview (R10). The host is the parsed URL's (`linkHost`), never the link's
-  text; only http(s) opens, and a link whose host parsers could disagree on
-  (userinfo, a backslash, invisible characters) stays words. Whether an IDN
-  host shows as Unicode or punycode is the owner's open decision. One to three
+  text; only http(s) opens, and only to an allowlisted authority (ASCII
+  letters, digits, dots, hyphens, a numeric port, a named last label): anything
+  else — userinfo, escapes, look-alike punctuation, raw IPs, non-ASCII hosts —
+  stays words. `xn--` hosts show as they are. One to three
   emoji alone are drawn at 32 pt.
 - **Route params** are anybody's link: ids must be one server-shaped segment
   (else "This link doesn’t work", nothing loads), names and the DM draft are

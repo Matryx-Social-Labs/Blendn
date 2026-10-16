@@ -63,6 +63,8 @@ type Item = { type: 'heading'; key: string; title: string; markAll?: boolean } |
 /** #27: a moved row travels to its new place on M.settle, 300 ms after its preview changed. */
 const REORDER = LinearTransition.delay(300).springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping).mass(SPRING.settle.mass)
 const SEARCH_GAP = SPACE.sm
+/** C12: after a lift that started no fling, the held order lets go this long after (a fling's momentum cancels it). */
+const HOLD_RELEASE_MS = 250
 
 /**
  * The Banter (Flow 5 Banter frames, R2-D2, R3-0, R3-D5) — every conversation
@@ -255,6 +257,20 @@ function ChatInner() {
    * on lift the rows settle and the pill goes (C12, `heldList`).
    */
   const [heldOrder, setHeldOrder] = useState<string[] | null>(null)
+  /*
+   * A drag can end with a small velocity and no momentum after it: neither
+   * end event lets go then, so the lift itself arms a release.
+   */
+  const releaseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const cancelRelease = () => {
+    if (releaseTimer.current) clearTimeout(releaseTimer.current)
+    releaseTimer.current = null
+  }
+  const armRelease = () => {
+    cancelRelease()
+    releaseTimer.current = setTimeout(() => setHeldOrder(null), HOLD_RELEASE_MS)
+  }
+  useEffect(() => cancelRelease, [])
   const items = useMemo<Item[]>(() => {
     const sections: [string, Row[], boolean][] = [
       ['Crews', match(crewRows), false],
@@ -438,8 +454,14 @@ function ChatInner() {
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         // A drag that catches a fling keeps the order it already holds.
-        onScrollBeginDrag={() => setHeldOrder((held) => held ?? items.map((i) => i.key))}
+        onScrollBeginDrag={() => {
+          cancelRelease()
+          setHeldOrder((held) => held ?? items.map((i) => i.key))
+        }}
+        onMomentumScrollBegin={cancelRelease}
         onMomentumScrollEnd={() => setHeldOrder(null)}
+        onTouchEnd={armRelease}
+        onTouchCancel={armRelease}
         onScrollEndDrag={(e) => {
           // A fling keeps the order held until it comes to rest.
           if (!e.nativeEvent.velocity?.y) setHeldOrder(null)

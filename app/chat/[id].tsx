@@ -196,6 +196,15 @@ function GroupChatInner() {
 
   const flatListRef = useRef<FlatList<ChatListItem>>(null)
   const isAtBottomRef = useRef(true)
+  /*
+   * Every message id this screen has held. The chip counts a socket message
+   * only the first time its id is seen: a redelivery, or one history already
+   * brought, is not new (the updater's dedupe can't say so — it runs later).
+   */
+  const seenIds = useRef(new Set<string>())
+  useEffect(() => {
+    for (const m of messages) seenIds.current.add(m.message_id)
+  }, [messages])
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const typingActiveSentRef = useRef(false)
   const typingCleanupRefs = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
@@ -320,6 +329,8 @@ function GroupChatInner() {
     const unsubscribe = [
       subscribeToChatMessage(roomId, (data) => {
         const incoming = roomMessageFromSocket(data.message, currentUser?.id)
+        const fresh = !seenIds.current.has(incoming.message_id)
+        seenIds.current.add(incoming.message_id)
         setMessages((prev) =>
           prev.some((m) => m.message_id === incoming.message_id)
             ? prev
@@ -334,7 +345,7 @@ function GroupChatInner() {
         })
         // Reading back: count it on the chip rather than pulling you down. Incoming plays no haptic.
         if (isAtBottomRef.current) setTimeout(() => scrollToBottom(true), 80)
-        else if (data.message.userId !== currentUser?.id) setNewWhileAway((n) => n + 1)
+        else if (fresh && data.message.userId !== currentUser?.id) setNewWhileAway((n) => n + 1)
       }),
       subscribeToChatTyping(roomId, (data) => {
         if (data.userId === currentUser?.id) return
