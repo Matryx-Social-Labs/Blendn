@@ -18,6 +18,7 @@ import { ASK_AT, MomentPour, ROOM_AT } from '../components/ds/MomentPour'
 import { DURATION } from '../lib/design/tokens'
 import { apiClient } from '../lib/apiClient'
 import { askIntentRoute, intentAnswered, revealOffer, submitCheckIn, type CheckInOutcome } from '../lib/checkIn'
+import { checkInRefusal } from '../lib/checkInRefusal'
 import { H } from '../lib/haptics'
 import { useCheckInFlow, type UseCheckInFlowOptions } from '../lib/useCheckInFlow'
 
@@ -190,7 +191,7 @@ describe('a check-in', () => {
     expect(props.onEnterRoom).toHaveBeenCalledTimes(1)
   })
 
-  it('"You were already in" is a quiet way in: no pour, no success haptic', async () => {
+  it('"You were already in" is a quiet way in: no sheet, no pour, no haptic, straight into the room (ROUND3 C12)', async () => {
     const already: CheckInOutcome = {
       kind: 'refused',
       refusal: { title: 'Already checked in', message: 'You’re already in.', offerDirections: false },
@@ -199,10 +200,104 @@ describe('a check-in', () => {
     } as CheckInOutcome
     expect(await (await checkIn(already)).done).toBe('checkedIn')
     expect(props.onCheckedIn).toHaveBeenCalledWith(already)
+    expect(props.showTray).not.toHaveBeenCalled()
+    expect(props.onEnterRoom).toHaveBeenCalledTimes(1)
     expect(screen.queryByTestId('pour', HIDDEN)).toBeNull()
     await advance(1000)
     expect(success).not.toHaveBeenCalled()
     expect(error).not.toHaveBeenCalled()
+  })
+})
+
+describe('the sheets it asks for (Flow 4 Tonight #15–#22)', () => {
+  const refused = (errorCode: string, title: string, offerDirections = false): CheckInOutcome =>
+    ({ kind: 'refused', refusal: { ...checkInRefusal(errorCode, 'The server’s sentence.'), title, offerDirections }, errorCode, alreadyCheckedIn: false }) as CheckInOutcome
+  const buttons = () => (props.showTray.mock.calls[0][2] as { label: string; kind?: string }[]).map((b) => [b.label, b.kind])
+
+  it('Not quite there yet: the server’s sentence, map-pin, Open Maps (strong) and Close, one H.error', async () => {
+    const { done } = await checkIn(refused('OUT_OF_RANGE', 'Not quite there yet', true))
+    expect(await done).toBe('refused')
+    expect(props.showTray).toHaveBeenCalledWith('Not quite there yet', 'The server’s sentence.', expect.any(Array), { icon: 'map-pin' })
+    expect(buttons()).toEqual([['Close', 'tertiary'], ['Open Maps', 'strong']])
+    expect(error).toHaveBeenCalledTimes(1)
+    expect(success).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['EVENT_NOT_STARTED', 'Doors aren’t open', 'door-closed'],
+    ['EVENT_ENDED', 'This one’s over', 'moon'],
+    ['AGE_RESTRICTED', 'Not open to you', 'circle-slash'],
+  ])('%s: its glyph and one Close', async (code, title, icon) => {
+    await checkIn(refused(code, title))
+    expect(props.showTray).toHaveBeenCalledWith(title, 'The server’s sentence.', expect.any(Array), { icon })
+    expect(buttons()).toEqual([['Close', 'secondary']])
+  })
+
+  it('a failure on our side offers Try again, which runs the check-in again', async () => {
+    await checkIn(refused('INTERNAL', 'Check-in failed'))
+    expect(props.showTray).toHaveBeenCalledWith('Check-in failed', 'The server’s sentence.', expect.any(Array), { icon: 'cloud-off' })
+    expect(buttons()).toEqual([['Close', 'tertiary'], ['Try again', 'primary']])
+    submit.mockClear()
+    await act(async () => (props.showTray.mock.calls[0][2] as { label: string; onPress: () => void }[])[1].onPress())
+    expect(submit).toHaveBeenCalledTimes(1)
+  })
+
+  it('the server timing out: "Still checking you in", hourglass, Retry resumes it', async () => {
+    await checkIn({ kind: 'timeout' } as CheckInOutcome)
+    expect(props.showTray).toHaveBeenCalledWith(
+      'Still checking you in',
+      'The server hasn’t answered yet. Your hold still counts.',
+      expect.any(Array),
+      { icon: 'hourglass' }
+    )
+    expect(buttons()).toEqual([['Cancel', 'tertiary'], ['Retry', 'primary']])
+  })
+})
+
+describe('the hold under a tray (Flow 4 Tonight #15, #23–#26: "Your hold still counts")', () => {
+  const { getCurrentLocation } = jest.requireMock('../lib/locationFix') as { getCurrentLocation: jest.Mock }
+
+  it('a location tray keeps the pass full until it closes; then it drains', async () => {
+    let trays!: { closeTray: () => void; onRetry: () => void }
+    getCurrentLocation.mockImplementationOnce(async (t: typeof trays) => {
+      trays = t
+      return null
+    })
+    const { done } = await checkIn(fresh())
+    expect(await done).toBe('failed')
+    expect(flow.checkingIn).toBe(true)
+    await act(async () => trays.closeTray())
+    expect(props.closeTray).toHaveBeenCalled()
+    expect(flow.checkingIn).toBe(false)
+  })
+
+  it('its Try again resumes the check-in, and the pass stays full through it', async () => {
+    let trays!: { closeTray: () => void; onRetry: () => void }
+    getCurrentLocation.mockImplementationOnce(async (t: typeof trays) => {
+      trays = t
+      return null
+    })
+    await checkIn(fresh())
+    submit.mockClear()
+    await act(async () => {
+      trays.closeTray()
+      trays.onRetry()
+    })
+    expect(submit).toHaveBeenCalledTimes(1)
+    expect(flow.checkingIn).toBe(true)
+  })
+
+  it('the server’s timeout keeps it full too; Cancel drains it', async () => {
+    await checkIn({ kind: 'timeout' } as CheckInOutcome)
+    expect(flow.checkingIn).toBe(true)
+    const cancel = (props.showTray.mock.calls[0][2] as { label: string; onPress: () => void }[]).find((b) => b.label === 'Cancel')!
+    await act(async () => cancel.onPress())
+    expect(flow.checkingIn).toBe(false)
+  })
+
+  it('a refusal drains at once (#16–#22)', async () => {
+    await checkIn({ kind: 'refused', refusal: checkInRefusal('EVENT_ENDED', 'Over.'), errorCode: 'EVENT_ENDED', alreadyCheckedIn: false } as CheckInOutcome)
+    expect(flow.checkingIn).toBe(false)
   })
 })
 
@@ -212,7 +307,7 @@ describe('every door is this flow', () => {
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/^\s*\/\/.*$/gm, '')
 
-  it.each(['components/screens/EventDetailScreen.tsx', 'components/blendn/BlendnScreen.tsx'])(
+  it.each(['components/blendn/BlendnScreen.tsx'])(
     '%s runs it, draws its pour and lets it hear the tray close',
     (file) => {
       const src = read(file)
@@ -224,10 +319,13 @@ describe('every door is this flow', () => {
     }
   )
 
-  it('the event screen pushes its chat after the check-in, never replaces itself mid-pour (Android crash on #389)', () => {
+  it('the event page’s "Blend in" opens this event’s pass, never a check-in of its own (Flow 3 #04–#06)', () => {
     const src = read('components/screens/EventDetailScreen.tsx')
-    expect(src).toContain("onEnterRoom: () => openEventChat('push')")
-    expect(src).toMatch(/router\[how\]\(`\/chat\//)
+    expect(src).not.toContain('useCheckInFlow(')
+    expect(src).not.toContain('submitCheckIn(')
+    expect(src).toMatch(/openThisPass = \(\) =>[\s\S]{0,120}openPass\(\{/)
+    // To the tabs first: the overlay is under the root stack.
+    expect(src).toContain("router.dismissTo('/(tabs)/events')")
   })
 
   it('the Pulse’s "Blend in" opens the Blend’n pass rather than checking in on its own', () => {

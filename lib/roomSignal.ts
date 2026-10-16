@@ -18,13 +18,13 @@ import { pickInsideEvent, pickTodayEvents, type RoomButtonEvent } from './roomBu
  */
 interface RoomSignal {
   insideEventId: string | null
-  /** The inside event's venue, for the centre button's coach mark ("You're at Toit."). */
-  insideVenueName: string | null
+  /** The inside event's venue: the disc's (c) label reads "Check in · {venue}" (Flow 4 T10). */
+  insideVenue: string | null
   todayEventIds: string[]
 }
 
-const NONE: RoomSignal = { insideEventId: null, insideVenueName: null, todayEventIds: [] }
-let _signal: RoomSignal = NONE
+const EMPTY: RoomSignal = { insideEventId: null, insideVenue: null, todayEventIds: [] }
+let _signal: RoomSignal = EMPTY
 const _listeners = new Set<() => void>()
 
 /**
@@ -42,12 +42,12 @@ export function publishRoomSignal(
   const insideEventId = pickInsideEvent(events, now)
   const next: RoomSignal = {
     insideEventId,
-    insideVenueName: events.find((e) => e.id === insideEventId)?.venue_name || null,
+    insideVenue: events.find((e) => e.id === insideEventId)?.venue_name ?? null,
     todayEventIds: pickTodayEvents(events, now),
   }
   if (
     next.insideEventId === _signal.insideEventId &&
-    next.insideVenueName === _signal.insideVenueName &&
+    next.insideVenue === _signal.insideVenue &&
     next.todayEventIds.length === _signal.todayEventIds.length &&
     next.todayEventIds.every((id, i) => id === _signal.todayEventIds[i])
   ) {
@@ -69,7 +69,7 @@ export function getRoomSignal(): RoomSignal {
  * else's plans.
  */
 export function clearRoomSignal(): void {
-  _signal = NONE
+  _signal = EMPTY
   for (const fn of _listeners) fn()
 }
 

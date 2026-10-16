@@ -3,9 +3,9 @@ import { useRef, useState } from 'react'
 import { apiClient } from './apiClient'
 import { afterTrayDismissed } from '../components/ActionTray'
 import { askIntentRoute, revealOffer, submitCheckIn, untilIntentAnswered, type CheckInOutcome } from './checkIn'
-import { isExpectedRefusal } from './checkInRefusal'
+import { isExpectedRefusal, type CheckInRefusal } from './checkInRefusal'
 import { H } from './haptics'
-import { getCurrentLocation as getLocationFix, type CheckInLocation, type ShowTray } from './locationFix'
+import { getCurrentLocation as getLocationFix, type CheckInLocation, type ShowTray, type TrayButton } from './locationFix'
 import { Logger } from './logger'
 import { useAuth } from './useAuth'
 
@@ -87,18 +87,77 @@ export function useCheckInFlow({
   }
   /** The reveal offer's answer, while it is open. */
   const revealAnswer = useRef<((yes: boolean) => void) | null>(null)
+  /**
+   * A location tray or the server's timeout is up, and the hold stays full
+   * under it (Flow 4 Tonight #15, #23–#26: "Your hold still counts") until it
+   * closes; then the pass drains. A refusal drains at once (#16–#22).
+   */
+  const trayHolds = useRef(false)
+  const releaseHold = () => {
+    if (!trayHolds.current) return
+    trayHolds.current = false
+    setCheckingIn(false)
+  }
+  const closeTrayAndRelease = () => {
+    closeTray()
+    releaseHold()
+  }
   /** The tray's own close (its backdrop): the caller's `ActionTray onClose`, so an open offer counts as "no". */
   const dismissTray = () => {
     revealAnswer.current?.(false)
     revealAnswer.current = null
-    closeTray()
+    closeTrayAndRelease()
   }
 
-  // "Try Again" on a weak fix runs the check-in again; a fix alone went nowhere (step 5 review, H4).
-  const getCurrentLocation = () => getLocationFix({ showTray, closeTray, onRetry: () => void start() })
+  // "Try again" on a weak or timed-out fix runs the check-in again; a fix alone went nowhere (step 5 review, H4).
+  const getCurrentLocation = () => getLocationFix({ showTray, closeTray: closeTrayAndRelease, onRetry: () => void start() })
+
+  /**
+   * A refusal sheet's actions (Flow 4 Tonight #16–#22): Open Maps (strong) and
+   * Close where a map can fix it; Try again (primary) and Close for a failure
+   * on our side; otherwise one Close.
+   */
+  const refusalButtons = (refusal: CheckInRefusal, errorCode: string | undefined): TrayButton[] => {
+    const close = { label: 'Close', onPress: closeTray }
+    if (refusal.offerDirections) {
+      return [
+        { ...close, kind: 'tertiary' },
+        {
+          label: 'Open Maps',
+          variant: 'primary',
+          kind: 'strong',
+          onPress: () => {
+            closeTray()
+            onOpenMaps?.()
+          },
+        },
+      ]
+    }
+    if (!isExpectedRefusal(errorCode)) {
+      return [
+        { ...close, kind: 'tertiary' },
+        { label: 'Try again', variant: 'primary', kind: 'primary', onPress: () => (closeTray(), void start()) },
+      ]
+    }
+    return [{ ...close, kind: 'secondary' }]
+  }
+
+  /** One check-in at a time: a second hold (or activation) while one runs is ignored, not sent. */
+  const inFlight = useRef(false)
 
   /** Run the check-in: straight to the position and the request, no tray first. */
   const start = async (): Promise<CheckInFlowResult> => {
+    if (inFlight.current) return 'failed'
+    inFlight.current = true
+    try {
+      return await run()
+    } finally {
+      inFlight.current = false
+    }
+  }
+
+  const run = async (): Promise<CheckInFlowResult> => {
+    trayHolds.current = false
     setCheckingIn(true)
 
     try {
@@ -114,7 +173,8 @@ export function useCheckInFlow({
       const location = await getCurrentLocation()
       if (!location) {
         Logger.warn('events', 'checkin:location:unavailable')
-        setCheckingIn(false)
+        // Its tray is up: the hold stays full until it closes.
+        trayHolds.current = true
         return 'failed'
       }
 
@@ -124,17 +184,25 @@ export function useCheckInFlow({
 
       if (outcome.kind === 'timeout') {
         Logger.warn('events', 'checkin:timeout')
-        showTray('Still checking you in', 'This is taking longer than expected. Please try again.', [
-          { label: 'Cancel', onPress: closeTray },
-          {
-            label: 'Retry',
-            variant: 'primary',
-            onPress: () => {
-              closeTray()
-              start()
-            }
-          }
-        ])
+        // Flow 4 Tonight #15: Retry resumes the same check-in; Cancel drains the pass.
+        showTray(
+          'Still checking you in',
+          'The server hasn’t answered yet. Your hold still counts.',
+          [
+            { label: 'Cancel', kind: 'tertiary', onPress: closeTrayAndRelease },
+            {
+              label: 'Retry',
+              variant: 'primary',
+              kind: 'primary',
+              onPress: () => {
+                closeTray()
+                start()
+              },
+            },
+          ],
+          { icon: 'hourglass' }
+        )
+        trayHolds.current = true
         return 'failed'
       } else if (outcome.kind === 'refused') {
         // The door saying no (too far, not open yet) is the flow working, not
@@ -146,31 +214,15 @@ export function useCheckInFlow({
         }
         const { refusal } = outcome
         if (outcome.alreadyCheckedIn) {
+          // ROUND3 C12: no "Already checked in" sheet; the Room simply opens.
           Logger.journey('checkin', 'detail:alreadyCheckedIn')
           onCheckedIn?.(outcome)
-        } else {
-          H.error({ blocking: true })
+          await onEnterRoom?.()
+          return 'checkedIn'
         }
-
-        showTray(
-          refusal.title,
-          refusal.message,
-          refusal.offerDirections
-            ? [
-                { label: 'Done', onPress: closeTray },
-                {
-                  label: 'Open Maps',
-                  variant: 'primary',
-                  onPress: () => {
-                    closeTray()
-                    onOpenMaps?.()
-                  },
-                },
-              ]
-            : undefined
-        )
-        // Already in is the answer the user wanted, whatever the server calls it.
-        return outcome.alreadyCheckedIn ? 'checkedIn' : 'refused'
+        H.error({ blocking: true })
+        showTray(refusal.title, refusal.message, refusalButtons(refusal, outcome.errorCode), { icon: refusal.icon })
+        return 'refused'
       } else {
         Logger.journey('checkin', 'detail:success', { eventId })
         const { askIntent, revealSuggestion } = outcome
@@ -204,10 +256,15 @@ export function useCheckInFlow({
               closeTray()
               answer(value)
             }
-            showTray(offer.title, offer.message, [
-              { label: offer.cancel, onPress: reply(false) },
-              { label: offer.confirm, variant: 'primary', onPress: reply(true) },
-            ])
+            showTray(
+              offer.title,
+              offer.message,
+              [
+                { label: offer.cancel, onPress: reply(false) },
+                { label: offer.confirm, variant: 'primary', onPress: reply(true) },
+              ],
+              { icon: 'eye' }
+            )
           })
           if (yes) {
             apiClient
@@ -228,11 +285,19 @@ export function useCheckInFlow({
     } catch (error) {
       Logger.error('events', 'checkin:exception', { error: error as any })
       H.error({ blocking: true })
-      showTray('Check-in failed', 'Something went wrong. Please try again.')
+      showTray(
+        'Check-in failed',
+        'Something went wrong on our side.',
+        [
+          { label: 'Close', kind: 'tertiary', onPress: closeTray },
+          { label: 'Try again', variant: 'primary', kind: 'primary', onPress: () => (closeTray(), void start()) },
+        ],
+        { icon: 'cloud-off' }
+      )
       return 'failed'
     } finally {
       setArrival(null)
-      setCheckingIn(false)
+      if (!trayHolds.current) setCheckingIn(false)
     }
   }
 

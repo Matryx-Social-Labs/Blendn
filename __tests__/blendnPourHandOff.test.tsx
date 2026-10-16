@@ -50,8 +50,8 @@ jest.mock('../lib/useRoom', () => {
   const none = {
     status: 'none', event: null, people: [], arrivals: [], hereCount: 0, hasMore: false, loadingMore: false,
     checkedInAt: null, revealed: false, chatGroupId: null, match: null, wave: null, error: null, connection: 'connected',
-    clearMatch: () => {}, connect: async () => ({}), loadMore: async () => {}, retry: () => {}, like: async () => {},
-    sendWave: async () => 'sent', remove: () => {}, clearWave: () => {}, refresh: async () => {},
+    clearMatch: () => {}, connect: async () => ({}), loadMore: async () => {}, retry: () => {}, like: async () => ({ kind: 'liked' }),
+    sendWave: async () => ({ kind: 'sent' }), remove: () => {}, refresh: async () => {},
   }
   let state: Record<string, unknown> = none
   const listeners = new Set<() => void>()
@@ -71,6 +71,8 @@ jest.mock('../lib/useTonight', () => ({
     status: 'ready',
     events: [{ id: 'e1', title: 'Vinyl Night', venue: 'Toit', hereCount: 3, tasteMatchCount: null }],
     insideEventId: 'e1',
+    location: 'on',
+    offline: false,
     refresh: async () => {},
   }),
 }))
@@ -116,37 +118,25 @@ jest.mock('../components/blendn/RoomStage', () => {
     useStageScroll: () => ({ onScroll: undefined, native: {}, scrollEventThrottle: 16 }),
   }
 })
-jest.mock('../components/blendn/RoomSections', () => {
+jest.mock('../components/blendn/RoomSections', () => ({
+  faceOf: () => ({ kind: 'creature', pseudonym: 'Night Cat' }),
+  RoomSkeleton: () => null,
+  useNow: () => Date.now(),
+  useGridCell: () => 100,
+}))
+jest.mock('../components/blendn/RoomView', () => {
   const { View } = jest.requireActual('react-native')
-  return {
-    RoomHero: () => <View testID="room" />,
-    MeetNext: () => null,
-    FaceGridHead: () => null,
-    FaceGridMore: () => null,
-    GridFace: () => null,
-    useGridCell: () => 100,
-    useNow: () => Date.now(),
-    GRID_GAP: 12,
-    GRID_ROW_GAP: 16,
-  }
+  return { RoomView: () => <View testID="room" /> }
 })
+jest.mock('../components/blendn/RoomCrews', () => ({ CrewsFoot: () => null, CrewsHead: () => null, PeopleCrewStrip: () => null, RoomCrewCard: () => null }))
 jest.mock('../components/crews/CrewsView', () => ({
   useCrewsHere: () => ({ state: { status: 'loading' }, mine: [] }),
-  useCrewActions: () => ({ like: async () => {}, liking: null, report: () => {} }),
+  useCrewActions: () => ({ like: async () => {}, liking: null, report: () => {}, here: async () => {}, told: {} }),
   crewCards: () => [],
-  chooseCrew: async () => null,
   openBlend: () => {},
-  CrewsHeader: () => null,
-  CrewsFooter: () => null,
 }))
-jest.mock('../components/crews/CrewParts', () => ({ CrewCardView: () => null }))
-jest.mock('../components/blendn/ChatDock', () => ({ ChatDock: () => null }))
-jest.mock('../components/blendn/MatchMoment', () => ({ MatchMoment: () => null }))
-jest.mock('../components/blendn/PersonCard', () => ({ PersonCard: () => null }))
-jest.mock('../components/blendn/RoomRecap', () => ({ RoomRecap: () => null }))
+jest.mock('../components/ds/PersonCard', () => ({ PersonCard: () => null }))
 jest.mock('../components/grid/ConnectSheet', () => ({ ConnectSheet: () => null }))
-jest.mock('../components/RealtimeStatusBanner', () => () => null)
-jest.mock('../components/RoomVisibilityBanner', () => ({ RoomVisibilityBanner: () => null }))
 
 const { router } = jest.requireMock('expo-router') as { router: { push: jest.Mock } }
 const { mockRoomLoads, mockRoomReset } = jest.requireMock('../lib/useRoom') as { mockRoomLoads: () => void; mockRoomReset: () => void }

@@ -50,6 +50,27 @@ function shortest(long: string, short: string): string {
 }
 
 /**
+ * Every reason, in the order `reasonLine` ranks them: the PersonCard's
+ * reasons panel (the card's head shows the top one). Matching v2's overlaps
+ * are the server's own sentences, already budgeted and positive only. Invents
+ * nothing when the server sent nothing.
+ */
+export function reasonLines(p: ReasonSource & { overlaps?: readonly { text: string }[] }): string[] {
+  const out: string[] = []
+  const intents = p.sharedIntents ?? []
+  if (intents.includes('dating')) out.push('Both open to dating')
+  if (intents.includes('networking')) out.push('Both here to network')
+  if (intents.includes('friends')) out.push('Both here to make friends')
+  const plans = p.sharedPlans ?? 0
+  if (plans > 0) out.push(`Going to ${plans} more ${plans === 1 ? 'event' : 'events'} together`)
+  const nights = p.sharedEvents ?? 0
+  if (nights > 0) out.push(`Both at ${nights} ${nights === 1 ? 'night' : 'nights'} before`)
+  if (p.sharedWorkField && p.workField) out.push(`You both work in ${p.workField}`)
+  for (const o of p.overlaps ?? []) out.push(o.text)
+  return out
+}
+
+/**
  * One short reason to walk over.
  *
  * The same priority the old Grid card's box used —
@@ -229,25 +250,25 @@ export function shuffleCountdownLabel(nextAt: number, now: number): string {
 
 export type StartsKind = 'live' | 'soon' | 'later' | 'ended'
 
-/** Under this, "IN 25M"; from here to `CLOCK_AFTER_MS`, "IN 2H". */
+/** Under this, "In 25 min"; from here on, the clock time. */
 const SOON_MS = 60 * 60_000
-/** Past this, the clock time reads better than a count of hours. */
-const CLOCK_AFTER_MS = 6 * 60 * 60_000
 
-/** "8:30 PM" in local time. Built by hand: `Intl` time formats vary by engine. */
-function clockTime(ms: number): string {
+/** "8:30 PM", or "9 PM" on the hour, in local time. Built by hand: `Intl` time formats vary by engine. */
+export function clockTime(ms: number): string {
   const d = new Date(ms)
   const h24 = d.getHours()
   const h12 = h24 % 12 === 0 ? 12 : h24 % 12
-  return `${h12}:${String(d.getMinutes()).padStart(2, '0')} ${h24 < 12 ? 'AM' : 'PM'}`
+  const m = d.getMinutes()
+  return `${h12}${m ? `:${String(m).padStart(2, '0')}` : ''} ${h24 < 12 ? 'AM' : 'PM'}`
 }
 
 /**
- * The status tag on a Tonight row: LIVE, IN 25M, IN 2H, 8:30 PM, ENDED.
+ * The time badge on a Tonight card, in the design's one date grammar
+ * (EventCard, Flow 4 Tonight): "Live", "In 25 min", "9 PM", "9:30 PM",
+ * "Ended".
  *
- * Minutes round up — "IN 0M" for something 30 seconds out is a tag that says
- * nothing — and hours round to nearest, so 1h50 reads "IN 2H" rather than
- * understating the wait by an hour.
+ * Minutes round up: "In 0 min" for something 30 seconds out is a badge that
+ * says nothing.
  */
 export function startsLabel(
   { startsAt, endsAt }: { startsAt?: string | null; endsAt?: string | null },
@@ -256,13 +277,12 @@ export function startsLabel(
   const start = startsAt ? new Date(startsAt).getTime() : NaN
   const end = endsAt ? new Date(endsAt).getTime() : NaN
 
-  if (Number.isFinite(end) && end <= now) return { kind: 'ended', text: 'ENDED' }
+  if (Number.isFinite(end) && end <= now) return { kind: 'ended', text: 'Ended' }
   if (!Number.isFinite(start)) return { kind: 'later', text: '' }
-  if (start <= now) return { kind: 'live', text: 'LIVE' }
+  if (start <= now) return { kind: 'live', text: 'Live' }
 
   const until = start - now
-  if (until < SOON_MS) return { kind: 'soon', text: `IN ${Math.max(1, Math.ceil(until / 60_000))}M` }
-  if (until < CLOCK_AFTER_MS) return { kind: 'later', text: `IN ${Math.round(until / SOON_MS)}H` }
+  if (until < SOON_MS) return { kind: 'soon', text: `In ${Math.max(1, Math.ceil(until / 60_000))} min` }
   return { kind: 'later', text: clockTime(start) }
 }
 

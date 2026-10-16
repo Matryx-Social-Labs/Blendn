@@ -119,7 +119,8 @@ describe("the screen consults the code, not the sentence", () => {
     expect(read("lib/useCheckInFlow.ts")).toContain("refusal.offerDirections")
   })
 
-  it("the event screen gives the shared flow its map", () => {
-    expect(read("components/screens/EventDetailScreen.tsx")).toContain("onOpenMaps: openInMaps")
+  it("the pass gives the shared flow its map", () => {
+    // Every check-in is the Blend'n pass's now (the event page opens it): Open Maps goes to the event.
+    expect(read("components/blendn/BlendnScreen.tsx")).toContain("onOpenMaps: () => insideEvent && router.push({ pathname: '/event/[id]'")
   })
 })

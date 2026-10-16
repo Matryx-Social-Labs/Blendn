@@ -1,4 +1,4 @@
-import { savedEventRows, goingItems, rsvpEventRows } from '../lib/savedEvents'
+import { savedEventRows, goingItems, rsvpEventRows, withPendingSaves } from '../lib/savedEvents'
 
 /**
  * The Going tab read the favourites payload as an array and showed "No saved
@@ -187,5 +187,34 @@ describe('the Going tab sections', () => {
   it('drops an empty section, header and all', () => {
     const saved = savedEventRows({ events: [api('b')] })
     expect(goingItems([], saved, [], NOW).map((i) => i.key)).toEqual(['h:saved', 's:b'])
+  })
+})
+
+describe('withPendingSaves: a read never undoes what Going just did (PR #401 review)', () => {
+  const row = (id: string) => ({ id, title: id }) as never
+
+  it('keeps a removed row gone against a read that began before its DELETE settled', () => {
+    const pending = new Map([['a', { saved: false, row: row('a'), settledAt: 3 }]])
+    expect(withPendingSaves([row('a'), row('b')], pending, 3).map((r: { id: string }) => r.id)).toEqual(['b'])
+    expect(pending.size).toBe(1)
+  })
+
+  it('keeps an Undo-restored row against a read that began before its POST, and while it is out', () => {
+    const inFlight = new Map([['a', { saved: true, row: row('a'), settledAt: Infinity }]])
+    expect(withPendingSaves([row('b')], inFlight, 9).map((r: { id: string }) => r.id)).toEqual(['a', 'b'])
+  })
+
+  it('lets a read that began after the request settled be the truth, and forgets the entry', () => {
+    const pending = new Map([['a', { saved: false, row: row('a'), settledAt: 3 }]])
+    expect(withPendingSaves([row('a')], pending, 4).map((r: { id: string }) => r.id)).toEqual(['a'])
+    expect(pending.size).toBe(0)
+  })
+})
+
+describe('Going: the newest read wins', () => {
+  it('drops an answer a later load has overtaken', () => {
+    const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'app', '(tabs)', 'going.tsx'), 'utf8') as string
+    expect(src).toMatch(/const id = \+\+loadId\.current[\s\S]*?if \(id !== loadId\.current\) return/)
+    expect(src).toContain('withPendingSaves(savedEventRows(saved.data), pendingSaves.current, id)')
   })
 })

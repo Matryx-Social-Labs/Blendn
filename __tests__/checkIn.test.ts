@@ -168,8 +168,12 @@ describe('the event screen hears check-in changes', () => {
     expect(screen).toMatch(/subscribeCheckInChanged\(\(\) => void fetchEventDetails\(\)\)/)
   })
 
-  it('still turns the CTA at once from the check-in result', () => {
-    expect(screen).toMatch(/onCheckedIn: \(outcome\) =>\s*setCheckInStatus\(/)
+  it('checks in only through the pass: "Blend in" opens this event’s VenuePass (Flow 3 #04–#06, Flow 4)', () => {
+    expect(screen).not.toContain('useCheckInFlow(')
+    expect(screen).not.toContain('<MomentPour')
+    expect(screen).toMatch(/if \(!isCheckedIn\) \{\s*openThisPass\(\)/)
+    // Checked in, "You're in" leads to the Room.
+    expect(screen).toMatch(/openThisPass\(\)\s*return\s*\}\s*toTheOverlay\(openBlendn\)/)
   })
 
   it('apiClient drops only the detail, not the attendee list', () => {

@@ -8,7 +8,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
 import { AccessibilityInfo, StyleSheet } from 'react-native'
 
-import { GridFace } from '../components/ds/GridFace'
+import { DOUBLE_TAP_MS, GridFace } from '../components/ds/GridFace'
 import { COLOR, TYPE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 
@@ -67,4 +67,59 @@ it('Increase Contrast sets the reason in white', async () => {
   await render(<GridFace {...PRIYA} />)
   await act(async () => {})
   expect(StyleSheet.flatten(screen.getByText('Both into vinyl', { includeHiddenElements: true }).props.style).color).toBe(COLOR.textPrimary)
+})
+
+describe('Flow 4 Room: the double tap likes; arrivals and waves show on the face', () => {
+  const advance = (ms: number) => act(async () => jest.advanceTimersByTime(ms))
+  beforeEach(() => jest.useFakeTimers())
+  afterEach(() => jest.useRealTimers())
+
+  it('a double tap likes: H.like and the HeartPop, and does not open the card', async () => {
+    const onPress = jest.fn()
+    const onLike = jest.fn()
+    const like = jest.spyOn(H, 'like').mockImplementation(() => {})
+    await render(<GridFace {...PRIYA} onPress={onPress} onLike={onLike} testID="g" />)
+    await fireEvent.press(screen.getByRole('button'))
+    await fireEvent.press(screen.getByRole('button'))
+    expect(onLike).toHaveBeenCalledTimes(1)
+    expect(like).toHaveBeenCalledTimes(1)
+    expect(query('g-heart')).toBeTruthy()
+    await advance(1000)
+    expect(onPress).not.toHaveBeenCalled()
+  })
+
+  it('one tap opens the card once the double-tap window has passed', async () => {
+    const onPress = jest.fn()
+    await render(<GridFace {...PRIYA} onPress={onPress} onLike={jest.fn()} />)
+    await fireEvent.press(screen.getByRole('button'))
+    expect(onPress).not.toHaveBeenCalled()
+    await advance(DOUBLE_TAP_MS)
+    expect(onPress).toHaveBeenCalledTimes(1)
+  })
+
+  it('with no like on offer (liked, matched, or the card would ask) a tap opens at once', async () => {
+    const onPress = jest.fn()
+    await render(<GridFace {...PRIYA} liked onPress={onPress} />)
+    await fireEvent.press(screen.getByRole('button'))
+    expect(onPress).toHaveBeenCalledTimes(1)
+  })
+
+  it('a screen reader likes from the actions menu, and activate opens at once', async () => {
+    const onPress = jest.fn()
+    const onLike = jest.fn()
+    await render(<GridFace {...PRIYA} onPress={onPress} onLike={onLike} />)
+    const face = screen.getByRole('button')
+    expect(face.props.accessibilityActions).toEqual([{ name: 'activate' }, { name: 'longpress', label: 'Like' }])
+    await fireEvent(face, 'accessibilityAction', { nativeEvent: { actionName: 'longpress' } })
+    expect(onLike).toHaveBeenCalledTimes(1)
+    await fireEvent(face, 'accessibilityAction', { nativeEvent: { actionName: 'activate' } })
+    expect(onPress).toHaveBeenCalledTimes(1)
+  })
+
+  it('a wave from them rings the face (#51); none before one arrives', async () => {
+    const view = await render(<GridFace {...PRIYA} testID="g" />)
+    expect(query('g-wave-ring')).toBeNull()
+    await view.rerender(<GridFace {...PRIYA} waveKey={1} testID="g" />)
+    expect(query('g-wave-ring')).toBeTruthy()
+  })
 })

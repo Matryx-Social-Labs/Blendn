@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
-import Animated, { Easing, useAnimatedReaction, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated'
+import Animated, { Easing, ReduceMotion, useAnimatedReaction, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
 
 import { GradientFill } from '../ui/GradientFill'
@@ -86,6 +86,8 @@ export function HoldToConfirm({
   const full = busy || !!confirmedLabel
   const progress = useSharedValue(previewProgress ?? (full ? 1 : 0))
   const inactive = disabled || full
+  /** Set on the UI thread the frame the hold commits: a later cancel is not a release. */
+  const committed = useSharedValue(false)
 
   const commit = useCallback(() => {
     H.commit()
@@ -123,15 +125,18 @@ export function HoldToConfirm({
     .maxDistance(MAX_DRIFT)
     .shouldCancelWhenOutside(false)
     .onBegin(() => {
-      progress.set(withTiming(1, { duration: DURATION.hold, easing: Easing.linear }))
+      committed.set(false)
+      // Never: the fill's speed is the hold's information; under Reduce Motion the default would jump straight to full.
+      progress.set(withTiming(1, { duration: DURATION.hold, easing: Easing.linear, reduceMotion: ReduceMotion.Never }))
     })
     .onStart(() => {
+      committed.set(true)
       progress.set(1)
       scheduleOnRN(commit)
     })
     .onFinalize((_e, success) => {
       // A cancel after the edge (busy disables the gesture, an Android drift) is not a release: it committed.
-      if (!success && progress.get() < 1) progress.set(reduceMotion ? 0 : withSpring(0, SPRING.settle))
+      if (!success && !committed.get()) progress.set(reduceMotion ? 0 : withSpring(0, SPRING.settle))
     })
   if (testID) hold.withTestId(`${testID}-hold`)
 

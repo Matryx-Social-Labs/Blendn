@@ -36,37 +36,16 @@ export function roomVisibility(revealed: boolean, listed = true): RoomVisibility
 }
 
 /**
- * The banner copy, in the second person and in the present tense.
- *
- * Present tense on purpose: "You are anonymous" is a fact about right now,
- * where "Anonymous mode" is a label that could equally be a button. The whole
- * job of the banner is that someone glancing at it knows their state without
- * reading twice.
- *
- * The anonymous line names the pseudonym rather than saying "anonymous",
- * because a person can see their pseudonym on their own messages and the two
- * need to obviously be the same thing.
+ * The Room's visibility line (ds `VisibilityBanner`, §12): hidden outranks
+ * everything; named; anonymous with a way to reveal; or anonymous and
+ * blocked, because there is nothing yet to reveal (no name or photo,
+ * `revealReadiness`). The gate is one-way: being named never waits on it, so
+ * going anonymous is always offered.
  */
-export function bannerText(
-  visibility: RoomVisibility,
-  pseudonym?: string | null
-): { title: string; action: string } {
-  if (visibility === 'hidden') {
-    return {
-      title: "You're not listed here — Show online status is off",
-      action: 'Turn it on',
-    }
-  }
-  if (visibility === 'named') {
-    return {
-      title: 'People here can see your name and photo',
-      action: 'Go anonymous',
-    }
-  }
-  return {
-    title: pseudonym ? `You're in this room as ${pseudonym}` : "You're anonymous in this room",
-    action: 'Show who I am',
-  }
+export function bannerState(revealed: boolean, listed: boolean, canReveal: boolean): 'hidden' | 'named' | 'anon' | 'blocked' {
+  const v = roomVisibility(revealed, listed)
+  if (v !== 'anonymous') return v
+  return canReveal ? 'anon' : 'blocked'
 }
 
 /**

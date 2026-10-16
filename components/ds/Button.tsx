@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Platform, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
 import Animated, { ReduceMotion, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated'
 
@@ -85,6 +85,8 @@ export type ButtonProps = {
   size?: ButtonSize
   /** A leading glyph: 20 pt, 16 at `sm` and `raised`. */
   icon?: IconName
+  /** A leading mark that is not a glyph, in its place: a crew's emblem on "Like for Nebula" (R2-D1). Decorative. */
+  leading?: ReactNode
   disabled?: boolean
   /** Busy: the label stays (for width, and as the name read), a spinner covers it after 300 ms. */
   loading?: boolean
@@ -99,6 +101,8 @@ export type ButtonProps = {
    */
   pressHaptic?: boolean | (() => void)
   accessibilityHint?: string
+  /** Only when the label alone is ambiguous on its screen ("Ask to join, Velvet Heron"): it must start with the label (WCAG 2.5.3). */
+  accessibilityLabel?: string
   /** The design gallery only: draws a transient state with no finger or keyboard. */
   previewState?: 'pressed' | 'focused'
   testID?: string
@@ -126,12 +130,14 @@ export function Button({
   kind = 'primary',
   size = 'lg',
   icon,
+  leading,
   disabled = false,
   loading = false,
   refused = false,
   onGlass = false,
   pressHaptic = true,
   accessibilityHint,
+  accessibilityLabel,
   previewState,
   testID,
   style,
@@ -183,7 +189,7 @@ export function Button({
         onBlur={() => setFocused(false)}
         android_ripple={{ color: PRESSED_WASH.android, foreground: true }}
         accessibilityRole="button"
-        accessibilityLabel={label}
+        accessibilityLabel={accessibilityLabel ?? label}
         accessibilityHint={accessibilityHint}
         accessibilityState={{ disabled, busy: loading }}
         style={[
@@ -197,7 +203,7 @@ export function Button({
         {kind === 'primary' ? <GradientFill style={StyleSheet.absoluteFill} /> : null}
         {pressed && android ? <View style={[StyleSheet.absoluteFill, { backgroundColor: PRESSED_WASH.android }]} /> : null}
         <View style={[styles.content, spinner && styles.hidden]}>
-          {icon ? <Icon name={icon} size={compact ? ICON.inline : ICON.control} color={ink} /> : null}
+          {leading ?? (icon ? <Icon name={icon} size={compact ? ICON.inline : ICON.control} color={ink} /> : null)}
           <Text
             style={[labelFont, { color: ink }]}
             maxFontSizeMultiplier={CONTROL_FONT_CAP}

@@ -9,9 +9,9 @@ const read = (p: string) => readFileSync(join(__dirname, '..', p), 'utf8')
 const stripComments = (src: string) =>
   src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 
-// The match moment replaced ConnectionSheet; every face in it draws through `Face`.
-const MOMENT = () => stripComments(read('components/blendn/MatchMoment.tsx'))
-const FACE = () => stripComments(read('components/blendn/Face.tsx'))
+// The match moment is the redesign's (components/ds/MomentMatch, D · 4.4); every face in it draws through `Avatar`.
+const MOMENT = () => stripComments(read('components/ds/MomentMatch.tsx'))
+const AVATAR = () => stripComments(read('components/ds/Avatar.tsx'))
 const SCREEN = () => stripComments(read('components/blendn/BlendnScreen.tsx'))
 const ROOM = () => stripComments(read('lib/useRoom.ts'))
 const DM = () => stripComments(read('app/private-chat/[conversationId].tsx'))
@@ -110,7 +110,7 @@ describe('the match moment shows only faces that were earned', () => {
     expect(src).not.toContain('profile_photos')
     expect(src).not.toContain('OptimizedImage')
     expect(src).not.toContain('avatarUrl')
-    expect(SCREEN()).toContain("them={{ name: room.match?.name ?? '', photo: matchPerson?.photo ?? null }}")
+    expect(SCREEN()).toContain("them={matchPerson?.photo ? { kind: 'photo', uri: matchPerson.photo } : { kind: 'creature', pseudonym: room.match.name }}")
     // …and the roster's photo is exactly what the server sent, never fetched.
     expect(ROOM()).toContain('photo: a.profile_photos?.[0] ?? null')
   })
@@ -121,20 +121,20 @@ describe('the match moment shows only faces that were earned', () => {
      * Unrevealed, you are the mark they know you by.
      */
     expect(SCREEN()).toContain(
-      "me={controls.revealed ? me : { name: room.match?.you ?? 'You', photo: null }}"
+      "you={controls.revealed && myPhoto ? { kind: 'photo', uri: myPhoto } : { kind: 'creature', pseudonym: room.match.you ?? myPseudonym ?? myName }}"
     )
   })
 
-  it('draws the generated mark for anybody without a photo', () => {
-    expect(MOMENT()).toContain('<Face name={me.name} photo={me.photo}')
-    expect(MOMENT()).toContain('<Face name={them.name} photo={them.photo}')
-    expect(FACE()).toContain('pseudonymAvatar(name)')
+  it('draws the creature for anybody without a photo', () => {
+    expect(MOMENT()).toContain('<Avatar {...you} size={FACE}')
+    expect(MOMENT()).toContain('<Avatar {...them} size={FACE}')
+    expect(AVATAR()).toContain('creatureFor(')
   })
 
   it('is seeded on pseudonyms, never a user id', () => {
     // A user id is stable forever and would rebuild the cross-surface identity
     // the pseudonyms exist to prevent.
-    for (const src of [MOMENT(), FACE()]) {
+    for (const src of [MOMENT(), AVATAR()]) {
       expect(src).not.toMatch(/userId|user_id|\.id\b/)
     }
   })

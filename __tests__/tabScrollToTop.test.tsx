@@ -39,6 +39,8 @@ jest.mock('../components/blendn/BlendnScreen', () => ({ BlendnScreen: () => null
   const mocked = require('react-native-reanimated')
   const actual = jest.requireActual('react-native-reanimated')
   for (const k of Object.keys(actual)) if (!(k in mocked)) mocked[k] = actual[k]
+  // The disc's values are `makeMutable`s read with `.get()`, which the old mock's plain values lack.
+  mocked.makeMutable = actual.makeMutable
 }
 
 const mockScrolls: Record<string, jest.Mock> = {}

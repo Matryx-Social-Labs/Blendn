@@ -82,6 +82,11 @@ export type SheetProps = {
   detents?: readonly Detent[]
   /** Between the body and the actions: a reason list, a form. Scroll it yourself if it can outgrow the detent. */
   children?: ReactNode
+  /**
+   * Once it has left the screen. iOS drops a Modal presented while another is
+   * still leaving, so the next sheet (Block / Report, a composer) waits for this.
+   */
+  onDismissed?: () => void
   testID?: string
 }
 
@@ -96,6 +101,7 @@ function useSheetMotion({
   opening,
   busy,
   requestClose,
+  onGone,
 }: {
   visible: boolean
   /** Lowest first. */
@@ -104,6 +110,8 @@ function useSheetMotion({
   opening: number
   busy: boolean
   requestClose: () => void
+  /** It has unmounted (Android); iOS reports through the Modal's own `onDismiss`. */
+  onGone: () => void
 }) {
   const window = useWindowDimensions()
   const reduceMotion = useReducedMotion()
@@ -132,7 +140,10 @@ function useSheetMotion({
     const out = { duration: fade, easing: Easing.bezier(...EASING.sheet) }
     if (!reduceMotion) offset.set(withTiming(window.height, out))
     scrim.set(withTiming(0, out))
-    const timer = setTimeout(() => setMounted(false), fade)
+    const timer = setTimeout(() => {
+      setMounted(false)
+      onGone()
+    }, fade)
     return () => clearTimeout(timer)
     // On `visible` only: the rest is read as it stood when the sheet opened or closed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -191,7 +202,7 @@ function useSheetMotion({
  * ponytail: focus is not handed back to the opener on close (the opener
  * knows what it was); the material does not grow more opaque near full height.
  */
-export function Sheet({ visible, onClose, title, body, icon, actions = [], detents, children, focusRef, testID }: SheetProps) {
+export function Sheet({ visible, onClose, title, body, icon, actions = [], detents, children, focusRef, onDismissed, testID }: SheetProps) {
   const android = Platform.OS === 'android'
   const insets = useSafeAreaInsets()
   const window = useWindowDimensions()
@@ -207,7 +218,21 @@ export function Sheet({ visible, onClose, title, body, icon, actions = [], deten
   const stops = [...new Set(detents)].sort((a, b) => DETENT[a] - DETENT[b])
   const heights = stops.map((d) => Math.round(window.height * DETENT[d]))
   const opening = detents ? stops.indexOf(detents[0]) : 0
-  const { mounted, drag, placeStyle, scrimStyle, natural, fixedHeight } = useSheetMotion({ visible, heights, opening, busy, requestClose })
+  const dismissed = useRef(onDismissed)
+  useEffect(() => {
+    dismissed.current = onDismissed
+  })
+  const ios = Platform.OS === 'ios'
+  const { mounted, drag, placeStyle, scrimStyle, natural, fixedHeight } = useSheetMotion({
+    visible,
+    heights,
+    opening,
+    busy,
+    requestClose,
+    onGone: () => {
+      if (!ios) dismissed.current?.()
+    },
+  })
   if (testID) drag.withTestId(`${testID}-drag`)
   // Once the modal is on screen: iOS presents it a frame after mount and drops a focus sent earlier.
   const focusTitle = () => {
@@ -234,6 +259,7 @@ export function Sheet({ visible, onClose, title, body, icon, actions = [], deten
       navigationBarTranslucent
       onRequestClose={requestClose}
       onShow={focusTitle}
+      onDismiss={ios ? () => dismissed.current?.() : undefined}
     >
       {/* A Modal is its own native root: gestures inside it need their own root view. */}
       <GestureHandlerRootView testID={testID && `${testID}-root`} pointerEvents={visible ? 'auto' : 'none'} style={styles.fill}>

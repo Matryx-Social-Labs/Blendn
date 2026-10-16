@@ -280,7 +280,7 @@ sits under the tab bar), then sits below the first card the page draws
 it, two lines at 360 dp covered the search bar). Featured's card reaches the tab
 bar, so the list first scrolls the card up by whatever the mark would overlap.
 
-The centre button's sits above the bar, centred on the disc, caret down, while
+The centre button's sits above the bar and (c)'s "Check in · {venue}" label, centred on the disc, caret down, while
 Blend'n is closed and the button is in `checkin` with a venue name
-(`lib/roomSignal.ts`). The Room's sits under the visibility banner once the
+(`lib/roomSignal.ts` `insideVenue`). The Room's sits under the visibility line once the
 check-in pour has handed off and nothing is over the Room.

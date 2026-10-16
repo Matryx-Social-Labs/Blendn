@@ -49,7 +49,7 @@ describe('getCurrentLocation', () => {
     loc.getCurrentPositionAsync.mockResolvedValue(fixWith(80))
     const t = trays()
     expect(await getCurrentLocation(t)).toBeNull()
-    expect(t.showTray).toHaveBeenCalledWith('GPS signal weak', expect.stringContaining('80m'), expect.any(Array))
+    expect(t.showTray).toHaveBeenCalledWith('GPS signal is weak', 'Accuracy is 80 m. Step away from walls and try again.', expect.any(Array), { icon: 'radar' })
   })
 
   it('stops at the deadline when no fix ever arrives', async () => {
@@ -63,7 +63,7 @@ describe('getCurrentLocation', () => {
     await Promise.resolve()
     jest.advanceTimersByTime(LOCATION_FIX_TIMEOUT_MS)
     expect(await pending).toBeNull()
-    expect(t.showTray).toHaveBeenCalledWith('Location timeout', expect.any(String))
+    expect(t.showTray).toHaveBeenCalledWith('Location timed out', 'We couldn’t get a fix in 15 seconds.', expect.any(Array), { icon: 'hourglass' })
   })
 
   it('asks for permission rather than reading a position without it', async () => {
@@ -71,6 +71,51 @@ describe('getCurrentLocation', () => {
     const t = trays()
     expect(await getCurrentLocation(t)).toBeNull()
     expect(loc.getCurrentPositionAsync).not.toHaveBeenCalled()
-    expect(t.showTray).toHaveBeenCalledWith('Location permission required', expect.any(String), expect.any(Array))
+    expect(t.showTray).toHaveBeenCalledWith('Location permission needed', 'Blend’n needs your location once, to check you in here.', expect.any(Array), { icon: 'map-pin' })
+  })
+
+  it('"Try again" on a timed-out fix resumes what wanted it (Flow 4 Tonight #25)', async () => {
+    jest.useFakeTimers()
+    loc.getCurrentPositionAsync.mockReturnValue(new Promise(() => {}))
+    const t = trays()
+    const onRetry = jest.fn()
+    const pending = getCurrentLocation({ ...t, onRetry })
+    await Promise.resolve()
+    await Promise.resolve()
+    await Promise.resolve()
+    jest.advanceTimersByTime(LOCATION_FIX_TIMEOUT_MS)
+    await pending
+    const buttons = t.showTray.mock.calls[0][2] as { label: string; kind?: string; onPress: () => void }[]
+    expect(buttons.map((b) => [b.label, b.kind])).toEqual([
+      ['Cancel', 'tertiary'],
+      ['Try again', 'primary'],
+    ])
+    buttons[1].onPress()
+    expect(t.closeTray).toHaveBeenCalled()
+    expect(onRetry).toHaveBeenCalledTimes(1)
+  })
+
+  it('says a Go Live’s words, not a check-in’s, for Go Live', async () => {
+    loc.hasServicesEnabledAsync.mockResolvedValue(false)
+    const t = trays()
+    await getCurrentLocation({ ...t, purpose: 'goLive' })
+    expect(t.showTray).toHaveBeenCalledWith('Location Services are off', 'Turn on Location Services to go live here.', expect.any(Array), { icon: 'map-pin-off' })
+    const buttons = t.showTray.mock.calls[0][2] as { label: string; kind?: string }[]
+    expect(buttons.map((b) => [b.label, b.kind])).toEqual([
+      ['Not now', 'tertiary'],
+      ['Open Settings', 'strong'],
+    ])
+  })
+
+  it('precise location off: its own tray with the path to the switch (R3-D4 4.7)', async () => {
+    loc.requestForegroundPermissionsAsync.mockResolvedValue({ status: 'granted', ios: { accuracy: 'reduced' } } as any)
+    const t = trays()
+    expect(await getCurrentLocation(t)).toBeNull()
+    expect(t.showTray).toHaveBeenCalledWith(
+      'Precise location is off',
+      'Check-in needs your exact spot to confirm you’re inside. Turn on Precise Location for Blend’n.',
+      expect.any(Array),
+      { icon: 'locate-off', detail: 'Settings › Blend’n › Location › Precise Location' }
+    )
   })
 })
