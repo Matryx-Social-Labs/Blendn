@@ -52,6 +52,8 @@ import {
 } from './RoomSections'
 import { RoomStage, useStageScroll } from './RoomStage'
 import { TonightView } from './TonightView'
+import { markCoachUsed, useCoachMark } from '../../lib/coachMarks'
+import { COACH_MARK_MAX_WIDTH, CoachMark } from '../ds/CoachMark'
 
 const TOP_BAR = CONTROL.md
 /** How long the pour and the pass wait for the Room after a check-in before giving up on it. */
@@ -92,6 +94,8 @@ export function openerFor(p: RoomPerson): string {
 
 type Tray = { visible: boolean; title: string; message: string; buttons: ActionTrayButton[] }
 const NO_TRAY: Tray = { visible: false, title: '', message: '', buttons: [] }
+/** round4/r4.js, "The Room". */
+const ROOM_COACH_TEXT = 'People here can’t see your name or photo until you choose to show them. You decide, per event.'
 
 /**
  * The Blend'n screen — what the button in the middle of the bar opens, always.
@@ -190,6 +194,8 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   const [passFrame, setPassFrame] = useState<PourFrame | null>(null)
   /** The next Room to mount comes out of the pour, and enters as #9 draws it. */
   const [pourEntrance, setPourEntrance] = useState(false)
+  /** The check-in pour on screen, from the server's yes to its hand-off; the Room's coach mark waits for it. */
+  const [pouring, setPouring] = useState(false)
   const roomReady = room.status === 'ready' || roomWaitOver
   const roomReadyNow = useLatest(roomReady)
   const roomShown = useRef<(() => void) | null>(null)
@@ -205,6 +211,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
     onCheckedIn: (outcome) => {
       if (outcome.kind !== 'checkedIn') return
       setPourEntrance(true)
+      setPouring(true)
       setRoomWaitOver(false)
       setTimeout(() => setRoomWaitOver(true), ROOM_WAIT_MS)
     },
@@ -282,6 +289,14 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   const [connectTo, setConnectTo] = useState<RoomPerson | null>(null)
   const [connecting, setConnecting] = useState(false)
   const [waves, setWaves] = useState<Record<string, 'sent' | 'too-soon'>>({})
+  const pourDone = () => {
+    setPouring(false)
+    checkIn.pourDone()
+  }
+  // The Room's coach mark: once the pour has handed off, with nothing over the Room.
+  const roomCoach = useCoachMark('room_reveal', {
+    ready: mode === 'room' && !pouring && !tray.visible && !open && !connectTo && !room.match,
+  })
   // The card follows the live person, so a like updates it in place.
   const openLive = open ? room.people.find((p) => p.id === open.id) ?? open : null
 
@@ -481,16 +496,25 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
                       people={room.people}
                     />
                   </Animated.View>
-                  <Animated.View style={styles.banner} entering={enter ? sectionIn(0) : undefined}>
+                  <Animated.View style={[styles.banner, roomCoach.visible && styles.coachRaised]} entering={enter ? sectionIn(0) : undefined}>
                     <RoomVisibilityBanner
                       revealed={controls.revealed}
-                      onToggle={() => void controls.toggleReveal()}
+                      onToggle={() => {
+                        markCoachUsed('room_reveal')
+                        void controls.toggleReveal()
+                      }}
                       busy={controls.revealBusy}
                       canReveal={controls.readiness.ok}
                       missing={controls.readiness.missing}
                       listed={controls.listed}
                       onUnhide={() => router.push('/settings')}
                     />
+                    {roomCoach.visible ? (
+                      // Under the banner, caret up (round4/r4.js, "The Room"): out of the layout, after it.
+                      <View style={styles.coachMark} pointerEvents="box-none">
+                        <CoachMark text={ROOM_COACH_TEXT} onDismiss={roomCoach.dismiss} testID="room-coach-mark" />
+                      </View>
+                    ) : null}
                   </Animated.View>
                   <Animated.View entering={enter ? sectionIn(1) : undefined}>
                     <GridTabs value={gridView} onChange={setGridView} />
@@ -722,7 +746,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
       {/* Over Tonight, and over the Room as it takes over: the pour clears itself, so it stays mounted. */}
       {/* Held, filled, until the Room is there; a question first clears it onto Tonight (Flow 4 #12–#14). */}
       {checkIn.pours > 0 ? (
-        <MomentPour key={checkIn.pours} testID="blendn-pour" frame={passFrame ?? undefined} venue={insideEvent?.venue ?? ''} ready={roomReady || checkIn.asks} asks={checkIn.asks} onDone={checkIn.pourDone} />
+        <MomentPour key={checkIn.pours} testID="blendn-pour" frame={passFrame ?? undefined} venue={insideEvent?.venue ?? ''} ready={roomReady || checkIn.asks} asks={checkIn.asks} onDone={pourDone} />
       ) : null}
 
       <ActionTray
@@ -775,6 +799,8 @@ const styles = StyleSheet.create({
   crewRow: { paddingHorizontal: GUTTER, marginBottom: SPACE.md },
   header: { gap: SPACE.xl, marginBottom: SPACE.xs },
   banner: { paddingHorizontal: GUTTER },
+  coachMark: { position: 'absolute', left: GUTTER, right: GUTTER, top: '100%', paddingTop: SPACE.sm, maxWidth: COACH_MARK_MAX_WIDTH },
+  coachRaised: { zIndex: 1 },
   statusBanner: { marginHorizontal: GUTTER },
   gridRow: { paddingHorizontal: GUTTER, columnGap: GRID_GAP, marginBottom: GRID_ROW_GAP },
   dock: { position: 'absolute', left: 0, right: 0, bottom: 0 },

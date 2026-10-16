@@ -10,6 +10,10 @@ import { font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast } from '
 const CARET = { size: 12, radius: 2 } as const
 /** It pops from 90% (the page's "pop"; M.pop). */
 const POP_FROM = 0.9
+/** The design's width: min(screen − 32, 300) (round4/r4.js). At 360 dp a tip's sentence is two lines. */
+export const COACH_MARK_MAX_WIDTH = 300
+/** The caret's size, for a screen that centres it on what it names. */
+export const COACH_MARK_CARET = CARET.size
 
 export type CoachMarkProps = {
   /** One sentence. The same text lives in the help screen for people who dismissed it. */

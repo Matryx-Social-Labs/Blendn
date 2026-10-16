@@ -25,6 +25,8 @@ jest.mock('../lib/apiClient', () => ({
   },
 }))
 jest.mock('../lib/checkIn', () => ({ subscribeCheckInChanged: () => () => {} }))
+// Coach marks have their own tests (coachMarks, pulseCoachMark); here they never show.
+jest.mock('../lib/coachMarks', () => ({ useCoachMark: () => ({ visible: false, dismiss: () => {} }), markCoachUsed: () => {} }))
 jest.mock('../components/blendn/BlendnScreen', () => ({ BlendnScreen: () => null }))
 
 /*

@@ -18,10 +18,13 @@ import { pickInsideEvent, pickTodayEvents, type RoomButtonEvent } from './roomBu
  */
 interface RoomSignal {
   insideEventId: string | null
+  /** The inside event's venue, for the centre button's coach mark ("You're at Toit."). */
+  insideVenueName: string | null
   todayEventIds: string[]
 }
 
-let _signal: RoomSignal = { insideEventId: null, todayEventIds: [] }
+const NONE: RoomSignal = { insideEventId: null, insideVenueName: null, todayEventIds: [] }
+let _signal: RoomSignal = NONE
 const _listeners = new Set<() => void>()
 
 /**
@@ -36,12 +39,15 @@ export function publishRoomSignal(
   events: readonly RoomButtonEvent[],
   now: number = Date.now()
 ): void {
+  const insideEventId = pickInsideEvent(events, now)
   const next: RoomSignal = {
-    insideEventId: pickInsideEvent(events, now),
+    insideEventId,
+    insideVenueName: events.find((e) => e.id === insideEventId)?.venue_name || null,
     todayEventIds: pickTodayEvents(events, now),
   }
   if (
     next.insideEventId === _signal.insideEventId &&
+    next.insideVenueName === _signal.insideVenueName &&
     next.todayEventIds.length === _signal.todayEventIds.length &&
     next.todayEventIds.every((id, i) => id === _signal.todayEventIds[i])
   ) {
@@ -63,7 +69,7 @@ export function getRoomSignal(): RoomSignal {
  * else's plans.
  */
 export function clearRoomSignal(): void {
-  _signal = { insideEventId: null, todayEventIds: [] }
+  _signal = NONE
   for (const fn of _listeners) fn()
 }
 

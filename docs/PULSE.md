@@ -238,7 +238,7 @@ padding as everything else.
 
 The first-run tip is not one of them any more. "Tip: Long-press any event card
 for quick actions. / Got it" was a banner in that header on every visit until
-dismissed; it is a coach mark over the first card now, once, and gone on Got it,
+dismissed; it is a coach mark under the first card now, once, and gone on Got it,
 on any long-press or on leaving the tab ([`NAVIGATION.md`](NAVIGATION.md#coach-marks)).
 
 ### The checked-in strip is gone — it is a ring on the Blend'n button now

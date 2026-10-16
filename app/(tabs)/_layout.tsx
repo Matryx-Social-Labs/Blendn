@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons'
 import { Tabs } from 'expo-router/js-tabs'
 import React, { memo, useCallback, useEffect, useState } from 'react'
-import { AppState, Pressable, StyleSheet, Text, View } from 'react-native'
+import { AppState, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import { Image } from 'expo-image'
 import Animated, { FadeIn } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -22,6 +22,8 @@ import { popIn, popOut } from '../../components/motion/presence'
 import ScalePress from '../../components/motion/ScalePress'
 import { BlendnScreen } from '../../components/blendn/BlendnScreen'
 import { openBlendn, useBlendnOpen } from '../../lib/blendnOverlay'
+import { markCoachUsed, useCoachMark } from '../../lib/coachMarks'
+import { COACH_MARK_CARET, COACH_MARK_MAX_WIDTH, CoachMark } from '../../components/ds/CoachMark'
 import { CONTROL, EMBER, EMBER_RADIUS, ICON, OPACITY, SPACE, TYPE } from '../../lib/theme'
 
 /**
@@ -210,6 +212,8 @@ const RoomButton = memo(({ target }: { target: RoomButtonTarget }) => {
            * itself and shows Tonight or the Room (`components/blendn`); the
            * states still decide the dot and the badge on this button.
            */
+          // The first half of what its coach mark says: tap, then hold.
+          if (target.state === 'checkin') markCoachUsed('centre_button_checkin')
           openBlendn()
         }}
         accessibilityRole="button"
@@ -300,6 +304,20 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
     badge: 0,
   })
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+
+  /*
+   * The centre button's coach mark: the first time it says you can check in,
+   * naming the place. Not while Blend'n is open over it; being checked in
+   * (however you got there) is using it.
+   */
+  const { width } = useWindowDimensions()
+  const coachWidth = Math.min(width - 2 * SPACE.lg, COACH_MARK_MAX_WIDTH)
+  const blendnOpen = useBlendnOpen()
+  const checkInVenue = target.state === 'checkin' ? getRoomSignal().insideVenueName : null
+  const centreCoach = useCoachMark('centre_button_checkin', { ready: checkInVenue !== null && !blendnOpen })
+  useEffect(() => {
+    if (target.state === 'live') markCoachUsed('centre_button_checkin')
+  }, [target.state])
 
   /*
    * Your photo for the Me tab.
@@ -465,6 +483,18 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
       {renderTab(TABS[0])}
       {renderTab(TABS[1])}
       <RoomButton target={target} />
+      {centreCoach.visible && checkInVenue ? (
+        // Above the bar, centred on the disc, caret down (round4/r4.js, "The centre button").
+        <View style={[styles.centreCoach, { left: (width - coachWidth) / 2, width: coachWidth }]} pointerEvents="box-none">
+          <CoachMark
+            text={`You’re at ${checkInVenue}. Tap the button, then hold to check in.`}
+            caret="bottom"
+            caretOffset={coachWidth / 2 - COACH_MARK_CARET / 2}
+            onDismiss={centreCoach.dismiss}
+            testID="centre-coach-mark"
+          />
+        </View>
+      ) : null}
       {renderTab(TABS[2])}
       {renderTab(TABS[3])}
     </View>
@@ -693,6 +723,7 @@ const styles = StyleSheet.create({
    * centred, entirely inside the surface, nothing to collide with.
    */
   centreSlot: { alignItems: 'center', alignSelf: 'center' },
+  centreCoach: { position: 'absolute', bottom: '100%', marginBottom: SPACE.sm },
   centreButton: {
     width: CENTRE_SIZE,
     height: CENTRE_SIZE,

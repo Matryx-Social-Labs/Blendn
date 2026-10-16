@@ -39,6 +39,8 @@ jest.mock('../lib/apiClient', () => ({
 }))
 jest.mock('../lib/locationFix', () => ({ getCurrentLocation: jest.fn(async () => ({ latitude: 12.97, longitude: 77.59, accuracy: 8 })) }))
 jest.mock('../lib/roomVisibilityStorage', () => ({}))
+// Coach marks have their own tests (coachMarks, pulseCoachMark); here they never show.
+jest.mock('../lib/coachMarks', () => ({ useCoachMark: () => ({ visible: false, dismiss: () => {} }), markCoachUsed: () => {} }))
 jest.mock('../lib/checkIn', () => ({ ...jest.requireActual('../lib/checkIn'), submitCheckIn: jest.fn(), revealOffer: jest.fn() }))
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn() }) }))
 

@@ -151,6 +151,8 @@ export interface RoomButtonEvent {
   distance?: number | null
   check_in_radius?: number | null
   is_favorited?: boolean
+  /** Names the place in the centre button's coach mark. */
+  venue_name?: string | null
 }
 
 /**

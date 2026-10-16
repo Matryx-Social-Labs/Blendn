@@ -9,6 +9,7 @@
  * that it stays that way.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import React from 'react'
 import { act, renderHook } from '@testing-library/react-native'
 
 jest.mock('@react-native-async-storage/async-storage', () =>
@@ -28,8 +29,7 @@ import { markCoachUsed, useCoachMark, type CoachMarkId } from '../lib/coachMarks
 /* eslint-enable import/first */
 
 const PULSE: CoachMarkId = 'events_preview_hint'
-// A second mark: the Flow 4 and 5 marks are not in the union until their screens are rebuilt.
-const OTHER = 'banter_swipe' as CoachMarkId
+const OTHER: CoachMarkId = 'room_reveal'
 
 let accounts = 0
 function signIn() {
@@ -71,6 +71,26 @@ describe('useCoachMark', () => {
     await hook.unmount()
 
     expect((await mount(PULSE)).result.current.visible).toBe(false)
+  })
+
+  it('shown once, it is not shown in a later launch: the stored flag decides, not memory', async () => {
+    const userId = signIn()
+    const first = await mount(PULSE)
+    expect(first.result.current.visible).toBe(true)
+    // The app is killed while it shows: no Got it, no use.
+    await first.unmount()
+
+    // A new launch: a fresh module, nothing in memory, the same phone storage.
+    let relaunched!: typeof import('../lib/coachMarks')
+    jest.isolateModules(() => {
+      jest.doMock('react', () => React)
+      jest.doMock('@react-native-async-storage/async-storage', () => AsyncStorage)
+      relaunched = require('../lib/coachMarks')
+    })
+    const again = await renderHook(() => relaunched.useCoachMark(PULSE, { ready: true }))
+    await act(async () => {})
+    expect(again.result.current.visible).toBe(false)
+    expect(await stored(PULSE, userId)).toBe('1')
   })
 
   it('a mark this account has seen on this phone never appears (the old banner’s key counts)', async () => {

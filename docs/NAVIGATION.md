@@ -263,13 +263,22 @@ the id to `CoachMarkId`.
 | Where | It explains | Sentence | Ended by use |
 |---|---|---|---|
 | **Pulse** (live) | holding a card | "Hold an event to save, share or preview it." | a long-press on any card |
-| **Flow 4**, the centre button | the first time it changes | "You’re at {venue}. Hold the button to check in." | the hold |
-| **Flow 4**, the Room | the reveal bar | "People here can’t see your name or photo until you choose to show them. You decide, per event." | showing yourself |
-| **Flow 5**, the Banter | swiping a row | "Swipe a chat left to mute it." | a swipe |
+| **Centre button** (live) | the first time it says you can check in | "You’re at {venue}. Tap the button, then hold to check in." | tapping it then, or being checked in |
+| **Room** (live) | the visibility banner | "People here can’t see your name or photo until you choose to show them. You decide, per event." | toggling it |
+| **Flow 5**, the Banter | swiping a row | "Swipe a chat left to mute it." | a swipe (not on dev yet: rows have no swipe) |
+
+Copy and placement are `round4/r4.js` (TIPS). The width is the design's
+min(screen − 32, 300), `COACH_MARK_MAX_WIDTH`.
 
 The Pulse's is `events_preview_hint`, the key the old "Tip: Long-press any event
 card" banner stored, so whoever dismissed that is not taught again. It waits for
 the drawer to be all the way up and the list at its top (at half, the first card
-sits under the tab bar), then sits above the first card the page draws
-(Featured's first, or Upcoming's when nothing is featured), caret down, over the
-section heading.
+sits under the tab bar), then sits below the first card the page draws
+(Featured's first, or Upcoming's when nothing is featured), caret up (R4.1: above
+it, two lines at 360 dp covered the search bar). Featured's card reaches the tab
+bar, so the list first scrolls the card up by whatever the mark would overlap.
+
+The centre button's sits above the bar, centred on the disc, caret down, while
+Blend'n is closed and the button is in `checkin` with a venue name
+(`lib/roomSignal.ts`). The Room's sits under the visibility banner once the
+check-in pour has handed off and nothing is over the Room.

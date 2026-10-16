@@ -28,7 +28,13 @@ import { currentUserId, useAuth } from './useAuth'
  * AsyncStorage. The Pulse's is the old "Got it" banner's key, so whoever
  * dismissed that is not taught again. A flow adds its own when it places one.
  */
-export type CoachMarkId = 'events_preview_hint'
+export type CoachMarkId =
+  /** The Pulse: holding a card. */
+  | 'events_preview_hint'
+  /** The centre button, the first time it says you can check in. */
+  | 'centre_button_checkin'
+  /** The Room: who can see your name and photo (the visibility banner). */
+  | 'room_reveal'
 
 type Phase = 'unseen' | 'showing' | 'done'
 

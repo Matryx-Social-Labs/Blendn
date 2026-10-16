@@ -88,7 +88,7 @@ import { useLiveSync } from '../../lib/useLiveSync'
 import { useMinimumVisible } from '../../lib/useMinimumVisible'
 import { useAuth } from '../../lib/useAuth'
 import { markCoachUsed, useCoachMark } from '../../lib/coachMarks'
-import { CoachMark } from '../../components/ds/CoachMark'
+import { COACH_MARK_MAX_WIDTH, CoachMark } from '../../components/ds/CoachMark'
 import { CONTROL, EMBER, EMBER_FONTS, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE, tint } from '../../lib/theme'
 import { RisingSheet, SheetFlatList, SheetModal } from '../../components/motion/RisingSheet'
 import { Grabber } from '../../components/ui/Grabber'
@@ -386,10 +386,16 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     setBannersHeight((prev) => (prev === h ? prev : h))
   }, [])
   const [netError, setNetError] = useState<string | null>(null)
-  /** The header still on screen, so the coach mark above the first card is too. */
+  /**
+   * The list at its top, so the first card is on screen when the coach mark
+   * starts. Once it is up it rides with the card, so it stops listening.
+   */
   const [listAtTop, setListAtTop] = useState(true)
+  const listOffsetRef = useRef(0)
+  const coachShowingRef = useRef(false)
   const onListScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    setListAtTop(e.nativeEvent.contentOffset.y < PULSE_HEADER_HEIGHT)
+    listOffsetRef.current = e.nativeEvent.contentOffset.y
+    if (!coachShowingRef.current) setListAtTop(e.nativeEvent.contentOffset.y < PULSE_HEADER_HEIGHT)
   }, [])
 
   /*
@@ -1556,7 +1562,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       bannersHeight
     )
     return (
-      <View style={styles.pulseSection}>
+      <View style={[styles.pulseSection, coachRaised]}>
         {/*
           No "VIEW ALL". It opened the Nearby list, sorted by distance, which is
           not the featured events it sat above; and every event not in a section
@@ -1620,7 +1626,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   const renderUpcomingStack = () => {
     if (upcomingStackItems.length === 0) return null
     return (
-      <View style={styles.pulseSection}>
+      <View style={[styles.pulseSection, featuredItems.length === 0 && coachRaised]}>
         {/*
           No prev/next arrows. The frame draws a pair beside this heading, and
           they belong to a horizontal row — this is a vertical stack, so they
@@ -1634,11 +1640,11 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
         */}
         <View style={styles.dayGroups}>
           {groupByDay(upcomingStackItems).map((group, groupIndex) => (
-            <View key={group.key} style={styles.dayGroup}>
+            <View key={group.key} style={[styles.dayGroup, groupIndex === 0 && coachRaised]}>
               <DayHeading title={group.title} detail={group.weekday} />
               {group.items.map((item, index) => (
                 // The page's first card when nothing is featured: it carries the coach mark.
-                <View key={`up-${item.id}`}>
+                <View key={`up-${item.id}`} style={index === 0 && coachRaised}>
                   <UpcomingCard
                     title={item.title}
                     category={item.category || null}
@@ -1766,8 +1772,9 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   const showLoadingSkeleton = useMinimumVisible(isLoading, 720)
 
   /*
-   * The coach mark, over the first card the page draws (Featured's first, or
-   * Upcoming's when nothing is featured). Ready only with the drawer all the
+   * The coach mark, under the first card the page draws (Featured's first, or
+   * Upcoming's when nothing is featured), caret up: above it, two lines at
+   * 360 dp covered the search bar (R4.1). Ready only with the drawer all the
    * way up and the list at its top -- at half the first card sits under the
    * tab bar -- and with none of this screen's sheets open. The bell's sheet is
    * the shell's and is not counted; it covers the page while it is up anyway.
@@ -1783,12 +1790,28 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       !filterSheetOpen &&
       !cityPickerOpen,
   })
-  // Out of the flow and above the card, so nothing moves and the card stays tappable; after it, for a screen reader.
+  useEffect(() => {
+    coachShowingRef.current = coach.visible
+  }, [coach.visible])
+  /*
+   * Below the featured card it would sit on the tab bar (that card is sized to
+   * reach it), so the list scrolls the card up by the overlap first.
+   */
+  const coachRef = useRef<View>(null)
+  const onCoachLayout = useCallback(() => {
+    coachRef.current?.measureInWindow((_x, y, _w, h) => {
+      const overlap = y + h + SPACE.sm - tabBarTop(SCREEN_HEIGHT, insets.bottom)
+      if (overlap > 0) listRef.current?.scrollToOffset({ offset: listOffsetRef.current + overlap, animated: true })
+    })
+  }, [insets.bottom])
+  // Out of the flow and under the card, so nothing moves and the card stays tappable; after it, for a screen reader.
   const coachMark = coach.visible ? (
-    <View style={styles.coachMark} pointerEvents="box-none">
-      <CoachMark text={PULSE_COACH_TEXT} caret="bottom" onDismiss={coach.dismiss} testID="pulse-coach-mark" />
+    <View ref={coachRef} onLayout={onCoachLayout} style={styles.coachMark} pointerEvents="box-none">
+      <CoachMark text={PULSE_COACH_TEXT} caret="top" onDismiss={coach.dismiss} testID="pulse-coach-mark" />
     </View>
   ) : null
+  // Its section and card are drawn over the siblings after them, which the mark overlaps.
+  const coachRaised = coach.visible ? styles.coachRaised : null
   useEffect(() => {
     if (!showLoadingSkeleton && mainListData.length > 0) mainRowsRevealPending.current = false
   }, [showLoadingSkeleton, mainListData.length])
@@ -2532,8 +2555,9 @@ const styles = StyleSheet.create({
   /** Upcoming: days a section's gap apart, rows within a day close together. */
   dayGroups: { gap: SPACE.xl },
   dayGroup: { gap: SPACE.md },
-  /** The coach mark, above the card it names: its caret's tip just clear of the card's edge. */
-  coachMark: { position: 'absolute', left: 0, right: 0, bottom: '100%', paddingBottom: SPACE.sm },
+  /** The coach mark, under the card it names: its caret's tip just clear of the card's edge; the design's 300 at most. */
+  coachMark: { position: 'absolute', left: 0, right: 0, top: '100%', paddingTop: SPACE.sm, maxWidth: COACH_MARK_MAX_WIDTH },
+  coachRaised: { zIndex: 1 },
   /** A row in the list under the sections: the Upcoming stack's spacing. */
   mainRow: { paddingBottom: SPACE.md },
   /**

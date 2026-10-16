@@ -211,13 +211,16 @@ describe('the Pulse’s coach mark', () => {
     expect(mark()).toBeTruthy()
   })
 
-  it('sits out of the layout, above the first card, after it in the reading order', async () => {
+  it('sits out of the layout, below the first card (R4.1), after it in the reading order', async () => {
     signIn()
     mockFull = true
     await mount()
     let anchor = screen.getByTestId('pulse-coach-mark').parent
     while (anchor && StyleSheet.flatten(anchor.props.style)?.position !== 'absolute') anchor = anchor.parent
-    expect(StyleSheet.flatten(anchor!.props.style)).toMatchObject({ position: 'absolute', bottom: '100%' })
+    expect(StyleSheet.flatten(anchor!.props.style)).toMatchObject({ position: 'absolute', top: '100%', maxWidth: 300 })
+    // Caret up, at the card above it.
+    expect(StyleSheet.flatten(screen.getByTestId('pulse-coach-mark-caret').props.style)).toMatchObject({ top: -6 })
+    expect(screen.getByText('Hold an event to save, share or preview it.')).toBeTruthy()
     // Its wrapper holds the cards first and the mark last.
     const [cards, ...rest] = anchor!.parent!.children.filter((c) => typeof c !== 'string')
     expect(within(cards as never).getByTestId('card-e1')).toBeTruthy()
