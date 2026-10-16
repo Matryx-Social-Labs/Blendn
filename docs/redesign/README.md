@@ -13,6 +13,20 @@ Everything Claude Design needs to redesign the whole client app: a design system
 - adds the small paths nobody drew: tapping a person in the chat, waving back, the long-press menu and more;
 - adds motion pack 2.
 
+**Built from the project (2026-10-15)?** Go to [`PROMPTS.md` → Round 4](./PROMPTS.md#round-4--one-source-of-truth-check-in-end-to-end-first-run-tips-2026-10-15), and read [`ROUND4.md`](./ROUND4.md) first. It:
+- makes every component single-sourced (deltas folded into the builders);
+- draws check-in end to end;
+- adds first-run tips;
+- adds the last 54 missing states.
+
+**After Round 4 (2026-10-16):** run [`PROMPTS.md` → Round 4.1](./PROMPTS.md#round-41--finish-round-4-2026-10-16). It:
+- removes the quarter marks;
+- retires every delta canvas, so there is one canvas per flow;
+- draws being inside more than one place;
+- finishes the component pages.
+
+The client build restarts once Round 4.1 is published.
+
 | File | What it is | Who reads it |
 |---|---|---|
 | [`PROMPTS.md`](./PROMPTS.md) | Setup checklist and paste-ready prompts, in order | You |
@@ -20,12 +34,13 @@ Everything Claude Design needs to redesign the whole client app: a design system
 | [`SCREENS.md`](./SCREENS.md) | Every screen in 8 flows: job, primary action, states to draw, direction, motion, haptics, rules to keep, bugs to design out | Claude Design (prompts 2–10) |
 | [`SCREENS-ADDITIONS.md`](./SCREENS-ADDITIONS.md) | **Round 2:** Flows 9–16, the screens never designed: notifications and push, crews and group matching, Places live, Blend'n+, regulars, matching v2, system states, sharing and link previews | Claude Design (Round 2 prompts) |
 | [`ROUND3.md`](./ROUND3.md) | **Round 3:** the rulings, the system fixes, corrections to drawn frames, the screens and states still missing, motion pack 2, and the server and client work behind them | Claude Design (Round 3 prompts) and the owner (part F) |
+| [`ROUND4.md`](./ROUND4.md) | **Round 4:** rulings, one source of truth, check-in end to end, coach marks and Help › Tips, the 154 conflicts and 54 missing states with evidence, and the server changes behind four frames | Claude Design (Round 4 prompts) and the owner (part 7) |
 | [`audit/`](./audit/) | What every screen does today, read from the code with `file:line` (2026-10-02, `origin/dev` `54481d2`). The home map and drawer (#363) landed after; SCREENS.md covers it from `docs/PLACEHOLDER_SCREENS.md` §8–§10 | Claude Design, per flow |
 | [`research/`](./research/) | The online research behind every number in the brief, with sources. `research/round2/` adds the server gap sweep and the round-2 research | Reference |
 | [`assets/`](./assets/) | The monogram as vector (gradient and white), extracted from the brand manual | Upload to Claude Design |
 
 **Where these files disagree, the order of authority is:**
-1. `ROUND3.md`, wherever it rules on something.
+1. `ROUND4.md`, then `ROUND3.md`, wherever they rule on something.
 2. `DESIGN-BRIEF.md` + `SCREENS.md` + `SCREENS-ADDITIONS.md`, for how things look and move.
 3. The audits, for what a screen does.
 4. The research.

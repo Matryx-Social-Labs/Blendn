@@ -53,6 +53,7 @@ import {
 import { feedPlaylist } from '../../lib/feedMedia'
 import { useLatest } from '../../lib/useLatest'
 import {
+  cityCountLabel,
   awayNotice,
   cityOnResume,
   isBrowsingHere,
@@ -2379,7 +2380,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
                       <CityArtCard
                         city={item.city}
                         art={art}
-                        eventCount={item.eventCount}
+                        countLabel={cityCountLabel(item)}
                         active={active}
                         here={here}
                         onPress={() => chooseCity(item.city)}
@@ -2393,8 +2394,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
                       accessibilityRole="button"
                       accessibilityState={{ selected: active }}
                       accessibilityLabel={
-                        `${item.city}${here ? ', your current location' : ''}, ` +
-                        `${item.eventCount} event${item.eventCount === 1 ? '' : 's'}`
+                        `${item.city}${here ? ', your current location' : ''}, ${cityCountLabel(item)}`
                       }
                     >
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
@@ -2403,7 +2403,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
                           <Ionicons name="navigate" size={ICON.sm} color={active ? EMBER.bg : EMBER.textSecondary} />
                         ) : null}
                       </View>
-                      <Text style={[styles.cityPickerCount, active && styles.cityPickerTextActive]}>{item.eventCount}</Text>
+                      <Text style={[styles.cityPickerCount, active && styles.cityPickerTextActive]}>{cityCountLabel(item)}</Text>
                     </TouchableOpacity>
                   )
                 }}
