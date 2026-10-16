@@ -20,6 +20,7 @@ Two audits fed it:
 | [5](#5--conflicts-the-evidence) | The conflicts: 154 rows with evidence, each with its fix | R4-0, R4-3 |
 | [6](#6--missing-screens-and-states-the-evidence) | The missing screens and states, flow by flow, with where the client reaches them | R4-D… |
 | [7](#7--not-design-server-follow-ups) | Not design: server changes behind four drawn frames | — |
+| [8](#8--round-41-finishing-round-4-2026-10-16) | Round 4.1: what reading the built project found, and the last fixes before the build restarts (inside two places, retiring the deltas) | R4.1-0 … R4.1-5 |
 
 **Authority.** Where this file rules, it wins over ROUND3 and everything before it. Everything it doesn't mention stands.
 
@@ -47,6 +48,8 @@ The owner asked for the recommended option on each (2026-10-15).
 | R12 | Stop being live | **Confirm it, the same as check-out:** Stay · Stop, `H.destructive` on Stop. | 6 "Not gaps" |
 | R13 | Reporting an offer | **Draw the reason step** (6 13-2). The server requires a reason, and a reason makes the report useful. R3-G's one tap becomes the first tap of two. | 6 13-2 |
 | R14 | Frames the server can't support yet ("signed out on another device" vs "password reset"; the deleted account; "Clear all · requests stay") | **Keep the frames.** Label each "Needs server" in its corner; the server follow-ups are Part 7. | 7 |
+| R15 | Inside more than one place at once: two events at one venue, two venues in one building, overlapping fences | **One pass, for the place you most likely mean,** chosen in this order:<br>1. an event you're going to or saved;<br>2. an event over a venue's own room;<br>3. the soonest-started event;<br>4. the nearest place.<br>With two or more, the pass reads "2 here · Switch", which opens a chooser, and the centre button's label reads "Check in · 2 here". Swiping the Tonight deck never moves the pass: the deck is for browsing, the pass is where you are. If you're already in a room, the pass reads "Hold to switch" and names the room you'll leave (ROUND3 4.8). The server decides which places you're inside (SCRUM-704). | 8 |
+| R16 | Do the delta canvases stay? | **No.** A change edits the approved builder. The flow canvas shows the result. Old states are deleted, never kept as "before" frames. One canvas per flow. The project's standing instruction that "a delta never edits an approved builder" is reversed. | 8 |
 
 ---
 
@@ -621,3 +624,93 @@ These four drawn frames need a server change before the client can show them. R1
 | 15.3 Deleted account | Google and Apple sign-in answer 401 "Account not found", the same code as an expired token. Only the message text differs | A distinct code for a deleted account |
 | 9.2 "Clear all · requests stay" | `DELETE /notifications` deletes every row; there's no kind filter | Keep friend and message requests when clearing |
 | 13-3 "Let them know I'm a regular" for someone with no date of birth | `GET /venues/:id/regular` has no age-eligibility field, so the client can't hide the ask in advance | Add the eligibility to that response |
+
+---
+
+## 8 · Round 4.1: finishing Round 4 (2026-10-16)
+
+Written after reading the project as it stood once the Round 4 prompts had run (`round4/Status.html`, `github.md`, the Flow 4 canvas and its builders). Much of the round landed:
+- **The folds:** R2-D1–D5, R2-D7, R3-0, R3-G, R3-D1 2.1, R3-D3, R3-D4 4.1–4.3, R3-D6, R3-D7, R3-D9 9.2 and R3-D10 10.2 now live in the approved builders. "Walked in" is gone at the source.
+- **The rulings:** R1–R14 are applied.
+- **Check-in:** drawn end to end on the Flow 4 canvas (`flow4-checkin.js`), with motion #9b.
+- **Coach marks:** the four marks and Help › Tips.
+- **The missing states:** 159 R4-D frames.
+
+What follows is everything still to do before the client build restarts. The build waits for all of it.
+
+### 8.1 · The hold has no quarter marks
+
+The project synced `docs/redesign/` from the brief branch at 21:06:17Z on 2026-10-15. The owner's ruling against quarter marks (#396) reached that branch 20 seconds later, so the project applied the old R3. The marks are drawn in:
+- `journey/ui.js` `JU.hold`: the `marks`, and the comment "Quarter marks (R3)";
+- `flow-4/flow4-checkin.js` `F4C.hold` (comment);
+- the Flow 4 canvas's "Check-in end to end" group: the refs text and frames 01–04 ("marks at 25/50/75", "the mark turns ink");
+- motion #8 and #9b;
+- the HoldToConfirm page;
+- `round4/Status.html` ("R3 quarter marks on the hold").
+
+Remove them all. The H.tick annotations at 225, 450 and 675 stay: they are haptics, and nothing is drawn for them.
+
+### 8.2 · Retire the deltas: one canvas per flow (R16)
+
+The Round 2 and Round 3 delta canvases now call the approved builder on both sides. Their "before" and "after" frames are mostly the same picture. Where they differ, the "before" is a retired screen that an implementer could build by mistake.
+
+**Retire them:**
+- **Fully folded R2-\* and R3-\* canvases:** delete the canvas and its card page (`Delta R2-D1.html` with `DeltaR2D1.html`, and so on).
+- **Anything not yet folded:** fold it into its builder first, then delete. The status page names R2-D7's Flow 4 and Flow 11 pieces as possibly unfolded.
+- **The four kept as compositions** become ordinary groups on their flow canvases, drawn from the builders:
+  - R3-D5's gestures and keyboard (Flow 5);
+  - R3-D9's wave banner (Flow 9);
+  - R3-D16's share sheet over the Scene (Flow 16);
+  - R3-D10 10.1's person sheet over a crew chat (Flow 10).
+- **The R4-D canvases (159 frames):** fold them into their flow canvases as groups, titled by their part 6 row ids. Then delete the `Delta R4-D*` canvases and cards. `round4/r4d.js` and `r4d2.js` may stay as helper files, but the frames live on the flow canvas.
+- **The helpers:** once nothing uses `round2/delta-canvas.js`, `round2/r2d7.js` or the `flow*-delta.js` / `flow*-r3d*.js` alias files, delete them. `R3.mark`, the "Needs server" marker, moves into `components/` or `journey/ui.js`.
+
+**Reverse the standing rule.** Replace the "Deltas" section of the project's `CLAUDE.md` with:
+
+> A change edits the approved builder; the flow canvas shows the result. Old states are deleted, never kept as "before" frames. If a change would alter an approved frame the prompt didn't name, list it and ask before changing it.
+
+Then each flow is one canvas, one builder file and its prototype, and a component page and a motion card call that same builder.
+
+### 8.3 · Inside more than one place (R15)
+
+**The server today:**
+- **One room at a time.** A new check-in or Go Live checks you out of every other room. Today that happens silently (SCRUM-635, designed in ROUND3 4.8).
+- **Overlapping fences are allowed.** Several events can run at one venue, venues can share a building, and outlines can overlap. You may check in to any one place whose fence you're inside.
+- **The one preference the server has:** while an event is on at a venue, it takes over the venue's own room. This is already drawn (`places.js` `venueSheet` "taken").
+- **The client today** guesses with "nearest pin within 100 m" (SCRUM-704).
+
+**Nothing in the project draws being inside two places.** Draw these as a new group, "Inside more than one place", on the Flow 4 canvas, iOS and Android:
+1. **Tonight, inside two places.** The pass docks for the first in R15's order and carries a "2 here · Switch" control. The deck shows the other place as an ordinary card. Annotate: swiping the deck never moves the pass.
+2. **The chooser.** A sheet listing each place you're inside, one row each:
+   - the event or venue name;
+   - its kind: an event, or "Go live" for a venue;
+   - its start time, or its live bucket;
+   - a check on the current pick.
+
+   Choosing a row re-docks the pass on `M.settle`; the hold starts only on the pass. The haptic is H.select on a row, nothing more.
+3. **The centre button** in state (c) with the label "Check in · 2 here".
+4. **Two events at one venue** (the same building, two rooms): the event title tells them apart, as in "Vinyl Night · at Toit" and "Bass Thursday · at Toit". The server has no field for a room within a venue, so don't draw one.
+5. **A venue and an event at the same place:** the event wins (R15 order 2). Show that the chooser lists only the event while it's on, and point to the venue page's "taken" sheet. Don't redraw it.
+6. **Already in a room, inside another place:** the pass reads "Hold to switch" with the line "You'll leave Vinyl Night". After the switch comes the "You left Vinyl Night" toast. That is ROUND3 4.8 (#29, #30): bring those frames onto this group if they aren't already on the Flow 4 canvas.
+7. **Approximate location** (precise location off): no pass at all. Tonight shows the 4.7 tray's line instead. Draw how this reads when the deck is full.
+8. **Reduce Motion:** the re-dock is a 200 ms crossfade.
+
+The copy here is proposed. Mark the chooser "Needs server" until SCRUM-704's "which places am I inside" read exists.
+
+### 8.4 · The prototype and the Pulse coach mark
+
+- **The Flow 4 prototype:** `flow4-proto.js` still animates the pour with `JM.flood`, full-screen. Rebuild it on `F4C.pour` inside the docked pass. Play both endings: the Room at +700, and the question path at +1600 → +1820. Then retire `JM.flood` and `pourStill`.
+- **The Pulse coach mark:** in the client build, the mark sits above the first event card. When its sentence wraps to two lines, about 24 pt of it covers the bottom of the search bar. Draw the Pulse mark at 2 lines and on a 360 dp screen, and say where it goes when it doesn't fit above the card: below the card, or the card scrolls first.
+
+### 8.5 · Still open from Round 4
+
+From `round4/Status.html`. Finish these in this round:
+- **R4-3, cell by cell.** Rebuild every component page's cells from the builder the flows call, so a page can't drift again. The pages name their builder today, but their cells still carry their own props.
+- **The part 5 rows that need new drawing:** A18, A19, A31, A37–A39, A44, A45, A53, A55, A56, A59–A63, A65–A67, A71–A73, A75, A77, A78, A80, A81, A85, A87, A88, B2 (a type role for "You're in."), B5–B9, B13, B14, B17, B20, B21, B23, C7, C9–C12, D17 (the PersonCard page from R3-D4 in full), D19 and D24.
+- **Prompt 10,** the consistency audit across every flow, last.
+
+### 8.6 · Not design (filed)
+
+- **SCRUM-704:** a server read of "which places am I inside", judged against the real fences and in R15's order. The disc and Tonight use only that read.
+- **SCRUM-705:** "one room at a time" is enforced only in app code. Make the switch one transaction, and back it with a partial unique index (one open check-in per person).
+- **SCRUM-635:** the silent switch, already filed.
