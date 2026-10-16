@@ -36,6 +36,13 @@ export interface HomeBrowse {
 type Segment = 'events' | 'places'
 
 /**
+ * Off the list, nothing closes the keyboard by itself: the list does it for
+ * its own surface (`keyboardShouldPersistTaps` in `events.tsx`), the map and
+ * the drawer's chrome call this. No-op with no keyboard up.
+ */
+const dismissKeyboard = () => Keyboard.dismiss()
+
+/**
  * The home screen: a map, and over it a drawer holding Events | Places (plan v2
  * step 2). PLACEHOLDER DESIGN — docs/PLACEHOLDER_SCREENS.md §8.
  *
@@ -131,8 +138,10 @@ export function HomeShell({
 
   return (
     <View style={styles.root} onLayout={onLayout}>
+      {/* A touch on the map (or through the top bar, which lets touches by) puts the search's keyboard away. */}
       <View
         style={StyleSheet.absoluteFill}
+        onTouchStart={dismissKeyboard}
         importantForAccessibility={screenReader ? 'no-hide-descendants' : 'auto'}
         accessibilityElementsHidden={screenReader}
       >
@@ -161,6 +170,7 @@ export function HomeShell({
         points={points}
         snap={snap}
         onSnap={onSnap}
+        onChromeTouch={dismissKeyboard}
         header={
           <View style={styles.segmented} accessibilityRole="tablist">
             {(['events', 'places'] as const).map((s) => (

@@ -115,3 +115,32 @@ describe('the bar does not clip the button that overhangs it', () => {
   })
 
 })
+
+/*
+ * The owner tapped outside the Pulse's search and the keyboard stayed up. A
+ * render test has no keyboard, so this pins each surface's own tool.
+ */
+describe('a tap outside the search closes the keyboard', () => {
+  it('the list lets a card take the tap and closes on a drag', () => {
+    const src = SCREEN()
+    const list = src.slice(src.indexOf('<VirtualizedList'), src.indexOf('ListHeaderComponent'))
+    expect(list).toContain('keyboardShouldPersistTaps="handled"')
+    expect(list).toContain('keyboardDismissMode="on-drag"')
+    // Nested in the list: left at the default it would eat a featured card's first tap.
+    const row = src.slice(src.indexOf('<FlatList\n            horizontal'), src.indexOf('renderItem={({ item, index })'))
+    expect(row).toContain('keyboardShouldPersistTaps="handled"')
+  })
+
+  it('a card closes it as it opens the event', () => {
+    const src = SCREEN()
+    const press = src.slice(src.indexOf('const handleEventPress'), src.indexOf('router.push', src.indexOf('const handleEventPress')))
+    expect(press).toContain('Keyboard.dismiss()')
+  })
+
+  it('the map and the drawer chrome close it', () => {
+    const shell = stripComments(read('components/home/HomeShell.tsx'))
+    expect(shell).toMatch(/style=\{StyleSheet\.absoluteFill\}\s+onTouchStart=\{dismissKeyboard\}/)
+    expect(shell).toContain('onChromeTouch={dismissKeyboard}')
+    expect(stripComments(read('components/home/HomeDrawer.tsx'))).toContain('<View style={styles.header} onTouchStart={onChromeTouch}>')
+  })
+})

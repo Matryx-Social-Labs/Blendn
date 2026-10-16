@@ -8,6 +8,7 @@ import {
   Dimensions,
   AppState,
   FlatList,
+  Keyboard,
   type LayoutChangeEvent,
   Linking,
   RefreshControl,
@@ -517,6 +518,8 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
 
   // Memoized callbacks to prevent re-creation
   const handleEventPress = useCallback((event: Event) => {
+    // The list lets a card's tap through (`keyboardShouldPersistTaps`), so the card puts the search's keyboard away itself.
+    Keyboard.dismiss()
     // Warm the event detail cache before navigation (fire-and-forget)
     apiClient.getEvent(event.id, {
       include: 'interestedUsers',
@@ -1620,6 +1623,8 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
             */
             style={styles.featuredBleed}
             contentContainerStyle={{ paddingHorizontal: featured.inset }}
+            // As the list it sits in: left at the default, this row would eat a card's first tap with the keyboard up.
+            keyboardShouldPersistTaps="handled"
             snapToAlignment="start"
             snapToInterval={featured.width + FEATURED_CARD_GAP}
             decelerationRate="fast"
@@ -1992,6 +1997,15 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
             },
           ]}
           showsVerticalScrollIndicator={false}
+          /*
+            The search lives in this list's header. A tap on anything that is
+            not a control closes its keyboard, a control (a card, the search's
+            clear) gets its tap on the first try, and a scroll closes it too.
+            Outside the list, the map and the drawer's chrome close it
+            (`HomeShell`).
+          */
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           enableVirtualization={!isLoading && mainListData.length > 20}
           /*
            * 4, not 10.

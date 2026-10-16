@@ -714,6 +714,7 @@ empty states. Design ticket: SCRUM-541.
 | **A screen reader gets the list open** | With VoiceOver/TalkBack on, the drawer opens at `full`; the handle is an adjustable control ("Collapsed / Half open / Expanded") |
 | **Switching never loses your place** | Both panes stay mounted once opened. Places reads afresh each time it is opened (a venue an event took over must not linger from a cache) |
 | **The keyboard never covers the search** | Typing in the Pulse's search opens the drawer fully; closing the keyboard puts it back |
+| **A tap outside the search closes the keyboard** | Anywhere: the list, a card (which still opens on that tap), a scroll, the map, the drawer's handle and segments. The search's clear (×) keeps it up. `__tests__/pulseNav.test.ts` |
 | **Every row is reachable at half** | The pane is as tall as what shows at the settled height |
 | **44pt targets** | The handle and each segment |
 | **Media plays only when seen** | The Pulse's hero pauses on Places, at peek, and on another tab |

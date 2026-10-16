@@ -39,6 +39,7 @@ export function HomeDrawer({
   snap,
   onSnap,
   header,
+  onChromeTouch,
   children,
 }: {
   /** The drawer's top edge as it moves: the shell's, so what rides on the drawer follows it frame by frame. */
@@ -47,6 +48,8 @@ export function HomeDrawer({
   snap: DrawerSnap
   onSnap: (snap: DrawerSnap) => void
   header: ReactNode
+  /** Any touch on the handle or the header, tap or drag, before either is handled. */
+  onChromeTouch?: () => void
   children: ReactNode
 }) {
   const { height } = useWindowDimensions()
@@ -84,7 +87,7 @@ export function HomeDrawer({
   return (
     <Animated.View style={[styles.drawer, { top: points.full }, moved]}>
       <GestureDetector gesture={pan}>
-        <View style={styles.header}>
+        <View style={styles.header} onTouchStart={onChromeTouch}>
           <Pressable
             onPress={tapStep}
             style={styles.handle}
