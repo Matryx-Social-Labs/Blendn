@@ -19,6 +19,14 @@ Everything Claude Design needs to redesign the whole client app: a design system
 - adds first-run tips;
 - adds the last 54 missing states.
 
+**After Round 4 (2026-10-16):** run [`PROMPTS.md` → Round 4.1](./PROMPTS.md#round-41--finish-round-4-2026-10-16). It:
+- removes the quarter marks;
+- retires every delta canvas, so there is one canvas per flow;
+- draws being inside more than one place;
+- finishes the component pages.
+
+The client build restarts once Round 4.1 is published.
+
 | File | What it is | Who reads it |
 |---|---|---|
 | [`PROMPTS.md`](./PROMPTS.md) | Setup checklist and paste-ready prompts, in order | You |
