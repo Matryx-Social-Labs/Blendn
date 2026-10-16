@@ -16,6 +16,7 @@ jest.mock('expo-router', () => {
   return {
     router: { back: jest.fn(), push: jest.fn(), replace: jest.fn(), canGoBack: () => true },
     useLocalSearchParams: () => mockParams,
+    useFocusEffect: (cb: () => void | (() => void)) => React.useEffect(cb, [cb]),
     Stack: { Screen: () => React.createElement(React.Fragment) },
   }
 })
@@ -54,6 +55,7 @@ jest.mock('../lib/logger', () => ({
 import PrivateChat from '../app/private-chat/[conversationId]'
 import { apiClient } from '../lib/apiClient'
 import { clearOutbox, dmThread, keepFailed } from '../lib/chatOutbox'
+import { RECEIPT_POLL_MS } from '../lib/receipts'
 /* eslint-enable import/first */
 
 const api = apiClient as jest.Mocked<typeof apiClient>
@@ -214,5 +216,31 @@ describe('the composer rides the keyboard', () => {
     expect(StyleSheet.flatten(avoider?.props.style)).toHaveProperty('paddingBottom')
     expect(avoider?.parent?.props.testID).toBe('chat-keyboard-frame')
     expect(within(frame).getByTestId('dm-composer')).toBeTruthy()
+  })
+})
+
+describe('the receipt catches up with a read the socket never announced', () => {
+  it('re-reads while your last message waits, and turns to Read', async () => {
+    // Arrange: your message, not read yet; the server will say it was read. The poll's timer is caught, not waited for.
+    const polls: Array<() => void> = []
+    const realSetInterval = global.setInterval
+    const spy = jest.spyOn(global, 'setInterval').mockImplementation(((fn: () => void, ms?: number) => {
+      if (ms === RECEIPT_POLL_MS) polls.push(fn)
+      return realSetInterval(() => {}, 1e9)
+    }) as typeof setInterval)
+    const mine = { id: 'm9', conversationId: 'c1', senderId: 'u-a', sender: { id: 'u-a', name: null, image: null }, text: 'On my way', isRead: false, createdAt: '2026-10-15T19:05:00.000Z' }
+    api.getConversation.mockResolvedValue({ success: true, data: named } as never)
+    api.getConversationMessages.mockResolvedValue(page([mine]) as never)
+    await open()
+    expect(screen.getByText('Sent', { includeHiddenElements: true })).toBeTruthy()
+    api.getConversationMessages.mockResolvedValue(page([{ ...mine, isRead: true }]) as never)
+    // Act: the poll fires.
+    expect(polls.length).toBeGreaterThan(0)
+    await act(async () => polls[polls.length - 1]())
+    await flush()
+    // Assert
+    expect(screen.queryByText('Sent', { includeHiddenElements: true })).toBeNull()
+    expect(screen.getByText('Read', { includeHiddenElements: true })).toBeTruthy()
+    spy.mockRestore()
   })
 })

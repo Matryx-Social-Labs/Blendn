@@ -1,4 +1,4 @@
-import { router, useLocalSearchParams } from 'expo-router'
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FlatList, Platform, StyleSheet, View } from 'react-native'
 import Animated, { Easing, FadeIn, FadeOut } from 'react-native-reanimated'
@@ -54,7 +54,7 @@ import { useActiveThread } from '../../lib/notifications'
 import { ScreenProfiler } from '../../lib/perf'
 import { pickImage, uploadChatPhoto } from '../../lib/photoUtils'
 import { queryCache } from '../../lib/queryCache'
-import { receiptFor } from '../../lib/receipts'
+import { RECEIPT_POLL_MS, receiptFor } from '../../lib/receipts'
 import { messageReportStep, showConversationOptions } from '../../lib/safetyUtils'
 import { sendOutcome } from '../../lib/sendOutcome'
 import { showSheet } from '../../lib/sheet'
@@ -481,6 +481,26 @@ function PrivateChatInner() {
   )
   /* Your last message carries the receipt, under it (Flow 5 DM #12–#13); never in a room. */
   const lastMineId = useMemo(() => [...messages].reverse().find((m) => m.senderId === myId && !isLocalMessage(m))?.id, [messages, myId])
+
+  /*
+   * Your last message not yet Read: re-read the thread now and then while
+   * it's on screen. The live tick is `private:read`, but the server also
+   * marks a thread read where it announces nothing — opening it (the
+   * messages GET) and the inbox's Mark all read — so a socket alone can
+   * leave "Sent" under a message the database calls read (Flow 5 drive).
+   * ponytail: one GET per RECEIPT_POLL_MS while waiting; drop it once every
+   * server read path emits `private:read`.
+   */
+  const lastMine = messages.find((m) => m.id === lastMineId)
+  const awaitingReceipt = !ended && !!lastMine && receiptFor(lastMine, myId) !== 'read'
+  const reloadRef = useLatest(() => void loadMessages())
+  useFocusEffect(
+    useCallback(() => {
+      if (!awaitingReceipt) return
+      const timer = setInterval(() => reloadRef.current(), RECEIPT_POLL_MS)
+      return () => clearInterval(timer)
+    }, [awaitingReceipt, reloadRef])
+  )
 
   /* Scroll to the unread rule once it is in the list (SCRUM-406). */
   const anchoredRef = useRef(false)

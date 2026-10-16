@@ -17,3 +17,6 @@ export function receiptFor(
   if (m.isRead) return 'read'
   return m.deliveredAt ? 'delivered' : 'sent'
 }
+
+/** How often an open thread re-reads while your last message waits for Read (see the DM screen). */
+export const RECEIPT_POLL_MS = 20_000
