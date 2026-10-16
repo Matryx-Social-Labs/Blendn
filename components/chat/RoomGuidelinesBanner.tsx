@@ -9,6 +9,7 @@ import {
 } from '../../lib/communityGuidelines'
 import { Logger } from '../../lib/logger'
 import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE, TYPE } from '../../lib/design/tokens'
+import { OPACITY } from '../../lib/theme'
 import { font, minTarget, useBoldText } from '../ds/shared'
 import { Icon } from '../ui/Icon'
 
@@ -24,6 +25,10 @@ import { Icon } from '../ui/Icon'
  * dismissed in does not flash the banner on the way in.
  *
  * Owner override of Flow 5 room #04 (2026-10-16): centred — the glyph above, the sentence and its actions centred under it.
+ * Owner ruling (2026-10-16): "community guidelines" is a link in the copy itself — white, underlined (§4 links are white;
+ * underlined always here, where the words around it are white too) — and it replaces the separate "Community guidelines"
+ * action. It closes the copy as its own line, so it is one focusable link with a 44 pt target (a nested Text link can't take
+ * a hitSlop).
  */
 export function RoomGuidelinesBanner({ userId, chatRoomId }: { userId?: string; chatRoomId?: string }) {
   // The room it is showing for: a different room is hidden until its own read lands.
@@ -59,16 +64,21 @@ export function RoomGuidelinesBanner({ userId, chatRoomId }: { userId?: string; 
       <Icon name="shield" size={ICON.control} />
       <View style={styles.copy}>
         <Text textBreakStrategy="balanced" style={[font('meta', bold), styles.ink, styles.centre]}>This room is anonymous. Be kind, keep it safe — people here are real.</Text>
+        <Pressable
+          onPress={openGuidelines}
+          hitSlop={(minTarget() - TYPE.meta.lineHeight) / 2}
+          accessibilityRole="link"
+          accessibilityLabel="Community guidelines"
+          accessibilityHint="Opens the guidelines in your browser"
+          testID="room-guidelines-link"
+        >
+          {({ pressed }) => (
+            <Text style={[font('meta', bold), styles.ink, styles.centre, pressed && styles.pressed]}>
+              Read the <Text style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.link]}>community guidelines</Text>.
+            </Text>
+          )}
+        </Pressable>
         <View style={styles.actions}>
-          <Pressable
-            onPress={openGuidelines}
-            hitSlop={(minTarget() - TYPE.meta.lineHeight) / 2}
-            accessibilityRole="link"
-            accessibilityLabel="Community guidelines"
-            accessibilityHint="Opens the guidelines in your browser"
-          >
-            <Text style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.secondary]}>Community guidelines</Text>
-          </Pressable>
           <Pressable
             onPress={dismiss}
             hitSlop={(minTarget() - TYPE.meta.lineHeight) / 2}
@@ -98,5 +108,6 @@ const styles = StyleSheet.create({
   centre: { textAlign: 'center' },
   actions: { flexDirection: 'row', justifyContent: 'center', gap: SPACE.lg },
   ink: { color: COLOR.textPrimary },
-  secondary: { color: COLOR.textSecondary },
+  link: { color: COLOR.link, textDecorationLine: 'underline' },
+  pressed: { opacity: OPACITY.pressed },
 })
