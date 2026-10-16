@@ -37,6 +37,8 @@ export type CoachMarkProps = {
  * `useCoachMarkSpot` and the root's `CoachMarkHost` draws it over the app with
  * the spotlight dim (the owner's ruling, 2026-10-16, over the page's "no scrim").
  *
+ * Text and Got it are centred: the owner's override (2026-10-16) of the page's left text and right action.
+ *
  * Announced once as it appears; the host moves focus to it. No haptic. It pops in on
  * `M.pop`; under Reduce Motion it fades in without the pop. Increase Contrast:
  * the 50% hairline. The page's drop shadow is not drawn: surfaces are flat.
@@ -100,6 +102,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.lg,
     gap: SPACE.sm,
   },
-  text: { color: COLOR.textPrimary },
-  action: { alignSelf: 'flex-end' },
+  text: { color: COLOR.textPrimary, textAlign: 'center' },
+  action: { alignSelf: 'center' },
 })
