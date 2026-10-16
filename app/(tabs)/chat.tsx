@@ -18,7 +18,9 @@ import {
   type RowFace,
   type RowLine,
 } from '../../components/banter/BanterParts'
+import { useLatest } from '../../lib/useLatest'
 import { heldList, inboxTimeLabel, previewWithSender } from '../../components/banter/inbox'
+import { holdStep, IDLE, type Hold, type HoldEvent } from '../../components/banter/hold'
 import { BoardRequestsSection } from '../../components/board/BoardRequestsSection'
 import { LeaveRoomSheet, MuteSheet } from '../../components/chat/RoomSheets'
 import { SearchField } from '../../components/ds/SearchField'
@@ -63,7 +65,7 @@ type Item = { type: 'heading'; key: string; title: string; markAll?: boolean } |
 /** #27: a moved row travels to its new place on M.settle, 300 ms after its preview changed. */
 const REORDER = LinearTransition.delay(300).springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping).mass(SPRING.settle.mass)
 const SEARCH_GAP = SPACE.sm
-/** C12: after a lift that started no fling, the held order lets go this long after (a fling's momentum cancels it). */
+/** C12: the held order lets go this long after a lift (a fling's momentum, starting just after, cancels it). */
 const HOLD_RELEASE_MS = 250
 
 /**
@@ -257,20 +259,27 @@ function ChatInner() {
    * on lift the rows settle and the pill goes (C12, `heldList`).
    */
   const [heldOrder, setHeldOrder] = useState<string[] | null>(null)
-  /*
-   * A drag can end with a small velocity and no momentum after it: neither
-   * end event lets go then, so the lift itself arms a release.
-   */
+  // The touch's state (`holdStep`) and the lift's timer: read only in the list's event handlers.
+  const hold = useRef<Hold>(IDLE)
   const releaseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const cancelRelease = () => {
-    if (releaseTimer.current) clearTimeout(releaseTimer.current)
-    releaseTimer.current = null
+  const step = (e: HoldEvent) => {
+    const prev = hold.current
+    const next = holdStep(prev, e)
+    hold.current = next
+    if (prev.armed && !next.armed && releaseTimer.current) {
+      clearTimeout(releaseTimer.current)
+      releaseTimer.current = null
+    }
+    if (next.armed && !prev.armed) releaseTimer.current = setTimeout(() => step('timer'), HOLD_RELEASE_MS)
+    if (next.held && !prev.held) setHeldOrder(liveOrder.current())
+    if (prev.held && !next.held) setHeldOrder(null)
   }
-  const armRelease = () => {
-    cancelRelease()
-    releaseTimer.current = setTimeout(() => setHeldOrder(null), HOLD_RELEASE_MS)
-  }
-  useEffect(() => cancelRelease, [])
+  useEffect(
+    () => () => {
+      if (releaseTimer.current) clearTimeout(releaseTimer.current)
+    },
+    []
+  )
   const items = useMemo<Item[]>(() => {
     const sections: [string, Row[], boolean][] = [
       ['Crews', match(crewRows), false],
@@ -286,6 +295,7 @@ function ChatInner() {
     }
     return out
   }, [crewRows, peopleRows, pastRows, match])
+  const liveOrder = useLatest(() => items.map((i) => i.key))
   const { shown, moved: newAbove } = heldList(items, heldOrder)
 
   /* Rows enter once, 18 ms apart, as the list first lands (Flow 5 Banter annotation). */
@@ -453,19 +463,14 @@ function ChatInner() {
         ListHeaderComponent={header}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
-        // A drag that catches a fling keeps the order it already holds.
-        onScrollBeginDrag={() => {
-          cancelRelease()
-          setHeldOrder((held) => held ?? items.map((i) => i.key))
-        }}
-        onMomentumScrollBegin={cancelRelease}
-        onMomentumScrollEnd={() => setHeldOrder(null)}
-        onTouchEnd={armRelease}
-        onTouchCancel={armRelease}
-        onScrollEndDrag={(e) => {
-          // A fling keeps the order held until it comes to rest.
-          if (!e.nativeEvent.velocity?.y) setHeldOrder(null)
-        }}
+        // #27 / C12, in a real touch's order (components/banter/hold.ts).
+        onTouchStart={() => step('touchStart')}
+        onScrollBeginDrag={() => step('dragBegin')}
+        onScrollEndDrag={() => step('dragEnd')}
+        onTouchEnd={() => step('touchEnd')}
+        onTouchCancel={() => step('touchEnd')}
+        onMomentumScrollBegin={() => step('momentumBegin')}
+        onMomentumScrollEnd={() => step('momentumEnd')}
         ListEmptyComponent={
           inbox.loading ? (
             <BanterSkeleton />
@@ -530,7 +535,7 @@ function ChatInner() {
         <NewAbovePill
           top={listTop}
           onPress={() => {
-            setHeldOrder(null)
+            step('release')
             listRef.current?.scrollToOffset({ offset: 0, animated: true })
           }}
         />

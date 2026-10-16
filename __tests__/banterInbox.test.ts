@@ -307,3 +307,40 @@ describe('#27 · C12: the held order and its release', () => {
     expect(heldList(rows('a', 'b'), ['a', 'b']).moved).toBe(false)
   })
 })
+
+describe('#27 · C12: the hold, in a real touch’s event order', () => {
+  const { holdStep, IDLE } = require('../components/banter/hold')
+  const { heldList } = require('../components/banter/inbox')
+  const run = (...events: string[]) => events.reduce((s, e) => holdStep(s, e), IDLE)
+  const keys = (rows: { key: string }[]) => rows.map((r) => r.key)
+
+  it('a finger resting on the list holds the order before any drag, and "↑ New" shows on a reorder', () => {
+    // Arrange: the finger comes down on [a, b]; nothing scrolls.
+    const s = run('touchStart')
+    const held = s.held ? ['a', 'b'] : null
+    // Act: b's message lands and the live order becomes [b, a].
+    const view = heldList([{ key: 'b' }, { key: 'a' }], held)
+    // Assert
+    expect(s.held).toBe(true)
+    expect(keys(view.shown)).toEqual(['a', 'b'])
+    expect(view.moved).toBe(true)
+  })
+
+  it('a slow drag with no fling: the lift arms the release, the timer lets go', () => {
+    const lifted = run('touchStart', 'dragBegin', 'dragEnd', 'touchEnd')
+    expect(lifted).toMatchObject({ held: true, armed: true })
+    expect(holdStep(lifted, 'timer')).toEqual(IDLE)
+  })
+
+  it('a fling: momentum cancels the lift’s release and holds until rest', () => {
+    const gliding = run('touchStart', 'dragBegin', 'dragEnd', 'touchEnd', 'momentumBegin')
+    expect(gliding).toMatchObject({ held: true, armed: false })
+    expect(holdStep(gliding, 'timer').held).toBe(true)
+    expect(holdStep(gliding, 'momentumEnd')).toEqual(IDLE)
+  })
+
+  it('Android’s touch cancel as the scroll view takes over is not a lift', () => {
+    const s = run('touchStart', 'dragBegin', 'touchEnd')
+    expect(s).toMatchObject({ held: true, dragging: true, armed: false })
+  })
+})
