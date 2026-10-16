@@ -4,6 +4,7 @@ import { FlatList, KeyboardAvoidingView, Platform, StyleSheet, useWindowDimensio
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { ChatHeader, chatHeaderBottom, SubtitleText } from '../../components/chat/ChatHeader'
+import { BrokenLink } from '../../components/chat/BrokenLink'
 import { CountLine, FeedSkeleton, JustMutedLine, LoadOlder, NewestChip, ReactionFlight, RoomCover, type Flight } from '../../components/chat/ChatParts'
 import { RoomGuidelinesBanner } from '../../components/chat/RoomGuidelinesBanner'
 import { RoomMessageRow, RoomOutside, senderOf, type Outside, type RowHandlers } from '../../components/chat/RoomFeed'
@@ -26,6 +27,7 @@ import { emitChatListUpdate } from '../../lib/chatListUpdates'
 import { draftOf, failedOf, keepFailed, roomThread, setDraft } from '../../lib/chatOutbox'
 import { CHAT_REACTIONS } from '../../lib/chatReactions'
 import { copyText, linkSheet, notSentSheet } from '../../lib/chatSheets'
+import { idParam, nameParam } from '../../lib/routeParams'
 import { subscribeCheckInChanged } from '../../lib/checkIn'
 import { newClientId } from '../../lib/clientId'
 import { defaultRoomName, roomClosedLine, roomKindParam } from '../../lib/crews'
@@ -109,8 +111,8 @@ function GroupChatInner() {
    * never supplies an image — `blendn://chat/x?eventImage=…` is anybody's link,
    * and drawing it fetched a host the server never named (Flow 5 security review).
    */
-  const roomName = roomInfo.title || (params.roomName as string)
-  const eventTitle = roomInfo.title || (params.eventTitle as string)
+  const roomName = roomInfo.title || nameParam(params.roomName)
+  const eventTitle = roomInfo.title || nameParam(params.eventTitle)
   const eventImage = roomInfo.image
   const { user: authUser, loading: authLoading } = useAuth()
   const thread = roomThread(roomId, authUser?.id)
@@ -150,15 +152,15 @@ function GroupChatInner() {
   /** A mute that arrived while you were here (`chat:memberMuted`, R2-D2 composer #06). */
   const [justMuted, setJustMuted] = useState(false)
   /** The place, from the opener (the place screen) or the room's own row (M4). */
-  const openedFromPlace = typeof params.venueId === 'string' ? params.venueId : null
+  const openedFromPlace = idParam(params.venueId)
   const venueId = openedFromPlace ?? roomInfo.venueId ?? null
   /* A crew's or a Blend's room (step 9), told by the opener; null for an event's. */
   const roomKind = roomKindParam(params.kind) ?? roomInfo.kind ?? null
   const eventRoom = roomKind === null
   /* Back, or — opened from a push with nothing underneath — the Banter. */
   const goBack = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)/chat'))
-  const crewIdParam = typeof params.crewId === 'string' ? params.crewId : roomInfo.crewId
-  const blendIdParam = typeof params.blendId === 'string' ? params.blendId : roomInfo.blendId
+  const crewIdParam = idParam(params.crewId) ?? roomInfo.crewId
+  const blendIdParam = idParam(params.blendId) ?? roomInfo.blendId
   const [closedLine, setClosedLine] = useState<string | null>(null)
   const [rejoining, setRejoining] = useState(false)
   const left = useRoomMembership().left.has(roomId)
@@ -914,6 +916,7 @@ const styles = StyleSheet.create({
  * `ScreenProfiler` is the children untouched in production — see its header.
  */
 export default function GroupChat() {
+  if (!idParam(useLocalSearchParams().id)) return <BrokenLink />
   return (
     <ScreenProfiler id="event-chat">
       <GroupChatInner />

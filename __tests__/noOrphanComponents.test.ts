@@ -61,7 +61,6 @@ const KNOWN_ORPHANS: Record<string, string> = {
    */
   'VenuePlate.tsx': 'redesign P5 set; the art for a place with no next event (Places tiles and rows, the venue hero) adopts it with the Places redesign',
   'Disc.tsx': 'the redesign centre button (§11), built ahead of its slot; Flow 4 swaps it in for RoomButton in app/(tabs)/_layout.tsx',
-  'DiscMark.tsx': 'the monogram drawn from its vector; on a screen with the disc (Flow 4), later the splash and the Live Activity (§11.6)',
   /* The P0 system components (ROUND3 B4), built ahead of their flows; each goes with the first flow that adopts it. */
   'ds/Toast.tsx': 'redesign P0 component; the toast provider (components/Toast.tsx) moves to it with its first redesigned flow (ROUND3 B4)',
   /* The P1 inputs (ROUND3 B4), built ahead of their flows; each goes with the first flow that adopts it. */

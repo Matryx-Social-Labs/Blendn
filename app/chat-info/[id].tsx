@@ -4,7 +4,8 @@ import React, { useCallback, useEffect, useState } from 'react'
 import { Linking, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { LeaveRoomSheet, MuteSheet } from '../../components/chat/RoomSheets'
+import { BrokenLink } from '../../components/chat/BrokenLink'
+import { LeaveRoomSheet, leavePlaceLine, MuteSheet } from '../../components/chat/RoomSheets'
 import { SenderCard, type Sender } from '../../components/chat/SenderCard'
 import { Avatar } from '../../components/ds/Avatar'
 import { IconButton } from '../../components/ds/IconButton'
@@ -18,10 +19,12 @@ import { PhotoScrim } from '../../components/ui/GradientFill'
 import { apiClient } from '../../lib/apiClient'
 import { COMMUNITY_GUIDELINES_URL } from '../../lib/communityGuidelines'
 import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
+import { liveNowLabel } from '../../lib/home'
 import { Logger } from '../../lib/logger'
 import { markSeed } from '../../lib/pseudonymAvatar'
 import { isMuted, muteLabel, useRoomMute } from '../../lib/roomMembership'
 import { useRoomRow } from '../../lib/roomRow'
+import { idParam, nameParam } from '../../lib/routeParams'
 import { showRoomReportOptions } from '../../lib/safetyUtils'
 import { subscribeToChatMemberLeft } from '../../lib/socketClient'
 import { useAuth } from '../../lib/useAuth'
@@ -57,6 +60,31 @@ const roleLabel = (role: string) => (role === 'admin' ? 'Organiser' : role === '
  * pseudonym (`markSeed`).
  */
 export default function ChatInfo() {
+  if (!idParam(useLocalSearchParams().id)) return <BrokenLink />
+  return <ChatInfoInner />
+}
+
+/** How many are live at the place, as a bucket ("5–9", "Under 5"); null until the place answers. */
+function usePlaceBucket(venueId: string | undefined): string | null {
+  const [bucket, setBucket] = useState<string | null>(null)
+  useEffect(() => {
+    if (!venueId) return
+    let live = true
+    apiClient
+      .getVenue(venueId)
+      .then((result) => {
+        const now = result.success ? result.data?.live?.liveNow : null
+        if (live && now) setBucket(liveNowLabel(now).replace(/ live$/, ''))
+      })
+      .catch((error) => Logger.warn('chat', 'Could not load the place for its room', { error }))
+    return () => {
+      live = false
+    }
+  }, [venueId])
+  return bucket
+}
+
+function ChatInfoInner() {
   const params = useLocalSearchParams<{ id: string; roomName?: string; eventTitle?: string }>()
   const chatGroupId = String(params.id)
   const insets = useSafeAreaInsets()
@@ -111,10 +139,19 @@ export default function ChatInfo() {
   )
 
   // The server's row wins; the route's names are a first paint and never an image (see app/chat/[id].tsx).
-  const title = row?.title || params.roomName || params.eventTitle || 'Event chat'
-  const eventTitle = row?.eventTitle || params.eventTitle
+  /*
+   * A place's room (R4-D5 5-2): titled "‹place› · tonight", its size a bucket
+   * from the place ("5–9"), never the exact total the event room shows — a
+   * count that ticks as people go live tells you who just walked in (D-19).
+   */
+  const place = row?.venueId ? row.title : undefined
+  const bucket = usePlaceBucket(row?.venueId)
+  const title = place ? `${place} · tonight` : row?.title || nameParam(params.roomName) || nameParam(params.eventTitle) || 'Event chat'
+  const eventTitle = place ? undefined : row?.eventTitle || nameParam(params.eventTitle)
   const cover = row?.image || null
-  const count = row?.memberCount ?? (total || null)
+  const count = row?.venueId ? bucket : (row?.memberCount ?? (total || null))
+
+  const leaveHint = place ? leavePlaceLine(place) : 'Rejoin by checking in at the event again.'
 
   const openGuidelines = () => {
     Linking.openURL(COMMUNITY_GUIDELINES_URL).catch((error) => Logger.warn('chat', 'Could not open the community guidelines', { error }))
@@ -185,7 +222,7 @@ export default function ChatInfo() {
             </SettingsGroup>
           </View>
 
-          <SectionHeader title="In the room" count={loading || failed ? undefined : total} testID="info-members" />
+          <SectionHeader title="In the room" count={loading || failed || place ? undefined : total} testID="info-members" />
           {loading ? (
             <View style={styles.grid}>
               {Array.from({ length: COLUMNS * 2 }, (_, i) => (
@@ -268,13 +305,13 @@ export default function ChatInfo() {
             onPress={() => setSheet('leave')}
             accessibilityRole="button"
             accessibilityLabel="Leave room"
-            accessibilityHint="Rejoin by checking in at the event again."
+            accessibilityHint={leaveHint}
             style={({ pressed }) => [styles.leave, pressed && styles.pressed]}
           >
             <Icon name="log-out" size={ICON.control} />
             <View style={styles.leaveText}>
               <Text style={[font('bodyStrong', bold), styles.ink]}>Leave room</Text>
-              <Text style={[font('meta', bold), styles.secondary]}>Rejoin by checking in at the event again.</Text>
+              <Text style={[font('meta', bold), styles.secondary]}>{leaveHint}</Text>
             </View>
           </Pressable>
         </View>
@@ -285,7 +322,7 @@ export default function ChatInfo() {
       </View>
 
       <MuteSheet chatGroupId={sheet === 'mute' ? chatGroupId : null} onClose={() => setSheet(null)} />
-      <LeaveRoomSheet chatGroupId={sheet === 'leave' ? chatGroupId : null} onClose={() => setSheet(null)} onLeft={() => router.dismissTo('/(tabs)/chat')} />
+      <LeaveRoomSheet chatGroupId={sheet === 'leave' ? chatGroupId : null} place={place} onClose={() => setSheet(null)} onLeft={() => router.dismissTo('/(tabs)/chat')} />
 
       <SenderCard sender={cardFor} eventId={row?.eventId ?? null} chatGroupId={chatGroupId} onClose={() => setCardFor(null)} onBlocked={() => {}} />
     </View>

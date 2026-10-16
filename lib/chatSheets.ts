@@ -1,7 +1,7 @@
 import * as Clipboard from 'expo-clipboard'
 import { Linking } from 'react-native'
 
-import { domainOf } from '../components/ds/chatShared'
+import { linkHost } from '../components/ds/chatShared'
 import { Logger } from './logger'
 import type { Sheet } from './sheet'
 
@@ -31,23 +31,37 @@ export function notSentSheet({ to, text, onRetry, onDelete }: { to: string; text
 }
 
 /**
- * A link in a bubble opens through a sheet that names its domain, never a
+ * A link in a bubble opens through a sheet that names its host, never a
  * preview (R10, R3-D5 5.11): fetching one would hand the poster the reader's
- * address — from an anonymous room, the whole point of which is not to.
+ * address — from an anonymous room, the whole point of which is not to. The
+ * host is the parsed URL's (`linkHost`), and only http(s) ever opens; anything
+ * else gets Copy and nothing to open.
  */
 export function linkSheet(url: string, surface: 'room' | 'dm'): Sheet {
-  const domain = domainOf(url)
+  const host = linkHost(url)
+  if (!host) {
+    return {
+      kind: 'actions',
+      icon: 'external-link',
+      title: 'This link can’t be opened',
+      message: 'Blend’n opens only web links it can name. You can still copy it.',
+      actions: [
+        { label: 'Copy link', then: () => copyText(url) },
+        { label: 'Cancel', cancel: true },
+      ],
+    }
+  }
   return {
     kind: 'actions',
     icon: 'external-link',
-    title: `Open ${domain}?`,
+    title: `Open ${host}?`,
     message:
       surface === 'room'
         ? 'This link leaves Blend’n and opens in your browser. Blend’n never fetches a preview: the site would see your address from an anonymous room.'
         : 'This link leaves Blend’n and opens in your browser. Blend’n never fetches a preview, so nobody learns your address from it.',
     actions: [
       {
-        label: `Open ${domain}`,
+        label: `Open ${host}`,
         variant: 'primary',
         then: () => {
           Linking.openURL(url).catch((error) => Logger.warn('chat', 'Could not open a link', { error }))

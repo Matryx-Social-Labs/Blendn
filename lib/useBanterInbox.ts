@@ -9,7 +9,7 @@ import { crewRoomsFrom, type CrewRoomRow } from './crews'
 import { H } from './haptics'
 import { hasDirtyDomain } from './liveSyncState'
 import { Logger } from './logger'
-import { roomDisplayTitle, roomMemberCount } from './placeRoom'
+import { isPlaceRoom, roomDisplayTitle, roomMemberCount } from './placeRoom'
 import { queryCache } from './queryCache'
 import { rememberRoomMute } from './roomMembership'
 import { roomStateFrom, type RoomState } from './roomState'
@@ -43,6 +43,8 @@ export interface GroupChat {
   unread_count: number
   /** Standing in it right now: the room is live and anonymous. */
   is_checked_in: boolean
+  /** A place's room (a venue day): "You’re here" where an event's says how many (R4-D5 5-3). */
+  is_place?: boolean
   /** Readable but not postable — the list says why (SCRUM-178). */
   room_state: RoomState
 }
@@ -267,6 +269,7 @@ export function useBanterInbox() {
             last_sender_is_me: !!room.lastMessage?.user?.id && room.lastMessage.user.id === user?.id,
             unread_count: Number(room.unreadCount ?? room.unread_count) || 0,
             is_checked_in: room.isCheckedIn === true,
+            is_place: isPlaceRoom(room),
             room_state: roomStateFrom(room),
           }
         })

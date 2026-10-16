@@ -281,3 +281,29 @@ describe('inbox helpers', () => {
     expect(previewText('  see you by the stairs  ')).toBe('see you by the stairs')
   })
 })
+
+describe('#27 · C12: the held order and its release', () => {
+  const { heldList } = require('../components/banter/inbox')
+  const rows = (...keys: string[]) => keys.map((key) => ({ key }))
+
+  it('holds the order under a finger; the change raises "↑ New"', () => {
+    // Arrange: c's message landed while the finger was down on [a, b, c].
+    const live = rows('c', 'a', 'b', 'd')
+    // Act
+    const held = heldList(live, ['a', 'b', 'c'])
+    // Assert: the held rows keep their places; d, new, sorts by its live place (3).
+    expect(held.shown.map((r: { key: string }) => r.key)).toEqual(['a', 'b', 'c', 'd'])
+    expect(held.moved).toBe(true)
+  })
+
+  it('on lift the rows take the live order and the pill goes', () => {
+    const live = rows('c', 'a', 'b')
+    const released = heldList(live, null)
+    expect(released.shown).toBe(live)
+    expect(released.moved).toBe(false)
+  })
+
+  it('a held order nothing changed under raises no pill', () => {
+    expect(heldList(rows('a', 'b'), ['a', 'b']).moved).toBe(false)
+  })
+})

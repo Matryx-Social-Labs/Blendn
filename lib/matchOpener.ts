@@ -1,3 +1,4 @@
+import { plainText } from './routeParams'
 /**
  * The line a match conversation opens with.
  *
@@ -95,6 +96,7 @@ export function matchRowPreview(input: MatchOpenerInput): string | null {
  * missing, repeated or blank param starts the composer empty.
  */
 export function draftParam(param: string | string[] | undefined): string {
-  if (typeof param !== 'string') return ''
-  return param.trim() ? param : ''
+  // Anybody's link can carry it: no control or direction marks, no longer than the composer takes.
+  return plainText(param, DRAFT_MAX, { newlines: true })
 }
+const DRAFT_MAX = 1000

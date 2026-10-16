@@ -16,6 +16,7 @@ import { RollingNumber } from '../ds/RollingNumber'
 import { CONTROL_FONT_CAP, font, useBoldText } from '../ds/shared'
 import { Icon, type IconName } from '../ui/Icon'
 import { Material } from '../ui/Material'
+import { glassContentsIn, glassRiseIn } from '../motion/presence'
 import { PhotoScrim } from '../ui/GradientFill'
 
 /** The Banter's rows: 52 pt avatars on a 64 pt row (Flow 5 Banter frames). */
@@ -77,6 +78,7 @@ export function LiveHero({
   title,
   coverUrl,
   count,
+  here = false,
   line,
   unread,
   muted,
@@ -86,6 +88,8 @@ export function LiveHero({
   title: string
   coverUrl?: string | null
   count: number
+  /** A place's room: "You’re here", never a count (R4-D5 5-3, D-19). */
+  here?: boolean
   line: string | null
   unread: number
   muted: boolean
@@ -98,7 +102,7 @@ export function LiveHero({
       testID={testID}
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={[title, 'live', count ? `${count} in the room` : null, unread ? `${unread} new` : null, line].filter(Boolean).join(', ')}
+      accessibilityLabel={[title, 'live', here ? 'You’re here' : count ? `${count} in the room` : null, unread ? `${unread} new` : null, line].filter(Boolean).join(', ')}
       style={({ pressed }) => [styles.hero, pressed && styles.pressed]}
     >
       {coverUrl ? <Image source={{ uri: coverUrl }} recyclingKey={coverUrl} contentFit="cover" style={StyleSheet.absoluteFill} accessible={false} /> : null}
@@ -127,7 +131,9 @@ export function LiveHero({
             </Text>
           ) : null}
         </View>
-        {count ? (
+        {here ? (
+          <Text style={[font('meta', bold), styles.ink]}>You’re here</Text>
+        ) : count ? (
           <View style={styles.heroCount}>
             <RollingNumber value={count} role="title" />
             <Text style={[font('caption', bold), styles.ink]}>in the room</Text>
@@ -472,11 +478,13 @@ const LINE_LONG = 220
 export function NewAbovePill({ top, onPress }: { top: number; onPress: () => void }) {
   const bold = useBoldText()
   return (
-    <Animated.View entering={ZoomIn.duration(DURATION.quick)} exiting={FadeOut.duration(DURATION.quick)} style={[styles.newPlace, { top }]}>
+    <Animated.View entering={glassRiseIn} exiting={FadeOut.duration(DURATION.quick)} style={[styles.newPlace, { top }]}>
       <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel="New messages above">
         <Material role="control" style={styles.newPill}>
-          <Icon name="arrow-up" size={ICON.inline} />
-          <Text style={[font('caption', bold), styles.ink]}>New</Text>
+          <Animated.View entering={glassContentsIn} style={styles.newPillContents}>
+            <Icon name="arrow-up" size={ICON.inline} />
+            <Text style={[font('caption', bold), styles.ink]}>New</Text>
+          </Animated.View>
         </Material>
       </Pressable>
     </Animated.View>
@@ -577,5 +585,6 @@ const styles = StyleSheet.create({
   lineShort: { width: LINE_SHORT, height: SPACE.lg },
   lineLong: { width: LINE_LONG, height: SPACE.md + SPACE.xxs },
   newPlace: { position: 'absolute', alignSelf: 'center', zIndex: 3 },
+  newPillContents: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs },
   newPill: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs, height: SPACE.xxl - SPACE.xs, paddingHorizontal: SPACE.md, borderRadius: RADIUS.capsule },
 })

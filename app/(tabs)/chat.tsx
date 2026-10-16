@@ -18,7 +18,7 @@ import {
   type RowFace,
   type RowLine,
 } from '../../components/banter/BanterParts'
-import { inboxTimeLabel, previewWithSender } from '../../components/banter/inbox'
+import { heldList, inboxTimeLabel, previewWithSender } from '../../components/banter/inbox'
 import { BoardRequestsSection } from '../../components/board/BoardRequestsSection'
 import { LeaveRoomSheet, MuteSheet } from '../../components/chat/RoomSheets'
 import { SearchField } from '../../components/ds/SearchField'
@@ -251,10 +251,10 @@ function ChatInner() {
 
   /*
    * #27: a landing message moves its row on M.settle — unless a finger is on
-   * the list. Then the order holds still and a "↑ New" pill offers the way up.
+   * the list. Then the order holds still and a "↑ New" pill offers the way up;
+   * on lift the rows settle and the pill goes (C12, `heldList`).
    */
   const [heldOrder, setHeldOrder] = useState<string[] | null>(null)
-  const [newAbove, setNewAbove] = useState(false)
   const items = useMemo<Item[]>(() => {
     const sections: [string, Row[], boolean][] = [
       ['Crews', match(crewRows), false],
@@ -270,12 +270,7 @@ function ChatInner() {
     }
     return out
   }, [crewRows, peopleRows, pastRows, match])
-  const order = items.map((i) => i.key)
-  // A row new to the list sorts by where it would be; the rest keep their held places.
-  const rank = (key: string) => (heldOrder?.includes(key) ? heldOrder.indexOf(key) : order.indexOf(key))
-  const shown = heldOrder ? [...items].sort((a, b) => rank(a.key) - rank(b.key)) : items
-  // Adjusted in render, on the change itself: the order moved under a finger.
-  if (heldOrder && !newAbove && order.join() !== heldOrder.join()) setNewAbove(true)
+  const { shown, moved: newAbove } = heldList(items, heldOrder)
 
   /* Rows enter once, 18 ms apart, as the list first lands (Flow 5 Banter annotation). */
   const entered = useRef(false)
@@ -356,6 +351,7 @@ function ChatInner() {
               title={c.event_title}
               coverUrl={c.event_image}
               count={c.participant_count}
+              here={c.is_place}
               unread={c.unread_count}
               muted={roomMuted(c.chat_room_id)}
               line={
@@ -441,16 +437,13 @@ function ChatInner() {
         ListHeaderComponent={header}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
-        onScrollBeginDrag={() => setHeldOrder(order)}
+        // A drag that catches a fling keeps the order it already holds.
+        onScrollBeginDrag={() => setHeldOrder((held) => held ?? items.map((i) => i.key))}
         onMomentumScrollEnd={() => setHeldOrder(null)}
         onScrollEndDrag={(e) => {
           // A fling keeps the order held until it comes to rest.
           if (!e.nativeEvent.velocity?.y) setHeldOrder(null)
         }}
-        onScroll={(e) => {
-          if (newAbove && e.nativeEvent.contentOffset.y <= 0) setNewAbove(false)
-        }}
-        scrollEventThrottle={100}
         ListEmptyComponent={
           inbox.loading ? (
             <BanterSkeleton />
@@ -515,7 +508,7 @@ function ChatInner() {
         <NewAbovePill
           top={listTop}
           onPress={() => {
-            setNewAbove(false)
+            setHeldOrder(null)
             listRef.current?.scrollToOffset({ offset: 0, animated: true })
           }}
         />

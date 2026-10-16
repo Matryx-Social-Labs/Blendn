@@ -69,8 +69,15 @@ LongPressMenu · ReactionFlight · SenderCard
 - **Not in the room:** left / not a member (Rejoin), not live (Go live again),
   removed by the organiser (the server's sentence, no action), gone (404, Back),
   a closed crew chat or Blend (Back). Each replaces the feed and the composer.
-- **Links** are tappable and open through a sheet that names the domain, never
-  a preview (R10). One to three emoji alone are drawn at 32 pt.
+- **Links** are tappable and open through a sheet that names the host, never
+  a preview (R10). The host is the parsed URL's (`linkHost`), never the link's
+  text; only http(s) opens, and a link whose host parsers could disagree on
+  (userinfo, a backslash, invisible characters) stays words. Whether an IDN
+  host shows as Unicode or punycode is the owner's open decision. One to three
+  emoji alone are drawn at 32 pt.
+- **Route params** are anybody's link: ids must be one server-shaped segment
+  (else "This link doesn’t work", nothing loads), names and the DM draft are
+  bounded plain text (`lib/routeParams.ts`).
 - **Typing** lives at the end of the feed, in the bubble's shape (#14).
 
 ## Room info
@@ -80,7 +87,9 @@ The cover as a scrimmed hero (a still Live badge, the bell-slash chip and
 guidelines · Report this room as rows; "In the room" as a crowd of creatures
 with Organiser / Moderator badges, each opening their card (5.12); Leave apart,
 in the danger zone. Mute is yours alone (`H.select` on the pick); Leave says it
-is undone by checking in again. The sheets are `components/chat/RoomSheets.tsx`
+is undone by checking in again. A place's room (R4-D5 5-2) is "‹place› · tonight",
+its size the place's bucket ("5–9"), never the exact total, and Leave says to go
+live again; on the Banter its Live now row says "You’re here" (5-3). The sheets are `components/chat/RoomSheets.tsx`
 (the Banter's swipe uses the same two).
 
 ## Direct messages

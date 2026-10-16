@@ -98,19 +98,39 @@ export function linkParts(text: string): TextPart[] {
     // A path's own closing parenthesis (Rumours_(album)) is kept; a sentence's is not.
     const open = m[0].split('(').length - m[0].split(')').length
     const link = open > 0 && text[start + m[0].length] === ')' ? `${m[0]})` : m[0]
+    const url = /^https?:\/\//i.test(link) ? link : `https://${link}`
     if (start > at) parts.push({ text: text.slice(at, start) })
-    parts.push({ text: link, url: /^https?:\/\//i.test(link) ? link : `https://${link}` })
+    // A link whose host can't be told for certain stays words: nothing to tap.
+    parts.push(linkHost(url) ? { text: link, url } : { text: link })
     at = start + link.length
   }
   if (at < text.length) parts.push({ text: text.slice(at) })
   return parts
 }
+
 /**
- * "toit.in" from "https://toit.in/vinyl": what the link sheet and its action
- * name — the host the link really goes to, so `https://toit.in@evil.example/`
- * is evil.example, never toit.in.
+ * "toit.in" from "https://toit.in/vinyl": the host the link really goes to,
+ * from the parsed URL — never the link's own text — or null when it is not an
+ * http(s) link with a plain host. Null too for any authority where parsers
+ * disagree about the host: userinfo (`toit.in@evil.example`), a backslash
+ * (`evil.example\@toit.in` opens evil.example in a browser, while React
+ * Native's URL shim reads toit.in), whitespace or invisible characters. Such a
+ * link is not offered at all, so the name on the sheet is always where it goes.
+ * TODO(owner decision): show an IDN host as Unicode or as punycode (xn--…);
+ * this returns whatever the runtime's URL gives, unchanged.
  */
-export const domainOf = (url: string) => url.replace(/^https?:\/\//i, '').split(/[/?#]/)[0].split('@').pop() ?? ''
+export function linkHost(url: string): string | null {
+  const scheme = /^(https?):\/\//i.exec(url)?.[1]
+  const authority = url.slice((scheme?.length ?? 0) + 3).split(/[/?#]/)[0]
+  if (!scheme || !authority || /[@\\\s\p{Cc}\p{Cf}]/u.test(authority)) return null
+  // The clean authority alone, parsed: React Native's URL shim misreads an `@`
+  // later in the path (medium.com/@someone) as userinfo; this way both agree.
+  try {
+    return new URL(`${scheme}://${authority}/`).hostname || null
+  } catch {
+    return null
+  }
+}
 
 /** #35: the drag tracks 1:1 to 56 pt, arms there, then rubber-bands at 0.5× to 96 pt. */
 export const REPLY_SWIPE = { trigger: 56, max: 96, rubber: 0.5 } as const

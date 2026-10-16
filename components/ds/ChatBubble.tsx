@@ -21,7 +21,7 @@ import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { tint } from '../../lib/theme'
 import { Avatar } from './Avatar'
 import { CHAT_REACTIONS } from '../../lib/chatReactions'
-import { avatarOf, BUBBLE, domainOf, emojiOnly, linkParts, reactionName, REPLY_SWIPE, replyOffset, timeFont, type ChatPerson, type Rect, type TextPart } from './chatShared'
+import { avatarOf, BUBBLE, emojiOnly, linkHost, linkParts, reactionName, REPLY_SWIPE, replyOffset, timeFont, type ChatPerson, type Rect, type TextPart } from './chatShared'
 import { ReactionPill } from './ReactionBar'
 import { RECEIPT_WORD, ReceiptMark, type Receipt } from './ReceiptMark'
 import { ReplyPreview } from './ReplyPreview'
@@ -352,7 +352,7 @@ function Message({
             ])
           : []),
         ...actions.map((a): [string, () => void] => [a.label, a.onPress]),
-        ...links.map((l): [string, () => void] => [`Open ${domainOf(l.url)}`, () => onLinkPress?.(l.url)]),
+        ...links.map((l): [string, () => void] => [`Open ${linkHost(l.url)}`, () => onLinkPress?.(l.url)]),
       ]
   const onAction = (e: AccessibilityActionEvent) => named.find(([name]) => name === e.nativeEvent.actionName)?.[1]()
   const tap = (e: GestureResponderEvent) => {

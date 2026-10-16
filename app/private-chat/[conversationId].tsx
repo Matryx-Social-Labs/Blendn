@@ -4,6 +4,7 @@ import { FlatList, KeyboardAvoidingView, Platform, StyleSheet, View } from 'reac
 import Animated, { Easing, FadeIn, FadeOut } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
+import { BrokenLink } from '../../components/chat/BrokenLink'
 import { ChatHeader, chatHeaderBottom } from '../../components/chat/ChatHeader'
 import { FeedSkeleton, HEADER_FACE, LoadOlder, NewestChip } from '../../components/chat/ChatParts'
 import { DmMessageRow, MatchOpenerCard, NudgeLine, PhotoPreviewSheet, quoteText, RevealLine, RevealSheets, SayHi, type DmRowHandlers } from '../../components/chat/DmParts'
@@ -27,6 +28,7 @@ import { runPlace } from '../../lib/chatFeed'
 import { emitChatListUpdate } from '../../lib/chatListUpdates'
 import { dmThread, draftOf, failedOf, keepFailed, setDraft } from '../../lib/chatOutbox'
 import { copyText, linkSheet, notSentSheet } from '../../lib/chatSheets'
+import { idParam, nameParam } from '../../lib/routeParams'
 import { newClientId } from '../../lib/clientId'
 import { revealView, type ConversationRevealState } from '../../lib/conversationReveal'
 import { COLOR, DURATION, EASING, SIZE, SPACE } from '../../lib/design/tokens'
@@ -184,12 +186,12 @@ function PrivateChatInner() {
   const setMessage = (id: string, change: (m: PrivateMessage) => PrivateMessage) => setMessages((prev) => prev.map((m) => (m.id === id ? change(m) : m)))
 
   // Their profile, only once they are a name to you: an accepted request, or a match who revealed.
-  const profileId = otherId || (otherUserId as string | undefined)
+  const profileId = otherId || idParam(otherUserId) || undefined
   const openProfile =
     reveal && (reveal.pseudonymous === false || reveal.theyRevealed) && profileId
       ? () => router.push({ pathname: '/user/[id]', params: { id: String(profileId) } } as never)
       : undefined
-  const name = reveal?.displayName || (otherUserName as string) || 'Chat'
+  const name = reveal?.displayName || nameParam(otherUserName) || 'Chat'
   const view = reveal ? revealView(reveal, asked) : null
 
   /* Ask them: the Asked state on the server's yes. No haptic (Flow 5 DM annotation). */
@@ -684,7 +686,7 @@ function PrivateChatInner() {
                   </View>
                 ) : (
                   // Sends for real: Say hi is "Hey 👋", at once (Flow 5 DM #10).
-                  <SayHi line={emptyThreadLine(reveal?.displayName, (otherUserName as string) || null)} onPress={() => void send('Hey 👋')} />
+                  <SayHi line={emptyThreadLine(reveal?.displayName, nameParam(otherUserName) ?? null)} onPress={() => void send('Hey 👋')} />
                 )
               }
               onContentSizeChange={follow.onContentSizeChange}
@@ -854,6 +856,7 @@ const styles = StyleSheet.create({
  * `ScreenProfiler` is the children untouched in production — see its header.
  */
 export default function PrivateChat() {
+  if (!idParam(useLocalSearchParams().conversationId)) return <BrokenLink />
   return (
     <ScreenProfiler id="dm">
       <PrivateChatInner />

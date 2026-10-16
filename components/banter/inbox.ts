@@ -81,3 +81,18 @@ export function previewText(raw: string): string | null {
   if (/^\[video\]$/i.test(text)) return 'Video'
   return text
 }
+
+/**
+ * #27 and its release (ROUND4 C12): while a finger is on the list its order
+ * holds — `held` is the order when the finger came down, and a row new to the
+ * list sorts where it would be. `moved` is the order changing under the
+ * finger: the "↑ New" pill. Released (`held` null), the list is the live
+ * order — the held rows settle into their places on M.settle (the row's
+ * layout transition) — and the pill goes.
+ */
+export function heldList<T extends { key: string }>(items: T[], held: string[] | null): { shown: T[]; moved: boolean } {
+  if (!held) return { shown: items, moved: false }
+  const order = items.map((i) => i.key)
+  const rank = (key: string) => (held.includes(key) ? held.indexOf(key) : order.indexOf(key))
+  return { shown: [...items].sort((a, b) => rank(a.key) - rank(b.key)), moved: order.join() !== held.join() }
+}

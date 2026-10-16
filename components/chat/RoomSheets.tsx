@@ -72,7 +72,18 @@ export function MuteSheet({ chatGroupId, onClose }: { chatGroupId: string | null
  * destructive button (`H.destructive` on its press); the room goes from the
  * Banter at once.
  */
-export function LeaveRoomSheet({ chatGroupId, onClose, onLeft }: { chatGroupId: string | null; onClose: () => void; onLeft: () => void }) {
+export function LeaveRoomSheet({
+  chatGroupId,
+  place,
+  onClose,
+  onLeft,
+}: {
+  chatGroupId: string | null
+  /** A place's room (R4-D5 5-2): the way back is going live there, not checking in. */
+  place?: string
+  onClose: () => void
+  onLeft: () => void
+}) {
   const { user } = useAuth()
   const { showToast } = useToast()
   const [busy, setBusy] = useState(false)
@@ -95,7 +106,11 @@ export function LeaveRoomSheet({ chatGroupId, onClose, onLeft }: { chatGroupId: 
       visible={!!chatGroupId}
       onClose={onClose}
       title="Leave this room?"
-      body="You’ll stop getting its messages and notifications, and it leaves your Banter. You can rejoin by checking in at the event again."
+      body={
+        place
+          ? leavePlaceLine(place)
+          : 'You’ll stop getting its messages and notifications, and it leaves your Banter. You can rejoin by checking in at the event again.'
+      }
       actions={[
         { label: 'Leave room', kind: 'destructive', onPress: () => void leave(), loading: busy },
         { label: 'Cancel', kind: 'tertiary', onPress: onClose },
@@ -104,3 +119,6 @@ export function LeaveRoomSheet({ chatGroupId, onClose, onLeft }: { chatGroupId: 
     />
   )
 }
+
+/** R4-D5 5-2: leaving a place's room is for tonight, and going live again is the way back. */
+export const leavePlaceLine = (place: string) => `You leave ${place}’s room for tonight. Go live again any time you’re here.`

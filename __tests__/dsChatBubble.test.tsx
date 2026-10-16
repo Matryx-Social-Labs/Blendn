@@ -14,7 +14,7 @@ import { State } from 'react-native-gesture-handler'
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils'
 
 import { ChatBubble, type ChatBubbleProps } from '../components/ds/ChatBubble'
-import { avatarOf, domainOf, emojiOnly, linkParts, replyOffset } from '../components/ds/chatShared'
+import { avatarOf, emojiOnly, linkHost, linkParts, replyOffset } from '../components/ds/chatShared'
 import { COLOR, MATERIAL } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 
@@ -56,10 +56,52 @@ describe('the rules', () => {
       { text: 'toit.in/vinyl-night', url: 'https://toit.in/vinyl-night' },
     ])
     expect(linkParts('Till midnight. Stairs by the bar.')).toEqual([{ text: 'Till midnight. Stairs by the bar.' }])
-    expect(domainOf('https://toit.in/vinyl-night?x=1')).toBe('toit.in')
-    // The link sheet names where the link goes, not the userinfo in front of it.
-    expect(domainOf('https://toit.in@evil.example/vinyl')).toBe('evil.example')
-    expect(domainOf('toit.in:8080@evil.example')).toBe('evil.example')
+  })
+
+  /*
+   * The host on the link sheet is the parsed URL's, never the link's text, and
+   * a link whose host parsers disagree on is not a link at all. Run against
+   * both URLs the app meets: WHATWG (jest, a browser) and React Native's shim
+   * (the phone), which reads `evil.example\@toit.in` as toit.in.
+   */
+  describe.each([
+    ['WHATWG URL', globalThis.URL],
+    ['React Native URL', require('react-native/Libraries/Blob/URL').URL],
+  ])('link host · %s', (_name, Impl) => {
+    const real = globalThis.URL
+    beforeEach(() => {
+      globalThis.URL = Impl
+    })
+    afterEach(() => {
+      globalThis.URL = real
+    })
+
+    it('names the host the link goes to', () => {
+      expect(linkHost('https://toit.in/vinyl-night?x=1')).toBe('toit.in')
+      expect(linkHost('http://toit.in:8080/@someone?a=b@c')).toBe('toit.in')
+      expect(linkHost('https://evil.example/x@toit.in')).toBe('evil.example')
+    })
+
+    it('refuses every spoofable or non-web link', () => {
+      for (const url of [
+        'https://toit.in@evil.example/vinyl',
+        'https://evil.example\\@toit.in/',
+        'https://evil.example\\toit.in',
+        'https://toit.in\u200B@evil.example',
+        'https://\u202Eni.tiot',
+        'javascript:alert(1)',
+        'intent://toit.in#Intent;end',
+        'blendn://chat/1',
+        'https://',
+      ]) {
+        expect([url, linkHost(url)]).toEqual([url, null])
+      }
+    })
+
+    it('a refused link is words, with nothing to tap', () => {
+      expect(linkParts('menu: https://toit.in@evil.example/menu').some((p) => p.url)).toBe(false)
+      expect(linkParts('menu: https://evil.example\\@toit.in').some((p) => p.url)).toBe(false)
+    })
   })
 
   it('links: a whole multi-part domain, never cut to a different one', () => {

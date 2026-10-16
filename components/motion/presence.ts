@@ -1,4 +1,5 @@
 import { Easing, FadeIn, FadeOut, ReduceMotion, withTiming } from 'react-native-reanimated'
+import { DURATION, EASING } from '../../lib/design/tokens'
 
 /*
  * Entering/exiting presets for small things that appear and disappear —
@@ -46,3 +47,23 @@ export const popOut = () => {
     },
   }
 }
+
+/*
+ * A glass pill arriving (ROUND4 B8, approved with Prompt 10): the pill rises
+ * 16 pt on `base` with its glass opaque the whole way — a blur faded by
+ * opacity reads as a grey smear — and only its contents fade in. Put
+ * `glassRiseIn` on the pill and `glassContentsIn` on what is inside it.
+ * Reduce Motion: no rise; the contents still fade.
+ */
+const PILL_RISE = 16
+const ENTRANCE = Easing.bezier(...EASING.entrance)
+const PILL_IN = DURATION.base
+export const glassRiseIn = () => {
+  'worklet'
+  const t = { duration: PILL_IN, easing: ENTRANCE, reduceMotion: ReduceMotion.System }
+  return {
+    initialValues: { transform: [{ translateY: PILL_RISE }] },
+    animations: { transform: [{ translateY: withTiming(0, t) }] },
+  }
+}
+export const glassContentsIn = FadeIn.duration(PILL_IN).easing(ENTRANCE).reduceMotion(ReduceMotion.Never)

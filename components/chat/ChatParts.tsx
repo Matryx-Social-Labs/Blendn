@@ -9,7 +9,7 @@ import { useReducedMotion } from '../../lib/motion'
 import { BUBBLE } from '../ds/chatShared'
 import { PresenceDot } from '../ds/MonoFamily'
 import { CONTROL_FONT_CAP, font, minTarget, useBoldText } from '../ds/shared'
-import { popIn, popOut } from '../motion/presence'
+import { glassContentsIn, glassRiseIn, popOut } from '../motion/presence'
 import { Icon } from '../ui/Icon'
 import { Material } from '../ui/Material'
 
@@ -68,7 +68,7 @@ export function LoadOlder({ busy, onPress }: { busy: boolean; onPress: () => voi
 export function NewestChip({ count, bottom, onPress }: { count: number; bottom: number; onPress: () => void }) {
   const bold = useBoldText()
   return (
-    <Animated.View entering={popIn} exiting={popOut} style={[styles.chipPlace, { bottom }]}>
+    <Animated.View entering={glassRiseIn} exiting={popOut} style={[styles.chipPlace, { bottom }]}>
       <Pressable
         testID="chat-newest"
         onPress={onPress}
@@ -77,13 +77,15 @@ export function NewestChip({ count, bottom, onPress }: { count: number; bottom: 
         accessibilityLabel={count ? `${count} new, jump to the newest` : 'Jump to the newest message'}
       >
         <Material role="control" style={styles.chip}>
-          <Icon name="arrow-down" size={ICON.control} />
-          {count ? (
-            <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={styles.ink}>
-              <Text style={[font('meta', bold, FONT_FAMILY.mono[700]), styles.tabular]}>{count}</Text>
-              <Text style={font('caption', bold)}> new</Text>
-            </Text>
-          ) : null}
+          <Animated.View entering={glassContentsIn} style={styles.chipContents}>
+            <Icon name="arrow-down" size={ICON.control} />
+            {count ? (
+              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={styles.ink}>
+                <Text style={[font('meta', bold, FONT_FAMILY.mono[700]), styles.tabular]}>{count}</Text>
+                <Text style={font('caption', bold)}> new</Text>
+              </Text>
+            ) : null}
+          </Animated.View>
         </Material>
       </Pressable>
     </Animated.View>
@@ -193,6 +195,7 @@ const styles = StyleSheet.create({
     paddingLeft: SPACE.sm,
     paddingRight: SPACE.md,
   },
+  chipContents: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs },
   justMuted: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACE.sm, paddingBottom: SPACE.sm },
   skeleton: { gap: SPACE.lg, justifyContent: 'flex-end', flexGrow: 1 },
   skeletonRow: { flexDirection: 'row', alignItems: 'flex-end', gap: SPACE.sm },
