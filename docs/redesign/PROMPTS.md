@@ -811,3 +811,89 @@ Each one goes inside the Round 2 delta wrapper. The rows are in [`ROUND4.md`](./
 - Forgot password: Resend refused on "Check your inbox".
 
 **Match page:** replace the stock Lucide cat in `components/sets.js` with the creature set (R3-A 3 leftover).
+
+---
+
+# Round 4.1 · Finish Round 4 (2026-10-16)
+
+The project after Round 4 was read file by file. Most of the round landed: the folds, the rulings, check-in end to end, the coach marks and the 159 missing states. [`ROUND4.md` part 8](./ROUND4.md#8--round-41-finishing-round-4-2026-10-16) lists what's left. **The client build restarts once all of Round 4.1 is published.**
+
+**Every prompt runs in the "Blend'n Design System" project.** There is no delta wrapper this round: R16 retires it. Each change edits the approved builder, and the flow canvas shows the result.
+
+**Before you start:** re-sync `docs/redesign/` from `docs/redesign-brief` (or `dev`). Then check it carries the no-quarter-marks ruling: `ROUND4.md` R3 says "No quarter marks", and the last sync missed that by 20 seconds. Check it also has R15, R16 and part 8.
+
+## Order
+
+1. **R4.1-0:** quarter marks out; the standing rule reversed.
+2. **R4.1-1:** retire the delta canvases, one canvas per flow.
+3. **R4.1-2:** inside more than one place.
+4. **R4.1-3:** the Flow 4 prototype and the Pulse coach mark.
+5. **R4.1-4:** R4-3 cell by cell, and the part 5 rows that need drawing.
+6. **R4.1-5:** Prompt 10 across every flow. Publish.
+
+## R4.1-0 · Quarter marks out, the rule reversed
+
+```
+Read docs/redesign/ROUND4.md ruling R3 and part 8.1. The hold has no quarter marks. Remove them everywhere they are drawn or described: JU.hold in journey/ui.js (the marks and the comment), F4C.hold in flow-4/flow4-checkin.js, the Flow 4 canvas's "Check-in end to end" group (refs text and frames 01–04), motion #8 and #9b, the HoldToConfirm page, and round4/Status.html. Keep every H.tick annotation at 225 / 450 / 675: they are haptics, with nothing drawn.
+
+Then replace the "Deltas" section of the project's CLAUDE.md with ROUND4 part 8.2's rule: a change edits the approved builder, the flow canvas shows the result, old states are deleted, and anything the prompt didn't name is listed and asked about first.
+
+Show me the hold at 0, 450 and 900 ms afterwards.
+```
+
+## R4.1-1 · Retire the deltas: one canvas per flow
+
+```
+Read docs/redesign/ROUND4.md ruling R16 and part 8.2.
+
+1. For every Delta R2-* and R3-* canvas: confirm each "after" is now drawn by an approved builder on its flow canvas. If any isn't, fold it into the builder first and tell me which. Check R2-D7 in Flows 4 and 11 especially. Then delete the canvas and its card page.
+2. Move the four compositions onto their flow canvases as ordinary groups, drawn from the builders:
+   - R3-D5's gestures and keyboard (Flow 5);
+   - R3-D9's wave banner (Flow 9);
+   - R3-D16's share sheet over the Scene (Flow 16);
+   - R3-D10 10.1's person sheet over a crew chat (Flow 10).
+3. Fold every Delta R4-D* canvas into its flow canvas as groups titled by their part 6 row ids, then delete the R4-D canvases and cards.
+4. Delete the helpers nothing uses any more: round2/delta-canvas.js, round2/r2d7.js, and the flow*-delta.js and flow*-r3d*.js alias files. Move R3.mark into journey/ui.js or components/.
+5. Update round4/Status.html and github.md.
+
+When you finish, each flow is one canvas, one builder file and its prototype. List every file you deleted and every group you added.
+```
+
+## R4.1-2 · Inside more than one place
+
+```
+Read docs/redesign/ROUND4.md ruling R15 and part 8.3. The server allows overlapping fences (two events at one venue, venues sharing a building) but only one room at a time. Nothing in the project draws being inside two places.
+
+Add a group "Inside more than one place" to the Flow 4 canvas, iOS and Android, drawn from the approved builders (F4.tonight, the VenuePass, the Sheet, the disc). Draw the eight frames in part 8.3:
+- Tonight inside two places, with "2 here · Switch";
+- the chooser sheet;
+- the disc's "Check in · 2 here";
+- two events at one venue;
+- a venue and an event at the same place;
+- already in a room ("Hold to switch", "You left Vinyl Night");
+- approximate location;
+- Reduce Motion.
+
+Annotate that swiping the deck never moves the pass. Mark the chooser "Needs server" (SCRUM-704). Show me the chooser and the pass before drawing the rest.
+```
+
+## R4.1-3 · The Flow 4 prototype and the Pulse coach mark
+
+```
+Read docs/redesign/ROUND4.md part 8.4.
+
+1. Rebuild flow-4/flow4-proto.js on F4C.pour inside the docked pass, not JM.flood. Play both endings: the Room at +700, and the question path ("You're in." held to +1600, cleared by +1820, then the reveal and intent sheets, then the Room). The hold has no quarter marks. Then retire JM.flood and pourStill.
+2. Draw the Pulse coach mark when its sentence wraps to two lines, and on a 360 dp screen. Today it covers about 24 pt of the search bar. Say where it goes when it doesn't fit above the first card.
+```
+
+## R4.1-4 · Component pages cell by cell, and the rows left to draw
+
+Run the existing **R4-3** prompt above, one group at a time (P0 → P5). Then:
+
+```
+Read docs/redesign/ROUND4.md part 8.5 and part 5. Draw each part 5 row that needs new drawing, using its fix column: A18, A19, A31, A37–A39, A44, A45, A53, A55, A56, A59–A63, A65–A67, A71–A73, A75, A77, A78, A80, A81, A85, A87, A88, B2 (give "You're in." a type role), B5–B9, B13, B14, B17, B20, B21, B23, C7, C9–C12, D17 (the PersonCard page in full) and D19, D24. Where a row's fix says "pick one", take what ROUND4's opening rule says. Finish with a table: row · what changed · where.
+```
+
+## R4.1-5 · Consistency audit, then publish
+
+Run **Prompt 10** across every flow. Then update `round4/Status.html` so its "Still open" list is empty, or lists only "Needs server" items. Publish.
