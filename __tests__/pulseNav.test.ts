@@ -122,7 +122,7 @@ describe('a tap outside the search closes the keyboard', () => {
     expect(list).toContain('keyboardShouldPersistTaps="handled"')
     expect(list).toContain('keyboardDismissMode="on-drag"')
     // Nested in the list: left at the default it would eat a featured card's first tap.
-    const row = src.slice(src.indexOf('<FlatList\n            horizontal'), src.indexOf('renderItem={({ item, index })'))
+    const row = src.slice(src.search(/<FlatList\s+horizontal/), src.indexOf('renderItem={({ item, index })'))
     expect(row).toContain('keyboardShouldPersistTaps="handled"')
   })
 
