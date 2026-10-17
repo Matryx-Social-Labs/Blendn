@@ -171,6 +171,12 @@ describe('the create body', () => {
     expect(createCrewBody({ ...form, bio: '   ' }, agreed)).not.toHaveProperty('bio')
   })
 
+  it('sends "Here for" when one is chosen, and nothing when none is', () => {
+    expect(createCrewBody({ ...form, intent: ['friendship', 'dating'] }, agreed)).toHaveProperty('intent', ['friendship', 'dating'])
+    expect(createCrewBody({ ...form, intent: [] }, agreed)).not.toHaveProperty('intent')
+    expect(createCrewBody(form, agreed)).not.toHaveProperty('intent')
+  })
+
   it('holds the name to 2–32 characters as a person counts them', () => {
     expect(createCrewBody({ ...form, name: 'A' }, agreed)).toHaveProperty('problem')
     expect(createCrewBody({ ...form, name: 'A'.repeat(33) }, agreed)).toHaveProperty('problem')

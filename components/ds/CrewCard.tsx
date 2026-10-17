@@ -1,7 +1,7 @@
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { Icon } from '../ui/Icon'
-import { COLOR, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, ICON, MATERIAL, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { ACHIEVEMENT, AchievementBadge, type AchievementKind } from './AchievementBadge'
 import { Button } from './Button'
@@ -52,6 +52,7 @@ export function CrewCard({
   overlap,
   like,
   compact = false,
+  onSheet = false,
   onPress,
   onMore,
   testID,
@@ -61,6 +62,11 @@ export function CrewCard({
   overlap?: string | null
   like?: CrewLike
   compact?: boolean
+  /**
+   * A preview on a sheet (Make a crew, Flow 10 · 10.2): 8% white on iOS glass,
+   * sunken on Android's solid sheet, the frame's `field_bg`. Not for lists.
+   */
+  onSheet?: boolean
   /** Opens the crew's sheet. */
   onPress?: () => void
   /** The ⋯: report or hide. */
@@ -75,7 +81,15 @@ export function CrewCard({
   const slop = (minTarget() - MORE) / 2
 
   return (
-    <View testID={testID} style={[styles.card, { borderRadius: compact ? RADIUS.sheet : RADIUS.card }, contrast && IC_HAIRLINE]}>
+    <View
+      testID={testID}
+      style={[
+        styles.card,
+        { borderRadius: compact ? RADIUS.sheet : RADIUS.card },
+        onSheet && { backgroundColor: Platform.OS === 'android' ? COLOR.surfaceSunken : MATERIAL.fillOnGlass },
+        contrast && IC_HAIRLINE,
+      ]}
+    >
       <Pressable
         onPress={onPress}
         disabled={!onPress}

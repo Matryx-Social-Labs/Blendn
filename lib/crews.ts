@@ -329,6 +329,8 @@ export const characters = (text: string): number => [...text].length
 export interface CrewForm {
   name: string
   bio: string
+  /** "Here for"; the server takes none, so absent is sent as absent. */
+  intent?: CrewIntent[]
   tags: string[]
   openToSolo: boolean
   inviteUserIds: string[]
@@ -337,6 +339,7 @@ export interface CrewForm {
 export type CreateCrewBody = {
   name: string
   bio?: string
+  intent?: CrewIntent[]
   tags: string[]
   openToSolo: boolean
   inviteUserIds: string[]
@@ -368,6 +371,7 @@ export function createCrewBody(form: CrewForm, consent: ConsentState): CreateCre
   return {
     name,
     ...(bio ? { bio } : {}),
+    ...(form.intent?.length ? { intent: form.intent } : {}),
     tags: form.tags,
     openToSolo: form.openToSolo,
     inviteUserIds: form.inviteUserIds,

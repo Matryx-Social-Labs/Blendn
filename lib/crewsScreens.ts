@@ -171,8 +171,8 @@ export const madeLine = (invited: number): string =>
  * details sentence), and the sentence belongs under the field it names.
  */
 export function textFieldOf(message: string): 'name' | 'bio' | null {
-  if (/crew.s name/i.test(message)) return 'name'
-  if (/crew.s bio|crew card/i.test(message)) return 'bio'
+  if (/crew(?:.s)? name/i.test(message)) return 'name'
+  if (/crew(?:.s)? bio|crew card/i.test(message)) return 'bio'
   return null
 }
 

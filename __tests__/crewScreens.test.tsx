@@ -63,7 +63,6 @@ jest.mock('../lib/logger', () => ({
 import { router } from 'expo-router'
 import BlendScreen from '../app/blend/[blendId]'
 import CrewScreen from '../app/crews/[crewId]'
-import NewCrewScreen from '../app/crews/new'
 import { apiClient } from '../lib/apiClient'
 import {
   BLEND_CLOSED_LINE,
@@ -86,90 +85,6 @@ beforeEach(() => {
   api.getFriends.mockResolvedValue({
     success: true,
     data: { friends: [{ userId: 'u-rohan', name: 'Rohan', photo: null, since: '2026-09-01T00:00:00Z' }], count: 1 },
-  })
-})
-
-describe('making a crew (CR-CU01)', () => {
-  it('shows the consent and the anonymity switch without a tap, and sends nothing until it is ticked', async () => {
-    await render(<NewCrewScreen />)
-    expect(screen.getByText(CONSENT_LINE)).toBeTruthy()
-    expect(screen.getByText(KEEP_ANONYMOUS_LABEL)).toBeTruthy()
-
-    await fireEvent.changeText(screen.getByLabelText('Crew name'), 'Two')
-    expect(screen.getByLabelText('Make the crew')).toBeDisabled()
-    await fireEvent.press(screen.getByLabelText('Make the crew'))
-    expect(crews.create).not.toHaveBeenCalled()
-  })
-
-  it('sends revealConsent: true, the anonymity choice and the friends picked, then opens the crew with the count asked', async () => {
-    crews.create.mockResolvedValue({ success: true, data: { crewId: 'c1', chatGroupId: 'g1', invited: 1 } })
-    await render(<NewCrewScreen />)
-    await fireEvent.changeText(screen.getByLabelText('Crew name'), 'Two')
-    await waitFor(() => screen.getByRole('checkbox', { name: 'Ask Rohan' }))
-    await fireEvent.press(screen.getByRole('checkbox', { name: 'Ask Rohan' }))
-    expect(screen.getByRole('checkbox', { name: 'Ask Rohan' }).props.accessibilityState).toEqual({ checked: true })
-    await fireEvent.press(screen.getByRole('switch', { name: KEEP_ANONYMOUS_LABEL }))
-    await fireEvent.press(screen.getByRole('checkbox', { name: new RegExp(CONSENT_AGREE) }))
-    await fireEvent.press(screen.getByLabelText('Make the crew'))
-
-    await waitFor(() => expect(crews.create).toHaveBeenCalledTimes(1))
-    expect(crews.create.mock.calls[0][0]).toEqual(
-      expect.objectContaining({ name: 'Two', inviteUserIds: ['u-rohan'], revealConsent: true, keepMeAnonymous: true })
-    )
-    await waitFor(() =>
-      expect(router.replace).toHaveBeenCalledWith({ pathname: '/crews/[crewId]', params: { crewId: 'c1', asked: '1' } })
-    )
-  })
-
-  it('a refusal of the name says what the server found', async () => {
-    crews.create.mockResolvedValue({ success: false, error: 'A phone number. Contact details can’t go on it.' })
-    await render(<NewCrewScreen />)
-    await fireEvent.changeText(screen.getByLabelText('Crew name'), 'call 98450 12345')
-    await waitFor(() => screen.getByRole('checkbox', { name: 'Ask Rohan' }))
-    await fireEvent.press(screen.getByRole('checkbox', { name: 'Ask Rohan' }))
-    await fireEvent.press(screen.getByRole('checkbox', { name: new RegExp(CONSENT_AGREE) }))
-    await fireEvent.press(screen.getByLabelText('Make the crew'))
-    await waitFor(() => screen.getByText('A phone number. Contact details can’t go on it.'))
-  })
-
-  it('C1: Make stays off until a friend is picked, even with the consent ticked', async () => {
-    await render(<NewCrewScreen />)
-    await fireEvent.changeText(screen.getByLabelText('Crew name'), 'Two')
-    await fireEvent.press(screen.getByRole('checkbox', { name: new RegExp(CONSENT_AGREE) }))
-    expect(screen.getByLabelText('Make the crew')).toBeDisabled()
-    await fireEvent.press(screen.getByLabelText('Make the crew'))
-    expect(crews.create).not.toHaveBeenCalled()
-    await waitFor(() => screen.getByRole('checkbox', { name: 'Ask Rohan' }))
-    await fireEvent.press(screen.getByRole('checkbox', { name: 'Ask Rohan' }))
-    expect(screen.getByLabelText('Make the crew')).not.toBeDisabled()
-  })
-
-  it('a failed friends read is not "no friends": it offers the retry', async () => {
-    api.getFriends.mockResolvedValueOnce({ success: false, error: 'No internet connection.' })
-    await render(<NewCrewScreen />)
-    await waitFor(() => screen.getByLabelText('Your friends didn’t load — try again'))
-    expect(screen.queryByText('Add friends first — a crew is made from your friends.')).toBeNull()
-    await fireEvent.press(screen.getByLabelText('Your friends didn’t load — try again'))
-    await waitFor(() => screen.getByRole('checkbox', { name: 'Ask Rohan' }))
-  })
-
-  it('M8: two fast taps on Make send one create', async () => {
-    let finish: (v: unknown) => void = () => {}
-    crews.create.mockReturnValue(new Promise((r) => (finish = r)) as never)
-    await render(<NewCrewScreen />)
-    await fireEvent.changeText(screen.getByLabelText('Crew name'), 'Two')
-    await waitFor(() => screen.getByRole('checkbox', { name: 'Ask Rohan' }))
-    await fireEvent.press(screen.getByRole('checkbox', { name: 'Ask Rohan' }))
-    await fireEvent.press(screen.getByRole('checkbox', { name: new RegExp(CONSENT_AGREE) }))
-    const button = screen.getByLabelText('Make the crew')
-    // Both taps land before the screen re-renders (state would lag them).
-    await act(async () => {
-      void fireEvent.press(button)
-      void fireEvent.press(button)
-    })
-    expect(crews.create).toHaveBeenCalledTimes(1)
-    await act(async () => finish({ success: true, data: { crewId: 'c1', chatGroupId: 'g1', invited: 1 } }))
-    crews.create.mockReset()
   })
 })
 

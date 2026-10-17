@@ -129,7 +129,7 @@ export type SheetAction = {
   loading?: boolean
   disabled?: boolean
   testID?: string
-} & Pick<ButtonProps, 'pressHaptic' | 'icon'>
+} & Pick<ButtonProps, 'pressHaptic' | 'icon' | 'refused'>
 
 export type SheetProps = {
   visible: boolean
