@@ -11,11 +11,13 @@ jest.mock('expo-location', () => ({
   hasServicesEnabledAsync: jest.fn(async () => true),
   requestForegroundPermissionsAsync: jest.fn(async () => ({ status: 'granted' })),
   getCurrentPositionAsync: jest.fn(),
-  Accuracy: { BestForNavigation: 6 },
+  getLastKnownPositionAsync: jest.fn(async () => null),
+  Accuracy: { High: 4, BestForNavigation: 6 },
 }))
 
 /* eslint-disable import/first */
 import * as Location from 'expo-location'
+import { Platform } from 'react-native'
 import { apiClient } from '../lib/apiClient'
 import { useGoLive } from '../lib/useGoLive'
 /* eslint-enable import/first */
@@ -36,6 +38,9 @@ async function goLiveOnce(showTray: jest.Mock) {
 }
 
 beforeEach(() => {
+  // The one-shot fix (Android's path). iOS's watch, and its bounded wait for a
+  // better fix, are pinned in locationFix.test.ts.
+  Object.defineProperty(Platform, 'OS', { get: () => 'android', configurable: true })
   ;(apiClient.goLive as jest.Mock).mockResolvedValue({ success: true, data: { venueDayId: 'd', expiresAt: 'x' } })
 })
 
@@ -54,7 +59,7 @@ it('a fix past the server ceiling, then "Try Again" with a good one, goes live (
   expect(apiClient.goLive).not.toHaveBeenCalled()
   const buttons = showTray.mock.calls[0][2] as { label: string; onPress: () => void }[]
   await act(async () => {
-    buttons.find((b) => b.label === 'Try Again')!.onPress()
+    buttons.find((b) => b.label === 'Try again')!.onPress()
     await new Promise((r) => setTimeout(r, 0))
   })
   expect(apiClient.goLive).toHaveBeenCalledTimes(1)
@@ -64,6 +69,6 @@ it('iOS Precise Location off is said as such, not "move for a better signal" (H4
   ;(Location.requestForegroundPermissionsAsync as jest.Mock).mockResolvedValueOnce({ status: 'granted', ios: { scope: 'whenInUse', accuracy: 'reduced' } })
   const showTray = jest.fn()
   await goLiveOnce(showTray)
-  expect(showTray.mock.calls[0][0]).toBe('Turn on Precise Location')
+  expect(showTray.mock.calls[0][0]).toBe('Precise location is off')
   expect(apiClient.goLive).not.toHaveBeenCalled()
 })

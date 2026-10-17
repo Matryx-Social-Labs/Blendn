@@ -41,11 +41,24 @@ export interface TonightEvent {
   going: boolean
   /** How many here share your taste; null when withheld, unknown, or not fetched. */
   tasteMatchCount: number | null
+  /** RSVPs, for the card's "N going" pill (Flow 4 Tonight #06); null until the detail answers (the list carries none). */
+  goingCount: number | null
 }
+
+/** What Tonight can say about your location (Flow 4 Tonight #10, R3-D4 4.7). */
+export type TonightLocation = 'on' | 'off' | 'approximate'
 
 export interface TonightState {
   status: 'loading' | 'ready' | 'error'
   events: TonightEvent[]
+  /**
+   * `off`: no permission, so the list is by city with no distances, said in a
+   * banner with Turn on (#10). `approximate`: iOS Precise Location is off, so
+   * no door can be checked (R3-D4 4.7). Never prompts: read, not asked.
+   */
+  location: TonightLocation
+  /** The last refresh failed and what is shown loaded earlier (#11, "Offline."). */
+  offline: boolean
   /** The event whose fence you are standing in, per the centre button's signal. */
   insideEventId: string | null
   refresh(): Promise<void>
@@ -58,14 +71,15 @@ const PREVIEW_TOP = 3
 const PULSE_PAGE = 20
 
 /** A fix only if the person already said yes. Never prompts. */
-async function quietLocation(): Promise<{ latitude: number; longitude: number } | null> {
+async function quietLocation(): Promise<{ coords: { latitude: number; longitude: number } | null; location: TonightLocation }> {
   try {
-    const { status } = await Location.getForegroundPermissionsAsync()
-    if (status !== 'granted') return null
+    const permission = await Location.getForegroundPermissionsAsync()
+    if (permission.status !== 'granted') return { coords: null, location: 'off' }
+    const location = permission.ios?.accuracy === 'reduced' ? 'approximate' : 'on'
     const last = await Location.getLastKnownPositionAsync()
-    return last?.coords ? { latitude: last.coords.latitude, longitude: last.coords.longitude } : null
+    return { coords: last?.coords ? { latitude: last.coords.latitude, longitude: last.coords.longitude } : null, location }
   } catch {
-    return null
+    return { coords: null, location: 'on' }
   }
 }
 
@@ -91,11 +105,14 @@ function toTonight(
     startsAt: live.start_time,
     endsAt: live.end_time ?? e.end_time,
     distanceKm,
-    hereCount: e.current_capacity || 0,
+    // Inside now (the Room's rule), never everybody who came; 0 from an older server.
+    hereCount: e.here_count ?? 0,
     // `eventFromApi` writes 0 for "no cap"; 0 is not a capacity anyone set.
     capacity: e.max_capacity > 0 ? e.max_capacity : null,
     going: e.is_favorited || goingIds.has(e.id),
     tasteMatchCount: null,
+    // The list's `goingCount` (RSVPs), the same number as the detail's `stats.rsvpCount`.
+    goingCount: e.going_count,
   }
 }
 
@@ -103,13 +120,15 @@ export function useTonight(): TonightState {
   const signal = useSyncExternalStore(subscribeRoomSignal, getRoomSignal, getRoomSignal)
   const [status, setStatus] = useState<TonightState['status']>('loading')
   const [events, setEvents] = useState<TonightEvent[]>([])
+  const [location, setLocation] = useState<TonightLocation>('on')
+  const [offline, setOffline] = useState(false)
   const [previews, setPreviews] = useState<Record<string, RoomPreview>>({})
   const loadIdRef = useRef(0)
   const eventsRef = useRef<TonightEvent[]>([])
 
   const load = useCallback(async (force: boolean) => {
     const loadId = ++loadIdRef.current
-    const [coords, stored, rsvps] = await Promise.all([
+    const [{ coords, location: where }, stored, rsvps] = await Promise.all([
       quietLocation(),
       readStoredCity(),
       // RSVPs are the other half of "yours". A failure only loses the sort.
@@ -128,13 +147,16 @@ export function useTonight(): TonightState {
       { force }
     )
     if (loadId !== loadIdRef.current) return
+    setLocation(where)
 
     if (!result.data) {
       Logger.warn('events', 'Tonight could not load events', { error: result.error })
-      // Keep what is on screen: a failed refresh is not "nothing on".
+      // Keep what is on screen: a failed refresh is not "nothing on", it is "offline" (#11).
       if (eventsRef.current.length === 0) setStatus('error')
+      else setOffline(true)
       return
     }
+    setOffline(false)
 
     /*
      * Hand the centre button what this fetch knows — but only with a fix. A
@@ -242,12 +264,10 @@ export function useTonight(): TonightState {
     () =>
       events.map((e) => {
         const preview = previews[e.id]
-        return preview
-          ? { ...e, hereCount: preview.hereCount, tasteMatchCount: preview.tasteMatchCount }
-          : e
+        return preview ? { ...e, hereCount: preview.hereCount, tasteMatchCount: preview.tasteMatchCount } : e
       }),
     [events, previews]
   )
 
-  return { status, events: merged, insideEventId, refresh }
+  return { status, events: merged, insideEventId, location, offline, refresh }
 }

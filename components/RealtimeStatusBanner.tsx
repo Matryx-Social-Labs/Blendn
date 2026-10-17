@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useSyncExternalStore } from 'react'
-import { Pressable, StyleSheet, Text, ViewStyle } from 'react-native'
+import type { ViewStyle } from 'react-native'
 import { connect, SocketConnectionStatus } from '../lib/socketClient'
 import { getNetworkState, subscribeNetworkState, type NetworkState } from '../lib/networkStatus'
 import Animated from 'react-native-reanimated'
-import { CONTROL, EMBER, EMBER_RADIUS, MAX_FONT_SCALE, OPACITY, SPACE, TYPE, tint } from '../lib/theme'
+import { Banner } from './ds/Banner'
 import { fadeInFast, fadeOutFast } from './motion/presence'
 
 /**
@@ -71,17 +71,11 @@ export default function RealtimeStatusBanner({
   const isReconnecting = status.state === 'reconnecting' || retrying
 
   /*
-   * What it means for the person, not which subsystem failed: "Realtime
-   * disconnected" named a socket. Offline is the error (actions will fail);
-   * a dropped socket is a warning (what is on screen just stops updating),
-   * so the two are tinted apart (docs/DESIGN_SYSTEM.md).
+   * What it means for the person, not which subsystem failed (the design's
+   * system banners, Flow 5): offline is the error (actions will fail); a
+   * dropped socket is a warning (what is on screen stops updating), tinted
+   * apart by the DS Banner. Try again is busy while a reconnect runs.
    */
-  const message = isOffline
-    ? "You're offline. Some actions won't work until you're back."
-    : isReconnecting
-    ? 'Reconnecting…'
-    : 'Live updates paused.'
-
   const handleRetry = async () => {
     if (isOffline || isReconnecting) return
     setRetrying(true)
@@ -93,55 +87,16 @@ export default function RealtimeStatusBanner({
   }
 
   return (
-    <Animated.View
-      entering={fadeInFast}
-      exiting={fadeOutFast}
-      style={[styles.container, isOffline && styles.offlineContainer, style]}
-      accessibilityLiveRegion="polite"
-    >
-      <Text style={styles.text}>{message}</Text>
-      {!isOffline && !isReconnecting && (
-        <Pressable
-          onPress={handleRetry}
-          accessibilityRole="button"
-          accessibilityLabel="Reconnect live updates"
-          hitSlop={SPACE.md}
-          style={({ pressed }) => [styles.retry, pressed && styles.pressed]}
-        >
-          <Text style={styles.retryText} maxFontSizeMultiplier={MAX_FONT_SCALE.label}>
-            TRY AGAIN
-          </Text>
-        </Pressable>
+    <Animated.View entering={fadeInFast} exiting={fadeOutFast} style={style}>
+      {isOffline ? (
+        <Banner kind="offline" text={OFFLINE} />
+      ) : (
+        <Banner kind="paused" text={PAUSED} action={{ label: 'Try again', onPress: handleRetry }} busy={isReconnecting} />
       )}
     </Animated.View>
   )
 }
 
-const styles = StyleSheet.create({
-  container: {
-    paddingVertical: SPACE.sm,
-    paddingHorizontal: SPACE.md,
-    borderRadius: EMBER_RADIUS.md,
-    backgroundColor: tint(EMBER.warning, 0.16),
-    borderWidth: 1,
-    borderColor: tint(EMBER.warning, 0.35),
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  offlineContainer: {
-    backgroundColor: tint(EMBER.destructive, 0.22),
-    borderColor: tint(EMBER.destructive, 0.5),
-  },
-  text: {
-    ...TYPE.meta,
-    color: EMBER.textPrimary,
-    flex: 1,
-  },
-  retry: { minHeight: CONTROL.sm, justifyContent: 'center', marginLeft: SPACE.sm },
-  retryText: {
-    ...TYPE.label,
-    color: EMBER.textPrimary,
-  },
-  pressed: { opacity: OPACITY.pressed },
-})
+/** The design's system banners (Flow 5 #12, #13). */
+export const OFFLINE = 'Offline. Some actions won’t work until you’re back.'
+export const PAUSED = 'Updates paused. Trying to reconnect.'

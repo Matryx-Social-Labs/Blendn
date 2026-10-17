@@ -1,6 +1,6 @@
 import { useIsFocused } from 'expo-router'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { AccessibilityInfo, Keyboard, Platform, Pressable, StyleSheet, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native'
+import { AccessibilityInfo, Dimensions, Keyboard, Platform, Pressable, StyleSheet, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native'
 import { useSharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -8,7 +8,7 @@ import { tabBarTop } from '../../app/(tabs)/_layout'
 import { NotificationBell } from '../pulse/NotificationBell'
 import { PulseTopBar, TOP_BAR_HEIGHT } from '../pulse/PulseTopBar'
 import { Text } from '../ui/Text'
-import { DRAWER_SEGMENTED_HEIGHT, drawerSnapPoints, snapOnKeyboard, type DrawerSnap } from '../../lib/home'
+import { DRAWER_SEGMENTED_HEIGHT, drawerSnapPoints, keyboardLeft, snapOnKeyboard, type DrawerSnap } from '../../lib/home'
 import { Logger } from '../../lib/logger'
 import { EMBER, EMBER_RADIUS, SPACE } from '../../lib/theme'
 import { HomeDrawer } from './HomeDrawer'
@@ -36,6 +36,13 @@ export interface HomeBrowse {
 type Segment = 'events' | 'places'
 
 /**
+ * Off the list, nothing closes the keyboard by itself: the list does it for
+ * its own surface (`keyboardShouldPersistTaps` in `events.tsx`), the map and
+ * the drawer's chrome call this. No-op with no keyboard up.
+ */
+const dismissKeyboard = () => Keyboard.dismiss()
+
+/**
  * The home screen: a map, and over it a drawer holding Events | Places (plan v2
  * step 2). PLACEHOLDER DESIGN — docs/PLACEHOLDER_SCREENS.md §8.
  *
@@ -52,7 +59,8 @@ type Segment = 'events' | 'places'
 export function HomeShell({
   renderEvents,
 }: {
-  renderEvents: (onBrowse: (browse: HomeBrowse) => void, visible: boolean) => ReactNode
+  /** `full`: the drawer all the way up and no keyboard, so the Pulse's first card is on screen and nobody is typing (its coach mark waits for it). */
+  renderEvents: (onBrowse: (browse: HomeBrowse) => void, visible: boolean, full: boolean) => ReactNode
 }) {
   const insets = useSafeAreaInsets()
   const { height } = useWindowDimensions()
@@ -97,20 +105,29 @@ export function HomeShell({
     return () => sub.remove()
   }, [])
 
+  /** Someone is typing (the Pulse's search): its coach mark never pops over them. */
+  const [keyboardUp, setKeyboardUp] = useState(false)
   // The Pulse's search sits in the drawer: typing opens it fully, so the field is not under the keyboard.
   useEffect(() => {
     if (!focused) return
-    const move = (event: 'show' | 'hide') =>
+    const move = (event: 'show' | 'hide') => {
+      setKeyboardUp(event === 'show')
       setSnap((current) => {
         const next = snapOnKeyboard({ snap: current, restore: restore.current }, event)
         restore.current = next.restore
         return next.snap
       })
+    }
     const show = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', () => move('show'))
-    const hide = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => move('hide'))
+    // Only a keyboard that actually left puts the drawer back: a frame change mid-typing is not one.
+    const hide = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', (e) => {
+      if (keyboardLeft(e, Dimensions.get('screen').height)) move('hide')
+    })
     return () => {
       show.remove()
       hide.remove()
+      // A hide missed while away must not keep the mark waiting for good.
+      setKeyboardUp(false)
     }
   }, [focused])
 
@@ -127,12 +144,15 @@ export function HomeShell({
 
   // The Pulse's media plays only while you can see it: its pane, the drawer open past peek, this tab.
   const pulseVisible = focused && segment === 'events' && snap !== 'peek'
-  const events = useMemo(() => renderEvents(setBrowse, pulseVisible), [renderEvents, pulseVisible])
+  const pulseFull = pulseVisible && snap === 'full' && !keyboardUp
+  const events = useMemo(() => renderEvents(setBrowse, pulseVisible, pulseFull), [renderEvents, pulseVisible, pulseFull])
 
   return (
     <View style={styles.root} onLayout={onLayout}>
+      {/* A touch on the map (or through the top bar, which lets touches by) puts the search's keyboard away. */}
       <View
         style={StyleSheet.absoluteFill}
+        onTouchStart={dismissKeyboard}
         importantForAccessibility={screenReader ? 'no-hide-descendants' : 'auto'}
         accessibilityElementsHidden={screenReader}
       >
@@ -161,6 +181,7 @@ export function HomeShell({
         points={points}
         snap={snap}
         onSnap={onSnap}
+        onChromeTouch={dismissKeyboard}
         header={
           <View style={styles.segmented} accessibilityRole="tablist">
             {(['events', 'places'] as const).map((s) => (

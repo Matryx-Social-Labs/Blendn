@@ -96,7 +96,7 @@ const UPCOMING_DAYS = [
         category: 'Networking',
         timeLabel: '8:00 AM',
         placeLabel: 'Third Wave, Indiranagar',
-        joinedCount: 142,
+        peopleLabel: '142 going',
         distanceLabel: '1.2 km',
       },
       {
@@ -105,7 +105,7 @@ const UPCOMING_DAYS = [
         category: 'Music',
         timeLabel: '9:30 PM',
         placeLabel: 'The Humming Tree',
-        joinedCount: 64,
+        peopleLabel: '64 going',
         distanceLabel: '2.1 km',
       },
     ],
@@ -120,7 +120,7 @@ const UPCOMING_DAYS = [
         category: 'Spoken word',
         timeLabel: '7:00 PM',
         placeLabel: 'Atta Galatta',
-        joinedCount: 38,
+        peopleLabel: '38 here now',
         distanceLabel: '4.8 km',
       },
     ],
@@ -234,7 +234,7 @@ export default function PulsePreview() {
                     imageUrl={null}
                     timeLabel={e.timeLabel}
                     placeLabel={e.placeLabel}
-                    joinedCount={e.joinedCount}
+                    peopleLabel={e.peopleLabel}
                     distanceLabel={e.distanceLabel}
                     onPress={() => {}}
                     onToggleFavorite={() => {}}

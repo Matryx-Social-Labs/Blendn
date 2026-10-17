@@ -1,6 +1,5 @@
-import { Ionicons } from '@expo/vector-icons'
 import { useEffect, useState } from 'react'
-import { Linking, Pressable, StyleSheet, View } from 'react-native'
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native'
 
 import {
   COMMUNITY_GUIDELINES_URL,
@@ -9,8 +8,10 @@ import {
   roomGuidelinesKey,
 } from '../../lib/communityGuidelines'
 import { Logger } from '../../lib/logger'
-import { EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, TYPE } from '../../lib/theme'
-import { Text } from '../ui/Text'
+import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE, TYPE } from '../../lib/design/tokens'
+import { OPACITY } from '../../lib/theme'
+import { font, minTarget, useBoldText } from '../ds/shared'
+import { Icon } from '../ui/Icon'
 
 /**
  * The ask at the top of an event room's chat: this room is anonymous, the
@@ -22,6 +23,12 @@ import { Text } from '../ui/Text'
  *
  * Nothing renders until the flag has been read, so a room you already
  * dismissed in does not flash the banner on the way in.
+ *
+ * Owner override of Flow 5 room #04 (2026-10-16): centred — the glyph above, the sentence and its actions centred under it.
+ * Owner ruling (2026-10-16): "community guidelines" is a link in the copy itself — white, underlined (§4 links are white;
+ * underlined always here, where the words around it are white too) — and it replaces the separate "Community guidelines"
+ * action. It closes the copy as its own line, so it is one focusable link with a 44 pt target (a nested Text link can't take
+ * a hitSlop).
  */
 export function RoomGuidelinesBanner({ userId, chatRoomId }: { userId?: string; chatRoomId?: string }) {
   // The room it is showing for: a different room is hidden until its own read lands.
@@ -38,6 +45,7 @@ export function RoomGuidelinesBanner({ userId, chatRoomId }: { userId?: string; 
     }
   }, [userId, chatRoomId])
 
+  const bold = useBoldText()
   if (!userId || !chatRoomId || shownFor !== roomGuidelinesKey(userId, chatRoomId)) return null
 
   const dismiss = () => {
@@ -53,31 +61,32 @@ export function RoomGuidelinesBanner({ userId, chatRoomId }: { userId?: string; 
 
   return (
     <View style={styles.root} testID="room-guidelines-banner" accessibilityRole="summary">
-      <Ionicons name="shield-checkmark-outline" size={ICON.md} color={EMBER.textSecondary} />
+      <Icon name="shield" size={ICON.control} />
       <View style={styles.copy}>
-        <Text variant="meta" color={EMBER.textPrimary}>
-          This room is anonymous. Be kind, keep it safe — people here are real.
-        </Text>
+        <Text textBreakStrategy="balanced" style={[font('meta', bold), styles.ink, styles.centre]}>This room is anonymous. Be kind, keep it safe — people here are real.</Text>
+        <Pressable
+          onPress={openGuidelines}
+          hitSlop={(minTarget() - TYPE.meta.lineHeight) / 2}
+          accessibilityRole="link"
+          accessibilityLabel="Community guidelines"
+          accessibilityHint="Opens the guidelines in your browser"
+          testID="room-guidelines-link"
+        >
+          {({ pressed }) => (
+            <Text style={[font('meta', bold), styles.ink, styles.centre, pressed && styles.pressed]}>
+              Read the <Text style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.link]}>community guidelines</Text>.
+            </Text>
+          )}
+        </Pressable>
         <View style={styles.actions}>
           <Pressable
-            onPress={openGuidelines}
-            hitSlop={8}
-            accessibilityRole="link"
-            accessibilityLabel="Community guidelines"
-            accessibilityHint="Opens the guidelines in your browser"
-            style={({ pressed }) => [pressed && styles.pressed]}
-          >
-            <Text style={styles.action}>COMMUNITY GUIDELINES</Text>
-          </Pressable>
-          <Pressable
             onPress={dismiss}
-            hitSlop={8}
+            hitSlop={(minTarget() - TYPE.meta.lineHeight) / 2}
             accessibilityRole="button"
             accessibilityLabel="Got it"
             accessibilityHint="Hides this for this room"
-            style={({ pressed }) => [pressed && styles.pressed]}
           >
-            <Text style={styles.action}>GOT IT</Text>
+            <Text style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>Got it</Text>
           </Pressable>
         </View>
       </View>
@@ -86,22 +95,19 @@ export function RoomGuidelinesBanner({ userId, chatRoomId }: { userId?: string; 
 }
 
 const styles = StyleSheet.create({
-  // The info banner of the design system: `surface`, a `separator` hairline.
+  // Flow 5 room #04: a surface card in the feed's column, never over a message; centred (owner override).
   root: {
-    flexDirection: 'row',
+    alignItems: 'center',
     gap: SPACE.md,
-    marginHorizontal: GUTTER,
-    marginTop: SPACE.sm,
     paddingVertical: SPACE.md,
     paddingHorizontal: SPACE.lg,
-    borderRadius: EMBER_RADIUS.md,
-    backgroundColor: EMBER.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: EMBER.separator,
+    borderRadius: RADIUS.rowInCard,
+    backgroundColor: COLOR.surface,
   },
-  copy: { flex: 1, gap: SPACE.sm },
-  actions: { flexDirection: 'row', justifyContent: 'space-between' },
-  // Text actions, not buttons: the composer's send is this screen's one accent.
-  action: { ...TYPE.label, color: EMBER.textPrimary },
+  copy: { alignSelf: 'stretch', alignItems: 'center', gap: SPACE.sm },
+  centre: { textAlign: 'center' },
+  actions: { flexDirection: 'row', justifyContent: 'center', gap: SPACE.lg },
+  ink: { color: COLOR.textPrimary },
+  link: { color: COLOR.link, textDecorationLine: 'underline' },
   pressed: { opacity: OPACITY.pressed },
 })

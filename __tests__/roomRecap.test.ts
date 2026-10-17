@@ -39,6 +39,7 @@ describe('roomRecap', () => {
       eventId: 'e1',
       title: 'Warehouse night',
       timeSpent: '2h 30m',
+      minutes: 150,
       matched: 2,
     })
   })
@@ -50,5 +51,6 @@ describe('roomRecap', () => {
 
   it('leaves the time out rather than inventing one', () => {
     expect(roomRecap({ event, checkedInAt: null, people: [] }, endMs)?.timeSpent).toBeNull()
+    expect(roomRecap({ event, checkedInAt: null, people: [] }, endMs)?.minutes).toBeNull()
   })
 })

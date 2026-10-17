@@ -1,3 +1,4 @@
+import { DISC_FRAMES, discLook } from '../components/ds/discMotion'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 
@@ -106,40 +107,28 @@ describe('the glow carries the checked-in state on its own', () => {
 })
 
 describe('the live state is a still dot, not a glow', () => {
+  /*
+   * The bar's disc is the redesign's (components/ds/Disc, Flow 4 T1–T10): the
+   * states are still frames, so each reads in a screenshot and with Reduce
+   * Motion on. Motion cannot carry a state.
+   */
   const bar = readFileSync(join(__dirname, '..', 'app/(tabs)/_layout.tsx'), 'utf8')
-  const style = (name: string) => {
-    const from = bar.slice(bar.indexOf(`${name}: {`))
-    return from.slice(0, from.indexOf('},'))
-  }
+  const disc = readFileSync(join(__dirname, '..', 'components/ds/Disc.tsx'), 'utf8')
+
+  it('the bar draws the redesign disc, not its own button', () => {
+    expect(bar).toContain('<TabBar')
+    expect(bar).toMatch(/disc=\{\{ target, onPress: \(\) => openBlendn\(\)/)
+    expect(bar).not.toContain('const RoomButton')
+  })
 
   it('draws nothing on a loop', () => {
-    /*
-     * It was a halo breathing out to 1.42x for as long as somebody was in a
-     * room, around a ring, over a warm bloom. Motion cannot carry a state —
-     * it is invisible in a screenshot and with Reduce Motion on — and the
-     * stack of glows read as generated.
-     */
-    expect(bar).not.toContain('Animated.loop')
-    expect(bar).not.toContain('styles.halo')
-    expect(bar).not.toContain('liveRing')
+    expect(disc).not.toContain('withRepeat')
+    expect(disc).not.toContain('Animated.loop')
   })
 
-  it('casts no bloom under the button', () => {
-    const button = style('centreButton')
-    expect(button).not.toContain('shadowColor')
-    expect(button).not.toContain('elevation')
-  })
-
-  it('tells being in a room apart from standing outside one, in colour', () => {
-    expect(bar).toContain("dot === 'live' ? styles.liveDotLive : styles.liveDotInvite")
-    expect(style('liveDotLive')).not.toBe(style('liveDotInvite'))
-  })
-
-  it('keeps the dot off the button, so the disc is not eaten', () => {
-    // RN grows borders inward; a border on `centreButton` would shrink the
-    // gradient and the mark on it. The dot is its own absolute view.
-    expect(style('liveDot')).toContain("position: 'absolute'")
-    expect(style('centreButton')).not.toContain('borderWidth')
+  it('tells being in a room apart from standing outside one: a green dot, a hollow ring', () => {
+    expect(DISC_FRAMES[discLook({ state: 'live', eventId: 'e', badge: 0 })]).toMatchObject({ dot: 1, hollow: 0 })
+    expect(DISC_FRAMES[discLook({ state: 'checkin', eventId: 'e', badge: 0 })]).toMatchObject({ dot: 0, hollow: 1 })
   })
 })
 
@@ -165,8 +154,8 @@ describe('the Pulse no longer carries the checked-in strip', () => {
     expect(pulse).toContain('title: `Check out of ${event.title}?`')
     expect(pulse).toContain('void handleCheckOut(event)')
     const blendn = readFileSync(join(__dirname, '..', 'components/blendn/BlendnScreen.tsx'), 'utf8')
-    expect(blendn).toContain('onPress={confirmLeave}')
-    expect(blendn).toMatch(/label: 'Check out',[\s\S]*?void leave\(\)/)
+    expect(blendn).toContain('onPress={() => setConfirmingOut(true)}')
+    expect(blendn).toMatch(/label: 'Check out', kind: 'destructive'[\s\S]*?void checkOut\(\)/)
     expect(readFileSync(join(__dirname, '..', 'lib/useRoomControls.ts'), 'utf8')).toContain(
       'checkOutOf(eventId)'
     )

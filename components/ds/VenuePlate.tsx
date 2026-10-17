@@ -3,9 +3,11 @@ import { StyleSheet, View } from 'react-native'
 import { PALETTE_GLYPH, VENUE_PLATES } from '../../lib/design/tokens'
 import { Icon, type IconName } from '../ui/Icon'
 
-type PlateType = keyof typeof VENUE_PLATES
+/** A restaurant reuses the café's pair, no new colour (owner's ruling on A87). */
+const PLATE_COLOURS = { ...VENUE_PLATES, restaurant: VENUE_PLATES.cafe }
+type PlateType = keyof typeof PLATE_COLOURS
 
-/** Each type's outline glyph (the design export's sets.js `PLATES`). */
+/** Each type's outline glyph (the design export's sets.js `PLATES`; Restaurant's from Flow 11). */
 export const VENUE_PLATE_GLYPHS = {
   brewery: 'beer',
   gardenBar: 'tree-palm',
@@ -13,6 +15,7 @@ export const VENUE_PLATE_GLYPHS = {
   club: 'disc-3',
   liveMusic: 'music-2',
   cafe: 'coffee',
+  restaurant: 'utensils',
 } as const satisfies Record<PlateType, IconName>
 
 /** The design's proportions: the glyph at 40% of the plate (of 120 when it fills), corners at 20%. */
@@ -49,8 +52,8 @@ export function VenuePlate({
   radius?: number
   testID?: string
 }) {
-  const plate: PlateType = Object.hasOwn(VENUE_PLATES, type) ? (type as PlateType) : 'bar'
-  const [a, b] = VENUE_PLATES[plate]
+  const plate: PlateType = Object.hasOwn(PLATE_COLOURS, type) ? (type as PlateType) : 'bar'
+  const [a, b] = PLATE_COLOURS[plate]
   return (
     <View
       testID={testID}

@@ -14,7 +14,9 @@ says so to testers. `app/forgot-password.tsx` is no longer a placeholder: it
 was designed to match sign-in on 2026-09-28, with a "Check your inbox" state
 (Open mail app, Resend with a 30-second cooldown). `app/rate/[eventId].tsx` and
 `app/event-preferences/[eventId].tsx` are no longer placeholders either (both
-2026-09-28); their sections below say what was decided.
+2026-09-28); their sections below say what was decided. The Board
+(`app/board/[eventId].tsx`, §6) took the Flow 4 design on 2026-10-16; its rules
+below still hold.
 
 **Read `blendn-admin/docs/DESIGN_HANDOFF.md` first.** It explains the product's
 five non-negotiable rules and why they exist. This file is the per-screen
@@ -714,6 +716,7 @@ empty states. Design ticket: SCRUM-541.
 | **A screen reader gets the list open** | With VoiceOver/TalkBack on, the drawer opens at `full`; the handle is an adjustable control ("Collapsed / Half open / Expanded") |
 | **Switching never loses your place** | Both panes stay mounted once opened. Places reads afresh each time it is opened (a venue an event took over must not linger from a cache) |
 | **The keyboard never covers the search** | Typing in the Pulse's search opens the drawer fully; closing the keyboard puts it back |
+| **A tap outside the search closes the keyboard** | Anywhere: the list, a card (which still opens on that tap), a scroll, the map, the drawer's handle and segments. The search's clear (×) keeps it up. `__tests__/pulseNav.test.ts` |
 | **Every row is reachable at half** | The pane is as tall as what shows at the settled height |
 | **44pt targets** | The handle and each segment |
 | **Media plays only when seen** | The Pulse's hero pauses on Places, at peek, and on another tab |

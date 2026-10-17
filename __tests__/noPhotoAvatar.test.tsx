@@ -1,5 +1,5 @@
 /*
- * A person with no photo is initials, not a spinner.
+ * A person with no photo is their creature, not a spinner.
  *
  * The Banter handed `OptimizedImage` an empty source for everyone who had not
  * set a photo, and `OptimizedImage` showed its spinner until an image loaded or
@@ -19,8 +19,6 @@ jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(),
 
 // eslint-disable-next-line import/first
 import { OptimizedImage } from '../components/OptimizedImage'
-// eslint-disable-next-line import/first
-import { initialsOf } from '../lib/initials'
 
 const read = (...p: string[]) => readFileSync(join(__dirname, '..', ...p), 'utf8')
 
@@ -36,27 +34,22 @@ describe('OptimizedImage with nothing to load', () => {
   })
 })
 
-describe('initialsOf', () => {
-  it.each([
-    ['Vikram Shetty', 'VS'],
-    ['vishruth', 'V'],
-    ['  Anna  Maria  Lopez ', 'AL'],
-    ['', '?'],
-  ])('%s → %s', (name, expected) => {
-    expect(initialsOf(name)).toBe(expected)
-  })
-})
-
 describe('the Banter row', () => {
-  it('draws initials, never an image, for a person with no photo', () => {
-    const src = read('components', 'banter', 'BanterSections.tsx')
-    expect(src).not.toMatch(/source=\{item\.avatarUrl \?\? ''\}/)
-    expect(src).toMatch(/initialsOf\(/)
+  /*
+   * Since the Flow 5 redesign there is one avatar family: a person is their
+   * photo or, with none, their creature (the DS Avatar). Never an image with
+   * an empty source.
+   */
+  it('draws the creature, never an image, for a person with no photo', () => {
+    const src = read('components', 'banter', 'BanterParts.tsx')
+    expect(src).not.toMatch(/source=\{\{ uri: [^}]*\?\? ''/)
+    expect(src).toContain('face.photo ? <Avatar size={ROW_AVATAR} kind="photo" uri={face.photo} /> : <Avatar size={ROW_AVATAR} kind="creature" pseudonym={face.pseudonym} />')
   })
 
-  it('the DM header uses the same initials', () => {
+  it('the DM header draws them the same way', () => {
     const src = read('app', 'private-chat', '[conversationId].tsx')
-    expect(src).not.toMatch(/const getInitials =/)
-    expect(src).toMatch(/initialsOf\(/)
+    // directHeaderAvatar decides (socialPolish.test.ts); "initials" draws the creature.
+    expect(src).toContain('directHeaderAvatar(reveal, otherImage)')
+    expect(src).toContain("head?.kind === 'photo' ? { kind: 'photo', uri: head.url } : { kind: 'creature'")
   })
 })

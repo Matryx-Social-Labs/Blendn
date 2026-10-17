@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ComponentProps, type ComponentRef, type ReactNode, type RefObject } from 'react'
 import { AccessibilityInfo, Platform, ScrollView, StyleSheet, Text, View } from 'react-native'
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated'
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated'
 
 import ScalePress from '../motion/ScalePress'
 import { Icon, type IconName } from '../ui/Icon'
@@ -10,8 +10,8 @@ import { useReducedMotion } from '../../lib/motion'
 import { Avatar } from './Avatar'
 import { Button } from './Button'
 import { InterestChip } from './Chip'
+import { CrewEmblem } from './CrewEmblem'
 import type { Face } from './Facepile'
-import { Spinner } from './Loader'
 import { PresenceDot } from './MonoFamily'
 import { Sheet } from './Sheet'
 import { CONTROL_FONT_CAP, focusRing, font, minTarget, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
@@ -41,10 +41,26 @@ export type PersonCardContentProps = {
   /** Matched and friend: checked in here now, so the card says so. A here-now card always is. */
   here?: boolean
   state?: PersonState
+  /**
+   * The states one at a time, as the gallery draws them, or each on its own:
+   * in a room someone can be liked, waved at and requested all at once, and
+   * one never hides another. Either form sets it.
+   */
+  liked?: boolean
+  requested?: boolean
+  /** A wave on its way: the hand waves (#51). */
+  waving?: boolean
+  waved?: boolean
   /** They waved at you this long ago ("2 min"): the still chip, and Wave reads Wave back (4.2). Kept on the phone, gone after 10 minutes. */
   wavedAtYou?: string
   /** A like or wave the server refused (4.3): one neutral line, never naming the action, maybe with its action. No haptic. */
   refusal?: { text: string; action?: { label: string; onPress: () => void } }
+  /**
+   * A crew of yours is here (R2-D1, Flow 10 §10.7): the like is the crew's,
+   * "Like for {crew}" with its emblem, and "Like as yourself" (`onLike`) under
+   * the row. The note says who they would see.
+   */
+  crewLike?: { name: string; emblemSeed?: string; onPress: () => void }
   onLike?: () => void
   onWave?: () => void
   /** The ConnectSheet: a request that reveals you; a friend's DM for a friend. */
@@ -94,8 +110,13 @@ export function PersonCardContent({
   variant,
   here = false,
   state = 'none',
+  liked = false,
+  requested = false,
+  waving = false,
+  waved = false,
   wavedAtYou,
   refusal,
+  crewLike,
   onLike,
   onWave,
   onMessage,
@@ -109,7 +130,11 @@ export function PersonCardContent({
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const reduceMotion = useReducedMotion()
-  const likedStyle = useLikedPop(state, reduceMotion)
+  const isLiked = liked || state === 'liked'
+  const isRequested = requested || state === 'requested'
+  const waveBusy = waving || state === 'waveBusy'
+  const isWaved = waved || state === 'waved'
+  const likedStyle = useLikedPop(isLiked, reduceMotion)
 
   // 4.3: the refusal is read as it arrives, or a screen reader hears nothing happen.
   const refusalText = refusal?.text
@@ -146,9 +171,11 @@ export function PersonCardContent({
         ? null
         : variant === 'friend'
           ? `Message opens your chat with ${name}.`
-          : state === 'requested'
+          : isRequested
             ? `Request sent to ${name}. They’ll see your name and photo.`
-            : `${state === 'waved' && variant === 'here' ? 'Waved. ' : ''}Message sends a request and reveals you to ${name}.`
+            : crewLike && !isLiked && (variant === 'here' || variant === 'was')
+              ? `A crew like is shown to ${name} as ${crewLike.name}, never as you.`
+              : `${isWaved && variant === 'here' ? 'Waved. ' : ''}Message sends a request and reveals you to ${name}.`
 
   const circle = (icon: IconName, label: string, onPress?: () => void, busy = false) => (
     <Control
@@ -161,7 +188,8 @@ export function PersonCardContent({
       accessibilityState={{ busy, disabled: busy }}
       style={[styles.circle, { backgroundColor: panel }]}
     >
-      {busy ? <Spinner /> : <Icon name={icon} size={ICON.control} />}
+      {/* Sending a wave: the hand waves (#51, owner-approved for the busy state), never a spinner. */}
+      {busy ? <WavingHand testID={id('hand-waving')} /> : <Icon name={icon} size={ICON.control} />}
     </Control>
   )
 
@@ -230,7 +258,7 @@ export function PersonCardContent({
         {variant === 'matched' ? (
           <Button label="Say hi" onPress={onSayHi} style={styles.grow} testID={id('say-hi')} />
         ) : variant === 'here' || variant === 'was' ? (
-          state === 'liked' ? (
+          isLiked ? (
             <Animated.View
               testID={id('liked')}
               accessible
@@ -244,6 +272,20 @@ export function PersonCardContent({
                 Liked
               </Text>
             </Animated.View>
+          ) : crewLike ? (
+            <Button
+              label={`Like for ${crewLike.name}`}
+              leading={crewLike.emblemSeed ? <CrewEmblem seed={crewLike.emblemSeed} size={ICON.nav} /> : undefined}
+              icon={crewLike.emblemSeed ? undefined : 'heart'}
+              pressHaptic={false}
+              accessibilityHint={`${name} sees ${crewLike.name}, never you, and only if they like back.`}
+              onPress={() => {
+                H.like()
+                crewLike.onPress()
+              }}
+              style={styles.grow}
+              testID={id('like-crew')}
+            />
           ) : (
             <Button
               label="Like"
@@ -261,14 +303,14 @@ export function PersonCardContent({
         ) : null}
 
         {variant === 'here' ? (
-          state === 'waved' ? (
+          isWaved ? (
             <View testID={id('waved')} accessible accessibilityLabel="Waved" style={[styles.pill, styles.liked]}>
               <Icon name="check" size={ICON.control} color={COLOR.ink} active />
               <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('button', bold), styles.onWhite]}>
                 Waved
               </Text>
             </View>
-          ) : wavedAtYou && state !== 'waveBusy' ? (
+          ) : wavedAtYou && !waveBusy ? (
             <Control
               testID={id('wave-back')}
               radius={RADIUS.capsule}
@@ -283,11 +325,11 @@ export function PersonCardContent({
               </Text>
             </Control>
           ) : (
-            circle('hand', `Wave at ${name}`, onWave, state === 'waveBusy')
+            circle('hand', `Wave at ${name}`, onWave, waveBusy)
           )
         ) : null}
 
-        {variant === 'pre' || variant === 'matched' ? null : state === 'requested' ? (
+        {variant === 'pre' || variant === 'matched' ? null : isRequested ? (
           <View accessible accessibilityLabel={`Request sent to ${name}`} style={[styles.pill, styles.grow, { backgroundColor: panel }]}>
             <Icon name="check" size={ICON.control} color={COLOR.textSecondary} />
             <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('button', bold), styles.secondary]}>
@@ -295,11 +337,32 @@ export function PersonCardContent({
             </Text>
           </View>
         ) : (
-          <Button label="Message" kind="secondary" onGlass onPress={onMessage} style={styles.grow} testID={id('message')} />
+          <Button
+            label="Message"
+            kind="secondary"
+            onGlass
+            accessibilityHint={variant === 'friend' ? undefined : 'Sends a request, which shows them your name and photo.'}
+            onPress={onMessage}
+            style={styles.grow}
+            testID={id('message')}
+          />
         )}
 
         <View style={styles.end}>{circle('ellipsis', `Block or report ${name}`, onMore)}</View>
       </View>
+
+      {crewLike && !isLiked && (variant === 'here' || variant === 'was') ? (
+        <View style={styles.center}>
+          <TextAction
+            label="Like as yourself"
+            onPress={() => {
+              H.like()
+              onLike?.()
+            }}
+            testID={id('like-as-yourself')}
+          />
+        </View>
+      ) : null}
 
       {refusal ? (
         <View style={styles.refusal}>
@@ -317,17 +380,36 @@ export function PersonCardContent({
   )
 }
 
+/** #51: a wave's hand rotates ±14° twice over 600 ms, once. Reduce Motion: still. */
+const WAVE_DEGREES = 14
+const WAVE_MS = 600
+const WAVE_TURNS = 2
+
+function WavingHand({ testID }: { testID?: string }) {
+  const reduceMotion = useReducedMotion()
+  const t = useSharedValue(0)
+  useEffect(() => {
+    if (!reduceMotion) t.set(withTiming(1, { duration: WAVE_MS, easing: Easing.linear }))
+  }, [reduceMotion, t])
+  const turn = useAnimatedStyle(() => ({ transform: [{ rotate: `${WAVE_DEGREES * Math.sin(t.get() * Math.PI * 2 * WAVE_TURNS)}deg` }] }))
+  return (
+    <Animated.View testID={testID} style={turn}>
+      <Icon name="hand" size={ICON.control} />
+    </Animated.View>
+  )
+}
+
 /** #15: Like turns to Liked with a pop, 0.85 → 1 on `M.pop`; Reduce Motion places it. */
-function useLikedPop(state: PersonState, reduceMotion: boolean) {
+function useLikedPop(liked: boolean, reduceMotion: boolean) {
   const scale = useSharedValue(1)
-  const last = useRef(state)
+  const last = useRef(liked)
   useEffect(() => {
     const was = last.current
-    last.current = state
-    if (reduceMotion || was === state || state !== 'liked') return
+    last.current = liked
+    if (reduceMotion || was === liked || !liked) return
     scale.set(LIKE_POP_FROM)
     scale.set(withSpring(1, SPRING.pop))
-  }, [state, reduceMotion, scale])
+  }, [liked, reduceMotion, scale])
   return useAnimatedStyle(() => ({ transform: [{ scale: scale.get() }] }))
 }
 
@@ -384,10 +466,16 @@ function TextAction({ label, onPress, testID }: { label: string; onPress?: () =>
  * on opening; it rises on `M.travel` (the Sheet). The face's travel from the
  * grid cell (#33) is the screen's.
  */
-export function PersonCard({ visible, onClose, testID, ...card }: PersonCardContentProps & { visible: boolean; onClose: () => void }) {
+export function PersonCard({
+  visible,
+  onClose,
+  onDismissed,
+  testID,
+  ...card
+}: PersonCardContentProps & { visible: boolean; onClose: () => void; onDismissed?: () => void }) {
   const head = useRef<ComponentRef<typeof View>>(null)
   return (
-    <Sheet visible={visible} onClose={onClose} detents={['medium', 'tall']} focusRef={head} testID={testID}>
+    <Sheet visible={visible} onClose={onClose} onDismissed={onDismissed} detents={['medium', 'tall']} focusRef={head} testID={testID}>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollBody}>
         <PersonCardContent {...card} onClose={onClose} headRef={head} testID={testID && `${testID}-card`} />
       </ScrollView>

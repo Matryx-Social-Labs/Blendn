@@ -38,3 +38,9 @@ export function PhotoScrim({ contrast = false, ...rest }: ViewProps & { contrast
   const foot = Math.min(1, PHOTO_SCRIM.foot + (contrast ? PHOTO_SCRIM.contrast : 0))
   return <LinearGradient {...rest} colors={[tint(COLOR.ink, 0), tint(COLOR.ink, foot)]} />
 }
+
+/** A photo's head under the status bar (Flow 5 Room info hero: 45% → 0), so the clock reads over any cover. */
+export const STATUS_SCRIM = 0.45
+export function StatusScrim(props: ViewProps) {
+  return <LinearGradient {...props} colors={[tint(COLOR.ink, STATUS_SCRIM), tint(COLOR.ink, 0)]} />
+}

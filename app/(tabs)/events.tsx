@@ -1,5 +1,4 @@
 import { ScreenProfiler } from '../../lib/perf'
-import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Ionicons } from '@expo/vector-icons'
 import * as Location from 'expo-location'
 import { router, useScrollToTop } from 'expo-router'
@@ -8,8 +7,11 @@ import {
   Dimensions,
   AppState,
   FlatList,
+  Keyboard,
   type LayoutChangeEvent,
   Linking,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   RefreshControl,
   StyleSheet,
   Text,
@@ -27,7 +29,7 @@ import {
   FEATURED_CARD_GAP,
   featuredCardLayout,
 } from '../../components/pulse/FeaturedCard'
-import { PulseHeader } from '../../components/pulse/PulseHeader'
+import { PULSE_HEADER_HEIGHT, PulseHeader } from '../../components/pulse/PulseHeader'
 import { CityArtBanner, CityArtCard } from '../../components/cityArt/CityArtCard'
 import { drawableCityArt } from '../../components/cityArt/drawable'
 import { TAB_BAR_CLEARANCE, tabBarTop } from './_layout'
@@ -68,8 +70,8 @@ import { formatDistance, getDistanceMetres } from '../../lib/geo'
 import { publishRoomSignal } from '../../lib/roomSignal'
 import {
   featuredDateLabel,
-  joinedCount,
   nextUpLabel,
+  peopleLabel,
   placeLabel,
   groupByDay,
   timeLabel,
@@ -86,6 +88,8 @@ import { formatTimeRange } from '../../lib/time'
 import { useLiveSync } from '../../lib/useLiveSync'
 import { useMinimumVisible } from '../../lib/useMinimumVisible'
 import { useAuth } from '../../lib/useAuth'
+import { markCoachUsed, useCoachMark } from '../../lib/coachMarks'
+import { useCoachMarkSpot } from '../../components/ds/CoachMarkHost'
 import { CONTROL, EMBER, EMBER_FONTS, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE, tint } from '../../lib/theme'
 import { RisingSheet, SheetFlatList, SheetModal } from '../../components/motion/RisingSheet'
 import { Grabber } from '../../components/ui/Grabber'
@@ -124,6 +128,17 @@ const MAIN_GAP = SPACE.xxl
 /** A section's own rows; a vertical stack of cards inside one. */
 const SECTION_GAP = SPACE.lg
 const STACK_GAP = SPACE.xl
+
+/**
+ * The Pulse's coach mark: the long-press on a card, which nothing on screen
+ * says exists (docs/NAVIGATION.md, "Coach marks"). Its id is the key the old
+ * "Got it" banner stored, so whoever dismissed that is not taught again.
+ */
+const PULSE_COACH = 'events_preview_hint'
+const PULSE_COACH_TEXT = 'Hold an event to save, share or preview it.'
+
+/** Started (today's session, `lib/eventSession.ts`) and not over: the card says who is here. */
+const onNow = (event: Event) => Date.parse(liveWindow(event).start_time) <= Date.now() && !sessionOver(event)
 
 const SECTION_MOTION_BASE_DELAY = 34
 const SECTION_MOTION_STAGGER = 44
@@ -274,7 +289,7 @@ const proximityFor = (
   return proximityMap
 }
 
-function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => void; visible: boolean }) {
+function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrowse) => void; visible: boolean; full: boolean }) {
   const { user, loading: authLoading } = useAuth()
   const insets = useSafeAreaInsets()
   // The hero card sits under the home drawer's header too (components/home/HomeDrawer.tsx).
@@ -365,7 +380,6 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
   const [cityPickerOpen, setCityPickerOpen] = useState(false)
   // Bumped by every city the person chooses, so the map moves even to the city it already shows; `here` when they chose where they stand.
   const [cityPick, setCityPick] = useState({ n: 0, here: false })
-  const [showPreviewHint, setShowPreviewHint] = useState(false)
   const listRef = useRef<any>(null)
   // Tapping Pulse while already on it goes back to the top (the bar emits `tabPress`).
   useScrollToTop(listRef)
@@ -376,6 +390,19 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
     setBannersHeight((prev) => (prev === h ? prev : h))
   }, [])
   const [netError, setNetError] = useState<string | null>(null)
+  /**
+   * The list at its top, so the first card is on screen when the coach mark
+   * starts. Once it is up it rides with the card, so it stops listening.
+   */
+  const [listAtTop, setListAtTop] = useState(true)
+  const listOffsetRef = useRef(0)
+  /** The first card the page draws: the coach mark's hole. */
+  const coachTarget = useRef<View>(null)
+  const coachShowingRef = useRef(false)
+  const onListScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    listOffsetRef.current = e.nativeEvent.contentOffset.y
+    if (!coachShowingRef.current) setListAtTop(e.nativeEvent.contentOffset.y < PULSE_HEADER_HEIGHT)
+  }, [])
 
   /*
    * Search, in two pieces of state rather than one.
@@ -468,7 +495,6 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
   const checkOutInFlightRef = useRef<Set<string>>(new Set())
   const lastFetchLocationRef = useRef<string>('none')
   const initialLoadedRef = useRef(false)
-  const previewHintSeenRef = useRef(false)
 
   const closeTray = useCallback(() => {
     setTrayState((prev) => ({ ...prev, visible: false }))
@@ -478,52 +504,25 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
     setTrayState({ ...next, visible: true })
   }, [])
 
-  const previewHintKey = useMemo(
-    () => (user?.id ? `events_preview_hint_seen_${user.id}` : null),
-    [user?.id]
-  )
-
-  const markPreviewHintSeen = useCallback(() => {
-    if (previewHintSeenRef.current) return
-    previewHintSeenRef.current = true
-    setShowPreviewHint(false)
-    if (!previewHintKey) return
-    AsyncStorage.setItem(previewHintKey, '1').catch(() => {})
-  }, [previewHintKey])
-
-  useEffect(() => {
-    let mounted = true
-    const hydratePreviewHint = async () => {
-      if (!previewHintKey) {
-        previewHintSeenRef.current = true
-        if (mounted) setShowPreviewHint(false)
-        return
-      }
-      try {
-        const seen = await AsyncStorage.getItem(previewHintKey)
-        const hasSeen = seen === '1'
-        previewHintSeenRef.current = hasSeen
-        if (mounted) setShowPreviewHint(!hasSeen)
-      } catch {
-        previewHintSeenRef.current = false
-        if (mounted) setShowPreviewHint(true)
-      }
-    }
-    hydratePreviewHint()
-    return () => {
-      mounted = false
-    }
-  }, [previewHintKey])
-
-  // Memoized callbacks to prevent re-creation
-  const handleEventPress = useCallback((event: Event) => {
-    // Warm the event detail cache before navigation (fire-and-forget)
+  /**
+   * The event page's own read, into the client's cache (fire-and-forget): on a
+   * card's press-in (~100 ms before the press), on the press, and for the first
+   * featured card once the Pulse settles. Replaces Tonight's per-card detail N+1.
+   */
+  const warmEvent = useCallback((event: Event) => {
     apiClient.getEvent(event.id, {
       include: 'interestedUsers',
       interestedLimit: 6,
       lat: userLocation?.latitude,
       lon: userLocation?.longitude,
     }).catch(() => {})
+  }, [userLocation?.latitude, userLocation?.longitude])
+
+  // Memoized callbacks to prevent re-creation
+  const handleEventPress = useCallback((event: Event) => {
+    // The list lets a card's tap through (`keyboardShouldPersistTaps`), so the card puts the search's keyboard away itself.
+    Keyboard.dismiss()
+    warmEvent(event)
 
     if (event.cover_image_url) {
       const hero = getOptimizedImageUrl(event.cover_image_url, {
@@ -553,7 +552,7 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
         interestCount: String(latestInterestCountsRef.current[event.id] ?? event.favorite_count ?? 0),
       } as any,
     })
-  }, [userLocation, latestInterestCountsRef])
+  }, [latestInterestCountsRef, warmEvent])
 
   /*
    * Re-reads the active check-ins after a check-in or out. Nothing here draws
@@ -706,7 +705,7 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
   }, [showTray, closeTray, latestCheckinStatusesRef, loadCheckedInEvents, loadCheckinStatusesBatch])
 
   const handleEventPreview = useCallback((event: Event) => {
-    markPreviewHintSeen()
+    markCoachUsed(PULSE_COACH)
     const checkinStatus = latestCheckinStatusesRef.current[event.id]
     const proximity = latestProximityDataRef.current[event.id]
     const isCheckedIn = checkinStatus?.status === 'checked_in'
@@ -793,7 +792,7 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
       buttons,
       size: 'expanded',
     })
-  }, [closeTray, toggleInterest, handleEventPress, handleCheckOut, showTray, markPreviewHintSeen, latestCheckinStatusesRef, latestProximityDataRef, latestInterestStatusesRef])
+  }, [closeTray, toggleInterest, handleEventPress, handleCheckOut, showTray, latestCheckinStatusesRef, latestProximityDataRef, latestInterestStatusesRef])
 
   const getCurrentLocationQuietly = useCallback(async () => {
     try {
@@ -1439,10 +1438,11 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
             retry={pulls}
             timeLabel={nextUpLabel(live.start_time, live.end_time)}
             placeLabel={placeLabel(event)}
-            joinedCount={joinedCount(event)}
+            peopleLabel={peopleLabel(event, onNow(event))}
             distanceLabel={browsingHere ? formatDistance(proximityData[event.id]?.distance_km ?? event.distance) : null}
             note={note}
             onPress={() => handleEventPress(event)}
+            onPressIn={() => warmEvent(event)}
             onLongPress={() => handleEventPreview(event)}
             isFavorited={!!interestStatuses[event.id]}
             favoriteBusy={!!interestPending[event.id]}
@@ -1451,7 +1451,7 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
         </View>
       </RevealRow>
     )
-  }, [checkinStatuses, proximityData, interestStatuses, interestPending, browsingHere, handleEventPress, handleEventPreview, toggleInterest, pulls])
+  }, [checkinStatuses, proximityData, interestStatuses, interestPending, browsingHere, handleEventPress, handleEventPreview, warmEvent, toggleInterest, pulls])
 
   // Memoized keyExtractor
   const keyExtractor = useCallback((item: Event) => item.id, [])
@@ -1513,10 +1513,12 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
         playlist: feedPlaylist(item.media, item.cover_image_url),
         dateLabel: featuredDateLabel(item.start_time),
         placeLabel: placeLabel(item),
+        peopleLabel: peopleLabel(item, onNow(item)),
         onPress: () => handleEventPress(item),
+        onPressIn: () => warmEvent(item),
         onLongPress: () => handleEventPreview(item),
       })),
-    [featuredItems, handleEventPress, handleEventPreview]
+    [featuredItems, handleEventPress, handleEventPreview, warmEvent]
   )
 
   const upcomingStackItems = useMemo(() => {
@@ -1594,45 +1596,54 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
           than as an invitation to scroll. One card fills the width; two or more
           go back to peeking.
         */}
-        {featuredItems.length === 1 ? (
-          <View style={[styles.featuredBleed, { paddingHorizontal: featured.inset }]}>
-            <FeaturedCard {...featuredCards[0]} isActive={visible} width={featured.width} />
-          </View>
-        ) : (
-          <FlatList
-            horizontal
-            data={featuredCards}
-            keyExtractor={featuredKeyExtractor}
-            showsHorizontalScrollIndicator={false}
-            /*
-              Full-bleed, then inset by the row's own 24.
+        <View>
+          {featuredItems.length === 1 ? (
+            <View style={[styles.featuredBleed, { paddingHorizontal: featured.inset }]}>
+              <View ref={coachTarget}>
+                <FeaturedCard {...featuredCards[0]} isActive={visible} width={featured.width} />
+              </View>
+            </View>
+          ) : (
+            <FlatList
+              horizontal
+              data={featuredCards}
+              keyExtractor={featuredKeyExtractor}
+              showsHorizontalScrollIndicator={false}
+              /*
+                Full-bleed, then inset by the row's own 24.
 
-              Frame `1141:4660` — the carousel's mask — sits at section-x `-12`,
-              cancelling `Main`'s gutter so the row is the full 390, with card 1
-              starting at x=24 inside it. Built inside the gutter instead, the
-              card began at 12 and the scroll area ended 12pt short of the
-              screen: not centred, and a carousel that looks clipped rather than
-              one running off the edge.
+                Frame `1141:4660` — the carousel's mask — sits at section-x `-12`,
+                cancelling `Main`'s gutter so the row is the full 390, with card 1
+                starting at x=24 inside it. Built inside the gutter instead, the
+                card began at 12 and the scroll area ended 12pt short of the
+                screen: not centred, and a carousel that looks clipped rather than
+                one running off the edge.
 
-              `snapToInterval` is unchanged and still correct — the leading
-              padding is part of the content, so card N's left edge lands at
-              offset `N × (width + gap)` and snapping puts it back at x=24.
-            */
-            style={styles.featuredBleed}
-            contentContainerStyle={{ paddingHorizontal: featured.inset }}
-            snapToAlignment="start"
-            snapToInterval={featured.width + FEATURED_CARD_GAP}
-            decelerationRate="fast"
-            viewabilityConfig={featuredViewability}
-            onViewableItemsChanged={onFeaturedViewable}
-            renderItem={({ item, index }) => (
-              <FeaturedCard {...item} isActive={visible && index === featuredActiveIndex} width={featured.width} />
-            )}
-            // Hoisted: an inline component is a new type every render, which
-            // remounts every separator rather than reusing them.
-            ItemSeparatorComponent={FeaturedSeparator}
-          />
-        )}
+                `snapToInterval` is unchanged and still correct — the leading
+                padding is part of the content, so card N's left edge lands at
+                offset `N × (width + gap)` and snapping puts it back at x=24.
+              */
+              style={styles.featuredBleed}
+              contentContainerStyle={{ paddingHorizontal: featured.inset }}
+              // As the list it sits in: left at the default, this row would eat a card's first tap with the keyboard up.
+              keyboardShouldPersistTaps="handled"
+              snapToAlignment="start"
+              snapToInterval={featured.width + FEATURED_CARD_GAP}
+              decelerationRate="fast"
+              viewabilityConfig={featuredViewability}
+              onViewableItemsChanged={onFeaturedViewable}
+              renderItem={({ item, index }) => (
+                // The first card is the coach mark's target.
+                <View ref={index === 0 ? coachTarget : undefined}>
+                  <FeaturedCard {...item} isActive={visible && index === featuredActiveIndex} width={featured.width} />
+                </View>
+              )}
+              // Hoisted: an inline component is a new type every render, which
+              // remounts every separator rather than reusing them.
+              ItemSeparatorComponent={FeaturedSeparator}
+            />
+          )}
+        </View>
       </View>
     )
   }
@@ -1653,28 +1664,31 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
           date is said once, above its events, so each card only needs a time.
         */}
         <View style={styles.dayGroups}>
-          {groupByDay(upcomingStackItems).map((group) => (
+          {groupByDay(upcomingStackItems).map((group, groupIndex) => (
             <View key={group.key} style={styles.dayGroup}>
               <DayHeading title={group.title} detail={group.weekday} />
-              {group.items.map((item) => (
-                <UpcomingCard
-                  key={`up-${item.id}`}
-                  title={item.title}
-                  category={item.category || null}
-                  imageUrl={item.cover_image_url}
-                  retry={pulls}
-                  timeLabel={timeLabel(item.start_time)}
-                  placeLabel={placeLabel(item)}
-                  joinedCount={joinedCount(item)}
-                  // Distance from you only means something in the city you are in;
-                  // browsing elsewhere it read "6412km away". Same rule as Nearby.
-                  distanceLabel={browsingHere ? formatDistance(item.distance) : null}
-                  onPress={() => handleEventPress(item)}
-                  onLongPress={() => handleEventPreview(item)}
-                  isFavorited={!!interestStatuses[item.id]}
-                  favoriteBusy={!!interestPending[item.id]}
-                  onToggleFavorite={() => toggleInterest(item)}
-                />
+              {group.items.map((item, index) => (
+                // The page's first card when nothing is featured: the coach mark's target.
+                <View key={`up-${item.id}`} ref={featuredItems.length === 0 && groupIndex === 0 && index === 0 ? coachTarget : undefined}>
+                  <UpcomingCard
+                    title={item.title}
+                    category={item.category || null}
+                    imageUrl={item.cover_image_url}
+                    retry={pulls}
+                    timeLabel={timeLabel(item.start_time)}
+                    placeLabel={placeLabel(item)}
+                    peopleLabel={peopleLabel(item, onNow(item))}
+                    // Distance from you only means something in the city you are in;
+                    // browsing elsewhere it read "6412km away". Same rule as Nearby.
+                    distanceLabel={browsingHere ? formatDistance(item.distance) : null}
+                    onPress={() => handleEventPress(item)}
+                    onPressIn={() => warmEvent(item)}
+                    onLongPress={() => handleEventPreview(item)}
+                    isFavorited={!!interestStatuses[item.id]}
+                    favoriteBusy={!!interestPending[item.id]}
+                    onToggleFavorite={() => toggleInterest(item)}
+                  />
+                </View>
               ))}
             </View>
           ))}
@@ -1781,6 +1795,52 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
 
   const isLoading = authLoading || loading
   const showLoadingSkeleton = useMinimumVisible(isLoading, 720)
+  // The first featured card, warm once the Pulse has settled: the likeliest tap.
+  const firstFeatured = showLoadingSkeleton ? undefined : featuredItems[0]
+  useEffect(() => {
+    if (firstFeatured) warmEvent(firstFeatured)
+    // Once per card, not per location fix.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firstFeatured?.id])
+
+  /*
+   * The coach mark, under the first card the page draws (Featured's first, or
+   * Upcoming's when nothing is featured), caret up: above it, two lines at
+   * 360 dp covered the search bar (R4.1). Ready only with the drawer all the
+   * way up and the list at its top -- at half the first card sits under the
+   * tab bar -- and with none of this screen's sheets open. The bell's sheet is
+   * the shell's and is not counted; it covers the page while it is up anyway.
+   */
+  const coach = useCoachMark(PULSE_COACH, {
+    ready:
+      full &&
+      listAtTop &&
+      !showLoadingSkeleton &&
+      !isNarrowed &&
+      upcomingItems.length > 0 &&
+      !trayState.visible &&
+      !filterSheetOpen &&
+      !cityPickerOpen,
+  })
+  useEffect(() => {
+    coachShowingRef.current = coach.visible
+  }, [coach.visible])
+  /*
+   * Drawn by the root's CoachMarkHost, over everything, with the first card as
+   * the hole. Below the featured card it would sit on the tab bar (that card is
+   * sized to reach it), so the list scrolls the card up by the overlap first.
+   */
+  useCoachMarkSpot(coach.visible, {
+    target: coachTarget,
+    text: PULSE_COACH_TEXT,
+    place: 'below',
+    radius: featuredItems.length > 0 ? EMBER_RADIUS.card : EMBER_RADIUS.md,
+    onDismiss: coach.dismiss,
+    onLost: coach.lose,
+    bottomLimit: tabBarTop(SCREEN_HEIGHT, insets.bottom),
+    onOverflow: (px) => listRef.current?.scrollToOffset({ offset: listOffsetRef.current + px, animated: true }),
+    testID: 'pulse-coach-mark',
+  })
   useEffect(() => {
     if (!showLoadingSkeleton && mainListData.length > 0) mainRowsRevealPending.current = false
   }, [showLoadingSkeleton, mainListData.length])
@@ -1801,21 +1861,6 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
    */
   const banners = (
           <View style={styles.filtersBar} onLayout={onBannersLayout}>
-            {showPreviewHint && (
-              <Animated.View entering={fadeInFast} exiting={fadeOutFast} style={styles.bannerInfo}>
-                <Text style={styles.bannerText}>
-                  Tip: Long-press any event card for quick actions.
-                </Text>
-                <TouchableOpacity
-                  accessibilityRole="button"
-                  accessibilityLabel="Dismiss quick actions tip"
-                  onPress={markPreviewHintSeen}
-                  style={[styles.bannerCta, styles.bannerCtaOnInfo]}
-                >
-                  <Text style={styles.bannerCtaText}>Got it</Text>
-                </TouchableOpacity>
-              </Animated.View>
-            )}
             {/*
               Offline is worth saying here. A dead socket is not.
 
@@ -1972,6 +2017,7 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
           estimatedItemSize={200}
           onEndReachedThreshold={0.5}
           onEndReached={fetchMore}
+          onScroll={onListScroll}
           refreshControl={
             <RefreshControl refreshing={refreshing && !isLoading} onRefresh={onRefresh} tintColor={EMBER.textSecondary} />
           }
@@ -1992,6 +2038,15 @@ function EventsInner({ onBrowse, visible }: { onBrowse: (browse: HomeBrowse) => 
             },
           ]}
           showsVerticalScrollIndicator={false}
+          /*
+            The search lives in this list's header. A tap on anything that is
+            not a control closes its keyboard, a control (a card, the search's
+            clear) gets its tap on the first try, and a scroll closes it too.
+            Outside the list, the map and the drawer's chrome close it
+            (`HomeShell`).
+          */
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           enableVirtualization={!isLoading && mainListData.length > 20}
           /*
            * 4, not 10.
@@ -2538,6 +2593,7 @@ const styles = StyleSheet.create({
   /** Upcoming: days a section's gap apart, rows within a day close together. */
   dayGroups: { gap: SPACE.xl },
   dayGroup: { gap: SPACE.md },
+  /** The coach mark, under the card it names: its caret's tip just clear of the card's edge; the design's 300 at most. */
   /** A row in the list under the sections: the Upcoming stack's spacing. */
   mainRow: { paddingBottom: SPACE.md },
   /**
@@ -2828,6 +2884,9 @@ export default function Events() {
 
 /**
  * The Pulse, as the home drawer's Events pane. Module-level, so only `visible`
- * (its pane showing, the drawer past peek) re-renders it, never a drag.
+ * (its pane showing, the drawer past peek) and `full` (the drawer all the way
+ * up, for the coach mark) re-render it: a settle, never a drag.
  */
-const renderPulse = (onBrowse: (browse: HomeBrowse) => void, visible: boolean) => <EventsInner onBrowse={onBrowse} visible={visible} />
+const renderPulse = (onBrowse: (browse: HomeBrowse) => void, visible: boolean, full: boolean) => (
+  <EventsInner onBrowse={onBrowse} visible={visible} full={full} />
+)

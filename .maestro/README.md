@@ -37,6 +37,11 @@ people your session creates get a passphrase you choose.
 | `c21-blend-push` | TQ-C20 (review H2) | none — signed in, in an open Blend; notifications granted once via `blendn://onboarding/notifications`; fire `xcrun simctl push` with the payload in the file while it waits |
 | `c22-plus-paywall` | TQ-C21 (MN-M01, step 11) | `MAESTRO_EMAIL MAESTRO_PASSWORD` (env) + `PLACE LAT LNG` — a fenced place in a city where Blendn+ is **gated**, an account with no Plus; a fresh launch (one automatic paywall per session); one 20-minute window, ~16 min; StoreKit config on the sim for prices; nothing is bought; the read-back is in the file |
 | `c12-delete-account` | SCRUM-232 | `EMAIL PASSWORD` — **a person you created, never a lane attendee** |
+| `flow5-01-banter` | Flow 5 redesign | `MAESTRO_EMAIL MAESTRO_PASSWORD` (env) + `PEER SEARCH ROOM` — the Banter's header, search, and a room opened from its row; writes nothing |
+| `flow5-02-room` | Flow 5 redesign | `MAESTRO_EMAIL MAESTRO_PASSWORD` (env) + `ROOM THEIRS SENDER MESSAGE` — send; long-press → react / copy / reply; swipe to reply; tap the sender → their card; needs a live event with someone else's message in its room |
+| `flow5-03-failed-send` | Flow 5 redesign | `MAESTRO_EMAIL MAESTRO_PASSWORD` (env) + `ROOM MESSAGE` — three links refused and kept, retried, deleted from the Not sent sheet; Android: airplane mode, then retry delivers |
+| `flow5-04-dm` | Flow 5 redesign | `MAESTRO_EMAIL MAESTRO_PASSWORD` (env) + `PEER MESSAGE` — a DM send and its receipt, then the reveal (a match the phone has not revealed to) |
+| `flow5-05-dm-photo` | Flow 5 redesign | `MAESTRO_EMAIL MAESTRO_PASSWORD MAESTRO_PEER_TOKEN` (env) + `PEER CONVERSATION_ID API CAPTION` — after `flow5-04`: the other side reveals through the API, then attach, preview with a caption, send, the viewer. The system picker is tapped by point |
 
 `smoke/launch.yaml` is not a journey: it is the release smoke test that
 `npm run ship:local` runs on every build before submitting it (launch from
@@ -44,7 +49,7 @@ clean, see the signed-out screen). It sits outside `journeys/` so
 `maestro test .maestro` skips it. See `docs/RELEASING.md`.
 
 Subflows: `sign-in`, `sign-out`, `dismiss-tip` (the Pulse tip and RN's LogBox
-eat taps), `keyboard-done` (the keyboard's bottom-right key after every typed
+eat taps), `flow5-open` (launch, sign in from `MAESTRO_*`, open the Banter), `keyboard-done` (the keyboard's bottom-right key after every typed
 field, per platform — Maestro's `hideKeyboard` sends BACK on Android when no
 keyboard is up, and leaves the app).
 

@@ -27,224 +27,110 @@ const codeOnly = (src: string) =>
     .join('\n')
 
 describe('the bubble points at its sender', () => {
-  const BUBBLE = () => read('components/chat/ChatBubble.tsx')
+  /*
+   * The room is pseudonymous: a sender is their creature, seeded on the
+   * pseudonym, and a photo only where the room names them (the server sends
+   * `image: null` in an event room). Since Flow 5 the bubble is the DS
+   * ChatBubble, and the rows hand it the one seed rule.
+   */
+  const ROW = () => codeOnly(read('components/chat/RoomFeed.tsx'))
 
-  it('never draws a photograph', () => {
-    /*
-     * The frame draws faces. This room is pseudonymous until somebody chooses
-     * otherwise, so a photo here undoes what the room's pseudonyms exist to protect.
-     * `pseudonymAvatar` is the only avatar source allowed on this surface.
-     */
-    const src = codeOnly(BUBBLE())
-    expect(src).toContain('pseudonymAvatar(markSeed(senderName, `${roomId}:${senderId}`))')
-    expect(src).not.toMatch(/OptimizedImage|<Image|profile_photos/)
+  it('seeds the creature on the pseudonym, the rule every surface shares — never on the id alone', () => {
+    const src = ROW()
+    expect(src).toContain('pseudonym: markSeed(m.sender_name, `${roomId}:${m.sender_id}`)')
+    expect(src).not.toMatch(/pseudonym: m\.sender_id/)
   })
 
-  it('seeds the avatar on the pseudonym, the rule every surface shares — never on the id alone', () => {
-    /*
-     * One person was a dolphin on the Room grid (seeded on the name) and a
-     * hedgehog in this bubble (seeded on room + id). `markSeed` is the one
-     * rule: the pseudonym, unique inside a room and different at the next
-     * event. A placeholder name ("Attendee") falls back to room + sender, so
-     * two unresolved people never share a creature.
-     *
-     * The id alone stays forbidden: `lib/pseudonymAvatar.ts` — "Never feed it
-     * a user id: that is stable forever and would rebuild exactly the
-     * cross-event identity the pseudonyms exist to prevent."
-     */
-    const src = codeOnly(BUBBLE())
-    expect(src).not.toContain('pseudonymAvatar(senderId)')
-    expect(src).toContain('pseudonymAvatar(markSeed(senderName, `${roomId}:${senderId}`))')
+  it('never hands the room bubble a photo', () => {
+    expect(ROW()).not.toMatch(/photoUri|profile_photos|photo=\{/)
   })
 
   it('counts reactions without naming who left them', () => {
-    /*
-     * Who reacted is exactly the kind of thing this room does not disclose.
-     *
-     * This used to assert `senders.length` — the component honouring the rule
-     * by convention while the prop was `Record<emoji, senderIds[]>` and carried
-     * the identities anyway. The server now sends a tally, so the names are not
-     * in the payload for the next reader to find, and the assertion moves to
-     * the shape rather than to one component's restraint.
-     */
-    const src = codeOnly(BUBBLE())
-    expect(src).toContain('count > 1')
-    expect(src).toMatch(/reactions\?: \{ emoji: string; count: number/)
-    // Nothing that could hold a person: no id list, no name list, no map of who.
-    expect(src).not.toMatch(/senders/)
-    expect(src).not.toMatch(/Record<string, string\[\]>/)
+    // The tally carries counts and yours; nothing that could hold a person.
+    const src = ROW()
+    expect(src).toContain('(r ?? []).map((x) => ({ emoji: x.emoji, count: x.count, mine: !!x.mine }))')
+    expect(codeOnly(read('components/ds/ChatBubble.tsx'))).not.toMatch(/senders|Record<string, string\[\]>/)
   })
 })
 
 describe('a paid message cannot be mistaken for the room’s own voice', () => {
-  const BROADCAST = () => read('components/chat/BroadcastNotice.tsx')
-
-  it('labels sponsored messages in words', () => {
-    // A paid message styled like an organiser's is an advert wearing the
-    // venue's voice. The label is not decoration.
-    expect(codeOnly(BROADCAST())).toContain("'SPONSORED'")
+  it('draws a broadcast full width through the DS notice, labelled', () => {
+    const src = codeOnly(read('components/chat/RoomFeed.tsx'))
+    expect(src).toMatch(/item\.message_type === 'announcement' \|\| item\.message_type === 'sponsored'[\s\S]{0,400}<BroadcastNotice kind=\{item\.message_type\}/)
+    expect(codeOnly(read('components/ds/BroadcastNotice.tsx'))).toContain("`${announcement ? 'Announcement' : 'Sponsored'} · ${from}`.toUpperCase()")
   })
 
-  it('lifts the organisation out of the announcement’s label line', () => {
-    /*
-     * Driven on Android: an organiser's announcement rendered as the
-     * ANNOUNCEMENT notice with "📢 [Announcement from Nightshift Collective]"
-     * as its first line -- the label twice, the emoji once. The name is the
-     * part worth keeping; it becomes "ANNOUNCEMENT · NIGHTSHIFT COLLECTIVE".
-     */
-    const src = codeOnly(read('components/chat/BroadcastNotice.tsx'))
-    expect(src).toMatch(/\/\^📢 \\\[Announcement from \(\[\^\\\]\]\+\)\\\]\\n\//)
-    expect(src).toContain('`ANNOUNCEMENT · ${from[1].toUpperCase()}`')
-    expect(src).toContain('text.slice(from[0].length)')
-  })
-
-  it('keeps the room’s bright rail off sponsored content', () => {
-    /*
-     * The bright rail is the room's own voice and marks an organiser speaking.
-     * Sponsored gets a deliberately dimmer treatment so it cannot borrow it --
-     * so the bright rail must be reachable only on the announcement branch.
-     */
-    const src = codeOnly(BROADCAST())
-    // The branch itself, not the order the two names happen to appear in.
-    expect(src).toMatch(
-      /sponsored \? \([\s\S]{0,200}railSponsored[\s\S]{0,200}\) : \([\s\S]{0,300}styles\.rail\b/
-    )
-    // The rail is full-strength text colour; the sponsored rail is not.
-    expect(src).toMatch(/rail: \{[^}]*backgroundColor: EMBER\.textPrimary/)
-    expect(src).not.toMatch(/railSponsored: \{[^}]*EMBER\.textPrimary/)
-    // Neither borrows the accent: the composer's send is this screen's one.
-    expect(src).not.toMatch(/EMBER\.accent/)
-    // And the bright rail is reachable from nowhere else on this surface.
-    expect(src.match(/styles\.rail\b/g)).toHaveLength(1)
+  it('lifts the organiser out of the announcement’s prefix, and never prints the sponsored one', () => {
+    const src = codeOnly(read('lib/chatFeed.ts'))
+    expect(src).toContain('const BROADCAST_HEAD = ')
+    expect(src).toContain("kind === 'sponsored' ? 'Partner' : fallbackFrom")
   })
 })
 
 describe('the composer offers only what the server accepts', () => {
-  it('has no attach button', () => {
+  it('offers a photo in a DM that can take one, and never in a room', () => {
     /*
-     * Attendees post no media -- only sponsored broadcasts may carry it. A
-     * button that opens a picker whose result the server rejects is worse than
-     * no button.
+     * Attendees post no media in a room (R9; the server refuses it, admin
+     * #697). A DM takes a photo once both are named to each other.
      */
-    const src = codeOnly(read('components/chat/ChatComposer.tsx'))
-    expect(src).not.toMatch(/ImagePicker|launchImageLibrary|DocumentPicker|attach/i)
+    expect(codeOnly(read('app/chat/[id].tsx'))).not.toMatch(/onAttach|ImagePicker|pickImage/)
+    const dm = codeOnly(read('app/private-chat/[conversationId].tsx'))
+    expect(dm).toContain('const photosAllowed = !!reveal && (!reveal.pseudonymous || (reveal.youRevealed && reveal.theyRevealed))')
+    expect(dm).toContain('onAttach={photosAllowed ? () => void attach() : undefined}')
   })
 })
 
-describe('the screen renders through the rebuilt components', () => {
+describe('the screen renders through the redesign', () => {
   const SCREEN = () => codeOnly(read('app/chat/[id].tsx'))
+  const ROW = () => codeOnly(read('components/chat/RoomFeed.tsx'))
 
-  it('draws every message kind through components/chat', () => {
-    const src = SCREEN()
-    for (const name of ['ChatBubble', 'BroadcastNotice', 'SystemNotice', 'TypingIndicator', 'ChatComposer']) {
+  it('draws every message kind through the DS chat components', () => {
+    const src = SCREEN() + ROW()
+    for (const name of ['ChatBubble', 'BroadcastNotice', 'SystemLine', 'TypingIndicator', 'Composer', 'DayPill', 'LongPressMenu']) {
       expect(src).toContain(`<${name}`)
     }
   })
 
-  it('still handles announcements and sponsored messages', () => {
-    // Broadcasts arrive down the same socket as everything else and were the
-    // easiest thing to drop in a render swap -- three features went that way
-    // on the Scene.
-    expect(SCREEN()).toContain("item.message_type === 'announcement'")
+  it('recognises a sponsored send on both paths, because its `type` is its media kind', () => {
+    const src = codeOnly(read('lib/roomMessages.ts'))
+    expect(src).toContain('msg.metadata?.sponsored_message_id')
+    expect(src).toContain("message.kind === 'sponsored'")
   })
 
-  it("recognises a sponsored send on both paths, because its `type` is its media kind", () => {
-    /*
-     * Driven on iOS: the scheduler's send rendered as a bubble from "Attendee"
-     * with a "📣 [Sponsored]" line, not as the SPONSORED notice. `type` on an
-     * ad is `text` or `image`; the marker is `metadata.sponsored_message_id`
-     * in history and `kind` on the wire. Either mapping missing reproduces it.
-     */
-    const src = SCREEN()
-    expect(src).toContain("msg.metadata?.sponsored_message_id")
-    expect(src).toContain("data.message.kind === 'sponsored'")
-    // And the label line is not printed twice under the SPONSORED label.
-    expect(codeOnly(read('components/chat/BroadcastNotice.tsx'))).toMatch(/text\.replace\(\/\^📣 \\\[Sponsored\\\]\\n\//)
-  })
-
-  it('lets VoiceOver pick Report on its own', () => {
-    /*
-     * Driven with Maestro on iOS: the long-press menu read as one node,
-     * "↩️ Reply 📋 Copy 🚩 Report", because the scrim TouchableOpacity is
-     * accessible by default and iOS collapses everything inside it. The
-     * safety action was unreachable to a screen reader.
-     *
-     * The menu is now a sheet step (`lib/sheet.ts`), and every tray button
-     * is its own labelled button.
-     */
-    const src = SCREEN()
-    for (const label of ['Reply', 'Copy', 'Report']) {
-      expect(src).toContain(`label: '${label}'`)
-    }
-    const tray = read('components/ActionTray.tsx')
-    expect(tray).toContain('accessibilityRole="button"')
-    expect(tray).toContain('accessibilityLabel={button.label}')
-  })
-
-  it('offers Report on their messages only', () => {
-    // Reporting your own message is not a thing; offering it read as broken.
-    expect(codeOnly(SCREEN())).toMatch(/if \(delivered && !mine\) \{[\s\S]{0,200}label: 'Report'/)
-  })
-
-  it('keeps day separators and system messages in one shape', () => {
-    /*
-     * Both are the room narrating rather than a person speaking. Drawn
-     * differently, a date reads as something somebody said.
-     */
-    const src = SCREEN()
-    expect(src).toContain('<SystemNotice label={item.label} />')
-    expect(src).toContain('<SystemNotice label={item.message_text} />')
+  it('keeps day separators and system messages in the room’s own voice', () => {
+    expect(SCREEN()).toContain('<DayPill text={item.label} />')
+    expect(ROW()).toContain('<SystemLine text={item.message_text} />')
   })
 
   it('puts typing in the feed rather than above the composer', () => {
-    // Pinned, it was equally present whether you were reading the newest
-    // message or two hundred back -- a note about right now, over history.
-    expect(SCREEN()).toMatch(/ListFooterComponent=\{[\s\S]{0,400}TypingIndicator/)
+    expect(SCREEN()).toMatch(/ListFooterComponent=\{[\s\S]{0,300}<TypingIndicator/)
   })
 
   it('sends the reply’s parent, and reads it back under the server’s name', () => {
-    /*
-     * Driven on two phones: a reply drew its quote on the sender's optimistic
-     * bubble and nowhere else. `sendChatMessage` never carried `parentId`, the
-     * history mapper read two field names the server has never sent
-     * (`parent_id` and `parent_message` are what arrive), and a live reply was
-     * appended without resolving its quote. Three halves of one feature.
-     */
-    const src = codeOnly(SCREEN())
+    const src = SCREEN()
     expect(src).toMatch(/sendChatMessage\([^)]*optimistic\.reply_to_message_id/)
-    expect(src).toContain('reply_to_message_id: msg.parent_id ||')
-    expect(src).toContain('msg.parent_message')
-    expect(src).toMatch(/replyTo: newMsg\.reply_to_message_id \? prev\.find/)
+    expect(codeOnly(read('lib/roomMessages.ts'))).toContain('reply_to_message_id: msg.parent_id ||')
+    expect(codeOnly(read('lib/roomMessages.ts'))).toContain('msg.parent_message')
+    expect(src).toMatch(/replyTo: incoming\.reply_to_message_id \? prev\.find/)
     expect(codeOnly(read('lib/apiClient.ts'))).toContain('...(parentId && { parentId })')
   })
 
   it('keeps the end in view as the list finishes laying out', () => {
-    /*
-     * Opening the room landed above the newest messages: `scrollToEnd` ran
-     * on a timer before the list had measured its later rows, so "Today"
-     * sat on the bottom edge with the day's messages beneath it, unseen.
-     */
-    const src = codeOnly(SCREEN())
-    // The rule lives in lib/useFollowEnd.ts now, shared with the DM screen and
-    // pinned behaviourally in followEnd.test.ts.
+    const src = SCREEN()
     expect(src).toMatch(/onContentSizeChange=\{follow\.onContentSizeChange\}/)
-    // Following stops on a real drag, not on the geometry of a programmatic
-    // scroll: the first fix keyed off `isAtBottomRef`, and the content growing
-    // once more after scrollToEnd read as "not at the bottom", so the room
-    // still opened with the newest bubble under the composer.
     expect(src).toMatch(/onScrollBeginDrag=\{follow\.onScrollBeginDrag\}/)
     expect(src).toMatch(/follow\.noteAtEnd\(atBottom\)/)
   })
 
   it('drops the optimistic bubble when the socket echo beat the response', () => {
-    /*
-     * Seen on the phone as a LogBox "two children with the same key" and the
-     * reply drawn twice: the server echoes the sender's own message to the
-     * room, and on a slow send it arrived before the POST returned, so the
-     * optimistic row was renamed to an id already in the list.
-     */
-    const src = codeOnly(SCREEN())
-    expect(src).toMatch(/prev\.some\(m => m\.message_id === newId\)\s*\? prev\.filter\(m => m\.message_id !== optimistic!?\.message_id\)/)
+    expect(SCREEN()).toMatch(/prev\.some\(\(m\) => m\.message_id === newId\)\s*\? prev\.filter\(\(m\) => m\.message_id !== optimistic\.message_id\)/)
+  })
+
+  it('offers each kind of message its own menu (R3-D5 5.2), Report on theirs only', () => {
+    const src = SCREEN()
+    expect(src).toContain("surface: 'room',")
+    expect(src).toContain("report: { icon: 'flag', label: 'Report…'")
+    // The table itself is pinned in messageMenu.test.ts.
   })
 })
 
@@ -389,122 +275,85 @@ describe('a photo you can tap actually opens', () => {
 
 describe('direct messages use the same bubble, minus what a DM does not need', () => {
   const DM = () => codeOnly(read('app/private-chat/[conversationId].tsx'))
+  const PARTS = () => codeOnly(read('components/chat/DmParts.tsx'))
 
-  it('renders through components/chat', () => {
-    const src = DM()
-    expect(src).toContain('<ChatBubble')
-    expect(src).toContain('<ChatComposer')
-    expect(src).toContain('<SystemNotice')
+  it('renders through the DS chat components', () => {
+    const src = DM() + PARTS()
+    for (const name of ['ChatBubble', 'Composer', 'DayPill', 'RevealBar', 'LongPressMenu']) expect(src).toContain(`<${name}`)
   })
 
   it('drops the avatar and the name', () => {
-    /*
-     * A DM has exactly one other person in it. A disc and a name on every
-     * inbound row repeat the screen's title once per message, and halve the
-     * width of the column to do it.
-     */
-    expect(DM()).toContain('variant="direct"')
-    const bubble = codeOnly(read('components/chat/ChatBubble.tsx'))
-    expect(bubble).toContain('{mine || direct ? null : (')
+    // A DM has one other person in it; the DS bubble draws no name or creature for `surface="dm"`.
+    expect(PARTS()).toContain("surface: 'dm' as const")
+    expect(codeOnly(read('components/ds/ChatBubble.tsx'))).toContain("const room = surface === 'room' && !mine")
   })
 
-  it('shows a receipt only on your own messages', () => {
-    // …and not on one that never arrived.
-    // …and not on one still on this phone (sending, or failed).
-    expect(DM()).toContain("receipt={isLocalMessage(item) ? null : receiptFor(item, authUser?.id)}")
+  it('shows a receipt only under your own last message', () => {
+    const src = DM()
+    expect(src).toContain('receipt={mine && item.id === lastMineId ? receiptFor(item, myId) : null}')
+    expect(src).toContain('!isLocalMessage(m))?.id')
   })
 
   it('keeps receipts out of the room', () => {
-    /*
-     * Twenty people read at twenty different times, so a tick there would
-     * either lie or need twenty answers. The room passes no `receipt` at all.
-     */
-    expect(codeOnly(read('app/chat/[id].tsx'))).not.toContain('receipt=')
+    expect(codeOnly(read('app/chat/[id].tsx')) + codeOnly(read('components/chat/RoomFeed.tsx'))).not.toContain('receipt=')
   })
 
   it('does not offer to report your own message, but lets you copy it', () => {
-    /*
-     * The long press used to be report-only and absent on your own rows, so
-     * nothing in a DM could be copied. Every row opens the menu now; Report is
-     * on theirs alone.
-     */
     const src = DM()
-    expect(src).toContain('onLongPress={() => openMessageMenu(item)}')
-    expect(src).toMatch(/\} else if \(!isMe\) \{[\s\S]{0,200}label: 'Report'/)
-    expect(src).toContain("label: 'Copy'")
+    expect(src).toContain("surface: 'dm',")
+    expect(src).toContain("copy: { icon: 'copy', label: 'Copy'")
   })
 })
 
 describe('the send button does not pretend the message is still in flight', () => {
-  const COMPOSER = () => codeOnly(read('components/chat/ChatComposer.tsx'))
+  const COMPOSER = () => codeOnly(read('components/ds/Composer.tsx'))
   const ROOM = () => codeOnly(read('app/chat/[id].tsx'))
   const DM = () => codeOnly(read('app/private-chat/[conversationId].tsx'))
+  const LOCK = () => codeOnly(read('lib/useComposerLock.ts'))
 
   it('has no spinner, and no prop that would drive one', () => {
-    /*
-     * `sendMessage` draws the optimistic bubble and clears the field in the
-     * same tick it starts the request, so by the time a spinner could paint,
-     * the room has already shown the message as sent. It was the only element
-     * on screen claiming otherwise.
-     */
     const src = COMPOSER()
     expect(src).not.toContain('ActivityIndicator')
     expect(src).not.toMatch(/\bsending\b/)
-    // Neither screen hands it a send-in-flight state any more.
     expect(ROOM()).not.toMatch(/sending=\{/)
     expect(DM()).not.toMatch(/sending=\{/)
   })
 
-  it('disables the button only for a reason it can name', () => {
+  it('locks only for a reason it can name, in the server’s words', () => {
     const src = COMPOSER()
-    // Every lock the type allows has a sentence; a disabled control that does
-    // not say why is the bug this replaced.
-    expect(src).toMatch(/const canSend = value\.trim\(\)\.length > 0 && !lock/)
-    for (const lock of ['muted', 'locked', 'closed', 'rate_limited']) {
-      expect(src).toMatch(new RegExp(`${lock}:\\s*['"\`]`))
+    for (const state of ['muted', 'automuted', 'locked', 'closed', 'ratelimited', 'notcheckedin', 'notopen', 'hidden']) {
+      expect(src).toMatch(new RegExp(`${state}: \\{\\s*icon: '`))
     }
-    expect(src).toContain('editable={!lock}')
-    expect(src).toContain('{LOCK_COPY[lock]}')
+    expect(src).toContain('const body = reason ?? fallback')
   })
 
   it('still refuses a double tap, without rendering anything for it', () => {
-    // The guard moved from state to a ref precisely so nothing draws from it.
     const src = ROOM()
-    expect(src).toContain('if (sendInFlightRef.current) return')
+    expect(src).toContain('sendInFlightRef.current) return')
     expect(src).toContain('sendInFlightRef.current = true')
-    expect(src).toMatch(/await deliver\(optimistic\)\s*sendInFlightRef\.current = false/)
+    expect(src).toMatch(/else await deliver\(optimistic\)\s*sendInFlightRef\.current = false/)
   })
 
   it('turns the server’s refusal into a lock, alongside the kept failed bubble', () => {
-    const src = ROOM()
-    const lock = src.slice(src.indexOf('const applyComposerLock'), src.indexOf('const deliver'))
-    // These codes have been on the wire the whole time and were thrown away.
-    for (const [code, state] of [['USER_MUTED', 'muted'], ['CHAT_LOCKED', 'locked'], ['CHAT_CLOSED', 'closed'], ['RATE_LIMITED', 'rate_limited']]) {
-      expect(lock).toMatch(new RegExp(`case '${code}':[\\s\\S]*?setComposerLock\\('${state}'\\)`))
+    const lock = LOCK()
+    for (const [code, state] of [['USER_MUTED', 'muted'], ['CHAT_LOCKED', 'locked'], ['NOT_CHECKED_IN', 'notcheckedin'], ['RATE_LIMITED', 'ratelimited']]) {
+      expect(lock).toMatch(new RegExp(`case '${code}':[\\s\\S]*?state: '${state}'`))
     }
-    // A rate limit lifts on its own, and the server says when.
-    expect(lock).toMatch(/setTimeout\(\(\) => setComposerLock\(null\), ms\)/)
-    expect(lock).toMatch(/retryAfter \?\? 5/)
-    // `deliver` is the one path for first sends and retries (#312), so the lock
-    // is decided there -- and a send that got through lifts it.
-    const deliver = src.slice(src.indexOf('const deliver'), src.indexOf('const sendMessage'))
-    expect(deliver).toContain('applyComposerLock(result.success ? undefined : result.errorCode, result.retryAfter)')
-    expect(src).toContain('lock={composerLock}')
+    // A rate limit lifts on its own; the server says when, and the clock counts it down.
+    expect(lock).toContain('retryAfter ?? DEFAULT_WAIT_S')
+    // Every answer re-decides it: a send that got through lifts it.
+    expect(ROOM()).toContain('composer.apply(result.success ? null : result.errorCode, result.retryAfter, result.error)')
+    expect(ROOM()).toContain('countdown={composer.countdown}')
   })
 
   it('locks a DM for the server’s cooldown when it rate-limits or spam-blocks', () => {
-    const src = DM()
-    const deliver = src.slice(src.indexOf('const deliver'), src.indexOf('const sendMessage'))
-    expect(deliver).toMatch(/result\.errorCode === 'RATE_LIMITED' \|\| result\.errorCode === 'SPAM_BLOCKED'/)
-    expect(deliver).toContain("setComposerLock('rate_limited')")
-    expect(deliver).toMatch(/result\.retryAfter \?\? 5/)
-    expect(src).toContain('lock={composerLock}')
+    expect(LOCK()).toMatch(/case 'RATE_LIMITED':\s*case 'SPAM_BLOCKED':\s*return \{ state: 'ratelimited' \}/)
+    expect(DM()).toContain('composer.apply(result.errorCode, result.retryAfter, result.error)')
   })
 
   it('carries retryAfter through the client so the cooldown is not guessed', () => {
     const src = codeOnly(read('lib/apiClient.ts'))
     expect(src).toMatch(/retryAfter\?: number/)
-    // Body first, then the header a proxy may strip.
     expect(src).toMatch(/retryAfter: typeof parsed\.retryAfter === 'number'/)
     expect(src).toContain("response.headers.get('Retry-After')")
   })

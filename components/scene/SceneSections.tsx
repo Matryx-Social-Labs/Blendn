@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { MaterialIcons } from '@expo/vector-icons'
 import { Image } from 'expo-image'
 import { LinearGradient } from 'expo-linear-gradient'
 import {
+  ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
@@ -21,9 +22,13 @@ import Animated, {
   cubicBezier,
   LayoutAnimationConfig,
   ReduceMotion,
+  useAnimatedStyle,
   useReducedMotion,
+  useSharedValue,
   withTiming,
 } from 'react-native-reanimated'
+import { GradientFill } from '../ui/GradientFill'
+import { COLOR, DURATION, EASING, MATERIAL, RISE } from '../../lib/design/tokens'
 import ScalePress from '../motion/ScalePress'
 import { fadeInFast, popIn } from '../motion/presence'
 import { MOTION_DURATION, MOTION_EASING } from '../../lib/motion'
@@ -59,6 +64,36 @@ const riseIn = () => {
   }
 }
 const changeFade = FadeIn.duration(MOTION_DURATION.fast).reduceMotion(ReduceMotion.Never)
+
+/*
+ * The CTA's label change (#45, A78 approved in Prompt 10): the old label exits
+ * up 8 pt over `quick`, the new one rises 8 pt over `base`. Reduce Motion: the
+ * two crossfade in place.
+ */
+const ctaLabelIn = () => {
+  'worklet'
+  return {
+    initialValues: { opacity: 0, transform: [{ translateY: RISE.list }] },
+    animations: {
+      opacity: withTiming(1, { duration: DURATION.base, easing: Easing.bezier(...EASING.entrance) }),
+      transform: [{ translateY: withTiming(0, { duration: DURATION.base, easing: Easing.bezier(...EASING.entrance) }) }],
+    },
+  }
+}
+const ctaLabelOut = () => {
+  'worklet'
+  return {
+    initialValues: { opacity: 1, transform: [{ translateY: 0 }] },
+    animations: {
+      opacity: withTiming(0, { duration: DURATION.quick, easing: Easing.bezier(...EASING.exit) }),
+      transform: [{ translateY: withTiming(-RISE.list, { duration: DURATION.quick, easing: Easing.bezier(...EASING.exit) }) }],
+    },
+  }
+}
+const ctaFadeOut = () => {
+  'worklet'
+  return { initialValues: { opacity: 1 }, animations: { opacity: withTiming(0, { duration: DURATION.quick }) } }
+}
 
 /**
  * The Scene's body sections — frame `1141:4875` and `1227:2903`.
@@ -597,10 +632,10 @@ export function SceneAmenity({
 }
 
 /**
- * The sticky call to action. Frame `1227:2904`.
+ * The sticky call to action. Frame `1227:2904`, as Flow 3's dock draws it.
  *
- * A flat pill: the screen's one accent fill while there is something still to
- * do, a quiet `surfaceSunken` pill with a hairline once it is done.
+ * A full-width pill: the gradient while there is something still to do, 8%
+ * white once it is done (A78).
  *
  * ## The price is not drawn
  *
@@ -609,7 +644,7 @@ export function SceneAmenity({
  * inventing a commitment the product cannot honour. The label says joining,
  * which is what actually happens.
  */
-export type SceneCTAState = 'rsvp' | 'rsvpd' | 'join' | 'going' | 'ended' | 'rate'
+export type SceneCTAState = 'rsvp' | 'rsvpd' | 'waitlisted' | 'join' | 'going' | 'ended' | 'rate'
 
 /**
  * What the button says, per state.
@@ -645,6 +680,8 @@ export type SceneCTAState = 'rsvp' | 'rsvpd' | 'join' | 'going' | 'ended' | 'rat
 const CTA_LABEL: Record<SceneCTAState, string> = {
   rsvp: "I'm going",
   rsvpd: "You're going",
+  // A waitlist place is not a seat: never "You're going" (A78 review).
+  waitlisted: 'On the waitlist',
   join: 'Blend in',
   going: "You're in",
   ended: "See what's on tonight",
@@ -675,23 +712,20 @@ export function sceneCtaLabel(state: SceneCTAState, alone = false): string {
  * the same reason `going` is not accompanied by a "leave" button: one slot,
  * one subject, and the state tells you which way the tap goes.
  */
-const CTA_QUIET: readonly SceneCTAState[] = ['rsvpd', 'going', 'ended']
+const CTA_QUIET: readonly SceneCTAState[] = ['rsvpd', 'waitlisted', 'going', 'ended']
+
+/** Before the doors: the RSVP slot's state from the server's answer. */
+export function rsvpCtaState(status: string | null | undefined): 'rsvp' | 'rsvpd' | 'waitlisted' {
+  return status === 'going' ? 'rsvpd' : status === 'waitlisted' ? 'waitlisted' : 'rsvp'
+}
 
 /*
- * The CTA's motion: a press scale, a label that rises into place when the
- * state changes (`riseIn`), and an icon that pops in when it swaps. Nothing else.
+ * The CTA's motion (#45 as A78 settled it): a press scale; on a change the old
+ * label exits up 8 pt over quick and the new one rises 8 pt over base; the
+ * icon pops in when it swaps; the gradient fades to 8% white under them when
+ * the state goes quiet. The width is full in every state, so nothing settles.
  *
- * - The new label rises 6pt and fades in; the old one simply goes. Two labels
- *   crossfading in a content-width pill would each push the other's layout.
- * - The icon — spinner, radio, tick — pops (opacity, 0.9 → 1) rather than
- *   rising: it is a glyph changing, not a line of text being replaced.
- * - The pill's width and colour snap. A `LinearTransition` on the width
- *   stuttered on device (layout transitions under Reanimated 3 on the New
- *   Architecture flicker), and a 1.04 "pop" on saying yes read as decoration —
- *   the label and the fill changing are the confirmation.
- *
- * Reduce Motion keeps the label fade, which is what says the state changed,
- * and drops the rise.
+ * Reduce Motion: the labels crossfade and nothing moves.
  */
 export function SceneCTA({
   state = 'join',
@@ -699,8 +733,11 @@ export function SceneCTA({
   iconKey,
   onPress,
   alone = false,
+  pending = false,
 }: {
   state?: SceneCTAState
+  /** The request is out: a spinner in the icon's place, the label unchanged, nothing pressable (#45). The sequence runs on the answer. */
+  pending?: boolean
   /** Nobody but you checked in: `rate` then asks about the night, not people. */
   alone?: boolean
   /** Drawn in the colour the pill hands it — dark on the accent fill, `textPrimary` on the quiet one. */
@@ -709,8 +746,8 @@ export function SceneCTA({
   iconKey?: string
   onPress?: () => void
 }) {
-  // Only while a handler is busy (checking in); no state is a dead end.
-  const disabled = !onPress
+  // Only while a handler is busy; no state is a dead end.
+  const disabled = !onPress || pending
   /*
    * Quiet once you have already said yes. The accent is for the thing that
    * still needs doing; a fully lit pill that only un-does something reads as
@@ -718,6 +755,12 @@ export function SceneCTA({
    */
   const quiet = CTA_QUIET.includes(state)
   const reduceMotion = useReducedMotion()
+  // A78: gradient → 8% white over `base` when the state goes quiet; the width is already full, so nothing settles.
+  const loud = useSharedValue(quiet ? 0 : 1)
+  useEffect(() => {
+    loud.set(withTiming(quiet ? 0 : 1, { duration: DURATION.base, easing: Easing.bezier(...EASING.gentle) }))
+  }, [quiet, loud])
+  const loudFill = useAnimatedStyle(() => ({ opacity: loud.get() }))
   /*
    * The label was a free string, which was survivable while this sat at the
    * bottom of a 1900pt page and most people never reached it. Pinned to the
@@ -736,32 +779,34 @@ export function SceneCTA({
       onPress={onPress}
       disabled={disabled}
       accessibilityRole="button"
-      accessibilityState={{ disabled, selected: state === 'going' }}
+      accessibilityState={{ disabled, busy: pending, selected: state === 'going' }}
       accessibilityLabel={sceneCtaLabel(state, alone)}
     >
       {/*
-        A solid pill, and nothing around it.
-
-        It was frosted glass with a warm tint, a lit white edge and an orange
-        bloom under it — every effect at once, and it read as generated rather
-        than designed. The event apps that get this right (Luma, District) use
-        a flat, high-contrast pill with no shadow, no blur and no gradient:
-        contrast alone lifts it off the page. So the to-do states are the
-        accent, solid, with the dark on-accent text; the done states step back
-        to a dark surface with a hairline edge and a `textPrimary` icon.
+        Full width, the gradient while there is something still to do, 8% white
+        once it is done (A78, Prompt 10): "I'm going" → "You're going" with the
+        check is one sequence, the old label up and out over quick, the new one
+        in over base, the fill crossfading under them.
       */}
       <View style={[styles.ctaFill, quiet ? styles.ctaFillQuiet : styles.ctaFillLoud]}>
+        {/* The to-do fill: the gradient, which fades to the 8% white under it once done (A78). */}
+        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, loudFill]}>
+          <GradientFill style={StyleSheet.absoluteFill} />
+        </Animated.View>
         {/* Skips the entrance on first paint; only a *change* of icon or label animates. */}
         <LayoutAnimationConfig skipEntering>
-          {icon ? (
+          {pending ? (
+            <ActivityIndicator testID="scene-cta-pending" color={COLOR.textOnGradient} />
+          ) : icon ? (
             <Animated.View key={iconKey} entering={reduceMotion ? changeFade : popIn}>
-              {icon(quiet ? EMBER.textPrimary : EMBER.onGradient)}
+              {icon(COLOR.textOnGradient)}
             </Animated.View>
           ) : null}
           <Animated.Text
             key={state}
-            entering={reduceMotion ? changeFade : riseIn}
-            style={[styles.ctaLabel, quiet ? styles.ctaLabelQuiet : styles.ctaLabelLoud]}
+            entering={reduceMotion ? changeFade : ctaLabelIn}
+            exiting={reduceMotion ? ctaFadeOut : ctaLabelOut}
+            style={[styles.ctaLabel, styles.ctaInk]}
             numberOfLines={1}
           >
             {sceneCtaLabel(state, alone)}
@@ -1034,33 +1079,29 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: SPACE.md,
     /*
-     * Content width, not screen width.
-     *
-     * A full-bleed pill is a *bar*, and a bar is a piece of chrome — it reads as
-     * part of the frame of the app rather than as an object sitting on the page.
-     * Padded to its label it becomes a floating control, which is what the node
-     * called "Floating CTA" is, and it stops claiming the whole width of a
-     * screen whose job is to show an event.
+     * Full width (Flow 3's dock, A78): the label changes in place and the
+     * width never has to follow it. The fill clips the gradient to the pill.
      */
-    paddingHorizontal: SPACE.xxl,
+    paddingHorizontal: SPACE.xl,
     // 15, with a 24pt icon and a 24pt line: 1 + 15 + 24 + 15 + 1 = 56, which is
     // SCENE_CTA_HEIGHT. Change either and the dock's reserved band is wrong.
     // design-exception: 15 lands the bordered pill on CONTROL.lg (56)
     paddingVertical: 15,
     borderRadius: EMBER_RADIUS.pill,
+    overflow: 'hidden',
     // Present in both states so the height never changes between them.
     borderWidth: 1,
   },
+  // The gradient layer draws the to-do fill; the 8% white is under it in both states.
   ctaFillLoud: {
-    backgroundColor: EMBER.accent,
-    borderColor: EMBER.accent,
+    backgroundColor: MATERIAL.fillOnGlass,
+    borderColor: 'transparent',
   },
   ctaFillQuiet: {
-    backgroundColor: EMBER.surfaceSunken,
-    borderColor: EMBER.separator,
+    backgroundColor: MATERIAL.fillOnGlass,
+    borderColor: 'transparent',
   },
   // TYPE.button's 24pt line is one of the terms SCENE_CTA_HEIGHT is summed from.
   ctaLabel: { ...TYPE.button },
-  ctaLabelLoud: { color: EMBER.onGradient },
-  ctaLabelQuiet: { color: EMBER.textPrimary },
+  ctaInk: { color: COLOR.textOnGradient },
 })

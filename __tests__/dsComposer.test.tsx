@@ -102,12 +102,24 @@ describe('<Composer>', () => {
     ['locked', 'Read only. The organiser locked posting in this room.'],
     ['closed', 'This chat has closed. Event chats stay open for 24 hours after the event ends.'],
     ['ratelimited', 'Slow down a moment. Too many messages.'],
+    // R2-D2: the two CHAT_CLOSED reasons the server words apart.
+    ['notopen', 'Not open yet. This chat opens 24 hours before the event starts.'],
+    ['hidden', 'This room is hidden. This event is no longer available.'],
   ] as const)('%s: no field, the reason in the server’s words as one element, nothing plays', async (state, said) => {
     await render(composer({ state }))
     expect(screen.queryByLabelText('Message')).toBeNull()
     expect(screen.getByLabelText(said)).toBeTruthy()
     expect(haptic.send).not.toHaveBeenCalled()
     expect(haptic.error).not.toHaveBeenCalled()
+  })
+
+  it('Send a photo only where the screen offers it (a DM you can both see, R9)', async () => {
+    await render(composer())
+    expect(screen.queryByLabelText('Send a photo')).toBeNull()
+    const onAttach = jest.fn()
+    await screen.rerender(composer({ onAttach }))
+    await fireEvent.press(screen.getByLabelText('Send a photo'))
+    expect(onAttach).toHaveBeenCalledTimes(1)
   })
 
   it('a lock that arrives while you are in the room is announced', async () => {

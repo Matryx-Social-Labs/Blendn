@@ -3,6 +3,7 @@
  * Replaces direct Supabase calls with admin backend API calls
  */
 
+import { markCheckIn } from './checkInTiming'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { AttendancePayload, RsvpEventsPayload, SavedEventsPayload } from './savedEvents'
 import type { PaywallEvent, PaywallTrigger } from './paywallPolicy'
@@ -622,6 +623,12 @@ export interface EventApiItem {
   distance: number | null
   isFavorited?: boolean
   favoriteCount?: number
+  /** RSVPs going: the card's "{n} going". Absent from an older server. */
+  goingCount?: number
+  /** Inside now (the Room's rule: checked in, not left): every "N here now". Absent from an older server. */
+  hereCount?: number
+  /** Came: everybody who checked in, left or not ("attended"). Never "here now". */
+  checkInCount?: number
   priceCents?: number
   price_cents?: number
   category?: string
@@ -709,7 +716,10 @@ export interface EventApiItem {
     memberCount?: number
   }
   stats?: {
+    /** Came: everybody who checked in, left or not ("attended"). Never "here now". */
     checkInCount?: number
+    /** Inside now (the Room's rule): every "N here now". Absent from an older server. */
+    hereCount?: number
     favoriteCount?: number
     /** Seats taken; the Scene's "Going" count before the doors. */
     rsvpCount?: number
@@ -1244,6 +1254,8 @@ class ApiClientClass {
     const isGet = method === 'GET'
     // Only retry safe read-only requests to avoid duplicate mutations
     const MAX_RETRIES = isGet ? 2 : 0
+    // Out of the queue and about to go: the check-in's clock (lib/checkInTiming.ts).
+    if (!isGet && /^\/api\/mobile\/events\/[^/]+\/checkin$/.test(endpoint)) markCheckIn('sent')
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',

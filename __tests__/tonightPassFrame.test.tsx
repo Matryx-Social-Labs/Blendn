@@ -21,7 +21,7 @@ const layout = (x: number, y: number, width: number, height: number) => ({ nativ
 
 it('is the dock’s place plus the pass’s place in it', async () => {
   const onPassFrame = jest.fn()
-  const event = { id: 'e1', title: 'Vinyl Night', venue: 'Toit', hereCount: 3, tasteMatchCount: null } as never
+  const event = { id: 'e1', title: 'Vinyl Night', venue: 'Toit', photo: null, hereCount: 3, tasteMatchCount: null, goingCount: null } as never
   await render(
     <TonightView
       events={[]}
@@ -29,7 +29,6 @@ it('is the dock’s place plus the pass’s place in it', async () => {
       error={false}
       onRetry={() => {}}
       insideEvent={event}
-      tasteMatchCount={null}
       checkingIn={false}
       onPassFrame={onPassFrame}
       onOpenEvent={() => {}}
@@ -41,6 +40,6 @@ it('is the dock’s place plus the pass’s place in it', async () => {
     />
   )
   await fireEvent(screen.getByTestId('tonight-pass-dock'), 'layout', layout(0, 560, 393, 292))
-  await fireEvent(screen.getByTestId('tonight-pass'), 'layout', layout(12, 4, 369, 234))
+  await fireEvent(screen.getByTestId('tonight-pass-slot'), 'layout', layout(12, 4, 369, 234))
   expect(onPassFrame).toHaveBeenLastCalledWith({ x: 12, y: 564, width: 369, height: 234 })
 })

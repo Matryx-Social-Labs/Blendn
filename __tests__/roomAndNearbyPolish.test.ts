@@ -40,15 +40,16 @@ describe('Connect in the room', () => {
   })
 
   it('checks the answer, says so on failure, and always stops the spinner', () => {
-    const onSend = SCREEN.slice(SCREEN.indexOf('onSend={async'), SCREEN.indexOf('<MatchMoment'))
+    const onSend = SCREEN.slice(SCREEN.indexOf('onSend={async'), SCREEN.indexOf('<MomentMatch'))
     expect(onSend).toMatch(/if \(await room\.connect\(connectTo\.id, message\)\) setConnectTo\(null\)/)
-    expect(onSend).toContain("showToast(\"Couldn't send the request. Try again.\", 'error')")
+    expect(onSend).toContain("say('Couldn’t send the request. Try again.', 'error')")
     expect(onSend).toMatch(/finally \{\s*setConnecting\(false\)/)
   })
 
   it('never prints the raw load error on the room', () => {
+    // A failed room is a quiet line over Tonight in fixed words (Flow 4 Room #15).
     expect(SCREEN).not.toMatch(/\{room\.error/)
-    expect(SCREEN).toContain('Couldn&apos;t load the room')
+    expect(read('components', 'blendn', 'TonightView.tsx')).toContain('Couldn’t check your room. You can still browse tonight.')
   })
 })
 

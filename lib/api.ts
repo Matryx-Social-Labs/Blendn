@@ -44,7 +44,12 @@ export function eventFromApi(e: EventPayload) {
       timezone: e.timezone || 'UTC',
       price_cents: e.priceCents || 0,
       max_capacity: e.maxCapacity || 0,
+      /** Distinct people checked in: the "here now" count, not going. */
       current_capacity: e.currentCapacity || 0,
+      /** Inside now (the Room's rule), for "N here now"; null from an older server: no line, not a wrong number. */
+      here_count: typeof e.hereCount === 'number' ? e.hereCount : null,
+      /** RSVPs going; null from a server that does not send it yet. */
+      going_count: typeof e.goingCount === 'number' ? e.goingCount : null,
       cover_image_url: e.coverImageUrl || null,
       category: e.categories?.[0]?.name || e.category || '',
       /*

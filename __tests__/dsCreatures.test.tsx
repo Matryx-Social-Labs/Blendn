@@ -201,7 +201,15 @@ describe('<VenuePlate>', () => {
       club: 'disc-3',
       liveMusic: 'music-2',
       cafe: 'coffee',
+      restaurant: 'utensils',
     })
+  })
+
+  it('a restaurant is the café’s pair with the utensils glyph: no new colour (A87 ruling)', async () => {
+    await render(<VenuePlate type="restaurant" size={120} />)
+    expect(StyleSheet.flatten(tree().props.style as object)).toMatchObject({ backgroundColor: VENUE_PLATES.cafe[0] })
+    expect(StyleSheet.flatten(half().props.style as object)).toMatchObject({ backgroundColor: VENUE_PLATES.cafe[1] })
+    expect(await glyphOf('restaurant', 120)).toBe(await icon('utensils', 48))
   })
 
   /** The second colour: the half of the plate past its 135° split. */

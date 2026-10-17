@@ -35,10 +35,11 @@ describe('<OverlapLine>', () => {
     expect(screen.queryByText('Kannada')).toBeNull()
   })
 
-  it('a shared label is outlined (1.5 pt at 35%) and read as shared', async () => {
+  it('a shared label is the outline chip (A31) and read as shared', async () => {
     await render(<OverlapLine line="Both from Tamil Nadu" labels={[{ text: 'CSK', shared: true }]} testID="o" />)
     expect(screen.getByLabelText('CSK, shared')).toBeTruthy()
-    expect(StyleSheet.flatten(screen.getByTestId('o-label').props.style)).toMatchObject({ borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.35)' })
+    expect(StyleSheet.flatten(screen.getByTestId('o-label').props.style)).toMatchObject({ backgroundColor: 'transparent' })
+    expect(StyleSheet.flatten(screen.getByTestId('o-label-edge').props.style)).toMatchObject({ borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)' })
   })
 
   it('nothing at all when there is nothing', async () => {

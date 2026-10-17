@@ -30,7 +30,8 @@ describe('crew and Blend rooms in the chat screen', () => {
     expect(chat).toContain('setClosedLine(null)')
     // Opened without a kind (an older push, a deep link): found in `rooms` (H2).
     expect(chat).toContain('roomKindParam(params.kind) ?? roomInfo.kind')
-    expect(chat).toContain('<RoomClosedNotice line={closedLine} onBack={goBack} />')
+    expect(chat).toContain("closedLine !== null\n      ? { kind: 'closed', line: closedLine }")
+    expect(src('components/chat/RoomFeed.tsx')).toContain("case 'closed':")
     // Opened from a push there may be nothing to go back to: then the Banter.
     expect(chat).toContain("router.canGoBack() ? router.back() : router.replace('/(tabs)/chat')")
   })
@@ -38,8 +39,9 @@ describe('crew and Blend rooms in the chat screen', () => {
 
 describe('a crew card is counts, never people', () => {
   it('draws nothing of a person: no pseudonym, photo or member', () => {
-    const parts = src('components/crews/CrewParts.tsx')
-    const card = parts.slice(parts.indexOf('export function CrewCardView'), parts.indexOf('/** A face in a Blend side'))
+    // The Room's crew cards are P4's CrewCard (Flow 10 · 10.7), fed only a crew's own fields.
+    const room = src('components/blendn/RoomCrews.tsx')
+    const card = room.slice(room.indexOf('export function RoomCrewCard'), room.indexOf('/** Under the cards'))
     expect(card.length).toBeGreaterThan(100)
     expect(card).not.toMatch(/pseudonym|photo|people|members|<Face/)
   })
@@ -49,17 +51,18 @@ describe('the surfaces are wired', () => {
   it('the Banter lists open Blends under Live now', () => {
     const banter = src('app/(tabs)/chat.tsx')
     expect(banter).toContain('blendRooms.map((r) =>')
-    expect(banter).toContain('crewRoomsFrom(result.data)')
+    expect(src('lib/useBanterInbox.ts')).toContain('crewRoomsFrom(result.data)')
     expect(banter).toContain("r.kind === 'crew'")
   })
 
-  it('the Grid has a Crews view', () => {
-    const room = src('components/blendn/BlendnScreen.tsx')
-    expect(room).toContain("gridView === 'crews' && eventId ? (")
-    expect(room).toContain('<CrewsHeader ')
-    // M13: the tabs are drawn at 32 and reached at 44.
-    expect(room).toContain('hitSlop={TAB_SLOP}')
+  it('the Room has a Crews view (R2-D1: People | Crews)', () => {
+    const screen = src('components/blendn/BlendnScreen.tsx')
+    expect(screen).toContain('<CrewsHead')
+    expect(screen).toContain('crewCards={crewCards(crews)}')
+    const room = src('components/blendn/RoomView.tsx')
+    // The segmented control is the ds one: 48 pt, reached at its own height.
+    expect(room).toContain("items={['People', 'Crews']}")
     // M12: the cards are rows of the Room's own list, not a mapped column.
-    expect(room).toContain("data={gridView === 'people' ? everyone : crewCards(crews)}")
+    expect(room).toContain('data={crewsView ? props.crewCards : people}')
   })
 })

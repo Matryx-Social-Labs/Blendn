@@ -14,7 +14,7 @@ import { State } from 'react-native-gesture-handler'
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils'
 
 import { ChatBubble, type ChatBubbleProps } from '../components/ds/ChatBubble'
-import { avatarOf, domainOf, emojiOnly, linkParts, replyOffset } from '../components/ds/chatShared'
+import { avatarOf, emojiOnly, linkHost, linkParts, replyOffset } from '../components/ds/chatShared'
 import { COLOR, MATERIAL } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 
@@ -56,7 +56,64 @@ describe('the rules', () => {
       { text: 'toit.in/vinyl-night', url: 'https://toit.in/vinyl-night' },
     ])
     expect(linkParts('Till midnight. Stairs by the bar.')).toEqual([{ text: 'Till midnight. Stairs by the bar.' }])
-    expect(domainOf('https://toit.in/vinyl-night?x=1')).toBe('toit.in')
+  })
+
+  /*
+   * The host on the link sheet is the parsed URL's, never the link's text, and
+   * a link whose host parsers disagree on is not a link at all. Run against
+   * both URLs the app meets: WHATWG (jest, a browser) and React Native's shim
+   * (the phone), which reads `evil.example\@toit.in` as toit.in.
+   */
+  describe.each([
+    ['WHATWG URL', globalThis.URL],
+    ['React Native URL', require('react-native/Libraries/Blob/URL').URL],
+  ])('link host · %s', (_name, Impl) => {
+    const real = globalThis.URL
+    beforeEach(() => {
+      globalThis.URL = Impl
+    })
+    afterEach(() => {
+      globalThis.URL = real
+    })
+
+    it('names the host the link goes to', () => {
+      expect(linkHost('https://toit.in/vinyl-night?x=1')).toBe('toit.in')
+      expect(linkHost('http://toit.in:8080/@someone?a=b@c')).toBe('toit.in')
+      expect(linkHost('https://evil.example/x@toit.in')).toBe('evil.example')
+      expect(linkHost('HtTpS://Toit.IN/vinyl')).toBe('toit.in') // a mixed-case scheme
+      expect(linkHost('https://xn--80ak6aa92e.com/')).toBe('xn--80ak6aa92e.com') // punycode shows as it is
+    })
+
+    it('refuses every spoofable or non-web link', () => {
+      for (const url of [
+        'https://toit.in@evil.example/vinyl',
+        'https://evil.example\\@toit.in/',
+        'https://evil.example\\toit.in',
+        'https://toit.in\u200B@evil.example',
+        'https://\u202Eni.tiot',
+        'javascript:alert(1)',
+        'intent://toit.in#Intent;end',
+        'blendn://chat/1',
+        'https://',
+        'https://t\u043Eit.in/', // a Cyrillic о: a homograph of toit.in
+        'https://toit.in%2eevil.com/',
+        'https://toit.in\u3002evil.com/', // an ideographic full stop
+        'https://toit.in\uFF20evil.com/', // fullwidth ＠
+        'https://evil.com\uFF0Ftoit.in', // fullwidth ／
+        'https://0x7f.1/',
+        'https://127.0.0.1/',
+        'https://[::1]/',
+        'https://toit.in:abc/', // a port that is not a number
+      ]) {
+        expect([url, linkHost(url)]).toEqual([url, null])
+      }
+    })
+
+    it('a refused link is words, with nothing to tap', () => {
+      expect(linkParts('menu: https://toit.in@evil.example/menu').some((p) => p.url)).toBe(false)
+      expect(linkParts('menu: https://evil.example\\@toit.in').some((p) => p.url)).toBe(false)
+      expect(linkParts('menu: HTTPS://toit.in/menu').find((p) => p.url)?.url).toBe('https://toit.in/menu')
+    })
   })
 
   it('links: a whole multi-part domain, never cut to a different one', () => {
@@ -140,7 +197,7 @@ describe('<ChatBubble>', () => {
     const onLongPress = jest.fn()
     await render(bubble({ removed: true, onLongPress, onReply: jest.fn() }))
     expect(flat('b-bubble')).toMatchObject({ borderStyle: 'dashed', backgroundColor: 'transparent' })
-    expect(screen.getByText('This message was removed.', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByText('This message was removed by moderation.', { includeHiddenElements: true })).toBeTruthy()
     await act(async () => fireGestureHandler(getByGestureTestId('b-hold'), [{ state: State.BEGAN }, { state: State.ACTIVE }, { state: State.END }]))
     expect(onLongPress).not.toHaveBeenCalled()
   })

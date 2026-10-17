@@ -217,3 +217,30 @@ export function withLockedNights(items: GoingItem[], lockedCount: number | null 
 export function lockedNightsLabel(count: number): string {
   return `${count} more night${count === 1 ? '' : 's'} with Blendn+`
 }
+
+/**
+ * What Going did to a save that a read may not have seen yet: saved again
+ * (Undo) or removed, and the newest load id when the request settled
+ * (`Infinity` while it is out). A load started at or before that id may
+ * carry the old answer; one started after it is the server's truth.
+ */
+export type PendingSave = { saved: boolean; row: SavedEventRow; settledAt: number }
+
+/**
+ * The saved rows a load returned, with this screen's own changes laid over
+ * any the load could not have seen. Entries a newer load has caught up with
+ * are dropped from `pending` (it is the screen's ref, mutated in place).
+ */
+export function withPendingSaves(rows: SavedEventRow[], pending: Map<string, PendingSave>, loadId: number): SavedEventRow[] {
+  let out = rows
+  for (const [id, op] of pending) {
+    if (loadId > op.settledAt) {
+      pending.delete(id)
+      continue
+    }
+    const listed = out.some((r) => r.id === id)
+    if (op.saved && !listed) out = [op.row, ...out]
+    else if (!op.saved && listed) out = out.filter((r) => r.id !== id)
+  }
+  return out
+}

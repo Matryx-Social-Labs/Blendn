@@ -1,4 +1,5 @@
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
+import type { Ref } from 'react'
+import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Icon, type IconName } from '../ui/Icon'
@@ -21,6 +22,32 @@ const TABS: readonly { key: Tab; label: string; icon: IconName }[] = [
 /** Android's indicator: a 56 × 32 pill at 10% white behind the glyph (§13), not iOS's whole-tab capsule. */
 const INDICATOR = { width: SIZE.primary, height: SIZE.tag, alpha: 0.1 } as const
 
+/**
+ * The bar's geometry. The capsule sits 16 pt in from each edge with 4 pt of
+ * padding inside it, and the row is FIVE EQUAL SLOTS: Pulse · Going · the
+ * disc · Banter · Me. Each item is centred in its slot, and the disc keeps
+ * its 56 pt inside the middle one.
+ *
+ * Owner override (2026-10-17, PR #401 drive): the design's grid,
+ * `1fr 1fr 56px 1fr 1fr` (journey/ui.js `JU.tabbar`), measured 86/71/71/86
+ * between centres on iOS, and the inner tabs read as crowding the disc.
+ * Owner ruling: all five centres equally spaced. `centres` are in screen x.
+ */
+export function tabBarGeometry(screenWidth: number) {
+  const left = SPACE.tabBarInset + SPACE.xs
+  const cell = Math.max(0, (screenWidth - 2 * left) / 5)
+  const centres = [0, 1, 2, 3, 4].map((i) => left + cell * (i + 0.5))
+  return { cell, centres }
+}
+
+/**
+ * How far the centre button's "Check in · {venue}" pill (components/ds/Disc)
+ * rises above the bar's top edge: the disc is centred in the bar, the pill sits
+ * `SPACE.sm` over it and is a `SIZE.tag` tall. Whatever floats over the bar
+ * (the Android snackbar) clears it.
+ */
+export const TAB_BAR_HINT_RISE = SIZE.disc + SPACE.sm + SIZE.tag - (SIZE.tabBar + SIZE.disc) / 2
+
 export type TabBarProps = {
   selected: Tab
   /** Every tap, the selected tab's too (re-tapping it scrolls to the top: the screen's call). */
@@ -29,6 +56,8 @@ export type TabBarProps = {
   disc: DiscProps
   /** Your own face on Me; the outlined person until there is one. */
   mePhoto?: string
+  /** The disc's slot, for whoever points at it (the centre button's coach mark). */
+  discRef?: Ref<View>
   testID?: string
 }
 
@@ -46,18 +75,19 @@ export type TabBarProps = {
  * Increase Contrast: the 50% outline on the capsule. Bold Text: every label
  * 700, so the pill alone tells selected from not.
  */
-export function TabBar({ selected, onSelect, disc, mePhoto, testID = 'tabs' }: TabBarProps) {
+export function TabBar({ selected, onSelect, disc, mePhoto, discRef, testID = 'tabs' }: TabBarProps) {
   const android = Platform.OS === 'android'
   const insets = useSafeAreaInsets()
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
+  const { cell } = tabBarGeometry(useWindowDimensions().width)
 
   const tab = ({ key, label, icon }: (typeof TABS)[number]) => {
     const on = key === selected
     const ink = on ? COLOR.textPrimary : COLOR.textSecondary
     const family = bold || (on && !android) ? FONT_FAMILY.brand[700] : FONT_FAMILY.brand[500]
     return (
-      <View key={key} style={styles.cell}>
+      <View key={key} testID={`${testID}-${key}-cell`} style={[styles.cell, { width: cell }]}>
         <Pressable
           testID={`${testID}-${key}`}
           onPress={() => onSelect(key)}
@@ -90,8 +120,11 @@ export function TabBar({ selected, onSelect, disc, mePhoto, testID = 'tabs' }: T
       <Material role="bar" style={[StyleSheet.absoluteFill, styles.round]} />
       <View testID={`${testID}-row`} accessibilityRole="tablist" style={styles.row}>
         {TABS.slice(0, 2).map(tab)}
-        <View style={styles.slot}>
-          <Disc {...disc} />
+        <View testID={`${testID}-disc-slot`} style={[styles.slot, { width: cell }]}>
+          {/* Sized by the disc, not the slot: what the centre button's coach mark frames. */}
+          <View ref={discRef}>
+            <Disc {...disc} />
+          </View>
         </View>
         {TABS.slice(2).map(tab)}
       </View>
@@ -110,8 +143,9 @@ const styles = StyleSheet.create({
   },
   round: { borderRadius: RADIUS.tabBar },
   row: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACE.xs },
-  cell: { flex: 1, alignItems: 'center' },
-  slot: { width: SIZE.disc, height: SIZE.disc },
+  cell: { alignItems: 'center' },
+  // The middle slot is a tab slot's width; the disc keeps its 56 pt, centred in it.
+  slot: { height: SIZE.disc, alignItems: 'center', justifyContent: 'center' },
   tab: { width: SIZE.primary, maxWidth: '100%', height: SIZE.primary, alignItems: 'center', justifyContent: 'center', gap: SPACE.xxs },
   pill: { ...StyleSheet.absoluteFill, borderRadius: RADIUS.capsule, backgroundColor: COLOR.tabCapsule },
   indicator: {

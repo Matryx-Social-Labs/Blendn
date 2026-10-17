@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons'
-import { useState } from 'react'
-import { ActivityIndicator, StyleSheet, Text, TextInput, View } from 'react-native'
+import { useEffect, useRef, useState } from 'react'
+import { ActivityIndicator, Dimensions, Keyboard, Platform, StyleSheet, Text, TextInput, View } from 'react-native'
 import Animated, { LayoutAnimationConfig } from 'react-native-reanimated'
 
 import { CONTROL, EMBER, EMBER_RADIUS, ICON, SPACE, TYPE } from '../../lib/theme'
 import ScalePress from '../motion/ScalePress'
 import { fadeInFast, fadeOutFast } from '../motion/presence'
+import { keyboardLeft } from '../../lib/home'
 
 /**
  * The top of The Pulse — the headline, where you are, and the search field.
@@ -86,6 +87,21 @@ export function PulseHeader({
   activeFilterCount = 0,
 }: Props) {
   const [focused, setFocused] = useState(false)
+  const input = useRef<TextInput>(null)
+  /*
+   * Android only: Back closes the keyboard and leaves the field focused, so a
+   * tap on it opened no keyboard. A keyboard that actually left blurs it, and
+   * the next tap is a fresh focus. Never on iOS: there a hide can arrive while
+   * you type (a frame change), and blurring on it closed the keyboard after
+   * every character (drive 3). The text is the screen's (`query`), so it stays.
+   */
+  useEffect(() => {
+    if (!focused || Platform.OS !== 'android') return
+    const sub = Keyboard.addListener('keyboardDidHide', (e) => {
+      if (keyboardLeft(e, Dimensions.get('screen').height)) input.current?.blur()
+    })
+    return () => sub.remove()
+  }, [focused])
   return (
     <View style={styles.wrap}>
       {/*
@@ -177,6 +193,7 @@ export function PulseHeader({
           )}
         </LayoutAnimationConfig>
         <TextInput
+          ref={input}
           value={query}
           onChangeText={onChangeQuery}
           placeholder="Search events…"

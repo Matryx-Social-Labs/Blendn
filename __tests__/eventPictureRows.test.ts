@@ -15,8 +15,8 @@ const SCREENS: Array<{ file: string[]; counter: string; bump: RegExp }> = [
   { file: ['app', '(tabs)', 'events.tsx'], counter: 'pulls', bump: /setPulls\(\(n\) => n \+ 1\)/ },
 ]
 
-/** Every `<UpcomingCard …>` opening element, props included. */
-const cards = (src: string) => src.match(/<UpcomingCard\b[\s\S]*?\n\s*\/?>/g) ?? []
+/** Every row's opening element, props included: `<UpcomingCard …>` on the Pulse, `<GoingRow …>` (the ds EventCard row) on Going. */
+const cards = (src: string) => src.match(/<(?:UpcomingCard|GoingRow)\b[\s\S]*?\n\s*\/?>/g) ?? []
 
 /** Index of the `)` that closes the `(` at `open`. */
 function closing(src: string, open: number): number {
@@ -41,11 +41,11 @@ function enclosingDeps(src: string, at: number): string | null {
 describe.each(SCREENS)('$file.2', ({ file, counter, bump }) => {
   const src = read(...file)
 
-  it('draws each event row through UpcomingCard, with the row cover and the refresh count', () => {
+  it('draws each event row with the row cover and the refresh count', () => {
     const found = cards(src)
     expect(found.length).toBeGreaterThan(0)
     for (const card of found) {
-      expect(card).toMatch(/imageUrl=\{\w+\.cover_image_url\}/)
+      expect(card).toMatch(/(?:imageUrl|cover)=\{\w+\.cover_image_url\}/)
       expect(card).toContain(`retry={${counter}}`)
     }
   })

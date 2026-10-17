@@ -93,25 +93,49 @@ describe('the stylesheet, frame 1141:4643', () => {
 
 })
 
-describe('the bar does not clip the button that overhangs it', () => {
+describe('the bar does not clip what rises above the disc', () => {
   /*
-   * The centre button sits at `y=-16` — sixteen points above the bar's top
-   * edge. The rounded surface needs `overflow: 'hidden'` to clip its own 48pt
-   * corners, and for one release both lived on the same view, so the surface
-   * clipped the button as well as itself.
+   * The disc's (c) label, "Check in · Toit", rises above the 64 pt capsule
+   * (Flow 4 T10). The glass is a layer behind the row, not a clipping parent
+   * around it, so nothing above the bar is cut off (components/ds/TabBar).
    */
+  const BAR = () => stripComments(read('components/ds/TabBar.tsx'))
   it('the laying-out view is not the clipping view', () => {
-    const src = NAV()
-    const bar = src.slice(src.indexOf('  bar: {'), src.indexOf('  barSurface: {'))
+    const src = BAR()
+    const bar = src.slice(src.indexOf('  bar: {'), src.indexOf('  round: {'))
     expect(bar).not.toContain("overflow: 'hidden'")
   })
 
-  it('the surface still clips, or the corners stop being round', () => {
-    const src = NAV()
-    const surface = src.slice(src.indexOf('  barSurface: {'), src.indexOf('  item: {'))
-    expect(surface).toContain("overflow: 'hidden'")
-    expect(surface).toContain('borderTopLeftRadius: EMBER_RADIUS.card')
-    expect(surface).toContain('borderTopRightRadius: EMBER_RADIUS.card')
+  it('the glass is behind the row, rounded to the capsule', () => {
+    expect(BAR()).toContain('<Material role="bar" style={[StyleSheet.absoluteFill, styles.round]} />')
+  })
+})
+
+/*
+ * The owner tapped outside the Pulse's search and the keyboard stayed up. A
+ * render test has no keyboard, so this pins each surface's own tool.
+ */
+describe('a tap outside the search closes the keyboard', () => {
+  it('the list lets a card take the tap and closes on a drag', () => {
+    const src = SCREEN()
+    const list = src.slice(src.indexOf('<VirtualizedList'), src.indexOf('ListHeaderComponent'))
+    expect(list).toContain('keyboardShouldPersistTaps="handled"')
+    expect(list).toContain('keyboardDismissMode="on-drag"')
+    // Nested in the list: left at the default it would eat a featured card's first tap.
+    const row = src.slice(src.search(/<FlatList\s+horizontal/), src.indexOf('renderItem={({ item, index })'))
+    expect(row).toContain('keyboardShouldPersistTaps="handled"')
   })
 
+  it('a card closes it as it opens the event', () => {
+    const src = SCREEN()
+    const press = src.slice(src.indexOf('const handleEventPress'), src.indexOf('router.push', src.indexOf('const handleEventPress')))
+    expect(press).toContain('Keyboard.dismiss()')
+  })
+
+  it('the map and the drawer chrome close it', () => {
+    const shell = stripComments(read('components/home/HomeShell.tsx'))
+    expect(shell).toMatch(/style=\{StyleSheet\.absoluteFill\}\s+onTouchStart=\{dismissKeyboard\}/)
+    expect(shell).toContain('onChromeTouch={dismissKeyboard}')
+    expect(stripComments(read('components/home/HomeDrawer.tsx'))).toContain('<View style={styles.header} onTouchStart={onChromeTouch}>')
+  })
 })

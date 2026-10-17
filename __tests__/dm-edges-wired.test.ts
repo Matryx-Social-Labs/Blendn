@@ -23,8 +23,9 @@ describe('a thread that has ended', () => {
   })
   it('does not offer a wave into it', () => {
     // The wave lives in the other branch only.
+    // The ended state replaces the feed, and Say hi is the feed's empty state.
     const ended = src.indexOf('This conversation has ended')
-    const wave = src.indexOf('emptyCtaText}>Say hi')
+    const wave = src.indexOf('<SayHi')
     expect(ended).toBeGreaterThan(-1)
     expect(wave).toBeGreaterThan(ended)
   })
@@ -32,7 +33,7 @@ describe('a thread that has ended', () => {
 
 describe('answering a request', () => {
   it('reloads the list past the cache, so the card stays gone', () => {
-    const src = read('app/(tabs)/chat.tsx')
+    const src = read('lib/useBanterInbox.ts')
     const at = src.indexOf('Message request ${action}ed')
     const after = src.slice(at, at + 900)
     expect(after).toContain('loadChats(true, true)')

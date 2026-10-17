@@ -541,6 +541,9 @@ const styles = StyleSheet.create({
   buttonSecondary: { backgroundColor: EMBER.surface },
   button: {
     height: CONTROL.lg,
+    // A caller that centres it (an empty state) gets a content-width pill: without this the label's first and last
+    // letters sat on the pill's curve, clipped (Crews "Make a crew", drive). A stretched one doesn't change.
+    paddingHorizontal: SPACE.xl,
     borderRadius: EMBER_RADIUS.pill,
     backgroundColor: EMBER.accent,
     alignItems: 'center',

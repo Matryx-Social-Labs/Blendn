@@ -182,7 +182,7 @@ export function hasLeftRoom(chatGroupId: string): boolean {
   return state.left.has(chatGroupId)
 }
 
-/** Tests only. */
+/** Forget every room's mute and leave: sign-out and session end (`lib/useAuth.ts`), and tests. */
 export function resetRoomMembership(): void {
   state = { mutes: new Map(), left: new Set() }
   emit()

@@ -1,13 +1,13 @@
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { Icon } from '../ui/Icon'
-import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { ACHIEVEMENT, AchievementBadge, type AchievementKind } from './AchievementBadge'
 import { Button } from './Button'
+import { Chip } from './Chip'
 import { CountTicks } from './CountTicks'
 import { CrewEmblem } from './CrewEmblem'
-import { tint } from '../../lib/theme'
 import { CONTROL_FONT_CAP, font, IC_HAIRLINE, minTarget, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
 
 /** The emblem: 96 on a card, 56 compact (the page); 40 in a row. */
@@ -15,8 +15,6 @@ const EMBLEM = { full: 96, compact: 56, row: 40 } as const
 /** The ⋯ in the card's corner: a 32 pt raised circle, 12 in, reaching the target through slop. */
 const MORE = SIZE.tag
 const ROW_MIN_HEIGHT = SIZE.primary + SPACE.sm
-/** Flow 10 `tagChips`: a clear 32 pt capsule with a 1 pt edge at 22% white. */
-const TAG_EDGE = 0.22
 
 export type CrewCardCrew = {
   name: string
@@ -105,12 +103,9 @@ export function CrewCard({
         </View>
         {crew.tags.length || crew.intent ? (
           <View style={styles.meta}>
+            {/* Flow 10 `tagChips`: the outline chip (A31). */}
             {crew.tags.map((t) => (
-              <View key={t} style={[styles.tag, contrast && IC_HAIRLINE]}>
-                <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} numberOfLines={1} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.ink]}>
-                  {t}
-                </Text>
-              </View>
+              <Chip key={t} label={t} variant="outline" />
             ))}
             {crew.intent ? <Text style={[font('meta', bold), { color: detail }]}>{crew.intent}</Text> : null}
           </View>
@@ -227,14 +222,6 @@ const styles = StyleSheet.create({
     gap: SPACE.sm,
     borderRadius: RADIUS.button,
     backgroundColor: COLOR.surface,
-  },
-  tag: {
-    height: SIZE.tag,
-    justifyContent: 'center',
-    paddingHorizontal: SPACE.md,
-    borderRadius: RADIUS.capsule,
-    borderWidth: 1,
-    borderColor: tint(COLOR.textPrimary, TAG_EDGE),
   },
   overlap: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   more: {

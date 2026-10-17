@@ -159,14 +159,16 @@ export const showConversationOptions = (
 ): void => {
   const fromMatch = opts.fromMatch ?? true
   const actions: SheetAction[] = []
-  if (opts.onViewProfile) actions.push({ label: 'View profile', then: opts.onViewProfile })
+  if (opts.onViewProfile) actions.push({ label: 'View profile', icon: 'user', then: opts.onViewProfile })
   actions.push({
     label: fromMatch ? 'Unmatch…' : 'End conversation…',
+    icon: 'heart-off',
     variant: 'destructive',
     next: () => leaveConversationSheet(conversationId, displayName, theyKnowYou, opts.onLeft, fromMatch),
   })
   actions.push({ label: 'Cancel', cancel: true })
-  showSheet({ kind: 'actions', title: displayName, actions })
+  // The design's options sheet (Flow 5 DM #20): rows, the destructive one in red.
+  showSheet({ kind: 'actions', title: displayName, layout: 'rows', actions })
 }
 
 /**
@@ -227,6 +229,7 @@ export const leaveConversationSheet = (
     kind: 'reasons',
     title,
     message: `Why are you reporting ${displayName}?`,
+    about: displayName,
     reasons: USER_REPORT_REASONS,
     submitLabel: action === 'block' ? 'Block and report' : `${verb} and report`,
     run: (reason, description) => leave(action, { reason, ...(description ? { description } : {}) }),
@@ -238,12 +241,12 @@ export const leaveConversationSheet = (
     message: copy.body,
     actions: [
       { label: verb, variant: 'destructive', run: () => leave('unmatch') },
-      { label: `${verb} and report`, next: () => reportStep('unmatch', `${verb} and report`) },
+      { label: `${verb} and report…`, next: () => reportStep('unmatch', `${verb} and report`) },
       {
         // Block is the stronger option, surfaced here rather than buried,
         // because somebody who wants to be *unseen* rather than merely
         // disconnected needs the other button and may not know it exists.
-        label: 'Block and report',
+        label: 'Block and report…',
         next: () => reportStep('block', `Block and report ${displayName}`),
       },
       { label: 'Cancel', cancel: true },
@@ -273,7 +276,8 @@ export const showUserSafetyActions = (
   })
 }
 
-const blockStep = (userName: string, userId: string, onComplete?: () => void): Sheet => ({
+/** Block one person, confirmed: from a profile's sheet, or a chat message's Block… (R3-D5 5.1, 5.2). */
+export const blockStep = (userName: string, userId: string, onComplete?: () => void): Sheet => ({
   kind: 'actions',
   title: `Block ${userName}?`,
   message: "They won't be able to see your profile or message you, and you won't see each other in rooms.",
@@ -297,6 +301,7 @@ export const userReportStep = (userName: string, userId: string, onComplete?: ()
   kind: 'reasons',
   title: `Report ${userName}`,
   message: `Why are you reporting ${userName}?`,
+  about: userName,
   reasons: USER_REPORT_REASONS,
   submitLabel: 'Send report',
   run: async (reason, description) => {
@@ -324,17 +329,19 @@ export const showReportOptions = (
 export const messageReportStep = (
   messageId: string,
   messageType: 'group' | 'private',
-  onComplete?: () => void
+  /** Who wrote it, as the chat names them: the sheet says they aren't told. */
+  opts: { about?: string; onComplete?: () => void } = {}
 ): Sheet => ({
   kind: 'reasons',
-  title: 'Report message',
-  message: 'Why are you reporting this message?',
+  title: 'Report this message',
+  message: `Our team reads every report. ${opts.about ? `${opts.about} isn’t` : 'Nobody is'} told who sent it.`,
+  about: opts.about,
   reasons: MESSAGE_REPORT_REASONS,
   submitLabel: 'Send report',
   run: async (reason, description) => {
     const result = await reportMessage(messageId, messageType, reason as MessageReportType, description)
     if (!result.success) return failed(result.message, "Couldn't send your report.")
-    onComplete?.()
+    opts.onComplete?.()
     return { ok: true, toast: REPORTED }
   },
 })
@@ -453,7 +460,7 @@ export const showRoomReportOptions = (chatGroupId: string, onComplete?: () => vo
   showSheet({
     kind: 'reasons',
     title: 'Report this room',
-    message: "What's going on in here? Our team reads the room, not just one message, and nobody is told who reported it.",
+    message: 'For what no single message shows. Our team reads every report.',
     reasons: ROOM_REPORT_REASONS,
     submitLabel: 'Send report',
     run: async (reason, description) => {

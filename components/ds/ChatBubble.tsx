@@ -2,6 +2,7 @@ import { Image } from 'expo-image'
 import { memo, useCallback, useState, type ComponentProps } from 'react'
 import { Pressable, StyleSheet, Text, View, type AccessibilityActionEvent, type GestureResponderEvent } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
+import Svg, { Circle } from 'react-native-svg'
 import Animated, {
   Easing,
   FadeInUp,
@@ -17,9 +18,10 @@ import { Icon } from '../ui/Icon'
 import { COLOR, EASING, ICON, PRESS, RADIUS, SIZE, SPACE, SPRING, TYPE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
+import { tint } from '../../lib/theme'
 import { Avatar } from './Avatar'
 import { CHAT_REACTIONS } from '../../lib/chatReactions'
-import { avatarOf, BUBBLE, domainOf, emojiOnly, linkParts, reactionName, REPLY_SWIPE, replyOffset, timeFont, type ChatPerson, type Rect, type TextPart } from './chatShared'
+import { avatarOf, BUBBLE, emojiOnly, linkHost, linkParts, reactionName, REPLY_SWIPE, replyOffset, timeFont, type ChatPerson, type Rect, type TextPart } from './chatShared'
 import { ReactionPill } from './ReactionBar'
 import { RECEIPT_WORD, ReceiptMark, type Receipt } from './ReceiptMark'
 import { ReplyPreview } from './ReplyPreview'
@@ -35,6 +37,9 @@ const FAILED_OPACITY = 0.7
 const EMOJI_ONLY_TYPE = { fontSize: 32, lineHeight: 40 }
 /** The page's photo in a bubble. */
 const PHOTO = { width: 220, height: 160 }
+/** R3-D5 5.9: a 44 pt ring with a 3 pt stroke; the veil is the photo dimmed to 65%. */
+const RING = { size: SIZE.circleButton, stroke: 3 }
+const VEIL_ALPHA = 0.35
 /** #12: the new bubble starts at the composer's field and travels to its slot over 300 ms. */
 const SEND = { from: SIZE.input, ms: 300 }
 /** The reply glyph sits off the bubble's leading edge and comes in with the drag. */
@@ -51,8 +56,8 @@ export type ChatBubbleProps = {
   first?: boolean
   last?: boolean
   text?: string
-  /** A photo message: tapping it opens the viewer from the bubble's frame. */
-  photo?: { uri: string; onPress: (from: Rect) => void }
+  /** A photo message: tapping it opens the viewer from the bubble's frame. `progress` (0–1) while it uploads: a determinate ring, never a spinner (R3-D5 5.9). */
+  photo?: { uri: string; onPress: (from: Rect) => void; progress?: number }
   replyTo?: { name: string; text: string; onPress?: () => void }
   reactions?: BubbleReaction[]
   onReactionPress?: (emoji: string) => void
@@ -322,7 +327,8 @@ function Message({
   const parts = removed || photo ? [] : linkParts(text)
   const links = onLinkPress ? parts.filter((p): p is TextPart & { url: string } => !!p.url) : []
 
-  const content = removed ? 'This message was removed.' : photo ? 'Photo' : text
+  // The room frame's words (Flow 5 #11): it was moderation, and it says so.
+  const content = removed ? 'This message was removed by moderation.' : photo ? 'Photo' : text
   const label = `${failed ? 'Not sent' : mine ? 'You' : sender.name}${failed ? ':' : ','} ${content}, ${time}${
     receipt ? `, ${RECEIPT_WORD[receipt]}` : ''
   }${waiting ? ', waiting for connection' : ''}`
@@ -346,7 +352,7 @@ function Message({
             ])
           : []),
         ...actions.map((a): [string, () => void] => [a.label, a.onPress]),
-        ...links.map((l): [string, () => void] => [`Open ${domainOf(l.url)}`, () => onLinkPress?.(l.url)]),
+        ...links.map((l): [string, () => void] => [`Open ${linkHost(l.url)}`, () => onLinkPress?.(l.url)]),
       ]
   const onAction = (e: AccessibilityActionEvent) => named.find(([name]) => name === e.nativeEvent.actionName)?.[1]()
   const tap = (e: GestureResponderEvent) => {
@@ -374,7 +380,10 @@ function Message({
     >
       {replyTo && !removed ? <ReplyPreview name={replyTo.name} text={replyTo.text} onPress={replyTo.onPress} /> : null}
       {photo && !removed ? (
-        <Image source={{ uri: photo.uri }} style={styles.photo} contentFit="cover" accessible={false} />
+        <View>
+          <Image source={{ uri: photo.uri }} style={styles.photo} contentFit="cover" accessible={false} />
+          {photo.progress !== undefined ? <UploadRing progress={photo.progress} /> : null}
+        </View>
       ) : (
         <Text style={[emoji ? EMOJI_ONLY_TYPE : font('body', bold), removed ? styles.removedText : styles.primary]}>
           {removed
@@ -391,6 +400,38 @@ function Message({
         </Text>
       )}
     </Pressable>
+  )
+}
+
+/** The upload's determinate ring over a 35% veil (R3-D5 5.9 #33): a fraction, read as a percentage. */
+function UploadRing({ progress }: { progress: number }) {
+  const r = (RING.size - RING.stroke) / 2
+  const around = 2 * Math.PI * r
+  const done = Math.max(0, Math.min(1, progress))
+  return (
+    <View
+      accessible
+      accessibilityRole="progressbar"
+      accessibilityLabel="Sending photo"
+      accessibilityValue={{ min: 0, max: 100, now: Math.round(done * 100) }}
+      style={[StyleSheet.absoluteFill, styles.veil]}
+    >
+      <Svg width={RING.size} height={RING.size}>
+        <Circle cx={RING.size / 2} cy={RING.size / 2} r={r} stroke={COLOR.hairlineStrong} strokeWidth={RING.stroke} fill="none" />
+        <Circle
+          cx={RING.size / 2}
+          cy={RING.size / 2}
+          r={r}
+          stroke={COLOR.textPrimary}
+          strokeWidth={RING.stroke}
+          fill="none"
+          strokeDasharray={`${around * done} ${around}`}
+          strokeLinecap="round"
+          rotation={-90}
+          origin={`${RING.size / 2}, ${RING.size / 2}`}
+        />
+      </Svg>
+    </View>
   )
 }
 
@@ -477,6 +518,7 @@ const styles = StyleSheet.create({
   removed: { borderWidth: 1, borderStyle: 'dashed', borderColor: COLOR.textTertiary },
   failedBubble: { opacity: FAILED_OPACITY },
   photo: { width: PHOTO.width, height: PHOTO.height, borderRadius: RADIUS.rowInCard, backgroundColor: COLOR.surface },
+  veil: { borderRadius: RADIUS.rowInCard, backgroundColor: tint(COLOR.ink, VEIL_ALPHA), alignItems: 'center', justifyContent: 'center' },
   reactions: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.xs },
   meta: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   link: { color: COLOR.link, textDecorationLine: 'underline' },

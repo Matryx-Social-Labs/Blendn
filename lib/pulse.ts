@@ -152,18 +152,27 @@ export function placeLabel(event: {
   return city || null
 }
 
+const count = (n: number | null | undefined) => (typeof n === 'number' && Number.isFinite(n) && n >= 1 ? Math.floor(n) : null)
+
 /**
- * How many people are going, or `null`.
+ * The card's people line (the design's EventCard pill): "{n} here now" while
+ * it is on and people are inside (`here_count`, the Room's rule: checked in
+ * and not left), otherwise "{n} going" (RSVPs), or `null`. Never the check-in
+ * count (`current_capacity`, everybody who came): it read "1 joined" on an
+ * event 19 were going to, and "14 here now" with 12 inside.
  *
- * Zero is `null` on purpose. "0 joined" reads as a verdict on the event, and
- * every event is 0 for a while — including, always, the first one somebody sees
- * after we launch in their city. No line reads as "this has not started filling
+ * Zero is `null` on purpose. "0 going" reads as a verdict on the event, and
+ * every event is 0 for a while. No line reads as "this has not started filling
  * up", which is the true statement.
  */
-export function joinedCount(event: { current_capacity?: number | null }): number | null {
-  const n = event.current_capacity
-  if (typeof n !== 'number' || !Number.isFinite(n) || n < 1) return null
-  return Math.floor(n)
+export function peopleLabel(
+  event: { here_count?: number | null; going_count?: number | null },
+  live: boolean
+): string | null {
+  const here = live ? count(event.here_count) : null
+  if (here) return `${here} here now`
+  const going = count(event.going_count)
+  return going ? `${going} going` : null
 }
 
 /* -------------------------------------------------------------------------- */

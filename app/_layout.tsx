@@ -25,6 +25,7 @@ import { SheetHost } from '../components/SheetHost';
 import { useAuth } from '../lib/useAuth';
 import { EMBER } from '../lib/theme';
 import { handleAndroidBack } from '../lib/androidBack';
+import { CoachMarkHost } from '../components/ds/CoachMarkHost';
 import { initSentry, Sentry } from '../lib/sentry';
 import { useFonts } from 'expo-font';
 import { EMBER_FONT_MODULES } from '../lib/fonts';
@@ -756,7 +757,11 @@ function RootLayout() {
             finished step can say what it did.
           */}
           <SheetHost />
-
+          {/*
+            Last, so nothing in the app draws over it (Android elevation
+            included): every coach mark and its dim (components/ds/CoachMarkHost).
+          */}
+          <CoachMarkHost />
         </View>
       </ToastProvider>
       </GestureHandlerRootView>

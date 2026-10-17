@@ -68,6 +68,22 @@ describe('the pill keeps its height between states', () => {
   })
 })
 
+describe('"I’m going" → "You’re going" is one sequence (A78, Prompt 10)', () => {
+  it('fades the gradient to 8% white under the label, and the old label leaves as the new one arrives', () => {
+    const src = SRC()
+    expect(src).toContain('<GradientFill')
+    expect(src).toMatch(/ctaFillQuiet: \{\s*backgroundColor: MATERIAL\.fillOnGlass/)
+    expect(src).toMatch(/loud\.set\(withTiming\(quiet \? 0 : 1, \{ duration: DURATION\.base/)
+    expect(src).toContain('exiting={reduceMotion ? ctaFadeOut : ctaLabelOut}')
+    // Full width already, so nothing settles: no content-width padding, the dock stretches it.
+    expect(DETAIL()).not.toMatch(/ctaDockInner: \{[^}]*alignItems: 'center'/)
+  })
+
+  it('carries the check on "You’re going" and no glyph on "I’m going"', () => {
+    expect(DETAIL()).toContain("ctaState === 'rsvpd' ? 'checkmark' : ctaState === 'waitlisted' ? 'time-outline' : ctaState === 'rsvp' ? null")
+  })
+})
+
 describe('what the button says', () => {
   it('says Blend in, and no state is a dead end', () => {
     const src = SRC()
@@ -162,26 +178,23 @@ describe('the event screen IS the Scene now, and kept what the CTA lacks', () =>
     // The CTA is time-aware. "Blend in" before the event cannot succeed --
     // check-in requires the event to be running -- so it must not be offered.
     expect(detail).toContain('hasStarted')
-    expect(detail).toContain("? (rsvpd ? 'rsvpd' : 'rsvp')")
+    expect(detail).toContain('? rsvpCtaState(rsvpStatus)')
     expect(detail).toContain('handleToggleRsvp')
 
     // A thrown RSVP request puts the old status back. The optimistic
     // "You're going" used to survive a timeout with no row behind it —
     // `prevStatus` lived inside the `try`, so the `catch` could not reach it.
     const handler = detail.slice(detail.indexOf('const handleToggleRsvp'), detail.indexOf('}, [id, user, rsvpStatus'))
-    expect(handler).toMatch(/const prevStatus = rsvpStatus\s*\n\s*try \{/)
+    expect(handler).toMatch(/const prevStatus = rsvpStatus\s*\n(?:\s*(?:if \(rsvpInFlight\.current\) return|let sent = false)\s*\n)*\s*try \{/)
     expect(handler).toMatch(/\} catch \{\s*setRsvpStatus\(prevStatus\)/)
 
     // No second control, and no overflow in the bar.
     expect(detail).not.toContain('secondaryRow')
     expect(detail).not.toContain('ellipsis-horizontal')
 
-    // The in-flight states the old morph showed.
-    /*
-     * Only check-in spins now: check out left this screen with the secondary
-     * row, so `checkingOut` was a state nothing could ever set.
-     */
-    expect(detail).toContain('checkingIn ? (')
+    // Nothing spins here now: the check-in is the pass's, in the Blend'n overlay (Flow 3 #04–#06, Flow 4).
+    expect(detail).not.toContain('checkingIn')
+    expect(detail).toContain('openPass({')
   })
 
   it('check out really is where this screen says it moved to', () => {

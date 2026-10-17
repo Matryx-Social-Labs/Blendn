@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useRef, useState, type ComponentRef, type ReactNode, type RefObject } from 'react'
 import {
   AccessibilityInfo,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
+  TextInput,
   Text,
   useWindowDimensions,
   View,
@@ -59,10 +62,74 @@ export function settleDetent(heights: number[], from: number, height: number, dr
   return nearest
 }
 
-export type SheetAction = { label: string; onPress: () => void; kind?: ButtonKind; loading?: boolean; disabled?: boolean } & Pick<
-  ButtonProps,
-  'pressHaptic' | 'icon'
->
+/**
+ * The sheet's foot. With the keyboard up the home indicator is under the
+ * keyboard, and the avoiding view already lifts the sheet by the keyboard's
+ * full height, so the safe-area inset would only leave a dead band between
+ * the last button and the keys (Board composer drive).
+ */
+export function sheetBottomPadding(insetBottom: number, keyboardUp: boolean) {
+  return (keyboardUp ? 0 : insetBottom) + SPACE.sm
+}
+
+/** A sheet never rises past the status bar: this far below the top safe area at most (the Board composer, drive 2). */
+export const SHEET_TOP_GAP = SPACE.sm
+
+/**
+ * The tallest a sheet may be: from the top safe area and a margin down to the
+ * keyboard's top edge (its `screenY`) when one is up, else to the bottom of the
+ * sheet's own root (the real visible height). Past it, the sheet's content
+ * scrolls inside it; the title and the actions stay put.
+ *
+ * The keyboard's top, not window height less keyboard height: on Android
+ * edge-to-edge the translucent modal is the whole screen while the window and
+ * the keyboard's height disagree about the navigation bar, and the composer's
+ * top landed inside the status bar (drive 3).
+ */
+export function sheetMaxHeight(visibleHeight: number, insetTop: number, keyboardTop: number | null) {
+  const bottom = keyboardTop === null ? visibleHeight : Math.min(visibleHeight, keyboardTop)
+  return Math.max(0, bottom - insetTop - SHEET_TOP_GAP)
+}
+
+/**
+ * Where a capped sheet scrolls to show the field being typed in (top `y`,
+ * height `h`, in a `viewport` over `content`): the field's foot just above the
+ * actions, or the very end when that still shows the whole field. Otherwise
+ * the next row (the Board composer's Spaces stepper) peeked a sliver of its
+ * circles between the text box and the pinned Post (drive 3).
+ */
+export function fieldScroll(y: number, h: number, viewport: number, content: number) {
+  const toField = Math.max(0, y + h + SPACE.sm - viewport)
+  const toEnd = Math.max(0, content - viewport)
+  return toEnd >= toField && y >= toEnd ? toEnd : toField
+}
+
+/** The keyboard while one is up (its height and its top edge on screen), null otherwise: iOS on `will` (in step with the avoiding view), Android on `did`. */
+function useKeyboard() {
+  const [frame, setFrame] = useState<{ height: number; top: number } | null>(null)
+  useEffect(() => {
+    const ios = Platform.OS === 'ios'
+    const show = Keyboard.addListener(ios ? 'keyboardWillShow' : 'keyboardDidShow', (e) => {
+      const end = e?.endCoordinates
+      setFrame(end && end.height > 0 ? { height: end.height, top: end.screenY } : null)
+    })
+    const hide = Keyboard.addListener(ios ? 'keyboardWillHide' : 'keyboardDidHide', () => setFrame(null))
+    return () => {
+      show.remove()
+      hide.remove()
+    }
+  }, [])
+  return frame
+}
+
+export type SheetAction = {
+  label: string
+  onPress: () => void
+  kind?: ButtonKind
+  loading?: boolean
+  disabled?: boolean
+  testID?: string
+} & Pick<ButtonProps, 'pressHaptic' | 'icon'>
 
 export type SheetProps = {
   visible: boolean
@@ -82,6 +149,11 @@ export type SheetProps = {
   detents?: readonly Detent[]
   /** Between the body and the actions: a reason list, a form. Scroll it yourself if it can outgrow the detent. */
   children?: ReactNode
+  /**
+   * Once it has left the screen. iOS drops a Modal presented while another is
+   * still leaving, so the next sheet (Block / Report, a composer) waits for this.
+   */
+  onDismissed?: () => void
   testID?: string
 }
 
@@ -96,6 +168,7 @@ function useSheetMotion({
   opening,
   busy,
   requestClose,
+  onGone,
 }: {
   visible: boolean
   /** Lowest first. */
@@ -104,6 +177,8 @@ function useSheetMotion({
   opening: number
   busy: boolean
   requestClose: () => void
+  /** It has unmounted (Android); iOS reports through the Modal's own `onDismiss`. */
+  onGone: () => void
 }) {
   const window = useWindowDimensions()
   const reduceMotion = useReducedMotion()
@@ -132,7 +207,10 @@ function useSheetMotion({
     const out = { duration: fade, easing: Easing.bezier(...EASING.sheet) }
     if (!reduceMotion) offset.set(withTiming(window.height, out))
     scrim.set(withTiming(0, out))
-    const timer = setTimeout(() => setMounted(false), fade)
+    const timer = setTimeout(() => {
+      setMounted(false)
+      onGone()
+    }, fade)
     return () => clearTimeout(timer)
     // On `visible` only: the rest is read as it stood when the sheet opened or closed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -191,13 +269,41 @@ function useSheetMotion({
  * ponytail: focus is not handed back to the opener on close (the opener
  * knows what it was); the material does not grow more opaque near full height.
  */
-export function Sheet({ visible, onClose, title, body, icon, actions = [], detents, children, focusRef, testID }: SheetProps) {
+export function Sheet({ visible, onClose, title, body, icon, actions = [], detents, children, focusRef, onDismissed, testID }: SheetProps) {
   const android = Platform.OS === 'android'
   const insets = useSafeAreaInsets()
   const window = useWindowDimensions()
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const titleRef = useRef<ComponentRef<typeof Text>>(null)
+  const keyboard = useKeyboard()
+  const keyboardUp = keyboard !== null
+  const keyboardHeight = keyboard?.height ?? 0
+  /** The modal root's height: the real visible area (the whole screen on Android, translucent bars). */
+  const [rootHeight, setRootHeight] = useState<number | null>(null)
+  /*
+   * With the keyboard up a capped sheet scrolls its content: bring the field
+   * being typed in into view (the Board composer's text box sits under the
+   * kind cards). The avoiding view has lifted the sheet a frame later, hence
+   * the frame's wait.
+   */
+  const content = useRef<ScrollView>(null)
+  const contentHeight = useRef(0)
+  const contentSize = useRef(0)
+  useEffect(() => {
+    if (!keyboardUp) return
+    const frame = requestAnimationFrame(() => {
+      const input = TextInput.State.currentlyFocusedInput()
+      const inner = content.current?.getInnerViewNode()
+      if (!input || !inner) return
+      input.measureLayout(
+        inner,
+        (_x, y, _w, h) => content.current?.scrollTo({ y: fieldScroll(y, h, contentHeight.current, contentSize.current), animated: true }),
+        () => {}
+      )
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [keyboardUp, keyboardHeight])
 
   const busy = actions.some((a) => a.loading)
   const sorted = [...actions].sort((a, b) => ORDER.indexOf(a.kind ?? 'secondary') - ORDER.indexOf(b.kind ?? 'secondary'))
@@ -207,7 +313,21 @@ export function Sheet({ visible, onClose, title, body, icon, actions = [], deten
   const stops = [...new Set(detents)].sort((a, b) => DETENT[a] - DETENT[b])
   const heights = stops.map((d) => Math.round(window.height * DETENT[d]))
   const opening = detents ? stops.indexOf(detents[0]) : 0
-  const { mounted, drag, placeStyle, scrimStyle, natural, fixedHeight } = useSheetMotion({ visible, heights, opening, busy, requestClose })
+  const dismissed = useRef(onDismissed)
+  useEffect(() => {
+    dismissed.current = onDismissed
+  })
+  const ios = Platform.OS === 'ios'
+  const { mounted, drag, placeStyle, scrimStyle, natural, fixedHeight } = useSheetMotion({
+    visible,
+    heights,
+    opening,
+    busy,
+    requestClose,
+    onGone: () => {
+      if (!ios) dismissed.current?.()
+    },
+  })
   if (testID) drag.withTestId(`${testID}-drag`)
   // Once the modal is on screen: iOS presents it a frame after mount and drops a focus sent earlier.
   const focusTitle = () => {
@@ -234,9 +354,15 @@ export function Sheet({ visible, onClose, title, body, icon, actions = [], deten
       navigationBarTranslucent
       onRequestClose={requestClose}
       onShow={focusTitle}
+      onDismiss={ios ? () => dismissed.current?.() : undefined}
     >
       {/* A Modal is its own native root: gestures inside it need their own root view. */}
-      <GestureHandlerRootView testID={testID && `${testID}-root`} pointerEvents={visible ? 'auto' : 'none'} style={styles.fill}>
+      <GestureHandlerRootView
+        testID={testID && `${testID}-root`}
+        pointerEvents={visible ? 'auto' : 'none'}
+        style={styles.fill}
+        onLayout={(e) => setRootHeight(e.nativeEvent.layout.height)}
+      >
         <KeyboardAvoidingView style={styles.end} behavior={KEYBOARD_BEHAVIOR}>
           <Animated.View
             testID={testID && `${testID}-scrim`}
@@ -249,7 +375,12 @@ export function Sheet({ visible, onClose, title, body, icon, actions = [], deten
               testID={testID}
               role="sheet"
               onLayout={(e) => natural.set(e.nativeEvent.layout.height)}
-              style={[styles.sheet, fixedHeight && styles.fill, { paddingBottom: insets.bottom + SPACE.sm }, contrast && IC_HAIRLINE]}
+              style={[
+                styles.sheet,
+                fixedHeight && styles.fill,
+                { paddingBottom: sheetBottomPadding(insets.bottom, keyboardUp), maxHeight: sheetMaxHeight(rootHeight ?? window.height, insets.top, keyboard?.top ?? null) },
+                contrast && IC_HAIRLINE,
+              ]}
             >
               <GestureDetector gesture={drag}>
                 <View style={styles.head}>
@@ -279,7 +410,22 @@ export function Sheet({ visible, onClose, title, body, icon, actions = [], deten
                   {body ? <Text style={[font('body', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{body}</Text> : null}
                 </View>
               </GestureDetector>
-              {children}
+              {children ? (
+                // Scrolls only when the sheet is at its cap; otherwise it is exactly its content.
+                <ScrollView
+                  ref={content}
+                  onLayout={(e) => (contentHeight.current = e.nativeEvent.layout.height)}
+                  onContentSizeChange={(_w, h) => (contentSize.current = h)}
+                  testID={testID && `${testID}-content`}
+                  style={styles.content}
+                  contentContainerStyle={styles.contentInner}
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                  bounces={false}
+                >
+                  {children}
+                </ScrollView>
+              ) : null}
               {sorted.length ? (
                 <View style={[styles.actions, fixedHeight && styles.pinned]}>
                   {sorted.map(({ kind = 'secondary', disabled, loading, ...action }) => (
@@ -332,5 +478,7 @@ const styles = StyleSheet.create({
   },
   title: { color: COLOR.textPrimary },
   actions: { gap: SPACE.sm },
+  content: { flexGrow: 0, flexShrink: 1 },
+  contentInner: { gap: SPACE.md },
   pinned: { marginTop: 'auto' },
 })

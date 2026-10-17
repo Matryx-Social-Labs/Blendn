@@ -314,6 +314,41 @@ export const uploadPhoto = async (
   }
 }
 
+/** The server's own sentence for a photo that did not get there (R3-D5 5.9, server copy). */
+export const PHOTO_DID_NOT_FINISH = 'That photo did not finish uploading. Try again.'
+
+/**
+ * A DM photo (R9, ROUND3 D 5.9). Re-encoded on the phone first, as profile
+ * photos are: `processImage` writes a fresh JPEG, which carries none of the
+ * original's metadata, so no location leaves the phone. Then uploaded to the
+ * chat folder with its progress, for the bubble's determinate ring.
+ */
+export const uploadChatPhoto = async (
+  uri: string,
+  onProgress: (fraction: number) => void
+): Promise<{ ok: true; url: string } | { ok: false; error: string }> => {
+  try {
+    const processed = await processImage(uri)
+    if (!processed) return { ok: false, error: PHOTO_DID_NOT_FINISH }
+    const presigned = await apiClient.getPresignedUploadUrl(`chat_${Date.now()}.jpg`, 'image/jpeg', 'chat')
+    if (!presigned.success || !presigned.data) return { ok: false, error: presigned.error || PHOTO_DID_NOT_FINISH }
+    const task = FileSystem.createUploadTask(
+      presigned.data.uploadUrl,
+      processed,
+      { httpMethod: 'PUT', headers: { 'Content-Type': 'image/jpeg' }, uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT },
+      ({ totalBytesSent, totalBytesExpectedToSend }) => {
+        if (totalBytesExpectedToSend > 0) onProgress(totalBytesSent / totalBytesExpectedToSend)
+      }
+    )
+    const result = await task.uploadAsync()
+    if (!result || result.status < 200 || result.status >= 300) return { ok: false, error: PHOTO_DID_NOT_FINISH }
+    return { ok: true, url: presigned.data.publicUrl }
+  } catch (error) {
+    Logger.error('chat', 'DM photo upload failed', { error })
+    return { ok: false, error: PHOTO_DID_NOT_FINISH }
+  }
+}
+
 /**
  * Upload to Tigris via presigned URL
  */
