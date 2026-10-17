@@ -4,6 +4,7 @@ import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-na
 import Animated, { LayoutAnimationConfig } from 'react-native-reanimated'
 
 import type { FeedMediaItem } from '../../lib/feedMedia'
+import { H } from '../../lib/haptics'
 import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, OPACITY, SPACE, TYPE, tint } from '../../lib/theme'
 import { fadeInFast, fadeOutFast } from '../motion/presence'
@@ -205,22 +206,16 @@ export function ProfileInterests({
 
   return (
     <View style={styles.chipWrap}>
-      {interests.map((interest) => {
-        const isShared = shared.has(interest.toLowerCase())
-        return isShared ? (
-          <View key={interest} style={[styles.chip, styles.chipShared]}>
-            <Text style={styles.chipLabelShared} maxFontSizeMultiplier={1.4}>
-              {interest}
-            </Text>
-          </View>
-        ) : (
-          <View key={interest} style={[styles.chip, styles.chipPlain]}>
-            <Text style={styles.chipLabel} maxFontSizeMultiplier={1.4}>
-              {interest}
-            </Text>
-          </View>
-        )
-      })}
+      {interests.map((interest) => (
+        <View
+          key={interest}
+          style={[styles.chip, shared.has(interest.toLowerCase()) ? styles.chipShared : styles.chipPlain]}
+        >
+          <Text style={styles.chipLabel} maxFontSizeMultiplier={1.4}>
+            {interest}
+          </Text>
+        </View>
+      ))}
     </View>
   )
 }
@@ -365,7 +360,7 @@ export function ProfileActions({
         {onLike ? (
           <ScalePress
             onPress={onLike}
-            haptic={false}
+            haptic={H.like}
             disabled={liked || likeBusy}
             accessibilityRole="button"
             accessibilityLabel={
@@ -470,7 +465,6 @@ const styles = StyleSheet.create({
     borderColor: EMBER.textPrimary,
   },
   chipLabel: { ...TYPE.bodyStrong },
-  chipLabelShared: { ...TYPE.bodyStrong, color: EMBER.textPrimary },
 
   detailCard: {
     backgroundColor: EMBER.surfaceMedia,

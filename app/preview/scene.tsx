@@ -2,7 +2,6 @@ import { Ionicons } from '@expo/vector-icons'
 import { useLocalSearchParams } from 'expo-router'
 import { useState } from 'react'
 import {
-  Dimensions,
   Image as RNImage,
   Pressable,
   ScrollView,
@@ -65,7 +64,6 @@ const DESCRIPTION =
 
 /** What the payload already knows: title, venue, city, category. */
 const ENTITIES = ['The Scene', 'The Obsidian Vault', 'Bengaluru', 'Nightlife']
-const SCREEN_W = Dimensions.get('window').width
 
 /*
  * A bundled asset resolved to a URI.
@@ -211,7 +209,7 @@ export default function ScenePreview() {
           <SceneLocationCard
             venue="The Obsidian Vault"
             area="Arts District, Downtown"
-            map={<SceneMap latitude={12.9716} longitude={77.5946} width={SCREEN_W - 2 * SCENE_PADDING_HORIZONTAL} />}
+            map={<SceneMap latitude={12.9716} longitude={77.5946} />}
           />
 
           {/*

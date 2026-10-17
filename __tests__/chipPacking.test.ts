@@ -7,17 +7,10 @@
  * that reads as instability.
  */
 
-import { estimateChipWidth, isCatchAll, packChips } from '../lib/chipPacking'
+import { isCatchAll, packChips } from '../lib/chipPacking'
 
 const w = (n: number) => () => n
 const widths = (items: readonly number[]) => packChips(items, (n) => n, 100)
-
-describe('estimateChipWidth', () => {
-  it('grows with the label and includes the padding', () => {
-    expect(estimateChipWidth('Gay', 40)).toBeLessThan(estimateChipWidth('Prefer not to say', 40))
-    expect(estimateChipWidth('', 40)).toBe(40)
-  })
-})
 
 describe('packChips', () => {
   it('leaves a list that already fits exactly alone', () => {
@@ -104,21 +97,5 @@ describe('isCatchAll', () => {
     for (const label of ['Design', 'Engineering', 'Queer', 'Other Sciences']) {
       expect([label, isCatchAll(label)]).toEqual([label, false])
     }
-  })
-})
-
-describe('the width estimate', () => {
-  it('does not overshoot a long label full of narrow letters', () => {
-    /*
-     * "Prefer not to say" is mostly f, t, i and spaces. An average tuned on
-     * short words judged it far wider than it renders, and overestimating is
-     * the direction that wastes space — a chip thought too wide is held back
-     * from a row it would have fitted.
-     *
-     * ~130pt of text at 16pt Manrope, plus 52 of padding and margin.
-     */
-    const estimated = estimateChipWidth('Prefer not to say', 52)
-    expect(estimated).toBeGreaterThan(160)
-    expect(estimated).toBeLessThan(195)
   })
 })

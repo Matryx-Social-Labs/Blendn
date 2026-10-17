@@ -17,7 +17,7 @@ The Blend'n screen is an **overlay hosted by the tab layout** (a modal route put
 ## Mobile data
 - [x] `lib/useRoom.ts`: roster, live arrivals/checkouts, hereCount, like/connect/safety, wave, match events — lifted from MatchScreen
 - [x] `lib/roomMoments.ts` (pure, tested): meet-next picks + 15-min shuffle window, reason line, time-here label, arrivals queue
-- [x] `lib/useCheckInFlow.ts`: the event screen's check-in flow (rules, location, refusals, reveal, intent) shared with Tonight
+- [x] `lib/useCheckInFlow.ts`: the event screen's check-in flow (location, refusals, reveal, intent) shared with Tonight
 - [x] apiClient + socketClient for the new endpoints/events; polls + chat reactions clients
 
 ## Screen
@@ -28,7 +28,7 @@ The Blend'n screen is an **overlay hosted by the tab layout** (a modal route put
 - [x] Person card: expands from face, pull down to close, double-tap / pull to like, wave, connect, safety
 - [x] Match moment: hearts arc your face → theirs, avatar bump, success haptic, "Say hi" opener
 - [x] Chat dock: last 2 messages + composer, arrivals/waves/matches as system lines, drag up → full chat
-- [ ] Polls + reactions UI (API clients exist: votePoll, reactToChatMessage)
+- [ ] Polls + reactions UI (API client exists: reactToChatMessage; the unused getPoll/votePoll were deleted — restore from git history)
 - [x] Swipe down to close
 
 ## Verify
@@ -353,7 +353,7 @@ Account
 - [ ] DM header doesn't open the other person's profile. Profile error state has no back button
 - [ ] Network errors read as permanent on friend profile, invite and friends/add
 - [ ] Sign-out takes one tap. No version footer. Blocked-users load error looks the same as an empty list
-- [ ] Pulse has its own check-in path (events.tsx:660–830) alongside useCheckInFlow, so the two will drift
+- [x] Pulse has its own check-in path (events.tsx:660–830) alongside useCheckInFlow, so the two will drift — its "Blend in" now opens the Blend'n pass (Flow 4)
 - [ ] Docs: AGENTS.md:94 + CODEBASE_OVERVIEW.md mention the deleted `/onboarding/welcome`. PULSE/ROADMAP still say "friend graph pending"
 
 ## Deferred by design (not gaps)

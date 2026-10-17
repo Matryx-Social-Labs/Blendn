@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons'
-import * as Haptics from 'expo-haptics'
+import { H } from '../lib/haptics'
 import { EMBER, EMBER_RADIUS, ICON, SPACE, TYPE } from '../lib/theme'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
@@ -45,9 +45,6 @@ const TILE_REFLOW = LinearTransition.duration(250).easing(Easing.bezier(0.77, 0,
 interface PhotoManagerProps {
   userId: string
   maxPhotos?: number
-  editable?: boolean
-  onPhotosChange?: (photos: string[]) => void
-  style?: any
 }
 
 /**
@@ -59,13 +56,7 @@ interface PhotoManagerProps {
 const adoptStoredUrls = (list: ProfilePhoto[], stored?: string[]): ProfilePhoto[] =>
   stored && stored.length === list.length ? list.map((p, i) => ({ ...p, url: stored[i] })) : list
 
-export default function PhotoManager({ 
-  userId, 
-  maxPhotos = 6, 
-  editable = true, 
-  onPhotosChange,
-  style 
-}: PhotoManagerProps) {
+export default function PhotoManager({ userId, maxPhotos = 6 }: PhotoManagerProps) {
   const [photos, setPhotos] = useState<ProfilePhoto[]>([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
@@ -84,7 +75,6 @@ export default function PhotoManager({
   const busy = uploading || saving
   const { showToast } = useToast()
   const [cachedUrls, setCachedUrls] = useState<Record<string, string>>({})
-  const onPhotosChangeRef = useRef<PhotoManagerProps['onPhotosChange'] | undefined>(undefined)
   // Measure available width to compute exact 3-col sizing
   const [containerWidth, setContainerWidth] = useState<number>(width - 32)
   const NUM_COLUMNS = 3
@@ -127,17 +117,6 @@ export default function PhotoManager({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId])
 
-  // Keep a stable reference to onPhotosChange to avoid triggering effects due to identity changes
-  useEffect(() => {
-    onPhotosChangeRef.current = onPhotosChange
-  }, [onPhotosChange])
-
-  // Notify parent only when photos actually change
-  useEffect(() => {
-    if (onPhotosChangeRef.current) {
-      onPhotosChangeRef.current(photos.map(p => p.url))
-    }
-  }, [photos])
 
   const handleAddPhoto = async () => {
     if (photos.length >= maxPhotos) {
@@ -145,7 +124,7 @@ export default function PhotoManager({
       return
     }
 
-    if (!editable || writing.current) return
+    if (writing.current) return
 
     writing.current = true
     setUploading(true)
@@ -159,10 +138,6 @@ export default function PhotoManager({
           url: result.url,
           order: photos.length,
           isPrimary: photos.length === 0,
-          metadata: result.metadata ? {
-            ...result.metadata,
-            uploadedAt: new Date().toISOString()
-          } : undefined
         }
 
         setPhotos(prev => [...prev, newPhoto])
@@ -184,6 +159,7 @@ export default function PhotoManager({
           showToast(saved.error, 'error')
           return
         }
+        H.success()
         setPhotos(prev => adoptStoredUrls(prev, saved.photos))
         AccessibilityInfo.announceForAccessibility('Photo added')
         Logger.info('profile', 'PhotoManager: Photo added', { userId, path: result.path || result.url })
@@ -219,7 +195,7 @@ export default function PhotoManager({
    */
   const handleMakePrimary = useCallback(
     async (photoIndex: number) => {
-      if (!editable || photoIndex === 0 || writing.current) return
+      if (photoIndex === 0 || writing.current) return
       writing.current = true
       setSaving(true)
 
@@ -229,9 +205,8 @@ export default function PhotoManager({
       ]
       // Optimistic: the grid reorders under the finger, and a failed write
       // puts it back rather than leaving the UI ahead of the server. The
-      // haptic lands on the same frame the tiles start to move.
+      // haptic waits for the server: outcome after truth (§10.1).
       setPhotos(reordered.map((p, i) => ({ ...p, order: i, isPrimary: i === 0 })))
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {})
 
       try {
         const saved = await reorderPhotos(userId, reordered.map((p) => p.url), photos[0]?.url)
@@ -240,17 +215,18 @@ export default function PhotoManager({
           showToast(saved.error, 'error')
           return
         }
+        H.success()
         setPhotos(prev => adoptStoredUrls(prev, saved.photos))
       } finally {
         writing.current = false
         setSaving(false)
       }
     },
-    [editable, photos, userId, showToast]
+    [photos, userId, showToast]
   )
 
   const handleRemovePhoto = useCallback((photoIndex: number) => {
-    if (!editable || writing.current) return
+    if (writing.current) return
 
     const photo = photos[photoIndex]
     
@@ -309,7 +285,7 @@ export default function PhotoManager({
     // loadPhotos is redefined every render; only the listed values should
     // recreate this callback.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editable, photos, userId, showToast])
+  }, [photos, userId, showToast])
 
   const renderPhoto = useCallback(({ item, index }: { item: ProfilePhoto; index: number }) => {
     const cachedUrl = cachedUrls[item.url]
@@ -318,7 +294,7 @@ export default function PhotoManager({
       <Animated.View
         layout={TILE_REFLOW}
         exiting={fadeOutFast}
-        style={[styles.photoContainer, { width: itemSize, height: itemSize }]}
+        style={{ width: itemSize, height: itemSize }}
       >
         {/*
           `accessible={false}`: the wrapper has no action of its own, and as an
@@ -352,45 +328,41 @@ export default function PhotoManager({
               <Text style={styles.primaryText}>Main</Text>
             </View>
           ) : (
-            editable && (
-              /*
-               * The badge existed and there was no way to move it, so the
-               * primary photo was whichever one happened to be uploaded first.
-               * `photos[0]` is the primary everywhere -- match card, DM avatar,
-               * and `User.image`, which the server mirrors from it.
-               */
-              <TouchableOpacity
-                style={styles.makePrimaryButton}
-                onPress={() => handleMakePrimary(index)}
-                disabled={busy}
-                accessibilityRole="button"
-                accessibilityLabel="Make this my main photo"
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Text style={styles.makePrimaryText}>Make main</Text>
-              </TouchableOpacity>
-            )
-          )}
-          
-          {editable && (
+            /*
+             * The badge existed and there was no way to move it, so the
+             * primary photo was whichever one happened to be uploaded first.
+             * `photos[0]` is the primary everywhere -- match card, DM avatar,
+             * and `User.image`, which the server mirrors from it.
+             */
             <TouchableOpacity
-              style={styles.removeButton}
-              onPress={() => handleRemovePhoto(index)}
+              style={styles.makePrimaryButton}
+              onPress={() => handleMakePrimary(index)}
               disabled={busy}
               accessibilityRole="button"
-              accessibilityLabel={`Remove photo ${index + 1}`}
+              accessibilityLabel="Make this my main photo"
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Ionicons name="close-circle" size={ICON.lg} color={EMBER.destructive} />
+              <Text style={styles.makePrimaryText}>Make main</Text>
             </TouchableOpacity>
           )}
+
+          <TouchableOpacity
+            style={styles.removeButton}
+            onPress={() => handleRemovePhoto(index)}
+            disabled={busy}
+            accessibilityRole="button"
+            accessibilityLabel={`Remove photo ${index + 1}`}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="close-circle" size={ICON.lg} color={EMBER.destructive} />
+          </TouchableOpacity>
         </TouchableOpacity>
       </Animated.View>
     )
-  }, [busy, cachedUrls, editable, handleRemovePhoto, handleMakePrimary, itemSize, photos.length])
+  }, [busy, cachedUrls, handleRemovePhoto, handleMakePrimary, itemSize, photos.length])
 
   const renderAddPhoto = () => {
-    if (!editable || photos.length >= maxPhotos) return null
+    if (photos.length >= maxPhotos) return null
 
     return (
       <TouchableOpacity
@@ -415,7 +387,7 @@ export default function PhotoManager({
 
   if (loading) {
     return (
-      <View style={[styles.container, styles.loadingContainer, style]}>
+      <View style={[styles.container, styles.loadingContainer]}>
         <ActivityIndicator size="large" color={EMBER.textSecondary} />
         <Text style={styles.loadingText}>Loading photos...</Text>
       </View>
@@ -424,7 +396,7 @@ export default function PhotoManager({
 
   return (
     <View 
-      style={[styles.container, style]}
+      style={styles.container}
       onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
     >
       {/*
@@ -447,7 +419,7 @@ export default function PhotoManager({
       </Text>
 
       {photos.length > 0 ? (
-        <View style={[styles.photoGrid, styles.photoGridContent]}> 
+        <View style={styles.photoGrid}> 
           {photos.map((item, index) => (
             <React.Fragment key={item.id}>
               {renderPhoto({ item, index })}
@@ -475,30 +447,14 @@ const styles = StyleSheet.create({
     marginTop: SPACE.lg,
     color: EMBER.textSecondary,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: SPACE.lg,
-  },
   caption: {
     ...TYPE.meta,
     marginBottom: SPACE.md,
-  },
-  hint: {
-    ...TYPE.meta,
-    fontStyle: 'italic',
   },
   photoGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: SPACE.sm,
-  },
-  photoGridContent: {
-    padding: 0,
-  },
-  photoContainer: {
-    margin: 0,
   },
   photo: {
     borderRadius: EMBER_RADIUS.sm,
@@ -537,15 +493,6 @@ const styles = StyleSheet.create({
     backgroundColor: EMBER.textPrimary,
     borderRadius: EMBER_RADIUS.pill,
   },
-  dragHandle: {
-    position: 'absolute',
-    bottom: SPACE.xs,
-    right: SPACE.xs,
-    backgroundColor: EMBER.scrim,
-    borderRadius: EMBER_RADIUS.sm,
-    padding: SPACE.xxs,
-  },
-  dragText: { ...TYPE.caption, color: EMBER.textPrimary },
   addPhoto: {
     borderRadius: EMBER_RADIUS.sm,
     borderWidth: 2,

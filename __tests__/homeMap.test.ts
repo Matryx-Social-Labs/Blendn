@@ -4,19 +4,27 @@ import { join } from 'path'
 import {
   backoffMs,
   buildingUnder,
+  cameraMove,
+  cityPickAction,
   insideLastCircle,
   lightCandidates,
   lightSignature,
   liveAt,
   loadPins,
+  locateRide,
+  locateTarget,
+  mapPadding,
   MAX_QUERY_RADIUS_KM,
   pinsFor,
   roundQuery,
   shadeOf,
-  shouldFollowCity,
   shouldFollowFix,
+  snapRecentre,
+  tiltedZoom,
   viewportQuery,
+  visibleCentreY,
 } from '../lib/homeMap'
+import { drawerSnapPoints } from '../lib/home'
 import { glowRadius } from '../lib/mapLit'
 import { CITY_BUILDINGS, EMBER_MAP_STYLE, homeMapStyle, styleHost } from '../lib/mapStyleEmber'
 import { MAP_THEME } from '../lib/mapTheme'
@@ -153,9 +161,9 @@ describe('the building a pin lights', () => {
 /** Read as source: a layer that draws the boundary renders fine and is wrong. */
 const code = (rel: string) =>
   readFileSync(join(__dirname, '..', rel), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+const component = code('components/home/HomeMap.tsx')
 
 describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
-  const component = code('components/home/HomeMap.tsx')
   // The map's own layers live in two files: the component and its lit layers.
   const layers = component + code('components/home/MapLitLayers.tsx')
   // Everything that decides what the map draws: the component, its layers, its lighting, its pure parts, its style and its theme.
@@ -179,12 +187,16 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
     expect(types.filter((t) => t !== 'fill-extrusion' && t !== 'circle')).toEqual([])
   })
 
-  it('moves the camera only with the drawer padding, so the centre stays above the drawer', () => {
-    const moves = component.split('\n').filter((line) => /\.(easeTo|flyTo|jumpTo)\(/.test(line))
-    expect(moves.length).toBeGreaterThan(0)
-    for (const line of moves) expect(line).toMatch(/padding:/)
+  it('moves the camera only through one stop helper, every stop with the padding', () => {
+    expect(component).not.toMatch(/camera\.current\?\.(easeTo|flyTo|jumpTo|zoomTo)\(/)
+    const stops = component.split('\n').filter((line) => /\bstop\(\{/.test(line))
+    expect(stops.length).toBeGreaterThanOrEqual(6)
+    for (const line of stops) expect(line).toMatch(/padding:/)
+    // Its failures are logged, never left floating (review L4).
+    expect(component).toMatch(/cam\.setStop\(\{ easing: 'ease', \.\.\.to \}\)\)\s*\.catch\(/)
     // …and the first frame has it too: a padding-only camera change is a no-op on Android (review H3).
-    expect(component).toMatch(/initialViewState=\{\{[\s\S]*?padding: \{ bottom: bottomInset \}/)
+    expect(component).toMatch(/initialViewState=\{\{[\s\S]*?\bpadding,\s*\}\}/)
+    expect(component).toMatch(/const padding = mapPadding\(\{ topChrome, mapHeight, drawerTop: drawerSnapTop \}\)/)
   })
 
   it("draws the person's dot as a plain puck, never one that follows the compass (Android redrew the map forever)", () => {
@@ -217,12 +229,12 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
     expect(component).not.toMatch(/queryRenderedFeatures/)
   })
 
-  it("keeps OpenFreeMap's buildings extrudable and its attribution on", () => {
+  it("keeps OpenFreeMap's buildings extrudable, credited by our own corner credit (the native one is off)", () => {
     expect(CITY_BUILDINGS).toMatchObject({ id: 'blendn-buildings', source: 'openmaptiles', sourceLayer: 'building' })
     expect(layers).toMatch(/<CityBuildings \/>/)
     expect(EMBER_MAP_STYLE.sources).toHaveProperty('openmaptiles')
-    expect(component).toMatch(/\battribution\b(?!=\{false\})/)
-    expect(component).not.toMatch(/attribution=\{false\}/)
+    expect(component).toMatch(/attribution=\{false\}/)
+    expect(component).toMatch(/<MapCredit /)
   })
 })
 
@@ -338,16 +350,207 @@ describe('the map style can move without a release (step 2 review)', () => {
   })
 })
 
-describe('the map and the city (step 2 drive)', () => {
-  it("follows a city the person picks, but the city resolved at launch never takes the map from their own position", () => {
-    // Launch: the city arrives after the fix — the fix wins.
-    expect(shouldFollowCity({ firstCity: true, hasFix: true, touched: false })).toBe(false)
-    // Launch with no fix: the city is the best place to look.
-    expect(shouldFollowCity({ firstCity: true, hasFix: false, touched: false })).toBe(true)
+describe('the map and the city (step 2 drive; owner, 2026-10-15)', () => {
+  const act = (over: Partial<Parameters<typeof cityPickAction>[0]>) => cityPickAction({ picked: false, here: false, hasFix: true, touched: false, ...over })
+
+  it('moves to a city chosen in the picker, even the one it shows: a re-pick is a pick', () => {
+    // The owner, in Saarbrücken with a fix, picked Bengaluru — the only city on staging — and nothing moved.
+    expect(act({ picked: true })).toBe('city')
+  })
+
+  it('moves to a city picked after the person panned the map', () => {
+    expect(act({ picked: true, touched: true })).toBe('city')
+    expect(act({ picked: true, touched: true, hasFix: false })).toBe('city')
+  })
+
+  it('shows the person, following them, when what they chose was where they stand (review L5)', () => {
+    // "Use my current location" and "You're in X. Browse events here?": not the middle of town, the fix.
+    expect(act({ picked: true, here: true })).toBe('locate')
+    expect(act({ picked: true, here: true, touched: true })).toBe('locate')
+  })
+
+  it('never lets a city the app decided take the map from where the person stands', () => {
+    // Launch: the stored or inferred city arrives after the fix — the fix wins.
+    expect(act({})).toBeNull()
+    // A better guess later (the device city) is not a pick either.
+    expect(act({ touched: true })).toBeNull()
     // Launch after the person already moved the map: theirs.
-    expect(shouldFollowCity({ firstCity: true, hasFix: false, touched: true })).toBe(false)
-    // A later pick is the person asking: follow it, fix or not.
-    expect(shouldFollowCity({ firstCity: false, hasFix: true, touched: true })).toBe(true)
+    expect(act({ hasFix: false, touched: true })).toBeNull()
+  })
+
+  it('goes to a city the app decided when there is nothing better: no fix, no map moved', () => {
+    expect(act({ hasFix: false })).toBe('city')
+  })
+})
+
+describe('how the camera gets there (design kit motion #41)', () => {
+  const saarbruecken: [number, number] = [6.9965, 49.2354]
+  const bengaluru: [number, number] = [77.5946, 12.9716]
+  const indiranagar: [number, number] = [77.6408, 12.9784]
+  const ease = { easeMs: MAP_THEME.camera.easeMs, reduceMotion: false }
+
+  it('eases within a city, in 600 ms or less', () => {
+    expect(cameraMove(bengaluru, indiranagar, ease)).toEqual({ duration: MAP_THEME.camera.easeMs, fade: false })
+    expect(MAP_THEME.camera.easeMs).toBeLessThanOrEqual(600)
+  })
+
+  it('jumps across cities, under a 200 ms fade: no flight', () => {
+    expect(cameraMove(saarbruecken, bengaluru, ease)).toEqual({ duration: 0, fade: true })
+    expect(MAP_THEME.camera.fadeMs).toBe(200)
+  })
+
+  it('draws the line between the two at the theme distance', () => {
+    const km = MAP_THEME.camera.acrossCityKm
+    // Due north, one degree of latitude is ~111.2 km.
+    const north = (d: number): [number, number] => [bengaluru[0], bengaluru[1] + d / 111.195]
+    expect(cameraMove(bengaluru, north(km - 1), ease).fade).toBe(false)
+    expect(cameraMove(bengaluru, north(km + 1), ease).fade).toBe(true)
+    expect(km).toBe(30)
+  })
+
+  it('jumps from nowhere known (the map has not said where it is yet)', () => {
+    expect(cameraMove(null, bengaluru, ease)).toEqual({ duration: 0, fade: true })
+  })
+
+  it('just jumps with Reduce Motion, near or far', () => {
+    expect(cameraMove(bengaluru, indiranagar, { ...ease, reduceMotion: true })).toEqual({ duration: 0, fade: false })
+    expect(cameraMove(saarbruecken, bengaluru, { ...ease, reduceMotion: true })).toEqual({ duration: 0, fade: false })
+  })
+})
+
+describe('your position sits in the middle of the map you can see (owner, TestFlight 124)', () => {
+  // iPhone 17 Pro, measured on the simulator: 874 pt screen, 62 pt safe area + 64 pt top bar, the map view 782 pt (the tab bar's top).
+  const topChrome = 126
+  const mapHeight = 782
+  const points = drawerSnapPoints({ height: 874, topChrome, tabBarTop: mapHeight })
+
+  it.each(['peek', 'half', 'full'] as const)('pads the top bar and the drawer at %s, in the map view\'s own points', (snap) => {
+    const padding = mapPadding({ topChrome, mapHeight, drawerTop: points[snap] })
+    expect(padding).toEqual({ top: topChrome, bottom: mapHeight - points[snap] })
+    // The middle of the padded map is halfway between the top bar and the drawer's edge.
+    expect(visibleCentreY(padding, mapHeight)).toBe((topChrome + points[snap]) / 2)
+  })
+
+  it('no longer pads from the screen\'s foot: at half the old padding put you about 110 pt above the middle', () => {
+    const half = points.half
+    const before = (mapHeight - (874 - half)) / 2 // bottom only, from the screen's height: 172.5, as measured
+    const now = visibleCentreY(mapPadding({ topChrome, mapHeight, drawerTop: half }), mapHeight)
+    expect(now - before).toBe(109)
+  })
+
+  it('never pads below nothing', () => {
+    expect(mapPadding({ topChrome, mapHeight, drawerTop: mapHeight + 40 }).bottom).toBe(0)
+  })
+
+  it('keeps your position centred when the drawer settles while the map follows you, and your own middle once you have moved it', () => {
+    const fix: [number, number] = [6.9965, 49.2354]
+    const base = { now: 1_000, inFlight: null, fix }
+    expect(snapRecentre({ ...base, following: true })).toEqual({ kind: 'centre', to: fix })
+    expect(snapRecentre({ ...base, following: false })).toEqual({ kind: 'read' })
+    expect(snapRecentre({ ...base, following: true, fix: null })).toEqual({ kind: 'read' })
+  })
+
+  it('sends a move still in flight again with the new padding, rather than undo it from a mid-flight centre (review M1)', () => {
+    const pick = { to: [77.6077, 12.9711] as [number, number], until: 1_400 }
+    // A pick to Bengaluru 400 ms from landing when the drawer settles: it lands, re-padded, in the time it had left.
+    expect(snapRecentre({ now: 1_000, inFlight: pick, following: true, fix: [6.99, 49.23] })).toEqual({ kind: 'reissue', move: pick, durationMs: 400 })
+    // Landed: back to the usual rule.
+    expect(snapRecentre({ now: 1_400, inFlight: pick, following: false, fix: null })).toEqual({ kind: 'read' })
+  })
+
+  it('re-centres once per settled snap, with a centre and the new padding, never per drag frame', () => {
+    expect(component).toMatch(/useEffect\(\(\) => \{\s*const before = shown\.current\s*shown\.current = \{ padding, mapHeight \}/)
+    // The old centre is read with the padding AND the map height it was drawn with (review M3).
+    expect(component).toMatch(/unproject\(\[width \/ 2, visibleCentreY\(before\.padding, before\.mapHeight\)\]\)/)
+    // A tick later, and dropped if a move started meanwhile: a pick in the same commit wins (review M1).
+    expect(component).toMatch(/const startedAt = moves\.current[\s\S]*?setTimeout\(\(\) => \{\s*if \(moves\.current !== startedAt\) return/)
+    expect(component).toMatch(/\.then\(\(centred\) => \{\s*if \(moves\.current !== startedAt\) return/)
+    expect(component).toMatch(/moves\.current \+= 1/)
+    expect(component).toMatch(/\}, \[padding\.top, padding\.bottom\]\)/)
+    // Keyed on the settled snap's top, not the animated drawer value.
+    expect(code('components/home/HomeShell.tsx')).toMatch(/drawerSnapTop=\{points\[snap\]\}/)
+    // The map waits for its own height, so the first frame is centred too.
+    expect(code('components/home/HomeShell.tsx')).toMatch(/\{mapHeight !== null \? \(\s*<HomeMap/)
+  })
+})
+
+describe('"my location"', () => {
+  it('goes to the fix at the map\'s own zoom and tilt', () => {
+    expect(locateTarget({ latitude: 49.2354, longitude: 6.9965 })).toEqual({
+      center: [6.9965, 49.2354],
+      zoom: MAP_THEME.camera.zoom,
+      pitch: MAP_THEME.camera.pitch,
+    })
+  })
+
+  it('has nowhere to go without a fix: the button asks for one instead', () => {
+    expect(locateTarget(null)).toBeNull()
+  })
+
+  it('rides a gap above the drawer wherever it is, fading out from half to full', () => {
+    const drawer = { half: 420, full: 120 }
+    const { sizePx, gapPx } = MAP_THEME.locate
+    for (const top of [700, 420, 300, 120]) expect(locateRide(top, drawer).translateY).toBe(top - gapPx - sizePx)
+    expect(locateRide(700, drawer).opacity).toBe(1) // peek
+    expect(locateRide(420, drawer).opacity).toBe(1) // half
+    expect(locateRide(270, drawer).opacity).toBe(0.5) // halfway up
+    expect(locateRide(120, drawer).opacity).toBe(0) // full
+    expect(locateRide(100, drawer).opacity).toBe(0) // dragged past full
+    expect(gapPx).toBeGreaterThan(0)
+    // A screen with no room between half and full: never NaN (review L3).
+    expect(locateRide(400, { half: 120, full: 120 }).opacity).toBe(1)
+    expect(locateRide(120, { half: 120, full: 120 }).opacity).toBe(0)
+  })
+
+  it('lands at its zoom on iOS when the ease also tilts the camera (review M2)', () => {
+    // MapLibre iOS sets the zoom as a height at the old tilt, then tilts: from flat a zoom-16 ease landed near 15.2.
+    const asked = tiltedZoom(16, 0, 55, 'ios')
+    expect(asked).toBeCloseTo(16 + Math.log2(1 / Math.cos((55 * Math.PI) / 180)), 6)
+    expect(asked - 16).toBeCloseTo(0.8, 2)
+    // Model of iOS: the height at the old tilt, re-tilted, loses log2(cos from / cos to) — so it lands at 16.
+    const landed = asked - Math.log2(Math.cos(0) / Math.cos((55 * Math.PI) / 180))
+    expect(landed).toBeCloseTo(16, 6)
+    // Already at the tilt, or on Android (which sets the zoom itself): as asked.
+    expect(tiltedZoom(16, 55, 55, 'ios')).toBe(16)
+    expect(tiltedZoom(16, 0, 55, 'android')).toBe(16)
+  })
+
+  it('follows the drawer frame by frame: the shell hands the drawer and the button one animated value', () => {
+    const shell = code('components/home/HomeShell.tsx')
+    expect(shell).toMatch(/const drawerTop = useSharedValue\(points\[snap\]\)/)
+    expect(shell).toMatch(/<HomeDrawer\s+y=\{drawerTop\}/)
+    expect(shell).toMatch(/drawerTop=\{drawerTop\}/)
+    expect(code('components/home/HomeDrawer.tsx')).not.toMatch(/const y = useSharedValue/)
+    expect(code('components/home/LocateButton.tsx')).toMatch(/locateRide\(drawerTop\.get\(\), drawer\)/)
+  })
+
+  it('is wired: a tap with no fix asks through the Pulse, and every move takes the one camera rule', () => {
+    expect(component).toMatch(/const target = locateTarget\(center\)\s*if \(!target\) \{\s*setAsking\(true\)\s*Promise\.resolve\(requestLocation\(\)\)[\s\S]*?\.finally\(\(\) => setAsking\(false\)\)/)
+    expect(component).toMatch(/tiltedZoom\(move\.at\.zoom, view\.current\.pitch, move\.at\.pitch, Platform\.OS\)/)
+    expect(component).toMatch(/cameraMove\(view\.current\.centre, move\.to/)
+    // MapLibre iOS jumps (drive, 2026-10-15): flat first, or a tilted camera put Bengaluru a kilometre from
+    // Saarbrücken; the zoom last, once tilted, or it lands a step out. And the opening zoom set again once tilted.
+    expect(component).toMatch(
+      /const \{ zoom, pitch \} = move\.at \?\? MAP_THEME\.camera\s*stop\(\{ zoom: view\.current\.zoom, pitch: 0, [^}]*\}\)\s*stop\(\{ center: move\.to, pitch, padding: pad, duration: 0 \}\)\s*stop\(\{ center: move\.to, zoom, padding: pad, duration: 0 \}\)/
+    )
+    // Once: a style that loads again does not send the camera back to where it opened (review L2).
+    expect(component).toMatch(/if \(!ready\.current\) \{\s*ready\.current = true[\s\S]{0,300}stop\(\{ center: opening, zoom: MAP_THEME\.camera\.zoom, padding: shown\.current\.padding, duration: 0 \}\)/)
+    // Hidden while the drawer is full.
+    expect(code('components/home/HomeShell.tsx')).toMatch(/locateVisible=\{snap !== 'full'\}/)
+    // A re-pick changes no coordinates: the effect is keyed on the pick itself.
+    expect(component).toMatch(/\}, \[cityPick\.n, cityLat, cityLon\]\)/)
+    // A pick waits for its city's centre rather than being marked seen and lost (review L1).
+    expect(component).toMatch(/if \(cityLat === undefined \|\| cityLon === undefined\) return\s*seenPick\.current = cityPick\.n/)
+    // The fade never takes a touch: the map under it is live.
+    expect(component).toMatch(/<Animated\.View pointerEvents="none"/)
+    // The Pulse hands over its own location flow; it never grows a second one.
+    expect(code('app/(tabs)/events.tsx')).toMatch(/requestLocation: requestLocationIfNeeded/)
+    const pulse = code('app/(tabs)/events.tsx')
+    expect(pulse).toMatch(/setSelection\(\{ city, source: 'chosen' \}\)\s*setCityPick\(\(p\) => \(\{ n: p\.n \+ 1, here \}\)\)/)
+    // Where you stand is a choice of you, not of a city centre (review L5); the picker's rows are picks.
+    expect(pulse).toMatch(/chooseCity\(switchSuggestion, true\)/)
+    expect(pulse).toMatch(/chooseCity\(deviceCity, true\)/)
+    expect(pulse.match(/chooseCity\(item\.city\)/g)).toHaveLength(2)
   })
 })
 

@@ -1,4 +1,5 @@
 import {
+  cityCountLabel,
   awayNotice,
   cityOnResume,
   isBrowsingHere,
@@ -259,5 +260,18 @@ describe('isBrowsingHere', () => {
     // relabelled rather than hidden, so the page keeps its shape instead of
     // flickering as the fix arrives.
     expect(isBrowsingHere('Bengaluru', null)).toBe(false)
+  })
+})
+
+describe('cityCountLabel', () => {
+  it('names the events when a city has them, and its places when it has none', () => {
+    expect(cityCountLabel({ eventCount: 12, placeCount: 1505 })).toBe('12 events')
+    expect(cityCountLabel({ eventCount: 1, placeCount: 0 })).toBe('1 event')
+    expect(cityCountLabel({ eventCount: 0, placeCount: 1206 })).toBe('1206 places')
+    expect(cityCountLabel({ eventCount: 0, placeCount: 1 })).toBe('1 place')
+  })
+
+  it('says events for an older server that sends no placeCount', () => {
+    expect(cityCountLabel({ eventCount: 0 })).toBe('0 events')
   })
 })

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, type ReactNode } from 'react'
 import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
-import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring } from 'react-native-reanimated'
+import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, type SharedValue } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
 
 import { Grabber } from '../ui/Grabber'
@@ -34,21 +34,26 @@ const SETTLE = { damping: 28, stiffness: 260, mass: 0.9 } as const
  * `full`, back down), and a screen reader adjusts it like a slider.
  */
 export function HomeDrawer({
+  y,
   points,
   snap,
   onSnap,
   header,
+  onChromeTouch,
   children,
 }: {
+  /** The drawer's top edge as it moves: the shell's, so what rides on the drawer follows it frame by frame. */
+  y: SharedValue<number>
   points: Record<DrawerSnap, number>
   snap: DrawerSnap
   onSnap: (snap: DrawerSnap) => void
   header: ReactNode
+  /** Any touch on the handle or the header, tap or drag, before either is handled. */
+  onChromeTouch?: () => void
   children: ReactNode
 }) {
   const { height } = useWindowDimensions()
   const reduceMotion = useReducedMotion()
-  const y = useSharedValue(points[snap])
   const dragStart = useSharedValue(0)
 
   useEffect(() => {
@@ -82,7 +87,7 @@ export function HomeDrawer({
   return (
     <Animated.View style={[styles.drawer, { top: points.full }, moved]}>
       <GestureDetector gesture={pan}>
-        <View style={styles.header}>
+        <View style={styles.header} onTouchStart={onChromeTouch}>
           <Pressable
             onPress={tapStep}
             style={styles.handle}

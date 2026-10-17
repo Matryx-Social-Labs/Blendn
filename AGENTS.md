@@ -101,10 +101,10 @@ Resume reads the unfinished flow's progress from `AsyncStorage` (`lib/onboarding
 | File | Purpose |
 |------|---------|
 | `apiClient.ts` | Core HTTP client — JWT auth, token refresh, priority request queue, SWR-style response cache |
-| `api.ts` | Legacy wrappers over `apiClient` with camelCase→snake_case transform; prefer `apiClient` directly for new code |
+| `api.ts` | `getEvents` (0-based page in, snake_case events out) and `eventFromApi`, the event mapper. Everything else calls `apiClient` directly |
 | `socketClient.ts` | Socket.io client — typed events, room-based subscriptions, reconnect with exponential backoff |
 | `useAuth.ts` | Global auth state **singleton** (not React context) + `useAuth()` hook |
-| `queryCache.ts` | In-memory TTL/LRU cache (max 500 entries, 5 min default TTL) |
+| `queryCache.ts` | In-memory TTL cache (max 500 entries; every caller passes its TTL) |
 
 **API response format**: every `apiClient` method returns `{ success: boolean, data?: T, error?: string }`. Never throws — always check `result.success`.
 
@@ -140,7 +140,7 @@ useLiveSync({
 })
 ```
 
-On every app foreground, `_layout.tsx` calls `queryCache.clear()` and `apiClient.clearResponseCache()` to force fresh data.
+Foreground does not clear the caches: every cached read is stale-while-revalidate, so it paints at once and refreshes behind (see the comment in `app/_layout.tsx`). `apiClient.clearResponseCache()` runs on sign-out.
 
 ### Theme System (`lib/theme.ts`)
 
@@ -155,8 +155,8 @@ font sizes or spacing**. Read `docs/DESIGN_SYSTEM.md` before touching UI.
   `// design-exception: <reason>`.
 - One accent (orange) per screen, plus the active tab.
 
-**`EMBER` is the palette. `APP_*` tokens are legacy** and banned in `app/` and
-`components/` by the design-token check.
+**`EMBER` is the palette.** The legacy `APP_*` tokens are deleted, and the
+design-token check still bans the names.
 
 - `EMBER` — `bg` (`#0F0E0E`), `surface`, `surfaceSunken`, `surfaceMedia`,
   `textPrimary/Secondary/Tertiary/Placeholder`, `accent` (`#FF906D`), `onGradient`,
@@ -165,14 +165,58 @@ font sizes or spacing**. Read `docs/DESIGN_SYSTEM.md` before touching UI.
 - `TYPE` / `<Text variant>`, `SPACE`, `GUTTER`, `ICON`, `CONTROL`, `EMBER_RADIUS`
 - `EMBER_FONTS` — Plus Jakarta Sans for display, Manrope for body.
   **A `fontFamily` naming an unloaded family renders the system font silently**
-- Surfaces are flat: no shadows, `BlurView`, glows or gradient fills (the check fails on them)
-- `APP_COLORS` — legacy. `#000` background, `#0A84FF` accent. Not the design
-- `APP_SPACING` — xxs/xs/sm/md/lg/xl/2xl/3xl/4xl (4–48 px)
-- `APP_RADIUS` — xs/sm/md/lg/xl/pill
-- `APP_SIZE` — touch target (44 px), icon sizes
-- `APP_ELEVATION` — low/medium/high shadow presets
-- `APP_MOTION` — duration (instant/fast/normal/slow) + easing (entrance/exit/standard)
-- `APP_CTA` — primary/secondary/destructive button style objects
+- Surfaces are flat: no shadows, glows or ad-hoc glass or gradients (the check fails on them)
+
+**The redesign** (`docs/redesign/`, DESIGN-BRIEF §4–§11) has its foundation in
+place; screens move to it one at a time, and `EMBER` goes when the last has.
+
+- `lib/design/tokens.ts` — generated from `design/tokens.json` by `npm run tokens`;
+  never edit it. `COLOR`, `GRADIENT`, `MATERIAL`, `TYPE` (Satoshi + Geist Mono),
+  `SPACE`, `RADIUS`, `SIZE`, `ICON`, `SPRING` (the seven), `DURATION`, `EASING`,
+  `REDUCE_MOTION` (its own table — read it through `useMotion()` in `lib/motion.ts`)
+- `lib/haptics.ts` — `H.*`, the only way to play a haptic
+- `components/ui/Material.tsx` (glass/blur/solid), `GradientFill.tsx` (the two
+  brand gradients), `Icon.tsx` (Lucide, outlined) — the only places glass, a
+  gradient or a Lucide glyph may come from
+- `components/ds/` — the P0 system components (ROUND3 B4): `Button`, `IconButton`,
+  `Sheet`, `Toast`, `Banner`/`VisibilityBanner`, `SettingsRow`/`SettingsGroup`,
+  `Avatar`, `Loader`/`Spinner`, `StateScreen`/`GlyphWell`. Import each file
+  directly (no barrel: it would hide wiring from `noOrphanComponents`). Every
+  state is on `/preview/ds-p0`
+- `components/ds/` P1, the inputs (ROUND3 B4): `TextField`/`TextArea`,
+  `DateField`, `SearchField`, `Chip`/`InterestChip`, `Toggle` (SettingsRow
+  draws it), `SegmentedControl`, `RadioCard`, `LookingForCard`, `Stepper`,
+  `ProgressBar`, `TabBar` (hosts `Disc`), `TopBar`, and `MonoFamily` (`Badge`,
+  `PresenceDot`, `LivePill`, `TimeBadge`, `Price`). Every state is on
+  `/preview/ds-p1`
+- `components/ds/` P2, events and people (ROUND3 B4): `EventCard` (hero,
+  compact, row), `TonightCard`, `VenuePass`/`DoorCode`, `HoldToConfirm` (the
+  one hold: 900 ms, `H.tick` ×3, `H.commit`), `AmenityTile`/`AmenityGrid`,
+  `MapCard`/`MapPin`/`MapCluster`, `DayHeading`, `SectionHeader`,
+  `Facepile`/`FaceMark`, `PersonCard` (every D · 4.1 variant), `MeetNextCard`,
+  `GridFace`, `TimeRing`, `RevealBar`, `RollingNumber`. Every state is on
+  `/preview/ds-p2`
+- `components/ds/` P3, chat and gestures (ROUND3 B4): `ChatBubble`, `Composer`,
+  `ReactionBar`/`ReactionPill`, `ContextMenu`/`LongPressMenu`, `SwipeRow`,
+  `ImageViewer`, `PollBubble`, `BroadcastNotice`, `SystemNotice`/`SystemLine`,
+  `TypingIndicator`, `ReplyPreview`, `UnreadDivider`/`DayPill`, `ReceiptMark`,
+  `CoachMark`; the rules they share in `chatShared.ts`, the six reactions in
+  `lib/chatReactions.ts`. Every state, and a live room to drive the gestures,
+  on `/preview/ds-p3`
+- `components/ds/` P4, the rest of R2-D0 (ROUND3 B4): `NotificationRow`/
+  `NotificationVisual`, `InAppBanner` (with the wave), `CountTicks`, `CrewCard`/
+  `CrewRow`, `CrewStrip`, `LikingAsChip`, `RevealSheet`/`RevealSide`,
+  `GoLiveSheet`, `SessionSheet`, `ExpiryPrompt`/`NotLiveNotice`, `OverlapLine`,
+  `AchievementBadge`, `TonightSheet`, `PlanCard`/`NightPassRow`/`PlanList`,
+  `NeverForSalePanel`, `ManageStatusRow`, `OfferCard`, `ShareSheet`,
+  `LinkPreviewCard`, `StoryCard`. Built from the flows and their deltas (the
+  newest delta's "after" first); every state on `/preview/ds-p4`
+- P5, sets and moments: `Orbs` and `Grain` (L0, the only ambient loop),
+  `CrewEmblem`, and the five L4 moments `MomentMatch`, `MomentBlend`,
+  `MomentReady`, `MomentPour`, `MomentRecap` on one `MomentStage`; each on
+  `/preview/ds-p5`. A moment plays its own haptic, so its caller plays none
+- Satoshi is gitignored (its licence; this repo is public): copy it in before
+  Metro runs — `docs/RELEASING.md`, "Satoshi"
 
 NativeWind (Tailwind) is configured but UI code predominantly uses `StyleSheet.create` with theme tokens.
 
@@ -181,7 +225,7 @@ NativeWind (Tailwind) is configured but UI code predominantly uses `StyleSheet.c
 - `components/screens/EventDetailScreen.tsx` — full event detail rendered inside the `event/[id]` modal sheet
 - `components/screens/MatchScreen.tsx` — people discovery UI
 - `components/OptimizedImage.tsx` — `expo-image` wrapper with placeholder and fallback
-- `components/motion/ScalePress.tsx` — use this for all tappable elements (haptic feedback + scale animation)
+- `components/motion/ScalePress.tsx` — use this for all tappable elements: a scale on `M.press`, on the UI thread, kept under Reduce Motion. No haptic unless you pass one from `lib/haptics.ts` (`haptic={H.primary}`); most taps are silent (DESIGN-BRIEF §10)
 - `components/Skeleton.tsx` — loading shimmer placeholder
 - `components/Toast.tsx` — global toast system (provider in `_layout.tsx`)
 - `components/RealtimeStatusBanner.tsx` — surfaces socket connection state
@@ -190,7 +234,7 @@ NativeWind (Tailwind) is configured but UI code predominantly uses `StyleSheet.c
 
 - **Motion is Reanimated 4** (SDK 57 pin). Use `.get()/.set()` on shared values, and `scheduleOnRN` from `react-native-worklets`, not `runOnJS`. For state-driven changes, use a CSS transition written as the `transition` shorthand string (`'color 150ms cubic-bezier(…)'`). `transitionProperty` & co. collide with react-native-web's string-typed style props.
 - **Logging**: use `Logger.info/warn/error('module', 'message', data)` from `lib/logger.ts` — never `console.log`.
+- **Coach marks** (first-run guidance): `useCoachMark` / `markCoachUsed` from `lib/coachMarks.ts`, never a banner or a hand-rolled AsyncStorage flag. The rules and the inventory are in [`docs/NAVIGATION.md`](docs/NAVIGATION.md#coach-marks).
 - **Auth singleton**: `useAuth.ts` stores state in a module-level variable, not React context. All components share one instance; calling `useAuth()` subscribes to updates.
 - **Socket lifecycle**: managed in `_layout.tsx` — connects on login via `initSocketWithAppState()`, disconnects on logout, auto-reconnects on foreground. Rooms are automatically rejoined after every reconnect.
-- **`lib/globalText.ts`**: imported once in `_layout.tsx` to patch the global `Text` component (font family, disable font scaling).
 - **camelCase vs snake_case**: the REST API returns camelCase. `EventApiItem` in `apiClient.ts` documents both forms for historical compatibility — use camelCase in new code.

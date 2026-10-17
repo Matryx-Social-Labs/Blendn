@@ -37,24 +37,28 @@ describe('safety sheets', () => {
 
   it('is drawn by one host, mounted at the root', () => {
     expect(read('app/_layout.tsx')).toContain('<SheetHost />')
-    // Every action gets its own row: four in the default layout put three in one.
-    expect(read('components/SheetHost.tsx')).toContain('layout="stack"')
+    // On the DS Sheet, which stacks every action on its own row (no three-in-a-row).
+    expect(read('components/SheetHost.tsx')).toContain('<DsSheet')
   })
 })
 
 describe('the chat screens say what failed', () => {
   it('shows a load failure, not the empty state, in both', () => {
-    expect(read('app/chat/[id].tsx')).toMatch(/loadError \? \([\s\S]{0,80}<ChatLoadFailed/)
-    expect(read('app/private-chat/[conversationId].tsx')).toMatch(/loadError \? \([\s\S]{0,80}<ChatLoadFailed/)
+    for (const screen of ['app/chat/[id].tsx', 'app/private-chat/[conversationId].tsx']) {
+      expect(read(screen)).toMatch(/loadError \? \([\s\S]{0,240}<StateScreen\s+icon="cloud-off"/)
+    }
   })
 
   it('keeps a failed send as a marked bubble in both', () => {
-    for (const screen of ['app/chat/[id].tsx', 'app/private-chat/[conversationId].tsx']) {
-      const src = read(screen)
-      expect(src).toContain('failed={item.failed}')
-      expect(src).toContain('onRetry={item.failed ?')
-      expect(src).not.toMatch(/setNewMessage\(messageText\)/)
+    // The rows draw it; the screens never put the text back in the composer.
+    for (const row of ['components/chat/RoomFeed.tsx', 'components/chat/DmParts.tsx']) {
+      const src = read(row)
+      expect(src).toMatch(/failed(=\{|: )item\.failed \? item\.failedLine \|\| true : false/)
+      expect(src).toContain('handlers.retry(item)')
     }
-    expect(read('components/chat/ChatBubble.tsx')).toContain('Not sent · Tap to retry')
+    for (const screen of ['app/chat/[id].tsx', 'app/private-chat/[conversationId].tsx']) {
+      expect(read(screen)).not.toMatch(/setNewMessage\(messageText\)/)
+    }
+    expect(read('components/ds/ChatBubble.tsx')).toContain('Not sent · Tap to retry')
   })
 })

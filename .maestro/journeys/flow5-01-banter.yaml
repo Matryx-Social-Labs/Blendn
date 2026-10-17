@@ -1,0 +1,45 @@
+# Flow 5 · the Banter (feat(flow-5)): the glass header, the sections, search,
+# and opening a room from its row.
+# Needs: an account with at least one DM (PEER) and one room it has posted in
+# or is checked into (ROOM).
+# Env: MAESTRO_EMAIL, MAESTRO_PASSWORD (environment variables; Maestro logs
+# MAESTRO_* values — delete ~/.maestro/tests/<run> afterwards). With -e:
+#   PEER    a regex for a DM row's name, e.g. ".*Cosmic Panda.*"
+#   SEARCH  a few letters of that name, e.g. "cosm"
+#   ROOM    a regex for a room row's or the Live now hero's title
+# Reads nothing back: it writes nothing.
+appId: com.matryxsociallabs.blendn
+tags:
+  - flow-5
+---
+- runFlow: ../subflows/flow5-open.yaml
+# The header: the bell, search, Mark all read (dimmed when nothing is unread).
+- assertVisible: "Banter"
+- assertVisible: "Search conversations"
+- assertVisible: "Mark all read"
+- extendedWaitUntil:
+    visible: ${PEER}
+    timeout: 30000
+- takeScreenshot: flow5-01-banter
+# Search filters in place; turning it off clears it.
+- tapOn: "Search conversations"
+- extendedWaitUntil:
+    visible: "Search conversations"
+    timeout: 5000
+- inputText: ${SEARCH}
+- extendedWaitUntil:
+    visible: ${PEER}
+    timeout: 5000
+- takeScreenshot: flow5-01-search
+- tapOn:
+    id: "banter-search-toggle"
+# A room's row (or the Live now hero) opens the room.
+- scrollUntilVisible:
+    element: ${ROOM}
+    direction: DOWN
+    timeout: 20000
+- tapOn: ${ROOM}
+- extendedWaitUntil:
+    visible: "Room info"
+    timeout: 20000
+- takeScreenshot: flow5-01-room-open

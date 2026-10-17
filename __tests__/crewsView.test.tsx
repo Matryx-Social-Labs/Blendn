@@ -28,7 +28,8 @@ jest.mock('../lib/sheet', () => ({ showSheet: jest.fn() }))
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn() }) }))
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() } }))
 
-import { CrewsFooter, CrewsHeader, useCrewActions, useCrewsHere } from '../components/crews/CrewsView'
+import { CrewsFoot, CrewsHead } from '../components/blendn/RoomCrews'
+import { useCrewActions, useCrewsHere } from '../components/crews/CrewsView'
 import { OPEN_TO_CREWS_LABEL, type CrewCard, type CrewsAtEvent } from '../lib/crews'
 import { crewsApi } from '../lib/crewsApi'
 
@@ -54,13 +55,13 @@ beforeEach(() => {
   api.myCrews.mockResolvedValue({ success: true, data: { crews: [], invites: [] } })
 })
 
+/** The Room's Crews view as it draws its head and foot (components/blendn/RoomCrews, R2-D1). */
 function Harness({ checkInKey }: { checkInKey: string }) {
   const crews = useCrewsHere('e1')
-  const actions = useCrewActions('e1', crews)
   return (
     <>
-      <CrewsHeader eventId="e1" checkInKey={checkInKey} crews={crews} actions={actions} />
-      <CrewsFooter crews={crews} />
+      <CrewsHead eventId="e1" checkInKey={checkInKey} crews={crews} likingAs={undefined} pseudonym="Night Cat" onLikingAs={jest.fn()} />
+      <CrewsFoot crews={crews} />
     </>
   )
 }

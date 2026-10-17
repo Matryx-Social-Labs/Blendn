@@ -2,51 +2,34 @@ import { readFileSync } from 'fs'
 import { join } from 'path'
 
 /**
- * The Banter — the decisions that made the rebuild against frame `1141:5247`
- * different from the screen it replaced.
+ * The Banter — the rules that outlived its redesign (Flow 5, 2026-10-15).
  *
- * These are source assertions rather than render assertions for the same
- * reason the rest of the suite is: the screen needs a login, a socket and a
- * conversation that exists, and none of those has anything to do with whether
- * the two lists are fetched together.
+ * The screen is drawn by `app/(tabs)/chat.tsx` and `components/banter/BanterParts.tsx`;
+ * its data — rooms, crew chats, DMs, requests, loaded together and kept live —
+ * by `lib/useBanterInbox.ts`. Behaviour is rendered in `banterScreen.test.tsx`;
+ * these pin the decisions a render with fixtures can't reach.
  */
 const read = (p: string) => readFileSync(join(__dirname, '..', p), 'utf8')
 
 /*
- * Strip comments before matching.
- *
- * Twice now a test has passed by matching its own explanatory prose — the
- * comment above the code said the same words the assertion looked for, so the
- * assertion held after the code was deleted.
+ * Strip comments before matching: twice a test passed by matching its own
+ * explanatory prose after the code was deleted.
  */
-const stripComments = (src: string) =>
-  src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+const stripComments = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 
 const SCREEN = () => stripComments(read('app/(tabs)/chat.tsx'))
-const SECTIONS = () => stripComments(read('components/banter/BanterSections.tsx'))
+const PARTS = () => stripComments(read('components/banter/BanterParts.tsx'))
+const INBOX = () => stripComments(read('lib/useBanterInbox.ts'))
 
 describe('one inbox, not two tabs', () => {
   it('keeps no tab state and no segmented control', () => {
-    /*
-     * The old screen carried `activeTab: 'group' | 'personal'` and branched
-     * every cache key, every throttle and every fetch on it. The frame has a
-     * single Recent list. If a tab comes back, the two-places-to-check problem
-     * comes back with it.
-     */
-    const src = SCREEN()
+    const src = SCREEN() + INBOX()
     expect(src).not.toContain('activeTab')
-    expect(src).not.toContain('ChatTabType')
     expect(src).not.toContain('setActiveTab')
   })
 
   it('fetches both lists in the same pass', () => {
-    /*
-     * The tabbed version fetched only the visible half, so the other half was
-     * always as stale as the last time you looked at it. Merged, they go out
-     * together — and `Promise.all` rather than sequentially, because the two
-     * requests do not depend on each other.
-     */
-    const src = SCREEN()
+    const src = INBOX()
     const block = src.slice(src.indexOf('if (shouldFetchList)'))
     const body = block.slice(0, block.indexOf('lastFetchRef.current.list'))
     expect(body).toContain('Promise.all')
@@ -55,288 +38,216 @@ describe('one inbox, not two tabs', () => {
   })
 
   it('sorts by last message with never-used conversations last', () => {
-    /*
-     * `sortTime` is 0 when a conversation has never been used, and the sort is
-     * descending — so an empty event room lands at the bottom rather than the
-     * top. A room created five minutes ago with nothing in it is not the most
-     * important thing in the inbox.
-     */
     const src = SCREEN()
     expect(src).toContain('sortTime: c.last_message_time ? Date.parse(c.last_message_time) : 0')
-    expect(src).toContain('merged.sort((a, b) => b.sortTime - a.sortTime)')
+    expect(src).toContain('const byRecent = (a: Row, b: Row) => b.sortTime - a.sortTime')
   })
 
-  it('distinguishes a room from a person by kind, not by list', () => {
-    // The whole visual difference in the frame: a photograph or a disc.
+  it('draws a person round and a room or crew square (one avatar family)', () => {
     const src = SCREEN()
-    expect(src).toContain("kind: 'direct' as const")
-    expect(src).toContain("kind: 'event' as const")
-    expect(SECTIONS()).toContain("const isRoom = item.kind === 'event' || item.kind === 'group'")
+    expect(src).toContain("face: { kind: 'person',")
+    expect(src).toContain("face: { kind: 'room', cover: c.event_image }")
+    expect(src).toContain("face: { kind: 'crew', seed: crews.seedFor(r.id) }")
+    expect(PARTS()).toContain('borderRadius: SQUARE_RADIUS')
   })
 
-  it('namespaces the two id spaces so a collision cannot drop a row', () => {
-    /*
-     * A conversation id and a chat-room id come from different tables and
-     * nothing guarantees they differ. Two rows with the same key in a FlatList
-     * renders one of them.
-     */
+  it('namespaces the id spaces so a collision cannot drop a row', () => {
     const src = SCREEN()
-    expect(src).toContain('id: `p:${c.conversation_id}`')
-    expect(src).toContain('id: `g:${c.chat_room_id}`')
+    expect(src).toContain('key: `p:${c.conversation_id}`')
+    expect(src).toContain('key: `g:${c.chat_room_id}`')
+    expect(src).toContain('key: `c:${r.id}`')
+  })
+
+  it('groups into Crews, People and Past rooms under one heading system', () => {
+    const src = SCREEN()
+    expect(src).toContain("['Crews', match(crewRows), false]")
+    expect(src).toContain("['People', match(peopleRows), true]")
+    expect(src).toContain("['Past rooms', match(pastRows), false]")
+    expect(src).toContain('<SectionHeader')
   })
 })
 
-describe('message requests survived the redesign', () => {
-  it('still loads, still answerable', () => {
-    /*
-     * The frame has no slot for a request. Matching it exactly would have
-     * deleted the only way to accept or decline one — the endpoint would still
-     * be there and nothing would ever call it.
-     */
+describe('message requests', () => {
+  it('still load, and are still answerable', () => {
+    expect(INBOX()).toContain('loadMessageRequests')
+    expect(SCREEN()).toContain("inbox.respondToRequest(r, 'accept')")
+    expect(SCREEN()).toContain("inbox.respondToRequest(r, 'decline')")
+  })
+
+  it('show the note verbatim, in two lines (ROUND3 C11)', () => {
+    expect(SCREEN()).toContain('note={r.initial_message?.trim() ||')
+    expect(PARTS()).toMatch(/numberOfLines=\{2\}[^>]*>\s*\{note\}/)
+  })
+
+  it('put Decline before Accept, at 48, and hold both while one is in flight', () => {
+    const parts = PARTS()
+    const actions = parts.slice(parts.indexOf('styles.requestActions'))
+    expect(actions.indexOf('label="Decline"')).toBeLessThan(actions.indexOf('label={accept}'))
+    expect(actions).toContain('disabled={pending}')
+    expect(actions).toContain('loading={pending}')
+    expect(actions.match(/size="md"/g)).toHaveLength(2)
+  })
+
+  it('Accept has no press haptic: H.success comes with the answer', () => {
+    expect(PARTS()).toContain('pressHaptic={false}')
+    expect(INBOX()).toMatch(/action === 'accept'[\s\S]{0,80}H\.success\(\)/)
+  })
+
+  it('leave with a fade while the rest close the gap', () => {
     const src = SCREEN()
-    expect(src).toContain('loadMessageRequests')
-    expect(src).toContain("respondToRequest(r, 'accept')")
-    expect(src).toContain("respondToRequest(r, 'decline')")
+    expect(src).toContain('exiting={reduceMotion ? undefined : FadeOut.duration(DURATION.quick)}')
+    expect(src).toContain('layout={reduceMotion ? undefined : REQUEST_REFLOW}')
   })
 
-  it('puts decline before accept', () => {
-    // The destructive action is not the one your thumb lands on by default.
-    const sections = SECTIONS()
-    const actions = sections.slice(sections.indexOf('requestStyles.requestActions'))
-    expect(actions.indexOf('onDecline')).toBeLessThan(actions.indexOf('onAccept'))
-  })
-
-  it('disables both buttons while one is in flight', () => {
-    // Double-tapping accept posts twice and the second one 404s on a request
-    // that no longer exists.
-    const sections = SECTIONS()
-    expect(sections).toContain('disabled={pending}')
-    expect(sections).toContain('accessibilityState={{ disabled: !!pending }}')
+  it('show crew invites as requests, with Join opening the consent screen (R2-D2 #02)', () => {
+    const src = SCREEN()
+    expect(src).toContain('accept="Join"')
+    expect(src).toContain("router.push('/crews')")
+    expect(src).toContain('crews.decline(invite)')
   })
 })
 
 describe('the list is still a list', () => {
-  it('renders through one FlatList rather than mapping in a ScrollView', () => {
-    /*
-     * The header — search, requests, the Recent heading — rides as
-     * `ListHeaderComponent` so the conversations below it stay virtualised. A
-     * hundred rows mapped inside a ScrollView mounts a hundred avatars.
-     */
+  it('renders through one FlatList, the live room and requests riding its header', () => {
     const src = SCREEN()
     expect(src).toContain('<FlatList')
     expect(src).toContain('ListHeaderComponent={header}')
   })
 
-  it('offers an empty state and a skeleton, and tells them apart', () => {
+  it('tells loading, a search that found nothing, a failure and empty apart', () => {
     const src = SCREEN()
-    expect(src).toMatch(/ListEmptyComponent=\{\s*loading \? \(\s*<InboxSkeleton \/>/)
-    expect(src).toContain('<EmptyInbox />')
+    expect(src).toMatch(/inbox\.loading \? \(\s*<BanterSkeleton \/>/)
+    expect(src).toContain('title={`No chats match “${query.trim()}”`}')
+    expect(src).toContain('title="Couldn’t load your chats"')
+    expect(src).toContain('title="No conversations yet"')
+    // Live rooms or requests with nothing else is not an empty inbox.
+    expect(src).toContain('hasHeaderContent ? null : (')
   })
 
-  it('says a search found nothing, rather than that the inbox is empty', () => {
-    const src = SCREEN()
-    expect(src).toContain('<BanterSearch value={query} onChangeText={setQuery} />')
-    expect(src).toMatch(/trimmedQuery \? \(\s*<Text style=\{styles\.noMatches\}/)
-  })
-
-  it('recycles avatars by key', () => {
-    // `expo-image` reuses native views in a FlatList; without this a row
-    // paints the previous row's face for a frame. Invisible in a screenshot.
-    expect(SECTIONS()).toContain('recyclingKey={item.avatarUrl}')
+  it('recycles covers by key', () => {
+    expect(PARTS()).toContain('recyclingKey={face.cover}')
+    expect(PARTS()).toContain('recyclingKey={coverUrl}')
   })
 })
 
 describe('the room you are standing in', () => {
   it('is decided by the server, not inferred from the clock', () => {
-    /*
-     * "The event is on now" is not "I am there". Someone who never turned up,
-     * or who left an hour ago, has a room whose event is mid-flight — and no
-     * business in a live section. The client has no check-in state, so the
-     * flag comes down with the room.
-     */
-    expect(SCREEN()).toContain('is_checked_in: room.isCheckedIn === true')
+    expect(INBOX()).toContain('is_checked_in: room.isCheckedIn === true')
   })
 
-  it('appears once — in the rail, not also in Recent', () => {
-    /*
-     * The rail lifts these out. Without the filter the live room is the first
-     * thing in the rail and, four seconds of scrolling later, the first thing
-     * in Recent as well.
-     */
+  it('appears once — as the hero, not also in Past rooms', () => {
     const src = SCREEN()
     expect(src).toContain('rooms.filter((c) => c.is_checked_in)')
-    expect(src).toContain('...rooms.filter((c) => !c.is_checked_in).map')
+    expect(src).toContain('.filter((c) => !c.is_checked_in)')
   })
 
-  it('shows the room count from `memberCount`, which is what the server sends', () => {
-    /*
-     * It read `participant_count` / `participantCount` / `participants`, none
-     * of which `GET /chat/groups` has ever sent, so every room had 0 people.
-     */
-    // Read through `roomMemberCount` (lib/placeRoom.ts), which takes `memberCount` and
-    // never shows one for a place's room (step 5, D-19) — table-tested in placeRoom.test.ts.
-    expect(SCREEN()).toContain('participant_count: roomMemberCount(room) ?? 0')
-    expect(SCREEN()).toContain('memberCount={c.participant_count}')
+  it('shows the room count from `memberCount`, rolling', () => {
+    expect(INBOX()).toContain('participant_count: roomMemberCount(room) ?? 0')
+    expect(SCREEN()).toContain('count={c.participant_count}')
+    expect(PARTS()).toContain('<RollingNumber value={count}')
+  })
+
+  it('says a locked room as a status, not as speech (Flow 5 #08)', () => {
+    expect(SCREEN()).toContain("'Locked by the organiser · read only'")
+    expect(SCREEN()).toContain("const stateLine = roomStateLine(c.room_state)")
+    expect(SCREEN()).toContain("{ kind: 'chip', icon: c.room_state === 'locked' ? 'lock' : 'mic-off', text: stateLine, warn: c.room_state === 'locked' }")
   })
 })
 
 describe('a row is one height, read or unread', () => {
-  it('reserves the unread dot\'s slot on every row', () => {
-    /*
-     * The dot sits under the time; a read row keeps the empty slot so reading
-     * a conversation never shifts the list under your thumb.
-     */
-    const sections = SECTIONS()
-    expect(sections).toContain('<View style={styles.unreadSlot}>')
-    expect(sections).toContain('{item.unread ? <View style={styles.unreadDot} /> : null}')
-    const dot = sections.slice(sections.indexOf('unreadDot: {'))
-    const dotBody = dot.slice(0, dot.indexOf('},'))
-    expect(dotBody).toContain('width: UNREAD_DOT')
-    // Unread is neutral, like everything on a populated inbox.
-    expect(dotBody).toContain('backgroundColor: EMBER.textPrimary')
+  it("reserves the unread dot's slot on every row", () => {
+    const parts = PARTS()
+    expect(parts).toContain('<View style={styles.dotSlot}>')
+    expect(parts).toContain('<PresenceDot kind="unread" />')
   })
 
+  it('marks unread in three changes: the line white and medium, the time white, the dot', () => {
+    const parts = PARTS()
+    expect(parts).toContain('unread ? FONT_FAMILY.brand[500] : undefined), unread ? styles.ink : styles.secondary')
+    expect(parts).toContain('unread ? styles.ink : styles.tertiary')
+  })
 })
 
 describe('a match is anonymous until they reveal', () => {
-  it('carries the reveal state instead of dropping it', () => {
-    /*
-     * The server gates the payload — pre-reveal `name` is the pseudonym and
-     * `image` is null — so the list cannot leak a name it was never sent. What
-     * it can get wrong is *drawing* that state: a null photo through the
-     * ordinary avatar is an empty grey circle, which reads as a broken row
-     * rather than as anonymity working.
-     */
-    const src = SCREEN()
-    expect(src).toContain('they_revealed: conv.theyRevealed !== false')
-    expect(src).toContain('pseudonymous: !c.they_revealed')
+  it('carries the reveal state, and defaults an absent flag to revealed', () => {
+    expect(INBOX()).toContain('they_revealed: conv.theyRevealed !== false')
+    expect(INBOX()).not.toContain('theyRevealed === true')
   })
 
-  it('defaults an absent flag to revealed, not to anonymous', () => {
-    /*
-     * Looks like the wrong direction and is not. `mayShowRealName` returns
-     * true for a conversation that never had a pseudonym — an accepted message
-     * request, which has shown real names since it existed. Defaulting to
-     * `false` would stamp a generated disc over every one of them.
-     *
-     * Safe because this flag picks a picture, not a permission: the name and
-     * the photo are gated server-side either way.
-     */
-    expect(SCREEN()).toContain('!== false')
-    expect(SCREEN()).not.toContain('theyRevealed === true')
-  })
-
-  it('draws the generated mark, seeded on the pseudonym', () => {
-    /*
-     * The same mark the Scene's attendee discs and the room use, so one person
-     * is one colour and one creature everywhere they appear under that name.
-     *
-     * Seeded on `item.title` — which *is* the pseudonym pre-reveal. Never a
-     * user id: that is stable forever and would rebuild exactly the
-     * cross-surface identity the pseudonyms exist to prevent.
-     */
-    const sections = SECTIONS()
-    expect(sections).toContain('<PseudonymDisc pseudonym={item.title} />')
-    expect(sections).toContain('pseudonymAvatar(pseudonym)')
-    const disc = sections.slice(sections.indexOf('function PseudonymDisc'))
-    expect(disc.slice(0, disc.indexOf('}\n'))).not.toContain('id')
+  it('draws their creature, seeded on the pseudonym, until they reveal', () => {
+    expect(SCREEN()).toContain("face: { kind: 'person', photo: c.they_revealed ? c.other_user_avatar : null, pseudonym: c.other_user_name }")
   })
 
   it('names an unknown person the way the server does', () => {
-    // The server's last resort is `UNNAMED = "Someone"`. "Unknown" reads as a
-    // data error, which an unrevealed match is not.
-    const src = SCREEN()
-    expect(src).toContain("|| 'Someone'")
-    expect(src).not.toContain("|| 'Unknown'")
-  })
-})
-
-describe('requests look like the conversations they become', () => {
-  it("draws the sender's face and when they asked", () => {
-    const src = SCREEN()
-    expect(src).toContain('sender_avatar: r.sender?.avatar || null')
-    expect(src).toContain('created_at: r.createdAt || null')
-    expect(src).toContain('timeLabel={inboxTimeLabel(r.created_at)}')
+    expect(INBOX()).toContain("|| 'Someone'")
+    expect(INBOX() + SCREEN()).not.toContain("|| 'Unknown'")
   })
 
-  it('keeps the exit and reflow animations', () => {
+  it('tells you someone asked to reveal, as a chip, until you open the thread', () => {
     const src = SCREEN()
-    expect(src).toContain('exiting={reduceMotion ? undefined : REQUEST_OUT}')
-    expect(src).toContain('layout={reduceMotion ? undefined : REQUEST_REFLOW}')
+    expect(src).toContain('c.reveal_requested && !revealSeen.has(c.conversation_id)')
+    expect(src).toContain("{ kind: 'chip', icon: 'eye', text: 'Asked to reveal names' }")
   })
 })
 
 describe('what the API already sends is read', () => {
   it('reads room unread, sender and cover from the group payload', () => {
-    const src = SCREEN()
+    const src = INBOX()
     expect(src).toContain('room.unreadCount')
     expect(src).toContain('last_sender_name: room.lastMessage?.user?.name || undefined')
     expect(src).toContain('room.event?.coverImageUrl')
-    expect(src).toContain('avatarUrl: c.event_image')
-    expect(src).toContain('unread: c.unread_count > 0')
-  })
-
-  it('no longer carries a venue that was always "Unknown Venue"', () => {
-    expect(SCREEN()).not.toContain('event_venue')
-    expect(SCREEN()).not.toContain('Unknown Venue')
+    expect(SCREEN()).toContain('unread: c.unread_count > 0')
   })
 
   it('knows when the last DM was yours', () => {
-    const src = SCREEN()
-    expect(src).toContain('conv.lastMessage.senderId === user?.id')
-    expect(src).toContain('previewWithSender(c.last_message, { fromMe: c.last_message_from_me })')
+    expect(INBOX()).toContain('conv.lastMessage.senderId === user?.id')
+    expect(SCREEN()).toContain('previewWithSender(c.last_message, { fromMe: c.last_message_from_me })')
   })
 
   it('bumps a room it is not showing when someone else writes in it', () => {
-    const src = SCREEN()
+    const src = INBOX()
     expect(src).toContain('const bump = !isFromMe && openRoomRef.current !== data.chatGroupId')
     expect(src).toContain('unread_count: bump ? updated[idx].unread_count + 1 : updated[idx].unread_count')
   })
 
   it('offers Mark all read for DMs only — no endpoint marks a room read', () => {
     const src = SCREEN()
-    expect(src).toContain('const hasUnread = useMemo(() => personalChats.some((c) => c.unread_count > 0), [personalChats])')
-    expect(src).toContain("action={item.first && hasUnread ? 'Mark all read' : undefined}")
+    expect(src).toContain('const hasUnread = personalChats.some((c) => c.unread_count > 0)')
+    expect(src).toContain("action={item.markAll && hasUnread ? { label: 'Mark all read'")
+    expect(src).toContain('canMarkAll={hasUnread}')
   })
 
   it('searches the room sender too', () => {
     expect(SCREEN()).toContain("${c.last_sender_name ?? ''}")
-    expect(SCREEN()).toContain('r.searchText.includes(trimmedQuery)')
-  })
-
-  it('tells you someone asked to reveal, until you open the thread', () => {
-    const src = SCREEN()
-    expect(src).toContain('c.reveal_requested && !revealSeen.has(c.conversation_id)')
-    expect(src).toContain("'Asked to reveal names'")
+    expect(SCREEN()).toContain('rows.filter((r) => r.searchText.includes(trimmed))')
   })
 
   it('formats no date through the device locale', () => {
-    expect(SCREEN()).not.toContain('toLocaleDateString')
+    expect(SCREEN() + PARTS()).not.toContain('toLocaleDateString')
   })
 })
 
-describe('the conversations are grouped by when', () => {
-  it('buckets through DayHeading, and hides every heading when empty', () => {
-    const src = SCREEN()
-    expect(src).toContain('bucketRows(visibleRows)')
-    expect(src).not.toContain('title="Recent"')
-    expect(SECTIONS()).toContain('<DayHeading title={title} />')
+describe('R3-D5 on the Banter', () => {
+  it('5.6: a row never previews a sponsored message', () => {
+    expect(SCREEN()).toContain('const sponsored = c.last_message === SPONSORED')
+    expect(INBOX()).toContain('previewText(rawText) ?? SPONSORED')
   })
 
-  it('only says the inbox is empty when nothing is above the list either', () => {
-    expect(SCREEN()).toContain('hasHeaderContent ? null : (')
+  it('5.8: not sent, then a draft, then the last message', () => {
+    expect(SCREEN()).toContain('const held = outboxLine(outbox, thread)')
   })
 
-  it('draws a skeleton with both avatar shapes', () => {
+  it('5.11: a room row swipes to Mute and Leave, a DM to Mark read only, a muted DM never exists', () => {
     const src = SCREEN()
-    expect(src).toContain('<SkeletonBlock width={ROW_AVATAR} height={ROW_AVATAR} borderRadius={EMBER_RADIUS.sm} />')
-    expect(src).toContain('<SkeletonCircle width={ROW_AVATAR} />')
+    expect(src).toContain("{ icon: 'log-out', label: 'Leave', destructive: true, onPress: () => setLeaveFor(c.chat_room_id) }")
+    expect(src).toContain("[{ icon: 'check-check', label: 'Mark read', onPress: () => void markRead(c) }]")
+    expect(src).toContain('muted: false,')
   })
 })
 
 describe('inbox helpers', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { inboxTimeLabel, activityBucket, bucketRows, previewWithSender, liveRoomMeta } = require('../components/banter/inbox')
+  const { inboxTimeLabel, previewWithSender, previewText } = require('../components/banter/inbox')
   // Wednesday 1 October 2026, 15:00 local.
   const now = new Date(2026, 9, 1, 15, 0, 0)
   const at = (...a: number[]) => new Date(a[0], a[1], a[2], a[3] ?? 12, a[4] ?? 0)
@@ -355,25 +266,6 @@ describe('inbox helpers', () => {
     expect(inboxTimeLabel('not a date', now)).toBe('')
   })
 
-  it('buckets by calendar day', () => {
-    expect(activityBucket(at(2026, 9, 1, 0, 5).getTime(), now)).toBe('Today')
-    expect(activityBucket(at(2026, 8, 30, 23).getTime(), now)).toBe('This week')
-    expect(activityBucket(at(2026, 8, 25).getTime(), now)).toBe('This week')
-    expect(activityBucket(at(2026, 8, 24).getTime(), now)).toBe('Earlier')
-    expect(activityBucket(0, now)).toBe('Earlier')
-  })
-
-  it('groups in order and drops empty buckets', () => {
-    const rows = [
-      { id: 'a', sortTime: at(2026, 9, 1, 14).getTime() },
-      { id: 'b', sortTime: at(2026, 7, 1).getTime() },
-      { id: 'c', sortTime: 0 },
-    ]
-    const buckets = bucketRows(rows, now)
-    expect(buckets.map((b: { title: string }) => b.title)).toEqual(['Today', 'Earlier'])
-    expect(buckets[1].rows.map((r: { id: string }) => r.id)).toEqual(['b', 'c'])
-  })
-
   it('says who wrote the preview', () => {
     expect(previewWithSender('hi', { fromMe: true, name: 'Mika' })).toBe('You: hi')
     expect(previewWithSender('hi', { name: 'Velvet Otter' })).toBe('Velvet Otter: hi')
@@ -381,9 +273,117 @@ describe('inbox helpers', () => {
     expect(previewWithSender('hi', {})).toBe('hi')
   })
 
-  it('leaves an unknown room count off', () => {
-    expect(liveRoomMeta(12)).toBe("You're here · 12 in the room")
-    expect(liveRoomMeta(0)).toBe("You're here")
-    expect(liveRoomMeta(undefined)).toBe("You're here")
+  it('5.6: says a photo, a video and an announcement as a person would, and never an advert', () => {
+    expect(previewText('[image]')).toBe('Photo')
+    expect(previewText('[video]')).toBe('Video')
+    expect(previewText('📢 [Announcement from Toit]\nLast call for the terrace')).toBe('Announcement · Toit: Last call for the terrace')
+    expect(previewText('📣 [Sponsored]\nTwo-for-one till 11')).toBeNull()
+    expect(previewText('  see you by the stairs  ')).toBe('see you by the stairs')
+  })
+})
+
+describe('#27 · C12: the held order and its release', () => {
+  const { heldList } = require('../components/banter/inbox')
+  const rows = (...keys: string[]) => keys.map((key) => ({ key }))
+
+  it('holds the order under a finger; the change raises "↑ New"', () => {
+    // Arrange: c's message landed while the finger was down on [a, b, c].
+    const live = rows('c', 'a', 'b', 'd')
+    // Act
+    const held = heldList(live, ['a', 'b', 'c'])
+    // Assert: the held rows keep their places; d, new, sorts by its live place (3).
+    expect(held.shown.map((r: { key: string }) => r.key)).toEqual(['a', 'b', 'c', 'd'])
+    expect(held.moved).toBe(true)
+  })
+
+  it('on lift the rows take the live order and the pill goes', () => {
+    const live = rows('c', 'a', 'b')
+    const released = heldList(live, null)
+    expect(released.shown).toBe(live)
+    expect(released.moved).toBe(false)
+  })
+
+  it('a held order nothing changed under raises no pill', () => {
+    expect(heldList(rows('a', 'b'), ['a', 'b']).moved).toBe(false)
+  })
+})
+
+describe('#27 · C12: the held order always lets go on iOS (drive 3)', () => {
+  const { holdController, HOLD_MAX_MS, HOLD_RELEASE_MS, HOLD_TOUCH_MAX_MS } = require('../components/banter/hold')
+  beforeEach(() => jest.useFakeTimers())
+  afterEach(() => jest.useRealTimers())
+  const drive = (...events: string[]) => {
+    const heard: boolean[] = []
+    const c = holdController((held: boolean) => heard.push(held))
+    events.forEach((e) => c.step(e))
+    return { c, heard }
+  }
+
+  it('a fling whose momentumEnd never comes: released at the cap, not at the next tap', () => {
+    // iOS's order: the drag cancels the raw touch, then the lift, then a glide with no end.
+    const { c, heard } = drive('touchStart', 'dragBegin', 'touchEnd', 'dragEnd', 'momentumBegin')
+    jest.advanceTimersByTime(HOLD_RELEASE_MS)
+    expect(c.state().held).toBe(true)
+    jest.advanceTimersByTime(HOLD_MAX_MS)
+    expect(c.state().held).toBe(false)
+    expect(heard).toEqual([true, false])
+  })
+
+  it('a finger resting on the list holds for as long as it rests (drive 5); only a lift never heard reaches the long cap', () => {
+    const { c } = drive('touchStart')
+    jest.advanceTimersByTime(HOLD_MAX_MS * 3)
+    expect(c.state().held).toBe(true)
+    jest.advanceTimersByTime(HOLD_TOUCH_MAX_MS)
+    expect(c.state().held).toBe(false)
+  })
+
+  it('a lift it does hear, with no momentum: released after the short timer', () => {
+    const { c } = drive('touchStart', 'dragBegin', 'dragEnd')
+    jest.advanceTimersByTime(HOLD_RELEASE_MS)
+    expect(c.state().held).toBe(false)
+  })
+
+  it('a fling that comes to rest: released at momentumEnd, and the cap is cleared', () => {
+    const { c, heard } = drive('touchStart', 'dragBegin', 'dragEnd', 'momentumBegin', 'momentumEnd')
+    expect(c.state().held).toBe(false)
+    jest.advanceTimersByTime(HOLD_MAX_MS)
+    expect(heard).toEqual([true, false])
+  })
+})
+
+describe('#27 · C12: the hold, in a real touch’s event order', () => {
+  const { holdStep, IDLE } = require('../components/banter/hold')
+  const { heldList } = require('../components/banter/inbox')
+  const run = (...events: string[]) => events.reduce((s, e) => holdStep(s, e), IDLE)
+  const keys = (rows: { key: string }[]) => rows.map((r) => r.key)
+
+  it('a finger resting on the list holds the order before any drag, and "↑ New" shows on a reorder', () => {
+    // Arrange: the finger comes down on [a, b]; nothing scrolls.
+    const s = run('touchStart')
+    const held = s.held ? ['a', 'b'] : null
+    // Act: b's message lands and the live order becomes [b, a].
+    const view = heldList([{ key: 'b' }, { key: 'a' }], held)
+    // Assert
+    expect(s.held).toBe(true)
+    expect(keys(view.shown)).toEqual(['a', 'b'])
+    expect(view.moved).toBe(true)
+  })
+
+  it('a slow drag with no fling: the lift arms the release, the timer lets go', () => {
+    const lifted = run('touchStart', 'dragBegin', 'dragEnd', 'touchEnd')
+    expect(lifted).toMatchObject({ held: true, armed: true })
+    expect(holdStep(lifted, 'timer')).toEqual(IDLE)
+  })
+
+  it('a fling: momentum cancels the lift’s release and holds until rest', () => {
+    const gliding = run('touchStart', 'dragBegin', 'dragEnd', 'touchEnd', 'momentumBegin')
+    expect(gliding).toMatchObject({ held: true, armed: false })
+    expect(holdStep(gliding, 'timer').held).toBe(true)
+    expect(holdStep(gliding, 'momentumEnd')).toEqual(IDLE)
+  })
+
+  it('Android’s touch cancel as the scroll view takes over is not a lift', () => {
+    const s = run('touchStart', 'dragBegin', 'touchEnd')
+    expect(s).toMatchObject({ held: true, dragging: true, armed: false })
   })
 })

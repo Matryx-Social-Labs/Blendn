@@ -14,7 +14,9 @@ says so to testers. `app/forgot-password.tsx` is no longer a placeholder: it
 was designed to match sign-in on 2026-09-28, with a "Check your inbox" state
 (Open mail app, Resend with a 30-second cooldown). `app/rate/[eventId].tsx` and
 `app/event-preferences/[eventId].tsx` are no longer placeholders either (both
-2026-09-28); their sections below say what was decided.
+2026-09-28); their sections below say what was decided. The Board
+(`app/board/[eventId].tsx`, §6) took the Flow 4 design on 2026-10-16; its rules
+below still hold.
 
 **Read `blendn-admin/docs/DESIGN_HANDOFF.md` first.** It explains the product's
 five non-negotiable rules and why they exist. This file is the per-screen
@@ -263,7 +265,7 @@ hint, and a hint does not fit in a chip.
 
 `lib/matchBand.ts` (Strong / Good / Some) was never wired into a screen and has
 been deleted. The card's shared-interest copy is built in
-`lib/gridCardContent.ts` and `components/blendn/PersonCard.tsx`. If a band is
+`components/blendn/PersonCard.tsx`. If a band is
 wanted again, design it first: it should not resemble a score, a percentage or
 a rank, and "Some" must not read as failure.
 
@@ -662,16 +664,37 @@ empty states. Design ticket: SCRUM-541.
   the roof: the name and "LIVE ●" or the start (in India's time, with the date
   past six days), or a venue glyph and its bucket; a screen reader hears plain
   words. Tap a pin, a lit building or a chip to open it. An event lights up
-  when its doors open, without a new read. The camera keeps its centre above
-  the drawer from the first frame, follows the picked city and your first
-  location fix (until you move the map yourself), and shows your position.
-  OpenFreeMap's attribution stays on (the OpenStreetMap licence), under the
-  top bar; the style can be moved off OpenFreeMap with
+  when its doors open, without a new read. The camera keeps its centre in the
+  middle of the map you can see — between the top bar and the drawer — from the
+  first frame, and eases to keep it there when the drawer settles at a new
+  snap; it follows your location fix (until you move
+  the map yourself), and shows your position. **A city chosen in the city
+  picker always moves the map**, even the city it already shows; a city the app
+  decided (stored or inferred) never takes the map from your fix. Within a city
+  a move eases (600 ms); across cities there is no flight — it jumps under a
+  200 ms fade of the map's ground (design kit motion #41); with Reduce Motion it
+  just jumps. **"My location"** (`LocateButton.tsx`, PLACEHOLDER, design ticket
+  SCRUM-667) is an icon-only round button riding a gap above the drawer's top
+  edge as it is dragged, fading out from `half` to `full` and gone at `full`:
+  filled while the map follows you, outlined once you have moved it; a tap
+  brings the map back to your fix, or with no fix runs the Pulse's own location
+  flow (the OS ask, or its "Turn on location" tray). **The basemap is variant B** of the
+  contrast prototype (2026-10-15): streets 2:1 or more on the ground, with
+  pedestrian streets drawn, major roads cased from the buildings' zoom and a
+  step dimmer below it, street names from zoom 15, river, lake and
+  neighbourhood names, every name 4.5:1 or more on its halo.
+  **No (i) on the map** (the owner, 2026-10-15): MapLibre's attribution
+  button is off, and the credits follow the OSMF attribution guidelines
+  instead — a corner credit under the top bar as the map opens (OpenFreeMap,
+  OpenMapTiles, OpenStreetMap, and our buildings' sources when our tiles draw),
+  gone on the first gesture or after 5 s, and every credit with its link and
+  licence under Settings › About Blend'n › Map data (`MAP_CREDITS`, one list).
+  The style can be moved off OpenFreeMap with
   `EXPO_PUBLIC_MAP_STYLE_URL`. Inside a city our own building tiles cover
   (`EXPO_PUBLIC_BUILDINGS_TILES_URL`; Bengaluru today), the buildings are ours
   — real outlines with baked heights, each its own feature — and a lit one is
   lit as itself (feature-state) in its crown colour, with their credits in the
-  map's attribution. **Every map colour, size, timing, the light and
+  map's credits. **Every map colour, size, timing, the light and
   the camera are `lib/mapTheme.ts`, and provisional**: the owner will redesign
   the app from a design link, and the map's look is that one file
   (SCRUM-566).
@@ -693,6 +716,7 @@ empty states. Design ticket: SCRUM-541.
 | **A screen reader gets the list open** | With VoiceOver/TalkBack on, the drawer opens at `full`; the handle is an adjustable control ("Collapsed / Half open / Expanded") |
 | **Switching never loses your place** | Both panes stay mounted once opened. Places reads afresh each time it is opened (a venue an event took over must not linger from a cache) |
 | **The keyboard never covers the search** | Typing in the Pulse's search opens the drawer fully; closing the keyboard puts it back |
+| **A tap outside the search closes the keyboard** | Anywhere: the list, a card (which still opens on that tap), a scroll, the map, the drawer's handle and segments. The search's clear (×) keeps it up. `__tests__/pulseNav.test.ts` |
 | **Every row is reachable at half** | The pane is as tall as what shows at the settled height |
 | **44pt targets** | The handle and each segment |
 | **Media plays only when seen** | The Pulse's hero pauses on Places, at peek, and on another tab |

@@ -53,16 +53,17 @@ const HUES = [
 ] as const
 
 /**
- * A small, stable hash. Not cryptographic — it picks a colour, and the only
- * property that matters is that the same string always picks the same one.
+ * FNV-1a, as a signed 32-bit int. Small and stable across engines. Not
+ * cryptographic — it picks a colour or spreads ids, and the only property
+ * that matters is that the same string always gives the same number.
  */
-function hash(seed: string): number {
-  let h = 2166136261
-  for (let i = 0; i < seed.length; i += 1) {
-    h ^= seed.charCodeAt(i)
-    h = Math.imul(h, 16777619)
+export function fnv1a(text: string): number {
+  let h = 0x811c9dc5
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i)
+    h = Math.imul(h, 0x01000193)
   }
-  return Math.abs(h)
+  return h
 }
 
 /**
@@ -113,8 +114,17 @@ const NOUN_CHARACTERS: Record<string, string> = {
   pelican: '🐦', puffin: '🐦', kite: '🐦', koel: '🐦',
 }
 
+/**
+ * Which of a `size`-strong cast a seed's hash `h` draws: a second mix of `h`,
+ * so the creature does not follow the hue (`h % 8`). `components/ds/Creature`
+ * picks with it too, so a name that is not an animal keeps its creature.
+ */
+export function castIndex(h: number, size: number): number {
+  return Math.abs(Math.imul(h ^ 0x9e3779b9, 2654435761)) % size
+}
+
 /** "Cosmic Panda" → "panda"; "Cosmic Panda 2" (a collision suffix) → "panda". */
-function nounOf(pseudonym: string): string | null {
+export function nounOf(pseudonym: string): string | null {
   const words = pseudonym.split(/\s+/).filter((w) => /^[A-Za-z]+$/.test(w))
   return words.length > 1 ? words[words.length - 1].toLowerCase() : null
 }
@@ -170,7 +180,7 @@ export function pseudonymAvatar(pseudonym: string): PseudonymAvatar {
    * crash or a blank hole there is worse than a neutral disc.
    */
   const seed = trimmed.length > 0 ? trimmed : 'anonymous'
-  const h = hash(seed)
+  const h = Math.abs(fnv1a(seed))
   /*
    * Colour and creature are drawn from *different* mixes of the same hash.
    *
@@ -183,7 +193,7 @@ export function pseudonymAvatar(pseudonym: string): PseudonymAvatar {
   const noun = nounOf(seed)
   const character =
     (noun && NOUN_CHARACTERS[noun]) ||
-    CHARACTERS[Math.abs(Math.imul(h ^ 0x9e3779b9, 2654435761)) % CHARACTERS.length]
+    CHARACTERS[castIndex(h, CHARACTERS.length)]
   return { colors, initial: seed[0].toUpperCase(), character }
 }
 

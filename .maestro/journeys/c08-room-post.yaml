@@ -22,9 +22,9 @@ tags:
     timeout: 30000
 - tapOn: ${ROOM}
 - extendedWaitUntil:
-    visible: ".*(Share your thoughts|Start the room).*"
+    visible: ".*(Say something to the room|Start the room).*"
     timeout: 20000
-- tapOn: ".*Share your thoughts.*"
+- tapOn: "Say something to the room"
 - inputText: ${MESSAGE}
 - runFlow: ../subflows/keyboard-done.yaml
 - tapOn:

@@ -1,13 +1,14 @@
 import { useIsFocused } from 'expo-router'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { AccessibilityInfo, Keyboard, Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native'
+import { AccessibilityInfo, Dimensions, Keyboard, Platform, Pressable, StyleSheet, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native'
+import { useSharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { tabBarTop } from '../../app/(tabs)/_layout'
 import { NotificationBell } from '../pulse/NotificationBell'
 import { PulseTopBar, TOP_BAR_HEIGHT } from '../pulse/PulseTopBar'
 import { Text } from '../ui/Text'
-import { DRAWER_SEGMENTED_HEIGHT, drawerSnapPoints, snapOnKeyboard, type DrawerSnap } from '../../lib/home'
+import { DRAWER_SEGMENTED_HEIGHT, drawerSnapPoints, keyboardLeft, snapOnKeyboard, type DrawerSnap } from '../../lib/home'
 import { Logger } from '../../lib/logger'
 import { EMBER, EMBER_RADIUS, SPACE } from '../../lib/theme'
 import { HomeDrawer } from './HomeDrawer'
@@ -20,11 +21,26 @@ export interface HomeBrowse {
   location: { latitude: number; longitude: number } | null
   /** The city has been decided (stored, inferred or none at all): Places may ask now. */
   ready: boolean
-  /** Where the picked city is (`/events/cities` `centre`): the map goes there when the city changes. */
+  /** Where the selected city is (`/events/cities` `centre`). */
   cityCentre: { latitude: number; longitude: number } | null
+  /**
+   * Bumped by every city the person chooses, never by one the app decided: the
+   * map goes there, even to the city it shows. `here` when the choice was where
+   * they stand ("Use my current location", the switch banner): the map shows them.
+   */
+  cityPick: { n: number; here: boolean }
+  /** Ask for the phone's position: the Pulse's own location flow (the OS ask, or its "Turn on location" tray). Settles when it does. */
+  requestLocation: () => void | Promise<void>
 }
 
 type Segment = 'events' | 'places'
+
+/**
+ * Off the list, nothing closes the keyboard by itself: the list does it for
+ * its own surface (`keyboardShouldPersistTaps` in `events.tsx`), the map and
+ * the drawer's chrome call this. No-op with no keyboard up.
+ */
+const dismissKeyboard = () => Keyboard.dismiss()
 
 /**
  * The home screen: a map, and over it a drawer holding Events | Places (plan v2
@@ -43,7 +59,8 @@ type Segment = 'events' | 'places'
 export function HomeShell({
   renderEvents,
 }: {
-  renderEvents: (onBrowse: (browse: HomeBrowse) => void, visible: boolean) => ReactNode
+  /** `full`: the drawer all the way up and no keyboard, so the Pulse's first card is on screen and nobody is typing (its coach mark waits for it). */
+  renderEvents: (onBrowse: (browse: HomeBrowse) => void, visible: boolean, full: boolean) => ReactNode
 }) {
   const insets = useSafeAreaInsets()
   const { height } = useWindowDimensions()
@@ -53,11 +70,23 @@ export function HomeShell({
     [height, insets.top, insets.bottom]
   )
   const [snap, setSnap] = useState<DrawerSnap>('half')
+  // The drawer's top edge as it moves; "my location" rides on it.
+  const drawerTop = useSharedValue(points[snap])
+  // The map's own height: the screen less the tab bar. The map waits for it, so its first frame is centred.
+  const [mapHeight, setMapHeight] = useState<number | null>(null)
+  const onLayout = (e: LayoutChangeEvent) => setMapHeight(e.nativeEvent.layout.height)
   const restore = useRef<DrawerSnap | null>(null)
   const [segment, setSegment] = useState<Segment>('events')
   const [placesOpened, setPlacesOpened] = useState(false)
   const [screenReader, setScreenReader] = useState(false)
-  const [browse, setBrowse] = useState<HomeBrowse>({ city: null, location: null, ready: false, cityCentre: null })
+  const [browse, setBrowse] = useState<HomeBrowse>({
+    city: null,
+    location: null,
+    ready: false,
+    cityCentre: null,
+    cityPick: { n: 0, here: false },
+    requestLocation: () => {},
+  })
 
   /*
    * With a screen reader the list is the screen: open it, and take the map out
@@ -76,20 +105,29 @@ export function HomeShell({
     return () => sub.remove()
   }, [])
 
+  /** Someone is typing (the Pulse's search): its coach mark never pops over them. */
+  const [keyboardUp, setKeyboardUp] = useState(false)
   // The Pulse's search sits in the drawer: typing opens it fully, so the field is not under the keyboard.
   useEffect(() => {
     if (!focused) return
-    const move = (event: 'show' | 'hide') =>
+    const move = (event: 'show' | 'hide') => {
+      setKeyboardUp(event === 'show')
       setSnap((current) => {
         const next = snapOnKeyboard({ snap: current, restore: restore.current }, event)
         restore.current = next.restore
         return next.snap
       })
+    }
     const show = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', () => move('show'))
-    const hide = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => move('hide'))
+    // Only a keyboard that actually left puts the drawer back: a frame change mid-typing is not one.
+    const hide = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', (e) => {
+      if (keyboardLeft(e, Dimensions.get('screen').height)) move('hide')
+    })
     return () => {
       show.remove()
       hide.remove()
+      // A hide missed while away must not keep the mark waiting for good.
+      setKeyboardUp(false)
     }
   }, [focused])
 
@@ -106,31 +144,44 @@ export function HomeShell({
 
   // The Pulse's media plays only while you can see it: its pane, the drawer open past peek, this tab.
   const pulseVisible = focused && segment === 'events' && snap !== 'peek'
-  const events = useMemo(() => renderEvents(setBrowse, pulseVisible), [renderEvents, pulseVisible])
+  const pulseFull = pulseVisible && snap === 'full' && !keyboardUp
+  const events = useMemo(() => renderEvents(setBrowse, pulseVisible, pulseFull), [renderEvents, pulseVisible, pulseFull])
 
   return (
-    <View style={styles.root}>
+    <View style={styles.root} onLayout={onLayout}>
+      {/* A touch on the map (or through the top bar, which lets touches by) puts the search's keyboard away. */}
       <View
         style={StyleSheet.absoluteFill}
+        onTouchStart={dismissKeyboard}
         importantForAccessibility={screenReader ? 'no-hide-descendants' : 'auto'}
         accessibilityElementsHidden={screenReader}
       >
-        <HomeMap
-          center={browse.location}
-          cityCentre={browse.cityCentre}
-          segment={segment}
-          topInset={insets.top + TOP_BAR_HEIGHT}
-          bottomInset={height - points[snap]}
-          focused={focused}
-          // Nothing breathes where nobody can see it: the drawer full over the map, or a screen reader (which hides the map).
-          glowVisible={focused && snap !== 'full' && !screenReader}
-        />
+        {mapHeight !== null ? (
+          <HomeMap
+            center={browse.location}
+            cityCentre={browse.cityCentre}
+            cityPick={browse.cityPick}
+            requestLocation={browse.requestLocation}
+            locateVisible={snap !== 'full'}
+            drawerTop={drawerTop}
+            drawer={points}
+            segment={segment}
+            topChrome={insets.top + TOP_BAR_HEIGHT}
+            mapHeight={mapHeight}
+            drawerSnapTop={points[snap]}
+            focused={focused}
+            // Nothing breathes where nobody can see it: the drawer full over the map, or a screen reader (which hides the map).
+            glowVisible={focused && snap !== 'full' && !screenReader}
+          />
+        ) : null}
       </View>
       <PulseTopBar actions={<NotificationBell />} />
       <HomeDrawer
+        y={drawerTop}
         points={points}
         snap={snap}
         onSnap={onSnap}
+        onChromeTouch={dismissKeyboard}
         header={
           <View style={styles.segmented} accessibilityRole="tablist">
             {(['events', 'places'] as const).map((s) => (

@@ -1,6 +1,6 @@
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { useEffect } from 'react'
-import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native'
+import { StyleSheet } from 'react-native'
 
 /**
  * A clip playing inside a feed card.
@@ -34,12 +34,10 @@ import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native'
  */
 export function FeedVideo({
   source,
-  style,
   onEnded,
 }: {
   /** A direct MP4 URL. See `blendn-admin/docs/MEDIA.md` for what the pipeline guarantees. */
   source: string
-  style?: StyleProp<ViewStyle>
   /**
    * Fired once the clip reaches its end.
    *
@@ -83,7 +81,7 @@ export function FeedVideo({
   return (
     <VideoView
       player={player}
-      style={[StyleSheet.absoluteFill, style]}
+      style={StyleSheet.absoluteFill}
       contentFit="cover"
       nativeControls={false}
       // Nothing here should offer full-screen or PiP: the card is a preview,

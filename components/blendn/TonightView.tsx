@@ -1,398 +1,243 @@
-import { Ionicons } from '@expo/vector-icons'
-import { LinearGradient } from 'expo-linear-gradient'
-import React, { useState } from 'react'
-import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native'
+import { useEffect, useState, type ReactNode } from 'react'
+import { Linking, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import { GestureDetector } from 'react-native-gesture-handler'
-import Animated, { FadeInDown } from 'react-native-reanimated'
+import Animated from 'react-native-reanimated'
 
-import { startsLabel } from '../../lib/roomMoments'
-import type { TonightEvent } from '../../lib/useTonight'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE } from '../../lib/theme'
-import ScalePress from '../motion/ScalePress'
-import { SwipeDeck, type DeckFan } from '../motion/SwipeDeck'
-import { OptimizedImage } from '../OptimizedImage'
-import { RollingNumber } from '../profile/RollingNumber'
-import { Text } from '../ui/Text'
-import { HoldToConfirm } from './HoldToConfirm'
+import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { clockTime, startsLabel } from '../../lib/roomMoments'
+import type { TonightEvent, TonightLocation } from '../../lib/useTonight'
+import { Banner } from '../ds/Banner'
+import type { PourFrame as PassFrame } from '../ds/MomentPour'
+import { font, minTarget, useBoldText } from '../ds/shared'
+import { StateScreen } from '../ds/StateScreen'
+import { TonightCard, type DeckEvent } from '../ds/TonightCard'
+import { VenuePass } from '../ds/VenuePass'
+import { Icon } from '../ui/Icon'
 import { useNow } from './RoomSections'
 import { useStageScroll } from './RoomStage'
 
-const THUMB = CONTROL.lg
+/** A deck, not a catalogue: the rest are one tap away under "See all" (Flow 4 Tonight #04, DECK_MAX). */
+const DECK_MAX = 10
+/** The deck card is inset 40 from each edge (Flow 4 Tonight). */
+const DECK_INSET = SPACE.xxl + SPACE.sm
+/** Portrait at 1.14 (the deck), 1.22 (the loading card), when there is room for it. */
+const DECK_ASPECT = 1.14
+const SKELETON_ASPECT = 1.22
+/** Room under the card for the pips, and the fan's drop. */
+const PIPS = SPACE.lg + SPACE.xs
+const FAN_DROP = SPACE.md + SPACE.xxs
+/** The empty and error states sit 72 below the sub line. */
+const STATE_TOP = SPACE.xxxl + SPACE.xl
+/** Below this a card stops reading as a card; the page scrolls instead. */
+const MIN_CARD = 280
 
 function distanceText(km: number | null) {
-  if (km === null || !Number.isFinite(km)) return null
+  if (km === null || !Number.isFinite(km)) return undefined
   return km < 1 ? `${Math.max(50, Math.round((km * 1000) / 50) * 50)} m` : `${km.toFixed(1)} km`
 }
 
-/**
- * The time badge in the left column — Luma's LIVE / IN 12H.
- *
- * Live is the one that matters, so it is the only one with colour: a still
- * green dot and the word. Everything else is a neutral pill with the time.
- */
-function TimeBadge({ event, now }: { event: TonightEvent; now: number }) {
-  const s = startsLabel(event, now)
-  const live = s.kind === 'live'
-  return (
-    <View style={[styles.badge, live && styles.badgeLive]}>
-      {live ? <View style={styles.liveDot} /> : null}
-      <Text variant="caption" color={live ? EMBER.textPrimary : EMBER.textSecondary} numberOfLines={1}>
-        {s.text}
-      </Text>
-    </View>
-  )
+/** Today, by the phone's clock: the "You're going · 9 PM" ribbon is for tonight only (Flow 4 Tonight #05). */
+function startsToday(iso: string, now: number) {
+  const d = new Date(iso)
+  const today = new Date(now)
+  return d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth() && d.getDate() === today.getDate()
 }
 
-/*
- * The Me tab's fan, scaled up to a card you read: shallower angles (a 300pt
- * card at the photo stack's 11° swings its corner a long way), wider offsets
- * so the two behind peek out either side, and a longer throw to match.
- */
-const FAN: DeckFan = {
-  rotate: [-2, 4, -5, -5],
-  shiftX: [0, 16, -16, -16],
-  shiftY: [0, 8, 14, 14],
-  scale: [1, 0.95, 0.9, 0.9],
-  opacity: [1, 1, 1, 0],
-}
-/** A deck, not a catalogue: the rest are one tap away under "See all". */
-const DECK_MAX = 10
-/** The pager row under the deck: its pips plus the gap above them. */
-const PAGER = SPACE.xl
-/** Below this a card stops reading as a card; the page scrolls instead. */
-const MIN_CARD = 280
-/** What the deck area spends besides the card: pager, the fan's drop, breathing room. */
-const DECK_CHROME = SPACE.lg
-
-/**
- * One event as a card in the deck: the photo, full bleed, with what you need
- * to decide laid over its darkened foot — when, where, how many are there.
- */
-function EventCard({ event, now, width, height }: { event: TonightEvent; now: number; width: number; height: number }) {
-  const distance = distanceText(event.distanceKm)
-  const where = [event.venue, distance].filter(Boolean).join(' · ')
-  return (
-    <View style={styles.cardFill}>
-      {event.photo ? (
-        <OptimizedImage
-          source={event.photo}
-          recyclingKey={event.photo}
-          style={styles.cardFill as never}
-          width={width}
-          height={height}
-          contentFit="cover"
-        />
-      ) : null}
-      {/* A photo fade, the one gradient the system allows: it is what makes the type legible. */}
-      <LinearGradient colors={['transparent', EMBER.scrim]} locations={[0.35, 1]} style={StyleSheet.absoluteFill} />
-      <View style={styles.cardTop}>
-        <TimeBadge event={event} now={now} />
-        {event.hereCount > 0 ? (
-          <View style={styles.herePill}>
-            <RollingNumber value={event.hereCount} variant="caption" color={EMBER.textPrimary} duration={260} stagger={40} />
-            <Text variant="caption" color={EMBER.textPrimary}>
-              there
-            </Text>
-          </View>
-        ) : null}
-      </View>
-      <View style={styles.cardFoot}>
-        {event.going ? (
-          <Text variant="label" color={EMBER.textPrimary}>
-            YOU&apos;RE GOING
-          </Text>
-        ) : null}
-        <Text variant="title" color={EMBER.textPrimary} numberOfLines={2} maxFontSizeMultiplier={1.3}>
-          {event.title}
-        </Text>
-        {where ? (
-          <Text variant="meta" color={EMBER.textPrimary} numberOfLines={1}>
-            {where}
-          </Text>
-        ) : null}
-        {event.tasteMatchCount && event.tasteMatchCount > 0 ? (
-          <Text variant="meta" color={EMBER.textSecondary} numberOfLines={1}>
-            {event.tasteMatchCount} there share your taste
-          </Text>
-        ) : null}
-      </View>
-    </View>
-  )
+/** A Tonight event as the deck's hero card: "In 25 min", "9 going", "at {venue} · 1.2 km", the saved ribbon. */
+export function deckEvent(e: TonightEvent, now: number): DeckEvent {
+  return {
+    title: e.title,
+    time: startsLabel(e, now).text,
+    venue: e.venue,
+    distance: distanceText(e.distanceKm),
+    going: e.goingCount ?? undefined,
+    cover: e.photo,
+    saved: e.going && startsToday(e.startsAt, now) ? clockTime(new Date(e.startsAt).getTime()) : undefined,
+  }
 }
 
-/**
- * Tonight as a deck you flick through — the Me tab's photo stack, at the size
- * of a decision.
- *
- * A list made every event the same weight and put the one you would actually
- * go to somewhere in a column. A deck shows one at a time, big, with the next
- * two peeking out behind it: flick it away and the next is already there,
- * tap it and you are on its page. It is ordered the way the list was — yours
- * first, then nearest — so the top card is the best guess.
- */
-function EventDeck({
-  events,
-  now,
-  onOpen,
-  maxHeight,
-}: {
-  events: TonightEvent[]
-  now: number
-  onOpen: (id: string) => void
-  /** The height the deck may take, pager included; 0 while unmeasured. */
-  maxHeight: number
-}) {
+/** The deck, sized to the room it has (`maxHeight`, 0 while unmeasured). Flicks are the TonightCard's. */
+function EventDeck({ events, now, onOpen, maxHeight }: { events: TonightEvent[]; now: number; onOpen: (id: string) => void; maxHeight: number }) {
   const { width: screen } = useWindowDimensions()
   const deck = events.slice(0, DECK_MAX)
-  const [front, setFront] = useState(0)
-  const fullWidth = screen - GUTTER * 2 - FAN.shiftX[1] * 2
-  // Portrait at 1.22 when it fits; shorter (and a touch narrower) when it doesn't.
-  const fit = maxHeight > 0 ? maxHeight - FAN.shiftY[2] - PAGER : Infinity
-  const height = Math.max(MIN_CARD, Math.min(Math.round(fullWidth * 1.22), fit))
-  const width = Math.min(fullWidth, Math.round(height / 1.05))
-  const top = deck[front] ?? deck[0]
-
+  const [index, setIndex] = useState(0)
+  const width = screen - DECK_INSET * 2
+  const fit = maxHeight > 0 ? maxHeight - FAN_DROP - (deck.length > 1 ? PIPS : 0) : Infinity
+  const height = Math.max(MIN_CARD, Math.min(Math.round(width * DECK_ASPECT), fit))
+  // The list can shrink under the deck (an event ends); never point past it.
+  const shown = Math.min(index, deck.length - 1)
   return (
-    <View style={styles.deckWrap}>
-      <SwipeDeck
-        items={deck}
-        keyOf={(e) => e.id}
+    <View style={styles.deck}>
+      <TonightCard
+        events={deck.map((e) => deckEvent(e, now))}
+        index={shown}
+        onIndexChange={setIndex}
+        onOpen={(i) => deck[i] && onOpen(deck[i].id)}
         width={width}
         height={height}
-        fan={FAN}
-        commitDistance={56}
-        throwDistance={Math.round(width * 0.55)}
-        tiltPer={18}
-        style={{ width: screen, height: height + FAN.shiftY[2] }}
-        cardStyle={styles.card}
-        onPress={(i) => deck[i] && onOpen(deck[i].id)}
-        onFrontChange={setFront}
-        accessibilityLabel={top ? `${top.title}. ${startsLabel(top, now).text}. ${top.venue}` : 'Tonight'}
-        accessibilityHint={deck.length > 1 ? 'Swipe sideways for the next event. Double tap to open it.' : 'Double tap to open it.'}
-        nextLabel="Next event"
-        renderCard={(e) => <EventCard event={e} now={now} width={width} height={height} />}
+        testID="tonight-deck"
       />
-      {deck.length > 1 ? (
-        <View style={styles.pager} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-          {deck.map((e, i) => (
-            <View key={e.id} style={[styles.pip, i === front && styles.pipOn]} />
-          ))}
-        </View>
-      ) : null}
     </View>
   )
 }
 
-/**
- * Faces you can't see yet — 222's "& your 4 closest matches" with blank discs.
- *
- * The count is real (`room-preview`, never under three people so it cannot
- * identify anybody); the faces are withheld until you check in, which is what
- * makes checking in the reveal rather than a chore.
- */
-function Teaser({ count }: { count: number }) {
-  const shown = Math.min(count, 3)
-  return (
-    <View style={styles.teaser} accessible accessibilityLabel={`${count} people here share your taste. Check in to see them.`}>
-      <View style={styles.blankStack}>
-        {Array.from({ length: shown }).map((_, i) => (
-          <View key={i} style={[styles.blank, i > 0 && styles.blankOverlap]}>
-            <Text variant="caption" color={EMBER.textTertiary}>
-              ?
-            </Text>
-          </View>
-        ))}
-      </View>
-      <Text variant="meta" color={EMBER.textPrimary} style={styles.teaserText}>
-        {count} {count === 1 ? 'person' : 'people'} here share your taste
-      </Text>
-    </View>
-  )
+export type TonightViewProps = {
+  events: TonightEvent[]
+  /** Nothing on screen yet: the one static card. */
+  loading: boolean
+  /** The feed failed and there is nothing on screen to keep. */
+  error: boolean
+  /** A refresh failed and the deck is what loaded earlier (#11). */
+  offline?: boolean
+  location?: TonightLocation
+  onRetry: () => void
+  insideEvent: TonightEvent | null
+  /** In another event's room already: the pass's hold is a switch out of it (ROUND4 8.3 #06). */
+  switchFrom?: string
+  checkingIn: boolean
+  /** The server said yes: the hold stays full under "You’re in" until the Room is there (motion #9). */
+  youreIn?: boolean
+  /** Where the docked pass is, in this view's frame: the pour fills exactly it (Flow 4 delta R2-D1, "success"). */
+  onPassFrame?: (frame: PassFrame) => void
+  onOpenEvent: (id: string) => void
+  onSeeAll: () => void
+  onBrowse: () => void
+  onCheckIn: () => void
+  /** The Room failed to load for someone checked in: Tonight stays, with a quiet line (Flow 4 Room #15). */
+  onRoomRetry?: () => void
+  /** After the server's yes: "Tell your crew" in the pass, which grows upward to hold it (Flow 4 delta R2-D1 "success"). */
+  crewStrip?: ReactNode
+  topInset: number
+  bottomInset: number
 }
 
 /**
- * The door. Docked at the bottom when you are standing inside an event's fence
- * — the boarding pass you hold to go through (FocusFlight + Opal).
- */
-export function VenuePass({
-  event,
-  tasteMatchCount,
-  busy,
-  onHold,
-}: {
-  event: TonightEvent
-  tasteMatchCount: number | null
-  busy: boolean
-  onHold: () => void
-}) {
-  return (
-    <Animated.View entering={FadeInDown.duration(320)} style={styles.pass}>
-      <View style={styles.passHead}>
-        {event.photo ? (
-          <OptimizedImage
-            source={event.photo}
-            recyclingKey={event.photo}
-            style={styles.thumb as never}
-            width={THUMB}
-            height={THUMB}
-            contentFit="cover"
-          />
-        ) : null}
-        <View style={styles.rowText}>
-          <Text variant="label">YOU&apos;RE HERE</Text>
-          <Text variant="bodyStrong" numberOfLines={1}>
-            {event.title}
-          </Text>
-          <Text variant="meta" numberOfLines={1}>
-            {event.hereCount > 0 ? `${event.hereCount} inside now` : 'Be the first one in'}
-          </Text>
-        </View>
-      </View>
-      {tasteMatchCount && tasteMatchCount > 0 ? <Teaser count={tasteMatchCount} /> : null}
-      <HoldToConfirm
-        label="Hold to blend in"
-        icon="finger-print"
-        busy={busy}
-        busyLabel="Checking you in…"
-        onConfirm={onHold}
-        accessibilityHint="Checks you in and opens the room"
-      />
-    </Animated.View>
-  )
-}
-
-/**
- * Blend'n before you are anywhere: what is on tonight, nearest first.
+ * Blend'n before you are anywhere (Flow 4 Tonight, guidelines/flow-4): what is
+ * on tonight as a deck, nearest first with yours on top, and, when you are
+ * standing inside an event's fence, the VenuePass docked at the bottom with
+ * the hold. The pass is the only gradient on this screen.
  *
- * This replaced three different destinations for one button — the event page
- * if you had one today, the nearby list if not — so the centre of the app had
- * no home of its own until you were checked in. Now it always opens here, and
- * *here* changes with you: a list tonight, a door when you arrive, the room
- * once you are in.
+ * The states are the frames': loading (one static card), the deck (1, 3,
+ * 10), saved today (the ribbon), the pass, the pass only, empty, error,
+ * location off (#10), offline (#11), approximate location (R3-D4 4.7: one
+ * quiet line, and no pass), and the Room's error (#15) as a banner over it.
  */
 export function TonightView({
   events,
   loading,
   error,
+  offline = false,
+  location = 'on',
   onRetry,
   insideEvent,
-  tasteMatchCount,
+  switchFrom,
   checkingIn,
+  youreIn = false,
+  onPassFrame,
   onOpenEvent,
   onSeeAll,
   onBrowse,
   onCheckIn,
+  onRoomRetry,
+  crewStrip,
   topInset,
   bottomInset,
-}: {
-  events: TonightEvent[]
-  loading: boolean
-  /** The feed failed and there is nothing on screen to keep. */
-  error: boolean
-  onRetry: () => void
-  insideEvent: TonightEvent | null
-  tasteMatchCount: number | null
-  checkingIn: boolean
-  onOpenEvent: (id: string) => void
-  onSeeAll: () => void
-  onBrowse: () => void
-  onCheckIn: () => void
-  topInset: number
-  bottomInset: number
-}) {
+}: TonightViewProps) {
+  const bold = useBoldText()
   const now = useNow(60_000)
   const { onScroll, native, scrollEventThrottle } = useStageScroll()
-  /*
-   * The deck is sized to the room it has, not to its width alone.
-   *
-   * It used to be `width × 1.22` in a scroll with the pass floating over the
-   * bottom — on a phone the pass covered the foot of the deck and "See
-   * everything nearby", and padding only helped once you scrolled, which
-   * nobody does on a screen that looks complete (driven on device). Now the
-   * pass sits *in* the column under the scroll, the link lives in the header,
-   * and the card takes whatever height is left between them.
-   */
+  // The pass's frame is the dock's place plus the pass's place in it.
+  const [dockAt, setDockAt] = useState<PassFrame | null>(null)
+  const [passAt, setPassAt] = useState<PassFrame | null>(null)
+  useEffect(() => {
+    if (dockAt && passAt) onPassFrame?.({ x: dockAt.x + passAt.x, y: dockAt.y + passAt.y, width: passAt.width, height: passAt.height })
+  }, [dockAt, passAt, onPassFrame])
+
+  // The deck takes the height left between the head and the pass.
   const [viewport, setViewport] = useState(0)
   const [headHeight, setHeadHeight] = useState(0)
-  const list = insideEvent ? events.filter((e) => e.id !== insideEvent.id) : events
-  const deckRoom = viewport ? viewport - topInset - headHeight - DECK_CHROME : 0
+  // R3-D4 4.7: with approximate location no door can be confirmed, so no pass is offered.
+  const door = location === 'approximate' ? null : insideEvent
+  const list = door ? events.filter((e) => e.id !== door.id) : events
+  const deckRoom = viewport ? viewport - topInset - headHeight - SPACE.xl : 0
+  const sub =
+    location === 'approximate'
+      ? 'Approximate location. Check-in needs your exact spot: turn on Precise Location for Blend’n.'
+      : door
+        ? 'You’re at an event. Hold the pass below to check in.'
+        : 'Check in at an event to open its room.'
 
   return (
     <View style={styles.fill}>
       <GestureDetector gesture={native}>
         <Animated.ScrollView
+          testID="tonight"
           style={styles.fill}
           onLayout={(e) => setViewport(Math.floor(e.nativeEvent.layout.height))}
           onScroll={onScroll}
           scrollEventThrottle={scrollEventThrottle}
           bounces={false}
-          contentContainerStyle={{
-            paddingTop: topInset,
-            paddingBottom: insideEvent ? SPACE.md : bottomInset + SPACE.xl,
-          }}
+          contentContainerStyle={{ paddingTop: topInset, paddingBottom: door ? SPACE.md : bottomInset + SPACE.xl }}
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.head} onLayout={(e) => setHeadHeight(Math.ceil(e.nativeEvent.layout.height))}>
             <View style={styles.titleRow}>
-              <Text variant="display" accessibilityRole="header">
+              <Text accessibilityRole="header" style={[font('display', bold), styles.ink]}>
                 Tonight
               </Text>
               {list.length > 0 ? (
                 <Pressable
                   onPress={onSeeAll}
-                  hitSlop={SPACE.md}
-                  style={({ pressed }) => [styles.seeAll, pressed && styles.pressed]}
+                  hitSlop={(minTarget() - SPACE.xl) / 2}
                   accessibilityRole="button"
-                  accessibilityLabel="See everything nearby"
+                  accessibilityLabel="See all"
+                  testID="tonight-see-all"
+                  style={styles.seeAll}
                 >
-                  <Text variant="button" color={EMBER.textSecondary}>
-                    See all
-                  </Text>
-                  <Ionicons name="chevron-forward" size={ICON.sm} color={EMBER.textSecondary} />
+                  <Text style={[font('button', bold), styles.secondary]}>See all</Text>
+                  <Icon name="chevron-right" size={ICON.inline} color={COLOR.textSecondary} />
                 </Pressable>
               ) : null}
             </View>
-            <Text variant="meta">
-              {insideEvent
-                ? 'You’re at an event — hold the pass below to check in.'
-                : 'Check in at an event to open its room.'}
-            </Text>
+            <Text style={[font('meta', bold), styles.secondary]}>{sub}</Text>
+            {onRoomRetry ? (
+              <Banner kind="info" text="Couldn’t check your room. You can still browse tonight." action={{ label: 'Try again', onPress: onRoomRetry }} testID="tonight-room-error" />
+            ) : null}
+            {offline ? <Banner kind="offline" text="Offline. Showing what loaded earlier." testID="tonight-offline" /> : null}
+            {location === 'off' ? (
+              <Banner
+                kind="info"
+                text="Location is off. Events are listed by city, without distances."
+                action={{ label: 'Turn on', onPress: () => void Linking.openSettings().catch(() => {}) }}
+                testID="tonight-location-off"
+              />
+            ) : null}
           </View>
 
           {loading && events.length === 0 ? (
-            <View style={styles.skeletonWrap}>
-              <View style={styles.skeleton} />
+            <View style={styles.deck}>
+              <Skeleton room={deckRoom} />
             </View>
-          ) : error && list.length === 0 && !insideEvent ? (
-            /*
-              A failed load is not "nothing on". The empty state below tells
-              somebody their city is quiet tonight, which is a claim about the
-              world the screen can't make when it never heard back.
-            */
-            <View style={styles.empty}>
-              <Ionicons name="cloud-offline-outline" size={ICON.lg} color={EMBER.textTertiary} />
-              <Text variant="bodyStrong">Couldn’t load tonight’s events</Text>
-              <Text variant="meta" style={styles.centre}>
-                Check your connection and try again.
-              </Text>
-              <ScalePress onPress={onRetry} style={styles.browse} accessibilityRole="button">
-                <Text variant="button" color={EMBER.onGradient}>
-                  Try again
-                </Text>
-              </ScalePress>
+          ) : error && list.length === 0 && !door ? (
+            // A failed load is not "nothing on": that is a claim about the world the screen can't make.
+            <View style={styles.state}>
+              <StateScreen
+                icon="cloud-off"
+                title="Couldn’t load tonight’s events"
+                body="Check your connection and try again."
+                actions={[{ label: 'Try again', onPress: onRetry }]}
+                testID="tonight-error"
+              />
             </View>
-          ) : list.length === 0 && !insideEvent ? (
-            <View style={styles.empty}>
-              <Ionicons name="moon-outline" size={ICON.lg} color={EMBER.textTertiary} />
-              <Text variant="bodyStrong">Nothing on near you right now</Text>
-              <Text variant="meta" style={styles.centre}>
-                Save something on the Pulse and it shows up here on the night.
-              </Text>
-              <ScalePress onPress={onBrowse} style={styles.browse} accessibilityRole="button">
-                <Text variant="button" color={EMBER.onGradient}>
-                  Browse the Pulse
-                </Text>
-              </ScalePress>
+          ) : list.length === 0 && !door ? (
+            <View style={styles.state}>
+              <StateScreen
+                icon="moon"
+                title="Nothing on near you right now"
+                body="Save something on the Pulse and it shows up here on the night."
+                actions={[{ label: 'Browse the Pulse', onPress: onBrowse }]}
+                testID="tonight-empty"
+              />
             </View>
           ) : list.length > 0 ? (
             <EventDeck events={list} now={now} onOpen={onOpenEvent} maxHeight={deckRoom} />
@@ -400,107 +245,80 @@ export function TonightView({
         </Animated.ScrollView>
       </GestureDetector>
 
-      {insideEvent ? (
-        <View style={[styles.passDock, { paddingBottom: bottomInset + SPACE.md }]}>
-          <VenuePass
-            event={insideEvent}
-            tasteMatchCount={tasteMatchCount}
-            busy={checkingIn}
-            onHold={onCheckIn}
-          />
+      {door ? (
+        <View
+          testID="tonight-pass-dock"
+          style={[styles.passDock, { paddingBottom: bottomInset + SPACE.md }]}
+          onLayout={(e) => setDockAt(e.nativeEvent.layout)}
+        >
+          <View testID="tonight-pass-slot" onLayout={(e) => setPassAt(e.nativeEvent.layout)}>
+            <VenuePass
+              title={door.title}
+              cover={door.photo}
+              hereCount={door.hereCount}
+              tasteCount={door.tasteMatchCount}
+              onConfirm={onCheckIn}
+              holdLabel={switchFrom ? 'Hold to switch' : undefined}
+              note={switchFrom ? `You’ll leave ${switchFrom}` : undefined}
+              busy={checkingIn && !youreIn}
+              confirmed={youreIn}
+              testID="tonight-pass"
+            >
+              {youreIn ? crewStrip : null}
+            </VenuePass>
+          </View>
+        </View>
+      ) : location === 'approximate' ? (
+        // ROUND4 8.3 #08: no pass at all; where it would dock, why, and the way to fix it.
+        <View testID="tonight-approximate" style={[styles.passDock, { paddingBottom: bottomInset + SPACE.md }]}>
+          <View style={styles.approx}>
+            <Icon name="locate-off" size={ICON.control} color={COLOR.textPrimary} />
+            <Text style={[font('meta', bold), styles.ink, styles.grow]}>No pass without precise location</Text>
+            <Pressable
+              onPress={() => void Linking.openSettings().catch(() => {})}
+              hitSlop={(minTarget() - SPACE.xl) / 2}
+              accessibilityRole="button"
+              accessibilityLabel="Turn on Precise Location"
+              testID="tonight-approximate-turn-on"
+            >
+              <Text style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>Turn on</Text>
+            </Pressable>
+          </View>
         </View>
       ) : null}
     </View>
   )
 }
 
+/** Flow 4 Tonight #01: one static card, nothing loops. */
+function Skeleton({ room }: { room: number }) {
+  const { width: screen } = useWindowDimensions()
+  const width = screen - DECK_INSET * 2
+  const height = Math.max(MIN_CARD, Math.min(Math.round(width * SKELETON_ASPECT), room ? room - SPACE.xl : Infinity))
+  return <View testID="tonight-skeleton" accessibilityLabel="Loading tonight" style={[styles.skeleton, { width, height }]} />
+}
+
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  head: { paddingHorizontal: GUTTER, gap: SPACE.xs, paddingBottom: SPACE.xl },
+  head: { paddingHorizontal: SPACE.gutter, gap: SPACE.sm, paddingBottom: SPACE.sm },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  pressed: { opacity: OPACITY.pressed },
-  skeletonWrap: { paddingHorizontal: GUTTER + SPACE.lg },
-  skeleton: { aspectRatio: 1 / 1.22, borderRadius: EMBER_RADIUS.card, backgroundColor: EMBER.skeleton },
-  deckWrap: { alignItems: 'center' },
-  card: {
-    borderRadius: EMBER_RADIUS.card,
-    backgroundColor: EMBER.surface,
-    // A page-coloured edge, so the cards behind read as separate without a shadow.
-    borderWidth: 2,
-    borderColor: EMBER.bg,
-  },
-  cardFill: { width: '100%', height: '100%' },
-  cardTop: {
-    position: 'absolute',
-    top: SPACE.lg,
-    left: SPACE.lg,
-    right: SPACE.lg,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  herePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACE.xs,
-    height: CONTROL.sm - SPACE.sm,
-    paddingHorizontal: SPACE.sm,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.bg,
-  },
-  cardFoot: { position: 'absolute', left: SPACE.xl, right: SPACE.xl, bottom: SPACE.xl, gap: SPACE.xs },
-  pager: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs, height: PAGER },
-  pip: { width: SPACE.xs + 2, height: SPACE.xs + 2, borderRadius: EMBER_RADIUS.pill, backgroundColor: EMBER.separator },
-  pipOn: { backgroundColor: EMBER.textPrimary, width: SPACE.lg },
-  badge: {
-    width: CONTROL.lg + SPACE.sm,
-    height: CONTROL.sm - SPACE.sm,
-    borderRadius: EMBER_RADIUS.pill,
-    // On a photo now, so the page colour rather than a surface tone.
-    backgroundColor: EMBER.bg,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: SPACE.xs,
-  },
-  badgeLive: {},
-  liveDot: { width: SPACE.sm - 2, height: SPACE.sm - 2, borderRadius: EMBER_RADIUS.pill, backgroundColor: EMBER.success },
-  thumb: { width: THUMB, height: THUMB, borderRadius: EMBER_RADIUS.sm },
-  thumbEmpty: { backgroundColor: EMBER.surface },
-  rowText: { flex: 1, gap: SPACE.xxs },
-  count: { alignItems: 'flex-end' },
+  ink: { color: COLOR.textPrimary },
+  secondary: { color: COLOR.textSecondary },
   seeAll: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xxs },
-  empty: { alignItems: 'center', gap: SPACE.sm, paddingHorizontal: GUTTER, paddingTop: SPACE.xxl },
-  centre: { textAlign: 'center' },
-  // An empty or error state's one action is that state's primary: the accent.
-  browse: {
-    marginTop: SPACE.md,
-    height: CONTROL.lg,
-    paddingHorizontal: SPACE.xl,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.accent,
-    justifyContent: 'center',
-  },
-  passDock: { paddingHorizontal: SPACE.md, paddingTop: SPACE.xs },
-  pass: {
-    gap: SPACE.md,
-    padding: SPACE.lg,
-    borderRadius: EMBER_RADIUS.lg,
-    backgroundColor: EMBER.surface,
-  },
-  passHead: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
-  teaser: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
-  teaserText: { flex: 1 },
-  blankStack: { flexDirection: 'row' },
-  blank: {
-    width: CONTROL.sm,
-    height: CONTROL.sm,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.surfaceSunken,
-    borderWidth: 2,
-    borderColor: EMBER.surface,
+  deck: { alignItems: 'center', paddingTop: SPACE.sm },
+  state: { paddingHorizontal: SPACE.gutter, paddingTop: STATE_TOP },
+  skeleton: { borderRadius: RADIUS.card, backgroundColor: COLOR.surfaceSunken },
+  passDock: { paddingHorizontal: SPACE.md, paddingTop: SPACE.md },
+  approx: {
+    height: SIZE.primary,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: SPACE.md,
+    paddingHorizontal: SPACE.lg,
+    // 24 from the screen edges, inside the dock's 12 (ROUND4 8.3 #08).
+    marginHorizontal: SPACE.md,
+    borderRadius: RADIUS.rowInCard,
+    backgroundColor: COLOR.surface,
   },
-  blankOverlap: { marginLeft: -SPACE.sm },
+  grow: { flex: 1 },
 })

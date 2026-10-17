@@ -29,10 +29,10 @@ export const UPCOMING_THUMB = CONTROL.md * 2
  * | "7:00 PM" | `startTime`, via `timeLabel` |
  * | category | `categories[0]` |
  * | venue | `venueName`, else `city`, via `placeLabel` |
- * | "142 joined" | `currentCapacity` |
+ * | "19 going" · "6 here now" | `goingCount` · `hereCount` while live (`peopleLabel`) |
  * | "1.2 km" | `distance`, via `formatDistance` |
  *
- * Anything the caller cannot fill is omitted rather than zeroed. "0 joined" on
+ * Anything the caller cannot fill is omitted rather than zeroed. "0 going" on
  * a new event reads as a failure of the event; no line reads as an event that
  * has not started filling up, which is what it is.
  */
@@ -45,11 +45,13 @@ interface Props {
   timeLabel: string
   /** Venue name, or the city when the venue is unnamed. */
   placeLabel?: string | null
-  /** Attendees so far. Omitted below 1: see above. */
-  joinedCount?: number | null
+  /** "{n} going" or "{n} here now" (`peopleLabel`); absent when nobody yet. */
+  peopleLabel?: string | null
   /** Pre-formatted by `formatDistance`, or absent when we have no fix. */
   distanceLabel?: string | null
   onPress: () => void
+  /** The finger is down: the screen warms the event page (~100 ms before the press). */
+  onPressIn?: () => void
   /**
    * The quick-actions tray (save, check in or out, details). Also offered to
    * VoiceOver as a "Quick actions" custom action, since a long-press is not
@@ -91,9 +93,10 @@ function UpcomingCardImpl({
   imageUrl,
   timeLabel,
   placeLabel,
-  joinedCount,
+  peopleLabel,
   distanceLabel,
   onPress,
+  onPressIn,
   onLongPress,
   note,
   noteTone = 'default',
@@ -103,7 +106,6 @@ function UpcomingCardImpl({
   onToggleFavorite,
   retry,
 }: Props) {
-  const showJoined = typeof joinedCount === 'number' && joinedCount > 0
   const eyebrow = [timeLabel, category].filter(Boolean).join(' · ')
 
   return (
@@ -123,9 +125,11 @@ function UpcomingCardImpl({
       haptic={false}
       pressedScale={0.98}
       onPress={onPress}
+      onPressIn={onPressIn}
       onLongPress={onLongPress}
       accessibilityRole="button"
-      accessibilityLabel={[title, timeLabel, placeLabel].filter(Boolean).join(', ')}
+      // The people line too (drive 6: VoiceOver left out "12 here now").
+      accessibilityLabel={[title, timeLabel, placeLabel, peopleLabel].filter(Boolean).join(', ')}
       accessibilityActions={onLongPress ? QUICK_ACTIONS : undefined}
       onAccessibilityAction={
         onLongPress
@@ -158,12 +162,12 @@ function UpcomingCardImpl({
             </Text>
           </View>
         ) : null}
-        {showJoined || distanceLabel ? (
+        {peopleLabel || distanceLabel ? (
           <View style={styles.metaRow}>
-            {showJoined ? (
+            {peopleLabel ? (
               <View style={styles.metaItem}>
                 <Ionicons name="people-outline" size={ICON.sm} color={EMBER.textSecondary} />
-                <Text style={styles.metaText}>{`${joinedCount} joined`}</Text>
+                <Text style={styles.metaText}>{peopleLabel}</Text>
               </View>
             ) : null}
             {distanceLabel ? (

@@ -1,30 +1,76 @@
+/*
+ * Motion, on the redesign's tokens (DESIGN-BRIEF §9.2, lib/design/tokens.ts).
+ *
+ * Seven springs, one table for both platforms: press · snap · settle · travel
+ * · fling · pop · celebrate. Spatial moves use a spring; effects (opacity,
+ * colour, blur) use a duration and an easing and never overshoot.
+ *
+ * Reduce Motion has its own table (REDUCE_MOTION in the tokens): durations
+ * shorten, rises and drift go to zero, the shake stops. Read it through
+ * `useMotion()`, never by checking the setting and picking numbers inline.
+ * Kept under Reduce Motion: the hold (its speed is information), drags,
+ * press feedback and every haptic.
+ */
+
+import { useReducedMotion } from 'react-native-reanimated'
+
+import { DURATION, EASING, ORBS, PRESS, REDUCE_MOTION, RISE, SHAKE, SPRING, STAGGER } from './design/tokens'
+
+export { DURATION, EASING, PRESS, SPRING, STAGGER }
+
+/**
+ * The system Reduce Motion setting.
+ *
+ * ponytail: Reanimated's, read once at launch, as every animated component
+ * here already reads it. Swap for an AccessibilityInfo listener if a change
+ * mid-session must apply without a restart.
+ */
+export { useReducedMotion }
+
+/** The motion values to use, with Reduce Motion's table laid over the base one. */
+export function motionTokens(reduceMotion: boolean) {
+  if (!reduceMotion) return { duration: DURATION, rise: RISE, orbs: ORBS, shake: SHAKE }
+  return {
+    duration: { ...DURATION, ...REDUCE_MOTION.duration },
+    rise: REDUCE_MOTION.rise,
+    orbs: REDUCE_MOTION.orbs,
+    shake: { ...SHAKE, ...REDUCE_MOTION.shake },
+  }
+}
+
+/** `motionTokens` for the current Reduce Motion setting. */
+export function useMotion() {
+  return motionTokens(useReducedMotion())
+}
+
+/*
+ * The names today's screens use, kept so they keep working unchanged. The
+ * first three are the tokens under their old names; the springs predate the
+ * seven and keep their values until their screens are redesigned.
+ */
+
+/** @deprecated `DURATION`: fast = quick, normal = base, slow = medium, relaxed = long. */
 export const MOTION_DURATION = {
-  instant: 100,
-  fast: 160,
-  normal: 220,
-  slow: 320,
+  fast: DURATION.quick,
+  normal: DURATION.base,
+  slow: DURATION.medium,
   /** First-load entrances on the Me tab: seen once, so they can be seen. */
-  relaxed: 520,
+  relaxed: DURATION.long,
 } as const
 
+/** @deprecated `EASING`. */
 export const MOTION_EASING = {
-  standard: [0.2, 0, 0, 1] as const,
-  entrance: [0.16, 1, 0.3, 1] as const,
-  exit: [0.4, 0, 1, 1] as const,
-  /**
-   * A soft ease-out (easeOutCubic) for entrances you watch happen, the
-   * once-per-load kind. `entrance` puts most of the movement in the first few
-   * frames, which reads as a snap at 400ms+; this spreads it out and settles.
-   */
-  gentle: [0.33, 1, 0.68, 1] as const,
+  entrance: EASING.entrance,
+  gentle: EASING.gentle,
 } as const
 
+/** @deprecated `STAGGER`: fast = base, normal = loose. */
 export const MOTION_STAGGER = {
-  xFast: 18,
-  fast: 28,
-  normal: 40,
+  fast: STAGGER.base,
+  normal: STAGGER.loose,
 } as const
 
+/** @deprecated Not among the seven: a screen moves to `SPRING.settle` / `SPRING.snap` when it is redesigned. */
 export const MOTION_SPRING = {
   gentle: {
     damping: 18,

@@ -45,14 +45,18 @@ interface UserProfile {
    * `profiles.interests`, which matching does not read; the structured ids live
    * in `interestIds` and are saved through the interests endpoints.
    */
-  display_name?: string
   bio?: string
-  profile_photos?: string[]
   goals?: string[]
   looking_for?: string[]
 }
 
 type TagInputMode = 'goal' | 'lookingFor'
+
+/** The add-a-tag sheet's words, per field. */
+const TAG_INPUT: Record<TagInputMode, { title: string; placeholder: string }> = {
+  goal: { title: 'Add goal', placeholder: 'What are you looking for?' },
+  lookingFor: { title: 'Add preference', placeholder: 'What type of person are you looking for?' },
+}
 
 /**
  * Everything the form edits, as one comparable string.
@@ -109,7 +113,6 @@ export default function EditProfile() {
   const [interestsAtLoad, setInterestsAtLoad] = useState<string[]>([])
   const [goals, setGoals] = useState<string[]>([])
   const [lookingFor, setLookingFor] = useState<string[]>([])
-  const [, setPhotos] = useState<string[]>([])
 
   /*
    * The five fields matching runs on. They used to live on their own screen,
@@ -146,8 +149,6 @@ export default function EditProfile() {
   const [ageError, setAgeError] = useState<string | null>(null)
   const [tagModalVisible, setTagModalVisible] = useState(false)
   const [tagInputValue, setTagInputValue] = useState('')
-  const [tagInputTitle, setTagInputTitle] = useState('')
-  const [tagInputPlaceholder, setTagInputPlaceholder] = useState('')
   const [tagInputMode, setTagInputMode] = useState<TagInputMode>('goal')
   const scrollRef = useRef<ScrollView>(null)
   const basicInfoY = useRef(0)
@@ -233,9 +234,7 @@ export default function EditProfile() {
           phone: p.phone || '',
           occupation: p.occupation || '',
           education: p.education || '',
-          display_name: p.name || '',
           bio: p.bio || '',
-          profile_photos: p.photos || [],
           goals: p.goals || [],
           looking_for: p.looking_for || []
         }
@@ -263,7 +262,6 @@ export default function EditProfile() {
         setInterestsAtLoad(structured)
         setGoals(combinedProfile.goals || [])
         setLookingFor(combinedProfile.looking_for || [])
-        setPhotos(combinedProfile.profile_photos || [])
 
         /*
          * Pre-filled, which the old screen never did: it read only name and age,
@@ -323,18 +321,7 @@ export default function EditProfile() {
     }
   }, [authUser, showToast])
 
-  const handlePhotosChange = (newPhotos: string[]) => {
-    setPhotos(newPhotos)
-  }
-
   const openTagInput = (mode: TagInputMode) => {
-    if (mode === 'goal') {
-      setTagInputTitle('Add goal')
-      setTagInputPlaceholder('What are you looking for?')
-    } else if (mode === 'lookingFor') {
-      setTagInputTitle('Add preference')
-      setTagInputPlaceholder('What type of person are you looking for?')
-    }
     setTagInputMode(mode)
     setTagInputValue('')
     setTagModalVisible(true)
@@ -367,22 +354,6 @@ export default function EditProfile() {
     closeTagModal()
   }
 
-  const handleAddGoal = () => {
-    openTagInput('goal')
-  }
-
-  const handleRemoveGoal = (goal: string) => {
-    setGoals(prev => prev.filter(g => g !== goal))
-  }
-
-  const handleAddLookingFor = () => {
-    openTagInput('lookingFor')
-  }
-
-  const handleRemoveLookingFor = (pref: string) => {
-    setLookingFor(prev => prev.filter(p => p !== pref))
-  }
-
   const handleSave = async () => {
     if (!authUser) return
 
@@ -412,16 +383,11 @@ export default function EditProfile() {
       if (parsedAge !== undefined && parsedAge !== profile?.age) updateData.age = parsedAge
       // Trimmed like the name: a bio typed as "text " saved the space, and a
       // field cleared to whitespace saved " " rather than null.
-      const trimmedLocation = location.trim()
-      const trimmedPhone = phone.trim()
-      const trimmedOccupation = occupation.trim()
-      const trimmedEducation = education.trim()
-      const trimmedBio = bio.trim()
-      if (trimmedLocation !== (profile?.location || '')) updateData.location = trimmedLocation || null
-      if (trimmedPhone !== (profile?.phone || '')) updateData.phone = trimmedPhone || null
-      if (trimmedOccupation !== (profile?.occupation || '')) updateData.occupation = trimmedOccupation || null
-      if (trimmedEducation !== (profile?.education || '')) updateData.education = trimmedEducation || null
-      if (trimmedBio !== (profile?.bio || '')) updateData.bio = trimmedBio || null
+      const texts = [['location', location], ['phone', phone], ['occupation', occupation], ['education', education], ['bio', bio]] as const
+      for (const [key, value] of texts) {
+        const trimmed = value.trim()
+        if (trimmed !== (profile?.[key] || '')) updateData[key] = trimmed || null
+      }
       if (JSON.stringify(goals) !== JSON.stringify(profile?.goals)) {
         updateData.goals = goals
       }
@@ -563,12 +529,7 @@ export default function EditProfile() {
             {isLoading ? (
               <SkeletonBlock width={'100%'} height={160} borderRadius={EMBER_RADIUS.md} />
             ) : authUser ? (
-              <PhotoManager
-                userId={authUser.id}
-                maxPhotos={6}
-                editable={true}
-                onPhotosChange={handlePhotosChange}
-              />
+              <PhotoManager userId={authUser.id} maxPhotos={6} />
             ) : null}
           </View>
 
@@ -771,7 +732,7 @@ export default function EditProfile() {
                 ))}
               </View>
             ) : (
-              renderTags(goals, handleRemoveGoal, handleAddGoal, 'Add Goal')
+              renderTags(goals, (goal) => setGoals(prev => prev.filter(g => g !== goal)), () => openTagInput('goal'), 'Add Goal')
             )}
           </View>
 
@@ -785,7 +746,7 @@ export default function EditProfile() {
                 ))}
               </View>
             ) : (
-              renderTags(lookingFor, handleRemoveLookingFor, handleAddLookingFor, 'Add Preference')
+              renderTags(lookingFor, (pref) => setLookingFor(prev => prev.filter(p => p !== pref)), () => openTagInput('lookingFor'), 'Add Preference')
             )}
           </View>
 
@@ -800,12 +761,12 @@ export default function EditProfile() {
         >
           <Pressable style={styles.modalBackdrop} onPress={closeTagModal}>
             <Pressable style={styles.modalCard} onPress={() => {}}>
-              <Text style={styles.modalTitle}>{tagInputTitle}</Text>
+              <Text style={styles.modalTitle}>{TAG_INPUT[tagInputMode].title}</Text>
               <TextInput
                 style={styles.modalInput}
                 value={tagInputValue}
                 onChangeText={setTagInputValue}
-                placeholder={tagInputPlaceholder}
+                placeholder={TAG_INPUT[tagInputMode].placeholder}
                 placeholderTextColor={EMBER.textPlaceholder}
                 autoFocus
                 maxLength={60}

@@ -1,105 +1,3 @@
-import {
-  applyGridFilters,
-  availableWorkFields,
-  emptyReason,
-  hasActiveFilters,
-  NO_GRID_FILTERS,
-} from '../lib/gridFilters'
-
-/**
- * Narrowing the Grid. Pure, because the security property lives here: the
- * filter must never become a server parameter.
- */
-const P = (workField: string | null, shared: string[] = []) => ({
-  workField,
-  sharedInterests: shared,
-})
-
-const ROOM = [
-  P('Design', ['Techno', 'Board games']),
-  P('Design', ['Techno']),
-  P('Engineering', ['Board games', 'Techno', 'Film']),
-  P('Finance', []),
-  P(null, ['Film']),
-]
-
-describe('the chips offer only what is in the room', () => {
-  it('lists professions present, commonest first', () => {
-    // A filter listing twenty professions when eleven are present is a menu of
-    // dead ends, and one empty result teaches people to stop using it.
-    expect(availableWorkFields(ROOM)).toEqual(['Design', 'Engineering', 'Finance'])
-  })
-
-  it('offers nothing when every profession is suppressed', () => {
-    /*
-     * Which is every room below 8 people: the server nulls `workField` there,
-     * because "29, Bengaluru, works in fintech, into techno and board games" is
-     * one specific person in a room of eight.
-     *
-     * So the control is safe by construction rather than by a check — there is
-     * simply nothing to offer.
-     */
-    expect(availableWorkFields([P(null), P(null), P(null)])).toEqual([])
-  })
-
-  it('ignores blank and whitespace fields', () => {
-    expect(availableWorkFields([P('  '), P('Design')])).toEqual(['Design'])
-  })
-})
-
-describe('filtering shows fewer, never different', () => {
-  it('preserves the server ranking', () => {
-    /*
-     * `rankMatches` ordered this list. Narrowing must not re-order it -- that is
-     * why these are filters and not sorts, and why a shared-interest sort was
-     * rejected: the ranking already accounts for shared interests, so a second
-     * ordering would disagree with the first about the same list.
-     */
-    const out = applyGridFilters(ROOM, { workFields: ['Design'] })
-    expect(out).toEqual([ROOM[0], ROOM[1]])
-  })
-
-  it('treats an empty selection as everyone', () => {
-    // Not as nobody. Unticking your last chip should clear the filter, not empty
-    // the room -- which reads as everyone leaving.
-    expect(applyGridFilters(ROOM, NO_GRID_FILTERS)).toHaveLength(ROOM.length)
-  })
-
-  it('excludes people whose profession is unknown from a profession filter', () => {
-    /*
-     * Keeping unknowns in every result would let you infer suppressed values by
-     * watching who never disappears, whatever you tick.
-     */
-    const out = applyGridFilters(ROOM, { workFields: ['Design'] })
-    expect(out.some((p) => p.workField === null)).toBe(false)
-  })
-
-
-
-})
-
-describe('an empty screen says which kind of empty it is', () => {
-  it('tells a filtered-out room from an empty one', () => {
-    /*
-     * Different situations, different fixes. Telling somebody the room is empty
-     * when they filtered it themselves is the kind of small lie that makes
-     * people stop trusting a screen.
-     */
-    expect(emptyReason(5, 0, { workFields: ['Finance'] })).toBe('filtered-out')
-    expect(emptyReason(0, 0, NO_GRID_FILTERS)).toBe('room-empty')
-    expect(emptyReason(5, 0, NO_GRID_FILTERS)).toBe('room-empty')
-  })
-
-  it('is null while anything is showing', () => {
-    expect(emptyReason(5, 3, NO_GRID_FILTERS)).toBeNull()
-  })
-
-  it('knows when a clear affordance is needed', () => {
-    expect(hasActiveFilters(NO_GRID_FILTERS)).toBe(false)
-    expect(hasActiveFilters({ workFields: ['Design'] })).toBe(true)
-  })
-})
-
 /**
  * The room, after the Blend'n rebuild. Source assertions: the roster needs a
  * check-in, a live socket and people in a room, none of which decides whether
@@ -108,7 +6,7 @@ describe('an empty screen says which kind of empty it is', () => {
  * The Grid (`MatchScreen` inside the `app/room.tsx` modal) is gone. The room is
  * a face grid in `components/blendn/BlendnScreen.tsx`, fed by `lib/useRoom.ts`.
  * The work-field filter chips went with it on purpose — a face grid has no
- * slot for them — so only the pure `lib/gridFilters.ts` tests above remain.
+ * slot for them.
  */
 import { readFileSync } from 'fs'
 import { join } from 'path'
@@ -120,6 +18,8 @@ const code = (...p: string[]) =>
 const SCREEN = () => code('components', 'blendn', 'BlendnScreen.tsx')
 const USE_ROOM = () => code('lib', 'useRoom.ts')
 const SECTIONS = () => code('components', 'blendn', 'RoomSections.tsx')
+/** The Room's list, header and dock (Flow 4 redesign). */
+const ROOM = () => code('components', 'blendn', 'RoomView.tsx')
 
 describe('the rebuilt room kept what the old Grid had', () => {
   it('still offers report and block from the card', () => {
@@ -129,9 +29,9 @@ describe('the rebuilt room kept what the old Grid had', () => {
      * making me uncomfortable" goes from one tap to opening a profile and
      * finding a menu. The card is `PersonCard` now; its "more" button is it.
      */
-    expect(code('components', 'blendn', 'PersonCard.tsx')).toContain('onPress={() => onSafety(p)}')
+    expect(code('components', 'ds', 'PersonCard.tsx')).toContain("circle('ellipsis', `Block or report ${name}`, onMore)")
     const src = SCREEN()
-    expect(src).toContain('onSafety={safety}')
+    expect(src).toContain('onMore={() => card && safety(card)}')
     expect(src).toContain('showUserSafetyActions(p.name, p.id')
   })
 
@@ -141,20 +41,19 @@ describe('the rebuilt room kept what the old Grid had', () => {
      * is here", the other is "we could not find out". Telling somebody the room
      * is empty when the network dropped is a lie they will act on.
      */
-    const src = SCREEN()
-    expect(src).toContain("mode === 'error' ? (")
-    expect(src).toContain('Couldn&apos;t load the room')
-    expect(src).toContain('onPress={room.retry}')
+    // A room that failed leaves Tonight up with a quiet line and its retry (Flow 4 Room #15): never "empty".
+    expect(SCREEN()).toContain("onRoomRetry={room.status === 'error' ? room.retry : undefined}")
+    expect(code('components', 'blendn', 'TonightView.tsx')).toContain('Couldn’t check your room. You can still browse tonight.')
     // Both branches, because the whole point is that they say different things.
-    expect(SECTIONS()).toContain('Nobody else is here yet')
+    expect(ROOM()).toContain('Nobody else is here yet')
   })
 
-  it('still announces people arriving', () => {
-    // The roster updates over the socket, so without this the grid grows under
-    // your thumb and a new face is indistinguishable from one you scrolled past.
+  it('still shows people arriving, without naming them (ROUND3 C1, motion #25)', () => {
+    // The roster updates over the socket; an arrival is the count step and a face entering the grid.
+    // Nothing names them: a name at the moment someone walks in ties them to the door.
     expect(USE_ROOM()).toContain('subscribeToEventRoomCheckIn(eventId')
-    expect(SCREEN()).toContain('walked in`')
-    expect(SECTIONS()).toContain('walked in`')
+    expect(ROOM()).toContain('arriving={props.arrivingIds.has(item.id)}')
+    for (const src of [SCREEN(), SECTIONS(), ROOM(), code('components', 'blendn', 'ChatDock.tsx')]) expect(src).not.toContain('walked in')
   })
 
   it('virtualises the roster instead of rendering all of it', () => {
@@ -171,10 +70,10 @@ describe('the rebuilt room kept what the old Grid had', () => {
      * `numColumns={3}` is right now (it was pinned *off* for the old
      * single-column cards): the room is a grid of faces.
      */
-    const src = SCREEN()
+    const src = ROOM()
     expect(src).toContain('<Animated.FlatList')
     // Three to a row for faces; the Crews view (step 9) is one card to a row in the same list.
-    expect(src).toContain("numColumns={gridView === 'people' ? 3 : 1}")
+    expect(src).toContain('numColumns={crewsView ? 1 : 3}')
     expect(src).toContain('renderItem=')
     expect(src).not.toMatch(/everyone\.map\(|people\.map\(/)
   })
@@ -185,7 +84,7 @@ describe('the rebuilt room kept what the old Grid had', () => {
      * "Show more" sits under "Nobody else is here yet" and offers to fetch a
      * second page of nobody.
      */
-    expect(SCREEN()).toContain('room.hasMore && everyone.length > 0')
+    expect(ROOM()).toContain('props.hasMore && !empty')
   })
 
   it('resolves the room chat once per room, not on every open', () => {
@@ -200,7 +99,7 @@ describe('the rebuilt room kept what the old Grid had', () => {
 
   it('never sends a filter to the server', () => {
     /*
-     * The whole reason `lib/gridFilters.ts` exists: a `?workField=` param would
+     * Why the old Grid filtered on the client: a `?workField=` param would
      * narrow on the real column while the response still suppressed it, so one
      * result would name a suppressed attribute by elimination.
      */
@@ -222,7 +121,7 @@ describe('Join Chat is a door, not a pane', () => {
      */
     const src = SCREEN()
     expect(src).toContain("pathname: '/chat/[id]'")
-    expect(src).toContain('onOpen={() => void openChat()}')
+    expect(src).toContain('onOpenChat={() => void openChat()}')
     expect(src).not.toContain('<GroupChat')
     expect(code('components', 'blendn', 'ChatDock.tsx')).not.toContain('<GroupChat')
   })
@@ -240,13 +139,14 @@ describe('the room says who is here now (SCRUM-495)', () => {
   })
 
   it('heads the face grid with what is true of everyone in it', () => {
-    expect(SCREEN()).toMatch(/const head = everyoneHead\(everyone, \{ hasMore: room\.hasMore, hereCount: room\.hereCount \}\)/)
-    expect(SCREEN()).toContain('<FaceGridHead title={head.title} count={head.count}')
-    expect(SECTIONS()).toContain('<Text variant="heading">{title}</Text>')
+    expect(SCREEN()).toMatch(/const head = everyoneHead\(room\.people, \{ hasMore: room\.hasMore, hereCount: room\.hereCount \}\)/)
+    expect(SCREEN()).toContain('everyoneTitle={head.title}')
+    expect(ROOM()).toContain('<EveryoneHead title={props.everyoneTitle} count={props.everyoneCount} />')
+    expect(SECTIONS()).toContain('<SectionHeader title={title}')
   })
 
-  it('names as just walked in only somebody who is still here', () => {
-    expect(SECTIONS()).toContain('const latest = arrivals.find((a) => a.insideNow !== false)')
+  it('rings as new only somebody who arrived this session and is still in the stack', () => {
+    expect(SECTIONS()).toContain('arrivals.some((a) => a.id === stack[0].id)')
   })
 })
 
@@ -259,9 +159,8 @@ describe('the face grid names people at a readable size (SCRUM-503)', () => {
      * grid under no Meet next. One line, ellipsised, is always legible.
      * Meet next's card keeps shrink-to-fit: full size in every drive so far.
      */
-    const src = SECTIONS()
-    const grid = src.slice(src.indexOf('export const GridFace'), src.indexOf('export function FaceGridHead'))
-    expect(grid).toMatch(/<Text variant="bodyStrong" numberOfLines=\{1\} style=\{styles\.centre\}>\s*\{person\.name\}/)
+    const grid = code('components', 'ds', 'GridFace.tsx')
+    expect(grid).toMatch(/<Text numberOfLines=\{1\} maxFontSizeMultiplier=\{CONTROL_FONT_CAP\}[^>]*>\s*\{name\}/)
     expect(grid).not.toContain('adjustsFontSizeToFit')
   })
 })

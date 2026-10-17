@@ -1,26 +1,22 @@
 import { ScreenProfiler } from '../../lib/perf'
-import { Ionicons } from '@expo/vector-icons'
 import { router, useFocusEffect, useScrollToTop } from 'expo-router'
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-    AppState,
-    FlatList,
-    Share,
-    StyleSheet,
-    Text,
-    View,
-} from 'react-native'
+import React, { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { AppState, FlatList, Pressable, Share, StyleSheet, Text, View } from 'react-native'
 import Animated, { Easing, FadeIn, FadeOut, LinearTransition, useReducedMotion } from 'react-native-reanimated'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { EventCover } from '../../components/EventCover'
-import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
+import { SkeletonBlock } from '../../components/Skeleton'
 import FadeInUp from '../../components/motion/FadeInUp'
 import ScalePress from '../../components/motion/ScalePress'
-import { SectionHeader } from '../../components/pulse/SectionHeader'
-import { UPCOMING_THUMB, UpcomingCard } from '../../components/pulse/UpcomingCard'
-import { DayHeading } from '../../components/ui/DayHeading'
-import { useToast } from '../../components/Toast'
+import { EventCard } from '../../components/ds/EventCard'
+import { PresenceDot, TimeBadge } from '../../components/ds/MonoFamily'
+import { SectionHeader } from '../../components/ds/SectionHeader'
+import { StateScreen } from '../../components/ds/StateScreen'
+import { CONTROL_FONT_CAP, font, minTarget, useBoldText } from '../../components/ds/shared'
+import { Icon, type IconName } from '../../components/ui/Icon'
+import { Toast, type ToastKind } from '../../components/ds/Toast'
 import { apiClient } from '../../lib/apiClient'
+import { openBlendn } from '../../lib/blendnOverlay'
 import { Logger } from '../../lib/logger'
 import { failedSections, goingSections, newFailure, type GoingSection } from '../../lib/goingSections'
 import {
@@ -28,19 +24,23 @@ import {
   rsvpEventRows,
   savedEventRows,
   withLockedNights,
+  withPendingSaves,
   type AttendancePayload,
   type GoingItem,
+  type PendingSave,
   type RsvpEventRow,
   type SavedEventRow as EventRow,
 } from '../../lib/savedEvents'
 import { HAPPENING_NOW, featuredDateLabel, nextUpLabel, placeLabel, timeLabel } from '../../lib/pulse'
 import { liveWindow, sessionOver } from '../../lib/eventSession'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE, tint } from '../../lib/theme'
+import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { OPACITY } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
 import { MOTION_DURATION } from '../../lib/motion'
-import { openInMaps as openPlaceInMaps } from '../../lib/openInMaps'
-import { addToCalendar as addEventToCalendar } from '../../lib/calendar'
+import { openInMaps } from '../../lib/openInMaps'
+import { addToCalendar } from '../../lib/calendar'
 import { openPaywall } from '../../lib/paywall'
+import { isNightRated, markNightRated, useRatedNights } from '../../lib/ratedNights'
 import { TAB_BAR_CLEARANCE } from './_layout'
 
 /**
@@ -71,7 +71,17 @@ function GoingScreenInner() {
   const [lockedCount, setLockedCount] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
   const [loadFailed, setLoadFailed] = useState(false)
-  const { showToast } = useToast()
+  /*
+   * The design's Toast (components/ds/Toast): iOS a capsule at the top, Android
+   * a snackbar at the bottom above the tab bar (drive 2: it covered "Going").
+   */
+  const [toast, setToast] = useState<{ key: number; kind: ToastKind; text: string; action?: { label: string; onPress: () => void } } | null>(null)
+  const say = useCallback((text: string, kind: ToastKind = 'info', action?: { label: string; onPress: () => void }) => {
+    setToast({ key: Date.now(), kind, text, action })
+  }, [])
+  const bold = useBoldText()
+  // A night rated anywhere (the rate screen, the Recap) stops offering "Rate who you met" at once.
+  const ratedVersion = useRatedNights()
   const reduceMotion = useReducedMotion()
   // The row Undo just restored — the only one that gets an entrance.
   const [restoredId, setRestoredId] = useState<string | null>(null)
@@ -86,6 +96,19 @@ function GoingScreenInner() {
   // Tapping Going while already on it goes back to the top (the bar emits `tabPress`).
   const listRef = useRef<FlatList<GoingItem>>(null)
   useScrollToTop(listRef)
+  // The newest read wins: focus, AppState, a pull and Try again can overlap.
+  const loadId = useRef(0)
+  // Removes and Undos a read may not have seen yet (lib/savedEvents.ts `withPendingSaves`).
+  const pendingSaves = useRef(new Map<string, PendingSave>())
+  const markSave = useCallback((row: EventRow, saved: boolean) => {
+    pendingSaves.current.set(row.id, { saved, row, settledAt: Infinity })
+  }, [])
+  const settleSave = useCallback((id: string, ok: boolean) => {
+    const op = pendingSaves.current.get(id)
+    if (!op) return
+    if (ok) pendingSaves.current.set(id, { ...op, settledAt: loadId.current })
+    else pendingSaves.current.delete(id)
+  }, [])
 
   const loadInterestedEvents = useCallback(async (): Promise<void> => {
     // No `setLoading(true)` here: `loading` starts true for the first load, and
@@ -106,22 +129,36 @@ function GoingScreenInner() {
        * blank the other two — and a server that predates `/me/rsvps` (404)
        * simply has no Going section. Only all three failing is "couldn't load".
        */
+      const id = ++loadId.current
       const [saved, rsvps, past] = await Promise.all([
         apiClient.getUserFavorites(authUser.id),
         apiClient.getMyRsvps(),
         apiClient.getMyAttendance(),
       ])
+      if (id !== loadId.current) return
 
       // `{ events, pagination }` — see lib/savedEvents.ts for why this is not
       // mapped inline any more.
       const rowCount =
         (saved.data?.events?.length ?? 0) + (rsvps.data?.events?.length ?? 0) + (past.data?.events?.length ?? 0)
       if (rowCount > 0) hadRowsRef.current = true
-      if (saved.success && saved.data) setEvents(savedEventRows(saved.data))
+      if (saved.success && saved.data) setEvents(withPendingSaves(savedEventRows(saved.data), pendingSaves.current, id))
       else Logger.debug('interested', 'Failed to load favorites', { error: saved.error })
       if (rsvps.success && rsvps.data) setGoing(rsvpEventRows(rsvps.data))
       else Logger.debug('interested', 'Failed to load RSVPs', { error: rsvps.error })
-      if (past.success && past.data) setAttended(past.data.events ?? [])
+      if (past.success && past.data) {
+        setAttended(past.data.events ?? [])
+        // Nights rated on another launch: the server's own answer, for the few Past rows on screen.
+        for (const e of (past.data.events ?? []).slice(0, PAST_RATING_READS)) {
+          if (isNightRated(e.id)) continue
+          void apiClient
+            .getMyEventRating(e.id)
+            .then((r) => {
+              if (r.success && r.data?.ratedAt) markNightRated(e.id)
+            })
+            .catch(() => {})
+        }
+      }
       else Logger.debug('interested', 'Failed to load attendance', { error: past.error })
       // Older nights behind Blendn+ (step 11); kept as last known when the read fails, like the rows.
       if (past.success && past.data) setLockedCount(past.data.lockedCount ?? 0)
@@ -138,9 +175,7 @@ function GoingScreenInner() {
       const failed = failedSections({ saved, going: rsvps, past })
       const shown = hadRowsRef.current || !allFailed
       if (shown && newFailure(failedRef.current, failed)) {
-        showToast("Couldn't load all of your events.", 'error', {
-          action: { label: 'Try again', onPress: () => reloadRef.current() },
-        })
+        say("Couldn't load all of your events.", 'error', { label: 'Try again', onPress: () => reloadRef.current() })
       }
       failedRef.current = failed
     } catch {
@@ -149,7 +184,7 @@ function GoingScreenInner() {
     } finally {
       setLoading(false)
     }
-  }, [authUser, showToast])
+  }, [authUser, say])
   useEffect(() => {
     reloadRef.current = () => void loadInterestedEvents()
   }, [loadInterestedEvents])
@@ -205,44 +240,50 @@ function GoingScreenInner() {
    * Optimistic, with an Undo. The card goes at once; a refused DELETE puts it
    * back and says so, and Undo saves it again.
    */
-  const removeSave = useCallback(async (event: EventRow) => {
+  const removeSave = useCallback((event: EventRow) => {
     const index = events.findIndex(e => e.id === event.id)
     setRestoredId(null)
     setEvents(prev => prev.filter(e => e.id !== event.id))
-    try {
-      // DELETE, not the POST upsert this used to send — that one never
-      // removed anything, and the card came back on the next refresh.
-      const result = await apiClient.removeFavorite(event.id)
+    markSave(event, false)
+    // DELETE, not the POST upsert this used to send — that one never
+    // removed anything, and the card came back on the next refresh.
+    const removed = apiClient.removeFavorite(event.id).then((result) => {
       if (!result.success) throw new Error(result.error || 'remove refused')
-    } catch (e) {
-      Logger.warn('interested', 'Failed to remove favorite', { error: e })
-      restoreRow(event, index)
-      showToast(`Couldn't remove ${event.title}. Try again.`, 'error')
-      return
-    }
-
-    showToast(`Removed ${event.title}`, 'info', {
-      action: {
-        label: 'Undo',
-        onPress: () => {
-          restoreRow(event, index)
-          apiClient
-            .addFavorite(event.id)
-            .then((res) => {
-              if (!res.success) throw new Error(res.error || 'save refused')
-            })
-            .catch(() => {
-              setEvents(prev => prev.filter(e => e.id !== event.id))
-              showToast(`Couldn't save ${event.title} again.`, 'error')
-            })
-        },
+    })
+    /*
+     * Said at once, with its Undo, as the row goes (drive 2: it came ~1 s
+     * later, after the server). A refused DELETE replaces it with the error and
+     * puts the row back; Undo waits for the DELETE before it saves again, so
+     * the two can never land in the wrong order.
+     */
+    say(`Removed ${event.title}`, 'info', {
+      label: 'Undo',
+      onPress: () => {
+        restoreRow(event, index)
+        markSave(event, true)
+        removed
+          .catch(() => undefined)
+          .then(() => apiClient.addFavorite(event.id))
+          .then((res) => {
+            if (!res.success) throw new Error(res.error || 'save refused')
+            settleSave(event.id, true)
+          })
+          .catch(() => {
+            settleSave(event.id, false)
+            setEvents(prev => prev.filter(e => e.id !== event.id))
+            say(`Couldn't save ${event.title} again.`, 'error')
+          })
       },
     })
-  }, [events, restoreRow, showToast])
-
-  const openInMaps = useCallback((event: EventRow) => {
-    void openPlaceInMaps(event)
-  }, [])
+    removed
+      .then(() => settleSave(event.id, true))
+      .catch((e) => {
+        settleSave(event.id, false)
+        Logger.warn('interested', 'Failed to remove favorite', { error: e })
+        restoreRow(event, index)
+        say(`Couldn't remove ${event.title}. Try again.`, 'error')
+      })
+  }, [events, restoreRow, say, markSave, settleSave])
 
   const shareEvent = useCallback(async (event: EventRow) => {
     try {
@@ -250,18 +291,18 @@ function GoingScreenInner() {
     } catch {}
   }, [])
 
-  const addToCalendar = useCallback((event: EventRow) => addEventToCalendar(event), [])
-
   const openEvent = useCallback((id: string) => {
     router.push({ pathname: '/event/[id]', params: { id } as any })
   }, [])
 
   /*
-   * Next up: the soonest RSVP, large. The photo carries nothing — its words sit
-   * under it — and photo, time, title and place are one button that opens the
-   * event. The actions are siblings of that button, not children: a card that
-   * was itself a touchable made VoiceOver read it as one element, so the
-   * actions inside it could not be reached.
+   * Next up (flow4.js `going`): a ticket-like solid card, the photo on top and
+   * the details under it, the date and time in Geist Mono, and a solid button
+   * group. Photo, time, title and place are one button that opens the event;
+   * the actions are its siblings, so VoiceOver reaches them. Live now swaps
+   * Directions for Open Blend'n, the bridge to the core loop (Going #06): a
+   * secondary, since the disc is the screen's primary then. No haptics: you
+   * pass this card while scrolling.
    */
   const renderNext = useCallback((row: RsvpEventRow) => {
     /*
@@ -276,99 +317,70 @@ function GoingScreenInner() {
     const cancelled = row.status === 'cancelled'
     const waitlisted = !cancelled && row.rsvpStatus === 'waitlisted'
     return (
-      <View style={styles.hero}>
-        {/* Shrinks under the finger, no haptic: it sits at the top of a scroll. */}
-        <ScalePress
-          onPress={() => openEvent(row.id)}
-          pressedScale={0.98}
-          haptic={false}
-          accessibilityRole="button"
-          accessibilityLabel={[
-            row.title,
-            when,
-            place,
-            cancelled ? 'Cancelled by the organiser' : waitlisted ? 'On the waitlist' : null,
-          ].filter(Boolean).join(', ')}
-          accessibilityHint="Opens the event"
-        >
-          <View style={styles.heroPhoto}>
-            <EventCover uri={row.cover_image_url} height={HERO_PHOTO} radius={EMBER_RADIUS.sm} retry={refreshCount} />
-          </View>
-          <View style={styles.heroBody}>
-            {when ? (
-              <View style={styles.heroWhen}>
-                {live ? <View style={styles.liveDot} /> : null}
-                <Text style={styles.heroEyebrow} numberOfLines={1}>{when}</Text>
-              </View>
-            ) : null}
-            <Text style={styles.heroTitle} numberOfLines={2}>{row.title}</Text>
-            {place ? (
-              <View style={styles.heroPlace}>
-                <Ionicons name="location-outline" size={ICON.sm} color={EMBER.textSecondary} />
-                <Text style={styles.heroPlaceText} numberOfLines={1}>{place}</Text>
-              </View>
-            ) : null}
-            {cancelled ? (
-              <View style={[styles.statusTag, styles.statusTagBad]}>
-                <Text style={[styles.statusText, styles.statusTextBad]}>CANCELLED</Text>
-              </View>
-            ) : waitlisted ? (
-              <View style={styles.statusTag}>
-                <Text style={styles.statusText}>ON THE WAITLIST</Text>
-              </View>
-            ) : null}
-          </View>
-        </ScalePress>
+      <View style={[styles.inset, styles.next]}>
+        <SectionLabel text="Next up" />
+        <View style={styles.hero}>
+          <ScalePress
+            onPress={() => openEvent(row.id)}
+            pressedScale={0.97}
+            haptic={false}
+            accessibilityRole="button"
+            accessibilityLabel={[
+              row.title,
+              when,
+              place,
+              cancelled ? 'Cancelled by the organiser' : waitlisted ? 'On the waitlist' : null,
+            ].filter(Boolean).join(', ')}
+            accessibilityHint="Opens the event"
+          >
+            <View style={styles.heroPhoto}>
+              <EventCover uri={row.cover_image_url} height={HERO_PHOTO} radius={RADIUS.mediaInCard} retry={refreshCount} />
+              {live ? (
+                <View style={styles.heroBadge}>
+                  <TimeBadge when="Live" />
+                </View>
+              ) : null}
+            </View>
+            <View style={styles.heroBody}>
+              {when ? <NextUpWhen when={when} live={live} /> : null}
+              <Text style={[font('title', bold), styles.ink]} numberOfLines={2}>{row.title}</Text>
+              {place ? (
+                <View style={styles.heroPlace}>
+                  <Icon name="map-pin" size={ICON.inline} color={COLOR.textSecondary} />
+                  <Text style={[font('meta', bold), styles.secondary, styles.shrink]} numberOfLines={1}>{place}</Text>
+                </View>
+              ) : null}
+              {cancelled ? (
+                <StatusTag icon="calendar-x" text="Cancelled" tint={COLOR.destructiveTint} />
+              ) : waitlisted ? (
+                <StatusTag icon="clock" text="On the waitlist" tint={COLOR.warningTint} />
+              ) : null}
+            </View>
+          </ScalePress>
 
-        {/*
-          Directions carries its word; Calendar and Share are icons. Three
-          labelled pills do not fit the 310pt inside the card at the body size —
-          "Directions" alone needs ~120 of a third's ~98 — and the type scale has
-          no smaller button label. No check-in here: that lives on the event.
-          They shrink under the finger but stay silent, as the buttons they
-          replaced were: no haptic on a card you pass while scrolling.
-        */}
-        <View style={styles.heroActions}>
-          <ScalePress
-            style={[styles.heroAction, styles.heroActionWide]}
-            pressedScale={0.95}
-            haptic={false}
-            onPress={() => openInMaps(row)}
-            accessibilityRole="button"
-            accessibilityLabel={`Directions to ${row.venue_name || row.title}`}
-          >
-            <Ionicons name="navigate-outline" size={ICON.sm} color={EMBER.textPrimary} />
-            <Text style={styles.heroActionText} numberOfLines={1}>Directions</Text>
-          </ScalePress>
-          <ScalePress
-            style={[styles.heroAction, styles.heroActionIcon]}
-            pressedScale={0.95}
-            haptic={false}
-            onPress={() => addToCalendar(row)}
-            accessibilityRole="button"
-            accessibilityLabel={`Add ${row.title} to calendar`}
-          >
-            <Ionicons name="calendar-outline" size={ICON.sm} color={EMBER.textPrimary} />
-          </ScalePress>
-          <ScalePress
-            style={[styles.heroAction, styles.heroActionIcon]}
-            pressedScale={0.95}
-            haptic={false}
-            onPress={() => shareEvent(row)}
-            accessibilityRole="button"
-            accessibilityLabel={`Share ${row.title}`}
-          >
-            <Ionicons name="share-outline" size={ICON.sm} color={EMBER.textPrimary} />
-          </ScalePress>
+          {/* Directions (or Open Blend'n) keeps its word; Calendar and Share are icons. */}
+          <View style={styles.heroActions}>
+            {live ? (
+              <HeroAction icon="radio" label="Open Blend’n" accessibilityLabel="Open Blend’n" onPress={() => openBlendn()} />
+            ) : (
+              <HeroAction icon="navigation" label="Directions" accessibilityLabel={`Directions to ${row.venue_name || row.title}`} onPress={() => void openInMaps(row)} />
+            )}
+            {live ? (
+              <HeroAction icon="navigation" accessibilityLabel={`Directions to ${row.venue_name || row.title}`} onPress={() => void openInMaps(row)} />
+            ) : (
+              <HeroAction icon="calendar" accessibilityLabel={`Add ${row.title} to calendar`} onPress={() => addToCalendar(row)} />
+            )}
+            <HeroAction icon="share" accessibilityLabel={`Share ${row.title}`} onPress={() => shareEvent(row)} />
+          </View>
         </View>
       </View>
     )
-  }, [addToCalendar, openEvent, openInMaps, refreshCount, shareEvent])
+  }, [bold, openEvent, refreshCount, shareEvent])
 
   /*
    * Every item carries its own space above it, because a FlatList has no `gap`:
-   * `SPACE.xl` above a day, `SPACE.xxl` above a section, `SPACE.md` between a
-   * heading and its rows and between rows. The first item sits on the header.
+   * `SPACE.xl` above a day or a section, `SPACE.xs` between rows (the 64 pt
+   * rows already hold their own air). The first item sits on the header.
    */
   const renderItem = useCallback(({ item, index }: { item: GoingItem; index: number }) => {
     const first = index === 0
@@ -377,15 +389,16 @@ function GoingScreenInner() {
 
     if (item.kind === 'day') {
       return (
-        <View style={[styles.inset, !first && { marginTop: SPACE.xl }]}>
-          <DayHeading title={item.title} detail={item.weekday} />
+        <View style={[styles.inset, styles.heading, first && styles.flush]}>
+          {/* flow4.js going `dayH`: the date alone, at the heading's 20, like every group on the tab. */}
+          <SectionHeader title={item.title} />
         </View>
       )
     }
 
     if (item.kind === 'header') {
       return (
-        <View style={[styles.inset, !first && { marginTop: SPACE.xxl }]}>
+        <View style={[styles.inset, styles.heading, first && styles.flush]}>
           <SectionHeader title={item.title} />
         </View>
       )
@@ -397,19 +410,16 @@ function GoingScreenInner() {
       const row = item.row
       const cancelled = row.status === 'cancelled'
       return (
-        <View style={styles.row}>
-          <UpcomingCard
-            title={row.title}
-            imageUrl={row.cover_image_url}
-            retry={refreshCount}
-            // Today's day of a multi-day run, as the heading above it is.
-            timeLabel={timeLabel(liveWindow(row).start_time)}
-            placeLabel={placeLabel(row)}
-            note={cancelled ? 'Cancelled' : row.rsvpStatus === 'waitlisted' ? 'On the waitlist' : null}
-            noteTone={cancelled ? 'destructive' : 'default'}
-            onPress={() => openEvent(row.id)}
-          />
-        </View>
+        <GoingRow
+          title={row.title}
+          cover={row.cover_image_url}
+          retry={refreshCount}
+          // Today's day of a multi-day run, as the heading above it is.
+          time={timeLabel(liveWindow(row).start_time)}
+          venue={placeLabel(row)}
+          onPress={() => openEvent(row.id)}
+          trailing={cancelled ? <RowNote text="Cancelled" bad /> : row.rsvpStatus === 'waitlisted' ? <RowNote text="Waitlist" /> : null}
+        />
       )
     }
 
@@ -418,17 +428,17 @@ function GoingScreenInner() {
       const label = lockedNightsLabel(item.count)
       return (
         <ScalePress
-          style={[styles.row, styles.locked]}
-          pressedScale={0.98}
+          style={[styles.inset, styles.locked]}
+          pressedScale={0.97}
           haptic={false}
           onPress={() => void openPaywall('recap', { userInitiated: true })}
           accessibilityRole="button"
           accessibilityLabel={label}
           accessibilityHint="Opens Blendn+"
         >
-          <Ionicons name="lock-closed-outline" size={ICON.md} color={EMBER.textSecondary} />
-          <Text style={styles.lockedText}>{label}</Text>
-          <Ionicons name="chevron-forward" size={ICON.sm} color={EMBER.textSecondary} />
+          <Icon name="lock" size={ICON.control} color={COLOR.textSecondary} />
+          <Text style={[font('bodyStrong', bold), styles.ink, styles.shrink]}>{label}</Text>
+          <Icon name="chevron-right" size={ICON.inline} color={COLOR.textSecondary} />
         </ScalePress>
       )
     }
@@ -436,21 +446,25 @@ function GoingScreenInner() {
     if (item.kind === 'past') {
       const row = item.row
       return (
-        <View style={styles.row}>
-          <UpcomingCard
-            title={row.title}
-            imageUrl={row.cover_image_url}
-            retry={refreshCount}
-            timeLabel={featuredDateLabel(row.start_time)}
-            placeLabel={placeLabel(row)}
-            onPress={() => openEvent(row.id)}
-            action={{
-              label: 'RATE WHO YOU MET',
-              accessibilityLabel: `Rate who you met at ${row.title}`,
-              onPress: () => router.push({ pathname: '/rate/[eventId]', params: { eventId: row.id } as any }),
-            }}
-          />
-        </View>
+        <GoingRow
+          title={row.title}
+          cover={row.cover_image_url}
+          retry={refreshCount}
+          time={featuredDateLabel(row.start_time)}
+          venue={placeLabel(row)}
+          onPress={() => openEvent(row.id)}
+          trailing={
+            isNightRated(row.id) ? (
+              <RowNote text="Rated" />
+            ) : (
+            <TextAction
+              label="Rate who you met"
+              accessibilityLabel={`Rate who you met at ${row.title}`}
+              onPress={() => router.push({ pathname: '/rate/[eventId]', params: { eventId: row.id } as any })}
+            />
+            )
+          }
+        />
       )
     }
 
@@ -461,25 +475,28 @@ function GoingScreenInner() {
     const cancelled = row.status === 'cancelled'
     return (
       <Animated.View
-        style={styles.row}
         exiting={reduceMotion ? undefined : ROW_OUT}
         entering={!reduceMotion && row.id === restoredId ? ROW_BACK : undefined}
       >
-        <UpcomingCard
+        <GoingRow
           title={row.title}
-          imageUrl={row.cover_image_url}
+          cover={row.cover_image_url}
           retry={refreshCount}
-          timeLabel={`${featuredDateLabel(row.start_time)} · ${timeLabel(row.start_time)}`}
-          placeLabel={placeLabel(row)}
-          note={cancelled ? 'Cancelled' : null}
-          noteTone={cancelled ? 'destructive' : 'default'}
+          time={`${featuredDateLabel(row.start_time)} · ${timeLabel(row.start_time)}`}
+          venue={placeLabel(row)}
           onPress={() => openEvent(row.id)}
-          isFavorited
-          onToggleFavorite={() => void removeSave(row)}
+          trailing={
+            <>
+              {cancelled ? <RowNote text="Cancelled" bad /> : null}
+              <SavedHeart title={row.title} onPress={() => void removeSave(row)} />
+            </>
+          }
         />
       </Animated.View>
     )
-  }, [openEvent, refreshCount, removeSave, reduceMotion, renderNext, restoredId])
+    // ratedVersion: a night rated elsewhere redraws its Past row.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bold, openEvent, refreshCount, removeSave, reduceMotion, renderNext, restoredId, ratedVersion])
 
   // Live events lead, under "Happening now" — never under the day they started (lib/goingSections.ts).
   const items = useMemo(
@@ -497,58 +514,40 @@ function GoingScreenInner() {
         now dead-end on whatever happened to be underneath.
       */}
       <View style={styles.headerRow}>
-        <Text style={styles.headerTitle}>Going</Text>
+        <Text accessibilityRole="header" style={[font('display', bold), styles.ink]}>Going</Text>
       </View>
-
       {loading ? (
         // The shapes the list fades into: the next-up card, then two rows.
-        <View accessibilityLabel="Loading your events" accessible>
-          <View style={styles.hero}>
-            <SkeletonBlock width={'100%'} height={HERO_PHOTO} borderRadius={EMBER_RADIUS.sm} />
-            <View style={styles.skeletonLines}>
-              <SkeletonLine width={'35%'} />
-              <SkeletonLine width={'80%'} />
-              <SkeletonLine width={'50%'} />
-            </View>
-          </View>
+        <View accessibilityLabel="Loading your events" accessible style={styles.inset}>
+          <SkeletonBlock width="100%" height={SKELETON_HERO} borderRadius={RADIUS.card} />
           {[0, 1].map((i) => (
-            <View key={i} style={[styles.row, styles.skeletonRow]}>
-              <View style={styles.skeletonRowText}>
-                <SkeletonLine width={'40%'} />
-                <SkeletonLine width={'85%'} />
-                <SkeletonLine width={'55%'} />
-              </View>
-              <SkeletonBlock width={UPCOMING_THUMB} height={UPCOMING_THUMB} borderRadius={EMBER_RADIUS.sm} />
-            </View>
+            <SkeletonBlock key={i} width="100%" height={SKELETON_ROW} borderRadius={RADIUS.rowInCard} style={i ? styles.skeletonRow : styles.skeletonFirstRow} />
           ))}
         </View>
       ) : items.length === 0 && loadFailed ? (
-        <FadeInUp style={styles.empty}>
-          <Text style={styles.emptyTitle}>Couldn&apos;t load your events</Text>
-          <Text style={styles.emptySub}>Check your connection and try again.</Text>
-          <ScalePress
-            style={styles.retryButton}
-            onPress={() => {
-              setLoading(true)
-              void loadInterestedEvents()
-            }}
-            accessibilityRole="button"
-          >
-            <Text style={styles.retryText}>Try again</Text>
-          </ScalePress>
-        </FadeInUp>
+        <StateScreen
+          icon="cloud-off"
+          title="Couldn’t load your events"
+          body="Check your connection and try again."
+          actions={[
+            {
+              label: 'Try again',
+              onPress: () => {
+                setLoading(true)
+                void loadInterestedEvents()
+              },
+            },
+          ]}
+          testID="going-failed"
+        />
       ) : items.length === 0 ? (
-        <FadeInUp style={styles.empty}>
-          <Text style={styles.emptyTitle}>Nothing here yet</Text>
-          <Text style={styles.emptySub}>Tap &quot;I&apos;m going&quot; or the heart on an event and it shows up here.</Text>
-          <ScalePress
-            style={styles.retryButton}
-            onPress={() => router.navigate('/(tabs)/events' as any)}
-            accessibilityRole="button"
-          >
-            <Text style={styles.retryText}>Browse events</Text>
-          </ScalePress>
-        </FadeInUp>
+        <StateScreen
+          icon="calendar"
+          title="Nothing here yet"
+          body="Tap “I’m going” or the heart on an event and it shows up here."
+          actions={[{ label: 'Browse events', onPress: () => router.navigate('/(tabs)/events' as any) }]}
+          testID="going-empty"
+        />
       ) : (
         /*
          * The list fades up over the skeleton's place as one piece, instead of
@@ -571,12 +570,154 @@ function GoingScreenInner() {
           />
         </FadeInUp>
       )}
+      {toast ? (
+        <Toast key={toast.key} kind={toast.kind} text={toast.text} action={toast.action} aboveTabBar onDismiss={() => setToast(null)} testID="going-toast" />
+      ) : null}
     </SafeAreaView>
   )
 }
 
+/** "Next up": the label role, over the card. */
+function SectionLabel({ text }: { text: string }) {
+  const bold = useBoldText()
+  return <Text style={[font('label', bold), styles.secondary, styles.label]}>{text}</Text>
+}
+
+/** "Tonight · 9 PM" with the time in Geist Mono, or the still live dot and "Happening now". */
+function NextUpWhen({ when, live }: { when: string; live: boolean }) {
+  const bold = useBoldText()
+  if (live) {
+    return (
+      <View style={styles.heroWhen}>
+        <PresenceDot kind="live" />
+        <Text style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.ink]}>{when}</Text>
+      </View>
+    )
+  }
+  const cut = when.lastIndexOf(' · ')
+  return (
+    <Text style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.secondary]} numberOfLines={1}>
+      {cut === -1 ? when : `${when.slice(0, cut)} · `}
+      {cut === -1 ? null : <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.ink, styles.tabular]}>{when.slice(cut + 3)}</Text>}
+    </Text>
+  )
+}
+
+/** Cancelled (destructive tint) or On the waitlist (warning tint): a 28 pt tag, an icon and the word. */
+function StatusTag({ icon, text, tint }: { icon: IconName; text: string; tint: string }) {
+  const bold = useBoldText()
+  return (
+    <View style={[styles.tag, { backgroundColor: tint }]}>
+      <Icon name={icon} size={ICON.inline - SPACE.xxs} color={COLOR.textPrimary} />
+      <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold, FONT_FAMILY.brand[500]), styles.ink]}>{text}</Text>
+    </View>
+  )
+}
+
+/** The hero's solid button group: 48 pt, surfaceSunken; the first keeps its word and grows. */
+function HeroAction({ icon, label, accessibilityLabel, onPress }: { icon: IconName; label?: string; accessibilityLabel: string; onPress: () => void }) {
+  const bold = useBoldText()
+  return (
+    <ScalePress
+      style={[styles.heroAction, label ? styles.heroActionWide : styles.heroActionIcon]}
+      pressedScale={0.97}
+      haptic={false}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+    >
+      <Icon name={icon} size={ICON.control} color={COLOR.textPrimary} />
+      {label ? (
+        <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} numberOfLines={1} style={[font('button', bold), styles.ink]}>
+          {label}
+        </Text>
+      ) : null}
+    </ScalePress>
+  )
+}
+
+/**
+ * A row (the ds EventCard row: a 56 pt thumb, the title, venue · the time in
+ * Geist Mono) with its one control beside it, a sibling so it never opens the
+ * event. Keyed on the pull count: a remount retries a cover that failed.
+ */
+function GoingRow({
+  title,
+  cover,
+  retry,
+  time,
+  venue,
+  onPress,
+  trailing,
+}: {
+  title: string
+  cover: string | null | undefined
+  retry: number
+  time: string
+  venue: string | null | undefined
+  onPress: () => void
+  trailing?: ReactNode
+}) {
+  return (
+    <View style={[styles.inset, styles.row]}>
+      <EventCard key={retry} kind="row" title={title} cover={cover} time={time} venue={venue ?? ''} onPress={onPress} style={styles.shrink} />
+      {trailing}
+    </View>
+  )
+}
+
+/** A row's text action ("Rate who you met"): 700 14 white, reached at 44. */
+function TextAction({ label, accessibilityLabel, onPress }: { label: string; accessibilityLabel: string; onPress: () => void }) {
+  const bold = useBoldText()
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      hitSlop={(minTarget() - SPACE.xl) / 2}
+      style={({ pressed }) => pressed && styles.pressed}
+    >
+      <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} numberOfLines={1} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>
+        {label}
+      </Text>
+    </Pressable>
+  )
+}
+
+/** A status the row's time can't carry: "Cancelled" in destructive, "Waitlist" in textSecondary. */
+function RowNote({ text, bad = false }: { text: string; bad?: boolean }) {
+  const bold = useBoldText()
+  return <Text style={[font('meta', bold), bad ? styles.bad : styles.secondary]}>{text}</Text>
+}
+
+/** Saved: a 32 pt white disc with the ink heart; the tap removes the save (with Undo). */
+function SavedHeart({ title, onPress }: { title: string; onPress: () => void }) {
+  return (
+    <ScalePress
+      onPress={onPress}
+      pressedScale={0.97}
+      haptic={false}
+      hitSlop={(minTarget() - HEART) / 2}
+      accessibilityRole="button"
+      accessibilityLabel={`Saved, ${title}`}
+      accessibilityHint="Removes it from saved"
+      style={styles.heart}
+    >
+      <Icon name="heart" size={ICON.inline} color={COLOR.selectionInk} active />
+    </ScalePress>
+  )
+}
+
+/** Past rows whose rating is read from the server on load (the ones a person sees first). */
+const PAST_RATING_READS = 10
+
 /** The next-up card's photo. */
 const HERO_PHOTO = 180
+/** Loading: the hero card and two rows (flow4.js going `loading`). */
+const SKELETON_HERO = 330
+const SKELETON_ROW = 72
+/** The saved heart's white disc. */
+const HEART = SIZE.tag
 
 /*
  * Removing a save: the row fades out while the ones below close the gap,
@@ -591,99 +732,73 @@ const ROW_REFLOW = LinearTransition.duration(MOTION_DURATION.normal).easing(Easi
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent' },
-  headerRow: {
+  headerRow: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.sm, paddingBottom: SPACE.lg },
+  ink: { color: COLOR.textPrimary },
+  secondary: { color: COLOR.textSecondary },
+  bad: { color: COLOR.destructive },
+  tabular: { fontVariant: ['tabular-nums'] },
+  shrink: { flexShrink: 1, flexGrow: 1 },
+  pressed: { opacity: OPACITY.pressed },
+  list: { flex: 1 },
+  inset: { marginHorizontal: SPACE.gutter },
+  // flow4.js going `dayH`: 8 above a heading after a row's own 4, 12 under it before the next row's 4.
+  heading: { marginTop: SPACE.md, marginBottom: SPACE.sm },
+  // The card's 20 below it, then the heading's 8.
+  next: { marginBottom: SPACE.lg },
+  flush: { marginTop: 0 },
+  label: { marginBottom: SPACE.sm },
+  // 72 pt rows, 4 apart (the frame steps 76).
+  row: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, minHeight: SKELETON_ROW, marginTop: SPACE.xs },
+  // Next up: a solid ticket, the photo inset 8 inside the card's 32 corner.
+  hero: { padding: SPACE.sm, backgroundColor: COLOR.surface, borderRadius: RADIUS.card },
+  heroPhoto: { borderRadius: RADIUS.mediaInCard, overflow: 'hidden' },
+  heroBadge: { position: 'absolute', left: SPACE.md, top: SPACE.md },
+  // 12 under the photo, then the details' 4 / 12 / 6 (flow4.js going `det`).
+  heroBody: { marginTop: SPACE.md, paddingTop: SPACE.xs, paddingHorizontal: SPACE.md, gap: SPACE.xs + SPACE.xxs },
+  heroWhen: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
+  heroPlace: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs + SPACE.xxs },
+  tag: {
+    alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-start',
-    paddingHorizontal: GUTTER,
-    paddingTop: SPACE.sm,
-    paddingBottom: SPACE.lg,
+    gap: SPACE.xs + SPACE.xxs,
+    height: SIZE.tag - SPACE.xs,
+    paddingHorizontal: SPACE.sm + SPACE.xxs,
+    borderRadius: RADIUS.capsule,
   },
-  headerTitle: { ...TYPE.display },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: GUTTER },
-  emptyTitle: { ...TYPE.title, marginBottom: SPACE.sm, textAlign: 'center' },
-  emptySub: { ...TYPE.body, color: EMBER.textSecondary, textAlign: 'center' },
-  // The empty or error state's one action is that state's primary action — the
-  // only accent the screen ever shows. A populated list has none.
-  retryButton: {
-    marginTop: SPACE.xl,
-    height: CONTROL.lg,
-    paddingHorizontal: SPACE.xl,
-    justifyContent: 'center',
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.accent,
-  },
-  retryText: { ...TYPE.button, color: EMBER.onGradient },
-  list: { flex: 1 },
-
-  inset: { marginHorizontal: GUTTER },
-  row: { marginHorizontal: GUTTER, marginTop: SPACE.md },
-
-  // Next up. A row's fill and radius, larger: the photo sits inside the card's
-  // padding on `surface` (EventCover's own fill), one step off the card.
-  hero: {
-    marginHorizontal: GUTTER,
-    padding: SPACE.lg,
-    backgroundColor: EMBER.surfaceSunken,
-    borderRadius: EMBER_RADIUS.md,
-  },
-  heroPhoto: { borderRadius: EMBER_RADIUS.sm, overflow: 'hidden' },
-  heroBody: { marginTop: SPACE.lg, gap: SPACE.xs },
-  heroWhen: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
-  // Still, not pulsing: status is a mark, not motion (tasks/lessons.md).
-  liveDot: { width: SPACE.sm, height: SPACE.sm, borderRadius: EMBER_RADIUS.pill, backgroundColor: EMBER.success },
-  heroEyebrow: { ...TYPE.meta, flexShrink: 1 },
-  heroTitle: TYPE.title,
-  heroPlace: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs },
-  heroPlaceText: { ...TYPE.meta, flexShrink: 1 },
-  statusTag: {
-    alignSelf: 'flex-start',
-    height: CONTROL.sm,
-    marginTop: SPACE.xs,
-    paddingHorizontal: SPACE.md,
-    justifyContent: 'center',
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: tint(EMBER.textPrimary, 0.12),
-  },
-  statusTagBad: { backgroundColor: tint(EMBER.destructive, 0.16) },
-  statusText: { ...TYPE.label, color: EMBER.textPrimary },
-  statusTextBad: { color: EMBER.destructive },
-  // One row, one height, one fill: `surface` on the `surfaceSunken` card.
-  heroActions: { flexDirection: 'row', gap: SPACE.sm, marginTop: SPACE.md },
+  // The details' 6 gap plus the group's 4 above it; the details' 8 below.
+  heroActions: { flexDirection: 'row', gap: SPACE.sm, marginTop: SPACE.sm + SPACE.xxs, paddingHorizontal: SPACE.md, paddingBottom: SPACE.sm },
   heroAction: {
-    height: CONTROL.md,
+    height: SIZE.control,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: SPACE.sm,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.surface,
+    borderRadius: RADIUS.capsule,
+    backgroundColor: COLOR.surfaceSunken,
   },
   heroActionWide: { flex: 1, paddingHorizontal: SPACE.lg },
-  heroActionIcon: { width: CONTROL.md },
-  heroActionText: TYPE.bodyStrong,
-
-  // Loading: `UpcomingCard`'s own card box, so the placeholder is the shape the
-  // row fades into (as on the Pulse).
-  skeletonLines: { marginTop: SPACE.lg, gap: SPACE.sm },
-  skeletonRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: SPACE.lg,
-    padding: SPACE.lg,
-    backgroundColor: EMBER.surfaceSunken,
-    borderRadius: EMBER_RADIUS.md,
-  },
-  skeletonRowText: { flex: 1, gap: SPACE.sm },
+  heroActionIcon: { width: SIZE.control },
+  // 24 under the hero, 12 between rows (flow4.js going `loading`).
+  skeletonFirstRow: { marginTop: SPACE.xl },
+  skeletonRow: { marginTop: SPACE.md },
   locked: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACE.md,
+    marginTop: SPACE.md,
     padding: SPACE.lg,
-    backgroundColor: EMBER.surfaceSunken,
-    borderRadius: EMBER_RADIUS.md,
+    backgroundColor: COLOR.surface,
+    borderRadius: RADIUS.rowInCard,
   },
-  lockedText: { ...TYPE.bodyStrong, flex: 1 },
+  heart: {
+    width: HEART,
+    height: HEART,
+    borderRadius: RADIUS.capsule,
+    backgroundColor: COLOR.selectionFill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 })
 
 /*

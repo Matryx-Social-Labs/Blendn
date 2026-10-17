@@ -1,9 +1,9 @@
-import * as Haptics from 'expo-haptics'
 import React, { useEffect, useMemo, useState } from 'react'
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 
 import { apiClient } from '../lib/apiClient'
 import { pickableItems, toPickerTree, type CategoryGroup, type CategoryNode } from '../lib/categories'
+import { H } from '../lib/haptics'
 import { Logger } from '../lib/logger'
 import { CONTROL, EMBER, EMBER_RADIUS, SPACE, TYPE } from '../lib/theme'
 
@@ -52,21 +52,9 @@ export const MAX_INTERESTS = 10
 export function InterestPicker({
   selected,
   onChange,
-  max = MAX_INTERESTS,
-  onLoadStateChange,
 }: {
   selected: string[]
   onChange: (next: string[]) => void
-  max?: number
-  /**
-   * Told to the caller so a Continue button can avoid becoming a dead end.
-   *
-   * Onboarding gated Continue on `selected.length === 0` alone, which meant an
-   * empty category list — a flaky network, a bad deploy, an unseeded database —
-   * left the user with nothing to tap and no way forward, in a flow with no
-   * skip and no back. Whatever the cause, they were stuck in the app forever.
-   */
-  onLoadStateChange?: (state: { loading: boolean; available: number }) => void
 }) {
   const [groups, setGroups] = useState<CategoryGroup[]>([])
   const [loading, setLoading] = useState(true)
@@ -98,31 +86,23 @@ export function InterestPicker({
 
   const available = useMemo(() => pickableItems(groups).length, [groups])
 
-  useEffect(() => {
-    onLoadStateChange?.({ loading, available })
-    // `onLoadStateChange` is intentionally not a dependency: callers pass an
-    // inline arrow, and including it would re-fire on every parent render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, available])
-
   const toggle = (id: string) => {
     if (selected.includes(id)) {
-      Haptics.selectionAsync().catch(() => {})
+      H.select()
       onChange(selected.filter((i) => i !== id))
       return
     }
-    if (selected.length >= max) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {})
-      return
-    }
-    Haptics.selectionAsync().catch(() => {})
+    // At the cap the tap does nothing, silently: the counter already reads
+    // 10/10, and the vocabulary has no haptic for local validation (§10.2).
+    if (selected.length >= MAX_INTERESTS) return
+    H.select()
     onChange([...selected, id])
   }
 
   return (
     <View>
       <Text style={styles.counter}>
-        Selected: {selected.length}/{max}
+        Selected: {selected.length}/{MAX_INTERESTS}
       </Text>
 
       {loading ? (

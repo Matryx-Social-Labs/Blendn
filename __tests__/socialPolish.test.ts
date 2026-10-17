@@ -1,4 +1,3 @@
-import { typingLabel } from '../components/chat/TypingIndicator'
 import {
   directHeaderAvatar,
   emptyThreadLine,
@@ -52,20 +51,7 @@ describe('one seed rule for a person’s mark', () => {
 })
 
 describe('the DM says their name once, in one grammar', () => {
-  it('writes "{name} is typing…" from the server’s name', () => {
-    expect(typingLabel(['Mika'])).toBe('Mika is typing…')
-    expect(typingLabel(['Cosmic Panda'])).toBe('Cosmic Panda is typing…')
-  })
-
-  it('never uppercases a name and never leaves it blank', () => {
-    expect(typingLabel(['mika'])).toBe('mika is typing…')
-    expect(typingLabel([''])).toBe('Someone is typing…')
-    expect(typingLabel([])).toBe('Someone is typing…')
-  })
-
-  it('counts several people in the room', () => {
-    expect(typingLabel(['A', 'B', 'C'])).toBe('3 people are typing…')
-  })
+  // "{name} is typing" is the DS TypingIndicator's now (dsTypingIndicator.test.tsx); the room names a blank one "Someone".
 
   it('says hi by the server’s name, the param only as a first paint, and nothing without either', () => {
     expect(emptyThreadLine('Mika', 'Old name')).toBe('Say hi to Mika.')
@@ -77,17 +63,19 @@ describe('the DM says their name once, in one grammar', () => {
 
   it('draws the pseudonym mark in the header until they reveal', () => {
     const reveal = { displayName: 'Cosmic Panda', pseudonymous: true, theyRevealed: false }
-    expect(directHeaderAvatar(reveal, null, 'https://cdn/route.jpg')).toEqual({ kind: 'mark', seed: 'Cosmic Panda' })
-    expect(directHeaderAvatar({ ...reveal, theyRevealed: true }, 'https://cdn/them.jpg', null)).toEqual({
+    expect(directHeaderAvatar(reveal, null)).toEqual({ kind: 'mark', seed: 'Cosmic Panda' })
+    expect(directHeaderAvatar({ ...reveal, theyRevealed: true }, 'https://cdn/them.jpg')).toEqual({
       kind: 'photo',
       url: 'https://cdn/them.jpg',
     })
   })
 
-  it('uses the route avatar only before the conversation record lands', () => {
-    expect(directHeaderAvatar(null, null, 'https://cdn/route.jpg')).toEqual({ kind: 'photo', url: 'https://cdn/route.jpg' })
+  it('draws a photo only from the server’s answer: the creature until it lands', () => {
+    // A route URL is anybody's link (blendn://private-chat/x?otherUserAvatar=…); the helper takes none.
+    expect(directHeaderAvatar(null, null)).toEqual({ kind: 'initials' })
+    expect(directHeaderAvatar(null, 'https://cdn/them.jpg')).toEqual({ kind: 'initials' })
     const named = { displayName: 'Mika', pseudonymous: false, theyRevealed: true }
-    expect(directHeaderAvatar(named, null, 'https://cdn/route.jpg')).toEqual({ kind: 'initials' })
+    expect(directHeaderAvatar(named, null)).toEqual({ kind: 'initials' })
   })
 })
 

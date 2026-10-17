@@ -1,14 +1,15 @@
-import * as Haptics from 'expo-haptics'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { useToast } from '../components/Toast'
 import type { Badge, Overlap } from './aboutYou'
 import type { AttendeeProfile } from './attendee'
 import { pickActiveRoom, extractEventId, type CheckinLike } from './activeRoom'
 import { apiClient } from './apiClient'
+import { DOCK_HISTORY, type ChatHistory } from './dockHistory'
+import { H } from './haptics'
+import { warmAvatars } from './warmAvatars'
 import { markRoomJoined, markRoomLeft, rememberRoomMute } from './roomMembership'
 import { subscribeCheckInChanged } from './checkIn'
-import { likeRefusal } from './likeRefusal'
+import { likeRefusal, type LikeRefusal } from './likeRefusal'
 import { likeStateAfter, likeStatusFor, shouldSendLike, type LikeStatus } from './likes'
 import { Logger } from './logger'
 import { reasonLine } from './roomMoments'
@@ -22,13 +23,13 @@ import {
   withRoster,
   type LiveRoster,
 } from './roomLive'
+import { ignoreWavesFrom } from './roomWaves'
 import { recallRoster, rememberRoster } from './rosterMemory'
 import { getBlockedUsers } from './safetyUtils'
 import {
   subscribeToEventCheckOut,
   subscribeToEventRoomCheckIn,
   subscribeToRoomMatch,
-  subscribeToRoomWave,
   type SocketConnectionStatus,
 } from './socketClient'
 import { useAuth } from './useAuth'
@@ -57,8 +58,10 @@ import { useLiveSync } from './useLiveSync'
  *   and a refused like says why without ever mentioning the other person
  *   (`lib/likeRefusal.ts`).
  *
- * Presentation is the caller's: this navigates nowhere and renders nothing.
- * The one exception is the refusal toast, which belongs with the refusal rule.
+ * Presentation is the caller's: this navigates nowhere and renders nothing. A
+ * refused like or wave comes back as its sentence (`lib/likeRefusal.ts`), for
+ * the card's one neutral line (R3-D4 4.3) or a toast when no card is open.
+ * Waves *to* you are `lib/roomWaves.ts`'s, heard at the tab layout.
  */
 
 export interface RoomPerson {
@@ -94,8 +97,18 @@ export interface RoomPerson {
   raw: AttendeeProfile
 }
 
+
+
 export interface RoomState {
   status: 'loading' | 'none' | 'ready' | 'error'
+  /**
+   * Ready, and its first count and chat have answered too (or failed): what
+   * the Room needs to reveal without a number jumping or the dock arriving
+   * late after a check-in's pour (PR #401 drive).
+   */
+  settled: boolean
+  /** The dock's first read of the room chat, fetched with the room so the dock opens on its real last line. */
+  chatHistory: ChatHistory | null
   event: { id: string; title: string; startsAt?: string; endsAt?: string } | null
   checkedInAt: string | null
   /**
@@ -120,7 +133,6 @@ export interface RoomState {
    * like response said; the socket event does not carry it.
    */
   match: { person: RoomPerson | null; name: string; you: string | null; conversationId: string; at: number } | null
-  wave: { fromUserId: string; fromName: string; at: number } | null
   /**
    * Why the room failed to load, when `status` is `error`. For diagnosis: the
    * screen says a fixed sentence and never prints this raw.
@@ -130,21 +142,20 @@ export interface RoomState {
   connection: SocketConnectionStatus
 }
 
+/** A like's or a wave's answer: what happened, or the sentence that says it didn't. */
+export type RoomAnswer<T extends string> = { kind: T } | { kind: 'refused'; refusal: LikeRefusal }
+
 export interface RoomActions {
   refresh(): Promise<void>
   loadMore(): Promise<void>
   retry(): void
-  like(id: string): Promise<'liked' | 'matched' | 'refused' | 'already'>
-  /**
-   * Wave at somebody. Named `sendWave` rather than `wave` because `wave` is
-   * already the incoming wave on `RoomState`, and one name can't be both.
-   */
-  sendWave(id: string): Promise<'sent' | 'too-soon' | 'refused'>
+  like(id: string): Promise<RoomAnswer<'liked' | 'matched' | 'already'>>
+  /** Wave at somebody. "Too soon" is the server's once-per-ten-minutes rule: said as "Waved", never as an error. */
+  sendWave(id: string): Promise<RoomAnswer<'sent' | 'too-soon'>>
   connect(id: string, note?: string): Promise<boolean>
   /** After a block or report: gone from every list for the rest of the session. */
   remove(id: string): void
   clearMatch(): void
-  clearWave(): void
 }
 
 /** The roster is ranked, not paged — see `loadMore`. */
@@ -160,9 +171,21 @@ const displayName = (name?: string) => {
 
 type RoomEvent = NonNullable<RoomState['event']>
 
+/** The here count's candidates: the room preview (the server's own "here now"), else the detail's `stats.hereCount` (never who came). */
+async function countCandidates(eventId: string, force: boolean): Promise<unknown[]> {
+  try {
+    const preview = await apiClient.getRoomPreview(eventId, { force })
+    if (preview.success && preview.data) return [preview.data.hereCount]
+    const detail = await apiClient.getEvent(eventId)
+    return [detail.data?.stats?.hereCount]
+  } catch (e) {
+    Logger.warn('match', 'Could not seed the here count', { error: e })
+    return []
+  }
+}
+
 export function useRoom(): RoomState & RoomActions {
   const { user: authUser, initialized: authInitialized } = useAuth()
-  const { showToast } = useToast()
   const userId = authUser?.id ?? null
 
   const [loading, setLoading] = useState(true)
@@ -176,6 +199,13 @@ export function useRoom(): RoomState & RoomActions {
   const [loadingMore, setLoadingMore] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [chatGroupId, setChatGroupId] = useState<string | null>(null)
+  /** The room whose first count, and whose chat lookup, have answered. */
+  const [seededFor, setSeededFor] = useState<string | null>(null)
+  const [chatFor, setChatFor] = useState<string | null>(null)
+  const [chatHistory, setChatHistory] = useState<ChatHistory | null>(null)
+  const [avatarsFor, setAvatarsFor] = useState<string | null>(null)
+  /** The chat lookup started with the check-ins read, before the roster: the chat effect takes it over. */
+  const chatEarly = useRef<{ eventId: string; result: ReturnType<typeof apiClient.getEventChat> } | null>(null)
 
   /*
    * Session knowledge about people in this room. All of it belongs to an
@@ -193,10 +223,8 @@ export function useRoom(): RoomState & RoomActions {
   const [requested, setRequested] = useState<Record<string, boolean>>({})
   /** Blocked or reported this session. Survives refetches until the next load's block list catches up. */
   const [removed, setRemoved] = useState<Record<string, true>>({})
-  const removedRef = useLatest(removed)
 
   const [match, setMatch] = useState<RoomState['match']>(null)
-  const [wave, setWave] = useState<RoomState['wave']>(null)
 
   /*
    * The loader is stable (`useCallback(..., [])`) because `useLiveSync` holds
@@ -241,20 +269,10 @@ export function useRoom(): RoomState & RoomActions {
    * server's own "here now"; an older server 404s it and the event detail's
    * occupancy stands in.
    */
-  const seedCount = useCallback(async (eventId: string, force: boolean, loadId: number) => {
-    let candidates: unknown[] = []
-    try {
-      const preview = await apiClient.getRoomPreview(eventId, { force })
-      if (preview.success && preview.data) {
-        candidates = [preview.data.hereCount]
-      } else {
-        const detail = await apiClient.getEvent(eventId)
-        candidates = [detail.data?.currentCapacity, detail.data?.stats?.checkInCount]
-      }
-    } catch (e) {
-      Logger.warn('match', 'Could not seed the here count', { error: e })
-    }
+  const seedCount = useCallback(async (eventId: string, force: boolean, loadId: number, early?: Promise<unknown[]>) => {
+    const candidates = await (early ?? countCandidates(eventId, force))
     if (loadId !== loadIdRef.current || eventRef.current?.id !== eventId) return
+    setSeededFor(eventId)
     setLive((prev) => {
       const hereCount = seedHereCount(candidates, prev.attendees)
       return hereCount === prev.hereCount ? prev : { ...prev, hereCount }
@@ -282,6 +300,15 @@ export function useRoom(): RoomState & RoomActions {
 
         // First paint: the remembered roster, once we know which room it is.
         const firstId = extractEventId(checkins[0])
+        /*
+         * The count and the chat, started now rather than after the roster: a
+         * check-in's Room is mounted under the pour and revealed once these
+         * answer too, so they must not add two more round trips after it.
+         */
+        const earlyCount = firstId ? countCandidates(firstId, force) : undefined
+        if (firstId && chatResolvedForRef.current !== firstId && chatEarly.current?.eventId !== firstId) {
+          chatEarly.current = { eventId: firstId, result: apiClient.getEventChat(firstId) }
+        }
         const remembered = recallRoster(firstId)
         if (remembered && firstId && liveRef.current.attendees.length === 0) {
           setLive((prev) => withRoster(prev, remembered.attendees, remembered.attendees.length >= PAGE))
@@ -395,7 +422,12 @@ export function useRoom(): RoomState & RoomActions {
         // Memory only — `lib/rosterMemory.ts` says why this never reaches disk.
         rememberRoster(outcome.eventId, attendees, outcome.eventTitle)
 
-        void seedCount(outcome.eventId, force, loadId)
+        void seedCount(outcome.eventId, force, loadId, outcome.eventId === firstId ? earlyCount : undefined)
+        // The faces the Room opens on, decoded before it is revealed (PR #401 drive 2: blank faces filling in).
+        const avatarsOf = outcome.eventId
+        void warmAvatars(attendees.map((a) => a.profile_photos?.[0])).then(() => {
+          if (eventRef.current?.id === avatarsOf) setAvatarsFor(avatarsOf)
+        })
       } catch (e) {
         Logger.error('match', 'Failed to load the room', { error: e })
         if (superseded()) return
@@ -529,9 +561,10 @@ export function useRoom(): RoomState & RoomActions {
     if (!eventId || chatResolvedForRef.current === eventId) return
     chatResolvedForRef.current = eventId
     let cancelled = false
-    apiClient
-      .getEventChat(eventId)
-      .then((result) => {
+    const early = chatEarly.current?.eventId === eventId ? chatEarly.current.result : null
+    chatEarly.current = null
+    ;(early ?? apiClient.getEventChat(eventId))
+      .then(async (result) => {
         if (cancelled || eventRef.current?.id !== eventId) return
         const id = result.data?.chatGroupId ?? result.data?.id
         if (result.success && id) {
@@ -539,6 +572,10 @@ export function useRoom(): RoomState & RoomActions {
           // Served as a member: back in, and the room's mute as the server has it.
           markRoomJoined(String(id))
           rememberRoomMute(String(id), result.data?.mute)
+          // The dock's last line, with the room: it never opens on "Nobody has said anything yet" and then changes.
+          const history = await apiClient.getChatMessages(String(id), { limit: DOCK_HISTORY }).catch(() => null)
+          if (cancelled) return
+          setChatHistory({ groupId: String(id), data: history?.success ? history.data : null, failed: !history?.success })
         } else if (result.errorCode === 'LEFT_ROOM' && result.chatGroupId) {
           /*
            * You left this room, and the server no longer rejoins you by
@@ -555,6 +592,10 @@ export function useRoom(): RoomState & RoomActions {
       .catch((e) => {
         Logger.warn('match', 'Chat group lookup failed', { error: e })
         if (!cancelled) chatResolvedForRef.current = null
+      })
+      // Answered either way: the Room may reveal (a failed lookup is the dock's "not open", not a wait).
+      .finally(() => {
+        if (!cancelled) setChatFor(eventId)
       })
     return () => {
       cancelled = true
@@ -622,7 +663,7 @@ export function useRoom(): RoomState & RoomActions {
     if (celebratedRef.current.has(next.conversationId)) return
     celebratedRef.current.add(next.conversationId)
     /*
-     * No haptic here. The match moment (`components/blendn/MatchMoment.tsx`)
+     * No haptic here. The match moment (`components/ds/MomentMatch.tsx`)
      * fires the success notification on the frame the last heart lands in
      * their face — the beat the animation builds to — and a second one as the
      * overlay rises would spend it early.
@@ -640,13 +681,13 @@ export function useRoom(): RoomState & RoomActions {
    * response was lost.
    */
   const like = useCallback(
-    async (id: string): Promise<'liked' | 'matched' | 'refused' | 'already'> => {
+    async (id: string): Promise<RoomAnswer<'liked' | 'matched' | 'already'>> => {
       const roomId = eventRef.current?.id
       const attendee = findAttendee(id)
-      if (!roomId || !attendee) return 'refused'
+      if (!roomId || !attendee) return { kind: 'refused', refusal: likeRefusal('NOT_FOUND', undefined) }
 
       const status = likeStatusFor(attendee.youLiked, likeState[id])
-      if (!shouldSendLike(status)) return 'already'
+      if (!shouldSendLike(status)) return { kind: 'already' }
 
       setLikeState((prev) => ({ ...prev, [id]: 'sending' }))
       const forget = () =>
@@ -664,9 +705,7 @@ export function useRoom(): RoomState & RoomActions {
 
         if (!result.success) {
           // Never silent, and never about them — see lib/likeRefusal.ts.
-          const refusal = likeRefusal(result.errorCode, result.error)
-          showToast(refusal.message, refusal.variant)
-          return 'refused'
+          return { kind: 'refused', refusal: likeRefusal(result.errorCode, result.error) }
         }
 
         const conversationId = result.data?.mutual ? result.data.conversationId : undefined
@@ -678,50 +717,40 @@ export function useRoom(): RoomState & RoomActions {
             you: result.data?.pseudonyms?.you ?? null,
             conversationId,
           })
-          return 'matched'
+          return { kind: 'matched' }
         }
-        return 'liked'
+        return { kind: 'liked' }
       } catch (e) {
         Logger.error('match', 'like failed', { error: e })
         forget()
         // A throw (timeout, no network) un-fills the heart like a refusal
         // does, so it is said like one — see lib/likeRefusal.ts.
-        const refusal = likeRefusal(undefined, undefined)
-        showToast(refusal.message, refusal.variant)
-        return 'refused'
+        return { kind: 'refused', refusal: likeRefusal(undefined, undefined) }
       }
     },
-    [findAttendee, likeState, showToast, celebrate, toPerson]
+    [findAttendee, likeState, celebrate, toPerson]
   )
 
   /**
    * Wave at somebody. Unlike a like it isn't private — they're told who — so
    * it is never optimistic: nothing claims a wave was sent until it was.
-   * "Too soon" is the server's once-per-ten-minutes rule, and the caller shows
-   * it as "already waved", not as an error.
    */
-  const sendWave = useCallback(
-    async (id: string): Promise<'sent' | 'too-soon' | 'refused'> => {
-      const roomId = eventRef.current?.id
-      if (!roomId) return 'refused'
-      try {
-        const result = await apiClient.sendWave(roomId, id)
-        if (result.success) {
-          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {})
-          return 'sent'
-        }
-        if (result.errorCode === 'WAVE_TOO_SOON') return 'too-soon'
-        const refusal = likeRefusal(result.errorCode, result.error)
-        showToast(refusal.message, refusal.variant)
-        return 'refused'
-      } catch (e) {
-        Logger.error('match', 'wave failed', { error: e })
-        showToast("Couldn't send the wave. Try again.", 'error')
-        return 'refused'
-      }
-    },
-    [showToast]
-  )
+  const sendWave = useCallback(async (id: string): Promise<RoomAnswer<'sent' | 'too-soon'>> => {
+    const roomId = eventRef.current?.id
+    if (!roomId) return { kind: 'refused', refusal: likeRefusal('NOT_CHECKED_IN', undefined) }
+    // Only someone on the roster, as `like`: never a removed person, never an id from elsewhere.
+    if (!findAttendee(id)) return { kind: 'refused', refusal: likeRefusal('NOT_FOUND', undefined) }
+    try {
+      const result = await apiClient.sendWave(roomId, id)
+      // No haptic on sending a wave: the hand's wiggle is the answer (ROUND3 #51).
+      if (result.success) return { kind: 'sent' }
+      if (result.errorCode === 'WAVE_TOO_SOON') return { kind: 'too-soon' }
+      return { kind: 'refused', refusal: likeRefusal(result.errorCode, result.error) }
+    } catch (e) {
+      Logger.error('match', 'wave failed', { error: e })
+      return { kind: 'refused', refusal: likeRefusal(undefined, undefined) }
+    }
+  }, [findAttendee])
 
   /**
    * A message request — the action that reveals you.
@@ -736,7 +765,7 @@ export function useRoom(): RoomState & RoomActions {
     try {
       const result = await apiClient.createMessageRequest(id, note)
       if (result.success) {
-        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {})
+        H.success()
       } else {
         Logger.warn('match', 'connect request failed', { error: result.error, code: result.errorCode })
       }
@@ -752,6 +781,8 @@ export function useRoom(): RoomState & RoomActions {
   const remove = useCallback((id: string) => {
     setRemoved((prev) => (prev[id] ? prev : { ...prev, [id]: true }))
     setLive((prev) => withoutPerson(prev, id))
+    // Their waves too: heard at the tab layout now, so told here.
+    ignoreWavesFrom(id)
   }, [])
 
   /*
@@ -776,19 +807,7 @@ export function useRoom(): RoomState & RoomActions {
     })
   }, [userId, findAttendee, celebrate, toPersonRef])
 
-  useEffect(() => {
-    if (!userId) return
-    return subscribeToRoomWave((data) => {
-      // Only from this room, and never from somebody you blocked or removed.
-      if (data.eventId !== eventRef.current?.id) return
-      if (blockedRef.current.has(data.fromUserId) || removedRef.current[data.fromUserId]) return
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {})
-      setWave({ fromUserId: data.fromUserId, fromName: data.fromName, at: Date.now() })
-    })
-  }, [userId, removedRef])
-
   const clearMatch = useCallback(() => setMatch(null), [])
-  const clearWave = useCallback(() => setWave(null), [])
 
   /*
    * Auth still restoring is "loading", not "none": signed-out and
@@ -807,6 +826,8 @@ export function useRoom(): RoomState & RoomActions {
 
   return {
     status,
+    settled: status === 'ready' && !!event && seededFor === event.id && chatFor === event.id && avatarsFor === event.id,
+    chatHistory,
     event,
     checkedInAt,
     revealed,
@@ -818,7 +839,6 @@ export function useRoom(): RoomState & RoomActions {
     refreshing,
     chatGroupId,
     match,
-    wave,
     error: loadError,
     connection,
     refresh,
@@ -829,6 +849,5 @@ export function useRoom(): RoomState & RoomActions {
     connect,
     remove,
     clearMatch,
-    clearWave,
   }
 }

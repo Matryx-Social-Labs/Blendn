@@ -16,3 +16,17 @@ describe('formatTimeRange', () => {
     expect(label).not.toMatch(/September/)
   })
 })
+
+describe('chatClock — one time format in every chat (Flow 5)', () => {
+  const { chatClock } = jest.requireActual('../lib/time') as typeof import('../lib/time')
+  const at = (h: number, m: number) => new Date(2026, 9, 15, h, m)
+  it('says h:mm AM/PM, never the device locale', () => {
+    expect(chatClock(at(21, 38))).toBe('9:38 PM')
+    expect(chatClock(at(0, 5))).toBe('12:05 AM')
+    expect(chatClock(at(12, 0))).toBe('12:00 PM')
+    expect(chatClock(at(9, 7))).toBe('9:07 AM')
+  })
+  it('is empty for a time it cannot read', () => {
+    expect(chatClock('not a date')).toBe('')
+  })
+})

@@ -14,6 +14,7 @@ import { fadeInFast } from '../../components/motion/presence'
 import { useToast } from '../../components/Toast'
 import { Text } from '../../components/ui/Text'
 import { apiClient } from '../../lib/apiClient'
+import { intentAnswered } from '../../lib/checkIn'
 import { Logger } from '../../lib/logger'
 import { MOTION_DURATION, MOTION_EASING } from '../../lib/motion'
 import { revealReadiness, type RevealReadiness } from '../../lib/reveal'
@@ -97,6 +98,8 @@ export default function EventPreferences() {
    * leads, and the answer is saved as the default in the same write.
    */
   const askIntent = askIntentParam === '1'
+  // A check-in waits for this question before its room shows (lib/checkIn.ts).
+  useEffect(() => (askIntent ? intentAnswered : undefined), [askIntent])
   const { showToast } = useToast()
   const { user } = useAuth()
 

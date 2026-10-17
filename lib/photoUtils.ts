@@ -29,12 +29,6 @@ export interface PhotoUploadResult {
    * changing; another string would not be.
    */
   cancelled?: true
-  metadata?: {
-    size: number
-    width: number
-    height: number
-    format: string
-  }
 }
 
 export interface PhotoCacheEntry {
@@ -57,13 +51,6 @@ export interface ProfilePhoto {
   order: number
   isVerified?: boolean
   isPrimary?: boolean
-  metadata?: {
-    size: number
-    width: number
-    height: number
-    format: string
-    uploadedAt: string
-  }
 }
 
 export interface PhotoOptions {
@@ -327,6 +314,41 @@ export const uploadPhoto = async (
   }
 }
 
+/** The server's own sentence for a photo that did not get there (R3-D5 5.9, server copy). */
+export const PHOTO_DID_NOT_FINISH = 'That photo did not finish uploading. Try again.'
+
+/**
+ * A DM photo (R9, ROUND3 D 5.9). Re-encoded on the phone first, as profile
+ * photos are: `processImage` writes a fresh JPEG, which carries none of the
+ * original's metadata, so no location leaves the phone. Then uploaded to the
+ * chat folder with its progress, for the bubble's determinate ring.
+ */
+export const uploadChatPhoto = async (
+  uri: string,
+  onProgress: (fraction: number) => void
+): Promise<{ ok: true; url: string } | { ok: false; error: string }> => {
+  try {
+    const processed = await processImage(uri)
+    if (!processed) return { ok: false, error: PHOTO_DID_NOT_FINISH }
+    const presigned = await apiClient.getPresignedUploadUrl(`chat_${Date.now()}.jpg`, 'image/jpeg', 'chat')
+    if (!presigned.success || !presigned.data) return { ok: false, error: presigned.error || PHOTO_DID_NOT_FINISH }
+    const task = FileSystem.createUploadTask(
+      presigned.data.uploadUrl,
+      processed,
+      { httpMethod: 'PUT', headers: { 'Content-Type': 'image/jpeg' }, uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT },
+      ({ totalBytesSent, totalBytesExpectedToSend }) => {
+        if (totalBytesExpectedToSend > 0) onProgress(totalBytesSent / totalBytesExpectedToSend)
+      }
+    )
+    const result = await task.uploadAsync()
+    if (!result || result.status < 200 || result.status >= 300) return { ok: false, error: PHOTO_DID_NOT_FINISH }
+    return { ok: true, url: presigned.data.publicUrl }
+  } catch (error) {
+    Logger.error('chat', 'DM photo upload failed', { error })
+    return { ok: false, error: PHOTO_DID_NOT_FINISH }
+  }
+}
+
 /**
  * Upload to Tigris via presigned URL
  */
@@ -391,44 +413,6 @@ export const deletePhoto = async (photoUrl: string): Promise<boolean> => {
   } catch (error) {
     Logger.error('profile', 'Error deleting photo', { error })
     return false
-  }
-}
-
-/**
- * Upload multiple photos with progress tracking
- */
-export const uploadMultiplePhotos = async (
-  imageUris: string[],
-  userId: string,
-  onProgress?: (completed: number, total: number) => void
-): Promise<PhotoUploadResult[]> => {
-  const results: PhotoUploadResult[] = []
-  
-  for (let i = 0; i < imageUris.length; i++) {
-    const result = await uploadPhoto(imageUris[i], userId, `profile_${i + 1}_${Date.now()}.jpg`)
-    results.push(result)
-    
-    if (onProgress) {
-      onProgress(i + 1, imageUris.length)
-    }
-  }
-  
-  return results
-}
-
-/**
- * Get optimized photo dimensions for different use cases
- */
-export const getPhotoDimensions = (usage: 'profile' | 'thumbnail' | 'fullscreen') => {
-  switch (usage) {
-    case 'profile':
-      return { width: 800, height: 800 }
-    case 'thumbnail':
-      return { width: 200, height: 200 }
-    case 'fullscreen':
-      return { width: 1200, height: 1600 }
-    default:
-      return { width: 800, height: 800 }
   }
 }
 
@@ -783,18 +767,7 @@ export const selectAndUploadPhoto = async (userId: string): Promise<PhotoUploadR
     }
 
     // Upload image
-    const result = await uploadPhoto(asset.uri, userId)
-    
-    if (result.success && result.url) {
-      result.metadata = {
-        size: asset.fileSize || 0,
-        width: asset.width,
-        height: asset.height,
-        format: asset.type || 'image'
-      }
-    }
-    
-    return result
+    return await uploadPhoto(asset.uri, userId)
   } catch (error) {
     Logger.error('profile', 'photoUtils: Photo selection error', { error })
     return { 

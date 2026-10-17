@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons'
-import * as Haptics from 'expo-haptics'
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
@@ -23,9 +22,11 @@ import { fadeInFast } from '../../components/motion/presence'
 import { useToast } from '../../components/Toast'
 import { Text } from '../../components/ui/Text'
 import { apiClient, type PeerRatingIssue } from '../../lib/apiClient'
+import { H } from '../../lib/haptics'
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
 import { Logger } from '../../lib/logger'
 import { askAboutNight, ratePeople, type RatePerson } from '../../lib/ratePeople'
+import { isNightRated, markNightRated } from '../../lib/ratedNights'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, TYPE } from '../../lib/theme'
 
 /**
@@ -136,6 +137,8 @@ type Load =
       title: string | null
       /** Whether to ask about the night: not if it was already rated. */
       askEvent: boolean
+      /** You rated this night already (here, or on another launch): said so, rather than "Nothing to rate". */
+      rated: boolean
     }
 
 /**
@@ -223,13 +226,13 @@ export default function RatePeers() {
   // One tick per changed answer. Re-tapping the current choice is not a change.
   const chooseRating = useCallback((n: number) => {
     setRating((prev) => {
-      if (prev !== n) Haptics.selectionAsync().catch(() => {})
+      if (prev !== n) H.select()
       return n
     })
   }, [])
   const chooseIssue = useCallback((value: PeerRatingIssue) => {
     setIssue((prev) => {
-      if (prev !== value) Haptics.selectionAsync().catch(() => {})
+      if (prev !== value) H.select()
       return value
     })
   }, [])
@@ -260,7 +263,9 @@ export default function RatePeers() {
         }
         const people = ratePeople(peers.data.userIds, conversations?.success ? conversations.data ?? [] : [])
         const askEvent = askAboutNight(own, event?.data?.userStatus?.userRating)
-        setLoad({ kind: 'ready', people, title: event?.data?.title ?? null, askEvent })
+        const rated = !!own?.data?.ratedAt || isNightRated(id)
+        if (rated) markNightRated(id)
+        setLoad({ kind: 'ready', people, title: event?.data?.title ?? null, askEvent: askEvent && !rated, rated })
         setIndex(askEvent ? -1 : 0)
       })
       .catch((e) => {
@@ -288,7 +293,7 @@ export default function RatePeers() {
   const rateNight = useCallback(
     async (n: number) => {
       if (submitting) return
-      Haptics.selectionAsync().catch(() => {})
+      H.select()
       setEventRating(n)
       setSubmitting(true)
       try {
@@ -300,6 +305,7 @@ export default function RatePeers() {
           return
         }
         setSent((s) => s + 1)
+        markNightRated(String(eventId))
         advance()
       } catch (e) {
         Logger.error('events', 'Failed to rate the event', { error: e })
@@ -331,6 +337,7 @@ export default function RatePeers() {
         return
       }
       setSent((s) => s + 1)
+      markNightRated(String(eventId))
       advance()
     } catch (e) {
       Logger.error('match', 'Failed to submit peer rating', { error: e })
@@ -396,6 +403,8 @@ export default function RatePeers() {
   const done = !onNight && index >= people.length
   // Nothing was ever asked: no night to rate and nobody to rate.
   const nothingToRate = people.length === 0 && !load.askEvent
+  // Recap #04's words: you rated this night, so it says thanks rather than that there is nothing here.
+  const ratedBefore = sent === 0 && load.rated
 
   return (
     <SafeAreaView style={styles.container}>
@@ -405,7 +414,7 @@ export default function RatePeers() {
           <Animated.View key="done" style={styles.layer} entering={entering}>
             <View style={styles.centred}>
               <Text variant="display" style={styles.centreText}>
-                {sent > 0 ? 'Thanks' : nothingToRate ? 'Nothing to rate' : 'All done'}
+                {sent > 0 ? 'Thanks' : ratedBefore ? 'You rated this night' : nothingToRate ? 'Nothing to rate' : 'All done'}
               </Text>
               {/*
                 The same three cases as the title. After skipping the night with
@@ -413,7 +422,7 @@ export default function RatePeers() {
                 matched with…" under "All done", which read as a refusal.
               */}
               <Text variant="body" color={EMBER.textSecondary} style={styles.centreText}>
-                {sent > 0
+                {sent > 0 || ratedBefore
                   ? 'This is only ever seen by us. Nobody you rated will know.'
                   : nothingToRate
                     ? 'You can rate people you matched with, once the event has finished.'

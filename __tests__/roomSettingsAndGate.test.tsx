@@ -1,8 +1,5 @@
-import { render, screen } from "@testing-library/react-native"
 import { readFileSync } from "fs"
 import { join } from "path"
-
-import { RoomVisibilityBanner } from "../components/RoomVisibilityBanner"
 
 /**
  * The room's reveal switch, and the way into the room's settings.
@@ -19,42 +16,26 @@ const code = readFileSync(join(__dirname, "..", "components", "blendn", "BlendnS
   .replace(/^\s*\/\/.*$/gm, "")
 
 describe("the reveal switch when there is nothing to reveal", () => {
-  it("refuses to offer a reveal that would change nothing", async () => {
-    await render(
-      <RoomVisibilityBanner revealed={false} onToggle={() => {}} canReveal={false} missing="a photo" />
-    )
-    expect(screen.getByLabelText("Show who I am")).toBeDisabled()
+  /*
+   * The room's line is the ds VisibilityBanner (Flow 4 Room #08–#11); its
+   * states and copy are pinned in roomVisibility.test.tsx. Here: the gate is
+   * held where the reveal is sent, not only by which button is drawn.
+   */
+  const controls = readFileSync(join(__dirname, "..", "lib", "useRoomControls.ts"), "utf8")
+
+  it("refuses to send a reveal that would change nothing", () => {
+    expect(controls).toMatch(/if \(next && !readiness\.ok\) return/)
   })
 
-  it("says why, on screen and not only to a screen reader", async () => {
-    await render(
-      <RoomVisibilityBanner revealed={false} onToggle={() => {}} canReveal={false} missing="a photo" />
-    )
-    // A greyed control with no stated cause reads as the app being broken.
-    expect(screen.getByText(/Add a photo to your profile first/)).toBeTruthy()
+  it("NEVER blocks going anonymous: the gate is one-way", () => {
+    expect(controls).not.toMatch(/if \(!next && !readiness/)
   })
 
-  it("keeps the reason out of the way when nothing is missing", async () => {
-    await render(<RoomVisibilityBanner revealed={false} onToggle={() => {}} />)
-    expect(screen.queryByText(/to your profile first/)).toBeNull()
-  })
-
-  it("NEVER blocks going anonymous, whatever the profile looks like", async () => {
-    /*
-     * The property that matters most here. A gate that could trap somebody in
-     * the named state turns a safety control into the thing they need
-     * protecting from, so `canReveal` is consulted in one direction only.
-     */
-    await render(
-      <RoomVisibilityBanner revealed={true} onToggle={() => {}} canReveal={false} missing="a photo" />
-    )
-    expect(screen.getByLabelText("Go anonymous")).not.toBeDisabled()
-  })
-
-  it("stays open when the caller has not loaded a profile yet", async () => {
-    // Defaulting closed would block the control on a guess during first paint.
-    await render(<RoomVisibilityBanner revealed={false} onToggle={() => {}} />)
-    expect(screen.getByLabelText("Show who I am")).not.toBeDisabled()
+  it("draws the blocked state, with what is missing, when there is nothing to reveal", () => {
+    expect(code).toContain("bannerState(controls.revealed, controls.listed, controls.readiness.ok)")
+    expect(code).toContain("missing={controls.readiness.missing || undefined}")
+    // Blocked's action is the profile, never a reveal.
+    expect(code).toMatch(/visibility === 'blocked'\s*\?\s*\(\) => router\.push\('\/edit-profile'\)/)
   })
 })
 
@@ -65,16 +46,12 @@ describe("the way into the room's settings", () => {
 
   it("is in the bar, not hung off the visibility banner", () => {
     /*
-     * `RoomVisibilityBanner` states a rule: "the action is the opposite state,
+     * The visibility line states a rule: "the action is the opposite state,
      * not a settings link". A second tap target on that row would break it and
      * put two controls for one concept in one line.
      */
-    const banner = code.slice(code.indexOf("<RoomVisibilityBanner"), code.indexOf("</View>", code.indexOf("<RoomVisibilityBanner")))
+    const banner = code.slice(code.indexOf("<VisibilityBanner"), code.indexOf("testID=\"room-visibility\""))
+    expect(banner.length).toBeGreaterThan(50)
     expect(banner).not.toContain("event-preferences")
-  })
-
-  it("feeds the banner the gate it could not compute alone", () => {
-    expect(code).toContain("canReveal={controls.readiness.ok}")
-    expect(code).toContain("missing={controls.readiness.missing}")
   })
 })

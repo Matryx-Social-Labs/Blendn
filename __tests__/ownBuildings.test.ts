@@ -7,15 +7,15 @@ import {
   BUILDING_LAYER_ID,
   drawsOwnBuildings,
   featureIdOf,
+  MAP_CREDITS,
+  mapCreditLine,
   OWN_BUILDINGS,
-  OWN_BUILDINGS_ATTRIBUTION,
   OWN_BUILDINGS_CITIES,
   OWN_BUILDINGS_CREDITS,
   OWN_BUILDINGS_ENTER_INSET,
   OWN_BUILDINGS_LAYER_ID,
   OWN_BUILDINGS_LIT_BY,
   OWN_BUILDINGS_TILE_ZOOM,
-  ownBuildingsUrl,
   parseOwnBuildingsUrl,
 } from '../lib/mapStyleEmber'
 import { MAP_THEME } from '../lib/mapTheme'
@@ -30,8 +30,8 @@ const V2 = 'https://blendn-media-staging.fly.storage.tigris.dev/map/buildings/v2
 
 describe('the tiles URL (review M7)', () => {
   it('takes an https {z}/{x}/{y} template from the env', () => {
-    expect(ownBuildingsUrl(V2)).toBe(V2)
-    expect(ownBuildingsUrl(`  ${V2}\n`)).toBe(V2)
+    expect(parseOwnBuildingsUrl(V2).url).toBe(V2)
+    expect(parseOwnBuildingsUrl(`  ${V2}\n`).url).toBe(V2)
   })
 
   it('is no URL, quietly, when unset or blank', () => {
@@ -163,21 +163,60 @@ describe('a building in our tiles, lit as itself', () => {
   })
 })
 
-describe('the credits (review H2)', () => {
+describe('the credits (review H2; the owner, 2026-10-15: no (i) on the map)', () => {
+  const code = (rel: string) => readFileSync(join(__dirname, '..', rel), 'utf8')
+
   it("name our tiles' sources, as their licences ask", () => {
     expect(OWN_BUILDINGS_CREDITS.map((c) => c.text)).toEqual(['© OpenStreetMap contributors', 'Overture Maps Foundation', 'Google Open Buildings', 'Microsoft'])
   })
 
-  it("are one https link each: Android's attribution dialog lists only links", () => {
-    const anchors = [...OWN_BUILDINGS_ATTRIBUTION.matchAll(/<a href="(https:\/\/[^"]+)">([^<]+)<\/a>/g)]
-    expect(anchors.map((m) => m[2])).toEqual(OWN_BUILDINGS_CREDITS.map((c) => c.text))
-    expect(anchors.map((m) => m[1])).toEqual(OWN_BUILDINGS_CREDITS.map((c) => c.href))
-    // Nothing outside the links but the separators.
-    expect(OWN_BUILDINGS_ATTRIBUTION.replace(/<a href="[^"]+">[^<]+<\/a>/g, '')).toBe(' ·  ·  · ')
+  it('are one list, each an https link, with the licences that ask for it named', () => {
+    const credits = Object.values(MAP_CREDITS)
+    expect(credits.map((c) => c.text)).toEqual([
+      '© OpenStreetMap contributors',
+      'OpenFreeMap',
+      '© OpenMapTiles',
+      'Overture Maps Foundation',
+      'Google Open Buildings',
+      'Microsoft',
+    ])
+    for (const c of credits) expect(c.href).toMatch(/^https:\/\//)
+    expect(MAP_CREDITS.openStreetMap.licence).toBe('ODbL')
+    expect(MAP_CREDITS.googleOpenBuildings.licence).toBe('CC BY 4.0')
+    // Our buildings' credits are entries of the one list, not copies of it.
+    for (const c of OWN_BUILDINGS_CREDITS) expect(credits).toContain(c)
   })
 
-  it("are given to the source, next to OpenFreeMap's", () => {
-    const layers = readFileSync(join(__dirname, '..', 'components/home/MapLitLayers.tsx'), 'utf8')
-    expect(layers).toMatch(/<VectorSource[\s\S]*?attribution=\{OWN_BUILDINGS_ATTRIBUTION\}/)
+  it("put the basemap's sources in the corner, and our buildings' too when our tiles draw, each once", () => {
+    expect(mapCreditLine(false)).toBe('OpenFreeMap · © OpenMapTiles · © OpenStreetMap contributors')
+    expect(mapCreditLine(true)).toBe(
+      ['OpenFreeMap', '© OpenMapTiles', ...OWN_BUILDINGS_CREDITS.map((c) => c.text)].join(' · ')
+    )
+    expect(mapCreditLine(true).match(/OpenStreetMap/g)).toHaveLength(1)
+  })
+
+  it("never names OpenFreeMap for a style moved off it: OpenStreetMap alone, and our buildings' when they draw (review L6)", () => {
+    expect(mapCreditLine(false, false)).toBe('© OpenStreetMap contributors')
+    expect(mapCreditLine(true, false)).toBe(OWN_BUILDINGS_CREDITS.map((c) => c.text).join(' · '))
+    expect(mapCreditLine(true, false)).not.toMatch(/OpenFreeMap|OpenMapTiles/)
+  })
+
+  it('turn the native attribution off and show our corner credit instead', () => {
+    const map = code('components/home/HomeMap.tsx')
+    expect(map).toMatch(/attribution=\{false\}/)
+    expect(map).toMatch(/logo=\{false\}/)
+    // Mounted once the map has loaded, so its few seconds are seconds of map.
+    expect(map).toMatch(/\{mapUp \? <MapCredit text=\{mapCreditLine\(ownTiles, typeof style !== 'string'\)\}/)
+    // It goes on the next gesture, counted, so a new line can come back after earlier ones (review H1).
+    expect(map).toMatch(/gestures=\{gestures\}/)
+    expect(map).toMatch(/if \(userInteraction\) \{\s*setTouched\(true\)\s*setGestures\(\(n\) => n \+ 1\)/)
+    expect(map).toMatch(/ready\.current = true\s*setMapUp\(true\)/)
+    // The source carries no attribution of its own any more: nothing would show it.
+    expect(code('components/home/MapLitLayers.tsx')).not.toMatch(/attribution=/)
+  })
+
+  it('stay findable after the corner credit fades: About lists every one, from the same list', () => {
+    expect(code('app/about.tsx')).toMatch(/Object\.values\(MAP_CREDITS\)\.map/)
+    expect(code('app/settings.tsx')).toMatch(/router\.push\('\/about'\)/)
   })
 })

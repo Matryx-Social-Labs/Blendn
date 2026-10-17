@@ -76,12 +76,16 @@ describe("the entry point to peer rating", () => {
      * Two fetch paths populate `checkInStatus` — the cached read and the live
      * one — and a control that removed only the first still passed, because the
      * assertion merely looked for the string. Both must read it or the button
-     * appears or vanishes depending on which path ran.
+     * appears or vanishes depending on which path ran. They share one mapper,
+     * `applyDetail`: the read is pinned there, and both paths to calling it.
      */
-    const reads = DETAIL.match(/status: d\.userStatus\.checkInStatus/g) ?? []
-    const writes = DETAIL.match(/setCheckInStatus\(\{\s*\n\s*success: true,\s*\n\s*checked_in: d\.userStatus/g) ?? []
-    expect(reads.length).toBe(writes.length)
-    expect(reads.length).toBeGreaterThan(1)
+    const mapper = DETAIL.slice(DETAIL.indexOf("const applyDetail = "), DETAIL.indexOf("const applyEventDetails = "))
+    expect(mapper).toMatch(/status: d\.userStatus\.checkInStatus/)
+    expect(mapper).toMatch(/setCheckInStatus\(\{\s*\n\s*success: true,\s*\n\s*checked_in: d\.userStatus/)
+    const fetchPath = DETAIL.slice(DETAIL.indexOf("const applyEventDetails = "), DETAIL.indexOf("const fetchEventDetails = "))
+    expect(fetchPath).toContain("applyDetail(d)")
+    const cachePath = DETAIL.slice(DETAIL.indexOf("const cached = getEventDetailCache"), DETAIL.indexOf("Logger.journey('events', 'detail:mount'"))
+    expect(cachePath).toContain("applyDetail(cached)")
   })
 
   it("is a live control", () => {
@@ -91,13 +95,14 @@ describe("the entry point to peer rating", () => {
     expect(DETAIL).toMatch(/alone=\{checkInCount <= 1\}/)
     // Nothing after the end is disabled: `rate` rates, `ended` offers tonight.
     expect(CTA).toMatch(/const disabled = !onPress/)
-    expect(DETAIL).toMatch(/const primaryActionDisabled = isEnded \? false/)
+    // The CTA is never disabled now: a check-in is the pass's, so there is no busy state here (Flow 4).
+    expect(DETAIL).toMatch(/onPress=\{primaryActionPress\}/)
   })
 
   it("sends somebody who wasn't there to tonight, not to a dead pill", () => {
     const press = DETAIL.slice(DETAIL.indexOf("const primaryActionPress"))
     const rate = press.indexOf("'/rate/[eventId]'")
-    const tonight = press.indexOf("openBlendn()")
+    const tonight = press.indexOf("toTheOverlay(openBlendn)")
     // After the rate branch: attending wins.
     expect(rate).toBeGreaterThan(-1)
     expect(tonight).toBeGreaterThan(rate)
@@ -110,10 +115,10 @@ describe("the Going tab's way in to peer rating", () => {
    * rating does not depend on reopening an old event. Past is only events you
    * attended that have ended (`pastEventRows`), the same gate as the CTA above.
    */
-  it("puts RATE WHO YOU MET on the Past row, to the rating screen", () => {
+  it("puts Rate who you met on the Past row, to the rating screen", () => {
     const past = GOING.slice(GOING.indexOf("item.kind === 'past'"))
-    expect(past).toMatch(/label: 'RATE WHO YOU MET'/)
+    expect(past).toMatch(/label="Rate who you met"/)
     expect(past).toMatch(/pathname: '\/rate\/\[eventId\]', params: \{ eventId: row\.id \}/)
-    expect(past).toMatch(/accessibilityLabel: `Rate who you met at \$\{row\.title\}`/)
+    expect(past).toMatch(/accessibilityLabel=\{`Rate who you met at \$\{row\.title\}`\}/)
   })
 })

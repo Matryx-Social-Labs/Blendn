@@ -1,0 +1,75 @@
+# Flow 5 · a send that fails stays (feat(flow-5), R3-D5 5.4, 5.8): three links
+# are refused ("Not sent · Two links at most"); retrying it is refused again
+# and it stays one bubble; its long-press is the Not sent sheet, and Delete
+# takes it away. Android also goes offline: the send waits, or fails, and
+# retrying it once the connection is back delivers it.
+# Needs: checked in at a live event (ROOM).
+# Env: MAESTRO_EMAIL, MAESTRO_PASSWORD (environment variables; delete
+# ~/.maestro/tests/<run> afterwards). With -e: ROOM, MESSAGE (unique per run).
+# Read back (blendn-admin): the links message never lands, the offline one does once.
+#   npm run -s qa sq "SELECT count(*) FILTER (WHERE m.content LIKE '%links.example%') AS links, count(*) FILTER (WHERE m.content = '<MESSAGE>') AS offline FROM chat_messages m JOIN \"User\" u ON u.id = m.user_id WHERE u.email = '<email>'"
+#   links 0 (a hidden spam row may exist with moderation_status set), offline 1 (Android) / 0 (iOS).
+appId: com.matryxsociallabs.blendn
+tags:
+  - flow-5
+  - needs-live-event
+---
+- runFlow: ../subflows/flow5-open.yaml
+- scrollUntilVisible:
+    element: ${ROOM}
+    direction: DOWN
+    timeout: 20000
+- tapOn: ${ROOM}
+- extendedWaitUntil:
+    visible: "Say something to the room"
+    timeout: 20000
+
+# --- Refused: too many links ---
+- tapOn: "Say something to the room"
+- inputText: "https://a.links.example https://b.links.example https://c.links.example"
+- tapOn: "Send"
+- extendedWaitUntil:
+    visible: "Not sent · Two links at most"
+    timeout: 15000
+- takeScreenshot: flow5-03-not-sent
+# Tap to retry: refused again, still one bubble.
+- tapOn: "Not sent · Two links at most"
+- extendedWaitUntil:
+    visible: "Not sent · Two links at most"
+    timeout: 15000
+# Its long-press is the Not sent sheet.
+- longPressOn: "Not sent: .*a.links.example.*"
+- extendedWaitUntil:
+    visible: "Try again"
+    timeout: 5000
+- assertVisible: "Delete"
+- takeScreenshot: flow5-03-not-sent-sheet
+- tapOn: "Delete"
+- extendedWaitUntil:
+    notVisible: "Not sent · Two links at most"
+    timeout: 5000
+
+# --- Android: offline, then back, then retry ---
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - setAirplaneMode: enabled
+      - tapOn: "Say something to the room"
+      - inputText: ${MESSAGE}
+      - tapOn: "Send"
+      - extendedWaitUntil:
+          visible: ".*(Waiting for connection|Not sent · Tap to retry).*"
+          timeout: 20000
+      - takeScreenshot: flow5-03-offline
+      - setAirplaneMode: disabled
+      - runFlow:
+          when:
+            visible: "Not sent · Tap to retry"
+          commands:
+            - tapOn: "Not sent · Tap to retry"
+      - extendedWaitUntil:
+          notVisible: ".*(Waiting for connection|Not sent · Tap to retry).*"
+          timeout: 30000
+      - assertVisible: ${MESSAGE}
+      - takeScreenshot: flow5-03-delivered

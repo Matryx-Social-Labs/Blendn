@@ -11,12 +11,12 @@
 
 import {
   ONBOARDING_ROUTES,
+  askOsPermission,
   ONBOARDING_STEPS,
   advance,
   anonymousByDefault,
   canContinue,
   isCompleteDateOfBirth,
-  isSkippable,
   joinDateOfBirth,
   nextStep,
   orientationConsent,
@@ -55,16 +55,6 @@ describe('the step list', () => {
     expect(nextStep('ready')).toBeNull()
     expect(previousStep('notifications')).toBe('basics')
     expect(previousStep('basics')).toBeNull()
-  })
-
-  it('will not let anyone skip the two steps that have to happen', () => {
-    // `basics` carries the birth date the age gate needs; `ready` is where
-    // `onboarded` is written, so skipping it leaves the account looking
-    // unfinished forever and the dashboard funnel counting it as a drop-off.
-    expect(isSkippable('basics')).toBe(false)
-    expect(isSkippable('ready')).toBe(false)
-    expect(isSkippable('notifications')).toBe(true)
-    expect(isSkippable('media')).toBe(true)
   })
 
   it('reports progress that starts above zero and ends at a hundred', () => {
@@ -354,5 +344,32 @@ describe('anonymousByDefault', () => {
 
   it('is the only case that is not anonymous: an explicit yes', () => {
     expect(anonymousByDefault({ reveal_by_default: true })).toBe(false)
+  })
+})
+
+describe('askOsPermission', () => {
+  const get = (granted: boolean, canAskAgain: boolean) => async () => ({ granted, canAskAgain })
+
+  it('takes a standing answer without asking again', async () => {
+    const request = jest.fn(async () => false)
+    await expect(askOsPermission(get(true, false), request)).resolves.toEqual({ granted: true, blocked: false })
+    expect(request).not.toHaveBeenCalled()
+  })
+
+  it('asks when the OS still can', async () => {
+    await expect(askOsPermission(get(false, true), async () => true)).resolves.toEqual({ granted: true, blocked: false })
+    await expect(askOsPermission(get(false, true), async () => false)).resolves.toEqual({ granted: false, blocked: false })
+  })
+
+  it('is blocked when the OS will not ask again, so Settings is the way back', async () => {
+    const request = jest.fn(async () => true)
+    await expect(askOsPermission(get(false, false), request)).resolves.toEqual({ granted: false, blocked: true })
+    expect(request).not.toHaveBeenCalled()
+  })
+
+  it('treats a throwing permissions call as a broken build, not a refusal', async () => {
+    const boom = async (): Promise<never> => { throw new Error('no module') }
+    await expect(askOsPermission(boom, async () => true)).resolves.toEqual({ granted: false, blocked: false })
+    await expect(askOsPermission(get(false, true), boom)).resolves.toEqual({ granted: false, blocked: false })
   })
 })

@@ -1,1234 +1,570 @@
-import { ScreenProfiler } from '../../lib/perf'
-import { router, useFocusEffect, useScrollToTop } from 'expo-router'
+import { router, useScrollToTop } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  FlatList,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native'
-import Reanimated, { Easing, FadeOut, LinearTransition, useReducedMotion } from 'react-native-reanimated'
+import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native'
+import Reanimated, { Easing, FadeInUp, FadeOut, LinearTransition, useReducedMotion } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
+import {
+  BanterHeader,
+  BanterRow,
+  BanterSkeleton,
+  BlendLiveCard,
+  LiveHero,
+  NewAbovePill,
+  RequestCard,
+  RequestFace,
+  rowLabel,
+  banterHeaderHeight,
+  type RowFace,
+  type RowLine,
+} from '../../components/banter/BanterParts'
+import { useLatest } from '../../lib/useLatest'
+import { heldList, inboxTimeLabel, previewWithSender } from '../../components/banter/inbox'
+import { holdController } from '../../components/banter/hold'
+import { BanterPressGuard, type PressGuard } from '../../components/banter/pressGuard'
 import { BoardRequestsSection } from '../../components/board/BoardRequestsSection'
-import { BOARD_ENABLED } from '../../lib/board'
-import { crewRoomTitle, crewRoomsFrom, type CrewRoomRow } from '../../lib/crews'
-import { useToast } from '../../components/Toast'
-import { SkeletonBlock, SkeletonCircle, SkeletonLine } from '../../components/Skeleton'
-import { preloadImages } from '../../components/OptimizedImage'
-import {
-  BANTER_PADDING_HORIZONTAL,
-  BANTER_SECTION_GAP,
-  BanterBucketHeading,
-  BanterConversation,
-  BanterHeading,
-  BanterLiveRoom,
-  BanterRequest,
-  BanterSearch,
-  ROW_AVATAR,
-  type ConversationItem,
-} from '../../components/banter/BanterSections'
-import { bucketRows, inboxTimeLabel, previewWithSender } from '../../components/banter/inbox'
-import { matchRowPreview } from '../../lib/matchOpener'
+import { LeaveRoomSheet, MuteSheet } from '../../components/chat/RoomSheets'
+import { SearchField } from '../../components/ds/SearchField'
+import { SectionHeader } from '../../components/ds/SectionHeader'
+import { font, useBoldText } from '../../components/ds/shared'
+import { StateScreen } from '../../components/ds/StateScreen'
+import { SwipeRow, type SwipeAction } from '../../components/ds/SwipeRow'
 import { NotificationBell } from '../../components/pulse/NotificationBell'
-import { roomStateFrom, roomStateLine, type RoomState } from '../../lib/roomState'
-import { isMuted, rememberRoomMute, useRoomMembership } from '../../lib/roomMembership'
-import { PulseTopBar, TOP_BAR_HEIGHT } from '../../components/pulse/PulseTopBar'
+import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
+import { useToast } from '../../components/Toast'
 import { apiClient } from '../../lib/apiClient'
-import { userReportStep } from '../../lib/safetyUtils'
-import { showSheet } from '../../lib/sheet'
-import { subscribeChatListUpdates } from '../../lib/chatListUpdates'
-import { roomDisplayTitle, roomMemberCount } from '../../lib/placeRoom'
-import { hasDirtyDomain } from '../../lib/liveSyncState'
-import { Logger } from '../../lib/logger'
-import { userMessage } from '../../lib/userMessage'
-import { LoadError, LoadState } from '../../components/LoadError'
-import { queryCache } from '../../lib/queryCache'
-import {
-  ChatMessageCallback,
-  PrivateMessageCallback,
-  subscribeToChatMessage,
-  subscribeToUserNotifications,
-} from '../../lib/socketClient'
-import { MOTION_DURATION } from '../../lib/motion'
-import { EMBER, EMBER_RADIUS, OPACITY, SPACE, TYPE } from '../../lib/theme'
-import { setConversationLastRead, syncUnreadCache } from '../../lib/unread'
-import { useAuth } from '../../lib/useAuth'
-import { useLiveSync } from '../../lib/useLiveSync'
+import { BOARD_ENABLED } from '../../lib/board'
+import { dmThread, outboxLine, roomThread, useOutbox, type Thread } from '../../lib/chatOutbox'
+import { crewRoomTitle, type CrewRoomRow } from '../../lib/crews'
+import { COLOR, DURATION, EASING, SPACE, SPRING, STAGGER } from '../../lib/design/tokens'
+import { H } from '../../lib/haptics'
+import { matchRowPreview } from '../../lib/matchOpener'
+import { ScreenProfiler } from '../../lib/perf'
+import { isMuted, useRoomMembership } from '../../lib/roomMembership'
+import { roomStateLine } from '../../lib/roomState'
+import { SPONSORED, useBanterInbox, type GroupChat, type MessageRequest, type PersonalChat } from '../../lib/useBanterInbox'
+import { useCrewInbox } from '../../lib/useCrewInbox'
 import { TAB_BAR_CLEARANCE } from './_layout'
 
+/** A conversation as the Banter draws it, and what it takes to open, find and swipe it. */
+type Row = {
+  key: string
+  title: string
+  face: RowFace
+  line: RowLine
+  time: string
+  unread: boolean
+  muted: boolean
+  sortTime: number
+  searchText: string
+  open: () => void
+  swipe: SwipeAction[]
+}
+
+type Item = { type: 'heading'; key: string; title: string; markAll?: boolean } | { type: 'row'; key: string; row: Row; index: number }
+
+/** #27: a moved row travels to its new place on M.settle, 300 ms after its preview changed. */
+const REORDER = LinearTransition.delay(300).springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping).mass(SPRING.settle.mass)
+const SEARCH_GAP = SPACE.sm
+/** A press held this long is a hold, not a tap (Pressable's own long-press delay). */
+const HELD_PRESS_MS = 500
+
 /**
- * The Banter — every conversation you have, on one screen.
+ * The Banter (Flow 5 Banter frames, R2-D2, R3-0, R3-D5) — every conversation
+ * you have, on one screen.
  *
- * ## One inbox, not two tabs
+ * A glass header (the bell, search, Mark all read); then, top to bottom:
+ * **Live now** (the room you're standing in, as the hero; an open Blend),
+ * **Requests** (message requests with their notes, crew invites, the Board's
+ * asks), **Crews**, **People** (DMs) and **Past rooms**. People are circles,
+ * rooms and crews rounded squares. Unread is three changes and a dot, never
+ * a height change. A room row swipes to Mute or Leave, a DM to Mark read.
+ * Rooms you're checked into are lifted out, never repeated; never-used
+ * conversations sort last. No compose button: a DM starts from a person.
  *
- * The screen this replaced split rooms and people into a `group` / `personal`
- * segmented control, and only ever fetched the visible half. A tabbed inbox
- * makes you check two places for "did anyone message me", and the tab you are
- * not looking at is the one with the unread message on it. One list costs one
- * extra request on first load and removes a decision from every visit. A
- * person is round, a room is its event's cover in a square, and that is the
- * whole distinction.
- *
- * ## Top to bottom
- *
- * 1. **Live now** — the rooms you are checked into, one full-width row each.
- *    What is pinned, by circumstance rather than by a gesture, is the event you
- *    are standing in: temporary, anonymous, only useful while you are there.
- *    Those rooms are lifted out of the list below rather than repeated in it.
- *    `isCheckedIn` comes from the API — `checked_in` with no `check_out_time`,
- *    which the client cannot derive, because "the event is on now" is not the
- *    same as "I am there".
- * 2. **Requests** — the one row that cannot be opened, because tapping it has
- *    to mean accept or decline. Accept is a strong-neutral pill, not the
- *    accent — a list of requests was a column of orange.
- * 3. **Conversations**, bucketed Today / This week / Earlier by last activity
- *    (`components/banter/inbox.ts`), "Mark all read" on the first heading.
- *
- * No compose button, by decision: a DM starts from a person, and every path to
- * one already goes through a profile.
- *
- * ## Anonymity holds in the inbox
- *
- * A DM that opens from a mutual like carries the pseudonym the match card
- * showed, and the real name appears only when that person reveals. The server
- * gates it — pre-reveal, `name` is the pseudonym and `image` is `null` — so the
- * list cannot leak a name it was never sent. `theyRevealed` is carried through
- * so an unrevealed match gets the generated mark instead of an empty circle —
- * the same one the Scene's discs and the room use, seeded on the pseudonym.
- *
- * `revealRequested` turns the row's preview into "Asked to reveal names" until
- * you open that thread — this session only; the server keeps the flag until
- * you answer, so it comes back after a relaunch.
+ * Anonymity holds here: the server sends the pseudonym and no photo until a
+ * person reveals, so an unrevealed match is their creature, seeded on the
+ * pseudonym (docs/BANTER.md).
  */
-
-interface GroupChat {
-  chat_room_id: string
-  event_id: string
-  event_title: string
-  /** `memberCount` — active members. 0 when the server did not say. */
-  participant_count: number
-  /** The event's cover — the room's square avatar. */
-  event_image?: string | null
-  last_message?: string
-  last_message_time?: string
-  /** The sender's name *in this room* — their pseudonym, never a real name. */
-  last_sender_name?: string
-  last_sender_is_me: boolean
-  unread_count: number
-  /** Standing in it right now: the room is live and anonymous. */
-  is_checked_in: boolean
-  /** Readable but not postable — the list says why (SCRUM-178). */
-  room_state: RoomState
-}
-
-interface PersonalChat {
-  conversation_id: string
-  other_user_name: string
-  other_user_id: string
-  other_user_avatar?: string | null
-  last_message?: string
-  last_message_time?: string
-  /** The last message is yours — the preview says "You: ". */
-  last_message_from_me: boolean
-  unread_count: number
-  /**
-   * They have revealed themselves to you.
-   *
-   * The server already gates the payload — pre-reveal, `name` is the pseudonym
-   * and `image` is `null`, so there is nothing here to leak. This flag exists
-   * so the row can *draw* the difference: an unrevealed match gets the
-   * generated mark rather than an empty circle.
-   */
-  they_revealed: boolean
-  /** They have asked you to reveal. There is no "declined". */
-  reveal_requested: boolean
-  /** Opened from a mutual like, not an accepted message request. */
-  from_match: boolean
-}
-
-interface MessageRequest {
-  request_id: string
-  /** Who asked. Opens their profile, and is who a report names. */
-  sender_id?: string | null
-  sender_name?: string | null
-  sender_avatar?: string | null
-  initial_message?: string | null
-  created_at?: string | null
-}
-
-/** A row in the merged list, plus what it takes to open it and find it. */
-type InboxRow = ConversationItem & { sortTime: number; searchText: string; open: () => void }
-
-/** What the FlatList draws: a bucket heading or a conversation. */
-type InboxItem =
-  | { type: 'heading'; id: string; title: string; first: boolean }
-  | ({ type: 'row' } & InboxRow)
-
-const GROUP_CHAT_CACHE_TTL = 60 * 1000
-const PERSONAL_CHAT_CACHE_TTL = 60 * 1000
-const MESSAGE_REQUESTS_CACHE_TTL = 60 * 1000
-const CHAT_BACKGROUND_REFRESH_THROTTLE_MS = 15 * 1000
-
-const previewFromMessage = (message: any): string | undefined => {
-  if (!message) return undefined
-
-  const rawText = message.text ?? message.message_text ?? message.content ?? message.body
-  if (typeof rawText === 'string' && rawText.trim().length > 0) {
-    return rawText.trim()
-  }
-
-  const mediaType = String(message.mediaType ?? message.media_type ?? message.type ?? '').toLowerCase()
-  // Said as a person would, not as a bracketed type tag.
-  if (mediaType.includes('image') || mediaType.includes('photo')) return 'Sent a photo'
-  if (mediaType.includes('voice') || mediaType.includes('audio')) return 'Sent a voice note'
-  if (mediaType.includes('video')) return 'Sent a video'
-  if (message.mediaUrl || message.media_url || message.attachmentUrl || message.attachment_url) return 'Sent an attachment'
-  return undefined
-}
-
-const previewFromConversation = (conv: any): { text?: string; time?: string } => {
-  const lastMessage = conv?.lastMessage || conv?.last_message || conv?.message || conv?.latestMessage
-  const text = previewFromMessage(lastMessage)
-    || (typeof conv?.lastMessageText === 'string' && conv.lastMessageText.trim().length > 0 ? conv.lastMessageText.trim() : undefined)
-    || (typeof conv?.last_message_text === 'string' && conv.last_message_text.trim().length > 0 ? conv.last_message_text.trim() : undefined)
-
-  const time = (lastMessage?.createdAt
-    || lastMessage?.created_at
-    || conv?.lastMessageTime
-    || conv?.last_message_time
-    || conv?.updatedAt
-    || conv?.updated_at) as string | undefined
-
-  return { text, time }
-}
-
-const displayPreview = (text?: string, fallback: string = 'Start chatting'): string =>
-  (text && text.trim().length > 0 ? text : fallback)
-
 function ChatInner() {
   const insets = useSafeAreaInsets()
-  const { user, loading: authLoading } = useAuth()
-  const { showToast } = useToast()
+  const bold = useBoldText()
   const reduceMotion = useReducedMotion()
-  const [incomingRequests, setIncomingRequests] = useState<MessageRequest[]>([])
-  const [groupChats, setGroupChats] = useState<GroupChat[]>([])
-  /** Crew chats and open Blend rooms (`rooms` on `GET /chat/groups`, step 9). */
-  const [crewRooms, setCrewRooms] = useState<CrewRoomRow[]>([])
-  const [personalChats, setPersonalChats] = useState<PersonalChat[]>([])
-  const [loading, setLoading] = useState(true)
-  const [listFailed, setListFailed] = useState(false)
-  const [refreshing, setRefreshing] = useState(false)
-  const [requestPending, setRequestPending] = useState<Record<string, boolean>>({})
-  // Board requests load themselves; this only knows whether they drew anything.
-  const [boardRequestCount, setBoardRequestCount] = useState(0)
-  const [boardRefreshKey, setBoardRefreshKey] = useState(0)
-  const latestLoadIdRef = useRef(0)
-  const isLoadingRef = useRef(false)
-  const lastFetchRef = useRef({ list: 0, requests: 0 })
-  const groupChatUnsubsRef = useRef<Map<string, () => void>>(new Map())
+  const { showToast } = useToast()
+  const inbox = useBanterInbox()
+  const { groupChats, setGroupChats, crewRooms, setCrewRooms, personalChats, setPersonalChats, incomingRequests, user } = inbox
+  const crews = useCrewInbox(useCallback((text: string) => showToast(text, 'error'), [showToast]))
+  const outbox = useOutbox()
+  const membership = useRoomMembership()
+  const [boardCount, setBoardCount] = useState(0)
+  const [searching, setSearching] = useState(false)
+  const [query, setQuery] = useState('')
+  const [muteFor, setMuteFor] = useState<string | null>(null)
+  const [leaveFor, setLeaveFor] = useState<string | null>(null)
+  const [openSwipe, setOpenSwipe] = useState<string | null>(null)
   // Tapping Banter while already on it goes back to the top (the bar emits `tabPress`).
-  const listRef = useRef<FlatList<InboxItem>>(null)
+  const listRef = useRef<FlatList<Item>>(null)
   useScrollToTop(listRef)
 
-  /*
-   * The room open on top of this tab, if any. A message arriving for it is
-   * being read as it lands, so it must not bump the room's unread here. Cleared
-   * when the Banter is focused again.
-   */
-  const openRoomRef = useRef<string | null>(null)
-  useFocusEffect(
-    useCallback(() => {
-      openRoomRef.current = null
-    }, [])
-  )
-
-  /*
-   * Threads whose "Asked to reveal names" you have opened this session. The
-   * server keeps `revealRequested` until you answer, so without this every
-   * background refresh would put the line straight back.
-   */
+  /* Threads whose "Asked to reveal names" you have opened this session (the server keeps the flag until you answer). */
   const [revealSeen, setRevealSeen] = useState<ReadonlySet<string>>(() => new Set())
+  const roomMuted = useCallback((id: string) => isMuted(membership.mutes.get(id)), [membership.mutes])
 
-  const handleGroupChatPress = useCallback((chat: GroupChat) => {
-    openRoomRef.current = chat.chat_room_id
-    setGroupChats((prev) =>
-      prev.map((c) => (c.chat_room_id === chat.chat_room_id ? { ...c, unread_count: 0 } : c))
-    )
-    router.push({
-      pathname: '/chat/[id]',
-      params: {
-        id: chat.chat_room_id,
-        roomName: chat.event_title,
-        eventTitle: chat.event_title,
-        eventImage: chat.event_image ?? '',
-      } as any,
-    })
-  }, [])
-
-  const handlePersonalChatPress = useCallback((chat: PersonalChat) => {
-    setConversationLastRead(chat.conversation_id).catch(() => {})
-    if (chat.reveal_requested) {
-      setRevealSeen((prev) => new Set(prev).add(chat.conversation_id))
-    }
-    router.push({
-      pathname: '/private-chat/[conversationId]',
-      params: {
-        conversationId: chat.conversation_id,
-        otherUserName: chat.other_user_name,
-        otherUserId: chat.other_user_id,
-        otherUserAvatar: chat.other_user_avatar ?? '',
-      } as any,
-    })
-  }, [])
-
-  /* Lifted into Live now above, so not repeated in the list below. */
-  /*
-   * Your mutes and the rooms you left, as `lib/roomMembership.ts` last heard
-   * them. A room left from Room info goes from this list at once rather than
-   * at the next read, and a mute set there shows on its row on the way back.
-   */
-  const membership = useRoomMembership()
-  const rooms = useMemo(
-    () => groupChats.filter((c) => !membership.left.has(c.chat_room_id)),
-    [groupChats, membership.left]
+  const openRoom = useCallback(
+    (chat: GroupChat) => {
+      inbox.noteOpenRoom(chat.chat_room_id)
+      setGroupChats((prev) => prev.map((c) => (c.chat_room_id === chat.chat_room_id ? { ...c, unread_count: 0 } : c)))
+      router.push({
+        pathname: '/chat/[id]',
+        params: { id: chat.chat_room_id, roomName: chat.event_title, eventTitle: chat.event_title } as never,
+      })
+    },
+    [inbox, setGroupChats]
   )
-  const roomMuted = useCallback(
-    (id: string) => isMuted(membership.mutes.get(id)),
-    [membership.mutes]
+  const openDm = useCallback(
+    (chat: PersonalChat) => {
+      if (chat.reveal_requested) setRevealSeen((prev) => new Set(prev).add(chat.conversation_id))
+      router.push({
+        pathname: '/private-chat/[conversationId]',
+        params: {
+          conversationId: chat.conversation_id,
+          otherUserName: chat.other_user_name,
+          otherUserId: chat.other_user_id,
+        } as never,
+      })
+    },
+    []
   )
+  const openCrewRoom = useCallback(
+    (r: CrewRoomRow) => {
+      setCrewRooms((prev) => prev.map((x) => (x.id === r.id ? { ...x, unreadCount: 0 } : x)))
+      router.push({
+        pathname: '/chat/[id]',
+        params: { id: r.id, roomName: crewRoomTitle(r), kind: r.kind, ...(r.crewId ? { crewId: r.crewId } : {}), ...(r.blendId ? { blendId: r.blendId } : {}) } as never,
+      })
+    },
+    [setCrewRooms]
+  )
+
+  /* "Mark read" on one DM: the thread's first page is what opens it on the server (no per-thread route exists). */
+  const markRead = useCallback(
+    async (chat: PersonalChat) => {
+      setPersonalChats((prev) => prev.map((c) => (c.conversation_id === chat.conversation_id ? { ...c, unread_count: 0 } : c)))
+      const result = await apiClient.getConversationMessages(chat.conversation_id, { limit: 1 })
+      if (!result.success) {
+        setPersonalChats((prev) => prev.map((c) => (c.conversation_id === chat.conversation_id ? { ...c, unread_count: chat.unread_count } : c)))
+        showToast("Couldn't mark it read. Try again.", 'error')
+      }
+    },
+    [setPersonalChats, showToast]
+  )
+
+  const rooms = useMemo(() => groupChats.filter((c) => !membership.left.has(c.chat_room_id)), [groupChats, membership.left])
   const liveRooms = useMemo(() => rooms.filter((c) => c.is_checked_in), [rooms])
-  /*
-   * Your open Blends (step 9) sit beside the rooms you are standing in — a
-   * Blend is tonight's, and closes 12 h after the night. Crew chats are
-   * conversations, in the list below.
-   */
-  const blendRooms = useMemo(
-    () => crewRooms.filter((r) => r.kind === 'blend' && !membership.left.has(r.id)),
-    [crewRooms, membership.left]
-  )
-  const openCrewRoom = useCallback((r: CrewRoomRow) => {
-    setCrewRooms((prev) => prev.map((x) => (x.id === r.id ? { ...x, unreadCount: 0 } : x)))
-    router.push({
-      pathname: '/chat/[id]',
-      params: {
-        id: r.id,
-        roomName: crewRoomTitle(r),
-        kind: r.kind,
-        ...(r.crewId ? { crewId: r.crewId } : {}),
-        ...(r.blendId ? { blendId: r.blendId } : {}),
-      } as never,
-    })
-  }, [])
+  const blendRooms = useMemo(() => crewRooms.filter((r) => r.kind === 'blend' && !membership.left.has(r.id)), [crewRooms, membership.left])
 
-  /* Crew chats: friends, named by first name, and never the event's anonymity. */
-  const myId = user?.id
-  const crewRows = useMemo<InboxRow[]>(() => {
+  /** Line 2, by 5.8's precedence: not sent, then a draft, then the last message. */
+  const lineFor = useCallback(
+    (thread: Thread, fallback: RowLine): RowLine => {
+      const held = outboxLine(outbox, thread)
+      return held ? (held.kind === 'failed' ? { kind: 'failed' } : { kind: 'draft', text: held.text }) : fallback
+    },
+    [outbox]
+  )
+
+  const { crewRows, peopleRows, pastRows } = useMemo(() => {
     const now = new Date()
-    return crewRooms
+    const byRecent = (a: Row, b: Row) => b.sortTime - a.sortTime
+    const crewRows: Row[] = crewRooms
       .filter((r) => r.kind === 'crew' && !membership.left.has(r.id))
-      .map((r) => {
+      .map((r): Row => {
         const last = r.lastMessage
-        const preview = last?.content.trim()
-          ? previewWithSender(last.content, { fromMe: last.user.id === myId, name: last.user.name ?? undefined })
-          : 'No messages yet'
+        const text = last?.content.trim() ? previewWithSender(last.content, { fromMe: last.user.id === user?.id, name: last.user.name ?? undefined }) : 'No messages yet'
         return {
-          id: `c:${r.id}`,
+          key: `c:${r.id}`,
           title: r.name,
-          preview,
-          timeLabel: inboxTimeLabel(r.lastMessageAt ?? undefined, now),
-          avatarUrl: null,
-          kind: 'group' as const,
+          face: { kind: 'crew', seed: crews.seedFor(r.id) },
+          line: lineFor(roomThread(r.id, user?.id), { kind: 'text', text }),
+          time: inboxTimeLabel(r.lastMessageAt ?? undefined, now),
           unread: r.unreadCount > 0,
           muted: roomMuted(r.id),
           sortTime: r.lastMessageAt ? Date.parse(r.lastMessageAt) : 0,
-          searchText: `${r.name} ${preview}`.toLowerCase(),
+          searchText: `${r.name} ${text}`.toLowerCase(),
           open: () => openCrewRoom(r),
+          swipe: [{ icon: 'bell-off', label: 'Mute', onPress: () => setMuteFor(r.id) }],
         }
       })
-  }, [crewRooms, membership.left, myId, roomMuted, openCrewRoom])
-
-  /*
-   * The merged list.
-   *
-   * Sorted by last message, newest first, with never-used conversations at the
-   * bottom rather than the top — an empty room is not news. `sortTime` is
-   * carried on the row so the comparator does not re-parse a date per
-   * comparison.
-   */
-  const rows = useMemo<InboxRow[]>(() => {
-    const now = new Date()
-    const merged: InboxRow[] = [
-      ...personalChats.map((c) => {
-        const askedToReveal = c.reveal_requested && !revealSeen.has(c.conversation_id)
-        /*
-         * A match nobody has written in yet says why it exists, rather than the
-         * generic "Start chatting" that is true of any empty thread. The row
-         * arrived because two people chose each other; it should say so before
-         * it is opened.
-         */
-        const preview = askedToReveal
-          ? 'Asked to reveal names'
-          : c.last_message?.trim()
-            ? previewWithSender(c.last_message, { fromMe: c.last_message_from_me })
-            : matchRowPreview({ fromMatch: c.from_match }) ?? displayPreview(undefined)
+      .sort(byRecent)
+    const peopleRows: Row[] = personalChats
+      .map((c): Row => {
+        const asked = c.reveal_requested && !revealSeen.has(c.conversation_id)
+        const text = c.last_message?.trim()
+          ? previewWithSender(c.last_message, { fromMe: c.last_message_from_me })
+          : (matchRowPreview({ fromMatch: c.from_match }) ?? 'Start chatting')
+        const line: RowLine = asked ? { kind: 'chip', icon: 'eye', text: 'Asked to reveal names' } : { kind: 'text', text }
         return {
-          id: `p:${c.conversation_id}`,
+          key: `p:${c.conversation_id}`,
           title: c.other_user_name,
-          preview,
-          previewEmphasis: askedToReveal,
-          timeLabel: inboxTimeLabel(c.last_message_time, now),
-          avatarUrl: c.other_user_avatar,
-          kind: 'direct' as const,
-          pseudonymous: !c.they_revealed,
+          face: { kind: 'person', photo: c.they_revealed ? c.other_user_avatar : null, pseudonym: c.other_user_name },
+          line: asked ? line : lineFor(dmThread(c.conversation_id, user?.id), line),
+          time: inboxTimeLabel(c.last_message_time, now),
           unread: c.unread_count > 0,
+          // DMs can't be muted (ROUND3 C5).
+          muted: false,
           sortTime: c.last_message_time ? Date.parse(c.last_message_time) : 0,
-          searchText: `${c.other_user_name} ${preview}`.toLowerCase(),
-          open: () => handlePersonalChatPress(c),
+          searchText: `${c.other_user_name} ${text}`.toLowerCase(),
+          open: () => openDm(c),
+          swipe: c.unread_count > 0 ? [{ icon: 'check-check', label: 'Mark read', onPress: () => void markRead(c) }] : [],
         }
-      }),
-      ...rooms.filter((c) => !c.is_checked_in).map((c) => {
-        const preview =
-          roomStateLine(c.room_state) ??
-          (c.last_message?.trim()
-            ? previewWithSender(c.last_message, { fromMe: c.last_sender_is_me, name: c.last_sender_name })
-            : 'No messages yet')
+      })
+      .sort(byRecent)
+    const pastRows: Row[] = rooms
+      .filter((c) => !c.is_checked_in)
+      .map((c): Row => {
+        const sponsored = c.last_message === SPONSORED
+        const text = sponsored ? '' : c.last_message?.trim() ? previewWithSender(c.last_message, { fromMe: c.last_sender_is_me, name: c.last_sender_name }) : 'No messages yet'
+        // The room's state is a status, never drawn like speech (Flow 5 #08).
+        const stateLine = roomStateLine(c.room_state)
+        const state: RowLine | null = stateLine
+          ? { kind: 'chip', icon: c.room_state === 'locked' ? 'lock' : 'mic-off', text: stateLine, warn: c.room_state === 'locked' }
+          : null
         return {
-          id: `g:${c.chat_room_id}`,
+          key: `g:${c.chat_room_id}`,
           title: c.event_title,
-          preview,
-          timeLabel: inboxTimeLabel(c.last_message_time, now),
-          avatarUrl: c.event_image,
-          kind: 'event' as const,
+          face: { kind: 'room', cover: c.event_image },
+          line: state ?? lineFor(roomThread(c.chat_room_id, user?.id), { kind: 'text', text }),
+          time: inboxTimeLabel(c.last_message_time, now),
           unread: c.unread_count > 0,
           muted: roomMuted(c.chat_room_id),
           sortTime: c.last_message_time ? Date.parse(c.last_message_time) : 0,
-          // The sender is searchable even when a room-state line replaces the preview.
-          searchText: `${c.event_title} ${preview} ${c.last_sender_name ?? ''}`.toLowerCase(),
-          open: () => handleGroupChatPress(c),
+          searchText: `${c.event_title} ${text} ${c.last_sender_name ?? ''}`.toLowerCase(),
+          open: () => openRoom(c),
+          swipe: [
+            { icon: 'bell-off', label: 'Mute', onPress: () => setMuteFor(c.chat_room_id) },
+            { icon: 'log-out', label: 'Leave', destructive: true, onPress: () => setLeaveFor(c.chat_room_id) },
+          ],
         }
-      }),
-      ...crewRows,
+      })
+      .sort(byRecent)
+    return { crewRows, peopleRows, pastRows }
+  }, [crewRooms, personalChats, rooms, membership.left, user?.id, crews, lineFor, roomMuted, revealSeen, openCrewRoom, openDm, openRoom, markRead])
+
+  const trimmed = query.trim().toLowerCase()
+  const match = useCallback((rows: Row[]) => (trimmed ? rows.filter((r) => r.searchText.includes(trimmed)) : rows), [trimmed])
+  /* Mark all read covers DMs only: no endpoint marks a room read (docs/BANTER.md). */
+  const hasUnread = personalChats.some((c) => c.unread_count > 0)
+
+  /*
+   * #27: a landing message moves its row on M.settle — unless a finger is on
+   * the list. Then the order holds still and a "↑ New" pill offers the way up;
+   * on lift the rows settle and the pill goes (C12, `heldList`).
+   */
+  const [heldOrder, setHeldOrder] = useState<string[] | null>(null)
+  const items = useMemo<Item[]>(() => {
+    const sections: [string, Row[], boolean][] = [
+      ['Crews', match(crewRows), false],
+      ['People', match(peopleRows), true],
+      ['Past rooms', match(pastRows), false],
     ]
-    return merged.sort((a, b) => b.sortTime - a.sortTime)
-  }, [personalChats, rooms, crewRows, roomMuted, revealSeen, handlePersonalChatPress, handleGroupChatPress])
-
-  const [query, setQuery] = useState('')
-  const trimmedQuery = query.trim().toLowerCase()
-  const visibleRows = useMemo(
-    () => (trimmedQuery ? rows.filter((r) => r.searchText.includes(trimmedQuery)) : rows),
-    [rows, trimmedQuery]
-  )
-
+    const out: Item[] = []
+    let index = 0
+    for (const [title, rows, markAll] of sections) {
+      if (!rows.length) continue
+      out.push({ type: 'heading', key: `h:${title}`, title, markAll })
+      for (const row of rows) out.push({ type: 'row', key: row.key, row, index: index++ })
+    }
+    return out
+  }, [crewRows, peopleRows, pastRows, match])
+  const liveOrder = useLatest(() => items.map((i) => i.key))
+  // The touch's state and its timers (`holdController`): driven only by the list's event handlers.
+  const [hold] = useState(() => holdController((held) => setHeldOrder(held ? liveOrder.current() : null)))
+  const step = hold.step
+  useEffect(() => () => hold.dispose(), [hold])
   /*
-   * "Mark all read" covers DMs only. The server has no endpoint that marks a
-   * room read (only fetching the event chat moves `last_read_message_id`), so
-   * offering it for a room's unread would be a button that does nothing.
+   * A lift after a hold is not a tap: Android opened the row under the finger
+   * when a rested finger came up (drive 2). A press that lasted a hold, or
+   * under which the list reordered, opens nothing. A screen reader's
+   * activation has no touch on the list, so it always opens.
    */
-  const hasUnread = useMemo(() => personalChats.some((c) => c.unread_count > 0), [personalChats])
-
-  /* The rows cut into Today / This week / Earlier, each under its heading. */
-  const listItems = useMemo<InboxItem[]>(() => {
-    const items: InboxItem[] = []
-    bucketRows(visibleRows).forEach((bucket, i) => {
-      items.push({ type: 'heading', id: `h:${bucket.title}`, title: bucket.title, first: i === 0 })
-      for (const row of bucket.rows) items.push({ type: 'row', ...row })
-    })
-    return items
-  }, [visibleRows])
-
-  /*
-   * Optimistic, then written to the server. The local caches alone were undone
-   * by the next background refresh, which reloads the server's counts.
-   */
-  const handleMarkAllRead = useCallback(async () => {
-    if (personalChats.length === 0 || !user) return
-    const before = personalChats
-    const cleared = personalChats.map((c) => ({ ...c, unread_count: 0 }))
-    setPersonalChats(cleared)
-    await Promise.all(personalChats.map((c) => setConversationLastRead(c.conversation_id)))
-
-    try {
-      const result = await apiClient.markAllConversationsRead()
-      if (!result.success) throw new Error(result.error || 'mark all read refused')
-      queryCache.set(`personal_chats_${user.id}`, cleared, PERSONAL_CHAT_CACHE_TTL)
-    } catch (e) {
-      Logger.warn('chat', 'mark all read failed', { error: e })
-      setPersonalChats(before)
-      syncUnreadCache(before)
-      showToast("Couldn't mark your chats as read. Try again.", 'error')
-    }
-  }, [personalChats, user, showToast])
-
-  // The loaders sit above every callback and effect that calls them: React
-  // Compiler rejects a closure that reads a binding before its declaration.
-  const loadMessageRequests = async (loadId?: number, cacheKey?: string, force = false) => {
-    if (cacheKey && !force) {
-      const cached = queryCache.get<{ incoming: MessageRequest[]; outgoing: MessageRequest[] }>(cacheKey)
-      if (cached) {
-        if (loadId !== undefined && latestLoadIdRef.current !== loadId) return
-        setIncomingRequests(cached.incoming)
-        return
-      }
-    }
-    try {
-      const result = await apiClient.getMessageRequests({ status: 'pending' }, { force })
-      if (loadId !== undefined && latestLoadIdRef.current !== loadId) return
-
-      if (result.success && result.data?.requests) {
-        const requests: MessageRequest[] = result.data.requests.map((r: any) => ({
-          request_id: r.id,
-          sender_id: r.senderId || r.sender?.id || null,
-          sender_name: r.sender?.name || null,
-          sender_avatar: r.sender?.avatar || null,
-          initial_message: r.message || null,
-          created_at: r.createdAt || null,
-        }))
-        setIncomingRequests(requests)
-        Logger.info('chat', 'Message requests loaded', { count: requests.length })
-        if (cacheKey) {
-          queryCache.set(cacheKey, { incoming: requests, outgoing: [] }, MESSAGE_REQUESTS_CACHE_TTL)
-        }
-      } else {
-        setIncomingRequests([])
-        if (cacheKey) {
-          queryCache.set(cacheKey, { incoming: [], outgoing: [] }, MESSAGE_REQUESTS_CACHE_TTL)
-        }
-      }
-    } catch (e) {
-      Logger.error('chat', 'loadMessageRequests failed', { error: e })
-      if (loadId === undefined || latestLoadIdRef.current === loadId) {
-        setIncomingRequests([])
-      }
-    }
+  const touchStartAt = useRef(0)
+  // The one guard for every press in the list (components/banter/pressGuard.ts), provided around it below.
+  const pressGuard: PressGuard = (fn) => (...args) => {
+    const held = hold.state().held && (Date.now() - touchStartAt.current >= HELD_PRESS_MS || heldList(items, heldOrder).moved)
+    if (!held) fn(...args)
   }
+  const { shown, moved: newAbove } = heldList(items, heldOrder)
 
-  /*
-   * Both list loaders return whether they succeeded, and on failure leave what
-   * is on screen alone: clearing it turned a network error into "No
-   * conversations yet", or silently dropped every room.
-   */
-  const loadGroupChats = async (loadId?: number, cacheKey?: string, force = false): Promise<boolean> => {
-    try {
-      const result = await apiClient.getChatGroups({ force })
-
-      if (!result.success || !result.data) {
-        Logger.error('chat', 'Error fetching group chats', { error: result.error })
-        return false
-      }
-
-      // Normalize API response shape (array vs wrapped payload)
-      const rooms = Array.isArray(result.data)
-        ? result.data
-        : (result.data as any).groups || (result.data as any).rooms || (result.data as any).data || []
-
-      if (!Array.isArray(rooms)) {
-        Logger.warn('chat', 'Unexpected group chat payload shape', { data: result.data })
-        return false
-      }
-
-      const groupChatData: GroupChat[] = rooms
-        .map((room: any) => {
-          const preview = previewFromConversation(room)
-          return {
-            chat_room_id: String(room.id || room.chat_room_id || room.chatRoomId || ''),
-            event_id: room.event_id || room.eventId || '',
-            // A place's room is named for the place; its venue day's title is bookkeeping (step 5).
-            event_title: roomDisplayTitle(room) || room.event_title || room.eventTitle || room.title || room.name || 'Event chat',
-            // `memberCount` is what `GET /chat/groups` sends; never for a place's room (H5, D-19).
-            participant_count: roomMemberCount(room) ?? 0,
-            event_image: room.event?.coverImageUrl || room.event?.cover_image_url || room.coverImageUrl || room.cover_image_url || null,
-            last_message: preview.text,
-            last_message_time: preview.time,
-            // The sender's room pseudonym (`anonymous_name`), or null.
-            last_sender_name: room.lastMessage?.user?.name || undefined,
-            last_sender_is_me: !!room.lastMessage?.user?.id && room.lastMessage.user.id === user?.id,
-            unread_count: Number(room.unreadCount ?? room.unread_count) || 0,
-            is_checked_in: room.isCheckedIn === true,
-            room_state: roomStateFrom(room),
-          }
-        })
-        .filter((chat) => chat.chat_room_id)
-      // Each row carries your mute of it; the store is what the rows read.
-      for (const room of rooms) rememberRoomMute(String(room.id || room.chat_room_id || room.chatRoomId || ''), room.mute)
-
-      // Crew chats and open Blends come with page 1 (`rooms`); each carries your mute of it too.
-      const others = crewRoomsFrom(result.data)
-      for (const r of others) rememberRoomMute(r.id, r.mute)
-      if (loadId === undefined || latestLoadIdRef.current === loadId) {
-        setGroupChats(groupChatData)
-        setCrewRooms(others)
-      }
-      if (cacheKey) {
-        queryCache.set(cacheKey, groupChatData, GROUP_CHAT_CACHE_TTL)
-        queryCache.set(`${cacheKey}_rooms`, others, GROUP_CHAT_CACHE_TTL)
-      }
-      Logger.info('chat', `Loaded ${groupChatData.length} group chats`)
-      return true
-    } catch (error) {
-      Logger.error('chat', 'Error loading group chats', { error })
-      return false
-    }
-  }
-
-  const loadPersonalChats = async (loadId?: number, cacheKey?: string, force = false): Promise<boolean> => {
-    try {
-      const result = await apiClient.getConversations({ force })
-
-      if (loadId !== undefined && latestLoadIdRef.current !== loadId) return true
-
-      if (result.success && result.data) {
-        const conversations = result.data
-        const personalChatData: PersonalChat[] = conversations.map((conv: any) => {
-          const convId = String(conv.id || conv.conversation_id || '')
-          const preview = previewFromConversation(conv)
-          const otherUser = conv.otherUser || conv.other_user || {}
-          return {
-            conversation_id: convId,
-            /*
-             * Already the pseudonym when they have not revealed —
-             * `displayNameInConversation` on the server decides this and every
-             * other surface resolves through it. "Someone" rather than
-             * "Unknown" to match the server's own last resort; "Unknown" reads
-             * as a data error, which this is not.
-             */
-            other_user_name: otherUser?.name || otherUser?.display_name || 'Someone',
-            other_user_id: String(otherUser?.id || otherUser?.user_id || ''),
-            other_user_avatar: otherUser?.image || otherUser?.avatar || null,
-            last_message: preview.text,
-            last_message_time: preview.time,
-            last_message_from_me: !!conv.lastMessage?.senderId && conv.lastMessage.senderId === user?.id,
-            unread_count: (conv.unreadCount ?? conv.unread_count) || 0,
-            /*
-             * Absent means revealed, which looks like the wrong direction and
-             * is not.
-             *
-             * The gate is entirely server-side: `name` is already the pseudonym
-             * and `image` already `null` before a reveal, so this flag decides
-             * a *picture*, not a permission, and cannot leak either way.
-             *
-             * Defaulting to `false` would draw a generated disc over every
-             * accepted message request — conversations that never had a
-             * pseudonym and have shown real names since they existed
-             * (`mayShowRealName` returns `true` for them precisely so this does
-             * not happen). Failing "closed" here would mislabel real people as
-             * anonymous, which is the worse error.
-             */
-            from_match: conv.fromMatch === true,
-            they_revealed: conv.theyRevealed !== false,
-            reveal_requested: conv.revealRequested === true,
-          }
-        }).filter((conv: PersonalChat) => !!conv.conversation_id)
-
-        setPersonalChats(personalChatData)
-        syncUnreadCache(conversations)
-        if (cacheKey) queryCache.set(cacheKey, personalChatData, PERSONAL_CHAT_CACHE_TTL)
-        try {
-          const firstScreenUrls = personalChatData
-            .map((c) => c.other_user_avatar)
-            .filter((u): u is string => !!u)
-            .slice(0, 8)
-          if (firstScreenUrls.length > 0) {
-            preloadImages(firstScreenUrls, 'low')
-          }
-        } catch {}
-        return true
-      }
-      Logger.error('chat', 'Error fetching personal chats', { error: result.error })
-      return false
-    } catch (error) {
-      Logger.error('chat', 'Error loading personal chats', { error })
-      return false
-    }
-  }
-
-  /*
-   * Both lists, always.
-   *
-   * The tabbed version fetched one and left the other stale, which is why
-   * switching tabs used to show yesterday's preview for a second. With one
-   * list there is one throttle and one cache decision, and the two requests
-   * go out together.
-   */
-  const loadChats = async (force = false, refreshEvenIfCached = false) => {
-    if (!user) return
-
-    const perfStart = Date.now()
-    const userId = user.id
-    const groupCacheKey = `group_chats_${userId}`
-    const personalCacheKey = `personal_chats_${userId}`
-    const requestsCacheKey = `message_requests_${userId}`
-
-    const cachedGroupChats = force ? null : queryCache.get<GroupChat[]>(groupCacheKey)
-    const cachedPersonalChats = force ? null : queryCache.get<PersonalChat[]>(personalCacheKey)
-    const cachedRequests = force
-      ? null
-      : queryCache.get<{ incoming: MessageRequest[]; outgoing: MessageRequest[] }>(requestsCacheKey)
-
-    if (cachedGroupChats) setGroupChats(cachedGroupChats)
-    const cachedCrewRooms = force ? null : queryCache.get<CrewRoomRow[]>(`${groupCacheKey}_rooms`)
-    if (cachedCrewRooms) setCrewRooms(cachedCrewRooms)
-    if (cachedPersonalChats) setPersonalChats(cachedPersonalChats)
-    if (cachedRequests) setIncomingRequests(cachedRequests.incoming)
-
-    const hasCachedList = !!cachedGroupChats && !!cachedPersonalChats
-    const hasCachedRequests = !!cachedRequests
-    if (!force && (hasCachedList || hasCachedRequests)) {
-      setLoading(false)
-    }
-
-    const now = Date.now()
-    // Bypass throttle when the chat domain is dirty (e.g. user just sent a message
-    // and navigated back) so stale data is never shown after a known change.
-    const chatDirty = hasDirtyDomain(['chat'])
-    const shouldFetchList = force
-      || !hasCachedList
-      || chatDirty
-      || (refreshEvenIfCached && now - lastFetchRef.current.list > CHAT_BACKGROUND_REFRESH_THROTTLE_MS)
-    const shouldFetchRequests = force
-      || !hasCachedRequests
-      || (refreshEvenIfCached && now - lastFetchRef.current.requests > CHAT_BACKGROUND_REFRESH_THROTTLE_MS)
-
-    if (!shouldFetchList && !shouldFetchRequests) return
-
-    const loadId = ++latestLoadIdRef.current
-    try {
-      isLoadingRef.current = true
-      const hasRenderedData = rows.length > 0 || incomingRequests.length > 0 || hasCachedList || hasCachedRequests
-      if (!hasRenderedData && (force || (!hasCachedList && shouldFetchList))) {
-        setLoading(true)
-      }
-
-      if (shouldFetchList) {
-        // If queryCache was empty (e.g. invalidated after a send), also bypass apiClient's
-        // internal SWR response cache so we don't get stale data from it either.
-        const bypassApiCache = force || !hasCachedList
-        const [groupsOk, personalOk] = await Promise.all([
-          loadGroupChats(loadId, groupCacheKey, bypassApiCache),
-          loadPersonalChats(loadId, personalCacheKey, bypassApiCache),
-        ])
-        if (latestLoadIdRef.current === loadId) setListFailed(!(groupsOk && personalOk))
-        lastFetchRef.current.list = now
-      }
-      if (shouldFetchRequests) {
-        await loadMessageRequests(loadId, requestsCacheKey, force)
-        lastFetchRef.current.requests = now
-      }
-    } catch (error) {
-      Logger.error('chat', 'Error loading chats', { error })
-    } finally {
-      if (latestLoadIdRef.current === loadId) {
-        setLoading(false)
-        isLoadingRef.current = false
-      }
-      Logger.info('chat', 'loadChats timing', {
-        force,
-        refreshEvenIfCached,
-        durationMs: Date.now() - perfStart,
-        fetchedList: shouldFetchList,
-        fetchedRequests: shouldFetchRequests,
-      })
-    }
-  }
-
-  const onRefresh = useCallback(async () => {
-    if (isLoadingRef.current) return
-    setRefreshing(true)
-    setBoardRefreshKey((k) => k + 1)
-    await loadChats(true, true)
-    setRefreshing(false)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // Real-time private message updates via Socket.io
+  /* Rows enter once, 18 ms apart, as the list first lands (Flow 5 Banter annotation). */
+  const entered = useRef(false)
   useEffect(() => {
-    if (!user) return
-
-    Logger.info('chat', 'Setting up real-time message subscription')
-
-    const handleNewMessage: PrivateMessageCallback = (data) => {
-      Logger.debug('chat', 'New message received', { conversationId: data.conversationId })
-
-      setPersonalChats(prev => {
-        const idx = prev.findIndex(c => c.conversation_id === data.conversationId)
-
-        if (idx === -1) {
-          // New conversation - reload the list to get full details
-          loadPersonalChats(undefined, undefined, true)
-          return prev
-        }
-
-        const updated = [...prev]
-        const isFromMe = data.message.senderId === user.id
-        const nextPreview = previewFromMessage(data.message) || 'New message'
-        updated[idx] = {
-          ...updated[idx],
-          last_message: nextPreview,
-          last_message_time: data.message.createdAt,
-          last_message_from_me: isFromMe,
-          // Only increment unread if message is from other user
-          unread_count: isFromMe ? updated[idx].unread_count : updated[idx].unread_count + 1,
-        }
-        return updated
-      })
-    }
-
-    const unsubscribe = subscribeToUserNotifications(user.id, handleNewMessage)
-
-    return () => {
-      Logger.debug('chat', 'Cleaning up message subscription')
-      unsubscribe()
-    }
-  }, [user])
-
-  // Real-time group chat updates — subscribe to loaded group chat rooms.
-  // Uses incremental delta-subscription to avoid a teardown gap when the list changes.
-  useEffect(() => {
-    if (!user) return
-
-    const handleGroupMessage: ChatMessageCallback = (data) => {
-      Logger.debug('chat', 'Group message received on chat tab', { chatGroupId: data.chatGroupId })
-
-      setGroupChats(prev => {
-        const idx = prev.findIndex(c => c.chat_room_id === data.chatGroupId)
-        if (idx === -1) return prev
-
-        const updated = [...prev]
-        const isFromMe = data.message.userId === user.id
-        // Someone else's message in a room you are not reading is unread.
-        const bump = !isFromMe && openRoomRef.current !== data.chatGroupId
-        updated[idx] = {
-          ...updated[idx],
-          last_message: data.message.content,
-          last_message_time: data.message.createdAt,
-          last_sender_name: data.message.userName,
-          last_sender_is_me: isFromMe,
-          unread_count: bump ? updated[idx].unread_count + 1 : updated[idx].unread_count,
-        }
-        return updated
-      })
-    }
-
-    const newIds = new Set(groupChats.map(c => c.chat_room_id))
-    const oldIds = new Set(groupChatUnsubsRef.current.keys())
-
-    for (const id of oldIds) {
-      if (!newIds.has(id)) {
-        groupChatUnsubsRef.current.get(id)?.()
-        groupChatUnsubsRef.current.delete(id)
-      }
-    }
-
-    for (const id of newIds) {
-      if (!oldIds.has(id)) {
-        groupChatUnsubsRef.current.set(id, subscribeToChatMessage(id, handleGroupMessage))
-      }
-    }
-  }, [user, groupChats])
-
-  // Cleanup all group chat subscriptions on unmount
-  useEffect(() => {
-    const subs = groupChatUnsubsRef.current
-    return () => {
-      subs.forEach(unsub => unsub())
-      subs.clear()
-    }
-  }, [])
-
-  // Instant local updates from chat screens — fires the moment a message is sent,
-  // so the list is already up-to-date before the user finishes swiping back.
-  useEffect(() => {
-    const unsub = subscribeChatListUpdates((update) => {
-      if (update.type === 'personal' && update.conversationId) {
-        setPersonalChats(prev => {
-          const idx = prev.findIndex(c => c.conversation_id === update.conversationId)
-          if (idx === -1) return prev
-          const updated = [...prev]
-          updated[idx] = {
-            ...updated[idx],
-            last_message: update.lastMessage,
-            last_message_time: update.lastMessageTime,
-            // Only ever emitted by this device's own sends.
-            last_message_from_me: true,
-          }
-          return updated
-        })
-      } else if (update.type === 'group' && update.chatGroupId) {
-        setGroupChats(prev => {
-          const idx = prev.findIndex(c => c.chat_room_id === update.chatGroupId)
-          if (idx === -1) return prev
-          const updated = [...prev]
-          updated[idx] = {
-            ...updated[idx],
-            last_message: update.lastMessage,
-            last_message_time: update.lastMessageTime,
-            last_sender_name: update.senderName,
-            last_sender_is_me: true,
-          }
-          return updated
-        })
-      }
-    })
-
-    return unsub
-  }, [])
-
-  const socketStatus = useLiveSync({
-    enabled: !!user && !authLoading,
-    // Background sync should not force blocking skeleton UI.
-    onSync: () => {
-      // A board request arrives by push and live sync too, not only on focus.
-      setBoardRefreshKey((k) => k + 1)
-      return loadChats(false, true)
-    },
-    domains: ['chat'],
-    connectedIntervalMs: 20000,
-    disconnectedIntervalMs: 8000,
-    maxDisconnectedIntervalMs: 30000,
+    if (!inbox.loading) entered.current = true
   })
+  const entering = (index: number) =>
+    entered.current || reduceMotion
+      ? undefined
+      : FadeInUp.duration(DURATION.base)
+          .delay(Math.min(index * STAGGER.tight, STAGGER.windowMax))
+          .easing(Easing.bezier(...EASING.entrance))
 
-  const respondToRequest = useCallback(async (request: MessageRequest, action: 'accept' | 'decline') => {
-    const requestId = request.request_id
-    if (requestPending[requestId]) return
-    setRequestPending((prev) => ({ ...prev, [requestId]: true }))
-
-    /*
-     * The card leaves now and the request goes out now — together. It used to
-     * wait for a 220ms fade before sending, so every accept was a fifth of a
-     * second slower than it had to be. The fade is the row's `exiting`.
-     */
-    setIncomingRequests((prev) => prev.filter((r) => r.request_id !== requestId))
-    try {
-      const result = await apiClient.respondToMessageRequest(requestId, action)
-      if (!result.success) {
-        Logger.error('chat', `Failed to ${action} request`, { requestId, error: result.error })
-        showToast(userMessage(result, `Couldn't ${action} that request. Try again.`), 'error')
-        await loadChats(true, true)
-        return
-      }
-
-      Logger.info('chat', `Message request ${action}ed`, { requestId, conversationId: result.data?.conversationId })
-      if (action === 'accept' && result.data?.conversationId) {
-        router.push({
-          pathname: '/private-chat/[conversationId]',
-          params: { conversationId: result.data.conversationId } as any,
-        })
-      }
-
-      // `force`: the cached requests list still holds the card that was just
-      // animated away, and the un-forced load put it straight back on screen
-      // until a pull-to-refresh (SCRUM-165).
-      await loadChats(true, true)
-    } catch (e) {
-      Logger.error('chat', `Error ${action}ing request`, { requestId, error: e })
-      showToast(`Couldn't ${action} that request. Try again.`, 'error')
-      await loadChats(true, true)
-    } finally {
-      setRequestPending((prev) => {
-        const next = { ...prev }
-        delete next[requestId]
-        return next
-      })
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requestPending, showToast])
-
-  /*
-   * "More" on a request: Block, or Report.
-   *
-   * Block goes through the request itself (`respond` with `block`), which is
-   * what writes the block and closes the request in one step. Report names
-   * the sender, and then declines the request, so a report does not leave the
-   * thing reported sitting in the inbox waiting for an answer.
-   */
-  const openRequestMore = (request: MessageRequest) => {
-    const name = request.sender_name || 'Someone'
-    const senderId = request.sender_id
-    showSheet({
-      kind: 'actions',
-      title: name,
-      message: 'Blocking stops them asking again and hides you from each other. A report goes to our team, and they are not told who sent it.',
-      actions: [
-        {
-          label: 'Block',
-          variant: 'destructive',
-          run: async () => {
-            const result = await apiClient.respondToMessageRequest(request.request_id, 'block')
-            if (!result.success) {
-              return { ok: false, error: userMessage(result, "Couldn't block them. Try again.") }
-            }
-            setIncomingRequests((prev) => prev.filter((r) => r.request_id !== request.request_id))
-            void loadChats(true, true)
-            return { ok: true, toast: `${name} is blocked` }
-          },
-        },
-        ...(senderId
-          ? [{
-              label: 'Report',
-              next: () => userReportStep(name, senderId, () => void respondToRequest(request, 'decline')),
-            }]
-          : []),
-        { label: 'Cancel', cancel: true as const },
-      ],
-    })
-  }
-
-  useEffect(() => {
-    // loadChats paints the cached lists before its first await, which is the
-    // synchronous setState flagged here. Moving that into render means splitting
-    // loadChats across its seven callers and changing the inbox's first frame.
-    // That is a change to the inbox, not a lint fix.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (!authLoading && user) loadChats(false, false)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, authLoading])
-
-  const renderItem = useCallback(
-    ({ item }: { item: InboxItem }) =>
-      item.type === 'heading' ? (
-        <View style={item.first ? undefined : styles.bucketGap}>
-          <BanterBucketHeading
+  const renderItem = ({ item }: { item: Item }) => {
+    if (item.type === 'heading') {
+      return (
+        <View style={styles.heading}>
+          <SectionHeader
             title={item.title}
-            action={item.first && hasUnread ? 'Mark all read' : undefined}
-            onAction={item.first && hasUnread ? handleMarkAllRead : undefined}
+            action={item.markAll && hasUnread ? { label: 'Mark all read', onPress: pressGuard(() => void inbox.handleMarkAllRead()) } : undefined}
+            testID={`banter-${item.title.toLowerCase().replace(' ', '-')}`}
           />
         </View>
-      ) : (
-        <BanterConversation item={item} onPress={item.open} />
-      ),
-    [hasUnread, handleMarkAllRead]
-  )
+      )
+    }
+    const { row } = item
+    const label = rowLabel(row.title, row.line, row.time, row.unread, row.muted)
+    // In a SwipeRow the row is drawn and the SwipeRow is the element (its actions in the rotor).
+    const body = (
+      <BanterRow
+        face={row.face}
+        title={row.title}
+        line={row.line}
+        time={row.time}
+        unread={row.unread}
+        muted={row.muted}
+        onPress={row.swipe.length ? undefined : row.open}
+        accessibilityLabel={row.swipe.length ? undefined : label}
+        testID={`banter-row-${row.key}`}
+      />
+    )
+    return (
+      <Reanimated.View entering={entering(item.index)} layout={reduceMotion ? undefined : REORDER}>
+        {row.swipe.length ? (
+          <SwipeRow
+            actions={row.swipe}
+            onPress={pressGuard(row.open)}
+            open={openSwipe === row.key}
+            onOpenChange={(open) => setOpenSwipe(open ? row.key : null)}
+            accessibilityLabel={label}
+            testID={`banter-swipe-${row.key}`}
+          >
+            {body}
+          </SwipeRow>
+        ) : (
+          body
+        )}
+      </Reanimated.View>
+    )
+  }
+
+  const headerHeight = banterHeaderHeight(insets.top)
+  const listTop = headerHeight + (searching ? SPACE.sm + SEARCH_FIELD + SEARCH_GAP : 0) + SPACE.lg
+  const invites = crews.invites
+  const hasHeaderContent = liveRooms.length + blendRooms.length + incomingRequests.length + invites.length + boardCount > 0
 
   const header = (
-    <View style={styles.header}>
-      <BanterSearch value={query} onChangeText={setQuery} />
+    <View style={styles.sections}>
+      {inbox.listFailed && items.length ? <Text style={[font('meta', bold), styles.secondary]}>Some chats couldn’t load. Pull down to try again.</Text> : null}
 
-      {listFailed && rows.length > 0 ? (
-        <Text style={styles.partialFailure} maxFontSizeMultiplier={1.4}>
-          Some chats couldn&apos;t load. Pull down to try again.
-        </Text>
-      ) : null}
-
-      {liveRooms.length > 0 || blendRooms.length > 0 ? (
+      {!trimmed && (liveRooms.length || blendRooms.length) ? (
         <View style={styles.section}>
-          <BanterHeading title="Live now" />
-          <View style={styles.liveList}>
-            {liveRooms.map((c) => (
-              <BanterLiveRoom
-                key={c.chat_room_id}
-                title={c.event_title}
-                coverUrl={c.event_image}
-                memberCount={c.participant_count}
-                muted={roomMuted(c.chat_room_id)}
-                onPress={() => handleGroupChatPress(c)}
-              />
-            ))}
-            {blendRooms.map((r) => (
-              <BanterLiveRoom
+          <SectionHeader title="Live now" live testID="banter-live" />
+          {liveRooms.map((c) => (
+            <LiveHero
+              key={c.chat_room_id}
+              testID={`banter-live-${c.chat_room_id}`}
+              title={c.event_title}
+              coverUrl={c.event_image}
+              count={c.participant_count}
+              here={c.is_place}
+              unread={c.unread_count}
+              muted={roomMuted(c.chat_room_id)}
+              line={
+                c.room_state === 'locked'
+                  ? 'Locked by the organiser · read only'
+                  : c.last_message && c.last_message !== SPONSORED
+                    ? previewWithSender(c.last_message, { fromMe: c.last_sender_is_me, name: c.last_sender_name })
+                    : null
+              }
+              onPress={() => openRoom(c)}
+            />
+          ))}
+          {blendRooms.map((r) => {
+            const sides = crews.blendFor(r.id)
+            return (
+              <BlendLiveCard
                 key={r.id}
-                title={crewRoomTitle(r)}
-                muted={roomMuted(r.id)}
+                title={sides?.theirName ? `Blend with ${sides.theirName}` : crewRoomTitle(r)}
+                seeds={[sides?.mineSeed ?? null, sides?.theirSeed ?? null]}
+                closesAt={sides?.closesAt ?? r.closesAt}
+                unread={r.unreadCount}
                 onPress={() => openCrewRoom(r)}
               />
-            ))}
-          </View>
+            )
+          })}
         </View>
       ) : null}
 
-      {incomingRequests.length > 0 ? (
+      {!trimmed && (incomingRequests.length || invites.length) ? (
         <View style={styles.section}>
-          <BanterHeading title="Requests" detail={String(incomingRequests.length)} />
-          <View>
-            {incomingRequests.map((r) => (
-              /*
-               * Fades out while the requests below close the gap, rather than
-               * fading to an empty slot that then snaps shut. No blur or
-               * shadow in the row, so the layout transition is cheap.
-               */
-              <Reanimated.View
-                key={r.request_id}
-                exiting={reduceMotion ? undefined : REQUEST_OUT}
-                layout={reduceMotion ? undefined : REQUEST_REFLOW}
-              >
-                <BanterRequest
-                  name={r.sender_name || 'Someone'}
-                  avatarUrl={r.sender_avatar}
-                  timeLabel={inboxTimeLabel(r.created_at)}
-                  message={displayPreview(r.initial_message ?? undefined, 'Wants to message you')}
-                  pending={requestPending[r.request_id]}
-                  onAccept={() => respondToRequest(r, 'accept')}
-                  onDecline={() => respondToRequest(r, 'decline')}
-                  onOpenProfile={
-                    r.sender_id
-                      ? () => router.push({ pathname: '/user/[id]', params: { id: String(r.sender_id) } } as never)
-                      : undefined
-                  }
-                  onMore={() => openRequestMore(r)}
-                />
-              </Reanimated.View>
-            ))}
-          </View>
+          <SectionHeader title="Requests" count={incomingRequests.length + invites.length} testID="banter-requests" />
+          {invites.map((invite) => (
+            <Reanimated.View key={`i:${invite.crewId}`} exiting={reduceMotion ? undefined : FadeOut.duration(DURATION.quick)} layout={reduceMotion ? undefined : REQUEST_REFLOW}>
+              <RequestCard
+                testID={`banter-invite-${invite.crewId}`}
+                face={<RequestFace emblemSeed={invite.emblemSeed} />}
+                name={invite.name}
+                note={`${invite.invitedBy} invited you to the crew`}
+                time={inboxTimeLabel(invite.invitedAt)}
+                accept="Join"
+                // Join is the consent screen (Flow 10 · 10.3): it reveals you to the crew, so it asks there.
+                onAccept={() => {
+                  H.primary()
+                  router.push('/crews')
+                }}
+                onDecline={() => crews.decline(invite)}
+              />
+            </Reanimated.View>
+          ))}
+          {incomingRequests.map((r: MessageRequest) => (
+            <Reanimated.View key={r.request_id} exiting={reduceMotion ? undefined : FadeOut.duration(DURATION.quick)} layout={reduceMotion ? undefined : REQUEST_REFLOW}>
+              <RequestCard
+                testID={`banter-request-${r.request_id}`}
+                face={<RequestFace photo={r.sender_avatar} pseudonym={r.sender_name ?? undefined} />}
+                name={r.sender_name || 'Someone'}
+                // The request's note, verbatim (ROUND3 C11).
+                note={r.initial_message?.trim() || 'Wants to message you'}
+                time={inboxTimeLabel(r.created_at)}
+                pending={inbox.requestPending[r.request_id]}
+                onAccept={() => void inbox.respondToRequest(r, 'accept')}
+                onDecline={() => void inbox.respondToRequest(r, 'decline')}
+                onMore={() => inbox.openRequestMore(r)}
+                onOpen={r.sender_id ? () => router.push({ pathname: '/user/[id]', params: { id: String(r.sender_id) } } as never) : undefined}
+              />
+            </Reanimated.View>
+          ))}
         </View>
       ) : null}
 
-      {/*
-        Beside message requests: the same object, somebody asking to start
-        talking. Behind BOARD_ENABLED until the board's safety half ships.
-      */}
-      {BOARD_ENABLED ? (
-        <BoardRequestsSection refreshKey={boardRefreshKey} onCount={setBoardRequestCount} />
-      ) : null}
+      {/* Beside message requests: somebody asking to start talking. Behind BOARD_ENABLED until the board's safety half ships. */}
+      {BOARD_ENABLED && !trimmed ? <BoardRequestsSection refreshKey={inbox.boardRefreshKey} onCount={setBoardCount} /> : null}
     </View>
   )
 
-  /*
-   * Live rooms or requests with nothing else is not an empty inbox, so it does
-   * not say "No conversations yet" under them.
-   */
-  const hasHeaderContent = liveRooms.length > 0 || blendRooms.length > 0 || incomingRequests.length > 0 || boardRequestCount > 0
-
   return (
-    <View style={styles.container}>
-      <PulseTopBar
-        title="The Banter"
-        actions={<NotificationBell />}
-      />
-
-      {/*
-        Just under the bar, where the event chat puts it. At the foot of the
-        column it sat behind the absolutely positioned tab bar.
-      */}
-      <RealtimeStatusBanner
-        status={socketStatus}
-        style={{ ...styles.statusBanner, top: insets.top + TOP_BAR_HEIGHT + SPACE.sm }}
-      />
-
+    <View style={styles.screen}>
+      {/* Every press inside the list, header cards included, goes through one guard. */}
+      <BanterPressGuard.Provider value={pressGuard}>
       <FlatList
         ref={listRef}
-        data={listItems}
-        keyExtractor={(item) => item.id}
+        testID="banter-list"
+        data={inbox.loading && !items.length ? [] : shown}
+        keyExtractor={(item) => item.key}
         renderItem={renderItem}
         ListHeaderComponent={header}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
+        // #27 / C12, in a real touch's order (components/banter/hold.ts).
+        onTouchStart={() => {
+          touchStartAt.current = Date.now()
+          step('touchStart')
+        }}
+        onScrollBeginDrag={() => step('dragBegin')}
+        onScrollEndDrag={() => step('dragEnd')}
+        onTouchEnd={() => step('touchEnd')}
+        // iOS can withhold the bubbled touchEnd while a row's Pressable has the touch; the capture phase still sees the lift.
+        onTouchEndCapture={() => step('touchEnd')}
+        onTouchCancel={() => step('touchEnd')}
+        onMomentumScrollBegin={() => step('momentumBegin')}
+        onMomentumScrollEnd={() => step('momentumEnd')}
         ListEmptyComponent={
-          loading ? (
-            <InboxSkeleton />
-          ) : trimmedQuery ? (
-            <Text style={styles.noMatches} maxFontSizeMultiplier={1.4}>
-              No chats match “{query.trim()}”
-            </Text>
-          ) : listFailed ? (
-            <InboxLoadFailed onRetry={() => void loadChats(true, true)} />
+          inbox.loading ? (
+            <BanterSkeleton />
+          ) : trimmed ? (
+            <StateScreen
+              icon="search"
+              title={`No chats match “${query.trim()}”`}
+              actions={[{ label: 'Clear search', kind: 'secondary', onPress: () => setQuery('') }]}
+              testID="banter-no-match"
+            />
+          ) : inbox.listFailed ? (
+            <StateScreen
+              icon="cloud-off"
+              title="Couldn’t load your chats"
+              body="Check your connection and try again."
+              actions={[{ label: 'Try again', onPress: () => void inbox.loadChats(true, true) }]}
+              testID="banter-failed"
+            />
           ) : hasHeaderContent ? null : (
-            <EmptyInbox />
+            // Live rooms or requests with nothing else is not an empty inbox.
+            <StateScreen
+              icon="message-circle"
+              title="No conversations yet"
+              body="Blend in to an event and its room appears here — or message someone you met there."
+              actions={[{ label: 'Explore events', onPress: () => router.push('/(tabs)/events' as never) }]}
+              testID="banter-empty"
+            />
           )
         }
-        contentContainerStyle={[
-          styles.content,
-          {
-            paddingTop: insets.top + TOP_BAR_HEIGHT + SPACE.xxl,
-            paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + SPACE.xl,
-          },
-        ]}
+        contentContainerStyle={[styles.content, { paddingTop: listTop, paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + SPACE.xl }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={EMBER.textSecondary}
-            progressViewOffset={insets.top + TOP_BAR_HEIGHT}
+            refreshing={inbox.refreshing}
+            onRefresh={() => {
+              H.threshold()
+              void inbox.onRefresh()
+            }}
+            tintColor={COLOR.textSecondary}
+            progressViewOffset={listTop}
           />
         }
       />
-    </View>
-  )
-}
+      </BanterPressGuard.Provider>
 
-/*
- * Four rows at the real row's geometry — people round, rooms square — so the
- * list does not jump or change shape when it lands.
- */
-const SKELETON_ROWS: ('person' | 'room')[] = ['person', 'room', 'person', 'person']
-
-function InboxSkeleton() {
-  return (
-    <View>
-      {SKELETON_ROWS.map((kind, i) => (
-        <View key={i} style={styles.skeletonRow}>
-          {kind === 'room' ? (
-            <SkeletonBlock width={ROW_AVATAR} height={ROW_AVATAR} borderRadius={EMBER_RADIUS.sm} />
-          ) : (
-            <SkeletonCircle width={ROW_AVATAR} />
-          )}
-          <View style={styles.skeletonBody}>
-            <SkeletonLine width="45%" />
-            <SkeletonLine width="80%" />
-          </View>
+      <BanterHeader
+        bell={<NotificationBell />}
+        searching={searching}
+        onSearch={() => {
+          setSearching((s) => !s)
+          setQuery('')
+        }}
+        canMarkAll={hasUnread}
+        onMarkAll={() => void inbox.handleMarkAllRead()}
+      />
+      {searching ? (
+        <View style={[styles.search, { top: headerHeight + SPACE.sm }]}>
+          <SearchField value={query} onChangeText={setQuery} placeholder="Search conversations" autoFocus testID="banter-search" />
         </View>
-      ))}
+      ) : null}
+      <RealtimeStatusBanner status={inbox.socketStatus} style={{ ...styles.banner, top: listTop - SPACE.sm }} />
+      {newAbove ? (
+        <NewAbovePill
+          top={listTop}
+          onPress={() => {
+            step('release')
+            listRef.current?.scrollToOffset({ offset: 0, animated: true })
+          }}
+        />
+      ) : null}
+
+      <MuteSheet chatGroupId={muteFor} onClose={() => setMuteFor(null)} />
+      <LeaveRoomSheet chatGroupId={leaveFor} onClose={() => setLeaveFor(null)} onLeft={() => setOpenSwipe(null)} />
     </View>
   )
 }
 
-function InboxLoadFailed({ onRetry }: { onRetry: () => void }) {
-  return <LoadError title="Couldn't load your chats" onRetry={onRetry} />
-}
-
-function EmptyInbox() {
-  return (
-    <LoadState
-      icon="chatbubbles-outline"
-      title="No conversations yet"
-      message="Blend in to an event and its room appears here — or message someone you met there."
-      action={{
-        label: 'Explore events',
-        onPress: () => router.push('/(tabs)/events' as any),
-        accessibilityHint: 'Opens the Pulse',
-      }}
-    />
-  )
-}
-
-const REQUEST_OUT = FadeOut.duration(MOTION_DURATION.fast)
-const REQUEST_REFLOW = LinearTransition.duration(MOTION_DURATION.normal).easing(Easing.bezier(0.77, 0, 0.175, 1))
+/** The search field's height (SearchField: a 48 pt capsule). */
+const SEARCH_FIELD = 48
+const REQUEST_REFLOW = LinearTransition.duration(DURATION.base).easing(Easing.bezier(...EASING.standard))
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: EMBER.bg },
-  pressed: { opacity: OPACITY.pressed },
-  content: { paddingHorizontal: BANTER_PADDING_HORIZONTAL },
-  header: { gap: BANTER_SECTION_GAP, marginBottom: BANTER_SECTION_GAP },
-  // A heading and its content are 16 apart, not 32.
-  section: { gap: SPACE.lg },
-  liveList: { gap: SPACE.md },
-  /*
-   * Between one day's rows and the next heading. The rows carry their own
-   * `SPACE.md` padding, so the first heading needs no margin under it and the
-   * next one needs only this above.
-   */
-  bucketGap: { marginTop: SPACE.xl },
-  // Above the list and level with the top bar's own zIndex.
-  statusBanner: {
-    position: 'absolute',
-    left: BANTER_PADDING_HORIZONTAL,
-    right: BANTER_PADDING_HORIZONTAL,
-    zIndex: 10,
-  },
-  partialFailure: TYPE.meta,
-  noMatches: {
-    ...TYPE.body,
-    color: EMBER.textSecondary,
-    textAlign: 'center',
-    paddingVertical: SPACE.xxl,
-  },
-
-  skeletonRow: { flexDirection: 'row', gap: SPACE.lg, paddingVertical: SPACE.md, alignItems: 'center' },
-  skeletonBody: { flex: 1, gap: SPACE.sm },
-
+  screen: { flex: 1, backgroundColor: COLOR.ink },
+  content: { paddingHorizontal: SPACE.gutter },
+  sections: { gap: SPACE.xl, marginBottom: SPACE.xl },
+  section: { gap: SPACE.md },
+  heading: { paddingTop: SPACE.lg, paddingBottom: SPACE.sm },
+  search: { position: 'absolute', left: SPACE.lg, right: SPACE.lg, zIndex: 2 },
+  banner: { position: 'absolute', left: SPACE.gutter, right: SPACE.gutter, zIndex: 2 },
+  secondary: { color: COLOR.textSecondary },
 })
-
 
 /*
  * Wrapped so `lib/perf.tsx` can report what this screen costs to render.

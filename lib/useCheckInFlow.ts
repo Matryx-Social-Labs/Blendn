@@ -1,40 +1,34 @@
 import { router } from 'expo-router'
-import { useState } from 'react'
-import { useReducedMotion } from 'react-native-reanimated'
+import { useEffect, useRef, useState } from 'react'
 import { apiClient } from './apiClient'
-import { CONFETTI_PEAK_MS } from './confetti'
-import { askIntentRoute, revealOffer, submitCheckIn, type CheckInOutcome } from './checkIn'
-import { isExpectedRefusal } from './checkInRefusal'
-import { getCurrentLocation as getLocationFix, type CheckInLocation, type ShowTray } from './locationFix'
+import { afterTrayDismissed } from '../components/ActionTray'
+import { askIntentRoute, revealOffer, submitCheckIn, untilIntentAnswered, type CheckInOutcome } from './checkIn'
+import { isExpectedRefusal, type CheckInRefusal } from './checkInRefusal'
+import { markCheckIn } from './checkInTiming'
+import { H } from './haptics'
+import { getCurrentLocation as getLocationFix, warmLocationFix, type CheckInLocation, type ShowTray, type TrayButton } from './locationFix'
 import { Logger } from './logger'
-import { NotificationHelpers } from './notifications'
 import { useAuth } from './useAuth'
-import { useInteractionFeedback } from './useInteractionFeedback'
 
 /**
- * The event screen's check-in, as a hook, so a second door runs it unchanged.
+ * The check-in, as a hook, so every door runs it unchanged: the event
+ * screen's "Blend in" and the Blend'n room's hold.
  *
  * `lib/checkIn.ts` holds what is the same wherever the button is: the request
- * and how its answer is read. This is the layer above it that was still
- * written inline in `EventDetailScreen` — the rules, the position, the trays
- * for each answer, the haptics, the reveal offer and "Why do you go out?" —
- * lifted out whole for the Blend'n room's hold-to-check-in, which must say
- * exactly what the event screen says. The trays are still the caller's own
- * (`showTray` / `closeTray`); only what they say lives here.
+ * and how its answer is read. This is the layer above it — the position, the
+ * trays for each answer, the pour, the reveal offer and "Why do you go out?" —
+ * so both doors say exactly the same thing. The trays and the pour are still
+ * the caller's to draw (`showTray` / `closeTray`, `<MomentPour>`); only what
+ * they say, and when, lives here.
+ *
+ * No rules tray before it and no "Checked in" tray after (the owner's ask,
+ * docs/redesign/SCREENS.md Flow 4): the press or the hold is the consent. A
+ * fresh check-in goes in Flow 4's order (Tonight #12–#14, motion #9): the
+ * pour, then the reveal offer and "Why do you go out?" if the server asks,
+ * then the room. Nothing navigates while any of it is still on screen.
  */
 
-const CHECKIN_RULES_TEXT = [
-  'Before you check in, please confirm:',
-  '1. You are physically at the event venue.',
-  '2. Location permission is enabled and accurate.',
-  '3. Fake/spoofed check-ins are not allowed.',
-  '4. One active check-in per event/account.',
-  '5. Follow venue rules and Blendn community guidelines.',
-  '6. Harassment, hate speech, or unsafe behavior is prohibited.',
-  '7. Violations can lead to check-in revocation or account restrictions.',
-].join('\n')
-
-export type CheckInFlowResult = 'checkedIn' | 'refused' | 'cancelled' | 'failed'
+export type CheckInFlowResult = 'checkedIn' | 'refused' | 'failed'
 
 /** A check-in that left the user inside: a fresh one, or one they already had. */
 export type CheckedInOutcome =
@@ -43,8 +37,6 @@ export type CheckedInOutcome =
 
 export type UseCheckInFlowOptions = {
   eventId: string
-  /** For the check-in notification; "Event" when not known yet. */
-  eventTitle?: string | null
   showTray: ShowTray
   closeTray: () => void
   /**
@@ -54,77 +46,127 @@ export type UseCheckInFlowOptions = {
   onCheckedIn?: (outcome: CheckedInOutcome) => void
   /** "Open Maps" on a refusal a map can fix. Without it the button only closes. */
   onOpenMaps?: () => void
-  /** "Go to Chat" on the success tray (`afterSuccess: 'tray'` only). */
-  onOpenChat?: () => void | Promise<void>
+  /**
+   * Into the room, last, once the pour and the questions are done: the event
+   * screen pushes its chat; the Blend'n overlay settles once its Room is there.
+   */
+  onEnterRoom?: () => void | Promise<void>
   /** The fix the check-in was sent from, before it is sent. */
   onLocated?: (location: CheckInLocation) => void
-  /**
-   * `'tray'` (default) ends a check-in with "Checked in / Go to Chat", as the
-   * event screen always has. `'none'` skips that one tray, for a screen that
-   * moves straight into the room — the reveal offer, "Why do you go out?" and
-   * the notification still happen, because they are about the user, not the
-   * screen.
-   */
-  afterSuccess?: 'tray' | 'none'
 }
 
 export function useCheckInFlow({
   eventId,
-  eventTitle,
   showTray,
   closeTray,
   onCheckedIn,
   onOpenMaps,
-  onOpenChat,
+  onEnterRoom,
   onLocated,
-  afterSuccess = 'tray',
 }: UseCheckInFlowOptions) {
   const { user } = useAuth()
-  const feedback = useInteractionFeedback()
-  const reduceMotion = useReducedMotion()
+  // The pass is up for this door: start the fix now, so the hold finds one waiting.
+  useEffect(() => {
+    if (eventId) void warmLocationFix()
+  }, [eventId])
+  /** The flow is running: from the press until the room is entered or the door said no. */
   const [checkingIn, setCheckingIn] = useState(false)
   /**
-   * Counts fresh check-ins, for `<ConfettiBurst trigger={celebrations} />`.
-   * It bumps when the server says yes, at the same moment as the success
-   * haptic. "You were already in" doesn't count: that isn't news.
+   * The server said yes and the room isn't on screen yet: the pass reads
+   * "You're in" (Flow 4 delta R2-D1 "success"), never a re-armed hold.
+   * `asks`: a question (the reveal offer, the intent) comes before the room.
    */
-  const [celebrations, setCelebrations] = useState(0)
+  const [arrival, setArrival] = useState<{ asks: boolean } | null>(null)
+  /**
+   * Counts fresh check-ins, for `<MomentPour key={pours} onDone={pourDone} />`
+   * once it is above 0. It bumps when the server says yes, and the pour plays
+   * the success haptic itself, so the check-in plays none (§10). "You were
+   * already in" doesn't count: that isn't news.
+   */
+  const [pours, setPours] = useState(0)
+  /** Settles the running check-in's wait for its pour to hand off. */
+  const pourHandedOff = useRef<(() => void) | null>(null)
+  const pourDone = () => {
+    pourHandedOff.current?.()
+    pourHandedOff.current = null
+  }
+  /** The reveal offer's answer, while it is open. */
+  const revealAnswer = useRef<((yes: boolean) => void) | null>(null)
+  /**
+   * A location tray or the server's timeout is up, and the hold stays full
+   * under it (Flow 4 Tonight #15, #23–#26: "Your hold still counts") until it
+   * closes; then the pass drains. A refusal drains at once (#16–#22).
+   */
+  const trayHolds = useRef(false)
+  const releaseHold = () => {
+    if (!trayHolds.current) return
+    trayHolds.current = false
+    setCheckingIn(false)
+  }
+  const closeTrayAndRelease = () => {
+    closeTray()
+    releaseHold()
+  }
+  /** The tray's own close (its backdrop): the caller's `ActionTray onClose`, so an open offer counts as "no". */
+  const dismissTray = () => {
+    revealAnswer.current?.(false)
+    revealAnswer.current = null
+    closeTrayAndRelease()
+  }
 
-  // "Try Again" on a weak fix runs the check-in again; a fix alone went nowhere (step 5 review, H4).
-  const getCurrentLocation = () => getLocationFix({ showTray, closeTray, onRetry: () => void start({ skipRules: true }) })
+  // "Try again" on a weak or timed-out fix runs the check-in again; a fix alone went nowhere (step 5 review, H4).
+  const getCurrentLocation = () => getLocationFix({ showTray, closeTray: closeTrayAndRelease, onRetry: () => void start() })
 
   /**
-   * Run the check-in. Without `skipRules` the rules tray comes first, and the
-   * promise settles on its answer: `'cancelled'`, or the check-in's own result
-   * after "I Agree". A tray dismissed by its backdrop never answers, so render
-   * from `checkingIn`, not from this promise being pending.
+   * A refusal sheet's actions (Flow 4 Tonight #16–#22): Open Maps (strong) and
+   * Close where a map can fix it; Try again (primary) and Close for a failure
+   * on our side; otherwise one Close.
    */
-  const start = async (opts?: { skipRules?: boolean }): Promise<CheckInFlowResult> => {
-    if (!opts?.skipRules) {
-      return new Promise<CheckInFlowResult>((resolve) => {
-        showTray('Rules and regulations', CHECKIN_RULES_TEXT, [
-          {
-            label: 'Cancel',
-            onPress: () => {
-              closeTray()
-              resolve('cancelled')
-            },
+  const refusalButtons = (refusal: CheckInRefusal, errorCode: string | undefined): TrayButton[] => {
+    const close = { label: 'Close', onPress: closeTray }
+    if (refusal.offerDirections) {
+      return [
+        { ...close, kind: 'tertiary' },
+        {
+          label: 'Open Maps',
+          variant: 'primary',
+          kind: 'strong',
+          onPress: () => {
+            closeTray()
+            onOpenMaps?.()
           },
-          {
-            label: "I Agree, Continue",
-            variant: 'primary',
-            onPress: () => {
-              closeTray()
-              start({ skipRules: true }).then(resolve)
-            },
-          },
-        ])
-      })
+        },
+      ]
     }
+    if (!isExpectedRefusal(errorCode)) {
+      return [
+        { ...close, kind: 'tertiary' },
+        { label: 'Try again', variant: 'primary', kind: 'primary', onPress: () => (closeTray(), void start()) },
+      ]
+    }
+    return [{ ...close, kind: 'secondary' }]
+  }
 
+  /** One check-in at a time: a second hold (or activation) while one runs is ignored, not sent. */
+  const inFlight = useRef(false)
+
+  /** Run the check-in: straight to the position and the request, no tray first. */
+  const start = async (): Promise<CheckInFlowResult> => {
+    if (inFlight.current) return 'failed'
+    inFlight.current = true
+    try {
+      return await run()
+    } finally {
+      inFlight.current = false
+    }
+  }
+
+  const run = async (): Promise<CheckInFlowResult> => {
+    trayHolds.current = false
     setCheckingIn(true)
 
     try {
+      markCheckIn('commit')
       Logger.journey('checkin', 'detail:start', { eventId })
       if (!user) {
         Logger.journey('auth', 'detail:blocked:notSignedIn')
@@ -137,27 +179,38 @@ export function useCheckInFlow({
       const location = await getCurrentLocation()
       if (!location) {
         Logger.warn('events', 'checkin:location:unavailable')
-        setCheckingIn(false)
+        // Its tray is up: the hold stays full until it closes.
+        trayHolds.current = true
         return 'failed'
       }
 
       onLocated?.(location)
 
+      markCheckIn('request')
       const outcome = await submitCheckIn(eventId, location)
+      markCheckIn('response', { ok: outcome.kind === 'checkedIn' ? 1 : 0 })
 
       if (outcome.kind === 'timeout') {
         Logger.warn('events', 'checkin:timeout')
-        showTray('Still checking you in', 'This is taking longer than expected. Please try again.', [
-          { label: 'Cancel', onPress: closeTray },
-          {
-            label: 'Retry',
-            variant: 'primary',
-            onPress: () => {
-              closeTray()
-              start({ skipRules: true })
-            }
-          }
-        ])
+        // Flow 4 Tonight #15: Retry resumes the same check-in; Cancel drains the pass.
+        showTray(
+          'Still checking you in',
+          'The server hasn’t answered yet. Your hold still counts.',
+          [
+            { label: 'Cancel', kind: 'tertiary', onPress: closeTrayAndRelease },
+            {
+              label: 'Retry',
+              variant: 'primary',
+              kind: 'primary',
+              onPress: () => {
+                closeTray()
+                start()
+              },
+            },
+          ],
+          { icon: 'hourglass' }
+        )
+        trayHolds.current = true
         return 'failed'
       } else if (outcome.kind === 'refused') {
         // The door saying no (too far, not open yet) is the flow working, not
@@ -169,120 +222,92 @@ export function useCheckInFlow({
         }
         const { refusal } = outcome
         if (outcome.alreadyCheckedIn) {
+          // ROUND3 C12: no "Already checked in" sheet; the Room simply opens.
           Logger.journey('checkin', 'detail:alreadyCheckedIn')
           onCheckedIn?.(outcome)
-        } else {
-          feedback.error()
+          await onEnterRoom?.()
+          return 'checkedIn'
         }
-
-        showTray(
-          refusal.title,
-          refusal.message,
-          refusal.offerDirections
-            ? [
-                { label: 'Done', onPress: closeTray },
-                {
-                  label: 'Open Maps',
-                  variant: 'primary',
-                  onPress: () => {
-                    closeTray()
-                    onOpenMaps?.()
-                  },
-                },
-              ]
-            : undefined
-        )
-        // Already in is the answer the user wanted, whatever the server calls it.
-        return outcome.alreadyCheckedIn ? 'checkedIn' : 'refused'
+        H.error({ blocking: true })
+        showTray(refusal.title, refusal.message, refusalButtons(refusal, outcome.errorCode), { icon: refusal.icon })
+        return 'refused'
       } else {
         Logger.journey('checkin', 'detail:success', { eventId })
-        feedback.success()
-        setCelebrations((n) => n + 1)
+        const { askIntent, revealSuggestion } = outcome
+        setArrival({ asks: askIntent || revealSuggestion })
         // Update check-in status directly - no need for another API call. Now,
-        // not after the trays, so the button turns as the confetti pops.
+        // not after the pour, so the button turns as it starts.
         onCheckedIn?.(outcome)
-        // A tray or a pushed screen would cover the confetti, so the next step
-        // waits until the burst has peaked and is on its way down.
-        await new Promise((r) => setTimeout(r, reduceMotion ? 0 : CONFETTI_PEAK_MS))
+        // The pour is the one ceremony (motion #9); it hands off at 700 ms, or
+        // later if the caller holds it for its room. With a question to ask it
+        // plays out to ASK_AT and hands off once its fade is done, so the
+        // sheet never rises over a pour still on screen.
+        await new Promise<void>((handOff) => {
+          pourHandedOff.current = handOff
+          setPours((n) => n + 1)
+        })
 
         // What follows a check-in is decided in `lib/checkIn.ts`, the same for
-        // this door and the Pulse's; only the trays are this screen's.
-        const { askIntent } = outcome
-        const closeAndAsk = () => {
-          closeTray()
-          if (askIntent) router.push(askIntentRoute(eventId))
-        }
-
-        if (outcome.revealSuggestion) {
+        // every door; only the trays are this screen's.
+        let trayShown = false
+        if (revealSuggestion) {
           const offer = await revealOffer({
             id: user.id,
             firstName: user.name?.trim().split(/\s+/)[0] ?? null,
             image: user.image,
           })
-          showTray(offer.title, offer.message, [
-            { label: offer.cancel, onPress: closeAndAsk },
-            {
-              label: offer.confirm,
-              variant: 'primary',
-              onPress: () => {
-                closeAndAsk()
-                apiClient
-                  .setMatchPreferences(eventId, { revealed: true })
-                  .catch((e) => Logger.error('match', 'reveal from prompt failed', { error: e }))
-              },
-            },
-          ])
-        } else if (afterSuccess === 'tray') {
-          // Keep user in context and offer next step instead of forcing a full-screen jump.
-          showTray(
-            'Checked in',
-            'You are now checked in. Join the event chat now, or stay on this screen.',
-            [
-              {
-                label: 'Stay here',
-                onPress: closeAndAsk,
-              },
-              {
-                label: 'Go to Chat',
-                variant: 'primary',
-                onPress: async () => {
-                  if (askIntent) {
-                    closeAndAsk()
-                    return
-                  }
-                  closeTray()
-                  await onOpenChat?.()
-                }
-              }
-            ]
-          )
-        } else if (askIntent) {
-          // No tray to hang the question from, so it is asked straight away.
+          trayShown = true
+          const yes = await new Promise<boolean>((answer) => {
+            revealAnswer.current = answer
+            const reply = (value: boolean) => () => {
+              revealAnswer.current = null
+              closeTray()
+              answer(value)
+            }
+            showTray(
+              offer.title,
+              offer.message,
+              [
+                { label: offer.cancel, onPress: reply(false) },
+                { label: offer.confirm, variant: 'primary', onPress: reply(true) },
+              ],
+              { icon: 'eye' }
+            )
+          })
+          if (yes) {
+            apiClient
+              .setMatchPreferences(eventId, { revealed: true })
+              .catch((e) => Logger.error('match', 'reveal from prompt failed', { error: e }))
+          }
+        }
+        if (askIntent) {
+          // iOS drops a push made while a tray is still leaving.
+          if (trayShown) await afterTrayDismissed()
+          const answered = untilIntentAnswered()
           router.push(askIntentRoute(eventId))
+          await answered
         }
-
-        // Send check-in success notification to the user
-        try {
-          await NotificationHelpers.checkInNotification(
-            eventTitle || 'Event',
-            user.id
-          )
-        } catch (notificationError) {
-          Logger.warn('events', 'checkInNotification:failed', { error: notificationError as any })
-          // Don't fail check-in if notification fails
-        }
-
+        await onEnterRoom?.()
         return 'checkedIn'
       }
     } catch (error) {
       Logger.error('events', 'checkin:exception', { error: error as any })
-      feedback.error()
-      showTray('Check-in failed', 'Something went wrong. Please try again.')
+      H.error({ blocking: true })
+      showTray(
+        'Check-in failed',
+        'Something went wrong on our side.',
+        [
+          { label: 'Close', kind: 'tertiary', onPress: closeTray },
+          { label: 'Try again', variant: 'primary', kind: 'primary', onPress: () => (closeTray(), void start()) },
+        ],
+        { icon: 'cloud-off' }
+      )
       return 'failed'
     } finally {
-      setCheckingIn(false)
+      setArrival(null)
+      if (!trayHolds.current) setCheckingIn(false)
     }
   }
 
-  return { checkingIn, celebrations, start, getCurrentLocation }
+  return { checkingIn, youreIn: arrival !== null, asks: arrival?.asks ?? false, pours, pourDone, dismissTray, start, getCurrentLocation }
 }

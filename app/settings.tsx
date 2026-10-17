@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Ionicons } from '@expo/vector-icons'
 import * as Notifications from 'expo-notifications'
 import { router, useFocusEffect } from 'expo-router'
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { ActivityIndicator, AppState, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import ActionTray from '../components/ActionTray'
@@ -14,6 +14,7 @@ import { apiClient } from '../lib/apiClient'
 import { BLENDN_LINKS } from '../lib/links'
 import { initializePushNotifications, removePushTokenFromProfile } from '../lib/notifications'
 import { clearPushDeclined } from '../lib/pushDecline'
+import { useLatest } from '../lib/useLatest'
 import { Logger } from '../lib/logger'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, SWITCH_COLORS, TYPE } from '../lib/theme'
 import { useAuth, signOut, deleteAccount } from '../lib/useAuth'
@@ -77,16 +78,11 @@ async function readOsPush(): Promise<OsPush> {
 export default function SettingsScreen() {
   const { user } = useAuth()
   const { showToast } = useToast()
-  const [, setDisplayName] = useState<string>('')
-  const [, setAvatarUrl] = useState<string | null>(null)
   const [preferences, setPreferences] = useState<PreferencesState>(DEFAULT_PREFERENCES)
   // What the screen currently shows, readable from an async callback. Two
   // toggles can be in flight at once, and a rollback that spread the snapshot
   // it was called with wrote the sibling's OLD value back into storage.
-  const preferencesRef = useRef(preferences)
-  useEffect(() => {
-    preferencesRef.current = preferences
-  }, [preferences])
+  const preferencesRef = useLatest(preferences)
   const [saving, setSaving] = useState<Record<PreferenceKey, boolean>>({
     pushEnabled: false,
     showOnlineStatus: false,
@@ -170,7 +166,7 @@ export default function SettingsScreen() {
       friendsSeeMe: toBoolean(profile.friends_see_me_in_rooms, DEFAULT_PREFERENCES.friendsSeeMe),
     }
 
-    return { profile, nextPrefs }
+    return nextPrefs
   }, [])
 
   const loadPreferences = useCallback(async () => {
@@ -205,17 +201,7 @@ export default function SettingsScreen() {
       }
       if (result.success && result.data) {
         setPreferencesError(null)
-        const { profile, nextPrefs } = hydratePreferencesFromProfile(result.data)
-        const name = profile.name || user.name || 'You'
-        setDisplayName(name)
-        // Get avatar from profile photos if available
-        const photos = profile.photos || profile.profile_photos || []
-        const primary = Array.isArray(photos) && photos[0] ? photos[0] : null
-        if (primary) {
-          setAvatarUrl(primary)
-        } else if (user.image) {
-          setAvatarUrl(user.image)
-        }
+        const nextPrefs = hydratePreferencesFromProfile(result.data)
         setPreferences(nextPrefs)
         savePreferencesLocal(nextPrefs)
       }
@@ -289,7 +275,7 @@ export default function SettingsScreen() {
     } finally {
       setSaving(prev => ({ ...prev, [key]: false }))
     }
-  }, [user, savePreferencesLocal, showToast])
+  }, [user, savePreferencesLocal, showToast, preferencesRef])
 
   const onTogglePreference = useCallback((key: PreferenceKey) => {
     // Turning push on after the phone has said no: explain, and change nothing.
@@ -303,7 +289,7 @@ export default function SettingsScreen() {
     setPreferences(next)
     savePreferencesLocal(next)
     persistPreference(next, previous, key)
-  }, [persistPreference, savePreferencesLocal, osPush])
+  }, [persistPreference, savePreferencesLocal, osPush, preferencesRef])
 
   /*
    * `openURL` alone, no `canOpenURL` first: on iOS that answers false for any

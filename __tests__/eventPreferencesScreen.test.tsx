@@ -27,6 +27,8 @@ jest.mock('react-native-safe-area-context', () => {
 })
 const mockAuth = { user: { id: 'u_me' } }
 jest.mock('../lib/useAuth', () => ({ useAuth: () => mockAuth }))
+// The screen tells a waiting check-in it has gone (lib/checkIn.ts); its storage is native.
+jest.mock('../lib/roomVisibilityStorage', () => ({}))
 jest.mock('../lib/apiClient', () => ({
   apiClient: { getProfile: jest.fn(), setMatchPreferences: jest.fn() },
 }))
@@ -37,6 +39,7 @@ jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShow
 import { router } from 'expo-router'
 import EventPreferences from '../app/event-preferences/[eventId]'
 import { apiClient } from '../lib/apiClient'
+import { untilIntentAnswered } from '../lib/checkIn'
 /* eslint-enable import/first */
 
 const api = apiClient as jest.Mocked<typeof apiClient>
@@ -149,4 +152,15 @@ it('never offers Dating to a minor', async () => {
   await waitFor(() => expect(screen.queryByRole('button', { name: /^Dating/ })).toBeNull())
   // And with no photo, the reveal switch says what is missing.
   expect(await screen.findByText(/to your profile first/)).toBeTruthy()
+})
+
+it('tells a waiting check-in when the first-door question goes, so the room comes after it (Flow 4 #14)', async () => {
+  const answered = jest.fn()
+  void untilIntentAnswered().then(answered)
+  const view = await render(<EventPreferences />)
+  await Promise.resolve()
+  expect(answered).not.toHaveBeenCalled()
+  await view.unmount()
+  await Promise.resolve()
+  expect(answered).toHaveBeenCalledTimes(1)
 })

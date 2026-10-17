@@ -5,10 +5,10 @@ import {
   statusCodes
 } from '@react-native-google-signin/google-signin'
 import * as AppleAuthentication from 'expo-apple-authentication'
-import Constants from 'expo-constants'
 import { router } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
+import { assetAspect, currentDeviceInfo } from '../components/onboarding/authForm'
 import { EmberButton } from '../components/onboarding/EmberControls'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LegalLine } from '../components/LegalLine'
@@ -46,10 +46,6 @@ const lockup = require('../assets/logo/lockup-hero.png')
  * the art cannot silently distort the layout — a hardcoded ratio is a number
  * that is correct exactly once.
  */
-function assetAspect(mod: number, fallback: number): number {
-  const s = Image.resolveAssetSource(mod)
-  return s?.width && s?.height ? s.width / s.height : fallback
-}
 
 const MONOGRAM_ASPECT = assetAspect(monogram, 453 / 534)
 // Fallback only — the real ratio comes from the bundler. Kept close to the
@@ -132,11 +128,7 @@ function IndexInner() {
 
       if (userInfo.data?.idToken) {
         // Get device info for the backend
-        const deviceInfo = {
-          platform: Platform.OS,
-          device: Constants.deviceName || undefined,
-          appVersion: Constants.expoConfig?.version || undefined,
-        }
+        const deviceInfo = currentDeviceInfo()
 
         // Sign in via admin backend
         const result = await signInWithGoogle(userInfo.data.idToken, deviceInfo)
@@ -195,11 +187,7 @@ function IndexInner() {
         throw new Error('No identity token received from Apple')
       }
 
-      const deviceInfo = {
-        platform: Platform.OS,
-        device: Constants.deviceName || undefined,
-        appVersion: Constants.expoConfig?.version || undefined,
-      }
+      const deviceInfo = currentDeviceInfo()
 
       const result = await signInWithApple(
         credential.identityToken,
@@ -261,8 +249,11 @@ function IndexInner() {
    * maroon one into a pastel sign-in. It now renders nothing but the root
    * background, which is the same black the native splash just showed — so the
    * handoff is invisible rather than a third colour.
+   *
+   * Authenticated is the same frame: held here for the frame or two the root
+   * layout takes to decide where to send them, so nothing flashes on the way out.
    */
-  if (loading) {
+  if (loading || user) {
     return (
       <View style={styles.splashContainer}>
         <Image source={monogram} style={styles.splashLogo} resizeMode="contain" />
@@ -283,126 +274,116 @@ function IndexInner() {
    * because Google's mark has to sit on Google's chrome and Apple's button is
    * Apple's — a third brand-orange pill would make this a paint sample.
    */
-  if (!user) {
-    return (
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        <View style={styles.brandBlock}>
-          <Image source={lockup} style={styles.lockup} resizeMode="contain" />
-          <Text style={styles.tagline}>Same place. Same vibe. Instant connections.</Text>
-          {/* Whose invite is waiting, when an invite link brought them here. */}
-          <PendingInvite />
-        </View>
-
-        <View style={styles.actions}>
-          {/*
-            * Announced to screen readers as an alert, so someone mid-gesture is
-            * told rather than left waiting. A toast would auto-dismiss and be
-            * missed entirely.
-            */}
-          {error && (
-            <Text style={styles.error} accessibilityRole="alert">
-              {error}
-            </Text>
-          )}
-          {!error && notice && (
-            <Text style={styles.notice} accessibilityRole="alert">
-              {notice}
-            </Text>
-          )}
-
-          {/*
-            * "Continue with Google", not "Get Started".
-            *
-            * The old label was a black pill wired to Google with no Google
-            * branding anywhere on it. That is three problems: it breaks Google's
-            * sign-in branding requirements, it is deceptive — a user expecting a
-            * signup form gets an account chooser for an identity they may not
-            * want to use — and once email sign-in exists it is ambiguous between
-            * three different flows.
-            */}
-          <Pressable
-            onPress={handleGoogleSignIn}
-            disabled={!!signingIn}
-            accessibilityRole="button"
-            accessibilityLabel="Continue with Google"
-            accessibilityState={{ disabled: !!signingIn, busy: signingIn === 'google' }}
-            style={({ pressed }) => [
-              styles.googleButton,
-              pressed && styles.pressed,
-              signingIn === 'apple' && styles.disabled,
-            ]}
-          >
-            {signingIn === 'google' ? (
-              <ActivityIndicator color={GOOGLE_INK} />
-            ) : (
-              <>
-                <AntDesign name="google" size={ICON.md} color={GOOGLE_INK} style={styles.googleMark} />
-                <Text style={styles.googleLabel}>Continue with Google</Text>
-              </>
-            )}
-          </Pressable>
-
-          {Platform.OS === 'ios' && appleSignInAvailable && (
-            /*
-             * WHITE, not BLACK. The button was BLACK, which was invisible the
-             * moment the background stopped being a pastel gradient — a real bug
-             * the old design was hiding rather than avoiding.
-             */
-            <View
-              pointerEvents={signingIn ? 'none' : 'auto'}
-              style={signingIn === 'google' && styles.disabled}
-            >
-              {/* The system draws this button and has no busy state; its spinner sits over it. */}
-              <AppleAuthentication.AppleAuthenticationButton
-                buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
-                buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
-                cornerRadius={CONTROL.lg / 2}
-                style={styles.appleButton}
-                onPress={handleAppleSignIn}
-              />
-              {signingIn === 'apple' ? (
-                <View style={styles.appleBusy} pointerEvents="none">
-                  <ActivityIndicator color={GOOGLE_INK} />
-                </View>
-              ) : null}
-            </View>
-          )}
-
-          <View style={styles.dividerRow}>
-            <View style={styles.divider} />
-            <Text style={styles.dividerText}>or</Text>
-            <View style={styles.divider} />
-          </View>
-
-          <Pressable
-            /*
-             * The notice goes with them. Somebody the server signed out who
-             * picks email lands on a form that otherwise says nothing about
-             * why they are there.
-             */
-            onPress={() =>
-              router.push(notice ? { pathname: '/sign-in', params: { notice } } : '/sign-in')
-            }
-            disabled={!!signingIn}
-            accessibilityRole="button"
-            accessibilityState={{ disabled: !!signingIn }}
-            style={({ pressed }) => [styles.emailButton, pressed && styles.pressed, !!signingIn && styles.disabled]}
-          >
-            <Text style={styles.emailLabel}>Continue with email</Text>
-          </Pressable>
-
-          <LegalLine lead="By continuing you" style={styles.legal} />
-        </View>
-      </SafeAreaView>
-    )
-  }
-
-  // Authenticated — held here for the frame or two the root layout takes to
-  // decide where to send them. Same black, so nothing flashes on the way out.
   return (
-    <View style={styles.splashContainer}>
-      <Image source={monogram} style={styles.splashLogo} resizeMode="contain" />
-    </View>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <View style={styles.brandBlock}>
+        <Image source={lockup} style={styles.lockup} resizeMode="contain" />
+        <Text style={styles.tagline}>Same place. Same vibe. Instant connections.</Text>
+        {/* Whose invite is waiting, when an invite link brought them here. */}
+        <PendingInvite />
+      </View>
+
+      <View style={styles.actions}>
+        {/*
+          * Announced to screen readers as an alert, so someone mid-gesture is
+          * told rather than left waiting. A toast would auto-dismiss and be
+          * missed entirely.
+          */}
+        {error && (
+          <Text style={styles.error} accessibilityRole="alert">
+            {error}
+          </Text>
+        )}
+        {!error && notice && (
+          <Text style={styles.notice} accessibilityRole="alert">
+            {notice}
+          </Text>
+        )}
+
+        {/*
+          * "Continue with Google", not "Get Started".
+          *
+          * The old label was a black pill wired to Google with no Google
+          * branding anywhere on it. That is three problems: it breaks Google's
+          * sign-in branding requirements, it is deceptive — a user expecting a
+          * signup form gets an account chooser for an identity they may not
+          * want to use — and once email sign-in exists it is ambiguous between
+          * three different flows.
+          */}
+        <Pressable
+          onPress={handleGoogleSignIn}
+          disabled={!!signingIn}
+          accessibilityRole="button"
+          accessibilityLabel="Continue with Google"
+          accessibilityState={{ disabled: !!signingIn, busy: signingIn === 'google' }}
+          style={({ pressed }) => [
+            styles.googleButton,
+            pressed && styles.pressed,
+            signingIn === 'apple' && styles.disabled,
+          ]}
+        >
+          {signingIn === 'google' ? (
+            <ActivityIndicator color={GOOGLE_INK} />
+          ) : (
+            <>
+              <AntDesign name="google" size={ICON.md} color={GOOGLE_INK} style={styles.googleMark} />
+              <Text style={styles.googleLabel}>Continue with Google</Text>
+            </>
+          )}
+        </Pressable>
+
+        {Platform.OS === 'ios' && appleSignInAvailable && (
+          /*
+           * WHITE, not BLACK. The button was BLACK, which was invisible the
+           * moment the background stopped being a pastel gradient — a real bug
+           * the old design was hiding rather than avoiding.
+           */
+          <View
+            pointerEvents={signingIn ? 'none' : 'auto'}
+            style={signingIn === 'google' && styles.disabled}
+          >
+            {/* The system draws this button and has no busy state; its spinner sits over it. */}
+            <AppleAuthentication.AppleAuthenticationButton
+              buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+              buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
+              cornerRadius={CONTROL.lg / 2}
+              style={styles.appleButton}
+              onPress={handleAppleSignIn}
+            />
+            {signingIn === 'apple' ? (
+              <View style={styles.appleBusy} pointerEvents="none">
+                <ActivityIndicator color={GOOGLE_INK} />
+              </View>
+            ) : null}
+          </View>
+        )}
+
+        <View style={styles.dividerRow}>
+          <View style={styles.divider} />
+          <Text style={styles.dividerText}>or</Text>
+          <View style={styles.divider} />
+        </View>
+
+        <Pressable
+          /*
+           * The notice goes with them. Somebody the server signed out who
+           * picks email lands on a form that otherwise says nothing about
+           * why they are there.
+           */
+          onPress={() =>
+            router.push(notice ? { pathname: '/sign-in', params: { notice } } : '/sign-in')
+          }
+          disabled={!!signingIn}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: !!signingIn }}
+          style={({ pressed }) => [styles.emailButton, pressed && styles.pressed, !!signingIn && styles.disabled]}
+        >
+          <Text style={styles.emailLabel}>Continue with email</Text>
+        </Pressable>
+
+        <LegalLine lead="By continuing you" style={styles.legal} />
+      </View>
+    </SafeAreaView>
   )
 }
 

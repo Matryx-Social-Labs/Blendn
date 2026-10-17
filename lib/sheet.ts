@@ -2,6 +2,8 @@ import type { ReactNode } from 'react'
 import { useSyncExternalStore } from 'react'
 import { Platform } from 'react-native'
 
+import type { IconName } from '../components/ui/Icon'
+
 /**
  * One bottom sheet for the whole app, opened from anywhere.
  *
@@ -40,6 +42,8 @@ export type SheetOutcome =
 export type SheetAction = {
   label: string
   variant?: 'primary' | 'secondary' | 'destructive'
+  /** A row's glyph, in a `rows` sheet (the DM's options). */
+  icon?: IconName
 } & (
   | { cancel: true }
   /** Another step, drawn in place of this one. */
@@ -54,6 +58,14 @@ export type ActionSheet = {
   kind: 'actions'
   title: string
   message?: string
+  /** The glyph well above the title (the design's sheets: Not sent, Leave, Mute). */
+  icon?: IconName
+  /**
+   * `rows`: every action but Cancel as a 48 pt list row (a chevron when it
+   * opens another step), the way the design draws an options or mute sheet.
+   * Default: buttons.
+   */
+  layout?: 'buttons' | 'rows'
   /** Drawn above the actions — the message menu's emoji row. */
   content?: ReactNode
   actions: SheetAction[]
@@ -69,6 +81,8 @@ export type ReasonSheet = {
   kind: 'reasons'
   title: string
   message?: string
+  /** Who is reported, for the "Something else" note's line: "{about} isn’t told who sent this." */
+  about?: string
   reasons: { value: string; label: string }[]
   submitLabel: string
   /** Every report endpoint takes an optional description; this is it. */

@@ -9,8 +9,7 @@ import { pickInsideEvent, pickTodayEvents, type RoomButtonEvent } from './roomBu
  * tonight — and re-fetching them there would mean a second location permission
  * dance and a second copy of the events list on a timer.
  *
- * Same shape as `lib/unread.ts`, which solves the identical problem for message
- * counts: a module-level cache with subscribers, rather than a context provider
+ * A module-level cache with subscribers, rather than a context provider
  * threaded through a tree the tab bar is not inside.
  *
  * **Nothing here is authoritative.** The button it feeds only ever *offers* an
@@ -19,10 +18,13 @@ import { pickInsideEvent, pickTodayEvents, type RoomButtonEvent } from './roomBu
  */
 interface RoomSignal {
   insideEventId: string | null
+  /** The inside event's venue: the disc's (c) label reads "Check in · {venue}" (Flow 4 T10). */
+  insideVenue: string | null
   todayEventIds: string[]
 }
 
-let _signal: RoomSignal = { insideEventId: null, todayEventIds: [] }
+const EMPTY: RoomSignal = { insideEventId: null, insideVenue: null, todayEventIds: [] }
+let _signal: RoomSignal = EMPTY
 const _listeners = new Set<() => void>()
 
 /**
@@ -37,12 +39,15 @@ export function publishRoomSignal(
   events: readonly RoomButtonEvent[],
   now: number = Date.now()
 ): void {
+  const insideEventId = pickInsideEvent(events, now)
   const next: RoomSignal = {
-    insideEventId: pickInsideEvent(events, now),
+    insideEventId,
+    insideVenue: events.find((e) => e.id === insideEventId)?.venue_name ?? null,
     todayEventIds: pickTodayEvents(events, now),
   }
   if (
     next.insideEventId === _signal.insideEventId &&
+    next.insideVenue === _signal.insideVenue &&
     next.todayEventIds.length === _signal.todayEventIds.length &&
     next.todayEventIds.every((id, i) => id === _signal.todayEventIds[i])
   ) {
@@ -64,7 +69,7 @@ export function getRoomSignal(): RoomSignal {
  * else's plans.
  */
 export function clearRoomSignal(): void {
-  _signal = { insideEventId: null, todayEventIds: [] }
+  _signal = EMPTY
   for (const fn of _listeners) fn()
 }
 

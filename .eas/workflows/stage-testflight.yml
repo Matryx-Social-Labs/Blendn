@@ -16,6 +16,12 @@
 # App Store are the same app; a TestFlight build is one that has not been
 # released. Play's `internal` track is the same idea.
 
+# Satoshi: these builds check out from GitHub, where the gitignored Satoshi
+# fonts never are (ITF licence, public repo). `eas-build-pre-install`
+# (scripts/check-satoshi.sh) restores them from the SATOSHI_FONTS_PART_*
+# secret files, or stops the build in its first minute with "Satoshi fonts
+# missing". docs/RELEASING.md, "Satoshi".
+
 name: stage -> TestFlight + Play internal
 
 # No `on:` trigger, on purpose. GitHub starts this, from the `ship` job in

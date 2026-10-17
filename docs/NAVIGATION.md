@@ -109,8 +109,8 @@ states would be a dead control in the most prominent position on the screen.
 knows about messages, not check-ins, and a check-out can happen on another
 device or from the presence monitor. The other two come from `lib/roomSignal.ts`,
 published by The Pulse out of a fetch it was already making: that screen asks for
-events with a location and gets `distance` back on every one. Same shape as
-`lib/unread.ts`. Deriving them in the bar would mean a second location permission
+events with a location and gets `distance` back on every one. Deriving them in
+the bar would mean a second location permission
 dance and a second copy of the events list on a timer.
 
 **Two unit systems meet here.** `distance` is kilometres and `check_in_radius` is
@@ -142,7 +142,7 @@ Two modes, chosen from your active check-in (`lib/useRoom.ts`):
 
 | Mode | What |
 |---|---|
-| **Tonight** | A swipeable deck of what is on, yours first then nearest (the Me tab's photo stack, `SwipeDeck`). At a venue, a docked pass: **hold to check in** (`HoldToConfirm`), which runs the event screen's own flow (`lib/useCheckInFlow.ts`) and turns into the Room. A "N here share your taste" teaser with blank faces (`room-preview`, never under 3 people). |
+| **Tonight** | A swipeable deck of what is on, yours first then nearest (the Me tab's photo stack, `SwipeDeck`). At a venue, a docked pass: **hold to check in** (`HoldToConfirm`), which runs the event screen's own flow (`lib/useCheckInFlow.ts`) and pours into the Room (`MomentPour`, motion #9; the flood fills the docked pass, Flow 4 delta R2-D1): the pour holds until the Room has loaded; when the server asks a question (a reveal offer, "Why do you go out?"), the pour plays out in full and clears first (`ASK_AT`, then a `D.base` fade) and the question comes over Tonight, the pass reading "You're in" (Flow 4 Tonight #12–#14). The Pulse peek's "Blend in" opens this pass. A "N here share your taste" teaser with blank faces (`room-preview`, never under 3 people). |
 | **Room** | LIVE, a rolling headcount, the faces who just walked in, and your time in the room set around your photo. **Meet next**: the server's top picks, three at a time, reshuffled every 15 minutes on a clock every phone agrees on. **Everyone here** ("Everyone who came" once somebody in it has checked out, captioned "Was here"): a 3-column face grid (virtualised), one reason per face; tap for the person card, double-tap to like. The room chat is docked at the bottom (last two lines + arrivals/waves/matches), pull up for the full chat. |
 
 The person card has three verbs: **Like** (private until mutual; the accent),
@@ -224,3 +224,68 @@ Split by where each half is used:
 
 Neither ships until the social graph does. Nothing about codes, friends or
 mutual connections exists in the schema yet.
+
+---
+
+## Coach marks
+
+The app explains itself at most once per thing, and only what is not obvious
+(the design: `guidelines/components/CoachMark.html`). A surface card with a
+caret at the control, one sentence, Got it at the right: `components/ds/CoachMark.tsx`.
+Not a tour, never a loop. Every screen decides "once" through
+`lib/coachMarks.ts`: `useCoachMark(id, { ready })` gives `{ visible, dismiss }`,
+and `markCoachUsed(id)` is called where the gesture it explains lands.
+
+**The rules**
+
+- **Once ever, per account, per mark.** Stored as `<id>_seen_<userId>`, written
+  once it has stayed on screen for a second (or on Got it, or on use); a mark gone
+  within that is done for this launch only. Got it, using the thing and leaving
+  the screen all end it.
+- **Using the thing counts, even first.** `markCoachUsed` before the mark ever
+  showed means it never will: someone who already holds cards is not told to.
+- **One new mark per account per launch**, which also keeps it to one on screen.
+- **Never before `ready`:** what it points at is on screen, the data under it has
+  loaded, and none of the screen's own sheets is open. The screen folds all of
+  that into `ready`. Nothing records open sheets app-wide, so a sheet another
+  component owns (the Pulse's bell) is not counted; it covers the mark anyway.
+- **Signed out, nothing.**
+- **Leaving the screen ends it** (blur or unmount). Not ready for a moment, a
+  sheet over it, only hides it; it is back when the sheet closes.
+- **On the top layer, with a spotlight.** A screen never draws a mark: it passes
+  its target's ref to `useCoachMarkSpot` and the one `CoachMarkHost`, last in
+  `app/_layout.tsx`, draws it over everything (tab bar, drawer, lists). The host
+  measures the target in window coordinates (and re-measures on rotation and
+  scroll), dims the rest as four `scrim` rects with a rounded hole, and fades on
+  `base` (at once under Reduce Motion). A tap on the dim does nothing; Got it or
+  Android back closes it; the target in the hole stays usable and using it counts.
+  The target gone or scrolled off ends it without spending it before the dwell.
+  The tip takes focus first; the dim is not focusable. No haptic.
+
+The same sentences belong in the help centre, for whoever dismissed one.
+
+**The inventory.** Each flow places its own when its screen is rebuilt, adding
+the id to `CoachMarkId`.
+
+| Where | It explains | Sentence | Ended by use |
+|---|---|---|---|
+| **Pulse** (live) | holding a card | "Hold an event to save, share or preview it." | a long-press on any card |
+| **Centre button** (live) | the first time it says you can check in | "You’re at {venue}. Tap the button, then hold to check in." | tapping it then, or being checked in |
+| **Room** (live) | the visibility banner | "People here can’t see your name or photo until you choose to show them. You decide, per event." | toggling it |
+| **Flow 5**, the Banter | swiping a row | "Swipe a chat left to mute it." | a swipe (not on dev yet: rows have no swipe) |
+
+Copy and placement are `round4/r4.js` (TIPS). The width is the design's
+min(screen − 32, 300), `COACH_MARK_MAX_WIDTH`.
+
+The Pulse's is `events_preview_hint`, the key the old "Tip: Long-press any event
+card" banner stored, so whoever dismissed that is not taught again. It waits for
+the drawer to be all the way up and the list at its top (at half, the first card
+sits under the tab bar), then sits below the first card the page draws
+(Featured's first, or Upcoming's when nothing is featured), caret up (R4.1: above
+it, two lines at 360 dp covered the search bar). Featured's card reaches the tab
+bar, so the list first scrolls the card up by whatever the mark would overlap.
+
+The centre button's sits above the bar and (c)'s "Check in · {venue}" label, centred on the disc, caret down, while
+Blend'n is closed and the button is in `checkin` with a venue name
+(`lib/roomSignal.ts` `insideVenue`). The Room's sits under the visibility line once the
+check-in pour has handed off and nothing is over the Room.

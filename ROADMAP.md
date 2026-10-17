@@ -1229,7 +1229,8 @@ is allowed only as an opt-in chip:** off by default, picked by the person
   standing blocker below.
 
   `xcrun simctl` cannot tap or type, which is why every UI change here has been
-  verified through a `__preview` harness. `scripts/sim.sh` maps a device point
+  verified through a `__preview` harness. `scripts/sim.sh` (since deleted; the
+  Maestro flows tap and type now) mapped a device point
   to a screen point — insets derived from the window's geometry, not hardcoded
   — and clicks through Accessibility. **Taps and screenshots work**, verified
   against the sign-in flow, so real screens can be reached from a script now.

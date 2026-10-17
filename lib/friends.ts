@@ -11,8 +11,11 @@
  *    can see who I am in rooms" in Settings. The friends list and a friend's
  *    profile show real names because both people said yes.
  *
- * Kept free of imports so it can be tested without mocking the API client.
+ * Imports nothing but the pure `./time`, so it can be tested without mocking
+ * the API client.
  */
+
+import { MONTHS } from './time'
 
 export type FriendState = 'self' | 'friends' | 'requested' | 'incoming' | 'none'
 
@@ -93,8 +96,6 @@ export function inviteLine(state: FriendState): string {
 export function inviteMessage(url: string): string {
   return `Add me on Blend'n: ${url}`
 }
-
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 /**
  * "Friends since Sep 2026". Month and year: the day is nobody's business.

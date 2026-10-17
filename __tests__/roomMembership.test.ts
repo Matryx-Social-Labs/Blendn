@@ -106,7 +106,7 @@ describe('the room header subtitle', () => {
 
   it('does not repeat the title; says how many are in the room instead', () => {
     expect(roomSubtitle('AI Meetup #42', 'AI Meetup #42', 38)).toBe('38 in the room')
-    // "<event> Chat" is the same name: check-in's "Go to Chat" passes it.
+    // "<event> Chat" is the same name: the check-in passes it as it hands off to the chat.
     expect(roomSubtitle('AI Meetup #42 Chat', 'AI Meetup #42', 38)).toBe('38 in the room')
   })
 
@@ -123,44 +123,47 @@ describe('the screens', () => {
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/^\s*\/\/.*$/gm, '')
   const INFO = read('app/chat-info/[id].tsx')
+  const SHEETS = read('components/chat/RoomSheets.tsx')
   const CHAT = read('app/chat/[id].tsx')
+  const HEADER = read('components/chat/ChatHeader.tsx')
   const BANTER = read('app/(tabs)/chat.tsx')
 
   it('Room info offers mute, a room report and leave — and no longer reports the event', () => {
-    expect(INFO).toContain('label="Mute notifications"')
-    expect(INFO).toContain('apiClient.muteChatGroup(')
-    expect(INFO).toContain('apiClient.unmuteChatGroup(')
-    expect(INFO).toContain('label="Report this room"')
+    expect(INFO).toContain(": 'Mute notifications'")
+    expect(INFO).toContain('<MuteSheet')
+    expect(SHEETS).toContain('apiClient.muteChatGroup(')
+    expect(SHEETS).toContain('apiClient.unmuteChatGroup(')
+    expect(INFO).toContain('title="Report this room"')
     expect(INFO).toContain('showRoomReportOptions(chatGroupId)')
     expect(INFO).not.toContain('showEventReportOptions')
-    expect(INFO).toContain('label="Leave room"')
-    expect(INFO).toContain('apiClient.leaveChatGroup(')
+    expect(INFO).toContain('accessibilityLabel="Leave room"')
+    expect(INFO).toContain('<LeaveRoomSheet')
+    expect(SHEETS).toContain('apiClient.leaveChatGroup(')
     expect(INFO).toContain("router.dismissTo('/(tabs)/chat')")
-    // Popups go through the app's one sheet, never Alert.
-    expect(INFO).not.toMatch(/Alert\.alert/)
+    // Popups go through a sheet, never Alert.
+    expect(INFO + SHEETS).not.toMatch(/Alert\.alert/)
   })
 
   it('the leave confirmation says how to come back', () => {
-    expect(INFO).toMatch(/rejoin by checking in at the event again/)
+    expect(SHEETS).toMatch(/rejoin by checking in at the event again/)
   })
 
   it('the room answers LEFT_ROOM and a plain 403 with the left state and Rejoin', () => {
     // LEFT_ROOM → left, FORBIDDEN → out (and NOT_LIVE → not live): roomRefusalState, table-tested in placeRoom.test.ts.
     expect(CHAT).toContain('roomRefusalState(result.errorCode)')
-    expect(CHAT).toContain("if (refused === 'left') markRoomLeft(String(chatRoomId))")
+    expect(CHAT).toContain("if (refused === 'left') markRoomLeft(roomId)")
     expect(CHAT).toContain("else if (refused === 'out') setOutOfRoom(true)")
-    expect(CHAT).toContain('<RoomLeftState')
+    expect(CHAT).toContain('<RoomOutside')
     expect(CHAT).toContain('apiClient.rejoinChatGroup(')
   })
 
   it('the header back button can be found by a screen reader', () => {
-    const header = CHAT.slice(CHAT.indexOf('function GroupChatHeader'), CHAT.indexOf('const headerStyles'))
-    expect(header).toMatch(/onPress=\{onBack\}\s*accessibilityRole="button"\s*accessibilityLabel="Go back"/)
+    expect(HEADER).toMatch(/onPress=\{onBack\}\s*accessibilityRole="button"\s*accessibilityLabel="Back"/)
   })
 
   it('the header shows a muted room and does not repeat the event title', () => {
     expect(CHAT).toContain('muted={muted}')
-    expect(CHAT).toContain('subtitle={roomSubtitle(')
+    expect(CHAT).toContain('roomSubtitle(name, eventTitle')
   })
 
   it('the Banter hides a room left here and marks a muted one', () => {

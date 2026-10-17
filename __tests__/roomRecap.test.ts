@@ -1,19 +1,15 @@
-import { endsAtMs, roomHasEnded, roomRecap, timeSpentLabel } from '../lib/roomRecap'
+import { endsAtMs, roomRecap, timeSpentLabel } from '../lib/roomRecap'
 
 const END = '2026-09-28T23:00:00Z'
 const endMs = Date.parse(END)
 const event = { id: 'e1', title: 'Warehouse night', endsAt: END }
 
-describe('roomHasEnded', () => {
-  it('is over at the end time, not a minute after', () => {
-    expect(roomHasEnded(END, endMs - 1)).toBe(false)
-    expect(roomHasEnded(END, endMs)).toBe(true)
-  })
-
-  it('never closes a room on a missing or broken end time', () => {
-    expect(roomHasEnded(undefined, endMs)).toBe(false)
-    expect(roomHasEnded(null, endMs)).toBe(false)
-    expect(roomHasEnded('not a date', endMs)).toBe(false)
+describe('endsAtMs', () => {
+  it('has no end time for a missing or broken one', () => {
+    expect(endsAtMs(END)).toBe(endMs)
+    expect(endsAtMs(undefined)).toBeNull()
+    expect(endsAtMs(null)).toBeNull()
+    expect(endsAtMs('not a date')).toBeNull()
     expect(endsAtMs('')).toBeNull()
   })
 })
@@ -43,6 +39,7 @@ describe('roomRecap', () => {
       eventId: 'e1',
       title: 'Warehouse night',
       timeSpent: '2h 30m',
+      minutes: 150,
       matched: 2,
     })
   })
@@ -54,5 +51,6 @@ describe('roomRecap', () => {
 
   it('leaves the time out rather than inventing one', () => {
     expect(roomRecap({ event, checkedInAt: null, people: [] }, endMs)?.timeSpent).toBeNull()
+    expect(roomRecap({ event, checkedInAt: null, people: [] }, endMs)?.minutes).toBeNull()
   })
 })

@@ -19,7 +19,8 @@ import { join } from 'path'
  * There are two fetch paths — the cold load and the cache-backed refresh — and
  * a field mapped in one and not the other is worse than one missing from both,
  * because the section then appears and disappears depending on how you got to
- * the screen.
+ * the screen. So both go through one mapper, `applyDetail`, and this pins that
+ * the mapper carries the fields and that both paths call it.
  *
  * Literal substring matching, not a regex: a guard that scans inside an object
  * literal with a negated character class stops at the first nested delimiter,
@@ -32,16 +33,19 @@ const SOURCE = readFileSync(
 
 describe('the event screen keeps the details it is sent', () => {
   it('copies details off the response on both fetch paths', () => {
-    const mapped = SOURCE.split('details: (d.details').length - 1
-    const amenities = SOURCE.split('amenities: Array.isArray(d.amenities)').length - 1
+    const mapper = SOURCE.slice(SOURCE.indexOf('const applyDetail = '), SOURCE.indexOf('const applyEventDetails = '))
+    expect(mapper).toContain('details: (d.details')
+    expect(mapper).toContain('amenities: Array.isArray(d.amenities)')
+    // One mapping, so a third copy that drifts fails here.
+    expect(SOURCE.split('details: (d.details').length - 1).toBe(1)
+    expect(SOURCE.split('amenities: Array.isArray(d.amenities)').length - 1).toBe(1)
 
-    /*
-     * Pinned against `amenities` rather than a bare 2, so the count follows the
-     * screen. If a third fetch path is added, this fails and asks whether it
-     * carries the field — which is the question worth being asked.
-     */
-    expect(amenities).toBeGreaterThan(1)
-    expect(mapped).toBe(amenities)
+    // The cold load...
+    const fetchPath = SOURCE.slice(SOURCE.indexOf('const applyEventDetails = '), SOURCE.indexOf('const fetchEventDetails = '))
+    expect(fetchPath).toContain('applyDetail(d)')
+    // ...and the cache, read during render on a new id.
+    const cachePath = SOURCE.slice(SOURCE.indexOf('const cached = getEventDetailCache'), SOURCE.indexOf("Logger.journey('events', 'detail:mount'"))
+    expect(cachePath).toContain('applyDetail(cached)')
   })
 
   it('runs the payload through the transform rather than reading it raw', () => {

@@ -3,7 +3,7 @@
  */
 import { newClientId } from '../lib/clientId'
 import { receiptFor } from '../lib/receipts'
-import { withUnreadDivider } from '../lib/unreadDivider'
+import { withDaySeparators, withUnreadDivider } from '../lib/unreadDivider'
 
 describe('newClientId', () => {
   it('is a v4 uuid, different every time', () => {
@@ -73,5 +73,21 @@ describe('swipe to reply', () => {
     expect(replyDragOffset(REPLY_SWIPE_TRIGGER)).toBe(REPLY_SWIPE_TRIGGER)
     expect(replyDragOffset(REPLY_SWIPE_TRIGGER + 20)).toBeLessThan(REPLY_SWIPE_TRIGGER + 20)
     expect(replyDragOffset(1000)).toBe(88)
+  })
+})
+
+describe('day headings', () => {
+  it('heads each day once, before its first message', () => {
+    const at = (day: number, hour: number) => new Date(2020, 2, day, hour).toISOString()
+    const rows = withDaySeparators(
+      [
+        { id: 'm1', created_at: at(4, 9) },
+        { id: 'm2', created_at: at(4, 21) },
+        { id: 'm3', created_at: at(5, 1) },
+      ],
+      (m) => m.created_at
+    )
+    expect(rows.map((r) => r.kind)).toEqual(['separator', 'message', 'message', 'separator', 'message'])
+    expect(rows[0]).toEqual({ kind: 'separator', id: 'sep-2020-2-4', label: 'Mar 4, 2020' })
   })
 })

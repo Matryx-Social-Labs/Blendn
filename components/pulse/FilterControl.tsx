@@ -1,4 +1,3 @@
-import * as Haptics from 'expo-haptics'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import Animated from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -12,6 +11,7 @@ import {
   type EventFilters,
   type When,
 } from '../../lib/eventFilters'
+import { H } from '../../lib/haptics'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, OPACITY, SPACE, TYPE } from '../../lib/theme'
 import { RisingSheet, SheetModal, SheetScrollView } from '../motion/RisingSheet'
 import { Grabber } from '../ui/Grabber'
@@ -178,8 +178,8 @@ function Group({ label, children }: { label: string; children: React.ReactNode }
  *
  * A CSS transition, because it is a two-state change with no finger dragging
  * it. It runs under Reduce Motion too: a colour change *is* the reduced form,
- * and it is what says which chip is on. The tick is a selection haptic, on the
- * frame of the tap.
+ * and it is what says which chip is on. The tick is `H.select`, on the frame of
+ * the tap, and only when the choice changes.
  *
  * Written as the `transition` shorthand, not `transitionProperty` & co.: SDK
  * 53's react-native-web typings declare those as strings on `ViewStyle`, and
@@ -192,7 +192,8 @@ function Chip({ label, on, onPress }: { label: string; on: boolean; onPress: () 
   return (
     <Pressable
       onPress={() => {
-        Haptics.selectionAsync().catch(() => {})
+        // A change of value only: re-tapping the chosen chip is not one (§10.2).
+        if (!on) H.select()
         onPress()
       }}
       accessibilityRole="button"

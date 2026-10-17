@@ -32,84 +32,50 @@ export type MessageReportType =
   | 'other'
 
 /**
- * Block a user
+ * One safety call, answered as a `SafetyActionResult`: the server's sentence
+ * on a refusal, `fallback` when it sent none, and never a throw.
  */
-export const blockUser = async (
-  userId: string,
-  _reason?: string
+const safely = async (
+  what: string,
+  fallback: string,
+  done: string,
+  call: () => Promise<{ success: boolean; error?: string }>
 ): Promise<SafetyActionResult> => {
   try {
-    const result = await apiClient.blockUser(userId)
+    const result = await call()
     if (!result.success) {
-      Logger.error('general', 'Error blocking user', { error: result.error })
-      return { success: false, message: result.error || 'Failed to block user' }
+      Logger.error('general', `Error ${what}`, { error: result.error })
+      return { success: false, message: result.error || fallback }
     }
-    return { success: true, message: 'User blocked' }
+    return { success: true, message: done }
   } catch (error) {
-    Logger.error('general', 'Error blocking user', { error })
+    Logger.error('general', `Error ${what}`, { error })
     return { success: false, message: 'Something went wrong' }
   }
 }
 
-/**
- * Unblock a user
- */
-export const unblockUser = async (userId: string): Promise<SafetyActionResult> => {
-  try {
-    const result = await apiClient.unblockUser(userId)
-    if (!result.success) {
-      Logger.error('general', 'Error unblocking user', { error: result.error })
-      return { success: false, message: result.error || 'Failed to unblock user' }
-    }
-    return { success: true, message: 'User unblocked' }
-  } catch (error) {
-    Logger.error('general', 'Error unblocking user', { error })
-    return { success: false, message: 'Something went wrong' }
-  }
-}
+export const blockUser = (userId: string): Promise<SafetyActionResult> =>
+  safely('blocking user', 'Failed to block user', 'User blocked', () => apiClient.blockUser(userId))
 
-/**
- * Report a user
- */
-export const reportUser = async (
+export const unblockUser = (userId: string): Promise<SafetyActionResult> =>
+  safely('unblocking user', 'Failed to unblock user', 'User unblocked', () => apiClient.unblockUser(userId))
+
+export const reportUser = (
   userId: string,
   reportType: ReportType,
   description?: string
-): Promise<SafetyActionResult> => {
-  try {
-    const result = await apiClient.reportUser(userId, reportType, description)
-    if (!result.success) {
-      Logger.error('general', 'Error reporting user', { error: result.error })
-      return { success: false, message: result.error || 'Failed to submit report' }
-    }
-    return { success: true, message: 'Report submitted' }
-  } catch (error) {
-    Logger.error('general', 'Error reporting user', { error })
-    return { success: false, message: 'Something went wrong' }
-  }
-}
+): Promise<SafetyActionResult> =>
+  safely('reporting user', 'Failed to submit report', 'Report submitted', () =>
+    apiClient.reportUser(userId, reportType, description))
 
-/**
- * Report a message
- */
-export const reportMessage = async (
+export const reportMessage = (
   messageId: string,
   messageType: 'group' | 'private',
   reportType: MessageReportType,
   description?: string
-): Promise<SafetyActionResult> => {
-  try {
-    const result = await apiClient.reportMessage(messageId, messageType, reportType, description)
-    if (!result.success) {
-      Logger.error('general', 'Error reporting message', { error: result.error })
-      return { success: false, message: result.error || 'Failed to report message' }
-    }
-    return { success: true, message: 'Report submitted' }
-  } catch (error) {
-    Logger.error('general', 'Error reporting message', { error })
-    return { success: false, message: 'Something went wrong' }
-  }
-}
+): Promise<SafetyActionResult> =>
+  safely('reporting message', 'Failed to report message', 'Report submitted', () =>
+    apiClient.reportMessage(messageId, messageType, reportType, description))
 
 /**
  * Get list of blocked users
@@ -125,19 +91,6 @@ export const getBlockedUsers = async (): Promise<BlockedUser[]> => {
   } catch (error) {
     Logger.error('general', 'Error fetching blocked users', { error })
     return []
-  }
-}
-
-/**
- * Check if a user is blocked
- */
-export const isUserBlocked = async (userId: string): Promise<boolean> => {
-  try {
-    const blocked = await getBlockedUsers()
-    return blocked.some((b) => b.blocked_id === userId)
-  } catch (error) {
-    Logger.error('general', 'Error checking if user is blocked', { error })
-    return false
   }
 }
 
@@ -189,6 +142,36 @@ const failed = (serverSays: string | undefined, fallback: string): SheetOutcome 
 }
 
 /**
+ * A conversation's ⋮ menu: the ordinary things first, leaving one step in.
+ *
+ * The ⋮ used to open the leave confirmation itself — "Unmatch Pooja Reddy?"
+ * with Unmatch as its first, red button — so the header's options icon was
+ * one mis-tap from ending a match, with nothing else behind it (simulator,
+ * 2026-09-29). Now it names the person, offers their profile when they are a
+ * name to you, and puts Unmatch (or End conversation) behind its own
+ * confirmation, unchanged.
+ */
+export const showConversationOptions = (
+  conversationId: string,
+  displayName: string,
+  theyKnowYou: boolean,
+  opts: { onLeft?: () => void; fromMatch?: boolean; onViewProfile?: () => void } = {}
+): void => {
+  const fromMatch = opts.fromMatch ?? true
+  const actions: SheetAction[] = []
+  if (opts.onViewProfile) actions.push({ label: 'View profile', icon: 'user', then: opts.onViewProfile })
+  actions.push({
+    label: fromMatch ? 'Unmatch…' : 'End conversation…',
+    icon: 'heart-off',
+    variant: 'destructive',
+    next: () => leaveConversationSheet(conversationId, displayName, theyKnowYou, opts.onLeft, fromMatch),
+  })
+  actions.push({ label: 'Cancel', cancel: true })
+  // The design's options sheet (Flow 5 DM #20): rows, the destructive one in red.
+  showSheet({ kind: 'actions', title: displayName, layout: 'rows', actions })
+}
+
+/**
  * Leaving a conversation: unmatch, or unmatch/block with a report.
  *
  * Distinct from `showUserSafetyActions`, which is the general "this person is a
@@ -218,45 +201,6 @@ const failed = (serverSays: string | undefined, fallback: string): SheetOutcome 
  * After, the app can close the channel and nothing more, and a sheet implying
  * otherwise sells a protection it cannot provide.
  */
-export const showLeaveConversationActions = (
-  conversationId: string,
-  displayName: string,
-  theyKnowYou: boolean,
-  onLeft?: () => void,
-  fromMatch = true
-): void => {
-  showSheet(leaveConversationSheet(conversationId, displayName, theyKnowYou, onLeft, fromMatch))
-}
-
-/**
- * A conversation's ⋮ menu: the ordinary things first, leaving one step in.
- *
- * The ⋮ used to open the leave confirmation itself — "Unmatch Pooja Reddy?"
- * with Unmatch as its first, red button — so the header's options icon was
- * one mis-tap from ending a match, with nothing else behind it (simulator,
- * 2026-09-29). Now it names the person, offers their profile when they are a
- * name to you, and puts Unmatch (or End conversation) behind its own
- * confirmation, unchanged.
- */
-export const showConversationOptions = (
-  conversationId: string,
-  displayName: string,
-  theyKnowYou: boolean,
-  opts: { onLeft?: () => void; fromMatch?: boolean; onViewProfile?: () => void } = {}
-): void => {
-  const fromMatch = opts.fromMatch ?? true
-  const actions: SheetAction[] = []
-  if (opts.onViewProfile) actions.push({ label: 'View profile', then: opts.onViewProfile })
-  actions.push({
-    label: fromMatch ? 'Unmatch…' : 'End conversation…',
-    variant: 'destructive',
-    next: () => leaveConversationSheet(conversationId, displayName, theyKnowYou, opts.onLeft, fromMatch),
-  })
-  actions.push({ label: 'Cancel', cancel: true })
-  showSheet({ kind: 'actions', title: displayName, actions })
-}
-
-/** The leave confirmation `showLeaveConversationActions` shows, as a step. */
 export const leaveConversationSheet = (
   conversationId: string,
   displayName: string,
@@ -285,6 +229,7 @@ export const leaveConversationSheet = (
     kind: 'reasons',
     title,
     message: `Why are you reporting ${displayName}?`,
+    about: displayName,
     reasons: USER_REPORT_REASONS,
     submitLabel: action === 'block' ? 'Block and report' : `${verb} and report`,
     run: (reason, description) => leave(action, { reason, ...(description ? { description } : {}) }),
@@ -296,12 +241,12 @@ export const leaveConversationSheet = (
     message: copy.body,
     actions: [
       { label: verb, variant: 'destructive', run: () => leave('unmatch') },
-      { label: `${verb} and report`, next: () => reportStep('unmatch', `${verb} and report`) },
+      { label: `${verb} and report…`, next: () => reportStep('unmatch', `${verb} and report`) },
       {
         // Block is the stronger option, surfaced here rather than buried,
         // because somebody who wants to be *unseen* rather than merely
         // disconnected needs the other button and may not know it exists.
-        label: 'Block and report',
+        label: 'Block and report…',
         next: () => reportStep('block', `Block and report ${displayName}`),
       },
       { label: 'Cancel', cancel: true },
@@ -331,7 +276,8 @@ export const showUserSafetyActions = (
   })
 }
 
-const blockStep = (userName: string, userId: string, onComplete?: () => void): Sheet => ({
+/** Block one person, confirmed: from a profile's sheet, or a chat message's Block… (R3-D5 5.1, 5.2). */
+export const blockStep = (userName: string, userId: string, onComplete?: () => void): Sheet => ({
   kind: 'actions',
   title: `Block ${userName}?`,
   message: "They won't be able to see your profile or message you, and you won't see each other in rooms.",
@@ -355,6 +301,7 @@ export const userReportStep = (userName: string, userId: string, onComplete?: ()
   kind: 'reasons',
   title: `Report ${userName}`,
   message: `Why are you reporting ${userName}?`,
+  about: userName,
   reasons: USER_REPORT_REASONS,
   submitLabel: 'Send report',
   run: async (reason, description) => {
@@ -365,15 +312,6 @@ export const userReportStep = (userName: string, userId: string, onComplete?: ()
   },
 })
 
-/** The block confirmation on its own, for a screen that already asked. */
-export const showBlockConfirmation = (
-  userName: string,
-  userId: string,
-  onComplete?: () => void
-): void => {
-  showSheet(blockStep(userName, userId, onComplete))
-}
-
 /** The user report reasons on their own. */
 export const showReportOptions = (
   userName: string,
@@ -383,33 +321,27 @@ export const showReportOptions = (
   showSheet(userReportStep(userName, userId, onComplete))
 }
 
-/** Report one message, from a chat's long-press menu. */
-export const showMessageReportOptions = (
-  messageId: string,
-  messageType: 'group' | 'private',
-  onComplete?: () => void
-): void => {
-  showSheet(messageReportStep(messageId, messageType, onComplete))
-}
-
 /**
- * The same step, for a menu that is already a sheet: it replaces the menu in
- * place rather than closing one and opening another.
+ * Report one message, from a chat's long-press menu. A step, because that menu
+ * is already a sheet: it replaces the menu in place rather than closing one
+ * and opening another.
  */
 export const messageReportStep = (
   messageId: string,
   messageType: 'group' | 'private',
-  onComplete?: () => void
+  /** Who wrote it, as the chat names them: the sheet says they aren't told. */
+  opts: { about?: string; onComplete?: () => void } = {}
 ): Sheet => ({
   kind: 'reasons',
-  title: 'Report message',
-  message: 'Why are you reporting this message?',
+  title: 'Report this message',
+  message: `Our team reads every report. ${opts.about ? `${opts.about} isn’t` : 'Nobody is'} told who sent it.`,
+  about: opts.about,
   reasons: MESSAGE_REPORT_REASONS,
   submitLabel: 'Send report',
   run: async (reason, description) => {
     const result = await reportMessage(messageId, messageType, reason as MessageReportType, description)
     if (!result.success) return failed(result.message, "Couldn't send your report.")
-    onComplete?.()
+    opts.onComplete?.()
     return { ok: true, toast: REPORTED }
   },
 })
@@ -454,23 +386,13 @@ export type EventReportType =
   | 'not_real'
   | 'other'
 
-export const reportEvent = async (
+export const reportEvent = (
   eventId: string,
   reportType: EventReportType,
   description?: string
-): Promise<SafetyActionResult> => {
-  try {
-    const result = await apiClient.reportEvent(eventId, reportType, description)
-    if (!result.success) {
-      Logger.error('general', 'Error reporting event', { error: result.error })
-      return { success: false, message: result.error || 'Failed to submit report' }
-    }
-    return { success: true, message: 'Report submitted' }
-  } catch (error) {
-    Logger.error('general', 'Error reporting event', { error })
-    return { success: false, message: 'Something went wrong' }
-  }
-}
+): Promise<SafetyActionResult> =>
+  safely('reporting event', 'Failed to submit report', 'Report submitted', () =>
+    apiClient.reportEvent(eventId, reportType, description))
 
 /**
  * The reason list, straight from the control.
@@ -538,7 +460,7 @@ export const showRoomReportOptions = (chatGroupId: string, onComplete?: () => vo
   showSheet({
     kind: 'reasons',
     title: 'Report this room',
-    message: "What's going on in here? Our team reads the room, not just one message, and nobody is told who reported it.",
+    message: 'For what no single message shows. Our team reads every report.',
     reasons: ROOM_REPORT_REASONS,
     submitLabel: 'Send report',
     run: async (reason, description) => {

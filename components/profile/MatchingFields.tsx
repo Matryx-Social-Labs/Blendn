@@ -110,23 +110,12 @@ export function MatchingFields({
     <>
       <Text style={styles.section}>WHAT ARE YOU OPEN TO?</Text>
       <View style={styles.row}>
-        {offered.map((intent) => {
-          const on = intents.includes(intent.value)
-          return (
-            <Pressable
-              key={intent.value}
-              onPress={() => onToggleIntent(intent.value)}
-              style={[styles.chip, on ? styles.chipOn : styles.chipOff]}
-              accessibilityRole="button"
-              accessibilityState={{ selected: on }}
-            >
-              <Text style={[styles.chipText, on && styles.chipTextOn]}>
-                {intent.label}
-                {intent.hint ? ` · ${intent.hint}` : ''}
-              </Text>
-            </Pressable>
-          )
-        })}
+        {offered.map((intent) => (
+          <Chip key={intent.value} on={intents.includes(intent.value)} onPress={() => onToggleIntent(intent.value)}>
+            {intent.label}
+            {intent.hint ? ` · ${intent.hint}` : ''}
+          </Chip>
+        ))}
       </View>
 
       {afterIntents}
@@ -140,47 +129,27 @@ export function MatchingFields({
           <Text style={styles.section}>YOU ARE</Text>
           <View style={styles.row}>
             {GENDERS.map((g) => (
-              <Pressable
-                key={g}
-                onPress={() => onChangeGender(g)}
-                style={[styles.chip, gender === g ? styles.chipOn : styles.chipOff]}
-                accessibilityRole="button"
-                accessibilityState={{ selected: gender === g }}
-              >
-                <Text style={[styles.chipText, gender === g && styles.chipTextOn]}>
-                  {GENDER_LABELS[g]}
-                </Text>
-              </Pressable>
+              <Chip key={g} on={gender === g} onPress={() => onChangeGender(g)}>
+                {GENDER_LABELS[g]}
+              </Chip>
             ))}
           </View>
 
           <Text style={styles.section}>YOU IDENTIFY AS</Text>
           <Text style={styles.hint}>Select all that apply — up to three.</Text>
           <View style={styles.row}>
-            {ORIENTATIONS.map((o) => {
-              const selected = orientations.includes(o)
+            {ORIENTATIONS.map((o) => (
               // Dimmed rather than removed at the cap: the chips you cannot
               // reach are what tell you the limit exists.
-              const disabled = orientationDisabled(orientations, o)
-              return (
-                <Pressable
-                  key={o}
-                  onPress={() => onChangeOrientations(toggleOrientation(orientations, o))}
-                  disabled={disabled}
-                  style={[
-                    styles.chip,
-                    selected ? styles.chipOn : styles.chipOff,
-                    disabled && styles.chipDisabled,
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected, disabled }}
-                >
-                  <Text style={[styles.chipText, selected && styles.chipTextOn]}>
-                    {ORIENTATION_LABELS[o]}
-                  </Text>
-                </Pressable>
-              )
-            })}
+              <Chip
+                key={o}
+                on={orientations.includes(o)}
+                onPress={() => onChangeOrientations(toggleOrientation(orientations, o))}
+                disabled={orientationDisabled(orientations, o)}
+              >
+                {ORIENTATION_LABELS[o]}
+              </Chip>
+            ))}
           </View>
 
           {askInterestedIn ? (
@@ -196,21 +165,13 @@ export function MatchingFields({
                 {GENDERS.map((g) => {
                   const on = interestedIn.includes(g)
                   return (
-                    <Pressable
+                    <Chip
                       key={g}
-                      onPress={() =>
-                        onChangeInterestedIn(
-                          on ? interestedIn.filter((x) => x !== g) : [...interestedIn, g]
-                        )
-                      }
-                      style={[styles.chip, on ? styles.chipOn : styles.chipOff]}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: on }}
+                      on={on}
+                      onPress={() => onChangeInterestedIn(on ? interestedIn.filter((x) => x !== g) : [...interestedIn, g])}
                     >
-                      <Text style={[styles.chipText, on && styles.chipTextOn]}>
-                        {GENDER_LABELS[g]}
-                      </Text>
-                    </Pressable>
+                      {GENDER_LABELS[g]}
+                    </Chip>
                   )
                 })}
               </View>
@@ -222,20 +183,37 @@ export function MatchingFields({
       <Text style={styles.section}>WHAT DO YOU DO?</Text>
       <View style={styles.row}>
         {workFields.map((f) => (
-          <Pressable
-            key={f.slug}
-            onPress={() => onChangeWorkField(workField === f.slug ? null : f.slug)}
-            style={[styles.chip, workField === f.slug ? styles.chipOn : styles.chipOff]}
-            accessibilityRole="button"
-            accessibilityState={{ selected: workField === f.slug }}
-          >
-            <Text style={[styles.chipText, workField === f.slug && styles.chipTextOn]}>
-              {f.label}
-            </Text>
-          </Pressable>
+          <Chip key={f.slug} on={workField === f.slug} onPress={() => onChangeWorkField(workField === f.slug ? null : f.slug)}>
+            {f.label}
+          </Chip>
         ))}
       </View>
     </>
+  )
+}
+
+/** One selectable chip. `disabled` is reported to screen readers only when it is given. */
+function Chip({
+  on,
+  onPress,
+  disabled,
+  children,
+}: {
+  on: boolean
+  onPress: () => void
+  disabled?: boolean
+  children: ReactNode
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      style={[styles.chip, on ? styles.chipOn : styles.chipOff, disabled && styles.chipDisabled]}
+      accessibilityRole="button"
+      accessibilityState={disabled === undefined ? { selected: on } : { selected: on, disabled }}
+    >
+      <Text style={[styles.chipText, on && styles.chipTextOn]}>{children}</Text>
+    </Pressable>
   )
 }
 

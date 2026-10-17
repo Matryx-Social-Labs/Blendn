@@ -1,4 +1,3 @@
-import * as Haptics from 'expo-haptics'
 import React, { useCallback, useEffect } from 'react'
 import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
@@ -17,6 +16,7 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
+import { H } from '../../lib/haptics'
 
 /**
  * Where each depth sits in the fan, front first. Four entries: the front card,
@@ -42,8 +42,9 @@ const FLICK_VELOCITY = 500
 /** The throw out, before the card springs back under the pile. */
 const THROW_MS = 220
 
+/** A card thrown past the threshold goes to the back: `H.threshold`, once per throw. */
 function lightTick() {
-  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {})
+  H.threshold()
 }
 
 function DeckCard({

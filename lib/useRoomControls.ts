@@ -74,6 +74,8 @@ export function useRoomControls(eventId: string | null, initiallyRevealed: boole
   const toggleReveal = useCallback(async () => {
     if (!eventId || revealBusy) return
     const next = !revealed
+    // Revealing needs a name and a photo to reveal (the gate the banner draws); going anonymous never waits.
+    if (next && !readiness.ok) return
     setRevealBusy(true)
     setRevealed(next)
     try {
@@ -93,7 +95,7 @@ export function useRoomControls(eventId: string | null, initiallyRevealed: boole
     } finally {
       setRevealBusy(false)
     }
-  }, [eventId, revealed, revealBusy, showToast])
+  }, [eventId, revealed, revealBusy, readiness.ok, showToast])
 
   /*
    * Leaving the room.

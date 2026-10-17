@@ -48,10 +48,10 @@ describe('a removed message is a placeholder, not a blank', () => {
    * `content ?? ''` and drew an empty bubble — a column of blanks after a
    * moderator removed three messages, seen on the simulator 2026-09-12.
    */
-  const bubble = readFileSync(require.resolve('../components/chat/ChatBubble.tsx'), 'utf8')
+  const bubble = readFileSync(require.resolve('../components/ds/ChatBubble.tsx'), 'utf8')
 
   it('carries moderation_hidden from the history into the message', () => {
-    expect(chatSource).toMatch(/removed: Boolean\(msg\.moderation_hidden\)/)
+    expect(readFileSync(join(__dirname, '..', 'lib', 'roomMessages.ts'), 'utf8')).toMatch(/removed: Boolean\(msg\.moderation_hidden\)/)
   })
 
   it("keeps your own live removal as a placeholder and drops everyone else's", () => {
@@ -61,8 +61,10 @@ describe('a removed message is a placeholder, not a blank', () => {
 
   it('the bubble says so, in its own style, with no actions', () => {
     expect(bubble).toContain('This message was removed by moderation.')
-    expect(bubble).toMatch(/onLongPress=\{removed \? undefined : onLongPress\}/)
-    expect(bubble).toMatch(/bubbleRemoved: \{[\s\S]*?borderStyle: 'dashed'/)
+    // No hold (so no menu) and no swipe on a removed message.
+    expect(bubble).toContain('.enabled(!!onLongPress && !removed)')
+    expect(bubble).toContain('.enabled(!!onReply && !removed && !failed)')
+    expect(bubble).toMatch(/removed: \{[^}]*borderStyle: 'dashed'/)
   })
 })
 
