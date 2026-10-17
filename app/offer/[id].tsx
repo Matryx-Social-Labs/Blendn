@@ -17,6 +17,7 @@ import { H } from '../../lib/haptics'
 import { Logger } from '../../lib/logger'
 import {
   maybeLaterKey,
+  regularsActive,
   nextRefreshMs,
   OFFER_REPORT_REASONS,
   offersApi,
@@ -197,7 +198,9 @@ export default function OfferScreen() {
     })
   }
 
-  const ask = !!offer && !!prefs && !prefs.known && later === false && !turnedOff
+  // Deferred feature: nothing about being a regular shows unless the server says it is live here.
+  const regulars = regularsActive(prefs)
+  const ask = regulars && !!offer && !!prefs && !prefs.known && later === false && !turnedOff
 
   return (
     <View style={styles.screen}>
@@ -207,8 +210,8 @@ export default function OfferScreen() {
           <>
             <PassBody offer={offer} lastReadFailed={lastReadFailed} focused={focused} />
             {ask && prefs ? <RegularAsk venueName={offer.venue.name} prefs={prefs} saving={saving} onYes={sayYes} onLater={notNow} /> : null}
-            {prefs?.known ? <RegularOn venueName={offer.venue.name} saving={saving} onOff={() => void turnOff()} /> : null}
-            {turnedOff && !prefs?.known ? <RegularOff venueName={offer.venue.name} /> : null}
+            {regulars && prefs?.known ? <RegularOn venueName={offer.venue.name} saving={saving} onOff={() => void turnOff()} /> : null}
+            {regulars && turnedOff && !prefs?.known ? <RegularOff venueName={offer.venue.name} /> : null}
             <Button kind="tertiary" label={`See ${offer.venue.name}`} onPress={() => router.push(`/venue/${offer.venue.id}` as never)} />
           </>
         ) : failure ? (

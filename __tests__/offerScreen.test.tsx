@@ -70,7 +70,7 @@ const offer = (state: string, pass: unknown, extra: Record<string, unknown> = {}
 })
 const LIVE = offer('live', { code: 'K7Q4M2', rotatesAt: '2026-10-11T20:00:30.000Z' })
 let reads: unknown[] = []
-let regular = { known: false, offersMuted: false, ownerName: 'Indiranagar Hospitality' }
+let regular: Record<string, unknown> = { known: false, offersMuted: false, ownerName: 'Indiranagar Hospitality', regulars: { active: true } }
 
 beforeEach(async () => {
   jest.useFakeTimers({ now: NOW })
@@ -79,7 +79,7 @@ beforeEach(async () => {
   ;(router.push as jest.Mock).mockClear()
   await AsyncStorage.clear()
   reads = [LIVE]
-  regular = { known: false, offersMuted: false, ownerName: 'Indiranagar Hospitality' }
+  regular = { known: false, offersMuted: false, ownerName: 'Indiranagar Hospitality', regulars: { active: true } }
   request.mockReset()
   request.mockImplementation((url: string, init?: RequestInit) => {
     if (url.endsWith('/regular') && init?.method === 'PUT') {
@@ -239,6 +239,33 @@ describe('before the offer is known', () => {
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull()
     await act(async () => { fireEvent.press(button('Go back')) })
     expect(router.back).toHaveBeenCalled()
+  })
+})
+
+describe('the regulars feature is deferred: nothing shows unless the server says it is live', () => {
+  it.each([
+    ['no flag', undefined],
+    ['regulars: {}', {}],
+    ['active: false', { active: false }],
+  ])('%s: no prompt, no Turn off — the pass is unaffected', async (_name, flag) => {
+    regular = { known: false, offersMuted: false, ownerName: 'Indiranagar Hospitality', ...(flag ? { regulars: flag } : {}) }
+    await mount()
+    expect(screen.queryByTestId('regular-ask')).toBeNull()
+    expect(screen.getByText('K7Q 4M2')).toBeTruthy()
+    regular = { ...regular, known: true }
+    await mount()
+    expect(screen.queryByTestId('regular-on')).toBeNull()
+  })
+
+  it('active: true shows the prompt', async () => {
+    await mount()
+    expect(screen.getByTestId('regular-ask')).toBeTruthy()
+  })
+
+  it('active: true and already known shows Turn off', async () => {
+    regular = { ...regular, known: true }
+    await mount()
+    expect(screen.getByTestId('regular-on')).toBeTruthy()
   })
 })
 

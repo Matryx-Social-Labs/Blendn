@@ -37,7 +37,16 @@ export type RegularPrefs = {
   offersMuted: boolean
   /** Who would see it: the organisation that runs the place on Blendn now; null while nobody does. */
   ownerName: string | null
+  /**
+   * The regulars feature is deferred: the server says it is live for this venue
+   * (`regulars.active === true`) or the app shows no "know I'm a regular" prompt.
+   * Absent is off.
+   */
+  regulars?: { active?: boolean }
 }
+
+/** Whether the regulars prompt may show for this venue: only on the server's explicit yes. */
+export const regularsActive = (prefs: Pick<RegularPrefs, 'regulars'> | null | undefined): boolean => prefs?.regulars?.active === true
 
 export type OfferReportReason = 'offensive' | 'misleading' | 'spam' | 'unsafe' | 'other'
 

@@ -60,6 +60,9 @@ const pass = { success: true, data: { active: true, gated: true, product: 'night
 const launch = { success: true, data: { ...none.data, gated: false } }
 const logged = () => (apiClient.logPaywallEvent as jest.Mock).mock.calls.map((c) => c[0])
 
+/** The clock walk is ~1 s alone and several on a loaded machine (a full parallel run): it gets room, and a timeout cannot leave fake timers on for the tests after it. */
+const CLOCK_WALK_TIMEOUT_MS = 30_000
+
 const MONTHLY_CTA = 'Start Blend’n+ — ₹199.00 / month'
 const NIGHT_CTA = 'Get the Night Pass — ₹49.00'
 const button = (name: string) => screen.getByRole('button', { name })
@@ -70,6 +73,8 @@ async function mount() {
   await act(async () => { await Promise.resolve(); await Promise.resolve() })
   return view
 }
+
+afterEach(() => jest.useRealTimers())
 
 beforeEach(() => {
   mockTrigger.value = 'go_live_expiry'
@@ -349,7 +354,7 @@ describe('the wait and the store', () => {
     } finally {
       jest.useRealTimers()
     }
-  })
+  }, CLOCK_WALK_TIMEOUT_MS)
 
   it('says each state aloud for VoiceOver', async () => {
     const say = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {})
