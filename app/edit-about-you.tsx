@@ -1,14 +1,16 @@
 import { router } from 'expo-router'
-import { useEffect, useState } from 'react'
-import { ScrollView, StyleSheet, View } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { useEffect, useState, type ReactNode } from 'react'
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { AppHeader } from '../components/AppHeader'
-import { LoadError } from '../components/LoadError'
-import { EmberChip, EmberChipRow, EmberFieldGroup, EmberToggle } from '../components/onboarding/EmberControls'
+import { Chip } from '../components/ds/Chip'
+import { SegmentedControl } from '../components/ds/SegmentedControl'
+import { font, useBoldText } from '../components/ds/shared'
+import { SettingsGroup, SettingsRow } from '../components/ds/SettingsRow'
+import { StateScreen } from '../components/ds/StateScreen'
+import { FieldLabel, FieldNotes } from '../components/ds/TextField'
+import { TopBar } from '../components/ds/TopBar'
 import { useToast } from '../components/Toast'
-import { PlaceholderBanner } from '../components/ui/PlaceholderBanner'
-import { Text } from '../components/ui/Text'
 import {
   aboutYouFrom,
   aboutYouUpdate,
@@ -24,14 +26,21 @@ import {
   type SignSystem,
 } from '../lib/aboutYou'
 import { apiClient, ProfileCache } from '../lib/apiClient'
+import { COLOR, RADIUS, SIZE, SPACE } from '../lib/design/tokens'
+import { H } from '../lib/haptics'
 import { Logger } from '../lib/logger'
 import { queryCache } from '../lib/queryCache'
-import { EMBER, GUTTER, SPACE } from '../lib/theme'
 import { refreshAuthUser, useAuth } from '../lib/useAuth'
+
+/** The two calendars, in the order the control draws them: `SIGN_SYSTEMS[index]`. */
+const SIGN_SYSTEMS: readonly SignSystem[] = ['western', 'rashi']
+const SIGN_SYSTEM_LABELS = ['Western', 'My rashi instead'] as const
 
 /**
  * Languages, home state, your sign and this-or-that — matching v2's "about
- * you" (placeholder design — docs/PLACEHOLDER_SCREENS.md §15).
+ * you" (guidelines/round4/r4d.js `aboutYou`, 6-7; the design keeps these inside
+ * Edit profile, and draws the route as it stands: loading, "Couldn't load
+ * this", "Couldn't save").
  *
  * Everything here is **shown, never ranked**: a card says "You both speak
  * Malayalam" or "Both from Kerala" when two people share one, and the server
@@ -46,10 +55,13 @@ import { refreshAuthUser, useAuth } from '../lib/useAuth'
  * which a birth date cannot give, so it is only ever chosen.
  *
  * Saves only what changed: opening this screen and saving writes nothing.
+ * Nothing on this route asks for or changes a birthday: the 18+ gate is the
+ * basics step's and Edit profile's, not this screen's.
  */
 export default function EditAboutYouScreen() {
   const { user: authUser } = useAuth()
   const { showToast } = useToast()
+  const insets = useSafeAreaInsets()
   const [options, setOptions] = useState<ProfileOptions | null>(null)
   const [loadFailed, setLoadFailed] = useState(false)
   const [loaded, setLoaded] = useState<AboutYou>(NO_ABOUT_YOU)
@@ -62,6 +74,7 @@ export default function EditAboutYouScreen() {
   const [signOn, setSignOn] = useState(false)
   const [system, setSystem] = useState<SignSystem>('western')
   const [attempt, setAttempt] = useState(0)
+  const [scrolled, setScrolled] = useState(false)
 
   useEffect(() => {
     if (!authUser) return
@@ -117,6 +130,11 @@ export default function EditAboutYouScreen() {
       return next
     })
 
+  const refuse = (text: string) => {
+    H.error()
+    showToast(text, 'error')
+  }
+
   const save = async () => {
     if (!authUser || saving) return
     const profileBody = aboutYouUpdate(loaded, form)
@@ -127,7 +145,7 @@ export default function EditAboutYouScreen() {
         const r = await apiClient.updateProfile(authUser.id, profileBody)
         // Three Tier B changes a day: the server's own sentence says when to try again.
         if (!r.success && r.errorCode === 'RATE_LIMITED' && r.error) {
-          showToast(r.error, 'error')
+          refuse(r.error)
           return
         }
         if (!r.success) throw new Error(r.error || 'profile')
@@ -141,11 +159,12 @@ export default function EditAboutYouScreen() {
       void refreshAuthUser()
       setLoaded(form)
       setAnswersLoaded(answers)
+      H.success()
       showToast('Saved', 'success')
       router.back()
     } catch (error) {
       Logger.error('profile', 'EditAboutYou: save failed', { error })
-      showToast("Couldn't save. Try again.", 'error')
+      refuse('Couldn’t save. Try again.')
     } finally {
       setSaving(false)
     }
@@ -153,115 +172,173 @@ export default function EditAboutYouScreen() {
 
   const sign = form.sign
   return (
-    <SafeAreaView style={styles.flex} edges={['top', 'bottom']}>
-      <AppHeader
-        title="Languages, home & sign"
+    <View style={styles.screen}>
+      <TopBar
+        title="About you"
+        state={scrolled ? 'scrolled' : 'rest'}
         onBack={() => router.back()}
-        rightTextButton={{ label: 'Save', onPress: save, loading: saving, disabled: saving || !options }}
+        save={{ onPress: () => void save(), saving, disabled: saving || !options }}
+        testID="about-you-top"
       />
       {loadFailed ? (
-        <LoadError title="Couldn't load this" onRetry={() => setAttempt((n) => n + 1)} />
+        <View style={styles.state}>
+          <StateScreen
+            icon="cloud-off"
+            title="Couldn’t load this"
+            body="Check your connection and try again."
+            actions={[{ label: 'Try again', onPress: () => setAttempt((n) => n + 1) }]}
+            testID="about-you-failed"
+          />
+        </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.content}>
-          <PlaceholderBanner />
-          <Text variant="body" color={EMBER.textSecondary}>
-            When you share one of these with someone in a room, their card says so — &quot;You both speak
-            Malayalam&quot;, &quot;Both from Kerala&quot;. It never decides who you see.
-          </Text>
-
+        <ScrollView
+          testID="about-you-scroll"
+          contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + SPACE.xxl }]}
+          onScroll={(e) => setScrolled(e.nativeEvent.contentOffset.y > 0)}
+          scrollEventThrottle={16}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Intro />
           {options ? (
             <>
-              <EmberFieldGroup label="Languages you speak" helper={`Besides English. Up to ${options.maxLanguages}.`}>
-                <EmberChipRow>
+              <View style={styles.card}>
+                <Field label="Languages you speak" hint={`Besides English, up to ${options.maxLanguages}.`}>
                   {options.languages.map((l) => (
-                    <EmberChip
+                    <Chip
                       key={l.slug}
                       label={l.label}
                       selected={form.languages.includes(l.slug)}
                       onPress={() => setForm((f) => ({ ...f, languages: toggleLanguage(f.languages, l.slug, options.maxLanguages) }))}
                     />
                   ))}
-                </EmberChipRow>
-              </EmberFieldGroup>
-
-              <EmberFieldGroup label="Where you're from" helper="A state, never a town. Tap again to clear.">
-                <EmberChipRow>
+                </Field>
+                <Field label="Home state" hint="A state, never a town. Tap again to clear.">
                   {options.homeStates.map((s) => (
-                    <EmberChip
+                    <Chip
                       key={s.slug}
                       label={s.label}
                       selected={form.homeState === s.slug}
                       onPress={() => setForm((f) => ({ ...f, homeState: f.homeState === s.slug ? null : s.slug }))}
                     />
                   ))}
-                </EmberChipRow>
-              </EmberFieldGroup>
+                </Field>
+              </View>
 
-              <EmberToggle
-                label="Show my sign"
-                helper={'Your sign shows next to your age. A fun line on cards — "Both Leos ♌" — never used to match you.'}
-                value={signOn}
-                onValueChange={toggleSign}
-              />
+              <SettingsGroup>
+                <SettingsRow
+                  icon="sparkles"
+                  title="Show my sign"
+                  hint={'Your sign shows next to your age. A fun line on cards — "Both Leos ♌" — never used to match you.'}
+                  trail="switch"
+                  value={signOn}
+                  onValueChange={toggleSign}
+                />
+              </SettingsGroup>
               {signOn ? (
-                <>
-                  <EmberChipRow>
-                    <EmberChip label="Western" selected={system === 'western'} onPress={() => chooseSystem('western')} />
-                    <EmberChip label="My rashi instead" selected={system === 'rashi'} onPress={() => chooseSystem('rashi')} />
-                  </EmberChipRow>
+                <View style={styles.card}>
+                  <SegmentedControl
+                    items={SIGN_SYSTEM_LABELS}
+                    selected={SIGN_SYSTEMS.indexOf(system)}
+                    onChange={(i) => chooseSystem(SIGN_SYSTEMS[i])}
+                    testID="about-you-system"
+                  />
                   {hint && !sign ? (
-                    <EmberChip label={`From your birthday: ${signName(hint, 'western')} — tap to use`} selected={false} onPress={() => {
-                      setSystem('western')
-                      setForm((f) => ({ ...f, sign: { slug: hint.slug, system: 'western' } }))
-                    }} />
+                    <BirthdaySign
+                      text={`From your birthday: ${signName(hint, 'western')} — tap to use`}
+                      onPress={() => {
+                        setSystem('western')
+                        setForm((f) => ({ ...f, sign: { slug: hint.slug, system: 'western' } }))
+                      }}
+                    />
                   ) : null}
-                  <EmberChipRow>
+                  <View style={styles.chips}>
                     {options.signs.map((s) => (
-                      <EmberChip
-                        key={s.slug}
-                        label={signName(s, system)}
-                        selected={sign?.slug === s.slug}
-                        onPress={() => pickSign(s.slug)}
-                      />
+                      <Chip key={s.slug} label={signName(s, system)} selected={sign?.slug === s.slug} onPress={() => pickSign(s.slug)} />
                     ))}
-                  </EmberChipRow>
-                </>
+                  </View>
+                </View>
               ) : null}
 
-              <EmberFieldGroup label="This or that" helper="Pick one, or leave it. Tap again to take it back.">
-                {options.thisOrThat.map((q) => (
-                  <View key={q.slug} style={styles.pair} accessibilityLabel={`${q.a} or ${q.b}`}>
-                    <EmberChipRow>
-                      <EmberChip label={q.a} selected={answers[q.slug] === 'a'} onPress={() => pick(q.slug, 'a')} />
-                      <EmberChip label={q.b} selected={answers[q.slug] === 'b'} onPress={() => pick(q.slug, 'b')} />
-                    </EmberChipRow>
-                  </View>
-                ))}
-              </EmberFieldGroup>
+              {options.thisOrThat.length ? (
+                <View style={styles.card}>
+                  <Field label="This or that" hint="Pick one, or leave it. Tap again to take it back.">
+                    {options.thisOrThat.map((q) => (
+                      <View key={q.slug} style={styles.pair}>
+                        <Chip label={q.a} selected={answers[q.slug] === 'a'} onPress={() => pick(q.slug, 'a')} />
+                        <Chip label={q.b} selected={answers[q.slug] === 'b'} onPress={() => pick(q.slug, 'b')} />
+                      </View>
+                    ))}
+                  </Field>
+                </View>
+              ) : null}
 
-              <EmberToggle
-                label="Show my badges"
-                helper="Earned by checking in — like “Regular here”. Off hides every badge on your card."
-                value={form.showBadges}
-                onValueChange={(v) => setForm((f) => ({ ...f, showBadges: v }))}
-              />
-
-              <EmberToggle
-                label="Show “Shows up” on my card"
-                helper="Once you've checked in to 80% of the events you said you'd go to (at least 3)."
-                value={form.showsUpBadge}
-                onValueChange={(v) => setForm((f) => ({ ...f, showsUpBadge: v }))}
-              />
+              <SettingsGroup>
+                <SettingsRow
+                  icon="badge-check"
+                  title="Show my badges"
+                  hint="Earned by checking in — like “Regular here”. Off hides every badge on your card."
+                  trail="switch"
+                  value={form.showBadges}
+                  onValueChange={(v) => setForm((f) => ({ ...f, showBadges: v }))}
+                />
+                <SettingsRow
+                  icon="calendar-check"
+                  title="Show “Shows up” on my card"
+                  hint="Once you've checked in to 80% of the events you said you'd go to (at least 3)."
+                  trail="switch"
+                  value={form.showsUpBadge}
+                  onValueChange={(v) => setForm((f) => ({ ...f, showsUpBadge: v }))}
+                />
+              </SettingsGroup>
             </>
           ) : null}
         </ScrollView>
       )}
-    </SafeAreaView>
+    </View>
+  )
+}
+
+/** The one line under the title; while loading it is all there is (Save is off). */
+function Intro() {
+  const bold = useBoldText()
+  return (
+    <Text style={[font('meta', bold), styles.intro]}>
+      Where you’re from, what you speak, your sign. When you share one with someone in a room, their card says so — it never decides who you see.
+    </Text>
+  )
+}
+
+/** The sign of their birth date, offered as a line to tap (never applied by itself): it wraps, where a chip would clip. */
+function BirthdaySign({ text, onPress }: { text: string; onPress: () => void }) {
+  const bold = useBoldText()
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={text} style={styles.birthday}>
+      <Text style={[font('meta', bold), styles.ink]}>{text}</Text>
+    </Pressable>
+  )
+}
+
+/** A labelled set of chips on the card: the mono label, the chips wrapping, a hint under. */
+function Field({ label, hint, children }: { label: string; hint: string; children: ReactNode }) {
+  const bold = useBoldText()
+  return (
+    <View style={styles.field}>
+      <FieldLabel text={label} bold={bold} contrast={false} />
+      <View style={styles.chips}>{children}</View>
+      <FieldNotes hint={hint} bold={bold} />
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  content: { paddingHorizontal: GUTTER, paddingBottom: SPACE.xxl, gap: SPACE.xl },
-  pair: { marginBottom: SPACE.sm },
+  screen: { flex: 1, backgroundColor: COLOR.ink },
+  content: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.sm, gap: SPACE.lg },
+  state: { flex: 1, paddingHorizontal: SPACE.gutter, justifyContent: 'center' },
+  intro: { color: COLOR.textSecondary },
+  ink: { color: COLOR.textPrimary },
+  birthday: { minHeight: SIZE.targetAndroid, justifyContent: 'center' },
+  card: { borderRadius: RADIUS.card, backgroundColor: COLOR.surface, padding: SPACE.lg, gap: SPACE.lg },
+  field: { gap: SPACE.sm },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
+  pair: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
 })
