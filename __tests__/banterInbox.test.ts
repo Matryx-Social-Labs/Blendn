@@ -309,7 +309,7 @@ describe('#27 · C12: the held order and its release', () => {
 })
 
 describe('#27 · C12: the held order always lets go on iOS (drive 3)', () => {
-  const { holdController, HOLD_MAX_MS, HOLD_RELEASE_MS } = require('../components/banter/hold')
+  const { holdController, HOLD_MAX_MS, HOLD_RELEASE_MS, HOLD_TOUCH_MAX_MS } = require('../components/banter/hold')
   beforeEach(() => jest.useFakeTimers())
   afterEach(() => jest.useRealTimers())
   const drive = (...events: string[]) => {
@@ -329,11 +329,11 @@ describe('#27 · C12: the held order always lets go on iOS (drive 3)', () => {
     expect(heard).toEqual([true, false])
   })
 
-  it('a lift the list never hears (a row’s Pressable had the touch): released at the cap', () => {
+  it('a finger resting on the list holds for as long as it rests (drive 5); only a lift never heard reaches the long cap', () => {
     const { c } = drive('touchStart')
-    jest.advanceTimersByTime(HOLD_MAX_MS - 1)
+    jest.advanceTimersByTime(HOLD_MAX_MS * 3)
     expect(c.state().held).toBe(true)
-    jest.advanceTimersByTime(1)
+    jest.advanceTimersByTime(HOLD_TOUCH_MAX_MS)
     expect(c.state().held).toBe(false)
   })
 

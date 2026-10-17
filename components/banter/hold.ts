@@ -41,12 +41,19 @@ export function holdStep(s: Hold, e: HoldEvent): Hold {
 /** The held order lets go this long after a lift (a fling's momentum, starting just after, cancels it). */
 export const HOLD_RELEASE_MS = 250
 /**
- * The longest the order holds without a new event from the list. iOS can drop
- * the lift (a row's Pressable has the touch, so the list's touchEnd never
- * comes) or a glide's momentumEnd; Android settled on lift, iOS held until
- * the next tap (drive 3). Restarted by every event while held.
+ * The longest the order holds after the finger is up without the list saying
+ * it came to rest: iOS can drop a glide's momentumEnd, and the order then held
+ * until the next tap (drive 3). Restarted by every event while held.
  */
 export const HOLD_MAX_MS = 3000
+/**
+ * The same cap while a finger is (as far as the list heard) still down. Never
+ * the short one: a finger resting on the list holds the order for as long as
+ * it rests (drive 5, Android: the 3 s cap let a DM reorder the rows under a
+ * resting finger, and the lift then opened the row). Only a lift the list
+ * never heard reaches it.
+ */
+export const HOLD_TOUCH_MAX_MS = 20000
 
 /**
  * `holdStep` with its two timers: the short one after a lift, and the cap.
@@ -56,6 +63,8 @@ export function holdController(onHeld: (held: boolean) => void) {
   let s: Hold = IDLE
   let lift: ReturnType<typeof setTimeout> | null = null
   let cap: ReturnType<typeof setTimeout> | null = null
+  /** A finger down on the list: from its touchStart to its touchEnd (or cancel). */
+  let touching = false
   const clear = (t: ReturnType<typeof setTimeout> | null) => {
     if (t) clearTimeout(t)
     return null
@@ -63,10 +72,12 @@ export function holdController(onHeld: (held: boolean) => void) {
   const step = (e: HoldEvent) => {
     const prev = s
     s = holdStep(prev, e)
+    if (e === 'touchStart' || e === 'dragBegin') touching = true
+    if (e === 'touchEnd' || e === 'release') touching = false
     if (prev.armed && !s.armed) lift = clear(lift)
     if (s.armed && !prev.armed) lift = setTimeout(() => step('timer'), HOLD_RELEASE_MS)
     cap = clear(cap)
-    if (s.held) cap = setTimeout(() => step('release'), HOLD_MAX_MS)
+    if (s.held) cap = setTimeout(() => step('release'), touching || s.dragging ? HOLD_TOUCH_MAX_MS : HOLD_MAX_MS)
     if (s.held !== prev.held) onHeld(s.held)
   }
   return {

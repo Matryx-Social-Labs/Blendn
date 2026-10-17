@@ -212,3 +212,35 @@ describe('a lift after a hold opens nothing (drive 2, Android)', () => {
     now.mockRestore()
   })
 })
+
+describe('a finger resting on the Live now card holds the order (drive 5, Android)', () => {
+  it('a DM 5 s into the hold raises "↑ New" without moving a row, and the lift opens nothing', async () => {
+    const { Platform } = require('react-native')
+    Object.defineProperty(Platform, 'OS', { value: 'android', configurable: true })
+    jest.useFakeTimers({ now: 1_000 })
+    const sneha = { ...dm, id: 'c2', otherUser: { id: 'u-s', name: 'Sneha Pillai', image: 'https://cdn.blendn.app/u/s.jpg' }, lastMessage: { content: 'hi', createdAt: '2026-10-15T18:00:00.000Z', senderId: 'u-s' }, unreadCount: 0 }
+    serve({ dms: [dm, sneha] })
+    await open()
+    const rows = () => screen.getAllByTestId(/^banter-row-p:/).map((r) => r.props.testID)
+    expect(rows()).toEqual(['banter-row-p:c1', 'banter-row-p:c2'])
+    // Android's order: the finger comes down on the Live now card (the list hears it) and rests; no drag, no lift.
+    await act(async () => fireEvent(screen.getAllByText('Vinyl Night')[0], 'touchStart'))
+    await act(async () => jest.advanceTimersByTime(5_000))
+    // Sneha writes: her row would move up.
+    await act(async () => {
+      mockDm.forEach((cb) => cb({ conversationId: 'c2', message: { id: 'm9', senderId: 'u-s', text: 'drive5 android held', createdAt: '2026-10-15T19:45:00.000Z' } }))
+    })
+    await flush()
+    expect(rows()).toEqual(['banter-row-p:c1', 'banter-row-p:c2'])
+    expect(screen.getByRole('button', { name: 'New messages above' })).toBeTruthy()
+    // The finger comes up on Sneha's row: a release after a hold opens nothing.
+    await act(async () => fireEvent.press(screen.getByTestId('banter-row-p:c2')))
+    await act(async () => fireEvent(screen.getByTestId('banter-list'), 'touchEnd'))
+    expect(router.push).not.toHaveBeenCalled()
+    // And on lift the rows settle.
+    await act(async () => jest.advanceTimersByTime(300))
+    expect(rows()).toEqual(['banter-row-p:c2', 'banter-row-p:c1'])
+    jest.useRealTimers()
+    Object.defineProperty(Platform, 'OS', { value: 'ios', configurable: true })
+  })
+})
