@@ -64,8 +64,8 @@ jest.mock('../components/pulse/UpcomingCard', () => {
   const { Pressable, Text } = require('react-native')
   return {
     UPCOMING_THUMB: 72,
-    UpcomingCard: (p: { title: string; onPress: () => void; onLongPress: () => void; onToggleFavorite: () => void }) => (
-      <Pressable testID={`row-${p.title}`} onPress={p.onPress} onLongPress={p.onLongPress}>
+    UpcomingCard: (p: { title: string; onPress: () => void; onPressIn?: () => void; onLongPress: () => void; onToggleFavorite: () => void }) => (
+      <Pressable testID={`row-${p.title}`} onPress={p.onPress} onPressIn={p.onPressIn} onLongPress={p.onLongPress}>
         <Text>{p.title}</Text>
         <Pressable testID={`heart-${p.title}`} onPress={p.onToggleFavorite} />
       </Pressable>
@@ -350,5 +350,18 @@ describe('the Pulse’s coach mark', () => {
     mockFull = true
     await mount()
     expect(mark()).toBeNull()
+  })
+})
+
+describe('the event page, warm before the tap', () => {
+  it('the first featured card once the Pulse settles, and a card the finger is on', async () => {
+    signIn()
+    ;(getEvents as jest.Mock).mockResolvedValue({ data: [event('e1', 'https://img/1.jpg'), event('u1', null)], error: null })
+    const { apiClient } = jest.requireMock('../lib/apiClient') as { apiClient: { getEvent: jest.Mock } }
+    apiClient.getEvent.mockClear()
+    await mount()
+    expect(apiClient.getEvent.mock.calls.map((c) => c[0])).toEqual(['e1'])
+    await act(async () => fireEvent(screen.getByTestId('row-Event u1'), 'pressIn'))
+    expect(apiClient.getEvent).toHaveBeenLastCalledWith('u1', expect.objectContaining({ include: 'interestedUsers' }))
   })
 })

@@ -119,6 +119,8 @@ interface Props {
   /** Full width when it is the only card — see `FEATURED_CARD_SOLO`. */
   width?: number
   onPress: () => void
+  /** The finger is down: the screen warms the event page (~100 ms before the press). */
+  onPressIn?: () => void
   /** The quick-actions tray; also a "Quick actions" VoiceOver action. */
   onLongPress?: () => void
 }
@@ -134,6 +136,7 @@ function FeaturedCardImpl({
   placeLabel,
   width = FEATURED_CARD_WIDTH,
   onPress,
+  onPressIn,
   onLongPress,
 }: Props) {
   // From the width it is actually drawn at: the solo card is wider.
@@ -146,6 +149,7 @@ function FeaturedCardImpl({
       haptic={false}
       pressedScale={0.98}
       onPress={onPress}
+      onPressIn={onPressIn}
       onLongPress={onLongPress}
       accessibilityRole="button"
       accessibilityLabel={`${title}. ${dateLabel}${placeLabel ? `, ${placeLabel}` : ''}`}

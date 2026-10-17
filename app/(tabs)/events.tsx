@@ -504,17 +504,25 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     setTrayState({ ...next, visible: true })
   }, [])
 
-  // Memoized callbacks to prevent re-creation
-  const handleEventPress = useCallback((event: Event) => {
-    // The list lets a card's tap through (`keyboardShouldPersistTaps`), so the card puts the search's keyboard away itself.
-    Keyboard.dismiss()
-    // Warm the event detail cache before navigation (fire-and-forget)
+  /**
+   * The event page's own read, into the client's cache (fire-and-forget): on a
+   * card's press-in (~100 ms before the press), on the press, and for the first
+   * featured card once the Pulse settles. Replaces Tonight's per-card detail N+1.
+   */
+  const warmEvent = useCallback((event: Event) => {
     apiClient.getEvent(event.id, {
       include: 'interestedUsers',
       interestedLimit: 6,
       lat: userLocation?.latitude,
       lon: userLocation?.longitude,
     }).catch(() => {})
+  }, [userLocation?.latitude, userLocation?.longitude])
+
+  // Memoized callbacks to prevent re-creation
+  const handleEventPress = useCallback((event: Event) => {
+    // The list lets a card's tap through (`keyboardShouldPersistTaps`), so the card puts the search's keyboard away itself.
+    Keyboard.dismiss()
+    warmEvent(event)
 
     if (event.cover_image_url) {
       const hero = getOptimizedImageUrl(event.cover_image_url, {
@@ -544,7 +552,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
         interestCount: String(latestInterestCountsRef.current[event.id] ?? event.favorite_count ?? 0),
       } as any,
     })
-  }, [userLocation, latestInterestCountsRef])
+  }, [latestInterestCountsRef, warmEvent])
 
   /*
    * Re-reads the active check-ins after a check-in or out. Nothing here draws
@@ -1434,6 +1442,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
             distanceLabel={browsingHere ? formatDistance(proximityData[event.id]?.distance_km ?? event.distance) : null}
             note={note}
             onPress={() => handleEventPress(event)}
+            onPressIn={() => warmEvent(event)}
             onLongPress={() => handleEventPreview(event)}
             isFavorited={!!interestStatuses[event.id]}
             favoriteBusy={!!interestPending[event.id]}
@@ -1442,7 +1451,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
         </View>
       </RevealRow>
     )
-  }, [checkinStatuses, proximityData, interestStatuses, interestPending, browsingHere, handleEventPress, handleEventPreview, toggleInterest, pulls])
+  }, [checkinStatuses, proximityData, interestStatuses, interestPending, browsingHere, handleEventPress, handleEventPreview, warmEvent, toggleInterest, pulls])
 
   // Memoized keyExtractor
   const keyExtractor = useCallback((item: Event) => item.id, [])
@@ -1505,9 +1514,10 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
         dateLabel: featuredDateLabel(item.start_time),
         placeLabel: placeLabel(item),
         onPress: () => handleEventPress(item),
+        onPressIn: () => warmEvent(item),
         onLongPress: () => handleEventPreview(item),
       })),
-    [featuredItems, handleEventPress, handleEventPreview]
+    [featuredItems, handleEventPress, handleEventPreview, warmEvent]
   )
 
   const upcomingStackItems = useMemo(() => {
@@ -1671,6 +1681,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
                     // browsing elsewhere it read "6412km away". Same rule as Nearby.
                     distanceLabel={browsingHere ? formatDistance(item.distance) : null}
                     onPress={() => handleEventPress(item)}
+                    onPressIn={() => warmEvent(item)}
                     onLongPress={() => handleEventPreview(item)}
                     isFavorited={!!interestStatuses[item.id]}
                     favoriteBusy={!!interestPending[item.id]}
@@ -1783,6 +1794,13 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
 
   const isLoading = authLoading || loading
   const showLoadingSkeleton = useMinimumVisible(isLoading, 720)
+  // The first featured card, warm once the Pulse has settled: the likeliest tap.
+  const firstFeatured = showLoadingSkeleton ? undefined : featuredItems[0]
+  useEffect(() => {
+    if (firstFeatured) warmEvent(firstFeatured)
+    // Once per card, not per location fix.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firstFeatured?.id])
 
   /*
    * The coach mark, under the first card the page draws (Featured's first, or

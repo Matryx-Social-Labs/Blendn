@@ -50,6 +50,8 @@ interface Props {
   /** Pre-formatted by `formatDistance`, or absent when we have no fix. */
   distanceLabel?: string | null
   onPress: () => void
+  /** The finger is down: the screen warms the event page (~100 ms before the press). */
+  onPressIn?: () => void
   /**
    * The quick-actions tray (save, check in or out, details). Also offered to
    * VoiceOver as a "Quick actions" custom action, since a long-press is not
@@ -94,6 +96,7 @@ function UpcomingCardImpl({
   peopleLabel,
   distanceLabel,
   onPress,
+  onPressIn,
   onLongPress,
   note,
   noteTone = 'default',
@@ -122,6 +125,7 @@ function UpcomingCardImpl({
       haptic={false}
       pressedScale={0.98}
       onPress={onPress}
+      onPressIn={onPressIn}
       onLongPress={onLongPress}
       accessibilityRole="button"
       accessibilityLabel={[title, timeLabel, placeLabel].filter(Boolean).join(', ')}
