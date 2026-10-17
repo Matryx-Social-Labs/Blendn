@@ -11,7 +11,7 @@ import { State } from 'react-native-gesture-handler'
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils'
 import * as Reanimated from 'react-native-reanimated'
 
-import { settleDetent, Sheet, sheetBottomPadding, sheetMaxHeight } from '../components/ds/Sheet'
+import { fieldScroll, settleDetent, Sheet, sheetBottomPadding, sheetMaxHeight } from '../components/ds/Sheet'
 import { COLOR, MATERIAL, SPRING } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 
@@ -252,8 +252,8 @@ describe('the foot over a keyboard (Board composer drive: a dead band between Ca
 
   it('follows the keyboard as it shows and hides', async () => {
     const { Keyboard } = require('react-native')
-    const handlers: Record<string, (e?: { endCoordinates: { height: number } }) => void> = {}
-    const spy = jest.spyOn(Keyboard, 'addListener').mockImplementation(((event: string, fn: (e?: { endCoordinates: { height: number } }) => void) => {
+    const handlers: Record<string, (e?: { endCoordinates: { height: number; screenY: number } }) => void> = {}
+    const spy = jest.spyOn(Keyboard, 'addListener').mockImplementation(((event: string, fn: (e?: { endCoordinates: { height: number; screenY: number } }) => void) => {
       handlers[event] = fn
       return { remove: () => {} }
     }) as never)
@@ -261,10 +261,11 @@ describe('the foot over a keyboard (Board composer drive: a dead band between Ca
     // The sheet's own glass (the mock names it 'glass'): its padding is the foot.
     const pad = () => flat('glass').paddingBottom
     const resting = pad()
-    await act(async () => handlers.keyboardWillShow({ endCoordinates: { height: 300 } }))
+    const windowHeight = Dimensions.get('window').height
+    await act(async () => handlers.keyboardWillShow({ endCoordinates: { height: 300, screenY: windowHeight - 300 } }))
     expect(pad()).toBe(8)
-    // And it never rises past the status bar: capped at the window less the keyboard, the top inset and a margin.
-    expect(flat('glass').maxHeight).toBe(sheetMaxHeight(Dimensions.get('window').height, 0, 300))
+    // And it never rises past the status bar: capped at the keyboard's top, less the top inset and a margin.
+    expect(flat('glass').maxHeight).toBe(sheetMaxHeight(windowHeight, 0, windowHeight - 300))
     await act(async () => handlers.keyboardWillHide())
     expect(pad()).toBe(resting)
     spy.mockRestore()
@@ -272,10 +273,31 @@ describe('the foot over a keyboard (Board composer drive: a dead band between Ca
 })
 
 describe('the cap (drive 2: the composer slid under the status bar with the keyboard up)', () => {
-  it('is the window less the keyboard, the top safe area and 8 pt', () => {
-    expect(sheetMaxHeight(874, 62, 336)).toBe(874 - 336 - 62 - 8)
-    expect(sheetMaxHeight(874, 62, 0)).toBe(874 - 62 - 8)
-    expect(sheetMaxHeight(300, 62, 400)).toBe(0)
+  it('runs from the keyboard’s top (or the visible bottom) to the top safe area and 8 pt', () => {
+    expect(sheetMaxHeight(874, 62, 874 - 336)).toBe(874 - 336 - 62 - 8)
+    expect(sheetMaxHeight(874, 62, null)).toBe(874 - 62 - 8)
+    expect(sheetMaxHeight(300, 62, 40)).toBe(0)
+  })
+
+  it('Android edge-to-edge (drive 3): the modal’s own height and the keyboard’s screenY, whatever the window says', async () => {
+    const { Keyboard } = require('react-native')
+    Object.defineProperty(Platform, 'OS', { value: 'android', configurable: true })
+    const handlers: Record<string, (e?: { endCoordinates: { height: number; screenY: number } }) => void> = {}
+    const spy = jest.spyOn(Keyboard, 'addListener').mockImplementation(((event: string, fn: (e?: { endCoordinates: { height: number; screenY: number } }) => void) => {
+      handlers[event] = fn
+      return { remove: () => {} }
+    }) as never)
+    await render(signOut())
+    // The translucent modal is the whole screen (915), taller than the window the app reports.
+    await act(async () => fireEvent(screen.getByTestId('s-root', { includeHiddenElements: true }), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 412, height: 915 } } }))
+    // The keyboard's height excludes the navigation bar; its top edge is what bounds the sheet.
+    await act(async () => handlers.keyboardDidShow({ endCoordinates: { height: 300, screenY: 567 } }))
+    // Android draws the sheet's material solid (no glass): the sheet is its testID.
+    expect(flat('s').maxHeight).toBe(567 - 0 - 8)
+    await act(async () => handlers.keyboardDidHide())
+    expect(flat('s').maxHeight).toBe(915 - 0 - 8)
+    spy.mockRestore()
+    Object.defineProperty(Platform, 'OS', { value: 'ios', configurable: true })
   })
 
   it('scrolls the content inside it, the title and the actions outside the scroll', async () => {
@@ -284,5 +306,18 @@ describe('the cap (drive 2: the composer slid under the status bar with the keyb
     const content = screen.getByTestId('s-content', { includeHiddenElements: true })
     expect(content.type).toBe('RCTScrollView')
     expect(screen.getByText('Form', { includeHiddenElements: true })).toBeTruthy()
+  })
+})
+
+describe('the field being typed in, scrolled into view (drive 3: the stepper peeked under the box)', () => {
+  it('scrolls to the end when the whole field still shows: the row after it comes fully into view, never a sliver', () => {
+    // Viewport 200 over 320 of content; the text box at 120–220, the stepper row after it to 320.
+    expect(fieldScroll(120, 100, 200, 320)).toBe(120)
+  })
+
+  it('stops at the field when the end would push its top out of view', () => {
+    // A tall form: the field at 40–140, 600 of content.
+    expect(fieldScroll(40, 100, 200, 600)).toBe(0)
+    expect(fieldScroll(300, 100, 200, 900)).toBe(208)
   })
 })
