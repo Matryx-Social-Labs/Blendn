@@ -622,6 +622,8 @@ export interface EventApiItem {
   distance: number | null
   isFavorited?: boolean
   favoriteCount?: number
+  /** RSVPs going: the card's "{n} going". Absent from an older server. */
+  goingCount?: number
   priceCents?: number
   price_cents?: number
   category?: string

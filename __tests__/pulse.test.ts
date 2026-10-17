@@ -2,7 +2,7 @@ import {
   dayGroupLabel,
   featuredDateLabel,
   groupByDay,
-  joinedCount,
+  peopleLabel,
   nextUpLabel,
   placeLabel,
   timeLabel,
@@ -138,22 +138,22 @@ describe('placeLabel', () => {
   })
 })
 
-describe('joinedCount', () => {
-  it('reads a real count', () => {
-    expect(joinedCount({ current_capacity: 142 })).toBe(142)
+describe('peopleLabel', () => {
+  it('before it is on: the going count, never the check-ins (Founders read "1 joined" with 19 going)', () => {
+    expect(peopleLabel({ current_capacity: 1, going_count: 19 }, false)).toBe('19 going')
   })
 
-  it('treats zero as nothing to say', () => {
-    // "0 joined" reads as a verdict on the event, and every event is 0 for a
-    // while — including the first one anybody sees after we launch in a city.
-    expect(joinedCount({ current_capacity: 0 })).toBeNull()
+  it('while it is on: who is here now, else still who is going', () => {
+    expect(peopleLabel({ current_capacity: 6, going_count: 39 }, true)).toBe('6 here now')
+    expect(peopleLabel({ current_capacity: 0, going_count: 39 }, true)).toBe('39 going')
   })
 
-  it('ignores values that are not counts', () => {
-    expect(joinedCount({ current_capacity: null })).toBeNull()
-    expect(joinedCount({ current_capacity: -3 })).toBeNull()
-    expect(joinedCount({ current_capacity: Number.NaN })).toBeNull()
-    expect(joinedCount({})).toBeNull()
+  it('zero, or a count the server did not send, is nothing to say', () => {
+    expect(peopleLabel({ current_capacity: 0, going_count: 0 }, false)).toBeNull()
+    expect(peopleLabel({ current_capacity: 3, going_count: null }, false)).toBeNull()
+    expect(peopleLabel({ going_count: -3 }, false)).toBeNull()
+    expect(peopleLabel({ going_count: Number.NaN }, false)).toBeNull()
+    expect(peopleLabel({}, true)).toBeNull()
   })
 })
 

@@ -70,8 +70,8 @@ import { formatDistance, getDistanceMetres } from '../../lib/geo'
 import { publishRoomSignal } from '../../lib/roomSignal'
 import {
   featuredDateLabel,
-  joinedCount,
   nextUpLabel,
+  peopleLabel,
   placeLabel,
   groupByDay,
   timeLabel,
@@ -136,6 +136,9 @@ const STACK_GAP = SPACE.xl
  */
 const PULSE_COACH = 'events_preview_hint'
 const PULSE_COACH_TEXT = 'Hold an event to save, share or preview it.'
+
+/** Started (today's session, `lib/eventSession.ts`) and not over: the card says who is here. */
+const onNow = (event: Event) => Date.parse(liveWindow(event).start_time) <= Date.now() && !sessionOver(event)
 
 const SECTION_MOTION_BASE_DELAY = 34
 const SECTION_MOTION_STAGGER = 44
@@ -1427,7 +1430,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
             retry={pulls}
             timeLabel={nextUpLabel(live.start_time, live.end_time)}
             placeLabel={placeLabel(event)}
-            joinedCount={joinedCount(event)}
+            peopleLabel={peopleLabel(event, onNow(event))}
             distanceLabel={browsingHere ? formatDistance(proximityData[event.id]?.distance_km ?? event.distance) : null}
             note={note}
             onPress={() => handleEventPress(event)}
@@ -1663,7 +1666,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
                     retry={pulls}
                     timeLabel={timeLabel(item.start_time)}
                     placeLabel={placeLabel(item)}
-                    joinedCount={joinedCount(item)}
+                    peopleLabel={peopleLabel(item, onNow(item))}
                     // Distance from you only means something in the city you are in;
                     // browsing elsewhere it read "6412km away". Same rule as Nearby.
                     distanceLabel={browsingHere ? formatDistance(item.distance) : null}
