@@ -23,6 +23,7 @@ import { boardSafetySheet } from '../../lib/safetyUtils'
 import { showSheet } from '../../lib/sheet'
 import { CONTROL, EMBER, OPACITY, SPACE } from '../../lib/theme'
 import { BoardMark } from './BoardSections'
+import { useBanterPress } from '../banter/pressGuard'
 
 type Answer = 'accept' | 'decline' | 'withdraw'
 
@@ -228,6 +229,8 @@ function OutgoingRow({
   busy: boolean
   onWithdraw: () => void
 }) {
+  // Inside the Banter's list: a lift after a hold withdraws nothing (components/banter/pressGuard.ts).
+  onWithdraw = useBanterPress(onWithdraw)
   const line = outgoingLine(request)
   return (
     <View style={styles.outRow}>

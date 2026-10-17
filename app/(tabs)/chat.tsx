@@ -21,6 +21,7 @@ import {
 import { useLatest } from '../../lib/useLatest'
 import { heldList, inboxTimeLabel, previewWithSender } from '../../components/banter/inbox'
 import { holdController } from '../../components/banter/hold'
+import { BanterPressGuard, type PressGuard } from '../../components/banter/pressGuard'
 import { BoardRequestsSection } from '../../components/board/BoardRequestsSection'
 import { LeaveRoomSheet, MuteSheet } from '../../components/chat/RoomSheets'
 import { SearchField } from '../../components/ds/SearchField'
@@ -286,9 +287,10 @@ function ChatInner() {
    * activation has no touch on the list, so it always opens.
    */
   const touchStartAt = useRef(0)
-  const openUnlessHeld = (open: () => void) => () => {
+  // The one guard for every press in the list (components/banter/pressGuard.ts), provided around it below.
+  const pressGuard: PressGuard = (fn) => (...args) => {
     const held = hold.state().held && (Date.now() - touchStartAt.current >= HELD_PRESS_MS || heldList(items, heldOrder).moved)
-    if (!held) open()
+    if (!held) fn(...args)
   }
   const { shown, moved: newAbove } = heldList(items, heldOrder)
 
@@ -310,7 +312,7 @@ function ChatInner() {
         <View style={styles.heading}>
           <SectionHeader
             title={item.title}
-            action={item.markAll && hasUnread ? { label: 'Mark all read', onPress: () => void inbox.handleMarkAllRead() } : undefined}
+            action={item.markAll && hasUnread ? { label: 'Mark all read', onPress: pressGuard(() => void inbox.handleMarkAllRead()) } : undefined}
             testID={`banter-${item.title.toLowerCase().replace(' ', '-')}`}
           />
         </View>
@@ -327,7 +329,7 @@ function ChatInner() {
         time={row.time}
         unread={row.unread}
         muted={row.muted}
-        onPress={row.swipe.length ? undefined : openUnlessHeld(row.open)}
+        onPress={row.swipe.length ? undefined : row.open}
         accessibilityLabel={row.swipe.length ? undefined : label}
         testID={`banter-row-${row.key}`}
       />
@@ -337,7 +339,7 @@ function ChatInner() {
         {row.swipe.length ? (
           <SwipeRow
             actions={row.swipe}
-            onPress={openUnlessHeld(row.open)}
+            onPress={pressGuard(row.open)}
             open={openSwipe === row.key}
             onOpenChange={(open) => setOpenSwipe(open ? row.key : null)}
             accessibilityLabel={label}
@@ -448,6 +450,8 @@ function ChatInner() {
 
   return (
     <View style={styles.screen}>
+      {/* Every press inside the list, header cards included, goes through one guard. */}
+      <BanterPressGuard.Provider value={pressGuard}>
       <FlatList
         ref={listRef}
         testID="banter-list"
@@ -513,6 +517,7 @@ function ChatInner() {
           />
         }
       />
+      </BanterPressGuard.Provider>
 
       <BanterHeader
         bell={<NotificationBell />}

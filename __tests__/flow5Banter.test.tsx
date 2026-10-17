@@ -244,3 +244,25 @@ describe('a finger resting on the Live now card holds the order (drive 5, Androi
     Object.defineProperty(Platform, 'OS', { value: 'ios', configurable: true })
   })
 })
+
+describe('one press guard for everything in the list (drive 6: the Live now card opened its room after a hold)', () => {
+  it('a hold on the Live now card, then the lift, opens nothing; a tap opens it', async () => {
+    await open()
+    const list = screen.getByTestId('banter-list')
+    const card = screen.getByTestId('banter-live-g-live')
+    const now = jest.spyOn(Date, 'now')
+    // A hold: the finger rests 600 ms on the card, then comes up on it.
+    now.mockReturnValue(10_000)
+    await act(async () => fireEvent(card, 'touchStart'))
+    now.mockReturnValue(10_600)
+    await act(async () => fireEvent.press(card))
+    expect(router.push).not.toHaveBeenCalled()
+    await act(async () => fireEvent(list, 'touchEnd'))
+    // A tap: down and up within a moment.
+    await act(async () => fireEvent(card, 'touchStart'))
+    now.mockReturnValue(10_700)
+    await act(async () => fireEvent.press(card))
+    expect(router.push).toHaveBeenCalled()
+    now.mockRestore()
+  })
+})

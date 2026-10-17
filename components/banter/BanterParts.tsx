@@ -1,3 +1,4 @@
+import { useBanterPress } from './pressGuard'
 import { Image } from 'expo-image'
 import type { ReactNode } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
@@ -96,6 +97,7 @@ export function LiveHero({
   onPress: () => void
   testID?: string
 }) {
+  onPress = useBanterPress(onPress)
   const bold = useBoldText()
   return (
     <Pressable
@@ -158,6 +160,7 @@ export function BlendLiveCard({
   unread: number
   onPress: () => void
 }) {
+  onPress = useBanterPress(onPress)
   const bold = useBoldText()
   const closes = closesAt ? hourLabel(closesAt) : null
   return (
@@ -222,6 +225,10 @@ export function RequestCard({
   onOpen?: () => void
   testID?: string
 }) {
+  onAccept = useBanterPress(onAccept)
+  onDecline = useBanterPress(onDecline)
+  onMore = useBanterPress(onMore)
+  onOpen = useBanterPress(onOpen)
   const bold = useBoldText()
   return (
     <View testID={testID} style={styles.request}>
@@ -332,6 +339,7 @@ export function BanterRow({
   accessibilityLabel?: string
   testID?: string
 }) {
+  onPress = useBanterPress(onPress)
   const bold = useBoldText()
   return (
     <Pressable
