@@ -89,6 +89,10 @@ function answer(path: string): unknown {
     return { hereCount: server.inside, tasteMatchCount: null }
   }
   if (path.startsWith(`/api/mobile/events/${server.event}/matches`)) return { matches: [] }
+  if (server.event.startsWith('e401') && path.startsWith(`/api/mobile/events/${server.event}/chat`)) return { chatGroupId: `g-${server.event}` }
+  if (path.startsWith(`/api/mobile/chat/groups/g-${server.event}/messages`)) {
+    return [{ id: 'm1', content: 'Rumours side two. Fight me.', user_id: 'u2', created_at: '2026-10-12T14:01:00.000Z' }]
+  }
   return {}
 }
 
@@ -191,5 +195,8 @@ it('asks for the count and the chat with the check-ins, before the roster, and i
   expect(at('/e401-early/chat')).toBeLessThan(roster)
   // Once each: the effect took the early lookup over rather than asking again.
   expect(order.filter((p) => p.endsWith('/e401-early/chat'))).toHaveLength(1)
+  // Settled includes the dock's first read: it opens on the real last line (drive 2).
+  expect(room.current.chatHistory).toMatchObject({ groupId: 'g-e401-early', failed: false })
+  expect(order.findIndex((p) => p.endsWith('/g-e401-early/messages'))).toBeGreaterThan(-1)
   unmount()
 })

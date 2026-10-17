@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useRef, useState, type ComponentRef, type ReactNode, type RefObject } from 'react'
 import {
   AccessibilityInfo,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
+  TextInput,
   Text,
   useWindowDimensions,
   View,
@@ -19,7 +22,7 @@ import { Icon, type IconName } from '../ui/Icon'
 import { Material } from '../ui/Material'
 import { COLOR, EASING, MATERIAL, RADIUS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
-import { KEYBOARD_BEHAVIOR, useKeyboardShown } from '../../lib/keyboard'
+import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { tint } from '../../lib/theme'
 import { Button, type ButtonKind, type ButtonProps } from './Button'
@@ -67,6 +70,33 @@ export function settleDetent(heights: number[], from: number, height: number, dr
  */
 export function sheetBottomPadding(insetBottom: number, keyboardUp: boolean) {
   return (keyboardUp ? 0 : insetBottom) + SPACE.sm
+}
+
+/** A sheet never rises past the status bar: this far below the top safe area at most (the Board composer, drive 2). */
+export const SHEET_TOP_GAP = SPACE.sm
+
+/**
+ * The tallest a sheet may be: the window, less the keyboard when one is up,
+ * less the top safe area and a margin. Past it, the sheet's content scrolls
+ * inside it; the title and the actions stay put.
+ */
+export function sheetMaxHeight(windowHeight: number, insetTop: number, keyboardHeight: number) {
+  return Math.max(0, windowHeight - keyboardHeight - insetTop - SHEET_TOP_GAP)
+}
+
+/** The keyboard's height while one is up, 0 otherwise: iOS on `will` (in step with the avoiding view), Android on `did`. */
+function useKeyboardHeight() {
+  const [height, setHeight] = useState(0)
+  useEffect(() => {
+    const ios = Platform.OS === 'ios'
+    const show = Keyboard.addListener(ios ? 'keyboardWillShow' : 'keyboardDidShow', (e) => setHeight(e?.endCoordinates?.height ?? 0))
+    const hide = Keyboard.addListener(ios ? 'keyboardWillHide' : 'keyboardDidHide', () => setHeight(0))
+    return () => {
+      show.remove()
+      hide.remove()
+    }
+  }, [])
+  return height
 }
 
 export type SheetAction = {
@@ -223,7 +253,30 @@ export function Sheet({ visible, onClose, title, body, icon, actions = [], deten
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const titleRef = useRef<ComponentRef<typeof Text>>(null)
-  const keyboardUp = useKeyboardShown()
+  const keyboardHeight = useKeyboardHeight()
+  const keyboardUp = keyboardHeight > 0
+  /*
+   * With the keyboard up a capped sheet scrolls its content: bring the field
+   * being typed in into view (the Board composer's text box sits under the
+   * kind cards). The avoiding view has lifted the sheet a frame later, hence
+   * the frame's wait.
+   */
+  const content = useRef<ScrollView>(null)
+  const contentHeight = useRef(0)
+  useEffect(() => {
+    if (!keyboardUp) return
+    const frame = requestAnimationFrame(() => {
+      const input = TextInput.State.currentlyFocusedInput()
+      const inner = content.current?.getInnerViewNode()
+      if (!input || !inner) return
+      input.measureLayout(
+        inner,
+        (_x, y, _w, h) => content.current?.scrollTo({ y: Math.max(0, y + h + SPACE.sm - contentHeight.current), animated: true }),
+        () => {}
+      )
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [keyboardUp, keyboardHeight])
 
   const busy = actions.some((a) => a.loading)
   const sorted = [...actions].sort((a, b) => ORDER.indexOf(a.kind ?? 'secondary') - ORDER.indexOf(b.kind ?? 'secondary'))
@@ -290,7 +343,12 @@ export function Sheet({ visible, onClose, title, body, icon, actions = [], deten
               testID={testID}
               role="sheet"
               onLayout={(e) => natural.set(e.nativeEvent.layout.height)}
-              style={[styles.sheet, fixedHeight && styles.fill, { paddingBottom: sheetBottomPadding(insets.bottom, keyboardUp) }, contrast && IC_HAIRLINE]}
+              style={[
+                styles.sheet,
+                fixedHeight && styles.fill,
+                { paddingBottom: sheetBottomPadding(insets.bottom, keyboardUp), maxHeight: sheetMaxHeight(window.height, insets.top, keyboardHeight) },
+                contrast && IC_HAIRLINE,
+              ]}
             >
               <GestureDetector gesture={drag}>
                 <View style={styles.head}>
@@ -320,7 +378,21 @@ export function Sheet({ visible, onClose, title, body, icon, actions = [], deten
                   {body ? <Text style={[font('body', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{body}</Text> : null}
                 </View>
               </GestureDetector>
-              {children}
+              {children ? (
+                // Scrolls only when the sheet is at its cap; otherwise it is exactly its content.
+                <ScrollView
+                  ref={content}
+                  onLayout={(e) => (contentHeight.current = e.nativeEvent.layout.height)}
+                  testID={testID && `${testID}-content`}
+                  style={styles.content}
+                  contentContainerStyle={styles.contentInner}
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                  bounces={false}
+                >
+                  {children}
+                </ScrollView>
+              ) : null}
               {sorted.length ? (
                 <View style={[styles.actions, fixedHeight && styles.pinned]}>
                   {sorted.map(({ kind = 'secondary', disabled, loading, ...action }) => (
@@ -373,5 +445,7 @@ const styles = StyleSheet.create({
   },
   title: { color: COLOR.textPrimary },
   actions: { gap: SPACE.sm },
+  content: { flexGrow: 0, flexShrink: 1 },
+  contentInner: { gap: SPACE.md },
   pinned: { marginTop: 'auto' },
 })
