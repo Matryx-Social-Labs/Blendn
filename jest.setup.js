@@ -41,3 +41,6 @@ jest.mock('react-native-purchases', () => {
 jest.mock('expo-web-browser', () => ({
   openBrowserAsync: jest.fn(async () => ({ type: 'dismiss' })),
 }))
+
+// The keyboard's frame is native; the package ships its own mock (plain Views, a no-op provider).
+jest.mock('react-native-keyboard-controller', () => require('react-native-keyboard-controller/jest'))

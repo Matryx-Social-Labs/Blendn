@@ -4,6 +4,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useRef, useState } from 'react';
 import { Appearance, BackHandler, Platform, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { StatusBar } from 'expo-status-bar';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { IntroAnimation } from '../components/IntroAnimation';
@@ -525,6 +526,8 @@ function RootLayout() {
         it, a `GestureDetector` anywhere in the app silently does nothing.
       */}
       <GestureHandlerRootView style={styles.gestureRoot}>
+      {/* The keyboard's real frame, frame by frame, including an interactive dismiss (KeyboardFrame reads it). */}
+      <KeyboardProvider>
       <ToastProvider>
         <View style={styles.root}>
           {/*
@@ -764,6 +767,7 @@ function RootLayout() {
           <CoachMarkHost />
         </View>
       </ToastProvider>
+      </KeyboardProvider>
       </GestureHandlerRootView>
     </ErrorBoundary>
   );
