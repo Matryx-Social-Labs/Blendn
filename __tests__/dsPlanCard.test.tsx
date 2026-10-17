@@ -60,6 +60,18 @@ describe('<NightPassRow>', () => {
 })
 
 describe('<PlanList>', () => {
+  it('apartFrom: the rule before that row is the 22% white one, inset 8 pt, not the row hairline', async () => {
+    await render(
+      <PlanList testID="l" apartFrom={2}>
+        <PlanCard name="Monthly" price="₹199" per="/ month" onPress={jest.fn()} />
+        <PlanCard name="Yearly" price="₹1,499" per="/ year" onPress={jest.fn()} />
+        <NightPassRow price="₹49" onPress={jest.fn()} />
+      </PlanList>
+    )
+    expect(screen.getAllByTestId('l-hairline', { includeHiddenElements: true })).toHaveLength(1)
+    expect(flat('l-apart')).toMatchObject({ marginHorizontal: 8 })
+  })
+
   it('a surface list with hairlines between rows; 8% white on a glass sheet, sunken on a solid one', async () => {
     await render(
       <PlanList testID="l">

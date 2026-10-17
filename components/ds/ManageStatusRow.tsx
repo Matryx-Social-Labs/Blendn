@@ -30,6 +30,16 @@ const DOT_SIZE = SPACE.sm
 /** The Plus mark: the monogram in white on the brand gradient, 40 pt, the mark at half. */
 const MARK = SIZE.control - SPACE.sm
 
+/** The Plus mark: the monogram in white on the brand gradient; `size` is the disc, the mark at half. */
+export function PlusMark({ size = MARK }: { size?: number }) {
+  return (
+    <View style={[styles.mark, { width: size, height: size }]}>
+      <GradientFill gradient="brand" style={StyleSheet.absoluteFill} />
+      <DiscMark height={size / 2} fill="white" />
+    </View>
+  )
+}
+
 /**
  * What is true about Blend'n+, in one card (guidelines/components/ManageStatusRow.html,
  * Flow 12 Manage): the Plus mark, the status, one sentence with the date and
@@ -62,10 +72,7 @@ export function ManageStatusRow({
     <View testID={testID} style={[styles.card, contrast && IC_HAIRLINE]}>
       <View accessible accessibilityLabel={`${title}. ${sentence}`} style={styles.gap}>
         <View style={styles.head}>
-          <View style={styles.mark}>
-            <GradientFill gradient="brand" style={StyleSheet.absoluteFill} />
-            <DiscMark height={MARK / 2} fill="white" />
-          </View>
+          <PlusMark />
           <Text style={[font('heading', bold), styles.title]}>{title}</Text>
           <View testID={testID && `${testID}-dot`} style={[styles.dot, { backgroundColor: DOT[tone] }]} />
         </View>
@@ -82,7 +89,7 @@ const styles = StyleSheet.create({
   card: { borderRadius: RADIUS.sheet, backgroundColor: COLOR.surface, padding: SPACE.lg, gap: SPACE.md },
   gap: { gap: SPACE.md },
   head: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
-  mark: { width: MARK, height: MARK, borderRadius: RADIUS.capsule, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  mark: { borderRadius: RADIUS.capsule, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   title: { flex: 1, color: COLOR.textPrimary },
   dot: { width: DOT_SIZE, height: DOT_SIZE, borderRadius: RADIUS.capsule },
 })

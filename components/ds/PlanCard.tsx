@@ -15,6 +15,8 @@ const RING_OFF = 1.5
 const RING_OFF_ALPHA = 0.35
 /** The hairline between rows starts past the ring (the page's 50 pt inset). */
 const HAIRLINE_INSET = SPACE.lg + RING + SPACE.md
+/** The rule that sets the Night Pass apart: 22% white (Flow 12 `page`). */
+const APART_ALPHA = 0.22
 
 export type PlanCardProps = {
   name: string
@@ -105,16 +107,28 @@ export function NightPassRow(props: Omit<PlanCardProps, 'name' | 'sub' | 'per'>)
 /**
  * The rows in one list: `surface`, radius 24, a hairline between rows past the
  * ring. `onSheet`: 8% white on iOS's glass sheet (no glass on glass), sunken
- * on Android's solid one (the Tonight sheet).
+ * on Android's solid one (the Tonight sheet). `apartFrom`: the index of the
+ * row the page sets apart (the Night Pass, a one-off among subscriptions): the
+ * rule before it is the 22% white one, inset 8 pt, not the row hairline.
  */
-export function PlanList({ children, onSheet = false, testID }: { children: ReactNode; onSheet?: boolean; testID?: string }) {
+export function PlanList({
+  children,
+  onSheet = false,
+  apartFrom,
+  testID,
+}: {
+  children: ReactNode
+  onSheet?: boolean
+  apartFrom?: number
+  testID?: string
+}) {
   const rows = Children.toArray(children).filter(isValidElement)
   const fill = !onSheet ? COLOR.surface : Platform.OS === 'android' ? COLOR.surfaceSunken : MATERIAL.fillOnGlass
   return (
     <View testID={testID} accessibilityRole="radiogroup" style={[styles.list, { backgroundColor: fill }]}>
       {rows.map((row, i) => (
         <Fragment key={row.key ?? i}>
-          {i ? <View testID={testID && `${testID}-hairline`} style={styles.hairline} /> : null}
+          {i ? <View testID={testID && `${testID}-${i === apartFrom ? 'apart' : 'hairline'}`} style={i === apartFrom ? styles.apart : styles.hairline} /> : null}
           {row}
         </Fragment>
       ))}
@@ -136,4 +150,5 @@ const styles = StyleSheet.create({
   ink: { color: COLOR.textPrimary },
   list: { borderRadius: RADIUS.sheet, overflow: 'hidden' },
   hairline: { height: StyleSheet.hairlineWidth, marginLeft: HAIRLINE_INSET, backgroundColor: COLOR.hairline },
+  apart: { height: StyleSheet.hairlineWidth, marginVertical: SPACE.xs, marginHorizontal: SPACE.sm, backgroundColor: tint(COLOR.textPrimary, APART_ALPHA) },
 })

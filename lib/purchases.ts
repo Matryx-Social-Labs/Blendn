@@ -92,12 +92,15 @@ export async function canBuyAs(userId: string | null | undefined): Promise<boole
   }
 }
 
+/** The Night Pass's package id in the offering: a one-off, granted by product id (the `plus` entitlement is the subscriptions'). */
+export const NIGHT_PASS_ID = 'night_pass'
+
 /** The packages the paywall sells, in this order. Anything else in the offering is not shown. */
 export const PLUS_PACKAGES = [
   { id: '$rc_monthly', title: 'Blendn+ · Monthly', length: '1 month, renews monthly' },
   { id: '$rc_three_month', title: 'Blendn+ · 3 months', length: '3 months, renews every 3 months' },
   { id: '$rc_annual', title: 'Blendn+ · Yearly', length: '1 year, renews yearly' },
-  { id: 'night_pass', title: 'Night Pass · 24 hours', length: '24 hours, does not renew' },
+  { id: NIGHT_PASS_ID, title: 'Night Pass · 24 hours', length: '24 hours, does not renew' },
 ] as const
 
 export type PlusOffer = { pkg: PurchasesPackage; title: string; length: string; price: string }

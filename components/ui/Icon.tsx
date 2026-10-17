@@ -115,6 +115,7 @@ import Rainbow from 'lucide-react-native/icons/rainbow'
 import RefreshCw from 'lucide-react-native/icons/refresh-cw'
 import Reply from 'lucide-react-native/icons/reply'
 import RotateCcw from 'lucide-react-native/icons/rotate-ccw'
+import RotateCcwClock from 'lucide-react-native/icons/rotate-ccw-clock'
 import Scale from 'lucide-react-native/icons/scale'
 import ScanFace from 'lucide-react-native/icons/scan-face'
 import Search from 'lucide-react-native/icons/search'
@@ -219,6 +220,7 @@ const ICONS = {
   hand: Hand,
   heart: Heart,
   'heart-off': HeartOff,
+  history: RotateCcwClock,
   hourglass: Hourglass,
   'id-card': IdCard,
   image: Image,

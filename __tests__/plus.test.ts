@@ -7,7 +7,17 @@ jest.mock('../lib/apiClient', () => ({ apiClient: { getMyPlus: jest.fn() } }))
 
 /* eslint-disable import/first */
 import { apiClient } from '../lib/apiClient'
-import { PLUS_FEATURES, PLUS_POLL_EVERY_MS, plusStatusLine, waitForPlus } from '../lib/plus'
+import {
+  ctaLabel,
+  defaultPick,
+  dockMode,
+  PLUS_COMING_SOON,
+  PLUS_FEATURES,
+  PLUS_POLL_EVERY_MS,
+  plusStatusCard,
+  plusStatusLine,
+  waitForPlus,
+} from '../lib/plus'
 import { lockedNightsLabel, withLockedNights, type GoingItem } from '../lib/savedEvents'
 /* eslint-enable import/first */
 
@@ -75,12 +85,57 @@ describe('after a purchase, the server is asked until the webhook has landed', (
 
 describe('what Plus is said to be', () => {
   it('only what exists today — no "coming soon" — and nothing from the never-sold list (review H2)', () => {
-    expect(PLUS_FEATURES.map((f) => f.title)).toEqual(["Stay live while I'm here", 'Your full night history'])
+    expect(PLUS_FEATURES.map((f) => f.title)).toEqual(['Stay live while you’re there', 'Your full night history'])
     expect(PLUS_FEATURES.map((f) => f.detail).join(' ').toLowerCase()).not.toContain('coming soon')
     const said = PLUS_FEATURES.map((f) => `${f.title} ${f.detail}`).join(' ').toLowerCase()
     for (const never of ['liked you', 'likes', 'unlimited', 'boost', 'reveal', 'without going live', 'more asks', 'more waves']) {
       expect(said).not.toContain(never)
     }
+  })
+})
+
+describe('the page\'s own rules', () => {
+  const offer = (id: string, price: string) => ({ pkg: { identifier: id }, title: id, length: '', price }) as never
+  const monthly = offer('$rc_monthly', '₹199.00')
+  const night = offer('night_pass', '₹49.00')
+
+  it('what is promised but not served is only ever a Coming soon row, never a live feature', () => {
+    expect(PLUS_COMING_SOON.map((f) => f.title)).toEqual(['Partner perks', 'Crew extras'])
+    expect(PLUS_FEATURES.map((f) => f.title).join(' ')).not.toMatch(/perks|crew/i)
+  })
+
+  it('Monthly is picked first; the Night Pass only when it is all there is; nothing, when nothing is sold', () => {
+    expect(defaultPick([night, monthly])).toBe('$rc_monthly')
+    expect(defaultPick([night])).toBe('night_pass')
+    expect(defaultPick([])).toBeNull()
+  })
+
+  it('the dock button carries the price of what is picked, in the store\'s string', () => {
+    expect(ctaLabel(monthly)).toBe('Start Blend’n+ — ₹199.00 / month')
+    expect(ctaLabel(night)).toBe('Get the Night Pass — ₹49.00')
+    expect(ctaLabel(undefined)).toBe('Start Blend’n+')
+  })
+
+  it('only a subscription the stores run is managed in the store; a grant and a pass keep the buy button', () => {
+    const at = (product: 'plus' | 'night_pass' | null, source: 'apple' | 'google' | 'grant' | null, active = true) =>
+      dockMode({ active, gated: true, product, source, expiresAt: null })
+    expect(at('plus', 'apple')).toBe('manage')
+    expect(at('plus', 'google')).toBe('manage')
+    expect(at('plus', 'grant')).toBe('buy')
+    expect(at('night_pass', 'google')).toBe('buy')
+    expect(at('plus', 'apple', false)).toBe('buy')
+    expect(dockMode(null)).toBe('buy')
+  })
+
+  it('the status card: nothing when nothing is active, a Night Pass does not renew, a subscription names its store', () => {
+    expect(plusStatusCard(null)).toBeNull()
+    expect(plusStatusCard(inactive.data as never)).toBeNull()
+    expect(plusStatusCard({ active: true, gated: true, product: 'night_pass', source: 'google', expiresAt: '2026-10-11T00:30:00.000Z' })).toMatchObject({
+      kind: 'night',
+      sentence: expect.stringMatching(/^Night Pass until .*\. It doesn’t renew; another one adds 24 hours\.$/),
+    })
+    expect(plusStatusCard(active.data as never)).toMatchObject({ kind: 'active', sentence: expect.stringMatching(/^Blendn\+ until .* · App Store$/) })
+    expect(plusStatusCard({ ...active.data, source: 'grant' } as never)?.sentence).toMatch(/^Blendn\+ until [^·]*$/)
   })
 })
 
