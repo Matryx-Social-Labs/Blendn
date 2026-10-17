@@ -248,6 +248,8 @@ export default function EventDetail() {
   const [loadFailure, setLoadFailure] = useState<'network' | 'notFound' | null>(null)
   /** The room's own "here now", while the event is running. */
   const [hereNow, setHereNow] = useState<number | null>(null)
+  /** The detail's `stats.hereCount` (inside now), null from an older server: then no here-now line. */
+  const [detailHere, setDetailHere] = useState<number | null>(null)
   // Don't show loading skeleton if we have params - show content immediately
   const [loading, setLoading] = useState(!hasParams)
   // Initialize from params for instant display
@@ -350,6 +352,7 @@ export default function EventDetail() {
       // Both, because the Attendees block reports a different one either
       // side of the doors -- see `attendeeBlock` below.
       setCheckInCount(d.stats.checkInCount || 0)
+      setDetailHere(typeof d.stats.hereCount === 'number' ? d.stats.hereCount : null)
       setGoingCount(d.stats.rsvpCount || 0)
     }
     // Determine if current user is the organizer
@@ -903,7 +906,7 @@ export default function EventDetail() {
         startsAt: event.start_time,
         endsAt: event.end_time,
         distanceKm: null,
-        hereCount: checkInCount,
+        hereCount: hereNow ?? detailHere ?? 0,
         capacity: null,
         going: rsvpStatus === 'going',
         tasteMatchCount: null,
@@ -1189,7 +1192,7 @@ export default function EventDetail() {
           */}
           {event?.organizer || isLive ? (
             <FadeInUp delay={SECTION_DELAY[0]}>
-              <SceneByline host={event?.organizer} hereNow={isLive ? hereNow ?? checkInCount : null} />
+              <SceneByline host={event?.organizer} hereNow={isLive ? hereNow ?? detailHere : null} />
             </FadeInUp>
           ) : null}
           {event?.description ? (

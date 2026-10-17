@@ -29,7 +29,7 @@ export const UPCOMING_THUMB = CONTROL.md * 2
  * | "7:00 PM" | `startTime`, via `timeLabel` |
  * | category | `categories[0]` |
  * | venue | `venueName`, else `city`, via `placeLabel` |
- * | "19 going" · "6 here now" | `goingCount` · `currentCapacity` while live (`peopleLabel`) |
+ * | "19 going" · "6 here now" | `goingCount` · `hereCount` while live (`peopleLabel`) |
  * | "1.2 km" | `distance`, via `formatDistance` |
  *
  * Anything the caller cannot fill is omitted rather than zeroed. "0 going" on

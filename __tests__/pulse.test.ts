@@ -1,3 +1,6 @@
+// `eventFromApi` lives beside the client; the mapping needs none of it.
+jest.mock('../lib/apiClient', () => ({ apiClient: {} }))
+import { eventFromApi } from '../lib/api'
 import {
   dayGroupLabel,
   featuredDateLabel,
@@ -139,18 +142,30 @@ describe('placeLabel', () => {
 })
 
 describe('peopleLabel', () => {
-  it('before it is on: the going count, never the check-ins (Founders read "1 joined" with 19 going)', () => {
-    expect(peopleLabel({ current_capacity: 1, going_count: 19 }, false)).toBe('19 going')
+  it('before it is on: the going count, never who came (Founders read "1 joined" with 19 going)', () => {
+    expect(peopleLabel({ here_count: 1, going_count: 19 }, false)).toBe('19 going')
   })
 
-  it('while it is on: who is here now, else still who is going', () => {
-    expect(peopleLabel({ current_capacity: 6, going_count: 39 }, true)).toBe('6 here now')
-    expect(peopleLabel({ current_capacity: 0, going_count: 39 }, true)).toBe('39 going')
+  it('while it is on: who is inside now (hereCount), else still who is going', () => {
+    expect(peopleLabel({ here_count: 6, going_count: 39 }, true)).toBe('6 here now')
+    expect(peopleLabel({ here_count: 0, going_count: 39 }, true)).toBe('39 going')
+  })
+
+  it('reads hereCount, never checkInCount: 12 inside of 14 who came is "12 here now" (final drive)', () => {
+    const card = eventFromApi({ id: 'e1', title: 'Evening Ragas', startTime: '2026-10-16T13:00:00.000Z', hereCount: 12, checkInCount: 14, currentCapacity: 14, goingCount: 30 } as never)
+    expect(peopleLabel(card, true)).toBe('12 here now')
+  })
+
+  it('an older server without hereCount: no here-now line (the going count instead), never the check-in count', () => {
+    const card = eventFromApi({ id: 'e1', title: 'Evening Ragas', startTime: '2026-10-16T13:00:00.000Z', checkInCount: 14, currentCapacity: 14, goingCount: 30 } as never)
+    expect(card.here_count).toBeNull()
+    expect(peopleLabel(card, true)).toBe('30 going')
+    expect(peopleLabel({ ...card, going_count: null }, true)).toBeNull()
   })
 
   it('zero, or a count the server did not send, is nothing to say', () => {
-    expect(peopleLabel({ current_capacity: 0, going_count: 0 }, false)).toBeNull()
-    expect(peopleLabel({ current_capacity: 3, going_count: null }, false)).toBeNull()
+    expect(peopleLabel({ here_count: 0, going_count: 0 }, false)).toBeNull()
+    expect(peopleLabel({ here_count: 3, going_count: null }, false)).toBeNull()
     expect(peopleLabel({ going_count: -3 }, false)).toBeNull()
     expect(peopleLabel({ going_count: Number.NaN }, false)).toBeNull()
     expect(peopleLabel({}, true)).toBeNull()

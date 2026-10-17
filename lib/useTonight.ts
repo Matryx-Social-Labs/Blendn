@@ -105,7 +105,8 @@ function toTonight(
     startsAt: live.start_time,
     endsAt: live.end_time ?? e.end_time,
     distanceKm,
-    hereCount: e.current_capacity || 0,
+    // Inside now (the Room's rule), never everybody who came; 0 from an older server.
+    hereCount: e.here_count ?? 0,
     // `eventFromApi` writes 0 for "no cap"; 0 is not a capacity anyone set.
     capacity: e.max_capacity > 0 ? e.max_capacity : null,
     going: e.is_favorited || goingIds.has(e.id),

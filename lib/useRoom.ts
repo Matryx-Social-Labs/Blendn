@@ -171,13 +171,13 @@ const displayName = (name?: string) => {
 
 type RoomEvent = NonNullable<RoomState['event']>
 
-/** The here count's candidates: the room preview (the server's own "here now"), else the event's occupancy. */
+/** The here count's candidates: the room preview (the server's own "here now"), else the detail's `stats.hereCount` (never who came). */
 async function countCandidates(eventId: string, force: boolean): Promise<unknown[]> {
   try {
     const preview = await apiClient.getRoomPreview(eventId, { force })
     if (preview.success && preview.data) return [preview.data.hereCount]
     const detail = await apiClient.getEvent(eventId)
-    return [detail.data?.currentCapacity, detail.data?.stats?.checkInCount]
+    return [detail.data?.stats?.hereCount]
   } catch (e) {
     Logger.warn('match', 'Could not seed the here count', { error: e })
     return []

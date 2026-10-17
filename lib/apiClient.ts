@@ -625,6 +625,10 @@ export interface EventApiItem {
   favoriteCount?: number
   /** RSVPs going: the card's "{n} going". Absent from an older server. */
   goingCount?: number
+  /** Inside now (the Room's rule: checked in, not left): every "N here now". Absent from an older server. */
+  hereCount?: number
+  /** Came: everybody who checked in, left or not ("attended"). Never "here now". */
+  checkInCount?: number
   priceCents?: number
   price_cents?: number
   category?: string
@@ -712,7 +716,10 @@ export interface EventApiItem {
     memberCount?: number
   }
   stats?: {
+    /** Came: everybody who checked in, left or not ("attended"). Never "here now". */
     checkInCount?: number
+    /** Inside now (the Room's rule): every "N here now". Absent from an older server. */
+    hereCount?: number
     favoriteCount?: number
     /** Seats taken; the Scene's "Going" count before the doors. */
     rsvpCount?: number

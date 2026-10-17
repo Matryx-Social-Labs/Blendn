@@ -46,6 +46,8 @@ export function eventFromApi(e: EventPayload) {
       max_capacity: e.maxCapacity || 0,
       /** Distinct people checked in: the "here now" count, not going. */
       current_capacity: e.currentCapacity || 0,
+      /** Inside now (the Room's rule), for "N here now"; null from an older server: no line, not a wrong number. */
+      here_count: typeof e.hereCount === 'number' ? e.hereCount : null,
       /** RSVPs going; null from a server that does not send it yet. */
       going_count: typeof e.goingCount === 'number' ? e.goingCount : null,
       cover_image_url: e.coverImageUrl || null,
