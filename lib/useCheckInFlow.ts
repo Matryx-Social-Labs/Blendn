@@ -4,6 +4,7 @@ import { apiClient } from './apiClient'
 import { afterTrayDismissed } from '../components/ActionTray'
 import { askIntentRoute, revealOffer, submitCheckIn, untilIntentAnswered, type CheckInOutcome } from './checkIn'
 import { isExpectedRefusal, type CheckInRefusal } from './checkInRefusal'
+import { markCheckIn } from './checkInTiming'
 import { H } from './haptics'
 import { getCurrentLocation as getLocationFix, warmLocationFix, type CheckInLocation, type ShowTray, type TrayButton } from './locationFix'
 import { Logger } from './logger'
@@ -165,6 +166,7 @@ export function useCheckInFlow({
     setCheckingIn(true)
 
     try {
+      markCheckIn('commit')
       Logger.journey('checkin', 'detail:start', { eventId })
       if (!user) {
         Logger.journey('auth', 'detail:blocked:notSignedIn')
@@ -184,7 +186,9 @@ export function useCheckInFlow({
 
       onLocated?.(location)
 
+      markCheckIn('request')
       const outcome = await submitCheckIn(eventId, location)
+      markCheckIn('response', { ok: outcome.kind === 'checkedIn' ? 1 : 0 })
 
       if (outcome.kind === 'timeout') {
         Logger.warn('events', 'checkin:timeout')

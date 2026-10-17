@@ -17,6 +17,7 @@ jest.mock('expo-location', () => ({
 
 /* eslint-disable import/first */
 import * as Location from 'expo-location'
+import { Platform } from 'react-native'
 import { apiClient } from '../lib/apiClient'
 import { useGoLive } from '../lib/useGoLive'
 /* eslint-enable import/first */
@@ -37,6 +38,9 @@ async function goLiveOnce(showTray: jest.Mock) {
 }
 
 beforeEach(() => {
+  // The one-shot fix (Android's path). iOS's watch, and its bounded wait for a
+  // better fix, are pinned in locationFix.test.ts.
+  Object.defineProperty(Platform, 'OS', { get: () => 'android', configurable: true })
   ;(apiClient.goLive as jest.Mock).mockResolvedValue({ success: true, data: { venueDayId: 'd', expiresAt: 'x' } })
 })
 

@@ -3,6 +3,7 @@
  * Replaces direct Supabase calls with admin backend API calls
  */
 
+import { markCheckIn } from './checkInTiming'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { AttendancePayload, RsvpEventsPayload, SavedEventsPayload } from './savedEvents'
 import type { PaywallEvent, PaywallTrigger } from './paywallPolicy'
@@ -1246,6 +1247,8 @@ class ApiClientClass {
     const isGet = method === 'GET'
     // Only retry safe read-only requests to avoid duplicate mutations
     const MAX_RETRIES = isGet ? 2 : 0
+    // Out of the queue and about to go: the check-in's clock (lib/checkInTiming.ts).
+    if (!isGet && /^\/api\/mobile\/events\/[^/]+\/checkin$/.test(endpoint)) markCheckIn('sent')
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
