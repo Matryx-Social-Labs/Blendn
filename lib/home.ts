@@ -95,6 +95,18 @@ export function snapOnKeyboard(
   return state.restore ? { snap: state.restore, restore: null } : state
 }
 
+/**
+ * A hide event that is the keyboard actually leaving: its end frame at or
+ * below the window's bottom. iOS also reports a hide while the keyboard only
+ * changes frame as you type (drive 3: the first character closed the search);
+ * that one ends on screen and is not a hide.
+ */
+export function keyboardLeft(event: { endCoordinates?: { screenY: number; height: number } } | undefined, windowHeight: number): boolean {
+  const end = event?.endCoordinates
+  if (!end) return true
+  return end.height === 0 || end.screenY >= windowHeight - 1
+}
+
 export const DRAWER_SNAP_LABEL: Record<DrawerSnap, string> = {
   full: 'Expanded',
   half: 'Half open',

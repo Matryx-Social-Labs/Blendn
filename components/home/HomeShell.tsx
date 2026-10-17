@@ -1,6 +1,6 @@
 import { useIsFocused } from 'expo-router'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { AccessibilityInfo, Keyboard, Platform, Pressable, StyleSheet, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native'
+import { AccessibilityInfo, Dimensions, Keyboard, Platform, Pressable, StyleSheet, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native'
 import { useSharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -8,7 +8,7 @@ import { tabBarTop } from '../../app/(tabs)/_layout'
 import { NotificationBell } from '../pulse/NotificationBell'
 import { PulseTopBar, TOP_BAR_HEIGHT } from '../pulse/PulseTopBar'
 import { Text } from '../ui/Text'
-import { DRAWER_SEGMENTED_HEIGHT, drawerSnapPoints, snapOnKeyboard, type DrawerSnap } from '../../lib/home'
+import { DRAWER_SEGMENTED_HEIGHT, drawerSnapPoints, keyboardLeft, snapOnKeyboard, type DrawerSnap } from '../../lib/home'
 import { Logger } from '../../lib/logger'
 import { EMBER, EMBER_RADIUS, SPACE } from '../../lib/theme'
 import { HomeDrawer } from './HomeDrawer'
@@ -119,7 +119,10 @@ export function HomeShell({
       })
     }
     const show = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', () => move('show'))
-    const hide = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => move('hide'))
+    // Only a keyboard that actually left puts the drawer back: a frame change mid-typing is not one.
+    const hide = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', (e) => {
+      if (keyboardLeft(e, Dimensions.get('screen').height)) move('hide')
+    })
     return () => {
       show.remove()
       hide.remove()
