@@ -53,3 +53,11 @@ describe('the conversation ⋮ menu', () => {
     expect(read('app', 'private-chat', '[conversationId].tsx')).toContain('showConversationOptions(')
   })
 })
+
+describe('Tonight reads "N going" off the list', () => {
+  it('maps the list’s goingCount, with no per-event detail fetch (the N+1 it replaced)', () => {
+    const src = read('lib', 'useTonight.ts')
+    expect(src).toContain('goingCount: e.going_count')
+    expect(src).not.toMatch(/apiClient\s*\.getEvent\(/)
+  })
+})

@@ -110,7 +110,8 @@ function toTonight(
     capacity: e.max_capacity > 0 ? e.max_capacity : null,
     going: e.is_favorited || goingIds.has(e.id),
     tasteMatchCount: null,
-    goingCount: null,
+    // The list's `goingCount` (RSVPs), the same number as the detail's `stats.rsvpCount`.
+    goingCount: e.going_count,
   }
 }
 
@@ -121,7 +122,6 @@ export function useTonight(): TonightState {
   const [location, setLocation] = useState<TonightLocation>('on')
   const [offline, setOffline] = useState(false)
   const [previews, setPreviews] = useState<Record<string, RoomPreview>>({})
-  const [goingCounts, setGoingCounts] = useState<Record<string, number>>({})
   const loadIdRef = useRef(0)
   const eventsRef = useRef<TonightEvent[]>([])
 
@@ -254,23 +254,6 @@ export function useTonight(): TonightState {
       if (found.length === 0) return
       setPreviews((prev) => ({ ...prev, ...Object.fromEntries(found) }))
     })
-    /*
-     * "N going" for the same few cards: the list carries no RSVP count, the
-     * event's detail does (`stats.rsvpCount`), and it is the read the Scene
-     * makes anyway, so a tap on the card opens on a warm cache.
-     */
-    Promise.all(
-      ids.map((id) =>
-        apiClient
-          .getEvent(id)
-          .then((r) => (r.success && typeof r.data?.stats?.rsvpCount === 'number' ? ([id, r.data.stats.rsvpCount] as const) : null))
-          .catch(() => null)
-      )
-    ).then((answers) => {
-      if (cancelled) return
-      const found = answers.filter((a): a is readonly [string, number] => a !== null)
-      if (found.length) setGoingCounts((prev) => ({ ...prev, ...Object.fromEntries(found) }))
-    })
     return () => {
       cancelled = true
     }
@@ -280,14 +263,9 @@ export function useTonight(): TonightState {
     () =>
       events.map((e) => {
         const preview = previews[e.id]
-        const going = goingCounts[e.id] ?? null
-        return preview
-          ? { ...e, hereCount: preview.hereCount, tasteMatchCount: preview.tasteMatchCount, goingCount: going }
-          : going === null
-            ? e
-            : { ...e, goingCount: going }
+        return preview ? { ...e, hereCount: preview.hereCount, tasteMatchCount: preview.tasteMatchCount } : e
       }),
-    [events, previews, goingCounts]
+    [events, previews]
   )
 
   return { status, events: merged, insideEventId, location, offline, refresh }
