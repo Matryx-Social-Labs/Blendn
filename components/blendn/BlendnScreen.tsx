@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BackHandler, StyleSheet, Text, View } from 'react-native'
 import Animated, { Easing, FadeIn, FadeInUp, FadeOut, ReduceMotion, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { scheduleOnRN } from 'react-native-worklets'
 
 import { apiClient } from '../../lib/apiClient'
 import { blendnClosed, isLiveHint, openPass, takePendingPerson, useDoor, usePendingPerson } from '../../lib/blendnOverlay'
@@ -56,6 +57,8 @@ const ROOM_ARRIVAL_MS = DURATION.base + 60 + 2 * 28 + DURATION.base
 
 /** How long the pour and the pass wait for the Room after a check-in before giving up on it. */
 const ROOM_WAIT_MS = 4000
+/** Past the crossfade's own length, Tonight goes even if its completion never came (an interrupted fade). */
+const FADE_FALLBACK_SLACK_MS = 50
 /** "Show more" brings at most this many (the server pages the ranking by 20). */
 const MORE_STEP = 20
 
@@ -213,7 +216,8 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   const door = useDoor()
   const liveInside = (door ? (tonight.events.find((e) => e.id === door.id) ?? door) : tonight.events.find((e) => e.id === tonight.insideEventId)) ?? null
   /*
-   * Tonight as it was when the hold committed, held until the check-in is done.
+   * Tonight as it was when the hold committed, held until the check-in is done
+   * (and, under a hand-off, its crossfade).
    * A check-in re-reads Tonight (`checkInChanged`), and the answer — the event
    * you just entered no longer "inside", the deck re-sorted or briefly empty —
    * landed mid-pour: the deck vanished, the pass changed under the flood and
@@ -242,7 +246,24 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   const [pourPlaying, setPourPlaying] = useState(false)
   const [pourStill, setPourStill] = useState(false)
   const [roomPremounted, setRoomPremounted] = useState(false)
-  /** The Room's crossfade in (#9: D.base), on the UI thread. 1 unless a pour is handing off into it. */
+  /*
+   * The pre-mounted Room has been laid out on the native side. The hand-off
+   * waits for this, not for the JS commit that mounts it: on Fabric that
+   * commit is mounted on the UI thread later, and a crossfade started with it
+   * stalled behind the mount (drive 3: 1-8 frozen frames, then a jump).
+   */
+  const [roomLaidOut, setRoomLaidOut] = useState(false)
+  /*
+   * Tonight stays mounted under the Room until the crossfade into it has
+   * finished (#9: "Tonight crossfades to the Room"), never removed at the
+   * hand-off: a layout animation's exit was skipped under Reduce Motion (a
+   * one-frame cut) and drawn over the Room otherwise (the ghost pass).
+   */
+  const [tonightHeld, setTonightHeld] = useState(false)
+  const releaseTonight = useCallback(() => setTonightHeld(false), [])
+  /** A check-in's Room is hidden and owes its crossfade in. */
+  const fadeOwed = useRef(false)
+  /** The Room's crossfade in (#9: D.base), on the UI thread; Tonight under it is 1 minus this. 1 unless a pour is handing off. */
   const roomFade = useSharedValue(1)
   const roomFadeStyle = useAnimatedStyle(() => ({ opacity: roomFade.get() }))
   /*
@@ -278,7 +299,10 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
       setPourPlaying(true)
       setPourStill(false)
       setRoomPremounted(false)
-      // Hidden from here, before the Room exists: it never shows a frame under Tonight.
+      setRoomLaidOut(false)
+      setTonightHeld(true)
+      // Hidden from here, before the Room exists: it never shows a frame over Tonight.
+      fadeOwed.current = true
       roomFade.set(0)
       setRoomWaitOver(false)
       setTimeout(() => setPourStill(true), ORBS_LIFT_MS)
@@ -313,21 +337,42 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   const roomIsThisOne = room.status === 'ready' && !!room.event && room.event.id === insideEvent?.id && !switchFrom
   // With its data: the count and the chat have answered too, so the Room reveals whole, never filling in after.
   const premount = pourPlaying && pourStill && !checkIn.asks && roomIsThisOne && room.settled
-  // Latched: the Room stays mounted from here to the hand-off. The pour's own hand-off effect runs after the
-  // commit that mounts it, so the crossfade never pays for the mount.
+  // Latched: this one Room instance stays mounted from here, through the hand-off, as the Room (same slot, same key).
   if (premount && !roomPremounted) setRoomPremounted(true)
   const showRoom = !!room.event && (mode === 'room' || premount || (roomPremounted && checkIn.checkingIn))
-  // The hand-off: the Room, already mounted, crossfades in while the pour fades (#9: D.base, gentle).
+  /** Tonight's layer: up outside the Room, and under it until the crossfade into it has finished. */
+  const tonightUp = mode !== 'room' || tonightHeld
+  // The snapshot of Tonight lasts the check-in and, under a hand-off, the crossfade: a re-read never lands in either.
+  if (held && !checkIn.checkingIn && !(mode === 'room' && tonightHeld)) setHeld(null)
+  // One value drives both layers: the Room over Tonight at `roomFade`, Tonight at the rest, while both are mounted.
+  const tonightFadeStyle = useAnimatedStyle(() => ({ opacity: showRoom ? 1 - roomFade.get() : 1 }), [showRoom])
+  /*
+   * The hand-off: the Room crossfades in over Tonight while the pour fades
+   * (#9: D.base, gentle; Reduce Motion's 200 ms, the same structure). Tonight
+   * unmounts on the fade's completion, or its length plus a little if that
+   * never comes.
+   */
+  const fadeRoomIn = useLatest(() => {
+    if (!fadeOwed.current) return
+    fadeOwed.current = false
+    const duration = motionTokens(reduceMotion).duration.base
+    roomFade.set(
+      withTiming(1, { duration, easing: gentle, reduceMotion: ReduceMotion.Never }, (finished) => {
+        if (finished) scheduleOnRN(releaseTonight)
+      })
+    )
+    setTimeout(releaseTonight, duration + FADE_FALLBACK_SLACK_MS)
+  })
+  // A Room that came only after the pour had cleared (a question first, or the wait ran out) crossfades in as it turns up.
   useEffect(() => {
-    if (mode !== 'room' || roomFade.get() === 1) return
-    roomFade.set(withTiming(1, { duration: motionTokens(reduceMotion).duration.base, easing: gentle, reduceMotion: ReduceMotion.Never }))
-  }, [mode, reduceMotion, roomFade])
-  /** The pour may hand off: into a Room mounted under it, or (as before) one that never came or isn't this one. */
-  const pourMayHandOff = roomPremounted || roomWaitOver || checkIn.asks || (roomReady && !roomIsThisOne)
+    if (mode === 'room') fadeRoomIn.current()
+  }, [mode, fadeRoomIn])
+  /** The pour may hand off: into a Room laid out under it, or (as before) one that never came or isn't this one. */
+  const pourMayHandOff = roomLaidOut || roomWaitOver || checkIn.asks || (roomReady && !roomIsThisOne)
   const pourDoneNow = useLatest(checkIn.pourDone)
   // The crossfade starts at the hand-off, on the UI thread, with the pour's own fade: not a render later, when the mode turns.
   const startRoomFade = useLatest(() => {
-    if (roomPremounted) roomFade.set(withTiming(1, { duration: motionTokens(reduceMotion).duration.base, easing: gentle, reduceMotion: ReduceMotion.Never }))
+    if (roomPremounted) fadeRoomIn.current()
   })
   const onPourDone = useCallback(() => {
     startRoomFade.current()
@@ -676,11 +721,76 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
 
   return (
     <View style={styles.fill}>
+      {/* Below the Room: Tonight (or the Recap, or the skeleton), held under a hand-off until its crossfade is done. */}
+      {!tonightUp ? null : mode === 'ended' && recap ? (
+        <Animated.View key="ended" style={styles.layer} entering={FadeIn.duration(DURATION.base)} exiting={FadeOut.duration(DURATION.quick)}>
+          <MomentRecap
+            face={myFace}
+            title={recap.title}
+            minutes={recap.minutes}
+            matches={recap.matched}
+            rated={ratedEvent === recap.eventId || isNightRated(recap.eventId)}
+            onRate={() => router.push({ pathname: '/rate/[eventId]', params: { eventId: recap.eventId } as never })}
+            onBack={() => {
+              setDismissedRecap(recap.eventId)
+              setRecap(null)
+            }}
+            onClose={onClose}
+            testID="room-recap"
+          />
+        </Animated.View>
+      ) : mode === 'loading' ? (
+        <RoomSkeleton topInset={topInset} />
+      ) : (
+        <Animated.View
+          key="tonight"
+          testID="tonight-layer"
+          style={[styles.layer, tonightFadeStyle]}
+          entering={FadeIn.duration(DURATION.base)}
+          // Under a Room it is already faded out by `tonightFadeStyle`: an exit would start it again from 1, over the Room.
+          exiting={showRoom ? undefined : FadeOut.duration(DURATION.base)}
+          pointerEvents={mode === 'room' ? 'none' : 'auto'}
+          accessibilityElementsHidden={mode === 'room'}
+          importantForAccessibility={mode === 'room' ? 'no-hide-descendants' : 'auto'}
+        >
+          <TonightView
+            events={tonightEvents}
+            loading={tonight.status === 'loading'}
+            error={tonight.status === 'error'}
+            offline={tonight.offline}
+            location={tonight.location}
+            onRetry={() => void tonight.refresh()}
+            insideEvent={insideEvent}
+            switchFrom={switchFrom?.title}
+            // Under the hand-off the check-in is over, but the pass fading out still reads "You're in", never a re-armed hold.
+            checkingIn={checkIn.checkingIn || mode === 'room'}
+            youreIn={checkIn.youreIn || mode === 'room'}
+            onPassFrame={setPassFrame}
+            onOpenEvent={(id) => router.push({ pathname: '/event/[id]', params: { id } as never })}
+            onSeeAll={() => router.push('/nearby-events')}
+            onBrowse={() => {
+              onClose()
+              router.navigate('/(tabs)/events')
+            }}
+            onCheckIn={() => {
+              setHeld({ events: tonight.events, insideEvent: liveInside })
+              void checkIn.start()
+            }}
+            onRoomRetry={room.status === 'error' ? room.retry : undefined}
+            // Not while the pour plays: the pass growing under it moved the flood (R2-D1's row comes after).
+            crewStrip={pourPlaying || mode === 'room' ? null : <PeopleCrewStrip myCrews={myCrewsHere} mine={crews.mine} eventTitle={insideEvent?.title ?? ''} actions={crewActions} inset={false} />}
+            topInset={topInset}
+            bottomInset={insets.bottom}
+          />
+        </Animated.View>
+      )}
+      {/* Above Tonight: pre-mounted at 0 under the pour, the one Room that stays. */}
       {showRoom && room.event ? (
         <Animated.View
           key="room"
           testID="room-stage"
-          style={[styles.fill, roomFadeStyle]}
+          style={[styles.layer, roomFadeStyle]}
+          onLayout={() => setRoomLaidOut(true)}
           // Out of a pour the crossfade is `roomFade`'s; otherwise the Room's own entrance.
           entering={pourEntrance ? undefined : reduceMotion ? FadeIn : FadeInUp.duration(DURATION.medium)}
           exiting={FadeOut.duration(DURATION.quick)}
@@ -763,57 +873,6 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
           />
         </Animated.View>
       ) : null}
-      {mode === 'room' ? null : mode === 'ended' && recap ? (
-        <Animated.View key="ended" style={styles.fill} entering={FadeIn.duration(DURATION.base)} exiting={FadeOut.duration(DURATION.quick)}>
-          <MomentRecap
-            face={myFace}
-            title={recap.title}
-            minutes={recap.minutes}
-            matches={recap.matched}
-            rated={ratedEvent === recap.eventId || isNightRated(recap.eventId)}
-            onRate={() => router.push({ pathname: '/rate/[eventId]', params: { eventId: recap.eventId } as never })}
-            onBack={() => {
-              setDismissedRecap(recap.eventId)
-              setRecap(null)
-            }}
-            onClose={onClose}
-            testID="room-recap"
-          />
-        </Animated.View>
-      ) : mode === 'loading' ? (
-        <RoomSkeleton topInset={topInset} />
-      ) : (
-        <Animated.View key="tonight" style={styles.fill} entering={FadeIn.duration(DURATION.base)} exiting={FadeOut.duration(DURATION.base)}>
-          <TonightView
-            events={tonightEvents}
-            loading={tonight.status === 'loading'}
-            error={tonight.status === 'error'}
-            offline={tonight.offline}
-            location={tonight.location}
-            onRetry={() => void tonight.refresh()}
-            insideEvent={insideEvent}
-            switchFrom={switchFrom?.title}
-            checkingIn={checkIn.checkingIn}
-            youreIn={checkIn.youreIn}
-            onPassFrame={setPassFrame}
-            onOpenEvent={(id) => router.push({ pathname: '/event/[id]', params: { id } as never })}
-            onSeeAll={() => router.push('/nearby-events')}
-            onBrowse={() => {
-              onClose()
-              router.navigate('/(tabs)/events')
-            }}
-            onCheckIn={() => {
-              setHeld({ events: tonight.events, insideEvent: liveInside })
-              void checkIn.start().finally(() => setHeld(null))
-            }}
-            onRoomRetry={room.status === 'error' ? room.retry : undefined}
-            // Not while the pour plays: the pass growing under it moved the flood (R2-D1's row comes after).
-            crewStrip={pourPlaying ? null : <PeopleCrewStrip myCrews={myCrewsHere} mine={crews.mine} eventTitle={insideEvent?.title ?? ''} actions={crewActions} inset={false} />}
-            topInset={topInset}
-            bottomInset={insets.bottom}
-          />
-        </Animated.View>
-      )}
 
       {/* The bar floats over every mode, so closing is always in the same place (the Recap draws its own). */}
       {mode === 'ended' ? null : (
@@ -995,6 +1054,8 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
+  /** Tonight and the Room are one absolute stack: as flex siblings, a Room mounted under the pour halved Tonight's height (drive 3). */
+  layer: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
   topBar: {
