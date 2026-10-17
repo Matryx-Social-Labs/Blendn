@@ -42,10 +42,10 @@ export const CREW_TAGS: readonly { slug: string; label: string }[] = [
 
 /** `POST /crews/:crewId/report` takes exactly these. */
 export const CREW_REPORT_REASONS: readonly { value: CrewReportReason; label: string }[] = [
-  { value: 'offensive', label: 'Offensive name or bio' },
-  { value: 'contact_details', label: 'Contact details on the card' },
-  { value: 'impersonation', label: 'Pretending to be someone else' },
-  { value: 'spam', label: 'Spam' },
+  { value: 'offensive', label: 'Hateful or abusive name' },
+  { value: 'contact_details', label: 'Contact details or a handle' },
+  { value: 'impersonation', label: 'Impersonating someone' },
+  { value: 'spam', label: 'Spam or a business' },
   { value: 'other', label: 'Something else' },
 ]
 export type CrewReportReason = 'spam' | 'offensive' | 'contact_details' | 'impersonation' | 'other'
@@ -64,7 +64,7 @@ export const KEEP_ANONYMOUS_HELPER =
   'Your crewmates can still reveal themselves. Turning this on later applies from then on — a reveal already made can’t be undone.'
 
 export const BLEND_CLOSED_LINE = 'This Blend has closed'
-export const CREW_GONE_LINE = 'This crew isn’t around any more'
+export const CREW_GONE_LINE = 'This crew isn’t here any more'
 /** A crew chat that removed you (a ban written into it): you, not the crew, are gone. */
 export const CREW_REMOVED_LINE = 'You’re no longer in this crew’s chat'
 export const OPEN_TO_CREWS_LABEL = 'Open to joining a crew tonight'
@@ -120,6 +120,11 @@ export interface Crew {
    * because a client outlives a deploy; absent reads as not hidden.
    */
   hidden?: boolean
+  /**
+   * Someone you have blocked, or who blocked you, is in this crew and is left
+   * off `members`. Optional for the same reason; absent says nothing.
+   */
+  apart?: boolean
 }
 
 export interface CrewInvite {

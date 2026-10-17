@@ -6,6 +6,7 @@
  * tested on its own.
  */
 
+import type { CrewPatch } from './crewsApi'
 import {
   characters,
   closesLine,
@@ -266,4 +267,50 @@ export function blendSub(blend: Pick<Blend, 'sides' | 'closesAt'>, now: number =
 /** Whether your crew's reveal is known to have happened: the server's flag, or a tap on this screen. */
 export function revealedFor(side: BlendSide | null, revealedHere: boolean): boolean {
   return revealedHere || side?.crewRevealed === true
+}
+
+/* -------------------------------------------------------------------------- */
+/* Editing a crew                                                             */
+/* -------------------------------------------------------------------------- */
+
+export interface CrewEdit {
+  name: string
+  bio: string
+  /** null: the crew's intent is one the picker has no chip for, and the owner left it alone. */
+  choice: IntentChoice | null
+  tags: readonly string[]
+  openToSolo: boolean
+}
+
+/** What the owner is editing starts as: the crew as it stands. */
+export function editOf(crew: Pick<Crew, 'name' | 'bio' | 'intent' | 'tags' | 'openToSolo'>): CrewEdit {
+  return {
+    name: crew.name,
+    bio: crew.bio ?? '',
+    choice: intentChoice(crew.intent),
+    tags: crew.tags.map((t) => t.slug),
+    openToSolo: crew.openToSolo,
+  }
+}
+
+const sameSet = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((x) => b.includes(x))
+
+/**
+ * The `PATCH` for what actually changed, or null when nothing did (Save then
+ * just closes: the server refuses an empty change). An intent the picker has no
+ * chip for is never overwritten by a default.
+ */
+export function crewPatch(
+  crew: Pick<Crew, 'name' | 'bio' | 'intent' | 'tags' | 'openToSolo'>,
+  edit: CrewEdit
+): CrewPatch | null {
+  const patch: CrewPatch = {}
+  const name = cleanName(edit.name)
+  if (name !== crew.name) patch.name = name
+  const bio = edit.bio.trim()
+  if (bio !== (crew.bio ?? '')) patch.bio = bio || null
+  if (edit.choice && edit.choice !== intentChoice(crew.intent)) patch.intent = intentOf(edit.choice)
+  if (!sameSet(edit.tags, crew.tags.map((t) => t.slug))) patch.tags = [...edit.tags]
+  if (edit.openToSolo !== crew.openToSolo) patch.openToSolo = edit.openToSolo
+  return Object.keys(patch).length ? patch : null
 }

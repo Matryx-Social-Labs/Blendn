@@ -4,6 +4,7 @@ import type {
   BlendRef,
   CreateCrewBody,
   Crew,
+  CrewIntent,
   CrewInvite,
   CrewReportReason,
   CrewsAtEvent,
@@ -17,6 +18,9 @@ import type {
  * closed. Mutations go at priority 2 and are never retried (`apiClient`).
  * Every refusal is read through `crewMessage` (lib/crews.ts).
  */
+
+/** `PATCH /crews/:crewId`: anything the owner can change, and at least one of them. */
+export type CrewPatch = Partial<{ name: string; bio: string | null; intent: CrewIntent[]; tags: string[]; openToSolo: boolean }>
 
 const enc = encodeURIComponent
 const post = (body?: unknown): RequestInit => ({ method: 'POST', body: JSON.stringify(body ?? {}) })
@@ -34,8 +38,8 @@ export const crewsApi = {
     return apiClient.queuedRequest('/api/mobile/crews', post(body), true, 2)
   },
 
-  /** The owner's settings. Only "Room for one more" has a control so far. */
-  update(crewId: string, patch: { openToSolo: boolean }): Promise<ApiResponse<Crew>> {
+  /** The owner's changes: name, bio, "Here for", tags and "Room for one more". */
+  update(crewId: string, patch: CrewPatch): Promise<ApiResponse<Crew>> {
     return apiClient.queuedRequest(
       `/api/mobile/crews/${enc(crewId)}`,
       { method: 'PATCH', body: JSON.stringify(patch) },

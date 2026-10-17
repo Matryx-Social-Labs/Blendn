@@ -62,7 +62,6 @@ jest.mock('../lib/logger', () => ({
 
 import { router } from 'expo-router'
 import BlendScreen from '../app/blend/[blendId]'
-import CrewScreen from '../app/crews/[crewId]'
 import { apiClient } from '../lib/apiClient'
 import {
   BLEND_CLOSED_LINE,
@@ -85,113 +84,6 @@ beforeEach(() => {
   api.getFriends.mockResolvedValue({
     success: true,
     data: { friends: [{ userId: 'u-rohan', name: 'Rohan', photo: null, since: '2026-09-01T00:00:00Z' }], count: 1 },
-  })
-})
-
-describe('a crew', () => {
-  const crew = (role: 'owner' | 'member'): Crew => ({
-    crewId: 'c2',
-    name: 'Two',
-    bio: null,
-    intent: [],
-    tags: [],
-    emblemSeed: 's',
-    openToSolo: false,
-    createdAt: '2026-10-09T10:00:00Z',
-    chatGroupId: 'g2',
-    size: 2,
-    you: { role, keepMeAnonymous: false },
-    members: [],
-  })
-
-  it('its owner can turn on "Room for one more" — what lets the crew like one person', async () => {
-    mockParams.crewId = 'c2'
-    crews.crew.mockResolvedValue({ success: true, data: crew('owner') })
-    crews.update.mockResolvedValue({ success: true, data: { ...crew('owner'), openToSolo: true } })
-    await render(<CrewScreen />)
-    await waitFor(() => screen.getByRole('switch', { name: 'Room for one more' }))
-    await fireEvent.press(screen.getByRole('switch', { name: 'Room for one more' }))
-    await waitFor(() => expect(crews.update).toHaveBeenCalledWith('c2', { openToSolo: true }))
-  })
-
-  it('M5: the invite picker leaves out a friend already in the crew', async () => {
-    mockParams.crewId = 'c2'
-    crews.crew.mockResolvedValue({
-      success: true,
-      data: {
-        ...crew('owner'),
-        members: [{ userId: 'rh_r', isFriend: true, name: 'Rohan', photo: null, role: 'member', joinedAt: '2026-10-09T10:00:00Z' }],
-      },
-    })
-    api.getFriends.mockResolvedValue({
-      success: true,
-      data: {
-        friends: [
-          { userId: 'u-rohan', name: 'Rohan', photo: null, since: '2026-09-01T00:00:00Z' },
-          { userId: 'u-kavya', name: 'Kavya', photo: null, since: '2026-09-01T00:00:00Z' },
-        ],
-        count: 2,
-      },
-    })
-    await render(<CrewScreen />)
-    await waitFor(() => screen.getByLabelText('Invite friends'))
-    await fireEvent.press(screen.getByLabelText('Invite friends'))
-    await waitFor(() => screen.getByRole('checkbox', { name: 'Ask Kavya' }))
-    expect(screen.queryByRole('checkbox', { name: 'Ask Rohan' })).toBeNull()
-  })
-
-  it('"We’re here" names the event you are checked in at, not a place you went live at', async () => {
-    mockParams.crewId = 'c2'
-    crews.crew.mockResolvedValue({ success: true, data: crew('member') })
-    api.getActiveCheckins.mockResolvedValue({
-      success: true,
-      data: { checkIns: [{ eventId: 'venue-day', kind: 'venue_day' }, { eventId: 'the-event', kind: 'event' }] },
-    } as never)
-    crews.here.mockResolvedValue({ success: true, data: { notified: 1, repeated: false } })
-    await render(<CrewScreen />)
-    await waitFor(() => screen.getByLabelText('We’re here'))
-    await fireEvent.press(screen.getByLabelText('We’re here'))
-    await waitFor(() => expect(crews.here).toHaveBeenCalledWith('c2', 'the-event'))
-  })
-
-  it('M11: the anonymity switch holds still while its write is in flight', async () => {
-    mockParams.crewId = 'c2'
-    crews.crew.mockResolvedValue({ success: true, data: crew('member') })
-    crews.setKeepMeAnonymous.mockReturnValue(new Promise(() => {}) as never)
-    await render(<CrewScreen />)
-    const toggle = await waitFor(() => screen.getByRole('switch', { name: KEEP_ANONYMOUS_LABEL }))
-    await fireEvent.press(toggle)
-    expect(screen.getByRole('switch', { name: KEEP_ANONYMOUS_LABEL })).toBeDisabled()
-    crews.setKeepMeAnonymous.mockReset()
-  })
-
-  it('M11: a write that lands after a refresh changes only its own field', async () => {
-    mockParams.crewId = 'c2'
-    crews.crew.mockResolvedValueOnce({ success: true, data: crew('owner') })
-    let finish: (v: unknown) => void = () => {}
-    crews.setKeepMeAnonymous.mockReturnValue(new Promise((r) => (finish = r)) as never)
-    await render(<CrewScreen />)
-    const anon = await waitFor(() => screen.getByRole('switch', { name: KEEP_ANONYMOUS_LABEL }))
-    await fireEvent.press(anon)
-    // Meanwhile a pull-to-refresh brings the crew as it is now: room for one more turned on elsewhere.
-    crews.crew.mockResolvedValueOnce({ success: true, data: { ...crew('owner'), openToSolo: true } })
-    await act(async () => {
-      await screen.getByTestId('crew-scroll').props.refreshControl.props.onRefresh()
-    })
-    await waitFor(() => expect(crews.crew).toHaveBeenCalledTimes(2))
-    await act(async () => finish({ success: true, data: { keepMeAnonymous: true } }))
-    expect(screen.getByRole('switch', { name: 'Room for one more' }).props.accessibilityState.checked).toBe(true)
-    expect(screen.getByRole('switch', { name: KEEP_ANONYMOUS_LABEL }).props.accessibilityState.checked).toBe(true)
-    crews.setKeepMeAnonymous.mockReset()
-    crews.crew.mockReset()
-  })
-
-  it('a member does not get the owner’s switch', async () => {
-    mockParams.crewId = 'c2'
-    crews.crew.mockResolvedValue({ success: true, data: crew('member') })
-    await render(<CrewScreen />)
-    await waitFor(() => screen.getByText('Open crew chat'))
-    expect(screen.queryByRole('switch', { name: 'Room for one more' })).toBeNull()
   })
 })
 

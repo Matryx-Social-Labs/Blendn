@@ -19,6 +19,7 @@ import { Icon } from '../ui/Icon'
 /** flow10.js `make`: the line about the crew is a one-liner's height. */
 const BIO_MIN_HEIGHT = 72
 const FRIEND_ROW = 64
+const NO_FRIENDS = 'Add friends first — a crew is made from your friends.'
 const FRIEND_FACE = 48
 /** The pick circle: 28, ringed at 35% white when off. */
 const PICK = 28
@@ -51,7 +52,8 @@ export type NameStepProps = {
   bio: string
   onBio: (next: string) => void
   bioError?: string
-  choice: IntentChoice
+  /** null: an intent the picker has no chip for, left as it is (Edit crew). */
+  choice: IntentChoice | null
   onChoice: (next: IntentChoice) => void
   tags: readonly string[]
   onTag: (slug: string) => void
@@ -184,10 +186,12 @@ export type FriendsStepProps = {
   picked: readonly string[]
   onToggle: (userId: string) => void
   onRetry: () => void
+  /** What an empty list says; Make a crew and Invite differ ("Every friend of yours is in this crew…"). */
+  none?: string
 }
 
 /** Step 2 · Invite friends: friends only, no search; the count says how many, never who was skipped. */
-export function FriendsStep({ friends, picked, onToggle, onRetry }: FriendsStepProps) {
+export function FriendsStep({ friends, picked, onToggle, onRetry, none = NO_FRIENDS }: FriendsStepProps) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const secondary = contrast ? COLOR.textPrimary : COLOR.textSecondary
@@ -203,7 +207,7 @@ export function FriendsStep({ friends, picked, onToggle, onRetry }: FriendsStepP
             {line('Your friends didn’t load — try again')}
           </Pressable>
         ) : friends.length === 0 ? (
-          line('Add friends first — a crew is made from your friends.')
+          line(none)
         ) : (
           friends.map((f, i) => (
             <View key={f.userId} style={i ? styles.divided : undefined}>
