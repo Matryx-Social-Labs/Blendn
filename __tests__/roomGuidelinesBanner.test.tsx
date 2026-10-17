@@ -7,7 +7,8 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
-import { Linking, StyleSheet } from 'react-native'
+import { StyleSheet } from 'react-native'
+import * as WebBrowser from 'expo-web-browser'
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
@@ -66,8 +67,6 @@ async function openRoom(userId: string, chatRoomId: string) {
 
 beforeEach(async () => {
   await AsyncStorage.clear()
-  jest.spyOn(Linking, 'openURL').mockResolvedValue(true)
-  jest.spyOn(Linking, 'canOpenURL').mockResolvedValue(true)
 })
 
 it('links to the published page', () => {
@@ -88,7 +87,7 @@ it('"community guidelines" in the copy is the one link: white, underlined, and i
   expect(StyleSheet.flatten(words.props.style)).toMatchObject({ color: '#FFFFFF', textDecorationLine: 'underline' })
   expect(screen.getAllByRole('link')).toHaveLength(1)
   await fireEvent.press(words)
-  expect(Linking.openURL).toHaveBeenCalledWith(COMMUNITY_GUIDELINES_URL)
+  expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(COMMUNITY_GUIDELINES_URL, expect.any(Object))
 })
 
 it('is centred, the copy unchanged (owner override of room #04)', async () => {
@@ -132,7 +131,7 @@ it('shows when the stored flag cannot be read — the safe direction', async () 
 it('the link opens the guidelines', async () => {
   await openRoom('u_me', 'room_a')
   await fireEvent.press(screen.getByRole('link', { name: 'Community guidelines' }))
-  expect(Linking.openURL).toHaveBeenCalledWith(COMMUNITY_GUIDELINES_URL)
+  expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(COMMUNITY_GUIDELINES_URL, expect.any(Object))
   // Reading the rules is not agreeing to them: the banner stays.
   expect(screen.getByTestId(BANNER)).toBeTruthy()
 })
@@ -141,5 +140,5 @@ it('the link opens the guidelines', async () => {
 it('the Settings row opens the same page', async () => {
   await render(<SettingsScreen />)
   await fireEvent.press(await screen.findByRole('link', { name: 'Community guidelines' }))
-  await waitFor(() => expect(Linking.openURL).toHaveBeenCalledWith(COMMUNITY_GUIDELINES_URL))
+  await waitFor(() => expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(COMMUNITY_GUIDELINES_URL, expect.any(Object)))
 })

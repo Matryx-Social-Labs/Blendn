@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
-import { Linking, ScrollView, StyleSheet, View } from 'react-native'
+import { ScrollView, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { AppHeader } from '../components/AppHeader'
@@ -8,7 +8,7 @@ import ScalePress from '../components/motion/ScalePress'
 import { useToast } from '../components/Toast'
 import { Text } from '../components/ui/Text'
 import { appVersionLabel } from '../lib/support'
-import { BLENDN_LINKS } from '../lib/links'
+import { BLENDN_LINKS, openInApp } from '../lib/links'
 import { MAP_CREDITS } from '../lib/mapStyleEmber'
 import { EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE } from '../lib/theme'
 
@@ -32,7 +32,7 @@ export default function AboutScreen() {
   const { showToast } = useToast()
 
   const open = (url: string) =>
-    Linking.openURL(url).catch(() => showToast("That page didn't open. Try again.", 'error'))
+    openInApp(url).catch(() => showToast("That page didn't open. Try again.", 'error'))
 
   const rows: LinkRow[] = [
     { icon: 'document-text-outline', title: 'Terms of Service', url: BLENDN_LINKS.terms },

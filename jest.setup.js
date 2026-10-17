@@ -36,3 +36,8 @@ jest.mock('react-native-purchases', () => {
   }
   return { __esModule: true, default: Purchases, PURCHASES_ERROR_CODE }
 })
+
+// The in-app browser (expo-web-browser) is native; every call resolves as if it opened and was dismissed.
+jest.mock('expo-web-browser', () => ({
+  openBrowserAsync: jest.fn(async () => ({ type: 'dismiss' })),
+}))

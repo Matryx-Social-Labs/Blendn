@@ -1,6 +1,6 @@
-import { Linking, StyleSheet, Text, type StyleProp, type TextStyle } from 'react-native'
+import { StyleSheet, Text, type StyleProp, type TextStyle } from 'react-native'
 
-import { BLENDN_LINKS } from '../lib/links'
+import { BLENDN_LINKS, openInApp } from '../lib/links'
 import { Logger } from '../lib/logger'
 import { EMBER, TYPE } from '../lib/theme'
 
@@ -13,7 +13,7 @@ import { EMBER, TYPE } from '../lib/theme'
  */
 export function LegalLine({ lead, style }: { lead: string; style?: StyleProp<TextStyle> }) {
   const open = (url: string) => {
-    Linking.openURL(url).catch((error) => Logger.warn('auth', 'Could not open a legal link', { url, error }))
+    openInApp(url).catch((error) => Logger.warn('auth', 'Could not open a legal link', { url, error }))
   }
   return (
     <Text style={[styles.legal, style]}>

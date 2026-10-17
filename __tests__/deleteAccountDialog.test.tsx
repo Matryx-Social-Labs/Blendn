@@ -7,7 +7,7 @@
  * that and links to the published page for the rest.
  */
 import { fireEvent, render, screen } from '@testing-library/react-native'
-import { Linking } from 'react-native'
+import * as WebBrowser from 'expo-web-browser'
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
@@ -47,7 +47,6 @@ jest.mock('../lib/notifications', () => ({
 import SettingsScreen from '../app/settings'
 
 it('says what is kept, and links to the page that lists it', async () => {
-  jest.spyOn(Linking, 'openURL').mockResolvedValue(true)
   await render(<SettingsScreen />)
 
   fireEvent.press(await screen.findByRole('button', { name: 'Delete account' }))
@@ -57,5 +56,5 @@ it('says what is kept, and links to the page that lists it', async () => {
   expect(screen.queryByText(/personal info/)).toBeNull()
 
   fireEvent.press(screen.getByRole('button', { name: "What's kept" }))
-  expect(Linking.openURL).toHaveBeenCalledWith('https://www.blendn.app/delete-account')
+  expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith('https://www.blendn.app/delete-account', expect.any(Object))
 })

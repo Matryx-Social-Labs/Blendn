@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Linking, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 import {
   COMMUNITY_GUIDELINES_URL,
@@ -7,6 +7,7 @@ import {
   hasDismissedRoomGuidelines,
   roomGuidelinesKey,
 } from '../../lib/communityGuidelines'
+import { openInApp } from '../../lib/links'
 import { Logger } from '../../lib/logger'
 import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE, TYPE } from '../../lib/design/tokens'
 import { OPACITY } from '../../lib/theme'
@@ -54,7 +55,7 @@ export function RoomGuidelinesBanner({ userId, chatRoomId }: { userId?: string; 
   }
 
   const openGuidelines = () => {
-    Linking.openURL(COMMUNITY_GUIDELINES_URL).catch((error) =>
+    openInApp(COMMUNITY_GUIDELINES_URL).catch((error) =>
       Logger.warn('chat', 'Could not open the community guidelines', { error })
     )
   }

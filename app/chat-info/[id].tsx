@@ -1,7 +1,7 @@
 import { Image } from 'expo-image'
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useState } from 'react'
-import { Animated, Linking, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
+import { Animated, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { BrokenLink } from '../../components/chat/BrokenLink'
@@ -20,6 +20,7 @@ import { apiClient } from '../../lib/apiClient'
 import { COMMUNITY_GUIDELINES_URL } from '../../lib/communityGuidelines'
 import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { liveNowLabel } from '../../lib/home'
+import { openInApp } from '../../lib/links'
 import { Logger } from '../../lib/logger'
 import { markSeed } from '../../lib/pseudonymAvatar'
 import { isMuted, muteLabel, useRoomMute } from '../../lib/roomMembership'
@@ -160,7 +161,7 @@ function ChatInfoInner() {
   const leaveHint = place ? leavePlaceLine(place) : 'Rejoin by checking in at the event again.'
 
   const openGuidelines = () => {
-    Linking.openURL(COMMUNITY_GUIDELINES_URL).catch((error) => Logger.warn('chat', 'Could not open the community guidelines', { error }))
+    openInApp(COMMUNITY_GUIDELINES_URL).catch((error) => Logger.warn('chat', 'Could not open the community guidelines', { error }))
   }
 
   const cell = (width - 2 * SPACE.gutter - (COLUMNS - 1) * CELL_GAP) / COLUMNS

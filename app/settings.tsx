@@ -11,7 +11,7 @@ import ScalePress from '../components/motion/ScalePress'
 import { useToast } from '../components/Toast'
 import { offersApi } from '../lib/offers'
 import { apiClient } from '../lib/apiClient'
-import { BLENDN_LINKS } from '../lib/links'
+import { BLENDN_LINKS, openInApp } from '../lib/links'
 import { initializePushNotifications, removePushTokenFromProfile } from '../lib/notifications'
 import { clearPushDeclined } from '../lib/pushDecline'
 import { useLatest } from '../lib/useLatest'
@@ -292,11 +292,19 @@ export default function SettingsScreen() {
   }, [persistPreference, savePreferencesLocal, osPush, preferencesRef])
 
   /*
-   * `openURL` alone, no `canOpenURL` first: on iOS that answers false for any
-   * scheme not declared in `LSApplicationQueriesSchemes`. A failure is a
-   * toast, the same sentence About uses.
+   * Our own pages open in the in-app browser; a store's page (Manage
+   * subscription) is not ours and opens in the store, through `openURL` alone
+   * with no `canOpenURL` first (on iOS that answers false for any scheme not
+   * declared in `LSApplicationQueriesSchemes`). A failure is a toast, the same
+   * sentence About uses.
    */
-  const openExternal = useCallback(
+  const openPage = useCallback(
+    (url: string) => {
+      openInApp(url).catch(() => showToast("That page didn't open. Try again.", 'error'))
+    },
+    [showToast]
+  )
+  const openStore = useCallback(
     (url: string) => {
       Linking.openURL(url).catch(() => showToast("That page didn't open. Try again.", 'error'))
     },
@@ -411,11 +419,11 @@ export default function SettingsScreen() {
      */
     { header: 'Safety' },
     { icon: 'ban-outline', title: 'Blocked users', onPress: () => router.push('/blocked-users') },
-    { icon: 'shield-checkmark-outline', title: 'Safety tips', external: true, onPress: () => openExternal(BLENDN_LINKS.safety) },
-    { icon: 'flag-outline', title: 'Community guidelines', external: true, onPress: () => openExternal(BLENDN_LINKS.guidelines) },
+    { icon: 'shield-checkmark-outline', title: 'Safety tips', external: true, onPress: () => openPage(BLENDN_LINKS.safety) },
+    { icon: 'flag-outline', title: 'Community guidelines', external: true, onPress: () => openPage(BLENDN_LINKS.guidelines) },
 
     { header: 'Help' },
-    { icon: 'help-circle-outline', title: 'Help centre', external: true, onPress: () => openExternal(BLENDN_LINKS.help) },
+    { icon: 'help-circle-outline', title: 'Help centre', external: true, onPress: () => openPage(BLENDN_LINKS.help) },
     { icon: 'mail-outline', title: 'Contact support', onPress: () => router.push('/support') },
 
     /*
@@ -445,7 +453,7 @@ export default function SettingsScreen() {
      */
     { header: 'Danger zone', spaced: true },
     { icon: 'trash-outline', title: deletingAccount ? 'Deleting account…' : 'Delete account', danger: true, disabled: deletingAccount, onPress: handleDeleteAccount },
-  ]), [openExternal, deletingAccount, handleDeleteAccount, plus])
+  ]), [openPage, deletingAccount, handleDeleteAccount, plus])
 
   const renderItem = (item: any, idx: number) => {
     if (item.offersFromPlaces) return <OffersFromPlacesRow key={idx} />
@@ -621,7 +629,7 @@ export default function SettingsScreen() {
               ]
             : [
                 { label: 'Delete account', variant: 'destructive', onPress: () => setDeleteStep('confirm') },
-                { label: "What's kept", onPress: () => openExternal(BLENDN_LINKS.deleteAccount) },
+                { label: "What's kept", onPress: () => openPage(BLENDN_LINKS.deleteAccount) },
                 { label: 'Cancel', onPress: closeDelete },
               ]
         }
@@ -633,7 +641,7 @@ export default function SettingsScreen() {
             </Text>
             <Pressable
               accessibilityRole="button"
-              onPress={() => void manageSubscriptionUrl().then(openExternal)}
+              onPress={() => void manageSubscriptionUrl().then(openStore)}
               style={styles.storeWarningButton}
             >
               <Text style={styles.storeWarningLink}>Manage subscription</Text>

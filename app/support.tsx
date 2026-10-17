@@ -9,7 +9,7 @@ import { EmberButton } from '../components/onboarding/EmberControls'
 import { useToast } from '../components/Toast'
 import { Text } from '../components/ui/Text'
 import { appVersionLabel, platformLabel, SUPPORT_EMAIL, supportMailto } from '../lib/support'
-import { BLENDN_LINKS } from '../lib/links'
+import { BLENDN_LINKS, openInApp } from '../lib/links'
 import { EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE } from '../lib/theme'
 import { useAuth } from '../lib/useAuth'
 
@@ -31,7 +31,7 @@ export default function SupportScreen() {
     )
 
   const openHelp = () =>
-    Linking.openURL(BLENDN_LINKS.help).catch(() => showToast("That page didn't open. Try again.", 'error'))
+    openInApp(BLENDN_LINKS.help).catch(() => showToast("That page didn't open. Try again.", 'error'))
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
