@@ -383,8 +383,15 @@ export function useBanterInbox() {
     const personalCacheKey = `personal_chats_${userId}`
     const requestsCacheKey = `message_requests_${userId}`
 
-    const cachedGroupChats = force ? null : queryCache.get<GroupChat[]>(groupCacheKey)
-    const cachedPersonalChats = force ? null : queryCache.get<PersonalChat[]>(personalCacheKey)
+    /*
+     * A known change (a message the socket delivered, a send) makes both caches
+     * stale. Painting them would undo the live row the socket just wrote, and
+     * apiClient's SWR copy would hand back the same old list: a DM that landed
+     * while the Banter was open vanished until the tab was refocused (drive 2).
+     */
+    const chatDirty = hasDirtyDomain(['chat'])
+    const cachedGroupChats = force || chatDirty ? null : queryCache.get<GroupChat[]>(groupCacheKey)
+    const cachedPersonalChats = force || chatDirty ? null : queryCache.get<PersonalChat[]>(personalCacheKey)
     const cachedRequests = force
       ? null
       : queryCache.get<{ incoming: MessageRequest[]; outgoing: MessageRequest[] }>(requestsCacheKey)
@@ -404,7 +411,6 @@ export function useBanterInbox() {
     const now = Date.now()
     // Bypass throttle when the chat domain is dirty (e.g. user just sent a message
     // and navigated back) so stale data is never shown after a known change.
-    const chatDirty = hasDirtyDomain(['chat'])
     const shouldFetchList = force
       || !hasCachedList
       || chatDirty
@@ -426,7 +432,7 @@ export function useBanterInbox() {
       if (shouldFetchList) {
         // If queryCache was empty (e.g. invalidated after a send), also bypass apiClient's
         // internal SWR response cache so we don't get stale data from it either.
-        const bypassApiCache = force || !hasCachedList
+        const bypassApiCache = force || !hasCachedList || chatDirty
         const [groupsOk, personalOk] = await Promise.all([
           loadGroupChats(loadId, groupCacheKey, bypassApiCache),
           loadPersonalChats(loadId, personalCacheKey, bypassApiCache),
