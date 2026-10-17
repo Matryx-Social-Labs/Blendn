@@ -721,7 +721,7 @@ function RootLayout() {
       <Stack.Screen name="board/[eventId]" options={{ headerShown: false }} />
       {/* Matching v2's about-you fields, reached from Edit profile (step 10, docs/PLACEHOLDER_SCREENS.md §15). */}
       <Stack.Screen name="edit-about-you" options={{ headerShown: false }} />
-      {/* Crews and Blends (step 9). Placeholder screens (docs/PLACEHOLDER_SCREENS.md §14). */}
+      {/* Crews and Blends (Flow 10). */}
       <Stack.Screen name="crews/index" options={{ headerShown: false }} />
       {/* Make a crew is a sheet over Crews (Flow 10 · 10.2): the route is transparent and draws the sheet itself. */}
       <Stack.Screen name="crews/new" options={{ headerShown: false, presentation: 'transparentModal', animation: 'none' }} />

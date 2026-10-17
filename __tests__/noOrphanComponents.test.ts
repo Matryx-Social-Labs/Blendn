@@ -74,7 +74,6 @@ const KNOWN_ORPHANS: Record<string, string> = {
   'ds/DayHeading.tsx': 'redesign P2; replaces components/ui/DayHeading on the Pulse’s Upcoming (Flow 3). Going draws its day groups at the heading’s 20 (flow4.js `dayH`), so it uses SectionHeader',
   'MapCard.tsx': 'redesign P2 (MapCard, MapPin, MapCluster); the Scene and venue page’s map band, then the home map’s pins (Flows 3, 11)',
   /* P4, the rest of R2-D0 (ROUND3 B4), built ahead of Flows 9–16; each goes with the first flow that adopts it. */
-  'RevealSheet.tsx': 'redesign P4 component (RevealSheet, RevealSide); the Blend room adopts it with the Crews redesign (Flow 10 · 10.9)',
   'GoLiveSheet.tsx': 'redesign P4 component; replaces the Go Live sheet on the venue page with the Places-live redesign (Flow 11 · 11.2)',
   'SessionSheet.tsx': 'redesign P4 component; opens from the live pill with the Places-live redesign (Flow 11 · 11.3)',
   'ExpiryPrompt.tsx': 'redesign P4 component (ExpiryPrompt, NotLiveNotice); replaces LiveAtVenue’s expiry prompt with the Places-live redesign (Flow 11 · 11.4)',

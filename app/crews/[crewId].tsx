@@ -4,9 +4,9 @@ import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'r
 
 import { CrewHead } from '../../components/crews/CrewHead'
 import { CrewMembers } from '../../components/crews/CrewMembers'
-import { CrewMenu } from '../../components/crews/CrewMenu'
 import { EditCrewSheet } from '../../components/crews/EditCrewSheet'
 import { InviteFriendsSheet } from '../../components/crews/InviteFriendsSheet'
+import { OverflowMenu } from '../../components/crews/OverflowMenu'
 import { RowsCard } from '../../components/crews/RowsCard'
 import { Banner } from '../../components/ds/Banner'
 import { Button } from '../../components/ds/Button'
@@ -342,7 +342,8 @@ export default function CrewScreen() {
       </ScrollView>
       {crew ? (
         <>
-          <CrewMenu
+          <OverflowMenu
+            testID="crew-menu"
             visible={menu}
             onClose={() => setMenu(false)}
             items={[

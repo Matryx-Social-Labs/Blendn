@@ -36,6 +36,8 @@ export type CoachMarkId =
   | 'centre_button_checkin'
   /** The Room: who can see your name and photo (the visibility banner). */
   | 'room_reveal'
+  /** A Blend, the first time anyone opens one: what it is, and that everyone is on tonight's names. */
+  | 'blend_first_open'
 
 type Phase = 'unseen' | 'showing' | 'done'
 

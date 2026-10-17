@@ -28,6 +28,7 @@ import {
   refusalTitle,
   removeSheet,
   revealedFor,
+  sideShape,
   stepLine,
   textFieldOf,
 } from '../lib/crewsScreens'
@@ -234,5 +235,72 @@ describe('a Blend', () => {
     expect(revealedFor(side({ crewRevealed: null }), true)).toBe(true)
     expect(revealedFor(side({}), false)).toBe(false)
     expect(revealedFor(null, false)).toBe(false)
+  })
+})
+
+describe('a side as RevealSide draws it', () => {
+  const person = (userId: string, pseudonym: string, name: string | null = null, photo: string | null = null) => ({ userId, pseudonym, name, photo })
+  const side = (over: Partial<BlendSide>): BlendSide => ({
+    kind: 'crew',
+    crewId: 'c',
+    name: 'Orbit',
+    emblemSeed: 'seed',
+    mine: false,
+    count: 3,
+    revealed: 1,
+    keptPrivate: 1,
+    people: [],
+    ...over,
+  })
+
+  it('lists their side alphabetically, a photo only for the one the server named', () => {
+    const shape = sideShape(
+      side({ people: [person('b', 'Quiet Otter', 'Vikram', 'v.jpg'), person('a', 'Velvet Heron'), person('c', 'Brave Turtle', null, 'leak.jpg')] }),
+      'me'
+    )
+    expect(shape.side).toEqual({ kind: 'crew', name: 'Orbit', emblemSeed: 'seed' })
+    expect(shape.people).toEqual([
+      { pseudonym: 'Brave Turtle', photo: null },
+      { pseudonym: 'Quiet Otter', photo: 'v.jpg' },
+      { pseudonym: 'Velvet Heron', photo: null },
+    ])
+    expect(shape.status).toBeUndefined()
+  })
+
+  it('draws one person on their side as that person: the revealed first name, or tonight’s name', () => {
+    const solo = (name: string | null) => side({ kind: 'person', crewId: null, name: null, emblemSeed: null, count: 1, people: [person('a', 'Quiet Heron', name, 'h.jpg')] })
+    expect(sideShape(solo(null), 'me').side).toEqual({ kind: 'person', name: 'Quiet Heron', pseudonym: 'Quiet Heron' })
+    expect(sideShape(solo('Heron'), 'me').side).toEqual({ kind: 'person', name: 'Heron', pseudonym: 'Quiet Heron' })
+  })
+
+  it('your side, when the server sends only you, is you and what is known, never a count of who kept private', () => {
+    const mine = side({ mine: true, count: 4, revealed: null, keptPrivate: null, people: [person('me', 'Cosmic Panda', 'Sam', 'sam.jpg')] })
+    expect(sideShape(mine, 'me')).toEqual({
+      side: { kind: 'crew', name: 'Orbit', emblemSeed: 'seed' },
+      people: [{ pseudonym: 'Cosmic Panda', photo: null }],
+      status: '4 on tonight’s names',
+    })
+    // Once the crew has revealed, your own face shows and the line says so.
+    expect(sideShape(mine, 'me', true)).toMatchObject({ people: [{ pseudonym: 'Cosmic Panda', photo: 'sam.jpg' }], status: 'Revealed' })
+    expect(sideShape({ ...mine, crewRevealed: true }, 'me')).toMatchObject({ status: 'Revealed' })
+  })
+
+  it('your side, when the server sends everyone, is drawn like theirs', () => {
+    const mine = side({
+      mine: true,
+      count: 2,
+      revealed: 1,
+      keptPrivate: 1,
+      people: [person('x', 'Brave Turtle'), person('me', 'Cosmic Panda', 'Sam', 'sam.jpg')],
+    })
+    const shape = sideShape(mine, 'me')
+    expect(shape.status).toBeUndefined()
+    expect(shape.people.map((p) => p.pseudonym)).toEqual(['Brave Turtle', 'Cosmic Panda'])
+  })
+
+  it('a solo person on your side is You', () => {
+    const solo = side({ kind: 'person', crewId: null, name: null, emblemSeed: null, mine: true, count: 1, revealed: null, keptPrivate: null, people: [person('me', 'Cosmic Panda', 'Sam', 's.jpg')] })
+    expect(sideShape(solo, 'me').side).toEqual({ kind: 'person', name: 'You', pseudonym: 'Cosmic Panda' })
+    expect(sideShape(solo, 'me').status).toBe('1 on tonight’s names')
   })
 })

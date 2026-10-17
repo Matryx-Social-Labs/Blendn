@@ -12,14 +12,14 @@ const DIM = 0.3
  * The page's ⋯ (flow10.js `detail`, `menu`): a column of rows under the top
  * bar's right edge, the page dimmed. Closes on a tap outside and on system back.
  */
-export function CrewMenu({ visible, items, onClose }: { visible: boolean; items: MenuItem[]; onClose: () => void }) {
+export function OverflowMenu({ visible, items, onClose, testID = 'menu' }: { visible: boolean; items: MenuItem[]; onClose: () => void; testID?: string }) {
   const insets = useSafeAreaInsets()
   return (
-    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose} testID="crew-menu-modal">
+    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose} testID={`${testID}-modal`}>
       <Pressable style={[styles.dim, { paddingTop: insets.top + SIZE.circleButton + SPACE.md }]} onPress={onClose} accessibilityLabel="Close menu">
         <View style={styles.anchor}>
           <ContextMenu
-            testID="crew-menu"
+            testID={testID}
             items={items.map((item) => ({
               ...item,
               // Close first, then act: a sheet opened by the action must not be under a menu that is still leaving.

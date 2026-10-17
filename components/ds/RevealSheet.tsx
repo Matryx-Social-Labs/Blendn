@@ -97,12 +97,19 @@ export function RevealSide({
   side,
   people,
   mine = false,
+  status: statusText,
   onReveal,
   testID,
 }: {
   side: RevealSideOf
   people: RevealPerson[]
   mine?: boolean
+  /**
+   * Your own side, when the server has not sent your crew's counts: it never
+   * says who kept private, so the line is what is known ("4 on tonight’s names",
+   * "Revealed"), not a count worked out from `people`.
+   */
+  status?: string
   onReveal?: () => void
   testID?: string
 }) {
@@ -110,9 +117,11 @@ export function RevealSide({
   const contrast = useIncreaseContrast()
   const revealed = people.filter((p) => p.photo)
   const kept = people.length - revealed.length
-  const status = revealed.length
-    ? `${revealed.length} revealed · ${kept} keep${kept === 1 ? 's' : ''} it private`
-    : `${people.length} on tonight’s names`
+  const status =
+    statusText ??
+    (revealed.length
+      ? `${revealed.length} revealed · ${kept} keep${kept === 1 ? 's' : ''} it private`
+      : `${people.length} on tonight’s names`)
   const tiles = revealed.length ? revealed : people
   return (
     <View testID={testID} style={styles.side}>

@@ -57,11 +57,7 @@ export type CrewReportReason = 'spam' | 'offensive' | 'contact_details' | 'imper
  */
 export const CONSENT_LINE =
   'Anyone in this crew can reveal the crew — your name and photos — to people you match with.'
-export const CONSENT_AGREE = 'I understand'
 export const KEEP_ANONYMOUS_LABEL = 'Keep me anonymous even when my crew reveals'
-/** D-10: switching it on later applies from then on. Say so, rather than imply it can unsee. */
-export const KEEP_ANONYMOUS_HELPER =
-  'Your crewmates can still reveal themselves. Turning this on later applies from then on — a reveal already made can’t be undone.'
 
 export const BLEND_CLOSED_LINE = 'This Blend has closed'
 export const CREW_GONE_LINE = 'This crew isn’t here any more'
@@ -76,12 +72,6 @@ export const OPEN_TO_CREWS_LABEL = 'Open to joining a crew tonight'
  */
 export const OPEN_TO_CREWS_HELPER =
   'Nobody is told you turned this on. It shows you crews here with room for one more, lets you like them, and lets their likes of you count. It switches itself off when tonight ends.'
-/**
- * After a reveal. The server says no count back — who of your crew revealed
- * and who kept private is never told to your own crew.
- */
-export const REVEALED_LINE =
-  'Your crew is revealed in this Blend. Anybody who chose to stay anonymous stays that way.'
 
 export type CrewIntent = 'dating' | 'networking' | 'friendship' | 'just_here'
 
@@ -315,8 +305,6 @@ export interface ConsentState {
   keepMeAnonymous: boolean
 }
 
-export const NO_CONSENT: ConsentState = { consented: false, keepMeAnonymous: false }
-
 /**
  * The consent half of a create or a join, or null until it is given.
  *
@@ -393,36 +381,9 @@ export function toggleTag(tags: readonly string[], slug: string): string[] {
 /* Lines                                                                      */
 /* -------------------------------------------------------------------------- */
 
-/**
- * What an invite says it did. `invited` is how many you asked for, whatever
- * the server did with each, so this says "asked" — never "invited Rohan",
- * never "2 of 3 invited".
- */
-export function invitedLine(invited: number): string | null {
-  if (!Number.isFinite(invited) || invited <= 0) return null
-  return invited === 1 ? 'Asked 1 friend' : `Asked ${invited} friends`
-}
-
-/** After "We're here": the first tap tells them, the second tells nobody and says so. */
-export function hereLine(result: { repeated: boolean }): string {
-  return result.repeated ? 'Your crew already knows you’re here tonight' : 'Told your crew you’re here 👋'
-}
-
-/** "Crew of 4". A crew of one is waiting for its friends — the server keeps it while invites are open. */
-export function sizeLine(size: number): string {
-  return size <= 1 ? 'Crew of 1 until a friend accepts' : `Crew of ${size}`
-}
-
 /** "Here now · 3 of 5". */
 export function hereNowLine(card: Pick<CrewCard, 'presentCount' | 'size'>): string {
   return `Here now · ${card.presentCount} of ${card.size}`
-}
-
-/** "4 revealed · 1 keeps it private", or null before anybody revealed. */
-export function revealCountLine(revealed: number, keptPrivate: number): string | null {
-  if (revealed <= 0) return null
-  if (keptPrivate <= 0) return `${revealed} revealed`
-  return `${revealed} revealed · ${keptPrivate} ${keptPrivate === 1 ? 'keeps' : 'keep'} it private`
 }
 
 /** "Closes in 9h", "Closes in 25m", "Closing now". */
@@ -435,65 +396,8 @@ export function closesLine(closesAt: string, now: number = Date.now()): string |
 }
 
 /* -------------------------------------------------------------------------- */
-/* A side of a Blend: the menagerie, then the collage                         */
+/* A Blend's sides                                                            */
 /* -------------------------------------------------------------------------- */
-
-/** How many revealed faces the collage draws before "+N". */
-export const COLLAGE_MAX = 4
-
-export interface SideView {
-  /**
-   * Theirs: `menagerie` until somebody on it is revealed, then `collage`.
-   * Yours: `mine` — a count line and you, never per-person tiles: a tile for
-   * the crewmate who kept anonymous would tell the crew who did.
-   */
-  mode: 'menagerie' | 'collage' | 'mine'
-  /** Revealed people, at most `COLLAGE_MAX`, drawn as photos with first names. */
-  faces: BlendPerson[]
-  /** Revealed people beyond the collage: "+3". */
-  more: number
-  /** Everyone not revealed — anonymous, or kept private — as tonight's pseudonym tiles. */
-  tiles: BlendPerson[]
-  /** "4 revealed · 1 keeps it private", for a crew; null for one person or before a reveal. */
-  countLine: string | null
-  /** The side's name: the crew's, or the person's (their first name once revealed, else pseudonym). */
-  title: string
-}
-
-/**
- * One side of a Blend as its card draws it.
- *
- * Anonymous, it is a menagerie: tonight's pseudonym animals, one per person.
- * Once its crew reveals, the revealed members become a collage of faces and
- * first names, and **anybody who kept themselves anonymous stays a tile** —
- * never a blank, never a face. "Revealed" is the server's `name`, nothing the
- * app infers: a photo without a name is not a reveal.
- */
-export function sideView(side: BlendSide): SideView {
-  if (side.mine) {
-    const others = Math.max(0, side.count - 1)
-    return {
-      mode: 'mine',
-      faces: [],
-      more: 0,
-      tiles: [],
-      countLine:
-        side.kind === 'crew' ? (others === 0 ? 'Just you here' : `You and ${others} of your crew here`) : null,
-      title: side.kind === 'crew' ? side.name || 'Your crew' : 'You',
-    }
-  }
-  const revealed = side.people.filter((p) => !!p.name)
-  const tiles = side.people.filter((p) => !p.name)
-  const first = side.people[0]
-  return {
-    mode: revealed.length > 0 ? 'collage' : 'menagerie',
-    faces: revealed.slice(0, COLLAGE_MAX),
-    more: Math.max(0, revealed.length - COLLAGE_MAX),
-    tiles,
-    countLine: side.kind === 'crew' ? revealCountLine(side.revealed ?? 0, side.keptPrivate ?? 0) : null,
-    title: side.kind === 'crew' ? side.name || 'A crew' : first?.name || first?.pseudonym || 'Someone',
-  }
-}
 
 /** Your side and theirs: the server marks yours (`mine`); your own id is the fallback. */
 export function blendSides(blend: Blend, myId: string | null | undefined): { mine: BlendSide | null; theirs: BlendSide | null } {
@@ -503,10 +407,24 @@ export function blendSides(blend: Blend, myId: string | null | undefined): { min
   return { mine, theirs }
 }
 
-/** "Blend with Crew Nebula" — the Banter row and the room's header. */
+/**
+ * What the other side is called: the crew's name, or the person's (their first
+ * name once they revealed in this Blend, else tonight's name).
+ */
+function sideName(side: BlendSide): string {
+  const first = side.people[0]
+  return side.kind === 'crew' ? side.name || 'A crew' : first?.name || first?.pseudonym || 'Someone'
+}
+
+/**
+ * The room's header (flow10b.js `blendRoom`): "Blend with Crew Orbit" between
+ * two crews, "Blend with Nebula" when you are one person.
+ */
 export function blendTitle(blend: Blend, myId: string | null | undefined): string {
-  const { theirs } = blendSides(blend, myId)
-  return theirs ? `Blend with ${sideView(theirs).title}` : 'Your Blend'
+  const { mine, theirs } = blendSides(blend, myId)
+  if (!theirs) return 'Your Blend'
+  const crewToCrew = mine?.kind === 'crew' && theirs.kind === 'crew'
+  return `Blend with ${crewToCrew ? 'Crew ' : ''}${sideName(theirs)}`
 }
 
 /* -------------------------------------------------------------------------- */

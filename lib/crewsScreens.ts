@@ -14,6 +14,7 @@ import {
   CREW_NAME_MAX,
   CREW_NAME_MIN,
   type Blend,
+  type BlendPerson,
   type BlendSide,
   type Crew,
   type CrewIntent,
@@ -200,9 +201,6 @@ export const isGate = (message: string, errorCode?: string | null): boolean => r
 /* The crew page                                                              */
 /* -------------------------------------------------------------------------- */
 
-/** Whether the owner can still ask friends in. */
-export const hasRoom = (crew: Pick<Crew, 'size'>, max: number): boolean => crew.size < max
-
 /**
  * Leaving a crew of two closes it (D-15: below two people a crew dissolves),
  * and the sheet says so before the tap.
@@ -247,14 +245,25 @@ export function closingSoon(closesAt: string, now: number = Date.now()): boolean
   return Number.isFinite(at) && at > now && at - now <= CLOSING_SOON_MS
 }
 
-/** "This Blend closes at 4 am", in the phone's own clock. */
-export function closesAtLine(closesAt: string): string | null {
-  const at = new Date(closesAt)
+/** "4 am", "12:30 pm": the time on the phone's own clock. */
+export function clockOf(iso: string): string | null {
+  const at = new Date(iso)
   if (Number.isNaN(at.getTime())) return null
   const hours = at.getHours()
   const minutes = at.getMinutes()
-  const clock = `${hours % 12 || 12}${minutes ? `:${String(minutes).padStart(2, '0')}` : ''} ${hours < 12 ? 'am' : 'pm'}`
-  return `This Blend closes at ${clock}`
+  return `${hours % 12 || 12}${minutes ? `:${String(minutes).padStart(2, '0')}` : ''} ${hours < 12 ? 'am' : 'pm'}`
+}
+
+/** "This Blend closes at 4 am". */
+export function closesAtLine(closesAt: string): string | null {
+  const clock = clockOf(closesAt)
+  return clock ? `This Blend closes at ${clock}` : null
+}
+
+/** The first-open card's body: "Made tonight · closes 4 am. Everyone here is on tonight’s names until they reveal." */
+export function blendWelcome(closesAt: string): string {
+  const clock = clockOf(closesAt)
+  return `${clock ? `Made tonight · closes ${clock}.` : 'Made tonight.'} Everyone here is on tonight’s names until they reveal.`
 }
 
 /** "7 people · Closes in 9h": the header's second line. */
@@ -313,4 +322,46 @@ export function crewPatch(
   if (!sameSet(edit.tags, crew.tags.map((t) => t.slug))) patch.tags = [...edit.tags]
   if (edit.openToSolo !== crew.openToSolo) patch.openToSolo = edit.openToSolo
   return Object.keys(patch).length ? patch : null
+}
+
+/* -------------------------------------------------------------------------- */
+/* A side of a Blend, as RevealSide draws it                                   */
+/* -------------------------------------------------------------------------- */
+
+export interface SideShape {
+  side: { kind: 'crew'; name: string; emblemSeed: string } | { kind: 'person'; name: string; pseudonym: string }
+  /** Alphabetical, so the order never says who chose what. A photo only for somebody the server named. */
+  people: { pseudonym: string; photo: string | null }[]
+  /** Set only for your own side when the server has not sent it the counts; see `RevealSide`. */
+  status?: string
+}
+
+const byPseudonym = (a: BlendPerson, b: BlendPerson) => a.pseudonym.localeCompare(b.pseudonym)
+
+/**
+ * The shape RevealSide draws for one side. The server's `name` is the reveal:
+ * a photo without it is not one, and somebody who kept private stays a
+ * creature (never a blank, never a face). Their side is the people the server
+ * sends. Your own side is the people it sends when it sends them all; until
+ * then, you alone with what is known (how many are here, and whether your
+ * crew has revealed), because a crew is never told who kept private.
+ */
+export function sideShape(side: BlendSide, myId: string | null | undefined, revealedHere = false): SideShape {
+  const named = (p: BlendPerson) => ({ pseudonym: p.pseudonym, photo: p.name ? p.photo : null })
+  const me = side.people.find((p) => p.userId === myId) ?? side.people[0]
+  const shape: SideShape['side'] =
+    side.kind === 'crew'
+      ? { kind: 'crew', name: side.name || 'A crew', emblemSeed: side.emblemSeed ?? '' }
+      : side.mine
+        ? { kind: 'person', name: 'You', pseudonym: me?.pseudonym ?? 'You' }
+        : { kind: 'person', name: me?.name || me?.pseudonym || 'Someone', pseudonym: me?.pseudonym ?? 'Someone' }
+  const everyone = !side.mine || (side.people.length >= side.count && side.revealed != null)
+  if (everyone) return { side: shape, people: [...side.people].sort(byPseudonym).map(named) }
+  const revealed = revealedFor(side, revealedHere)
+  return {
+    side: shape,
+    // Your own face only once your crew has revealed: before it you are on tonight's name like the rest.
+    people: me ? [{ pseudonym: me.pseudonym, photo: revealed ? me.photo : null }] : [],
+    status: revealed ? 'Revealed' : `${side.count} on tonight’s names`,
+  }
 }
