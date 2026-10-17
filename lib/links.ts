@@ -2,6 +2,7 @@ import * as WebBrowser from 'expo-web-browser'
 
 import { COMMUNITY_GUIDELINES_URL } from './communityGuidelines'
 import { COLOR } from './design/tokens'
+import { Logger } from './logger'
 
 /**
  * The web pages the app links out to.
@@ -25,14 +26,31 @@ export const BLENDN_LINKS = {
  * screen that asked. Store pages and system settings are not ours and stay with
  * `Linking`: the store's own app should open for them.
  *
- * Rejects when no browser could open it, so a caller keeps its "That page didn't
- * open" toast or log line.
+ * Only https pages on our own hosts open (`OUR_HOSTS`): anything else is logged
+ * and refused, so a link that arrives from data can never put another site in
+ * front of someone inside our app. Rejects when it was refused or no browser
+ * could open it, so a caller keeps its "That page didn't open" toast or log line.
  */
 export async function openInApp(url: string): Promise<void> {
+  if (!isOurPage(url)) {
+    Logger.warn('links', 'Refused to open a page that is not ours in the in-app browser', { url })
+    throw new Error('Not one of our pages')
+  }
   await WebBrowser.openBrowserAsync(url, {
     controlsColor: COLOR.textPrimary,
     toolbarColor: COLOR.ink,
     dismissButtonStyle: 'close',
     enableBarCollapsing: true,
   })
+}
+
+const OUR_HOSTS: ReadonlySet<string> = new Set(['blendn.app', 'www.blendn.app'])
+
+export function isOurPage(url: string): boolean {
+  try {
+    const u = new URL(url)
+    return u.protocol === 'https:' && OUR_HOSTS.has(u.hostname)
+  } catch {
+    return false
+  }
 }

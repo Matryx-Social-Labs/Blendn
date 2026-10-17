@@ -9,7 +9,7 @@ jest.mock('@react-native-async-storage/async-storage', () =>
 /* eslint-disable import/first */
 import * as WebBrowser from 'expo-web-browser'
 
-import { BLENDN_LINKS, openInApp } from '../lib/links'
+import { BLENDN_LINKS, isOurPage, openInApp } from '../lib/links'
 /* eslint-enable import/first */
 
 const open = WebBrowser.openBrowserAsync as jest.Mock
@@ -22,6 +22,30 @@ it('opens the page it is given in the in-app browser, closable with Close', asyn
 it('rejects when no browser could open it, so the caller keeps its toast', async () => {
   open.mockRejectedValueOnce(new Error('no browser'))
   await expect(openInApp(BLENDN_LINKS.privacy)).rejects.toThrow('no browser')
+})
+
+it.each([
+  'https://evil.example',
+  'https://blendn.app.evil.example/terms',
+  'https://evilblendn.app/terms',
+  'http://blendn.app/terms',
+  'javascript:alert(1)',
+  'blendn://settings',
+  'not a url',
+  '',
+])('refuses %p: logged, nothing opened, the caller hears it', async (url) => {
+  await expect(openInApp(url)).rejects.toThrow('Not one of our pages')
+  expect(open).not.toHaveBeenCalled()
+})
+
+it('opens both of our hosts', async () => {
+  await openInApp('https://www.blendn.app/community-guidelines')
+  await openInApp('https://blendn.app/help')
+  expect(open).toHaveBeenCalledTimes(2)
+})
+
+it('every link in BLENDN_LINKS is one of ours', () => {
+  for (const url of Object.values(BLENDN_LINKS)) expect(isOurPage(url)).toBe(true)
 })
 
 it('no screen opens one of our pages through Linking any more', () => {
