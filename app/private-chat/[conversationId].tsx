@@ -559,7 +559,13 @@ function PrivateChatInner() {
 
   const renderChatItem = ({ item, index }: { item: ChatListItem; index: number }) => {
     if (item.kind === 'separator') return <DayPill text={item.label} />
-    if (item.kind === 'unread') return <UnreadRule count={unread?.count} word="unread" testID="dm-unread" />
+    // The frames' feed gap around the rule, so it never touches the day pill above it (drive 2, Android).
+    if (item.kind === 'unread')
+      return (
+        <View style={styles.unreadRule}>
+          <UnreadRule count={unread?.count} word="unread" testID="dm-unread" />
+        </View>
+      )
     const place = runPlace(chatItems, index, (i) => (i.kind === 'message' ? i.senderId : null), (i) => (i.kind === 'message' ? Date.parse(i.createdAt) || 0 : 0))
     const mine = item.senderId === myId
     return (
@@ -865,6 +871,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: COLOR.ink },
   fill: { flex: 1 },
   listContent: { paddingHorizontal: SPACE.gutter, flexGrow: 1, justifyContent: 'flex-end' },
+  unreadRule: { paddingVertical: SPACE.md },
   reveal: { position: 'absolute', left: SPACE.lg, right: SPACE.lg, gap: SPACE.sm, paddingBottom: SPACE.md },
   typing: { marginTop: SPACE.lg },
   centre: { flexGrow: 1, justifyContent: 'center' },

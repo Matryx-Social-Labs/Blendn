@@ -67,6 +67,8 @@ const REORDER = LinearTransition.delay(300).springify().stiffness(SPRING.settle.
 const SEARCH_GAP = SPACE.sm
 /** C12: the held order lets go this long after a lift (a fling's momentum, starting just after, cancels it). */
 const HOLD_RELEASE_MS = 250
+/** A press held this long is a hold, not a tap (Pressable's own long-press delay). */
+const HELD_PRESS_MS = 500
 
 /**
  * The Banter (Flow 5 Banter frames, R2-D2, R3-0, R3-D5) — every conversation
@@ -296,6 +298,17 @@ function ChatInner() {
     return out
   }, [crewRows, peopleRows, pastRows, match])
   const liveOrder = useLatest(() => items.map((i) => i.key))
+  /*
+   * A lift after a hold is not a tap: Android opened the row under the finger
+   * when a rested finger came up (drive 2). A press that lasted a hold, or
+   * under which the list reordered, opens nothing. A screen reader's
+   * activation has no touch on the list, so it always opens.
+   */
+  const touchStartAt = useRef(0)
+  const openUnlessHeld = (open: () => void) => () => {
+    const held = hold.current.held && (Date.now() - touchStartAt.current >= HELD_PRESS_MS || heldList(items, heldOrder).moved)
+    if (!held) open()
+  }
   const { shown, moved: newAbove } = heldList(items, heldOrder)
 
   /* Rows enter once, 18 ms apart, as the list first lands (Flow 5 Banter annotation). */
@@ -333,7 +346,7 @@ function ChatInner() {
         time={row.time}
         unread={row.unread}
         muted={row.muted}
-        onPress={row.swipe.length ? undefined : row.open}
+        onPress={row.swipe.length ? undefined : openUnlessHeld(row.open)}
         accessibilityLabel={row.swipe.length ? undefined : label}
         testID={`banter-row-${row.key}`}
       />
@@ -343,7 +356,7 @@ function ChatInner() {
         {row.swipe.length ? (
           <SwipeRow
             actions={row.swipe}
-            onPress={row.open}
+            onPress={openUnlessHeld(row.open)}
             open={openSwipe === row.key}
             onOpenChange={(open) => setOpenSwipe(open ? row.key : null)}
             accessibilityLabel={label}
@@ -464,7 +477,10 @@ function ChatInner() {
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         // #27 / C12, in a real touch's order (components/banter/hold.ts).
-        onTouchStart={() => step('touchStart')}
+        onTouchStart={() => {
+          touchStartAt.current = Date.now()
+          step('touchStart')
+        }}
         onScrollBeginDrag={() => step('dragBegin')}
         onScrollEndDrag={() => step('dragEnd')}
         onTouchEnd={() => step('touchEnd')}

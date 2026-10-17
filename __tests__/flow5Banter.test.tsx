@@ -37,8 +37,21 @@ jest.mock('../lib/apiClient', () => ({
 }))
 jest.mock('../lib/crewsApi', () => ({ crewsApi: { myCrews: jest.fn(async () => ({ success: true, data: { crews: [], invites: [] } })) } }))
 jest.mock('../lib/useBlends', () => ({ useBlends: () => ({ blends: [] }) }))
-jest.mock('../lib/socketClient', () => ({ subscribeToChatMessage: () => () => {}, subscribeToUserNotifications: () => () => {} }))
-jest.mock('../lib/useLiveSync', () => ({ useLiveSync: () => ({ state: 'connected', connected: true }) }))
+const mockDm: Array<(d: { conversationId: string; message: Record<string, unknown> }) => void> = []
+const mockSync: { onSync?: () => unknown } = {}
+jest.mock('../lib/socketClient', () => ({
+  subscribeToChatMessage: () => () => {},
+  subscribeToUserNotifications: (_user: string, cb: never) => {
+    mockDm.push(cb)
+    return () => {}
+  },
+}))
+jest.mock('../lib/useLiveSync', () => ({
+  useLiveSync: (o: { onSync: () => unknown }) => {
+    mockSync.onSync = o.onSync
+    return { state: 'connected', connected: true }
+  },
+}))
 jest.mock('../lib/board', () => ({ ...jest.requireActual('../lib/board'), BOARD_ENABLED: false }))
 jest.mock('../components/pulse/NotificationBell', () => ({ NotificationBell: () => null }))
 jest.mock('../components/RealtimeStatusBanner', () => ({ __esModule: true, default: () => null }))
@@ -51,6 +64,7 @@ import { router } from 'expo-router'
 import Banter from '../app/(tabs)/chat'
 import { apiClient } from '../lib/apiClient'
 import { clearOutbox, dmThread, keepFailed, roomThread, setDraft } from '../lib/chatOutbox'
+import { markDomainsDirty } from '../lib/liveSyncState'
 import { queryCache } from '../lib/queryCache'
 import { resetRoomMembership } from '../lib/roomMembership'
 /* eslint-enable import/first */
@@ -153,4 +167,48 @@ it('a search with nothing says what it searched for, and clears', async () => {
   // The state's action, not the field's own clear button.
   await act(async () => fireEvent.press(within(screen.getByTestId('banter-no-match')).getByLabelText('Clear search')))
   expect(screen.queryByText('No chats match “zzz”')).toBeNull()
+})
+
+describe('a DM that lands while the Banter is open', () => {
+  it('shows at once, and a dirty sync never puts the stale list back', async () => {
+    // Arrange: the list is loaded (and cached); then a message lands on the socket.
+    await open()
+    const fresh = { ...dm, lastMessage: { content: 'On my way up', createdAt: '2026-10-15T19:30:00.000Z', senderId: 'u-m' }, unreadCount: 2 }
+    // The SWR copy still holds the old list; only a forced fetch has the new one.
+    api.getConversations.mockImplementation((async (o?: { force?: boolean }) => ({ success: true, data: o?.force ? [fresh] : [dm] })) as never)
+    // Act
+    await act(async () => {
+      mockDm.forEach((cb) => cb({ conversationId: 'c1', message: { id: 'm2', senderId: 'u-m', text: 'On my way up', createdAt: '2026-10-15T19:30:00.000Z' } }))
+    })
+    expect(screen.getByText(/On my way up/)).toBeTruthy()
+    markDomainsDirty(['chat'])
+    await act(async () => {
+      await mockSync.onSync?.()
+    })
+    await flush()
+    // Assert
+    expect(screen.getByText(/On my way up/)).toBeTruthy()
+    expect(api.getConversations).toHaveBeenLastCalledWith({ force: true })
+  })
+})
+
+describe('a lift after a hold opens nothing (drive 2, Android)', () => {
+  it('a rested finger coming up does not open the row; a tap still does', async () => {
+    await open()
+    const list = screen.getByTestId('banter-list')
+    const now = jest.spyOn(Date, 'now')
+    // A hold: the finger rests 600 ms, then comes up on the row.
+    now.mockReturnValue(1_000)
+    await act(async () => fireEvent(list, 'touchStart'))
+    now.mockReturnValue(1_600)
+    await act(async () => fireEvent.press(screen.getByTestId('banter-row-p:c1')))
+    expect(router.push).not.toHaveBeenCalled()
+    // A tap: down and up within a moment.
+    await act(async () => fireEvent(list, 'touchEnd'))
+    await act(async () => fireEvent(list, 'touchStart'))
+    now.mockReturnValue(1_700)
+    await act(async () => fireEvent.press(screen.getByTestId('banter-row-p:c1')))
+    expect(router.push).toHaveBeenCalled()
+    now.mockRestore()
+  })
 })

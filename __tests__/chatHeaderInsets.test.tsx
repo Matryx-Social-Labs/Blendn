@@ -24,9 +24,9 @@ it('the capsule starts below the safe-area top inset', async () => {
   expect(top).toBeGreaterThan(INSET_TOP)
 })
 
-it('the feed starts under the status bar, its first message under the capsule', () => {
+it('the feed’s window starts at the capsule’s bottom edge, its first message 12 below', () => {
   const frame = chatFeedFrame(INSET_TOP)
-  expect(frame.style.marginTop).toBe(INSET_TOP)
+  expect(frame.style.marginTop).toBe(INSET_TOP + SPACE.xs + SIZE.input)
   // In the window: the list's top plus its padding is the capsule's bottom edge plus the gap.
   expect(frame.style.marginTop + frame.paddingTop).toBe(chatHeaderBottom(INSET_TOP))
   expect(chatHeaderBottom(INSET_TOP)).toBe(INSET_TOP + SPACE.xs + SIZE.input + SPACE.md)

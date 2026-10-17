@@ -1,7 +1,7 @@
 import { Image } from 'expo-image'
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useState } from 'react'
-import { Animated, Linking, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
+import { Animated, Linking, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { BrokenLink } from '../../components/chat/BrokenLink'
@@ -18,7 +18,7 @@ import { Icon } from '../../components/ui/Icon'
 import { PhotoScrim, StatusScrim } from '../../components/ui/GradientFill'
 import { apiClient } from '../../lib/apiClient'
 import { COMMUNITY_GUIDELINES_URL } from '../../lib/communityGuidelines'
-import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { liveNowLabel } from '../../lib/home'
 import { Logger } from '../../lib/logger'
 import { markSeed } from '../../lib/pseudonymAvatar'
@@ -106,6 +106,8 @@ function ChatInfoInner() {
   const [cardFor, setCardFor] = useState<Sender | null>(null)
   // One value for the screen's life; a lazy state, so nothing reads a ref while rendering.
   const [scrollY] = useState(() => new Animated.Value(0))
+  // The inset, then the back button's row: SPACE.sm above and below it.
+  const shieldHeight = insets.top + SPACE.sm + (Platform.OS === 'android' ? SIZE.circleButtonAndroid : SIZE.circleButton) + SPACE.sm
 
   const loadMembers = useCallback(
     (offset = 0) =>
@@ -276,10 +278,12 @@ function ChatInfoInner() {
                     <View>
                       <Avatar size={face} kind="creature" pseudonym={markSeed(m.name, `${chatGroupId}:${m.userId}`)} />
                       {role ? (
-                        <View style={styles.roleBadge}>
-                          <Text maxFontSizeMultiplier={1.3} style={[font('label', bold), styles.onWhite]}>
-                            {role.toUpperCase()}
-                          </Text>
+                        <View style={styles.roleBadgePlace} pointerEvents="none">
+                          <View style={styles.roleBadge}>
+                            <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={[font('label', bold), styles.onWhite]}>
+                              {role.toUpperCase()}
+                            </Text>
+                          </View>
                         </View>
                       ) : null}
                     </View>
@@ -327,14 +331,15 @@ function ChatInfoInner() {
       </Animated.ScrollView>
 
       {/*
-       * The status bar's shield: clear over the hero (the design draws the
-       * cover under the clock, behind its head scrim), solid ink by the time
-       * the rows reach it — they never scroll behind the clock.
+       * The status bar's and the back button's shield: clear over the hero
+       * (the design draws the cover under the clock, behind its head scrim),
+       * solid ink by the time the rows reach it — no row or heading passes
+       * behind the clock or the floating back button.
        */}
       <Animated.View
         pointerEvents="none"
         testID="info-status-shield"
-        style={[styles.shield, { height: insets.top, opacity: scrollY.interpolate({ inputRange: [HERO_HEIGHT - 2 * insets.top, HERO_HEIGHT - insets.top], outputRange: [0, 1], extrapolate: 'clamp' }) }]}
+        style={[styles.shield, { height: shieldHeight, opacity: scrollY.interpolate({ inputRange: [HERO_HEIGHT - 2 * shieldHeight, HERO_HEIGHT - shieldHeight], outputRange: [0, 1], extrapolate: 'clamp' }) }]}
       />
 
       <View style={[styles.back, { top: insets.top + SPACE.sm }]}>
@@ -360,10 +365,14 @@ const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', columnGap: CELL_GAP, rowGap: SPACE.md },
   member: { alignItems: 'center', gap: SPACE.sm },
   skeleton: { borderRadius: RADIUS.capsule, backgroundColor: COLOR.surface },
+  /*
+   * The badge is wider than the face it sits on ("ORGANISER"): placed in a band
+   * wider than the cell, sized to its words, never wrapped (Android drive 2
+   * broke it "ORGANIS / ER" inside the face's width).
+   */
+  roleBadgePlace: { position: 'absolute', bottom: -SPACE.xs, left: -CELL_GAP, right: -CELL_GAP, alignItems: 'center' },
   roleBadge: {
-    position: 'absolute',
-    bottom: -SPACE.xs,
-    alignSelf: 'center',
+    flexShrink: 0,
     paddingHorizontal: SPACE.sm,
     borderRadius: RADIUS.capsule,
     backgroundColor: COLOR.textPrimary,

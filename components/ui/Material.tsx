@@ -4,8 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { useEffect, useState } from 'react'
 import { AccessibilityInfo, Platform, StyleSheet, View, type ViewProps } from 'react-native'
 
-import { COLOR, MATERIAL } from '../../lib/design/tokens'
-import { tint } from '../../lib/theme'
+import { MATERIAL } from '../../lib/design/tokens'
 
 /**
  * What a surface is for (DESIGN-BRIEF §5.4): `bar` (tab bar, top bar, docks,
@@ -18,19 +17,15 @@ export type MaterialTier = 'glass' | 'blur' | 'solid'
 
 /*
  * Ink under each role, so text and icons on it pass at the clearest glass
- * setting (§5.2 rule 5). bar/sheet/control are the tokens; media and toast are
- * the Material component page's values, which tokens.json does not carry yet
- * (its `glass-tint-text`, 0.60, is lower than the page's toast at 0.80).
+ * setting (§5.2 rule 5) — every one a token (tokens.json R4-0 B10: text and
+ * toast 0.80, media 0.25).
  */
-const MEDIA_GLASS_INK = 0.25
-const TOAST_GLASS_INK = 0.8
-
 export const GLASS: Record<MaterialRole, string> = {
   bar: MATERIAL.glassTintBar,
   sheet: MATERIAL.glassTintSheet,
   control: MATERIAL.glassTintIcon,
-  media: tint(COLOR.ink, MEDIA_GLASS_INK),
-  toast: tint(COLOR.ink, TOAST_GLASS_INK),
+  media: MATERIAL.glassTintMedia,
+  toast: MATERIAL.glassTintToast,
 }
 
 /** The blur tier cannot saturate the backdrop, so it tints harder (§5.3). */

@@ -80,7 +80,9 @@ export const GRADIENT = {
 /** Material tiers (§5): glass (iOS 26+), blur (iOS 16.4–25), solid (Android Tier B, Reduce Transparency). Drawn only by `<Material>`. */
 export const MATERIAL = {
   glassBlur: 20,
-  glassTintText: 'rgba(13,12,12,0.60)',
+  glassTintText: 'rgba(13,12,12,0.80)',
+  glassTintToast: 'rgba(13,12,12,0.80)',
+  glassTintMedia: 'rgba(13,12,12,0.25)',
   glassTintBar: 'rgba(13,12,12,0.80)',
   glassTintSheet: 'rgba(13,12,12,0.80)',
   glassTintIcon: 'rgba(13,12,12,0.45)',

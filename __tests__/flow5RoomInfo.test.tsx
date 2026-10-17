@@ -109,3 +109,15 @@ it('Mute opens the four choices; Leave is apart and asks first', async () => {
   expect(screen.getByText('Leave this room?')).toBeTruthy()
   expect(api.leaveChatGroup).not.toHaveBeenCalled()
 })
+
+describe('nothing collides with the clock or the back button (drive 2)', () => {
+  it('the shield covers the inset and the back button’s row; a role badge never wraps', async () => {
+    await open()
+    const { StyleSheet } = require('react-native')
+    const { SIZE, SPACE } = require('../lib/design/tokens')
+    const shield = StyleSheet.flatten(screen.getByTestId('info-status-shield').props.style)
+    // The inset (whatever the device's) plus the back button's row.
+    expect(shield.height).toBeGreaterThanOrEqual(SPACE.sm + SIZE.circleButton + SPACE.sm)
+    expect(screen.getByText('ORGANISER').props.numberOfLines).toBe(1)
+  })
+})
