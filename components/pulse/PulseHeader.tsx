@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons'
-import { useState } from 'react'
-import { ActivityIndicator, StyleSheet, Text, TextInput, View } from 'react-native'
+import { useEffect, useRef, useState } from 'react'
+import { ActivityIndicator, Keyboard, StyleSheet, Text, TextInput, View } from 'react-native'
 import Animated, { LayoutAnimationConfig } from 'react-native-reanimated'
 
 import { CONTROL, EMBER, EMBER_RADIUS, ICON, SPACE, TYPE } from '../../lib/theme'
@@ -86,6 +86,19 @@ export function PulseHeader({
   activeFilterCount = 0,
 }: Props) {
   const [focused, setFocused] = useState(false)
+  const input = useRef<TextInput>(null)
+  /*
+   * The keyboard going away ends the search's focus. Android's Back closes the
+   * keyboard and leaves the field focused, so the drawer's restore found a
+   * field that still had focus and no keyboard, and a tap on it opened none:
+   * blurred, the next tap is a fresh focus and brings the keyboard back. The
+   * text is the screen's (`query`), so it stays.
+   */
+  useEffect(() => {
+    if (!focused) return
+    const sub = Keyboard.addListener('keyboardDidHide', () => input.current?.blur())
+    return () => sub.remove()
+  }, [focused])
   return (
     <View style={styles.wrap}>
       {/*
@@ -177,6 +190,7 @@ export function PulseHeader({
           )}
         </LayoutAnimationConfig>
         <TextInput
+          ref={input}
           value={query}
           onChangeText={onChangeQuery}
           placeholder="Search events…"
