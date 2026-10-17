@@ -3,6 +3,7 @@ import { Linking, Platform } from 'react-native'
 import type { ActionTrayButton } from '../components/ActionTray'
 import type { ButtonKind } from '../components/ds/Button'
 import type { IconName } from '../components/ui/Icon'
+import { markCheckIn, type FixSource } from './checkInTiming'
 import { H } from './haptics'
 import { Logger } from './logger'
 
@@ -24,22 +25,84 @@ export const LOCATION_FIX_TIMEOUT_MS = 15_000
  */
 export const FRESH_FIX_MAX_AGE_MS = 20_000
 
-/** The fix asked for when the pass showed, so the hold does not start one cold. */
+/** The event door's floor for a usable fix. */
+export const CHECK_IN_MAX_ACCURACY_M = 50
+
+/**
+ * A fix good enough for the door, as fast as the platform gives one.
+ *
+ * Not `getCurrentPositionAsync` on iOS. There it is CoreLocation's
+ * `requestLocation()` (expo-location `LocationRequester.swift`), which keeps
+ * listening until it reaches the requested accuracy or gives up — about ten
+ * seconds — and only then answers. That was the ~10 s between the hold and the
+ * request on every iOS drive (Android's fused `getCurrentLocation` answers in
+ * well under a second, and stays as it was). A watch delivers the first fix at
+ * once and better ones after: the first inside `maxAccuracyM` is taken and the
+ * watch stopped. At the deadline it answers with the best it had, which the
+ * caller judges (the weak-fix tray), or rejects as timed out when it had none.
+ */
+/**
+ * `firstGoodFix` settles this much before the check-in's own deadline, so a
+ * weak best-so-far is judged ("GPS signal is weak, 400 m") rather than lost to
+ * the outer timer's "Location timed out".
+ */
+const SETTLE_BEFORE_DEADLINE_MS = 500
+
+export function firstGoodFix(
+  maxAccuracyM: number,
+  deadlineMs: number = LOCATION_FIX_TIMEOUT_MS - SETTLE_BEFORE_DEADLINE_MS
+): Promise<Location.LocationObject> {
+  const timedOut = () => Object.assign(new Error('Location timed out'), { code: 'E_LOCATION_TIMEOUT' })
+  if (Platform.OS !== 'ios') {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(timedOut()), deadlineMs)
+      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High, mayShowUserSettingsDialog: true })
+        .then(resolve, reject)
+        .finally(() => clearTimeout(timer))
+    })
+  }
+  return new Promise((resolve, reject) => {
+    let best: Location.LocationObject | null = null
+    let subscription: Location.LocationSubscription | null = null
+    let settled = false
+    const settle = (finish: () => void) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      subscription?.remove()
+      finish()
+    }
+    const accuracyOf = (fix: Location.LocationObject) => fix.coords.accuracy ?? Infinity
+    const timer = setTimeout(() => settle(() => (best ? resolve(best) : reject(timedOut()))), deadlineMs)
+    Location.watchPositionAsync({ accuracy: Location.Accuracy.High, distanceInterval: 0 }, (fix) => {
+      if (!best || accuracyOf(fix) < accuracyOf(best)) best = fix
+      if (accuracyOf(fix) <= maxAccuracyM) settle(() => resolve(fix))
+    }).then(
+      (sub) => {
+        subscription = sub
+        if (settled) sub.remove()
+      },
+      (error) => settle(() => reject(error))
+    )
+  })
+}
+
+/**
+ * The fix asked for when the pass showed, so the hold does not start one cold.
+ * Pending or done, the hold reuses it rather than asking a second time.
+ */
 let warming: { startedAt: number; fix: Promise<Location.LocationObject | null> } | null = null
 
 /**
- * Start a fix now, before anybody holds: a cold GPS fix takes seconds, and the
- * hold is under one. Never prompts — without permission (or with Precise off)
- * it does nothing, and the hold's own path asks and explains as before.
+ * Start a fix now, before anybody holds. Never prompts — without permission
+ * (or with Precise off) it does nothing, and the hold's own path asks and
+ * explains as before. Bounded by `firstGoodFix`'s deadline.
  */
 export async function warmLocationFix(): Promise<void> {
   if (warming && Date.now() - warming.startedAt < FRESH_FIX_MAX_AGE_MS) return
   const permission = await Location.getForegroundPermissionsAsync().catch(() => null)
   if (permission?.status !== 'granted' || permission.ios?.accuracy === 'reduced') return
-  warming = {
-    startedAt: Date.now(),
-    fix: Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High }).catch(() => null),
-  }
+  warming = { startedAt: Date.now(), fix: firstGoodFix(CHECK_IN_MAX_ACCURACY_M).catch(() => null) }
 }
 
 /** Recent, and as good as the door asks: a fix that can stand in for a new one. */
@@ -48,15 +111,17 @@ function usable(fix: Location.LocationObject | null, maxAccuracyM: number): Loca
   return (fix.coords.accuracy ?? Infinity) <= maxAccuracyM ? fix : null
 }
 
-/** The warmed fix, else the OS's last one if it is fresh and good enough, else a new one. */
-async function freshFix(maxAccuracyM: number): Promise<Location.LocationObject> {
-  const warmed = usable((await warming?.fix) ?? null, maxAccuracyM)
-  if (warmed) return warmed
+/**
+ * The phone's last fix if it is fresh and good enough (instant), else the
+ * warmed one (awaited if still coming), else a new one.
+ */
+async function freshFix(maxAccuracyM: number): Promise<{ fix: Location.LocationObject; source: FixSource }> {
   const last = await Location.getLastKnownPositionAsync({ maxAge: FRESH_FIX_MAX_AGE_MS, requiredAccuracy: maxAccuracyM }).catch(() => null)
-  return (
-    usable(last, maxAccuracyM) ??
-    Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High, mayShowUserSettingsDialog: true })
-  )
+  const cached = usable(last, maxAccuracyM)
+  if (cached) return { fix: cached, source: 'lastKnown' }
+  const warmed = usable((await warming?.fix) ?? null, maxAccuracyM)
+  if (warmed) return { fix: warmed, source: 'warm' }
+  return { fix: await firstGoodFix(maxAccuracyM), source: 'fresh' }
 }
 
 /**
@@ -90,9 +155,6 @@ export type CheckInTrays = {
   /** Whose words the trays use: a check-in's (the default) or a Go Live's. */
   purpose?: 'checkIn' | 'goLive'
 }
-
-/** The event door's floor for a usable fix. */
-export const CHECK_IN_MAX_ACCURACY_M = 50
 
 /**
  * Precise location switched off: every fix is kilometres wide, so "move
@@ -202,7 +264,11 @@ export async function getCurrentLocation({
         LOCATION_FIX_TIMEOUT_MS
       )
       freshFix(maxAccuracyM)
-        .then((fix) => { clearTimeout(timer); resolve(fix) })
+        .then(({ fix, source }) => {
+          clearTimeout(timer)
+          markCheckIn('location', { source, ageMs: Date.now() - fix.timestamp, accuracyM: fix.coords.accuracy ?? undefined })
+          resolve(fix)
+        })
         .catch((err) => { clearTimeout(timer); reject(err) })
     })
 

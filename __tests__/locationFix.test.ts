@@ -14,13 +14,20 @@ jest.mock('expo-location', () => ({
   getForegroundPermissionsAsync: jest.fn(),
   getCurrentPositionAsync: jest.fn(),
   getLastKnownPositionAsync: jest.fn(),
+  watchPositionAsync: jest.fn(),
 }))
+jest.mock('../lib/checkInTiming', () => ({ markCheckIn: jest.fn() }))
 jest.mock('../lib/logger', () => ({
   Logger: { warn: jest.fn(), error: jest.fn(), journey: jest.fn() },
 }))
 
 import * as Location from 'expo-location'
+import { Platform } from 'react-native'
+import { markCheckIn } from '../lib/checkInTiming'
 import { getCurrentLocation, LOCATION_FIX_TIMEOUT_MS } from '../lib/locationFix'
+
+/** Which native path runs: iOS watches, Android asks once. */
+const setOS = (os: 'ios' | 'android') => Object.defineProperty(Platform, 'OS', { get: () => os, configurable: true })
 
 const loc = Location as jest.Mocked<typeof Location>
 
@@ -35,6 +42,8 @@ function fixWith(accuracy: number | null) {
 beforeEach(() => {
   jest.useRealTimers()
   jest.clearAllMocks()
+  // The flow's tests ask once (Android's path); iOS's watch has its own below.
+  setOS('android')
   loc.hasServicesEnabledAsync.mockResolvedValue(true)
   loc.requestForegroundPermissionsAsync.mockResolvedValue({ status: 'granted' } as any)
   loc.getForegroundPermissionsAsync.mockResolvedValue({ status: 'granted' } as any)
@@ -112,6 +121,7 @@ describe('getCurrentLocation', () => {
   })
 
   it('precise location off: its own tray with the path to the switch (R3-D4 4.7)', async () => {
+    setOS('ios') // Precise Location is an iOS switch, and the path named is iOS's
     loc.requestForegroundPermissionsAsync.mockResolvedValue({ status: 'granted', ios: { accuracy: 'reduced' } } as any)
     const t = trays()
     expect(await getCurrentLocation(t)).toBeNull()
@@ -176,5 +186,78 @@ describe('a fix that is already there', () => {
     loc.getCurrentPositionAsync.mockResolvedValue(recentFix(11))
     expect(await locate(trays())).toEqual({ latitude: 12.97, longitude: 77.59, accuracy: 11 })
     expect(loc.getCurrentPositionAsync).toHaveBeenCalledWith({ accuracy: Location.Accuracy.High, mayShowUserSettingsDialog: true })
+  })
+})
+
+/*
+ * iOS: `getCurrentPositionAsync` is CoreLocation's `requestLocation()`, which
+ * answers only after ~10 s of trying for its best accuracy. Every iOS drive
+ * waited that long between the hold and the request; Android never did.
+ */
+describe('iOS: the first good fix from a watch, not requestLocation', () => {
+  const recentFix = (accuracy: number) =>
+    ({ coords: { latitude: 12.97, longitude: 77.59, accuracy }, timestamp: Date.now() }) as any
+  const remove = jest.fn()
+  let deliver: (fix: unknown) => void
+
+  function fresh() {
+    let mod!: typeof import('../lib/locationFix')
+    jest.isolateModules(() => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      mod = require('../lib/locationFix')
+    })
+    return mod
+  }
+
+  beforeEach(() => {
+    setOS('ios')
+    remove.mockClear()
+    loc.watchPositionAsync.mockImplementation(async (_opts, cb) => {
+      deliver = cb as (fix: unknown) => void
+      return { remove } as any
+    })
+  })
+
+  it('takes the first fix inside 50 m and stops watching — never requestLocation', async () => {
+    const pending = fresh().getCurrentLocation(trays())
+    await new Promise((r) => setImmediate(r))
+    deliver(recentFix(900)) // the coarse first fix: kept, not taken
+    deliver(recentFix(8))
+    expect(await pending).toEqual({ latitude: 12.97, longitude: 77.59, accuracy: 8 })
+    expect(loc.getCurrentPositionAsync).not.toHaveBeenCalled()
+    expect(remove).toHaveBeenCalledTimes(1)
+    expect(markCheckIn).toHaveBeenCalledWith('location', expect.objectContaining({ source: 'fresh', accuracyM: 8 }))
+  })
+
+  it('the hold reuses a warm-up still under way, rather than starting a second watch', async () => {
+    const { warmLocationFix, getCurrentLocation: locate } = fresh()
+    await warmLocationFix()
+    const pending = locate(trays())
+    await new Promise((r) => setImmediate(r))
+    deliver(recentFix(6))
+    expect(await pending).toEqual({ latitude: 12.97, longitude: 77.59, accuracy: 6 })
+    expect(loc.watchPositionAsync).toHaveBeenCalledTimes(1)
+    expect(markCheckIn).toHaveBeenCalledWith('location', expect.objectContaining({ source: 'warm' }))
+  })
+
+  it('is bounded: at the deadline it answers with the best it had, and stops watching', async () => {
+    jest.useFakeTimers()
+    const { firstGoodFix } = fresh()
+    const pending = firstGoodFix(50, 1_000)
+    await Promise.resolve()
+    await Promise.resolve()
+    deliver(recentFix(120))
+    jest.advanceTimersByTime(1_000)
+    expect((await pending).coords.accuracy).toBe(120)
+    expect(remove).toHaveBeenCalledTimes(1)
+  })
+
+  it('with no fix at all by the deadline, times out rather than spinning', async () => {
+    jest.useFakeTimers()
+    const { firstGoodFix } = fresh()
+    const pending = firstGoodFix(50, 1_000)
+    await Promise.resolve()
+    jest.advanceTimersByTime(1_000)
+    await expect(pending).rejects.toMatchObject({ code: 'E_LOCATION_TIMEOUT' })
   })
 })
