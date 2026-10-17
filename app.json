@@ -135,6 +135,7 @@
       ],
       "expo-asset",
       "expo-video",
+      "expo-web-browser",
       "@maplibre/maplibre-react-native"
     ],
     "experiments": {
