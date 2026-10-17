@@ -1513,6 +1513,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
         playlist: feedPlaylist(item.media, item.cover_image_url),
         dateLabel: featuredDateLabel(item.start_time),
         placeLabel: placeLabel(item),
+        peopleLabel: peopleLabel(item, onNow(item)),
         onPress: () => handleEventPress(item),
         onPressIn: () => warmEvent(item),
         onLongPress: () => handleEventPreview(item),

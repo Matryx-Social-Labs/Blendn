@@ -116,6 +116,8 @@ interface Props {
   dateLabel: string
   /** Venue name, or the city when the venue is unnamed. */
   placeLabel?: string | null
+  /** "{n} here now" or "{n} going" (`peopleLabel`): read out with the card, so VoiceOver hears who is there. */
+  peopleLabel?: string | null
   /** Full width when it is the only card — see `FEATURED_CARD_SOLO`. */
   width?: number
   onPress: () => void
@@ -134,6 +136,7 @@ function FeaturedCardImpl({
   isActive = false,
   dateLabel,
   placeLabel,
+  peopleLabel,
   width = FEATURED_CARD_WIDTH,
   onPress,
   onPressIn,
@@ -152,7 +155,7 @@ function FeaturedCardImpl({
       onPressIn={onPressIn}
       onLongPress={onLongPress}
       accessibilityRole="button"
-      accessibilityLabel={`${title}. ${dateLabel}${placeLabel ? `, ${placeLabel}` : ''}`}
+      accessibilityLabel={`${title}. ${[dateLabel, placeLabel, peopleLabel].filter(Boolean).join(', ')}`}
       accessibilityActions={onLongPress ? QUICK_ACTIONS : undefined}
       onAccessibilityAction={
         onLongPress

@@ -128,7 +128,8 @@ function UpcomingCardImpl({
       onPressIn={onPressIn}
       onLongPress={onLongPress}
       accessibilityRole="button"
-      accessibilityLabel={[title, timeLabel, placeLabel].filter(Boolean).join(', ')}
+      // The people line too (drive 6: VoiceOver left out "12 here now").
+      accessibilityLabel={[title, timeLabel, placeLabel, peopleLabel].filter(Boolean).join(', ')}
       accessibilityActions={onLongPress ? QUICK_ACTIONS : undefined}
       onAccessibilityAction={
         onLongPress
