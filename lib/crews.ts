@@ -115,6 +115,11 @@ export interface Crew {
   size: number
   you: { role: 'owner' | 'member'; keepMeAnonymous: boolean } | null
   members: CrewMember[]
+  /**
+   * A moderator is looking at a report: only members can see the crew. Optional
+   * because a client outlives a deploy; absent reads as not hidden.
+   */
+  hidden?: boolean
 }
 
 export interface CrewInvite {
@@ -126,6 +131,8 @@ export interface CrewInvite {
   size: number
   /** The friend who asked you, by first name. */
   invitedBy: string
+  /** Their photo; optional (a client outlives a deploy) and drawn only when sent. */
+  invitedByPhoto?: string | null
   invitedAt: string
 }
 
@@ -183,6 +190,11 @@ export interface BlendSide {
   keptPrivate: number | null
   /** Their side: each person. Yours: you alone. */
   people: BlendPerson[]
+  /**
+   * Your side only: your crew has revealed in this Blend. Optional (a client
+   * outlives a deploy); absent means this screen only knows what you tapped.
+   */
+  crewRevealed?: boolean | null
 }
 
 export interface Blend {
@@ -572,15 +584,6 @@ export function friendsToInvite<F extends { userId: string; name: string; photo:
     if (matches.length === 1) inCrew.add(matches[0].userId)
   }
   return friends.filter((f) => !inCrew.has(f.userId))
-}
-
-/**
- * Invites still worth showing. One that answered 404 to an accept is gone
- * (lapsed, withdrawn, its crew dissolved) and stays off the screen for the
- * session, even if a cached list still has it.
- */
-export function visibleInvites<I extends { crewId: string }>(invites: readonly I[], gone: ReadonlySet<string>): I[] {
-  return invites.filter((i) => !gone.has(i.crewId))
 }
 
 /* -------------------------------------------------------------------------- */

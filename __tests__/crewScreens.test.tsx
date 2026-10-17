@@ -63,7 +63,6 @@ jest.mock('../lib/logger', () => ({
 import { router } from 'expo-router'
 import BlendScreen from '../app/blend/[blendId]'
 import CrewScreen from '../app/crews/[crewId]'
-import CrewsScreen from '../app/crews/index'
 import NewCrewScreen from '../app/crews/new'
 import { apiClient } from '../lib/apiClient'
 import {
@@ -171,83 +170,6 @@ describe('making a crew (CR-CU01)', () => {
     expect(crews.create).toHaveBeenCalledTimes(1)
     await act(async () => finish({ success: true, data: { crewId: 'c1', chatGroupId: 'g1', invited: 1 } }))
     crews.create.mockReset()
-  })
-})
-
-describe('an invite', () => {
-  const invite = {
-    crewId: 'c5',
-    name: 'Five',
-    bio: null,
-    emblemSeed: 's',
-    tags: [],
-    size: 4,
-    invitedBy: 'Vikram',
-    invitedAt: '2026-10-09T10:00:00Z',
-  }
-
-  beforeEach(() => {
-    crews.myCrews.mockResolvedValue({ success: true, data: { crews: [], invites: [invite] } })
-  })
-
-  it('accepting shows the consent first, and joins only once it is ticked', async () => {
-    crews.join.mockResolvedValue({ success: true, data: { chatGroupId: 'g5' } })
-    await render(<CrewsScreen />)
-    await waitFor(() => screen.getByText('Vikram asked you · Crew of 4'))
-    await fireEvent.press(screen.getByLabelText('Accept'))
-    expect(screen.getByText(CONSENT_LINE)).toBeTruthy()
-
-    await fireEvent.press(screen.getByLabelText('Join Five'))
-    expect(crews.join).not.toHaveBeenCalled()
-
-    await fireEvent.press(screen.getByRole('checkbox', { name: new RegExp(CONSENT_AGREE) }))
-    await fireEvent.press(screen.getByLabelText('Join Five'))
-    await waitFor(() => expect(crews.join).toHaveBeenCalledWith('c5', { revealConsent: true, keepMeAnonymous: false }))
-  })
-
-  it('H4: an invite that went away says so, and stays off the list even if a read still has it', async () => {
-    const gone = { ...invite, crewId: 'c-gone', name: 'Gone' }
-    crews.myCrews.mockResolvedValue({ success: true, data: { crews: [], invites: [gone] } })
-    crews.join.mockResolvedValue({ success: false, error: 'Crew not found', errorCode: 'NOT_FOUND' })
-    await render(<CrewsScreen />)
-    await waitFor(() => screen.getByText('Vikram asked you · Crew of 4'))
-    await fireEvent.press(screen.getByLabelText('Accept'))
-    await fireEvent.press(screen.getByRole('checkbox', { name: new RegExp(CONSENT_AGREE) }))
-    await fireEvent.press(screen.getByLabelText('Join Gone'))
-    await waitFor(() => expect(mockToast).toHaveBeenCalledWith('That invite isn’t open any more.', 'info'))
-    // The re-read still lists it (a cached answer): it stays off the screen.
-    await waitFor(() => expect(screen.queryByText('Vikram asked you · Crew of 4')).toBeNull())
-  })
-
-  it('M8: two taps on Join in the same render send one join', async () => {
-    let finish: (v: unknown) => void = () => {}
-    crews.join.mockReturnValue(new Promise((r) => (finish = r)) as never)
-    await render(<CrewsScreen />)
-    await waitFor(() => screen.getByText('Vikram asked you · Crew of 4'))
-    await fireEvent.press(screen.getByLabelText('Accept'))
-    await fireEvent.press(screen.getByRole('checkbox', { name: new RegExp(CONSENT_AGREE) }))
-    const join = screen.getByLabelText('Join Five')
-    await act(async () => {
-      void fireEvent.press(join)
-      void fireEvent.press(join)
-    })
-    expect(crews.join).toHaveBeenCalledTimes(1)
-    await act(async () => finish({ success: true, data: { chatGroupId: 'g5' } }))
-    crews.join.mockReset()
-  })
-
-  it('declining tells nobody and takes it off the list', async () => {
-    crews.decline.mockResolvedValue({ success: true, data: { declined: true } })
-    await render(<CrewsScreen />)
-    await waitFor(() => screen.getByText('Vikram asked you · Crew of 4'))
-    await fireEvent.press(screen.getByLabelText('Decline'))
-    // It asks first: a decline holds for 30 days.
-    expect(crews.decline).not.toHaveBeenCalled()
-    const sheet = (showSheet as jest.Mock).mock.calls.at(-1)[0] as ActionSheet
-    expect(sheet.title).toBe('Decline Five?')
-    ;(sheet.actions.find((a) => a.label === 'Decline') as { then: () => void }).then()
-    await waitFor(() => expect(screen.queryByText('Vikram asked you · Crew of 4')).toBeNull())
-    expect(crews.decline).toHaveBeenCalledWith('c5')
   })
 })
 

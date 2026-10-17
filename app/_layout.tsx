@@ -724,6 +724,7 @@ function RootLayout() {
       {/* Crews and Blends (step 9). Placeholder screens (docs/PLACEHOLDER_SCREENS.md §14). */}
       <Stack.Screen name="crews/index" options={{ headerShown: false }} />
       <Stack.Screen name="crews/new" options={{ headerShown: false }} />
+      <Stack.Screen name="crews/invite/[crewId]" options={{ headerShown: false }} />
       <Stack.Screen name="crews/[crewId]" options={{ headerShown: false }} />
       <Stack.Screen name="blend/[blendId]" options={{ headerShown: false }} />
       {/* A place from the Places list. Placeholder until step 5 (docs/PLACEHOLDER_SCREENS.md §10). */}

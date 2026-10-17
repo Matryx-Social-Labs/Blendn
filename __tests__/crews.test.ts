@@ -23,7 +23,6 @@ import {
   crewsThatMayLikePeople,
   friendsToInvite,
   sizeLine,
-  visibleInvites,
   defaultRoomName,
   hereLine,
   hereNowLine,
@@ -417,11 +416,6 @@ describe('pass 2 (review of #369)', () => {
       { isFriend: false, name: 'Meera', photo: null },
     ]
     expect(friendsToInvite(friends, members).map((f) => f.userId)).toEqual(['u-kavya', 'u-kavya2', 'u-meera'])
-  })
-
-  it('H4: an invite that answered 404 stays off the screen', () => {
-    const invites = [{ crewId: 'a' }, { crewId: 'b' }]
-    expect(visibleInvites(invites, new Set(['a']))).toEqual([{ crewId: 'b' }])
   })
 
   it('M7: the open-to-crews copy says what the server does — nobody is told, it lets crews like you', () => {
