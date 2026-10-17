@@ -502,7 +502,7 @@ describe('live', () => {
 })
 
 describe('regulars (Flow 13 · 13.4)', () => {
-  const prefs = (known: boolean, offersMuted = false) => ({ success: true, data: { known, offersMuted, ownerName: 'Indiranagar Hospitality' } })
+  const prefs = (known: boolean, offersMuted = false, regulars: unknown = { active: true }) => ({ success: true, data: { known, offersMuted, ownerName: 'Indiranagar Hospitality', regulars } })
   const claimed = venue({ venue: { claimed: true } })
 
   it('the offer is an itemised notice, never pre-ticked; Let know sends only that choice and becomes one row', async () => {
@@ -550,6 +550,20 @@ describe('regulars (Flow 13 · 13.4)', () => {
     expect(request).toHaveBeenLastCalledWith('/api/mobile/venues/v1/regular', { method: 'PUT', body: '{"offersMuted":true}' }, true, 2)
     expect(mockShowToast).toHaveBeenCalledWith('Nope', 'error')
     expect(screen.getByTestId('venue-offers-muted').props.accessibilityState).toMatchObject({ checked: false })
+  })
+
+  it('deferred: no flag, a false flag or a missing regulars object means no regulars UI at all; true shows it', async () => {
+    for (const regulars of [null, {}, { active: false }, { active: 'yes' }]) {
+      request.mockResolvedValue(prefs(true, false, regulars))
+      await mount(claimed)
+      expect(screen.queryByTestId('venue-regulars')).toBeNull()
+      expect(screen.queryByTestId('venue-regular-on')).toBeNull()
+      expect(screen.queryByTestId('venue-offers-muted')).toBeNull()
+      expect(screen.queryByRole('header', { name: /know you’re a regular/ })).toBeNull()
+    }
+    request.mockResolvedValue(prefs(false, false, { active: true }))
+    await mount(claimed)
+    expect(screen.getByTestId('venue-regulars')).toBeTruthy()
   })
 
   it('an unclaimed place has nobody to tell: no regulars at all', async () => {

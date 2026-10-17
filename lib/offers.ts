@@ -35,6 +35,12 @@ export type RegularPrefs = {
   offersMuted: boolean
   /** Who would see it: the organisation that runs the place on Blendn now; null while nobody does. */
   ownerName: string | null
+  /**
+   * Owner ruling: regulars are deferred. Every regulars surface on the place
+   * page is drawn only when the server says the venue has turned them on from
+   * the dashboard (`regulars.active === true`). Not sent yet: absent is off.
+   */
+  regulars?: { active?: boolean }
 }
 
 export type OfferReportReason = 'offensive' | 'misleading' | 'spam' | 'unsafe' | 'other'

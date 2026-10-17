@@ -96,7 +96,8 @@ export function VenueRegulars({ venueId, venueName }: { venueId: string; venueNa
     }
   }
 
-  if (!prefs || !state) return null
+  // Deferred (owner ruling): nothing at all unless the venue has activated regulars.
+  if (!prefs || !state || prefs.regulars?.active !== true) return null
   const who = whoSees(prefs, venueName)
 
   return (
