@@ -27,6 +27,8 @@ export type Offer = {
 export type OpenedOffer = Offer & {
   /** The code on the pass now and when it turns; only while `live`. */
   pass: { code: string; rotatesAt: string } | null
+  /** When staff tapped Redeemed, once they have. Not sent yet (the stamp then reads "Redeemed" alone). */
+  redeemedAt?: string | null
 }
 
 export type RegularPrefs = {
@@ -62,8 +64,9 @@ export const offersApi = {
   },
 
   /** Into the reports queue with the offer's words as they read. 409 while an earlier report is pending. */
-  report(offerId: string, reason: OfferReportReason): Promise<ApiResponse<{ reported: true }>> {
-    return apiClient.queuedRequest(`/api/mobile/offers/${enc(offerId)}/report`, { method: 'POST', body: JSON.stringify({ reason }) }, true, 2)
+  report(offerId: string, reason: OfferReportReason, description?: string): Promise<ApiResponse<{ reported: true }>> {
+    const body = description ? { reason, description } : { reason }
+    return apiClient.queuedRequest(`/api/mobile/offers/${enc(offerId)}/report`, { method: 'POST', body: JSON.stringify(body) }, true, 2)
   },
 
   /** "Offers from places": one switch for every place. */
@@ -121,3 +124,93 @@ export function codeLife(rotatesAt: string | null | undefined, now: number, step
 
 /** The code as staff read it: two groups of three. */
 export const spacedCode = (code: string) => `${code.slice(0, 3)} ${code.slice(3)}`
+
+/** The reasons a report offers, in the order the design lists them (13-2). */
+export const OFFER_REPORT_REASONS: readonly { value: OfferReportReason; label: string }[] = [
+  { value: 'offensive', label: 'Offensive' },
+  { value: 'misleading', label: 'Misleading' },
+  { value: 'spam', label: 'Spam' },
+  { value: 'unsafe', label: 'Feels unsafe' },
+  { value: 'other', label: 'Something else' },
+]
+
+/** How full the disc is while the pass is live (Flow 13 pass.js: 0.62); a spent one is full, an ended one empty. */
+export const LIVE_LEVEL = 0.62
+
+export const LIVE_FOOT = 'Show this at the door. Staff type the code and tap Redeemed.'
+export const OFFLINE_FOOT = 'This pass needs a connection to show its code.'
+export const FRESH_CODE_FOOT = 'Getting a fresh code…'
+
+/** Which face the door code wears: `offline` is "no fresh code to show", whatever the reason. */
+export type DoorState = 'live' | 'offline' | 'redeemed' | 'used' | 'ended'
+
+export type PassView = {
+  door: DoorState
+  /** How full the disc is, 0–1. */
+  level: number
+  /** A spent pass is still: no wave, no bubbles, dimmed. */
+  spent: boolean
+  /** "Redeemed 21:43" over the disc, once there is something to stamp. */
+  stamp: string | null
+  /** When staff redeemed it, "21:43", if the server said. */
+  redeemedClock: string | undefined
+  /** The sentence under the ticket. */
+  foot: string
+}
+
+const timeOf = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+
+/**
+ * What the pass shows, from what the server last said and the clock now. A
+ * live pass whose code has gone stale (past its turn, no fresh one came) shows
+ * no code, never the old one (L2): `offline` if the last ask failed, else a
+ * fresh code is on its way.
+ */
+export function passView(
+  offer: Pick<OpenedOffer, 'state' | 'pass' | 'venue' | 'redeemedAt'>,
+  now: number,
+  lastReadFailed: boolean
+): PassView {
+  switch (offer.state) {
+    case 'live': {
+      const fresh = !!offer.pass && codeIsFresh(offer.pass.rotatesAt, now)
+      return {
+        door: fresh ? 'live' : 'offline',
+        level: LIVE_LEVEL,
+        spent: false,
+        stamp: null,
+        redeemedClock: undefined,
+        foot: fresh ? LIVE_FOOT : lastReadFailed ? OFFLINE_FOOT : FRESH_CODE_FOOT,
+      }
+    }
+    case 'redeemed': {
+      const clock = offer.redeemedAt ? timeOf(offer.redeemedAt) : undefined
+      return {
+        door: 'redeemed',
+        level: 1,
+        spent: false,
+        stamp: clock ? `Redeemed ${clock}` : 'Redeemed',
+        redeemedClock: clock,
+        foot: offerStateLine('redeemed', offer.venue.name) ?? '',
+      }
+    }
+    case 'used_tonight':
+      return {
+        door: 'used',
+        level: 1,
+        spent: true,
+        stamp: 'Used tonight',
+        redeemedClock: undefined,
+        foot: offerStateLine('used_tonight', offer.venue.name) ?? '',
+      }
+    case 'ended':
+      return { door: 'ended', level: 0, spent: true, stamp: null, redeemedClock: undefined, foot: offerStateLine('ended', offer.venue.name) ?? '' }
+  }
+}
+
+/** "ENDED SUNDAY": the day the offer ran out, for an ended pass. */
+export const endedLabel = (endsAt: string) => `ENDED ${new Date(endsAt).toLocaleDateString([], { weekday: 'long' }).toUpperCase()}`
+
+/** "until Wed, 15 Oct": how long the offer runs (the pass itself is for today). */
+export const validUntil = (endsAt: string) =>
+  `until ${new Date(endsAt).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })}`

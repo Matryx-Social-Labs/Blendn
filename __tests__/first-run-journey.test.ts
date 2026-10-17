@@ -78,7 +78,7 @@ describe('the sign-in screens', () => {
   it('link the Terms and the Privacy Policy from one list', () => {
     expect(read('app/index.tsx')).toContain('<LegalLine')
     expect(read('app/sign-in.tsx')).toContain('<LegalLine')
-    expect(read('app/settings.tsx')).toContain("import { BLENDN_LINKS } from '../lib/links'")
+    expect(read('app/settings.tsx')).toContain("import { BLENDN_LINKS, openInApp } from '../lib/links'")
     expect(read('components/LegalLine.tsx')).toMatch(/BLENDN_LINKS\.terms[\s\S]*BLENDN_LINKS\.privacy/)
   })
 

@@ -78,6 +78,7 @@ import Flag from 'lucide-react-native/icons/flag'
 import Ghost from 'lucide-react-native/icons/ghost'
 import Gift from 'lucide-react-native/icons/gift'
 import Hand from 'lucide-react-native/icons/hand'
+import HandHeart from 'lucide-react-native/icons/hand-heart'
 import Heart from 'lucide-react-native/icons/heart'
 import HeartOff from 'lucide-react-native/icons/heart-off'
 import Hourglass from 'lucide-react-native/icons/hourglass'
@@ -218,6 +219,7 @@ const ICONS = {
   ghost: Ghost,
   gift: Gift,
   hand: Hand,
+  'hand-heart': HandHeart,
   heart: Heart,
   'heart-off': HeartOff,
   history: RotateCcwClock,

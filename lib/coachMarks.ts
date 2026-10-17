@@ -36,6 +36,8 @@ export type CoachMarkId =
   | 'centre_button_checkin'
   /** The Room: who can see your name and photo (the visibility banner). */
   | 'room_reveal'
+  /** The door pass, the first time one is live: the staff type the code. */
+  | 'door_pass'
 
 type Phase = 'unseen' | 'showing' | 'done'
 
