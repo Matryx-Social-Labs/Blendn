@@ -10,6 +10,7 @@ import { AccessibilityInfo, Platform, StyleSheet } from 'react-native'
 import * as Reanimated from 'react-native-reanimated'
 
 import { Toast, toastDwell } from '../components/ds/Toast'
+import { TAB_BAR_HINT_RISE } from '../components/ds/TabBar'
 import { COLOR, RADIUS, SIZE, SPACE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 
@@ -73,7 +74,9 @@ describe('<Toast>', () => {
     expect(flat('t-body')).toMatchObject({ backgroundColor: COLOR.surfaceRaised, borderRadius: RADIUS.pressedAndroid })
     expect(flat('t').bottom).toBe(SPACE.lg)
     await render(<Toast kind="error" text="Couldn’t save." onDismiss={jest.fn()} aboveTabBar testID="t" />)
-    expect(flat('t').bottom).toBe(SPACE.tabBarBottomGapAndroid + SIZE.tabBar + SPACE.md)
+    // Over the bar and over the centre button's check-in pill, which rises 36 above it (drive 3).
+    expect(TAB_BAR_HINT_RISE).toBe(36)
+    expect(flat('t').bottom).toBe(SPACE.tabBarBottomGapAndroid + SIZE.tabBar + TAB_BAR_HINT_RISE + SPACE.md)
   })
 
   it.each([

@@ -11,6 +11,7 @@ import { COLOR, EASING, FONT_FAMILY, ICON, MATERIAL, RADIUS, SIZE, SPACE, SPRING
 import { H } from '../../lib/haptics'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast, useScreenReader } from './shared'
+import { TAB_BAR_HINT_RISE } from './TabBar'
 
 export type ToastKind = 'success' | 'error' | 'info'
 
@@ -186,7 +187,8 @@ export function Toast({ kind = 'info', text, action, onDismiss, aboveTabBar = fa
   }, [])
 
   const place = android
-    ? { bottom: insets.bottom + (aboveTabBar ? SPACE.tabBarBottomGapAndroid + SIZE.tabBar + SPACE.md : SPACE.lg) }
+    ? // Above the bar and above the check-in pill that rises from it (drive 3: the pill covered the snackbar's second line).
+      { bottom: insets.bottom + (aboveTabBar ? SPACE.tabBarBottomGapAndroid + SIZE.tabBar + TAB_BAR_HINT_RISE + SPACE.md : SPACE.lg) }
     : { top: insets.top + SPACE.sm }
   const look = LOOK[kind]
   const radius = android ? RADIUS.pressedAndroid : RADIUS.sheet

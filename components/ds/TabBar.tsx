@@ -40,6 +40,14 @@ export function tabBarGeometry(screenWidth: number) {
   return { cell, centres }
 }
 
+/**
+ * How far the centre button's "Check in · {venue}" pill (components/ds/Disc)
+ * rises above the bar's top edge: the disc is centred in the bar, the pill sits
+ * `SPACE.sm` over it and is a `SIZE.tag` tall. Whatever floats over the bar
+ * (the Android snackbar) clears it.
+ */
+export const TAB_BAR_HINT_RISE = SIZE.disc + SPACE.sm + SIZE.tag - (SIZE.tabBar + SIZE.disc) / 2
+
 export type TabBarProps = {
   selected: Tab
   /** Every tap, the selected tab's too (re-tapping it scrolls to the top: the screen's call). */
