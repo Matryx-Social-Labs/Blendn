@@ -11,7 +11,7 @@ import { State } from 'react-native-gesture-handler'
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils'
 import * as Reanimated from 'react-native-reanimated'
 
-import { settleDetent, Sheet, sheetBottomPadding } from '../components/ds/Sheet'
+import { settleDetent, Sheet, sheetBottomPadding, sheetMaxHeight } from '../components/ds/Sheet'
 import { COLOR, MATERIAL, SPRING } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 
@@ -252,8 +252,8 @@ describe('the foot over a keyboard (Board composer drive: a dead band between Ca
 
   it('follows the keyboard as it shows and hides', async () => {
     const { Keyboard } = require('react-native')
-    const handlers: Record<string, () => void> = {}
-    const spy = jest.spyOn(Keyboard, 'addListener').mockImplementation(((event: string, fn: () => void) => {
+    const handlers: Record<string, (e?: { endCoordinates: { height: number } }) => void> = {}
+    const spy = jest.spyOn(Keyboard, 'addListener').mockImplementation(((event: string, fn: (e?: { endCoordinates: { height: number } }) => void) => {
       handlers[event] = fn
       return { remove: () => {} }
     }) as never)
@@ -261,10 +261,28 @@ describe('the foot over a keyboard (Board composer drive: a dead band between Ca
     // The sheet's own glass (the mock names it 'glass'): its padding is the foot.
     const pad = () => flat('glass').paddingBottom
     const resting = pad()
-    await act(async () => handlers.keyboardWillShow())
+    await act(async () => handlers.keyboardWillShow({ endCoordinates: { height: 300 } }))
     expect(pad()).toBe(8)
+    // And it never rises past the status bar: capped at the window less the keyboard, the top inset and a margin.
+    expect(flat('glass').maxHeight).toBe(sheetMaxHeight(Dimensions.get('window').height, 0, 300))
     await act(async () => handlers.keyboardWillHide())
     expect(pad()).toBe(resting)
     spy.mockRestore()
+  })
+})
+
+describe('the cap (drive 2: the composer slid under the status bar with the keyboard up)', () => {
+  it('is the window less the keyboard, the top safe area and 8 pt', () => {
+    expect(sheetMaxHeight(874, 62, 336)).toBe(874 - 336 - 62 - 8)
+    expect(sheetMaxHeight(874, 62, 0)).toBe(874 - 62 - 8)
+    expect(sheetMaxHeight(300, 62, 400)).toBe(0)
+  })
+
+  it('scrolls the content inside it, the title and the actions outside the scroll', async () => {
+    const { Text } = jest.requireActual('react-native')
+    await render(signOut({ children: <Text>Form</Text> }))
+    const content = screen.getByTestId('s-content', { includeHiddenElements: true })
+    expect(content.type).toBe('RCTScrollView')
+    expect(screen.getByText('Form', { includeHiddenElements: true })).toBeTruthy()
   })
 })

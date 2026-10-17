@@ -131,12 +131,27 @@ describe('the Going tab after a partial failure', () => {
     // A section only updates when its own request succeeds.
     expect(GOING).toMatch(/if \(saved\.success && saved\.data\) setEvents/)
     expect(GOING).toMatch(/if \(rsvps\.success && rsvps\.data\) setGoing/)
-    expect(GOING).toMatch(/if \(past\.success && past\.data\) setAttended/)
+    expect(GOING).toMatch(/if \(past\.success && past\.data\) \{\s*setAttended/)
     expect(GOING).toMatch(/newFailure\(failedRef\.current, failed\)/)
-    expect(GOING).toMatch(/action: \{ label: 'Try again'/)
+    expect(GOING).toMatch(/say\("Couldn't load all of your events\.", 'error', \{ label: 'Try again'/)
   })
 
   it('draws the tab from goingSections, so live events never sit under a past day', () => {
     expect(GOING).toContain('goingSections(going, events, attended)')
+  })
+})
+
+describe('Going’s Undo toast (drive 2: it came ~1 s late and covered the title on Android)', () => {
+  const GOING = readFileSync(join(__dirname, '..', 'app', '(tabs)', 'going.tsx'), 'utf8')
+  const remove = GOING.slice(GOING.indexOf('const removeSave'), GOING.indexOf('const shareEvent'))
+
+  it('is said as the row goes, before the server answers, and Undo waits for the DELETE', () => {
+    expect(remove).not.toMatch(/await apiClient\.removeFavorite/)
+    expect(remove.indexOf('say(`Removed ${event.title}`')).toBeLessThan(remove.indexOf('removed\n      .then(() => settleSave'))
+    expect(remove).toMatch(/removed\s*\.catch\(\(\) => undefined\)\s*\.then\(\(\) => apiClient\.addFavorite/)
+  })
+
+  it('is the design’s Toast: a snackbar above the tab bar on Android', () => {
+    expect(GOING).toMatch(/<Toast key=\{toast\.key\}[^>]*aboveTabBar/)
   })
 })

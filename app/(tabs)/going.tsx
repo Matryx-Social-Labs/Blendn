@@ -14,7 +14,7 @@ import { SectionHeader } from '../../components/ds/SectionHeader'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { CONTROL_FONT_CAP, font, minTarget, useBoldText } from '../../components/ds/shared'
 import { Icon, type IconName } from '../../components/ui/Icon'
-import { useToast } from '../../components/Toast'
+import { Toast, type ToastKind } from '../../components/ds/Toast'
 import { apiClient } from '../../lib/apiClient'
 import { openBlendn } from '../../lib/blendnOverlay'
 import { Logger } from '../../lib/logger'
@@ -40,6 +40,7 @@ import { MOTION_DURATION } from '../../lib/motion'
 import { openInMaps } from '../../lib/openInMaps'
 import { addToCalendar } from '../../lib/calendar'
 import { openPaywall } from '../../lib/paywall'
+import { isNightRated, markNightRated, useRatedNights } from '../../lib/ratedNights'
 import { TAB_BAR_CLEARANCE } from './_layout'
 
 /**
@@ -70,8 +71,17 @@ function GoingScreenInner() {
   const [lockedCount, setLockedCount] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
   const [loadFailed, setLoadFailed] = useState(false)
-  const { showToast } = useToast()
+  /*
+   * The design's Toast (components/ds/Toast): iOS a capsule at the top, Android
+   * a snackbar at the bottom above the tab bar (drive 2: it covered "Going").
+   */
+  const [toast, setToast] = useState<{ key: number; kind: ToastKind; text: string; action?: { label: string; onPress: () => void } } | null>(null)
+  const say = useCallback((text: string, kind: ToastKind = 'info', action?: { label: string; onPress: () => void }) => {
+    setToast({ key: Date.now(), kind, text, action })
+  }, [])
   const bold = useBoldText()
+  // A night rated anywhere (the rate screen, the Recap) stops offering "Rate who you met" at once.
+  const ratedVersion = useRatedNights()
   const reduceMotion = useReducedMotion()
   // The row Undo just restored — the only one that gets an entrance.
   const [restoredId, setRestoredId] = useState<string | null>(null)
@@ -136,7 +146,19 @@ function GoingScreenInner() {
       else Logger.debug('interested', 'Failed to load favorites', { error: saved.error })
       if (rsvps.success && rsvps.data) setGoing(rsvpEventRows(rsvps.data))
       else Logger.debug('interested', 'Failed to load RSVPs', { error: rsvps.error })
-      if (past.success && past.data) setAttended(past.data.events ?? [])
+      if (past.success && past.data) {
+        setAttended(past.data.events ?? [])
+        // Nights rated on another launch: the server's own answer, for the few Past rows on screen.
+        for (const e of (past.data.events ?? []).slice(0, PAST_RATING_READS)) {
+          if (isNightRated(e.id)) continue
+          void apiClient
+            .getMyEventRating(e.id)
+            .then((r) => {
+              if (r.success && r.data?.ratedAt) markNightRated(e.id)
+            })
+            .catch(() => {})
+        }
+      }
       else Logger.debug('interested', 'Failed to load attendance', { error: past.error })
       // Older nights behind Blendn+ (step 11); kept as last known when the read fails, like the rows.
       if (past.success && past.data) setLockedCount(past.data.lockedCount ?? 0)
@@ -153,9 +175,7 @@ function GoingScreenInner() {
       const failed = failedSections({ saved, going: rsvps, past })
       const shown = hadRowsRef.current || !allFailed
       if (shown && newFailure(failedRef.current, failed)) {
-        showToast("Couldn't load all of your events.", 'error', {
-          action: { label: 'Try again', onPress: () => reloadRef.current() },
-        })
+        say("Couldn't load all of your events.", 'error', { label: 'Try again', onPress: () => reloadRef.current() })
       }
       failedRef.current = failed
     } catch {
@@ -164,7 +184,7 @@ function GoingScreenInner() {
     } finally {
       setLoading(false)
     }
-  }, [authUser, showToast])
+  }, [authUser, say])
   useEffect(() => {
     reloadRef.current = () => void loadInterestedEvents()
   }, [loadInterestedEvents])
@@ -220,46 +240,50 @@ function GoingScreenInner() {
    * Optimistic, with an Undo. The card goes at once; a refused DELETE puts it
    * back and says so, and Undo saves it again.
    */
-  const removeSave = useCallback(async (event: EventRow) => {
+  const removeSave = useCallback((event: EventRow) => {
     const index = events.findIndex(e => e.id === event.id)
     setRestoredId(null)
     setEvents(prev => prev.filter(e => e.id !== event.id))
     markSave(event, false)
-    try {
-      // DELETE, not the POST upsert this used to send — that one never
-      // removed anything, and the card came back on the next refresh.
-      const result = await apiClient.removeFavorite(event.id)
+    // DELETE, not the POST upsert this used to send — that one never
+    // removed anything, and the card came back on the next refresh.
+    const removed = apiClient.removeFavorite(event.id).then((result) => {
       if (!result.success) throw new Error(result.error || 'remove refused')
-      settleSave(event.id, true)
-    } catch (e) {
-      settleSave(event.id, false)
-      Logger.warn('interested', 'Failed to remove favorite', { error: e })
-      restoreRow(event, index)
-      showToast(`Couldn't remove ${event.title}. Try again.`, 'error')
-      return
-    }
-
-    showToast(`Removed ${event.title}`, 'info', {
-      action: {
-        label: 'Undo',
-        onPress: () => {
-          restoreRow(event, index)
-          markSave(event, true)
-          apiClient
-            .addFavorite(event.id)
-            .then((res) => {
-              if (!res.success) throw new Error(res.error || 'save refused')
-              settleSave(event.id, true)
-            })
-            .catch(() => {
-              settleSave(event.id, false)
-              setEvents(prev => prev.filter(e => e.id !== event.id))
-              showToast(`Couldn't save ${event.title} again.`, 'error')
-            })
-        },
+    })
+    /*
+     * Said at once, with its Undo, as the row goes (drive 2: it came ~1 s
+     * later, after the server). A refused DELETE replaces it with the error and
+     * puts the row back; Undo waits for the DELETE before it saves again, so
+     * the two can never land in the wrong order.
+     */
+    say(`Removed ${event.title}`, 'info', {
+      label: 'Undo',
+      onPress: () => {
+        restoreRow(event, index)
+        markSave(event, true)
+        removed
+          .catch(() => undefined)
+          .then(() => apiClient.addFavorite(event.id))
+          .then((res) => {
+            if (!res.success) throw new Error(res.error || 'save refused')
+            settleSave(event.id, true)
+          })
+          .catch(() => {
+            settleSave(event.id, false)
+            setEvents(prev => prev.filter(e => e.id !== event.id))
+            say(`Couldn't save ${event.title} again.`, 'error')
+          })
       },
     })
-  }, [events, restoreRow, showToast, markSave, settleSave])
+    removed
+      .then(() => settleSave(event.id, true))
+      .catch((e) => {
+        settleSave(event.id, false)
+        Logger.warn('interested', 'Failed to remove favorite', { error: e })
+        restoreRow(event, index)
+        say(`Couldn't remove ${event.title}. Try again.`, 'error')
+      })
+  }, [events, restoreRow, say, markSave, settleSave])
 
   const shareEvent = useCallback(async (event: EventRow) => {
     try {
@@ -430,11 +454,15 @@ function GoingScreenInner() {
           venue={placeLabel(row)}
           onPress={() => openEvent(row.id)}
           trailing={
+            isNightRated(row.id) ? (
+              <RowNote text="Rated" />
+            ) : (
             <TextAction
               label="Rate who you met"
               accessibilityLabel={`Rate who you met at ${row.title}`}
               onPress={() => router.push({ pathname: '/rate/[eventId]', params: { eventId: row.id } as any })}
             />
+            )
           }
         />
       )
@@ -466,7 +494,9 @@ function GoingScreenInner() {
         />
       </Animated.View>
     )
-  }, [bold, openEvent, refreshCount, removeSave, reduceMotion, renderNext, restoredId])
+    // ratedVersion: a night rated elsewhere redraws its Past row.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bold, openEvent, refreshCount, removeSave, reduceMotion, renderNext, restoredId, ratedVersion])
 
   // Live events lead, under "Happening now" — never under the day they started (lib/goingSections.ts).
   const items = useMemo(
@@ -540,6 +570,9 @@ function GoingScreenInner() {
           />
         </FadeInUp>
       )}
+      {toast ? (
+        <Toast key={toast.key} kind={toast.kind} text={toast.text} action={toast.action} aboveTabBar onDismiss={() => setToast(null)} testID="going-toast" />
+      ) : null}
     </SafeAreaView>
   )
 }
@@ -674,6 +707,9 @@ function SavedHeart({ title, onPress }: { title: string; onPress: () => void }) 
     </ScalePress>
   )
 }
+
+/** Past rows whose rating is read from the server on load (the ones a person sees first). */
+const PAST_RATING_READS = 10
 
 /** The next-up card's photo. */
 const HERO_PHOTO = 180

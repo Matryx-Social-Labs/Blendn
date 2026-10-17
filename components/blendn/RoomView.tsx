@@ -7,6 +7,7 @@ import { DURATION, EASING, RISE, SPACE, SPRING, STAGGER } from '../../lib/design
 import type { CrewCard } from '../../lib/crews'
 import { getNetworkState, subscribeNetworkState } from '../../lib/networkStatus'
 import { connect, type SocketConnectionStatus } from '../../lib/socketClient'
+import type { ChatHistory } from '../../lib/dockHistory'
 import type { RoomPerson } from '../../lib/useRoom'
 import { Banner } from '../ds/Banner'
 import type { Face } from '../ds/Facepile'
@@ -116,6 +117,8 @@ export type RoomViewProps = {
   /** The double tap's like, or null when a like would have to ask first (then a double tap just opens the card). */
   onLike: ((p: RoomPerson) => void) | null
   chatGroupId: string | null
+  /** The room's first read of its chat, for the dock (`useRoom`). */
+  chatHistory?: ChatHistory | null
   myId?: string
   dockWave: Extract<DockLine, { kind: 'wave' }> | null
   onOpenChat: () => void
@@ -234,6 +237,7 @@ export function RoomView(props: RoomViewProps) {
       </GestureDetector>
       <ChatDock
         chatGroupId={props.chatGroupId}
+        history={props.chatHistory}
         myId={props.myId}
         wave={props.dockWave}
         onOpen={props.onOpenChat}

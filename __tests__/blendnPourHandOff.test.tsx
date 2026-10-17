@@ -24,7 +24,8 @@ import { askIntentRoute, intentAnswered, submitCheckIn, type CheckInOutcome } fr
 import { H } from '../lib/haptics'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
-jest.mock('react-native-reanimated', () => ({ ...jest.requireActual('react-native-reanimated'), __esModule: true, useReducedMotion: () => false }))
+let mockReduceMotion = false
+jest.mock('react-native-reanimated', () => ({ ...jest.requireActual('react-native-reanimated'), __esModule: true, useReducedMotion: () => mockReduceMotion }))
 jest.mock('react-native-gesture-handler', () => ({
   ...jest.requireActual('react-native-gesture-handler'),
   GestureDetector: ({ children }: { children: React.ReactNode }) => children,
@@ -158,6 +159,7 @@ const tonightShowing = () => screen.queryByTestId('tonight', HIDDEN) !== null
 
 let success: jest.SpyInstance
 beforeEach(() => {
+  mockReduceMotion = false
   jest.useFakeTimers()
   mockRoomReset()
   mockPassLabels.length = 0
@@ -279,5 +281,55 @@ describe('smooth: nothing heavy mounts while the pour moves (owner defect, Debug
     })
     await advance(0)
     expect(submit).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('Reduce Motion on (drive 2: stuck on "Checking you in…")', () => {
+  const stage = () => screen.queryByTestId('room-stage', HIDDEN)
+  const pourReleased = () => screen.getByTestId('blendn-pour', HIDDEN).props.pointerEvents === 'none'
+
+  it('every step is a timer or state: the pour plays, hands off at #9’s 700 ms and the Room is there', async () => {
+    mockReduceMotion = true
+    await holdToCheckIn(fresh(false))
+    expect(screen.getByText('You’re in.', HIDDEN)).toBeTruthy()
+    await act(async () => mockRoomLoads())
+    await advance(ROOM_AT)
+    expect(pourReleased()).toBe(true)
+    expect(stage()).not.toBeNull()
+    expect(stage()!.props.pointerEvents).toBe('auto')
+    expect(tonightShowing()).toBe(false)
+    expect(success).toHaveBeenCalledTimes(1)
+  })
+
+  it('with a question: the pour clears on its timer and the question is asked', async () => {
+    mockReduceMotion = true
+    await holdToCheckIn(fresh(true))
+    await act(async () => mockRoomLoads())
+    await advance(ASK_AT)
+    // Reduce Motion's fade is 200 ms: a timer, not an animation's completion.
+    await advance(200)
+    expect(router.push).toHaveBeenCalledWith(askIntentRoute('e1'))
+  })
+})
+
+describe('the crossfade: both layers at once (drive 2: a one-frame cut)', () => {
+  it('at the hand-off the Room is already mounted under the pour, and the pour is still there to fade', async () => {
+    await holdToCheckIn(fresh(false))
+    await act(async () => mockRoomLoads())
+    await advance(ORBS_LIFT_MS)
+    // Before the hand-off: both mounted, the Room hidden.
+    expect(screen.queryByTestId('room-stage', HIDDEN)).not.toBeNull()
+    expect(screen.getByTestId('blendn-pour', HIDDEN)).toBeTruthy()
+    await advance(ROOM_AT - ORBS_LIFT_MS)
+    // After it: still both, the pour fading out over the Room fading in (opacity, not a mount).
+    expect(screen.queryByTestId('room-stage', HIDDEN)).not.toBeNull()
+    expect(screen.getByTestId('blendn-pour', HIDDEN)).toBeTruthy()
+  })
+
+  it('the readiness gate is the room hook’s `settled`: count, chat and avatars, not just the roster', async () => {
+    await holdToCheckIn(fresh(false))
+    await act(async () => mockRoomReadyUnsettled())
+    await advance(ROOM_AT + 500)
+    expect(screen.queryByTestId('room-stage', HIDDEN)).toBeNull()
   })
 })

@@ -5,6 +5,7 @@ import Animated, {
   Easing,
   Extrapolation,
   interpolate,
+  ReduceMotion,
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useReducedMotion,
@@ -129,12 +130,13 @@ export const RoomStage = React.forwardRef<{ close(): void }, {
   const dragFrom = useSharedValue(0)
 
   useEffect(() => {
-    open.set(withTiming(1, { duration: reduceMotion ? FADE_MS : OPEN_MS, easing: EASE }))
+    // Never: Reduce Motion's own 200 ms fade is chosen here, and the system setting must not skip it (or its callback).
+    open.set(withTiming(1, { duration: reduceMotion ? FADE_MS : OPEN_MS, easing: EASE, reduceMotion: ReduceMotion.Never }))
   }, [open, reduceMotion])
 
   const close = useCallback(() => {
     open.set(
-      withTiming(0, { duration: reduceMotion ? FADE_MS : CLOSE_MS, easing: EASE }, (done) => {
+      withTiming(0, { duration: reduceMotion ? FADE_MS : CLOSE_MS, easing: EASE, reduceMotion: ReduceMotion.Never }, (done) => {
         if (done) scheduleOnRN(onClosed)
       })
     )

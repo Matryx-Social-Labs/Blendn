@@ -5,6 +5,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-na
 import { scheduleOnRN } from 'react-native-worklets'
 
 import { apiClient } from '../../lib/apiClient'
+import { DOCK_HISTORY, type ChatHistory } from '../../lib/dockHistory'
 import { COLOR, FONT_FAMILY, ICON, PRESS, RADIUS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
 import { Logger } from '../../lib/logger'
 import { useRoomMembership } from '../../lib/roomMembership'
@@ -65,8 +66,11 @@ export function ChatDock({
   onOpen,
   onOpenPerson,
   bottomInset,
+  history,
 }: {
   chatGroupId: string | null
+  /** The room's first read of the chat (`useRoom`), so the dock opens on its real line rather than fetching after. */
+  history?: ChatHistory | null
   myId?: string
   /** The newest wave to you, while it is fresh. */
   wave: Extract<DockLine, { kind: 'wave' }> | null
@@ -81,23 +85,31 @@ export function ChatDock({
   // The history request failed: not the same as a quiet room, so it says so.
   const [failed, setFailed] = useState(false)
   const [attempt, setAttempt] = useState(0)
+  /** The history has answered (or failed) for this chat: until then the line is a skeleton, never "Nobody has said…". */
+  const [loadedFor, setLoadedFor] = useState<string | null>(null)
   // Left: the server refuses the history and the socket, so neither is asked.
   const left = useRoomMembership().left.has(chatGroupId ?? '')
 
   useEffect(() => {
     if (!chatGroupId || left) return
     let cancelled = false
-    apiClient
-      .getChatMessages(chatGroupId, { limit: 8 })
-      .then((r) => {
-        if (cancelled) return
-        setFailed(!r.success)
-        if (r.success) setMessage(lastFromHistory(r.data, myId))
-      })
-      .catch((e) => {
-        Logger.debug('chat', 'dock history failed', { error: e })
-        if (!cancelled) setFailed(true)
-      })
+    const take = (ok: boolean, data: unknown) => {
+      setFailed(!ok)
+      if (ok) setMessage(lastFromHistory(data, myId))
+      setLoadedFor(chatGroupId)
+    }
+    // The room already read it (a fresh room); a Try again reads it here.
+    if (attempt === 0 && history && history.groupId === chatGroupId) take(!history.failed, history.data)
+    else
+      apiClient
+        .getChatMessages(chatGroupId, { limit: DOCK_HISTORY })
+        .then((r) => {
+          if (!cancelled) take(r.success, r.data)
+        })
+        .catch((e) => {
+          Logger.debug('chat', 'dock history failed', { error: e })
+          if (!cancelled) take(false, null)
+        })
     const unsubscribe = subscribeToChatMessage(chatGroupId, (data) => {
       if (data.chatGroupId !== chatGroupId) return
       const m = data.message
@@ -109,6 +121,8 @@ export function ChatDock({
       cancelled = true
       unsubscribe()
     }
+    // `history` is read once per chat: a later copy of the same read never replaces live lines.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatGroupId, myId, left, attempt])
 
   const last = useMemo(() => (wave && (!message || wave.at >= message.at) ? wave : message), [wave, message])
@@ -131,14 +145,17 @@ export function ChatDock({
     })
   const liftStyle = useAnimatedStyle(() => ({ transform: [{ translateY: lift.get() }] }))
 
-  const state = left ? 'left' : failed && !last ? 'failed' : last ? 'line' : 'quiet'
+  const loading = !!chatGroupId && !left && !last && loadedFor !== chatGroupId
+  const state = left ? 'left' : failed && !last ? 'failed' : last ? 'line' : loading ? 'loading' : 'quiet'
   const line =
     state === 'left'
       ? 'You left this chat. Open it to rejoin.'
       : state === 'failed'
         ? 'Couldn’t load messages.'
-        : state === 'quiet'
-          ? 'Nobody has said anything yet. Be the first.'
+        : state === 'loading'
+          ? ''
+          : state === 'quiet'
+            ? 'Nobody has said anything yet. Be the first.'
           : last!.kind === 'wave'
             ? `${last!.fromName} waved at you`
             : `${last!.who}: ${last!.text}`
@@ -169,6 +186,7 @@ export function ChatDock({
               <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold), styles.ink]}>
                 Room chat
               </Text>
+              {state === 'loading' ? <View testID="room-dock-line-loading" style={styles.lineSkeleton} /> : null}
               <Text
                 testID="room-dock-line"
                 numberOfLines={1}
@@ -213,6 +231,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   text: { flex: 1, minWidth: 0 },
+  // The line's place while the chat is read: a caption-height bar, still (#17: nothing loops).
+  lineSkeleton: { position: 'absolute', left: 0, bottom: SPACE.xxs, width: '60%', height: SPACE.md, borderRadius: RADIUS.capsule, backgroundColor: COLOR.surfaceSunken },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
 })

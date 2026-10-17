@@ -4,7 +4,9 @@ import type { Badge, Overlap } from './aboutYou'
 import type { AttendeeProfile } from './attendee'
 import { pickActiveRoom, extractEventId, type CheckinLike } from './activeRoom'
 import { apiClient } from './apiClient'
+import { DOCK_HISTORY, type ChatHistory } from './dockHistory'
 import { H } from './haptics'
+import { warmAvatars } from './warmAvatars'
 import { markRoomJoined, markRoomLeft, rememberRoomMute } from './roomMembership'
 import { subscribeCheckInChanged } from './checkIn'
 import { likeRefusal, type LikeRefusal } from './likeRefusal'
@@ -95,6 +97,8 @@ export interface RoomPerson {
   raw: AttendeeProfile
 }
 
+
+
 export interface RoomState {
   status: 'loading' | 'none' | 'ready' | 'error'
   /**
@@ -103,6 +107,8 @@ export interface RoomState {
    * late after a check-in's pour (PR #401 drive).
    */
   settled: boolean
+  /** The dock's first read of the room chat, fetched with the room so the dock opens on its real last line. */
+  chatHistory: ChatHistory | null
   event: { id: string; title: string; startsAt?: string; endsAt?: string } | null
   checkedInAt: string | null
   /**
@@ -196,6 +202,8 @@ export function useRoom(): RoomState & RoomActions {
   /** The room whose first count, and whose chat lookup, have answered. */
   const [seededFor, setSeededFor] = useState<string | null>(null)
   const [chatFor, setChatFor] = useState<string | null>(null)
+  const [chatHistory, setChatHistory] = useState<ChatHistory | null>(null)
+  const [avatarsFor, setAvatarsFor] = useState<string | null>(null)
   /** The chat lookup started with the check-ins read, before the roster: the chat effect takes it over. */
   const chatEarly = useRef<{ eventId: string; result: ReturnType<typeof apiClient.getEventChat> } | null>(null)
 
@@ -415,6 +423,11 @@ export function useRoom(): RoomState & RoomActions {
         rememberRoster(outcome.eventId, attendees, outcome.eventTitle)
 
         void seedCount(outcome.eventId, force, loadId, outcome.eventId === firstId ? earlyCount : undefined)
+        // The faces the Room opens on, decoded before it is revealed (PR #401 drive 2: blank faces filling in).
+        const avatarsOf = outcome.eventId
+        void warmAvatars(attendees.map((a) => a.profile_photos?.[0])).then(() => {
+          if (eventRef.current?.id === avatarsOf) setAvatarsFor(avatarsOf)
+        })
       } catch (e) {
         Logger.error('match', 'Failed to load the room', { error: e })
         if (superseded()) return
@@ -551,7 +564,7 @@ export function useRoom(): RoomState & RoomActions {
     const early = chatEarly.current?.eventId === eventId ? chatEarly.current.result : null
     chatEarly.current = null
     ;(early ?? apiClient.getEventChat(eventId))
-      .then((result) => {
+      .then(async (result) => {
         if (cancelled || eventRef.current?.id !== eventId) return
         const id = result.data?.chatGroupId ?? result.data?.id
         if (result.success && id) {
@@ -559,6 +572,10 @@ export function useRoom(): RoomState & RoomActions {
           // Served as a member: back in, and the room's mute as the server has it.
           markRoomJoined(String(id))
           rememberRoomMute(String(id), result.data?.mute)
+          // The dock's last line, with the room: it never opens on "Nobody has said anything yet" and then changes.
+          const history = await apiClient.getChatMessages(String(id), { limit: DOCK_HISTORY }).catch(() => null)
+          if (cancelled) return
+          setChatHistory({ groupId: String(id), data: history?.success ? history.data : null, failed: !history?.success })
         } else if (result.errorCode === 'LEFT_ROOM' && result.chatGroupId) {
           /*
            * You left this room, and the server no longer rejoins you by
@@ -809,7 +826,8 @@ export function useRoom(): RoomState & RoomActions {
 
   return {
     status,
-    settled: status === 'ready' && !!event && seededFor === event.id && chatFor === event.id,
+    settled: status === 'ready' && !!event && seededFor === event.id && chatFor === event.id && avatarsFor === event.id,
+    chatHistory,
     event,
     checkedInAt,
     revealed,

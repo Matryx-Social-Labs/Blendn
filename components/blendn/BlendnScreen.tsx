@@ -1,7 +1,7 @@
 import { router } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BackHandler, StyleSheet, Text, View } from 'react-native'
-import Animated, { Easing, FadeIn, FadeInUp, FadeOut, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
+import Animated, { Easing, FadeIn, FadeInUp, FadeOut, ReduceMotion, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { apiClient } from '../../lib/apiClient'
@@ -24,7 +24,8 @@ import { useCheckInFlow } from '../../lib/useCheckInFlow'
 import { useLatest } from '../../lib/useLatest'
 import { useRoom, type RoomPerson } from '../../lib/useRoom'
 import { useRoomControls } from '../../lib/useRoomControls'
-import { useTonight } from '../../lib/useTonight'
+import { useTonight, type TonightEvent } from '../../lib/useTonight'
+import { isNightRated, markNightRated, useRatedNights } from '../../lib/ratedNights'
 import { crewCards, openBlend, useCrewActions, useCrewsHere } from '../crews/CrewsView'
 import { VisibilityBanner, type Visibility } from '../ds/Banner'
 import type { Face } from '../ds/Facepile'
@@ -50,6 +51,9 @@ import { useCoachMarkSpot } from '../ds/CoachMarkHost'
 
 /** Under the top bar's 44 pt circles: Flow 4 sets the title 70 below the safe area (124 on a 54 pt status bar). */
 const TOP_CHROME = SPACE.sm + SIZE.circleButton + SPACE.lg + SPACE.xxs
+/** #9: the Room's crossfade (D.base) and its sections (+60, 28 apart, D.base each), done: nothing lands on it before. */
+const ROOM_ARRIVAL_MS = DURATION.base + 60 + 2 * 28 + DURATION.base
+
 /** How long the pour and the pass wait for the Room after a check-in before giving up on it. */
 const ROOM_WAIT_MS = 4000
 /** "Show more" brings at most this many (the server pages the ranking by 20). */
@@ -165,6 +169,8 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   const roomOver = endedRecap !== null && endedRecap.eventId === dismissedRecap
   // Recap #04: rated already, so "You rated this night. Thanks." and no primary. Unknown (a failed read) offers Rate.
   const [ratedEvent, setRatedEvent] = useState<string | null>(null)
+  // Rated on the rate screen just now (pushed over the overlay): the Recap says so as you come back.
+  useRatedNights()
   const recapEventId = recap?.eventId ?? null
   useEffect(() => {
     if (!recapEventId) return
@@ -172,7 +178,10 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
     apiClient
       .getMyEventRating(recapEventId)
       .then((r) => {
-        if (live && r.success && r.data?.ratedAt) setRatedEvent(recapEventId)
+        if (live && r.success && r.data?.ratedAt) {
+          setRatedEvent(recapEventId)
+          markNightRated(recapEventId)
+        }
       })
       .catch(() => {})
     return () => {
@@ -202,7 +211,17 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
    * it wins when it has one: its counts are live.
    */
   const door = useDoor()
-  const insideEvent = (door ? (tonight.events.find((e) => e.id === door.id) ?? door) : tonight.events.find((e) => e.id === tonight.insideEventId)) ?? null
+  const liveInside = (door ? (tonight.events.find((e) => e.id === door.id) ?? door) : tonight.events.find((e) => e.id === tonight.insideEventId)) ?? null
+  /*
+   * Tonight as it was when the hold committed, held until the check-in is done.
+   * A check-in re-reads Tonight (`checkInChanged`), and the answer — the event
+   * you just entered no longer "inside", the deck re-sorted or briefly empty —
+   * landed mid-pour: the deck vanished, the pass changed under the flood and
+   * the Room's "is this the one" test lost its event (PR #401 drive 2).
+   */
+  const [held, setHeld] = useState<{ events: TonightEvent[]; insideEvent: TonightEvent | null } | null>(null)
+  const tonightEvents = held ? held.events : tonight.events
+  const insideEvent = held ? held.insideEvent : liveInside
   /*
    * The Room is there to hand off to: loaded, or waited for long enough.
    * ponytail: a fixed ceiling, so a room that doesn't load straight after the
@@ -301,15 +320,20 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   // The hand-off: the Room, already mounted, crossfades in while the pour fades (#9: D.base, gentle).
   useEffect(() => {
     if (mode !== 'room' || roomFade.get() === 1) return
-    roomFade.set(withTiming(1, { duration: motionTokens(reduceMotion).duration.base, easing: gentle }))
+    roomFade.set(withTiming(1, { duration: motionTokens(reduceMotion).duration.base, easing: gentle, reduceMotion: ReduceMotion.Never }))
   }, [mode, reduceMotion, roomFade])
   /** The pour may hand off: into a Room mounted under it, or (as before) one that never came or isn't this one. */
   const pourMayHandOff = roomPremounted || roomWaitOver || checkIn.asks || (roomReady && !roomIsThisOne)
   const pourDoneNow = useLatest(checkIn.pourDone)
+  // The crossfade starts at the hand-off, on the UI thread, with the pour's own fade: not a render later, when the mode turns.
+  const startRoomFade = useLatest(() => {
+    if (roomPremounted) roomFade.set(withTiming(1, { duration: motionTokens(reduceMotion).duration.base, easing: gentle, reduceMotion: ReduceMotion.Never }))
+  })
   const onPourDone = useCallback(() => {
+    startRoomFade.current()
     setPourPlaying(false)
     pourDoneNow.current()
-  }, [pourDoneNow])
+  }, [pourDoneNow, startRoomFade])
   // #07: the switch landed: an info toast, no haptic.
   const roomEventId = room.event?.id ?? null
   useEffect(() => {
@@ -412,8 +436,20 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   const [connectTo, setConnectTo] = useState<OpenCard | null>(null)
   const [connecting, setConnecting] = useState(false)
   // The Room's coach mark: once the pour has handed off, with nothing over the Room; never to someone already shown.
+  /*
+   * The Room has finished arriving (#9's crossfade and its sections), so a
+   * coach mark's dim never lands on the hand-off: it dropped the frame from
+   * the pour's 82 to the Room's 42 luminance in one frame (drive 2).
+   */
+  const [roomArrived, setRoomArrived] = useState(false)
+  if (mode !== 'room' && roomArrived) setRoomArrived(false)
+  useEffect(() => {
+    if (mode !== 'room') return
+    const timer = setTimeout(() => setRoomArrived(true), ROOM_ARRIVAL_MS)
+    return () => clearTimeout(timer)
+  }, [mode])
   const roomCoach = useCoachMark('room_reveal', {
-    ready: mode === 'room' && !controls.revealed && !pourPlaying && !tray.visible && !open && !connectTo && !room.match,
+    ready: mode === 'room' && roomArrived && !controls.revealed && !pourPlaying && !tray.visible && !open && !connectTo && !room.match,
   })
   // Drawn by the root's CoachMarkHost: the visibility line is the hole, the tip under it (round4/r4.js, "The Room").
   const roomCoachTarget = useRef<View>(null)
@@ -715,6 +751,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
             onOpen={openCard}
             onLike={doubleTapLike}
             chatGroupId={room.chatGroupId}
+            chatHistory={room.chatHistory}
             myId={user?.id}
             dockWave={dockWave ? { kind: 'wave', id: `wave-${dockWave.fromUserId}`, fromUserId: dockWave.fromUserId, fromName: dockWave.fromName, at: dockWave.at } : null}
             onOpenChat={() => void openChat()}
@@ -733,7 +770,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
             title={recap.title}
             minutes={recap.minutes}
             matches={recap.matched}
-            rated={ratedEvent === recap.eventId}
+            rated={ratedEvent === recap.eventId || isNightRated(recap.eventId)}
             onRate={() => router.push({ pathname: '/rate/[eventId]', params: { eventId: recap.eventId } as never })}
             onBack={() => {
               setDismissedRecap(recap.eventId)
@@ -748,7 +785,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
       ) : (
         <Animated.View key="tonight" style={styles.fill} entering={FadeIn.duration(DURATION.base)} exiting={FadeOut.duration(DURATION.base)}>
           <TonightView
-            events={tonight.events}
+            events={tonightEvents}
             loading={tonight.status === 'loading'}
             error={tonight.status === 'error'}
             offline={tonight.offline}
@@ -765,7 +802,10 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
               onClose()
               router.navigate('/(tabs)/events')
             }}
-            onCheckIn={() => void checkIn.start()}
+            onCheckIn={() => {
+              setHeld({ events: tonight.events, insideEvent: liveInside })
+              void checkIn.start().finally(() => setHeld(null))
+            }}
             onRoomRetry={room.status === 'error' ? room.retry : undefined}
             // Not while the pour plays: the pass growing under it moved the flood (R2-D1's row comes after).
             crewStrip={pourPlaying ? null : <PeopleCrewStrip myCrews={myCrewsHere} mine={crews.mine} eventTitle={insideEvent?.title ?? ''} actions={crewActions} inset={false} />}
