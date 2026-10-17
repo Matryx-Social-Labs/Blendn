@@ -20,6 +20,7 @@ import { AccessibilityInfo, StyleSheet } from 'react-native'
 import { BlendnScreen } from '../components/blendn/BlendnScreen'
 import { ASK_AT, ORBS_LIFT_MS, ROOM_AT } from '../components/ds/MomentPour'
 import { DURATION } from '../lib/design/tokens'
+import { motionTokens } from '../lib/motion'
 import { askIntentRoute, intentAnswered, submitCheckIn, type CheckInOutcome } from '../lib/checkIn'
 import { H } from '../lib/haptics'
 
@@ -130,9 +131,19 @@ jest.mock('../components/blendn/RoomSections', () => ({
   useNow: () => Date.now(),
   useGridCell: () => 100,
 }))
+/* The Room, counting its mounts: the one pre-mounted under the pour must be the one that stays. */
+let mockRoomMounts = 0
 jest.mock('../components/blendn/RoomView', () => {
   const { View } = jest.requireActual('react-native')
-  return { RoomView: () => <View testID="room" /> }
+  const { useEffect } = jest.requireActual('react')
+  return {
+    RoomView: () => {
+      useEffect(() => {
+        mockRoomMounts += 1
+      }, [])
+      return <View testID="room" />
+    },
+  }
 })
 jest.mock('../components/blendn/RoomCrews', () => ({ CrewsFoot: () => null, CrewsHead: () => null, PeopleCrewStrip: () => null, RoomCrewCard: () => null }))
 jest.mock('../components/crews/CrewsView', () => ({
@@ -156,6 +167,11 @@ const advance = (ms: number) => act(async () => jest.advanceTimersByTime(ms))
 const fresh = (askIntent: boolean): CheckInOutcome => ({ kind: 'checkedIn', checkInId: 'c1', askIntent, revealSuggestion: false })
 const roomShowing = () => screen.queryByTestId('room', HIDDEN) !== null
 const tonightShowing = () => screen.queryByTestId('tonight', HIDDEN) !== null
+/** The pre-mounted Room laid out on the native side: the hand-off waits for this, as on a device. */
+const layOut = () =>
+  act(async () => fireEvent(screen.getByTestId('room-stage', HIDDEN), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 393, height: 852 } } }))
+/** Past the crossfade (D.base, or Reduce Motion's 200 ms) and its fallback's slack. */
+const AFTER_FADE = DURATION.base + 100
 
 let success: jest.SpyInstance
 beforeEach(() => {
@@ -163,6 +179,7 @@ beforeEach(() => {
   jest.useFakeTimers()
   mockRoomReset()
   mockPassLabels.length = 0
+  mockRoomMounts = 0
   success = jest.spyOn(H, 'success').mockImplementation(() => {})
   jest.spyOn(AccessibilityInfo, 'announceForAccessibilityWithOptions').mockImplementation(() => {})
   jest.spyOn(AccessibilityInfo, 'isScreenReaderEnabled').mockResolvedValue(false)
@@ -190,9 +207,12 @@ it('no question: the pour holds, filled, until the Room has loaded, then hands o
   expect(tonightShowing()).toBe(true)
   await act(async () => mockRoomLoads())
   await advance(0)
-  // Handed off: it lets every touch through to the Room crossfading in under it.
+  await layOut()
+  // Handed off: it lets every touch through to the Room crossfading in over Tonight.
   expect(screen.getByTestId('blendn-pour', HIDDEN).props.pointerEvents).toBe('none')
   expect(roomShowing()).toBe(true)
+  expect(tonightShowing()).toBe(true)
+  await advance(AFTER_FADE)
   expect(tonightShowing()).toBe(false)
   // Never a re-armed pass between the server's yes and the Room.
   expect(mockPassLabels).not.toContain('Hold to blend in')
@@ -250,10 +270,15 @@ describe('smooth: nothing heavy mounts while the pour moves (owner defect, Debug
     expect(stage()!.props.accessibilityElementsHidden).toBe(true)
     expect(tonightShowing()).toBe(true)
     expect(pourReleased()).toBe(false)
-    // #9's 700 ms: the hand-off, into the Room that is already there.
+    // Mounted in JS is not mounted on screen: past #9's 700 ms the pour still holds for the Room's native layout.
     await advance(ROOM_AT - ORBS_LIFT_MS)
+    expect(pourReleased()).toBe(false)
+    await layOut()
+    // The hand-off, into the Room that is already there; Tonight stays under it until the crossfade is done.
     expect(pourReleased()).toBe(true)
     expect(stage()!.props.pointerEvents).toBe('auto')
+    expect(tonightShowing()).toBe(true)
+    await advance(AFTER_FADE)
     expect(tonightShowing()).toBe(false)
     expect(success).toHaveBeenCalledTimes(1)
   })
@@ -269,6 +294,7 @@ describe('smooth: nothing heavy mounts while the pour moves (owner defect, Debug
     await act(async () => mockRoomLoads())
     await advance(0)
     expect(stage()).not.toBeNull()
+    await layOut()
     expect(pourReleased()).toBe(true)
   })
 
@@ -293,10 +319,14 @@ describe('Reduce Motion on (drive 2: stuck on "Checking you in…")', () => {
     await holdToCheckIn(fresh(false))
     expect(screen.getByText('You’re in.', HIDDEN)).toBeTruthy()
     await act(async () => mockRoomLoads())
-    await advance(ROOM_AT)
+    await advance(ORBS_LIFT_MS)
+    await layOut()
+    await advance(ROOM_AT - ORBS_LIFT_MS)
     expect(pourReleased()).toBe(true)
     expect(stage()).not.toBeNull()
     expect(stage()!.props.pointerEvents).toBe('auto')
+    expect(tonightShowing()).toBe(true)
+    await advance(AFTER_FADE)
     expect(tonightShowing()).toBe(false)
     expect(success).toHaveBeenCalledTimes(1)
   })
@@ -331,5 +361,61 @@ describe('the crossfade: both layers at once (drive 2: a one-frame cut)', () => 
     await act(async () => mockRoomReadyUnsettled())
     await advance(ROOM_AT + 500)
     expect(screen.queryByTestId('room-stage', HIDDEN)).toBeNull()
+  })
+})
+
+describe('the hand-off is one stack (drive 3: Tonight vanished in one frame, then an empty screen)', () => {
+  const FRAME = 16
+  const pour = () => screen.queryByTestId('blendn-pour', HIDDEN)
+  const pourReleased = () => pour()?.props.pointerEvents === 'none'
+  /** The two layers, in paint order (later is on top). */
+  const layers = () => {
+    const ids: string[] = []
+    const walk = (n: unknown): void => {
+      if (!n || typeof n !== 'object') return
+      if (Array.isArray(n)) return n.forEach(walk)
+      const node = n as { props?: { testID?: string }; children?: unknown }
+      if (node.props?.testID === 'tonight-layer' || node.props?.testID === 'room-stage') ids.push(node.props.testID)
+      walk(node.children)
+    }
+    walk(screen.toJSON())
+    return ids
+  }
+
+  it.each([false, true])('Reduce Motion %s: Tonight or the Room in every frame, both at the hand-off, one Room, Tonight gone only after the fade', async (reduce) => {
+    mockReduceMotion = reduce
+    const fade = motionTokens(reduce).duration.base
+    await holdToCheckIn(fresh(false))
+    const frames: { t: number; tonight: boolean; room: boolean; released: boolean }[] = []
+    let laidOut = false
+    for (let t = 0; t <= 2000; t += FRAME) {
+      if (t === 96) await act(async () => mockRoomLoads())
+      if (!laidOut && screen.queryByTestId('room-stage', HIDDEN)) {
+        // Mounted: an absolute layer above Tonight, never a flex sibling that halves it.
+        expect(layers()).toEqual(['tonight-layer', 'room-stage'])
+        expect(StyleSheet.flatten(screen.getByTestId('room-stage', HIDDEN).props.style)).toMatchObject({ position: 'absolute', top: 0, bottom: 0 })
+        expect(StyleSheet.flatten(screen.getByTestId('tonight-layer', HIDDEN).props.style)).toMatchObject({ position: 'absolute', top: 0, bottom: 0 })
+        await layOut()
+        laidOut = true
+      }
+      frames.push({ t, tonight: tonightShowing(), room: roomShowing(), released: pourReleased() })
+      await advance(FRAME)
+    }
+    // Never an empty frame from the pour's start to settled.
+    expect(frames.filter((f) => !f.tonight && !f.room)).toEqual([])
+    const handOff = frames.find((f) => f.released)!
+    expect(handOff).toBeDefined()
+    // At the hand-off: both layers.
+    expect(handOff).toMatchObject({ tonight: true, room: true })
+    // Tonight stays through the fade and goes after it.
+    const tonightGone = frames.find((f) => f.t > handOff.t && !f.tonight)!
+    expect(tonightGone.t - handOff.t).toBeGreaterThanOrEqual(fade)
+    expect(tonightGone.t - handOff.t).toBeLessThanOrEqual(fade + 100)
+    expect(frames.filter((f) => f.t >= tonightGone.t).every((f) => f.room && !f.tonight)).toBe(true)
+    // The Room mounted once, under the pour, and is the one that stays.
+    expect(mockRoomMounts).toBe(1)
+    expect(screen.getByTestId('room-stage', HIDDEN).props.pointerEvents).toBe('auto')
+    // Under the fade the pass never re-armed.
+    expect(mockPassLabels).not.toContain('Hold to blend in')
   })
 })
