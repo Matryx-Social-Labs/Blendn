@@ -1,76 +1,199 @@
-import { Ionicons } from '@expo/vector-icons'
-import { router, useFocusEffect, useIsFocused, useLocalSearchParams } from 'expo-router'
+import * as Clipboard from 'expo-clipboard'
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ActivityIndicator, AppState, Linking, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { Animated, AppState, Linking, Platform, Share, StyleSheet, Text, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import ActionTray, { type ActionTrayButton } from '../../components/ActionTray'
-import { AppHeader } from '../../components/AppHeader'
-import ScalePress from '../../components/motion/ScalePress'
+import { AmenityGrid } from '../../components/ds/AmenityTile'
+import { GoLiveSheet, type GoLiveChoice as DialChoice } from '../../components/ds/GoLiveSheet'
+import { IconButton } from '../../components/ds/IconButton'
+import { SectionHeader } from '../../components/ds/SectionHeader'
+import { Sheet, type SheetAction } from '../../components/ds/Sheet'
+import { SessionSheet } from '../../components/ds/SessionSheet'
+import { announceOutcome, font, useBoldText } from '../../components/ds/shared'
 import { useToast } from '../../components/Toast'
-import { PlaceholderBanner } from '../../components/ui/PlaceholderBanner'
-import { Text } from '../../components/ui/Text'
+import { VenueDock } from '../../components/venue/VenueDock'
+import { VenueHero, VENUE_HERO_HEIGHT } from '../../components/venue/VenueHero'
+import { VenueRegulars } from '../../components/venue/VenueRegulars'
+import {
+  About,
+  BoardRow,
+  ClaimLine,
+  EventOnCard,
+  LiveCard,
+  Section,
+  TonightHere,
+  UpcomingList,
+  Where,
+  WhosHere,
+} from '../../components/venue/VenueSections'
+import { VenueGateScreen, VenueSkeleton } from '../../components/venue/VenueStates'
 import { apiClient, type VenueDetail } from '../../lib/apiClient'
 import { openBlendn } from '../../lib/blendnOverlay'
 import { checkOutOf, subscribeCheckInChanged } from '../../lib/checkIn'
 import { claimUrlFrom } from '../../lib/claimLink'
-import {
-  choiceLabel,
-  countdownLabel,
-  countdownSpoken,
-  GO_LIVE_CHOICES,
-  liveCountLine,
-  oneTapChoice,
-  readLiveSession,
-  remainingMs,
-  venueAction,
-  type GoLiveChoice,
-} from '../../lib/goLive'
-import { tonightLine } from '../../lib/home'
+import { COLOR, FONT_FAMILY, SIZE, SPACE } from '../../lib/design/tokens'
+import { EXTEND_CHOICE, oneTapChoice, readLiveSession, venueAction, type GoLiveChoice } from '../../lib/goLive'
+import { H } from '../../lib/haptics'
+import { type ShowTray, type TrayButton, type TrayExtra } from '../../lib/locationFix'
 import { Logger } from '../../lib/logger'
-import { knownLine, offersApi, type RegularPrefs } from '../../lib/offers'
-import { subscribeToLiveEnded } from '../../lib/socketClient'
-import { useGoLive } from '../../lib/useGoLive'
+import { openInMaps } from '../../lib/openInMaps'
+import { openPaywall } from '../../lib/paywall'
+import { placeArea } from '../../lib/placesPane'
+import { usePlusStatus } from '../../lib/plus'
+import { idParam } from '../../lib/routeParams'
 import { serverNow } from '../../lib/serverClock'
+import { subscribeToLiveEnded } from '../../lib/socketClient'
 import { useAuth } from '../../lib/useAuth'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, SWITCH_COLORS, tint } from '../../lib/theme'
+import { useGoLive } from '../../lib/useGoLive'
+import { useLatest } from '../../lib/useLatest'
+import { useSessionTime } from '../../lib/useSessionTime'
+import {
+  apiChoice,
+  boardEventId,
+  dialChoice as toDialChoice,
+  dockMode,
+  goodToKnow,
+  kmParam,
+  upcomingRows,
+  venueGate,
+  venueHero,
+  venueTiles,
+  type VenueGate,
+} from '../../lib/venuePage'
 
-/** Refusals of the page itself that no retry fixes: not onboarded, no known adult age. */
-const FINAL_REFUSALS = new Set(['FORBIDDEN', 'AGE_RESTRICTED', 'NOT_FOUND'])
+type SheetKind = 'dial' | 'session' | 'leave' | 'claim'
+type Tray = { visible: boolean; title: string; message: string; buttons: TrayButton[]; extra?: TrayExtra }
+
+/** The shield under the status bar and the back button fades in as the rows reach it. */
+const SHIELD_PAD = SPACE.sm
+const DEFAULT_DOCK = SIZE.primary + SPACE.xxxl
+/** The dial's exit is ~220 ms; if iOS never reports it gone, what waited for it starts anyway. */
+const DIAL_GONE_FALLBACK_MS = 800
 
 /**
- * A place — PLACEHOLDER DESIGN (plan v2 step 5; docs/PLACEHOLDER_SCREENS.md §10).
+ * A place (fullpages.js `venue`, places.js `venue`, Flow 11, Flow 13 · 13.4).
  *
  * `GET /api/mobile/venues/:venueId` decides everything here: whether going
  * live would be accepted (`live.open`), why not (`closedReason`), how many are
  * live (a bucket, never a number), and your own window (`expiresAt`, which the
- * countdown reads — never a timer from the tap). Go Live, the hand-off when an
- * event has the place, the room (locked until you are live), and "Own this
- * place? Claim it".
+ * clock counts down from, never a timer from the tap). A field the server does
+ * not send yet is a tile, a section or a line that is not drawn (docs/PLACES.md).
+ *
+ * The hero is tonight's cover, else the type's plate. The dock holds one slot:
+ * Go live (a dial, then the hold), Go live again in one tap, the live pill with
+ * Open the room and Leave, the hand-off to an event's check-in, or the server's
+ * sentence. The check-in area is never drawn, in any state. The room, Who's
+ * here and the people are for the people live here; the claim link is the
+ * server's, quiet, and leaves the app.
  */
-export default function VenueScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>()
+export default function VenueRoute() {
+  const params = useLocalSearchParams<{ id?: string; km?: string }>()
+  const id = idParam(params.id)
+  if (!id) return <MissingPlace />
+  return <VenueScreen id={id} km={kmParam(params.km)} />
+}
+
+function MissingPlace() {
+  const insets = useSafeAreaInsets()
+  return (
+    <View style={styles.screen}>
+      <View style={[styles.controls, { top: insets.top + SPACE.sm }]}>
+        <IconButton icon="chevron-left" tier="control" accessibilityLabel="Back" onPress={() => router.back()} testID="venue-back" />
+      </View>
+      <VenueGateScreen gate={{ kind: 'notFound' }} onRetry={() => {}} onBack={() => router.back()} />
+    </View>
+  )
+}
+
+/** The session sheet, ticking on its own: the page above it does not re-render with the clock. */
+function SessionHost(props: {
+  live: VenueDetail['live']
+  venue: string
+  visible: boolean
+  confirmFirst: boolean
+  extended: boolean
+  extending: boolean
+  ending: boolean
+  onClose: () => void
+  onExtend: () => void
+  onEnd: () => void
+  onZero: () => void
+}) {
+  const time = useSessionTime(props.live, props.onZero)
+  if (!time) return null
+  return (
+    <SessionSheet
+      visible={props.visible}
+      onClose={props.onClose}
+      venue={props.venue}
+      time={time}
+      extended={props.extended}
+      extending={props.extending}
+      ending={props.ending}
+      onExtend={props.onExtend}
+      onEnd={props.onEnd}
+      startConfirming={props.confirmFirst}
+    />
+  )
+}
+
+function VenueScreen({ id, km }: { id: string; km: number | null }) {
+  const insets = useSafeAreaInsets()
+  const bold = useBoldText()
   const { showToast } = useToast()
   const { user } = useAuth()
   const userId = user?.id ?? null
+  const { status: plus } = usePlusStatus()
   const [detail, setDetail] = useState<VenueDetail | null>(null)
-  const [failed, setFailed] = useState<{ message: string; final: boolean } | null>(null)
+  const [gate, setGate] = useState<VenueGate | null>(null)
   /** The window to repeat in one tap here, or null (`oneTapChoice`, PL-M05). */
   const [lastChoice, setLastChoice] = useState<GoLiveChoice | null>(null)
+  const [sheet, setSheet] = useState<SheetKind | null>(null)
+  const sheetRef = useLatest(sheet)
+  const [dial, setDial] = useState<DialChoice>(20)
+  const [tray, setTray] = useState<Tray | null>(null)
   const [leaving, setLeaving] = useState(false)
-
-  const [tray, setTray] = useState<{ title: string; message: string; buttons: ActionTrayButton[]; stack?: boolean } | null>(null)
-  const closeTray = useCallback(() => setTray(null), [])
-  const showTray = useCallback(
-    (title: string, message: string, buttons?: ActionTrayButton[]) =>
-      setTray({ title, message, buttons: buttons?.length ? buttons : [{ label: 'Done', variant: 'primary', onPress: () => setTray(null) }] }),
+  const [extending, setExtending] = useState(false)
+  const [extended, setExtended] = useState(false)
+  const [dockHeight, setDockHeight] = useState(DEFAULT_DOCK)
+  // One value for the screen's life; a lazy state, so nothing reads a ref while rendering.
+  const [scrollY] = useState(() => new Animated.Value(0))
+  /** What waits for the dial to leave: iOS drops a Modal presented while another is still leaving. */
+  const afterDial = useRef<(() => void) | null>(null)
+  const dialFallback = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const dialGone = useCallback(() => {
+    if (dialFallback.current) clearTimeout(dialFallback.current)
+    dialFallback.current = null
+    const next = afterDial.current
+    afterDial.current = null
+    next?.()
+  }, [])
+  /** Closes the dial and starts `next` once it has left the screen. */
+  const afterDialLeaves = useCallback(
+    (next: () => void) => {
+      afterDial.current = next
+      setSheet(null)
+      dialFallback.current = setTimeout(dialGone, DIAL_GONE_FALLBACK_MS)
+    },
+    [dialGone]
+  )
+  useEffect(
+    () => () => {
+      if (dialFallback.current) clearTimeout(dialFallback.current)
+    },
     []
   )
+
+  /** The session sheet away, and its "Extended" line with it. */
+  const closeSession = useCallback(() => {
+    setSheet((s) => (s === 'session' || s === 'leave' ? null : s))
+    setExtended(false)
+  }, [])
 
   // Only the newest read is the truth: an older one that answers last is dropped (H2).
   const loadSeq = useRef(0)
   const load = useCallback(() => {
-    if (!id) return
     const mine = ++loadSeq.current
     apiClient
       .getVenue(id)
@@ -78,24 +201,25 @@ export default function VenueScreen() {
         if (mine !== loadSeq.current) return
         if (res.success && res.data) {
           setDetail(res.data)
-          setFailed(null)
+          setGate(null)
+          // The window is gone: no session sheet over a place you are no longer live at.
+          if (!res.data.live.youAreLive) closeSession()
         } else {
-          setFailed({ message: res.error || "This place didn't load.", final: FINAL_REFUSALS.has(res.errorCode ?? '') })
+          setGate(venueGate(res.errorCode, res.error))
         }
       })
       .catch((error) => {
         if (mine !== loadSeq.current) return
         Logger.warn('events', 'Venue screen load threw', { error: String(error) })
-        setFailed({ message: "This place didn't load.", final: false })
+        setGate({ kind: 'failed' })
       })
-  }, [id])
+  }, [id, closeSession])
 
   // On focus, so coming back to it shows the count and your window as they are now.
   useFocusEffect(load)
 
   // The window to repeat here, from the remembered session: it outlives this screen (PL-M05).
   const readLastChoice = useCallback(() => {
-    if (!id) return
     readLiveSession(userId)
       .then((session) => setLastChoice(oneTapChoice(session, id, serverNow())))
       .catch(() => {})
@@ -110,7 +234,7 @@ export default function VenueScreen() {
     return () => sub.remove()
   }, [load])
 
-  // A Go Live, an extend from the expiry prompt, a check-out anywhere: the window moved.
+  // A Go Live, an extend, a check-out anywhere: the window moved.
   useEffect(
     () =>
       subscribeCheckInChanged(() => {
@@ -123,9 +247,34 @@ export default function VenueScreen() {
   const live = detail?.live
   const venueDayId = live?.venueDayId ?? null
   // Your window ended here — expiry, an event starting, a switch: the server says so.
-  useEffect(() => subscribeToLiveEnded((data) => {
-    if (data.eventId === venueDayId) load()
-  }), [venueDayId, load])
+  useEffect(
+    () =>
+      subscribeToLiveEnded((data) => {
+        if (data.eventId === venueDayId) load()
+      }),
+    [venueDayId, load]
+  )
+
+  const closeTray = useCallback(() => setTray((t) => (t ? { ...t, visible: false } : t)), [])
+  const showTray: ShowTray = useCallback(
+    (title, message, buttons, extra) => {
+      const next: Tray = {
+        visible: true,
+        title,
+        message,
+        buttons: buttons?.length ? buttons : [{ label: 'Close', kind: 'secondary', onPress: closeTray }],
+        extra,
+      }
+      // The dial leaves first; the refusal comes up when it has gone.
+      if (sheetRef.current === 'dial') afterDialLeaves(() => setTray(next))
+      else setTray(next)
+    },
+    [closeTray, sheetRef, afterDialLeaves]
+  )
+  const closeAll = useCallback(() => {
+    closeTray()
+    if (sheetRef.current === 'dial') setSheet(null)
+  }, [closeTray, sheetRef])
 
   const place = detail
     ? { id: detail.venue.id, name: detail.venue.name, latitude: detail.venue.latitude, longitude: detail.venue.longitude, address: detail.venue.address }
@@ -133,28 +282,49 @@ export default function VenueScreen() {
   const { goLive, busy } = useGoLive({
     place,
     showTray,
-    closeTray,
+    closeTray: closeAll,
     onLive: (result) => {
+      if (sheetRef.current === 'dial') setSheet(null)
       showToast(`You're live until ${new Date(result.expiresAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`, 'success')
       load()
     },
   })
 
-  const choose = (choice: GoLiveChoice) => {
-    closeTray()
-    void goLive(choice)
+  const openDial = () => {
+    setDial(lastChoice ? toDialChoice(lastChoice) : 20)
+    setSheet('dial')
+  }
+  const stayLocked = () => afterDialLeaves(() => void openPaywall('go_live_expiry', { userInitiated: true }))
+
+  const extend = async () => {
+    setExtending(true)
+    try {
+      if (await goLive(EXTEND_CHOICE)) setExtended(true)
+    } finally {
+      setExtending(false)
+    }
   }
 
-  const openSheet = () =>
-    setTray({
-      title: `Go live at ${detail?.venue.name ?? 'this place'}`,
-      message: "While you're live you can see who else is here and join today's room — and they can see you, by your room name. It ends when your time is up.",
-      buttons: [
-        ...GO_LIVE_CHOICES.map(({ choice, label }) => ({ label, onPress: () => choose(choice) })),
-        { label: 'Cancel', onPress: closeTray },
-      ],
-      stack: true,
-    })
+  const stopLive = async () => {
+    if (!venueDayId || leaving) return
+    setLeaving(true)
+    try {
+      const res = await checkOutOf(venueDayId)
+      if (!res.success) {
+        H.error()
+        showToast(res.error || "Couldn't stop. Try again.", 'error')
+      } else {
+        closeSession()
+      }
+    } catch (error) {
+      Logger.warn('events', 'stop live failed', { error: String(error) })
+      H.error()
+      showToast("Couldn't stop. Try again.", 'error')
+    } finally {
+      setLeaving(false)
+      load()
+    }
+  }
 
   const openRoom = () => {
     if (!detail || !live?.chatGroupId) return
@@ -164,340 +334,221 @@ export default function VenueScreen() {
     } as never)
   }
 
-  const stopLive = async () => {
-    if (!venueDayId || leaving) return
-    setLeaving(true)
-    try {
-      const res = await checkOutOf(venueDayId)
-      if (!res.success) showToast(res.error || "Couldn't stop. Try again.", 'error')
-    } catch (error) {
-      Logger.warn('events', 'stop live failed', { error: String(error) })
-      showToast("Couldn't stop. Try again.", 'error')
-    } finally {
-      setLeaving(false)
-      load()
-    }
-  }
-
   // The Blend'n room is hosted by the tab layout: from a pushed screen it would open underneath (H3).
   const seeWhoIsHere = () => {
     router.dismissTo('/(tabs)/events' as never)
     openBlendn()
   }
 
-  const action = live ? venueAction(live) : null
-  const countLine = live ? liveCountLine(live.liveNow, live.youAreLive) : null
-  const claimUrl = detail && !detail.venue.claimed ? claimUrlFrom(detail.claim) : null
-  const tonightEvent = detail?.tonight ?? null
-  const tonight = tonightEvent ? tonightLine(tonightEvent) : null
-  const handoffTitle = action?.kind === 'handoff' && tonightEvent?.id === action.eventId ? tonightEvent.title : null
-
-  return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <AppHeader title={detail?.venue.name ?? 'Place'} onBack={() => router.back()} />
-      <ScrollView contentContainerStyle={styles.content}>
-        <PlaceholderBanner />
-        {detail && live && action ? (
-          <View style={styles.body}>
-            <Text variant="title" accessibilityRole="header">
-              {detail.venue.name}
-            </Text>
-            <Text variant="meta">
-              {[detail.venue.venueTypeLabel, detail.venue.address ?? detail.venue.city].filter(Boolean).join(' · ')}
-            </Text>
-
-            {action.kind === 'live' ? <LiveCountdown expiresAt={live.expiresAt ?? null} stay={live.stay === true} onZero={load} /> : null}
-            {countLine ? <Text variant="bodyStrong">{countLine}</Text> : null}
-
-            {action.kind === 'goLive' ? (
-              <ScalePress
-                style={styles.primary}
-                onPress={lastChoice ? () => choose(lastChoice) : openSheet}
-                disabled={busy}
-                accessibilityRole="button"
-                accessibilityLabel={lastChoice ? `Go live again, ${choiceLabel(lastChoice)}` : 'Go Live'}
-                accessibilityState={{ busy, disabled: busy }}
-              >
-                {busy ? (
-                  <ActivityIndicator color={EMBER.onGradient} />
-                ) : (
-                  <Text variant="button" color={EMBER.onGradient}>
-                    {lastChoice ? `Go live again · ${choiceLabel(lastChoice)}` : 'Go Live'}
-                  </Text>
-                )}
-              </ScalePress>
-            ) : null}
-            {action.kind === 'goLive' && lastChoice ? (
-              <Pressable
-                onPress={openSheet}
-                disabled={busy}
-                accessibilityRole="button"
-                accessibilityState={{ disabled: busy }}
-                style={[styles.quiet, busy && styles.dimmed]}
-              >
-                <Text variant="meta">Pick another time</Text>
-              </Pressable>
-            ) : null}
-
-            {action.kind === 'handoff' ? (
-              <View style={styles.panel}>
-                <Text variant="bodyStrong">{handoffTitle ? `${handoffTitle} has this place now` : 'An event has this place now'}</Text>
-                <Text variant="meta">{"Check in to the event to join its room. You can go live here again once it's over."}</Text>
-                <ScalePress
-                  style={styles.primary}
-                  onPress={() => router.push(`/event/${action.eventId}` as never)}
-                  accessibilityRole="button"
-                  accessibilityLabel="Go to the event"
-                >
-                  <Text variant="button" color={EMBER.onGradient}>
-                    Go to the event
-                  </Text>
-                </ScalePress>
-              </View>
-            ) : null}
-
-            {action.kind === 'closed' ? <Text variant="meta">{action.message}</Text> : null}
-
-            <View style={styles.panel}>
-              <View style={styles.row}>
-                <Ionicons name={action.kind === 'live' ? 'chatbubbles-outline' : 'lock-closed-outline'} size={ICON.md} color={EMBER.textSecondary} />
-                <Text variant="bodyStrong">{"Today's room"}</Text>
-              </View>
-              {action.kind === 'live' ? (
-                <>
-                  <Text variant="meta">Everyone live here, by their room names. It starts fresh every morning.</Text>
-                  <View style={styles.row}>
-                    {live.chatGroupId ? (
-                      <ScalePress style={styles.secondary} onPress={openRoom} accessibilityRole="button" accessibilityLabel="Open the room">
-                        <Text variant="button">Open the room</Text>
-                      </ScalePress>
-                    ) : null}
-                    <ScalePress style={styles.secondary} onPress={seeWhoIsHere} accessibilityRole="button" accessibilityLabel="See who's here">
-                      <Text variant="button">{"See who's here"}</Text>
-                    </ScalePress>
-                  </View>
-                  <Pressable onPress={stopLive} disabled={leaving} accessibilityRole="button" style={styles.quiet}>
-                    <Text variant="meta">{leaving ? 'Stopping…' : 'Stop being live'}</Text>
-                  </Pressable>
-                </>
-              ) : (
-                <Text variant="meta">{"Only people live here can see who's here and join the chat. Go live to get in."}</Text>
-              )}
-            </View>
-
-            {tonight && tonightEvent ? (
-              <ScalePress
-                style={styles.panel}
-                onPress={() => router.push(`/event/${tonightEvent.id}` as never)}
-                accessibilityRole="button"
-                accessibilityLabel={tonight}
-              >
-                <Text variant="bodyStrong">{tonight}</Text>
-              </ScalePress>
-            ) : null}
-
-            {/* Only where somebody runs the place on Blendn: there is nobody to tell at an unclaimed one (step 12). */}
-            {detail.venue.claimed ? <RegularChoices venueId={detail.venue.id} venueName={detail.venue.name} /> : null}
-
-            {/* Leaves the app on purpose: the app refuses venue accounts, the claim page needs none (§7). */}
-            {claimUrl ? (
-              <Pressable
-                testID="claim-venue-link"
-                onPress={() => Linking.openURL(claimUrl).catch(() => showToast("That page didn't open. Try again.", 'error'))}
-                accessibilityRole="link"
-                accessibilityLabel="Own this place? Claim it"
-                accessibilityHint="Opens the Blend'n dashboard in your browser"
-                style={styles.claimRow}
-              >
-                <Text variant="meta">
-                  Own this place? <Text variant="meta" color={EMBER.textPrimary} style={styles.underline}>Claim it</Text>
-                </Text>
-                <Ionicons name="open-outline" size={ICON.sm} color={EMBER.textSecondary} />
-              </Pressable>
-            ) : null}
-          </View>
-        ) : failed ? (
-          <View style={styles.body} accessibilityLiveRegion="polite">
-            <Text variant="heading">{failed.message}</Text>
-            {failed.final ? null : (
-              <ScalePress style={styles.panel} onPress={load} accessibilityRole="button" accessibilityLabel="Try again">
-                <Text variant="bodyStrong">Try again</Text>
-              </ScalePress>
-            )}
-          </View>
-        ) : (
-          <ActivityIndicator color={EMBER.textSecondary} accessibilityLabel="Loading the place" />
-        )}
-      </ScrollView>
-      <ActionTray
-        visible={tray !== null}
-        title={tray?.title ?? ''}
-        message={tray?.message}
-        buttons={tray?.buttons ?? []}
-        onClose={closeTray}
-        layout={tray?.stack ? 'stack' : 'row'}
-        // Four windows and Cancel: at the default height Cancel sat below the fold (drive, 2026-10-09).
-        size={tray?.stack ? 'expanded' : 'default'}
-      />
-    </SafeAreaView>
-  )
-}
-
-/**
- * Your two choices about this place (step 12): be known here as a regular —
- * the place sees your first name and your nights here in the last 30, nothing
- * else — and no offers from it. Each switch sends only itself, and the switch
- * shows what the server saved, never what was tapped.
- */
-function RegularChoices({ venueId, venueName }: { venueId: string; venueName: string }) {
-  const { showToast } = useToast()
-  const [prefs, setPrefs] = useState<RegularPrefs | null>(null)
-  type Choice = 'known' | 'offersMuted'
-  const [saving, setSaving] = useState<Choice | null>(null)
-  const read = useCallback(() => {
-    offersApi
-      .prefs(venueId)
-      .then((res) => {
-        if (res.success && res.data) setPrefs(res.data)
+  const openEvent = (eventId: string) => router.push(`/event/${eventId}` as never)
+  const share = () => {
+    if (!detail) return
+    Share.share({ title: detail.venue.name, message: [detail.venue.name, detail.venue.address].filter(Boolean).join('\n') }).catch(() => {})
+  }
+  const directions = () => {
+    if (!detail) return
+    openInMaps({ latitude: detail.venue.latitude, longitude: detail.venue.longitude, address: detail.venue.address, venue_name: detail.venue.name }).catch(() => {})
+  }
+  const copyAddress = () => {
+    const address = detail?.venue.address
+    if (!address) return
+    Clipboard.setStringAsync(address)
+      .then(() => {
+        showToast('Address copied', 'info')
+        announceOutcome('Address copied')
       })
-      .catch(() => {})
-  }, [venueId])
-  useFocusEffect(read)
-
-  const flip = async (key: Choice) => {
-    if (!prefs || saving) return
-    setSaving(key)
-    try {
-      const res = await offersApi.setPrefs(venueId, { [key]: !prefs[key] })
-      if (res.success && res.data) setPrefs(res.data)
-      else showToast(res.error || "That didn't save. Try again.", 'error')
-    } catch {
-      showToast("That didn't save. Try again.", 'error')
-    } finally {
-      setSaving(null)
-    }
+      .catch(() => showToast("Couldn't copy. Try again.", 'error'))
+  }
+  const claimUrl = detail && !detail.venue.claimed ? claimUrlFrom(detail.claim) : null
+  const openClaim = () => {
+    if (!claimUrl) return
+    Linking.openURL(claimUrl).catch(() => showToast("That page didn't open. Try again.", 'error'))
   }
 
-  if (!prefs) return null
-  const rows: { key: Choice; title: string; hint: string }[] = [
-    // Names who sees it: the organisation that runs the place now (review M2).
-    { key: 'known', title: `Let ${venueName} know I'm a regular`, hint: knownLine(prefs, venueName) },
-    { key: 'offersMuted', title: `No offers from ${venueName}`, hint: 'Offers go to people who come here often. You can stop them.' },
-  ]
-  return (
-    <View style={styles.panel}>
-      {rows.map((row) => (
-        <Pressable
-          key={row.key}
-          onPress={() => flip(row.key)}
-          disabled={saving !== null}
-          accessibilityRole="switch"
-          accessibilityLabel={row.title}
-          accessibilityHint={row.hint}
-          accessibilityState={{ checked: prefs[row.key], disabled: saving !== null, busy: saving === row.key }}
-          style={styles.choice}
-        >
-          <View style={styles.choiceText}>
-            <Text variant="bodyStrong">{row.title}</Text>
-            <Text variant="meta">{row.hint}</Text>
-          </View>
-          <Switch
-            value={prefs[row.key]}
-            onValueChange={() => flip(row.key)}
-            disabled={saving !== null}
-            accessibilityElementsHidden
-            importantForAccessibility="no-hide-descendants"
-            {...SWITCH_COLORS}
-          />
-        </Pressable>
-      ))}
+  const shieldHeight = insets.top + SHIELD_PAD + (Platform.OS === 'android' ? SIZE.circleButtonAndroid : SIZE.circleButton) + SHIELD_PAD
+  const controls = (
+    <View style={[styles.controls, { top: insets.top + SPACE.sm }]} pointerEvents="box-none">
+      <IconButton icon="chevron-left" tier={detail ? 'media' : 'control'} accessibilityLabel="Back" onPress={() => router.back()} testID="venue-back" />
+      {detail ? <IconButton icon="share" tier="media" accessibilityLabel="Share" onPress={share} testID="venue-share" /> : null}
     </View>
   )
-}
 
-/** At zero with the server still saying live, ask again this often (M10). */
-const ZERO_RETRY_MS = 3_000
+  if (!detail || !live) {
+    return (
+      <View style={styles.screen}>
+        {controls}
+        {gate ? <VenueGateScreen gate={gate} onRetry={load} onBack={() => router.back()} /> : <VenueSkeleton />}
+      </View>
+    )
+  }
 
-/**
- * The pill and its countdown, a leaf: it ticks itself, once a second and only
- * while the screen is focused, so the place screen above it does not re-render
- * every second (L1). The clock is the server's (`serverNow`, M10); at zero it
- * asks the server (`onZero`) every few seconds until the window is gone.
- */
-function LiveCountdown({ expiresAt, stay, onZero }: { expiresAt: string | null; stay: boolean; onZero: () => void }) {
-  const focused = useIsFocused()
-  const [now, setNow] = useState(serverNow)
-  const left = remainingMs(expiresAt, now) ?? 0
-  useEffect(() => {
-    if (!focused || stay) return
-    const timer = setTimeout(() => {
-      if (left === 0) onZero()
-      setNow(serverNow())
-    }, left === 0 ? ZERO_RETRY_MS : 1000)
-    return () => clearTimeout(timer)
-  }, [focused, stay, left, now, onZero])
+  const { venue } = detail
+  const action = venueAction(live)
+  const mode = dockMode(action, lastChoice)
+  const tonight = detail.tonight
+  const handoffTitle = action.kind === 'handoff' && tonight?.id === action.eventId ? tonight.title : null
+  const now = serverNow()
+  const tiles = venueTiles(detail, now).map((t) => ({ label: t.label, value: t.value, mono: t.mono }))
+  const known = goodToKnow(venue.amenities)
+  const upcoming = upcomingRows(venue.upcoming)
+  const boardId = boardEventId(tonight, now)
+
+  const trayActions: SheetAction[] = (tray?.buttons ?? []).map((b) => ({
+    label: b.label,
+    onPress: b.onPress,
+    loading: b.loading,
+    disabled: b.disabled,
+    kind: b.kind ?? (b.variant === 'primary' ? 'primary' : b.variant === 'destructive' ? 'destructive' : 'secondary'),
+  }))
 
   return (
-    <View
-      style={styles.livePill}
-      accessible
-      accessibilityRole="text"
-      accessibilityLabel={stay ? 'Live here, staying' : `Live here. ${countdownSpoken(left)}`}
-    >
-      <View style={styles.liveDot} />
-      <Text variant="label" color={EMBER.onGradient}>
-        {stay ? 'LIVE · STAYING' : `LIVE · ${countdownLabel(left)} left`}
-      </Text>
+    <View style={styles.screen}>
+      {controls}
+      <Animated.ScrollView
+        contentContainerStyle={{ paddingBottom: dockHeight + SPACE.xl }}
+        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
+        scrollEventThrottle={16}
+        showsVerticalScrollIndicator={false}
+      >
+        <VenueHero
+          hero={venueHero(detail)}
+          name={venue.name}
+          typeLabel={venue.venueTypeLabel}
+          area={placeArea(venue)}
+          km={km}
+          live={live}
+          onZero={load}
+        />
+        <View style={styles.body}>
+          {action.kind === 'handoff' ? (
+            <EventOnCard tonight={tonight?.id === action.eventId ? tonight : null} now={now} onPress={() => openEvent(action.eventId)} />
+          ) : action.kind === 'live' ? (
+            <LiveCard live={live} name={venue.name} onZero={load} />
+          ) : tiles.length ? (
+            <AmenityGrid tiles={tiles} testID="venue-tiles" />
+          ) : null}
+
+          {action.kind === 'handoff' ? null : <TonightHere tonight={tonight} venue={venue.name} km={km} now={now} onOpen={openEvent} />}
+          {upcoming.length ? <UpcomingList rows={upcoming} onOpen={openEvent} /> : null}
+          <WhosHere live={live} onSeeWho={seeWhoIsHere} />
+          {/* Only where somebody runs the place on Blendn: there is nobody to tell at an unclaimed one (step 12). */}
+          {venue.claimed ? <VenueRegulars venueId={venue.id} venueName={venue.name} /> : null}
+          {boardId && tonight ? <BoardRow title={tonight.title} onPress={() => router.push(`/board/${boardId}` as never)} /> : null}
+          {venue.description?.trim() ? <About text={venue.description.trim()} /> : null}
+          {known.length ? (
+            <Section>
+              <SectionHeader title="Good to know" />
+              <AmenityGrid tiles={known} testID="venue-good-to-know" />
+            </Section>
+          ) : null}
+          <Where venue={venue} km={km} onDirections={directions} onCopy={copyAddress} />
+          {/* Leaves the app on purpose: the app refuses venue accounts, the claim page needs none (§7). */}
+          {claimUrl ? <ClaimLine onPress={() => setSheet('claim')} /> : null}
+        </View>
+      </Animated.ScrollView>
+
+      {/*
+       * The status bar's and the back button's shield: clear over the hero (the
+       * design draws the cover under the clock, behind its head scrim), solid
+       * ink by the time the rows reach it.
+       */}
+      <Animated.View
+        pointerEvents="none"
+        testID="venue-status-shield"
+        style={[
+          styles.shield,
+          {
+            height: shieldHeight,
+            opacity: scrollY.interpolate({
+              inputRange: [VENUE_HERO_HEIGHT - 2 * shieldHeight, VENUE_HERO_HEIGHT - shieldHeight],
+              outputRange: [0, 1],
+              extrapolate: 'clamp',
+            }),
+          },
+        ]}
+      />
+
+      <VenueDock
+        mode={mode}
+        name={venue.name}
+        live={live}
+        eventTitle={handoffTitle}
+        busy={busy}
+        onHeight={setDockHeight}
+        onGoLive={() => (mode.kind === 'goLive' && mode.again ? void goLive(mode.again) : openDial())}
+        onPickAnother={openDial}
+        onOpenRoom={openRoom}
+        onPill={() => setSheet('session')}
+        onLeave={() => setSheet('leave')}
+        onEvent={() => action.kind === 'handoff' && openEvent(action.eventId)}
+        onZero={load}
+      />
+
+      <GoLiveSheet
+        visible={sheet === 'dial'}
+        onClose={() => setSheet(null)}
+        onDismissed={dialGone}
+        venue={venue.name}
+        pseudonym="your nickname for today"
+        choice={dial}
+        onChoice={setDial}
+        stay={plus?.gated && !plus.active ? 'locked' : 'free'}
+        onStayLocked={stayLocked}
+        onGoLive={() => void goLive(apiChoice(dial))}
+        busy={busy}
+        testID="venue-dial"
+      />
+      <SessionHost
+        live={live}
+        venue={venue.name}
+        visible={sheet === 'session' || sheet === 'leave'}
+        confirmFirst={sheet === 'leave'}
+        extended={extended}
+        extending={extending}
+        ending={leaving}
+        onClose={closeSession}
+        onExtend={() => void extend()}
+        onEnd={() => void stopLive()}
+        onZero={load}
+      />
+      <Sheet
+        visible={sheet === 'claim'}
+        onClose={() => setSheet(null)}
+        icon="arrow-up-right"
+        title="Own this place?"
+        body={`This opens blendn.app in your browser, where you can claim ${venue.name}. A person reviews every claim; filing one grants nothing yet.`}
+        actions={[
+          {
+            label: 'Open blendn.app',
+            kind: 'strong',
+            onPress: () => {
+              setSheet(null)
+              openClaim()
+            },
+          },
+          { label: 'Not now', kind: 'tertiary', onPress: () => setSheet(null) },
+        ]}
+        testID="venue-claim-sheet"
+      />
+      <Sheet
+        visible={tray?.visible === true}
+        onClose={closeTray}
+        title={tray?.title}
+        body={tray?.message}
+        icon={tray?.extra?.icon}
+        actions={trayActions}
+        testID="venue-tray"
+      >
+        {tray?.extra?.detail ? <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary]}>{tray.extra.detail}</Text> : null}
+      </Sheet>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: EMBER.bg },
-  content: { paddingHorizontal: GUTTER, paddingVertical: SPACE.lg, gap: SPACE.xl },
-  body: { gap: SPACE.md },
-  row: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, flexWrap: 'wrap' },
-  livePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACE.sm,
-    alignSelf: 'flex-start',
-    paddingHorizontal: SPACE.md,
-    minHeight: CONTROL.sm,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.accent,
-  },
-  liveDot: { width: SPACE.sm, height: SPACE.sm, borderRadius: EMBER_RADIUS.pill, backgroundColor: EMBER.onGradient },
-  primary: {
-    minHeight: CONTROL.lg,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: SPACE.xl,
-  },
-  secondary: {
-    minHeight: CONTROL.md,
-    borderRadius: EMBER_RADIUS.pill,
-    borderWidth: 1,
-    borderColor: EMBER.separator,
-    backgroundColor: tint(EMBER.textPrimary, 0.06),
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: SPACE.lg,
-  },
-  quiet: { minHeight: CONTROL.md, justifyContent: 'center', alignSelf: 'flex-start' },
-  dimmed: { opacity: OPACITY.disabled },
-  panel: {
-    gap: SPACE.sm,
-    padding: SPACE.lg,
-    borderRadius: EMBER_RADIUS.md,
-    borderWidth: 1,
-    borderColor: EMBER.separator,
-    backgroundColor: EMBER.surfaceSunken,
-  },
-  choice: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, minHeight: CONTROL.lg },
-  choiceText: { flex: 1, gap: SPACE.xxs },
-  claimRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, alignSelf: 'flex-start', minHeight: CONTROL.md },
-  underline: { textDecorationLine: 'underline' },
+  screen: { flex: 1, backgroundColor: COLOR.ink },
+  body: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.xl, gap: SPACE.sectionGap },
+  controls: { position: 'absolute', left: SPACE.lg, right: SPACE.lg, zIndex: 2, flexDirection: 'row', justifyContent: 'space-between' },
+  shield: { position: 'absolute', left: 0, right: 0, top: 0, backgroundColor: COLOR.ink },
+  secondary: { color: COLOR.textSecondary },
 })

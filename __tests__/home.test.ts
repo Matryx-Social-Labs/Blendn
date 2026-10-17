@@ -16,7 +16,6 @@ import {
   settleSnap,
   snapOnKeyboard,
   stepSnap,
-  tonightLine,
 } from '../lib/home'
 import { placeLabel } from '../lib/pulse'
 
@@ -97,17 +96,6 @@ describe('a place in the list', () => {
     expect(liveNowLabel('20+')).toBe('20+ live')
     // An older server with no field reads as quiet, not as nothing or zero.
     expect(liveNowLabel(undefined)).toBe('Under 5 live')
-  })
-
-  it("names tonight's event, and nothing when the next one is another day", () => {
-    const now = new Date(2026, 9, 2, 18, 0)
-    const at = (h: number, dayOffset = 0) => new Date(2026, 9, 2 + dayOffset, h, 0).toISOString()
-    expect(tonightLine({ title: 'Jazz Night', startTime: at(21), endTime: at(23) }, now)).toMatch(/^Tonight · .* · Jazz Night$/)
-    expect(tonightLine({ title: 'Jazz Night', startTime: at(17), endTime: at(23) }, now)).toBe('Happening now · Jazz Night')
-    expect(tonightLine({ title: 'Brunch', startTime: at(11, 1), endTime: at(14, 1) }, now)).toBeNull()
-    // Running since yesterday is still on now: by the clock, not by what a label says.
-    expect(tonightLine({ title: 'Festival', startTime: at(20, -1), endTime: at(23) }, now)).toBe('Happening now · Festival')
-    expect(tonightLine(null, now)).toBeNull()
   })
 })
 

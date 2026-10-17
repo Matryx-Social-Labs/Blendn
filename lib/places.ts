@@ -40,10 +40,14 @@ export const initialPlaces = (key: string): PlacesState => ({
   refreshFailed: false,
 })
 
-/** What the list is of: the city, and the spot distances are from (to ~100 m, so a GPS jitter is not a new list). */
-export function placesKey(city: string | null, location: { latitude: number; longitude: number } | null): string {
+/** What the list is of: the city, the spot distances are from (to ~100 m, so a GPS jitter is not a new list), and the type chip. */
+export function placesKey(
+  city: string | null,
+  location: { latitude: number; longitude: number } | null,
+  venueType: string | null = null
+): string {
   const at = location ? `${location.latitude.toFixed(3)},${location.longitude.toFixed(3)}` : '-'
-  return `${city ?? '-'}|${at}`
+  return `${city ?? '-'}|${at}|${venueType ?? '-'}`
 }
 
 export function placesReducer(state: PlacesState, action: PlacesAction): PlacesState {

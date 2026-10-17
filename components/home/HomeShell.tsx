@@ -31,6 +31,8 @@ export interface HomeBrowse {
   cityPick: { n: number; here: boolean }
   /** Ask for the phone's position: the Pulse's own location flow (the OS ask, or its "Turn on location" tray). Settles when it does. */
   requestLocation: () => void | Promise<void>
+  /** Open the Pulse's city picker: Places' empty city offers it ("Change city"). */
+  openCityPicker: () => void
 }
 
 type Segment = 'events' | 'places'
@@ -86,6 +88,7 @@ export function HomeShell({
     cityCentre: null,
     cityPick: { n: 0, here: false },
     requestLocation: () => {},
+    openCityPicker: () => {},
   })
 
   /*

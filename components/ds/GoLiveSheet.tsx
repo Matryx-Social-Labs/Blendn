@@ -102,6 +102,7 @@ export function GoLiveSheet({
   event = '',
   hours = '',
   onRefusalAction,
+  onDismissed,
   testID,
 }: {
   visible: boolean
@@ -125,6 +126,8 @@ export function GoLiveSheet({
   /** Tonight's hours (`closed`), "12 PM – 1 AM". */
   hours?: string
   onRefusalAction?: () => void
+  /** Once the sheet has left the screen: what must wait for it (a refusal's sheet, the paywall) starts here. */
+  onDismissed?: () => void
   testID?: string
 }) {
   const ios = Platform.OS === 'ios'
@@ -133,7 +136,7 @@ export function GoLiveSheet({
   useLiveHaptic(live, visible)
 
   if (refusal) {
-    return <Sheet visible={visible} onClose={onClose} testID={testID} {...refusalSheet(refusal, venue, event, hours, () => onRefusalAction?.(), onClose)} />
+    return <Sheet visible={visible} onClose={onClose} onDismissed={onDismissed} testID={testID} {...refusalSheet(refusal, venue, event, hours, () => onRefusalAction?.(), onClose)} />
   }
 
   const picked = CHOICES.find((c) => c.value === choice) ?? CHOICES[0]
@@ -143,6 +146,7 @@ export function GoLiveSheet({
     <Sheet
       visible={visible}
       onClose={busy ? noop : onClose}
+      onDismissed={onDismissed}
       title={`Go live at ${venue}`}
       body={`People in ${venue}’s room tonight see you by your nickname for today. Outside the room, ${venue} only shows how busy it is — never who.`}
       testID={testID}

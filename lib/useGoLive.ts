@@ -63,9 +63,9 @@ export function showPlusRefusal(showTray: ShowTray, closeTray: () => void, seePl
     'Staying live is part of Blendn+',
     'Pick a time instead — you can extend it for free before it ends.',
     [
-      { label: 'OK', onPress: closeTray },
+      { label: 'OK', kind: 'tertiary', onPress: closeTray },
       ...(seePlus
-        ? [{ label: 'See Blendn+', variant: 'primary' as const, onPress: () => { closeTray(); seePlus() } }]
+        ? [{ label: 'See Blendn+', variant: 'primary' as const, kind: 'strong' as const, onPress: () => { closeTray(); seePlus() } }]
         : []),
     ]
   )
@@ -80,10 +80,11 @@ export function showGoLiveRefusal(
   if (refusal.kind === 'handoff') {
     // A state, not an error: an event has the place, and its check-in is the way in (PL-CU01).
     return showTray('Check in to the event instead', refusal.message, [
-      { label: 'Not now', onPress: closeTray },
+      { label: 'Not now', kind: 'tertiary', onPress: closeTray },
       {
         label: 'Go to the event',
         variant: 'primary',
+        kind: 'primary',
         onPress: () => {
           closeTray()
           router.push(`/event/${refusal.eventId}` as never)
@@ -91,13 +92,14 @@ export function showGoLiveRefusal(
       },
     ])
   }
-  const done = { label: 'Done', onPress: closeTray }
+  const done = { label: 'Done', kind: 'tertiary' as const, onPress: closeTray }
   if (refusal.offerDirections) {
     return showTray(refusal.title, refusal.message, [
       done,
       {
         label: 'Open Maps',
         variant: 'primary',
+        kind: 'strong',
         onPress: () => {
           closeTray()
           openInMaps({ latitude: place.latitude, longitude: place.longitude, address: place.address, venue_name: place.name }).catch(() => {})
@@ -107,10 +109,11 @@ export function showGoLiveRefusal(
   }
   if (refusal.action === 'retry' && retry) {
     return showTray(refusal.title, refusal.message, [
-      { label: 'Cancel', onPress: closeTray },
+      { label: 'Cancel', kind: 'tertiary', onPress: closeTray },
       {
         label: 'Try Again',
         variant: 'primary',
+        kind: 'strong',
         onPress: () => {
           closeTray()
           retry()
@@ -124,6 +127,7 @@ export function showGoLiveRefusal(
       {
         label: 'Add your age',
         variant: 'primary',
+        kind: 'strong',
         onPress: () => {
           closeTray()
           router.push('/edit-profile' as never)

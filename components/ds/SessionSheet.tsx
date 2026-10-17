@@ -12,7 +12,7 @@ import { announceOutcome, font, useBoldText, useIncreaseContrast } from './share
 export type SessionTime =
   | { kind: 'minutes'; left: number; /** "21:50". */ until: string }
   | { kind: 'ending'; /** "4:59". */ clock: string; /** The new end an Extend gives, "22:10". */ extendUntil: string }
-  | { kind: 'stay'; /** 4 hours from the start, cut at 06:00: "00:40". */ endsBy: string }
+  | { kind: 'stay'; /** 4 hours from the start, cut at 06:00: "00:40". Left out until the server says it. */ endsBy?: string }
 
 /**
  * `H.success` and the announcement once, as an extension lands while the
@@ -62,6 +62,7 @@ export function SessionSheet({
   onExtend,
   onEnd,
   ending = false,
+  startConfirming = false,
 }: {
   visible: boolean
   onClose: () => void
@@ -75,12 +76,18 @@ export function SessionSheet({
   onEnd: () => void
   /** End is on its way to the server. */
   ending?: boolean
+  /** Opens on the "End your live time?" confirm (the dock's Leave); the pill opens on the session. Read as the sheet opens. */
+  startConfirming?: boolean
 }) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
-  const [confirming, setConfirming] = useState(false)
-  // Closed from outside: the next open starts at the session, not the confirm (state adjusted in render).
-  if (!visible && confirming) setConfirming(false)
+  const [confirming, setConfirming] = useState(visible && startConfirming)
+  // Each open starts where it was asked to (the session, or the confirm); a close resets (state adjusted in render).
+  const [wasVisible, setWasVisible] = useState(visible)
+  if (visible !== wasVisible) {
+    setWasVisible(visible)
+    setConfirming(visible && startConfirming)
+  }
   const extendedLine = time.kind === 'minutes' ? `Extended · Live until ${time.until}` : ''
   useExtendedOutcome(extended, visible, extendedLine)
   const detail = contrast ? COLOR.textPrimary : COLOR.textSecondary
@@ -106,13 +113,13 @@ export function SessionSheet({
       ? `${time.left} minutes left, live until ${time.until}${extended ? ', extended' : ''}`
       : time.kind === 'ending'
         ? `${time.clock} left, ending soon`
-        : `Staying, ends ${time.endsBy} at the latest`
+        : `Staying${time.endsBy ? `, ends ${time.endsBy} at the latest` : ''}`
   const sub =
     time.kind === 'minutes'
       ? `Live until ${time.until}`
       : time.kind === 'ending'
         ? 'Ending soon'
-        : `As long as you’re at ${venue} · up to 4 hours · ends ${time.endsBy} at the latest`
+        : `As long as you’re at ${venue} · up to 4 hours${time.endsBy ? ` · ends ${time.endsBy} at the latest` : ''}`
   const actions: SheetAction[] = [{ label: 'End', kind: 'secondary', onPress: () => setConfirming(true) }]
   if (time.kind === 'ending')
     actions.unshift({ label: `Extend · Live until ${time.extendUntil}`, kind: 'strong', onPress: onExtend, loading: extending, pressHaptic: H.primary })

@@ -50,6 +50,7 @@ import CheckCheck from 'lucide-react-native/icons/check-check'
 import ChevronDown from 'lucide-react-native/icons/chevron-down'
 import ChevronLeft from 'lucide-react-native/icons/chevron-left'
 import ChevronRight from 'lucide-react-native/icons/chevron-right'
+import ChevronUp from 'lucide-react-native/icons/chevron-up'
 import Cigarette from 'lucide-react-native/icons/cigarette'
 import CircleAlert from 'lucide-react-native/icons/circle-alert'
 import CircleCheck from 'lucide-react-native/icons/circle-check'
@@ -78,6 +79,7 @@ import Flag from 'lucide-react-native/icons/flag'
 import Ghost from 'lucide-react-native/icons/ghost'
 import Gift from 'lucide-react-native/icons/gift'
 import Hand from 'lucide-react-native/icons/hand'
+import HandHeart from 'lucide-react-native/icons/hand-heart'
 import Heart from 'lucide-react-native/icons/heart'
 import HeartOff from 'lucide-react-native/icons/heart-off'
 import Hourglass from 'lucide-react-native/icons/hourglass'
@@ -189,6 +191,7 @@ const ICONS = {
   'chevron-down': ChevronDown,
   'chevron-left': ChevronLeft,
   'chevron-right': ChevronRight,
+  'chevron-up': ChevronUp,
   cigarette: Cigarette,
   'circle-alert': CircleAlert,
   'circle-check': CircleCheck,
@@ -217,6 +220,7 @@ const ICONS = {
   ghost: Ghost,
   gift: Gift,
   hand: Hand,
+  'hand-heart': HandHeart,
   heart: Heart,
   'heart-off': HeartOff,
   hourglass: Hourglass,

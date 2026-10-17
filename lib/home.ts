@@ -1,10 +1,8 @@
 /**
  * The home screen's pure parts: where the drawer rests, and how a place reads
- * in the Places list (plan v2 step 2). Separate from the components so they run
+ * in the Places list (plan v2 step 2; the list's own strata are `lib/placesPane.ts`). Separate from the components so they run
  * in a plain node test.
  */
-
-import { nextUpLabel } from './pulse'
 
 export type DrawerSnap = 'full' | 'half' | 'peek'
 
@@ -132,22 +130,4 @@ export function liveNowLabel(bucket: LiveNow | null | undefined): string {
     default:
       return 'Under 5 live'
   }
-}
-
-/**
- * The venue's event tonight, or null when its next event is another day.
- * "Happening now · Jazz Night", "Tonight · 9:00 PM · Jazz Night".
- */
-export function tonightLine(
-  next: { title: string; startTime: string; endTime: string } | null | undefined,
-  now: Date = new Date()
-): string | null {
-  if (!next) return null
-  const start = new Date(next.startTime)
-  const end = new Date(next.endTime)
-  if (Number.isNaN(start.getTime())) return null
-  const running = start <= now && now < end
-  // Today by the calendar, not by what the label happens to say.
-  const today = start.getFullYear() === now.getFullYear() && start.getMonth() === now.getMonth() && start.getDate() === now.getDate()
-  return running || today ? `${nextUpLabel(next.startTime, next.endTime, now)} · ${next.title}` : null
 }

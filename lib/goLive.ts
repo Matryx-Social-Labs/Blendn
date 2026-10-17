@@ -1,7 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
 import { CHECK_IN_CODES } from './checkInRefusal'
-import { liveNowLabel, type LiveNow } from './home'
 import { Logger } from './logger'
 
 /**
@@ -17,24 +16,6 @@ import { Logger } from './logger'
 
 /** What `POST /venues/:venueId/live` accepts besides where you are. Anything else is a 400. */
 export type GoLiveChoice = { minutes: 20 | 45 | 60 } | { stay: true }
-
-/** The Go Live sheet, top to bottom. */
-export const GO_LIVE_CHOICES: readonly { choice: GoLiveChoice; label: string }[] = [
-  { choice: { minutes: 20 }, label: '20 minutes' },
-  { choice: { minutes: 45 }, label: '45 minutes' },
-  { choice: { minutes: 60 }, label: 'An hour' },
-  // The server decides whether "stay" is Blendn+'s (`PLUS_REQUIRED`): in a city's launch season it is everyone's.
-  // It holds only while the app pings from inside the place, and it pings in the foreground.
-  { choice: { stay: true }, label: 'Stay while Blendn is open here' },
-]
-
-export function choiceLabel(choice: GoLiveChoice): string {
-  return GO_LIVE_CHOICES.find((c) => sameChoice(c.choice, choice))?.label ?? ''
-}
-
-function sameChoice(a: GoLiveChoice, b: GoLiveChoice): boolean {
-  return 'stay' in a ? 'stay' in b : 'minutes' in b && a.minutes === b.minutes
-}
 
 /** The expiry prompt shows this long before the window ends. */
 export const EXPIRY_PROMPT_LEAD_MS = 5 * 60_000
@@ -64,16 +45,6 @@ export function countdownLabel(ms: number): string {
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`
 }
 
-/** The countdown for a screen reader: whole minutes, never ticking seconds. */
-export function countdownSpoken(ms: number): string {
-  const minutes = Math.ceil(Math.max(0, ms) / 60_000)
-  if (minutes <= 1) return 'Less than a minute left'
-  if (minutes < 60) return `${minutes} minutes left`
-  const h = Math.floor(minutes / 60)
-  const m = minutes % 60
-  return `${h} hour${h > 1 ? 's' : ''}${m ? ` ${m} minutes` : ''} left`
-}
-
 /**
  * How long until the expiry prompt should show, or null when it never should:
  * no window, a window already over, a "stay" window (it follows the person,
@@ -91,20 +62,6 @@ export function promptDelayMs(
   return Math.max(0, left - EXPIRY_PROMPT_LEAD_MS)
 }
 
-/**
- * How many are live here, as the place screen says it. A bucket, never a
- * number (D-19): a count that moved from 4 to 5 as you watched would tell you
- * somebody just walked in. The server's figure never counts the caller, so a
- * person who is live reads it as the others. Null for a viewer the server
- * gives no figure (not onboarded, no known adult age).
- */
-export function liveCountLine(bucket: LiveNow | null | undefined, youAreLive: boolean): string | null {
-  if (bucket === null) return null
-  const label = liveNowLabel(bucket) // "Under 5 live", "5–9 live", …
-  if (!youAreLive) return `${label} here`
-  return `You and ${label.replace(/ live$/, '').replace(/^Under/, 'under')} others`
-}
-
 /** What the place screen offers, from `live` on `GET /venues/:venueId`. */
 export type VenueAction =
   | { kind: 'live' }
@@ -114,7 +71,8 @@ export type VenueAction =
   /** Going live here would be refused for a reason that is not yours to fix. */
   | { kind: 'closed'; message: string }
 
-export const NO_AREA_MESSAGE = "This place has no check-in area yet, so you can't go live here."
+/** The dock's sentence when going live is not possible here (Flow 11 `SRV.noArea`). */
+export const NO_AREA_MESSAGE = "You can’t go live here yet."
 
 export function venueAction(live: {
   open: boolean
