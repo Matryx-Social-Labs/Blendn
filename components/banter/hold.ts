@@ -37,3 +37,44 @@ export function holdStep(s: Hold, e: HoldEvent): Hold {
       return IDLE
   }
 }
+
+/** The held order lets go this long after a lift (a fling's momentum, starting just after, cancels it). */
+export const HOLD_RELEASE_MS = 250
+/**
+ * The longest the order holds without a new event from the list. iOS can drop
+ * the lift (a row's Pressable has the touch, so the list's touchEnd never
+ * comes) or a glide's momentumEnd; Android settled on lift, iOS held until
+ * the next tap (drive 3). Restarted by every event while held.
+ */
+export const HOLD_MAX_MS = 3000
+
+/**
+ * `holdStep` with its two timers: the short one after a lift, and the cap.
+ * `onHeld` hears each change of `held`. `state()` is the current step.
+ */
+export function holdController(onHeld: (held: boolean) => void) {
+  let s: Hold = IDLE
+  let lift: ReturnType<typeof setTimeout> | null = null
+  let cap: ReturnType<typeof setTimeout> | null = null
+  const clear = (t: ReturnType<typeof setTimeout> | null) => {
+    if (t) clearTimeout(t)
+    return null
+  }
+  const step = (e: HoldEvent) => {
+    const prev = s
+    s = holdStep(prev, e)
+    if (prev.armed && !s.armed) lift = clear(lift)
+    if (s.armed && !prev.armed) lift = setTimeout(() => step('timer'), HOLD_RELEASE_MS)
+    cap = clear(cap)
+    if (s.held) cap = setTimeout(() => step('release'), HOLD_MAX_MS)
+    if (s.held !== prev.held) onHeld(s.held)
+  }
+  return {
+    step,
+    state: () => s,
+    dispose() {
+      lift = clear(lift)
+      cap = clear(cap)
+    },
+  }
+}

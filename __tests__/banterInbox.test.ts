@@ -308,6 +308,49 @@ describe('#27 · C12: the held order and its release', () => {
   })
 })
 
+describe('#27 · C12: the held order always lets go on iOS (drive 3)', () => {
+  const { holdController, HOLD_MAX_MS, HOLD_RELEASE_MS } = require('../components/banter/hold')
+  beforeEach(() => jest.useFakeTimers())
+  afterEach(() => jest.useRealTimers())
+  const drive = (...events: string[]) => {
+    const heard: boolean[] = []
+    const c = holdController((held: boolean) => heard.push(held))
+    events.forEach((e) => c.step(e))
+    return { c, heard }
+  }
+
+  it('a fling whose momentumEnd never comes: released at the cap, not at the next tap', () => {
+    // iOS's order: the drag cancels the raw touch, then the lift, then a glide with no end.
+    const { c, heard } = drive('touchStart', 'dragBegin', 'touchEnd', 'dragEnd', 'momentumBegin')
+    jest.advanceTimersByTime(HOLD_RELEASE_MS)
+    expect(c.state().held).toBe(true)
+    jest.advanceTimersByTime(HOLD_MAX_MS)
+    expect(c.state().held).toBe(false)
+    expect(heard).toEqual([true, false])
+  })
+
+  it('a lift the list never hears (a row’s Pressable had the touch): released at the cap', () => {
+    const { c } = drive('touchStart')
+    jest.advanceTimersByTime(HOLD_MAX_MS - 1)
+    expect(c.state().held).toBe(true)
+    jest.advanceTimersByTime(1)
+    expect(c.state().held).toBe(false)
+  })
+
+  it('a lift it does hear, with no momentum: released after the short timer', () => {
+    const { c } = drive('touchStart', 'dragBegin', 'dragEnd')
+    jest.advanceTimersByTime(HOLD_RELEASE_MS)
+    expect(c.state().held).toBe(false)
+  })
+
+  it('a fling that comes to rest: released at momentumEnd, and the cap is cleared', () => {
+    const { c, heard } = drive('touchStart', 'dragBegin', 'dragEnd', 'momentumBegin', 'momentumEnd')
+    expect(c.state().held).toBe(false)
+    jest.advanceTimersByTime(HOLD_MAX_MS)
+    expect(heard).toEqual([true, false])
+  })
+})
+
 describe('#27 · C12: the hold, in a real touch’s event order', () => {
   const { holdStep, IDLE } = require('../components/banter/hold')
   const { heldList } = require('../components/banter/inbox')

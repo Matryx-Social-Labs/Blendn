@@ -20,7 +20,7 @@ import {
 } from '../../components/banter/BanterParts'
 import { useLatest } from '../../lib/useLatest'
 import { heldList, inboxTimeLabel, previewWithSender } from '../../components/banter/inbox'
-import { holdStep, IDLE, type Hold, type HoldEvent } from '../../components/banter/hold'
+import { holdController } from '../../components/banter/hold'
 import { BoardRequestsSection } from '../../components/board/BoardRequestsSection'
 import { LeaveRoomSheet, MuteSheet } from '../../components/chat/RoomSheets'
 import { SearchField } from '../../components/ds/SearchField'
@@ -65,8 +65,6 @@ type Item = { type: 'heading'; key: string; title: string; markAll?: boolean } |
 /** #27: a moved row travels to its new place on M.settle, 300 ms after its preview changed. */
 const REORDER = LinearTransition.delay(300).springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping).mass(SPRING.settle.mass)
 const SEARCH_GAP = SPACE.sm
-/** C12: the held order lets go this long after a lift (a fling's momentum, starting just after, cancels it). */
-const HOLD_RELEASE_MS = 250
 /** A press held this long is a hold, not a tap (Pressable's own long-press delay). */
 const HELD_PRESS_MS = 500
 
@@ -261,27 +259,6 @@ function ChatInner() {
    * on lift the rows settle and the pill goes (C12, `heldList`).
    */
   const [heldOrder, setHeldOrder] = useState<string[] | null>(null)
-  // The touch's state (`holdStep`) and the lift's timer: read only in the list's event handlers.
-  const hold = useRef<Hold>(IDLE)
-  const releaseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const step = (e: HoldEvent) => {
-    const prev = hold.current
-    const next = holdStep(prev, e)
-    hold.current = next
-    if (prev.armed && !next.armed && releaseTimer.current) {
-      clearTimeout(releaseTimer.current)
-      releaseTimer.current = null
-    }
-    if (next.armed && !prev.armed) releaseTimer.current = setTimeout(() => step('timer'), HOLD_RELEASE_MS)
-    if (next.held && !prev.held) setHeldOrder(liveOrder.current())
-    if (prev.held && !next.held) setHeldOrder(null)
-  }
-  useEffect(
-    () => () => {
-      if (releaseTimer.current) clearTimeout(releaseTimer.current)
-    },
-    []
-  )
   const items = useMemo<Item[]>(() => {
     const sections: [string, Row[], boolean][] = [
       ['Crews', match(crewRows), false],
@@ -298,6 +275,10 @@ function ChatInner() {
     return out
   }, [crewRows, peopleRows, pastRows, match])
   const liveOrder = useLatest(() => items.map((i) => i.key))
+  // The touch's state and its timers (`holdController`): driven only by the list's event handlers.
+  const [hold] = useState(() => holdController((held) => setHeldOrder(held ? liveOrder.current() : null)))
+  const step = hold.step
+  useEffect(() => () => hold.dispose(), [hold])
   /*
    * A lift after a hold is not a tap: Android opened the row under the finger
    * when a rested finger came up (drive 2). A press that lasted a hold, or
@@ -306,7 +287,7 @@ function ChatInner() {
    */
   const touchStartAt = useRef(0)
   const openUnlessHeld = (open: () => void) => () => {
-    const held = hold.current.held && (Date.now() - touchStartAt.current >= HELD_PRESS_MS || heldList(items, heldOrder).moved)
+    const held = hold.state().held && (Date.now() - touchStartAt.current >= HELD_PRESS_MS || heldList(items, heldOrder).moved)
     if (!held) open()
   }
   const { shown, moved: newAbove } = heldList(items, heldOrder)
@@ -484,6 +465,8 @@ function ChatInner() {
         onScrollBeginDrag={() => step('dragBegin')}
         onScrollEndDrag={() => step('dragEnd')}
         onTouchEnd={() => step('touchEnd')}
+        // iOS can withhold the bubbled touchEnd while a row's Pressable has the touch; the capture phase still sees the lift.
+        onTouchEndCapture={() => step('touchEnd')}
         onTouchCancel={() => step('touchEnd')}
         onMomentumScrollBegin={() => step('momentumBegin')}
         onMomentumScrollEnd={() => step('momentumEnd')}
