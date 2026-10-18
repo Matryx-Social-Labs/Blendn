@@ -195,3 +195,49 @@ describe('signed out with the app still open (SCRUM-616)', () => {
     expect(r.pathname()).toBe(EVENT_LINK)
   })
 })
+
+describe('the socket follows who is signed in, not which object they are', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const socket = require('../lib/socketClient') as {
+    initSocketWithAppState: jest.Mock
+    cleanup: jest.Mock
+    disconnect: jest.Mock
+  }
+
+  beforeEach(() => {
+    resetPendingRoute()
+    jest.spyOn(console, 'warn').mockImplementation(() => {})
+    socket.initSocketWithAppState.mockClear()
+    socket.cleanup.mockClear()
+    socket.disconnect.mockClear()
+  })
+  afterEach(async () => {
+    await cleanup()
+    jest.useRealTimers()
+  })
+
+  it('a refreshed profile (a new user object, same id) does not tear the connection down', async () => {
+    // refreshAuthUser() after a photo or profile edit hands over a new object.
+    // Keyed on the object, that reconnected and dropped every subscription
+    // (the bell's among them) over an edit that changed nothing about who is here.
+    await renderSignedInOnSettings()
+    expect(socket.initSocketWithAppState).toHaveBeenCalledTimes(1)
+
+    await setAuth({ ...SIGNED_IN, user: { ...SIGNED_IN.user, profile: { onboarded: true, photo: 'new.jpg' } } })
+
+    expect(socket.cleanup).not.toHaveBeenCalled()
+    expect(socket.initSocketWithAppState).toHaveBeenCalledTimes(1)
+  })
+
+  it('signing out disconnects, and a different account reconnects', async () => {
+    await renderSignedInOnSettings()
+
+    await setAuth(SIGNED_OUT)
+    expect(socket.disconnect).toHaveBeenCalled()
+    expect(socket.cleanup).toHaveBeenCalledTimes(1)
+
+    socket.initSocketWithAppState.mockClear()
+    await setAuth({ ...SIGNED_IN, user: { ...SIGNED_IN.user, id: 'u2' } })
+    expect(socket.initSocketWithAppState).toHaveBeenCalledTimes(1)
+  })
+})

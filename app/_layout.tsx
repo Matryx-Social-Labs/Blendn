@@ -222,10 +222,14 @@ function RootLayout() {
   }, []);
 
   // Socket connection management
+  // Keyed on who is signed in, not on the user object: refreshAuthUser() after a
+  // profile or photo edit hands over a new object, and tearing the socket down for
+  // that dropped every subscription and paid a full reconnect for nothing.
+  const userId = user?.id;
   useEffect(() => {
     if (loading) return;
 
-    if (user) {
+    if (userId) {
       // User authenticated - initialize socket with app state management
       initSocketWithAppState();
     } else {
@@ -237,7 +241,7 @@ function RootLayout() {
       // Cleanup on unmount
       cleanupSocket();
     };
-  }, [user, loading]);
+  }, [userId, loading]);
 
   useEffect(() => {
     if (loading) {
