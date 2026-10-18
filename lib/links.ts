@@ -33,7 +33,7 @@ export const BLENDN_LINKS = {
  */
 export async function openInApp(url: string): Promise<void> {
   if (!isOurPage(url)) {
-    Logger.warn('links', 'Refused to open a page that is not ours in the in-app browser', { url })
+    Logger.warn('general', 'Refused to open a page that is not ours in the in-app browser', { url })
     throw new Error('Not one of our pages')
   }
   await WebBrowser.openBrowserAsync(url, {

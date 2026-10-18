@@ -18,11 +18,12 @@ import { H } from '../lib/haptics'
 import { BLENDN_LINKS, openInApp } from '../lib/links'
 import { isPaywallTrigger } from '../lib/paywallPolicy'
 import {
-  ctaLabel,
+  ctaParts,
   defaultPick,
   dockMode,
   isNightPass,
   planRowFor,
+  planSubline,
   PLUS_COMING_SOON,
   PLUS_FEATURES,
   plusStatusCard,
@@ -49,7 +50,7 @@ const say = (text: string) => AccessibilityInfo.announceForAccessibility(text)
  */
 const GATED_TRIGGERS = new Set(['go_live_expiry', 'recap'])
 
-const LAUNCH_LINE = "Blendn+ is free during launch in your city. Staying live and your full night history are everyone's for now — nothing to buy."
+const LAUNCH_LINE = "Blend’n+ is free during launch in your city. Staying live and your full night history are everyone's for now — nothing to buy."
 
 /**
  * Blend'n+ — the page (Flow 12 · 12.2, R3-G, R4-D12; guidelines/flow-12/flow12.js `page`).
@@ -240,7 +241,9 @@ export default function PlusScreen() {
   const card = plusStatusCard(status)
   const failed = !forSale && statusLoad === 'failed'
   const pick = offers?.find((o) => o.pkg.identifier === picked) ?? offers?.find((o) => o.pkg.identifier === defaultPick(offers ?? []))
-  const locked = !sellable || busy !== null || finished
+  // A subscriber manages in the store (12.2 #06): the plans stay drawn, but nothing is pickable and no pick plays a haptic.
+  const managing = dockMode(status) === 'manage'
+  const locked = !sellable || busy !== null || finished || managing
 
   const plans = (list: PlusOffer[]) => {
     const subs = list.filter((o) => !isNightPass(o))
@@ -254,6 +257,7 @@ export default function PlusScreen() {
               testID={`plan-${offer.pkg.identifier}`}
               name={planRowFor(offer)?.name ?? offer.title}
               per={planRowFor(offer)?.per}
+              sub={planSubline(offer, list) ?? undefined}
               price={offer.price}
               selected={pick?.pkg.identifier === offer.pkg.identifier}
               disabled={locked}
@@ -330,25 +334,26 @@ export default function PlusScreen() {
             <WhatYouGet features={PLUS_FEATURES} comingSoon={PLUS_COMING_SOON} />
             <NeverForSalePanel />
             {plansSection()}
-            <PlusFooter
-              forSale={forSale}
-              restoreDisabled={!buyable || busy !== null}
-              restoring={busy === 'restore'}
-              onTerms={() => void open(BLENDN_LINKS.terms)}
-              onPrivacy={() => void open(BLENDN_LINKS.privacy)}
-              onRestore={() => void restoreAll()}
-              onManage={() => void manage()}
-            />
           </>
         )}
+        {/* Restore and Manage stay even when the status could not be read: they do not depend on it. */}
+        <PlusFooter
+          forSale={forSale}
+          restoreDisabled={!buyable || busy !== null}
+          restoring={busy === 'restore'}
+          onTerms={() => void open(BLENDN_LINKS.terms)}
+          onPrivacy={() => void open(BLENDN_LINKS.privacy)}
+          onRestore={() => void restoreAll()}
+          onManage={() => void manage()}
+        />
       </ScrollView>
       {failed ? null : (
         <PlusActions
           onHeight={setDockHeight}
           phase={phase}
           restoring={busy === 'restore'}
-          action={launch ? 'launch' : dockMode(status) === 'manage' ? 'manage' : forSale ? 'buy' : 'none'}
-          label={ctaLabel(pick)}
+          action={launch ? 'launch' : managing ? 'manage' : forSale ? 'buy' : 'none'}
+          cta={ctaParts(pick)}
           disabled={locked || !pick}
           buying={busy === 'buy'}
           onBuy={() => pick && void buy(pick)}

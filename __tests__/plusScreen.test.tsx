@@ -26,6 +26,8 @@ jest.mock('expo-linear-gradient', () => {
   return { LinearGradient: (props: object) => <View {...props} /> }
 })
 jest.mock('../components/ds/Orbs', () => ({ Orbs: () => null }))
+// Its endless withRepeat would run ~3,800 frames through the 61 s fake-timer walk below.
+jest.mock('../components/ds/Loader', () => ({ Spinner: () => null }))
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockToast }) }))
 jest.mock('../lib/sheet', () => ({ showSheet: jest.fn() }))
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn() } }))
@@ -50,9 +52,9 @@ import { buyPackage, canBuyAs, loadPlusOffers, purchasesAvailable, restore } fro
 import { showSheet, type ActionSheet } from '../lib/sheet'
 /* eslint-enable import/first */
 
-const monthly = { pkg: { identifier: '$rc_monthly' }, title: 'Blendn+ · Monthly', length: '1 month, renews monthly', price: '₹199.00' }
-const yearly = { pkg: { identifier: '$rc_annual' }, title: 'Blendn+ · Yearly', length: '1 year, renews yearly', price: '₹1,499.00' }
-const nightPass = { pkg: { identifier: 'night_pass' }, title: 'Night Pass · 24 hours', length: '24 hours, does not renew', price: '₹49.00' }
+const monthly = { pkg: { identifier: '$rc_monthly', product: { price: 199, pricePerMonth: 199, pricePerMonthString: '₹199' } }, title: 'Blendn+ · Monthly', length: '1 month, renews monthly', price: '₹199.00' }
+const yearly = { pkg: { identifier: '$rc_annual', product: { price: 1499, pricePerMonth: 124.92, pricePerMonthString: '₹125' } }, title: 'Blendn+ · Yearly', length: '1 year, renews yearly', price: '₹1,499.00' }
+const nightPass = { pkg: { identifier: 'night_pass', product: { price: 49, pricePerMonth: 49, pricePerMonthString: '₹49' } }, title: 'Night Pass · 24 hours', length: '24 hours, does not renew', price: '₹49.00' }
 const none = { success: true, data: { active: false, gated: true, product: null, source: null, expiresAt: null } }
 const granted = { success: true, data: { active: true, gated: true, product: 'plus', source: 'grant', expiresAt: '2026-11-10T10:00:00.000Z' } }
 const subscribed = { success: true, data: { active: true, gated: true, product: 'plus', source: 'apple', expiresAt: '2026-11-10T10:00:00.000Z' } }
@@ -91,15 +93,21 @@ beforeEach(() => {
 it('lists the store\'s packages at the store\'s prices, says what Plus is, and logs "shown"', async () => {
   await mount()
   expect(plan('$rc_monthly').props.accessibilityLabel).toBe('Monthly, 199.00 rupees a month')
-  expect(screen.getByText('₹199.00', { includeHiddenElements: true })).toBeTruthy()
+  expect(screen.getAllByText('₹199.00', { includeHiddenElements: true }).length).toBeGreaterThanOrEqual(1)
   expect(plan('night_pass').props.accessibilityLabel).toBe('Just tonight, 49.00 rupees, 24 hours · doesn’t renew')
-  expect(screen.getByText('₹49.00', { includeHiddenElements: true })).toBeTruthy()
+  expect(screen.getAllByText('₹49.00', { includeHiddenElements: true }).length).toBeGreaterThanOrEqual(1)
   expect(screen.getByText('Stay live while you’re there')).toBeTruthy()
   expect(screen.getByText('Never for sale, on any plan')).toBeTruthy()
   expect(screen.getByRole('link', { name: 'Terms' })).toBeTruthy()
   expect(screen.getByRole('link', { name: 'Privacy' })).toBeTruthy()
   expect(screen.getByText('Not now')).toBeTruthy()
   expect(apiClient.logPaywallEvent).toHaveBeenCalledWith('shown', 'go_live_expiry')
+})
+
+it('a yearly row carries the store-computed savings under its name', async () => {
+  ;(loadPlusOffers as jest.Mock).mockResolvedValue([monthly, yearly, nightPass])
+  await mount()
+  expect(plan('$rc_annual').props.accessibilityLabel).toBe('Yearly, 1,499.00 rupees a year, About ₹125 a month · Save 37%')
 })
 
 it('Monthly is picked first, the Night Pass is set apart, and the dock carries the picked price', async () => {
@@ -120,7 +128,8 @@ it('draws the two Coming soon rows without a tap', async () => {
   await mount()
   expect(screen.getByLabelText('Partner perks. At places that run them. Coming soon')).toBeTruthy()
   expect(screen.getByLabelText(/^Crew extras\..*Coming soon$/)).toBeTruthy()
-  expect(screen.getAllByText('Coming soon')).toHaveLength(2)
+  expect(screen.getByLabelText('Cosmetics. Looks for your disc and creature. Coming soon')).toBeTruthy()
+  expect(screen.getAllByText('Coming soon')).toHaveLength(3)
 })
 
 it('never buys while RevenueCat is not this account: the plans and the button are off and say so', async () => {
@@ -143,7 +152,7 @@ it('a purchase is logged, then the SERVER is asked until it says active', async 
   expect(buyPackage).toHaveBeenCalledWith(monthly.pkg, 'u1')
   expect(logged()).toEqual(['shown', 'purchase_started', 'purchased'])
   expect(screen.getByText("You're in.")).toBeTruthy()
-  expect(screen.getByText(/^Blendn\+ until /)).toBeTruthy()
+  expect(screen.getByText(/^Blend’n\+ until /)).toBeTruthy()
 })
 
 it('buys the package that is picked, not the first', async () => {
@@ -196,7 +205,7 @@ describe('what is already active', () => {
     ;(apiClient.getMyPlus as jest.Mock).mockResolvedValue(granted)
     ;(buyPackage as jest.Mock).mockResolvedValue({ kind: 'cancelled' })
     await mount()
-    expect(screen.getByText(/^Blendn\+ until /)).toBeTruthy()
+    expect(screen.getByText(/^Blend’n\+ until /)).toBeTruthy()
     expect(screen.getByText('Blend’n+ · active')).toBeTruthy()
     await act(async () => { fireEvent.press(button(MONTHLY_CTA)) })
     expect(buyPackage).toHaveBeenCalled()
@@ -210,11 +219,21 @@ describe('what is already active', () => {
     expect(button(MONTHLY_CTA)).toBeTruthy()
   })
 
+  it('a subscriber gets Manage and no purchase: the plans are drawn but locked, and a tap picks nothing', async () => {
+    ;(apiClient.getMyPlus as jest.Mock).mockResolvedValue(subscribed)
+    ;(loadPlusOffers as jest.Mock).mockResolvedValue([monthly, yearly, nightPass])
+    await mount()
+    for (const id of ['$rc_monthly', '$rc_annual', 'night_pass']) expect(plan(id).props.accessibilityState.disabled).toBe(true)
+    await act(async () => { fireEvent.press(plan('night_pass')) })
+    expect(plan('night_pass').props.accessibilityState.checked).toBe(false)
+    expect(buyPackage).not.toHaveBeenCalled()
+  })
+
   it('a store subscription is managed in the store: the dock reads Manage, and opens the store', async () => {
     ;(apiClient.getMyPlus as jest.Mock).mockResolvedValue(subscribed)
     const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(true)
     await mount()
-    expect(screen.getByText(/^Blendn\+ until .* · App Store$/)).toBeTruthy()
+    expect(screen.getByText(/^Blend’n\+ until .* · App Store$/)).toBeTruthy()
     expect(screen.queryByRole('button', { name: MONTHLY_CTA })).toBeNull()
     await act(async () => { fireEvent.press(button('Manage Blend’n+')) })
     expect(open).toHaveBeenCalledWith('https://apps.apple.com/account/subscriptions')
@@ -304,6 +323,17 @@ describe('prices and the server, honestly', () => {
     await act(async () => { await Promise.resolve() })
     expect(plan('$rc_monthly')).toBeTruthy()
     expect(screen.queryByText('Couldn’t load Blend’n+')).toBeNull()
+  })
+
+  it('the failed state keeps Restore and Manage (they do not depend on the status)', async () => {
+    mockTrigger.value = 'profile'
+    ;(apiClient.getMyPlus as jest.Mock).mockRejectedValue(new Error('offline'))
+    ;(restore as jest.Mock).mockResolvedValue({ kind: 'nothing' })
+    await mount()
+    expect(screen.getByText('Couldn’t load Blend’n+')).toBeTruthy()
+    await act(async () => { fireEvent.press(button('Restore purchases')) })
+    expect(restore).toHaveBeenCalled()
+    expect(button('Manage subscription')).toBeTruthy()
   })
 
   it('a gated moment still sells when the status ask failed', async () => {

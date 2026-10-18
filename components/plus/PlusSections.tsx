@@ -10,14 +10,18 @@ import { PlusMark } from '../ds/ManageStatusRow'
 import { CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from '../ds/shared'
 import { Icon } from '../ui/Icon'
 import { Material } from '../ui/Material'
-import { COLOR, ICON, MATERIAL, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
+import { COLOR, MATERIAL, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { OPACITY } from '../../lib/theme'
-import type { PlusFeature } from '../../lib/plus'
+import type { ctaParts, PlusFeature } from '../../lib/plus'
 
 /** The hero's mark (Flow 12 `plusMark(hero, 64)`). */
 const HERO_MARK = SIZE.primary + SPACE.sm
 /** A feature row is at least 60 pt (the page's `min-height:60px`). */
 const FEATURE_MIN_HEIGHT = SIZE.primary + SPACE.xs
+// design-exception: the page draws its feature glyphs at 22 and gaps them 14 (flow12.js `GETS`); neither is on the scale.
+const FEATURE_ICON = 22
+// design-exception: see FEATURE_ICON.
+const FEATURE_GAP = 14
 /** The footer links are one line of meta text; slop takes each to the 44 / 48 target. */
 const LINK_SLOP = (SIZE.targetAndroid - TYPE.meta.lineHeight) / 2
 
@@ -101,7 +105,7 @@ export function DockLine({ text, spinning = false, strong = false }: { text: str
 }
 
 const PENDING_LINE =
-  "Your payment is pending. Blendn+ unlocks once your bank or the store confirms it — that can take a while. You can close this; we'll pick it up when it does."
+  "Your payment is pending. Blend’n+ unlocks once your bank or the store confirms it — that can take a while. You can close this; we'll pick it up when it does."
 
 export type DockAction = 'buy' | 'manage' | 'launch' | 'none'
 
@@ -117,7 +121,7 @@ export function PlusActions({
   phase,
   restoring,
   action,
-  label,
+  cta,
   disabled,
   buying,
   onBuy,
@@ -127,7 +131,7 @@ export function PlusActions({
   phase: 'idle' | 'confirming' | 'pending' | 'slow' | 'done'
   restoring: boolean
   action: DockAction
-  label: string
+  cta: ReturnType<typeof ctaParts>
   disabled: boolean
   buying: boolean
   onBuy: () => void
@@ -153,7 +157,7 @@ export function PlusActions({
       ) : action === 'manage' ? (
         <Button kind="secondary" label="Manage Blend’n+" onGlass={onGlass} onPress={onManage} />
       ) : action === 'buy' ? (
-        <Button label={label} disabled={disabled} loading={buying} onPress={onBuy} />
+        <Button label={cta.lead} price={cta.price} accessibilityLabel={cta.spoken} disabled={disabled} loading={buying} onPress={onBuy} />
       ) : null}
     </PlusDock>
   )
@@ -210,7 +214,7 @@ export function WhatYouGet({ features, comingSoon }: { features: readonly PlusFe
               accessibilityLabel={`${row.title}. ${row.detail}${row.soon ? '. Coming soon' : ''}`}
               style={styles.feature}
             >
-              <Icon name={row.icon} size={ICON.nav} color={row.soon ? COLOR.textSecondary : COLOR.textPrimary} />
+              <Icon name={row.icon} size={FEATURE_ICON} color={row.soon ? COLOR.textSecondary : COLOR.textPrimary} />
               <View style={styles.fill}>
                 <Text style={[font('bodyStrong', bold), row.soon ? styles.secondary : styles.ink]}>{row.title}</Text>
                 <Text style={[font('meta', bold), styles.secondary]}>{row.detail}</Text>
@@ -310,7 +314,7 @@ const styles = StyleSheet.create({
   section: { gap: SPACE.md },
   note: { paddingHorizontal: SPACE.xs },
   list: { borderRadius: RADIUS.sheet, backgroundColor: COLOR.surface, overflow: 'hidden' },
-  feature: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, minHeight: FEATURE_MIN_HEIGHT, paddingVertical: SPACE.md, paddingHorizontal: SPACE.lg },
+  feature: { flexDirection: 'row', alignItems: 'center', gap: FEATURE_GAP, minHeight: FEATURE_MIN_HEIGHT, paddingVertical: SPACE.md, paddingHorizontal: SPACE.lg },
   hairline: { height: StyleSheet.hairlineWidth, backgroundColor: COLOR.hairline },
   fill: { flex: 1 },
   footer: { gap: SPACE.md },

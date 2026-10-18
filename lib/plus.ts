@@ -39,6 +39,7 @@ export const PLUS_FEATURES: readonly PlusFeature[] = [
 /** Promised in the design, not served yet: drawn with a "Coming soon" tag, no tap, no sheet (R3-G). */
 export const PLUS_COMING_SOON: readonly PlusFeature[] = [
   { icon: 'gift', title: 'Partner perks', detail: 'At places that run them' },
+  { icon: 'sparkles', title: 'Cosmetics', detail: 'Looks for your disc and creature' },
   { icon: 'users', title: 'Crew extras', detail: 'A crew photo seen only inside the crew · your pick of the 12 emblem palettes' },
 ]
 
@@ -52,7 +53,7 @@ const timeOf = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: 'nu
  */
 export function plusStatusLine(status: PlusStatus | null | undefined): string | null {
   if (!status?.active) return null
-  const name = status.product === 'night_pass' ? 'Night Pass' : 'Blendn+'
+  const name = status.product === 'night_pass' ? 'Night Pass' : 'Blend’n+'
   if (!status.expiresAt) return `You have ${name}`
   const until = status.product === 'night_pass' ? `${dateOf(status.expiresAt)}, ${timeOf(status.expiresAt)}` : dateOf(status.expiresAt)
   return `${name} until ${until}`
@@ -139,6 +140,25 @@ const PLAN_ROWS: Record<string, { name: string; per: string }> = {
 
 export const isNightPass = (offer: PlusOffer) => offer.pkg.identifier === NIGHT_PASS_ID
 
+/** Months in a subscription package's period: what the monthly equivalent divides by. */
+const MONTHS: Record<string, number> = { $rc_monthly: 1, $rc_three_month: 3, $rc_annual: 12 }
+
+/**
+ * The sub line under a subscription row, from the store's own numbers (never a
+ * price written here): "About ₹166 a month · Save 16%" against the monthly
+ * package. Monthly itself has none; no "Save" when the store's prices do not
+ * say it saves; null when the store gave no monthly figure.
+ */
+export function planSubline(offer: PlusOffer, offers: readonly PlusOffer[]): string | null {
+  const months = MONTHS[offer.pkg.identifier]
+  if (!months || months === 1) return null
+  const { pricePerMonthString: each, pricePerMonth: perMonth } = offer.pkg.product
+  if (!each) return null
+  const monthly = offers.find((o) => o.pkg.identifier === '$rc_monthly')?.pkg.product.price
+  const saved = monthly && perMonth ? Math.round((1 - perMonth / monthly) * 100) : 0
+  return `About ${each} a month${saved > 0 ? ` · Save ${saved}%` : ''}`
+}
+
 /** The row for a subscription package; null for the Night Pass (its own row) or a package we do not name. */
 export function planRowFor(offer: PlusOffer): { name: string; per: string } | null {
   return PLAN_ROWS[offer.pkg.identifier] ?? null
@@ -150,10 +170,16 @@ export function defaultPick(offers: readonly PlusOffer[]): string | null {
   return first?.pkg.identifier ?? null
 }
 
-/** The dock's button carries the price the person is about to pay, the store's string. */
-export function ctaLabel(offer: PlusOffer | undefined): string {
-  if (!offer) return 'Start Blend’n+'
-  if (isNightPass(offer)) return `Get the Night Pass — ${offer.price}`
-  const per = planRowFor(offer)?.per
-  return `Start Blend’n+ — ${offer.price}${per ? ` ${per}` : ''}`
+/**
+ * The dock's button carries the price the person is about to pay, the store's
+ * string: the words, the price (set in Geist Mono by the button), and the whole
+ * as it is read.
+ */
+export function ctaParts(offer: PlusOffer | undefined): { lead: string; price?: { amount: string; per?: string }; spoken: string } {
+  if (!offer) return { lead: 'Start Blend’n+', spoken: 'Start Blend’n+' }
+  const lead = isNightPass(offer) ? 'Get the Night Pass —' : 'Start Blend’n+ —'
+  const per = isNightPass(offer) ? undefined : planRowFor(offer)?.per
+  return { lead, price: { amount: offer.price, per }, spoken: `${lead} ${offer.price}${per ? ` ${per}` : ''}` }
 }
+
+export const ctaLabel = (offer: PlusOffer | undefined): string => ctaParts(offer).spoken

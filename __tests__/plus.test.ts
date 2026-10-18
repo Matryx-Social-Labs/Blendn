@@ -9,6 +9,8 @@ jest.mock('../lib/apiClient', () => ({ apiClient: { getMyPlus: jest.fn() } }))
 import { apiClient } from '../lib/apiClient'
 import {
   ctaLabel,
+  ctaParts,
+  planSubline,
   defaultPick,
   dockMode,
   PLUS_COMING_SOON,
@@ -29,12 +31,12 @@ describe('the status line', () => {
   it('says nothing without Plus; names the product and when it ends', () => {
     expect(plusStatusLine(null)).toBeNull()
     expect(plusStatusLine(inactive.data as never)).toBeNull()
-    expect(plusStatusLine(active.data as never)).toMatch(/^Blendn\+ until .*2026/)
+    expect(plusStatusLine(active.data as never)).toMatch(/^Blend’n\+ until .*2026/)
     // A pass shows its day as well as its time: passes stack, and the hour alone could be any day's (review LOW).
     expect(plusStatusLine({ active: true, gated: true, product: 'night_pass', source: 'grant', expiresAt: '2026-10-11T00:30:00.000Z' })).toMatch(
       /^Night Pass until .*2026, \d{1,2}:\d{2}/
     )
-    expect(plusStatusLine({ active: true, gated: true, product: 'plus', source: 'grant', expiresAt: null })).toBe('You have Blendn+')
+    expect(plusStatusLine({ active: true, gated: true, product: 'plus', source: 'grant', expiresAt: null })).toBe('You have Blend’n+')
   })
 })
 
@@ -100,8 +102,30 @@ describe('the page\'s own rules', () => {
   const night = offer('night_pass', '₹49.00')
 
   it('what is promised but not served is only ever a Coming soon row, never a live feature', () => {
-    expect(PLUS_COMING_SOON.map((f) => f.title)).toEqual(['Partner perks', 'Crew extras'])
+    expect(PLUS_COMING_SOON.map((f) => f.title)).toEqual(['Partner perks', 'Cosmetics', 'Crew extras'])
     expect(PLUS_FEATURES.map((f) => f.title).join(' ')).not.toMatch(/perks|crew/i)
+  })
+
+  it('savings are the store’s own numbers: the monthly equivalent and the percent against Monthly; none for Monthly', () => {
+    const sub = (id: string, price: number, perMonth: number, each: string) =>
+      ({ pkg: { identifier: id, product: { price, pricePerMonth: perMonth, pricePerMonthString: each } }, title: id, length: '', price: String(price) }) as never
+    const m = sub('$rc_monthly', 199, 199, '₹199')
+    const q = sub('$rc_three_month', 499, 166.33, '₹166')
+    const y = sub('$rc_annual', 1499, 124.92, '₹125')
+    const all = [m, q, y]
+    expect(planSubline(m, all)).toBeNull()
+    expect(planSubline(q, all)).toBe('About ₹166 a month · Save 16%')
+    expect(planSubline(y, all)).toBe('About ₹125 a month · Save 37%')
+    // The store does not say it saves: no "Save".
+    expect(planSubline(sub('$rc_three_month', 600, 200, '₹200'), all)).toBe('About ₹200 a month')
+    // No monthly figure from the store: no line at all.
+    expect(planSubline(sub('$rc_annual', 1499, 124.92, ''), all)).toBeNull()
+    expect(planSubline(sub('night_pass', 49, 49, '₹49'), all)).toBeNull()
+  })
+
+  it('the dock’s price is split out for Geist Mono, and the whole is still what is read', () => {
+    expect(ctaParts(monthly)).toEqual({ lead: 'Start Blend’n+ —', price: { amount: '₹199.00', per: '/ month' }, spoken: 'Start Blend’n+ — ₹199.00 / month' })
+    expect(ctaParts(night)).toEqual({ lead: 'Get the Night Pass —', price: { amount: '₹49.00', per: undefined }, spoken: 'Get the Night Pass — ₹49.00' })
   })
 
   it('Monthly is picked first; the Night Pass only when it is all there is; nothing, when nothing is sold', () => {
@@ -134,8 +158,8 @@ describe('the page\'s own rules', () => {
       kind: 'night',
       sentence: expect.stringMatching(/^Night Pass until .*\. It doesn’t renew; another one adds 24 hours\.$/),
     })
-    expect(plusStatusCard(active.data as never)).toMatchObject({ kind: 'active', sentence: expect.stringMatching(/^Blendn\+ until .* · App Store$/) })
-    expect(plusStatusCard({ ...active.data, source: 'grant' } as never)?.sentence).toMatch(/^Blendn\+ until [^·]*$/)
+    expect(plusStatusCard(active.data as never)).toMatchObject({ kind: 'active', sentence: expect.stringMatching(/^Blend’n\+ until .* · App Store$/) })
+    expect(plusStatusCard({ ...active.data, source: 'grant' } as never)?.sentence).toMatch(/^Blend’n\+ until [^·]*$/)
   })
 })
 

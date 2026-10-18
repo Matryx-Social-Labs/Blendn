@@ -83,6 +83,11 @@ export type ButtonProps = {
   onPress?: () => void
   kind?: ButtonKind
   size?: ButtonSize
+  /**
+   * A price after the label, in Geist Mono (Flow 12: "Start Blend’n+ — ₹199 / month"). The label is the words
+   * before it; pass `accessibilityLabel` with the whole thing, since the price is not part of `label`.
+   */
+  price?: { amount: string; per?: string }
   /** A leading glyph: 20 pt, 16 at `sm` and `raised`. */
   icon?: IconName
   /** A leading mark that is not a glyph, in its place: a crew's emblem on "Like for Nebula" (R2-D1). Decorative. */
@@ -133,6 +138,7 @@ export function Button({
   kind = 'primary',
   size = 'lg',
   icon,
+  price,
   leading,
   disabled = false,
   loading = false,
@@ -213,6 +219,13 @@ export function Button({
             numberOfLines={android ? 2 : 1}
           >
             {label}
+            {price ? (
+              <>
+                {' '}
+                <Text style={[font('button', bold, FONT_FAMILY.mono[700]), { fontVariant: ['tabular-nums'] }]}>{price.amount}</Text>
+                {price.per ? <Text style={font('meta', bold, FONT_FAMILY.brand[400])}>{` ${price.per}`}</Text> : null}
+              </>
+            ) : null}
           </Text>
         </View>
         {spinner ? (

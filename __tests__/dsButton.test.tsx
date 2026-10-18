@@ -52,6 +52,15 @@ afterEach(() => jest.useRealTimers())
 const draw = (props: Partial<React.ComponentProps<typeof Button>> = {}) =>
   render(<Button label="I’m going" onPress={jest.fn()} testID="b" {...props} />)
 
+describe('a price after the label', () => {
+  it('sets the amount in Geist Mono and the unit small, and reads as the whole it is given', async () => {
+    await draw({ label: 'Start Blend’n+ —', price: { amount: '₹199', per: '/ month' }, accessibilityLabel: 'Start Blend’n+ — ₹199 / month' })
+    expect(screen.getByLabelText('Start Blend’n+ — ₹199 / month')).toBeTruthy()
+    expect(StyleSheet.flatten(screen.getByText('₹199').props.style).fontFamily).toMatch(/mono/i)
+    expect(screen.getByText('/ month', { exact: false })).toBeTruthy()
+  })
+})
+
 describe('kinds and sizes', () => {
   it.each([
     ['lg', SIZE.primary],
