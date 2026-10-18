@@ -771,7 +771,13 @@ export interface VenueListItem {
 
 export interface VenuesListResponse {
   venues: VenueListItem[]
-  pagination: { page: number; limit: number; totalCount: number; totalPages: number; hasMore: boolean }
+  /**
+   * `order: 'live'` is the server saying it honoured `?order=live`: live now, then open tonight, then the
+   * rest, so the strata are all in the first pages. Absent from a server that does not know it.
+   */
+  pagination: { page: number; limit: number; totalCount: number; totalPages: number; hasMore: boolean; order?: string }
+  /** Read too where a server echoes it beside the list rather than in its paging. */
+  order?: string
 }
 
 /** One venue — `GET /api/mobile/venues/:venueId`, as the place screen reads it. */
@@ -783,9 +789,28 @@ export interface VenueDetail {
     city: string | null
     latitude: number | null
     longitude: number | null
+    /** The venue_type key ("pub_bar"): which plate the page draws when tonight has no cover. */
+    venueType?: string | null
     venueTypeLabel: string
     /** False: "Own this place? Claim it" applies. */
     claimed: boolean
+    /*
+     * Not sent yet (the design's ⚑ fields, guidelines/places/fullpages.js). The
+     * page draws each only when it is here and says nothing when it is not:
+     * see docs/PLACES.md for the shapes asked of the server.
+     */
+    /** A fire-safety number: stated as a size, never as scarcity. */
+    capacity?: number | null
+    /** The venue day starts at this local hour; "Reset 06:00". */
+    dayResetHour?: number | null
+    /** Today's opening hours as instants. */
+    hours?: { opensAt: string; closesAt: string } | null
+    /** The owner's words about the place. */
+    description?: string | null
+    /** Good to know: what the owner ticked. */
+    amenities?: { id: string; name: string; subtitle?: string | null; icon?: string | null }[] | null
+    /** Upcoming events here, soonest first (the page shows three). */
+    upcoming?: { id: string; title: string; startTime: string; goingCount?: number | null }[] | null
   }
   live: {
     /** Whether going live here would be accepted now, the fence aside. */
@@ -800,13 +825,15 @@ export interface VenueDetail {
     stay?: boolean
     venueDayId?: string | null
     chatGroupId?: string | null
+    /** A "stay" window's hard end (4 hours from its start, cut at the day's reset); not sent yet. */
+    stayUntil?: string | null
   }
   /**
    * The public claim page, when the place is unclaimed and the server offers
    * one (`{ url }`, built on the dashboard host). Read through `claimUrlFrom`.
    */
   claim?: { url?: unknown } | null
-  tonight: { id: string; title: string; startTime: string; endTime: string } | null
+  tonight: { id: string; title: string; startTime: string; endTime: string; coverImageUrl?: string | null } | null
 }
 
 /** `POST /api/mobile/venues/:venueId/live` — your window at a place. */
@@ -1730,7 +1757,7 @@ class ApiClientClass {
    * event's card names the venue instead.
    */
   async getVenues(
-    params: { page?: number; limit?: number; city?: string; lat?: number; lon?: number; sortBy?: 'name' | 'distance' },
+    params: { page?: number; limit?: number; city?: string; lat?: number; lon?: number; sortBy?: 'name' | 'distance'; venueType?: string; order?: 'live' },
     options?: { force?: boolean }
   ): Promise<ApiResponse<VenuesListResponse>> {
     const endpoint = `/api/mobile/venues${toQuery(params)}`

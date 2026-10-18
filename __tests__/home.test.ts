@@ -9,6 +9,7 @@ import { eventFromApi } from '../lib/api'
 import {
   DRAWER_HANDLE_HEIGHT,
   DRAWER_HEADER_HEIGHT,
+  DRAWER_PEEK_LINE,
   DRAWER_SEGMENTED_HEIGHT,
   drawerContentHeight,
   drawerSnapPoints,
@@ -16,7 +17,6 @@ import {
   settleSnap,
   snapOnKeyboard,
   stepSnap,
-  tonightLine,
 } from '../lib/home'
 import { placeLabel } from '../lib/pulse'
 
@@ -98,16 +98,16 @@ describe('a place in the list', () => {
     // An older server with no field reads as quiet, not as nothing or zero.
     expect(liveNowLabel(undefined)).toBe('Under 5 live')
   })
+})
 
-  it("names tonight's event, and nothing when the next one is another day", () => {
-    const now = new Date(2026, 9, 2, 18, 0)
-    const at = (h: number, dayOffset = 0) => new Date(2026, 9, 2 + dayOffset, h, 0).toISOString()
-    expect(tonightLine({ title: 'Jazz Night', startTime: at(21), endTime: at(23) }, now)).toMatch(/^Tonight · .* · Jazz Night$/)
-    expect(tonightLine({ title: 'Jazz Night', startTime: at(17), endTime: at(23) }, now)).toBe('Happening now · Jazz Night')
-    expect(tonightLine({ title: 'Brunch', startTime: at(11, 1), endTime: at(14, 1) }, now)).toBeNull()
-    // Running since yesterday is still on now: by the clock, not by what a label says.
-    expect(tonightLine({ title: 'Festival', startTime: at(20, -1), endTime: at(23) }, now)).toBe('Happening now · Festival')
-    expect(tonightLine(null, now)).toBeNull()
+describe('the peek line makes room only when a pane has one', () => {
+  const screen = { height: 800, topChrome: 100, tabBarTop: 700 }
+  it('peek rises by the line; full and half do not move', () => {
+    const plain = drawerSnapPoints(screen)
+    const withLine = drawerSnapPoints({ ...screen, peekExtra: DRAWER_PEEK_LINE })
+    expect(withLine.peek).toBe(plain.peek - DRAWER_PEEK_LINE)
+    expect(withLine.full).toBe(plain.full)
+    expect(withLine.half).toBe(plain.half)
   })
 })
 

@@ -44,3 +44,9 @@ export const STATUS_SCRIM = 0.45
 export function StatusScrim(props: ViewProps) {
   return <LinearGradient {...props} colors={[tint(COLOR.ink, STATUS_SCRIM), tint(COLOR.ink, 0)]} />
 }
+
+/** The page's wash under the hero (fullpages.js: 300 tall, the hero's warm 50% fading to the page ink). */
+export const PAGE_WASH = { height: 300, alpha: 0.5 } as const
+export function PageWash({ color, ...rest }: ViewProps & { color: string }) {
+  return <LinearGradient {...rest} colors={[tint(color, PAGE_WASH.alpha), COLOR.ink]} />
+}

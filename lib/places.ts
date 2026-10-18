@@ -18,6 +18,8 @@ export interface PlacesState {
   /** The last page that arrived. */
   page: number
   hasMore: boolean
+  /** The server ordered this list live first (`order: 'live'`): Live now and Open tonight are all in the first pages. */
+  orderedLive: boolean
   /** A page past the first is on its way: `onEndReached` must not ask again. */
   loadingMore: boolean
   /** A refresh failed over a list already shown: keep the list, say so inline, offer a retry. */
@@ -27,7 +29,7 @@ export interface PlacesState {
 export type PlacesAction =
   | { type: 'reset'; key: string }
   | { type: 'request'; key: string; page: number }
-  | { type: 'loaded'; key: string; page: number; venues: VenueListItem[]; hasMore: boolean }
+  | { type: 'loaded'; key: string; page: number; venues: VenueListItem[]; hasMore: boolean; orderedLive?: boolean }
   | { type: 'failed'; key: string; page: number }
 
 export const initialPlaces = (key: string): PlacesState => ({
@@ -36,14 +38,25 @@ export const initialPlaces = (key: string): PlacesState => ({
   venues: [],
   page: 0,
   hasMore: false,
+  orderedLive: false,
   loadingMore: false,
   refreshFailed: false,
 })
 
-/** What the list is of: the city, and the spot distances are from (to ~100 m, so a GPS jitter is not a new list). */
-export function placesKey(city: string | null, location: { latitude: number; longitude: number } | null): string {
+/** What the list is of: the city, the spot distances are from (to ~100 m, so a GPS jitter is not a new list), and the type chip. */
+export function placesKey(
+  city: string | null,
+  location: { latitude: number; longitude: number } | null,
+  venueType: string | null = null
+): string {
   const at = location ? `${location.latitude.toFixed(3)},${location.longitude.toFixed(3)}` : '-'
-  return `${city ?? '-'}|${at}`
+  return `${city ?? '-'}|${at}|${venueType ?? '-'}`
+}
+
+/** First occurrence wins: a venue that went live between two page loads can be on both (`order=live` moves it up the order). */
+export function uniqueById(venues: readonly VenueListItem[], seen: ReadonlySet<string> = new Set()): VenueListItem[] {
+  const taken = new Set(seen)
+  return venues.filter((v) => !taken.has(v.id) && (taken.add(v.id), true))
 }
 
 export function placesReducer(state: PlacesState, action: PlacesAction): PlacesState {
@@ -58,13 +71,12 @@ export function placesReducer(state: PlacesState, action: PlacesAction): PlacesS
       return { ...state, status: state.venues.length > 0 ? 'ready' : 'loading', refreshFailed: false }
     case 'loaded': {
       if (action.page <= 1) {
-        return { ...state, status: 'ready', venues: action.venues, page: 1, hasMore: action.hasMore, loadingMore: false, refreshFailed: false }
+        return { ...state, status: 'ready', venues: uniqueById(action.venues), page: 1, hasMore: action.hasMore, orderedLive: action.orderedLive === true, loadingMore: false, refreshFailed: false }
       }
       // A venue taken over (or back) between pages shifts the offsets; never show one twice.
-      const seen = new Set(state.venues.map((v) => v.id))
       return {
         ...state,
-        venues: [...state.venues, ...action.venues.filter((v) => !seen.has(v.id))],
+        venues: [...state.venues, ...uniqueById(action.venues, new Set(state.venues.map((v) => v.id)))],
         page: action.page,
         hasMore: action.hasMore,
         loadingMore: false,

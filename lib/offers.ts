@@ -38,8 +38,9 @@ export type RegularPrefs = {
   /** Who would see it: the organisation that runs the place on Blendn now; null while nobody does. */
   ownerName: string | null
   /**
-   * The regulars feature is deferred: the server says it is live for this venue
-   * (`regulars.active === true`) or the app shows no "know I'm a regular" prompt.
+   * Owner ruling: regulars are deferred. Every regulars surface (the venue
+   * page's section, the offer pass's "know I'm a regular" prompt) is drawn only
+   * when the server says the venue turned them on (`regulars.active === true`).
    * Absent is off.
    */
   regulars?: { active?: boolean }

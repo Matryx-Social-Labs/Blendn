@@ -1,10 +1,8 @@
 /**
  * The home screen's pure parts: where the drawer rests, and how a place reads
- * in the Places list (plan v2 step 2). Separate from the components so they run
+ * in the Places list (plan v2 step 2; the list's own strata are `lib/placesPane.ts`). Separate from the components so they run
  * in a plain node test.
  */
-
-import { nextUpLabel } from './pulse'
 
 export type DrawerSnap = 'full' | 'half' | 'peek'
 
@@ -23,6 +21,9 @@ const DRAWER_HEADER_GAP = 8
  * left showing at `peek`, so the control can always be reached.
  */
 export const DRAWER_HEADER_HEIGHT = DRAWER_HANDLE_HEIGHT + DRAWER_SEGMENTED_HEIGHT + DRAWER_HEADER_GAP
+
+/** The one-line summary Places keeps at `peek` under the control ("3 places live · 31 open tonight"): a 20 pt line and its 8 pt margin. */
+export const DRAWER_PEEK_LINE = 28
 
 /**
  * How far ahead a release is projected, in seconds of its velocity. A flick
@@ -43,9 +44,11 @@ export function drawerSnapPoints(screen: {
   topChrome: number
   /** Where the tab bar's top edge is (`tabBarTop`). */
   tabBarTop: number
+  /** Extra room at `peek` for a summary line under the control (`DRAWER_PEEK_LINE`); none for a pane without one. */
+  peekExtra?: number
 }): Record<DrawerSnap, number> {
   const full = screen.topChrome
-  const peek = Math.max(full, screen.tabBarTop - DRAWER_HEADER_HEIGHT)
+  const peek = Math.max(full, screen.tabBarTop - DRAWER_HEADER_HEIGHT - (screen.peekExtra ?? 0))
   const half = Math.min(peek, Math.max(full, Math.round(screen.height / 2)))
   return { full, half, peek }
 }
@@ -132,22 +135,4 @@ export function liveNowLabel(bucket: LiveNow | null | undefined): string {
     default:
       return 'Under 5 live'
   }
-}
-
-/**
- * The venue's event tonight, or null when its next event is another day.
- * "Happening now · Jazz Night", "Tonight · 9:00 PM · Jazz Night".
- */
-export function tonightLine(
-  next: { title: string; startTime: string; endTime: string } | null | undefined,
-  now: Date = new Date()
-): string | null {
-  if (!next) return null
-  const start = new Date(next.startTime)
-  const end = new Date(next.endTime)
-  if (Number.isNaN(start.getTime())) return null
-  const running = start <= now && now < end
-  // Today by the calendar, not by what the label happens to say.
-  const today = start.getFullYear() === now.getFullYear() && start.getMonth() === now.getMonth() && start.getDate() === now.getDate()
-  return running || today ? `${nextUpLabel(next.startTime, next.endTime, now)} · ${next.title}` : null
 }

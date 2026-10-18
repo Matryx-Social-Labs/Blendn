@@ -50,6 +50,7 @@ import CheckCheck from 'lucide-react-native/icons/check-check'
 import ChevronDown from 'lucide-react-native/icons/chevron-down'
 import ChevronLeft from 'lucide-react-native/icons/chevron-left'
 import ChevronRight from 'lucide-react-native/icons/chevron-right'
+import ChevronUp from 'lucide-react-native/icons/chevron-up'
 import Cigarette from 'lucide-react-native/icons/cigarette'
 import CircleAlert from 'lucide-react-native/icons/circle-alert'
 import CircleCheck from 'lucide-react-native/icons/circle-check'
@@ -191,6 +192,7 @@ const ICONS = {
   'chevron-down': ChevronDown,
   'chevron-left': ChevronLeft,
   'chevron-right': ChevronRight,
+  'chevron-up': ChevronUp,
   cigarette: Cigarette,
   'circle-alert': CircleAlert,
   'circle-check': CircleCheck,

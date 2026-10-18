@@ -12,7 +12,7 @@ import { announceOutcome, font, useBoldText, useIncreaseContrast } from './share
 export type SessionTime =
   | { kind: 'minutes'; left: number; /** "21:50". */ until: string }
   | { kind: 'ending'; /** "4:59". */ clock: string; /** The new end an Extend gives, "22:10". */ extendUntil: string }
-  | { kind: 'stay'; /** 4 hours from the start, cut at 06:00: "00:40". */ endsBy: string }
+  | { kind: 'stay'; /** 4 hours from the start, cut at 06:00: "00:40". Left out until the server says it. */ endsBy?: string }
 
 /**
  * `H.success` and the announcement once, as an extension lands while the
@@ -62,11 +62,13 @@ export function SessionSheet({
   onExtend,
   onEnd,
   ending = false,
+  startConfirming = false,
 }: {
   visible: boolean
   onClose: () => void
   venue: string
-  time: SessionTime
+  /** Null: the server sent no end to count to (and no stay); the sheet says only that you are live. */
+  time: SessionTime | null
   /** Just extended: says until when. */
   extended?: boolean
   /** Extend is on its way to the server. */
@@ -75,46 +77,63 @@ export function SessionSheet({
   onEnd: () => void
   /** End is on its way to the server. */
   ending?: boolean
+  /**
+   * Opens on the confirm (the dock's Leave, R4 R12: "Stop being live at ‹place›?" · Stay · Stop, then
+   * "Stopping…"); Stay, or a swipe, then closes the sheet. The pill opens on the session, whose End
+   * confirms in the same sheet and goes back to it on Keep going. Read as the sheet opens.
+   */
+  startConfirming?: boolean
 }) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
-  const [confirming, setConfirming] = useState(false)
-  // Closed from outside: the next open starts at the session, not the confirm (state adjusted in render).
-  if (!visible && confirming) setConfirming(false)
-  const extendedLine = time.kind === 'minutes' ? `Extended · Live until ${time.until}` : ''
+  const [confirming, setConfirming] = useState(visible && startConfirming)
+  // Each open starts where it was asked to (the session, or the confirm); a close resets (state adjusted in render).
+  const [wasVisible, setWasVisible] = useState(visible)
+  if (visible !== wasVisible) {
+    setWasVisible(visible)
+    setConfirming(visible && startConfirming)
+  }
+  const extendedLine = time?.kind === 'minutes' ? `Extended · Live until ${time.until}` : ''
   useExtendedOutcome(extended, visible, extendedLine)
   const detail = contrast ? COLOR.textPrimary : COLOR.textSecondary
 
   if (confirming) {
+    const stop = startConfirming
+    // Leaving from the dock closes the sheet on Stay; ending from the session goes back to it.
+    const cancel = stop ? onClose : () => setConfirming(false)
     return (
       <Sheet
         visible={visible}
-        onClose={() => setConfirming(false)}
+        onClose={cancel}
         icon="log-out"
-        title={`End your live time at ${venue}?`}
+        title={stop ? `Stop being live at ${venue}?` : `End your live time at ${venue}?`}
         body="You leave today’s room at that second. Go live again any time you’re here."
         actions={[
-          { label: 'End', kind: 'destructive', onPress: onEnd, loading: ending },
-          { label: 'Keep going', kind: 'tertiary', onPress: () => setConfirming(false) },
+          { label: stop ? (ending ? 'Stopping…' : 'Stop') : 'End', kind: 'destructive', onPress: onEnd, loading: ending },
+          { label: stop ? 'Stay' : 'Keep going', kind: 'tertiary', onPress: cancel },
         ]}
       />
     )
   }
 
   const spoken =
-    time.kind === 'minutes'
+    !time
+      ? 'Live'
+      : time.kind === 'minutes'
       ? `${time.left} minutes left, live until ${time.until}${extended ? ', extended' : ''}`
       : time.kind === 'ending'
         ? `${time.clock} left, ending soon`
-        : `Staying, ends ${time.endsBy} at the latest`
+        : `Staying${time.endsBy ? `, ends ${time.endsBy} at the latest` : ''}`
   const sub =
-    time.kind === 'minutes'
+    !time
+      ? null
+      : time.kind === 'minutes'
       ? `Live until ${time.until}`
       : time.kind === 'ending'
         ? 'Ending soon'
-        : `As long as you’re at ${venue} · up to 4 hours · ends ${time.endsBy} at the latest`
+        : `As long as you’re at ${venue} · up to 4 hours${time.endsBy ? ` · ends ${time.endsBy} at the latest` : ''}`
   const actions: SheetAction[] = [{ label: 'End', kind: 'secondary', onPress: () => setConfirming(true) }]
-  if (time.kind === 'ending')
+  if (time?.kind === 'ending')
     actions.unshift({ label: `Extend · Live until ${time.extendUntil}`, kind: 'strong', onPress: onExtend, loading: extending, pressHaptic: H.primary })
 
   return (
@@ -122,16 +141,18 @@ export function SessionSheet({
       <View accessible accessibilityLabel={spoken} style={styles.big}>
         <View style={styles.count}>
           <PresenceDot kind="live" size={DOT} />
-          {time.kind === 'stay' ? (
+          {!time ? (
+            <Text style={[font('display', bold), styles.ink]}>Live</Text>
+          ) : time.kind === 'stay' ? (
             <Text style={[font('display', bold), styles.ink]}>Staying</Text>
           ) : (
             <Text style={[font('numericDisplay', bold, FONT_FAMILY.mono[700]), styles.ink, styles.tabular]}>
               {time.kind === 'minutes' ? String(time.left) : time.clock}
             </Text>
           )}
-          {time.kind === 'minutes' ? <Text style={[font('title', bold), { color: COLOR.textSecondary }]}>min</Text> : null}
+          {time?.kind === 'minutes' ? <Text style={[font('title', bold), { color: COLOR.textSecondary }]}>min</Text> : null}
         </View>
-        <Text style={[font('meta', bold), styles.centre, { color: detail }]}>{sub}</Text>
+        {sub ? <Text style={[font('meta', bold), styles.centre, { color: detail }]}>{sub}</Text> : null}
         {extended && extendedLine ? (
           <View accessibilityLiveRegion="polite" style={styles.extended}>
             <Icon name="check" size={ICON.inline} active />
@@ -139,7 +160,7 @@ export function SessionSheet({
           </View>
         ) : null}
       </View>
-      {time.kind === 'stay' ? (
+      {time?.kind === 'stay' ? (
         <View style={styles.info}>
           <Icon name="info" size={ICON.inline} color={COLOR.textSecondary} />
           <Text style={[font('meta', bold), styles.fill, { color: detail }]}>

@@ -63,9 +63,9 @@ export function showPlusRefusal(showTray: ShowTray, closeTray: () => void, seePl
     'Staying live is part of Blendn+',
     'Pick a time instead — you can extend it for free before it ends.',
     [
-      { label: 'OK', onPress: closeTray },
+      { label: 'OK', kind: 'tertiary', onPress: closeTray },
       ...(seePlus
-        ? [{ label: 'See Blendn+', variant: 'primary' as const, onPress: () => { closeTray(); seePlus() } }]
+        ? [{ label: 'See Blendn+', variant: 'primary' as const, kind: 'strong' as const, onPress: () => { closeTray(); seePlus() } }]
         : []),
     ]
   )
@@ -80,10 +80,11 @@ export function showGoLiveRefusal(
   if (refusal.kind === 'handoff') {
     // A state, not an error: an event has the place, and its check-in is the way in (PL-CU01).
     return showTray('Check in to the event instead', refusal.message, [
-      { label: 'Not now', onPress: closeTray },
+      { label: 'Not now', kind: 'tertiary', onPress: closeTray },
       {
         label: 'Go to the event',
         variant: 'primary',
+        kind: 'primary',
         onPress: () => {
           closeTray()
           router.push(`/event/${refusal.eventId}` as never)
@@ -91,13 +92,14 @@ export function showGoLiveRefusal(
       },
     ])
   }
-  const done = { label: 'Done', onPress: closeTray }
+  const done = { label: 'Done', kind: 'tertiary' as const, onPress: closeTray }
   if (refusal.offerDirections) {
     return showTray(refusal.title, refusal.message, [
       done,
       {
         label: 'Open Maps',
         variant: 'primary',
+        kind: 'strong',
         onPress: () => {
           closeTray()
           openInMaps({ latitude: place.latitude, longitude: place.longitude, address: place.address, venue_name: place.name }).catch(() => {})
@@ -107,10 +109,11 @@ export function showGoLiveRefusal(
   }
   if (refusal.action === 'retry' && retry) {
     return showTray(refusal.title, refusal.message, [
-      { label: 'Cancel', onPress: closeTray },
+      { label: 'Cancel', kind: 'tertiary', onPress: closeTray },
       {
         label: 'Try Again',
         variant: 'primary',
+        kind: 'strong',
         onPress: () => {
           closeTray()
           retry()
@@ -124,6 +127,7 @@ export function showGoLiveRefusal(
       {
         label: 'Add your age',
         variant: 'primary',
+        kind: 'strong',
         onPress: () => {
           closeTray()
           router.push('/edit-profile' as never)
@@ -140,6 +144,7 @@ export function useGoLive({
   closeTray,
   onLive,
   onPlusRequired,
+  onRefusal,
 }: {
   place: GoLivePlace | null
   showTray: ShowTray
@@ -151,6 +156,13 @@ export function useGoLive({
    * still there); `paywallOpened` says whether the paywall is now on screen.
    */
   onPlusRequired?: (paywallOpened: boolean) => void
+  /**
+   * Given, every refusal of Go Live itself (the server's answer, or none)
+   * comes here to be drawn by the caller (the place page's Go Live sheet,
+   * Flow 11 · 11.2) instead of in the generic tray. The location trays
+   * (permission, Precise Location, a weak fix) stay `showTray`'s.
+   */
+  onRefusal?: (refusal: GoLiveRefusal) => void
 }) {
   const { user } = useAuth()
   const userId = user?.id ?? null
@@ -184,7 +196,7 @@ export function useGoLive({
       // No code: a timeout or no network. The POST may have landed, so everything that shows it re-reads (M2).
       if (!result.errorCode) checkInChanged()
       const refusal = goLiveRefusal(result.errorCode, result.error, result.eventId, result.retryAfter)
-      if (refusal.kind === 'refused') H.error({ blocking: true })
+      // No haptic on a refusal (R4-D11 11-1): a refusal about the place is not about you.
       Logger.info('events', 'go live refused', { code: result.errorCode })
       const seePlus = () => void openPaywall('go_live_expiry', { userInitiated: true })
       if (refusal.kind === 'plus') {
@@ -199,12 +211,15 @@ export function useGoLive({
         }
         if (opened) return false
       }
-      showGoLiveRefusal(refusal, place, { showTray, closeTray, retry: again, seePlus })
+      if (onRefusal) onRefusal(refusal)
+      else showGoLiveRefusal(refusal, place, { showTray, closeTray, retry: again, seePlus })
       return false
     } catch (error) {
       Logger.error('events', 'go live failed', { error: String(error) })
       checkInChanged()
-      showGoLiveRefusal(goLiveRefusal(undefined, 'Check your connection and try again.'), place, { showTray, closeTray, retry: again })
+      const thrown = goLiveRefusal(undefined, 'Check your connection and try again.')
+      if (onRefusal) onRefusal(thrown)
+      else showGoLiveRefusal(thrown, place, { showTray, closeTray, retry: again })
       return false
     } finally {
       setInFlight(false)

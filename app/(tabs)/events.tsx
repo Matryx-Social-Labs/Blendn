@@ -851,6 +851,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
         cityCentre: cityOptions.find((c) => c.city === selectedCity)?.centre ?? null,
         cityPick,
         requestLocation: requestLocationIfNeeded,
+        openCityPicker: () => setCityPickerOpen(true),
       }),
     [onBrowse, selectedCity, userLocation, cityResolved, cityOptions, cityPick, requestLocationIfNeeded]
   )

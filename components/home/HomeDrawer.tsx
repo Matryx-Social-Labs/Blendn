@@ -8,6 +8,7 @@ import { Grabber } from '../ui/Grabber'
 import {
   DRAWER_HANDLE_HEIGHT,
   DRAWER_HEADER_HEIGHT,
+  DRAWER_PEEK_LINE,
   DRAWER_SNAP_LABEL,
   drawerContentHeight,
   settleSnap,
@@ -40,6 +41,7 @@ export function HomeDrawer({
   onSnap,
   header,
   onChromeTouch,
+  peek,
   children,
 }: {
   /** The drawer's top edge as it moves: the shell's, so what rides on the drawer follows it frame by frame. */
@@ -50,6 +52,8 @@ export function HomeDrawer({
   header: ReactNode
   /** Any touch on the handle or the header, tap or drag, before either is handled. */
   onChromeTouch?: () => void
+  /** A line kept under the header while the drawer rests at `peek`, over the pane; none for a pane without one. */
+  peek?: ReactNode
   children: ReactNode
 }) {
   const { height } = useWindowDimensions()
@@ -104,6 +108,7 @@ export function HomeDrawer({
         </View>
       </GestureDetector>
       <View style={{ height: drawerContentHeight(points, snap, height) }}>{children}</View>
+      {snap === 'peek' && peek ? <View style={styles.peek}>{peek}</View> : null}
     </Animated.View>
   )
 }
@@ -121,6 +126,7 @@ const styles = StyleSheet.create({
     borderColor: EMBER.separator,
     overflow: 'hidden',
   },
+  peek: { position: 'absolute', left: 0, right: 0, top: DRAWER_HEADER_HEIGHT, height: DRAWER_PEEK_LINE, paddingHorizontal: SPACE.xl, backgroundColor: EMBER.bg },
   header: { height: DRAWER_HEADER_HEIGHT, paddingHorizontal: SPACE.xl },
   // The whole width and 44pt tall: the grabber is the drawing, this is the target.
   handle: { height: DRAWER_HANDLE_HEIGHT, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
