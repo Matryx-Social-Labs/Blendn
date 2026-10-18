@@ -90,7 +90,16 @@ const SECURE_OPTIONS: SecureStore.SecureStoreOptions = {
 /** A page by the cursor the page before it handed over (keyset), or by number while the server has none. */
 const pageQuery = (page: number, cursor?: string | null): string => (cursor ? `cursor=${encodeURIComponent(cursor)}` : `page=${page}`)
 
-class RequestQueue {
+/**
+ * How many requests are on the wire at once.
+ *
+ * Six was tuned for HTTP/1.1. Over HTTP/2 (Railway's edge) the requests share
+ * one connection, and a launch burst of 10-12 reads with six slots queued the
+ * second half behind the first: one extra ~200-250 ms round trip from Canada.
+ */
+export const MAX_CONCURRENT_REQUESTS = 10
+
+export class RequestQueue {
   private queue: Array<{
     request: () => Promise<unknown>
     resolve: (value: unknown) => void
@@ -100,7 +109,7 @@ class RequestQueue {
     type: 'query' | 'mutation' | 'auth'
   }> = []
   private processing = false
-  private maxConcurrent = 6
+  private maxConcurrent = MAX_CONCURRENT_REQUESTS
   private currentRequests = 0
   private lastProcessTime = 0
   private debounceMs = 10
@@ -198,7 +207,8 @@ class RequestQueue {
 
       item.reject(error)
     } finally {
-      this.currentRequests--
+      // Never below zero: a request that outlived clear() still ends here.
+      this.currentRequests = Math.max(0, this.currentRequests - 1)
       setTimeout(() => this.processQueue(), 10)
     }
   }
@@ -219,7 +229,10 @@ class RequestQueue {
       item.reject(new Error('Request queue cleared'))
     })
     this.queue = []
-    this.currentRequests = 0
+    // currentRequests is deliberately NOT reset: what is on the wire stays on the
+    // wire and still holds its slot until it settles. Zeroing it here (on every
+    // background) let the count go negative as those requests finished, and so
+    // admitted more than the ceiling afterwards.
     this.processing = false
   }
 }

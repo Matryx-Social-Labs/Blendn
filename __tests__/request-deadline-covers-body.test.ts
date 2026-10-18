@@ -33,7 +33,7 @@ jest.mock('../lib/logger', () => ({
 
 process.env.EXPO_PUBLIC_API_BASE_URL = 'https://api.test'
 /* eslint-disable @typescript-eslint/no-require-imports */
-const { apiClient, TokenStorage } = require('../lib/apiClient') as typeof import('../lib/apiClient')
+const { apiClient, TokenStorage, MAX_CONCURRENT_REQUESTS } = require('../lib/apiClient') as typeof import('../lib/apiClient')
 const { REQUEST_TIMEOUT_MS, TIMEOUT_MESSAGE, fetchWithTimeout } =
   require('../lib/fetchTimeout') as typeof import('../lib/fetchTimeout')
 /* eslint-enable @typescript-eslint/no-require-imports */
@@ -113,25 +113,25 @@ describe('apiClient', () => {
     await TokenStorage.setRefreshToken('ref')
   })
 
-  it('gives six stalled bodies the timeout sentence, and the seventh call its turn', async () => {
-    // Six is the queue's whole width: before, six stalled bodies were every
-    // slot, and the seventh call waited for good.
+  it('gives a full queue of stalled bodies the timeout sentence, and the next call its turn', async () => {
+    // The queue's whole width: before, that many stalled bodies were every
+    // slot, and the next call waited for good.
     global.fetch = jest.fn(async (input: RequestInfo | URL) =>
-      String(input).includes('/events/e7/') ? json(200, { success: true, data: { id: 'e7' } }) : stalledBody()
+      String(input).includes('/events/after/') ? json(200, { success: true, data: { id: 'after' } }) : stalledBody()
     ) as typeof fetch
 
-    const stalled = ['e1', 'e2', 'e3', 'e4', 'e5', 'e6'].map((id) => apiClient.getEventChat(id))
-    let seventh: unknown
-    void apiClient.getEventChat('e7').then((r) => (seventh = r))
+    const stalled = Array.from({ length: MAX_CONCURRENT_REQUESTS }, (_, i) => apiClient.getEventChat(`e${i + 1}`))
+    let next: unknown
+    void apiClient.getEventChat('after').then((r) => (next = r))
 
     await jest.advanceTimersByTimeAsync(1000)
-    expect(seventh).toBeUndefined()
+    expect(next).toBeUndefined()
 
     await jest.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS)
     for (const result of await Promise.all(stalled)) {
       expect(result).toEqual({ success: false, error: TIMEOUT_MESSAGE })
     }
-    expect(seventh).toMatchObject({ success: true, data: { id: 'e7' } })
+    expect(next).toMatchObject({ success: true, data: { id: 'after' } })
   })
 
   it('takes an empty answer as success, read from the body it was handed', async () => {
