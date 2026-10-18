@@ -31,6 +31,9 @@ jest.mock('../lib/logger', () => ({
   Logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
 }))
 
+import { readFileSync } from 'fs'
+import { join } from 'path'
+
 process.env.EXPO_PUBLIC_API_BASE_URL = 'https://api.test'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { apiClient, TokenStorage } = require('../lib/apiClient') as typeof import('../lib/apiClient')
@@ -129,5 +132,14 @@ describe('proactive refresh', () => {
       '/api/mobile/auth/refresh',
       `/api/mobile/auth/session Bearer ${fresh}`,
     ])
+  })
+})
+
+describe('no unconditional refresh timer', () => {
+  it('useAuth no longer refreshes every 10 minutes: the next request does it, only when needed', () => {
+    // Every refresh rotates the 30-day refresh token, so a session slides on use
+    // either way; the timer only added a request per 10 minutes, idle or not.
+    const src = readFileSync(join(__dirname, '..', 'lib', 'useAuth.ts'), 'utf8')
+    expect(src).not.toMatch(/setInterval/)
   })
 })
