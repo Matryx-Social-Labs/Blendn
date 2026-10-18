@@ -29,7 +29,8 @@ import { appVersionNumber } from './appVersion'
 import { isUpdateRefusal, markUpdateRequired } from './updateRequired'
 import { markSessionExpired, markSessionStarted } from './sessionEvents'
 import { onCriticalPath } from './criticalPath'
-import { noteServerDate } from './serverClock'
+import { noteServerDate, serverNow } from './serverClock'
+import { msUntilExpiry, REFRESH_SKEW_MS } from './socketAuth'
 import { getPushTokenRef, setPushTokenRef } from './pushTokenRef'
 import type { ChatReaction } from './chatReactions'
 import { SEARCH_TOO_SHORT, searchTermOf } from './searchTerm'
@@ -1270,6 +1271,17 @@ const NOT_SIGNED_IN_MESSAGE = 'You’re not signed in.'
 export const REFRESH_RETRY_DELAYS_MS = [2000, 5000, 10000] as const
 /** The whole refresh: the keychain read and the fetch, each on the fetch deadline. */
 export const REFRESH_DEADLINE_MS = 2 * REQUEST_TIMEOUT_MS
+/**
+ * At most one *proactive* refresh per this window.
+ *
+ * A phone whose clock is wrong reads every token as dead. `serverNow()` corrects
+ * for that once any response has carried a `Date` header, but the very first
+ * request has none, and a token that is genuinely short-lived would otherwise
+ * refresh on every call. The 401 path is not rate-limited by this: it only
+ * governs refreshing *before* we know the token is bad.
+ */
+const PROACTIVE_REFRESH_MIN_GAP_MS = 30_000
+let lastProactiveRefreshAt = 0
 let refreshRetryAttempt = 0
 let refreshRetryTimer: ReturnType<typeof setTimeout> | null = null
 /** The server's sentence from the last rejected refresh, if it gave one. */
@@ -1552,6 +1564,35 @@ class ApiClientClass {
     return { success: true, data: parsed as T }
   }
 
+  /**
+   * The access token to send, refreshed first if it is about to die.
+   *
+   * Tokens live 15 minutes, so a cold start or a resume after that sent the
+   * stale one, took a 401 (a full round trip, ~200-250 ms from Canada), then
+   * refreshed and retried; on foreground four or five requests each burned
+   * their own. Reading the expiry costs nothing. A token whose expiry cannot be
+   * read is sent as is: the server decides, and the 401 path below still
+   * recovers it. Awaiting an in-flight refresh also stops a request that read
+   * the old token just before it rotated from 401ing after the refresh settles
+   * and starting a second rotation.
+   */
+  private async freshAccessToken(): Promise<string | null | typeof TIMED_OUT> {
+    if (refreshPromise) await refreshPromise
+    const token = await withinDeadline(TokenStorage.getAccessToken())
+    if (token === TIMED_OUT) return token
+    const remaining = msUntilExpiry(token, serverNow())
+    if (remaining === null || remaining > REFRESH_SKEW_MS) return token
+    // A refresh begun since we read the token is joined, whatever the guard says.
+    const now = Date.now()
+    if (!refreshPromise) {
+      if (now - lastProactiveRefreshAt < PROACTIVE_REFRESH_MIN_GAP_MS) return token
+      lastProactiveRefreshAt = now
+    }
+    // 'failed' / 'rejected': send what we have; the 401 path decides what that means.
+    await this.refreshTokens()
+    return withinDeadline(TokenStorage.getAccessToken())
+  }
+
   private async request<T>(
     endpoint: string,
     options: RequestInit = {},
@@ -1577,7 +1618,7 @@ class ApiClientClass {
     const epoch = sessionEpoch
     let sentToken = false
     if (requireAuth) {
-      const accessToken = await withinDeadline(TokenStorage.getAccessToken())
+      const accessToken = await this.freshAccessToken()
       // The keychain did not answer: a transport-shaped failure, tried again on the next call. Never sent unauthenticated.
       if (accessToken === TIMED_OUT) return { success: false, error: TIMEOUT_MESSAGE }
       if (accessToken) {
