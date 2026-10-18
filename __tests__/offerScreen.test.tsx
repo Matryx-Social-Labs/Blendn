@@ -1,5 +1,6 @@
 import React from 'react'
 import { act, render, screen, fireEvent } from '@testing-library/react-native'
+import { StyleSheet } from 'react-native'
 
 /*
  * The clock is pinned (`jest.useFakeTimers({ now: NOW })` fakes Date too), so
@@ -33,6 +34,8 @@ jest.mock('expo-linear-gradient', () => {
   const { View } = jest.requireActual('react-native')
   return { LinearGradient: (props: object) => <View {...props} /> }
 })
+// The disc's endless wave and bubbles would run through every fake-clock walk below; it has its own test (dsLiquidDisc). The stamp over it is the screen's.
+jest.mock('../components/ds/LiquidDisc', () => ({ LiquidDisc: ({ stamp }: { stamp?: React.ReactNode }) => stamp ?? null }))
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockToast }) }))
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn() } }))
 jest.mock('../lib/apiClient', () => ({ apiClient: { queuedRequest: jest.fn() } }))
@@ -44,6 +47,7 @@ import OfferScreen from '../app/offer/[id]'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { router } from 'expo-router'
 import { apiClient } from '../lib/apiClient'
+import { noteServerDate } from '../lib/serverClock'
 import { showSheet, type ActionSheet, type ReasonSheet } from '../lib/sheet'
 /* eslint-enable import/first */
 
@@ -75,6 +79,8 @@ let regular: Record<string, unknown> = { known: false, offersMuted: false, owner
 beforeEach(async () => {
   jest.useFakeTimers({ now: NOW })
   mockToast.mockClear()
+  // The phone agrees with the server unless a test says otherwise.
+  noteServerDate(new Date(NOW).toUTCString(), NOW)
   ;(showSheet as jest.Mock).mockClear()
   ;(router.push as jest.Mock).mockClear()
   await AsyncStorage.clear()
@@ -174,10 +180,17 @@ describe('the live pass', () => {
     expect(screen.queryByText('This pass needs a connection to show its code.')).toBeNull()
   }, CLOCK_WALK_TIMEOUT_MS)
 
-  it('the ring counts down to the server’s turn, not the phone’s guess at it', async () => {
+  it('the ring counts down to the server’s turn: with the phone’s clock agreeing, 20 s of the 30 are left', async () => {
     await mount()
-    // 20 s of the 30 are left at 20:00:10.
     expect(screen.getByText('20 s', { includeHiddenElements: true })).toBeTruthy()
+  })
+
+  it('and on the server’s clock, not the phone’s: a phone 10 s behind the server shows 10 s, not 20', async () => {
+    // The server says it is 20:00:20 while this phone says 20:00:10; the code turns at 20:00:30 server time.
+    noteServerDate(new Date(NOW + 10_000).toUTCString(), NOW)
+    await mount()
+    expect(screen.getByText('10 s', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.queryByText('20 s', { includeHiddenElements: true })).toBeNull()
   })
 })
 
@@ -257,9 +270,9 @@ describe('the regulars feature is deferred: nothing shows unless the server says
     expect(screen.queryByTestId('regular-on')).toBeNull()
   })
 
-  it('active: true shows the prompt', async () => {
+  it('active: true shows the prompt, a radius-24 card (13.4)', async () => {
     await mount()
-    expect(screen.getByTestId('regular-ask')).toBeTruthy()
+    expect(StyleSheet.flatten(screen.getByTestId('regular-ask').props.style).borderRadius).toBe(24)
   })
 
   it('active: true and already known shows Turn off', async () => {
@@ -301,6 +314,7 @@ describe('"Let them know I’m a regular"', () => {
   it('names who would see a yes (M2), and what they would not', async () => {
     await mount()
     expect(screen.getByText(/Indiranagar Hospitality, who runs The Humming Tree on Blendn, will see your first name/)).toBeTruthy()
+    expect(screen.getByText('The Humming Tree will see')).toBeTruthy()
     expect(screen.getByText('The Humming Tree won’t see')).toBeTruthy()
     expect(screen.queryByText(/photo/i)).toBeNull()
   })

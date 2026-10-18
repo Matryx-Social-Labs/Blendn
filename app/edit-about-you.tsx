@@ -32,6 +32,10 @@ import { Logger } from '../lib/logger'
 import { queryCache } from '../lib/queryCache'
 import { refreshAuthUser, useAuth } from '../lib/useAuth'
 
+const NUMBER_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten']
+/** "up to five" from the server's cap (the design wrote "up to three"; the server's number is the true one). */
+const upTo = (n: number) => `up to ${NUMBER_WORDS[n] ?? n}`
+
 /** The two calendars, in the order the control draws them: `SIGN_SYSTEMS[index]`. */
 const SIGN_SYSTEMS: readonly SignSystem[] = ['western', 'rashi']
 const SIGN_SYSTEM_LABELS = ['Western', 'My rashi instead'] as const
@@ -202,7 +206,7 @@ export default function EditAboutYouScreen() {
           {options ? (
             <>
               <View style={styles.card}>
-                <Field label="Languages you speak" hint={`Besides English, up to ${options.maxLanguages}.`}>
+                <Field label="Languages you speak" hint={`Besides English, ${upTo(options.maxLanguages)}.`}>
                   {options.languages.map((l) => (
                     <Chip
                       key={l.slug}
@@ -222,6 +226,16 @@ export default function EditAboutYouScreen() {
                     />
                   ))}
                 </Field>
+                {options.thisOrThat.length ? (
+                  <Field label="This or that" hint="Pick one, or leave it. Tap again to take it back.">
+                    {options.thisOrThat.map((q) => (
+                      <View key={q.slug} style={styles.pair} accessibilityLabel={`${q.a} or ${q.b}`}>
+                        <Chip label={q.a} selected={answers[q.slug] === 'a'} onPress={() => pick(q.slug, 'a')} />
+                        <Chip label={q.b} selected={answers[q.slug] === 'b'} onPress={() => pick(q.slug, 'b')} />
+                      </View>
+                    ))}
+                  </Field>
+                ) : null}
               </View>
 
               <SettingsGroup>
@@ -259,19 +273,6 @@ export default function EditAboutYouScreen() {
                 </View>
               ) : null}
 
-              {options.thisOrThat.length ? (
-                <View style={styles.card}>
-                  <Field label="This or that" hint="Pick one, or leave it. Tap again to take it back.">
-                    {options.thisOrThat.map((q) => (
-                      <View key={q.slug} style={styles.pair}>
-                        <Chip label={q.a} selected={answers[q.slug] === 'a'} onPress={() => pick(q.slug, 'a')} />
-                        <Chip label={q.b} selected={answers[q.slug] === 'b'} onPress={() => pick(q.slug, 'b')} />
-                      </View>
-                    ))}
-                  </Field>
-                </View>
-              ) : null}
-
               <SettingsGroup>
                 <SettingsRow
                   icon="badge-check"
@@ -303,7 +304,7 @@ function Intro() {
   const bold = useBoldText()
   return (
     <Text style={[font('meta', bold), styles.intro]}>
-      Where you’re from, what you speak, your sign. When you share one with someone in a room, their card says so — it never decides who you see.
+      Where you’re from, what you speak, your sign. Each shows only to people who may already see who you are.
     </Text>
   )
 }

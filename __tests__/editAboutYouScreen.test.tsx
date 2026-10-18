@@ -281,6 +281,16 @@ describe('every field saves what the person chose', () => {
   })
 })
 
+describe('the words and the grouping', () => {
+  it('the design’s intro, the cap in words from the server’s number, and each pair named for a screen reader', async () => {
+    await open()
+    expect(screen.getByText('Where you’re from, what you speak, your sign. Each shows only to people who may already see who you are.')).toBeTruthy()
+    expect(screen.getByText('Besides English, up to two.')).toBeTruthy()
+    expect(screen.getByLabelText('Filter coffee or Chai')).toBeTruthy()
+    expect(screen.getByLabelText('Beach or Hills')).toBeTruthy()
+  })
+})
+
 describe('the states', () => {
   it('loading: the intro only, and Save is off', async () => {
     api.getProfileOptions.mockReturnValue(new Promise(() => {}))

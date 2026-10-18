@@ -114,6 +114,9 @@ export function DoorTicket({
   )
 }
 
+// design-exception: the regular card's fact titles are 15/20 (flow13.js `regular`: strongCss at 15px / 20px); no role is.
+const FACT_TITLE = { fontSize: 15, lineHeight: 20 } as const
+
 /** One row of the regular card: a glyph, what it says, and the plain words. */
 function FactRow({ icon, title, text }: { icon: IconName; title?: string; text: string }) {
   const bold = useBoldText()
@@ -121,7 +124,7 @@ function FactRow({ icon, title, text }: { icon: IconName; title?: string; text: 
     <View style={styles.fact}>
       <Icon name={icon} size={ICON.control} color={COLOR.textPrimary} />
       <View style={styles.fill}>
-        {title ? <Text style={[font('bodyStrong', bold), styles.ink]}>{title}</Text> : null}
+        {title ? <Text style={[font('bodyStrong', bold), FACT_TITLE, styles.ink]}>{title}</Text> : null}
         <Text style={[font('meta', bold), title ? styles.secondary : styles.ink]}>{text}</Text>
       </View>
     </View>
@@ -151,7 +154,7 @@ export function RegularAsk({
   return (
     <View testID="regular-ask" style={styles.card}>
       <Text accessibilityRole="header" style={[font('heading', bold), styles.ink]}>{`Let ${venueName} know you’re a regular`}</Text>
-      <FactRow icon="eye" text={knownLine(prefs, venueName)} />
+      <FactRow icon="eye" title={`${venueName} will see`} text={knownLine(prefs, venueName)} />
       <FactRow icon="eye-off" title={`${venueName} won’t see`} text="your chats, who you met, or anywhere else you go" />
       <FactRow icon="hand-heart" title="Why" text="so the staff can say hi or look after you" />
       <View style={styles.actions}>
@@ -211,7 +214,7 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.capsule,
     backgroundColor: COLOR.selectionFill,
   },
-  card: { borderRadius: RADIUS.card, backgroundColor: COLOR.surface, padding: SPACE.lg, gap: SPACE.md },
+  card: { borderRadius: RADIUS.sheet, backgroundColor: COLOR.surface, padding: SPACE.lg, gap: SPACE.md },
   rowCard: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, borderRadius: RADIUS.rowInCard, backgroundColor: COLOR.surface, paddingVertical: SPACE.md, paddingHorizontal: SPACE.lg },
   fact: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.md },
   actions: { flexDirection: 'row', gap: SPACE.sm, paddingTop: SPACE.xs },
