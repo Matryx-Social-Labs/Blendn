@@ -429,6 +429,9 @@ export function useBanterInbox() {
         setLoading(true)
       }
 
+      // Started with the lists, not after them: it never rejects, and waiting cost the inbox a third round trip in series.
+      const requestsLoad = shouldFetchRequests ? loadMessageRequests(loadId, requestsCacheKey, force) : null
+
       if (shouldFetchList) {
         // If queryCache was empty (e.g. invalidated after a send), also bypass apiClient's
         // internal SWR response cache so we don't get stale data from it either.
@@ -440,8 +443,8 @@ export function useBanterInbox() {
         if (latestLoadIdRef.current === loadId) setListFailed(!(groupsOk && personalOk))
         lastFetchRef.current.list = now
       }
-      if (shouldFetchRequests) {
-        await loadMessageRequests(loadId, requestsCacheKey, force)
+      if (requestsLoad) {
+        await requestsLoad
         lastFetchRef.current.requests = now
       }
     } catch (error) {

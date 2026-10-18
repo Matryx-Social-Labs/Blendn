@@ -37,6 +37,17 @@ describe('one inbox, not two tabs', () => {
     expect(body).toContain('loadPersonalChats')
   })
 
+  it('starts the message requests with the lists, not after them', () => {
+    // Three round trips in series (~200-250 ms each from Canada) became two in parallel.
+    const src = INBOX()
+    const load = src.slice(src.indexOf('const loadChats'))
+    const started = load.indexOf('const requestsLoad = shouldFetchRequests ? loadMessageRequests(')
+    expect(started).toBeGreaterThan(-1)
+    expect(started).toBeLessThan(load.indexOf('if (shouldFetchList)'))
+    expect(load).not.toMatch(/await loadMessageRequests\(/)
+    expect(load).toMatch(/if \(requestsLoad\) \{\s*await requestsLoad/)
+  })
+
   it('sorts by last message with never-used conversations last', () => {
     const src = SCREEN()
     expect(src).toContain('sortTime: c.last_message_time ? Date.parse(c.last_message_time) : 0')
