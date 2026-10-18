@@ -128,19 +128,7 @@ describe('the page', () => {
     expect(screen.queryByLabelText('Invite friends')).toBeNull()
   })
 
-  it('Open crew chat goes to the room, and is not offered when you came from it', async () => {
-    crews.crew.mockResolvedValue({ success: true, data: crew('member') })
-    await render(<CrewScreen />)
-    await waitFor(() => screen.getByLabelText('Open crew chat'))
-    await fireEvent.press(screen.getByLabelText('Open crew chat'))
-    expect(router.push).toHaveBeenCalledWith({
-      pathname: '/chat/[id]',
-      params: { id: 'g2', roomName: 'Nebula', kind: 'crew', crewId: 'c2' },
-    })
-  })
-
-  it('does not offer Open crew chat when opened from the chat', async () => {
-    mockParams.fromChat = '1'
+  it('has no Open crew chat: the room is reached from the Banter and the chat’s own header', async () => {
     crews.crew.mockResolvedValue({ success: true, data: crew('member') })
     await render(<CrewScreen />)
     await waitFor(() => screen.getByText('Nebula'))
@@ -423,12 +411,25 @@ describe('editing', () => {
     expect(crews.update).not.toHaveBeenCalled()
   })
 
-  it('a name the server will not take comes back under the name', async () => {
+  it('a name the server will not take comes back under the name, and goes once the name is edited', async () => {
     crews.crew.mockResolvedValue({ success: true, data: crew('owner') })
-    crews.update.mockResolvedValue({ success: false, error: 'This can’t be a crew’s name.', errorCode: 'BAD_REQUEST' })
+    crews.update.mockResolvedValue({ success: false, error: 'This can’t be a crew’s name.', errorCode: 'BAD_REQUEST', field: 'name' })
     await openEdit()
     await fireEvent.changeText(screen.getByTestId('make-name-input'), 'Bad name')
     await fireEvent.press(screen.getByLabelText('Save'))
     await waitFor(() => screen.getByText('This can’t be a crew’s name.'))
+    await fireEvent.changeText(screen.getByTestId('make-name-input'), 'Better name')
+    expect(screen.queryByText('This can’t be a crew’s name.')).toBeNull()
+  })
+
+  it('a refusal with no field is the form’s: a toast, nothing under the bio', async () => {
+    const said = 'A phone number. A crew card is shown to people you haven’t met, so contact details can’t go on it.'
+    crews.crew.mockResolvedValue({ success: true, data: crew('owner') })
+    crews.update.mockResolvedValue({ success: false, error: said, errorCode: 'BAD_REQUEST' })
+    await openEdit()
+    await fireEvent.changeText(screen.getByTestId('make-name-input'), 'Call 98450 12345')
+    await fireEvent.press(screen.getByLabelText('Save'))
+    await waitFor(() => expect(mockToast).toHaveBeenCalledWith(said, 'error'))
+    expect(screen.queryByText(said)).toBeNull()
   })
 })

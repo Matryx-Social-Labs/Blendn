@@ -5,7 +5,7 @@
  * rule: nothing is sent until Join is tapped, and the consent is on screen
  * when it is.
  */
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native'
 
 const mockParams: Record<string, string> = {}
 jest.mock('expo-router', () => ({
@@ -26,6 +26,9 @@ jest.mock('react-native-safe-area-context', () => {
 })
 jest.mock('../lib/crewsApi', () => ({ crewsApi: { myCrews: jest.fn(), join: jest.fn(), decline: jest.fn() } }))
 jest.mock('../lib/sheet', () => ({ showSheet: jest.fn() }))
+jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { id: 'me' } }) }))
+const mockAskPush = jest.fn()
+jest.mock('../lib/crewPushAsk', () => ({ askCrewPush: (id: string) => mockAskPush(id) }))
 const mockToast = jest.fn()
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockToast }) }))
 
@@ -34,7 +37,6 @@ import CrewsScreen from '../app/crews/index'
 import InviteScreen from '../app/crews/invite/[crewId]'
 import { CONSENT_LINE, KEEP_ANONYMOUS_LABEL, type Crew, type CrewInvite } from '../lib/crews'
 import { crewsApi } from '../lib/crewsApi'
-import { goneInvites } from '../lib/crewsScreens'
 import { showSheet, type ActionSheet } from '../lib/sheet'
 
 const api = crewsApi as jest.Mocked<typeof crewsApi>
@@ -71,7 +73,6 @@ const list = (crews: Crew[], invites: CrewInvite[]) => ({ success: true as const
 beforeEach(() => {
   jest.clearAllMocks()
   Object.values(api).forEach((fn) => (fn as jest.Mock).mockReset())
-  goneInvites.clear()
   for (const k of Object.keys(mockParams)) delete mockParams[k]
 })
 
@@ -123,13 +124,6 @@ describe('Crews', () => {
     expect(screen.queryByLabelText(/See invite/)).toBeNull()
   })
 
-  it('an invite the session saw go is Expired even if a read still lists it', async () => {
-    goneInvites.add('c-usual')
-    api.myCrews.mockResolvedValue(list([], [invite()]))
-    await render(<CrewsScreen />)
-    await waitFor(() => screen.getByLabelText('Aisha invited you to The Usual Suspects, Expired'))
-  })
-
   it('a failed read is not "no crews": it offers the retry, and a refresh that fails keeps the list', async () => {
     api.myCrews.mockResolvedValueOnce({ success: false, error: 'No internet connection.' })
     await render(<CrewsScreen />)
@@ -177,13 +171,24 @@ describe('an invite', () => {
     expect(api.join).not.toHaveBeenCalled()
   })
 
-  it('Join is the agreement: it sends revealConsent true and the anonymity choice, then opens the crew chat', async () => {
+  it('the consent sits in the dock with Join, so a long bio can not scroll it away', async () => {
+    await render(<InviteScreen />)
+    await waitFor(() => screen.getByText('The Usual Suspects'))
+    const dock = screen.getByTestId('invite-dock')
+    expect(within(dock).getByText(CONSENT_LINE)).toBeTruthy()
+    expect(within(dock).getByRole('switch', { name: KEEP_ANONYMOUS_LABEL })).toBeTruthy()
+    expect(within(dock).getByLabelText('Join')).toBeTruthy()
+  })
+
+  it('Join is the agreement: it sends revealConsent true and the anonymity choice, says Joined, then opens the crew chat and asks about pushes', async () => {
     api.join.mockResolvedValue({ success: true, data: { chatGroupId: 'g-usual' } })
     await render(<InviteScreen />)
     await waitFor(() => screen.getByText('The Usual Suspects'))
     await fireEvent.press(screen.getByRole('switch', { name: KEEP_ANONYMOUS_LABEL }))
     await fireEvent.press(screen.getByLabelText('Join'))
     await waitFor(() => expect(api.join).toHaveBeenCalledWith('c-usual', { revealConsent: true, keepMeAnonymous: true }))
+    await waitFor(() => screen.getByLabelText('Joined'))
+    expect(router.replace).not.toHaveBeenCalled()
     await waitFor(() =>
       expect(router.replace).toHaveBeenCalledWith({
         pathname: '/chat/[id]',
@@ -191,6 +196,7 @@ describe('an invite', () => {
       })
     )
     expect(mockToast).toHaveBeenCalledWith('You’re in The Usual Suspects', 'success')
+    expect(mockAskPush).toHaveBeenCalledWith('me')
   })
 
   it('two taps on Join in the same render send one join', async () => {
@@ -214,7 +220,6 @@ describe('an invite', () => {
     await fireEvent.press(screen.getByLabelText('Join'))
     await waitFor(() => screen.getByText('This invite isn’t open any more'))
     expect(screen.getByText('Invites last 14 days. Ask your friend to invite you again.')).toBeTruthy()
-    expect(goneInvites.has('c-usual')).toBe(true)
     await fireEvent.press(screen.getByLabelText('Back to Crews'))
     expect(router.back).toHaveBeenCalled()
   })

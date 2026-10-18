@@ -1,5 +1,5 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -16,16 +16,23 @@ import { Toggle } from '../../../components/ds/Toggle'
 import { TopBar } from '../../../components/ds/TopBar'
 import { Icon } from '../../../components/ui/Icon'
 import { useToast } from '../../../components/Toast'
+import { askCrewPush } from '../../../lib/crewPushAsk'
 import { CONSENT_LINE, KEEP_ANONYMOUS_LABEL, crewMessage, type CrewInvite } from '../../../lib/crews'
 import { crewsApi } from '../../../lib/crewsApi'
-import { goneInvites, inviteWho } from '../../../lib/crewsScreens'
+import { inviteWho } from '../../../lib/crewsScreens'
 import { COLOR, ICON, RADIUS, SPACE } from '../../../lib/design/tokens'
 import { H } from '../../../lib/haptics'
 import { showSheet } from '../../../lib/sheet'
+import { useAuth } from '../../../lib/useAuth'
 
 type Load = { kind: 'loading' } | { kind: 'ready'; invite: CrewInvite } | { kind: 'notOpen' } | { kind: 'failed' }
 
 const EMBLEM = 160
+/** How long "Joined" shows before the chat opens. */
+const JOINED_MS = 700
+/** flow10.js `invite`: the anonymity line is the strong label at 15/20, a size the type roles do not have. */
+// design-exception: flow10.js invite draws the keep-anonymous label at 15/20, between meta and body
+const ANON_LABEL = { fontSize: 15, lineHeight: 20 } as const
 const NOT_OPEN = 'This invite isn’t open any more'
 
 /**
@@ -44,9 +51,12 @@ export default function CrewInviteScreen() {
   const contrast = useIncreaseContrast()
   const insets = useSafeAreaInsets()
   const { showToast } = useToast()
+  const { user } = useAuth()
   const [load, setLoad] = useState<Load>({ kind: 'loading' })
   const [keepAnonymous, setKeepAnonymous] = useState(false)
   const [joining, setJoining] = useState(false)
+  /** The server said yes: Join reads "Joined" for a beat, quiet, before the chat opens (R3-D10 #45). */
+  const [joined, setJoined] = useState<{ chatGroupId: string; name: string } | null>(null)
   const [refusal, setRefusal] = useState<CrewRefusal | null>(null)
   /** One join or decline at a time: state lags a fast second tap by a render. */
   const inFlight = useRef(false)
@@ -55,7 +65,7 @@ export default function CrewInviteScreen() {
     const result = await crewsApi.myCrews()
     if (!result.success || !result.data) return setLoad({ kind: 'failed' })
     const invite = result.data.invites.find((i) => i.crewId === crewId)
-    setLoad(invite && !goneInvites.has(crewId) ? { kind: 'ready', invite } : { kind: 'notOpen' })
+    setLoad(invite ? { kind: 'ready', invite } : { kind: 'notOpen' })
   }, [crewId])
 
   useFocusEffect(
@@ -63,6 +73,19 @@ export default function CrewInviteScreen() {
       void read()
     }, [read])
   )
+
+  // Timer-driven, so Reduce Motion and a dropped frame both still arrive at the chat.
+  useEffect(() => {
+    if (!joined) return
+    const timer = setTimeout(() => {
+      // The chat opens next; Back from it lands on Crews, which re-reads on focus.
+      router.replace({ pathname: '/chat/[id]', params: { id: joined.chatGroupId, roomName: joined.name, kind: 'crew', crewId } } as never)
+      showToast(`You’re in ${joined.name}`, 'success')
+      if (user?.id) void askCrewPush(user.id)
+    }, JOINED_MS)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [joined])
 
   if (load.kind !== 'ready') {
     return (
@@ -109,8 +132,7 @@ export default function CrewInviteScreen() {
     setJoining(false)
     if (!result.success || !result.data) {
       if (result.errorCode === 'NOT_FOUND') {
-        // Gone: the list draws it as Expired from now on.
-        goneInvites.add(crewId)
+        // Gone: the list stops offering it once it is re-read.
         setLoad({ kind: 'notOpen' })
         return
       }
@@ -118,13 +140,9 @@ export default function CrewInviteScreen() {
       return
     }
     H.success()
-    showToast(`You’re in ${invite.name}`, 'success')
-    // The chat opens next; Back from it lands on Crews, which re-reads on focus.
-    router.replace({
-      pathname: '/chat/[id]',
-      params: { id: result.data.chatGroupId, roomName: invite.name, kind: 'crew', crewId },
-    } as never)
+    setJoined({ chatGroupId: result.data.chatGroupId, name: invite.name })
   }
+
 
   const decline = async () => {
     if (inFlight.current) return
@@ -136,7 +154,6 @@ export default function CrewInviteScreen() {
       return
     }
     // Told to nobody, and a gone invite is as good as declined.
-    goneInvites.add(crewId)
     router.back()
   }
 
@@ -177,20 +194,29 @@ export default function CrewInviteScreen() {
           </View>
           <Text style={[font('meta', bold), styles.centre, styles.tertiary]}>You’ll see who’s in it once you join.</Text>
         </View>
+      </ScrollView>
+      <View testID="invite-dock" style={[styles.dock, { paddingBottom: insets.bottom + SPACE.xl }]}>
         <View style={[styles.consent, contrast && IC_HAIRLINE]}>
           <View style={styles.consentLine}>
             <Icon name="eye" size={ICON.control} />
             <Text style={[font('meta', bold), styles.ink, styles.fill]}>{CONSENT_LINE}</Text>
           </View>
           <View style={styles.anon}>
-            <Text style={[font('meta', bold), styles.ink, styles.fill]}>{KEEP_ANONYMOUS_LABEL}</Text>
+            <Text style={[font('bodyStrong', bold), ANON_LABEL, styles.ink, styles.fill]}>{KEEP_ANONYMOUS_LABEL}</Text>
             <Toggle value={keepAnonymous} onValueChange={setKeepAnonymous} accessibilityLabel={KEEP_ANONYMOUS_LABEL} disabled={joining} />
           </View>
         </View>
-      </ScrollView>
-      <View style={[styles.dock, { paddingBottom: insets.bottom + SPACE.xl }]}>
-        <Button label="Join" onPress={() => void join()} loading={joining} refused={!!refusal} testID="invite-join" />
-        <Button label="Not now" kind="tertiary" onPress={confirmDecline} disabled={joining} testID="invite-not-now" />
+        <Button
+          label={joined ? 'Joined' : 'Join'}
+          kind={joined ? 'secondary' : 'primary'}
+          onPress={() => void join()}
+          loading={joining}
+          disabled={!!joined}
+          refused={!!refusal}
+          pressHaptic={false}
+          testID="invite-join"
+        />
+        <Button label="Not now" kind="tertiary" onPress={confirmDecline} disabled={joining || !!joined} testID="invite-not-now" />
       </View>
       <CrewRefusalSheet refusal={refusal} onClose={() => setRefusal(null)} />
     </View>

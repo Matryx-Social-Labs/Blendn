@@ -400,7 +400,11 @@ describe('crew pushes land where they mean something, and name nobody', () => {
   })
 
   it('an invite opens the crews screen', () => {
-    expect(notificationTarget({ type: 'crew_invite', crewId: 'c1' })).toBe('/crews')
+    expect(notificationTarget({ type: 'crew_invite', crewId: 'c1' })).toEqual({
+      pathname: '/crews/invite/[crewId]',
+      params: { crewId: 'c1' },
+    })
+    expect(notificationTarget({ type: 'crew_invite' })).toBe('/crews')
   })
 
   it('"We’re here" opens the crew’s chat, where its line is', () => {

@@ -1,6 +1,7 @@
 import { router } from 'expo-router'
 import { useCallback, useEffect, useRef, useState, type ComponentRef } from 'react'
-import { Text } from 'react-native'
+import { StyleSheet, Text } from 'react-native'
+import Animated, { FadeIn, ReduceMotion, SlideInRight } from 'react-native-reanimated'
 
 import { CrewRefusalSheet, type CrewRefusal } from '../../components/crews/CrewRefusalSheet'
 import { MadeBeat } from '../../components/crews/MadeBeat'
@@ -21,6 +22,7 @@ import {
   type MakeStep,
 } from '../../lib/crewsScreens'
 import type { Friend } from '../../lib/friends'
+import { DURATION, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
 
@@ -125,11 +127,8 @@ export default function NewCrewScreen() {
     if (inFlight.current) return
     // Tapping Make the crew is the agreement to the sentence above it.
     const body = createCrewBody({ name, bio, intent, tags, openToSolo, inviteUserIds: picked }, { consented: true, keepMeAnonymous: keepAnonymous })
-    if ('problem' in body) {
-      setErrors({ name: nameError(name), bio: bioFits(bio) ? undefined : BIO_TOO_LONG })
-      setStep(1)
-      return
-    }
+    // Step 1 and 2 hold every limit, so this is only the type's other half.
+    if ('problem' in body) return setRefusal({ text: body.problem })
     inFlight.current = true
     setSending(true)
     const result = await crewsApi.create(body)
@@ -138,7 +137,7 @@ export default function NewCrewScreen() {
       setSending(false)
       // The server's sentence names what it found (a phone number in the bio, the daily cap).
       const text = crewMessage(result, 'create', 'Couldn’t make the crew. Try again.')
-      const field = textFieldOf(text)
+      const field = textFieldOf(text, result.field)
       if (field) {
         setErrors({ [field]: text })
         setStep(1)
@@ -148,12 +147,12 @@ export default function NewCrewScreen() {
       setStuck(true)
       return
     }
+    H.success()
     const { crewId, chatGroupId, invited } = result.data
     // The emblem the server drew, for the beat; if it cannot be read the chat simply opens.
     const fresh = await crewsApi.crew(crewId)
     inFlight.current = false
     setSending(false)
-    H.success()
     if (!fresh.success || !fresh.data) {
       router.replace({ pathname: '/chat/[id]', params: { id: chatGroupId, roomName: body.name, kind: 'crew', crewId } } as never)
       return
@@ -194,40 +193,43 @@ export default function NewCrewScreen() {
         ) : (
           <>
             <MakeHeader step={step} titleRef={titleRef} />
-            {step === 1 ? (
-              <NameStep
-                name={name}
-                onName={(v) => {
-                  setName(v)
-                  setErrors((e) => ({ ...e, name: undefined }))
-                }}
-                nameError={errors.name}
-                bio={bio}
-                onBio={(v) => {
-                  setBio(v)
-                  setErrors((e) => ({ ...e, bio: undefined }))
-                }}
-                bioError={errors.bio}
-                choice={choice}
-                onChoice={setChoice}
-                tags={tags}
-                onTag={(slug) => setTags((t) => toggleTag(t, slug))}
-                openToSolo={openToSolo}
-                onOpenToSolo={setOpenToSolo}
-                previewSeed={previewSeed}
-                intentText={intentLine(intent) ?? ''}
-              />
-            ) : step === 2 ? (
-              <FriendsStep friends={friends} picked={picked} onToggle={togglePick} onRetry={retryFriends} />
-            ) : (
-              <ConsentStep
-                name={cleanName(name)}
-                summary={makeSummary({ invited: picked.length, intent, tags: labels })}
-                previewSeed={previewSeed}
-                keepAnonymous={keepAnonymous}
-                onKeepAnonymous={setKeepAnonymous}
-              />
-            )}
+            {/* The step slides in on `base` (flow10 · 10.2); under Reduce Motion it fades. */}
+            <Animated.View key={step} entering={(reduceMotion ? FadeIn : SlideInRight).duration(DURATION.base).reduceMotion(ReduceMotion.Never)} style={styles.step}>
+              {step === 1 ? (
+                <NameStep
+                  name={name}
+                  onName={(v) => {
+                    setName(v)
+                    setErrors((e) => ({ ...e, name: undefined }))
+                  }}
+                  nameError={errors.name}
+                  bio={bio}
+                  onBio={(v) => {
+                    setBio(v)
+                    setErrors((e) => ({ ...e, bio: undefined }))
+                  }}
+                  bioError={errors.bio}
+                  choice={choice}
+                  onChoice={setChoice}
+                  tags={tags}
+                  onTag={(slug) => setTags((t) => toggleTag(t, slug))}
+                  openToSolo={openToSolo}
+                  onOpenToSolo={setOpenToSolo}
+                  previewSeed={previewSeed}
+                  intentText={intentLine(intent) ?? ''}
+                />
+              ) : step === 2 ? (
+                <FriendsStep friends={friends} picked={picked} onToggle={togglePick} onRetry={retryFriends} />
+              ) : (
+                <ConsentStep
+                  name={cleanName(name)}
+                  summary={makeSummary({ invited: picked.length, intent, tags: labels })}
+                  previewSeed={previewSeed}
+                  keepAnonymous={keepAnonymous}
+                  onKeepAnonymous={setKeepAnonymous}
+                />
+              )}
+            </Animated.View>
           </>
         )}
       </Sheet>
@@ -235,3 +237,6 @@ export default function NewCrewScreen() {
     </>
   )
 }
+
+/** The step's own column, so the slide moves a block that lays out like the sheet's content. */
+const styles = StyleSheet.create({ step: { gap: SPACE.md } })

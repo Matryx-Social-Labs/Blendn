@@ -115,7 +115,7 @@ describe('step 2 · invite friends', () => {
     expect(screen.getByLabelText('Step 2 of 3 · Invite friends')).toBeTruthy()
     expect(screen.getByLabelText('Next')).toBeDisabled()
     await fireEvent.press(screen.getByRole('checkbox', { name: 'Ask Priya' }))
-    expect(screen.getByRole('checkbox', { name: 'Ask Priya' }).props.accessibilityState).toEqual({ checked: true })
+    expect(screen.getByRole('checkbox', { name: 'Ask Priya' }).props.accessibilityState).toEqual({ checked: true, disabled: false })
     expect(screen.getByText('1')).toBeTruthy()
     expect(screen.getByText('Invites last 14 days')).toBeTruthy()
     expect(screen.getByLabelText('Next')).not.toBeDisabled()
@@ -142,8 +142,10 @@ describe('step 2 · invite friends', () => {
     await toFriends()
     await waitFor(() => screen.getByRole('checkbox', { name: 'Ask Friend0' }))
     for (const f of many) await fireEvent.press(screen.getByRole('checkbox', { name: `Ask ${f.name}` }))
-    expect(screen.getByRole('checkbox', { name: 'Ask Friend11' }).props.accessibilityState).toEqual({ checked: false })
+    expect(screen.getByRole('checkbox', { name: 'Ask Friend11' }).props.accessibilityState).toEqual({ checked: false, disabled: true })
     expect(screen.getByText('11')).toBeTruthy()
+    // At the cap the footer says why, instead of the rows doing nothing in silence.
+    expect(screen.getByText('A crew has at most 12 people.')).toBeTruthy()
   })
 })
 
@@ -153,8 +155,7 @@ describe('step 3 · consent', () => {
     expect(screen.getByLabelText('Step 3 of 3 · Consent')).toBeTruthy()
     expect(screen.getByRole('switch', { name: KEEP_ANONYMOUS_LABEL })).toBeTruthy()
     expect(screen.getByText('2 invited · Friendship')).toBeTruthy()
-    expect(screen.getByText(/The emblem is drawn from a random seed/)).toBeTruthy()
-    expect(crews.create).not.toHaveBeenCalled()
+        expect(crews.create).not.toHaveBeenCalled()
   })
 
   it('Make the crew is the agreement: it sends the consent, the choices and the friends asked', async () => {
@@ -249,13 +250,22 @@ describe('what the server refuses', () => {
     expect(screen.getByLabelText('Step 1 of 3 · Name and vibe')).toBeTruthy()
   })
 
-  it('contact details in the line come back under the line', async () => {
+  it('contact details with no field are the form’s: a sheet in the server’s words, not under the line', async () => {
     const said = 'A phone number. A crew card is shown to people you haven’t met, so contact details can’t go on it.'
     crews.create.mockResolvedValue({ success: false, error: said, errorCode: 'BAD_REQUEST' })
     await toConsent()
     await press('Make the crew')
     await waitFor(() => screen.getByText(said))
-    expect(screen.getByLabelText('Step 1 of 3 · Name and vibe')).toBeTruthy()
+    expect(screen.getByLabelText('Step 3 of 3 · Consent')).toBeTruthy()
+  })
+
+  it('the server naming the line puts its sentence under the line', async () => {
+    const said = 'A phone number. A crew card is shown to people you haven’t met, so contact details can’t go on it.'
+    crews.create.mockResolvedValue({ success: false, error: said, errorCode: 'BAD_REQUEST', field: 'bio' })
+    await toConsent()
+    await press('Make the crew')
+    await waitFor(() => screen.getByLabelText('Step 1 of 3 · Name and vibe'))
+    expect(screen.getByText(said)).toBeTruthy()
   })
 
   it.each([

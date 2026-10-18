@@ -44,7 +44,21 @@ export function EditCrewSheet({
   const [edit, setEdit] = useState<CrewEdit>(() => editOf(crew))
   const [errors, setErrors] = useState<{ name?: string; bio?: string }>({})
   const [stuck, setStuck] = useState(false)
-  const shown = { name: errors.name ?? (serverError?.field === 'name' ? serverError.text : undefined), bio: errors.bio ?? (serverError?.field === 'bio' ? serverError.text : undefined) }
+  /** The server's refusal this form has since been edited past: it said what was wrong with what was there. */
+  const [editedPast, setEditedPast] = useState<typeof serverError>(null)
+  const server = serverError && serverError !== editedPast ? serverError : null
+  const shown = { name: errors.name ?? (server?.field === 'name' ? server.text : undefined), bio: errors.bio ?? (server?.field === 'bio' ? server.text : undefined) }
+  const edited = (change: (e: CrewEdit) => CrewEdit) => {
+    setEdit(change)
+    setEditedPast(serverError)
+  }
+
+  // A refusal from the server shakes Save once, each time it comes (state adjusted in render).
+  const [shaken, setShaken] = useState<typeof serverError>(null)
+  if (serverError && serverError !== shaken) {
+    setShaken(serverError)
+    setStuck(true)
+  }
 
   // A refused Save shakes once (#20); the flag drops so the next refusal can shake again.
   useEffect(() => {
@@ -76,7 +90,7 @@ export function EditCrewSheet({
       title="Edit crew"
       detents={['tall']}
       actions={[
-        { label: 'Save', kind: 'primary', onPress: save, loading: saving, refused: stuck || !!serverError },
+        { label: 'Save', kind: 'primary', onPress: save, loading: saving, refused: stuck },
         { label: 'Cancel', kind: 'tertiary', onPress: onClose },
       ]}
       testID="crew-edit"
@@ -84,22 +98,22 @@ export function EditCrewSheet({
       <NameStep
         name={edit.name}
         onName={(name) => {
-          setEdit((e) => ({ ...e, name }))
+          edited((e) => ({ ...e, name }))
           setErrors((e) => ({ ...e, name: undefined }))
         }}
         nameError={shown.name}
         bio={edit.bio}
         onBio={(bio) => {
-          setEdit((e) => ({ ...e, bio }))
+          edited((e) => ({ ...e, bio }))
           setErrors((e) => ({ ...e, bio: undefined }))
         }}
         bioError={shown.bio}
         choice={edit.choice}
-        onChoice={(choice) => setEdit((e) => ({ ...e, choice }))}
+        onChoice={(choice) => edited((e) => ({ ...e, choice }))}
         tags={edit.tags}
-        onTag={(slug) => setEdit((e) => ({ ...e, tags: toggleTag(e.tags, slug) }))}
+        onTag={(slug) => edited((e) => ({ ...e, tags: toggleTag(e.tags, slug) }))}
         openToSolo={edit.openToSolo}
-        onOpenToSolo={(openToSolo) => setEdit((e) => ({ ...e, openToSolo }))}
+        onOpenToSolo={(openToSolo) => edited((e) => ({ ...e, openToSolo }))}
         previewSeed={crew.emblemSeed}
         intentText={intentLine(edit.choice ? intentOf(edit.choice) : crew.intent) ?? ''}
       />

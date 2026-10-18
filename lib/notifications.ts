@@ -357,7 +357,8 @@ export function notificationTarget(data: Record<string, any> | undefined): Href 
      * the crew's chat, where its line is; a Blend opens its room.
      */
     case 'crew_invite': {
-      target = '/crews'
+      // An invite always lands on its own screen, never one tap from joined (Flow 10 · 10.3).
+      target = data.crewId ? { pathname: '/crews/invite/[crewId]', params: { crewId: String(data.crewId) } } : '/crews'
       break
     }
     case 'crew_here': {

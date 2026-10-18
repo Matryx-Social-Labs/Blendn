@@ -99,10 +99,10 @@ describe('message requests', () => {
     expect(src).toContain('layout={reduceMotion ? undefined : REQUEST_REFLOW}')
   })
 
-  it('show crew invites as requests, with Join opening the consent screen (R2-D2 #02)', () => {
+  it('show crew invites as requests, with Join opening the invite, which holds the consent (R2-D2 #02)', () => {
     const src = SCREEN()
     expect(src).toContain('accept="Join"')
-    expect(src).toContain("router.push('/crews')")
+    expect(src).toContain("pathname: '/crews/invite/[crewId]'")
     expect(src).toContain('crews.decline(invite)')
   })
 })

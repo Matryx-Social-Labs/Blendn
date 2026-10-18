@@ -11,6 +11,10 @@ import { font, useBoldText, useIncreaseContrast } from '../ds/shared'
 const EMBLEM = 160
 /** flow10.js `make` success: the emblem scales 0.8 → 1 on `base`. */
 const FROM_SCALE = 0.8
+// design-exception: flow10.js `make` success sits its column 20 apart, between the 16 and 24 steps
+const COLUMN_GAP = 20
+// design-exception: and the name over its line 6 apart, off the SPACE scale
+const TEXT_GAP = 6
 
 /**
  * The crew is made (Flow 10 · 10.2, Success): the emblem appears, the name in
@@ -54,8 +58,8 @@ export function MadeBeat({ name, emblemSeed, invited, onContinue }: { name: stri
 
 const styles = StyleSheet.create({
   fill: { flex: 1, justifyContent: 'center' },
-  column: { alignItems: 'center', gap: SPACE.xl, paddingVertical: SPACE.xxl },
-  text: { alignItems: 'center', gap: SPACE.sm },
+  column: { alignItems: 'center', gap: COLUMN_GAP, paddingVertical: SPACE.xxl },
+  text: { alignItems: 'center', gap: TEXT_GAP },
   centre: { textAlign: 'center' },
   ink: { color: COLOR.textPrimary },
   tertiary: { color: COLOR.textTertiary },

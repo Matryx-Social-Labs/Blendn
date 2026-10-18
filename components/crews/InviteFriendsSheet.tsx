@@ -52,7 +52,7 @@ export function InviteFriendsSheet({
       ]}
       testID="crew-invite-sheet"
     >
-      <FriendsStep friends={friends} picked={picked} onToggle={toggle} onRetry={onRetry} none={NONE_TO_ASK} />
+      <FriendsStep friends={friends} picked={picked} onToggle={toggle} onRetry={onRetry} none={NONE_TO_ASK} limit={Math.min(room, CREW_MAX_MEMBERS - 1)} />
     </Sheet>
   )
 }

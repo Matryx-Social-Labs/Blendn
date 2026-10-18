@@ -5,12 +5,14 @@
 import type { Blend, BlendSide, CrewInvite } from '../lib/crews'
 import {
   blendPeople,
-  blendSub,
+  blendWelcome,
+  peopleLine,
+  rememberReveal,
+  revealRemembered,
   closesAtLine,
   closingSoon,
   CREW_NAME_ERROR,
   crewRowSub,
-  goneInvites,
   intentChoice,
   intentLine,
   intentOf,
@@ -62,24 +64,12 @@ describe('invites', () => {
     expect(invitedAgo('nope', NOW)).toBeNull()
   })
 
-  it('put open invites before expired ones, and expire one the session saw go', () => {
-    const gone = new Set(['c-gone'])
-    const rows = inviteRows(
-      [invite({ crewId: 'c-gone' }), invite({ crewId: 'c-old', invitedAt: ago(20) }), invite({ crewId: 'c-open' })],
-      gone,
-      NOW
-    )
+  it('put open invites before expired ones', () => {
+    const rows = inviteRows([invite({ crewId: 'c-old', invitedAt: ago(20) }), invite({ crewId: 'c-open' })], NOW)
     expect(rows.map((r) => [r.invite.crewId, r.lapsed])).toEqual([
       ['c-open', false],
-      ['c-gone', true],
       ['c-old', true],
     ])
-  })
-
-  it('reads the module set of gone invites by default', () => {
-    goneInvites.add('c1')
-    expect(inviteRows([invite()], undefined, NOW)[0].lapsed).toBe(true)
-    goneInvites.clear()
   })
 
   it('title with the friend and the crew, and a second line that is Expired once lapsed', () => {
@@ -136,10 +126,14 @@ describe('making a crew', () => {
     expect(madeLine(0)).toBe('Your crew.')
   })
 
-  it('files a server sentence under the field it is about', () => {
+  it('files a refusal under the field the server names, or the one a sentence names', () => {
     expect(textFieldOf('This can’t be a crew’s name.')).toBe('name')
     expect(textFieldOf('This can\'t be a crew\'s bio.')).toBe('bio')
-    expect(textFieldOf('A phone number. A crew card is shown to people you haven’t met, so contact details can’t go on it.')).toBe('bio')
+    // The server names the field when it can, and that wins over the sentence.
+    expect(textFieldOf('Anything', 'bio')).toBe('bio')
+    expect(textFieldOf('This can’t be a crew’s name.', 'bio')).toBe('bio')
+    // Contact details are about whichever field held them: without a field it is the form's, not the bio's.
+    expect(textFieldOf('A phone number. A crew card is shown to people you haven’t met, so contact details can’t go on it.')).toBeNull()
     expect(textFieldOf('You can own up to 3 crews at a time.')).toBeNull()
   })
 })
@@ -209,9 +203,22 @@ describe('a Blend', () => {
     expect(blendPeople(blend(ago(0)))).toBe(7)
   })
 
-  it('writes the header line from the people and the clock', () => {
-    const closes = new Date(NOW + 9 * 60 * 60 * 1000).toISOString()
-    expect(blendSub(blend(closes), NOW)).toBe('7 people · Closes in 9h')
+  it('writes the header’s people line', () => {
+    expect(peopleLine(blend(ago(0)))).toBe('7 people')
+  })
+
+  it('says where it was made when the event is known, and not otherwise', () => {
+    const at = new Date(2026, 9, 18, 4).toISOString()
+    expect(blendWelcome(at, 'Toit')).toBe('Made at Toit · closes 4 am. Everyone here is on tonight’s names until they reveal.')
+    expect(blendWelcome(at)).toBe('Made tonight · closes 4 am. Everyone here is on tonight’s names until they reveal.')
+  })
+
+  it('remembers a reveal for the account that made it, on this phone', () => {
+    rememberReveal('me', 'b-remembered')
+    expect(revealRemembered('me', 'b-remembered')).toBe(true)
+    expect(revealRemembered('someone-else', 'b-remembered')).toBe(false)
+    expect(revealRemembered('me', 'b-other')).toBe(false)
+    expect(revealRemembered(undefined, 'b-remembered')).toBe(false)
   })
 
   it('is quiet until the last hour, then says when it closes', () => {
@@ -283,19 +290,13 @@ describe('a side as RevealSide draws it', () => {
     // Once the crew has revealed, your own face shows and the line says so.
     expect(sideShape(mine, 'me', true)).toMatchObject({ people: [{ pseudonym: 'Cosmic Panda', photo: 'sam.jpg' }], status: 'Revealed' })
     expect(sideShape({ ...mine, crewRevealed: true }, 'me')).toMatchObject({ status: 'Revealed' })
-  })
-
-  it('your side, when the server sends everyone, is drawn like theirs', () => {
-    const mine = side({
-      mine: true,
-      count: 2,
-      revealed: 1,
-      keptPrivate: 1,
-      people: [person('x', 'Brave Turtle'), person('me', 'Cosmic Panda', 'Sam', 'sam.jpg')],
+    // The server not naming you (you keep anonymous) means no face and no "Revealed", whatever was tapped.
+    const unnamed = { ...mine, people: [person('me', 'Cosmic Panda')] }
+    expect(sideShape(unnamed, 'me', true)).toEqual({
+      side: { kind: 'crew', name: 'Orbit', emblemSeed: 'seed' },
+      people: [{ pseudonym: 'Cosmic Panda', photo: null }],
+      status: '4 on tonight’s names',
     })
-    const shape = sideShape(mine, 'me')
-    expect(shape.status).toBeUndefined()
-    expect(shape.people.map((p) => p.pseudonym)).toEqual(['Brave Turtle', 'Cosmic Panda'])
   })
 
   it('a solo person on your side is You', () => {

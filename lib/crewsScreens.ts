@@ -29,13 +29,6 @@ const DAY_MS = 24 * 60 * 60 * 1000
 /** The server's `CREW.INVITE_TTL_MS`: an invite lapses 14 days after it was sent. */
 export const INVITE_TTL_DAYS = 14
 
-/**
- * Invites an accept answered 404 to, for this session: gone (lapsed,
- * withdrawn, the crew dissolved). The list draws them as "Expired" rather than
- * offering them again, even if a cached read still lists one.
- */
-export const goneInvites = new Set<string>()
-
 /** Lapsed by the clock (`invitedAt` + 14 days): the server stops listing it, a cached list does not. */
 export function inviteLapsed(invitedAt: string, now: number = Date.now()): boolean {
   const sent = Date.parse(invitedAt)
@@ -58,12 +51,8 @@ export interface InviteRow {
 }
 
 /** Open invites first, then the ones that lapsed, each in the order the server sent them. */
-export function inviteRows(
-  invites: readonly CrewInvite[],
-  gone: ReadonlySet<string> = goneInvites,
-  now: number = Date.now()
-): InviteRow[] {
-  const rows = invites.map((invite) => ({ invite, lapsed: gone.has(invite.crewId) || inviteLapsed(invite.invitedAt, now) }))
+export function inviteRows(invites: readonly CrewInvite[], now: number = Date.now()): InviteRow[] {
+  const rows = invites.map((invite) => ({ invite, lapsed: inviteLapsed(invite.invitedAt, now) }))
   return [...rows.filter((r) => !r.lapsed), ...rows.filter((r) => r.lapsed)]
 }
 
@@ -168,13 +157,14 @@ export const madeLine = (invited: number): string =>
   invited > 0 ? `Your crew. ${invited} invited; it starts when someone joins.` : 'Your crew.'
 
 /**
- * Which field a server sentence about the text is about. The server refuses a
- * name or a bio in its own words ("This can't be a crew's name.", the contact
- * details sentence), and the sentence belongs under the field it names.
+ * Which field a refused text is about. The server names it (`field`) when it can; failing that, only a
+ * sentence that says "a crew's name" or "a crew's bio" is read. Anything else (the contact-details
+ * sentence is about whichever field held the number) is the form's, not a guess at a field.
  */
-export function textFieldOf(message: string): 'name' | 'bio' | null {
+export function textFieldOf(message: string, field?: unknown): 'name' | 'bio' | null {
+  if (field === 'name' || field === 'bio') return field
   if (/crew(?:.s)? name/i.test(message)) return 'name'
-  if (/crew(?:.s)? bio|crew card/i.test(message)) return 'bio'
+  if (/crew(?:.s)? bio/i.test(message)) return 'bio'
   return null
 }
 
@@ -260,18 +250,21 @@ export function closesAtLine(closesAt: string): string | null {
   return clock ? `This Blend closes at ${clock}` : null
 }
 
-/** The first-open card's body: "Made tonight · closes 4 am. Everyone here is on tonight’s names until they reveal." */
-export function blendWelcome(closesAt: string): string {
+/** The first-open card's body: "Made at Toit · closes 4 am. Everyone here is on tonight’s names until they reveal." */
+export function blendWelcome(closesAt: string, venue?: string | null): string {
   const clock = clockOf(closesAt)
-  return `${clock ? `Made tonight · closes ${clock}.` : 'Made tonight.'} Everyone here is on tonight’s names until they reveal.`
+  const made = venue ? `Made at ${venue}` : 'Made tonight'
+  return `${made}${clock ? ` · closes ${clock}` : ''}. Everyone here is on tonight’s names until they reveal.`
 }
 
-/** "7 people · Closes in 9h": the header's second line. */
-export function blendSub(blend: Pick<Blend, 'sides' | 'closesAt'>, now: number = Date.now()): string {
-  const people = `${blendPeople(blend)} people`
-  const closes = closesLine(blend.closesAt, now)
-  return closes ? `${people} · ${closes}` : people
-}
+/** "7 people": the header's second line, before the clock. */
+export const peopleLine = (blend: Pick<Blend, 'sides'>): string => `${blendPeople(blend)} people`
+
+/** Your reveals made on this phone, for the Blends whose side the server has not yet marked: "userId|blendId". */
+const revealedOnThisPhone = new Set<string>()
+export const rememberReveal = (userId: string, blendId: string): void => void revealedOnThisPhone.add(`${userId}|${blendId}`)
+export const revealRemembered = (userId: string | null | undefined, blendId: string): boolean =>
+  !!userId && revealedOnThisPhone.has(`${userId}|${blendId}`)
 
 /** Whether your crew's reveal is known to have happened: the server's flag, or a tap on this screen. */
 export function revealedFor(side: BlendSide | null, revealedHere: boolean): boolean {
@@ -339,12 +332,9 @@ export interface SideShape {
 const byPseudonym = (a: BlendPerson, b: BlendPerson) => a.pseudonym.localeCompare(b.pseudonym)
 
 /**
- * The shape RevealSide draws for one side. The server's `name` is the reveal:
- * a photo without it is not one, and somebody who kept private stays a
- * creature (never a blank, never a face). Their side is the people the server
- * sends. Your own side is the people it sends when it sends them all; until
- * then, you alone with what is known (how many are here, and whether your
- * crew has revealed), because a crew is never told who kept private.
+ * The shape RevealSide draws for one side. The server's `name` is the reveal: a photo without it is not
+ * one, and somebody who kept private stays a creature (never a blank, never a face). Their side is the
+ * people the server sends; yours is you alone with what is known.
  */
 export function sideShape(side: BlendSide, myId: string | null | undefined, revealedHere = false): SideShape {
   const named = (p: BlendPerson) => ({ pseudonym: p.pseudonym, photo: p.name ? p.photo : null })
@@ -355,13 +345,13 @@ export function sideShape(side: BlendSide, myId: string | null | undefined, reve
       : side.mine
         ? { kind: 'person', name: 'You', pseudonym: me?.pseudonym ?? 'You' }
         : { kind: 'person', name: me?.name || me?.pseudonym || 'Someone', pseudonym: me?.pseudonym ?? 'Someone' }
-  const everyone = !side.mine || (side.people.length >= side.count && side.revealed != null)
-  if (everyone) return { side: shape, people: [...side.people].sort(byPseudonym).map(named) }
-  const revealed = revealedFor(side, revealedHere)
+  if (!side.mine) return { side: shape, people: [...side.people].sort(byPseudonym).map(named) }
+  // Your own side is you alone (the server never says which crewmate kept private), with what is known.
+  // Your face shows only once the server has named you in this Blend; it leaves you out if you keep anonymous.
+  const shown = revealedFor(side, revealedHere) && !!me?.name
   return {
     side: shape,
-    // Your own face only once your crew has revealed: before it you are on tonight's name like the rest.
-    people: me ? [{ pseudonym: me.pseudonym, photo: revealed ? me.photo : null }] : [],
-    status: revealed ? 'Revealed' : `${side.count} on tonight’s names`,
+    people: me ? [{ pseudonym: me.pseudonym, photo: shown ? me.photo : null }] : [],
+    status: shown ? 'Revealed' : `${side.count} on tonight’s names`,
   }
 }

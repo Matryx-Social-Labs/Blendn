@@ -1,16 +1,15 @@
-import { type ComponentRef, type RefObject } from 'react'
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
+import { useRef, type ComponentRef, type RefObject } from 'react'
+import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 
 import { COLOR, FONT_FAMILY, ICON, MATERIAL, RADIUS, SPACE } from '../../lib/design/tokens'
-import { CONSENT_LINE, CREW_BIO_MAX, CREW_MAX_TAGS, CREW_NAME_MAX, CREW_TAGS, KEEP_ANONYMOUS_LABEL } from '../../lib/crews'
+import { CONSENT_LINE, CREW_BIO_MAX, CREW_MAX_MEMBERS, CREW_MAX_TAGS, CREW_NAME_MAX, CREW_TAGS, KEEP_ANONYMOUS_LABEL } from '../../lib/crews'
 import { INTENT_CHOICES, stepLine, type IntentChoice, type MakeStep } from '../../lib/crewsScreens'
 import type { Friend } from '../../lib/friends'
-import { tint } from '../../lib/theme'
+import { OPACITY, tint } from '../../lib/theme'
 import { Avatar } from '../ds/Avatar'
 import { Chip } from '../ds/Chip'
 import { CrewCard } from '../ds/CrewCard'
 import { CrewEmblem } from '../ds/CrewEmblem'
-import { monoCaption } from '../ds/MonoFamily'
 import { font, minTarget, useBoldText, useIncreaseContrast } from '../ds/shared'
 import { FieldLabel, TextArea, TextField } from '../ds/TextField'
 import { Toggle } from '../ds/Toggle'
@@ -38,7 +37,7 @@ export function MakeHeader({ step, titleRef }: { step: MakeStep; titleRef: RefOb
         Make a crew
       </Text>
       <Text accessibilityLabel={`Step ${stepLine(step)}`} style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>
-        <Text style={[monoCaption(bold), styles.ink]}>{position}</Text>
+        <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.ink]}>{position}</Text>
         {` of ${rest.join(' of ')}`}
       </Text>
     </View>
@@ -70,6 +69,7 @@ export function NameStep(p: NameStepProps) {
   const contrast = useIncreaseContrast()
   const full = p.tags.length >= CREW_MAX_TAGS
   const secondary = contrast ? COLOR.textPrimary : COLOR.textSecondary
+  const bioInput = useRef<TextInput>(null)
   const labels = CREW_TAGS.filter((t) => p.tags.includes(t.slug)).map((t) => t.label)
   return (
     <>
@@ -81,6 +81,9 @@ export function NameStep(p: NameStepProps) {
         error={p.nameError}
         autoCapitalize="words"
         returnKeyType="next"
+        // Next moves on to the line about the crew rather than closing the keyboard.
+        onSubmitEditing={() => bioInput.current?.focus()}
+        submitBehavior="submit"
         testID="make-name"
       />
       <TextArea
@@ -89,6 +92,7 @@ export function NameStep(p: NameStepProps) {
         onChangeText={p.onBio}
         limit={CREW_BIO_MAX}
         minHeight={BIO_MIN_HEIGHT}
+        inputRef={bioInput}
         error={p.bioError}
         testID="make-bio"
       />
@@ -155,15 +159,15 @@ export function NameStep(p: NameStepProps) {
 }
 
 /** One friend in the picker: face, name, and a pick circle. A checkbox, the whole row the target. */
-function FriendPick({ friend, picked, onToggle }: { friend: Friend; picked: boolean; onToggle: () => void }) {
+function FriendPick({ friend, picked, capped, onToggle }: { friend: Friend; picked: boolean; capped: boolean; onToggle: () => void }) {
   const bold = useBoldText()
   return (
     <Pressable
       onPress={onToggle}
       accessibilityRole="checkbox"
-      accessibilityState={{ checked: picked }}
+      accessibilityState={{ checked: picked, disabled: capped }}
       accessibilityLabel={`Ask ${friend.name}`}
-      style={styles.friend}
+      style={[styles.friend, capped && styles.capped]}
     >
       {friend.photo ? (
         <Avatar kind="photo" uri={friend.photo} size={FRIEND_FACE} />
@@ -188,13 +192,16 @@ export type FriendsStepProps = {
   onRetry: () => void
   /** What an empty list says; Make a crew and Invite differ ("Every friend of yours is in this crew…"). */
   none?: string
+  /** How many can be asked at most (11 for a new crew: twelve with you). At it, the rest dim and the footer says why. */
+  limit?: number
 }
 
 /** Step 2 · Invite friends: friends only, no search; the count says how many, never who was skipped. */
-export function FriendsStep({ friends, picked, onToggle, onRetry, none = NO_FRIENDS }: FriendsStepProps) {
+export function FriendsStep({ friends, picked, onToggle, onRetry, none = NO_FRIENDS, limit = CREW_MAX_MEMBERS - 1 }: FriendsStepProps) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const secondary = contrast ? COLOR.textPrimary : COLOR.textSecondary
+  const full = picked.length >= limit
   const line = (text: string) => <Text style={[font('meta', bold), styles.centre, { color: secondary }]}>{text}</Text>
   return (
     <>
@@ -211,7 +218,7 @@ export function FriendsStep({ friends, picked, onToggle, onRetry, none = NO_FRIE
         ) : (
           friends.map((f, i) => (
             <View key={f.userId} style={i ? styles.divided : undefined}>
-              <FriendPick friend={f} picked={picked.includes(f.userId)} onToggle={() => onToggle(f.userId)} />
+              <FriendPick friend={f} picked={picked.includes(f.userId)} capped={full && !picked.includes(f.userId)} onToggle={() => onToggle(f.userId)} />
             </View>
           ))
         )}
@@ -221,7 +228,9 @@ export function FriendsStep({ friends, picked, onToggle, onRetry, none = NO_FRIE
           <Text style={[font('body', bold, FONT_FAMILY.mono[500]), styles.ink]}>{picked.length}</Text>
           {' invited'}
         </Text>
-        <Text style={[font('meta', bold), { color: secondary }]}>Invites last 14 days</Text>
+        <Text style={[font('meta', bold), full ? styles.ink : { color: secondary }, styles.note]}>
+          {full ? 'A crew has at most 12 people.' : 'Invites last 14 days'}
+        </Text>
       </View>
     </>
   )
@@ -262,9 +271,6 @@ export function ConsentStep({ name, summary, previewSeed, keepAnonymous, onKeepA
           <Text style={[font('meta', bold), { color: secondary }]}>{summary}</Text>
         </View>
       </View>
-      <Text style={[font('meta', bold), styles.tertiary]}>
-        The emblem is drawn from a random seed. It never changes, so nobody can read the crew’s membership from it.
-      </Text>
     </>
   )
 }
@@ -293,6 +299,8 @@ const styles = StyleSheet.create({
   pick: { width: PICK, height: PICK, borderRadius: RADIUS.capsule, alignItems: 'center', justifyContent: 'center' },
   pickOn: { backgroundColor: COLOR.selectionFill },
   pickOff: { borderWidth: 1.5, borderColor: tint(COLOR.textPrimary, PICK_RING) },
+  capped: { opacity: OPACITY.disabled },
+  note: { flexShrink: 1, textAlign: 'right' },
   footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   consent: { borderRadius: RADIUS.sheet, backgroundColor: SHEET_FILL, padding: SPACE.lg, gap: SPACE.md },
   consentLine: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.md },

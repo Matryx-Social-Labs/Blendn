@@ -19,6 +19,12 @@ jest.mock('expo-router', () => ({
   router: { push: jest.fn(), back: jest.fn(), replace: jest.fn(), canGoBack: () => true },
   Stack: { Screen: () => null },
   useLocalSearchParams: () => mockParams,
+  // The room reads a Blend's chrome on focus; a room that is not a Blend's reads nothing.
+  useIsFocused: () => true,
+  useFocusEffect: (effect: () => void) => {
+    const { useEffect } = require('react')
+    useEffect(effect, [effect])
+  },
 }))
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('expo-video', () => ({ useVideoPlayer: () => ({ addListener: () => ({ remove: () => {} }), play: () => {} }), VideoView: () => null }))

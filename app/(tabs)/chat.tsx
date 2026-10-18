@@ -417,7 +417,7 @@ function ChatInner() {
                 // Join is the consent screen (Flow 10 · 10.3): it reveals you to the crew, so it asks there.
                 onAccept={() => {
                   H.primary()
-                  router.push('/crews')
+                  router.push({ pathname: '/crews/invite/[crewId]', params: { crewId: invite.crewId } })
                 }}
                 onDecline={() => crews.decline(invite)}
               />

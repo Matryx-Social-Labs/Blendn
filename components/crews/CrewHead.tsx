@@ -8,6 +8,8 @@ import { CrewEmblem } from '../ds/CrewEmblem'
 import { font, useBoldText, useIncreaseContrast } from '../ds/shared'
 
 const EMBLEM = 160
+// design-exception: flow10.js `detail` head sits 10 apart, off the SPACE scale
+const HEAD_GAP = 10
 
 /**
  * A crew's head (flow10.js `detail`): the emblem at 160, the name, the line
@@ -39,7 +41,7 @@ export function CrewHead({ crew }: { crew: Pick<Crew, 'name' | 'bio' | 'tags' | 
 }
 
 const styles = StyleSheet.create({
-  head: { alignItems: 'center', gap: SPACE.md },
+  head: { alignItems: 'center', gap: HEAD_GAP },
   meta: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: SPACE.sm },
   ink: { color: COLOR.textPrimary },
   centre: { textAlign: 'center' },

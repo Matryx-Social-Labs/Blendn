@@ -9,7 +9,6 @@ import { InviteFriendsSheet } from '../../components/crews/InviteFriendsSheet'
 import { OverflowMenu } from '../../components/crews/OverflowMenu'
 import { RowsCard } from '../../components/crews/RowsCard'
 import { Banner } from '../../components/ds/Banner'
-import { Button } from '../../components/ds/Button'
 import { SectionHeader } from '../../components/ds/SectionHeader'
 import { SettingsRow } from '../../components/ds/SettingsRow'
 import { font, useBoldText } from '../../components/ds/shared'
@@ -155,7 +154,7 @@ export default function CrewScreen() {
     setBusy(null)
     if (!result.success || !result.data) {
       const text = crewMessage(result, 'crew', 'Couldn’t save that. Try again.')
-      const field = textFieldOf(text)
+      const field = textFieldOf(text, result.field)
       if (field) setEditError({ field, text })
       else showToast(text, 'error')
       return
@@ -233,14 +232,6 @@ export default function CrewScreen() {
     })
   }
 
-  const openChat = () => {
-    if (!crew?.chatGroupId) return
-    router.push({
-      pathname: '/chat/[id]',
-      params: { id: crew.chatGroupId, roomName: crew.name, kind: 'crew', crewId },
-    } as never)
-  }
-
   let body: ReactNode
   if (!crew) {
     body =
@@ -269,7 +260,6 @@ export default function CrewScreen() {
       <>
         {crew.hidden ? <Banner kind="info" text={HIDDEN_LINE} testID="crew-hidden" /> : null}
         <CrewHead crew={crew} />
-        {!params.fromChat && crew.chatGroupId ? <Button kind="secondary" label="Open crew chat" onPress={openChat} testID="crew-open-chat" /> : null}
         <View style={styles.section}>
           <SectionHeader title="Members" count={crew.members.length} />
           <CrewMembers
