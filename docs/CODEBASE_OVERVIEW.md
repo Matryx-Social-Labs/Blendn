@@ -245,7 +245,7 @@ Keys stored in SecureStore under keychain service `blendn.api.auth` (`WHEN_UNLOC
 
 ### Request queue
 
-All requests go through `RequestQueue` — a priority-based concurrency limiter (max 6 concurrent). Priorities:
+All requests go through `RequestQueue` — a priority-based concurrency limiter (max 10 concurrent). Priorities:
 
 | Type | Priority value |
 |------|---------------|
