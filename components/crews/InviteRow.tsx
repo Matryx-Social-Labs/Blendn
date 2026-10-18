@@ -6,7 +6,7 @@ import { Button } from '../ds/Button'
 import { CrewEmblem } from '../ds/CrewEmblem'
 import { font, useBoldText, useIncreaseContrast } from '../ds/shared'
 
-const ROW_MIN_HEIGHT = SIZE.primary + SPACE.sm
+const ROW_MIN_HEIGHT = SIZE.primary
 const EMBLEM = 40
 /** flow10.js `crews`: a lapsed invite's row dims to 55%. */
 const LAPSED_OPACITY = 0.55
