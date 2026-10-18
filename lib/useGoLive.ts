@@ -144,6 +144,7 @@ export function useGoLive({
   closeTray,
   onLive,
   onPlusRequired,
+  onRefusal,
 }: {
   place: GoLivePlace | null
   showTray: ShowTray
@@ -155,6 +156,13 @@ export function useGoLive({
    * still there); `paywallOpened` says whether the paywall is now on screen.
    */
   onPlusRequired?: (paywallOpened: boolean) => void
+  /**
+   * Given, every refusal of Go Live itself (the server's answer, or none)
+   * comes here to be drawn by the caller (the place page's Go Live sheet,
+   * Flow 11 · 11.2) instead of in the generic tray. The location trays
+   * (permission, Precise Location, a weak fix) stay `showTray`'s.
+   */
+  onRefusal?: (refusal: GoLiveRefusal) => void
 }) {
   const { user } = useAuth()
   const userId = user?.id ?? null
@@ -188,7 +196,7 @@ export function useGoLive({
       // No code: a timeout or no network. The POST may have landed, so everything that shows it re-reads (M2).
       if (!result.errorCode) checkInChanged()
       const refusal = goLiveRefusal(result.errorCode, result.error, result.eventId, result.retryAfter)
-      if (refusal.kind === 'refused') H.error({ blocking: true })
+      // No haptic on a refusal (R4-D11 11-1): a refusal about the place is not about you.
       Logger.info('events', 'go live refused', { code: result.errorCode })
       const seePlus = () => void openPaywall('go_live_expiry', { userInitiated: true })
       if (refusal.kind === 'plus') {
@@ -203,12 +211,15 @@ export function useGoLive({
         }
         if (opened) return false
       }
-      showGoLiveRefusal(refusal, place, { showTray, closeTray, retry: again, seePlus })
+      if (onRefusal) onRefusal(refusal)
+      else showGoLiveRefusal(refusal, place, { showTray, closeTray, retry: again, seePlus })
       return false
     } catch (error) {
       Logger.error('events', 'go live failed', { error: String(error) })
       checkInChanged()
-      showGoLiveRefusal(goLiveRefusal(undefined, 'Check your connection and try again.'), place, { showTray, closeTray, retry: again })
+      const thrown = goLiveRefusal(undefined, 'Check your connection and try again.')
+      if (onRefusal) onRefusal(thrown)
+      else showGoLiveRefusal(thrown, place, { showTray, closeTray, retry: again })
       return false
     } finally {
       setInFlight(false)

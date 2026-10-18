@@ -8,7 +8,7 @@ import { tabBarTop } from '../../app/(tabs)/_layout'
 import { NotificationBell } from '../pulse/NotificationBell'
 import { PulseTopBar, TOP_BAR_HEIGHT } from '../pulse/PulseTopBar'
 import { Text } from '../ui/Text'
-import { DRAWER_SEGMENTED_HEIGHT, drawerSnapPoints, keyboardLeft, snapOnKeyboard, type DrawerSnap } from '../../lib/home'
+import { DRAWER_PEEK_LINE, DRAWER_SEGMENTED_HEIGHT, drawerSnapPoints, keyboardLeft, snapOnKeyboard, type DrawerSnap } from '../../lib/home'
 import { Logger } from '../../lib/logger'
 import { EMBER, EMBER_RADIUS, SPACE } from '../../lib/theme'
 import { HomeDrawer } from './HomeDrawer'
@@ -67,9 +67,13 @@ export function HomeShell({
   const insets = useSafeAreaInsets()
   const { height } = useWindowDimensions()
   const focused = useIsFocused()
+  const [segment, setSegment] = useState<Segment>('events')
+  /** Places' one-line summary, kept at peek (null while nothing is known: no room is made for a line that is not there). */
+  const [placesLine, setPlacesLine] = useState<string | null>(null)
+  const peekExtra = segment === 'places' && placesLine ? DRAWER_PEEK_LINE : 0
   const points = useMemo(
-    () => drawerSnapPoints({ height, topChrome: insets.top + TOP_BAR_HEIGHT, tabBarTop: tabBarTop(height, insets.bottom) }),
-    [height, insets.top, insets.bottom]
+    () => drawerSnapPoints({ height, topChrome: insets.top + TOP_BAR_HEIGHT, tabBarTop: tabBarTop(height, insets.bottom), peekExtra }),
+    [height, insets.top, insets.bottom, peekExtra]
   )
   const [snap, setSnap] = useState<DrawerSnap>('half')
   // The drawer's top edge as it moves; "my location" rides on it.
@@ -78,7 +82,6 @@ export function HomeShell({
   const [mapHeight, setMapHeight] = useState<number | null>(null)
   const onLayout = (e: LayoutChangeEvent) => setMapHeight(e.nativeEvent.layout.height)
   const restore = useRef<DrawerSnap | null>(null)
-  const [segment, setSegment] = useState<Segment>('events')
   const [placesOpened, setPlacesOpened] = useState(false)
   const [screenReader, setScreenReader] = useState(false)
   const [browse, setBrowse] = useState<HomeBrowse>({
@@ -185,6 +188,13 @@ export function HomeShell({
         snap={snap}
         onSnap={onSnap}
         onChromeTouch={dismissKeyboard}
+        peek={
+          peekExtra ? (
+            <Text variant="meta" color={EMBER.textPrimary} numberOfLines={1} testID="places-peek-line">
+              {placesLine}
+            </Text>
+          ) : null
+        }
         header={
           <View style={styles.segmented} accessibilityRole="tablist">
             {(['events', 'places'] as const).map((s) => (
@@ -207,7 +217,7 @@ export function HomeShell({
         <View style={[styles.pane, segment !== 'events' && styles.hidden]}>{events}</View>
         {placesOpened ? (
           <View style={[styles.pane, segment !== 'places' && styles.hidden]}>
-            <PlacesList browse={browse} active={focused && segment === 'places'} />
+            <PlacesList browse={browse} active={focused && segment === 'places'} onSummary={setPlacesLine} />
           </View>
         ) : null}
       </HomeDrawer>

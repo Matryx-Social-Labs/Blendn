@@ -3,6 +3,7 @@ import {
   distanceText,
   EAGER_PAGES,
   mayReadNext,
+  peekLine,
   placeLabel,
   placeRows,
   PLACE_TYPES,
@@ -141,10 +142,38 @@ describe('paging with thousands of venues', () => {
   })
 })
 
+describe('a server that orders live first (liveFirst)', () => {
+  it('folded, it reads exactly as far as the last live or open venue — no page cap — and stops at the first quiet one', () => {
+    const state = { page: EAGER_PAGES + 4, hasMore: true, liveFirst: true }
+    expect(mayReadNext(state, false, false)).toBe(true)
+    expect(mayReadNext(state, false, true)).toBe(false)
+    expect(mayReadNext({ ...state, hasMore: false }, true, true)).toBe(false)
+    // Unfolded it reads as far as the person scrolls, quiet or not.
+    expect(mayReadNext(state, true, true)).toBe(true)
+  })
+
+  it('without it, the first few pages are the cap, as before', () => {
+    expect(mayReadNext({ page: EAGER_PAGES, hasMore: true, liveFirst: false }, false, false)).toBe(false)
+  })
+})
+
+describe('the peek line (Places.html 04)', () => {
+  const v = (id: string, over: Partial<VenueListItem> = {}) => venue({ id, ...over })
+  it('“N places live · M open tonight”, with a + while pages remain, and nothing before anything is known', () => {
+    const s = splitPlaces([v('a', { liveNow: '5-9' }), v('b', { liveNow: '20+' }), v('c', { nextEvent: event(21, 23) }), v('d')], NOW)
+    expect(peekLine(s, false)).toBe('2 places live · 1 open tonight')
+    expect(peekLine(s, true)).toBe('2+ places live · 1+ open tonight')
+    expect(peekLine(splitPlaces([v('a', { liveNow: '5-9' })], NOW), false)).toBe('1 place live · 0 open tonight')
+    expect(peekLine(splitPlaces([], NOW), false)).toBeNull()
+  })
+})
+
 describe('what a tile is read as', () => {
   it('name, type, distance, live bucket and tonight’s event — the people line, never who', () => {
     const label = placeLabel(venue({ liveNow: '10-19', nextEvent: event(21, 23) }), NOW)
     expect(label).toBe('Toit. Brewery. 350 m. 10–19 live. 9 PM, Vinyl Night')
     expect(placeLabel(venue({ liveNow: null, distance: null }), NOW)).toBe('Toit. Brewery')
+    // A quiet row passes no clock, so its label (and its memo) does not move with it.
+    expect(placeLabel(venue({ liveNow: 'quiet', nextEvent: event(21, 23) }))).toBe('Toit. Brewery. 350 m. Under 5 live')
   })
 })

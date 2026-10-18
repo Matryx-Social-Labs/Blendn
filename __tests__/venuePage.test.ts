@@ -20,7 +20,9 @@ import {
   venueGate,
   venueHero,
   venueTiles,
-  whereLine,
+  sheetRefusal,
+  liveToast,
+  washColor,
   ZERO_RETRY_MS,
 } from '../lib/venuePage'
 
@@ -85,14 +87,15 @@ describe('good to know, coming up, the board', () => {
     expect(goodToKnow(null)).toEqual([])
   })
 
-  it('the first three upcoming events with their day and going count', () => {
+  it('upcoming events with their day and going count', () => {
     const rows = upcomingRows([
       { id: 'a', title: 'Bass Thursday', startTime: new Date(2026, 9, 22, 22).toISOString(), goingCount: 31 },
       { id: 'b', title: 'Comedy', startTime: new Date(2026, 9, 24, 21).toISOString(), goingCount: 0 },
       { id: 'c', title: 'Trivia', startTime: new Date(2026, 9, 29, 21).toISOString() },
       { id: 'd', title: 'Fourth', startTime: new Date(2026, 9, 30, 21).toISOString() },
     ])
-    expect(rows).toHaveLength(3)
+    // All four are rows; the page shows UPCOMING_SHOWN of them and keeps the rest behind See all.
+    expect(rows).toHaveLength(4)
     expect(rows[0]).toEqual({ id: 'a', title: 'Bass Thursday', day: 'Thu 22 Oct', going: '31 going' })
     expect(rows[1].going).toBeNull()
     expect(upcomingRows(undefined)).toEqual([])
@@ -111,10 +114,9 @@ describe('good to know, coming up, the board', () => {
     expect(timeRange(new Date(2026, 9, 9, 21).toISOString(), new Date(2026, 9, 10, 1).toISOString())).toBe('9 PM – 1 AM')
   })
 
-  it('where line: city and distance, whichever is known', () => {
-    expect(whereLine('Bengaluru', 0.35)).toBe('Bengaluru · 350 m')
-    expect(whereLine(null, 4.8)).toBe('4.8 km')
-    expect(whereLine('Bengaluru', null)).toBe('Bengaluru')
+  it('upcoming: every event with a title and a day; the page shows three and the rest sit behind See all', () => {
+    const e = (n: number) => ({ id: `e${n}`, title: `T${n}`, startTime: new Date(2026, 9, 20 + n, 21).toISOString() })
+    expect(upcomingRows([e(1), e(2), e(3), e(4), { ...e(5), title: '' }])).toHaveLength(4)
   })
 })
 
@@ -176,6 +178,36 @@ describe('where your window stands', () => {
     expect(liveWords(stay)).toBe('You’re live · staying')
     expect(ringWords(stay)).toBe('Live · staying')
     expect(liveWords(null)).toBe('You’re live')
+  })
+})
+
+describe('a refusal of Go Live, as the sheet draws it', () => {
+  const refused = (reason: string, over = {}) => ({ kind: 'refused' as const, reason, title: 'Server title', message: 'Server words.', offerDirections: false, ...over }) as never
+  it('each answer is its own sheet, with the server’s sentence where the design shows server copy', () => {
+    expect(sheetRefusal(refused('notHere'))).toEqual({ kind: 'notHere', message: 'Server words.' })
+    expect(sheetRefusal(refused('gps'))).toEqual({ kind: 'gps', message: 'Server words.' })
+    expect(sheetRefusal(refused('timeout'))).toEqual({ kind: 'timeout', message: 'Server words.' })
+    expect(sheetRefusal(refused('rate'))).toEqual({ kind: 'rate', message: 'Server words.' })
+    expect(sheetRefusal(refused('noArea'))).toEqual({ kind: 'noArea', message: 'Server words.' })
+    expect(sheetRefusal(refused('age'))).toEqual({ kind: 'age', message: 'Server words.' })
+    expect(sheetRefusal(refused('other'))).toEqual({ kind: 'other', title: 'Server title', message: 'Server words.' })
+  })
+
+  it('an event that has the place is a hand-off to its check-in; Blend’n+ for a stay is its own sheet', () => {
+    expect(sheetRefusal({ kind: 'handoff', eventId: 'e1', message: 'On.' })).toEqual({ kind: 'eventOn', eventId: 'e1', message: 'On.' })
+    expect(sheetRefusal({ kind: 'plus' })).toEqual({ kind: 'stay' })
+  })
+
+  it('the success toast writes 24-hour time and, for a stay, names no end (it rolls)', () => {
+    expect(liveToast({ expiresAt: iso(min(45)), stay: false })).toBe(`You’re live until ${clock24(min(45))}`)
+    expect(liveToast({ expiresAt: iso(min(45)), stay: true })).toBe('You’re live for as long as you’re here')
+    expect(liveToast({ expiresAt: 'nonsense' })).toBe('You’re live')
+  })
+
+  it('the wash under the hero takes the plate’s second colour; a cover uses the brewery’s, the design’s own', () => {
+    expect(washColor({ kind: 'plate', plate: 'bar' })).toBe('#4A3A2E')
+    expect(washColor({ kind: 'plate', plate: 'restaurant' })).toBe('#3A2A24')
+    expect(washColor({ kind: 'cover', uri: 'x' })).toBe('#5A3328')
   })
 })
 

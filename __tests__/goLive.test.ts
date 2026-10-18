@@ -137,6 +137,7 @@ describe("a refused Go Live is read by its code, never its sentence (PL-CU01)", 
   it("keeps the server's sentence and offers a map only when you are in the wrong place", () => {
     expect(goLiveRefusal('OUT_OF_RANGE', "You're not at The Humming Tree yet.")).toEqual({
       kind: 'refused',
+      reason: 'notHere',
       title: 'Not quite there yet',
       message: "You're not at The Humming Tree yet.",
       offerDirections: true,
@@ -152,11 +153,19 @@ describe("a refused Go Live is read by its code, never its sentence (PL-CU01)", 
     expect(goLiveRefusal('GPS_TOO_VAGUE', 'GPS signal is too weak (accuracy: 400m).')).toMatchObject({ title: 'GPS signal too weak', offerDirections: false, action: 'retry' })
     expect(goLiveRefusal('NO_CHECK_IN_AREA', 'This place has no check-in area yet.')).toEqual({
       kind: 'refused',
+      reason: 'noArea',
       title: 'No check-in area here',
       message: 'This place has no check-in area yet.',
       offerDirections: false,
     })
     expect(goLiveRefusal('OUT_OF_RANGE', 'x')).toMatchObject({ action: 'directions', offerDirections: true })
+  })
+
+  it('each refusal names the Flow 11 sheet it is drawn on', () => {
+    const reason = (code: string | undefined) => (goLiveRefusal(code, 'x') as { reason: string }).reason
+    expect(['OUT_OF_RANGE', 'GPS_TOO_VAGUE', undefined, 'RATE_LIMITED', 'NO_CHECK_IN_AREA', 'AGE_RESTRICTED', 'FORBIDDEN', 'NOT_FOUND', 'WHATEVER'].map(reason)).toEqual([
+      'notHere', 'gps', 'timeout', 'rate', 'noArea', 'age', 'age', 'notFound', 'other',
+    ])
   })
 
   it('AGE_RESTRICTED leads to adding your age; a rate limit says how long to wait', () => {

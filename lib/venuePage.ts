@@ -15,9 +15,14 @@ import type { IconName } from '../components/ui/Icon'
 import type { GoLiveChoice as DialChoice } from '../components/ds/GoLiveSheet'
 import type { VenueDetail, VenueListItem } from './apiClient'
 import { BOARD_ENABLED } from './board'
-import { countdownLabel, EXTEND_CHOICE, remainingMs, type GoLiveChoice, type VenueAction } from './goLive'
+import type { GoLiveRefusal as SheetKind } from '../components/ds/GoLiveSheet'
+import { countdownLabel, EXTEND_CHOICE, remainingMs, type GoLiveChoice, type GoLiveRefusal, type VenueAction } from './goLive'
 import { liveNowLabel } from './home'
+import { VENUE_PLATES } from './design/tokens'
 import { distanceText, plateFor, type PlateKey } from './placesPane'
+
+/** A restaurant reuses the café's pair (owner's ruling on A87), as `VenuePlate` does. */
+const PLATE_PAIRS: Record<PlateKey, readonly [string, string]> = { ...VENUE_PLATES, restaurant: VENUE_PLATES.cafe }
 import { clockTime } from './roomMoments'
 import { MONTHS, WEEKDAYS } from './time'
 
@@ -88,12 +93,11 @@ export function timeRange(startIso: string, endIso: string): string {
   return Number.isFinite(end) ? `${clockTime(start)} – ${clockTime(end)}` : clockTime(start)
 }
 
-/** "Coming up here": the first three, the rest behind See all. */
+/** "Coming up here": the first three show, the rest behind See all. */
 export const UPCOMING_SHOWN = 3
 export function upcomingRows(upcoming: VenueDetail['venue']['upcoming']) {
   return (upcoming ?? [])
     .filter((e) => e.title && dayLabel(e.startTime))
-    .slice(0, UPCOMING_SHOWN)
     .map((e) => ({
       id: e.id,
       title: e.title,
@@ -193,9 +197,6 @@ export function ringWords(time: SessionTime | null): string {
   return `Live · ${time.kind === 'minutes' ? `${time.left} min` : time.clock} left`
 }
 
-/** The Where card's second line: "Bengaluru · 350 m". */
-export const whereLine = (city: string | null, km: number | null) => [city, distanceText(km)].filter(Boolean).join(' · ')
-
 /** The distance the list handed over in the route (kilometres), or null when it is not a plain positive number. */
 export function kmParam(value: unknown): number | null {
   if (typeof value !== 'string' || !/^\d{1,4}(\.\d{1,3})?$/.test(value)) return null
@@ -222,4 +223,27 @@ export function venueGate(errorCode: string | undefined, message: string | undef
     return { kind: 'refused', icon: 'id-card', title: 'Not yet', body: message?.trim() || 'Going live is for people 18 and over who have finished setting up.' }
   }
   return { kind: 'failed' }
+}
+
+/** A refusal of Go Live as the Go Live sheet draws it (Flow 11 · 11.2, R4 11-1). */
+export type SheetRefusal = { kind: SheetKind; message?: string; title?: string; eventId?: string }
+
+/** Which of the sheet's refusals a Go Live answer is, with the server's own words where it has them. */
+export function sheetRefusal(refusal: GoLiveRefusal): SheetRefusal {
+  if (refusal.kind === 'plus') return { kind: 'stay' }
+  if (refusal.kind === 'handoff') return { kind: 'eventOn', eventId: refusal.eventId, message: refusal.message }
+  const { reason, message, title } = refusal
+  return reason === 'other' ? { kind: 'other', title, message } : { kind: reason, message }
+}
+
+/** "You’re live until 21:50" (24-hour, as Flow 11 writes every live time); a stay has no end to name: it rolls. */
+export function liveToast(result: { expiresAt: string; stay?: boolean }): string {
+  if (result.stay) return 'You’re live for as long as you’re here'
+  const end = Date.parse(result.expiresAt)
+  return Number.isFinite(end) ? `You’re live until ${clock24(end)}` : 'You’re live'
+}
+
+/** The wash under the hero: the plate's second colour, or (a cover has none) the brewery's, which is the design's own. */
+export function washColor(hero: VenueHero): string {
+  return hero.kind === 'plate' ? PLATE_PAIRS[hero.plate][1] : PLATE_PAIRS.brewery[1]
 }

@@ -109,9 +109,9 @@ describe('<GoLiveSheet>', () => {
   it.each([
     ['notHere', 'Not here yet', /You’re not at Toit yet\. Go live once you’re inside\./, 'Open Maps'],
     ['eventOn', 'Vinyl Night is on here', /An event is on here\./, 'Check in to Vinyl Night'],
-    ['noArea', 'Not yet', /You can’t go live here yet\./, 'OK'],
+    ['noArea', 'Not yet', /You can’t go live here yet\./, 'Close'],
     ['age', 'Not yet', /18 and over/, 'Finish setting up'],
-    ['closed', 'Toit is closed right now', /Tonight’s hours: 12 PM – 1 AM\./, 'OK'],
+    ['closed', 'Toit is closed right now', /Tonight’s hours: 12 PM – 1 AM\./, 'Close'],
   ] as const)('refusal %s: the server’s sentence in the sheet, no haptic', async (refusal, title, body, action) => {
     const onRefusalAction = jest.fn()
     const onClose = jest.fn()
@@ -120,8 +120,45 @@ describe('<GoLiveSheet>', () => {
     expect(screen.getByText(body)).toBeTruthy()
     expect(screen.queryByRole('radio')).toBeNull()
     await fireEvent.press(screen.getByRole('button', { name: action }))
-    // OK has nothing to do but close; the others take you somewhere.
-    expect(action === 'OK' ? onClose : onRefusalAction).toHaveBeenCalledTimes(1)
+    // Close has nothing to do but close; the others take you somewhere (A50: a verb, never OK).
+    expect(screen.queryByRole('button', { name: 'OK' })).toBeNull()
+    expect(action === 'Close' ? onClose : onRefusalAction).toHaveBeenCalledTimes(1)
     for (const k of ['error', 'success', 'primary', 'select']) if (refusal !== 'eventOn' || k !== 'primary') expect(spies[k]).not.toHaveBeenCalled()
+  })
+  it.each([
+    ['gps', 'GPS signal too weak', 'GPS signal is too weak (accuracy: 400m).', 'Try again'],
+    ['timeout', 'Couldn’t go live', 'Check your connection and try again.', 'Try again'],
+    ['rate', 'Too many tries', 'Try again in 2 minutes.', 'Close'],
+    ['notFound', 'This place isn’t available', 'Venue not found', 'Go back'],
+    ['notHere', 'Not here yet', 'You’re not at Toit yet.', 'Open Maps'],
+  ] as const)('R4 11-1 refusal %s: the server’s sentence verbatim, a verb for the way on, no haptic', async (refusal, title, message, action) => {
+    const onRefusalAction = jest.fn()
+    const onClose = jest.fn()
+    await render(sheet({ refusal, refusalMessage: message, onRefusalAction, onClose }))
+    expect(screen.getByRole('header', { name: title })).toBeTruthy()
+    expect(screen.getByText(new RegExp(message.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))).toBeTruthy()
+    await fireEvent.press(screen.getByRole('button', { name: action }))
+    expect(action === 'Close' ? onClose : onRefusalAction).toHaveBeenCalledTimes(1)
+    for (const k of Object.keys(spies)) expect(spies[k]).not.toHaveBeenCalled()
+  })
+
+  it('"Staying live is part of Blend’n+": Pick a time is the strong way back, See Blend’n+ the second', async () => {
+    const onRefusalAction = jest.fn()
+    const onRefusalAlt = jest.fn()
+    await render(sheet({ refusal: 'stay', onRefusalAction, onRefusalAlt }))
+    expect(screen.getByRole('header', { name: 'Staying live is part of Blend’n+' })).toBeTruthy()
+    await fireEvent.press(screen.getByRole('button', { name: 'Pick a time' }))
+    await fireEvent.press(screen.getByRole('button', { name: 'See Blend’n+' }))
+    expect(onRefusalAction).toHaveBeenCalledTimes(1)
+    expect(onRefusalAlt).toHaveBeenCalledTimes(1)
+  })
+
+  it('a refusal with no sheet of its own takes the server’s title and words; an event with no known title is still named', async () => {
+    await render(sheet({ refusal: 'other', refusalTitle: 'Finish your profile first', refusalMessage: 'Finish onboarding.' }))
+    expect(screen.getByRole('header', { name: 'Finish your profile first' })).toBeTruthy()
+    expect(screen.getByText('Finish onboarding.')).toBeTruthy()
+    await render(sheet({ refusal: 'eventOn' }))
+    expect(screen.getByRole('header', { name: 'An event is on here' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Check in to the event' })).toBeTruthy()
   })
 })

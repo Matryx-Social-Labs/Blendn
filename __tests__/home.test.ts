@@ -9,6 +9,7 @@ import { eventFromApi } from '../lib/api'
 import {
   DRAWER_HANDLE_HEIGHT,
   DRAWER_HEADER_HEIGHT,
+  DRAWER_PEEK_LINE,
   DRAWER_SEGMENTED_HEIGHT,
   drawerContentHeight,
   drawerSnapPoints,
@@ -96,6 +97,17 @@ describe('a place in the list', () => {
     expect(liveNowLabel('20+')).toBe('20+ live')
     // An older server with no field reads as quiet, not as nothing or zero.
     expect(liveNowLabel(undefined)).toBe('Under 5 live')
+  })
+})
+
+describe('the peek line makes room only when a pane has one', () => {
+  const screen = { height: 800, topChrome: 100, tabBarTop: 700 }
+  it('peek rises by the line; full and half do not move', () => {
+    const plain = drawerSnapPoints(screen)
+    const withLine = drawerSnapPoints({ ...screen, peekExtra: DRAWER_PEEK_LINE })
+    expect(withLine.peek).toBe(plain.peek - DRAWER_PEEK_LINE)
+    expect(withLine.full).toBe(plain.full)
+    expect(withLine.half).toBe(plain.half)
   })
 })
 

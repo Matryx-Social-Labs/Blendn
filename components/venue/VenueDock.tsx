@@ -18,7 +18,7 @@ const EXTEND_CHIP = 24
 
 /**
  * "● Live · Toit · 32 min": minutes only, stepped once a minute; in the last
- * five minutes mm:ss, an Extend chip and a solid Ending chip; "staying" with
+ * five minutes mm:ss, a solid Ending chip and an Extend chip; "staying" with
  * Stay. Monochrome even then: the chip carries the warning colour, not the
  * pill. It sits on the dock's glass, so it is a fill, never glass on glass.
  * A leaf: it ticks itself.
@@ -43,7 +43,7 @@ function LivePill({ name, live, onZero, onPress }: { name: string; live: VenueDe
       style={[styles.pill, contrast && IC_HAIRLINE]}
     >
       <PresenceDot kind="live" />
-      <Text numberOfLines={1} style={[font('meta', bold), styles.ink, styles.pillText]}>
+      <Text numberOfLines={1} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.ink, styles.pillText]}>
         {`Live · ${name}`}
         {time ? (
           <>
@@ -59,11 +59,11 @@ function LivePill({ name, live, onZero, onPress }: { name: string; live: VenueDe
       </Text>
       {ending ? (
         <>
-          <View style={styles.extendChip} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-            <Text style={[font('caption', bold, FONT_FAMILY.brand[700]), styles.onWhite]}>Extend</Text>
-          </View>
           <View style={styles.endingChip} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
             <Text style={[font('caption', bold, FONT_FAMILY.brand[700]), styles.onWhite]}>Ending</Text>
+          </View>
+          <View style={styles.extendChip} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+            <Text style={[font('caption', bold, FONT_FAMILY.brand[700]), styles.onWhite]}>Extend</Text>
           </View>
         </>
       ) : null}

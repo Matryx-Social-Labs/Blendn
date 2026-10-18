@@ -16,7 +16,7 @@ import { timeWords, type VenueHero as Hero } from '../../lib/venuePage'
 /** The hero (fullpages.js `venue`): 380 tall, under the status bar; the dock and the controls ride over it. */
 export const VENUE_HERO_HEIGHT = 380
 /** The head scrim that lets the clock and the circles read over any cover. */
-const HEAD_SCRIM = 160
+const HEAD_SCRIM = 180
 
 /**
  * "You’re live · 42 min", white on the photo. A leaf: it ticks itself (the

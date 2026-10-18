@@ -108,18 +108,42 @@ export function quietLine(count: number, more: boolean): string {
 export const bucketLabel = (bucket: VenueListItem['liveNow']) => (bucket ? liveNowLabel(bucket) : null)
 
 /**
- * Pages read on their own while the quiet places are folded. Live and Open
- * tonight are found among the nearest few dozen; past that nothing is read
- * until the person unfolds the quiet places and scrolls (thousands of venues:
- * an eager read of all of them would be a hundred requests for a fold).
- * ponytail: the server has no "live first" order; ask for one (docs/PLACES.md)
- * and this cap goes.
+ * Pages read on their own while the quiet places are folded, for a server that
+ * cannot order live first: Live now and Open tonight are found among the
+ * nearest few dozen; past that nothing is read until the person unfolds the
+ * quiet places and scrolls (thousands of venues: an eager read of all of them
+ * would be a hundred requests for a fold).
+ * ponytail: the cap is the fallback for a server without `liveFirst`.
  */
 export const EAGER_PAGES = 3
 
-/** Whether the end of the list may read another page now. */
-export function mayReadNext(state: { page: number; hasMore: boolean }, quietOpen: boolean): boolean {
-  return state.hasMore && (quietOpen || state.page < EAGER_PAGES)
+/**
+ * The drawer's peek line (Places.html 04): what is true tonight in one line.
+ * Counts are what has been read; while pages remain they say "N+". Null while
+ * nothing is known, so a loading or failed list shows no line.
+ */
+export function peekLine(strata: PlaceStrata, more: boolean): string | null {
+  const live = strata.live.length
+  const open = strata.open.length
+  if (live + open + strata.quiet.length === 0) return null
+  const n = (count: number) => `${count}${more ? '+' : ''}`
+  return `${n(live)} ${live === 1 && !more ? 'place' : 'places'} live · ${n(open)} open tonight`
+}
+
+/**
+ * Whether the end of the list may read another page now. With a server that
+ * orders live first the strata arrive in order, so folded it reads exactly as
+ * far as the last live or open venue (until a quiet one shows up) with no cap;
+ * without, only the first few pages.
+ */
+export function mayReadNext(
+  state: { page: number; hasMore: boolean; liveFirst?: boolean },
+  quietOpen: boolean,
+  reachedQuiet = false
+): boolean {
+  if (!state.hasMore) return false
+  if (quietOpen) return true
+  return state.liveFirst ? !reachedQuiet : state.page < EAGER_PAGES
 }
 
 export type PlaceRow =
@@ -145,8 +169,9 @@ export function placeRows(strata: PlaceStrata, quietOpen: boolean, more: boolean
 }
 
 /** What a tile, a row or a quiet row is read as: name, type, distance, live bucket, tonight's event. */
-export function placeLabel(venue: VenueListItem, now: number): string {
-  const tonight = tonightEvent(venue.nextEvent, now)
+/** `now` only for a row whose words change with the clock (a tile, an open row); a quiet row passes none, so its memo holds. */
+export function placeLabel(venue: VenueListItem, now?: number): string {
+  const tonight = now === undefined ? null : tonightEvent(venue.nextEvent, now)
   return [
     venue.name,
     venue.venueTypeLabel,

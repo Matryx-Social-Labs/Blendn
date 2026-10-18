@@ -33,6 +33,8 @@ const TILE_PHOTO = 124
 const OPEN_ROW = 72
 const QUIET_ROW = SIZE.primary
 const QUIET_THUMB = 40
+// design-exception: places.js quiet rows draw the thumb at radius 10 (RADIUS.thumb is 8, rowInCard 16)
+const QUIET_THUMB_RADIUS = 10
 
 /** A place opens with the distance the list showed, so the page need not ask where the phone is. */
 function openPlace(venue: VenueListItem) {
@@ -57,17 +59,17 @@ function PlaceArt({ venue, now, size, radius }: { venue: VenueListItem; now: num
 }
 
 /** "Brewery · 350 m": the type, and the distance in Geist Mono. */
-function TypeLine({ venue, area = false }: { venue: VenueListItem; area?: boolean }) {
+function TypeLine({ venue, area = false, small = false }: { venue: VenueListItem; area?: boolean; small?: boolean }) {
   const bold = useBoldText()
   const distance = distanceText(venue.distance)
   const lead = [venue.venueTypeLabel, area ? placeArea(venue) : null].filter(Boolean).join(' · ')
   return (
-    <Text numberOfLines={1} style={[font('meta', bold), styles.secondary]}>
+    <Text numberOfLines={1} style={[font('meta', bold), styles.secondary, small && styles.quietMeta]}>
       {lead}
       {distance ? (
         <>
           {lead ? ' · ' : ''}
-          <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{distance}</Text>
+          <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular, small && styles.quietMono]}>{distance}</Text>
         </>
       ) : null}
     </Text>
@@ -207,7 +209,7 @@ export function QuietFold({ count, more, open, onPress }: { count: number; more:
 }
 
 /** A quiet place: a small type plate (no photo), the name, the type and area, "Under 5 live" at the end. */
-export const QuietRow = memo(function QuietRow({ venue, now }: { venue: VenueListItem; now: number }) {
+export const QuietRow = memo(function QuietRow({ venue }: { venue: VenueListItem }) {
   const bold = useBoldText()
   const words = bucketLabel(venue.liveNow)
   return (
@@ -216,15 +218,15 @@ export const QuietRow = memo(function QuietRow({ venue, now }: { venue: VenueLis
       onPress={() => openPlace(venue)}
       android_ripple={{ color: PRESSED_WASH.android }}
       accessibilityRole="button"
-      accessibilityLabel={placeLabel(venue, now)}
+      accessibilityLabel={placeLabel(venue)}
       style={({ pressed }) => [styles.quietRow, styles.gutter, pressed && Platform.OS === 'ios' && styles.pressed]}
     >
-      <VenuePlate type={plateFor(venue.venueType)} size={QUIET_THUMB} radius={RADIUS.thumb} />
+      <VenuePlate type={plateFor(venue.venueType)} size={QUIET_THUMB} radius={QUIET_THUMB_RADIUS} />
       <View style={styles.rowText}>
-        <Text numberOfLines={1} style={[font('bodyStrong', bold), styles.ink]}>
+        <Text numberOfLines={1} style={[font('bodyStrong', bold), styles.quietName, styles.ink]}>
           {venue.name}
         </Text>
-        <TypeLine venue={venue} area />
+        <TypeLine venue={venue} area small />
       </View>
       {words ? (
         <Text numberOfLines={1} style={[font('meta', bold), styles.tertiary]}>
@@ -283,7 +285,8 @@ const styles = StyleSheet.create({
   rail: { paddingHorizontal: SPACE.gutter, gap: SPACE.md },
   tile: { width: TILE_WIDTH, gap: SPACE.sm },
   tilePhoto: { height: TILE_PHOTO, borderRadius: RADIUS.mediaInCard, overflow: 'hidden', backgroundColor: COLOR.surface },
-  tilePill: { position: 'absolute', left: SPACE.md, top: SPACE.md },
+  // places.js: the pill sits 10 in from the photo's corner.
+  tilePill: { position: 'absolute', left: SPACE.sm + SPACE.xxs, top: SPACE.sm + SPACE.xxs },
   tileText: { gap: SPACE.xxs, paddingHorizontal: SPACE.xs },
   row: { height: OPEN_ROW, flexDirection: 'row', alignItems: 'center', gap: SPACE.md, marginBottom: SPACE.sm },
   headerGap: { paddingBottom: SPACE.md },
@@ -307,6 +310,12 @@ const styles = StyleSheet.create({
   skeletonBlock: { height: OPEN_ROW, borderRadius: RADIUS.rowInCard, backgroundColor: COLOR.surfaceSunken },
   failed: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: SPACE.sm },
   retry: { justifyContent: 'center' },
+  // design-exception: places.js quiet rows are 15/20 with a 13 meta and a 12 mono — between the type roles
+  quietName: { fontSize: 15, lineHeight: 20 },
+  // design-exception: places.js quiet rows meta 13/20
+  quietMeta: { fontSize: 13 },
+  // design-exception: places.js quiet rows distance 12 mono
+  quietMono: { fontSize: 12 },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
   tertiary: { color: COLOR.textTertiary },

@@ -13,7 +13,6 @@ import { AppState, Linking } from 'react-native'
 const NOW = Date.parse('2026-10-09T20:00:00.000Z')
 const mockOpenURL = jest.fn(() => Promise.resolve())
 const mockShowToast = jest.fn()
-const mockGoLive = jest.fn()
 const mockEnded: Array<(d: { eventId: string; reason: string }) => void> = []
 let mockAppStateCb: ((s: string) => void) | null = null
 let mockLiveSession: unknown = null
@@ -49,13 +48,9 @@ jest.mock('../lib/apiClient', () => ({ apiClient: { getVenue: jest.fn(), goLive:
 jest.mock('../lib/blendnOverlay', () => ({ openBlendn: jest.fn() }))
 jest.mock('../lib/checkIn', () => ({ checkOutOf: jest.fn(), checkInChanged: jest.fn(), subscribeCheckInChanged: () => () => {} }))
 jest.mock('../lib/socketClient', () => ({ subscribeToLiveEnded: (cb: never) => { mockEnded.push(cb); return () => {} } }))
-const mockGoLiveOpts: { current: { showTray: (...a: unknown[]) => void; closeTray: () => void; onLive: (r: unknown) => void } | null } = { current: null }
-jest.mock('../lib/useGoLive', () => ({
-  useGoLive: (opts: never) => {
-    mockGoLiveOpts.current = opts
-    return { goLive: mockGoLive, busy: false }
-  },
-}))
+// The real useGoLive runs: only the phone's position, the network and the paywall are stood in for.
+jest.mock('../lib/locationFix', () => ({ getCurrentLocation: jest.fn(async () => ({ latitude: 12.97, longitude: 77.64, accuracy: 10 })) }))
+jest.mock('../components/ActionTray', () => ({ __esModule: true, default: () => null, afterTrayDismissed: () => Promise.resolve() }))
 jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { id: 'u1' } }) }))
 jest.mock('../lib/plus', () => ({ usePlusStatus: () => ({ status: null, refresh: jest.fn() }) }))
 jest.mock('../lib/paywall', () => ({ openPaywall: jest.fn(async () => true) }))
@@ -121,12 +116,16 @@ async function mount(res: unknown = venue()) {
 }
 
 const request = apiClient.queuedRequest as jest.Mock
+const goLiveApi = apiClient.goLive as jest.Mock
 beforeEach(() => {
   jest.useFakeTimers({ now: NOW })
   mockEnded.length = 0
   mockAppStateCb = null
   mockLiveSession = null
-  mockGoLive.mockReset().mockResolvedValue(true)
+  goLiveApi.mockReset().mockResolvedValue({
+    success: true,
+    data: { venueDayId: 'day-1', chatGroupId: 'g1', expiresAt: min(45), stay: false, stayUntil: null, checkIn: { id: 'c', status: 'checked_in', checkInTime: min(0) }, revealSuggestion: false, intentNeeded: false },
+  })
   request.mockReset().mockResolvedValue({ success: false })
   jest.spyOn(AppState, 'addEventListener').mockImplementation(((_t: string, cb: (s: string) => void) => {
     mockAppStateCb = cb
@@ -162,6 +161,10 @@ describe('before it is drawn', () => {
     expect(screen.getByText('Not yet')).toBeTruthy()
     expect(screen.getByText('Finish setting up before you go live.')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull()
+    await act(async () => {
+      fireEvent.press(screen.getByRole('button', { name: 'Finish setting up' }))
+    })
+    expect(router.push).toHaveBeenLastCalledWith('/edit-profile')
   })
 
   it('no such place is its own state', async () => {
@@ -261,6 +264,37 @@ describe('the place, not live', () => {
   })
 })
 
+describe('the page, the design’s details', () => {
+  it('Coming up here shows three and the rest behind See all', async () => {
+    const upcoming = [1, 2, 3, 4].map((n) => ({ id: `u${n}`, title: `Night ${n}`, startTime: min(60 * 24 * n) }))
+    await mount(venue({ venue: { upcoming } }))
+    expect(screen.queryByTestId('venue-upcoming-u4')).toBeNull()
+    await act(async () => {
+      fireEvent.press(screen.getByRole('button', { name: 'See all' }))
+    })
+    expect(screen.getByTestId('venue-upcoming-u4')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'See all' })).toBeNull()
+  })
+
+  it('three or fewer have no See all', async () => {
+    await mount(venue({ venue: { upcoming: [{ id: 'u1', title: 'Night', startTime: min(1440) }] } }))
+    expect(screen.queryByRole('button', { name: 'See all' })).toBeNull()
+  })
+
+  it('the Where card’s distance is Geist Mono, after the city', async () => {
+    await mount()
+    const distances = screen.getAllByText('350 m', { includeHiddenElements: true })
+    expect(distances.length).toBeGreaterThanOrEqual(2)
+    for (const d of distances) expect(JSON.stringify(d.props.style)).toMatch(/Geist/i)
+  })
+
+  it('the dock’s pill in the last five minutes reads Ending, then Extend', async () => {
+    await mount(venue({ live: liveOver({ expiresAt: new Date(NOW + 4 * 60_000 + 59_000).toISOString() }) }))
+    const chips = screen.getAllByText(/^(Ending|Extend)$/, { includeHiddenElements: true }).map((t) => t.props.children)
+    expect(chips).toEqual(['Ending', 'Extend'])
+  })
+})
+
 describe('the dock', () => {
   it('Go live opens the dial at 20 minutes; Stay is free today', async () => {
     await mount()
@@ -270,70 +304,197 @@ describe('the dock', () => {
     expect(screen.getByRole('header', { name: 'Go live at The Humming Tree' })).toBeTruthy()
     const radios = screen.getAllByRole('radio')
     expect(radios[0].props.accessibilityState).toMatchObject({ checked: true })
-    expect(mockGoLive).not.toHaveBeenCalled()
+    expect(goLiveApi).not.toHaveBeenCalled()
   })
 
-  it('choosing 45 minutes and holding goes live for 45; a yes closes the dial and says until when', async () => {
-    await mount()
-    await act(async () => {
-      fireEvent.press(screen.getByTestId('venue-go-live'))
-    })
-    await act(async () => {
-      fireEvent.press(screen.getAllByRole('radio')[1])
-    })
+  const settle = () => act(async () => { jest.advanceTimersByTime(1000) })
+  const hold = async () => {
     await act(async () => {
       fireEvent(screen.getByLabelText('Hold to go live'), 'accessibilityAction', { nativeEvent: { actionName: 'activate' } })
     })
-    expect(mockGoLive).toHaveBeenCalledWith({ minutes: 45 })
-    await act(async () => {
-      mockGoLiveOpts.current?.onLive({ expiresAt: min(45), venueDayId: 'day-1' })
-    })
-    expect(mockShowToast).toHaveBeenCalledWith(expect.stringMatching(/^You're live until /), 'success')
-  })
-
-  it('a refusal comes up in a sheet once the dial has left, in the server’s words, Open Maps the strong action', async () => {
-    await mount()
+  }
+  const openDial = async (radio = 0) => {
     await act(async () => {
       fireEvent.press(screen.getByTestId('venue-go-live'))
     })
-    const onPress = jest.fn()
-    await act(async () => {
-      mockGoLiveOpts.current?.showTray('Not quite there yet', 'You’re about 1.2 km from The Humming Tree.', [
-        { label: 'Done', kind: 'tertiary', onPress: jest.fn() },
-        { label: 'Open Maps', kind: 'strong', onPress },
-      ])
-    })
-    await act(async () => { jest.advanceTimersByTime(900) })
-    expect(screen.getByRole('header', { name: 'Not quite there yet' })).toBeTruthy()
-    expect(screen.getByText('You’re about 1.2 km from The Humming Tree.')).toBeTruthy()
-    await act(async () => {
-      fireEvent.press(screen.getByRole('button', { name: 'Open Maps' }))
-    })
-    expect(onPress).toHaveBeenCalled()
+    if (radio) {
+      await act(async () => {
+        fireEvent.press(screen.getAllByRole('radio')[radio])
+      })
+    }
+  }
+
+  it('choosing 45 minutes and holding asks the server for 45 from where the phone is; a yes closes the dial and says until when, in 24-hour time', async () => {
+    await mount()
+    await openDial(1)
+    await hold()
+    expect(goLiveApi).toHaveBeenCalledWith('v1', expect.objectContaining({ minutes: 45, latitude: 12.97, longitude: 77.64 }))
+    await settle()
+    expect(screen.queryByRole('header', { name: 'Go live at The Humming Tree' })).toBeNull()
+    expect(mockShowToast).toHaveBeenCalledWith(expect.stringMatching(/^You’re live until \d\d:\d\d$/), 'success')
   })
 
-  it('with no dial open, a refusal (a one-tap Go live again that was turned away) shows at once', async () => {
+  it('a stay names no end in its toast: it rolls', async () => {
+    goLiveApi.mockResolvedValue({ success: true, data: { venueDayId: 'day-1', chatGroupId: 'g1', expiresAt: min(20), stay: true, stayUntil: null } })
     await mount()
-    await act(async () => {
-      mockGoLiveOpts.current?.showTray('Couldn’t go live', 'Check your connection and try again.')
+    await openDial(3)
+    await hold()
+    expect(goLiveApi).toHaveBeenCalledWith('v1', expect.objectContaining({ stay: true }))
+    expect(mockShowToast).toHaveBeenCalledWith('You’re live for as long as you’re here', 'success')
+  })
+
+  describe('a refusal is the Go Live sheet’s own, in place of the dial, in the server’s words, with no haptic', () => {
+    it('too far: “Not here yet” with the server’s sentence; Open Maps opens Maps', async () => {
+      goLiveApi.mockResolvedValue({ success: false, errorCode: 'OUT_OF_RANGE', error: 'You’re not at The Humming Tree yet.' })
+      await mount()
+      await openDial()
+      await hold()
+      expect(screen.getByRole('header', { name: 'Not here yet' })).toBeTruthy()
+      expect(screen.getByText('You’re not at The Humming Tree yet. Go live once you’re inside.')).toBeTruthy()
+      expect(screen.queryAllByRole('radio')).toHaveLength(0)
+      // The hold's own cues are the hold's; the answer is silent (R4 11-1).
+      for (const k of ['error', 'success', 'threshold', 'destructive'] as const) expect(H[k]).not.toHaveBeenCalled()
+      await act(async () => {
+        fireEvent.press(screen.getByRole('button', { name: 'Open Maps' }))
+      })
+      expect(openInMaps).toHaveBeenCalledWith(expect.objectContaining({ venue_name: 'The Humming Tree' }))
     })
-    expect(screen.getByRole('header', { name: 'Couldn’t go live' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Close' })).toBeTruthy()
+
+    it('a weak fix: Try again asks for the same window once more', async () => {
+      goLiveApi.mockResolvedValueOnce({ success: false, errorCode: 'GPS_TOO_VAGUE', error: 'GPS signal is too weak (accuracy: 400m).' })
+      await mount()
+      await openDial(2)
+      await hold()
+      expect(screen.getByRole('header', { name: 'GPS signal too weak' })).toBeTruthy()
+      expect(screen.getByText('GPS signal is too weak (accuracy: 400m).')).toBeTruthy()
+      await act(async () => {
+        fireEvent.press(screen.getByRole('button', { name: 'Try again' }))
+      })
+      expect(goLiveApi).toHaveBeenCalledTimes(2)
+      expect(goLiveApi).toHaveBeenLastCalledWith('v1', expect.objectContaining({ minutes: 60 }))
+    })
+
+    it('no answer at all (a timeout) is “Couldn’t go live”, and the places that read the window are told it may have landed', async () => {
+      goLiveApi.mockResolvedValueOnce({ success: false, error: 'Request timed out' })
+      await mount()
+      await openDial()
+      await hold()
+      expect(screen.getByRole('header', { name: 'Couldn’t go live' })).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
+    })
+
+    it('too many tries says how long to wait; its way on is a verb, never OK', async () => {
+      goLiveApi.mockResolvedValue({ success: false, errorCode: 'RATE_LIMITED', error: 'Too many requests', retryAfter: 90 })
+      await mount()
+      await openDial()
+      await hold()
+      expect(screen.getByRole('header', { name: 'Too many tries' })).toBeTruthy()
+      expect(screen.getByText('Try again in 2 minutes.')).toBeTruthy()
+      expect(screen.queryByRole('button', { name: 'OK' })).toBeNull()
+      expect(screen.getByRole('button', { name: 'Close' })).toBeTruthy()
+    })
+
+    it('an event has the place: the sheet hands off to its check-in', async () => {
+      goLiveApi.mockResolvedValue({ success: false, errorCode: 'EVENT_LIVE_HERE', error: 'An event is on.', eventId: 'e1' })
+      await mount(venue({ tonight: night(30) }))
+      await openDial()
+      await hold()
+      expect(screen.getByRole('header', { name: 'Vinyl Night is on here' })).toBeTruthy()
+      await act(async () => {
+        fireEvent.press(screen.getByRole('button', { name: 'Check in to Vinyl Night' }))
+      })
+      expect(router.push).toHaveBeenLastCalledWith('/event/e1')
+    })
+
+    it('not an adult yet / not onboarded: Finish setting up', async () => {
+      goLiveApi.mockResolvedValue({ success: false, errorCode: 'AGE_RESTRICTED', error: 'Adults only.' })
+      await mount()
+      await openDial()
+      await hold()
+      await act(async () => {
+        fireEvent.press(screen.getByRole('button', { name: 'Finish setting up' }))
+      })
+      expect(router.push).toHaveBeenLastCalledWith('/edit-profile')
+    })
+
+    it('no check-in area: the design’s sentence, and nothing to do but Close', async () => {
+      goLiveApi.mockResolvedValue({ success: false, errorCode: 'NO_CHECK_IN_AREA', error: 'This place has no check-in area yet.' })
+      await mount()
+      await openDial()
+      await hold()
+      expect(screen.getByText(/You can’t go live here yet\./)).toBeTruthy()
+      expect(screen.queryByRole('button', { name: 'OK' })).toBeNull()
+    })
+
+    it('a one-tap Go live again that is turned away opens the sheet on the refusal', async () => {
+      mockLiveSession = { userId: 'u1', venueDayId: 'd', venueId: 'v1', venueName: 'The Humming Tree', prompted: true, choice: { minutes: 45 }, dayEndsAt: min(600) }
+      goLiveApi.mockResolvedValue({ success: false, errorCode: 'OUT_OF_RANGE', error: 'You’re not at The Humming Tree yet.' })
+      await mount()
+      await act(async () => {
+        await Promise.resolve()
+      })
+      await act(async () => {
+        fireEvent.press(screen.getByRole('button', { name: 'Go live again · 45 minutes' }))
+      })
+      expect(screen.getByRole('header', { name: 'Not here yet' })).toBeTruthy()
+      // Pick another time starts from the dial, not from the refusal.
+      await act(async () => {
+        fireEvent.press(screen.getByRole('button', { name: 'Close' }))
+      })
+      await act(async () => {
+        fireEvent.press(screen.getByRole('button', { name: 'Pick another time' }))
+      })
+      expect(screen.queryAllByRole('radio').length).toBe(4)
+    })
+
+    it('“Staying live is part of Blend’n+” when the paywall may not open: Pick a time goes back to the dial, See Blend’n+ opens the paywall', async () => {
+      goLiveApi.mockResolvedValue({ success: false, errorCode: 'PLUS_REQUIRED', error: 'Staying live is part of Blendn+.' })
+      ;(openPaywall as jest.Mock).mockResolvedValue(false)
+      await mount()
+      await openDial(3)
+      await hold()
+      await act(async () => { jest.advanceTimersByTime(900) })
+      expect(screen.getByRole('header', { name: 'Staying live is part of Blend’n+' })).toBeTruthy()
+      await act(async () => {
+        fireEvent.press(screen.getByRole('button', { name: 'Pick a time' }))
+      })
+      expect(screen.getAllByRole('radio')).toHaveLength(4)
+      expect(screen.getAllByRole('radio')[0].props.accessibilityState).toMatchObject({ checked: true })
+      goLiveApi.mockResolvedValue({ success: false, errorCode: 'PLUS_REQUIRED', error: 'x' })
+      await openDialAgainStay()
+      await act(async () => {
+        fireEvent.press(screen.getByRole('button', { name: 'See Blend’n+' }))
+      })
+      await act(async () => { jest.advanceTimersByTime(900) })
+      expect(openPaywall).toHaveBeenLastCalledWith('go_live_expiry', { userInitiated: true })
+    })
+
+    const openDialAgainStay = async () => {
+      await act(async () => {
+        fireEvent.press(screen.getAllByRole('radio')[3])
+      })
+      await hold()
+      await act(async () => { jest.advanceTimersByTime(900) })
+    }
+
+    it('the generic tray is not used for any of them', async () => {
+      goLiveApi.mockResolvedValue({ success: false, errorCode: 'OUT_OF_RANGE', error: 'x' })
+      await mount()
+      await openDial()
+      await hold()
+      expect(screen.queryByTestId('venue-tray')).toBeNull()
+    })
   })
 
   it('Stay is Blend’n+’s where the server gates it: the dial shows it locked, and a tap opens the paywall once the dial has left', async () => {
     const plus = require('../lib/plus')
     jest.spyOn(plus, 'usePlusStatus').mockReturnValue({ status: { active: false, gated: true }, refresh: jest.fn() })
+    ;(openPaywall as jest.Mock).mockResolvedValue(true)
     await mount()
-    await act(async () => {
-      fireEvent.press(screen.getByTestId('venue-go-live'))
-    })
-    await act(async () => {
-      fireEvent.press(screen.getAllByRole('radio')[3])
-    })
+    await openDial(3)
     await act(async () => { jest.advanceTimersByTime(900) })
     expect(openPaywall).toHaveBeenCalledWith('go_live_expiry', { userInitiated: true })
-    expect(mockGoLive).not.toHaveBeenCalled()
+    expect(goLiveApi).not.toHaveBeenCalled()
   })
 
   it('after a window ends, Go live again repeats it in one tap, with Pick another time under it (PL-M05)', async () => {
@@ -345,7 +506,7 @@ describe('the dock', () => {
     await act(async () => {
       fireEvent.press(screen.getByRole('button', { name: 'Go live again · 45 minutes' }))
     })
-    expect(mockGoLive).toHaveBeenCalledWith({ minutes: 45 })
+    expect(goLiveApi).toHaveBeenCalledWith('v1', expect.objectContaining({ minutes: 45 }))
     expect(screen.queryByRole('header', { name: 'Go live at The Humming Tree' })).toBeNull()
     await act(async () => {
       fireEvent.press(screen.getByRole('button', { name: 'Pick another time' }))
@@ -407,29 +568,77 @@ describe('live', () => {
     await act(async () => {
       fireEvent.press(extend)
     })
-    expect(mockGoLive).toHaveBeenCalledWith({ minutes: 45 })
+    expect(goLiveApi).toHaveBeenCalledWith('v1', expect.objectContaining({ minutes: 45 }))
   })
 
-  it('Leave confirms: the sheet opens on "End your live time?", and End checks out; Keep going does not', async () => {
+  it('the pill’s sheet: End confirms in the same sheet and Keep going goes back to the session', async () => {
     ;(checkOutOf as jest.Mock).mockResolvedValue({ success: true })
     await mount(venue({ live: liveOver() }))
     await act(async () => {
-      fireEvent.press(screen.getByTestId('venue-leave'))
+      fireEvent.press(screen.getByTestId('venue-live-pill'))
+    })
+    await act(async () => {
+      fireEvent.press(screen.getByRole('button', { name: 'End' }))
     })
     expect(screen.getByRole('header', { name: 'End your live time at The Humming Tree?' })).toBeTruthy()
     await act(async () => {
       fireEvent.press(screen.getByRole('button', { name: 'Keep going' }))
     })
     expect(checkOutOf).not.toHaveBeenCalled()
-    // Keep going turns it back to the session; End there asks again.
     expect(screen.getByRole('header', { name: 'Live at The Humming Tree' })).toBeTruthy()
+  })
+
+  it('Leave is R12’s “Stop being live at ‹place›?”: Stay, or a swipe, closes the sheet; Stop checks out', async () => {
+    ;(checkOutOf as jest.Mock).mockResolvedValue({ success: true })
+    await mount(venue({ live: liveOver() }))
     await act(async () => {
-      fireEvent.press(screen.getByRole('button', { name: 'End' }))
+      fireEvent.press(screen.getByTestId('venue-leave'))
+    })
+    expect(screen.getByRole('header', { name: 'Stop being live at The Humming Tree?' })).toBeTruthy()
+    await act(async () => {
+      fireEvent.press(screen.getByRole('button', { name: 'Stay' }))
+    })
+    await act(async () => { jest.advanceTimersByTime(1000) })
+    expect(screen.queryByRole('header', { name: /Stop being live|Live at The Humming Tree/ })).toBeNull()
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('venue-leave'))
     })
     await act(async () => {
-      fireEvent.press(screen.getByRole('button', { name: 'End' }))
+      fireEvent.press(screen.getByRole('button', { name: 'Dismiss' }))
+    })
+    await act(async () => { jest.advanceTimersByTime(1000) })
+    expect(screen.queryByRole('header', { name: /Stop being live|Live at The Humming Tree/ })).toBeNull()
+    expect(checkOutOf).not.toHaveBeenCalled()
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('venue-leave'))
+    })
+    await act(async () => {
+      fireEvent.press(screen.getByRole('button', { name: 'Stop' }))
     })
     expect(checkOutOf).toHaveBeenCalledWith('day-1')
+  })
+
+  it('Stopping… is the button’s word while the check-out is on the wire', async () => {
+    let release: (v: unknown) => void = () => {}
+    ;(checkOutOf as jest.Mock).mockReturnValue(new Promise((r) => { release = r }))
+    await mount(venue({ live: liveOver() }))
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('venue-leave'))
+    })
+    await act(async () => {
+      fireEvent.press(screen.getByRole('button', { name: 'Stop' }))
+    })
+    expect(screen.getByRole('button', { name: 'Stopping…' })).toBeTruthy()
+    await act(async () => { release({ success: true }) })
+  })
+
+  it('live with no clock (no expiry, not a stay) still shows the pill, and Leave still opens the confirm', async () => {
+    await mount(venue({ live: liveOver({ expiresAt: null }) }))
+    expect(screen.getByLabelText('Live at The Humming Tree')).toBeTruthy()
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('venue-leave'))
+    })
+    expect(screen.getByRole('header', { name: 'Stop being live at The Humming Tree?' })).toBeTruthy()
   })
 
   it('a failed End is an error toast with H.error, and the place is read again', async () => {
@@ -440,7 +649,7 @@ describe('live', () => {
     })
     const reads = (apiClient.getVenue as jest.Mock).mock.calls.length
     await act(async () => {
-      fireEvent.press(screen.getByRole('button', { name: 'End' }))
+      fireEvent.press(screen.getByRole('button', { name: 'Stop' }))
     })
     expect(mockShowToast).toHaveBeenCalledWith("Couldn't stop. Try again.", 'error')
     expect(H.error).toHaveBeenCalled()

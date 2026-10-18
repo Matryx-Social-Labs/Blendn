@@ -36,15 +36,16 @@ export function VenueSkeleton() {
 
 /**
  * The page refused or failed (R3-D3 3.3, Flow 11 11-2): a state, not a toast.
- * Try again only where a retry could change the answer; Back always.
+ * Try again only where a retry could change the answer; Back always; a refusal
+ * about you (not onboarded, no adult age) offers the one fix, Finish setting up.
  */
-export function VenueGateScreen({ gate, onRetry, onBack }: { gate: VenueGate; onRetry: () => void; onBack: () => void }) {
+export function VenueGateScreen({ gate, onRetry, onBack, onFinish }: { gate: VenueGate; onRetry: () => void; onBack: () => void; onFinish: () => void }) {
   const { height } = useWindowDimensions()
   const back: StateAction = { label: 'Go back', kind: gate.kind === 'failed' ? 'tertiary' : 'secondary', onPress: onBack }
   return (
     <View style={[styles.gate, { paddingTop: Math.round(height * GATE_TOP) }]} accessibilityLiveRegion="polite" testID={`venue-${gate.kind}`}>
       {gate.kind === 'refused' ? (
-        <StateScreen icon={gate.icon} title={gate.title} body={gate.body} actions={[back]} />
+        <StateScreen icon={gate.icon} title={gate.title} body={gate.body} actions={[{ label: 'Finish setting up', onPress: onFinish }, back]} />
       ) : gate.kind === 'notFound' ? (
         <StateScreen icon="map-pin-off" title="This place isn’t on Blend’n yet" actions={[back]} />
       ) : (

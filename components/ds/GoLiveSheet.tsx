@@ -11,7 +11,7 @@ import { Sheet, type SheetAction } from './Sheet'
 import { CONTROL_FONT_CAP, font, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
 
 export type GoLiveChoice = 20 | 45 | 60 | 'stay'
-export type GoLiveRefusal = 'notHere' | 'eventOn' | 'noArea' | 'age' | 'closed'
+export type GoLiveRefusal = 'notHere' | 'eventOn' | 'noArea' | 'age' | 'closed' | 'gps' | 'timeout' | 'rate' | 'notFound' | 'stay' | 'other'
 
 const CHOICES: { value: GoLiveChoice; label: string; spoken: string }[] = [
   { value: 20, label: '20 min', spoken: '20 minutes' },
@@ -34,32 +34,60 @@ const noop = () => {}
 /** The locked Stay row dims to 70% (Delta R2-D7: the Plus mark, not a locked row). */
 const LOCKED_OPACITY = 0.7
 
-/** Each refusal (Flow 11 · 11.2 `goLive`): its glyph, title, the server's sentence and what follows, its one way on. */
-function refusalSheet(refusal: GoLiveRefusal, venue: string, event: string, hours: string, act: () => void, close: () => void) {
+/** What each refusal sheet needs to say; `message` is the server's sentence, verbatim, where there is one. */
+type RefusalWords = { venue: string; event: string; hours: string; message?: string; title?: string }
+
+/**
+ * Each refusal (Flow 11 · 11.2 `goLive`, R4-D11 11-1): its glyph, title, the
+ * server's sentence and what follows, its one way on. The buttons are named
+ * with the verb, never "OK" (A50). `act` is the way on, `alt` the second one
+ * (the paywall, on "Staying live is part of Blend'n+"). No haptic, in any.
+ */
+function refusalSheet(refusal: GoLiveRefusal, w: RefusalWords, act: () => void, alt: () => void, close: () => void) {
   const then = (label: string, kind: SheetAction['kind'] = 'strong'): SheetAction[] => [{ label, kind, onPress: act }]
-  /** Nothing to do but read it: OK closes the sheet. */
-  const ok: SheetAction[] = [{ label: 'OK', kind: 'strong', onPress: close }]
+  const tertiary = (label: string): SheetAction => ({ label, kind: 'tertiary', onPress: close })
+  /** Nothing to do but read it. */
+  const read: SheetAction[] = [{ label: 'Close', kind: 'strong', onPress: close }]
   switch (refusal) {
     case 'notHere':
-      return { icon: 'map-pin' as const, title: 'Not here yet', body: `${SERVER.notHere(venue)} Go live once you’re inside.`, actions: [...then('Open Maps'), { label: 'Close', kind: 'tertiary' as const, onPress: close }] }
-    case 'eventOn':
+      return { icon: 'map-pin' as const, title: 'Not here yet', body: `${w.message ?? SERVER.notHere(w.venue)} Go live once you’re inside.`, actions: [...then('Open Maps'), tertiary('Close')] }
+    case 'eventOn': {
+      const name = w.event || 'the event'
       return {
         icon: 'calendar' as const,
-        title: `${event} is on here`,
-        body: `${SERVER.eventOn} While it’s on, ${venue}’s room is the event’s room. Check in to ${event} instead.`,
-        actions: [...then(`Check in to ${event}`, 'primary'), { label: 'Not now', kind: 'tertiary' as const, onPress: close }],
+        title: w.event ? `${w.event} is on here` : 'An event is on here',
+        body: `${SERVER.eventOn} While it’s on, ${w.venue}’s room is the event’s room. Check in to ${name} instead.`,
+        actions: [...then(`Check in to ${name}`, 'primary'), tertiary('Not now')],
       }
+    }
     case 'noArea':
-      return { icon: 'map-pin-off' as const, title: 'Not yet', body: `${SERVER.noArea} ${venue} hasn’t set its check-in area. You can still save it and see tonight’s events.`, actions: ok }
+      return { icon: 'map-pin-off' as const, title: 'Not yet', body: `${SERVER.noArea} ${w.venue} hasn’t set its check-in area. You can still save it and see tonight’s events.`, actions: read }
     case 'age':
       return {
         icon: 'id-card' as const,
         title: 'Not yet',
         body: 'Going live is for people 18 and over who have finished setting up.',
-        actions: [...then('Finish setting up'), { label: 'Not now', kind: 'tertiary' as const, onPress: close }],
+        actions: [...then('Finish setting up'), tertiary('Not now')],
       }
     case 'closed':
-      return { icon: 'door-closed' as const, title: `${venue} is closed right now`, body: `Its room opens with the venue. Tonight’s hours: ${hours}.`, actions: ok }
+      return { icon: 'door-closed' as const, title: `${w.venue} is closed right now`, body: `Its room opens with the venue. Tonight’s hours: ${w.hours}.`, actions: read }
+    case 'gps':
+      return { icon: 'locate-off' as const, title: 'GPS signal too weak', body: w.message ?? 'Move somewhere with a clearer view of the sky and try again.', actions: [...then('Try again'), tertiary('Cancel')] }
+    case 'timeout':
+      return { icon: 'wifi-off' as const, title: 'Couldn’t go live', body: w.message ?? 'Check your connection and try again.', actions: [...then('Try again'), tertiary('Cancel')] }
+    case 'rate':
+      return { icon: 'timer' as const, title: 'Too many tries', body: w.message ?? 'Try again in a moment.', actions: read }
+    case 'notFound':
+      return { icon: 'map-pin-off' as const, title: 'This place isn’t available', body: w.message ?? 'It may have been taken off Blend’n.', actions: [...then('Go back')] }
+    case 'stay':
+      return {
+        icon: 'hourglass' as const,
+        title: 'Staying live is part of Blend’n+',
+        body: 'Pick a time instead — you can extend it for free before it ends.',
+        actions: [...then('Pick a time'), { label: 'See Blend’n+', kind: 'secondary' as const, onPress: alt }],
+      }
+    case 'other':
+      return { icon: 'circle-alert' as const, title: w.title ?? 'Couldn’t go live', body: w.message ?? 'We couldn’t make you live here. Please try again.', actions: read }
   }
 }
 
@@ -101,7 +129,10 @@ export function GoLiveSheet({
   refusal = null,
   event = '',
   hours = '',
+  refusalMessage,
+  refusalTitle,
   onRefusalAction,
+  onRefusalAlt,
   onDismissed,
   testID,
 }: {
@@ -125,7 +156,14 @@ export function GoLiveSheet({
   event?: string
   /** Tonight's hours (`closed`), "12 PM – 1 AM". */
   hours?: string
+  /** The server's sentence for the refusal, shown verbatim where the design shows "(server copy)". */
+  refusalMessage?: string
+  /** The title of a refusal that has no sheet of its own (`other`). */
+  refusalTitle?: string
+  /** The refusal's way on: Open Maps, Check in, Finish setting up, Try again, Pick a time, Go back. */
   onRefusalAction?: () => void
+  /** Its second way on: See Blend’n+. */
+  onRefusalAlt?: () => void
   /** Once the sheet has left the screen: what must wait for it (a refusal's sheet, the paywall) starts here. */
   onDismissed?: () => void
   testID?: string
@@ -136,7 +174,7 @@ export function GoLiveSheet({
   useLiveHaptic(live, visible)
 
   if (refusal) {
-    return <Sheet visible={visible} onClose={onClose} onDismissed={onDismissed} testID={testID} {...refusalSheet(refusal, venue, event, hours, () => onRefusalAction?.(), onClose)} />
+    return <Sheet visible={visible} onClose={onClose} onDismissed={onDismissed} testID={testID} {...refusalSheet(refusal, { venue, event, hours, message: refusalMessage, title: refusalTitle }, () => onRefusalAction?.(), () => onRefusalAlt?.(), onClose)} />
   }
 
   const picked = CHOICES.find((c) => c.value === choice) ?? CHOICES[0]

@@ -19,13 +19,15 @@ jest.mock('expo-linear-gradient', () => {
   return { LinearGradient: (props: object) => <View {...props} /> }
 })
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() } }))
-jest.mock('../lib/apiClient', () => ({ apiClient: { getVenues: jest.fn() } }))
+jest.mock('../lib/apiClient', () => ({ apiClient: { getVenues: jest.fn(), getVenue: jest.fn(), queuedRequest: jest.fn(), cachedRequest: jest.fn() } }))
+jest.mock('../lib/offers', () => ({ offersApi: { prefs: jest.fn() } }))
 
 /* eslint-disable import/first */
 import { router } from 'expo-router'
 import { PlacesList } from '../components/home/PlacesList'
 import type { HomeBrowse } from '../components/home/HomeShell'
 import { apiClient } from '../lib/apiClient'
+import { offersApi } from '../lib/offers'
 import { H } from '../lib/haptics'
 /* eslint-enable import/first */
 
@@ -167,7 +169,7 @@ describe('the chips', () => {
   it('each asks the server for that type, afresh, and the selected one is white', async () => {
     getVenues.mockResolvedValue(page([venue('a', { liveNow: '5-9' })]))
     await mount()
-    expect(getVenues).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1, limit: 30, city: 'Bengaluru', sortBy: 'distance', venueType: undefined }), { force: true })
+    expect(getVenues).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1, limit: 30, city: 'Bengaluru', sortBy: 'distance', venueType: undefined, liveFirst: true }), { force: true })
     await act(async () => {
       fireEvent.press(screen.getByRole('button', { name: 'Breweries' }))
     })
@@ -187,11 +189,44 @@ describe('the chips', () => {
   })
 })
 
+describe('the peek line', () => {
+  it('the pane reports “N places live · M open tonight” for the drawer to keep at peek, and nothing before it knows', async () => {
+    const onSummary = jest.fn()
+    getVenues.mockResolvedValue(page([venue('a', { liveNow: '5-9' }), venue('b', { nextEvent: tonight() }), venue('c')]))
+    await render(<PlacesList browse={browse()} active onSummary={onSummary} />)
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(onSummary).toHaveBeenCalledWith(null)
+    expect(onSummary).toHaveBeenLastCalledWith('1 place live · 1 open tonight')
+  })
+})
+
+describe('the chips stay while a type is chosen', () => {
+  it('a tap on a chip keeps the row up through the load and through a failed load', async () => {
+    getVenues.mockResolvedValueOnce(page([venue('a', { liveNow: '5-9' })]))
+    await mount()
+    getVenues.mockReturnValue(new Promise(() => {}))
+    await act(async () => {
+      fireEvent.press(screen.getByRole('button', { name: 'Cafés' }))
+    })
+    expect(screen.getByTestId('places-skeleton')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Cafés' }).props.accessibilityState).toMatchObject({ selected: true })
+    getVenues.mockResolvedValue({ success: false, error: 'offline' })
+    await act(async () => {
+      fireEvent.press(screen.getByRole('button', { name: 'Clubs' }))
+    })
+    await waitFor(() => expect(screen.getByTestId('places-error')).toBeTruthy())
+    expect(screen.getByRole('button', { name: 'Clubs' })).toBeTruthy()
+  })
+})
+
 describe('loading, failing, empty', () => {
   it('loading: a static skeleton and no chips', async () => {
     getVenues.mockReturnValue(new Promise(() => {}))
     await mount()
     expect(screen.getByTestId('places-skeleton')).toBeTruthy()
+    // Nothing chosen and nothing read: no chips to offer yet.
     expect(screen.queryByTestId('places-type-chips')).toBeNull()
   })
 
@@ -268,9 +303,32 @@ describe('thousands of venues', () => {
     expect(getVenues.mock.calls.map(([q]) => q.page)).toEqual([1, 2, 3, 4])
   })
 
-  it('no row fetches anything: only the list asks', async () => {
-    getVenues.mockResolvedValue(page(Array.from({ length: 25 }, (_, i) => venue(`t${i}`, { liveNow: '5-9' }))))
+  it('no row fetches anything: the list asks, once, and no other API call of any kind is made — not a venue, not a request, not a prefs read', async () => {
+    getVenues.mockResolvedValue(page(Array.from({ length: 25 }, (_, i) => venue(`t${i}`, { liveNow: i % 3 ? '5-9' : 'quiet', nextEvent: i % 2 ? tonight() : null }))))
     await mount()
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText(/quiet places?$/))
+    })
     expect(getVenues).toHaveBeenCalledTimes(1)
+    for (const call of [apiClient.getVenue, apiClient.queuedRequest, apiClient.cachedRequest, offersApi.prefs]) expect(call).not.toHaveBeenCalled()
+  })
+
+  it('a server that orders live first is read as far as the last live or open venue, with no page cap, and no further once a quiet one shows', async () => {
+    const liveFull = (from: number) => Array.from({ length: 30 }, (_, i) => venue(`l${from + i}`, { liveNow: '5-9' }))
+    const calls: number[] = []
+    getVenues.mockImplementation(({ page: n }: { page: number }) => {
+      calls.push(n)
+      // Pages 1-5 are all live; page 6 reaches the quiet ones.
+      const venues = n < 6 ? liveFull(n * 100) : full(n * 100)
+      return Promise.resolve({ ...page(venues, true, n), data: { ...page(venues, true, n).data, liveFirst: true } })
+    })
+    await mount()
+    const list = screen.getByTestId('places-list')
+    for (let i = 0; i < 9; i++) {
+      await act(async () => {
+        fireEvent(list, 'endReached')
+      })
+    }
+    expect(calls).toEqual([1, 2, 3, 4, 5, 6])
   })
 })

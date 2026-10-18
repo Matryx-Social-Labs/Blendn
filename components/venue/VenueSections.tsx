@@ -15,7 +15,7 @@ import { COLOR, FONT_FAMILY, ICON, PRESS, RADIUS, SIZE, SPACE } from '../../lib/
 import { distanceText } from '../../lib/placesPane'
 import { startsLabel } from '../../lib/roomMoments'
 import { useSessionTime } from '../../lib/useSessionTime'
-import { bucketWord, ringWords, timeRange, whereLine } from '../../lib/venuePage'
+import { bucketWord, ringWords, timeRange, UPCOMING_SHOWN } from '../../lib/venuePage'
 import { VenueMap } from './VenueMap'
 
 /** The ring around the live card (the design's 88, a 56 face inside). */
@@ -41,7 +41,7 @@ export function LiveCard({ live, name, onZero }: { live: VenueDetail['live']; na
   const bold = useBoldText()
   const time = useSessionTime(live, onZero)
   return (
-    <View style={styles.card} testID="venue-live-card">
+    <View style={[styles.card, styles.liveCard]} testID="venue-live-card">
       <TimeRing text={ringWords(time)} size={RING}>
         <View style={styles.face} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
           <Icon name="radio" size={ICON.nav} />
@@ -133,14 +133,17 @@ export function UpcomingList({
   rows,
   onOpen,
 }: {
+  /** Every upcoming event the server sent, soonest first; three show, the rest behind See all. */
   rows: { id: string; title: string; day: string; going: string | null }[]
   onOpen: (eventId: string) => void
 }) {
   const bold = useBoldText()
+  const [all, setAll] = useState(false)
+  const shown = all ? rows : rows.slice(0, UPCOMING_SHOWN)
   return (
     <Section>
-      <SectionHeader title="Coming up here" />
-      {rows.map((r) => (
+      <SectionHeader title="Coming up here" action={rows.length > UPCOMING_SHOWN && !all ? { label: 'See all', onPress: () => setAll(true) } : undefined} />
+      {shown.map((r) => (
         <Pressable
           key={r.id}
           onPress={() => onOpen(r.id)}
@@ -265,7 +268,7 @@ export function Where({
 }) {
   const bold = useBoldText()
   const hasCoords = !!venue.latitude && !!venue.longitude
-  const line = whereLine(venue.city, km)
+  const distance = distanceText(km)
   return (
     <Section>
       <SectionHeader title="Where" />
@@ -275,7 +278,17 @@ export function Where({
           <View style={styles.fill}>
             <Text style={[font('bodyStrong', bold), styles.ink]}>{venue.name}</Text>
             {venue.address ? <Text style={[font('body', bold), styles.secondary]}>{venue.address}</Text> : null}
-            {line ? <Text style={[font('meta', bold), styles.secondary]}>{line}</Text> : null}
+            {venue.city || distance ? (
+              <Text style={[font('meta', bold), styles.secondary]}>
+                {venue.city}
+                {distance ? (
+                  <>
+                    {venue.city ? ' · ' : ''}
+                    <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{distance}</Text>
+                  </>
+                ) : null}
+              </Text>
+            ) : null}
           </View>
         </View>
         <View style={styles.whereActions}>
@@ -333,6 +346,8 @@ export function ClaimLine({ onPress }: { onPress: () => void }) {
 const styles = StyleSheet.create({
   section: { gap: SPACE.md },
   eventCard: { height: EVENT_HEIGHT },
+  // design-exception: places.js draws the ring and its words in a row, centred, 14 apart (between SPACE.md and lg)
+  liveCard: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   card: { borderRadius: RADIUS.mediaInCard, backgroundColor: COLOR.surface, padding: SPACE.lg, gap: SPACE.md },
   face: { width: FACE, height: FACE, borderRadius: RADIUS.capsule, backgroundColor: COLOR.surfaceRaised, alignItems: 'center', justifyContent: 'center' },
   cardText: { flex: 1, gap: SPACE.xs },

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import { RefreshControl, StyleSheet, View } from 'react-native'
 import Animated, { LinearTransition, useReducedMotion } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -12,7 +12,7 @@ import { COLOR, SPACE, SPRING } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { Logger } from '../../lib/logger'
 import { initialPlaces, mayLoadMore, placesKey, placesReducer } from '../../lib/places'
-import { mayReadNext, PLACE_TYPES, placeRows, splitPlaces, type PlaceRow, type PlaceTypeFilter } from '../../lib/placesPane'
+import { mayReadNext, peekLine, PLACE_TYPES, placeRows, splitPlaces, type PlaceRow, type PlaceTypeFilter } from '../../lib/placesPane'
 import { useNow } from '../../lib/useNow'
 import type { HomeBrowse } from './HomeShell'
 
@@ -43,7 +43,7 @@ const keyOf = (row: PlaceRow) => row.key
  * the quiet places are folded only the first few pages are read on their own
  * (`mayReadNext`): thousands of venues are not a hundred requests for a fold.
  */
-export function PlacesList({ browse, active }: { browse: HomeBrowse; active: boolean }) {
+export function PlacesList({ browse, active, onSummary }: { browse: HomeBrowse; active: boolean; onSummary?: (line: string | null) => void }) {
   const insets = useSafeAreaInsets()
   const reduceMotion = useReducedMotion()
   const { city, location, ready, openCityPicker } = browse
@@ -67,12 +67,12 @@ export function PlacesList({ browse, active }: { browse: HomeBrowse; active: boo
       dispatch({ type: 'request', key, page })
       try {
         const res = await apiClient.getVenues(
-          { page, limit: PAGE, city: city ?? undefined, lat, lon, sortBy: lat !== undefined ? 'distance' : 'name', venueType: venueType ?? undefined },
+          { page, limit: PAGE, city: city ?? undefined, lat, lon, sortBy: lat !== undefined ? 'distance' : 'name', venueType: venueType ?? undefined, liveFirst: true },
           // Opening the pane, pull-to-refresh and Try again are the person asking: never a cached page.
           fresh ? { force: true } : undefined
         )
         if (res.success && res.data) {
-          dispatch({ type: 'loaded', key, page, venues: res.data.venues, hasMore: res.data.pagination.hasMore })
+          dispatch({ type: 'loaded', key, page, venues: res.data.venues, hasMore: res.data.pagination.hasMore, liveFirst: res.data.liveFirst })
         } else {
           Logger.warn('events', 'Could not load places', { page, error: res.error })
           dispatch({ type: 'failed', key, page })
@@ -96,6 +96,9 @@ export function PlacesList({ browse, active }: { browse: HomeBrowse; active: boo
     void request(1, true)
   }, [active, ready, request])
 
+  const now = useNow(MINUTE_MS)
+  const strata = splitPlaces(state.venues, now)
+
   const refresh = useCallback(async () => {
     setRefreshing(true)
     try {
@@ -106,7 +109,7 @@ export function PlacesList({ browse, active }: { browse: HomeBrowse; active: boo
   }, [request])
 
   const loadMore = async () => {
-    if (inFlight.current || !mayLoadMore(state) || !mayReadNext(state, quietOpen)) return
+    if (inFlight.current || !mayLoadMore(state) || !mayReadNext(state, quietOpen, strata.quiet.length > 0)) return
     inFlight.current = true
     try {
       await request(state.page + 1, false)
@@ -115,8 +118,10 @@ export function PlacesList({ browse, active }: { browse: HomeBrowse; active: boo
     }
   }
 
-  const now = useNow(MINUTE_MS)
-  const rows = useMemo(() => placeRows(splitPlaces(state.venues, now), quietOpen, state.hasMore), [state.venues, state.hasMore, quietOpen, now])
+  // The drawer keeps this one line at peek, when only its header shows.
+  const summary = peekLine(strata, state.hasMore)
+  useEffect(() => onSummary?.(summary), [onSummary, summary])
+  const rows = placeRows(strata, quietOpen, state.hasMore)
 
   const renderItem = useCallback(
     ({ item }: { item: PlaceRow }) => {
@@ -130,13 +135,14 @@ export function PlacesList({ browse, active }: { browse: HomeBrowse; active: boo
         case 'fold':
           return <QuietFold count={item.count} more={item.more} open={item.open} onPress={() => setQuietOpen((o) => !o)} />
         case 'quiet':
-          return <QuietRow venue={item.venue} now={now} />
+          return <QuietRow venue={item.venue} />
       }
     },
     [now]
   )
 
-  const showChips = state.status === 'ready' && (state.venues.length > 0 || venueType !== null)
+  // A chosen type keeps the chips up through its loading and its failure: a tap must never take the row away.
+  const showChips = venueType !== null || state.venues.length > 0
   const typeLabel = PLACE_TYPES.find((t) => t.venueType === venueType)?.label ?? 'All'
   const header = (
     <View>

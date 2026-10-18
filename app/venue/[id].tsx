@@ -13,6 +13,7 @@ import { SessionSheet } from '../../components/ds/SessionSheet'
 import { announceOutcome, font, useBoldText } from '../../components/ds/shared'
 import { useToast } from '../../components/Toast'
 import { VenueDock } from '../../components/venue/VenueDock'
+import { PAGE_WASH, PageWash } from '../../components/ui/GradientFill'
 import { VenueHero, VENUE_HERO_HEIGHT } from '../../components/venue/VenueHero'
 import { VenueRegulars } from '../../components/venue/VenueRegulars'
 import {
@@ -54,11 +55,15 @@ import {
   dialChoice as toDialChoice,
   dockMode,
   goodToKnow,
+  liveToast,
   kmParam,
+  sheetRefusal,
+  type SheetRefusal,
   upcomingRows,
   venueGate,
   venueHero,
   venueTiles,
+  washColor,
   type VenueGate,
 } from '../../lib/venuePage'
 
@@ -94,6 +99,8 @@ export default function VenueRoute() {
   return <VenueScreen id={id} km={kmParam(params.km)} />
 }
 
+const finishSetup = () => router.push('/edit-profile' as never)
+
 function MissingPlace() {
   const insets = useSafeAreaInsets()
   return (
@@ -101,7 +108,7 @@ function MissingPlace() {
       <View style={[styles.controls, { top: insets.top + SPACE.sm }]}>
         <IconButton icon="chevron-left" tier="control" accessibilityLabel="Back" onPress={() => router.back()} testID="venue-back" />
       </View>
-      <VenueGateScreen gate={{ kind: 'notFound' }} onRetry={() => {}} onBack={() => router.back()} />
+      <VenueGateScreen gate={{ kind: 'notFound' }} onRetry={() => {}} onBack={() => router.back()} onFinish={finishSetup} />
     </View>
   )
 }
@@ -121,7 +128,6 @@ function SessionHost(props: {
   onZero: () => void
 }) {
   const time = useSessionTime(props.live, props.onZero)
-  if (!time) return null
   return (
     <SessionSheet
       visible={props.visible}
@@ -136,6 +142,10 @@ function SessionHost(props: {
       startConfirming={props.confirmFirst}
     />
   )
+}
+
+function directionsTo(detail: VenueDetail) {
+  openInMaps({ latitude: detail.venue.latitude, longitude: detail.venue.longitude, address: detail.venue.address, venue_name: detail.venue.name }).catch(() => {})
 }
 
 function VenueScreen({ id, km }: { id: string; km: number | null }) {
@@ -153,6 +163,10 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
   const sheetRef = useLatest(sheet)
   const [dial, setDial] = useState<DialChoice>(20)
   const [tray, setTray] = useState<Tray | null>(null)
+  /** The refusal the Go Live sheet is showing in place of the dial, or null. */
+  const [refusal, setRefusal] = useState<SheetRefusal | null>(null)
+  /** The window Go Live was last asked for, for "Try again" on a weak fix or a lost answer. */
+  const lastAsked = useRef<GoLiveChoice | null>(null)
   const [leaving, setLeaving] = useState(false)
   const [extending, setExtending] = useState(false)
   const [extended, setExtended] = useState(false)
@@ -172,6 +186,7 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
   /** Closes the dial and starts `next` once it has left the screen. */
   const afterDialLeaves = useCallback(
     (next: () => void) => {
+      if (dialFallback.current) clearTimeout(dialFallback.current)
       afterDial.current = next
       setSheet(null)
       dialFallback.current = setTimeout(dialGone, DIAL_GONE_FALLBACK_MS)
@@ -279,21 +294,58 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
   const place = detail
     ? { id: detail.venue.id, name: detail.venue.name, latitude: detail.venue.latitude, longitude: detail.venue.longitude, address: detail.venue.address }
     : null
-  const { goLive, busy } = useGoLive({
+  const { goLive: runGoLive, busy } = useGoLive({
     place,
     showTray,
     closeTray: closeAll,
+    onRefusal: (r) => {
+      // Drawn by the dial's own sheet, in place of the dial; with no dial open (a one-tap Go live again) it opens to it.
+      setRefusal(sheetRefusal(r))
+      setSheet('dial')
+    },
     onLive: (result) => {
       if (sheetRef.current === 'dial') setSheet(null)
-      showToast(`You're live until ${new Date(result.expiresAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`, 'success')
+      showToast(liveToast(result), 'success')
       load()
     },
   })
+  const goLive = (choice: GoLiveChoice) => {
+    lastAsked.current = choice
+    return runGoLive(choice)
+  }
 
   const openDial = () => {
     setDial(lastChoice ? toDialChoice(lastChoice) : 20)
+    setRefusal(null)
     setSheet('dial')
   }
+  /** The refusal's way on: where the design sends each one. */
+  const refusalAction = () => {
+    const r = refusal
+    if (!r || !detail) return
+    if (r.kind === 'notHere') {
+      setSheet(null)
+      directionsTo(detail)
+    } else if (r.kind === 'eventOn' && r.eventId) {
+      setSheet(null)
+      openEvent(r.eventId)
+    } else if (r.kind === 'age') {
+      setSheet(null)
+      router.push('/edit-profile' as never)
+    } else if (r.kind === 'gps' || r.kind === 'timeout') {
+      // Try again: the same window, asked once more.
+      setRefusal(null)
+      if (lastAsked.current) void goLive(lastAsked.current)
+    } else if (r.kind === 'stay') {
+      // Pick a time: back to the dial, on the first window.
+      setRefusal(null)
+      setDial(20)
+    } else if (r.kind === 'notFound') {
+      setSheet(null)
+      router.back()
+    }
+  }
+  const refusalAlt = () => afterDialLeaves(() => void openPaywall('go_live_expiry', { userInitiated: true }))
   const stayLocked = () => afterDialLeaves(() => void openPaywall('go_live_expiry', { userInitiated: true }))
 
   const extend = async () => {
@@ -346,8 +398,7 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
     Share.share({ title: detail.venue.name, message: [detail.venue.name, detail.venue.address].filter(Boolean).join('\n') }).catch(() => {})
   }
   const directions = () => {
-    if (!detail) return
-    openInMaps({ latitude: detail.venue.latitude, longitude: detail.venue.longitude, address: detail.venue.address, venue_name: detail.venue.name }).catch(() => {})
+    if (detail) directionsTo(detail)
   }
   const copyAddress = () => {
     const address = detail?.venue.address
@@ -377,7 +428,7 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
     return (
       <View style={styles.screen}>
         {controls}
-        {gate ? <VenueGateScreen gate={gate} onRetry={load} onBack={() => router.back()} /> : <VenueSkeleton />}
+        {gate ? <VenueGateScreen gate={gate} onRetry={load} onBack={() => router.back()} onFinish={finishSetup} /> : <VenueSkeleton />}
       </View>
     )
   }
@@ -419,6 +470,7 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
           live={live}
           onZero={load}
         />
+        <PageWash color={washColor(venueHero(detail))} pointerEvents="none" style={styles.wash} />
         <View style={styles.body}>
           {action.kind === 'handoff' ? (
             <EventOnCard tonight={tonight?.id === action.eventId ? tonight : null} now={now} onPress={() => openEvent(action.eventId)} />
@@ -496,6 +548,12 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
         onStayLocked={stayLocked}
         onGoLive={() => void goLive(apiChoice(dial))}
         busy={busy}
+        refusal={refusal?.kind ?? null}
+        refusalMessage={refusal?.message}
+        refusalTitle={refusal?.title}
+        event={refusal?.eventId && tonight?.id === refusal.eventId ? tonight.title : ''}
+        onRefusalAction={refusalAction}
+        onRefusalAlt={refusalAlt}
         testID="venue-dial"
       />
       <SessionHost
@@ -549,6 +607,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: COLOR.ink },
   body: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.xl, gap: SPACE.sectionGap },
   controls: { position: 'absolute', left: SPACE.lg, right: SPACE.lg, zIndex: 2, flexDirection: 'row', justifyContent: 'space-between' },
+  wash: { position: 'absolute', left: 0, right: 0, top: VENUE_HERO_HEIGHT - 1, height: PAGE_WASH.height },
   shield: { position: 'absolute', left: 0, right: 0, top: 0, backgroundColor: COLOR.ink },
   secondary: { color: COLOR.textSecondary },
 })
