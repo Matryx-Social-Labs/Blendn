@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { AppState } from 'react-native'
 import { apiClient, AuthUser, TokenStorage } from './apiClient'
 import { Logger } from './logger'
 import { syncPurchasesUser } from './purchases'
@@ -61,39 +60,8 @@ const UNINITIALIZED: AuthState = {
 let globalAuthState: AuthState = { ...UNINITIALIZED }
 
 let authStateListeners: ((state: AuthState) => void)[] = []
-// `ReturnType<typeof setInterval>`, not `NodeJS.Timeout`: in React Native the
-// timer id is a number, and whether TypeScript agrees depends on whether
-// `@types/node` happens to be in scope — which varies between a fresh clone and
-// one that has run `pod install`. That made the same source typecheck on one
-// machine and fail on another. This form is correct under either resolution.
-let sessionCheckInterval: ReturnType<typeof setInterval> | null = null
 let isInitializing = false // Prevent concurrent initialization
 let initializationPromise: Promise<AuthState> | null = null // Promise-based wait instead of polling
-let appStateListenerRegistered = false
-let isAppActive = AppState.currentState === 'active'
-
-const registerAppStateListener = () => {
-  if (appStateListenerRegistered) return
-
-  try {
-    AppState.addEventListener('change', (state) => {
-      isAppActive = state === 'active'
-      if (!isAppActive) {
-        Logger.info('auth', 'App backgrounded; pausing session refresh')
-        stopSessionRefresh()
-        return
-      }
-
-      if (globalAuthState.user) {
-        Logger.info('auth', 'App foregrounded; resuming session refresh')
-        startSessionRefresh()
-      }
-    })
-    appStateListenerRegistered = true
-  } catch (error) {
-    Logger.warn('auth', 'Failed to register AppState listener', { error })
-  }
-}
 
 // Update global state and notify listeners
 const updateAuthState = (newState: Partial<AuthState>) => {
@@ -117,8 +85,6 @@ const initializeAuth = async (): Promise<AuthState> => {
   if (globalAuthState.initialized) {
     return globalAuthState
   }
-
-  registerAppStateListener()
 
   // Prevent concurrent initialization - use Promise instead of polling
   if (isInitializing && initializationPromise) {
@@ -222,15 +188,14 @@ const signInVerified = async (user: AuthUser, message: string) => {
     initialized: true,
   })
   await TokenStorage.setUser(user)
-  startSessionRefresh()
 }
 
 /**
  * The server could not be reached. The session is not over.
  *
  * Signed in as the user stored at the last sign-in, and the tokens are left
- * alone: `apiClient` retries the refresh in the background, the ten-minute
- * refresh keeps trying, and the next request that needs it tries again. With
+ * alone: `apiClient` retries the refresh in the background, and the next
+ * request that needs it refreshes first (see `freshAccessToken`). With
  * no stored user there is nobody to carry on as, so the entry screen says it
  * cannot reach Blend'n and offers Try again rather than a sign-in.
  */
@@ -246,7 +211,6 @@ const keepStoredSession = async () => {
       loading: false,
       initialized: true,
     })
-    startSessionRefresh()
     return
   }
   Logger.warn('auth', 'Could not reach the server and no user is stored')
@@ -262,7 +226,6 @@ const keepStoredSession = async () => {
 // Clear auth state
 const clearAuthState = async () => {
   await TokenStorage.clearAll()
-  stopSessionRefresh()
   /*
    * The centre button's cache is per-account.
    *
@@ -313,29 +276,6 @@ const registerSessionExpiredListener = () => {
   })
 }
 registerSessionExpiredListener()
-
-// Start periodic session refresh (every 10 minutes)
-const startSessionRefresh = () => {
-  stopSessionRefresh()
-  if (!isAppActive) {
-    Logger.debug('auth', 'Skipping session refresh start; app not active')
-    return
-  }
-  sessionCheckInterval = setInterval(
-    async () => {
-      Logger.debug('auth', 'Periodic session refresh check')
-      await apiClient.refreshSession()
-    },
-    10 * 60 * 1000
-  ) // 10 minutes
-}
-
-const stopSessionRefresh = () => {
-  if (sessionCheckInterval) {
-    clearInterval(sessionCheckInterval)
-    sessionCheckInterval = null
-  }
-}
 
 // Hook for React components
 export function useAuth(): AuthState {
@@ -406,8 +346,6 @@ export const signInWithGoogle = async (
         isNewAccount: isNewUser === true,
       })
 
-      startSessionRefresh()
-
       return { success: true, isNewUser }
     } else {
       Logger.error('auth', 'Google sign in failed', { error: result.error })
@@ -447,8 +385,6 @@ export const signInWithApple = async (
         isNewAccount: isNewUser === true,
       })
 
-      startSessionRefresh()
-
       return { success: true, isNewUser }
     } else {
       Logger.error('auth', 'Apple sign in failed', { error: result.error })
@@ -486,8 +422,6 @@ export const signInWithEmail = async (
         // Signing in is never creating; say so rather than inherit the flag.
         isNewAccount: false,
       })
-
-      startSessionRefresh()
 
       return { success: true }
     } else {
@@ -536,8 +470,6 @@ export const signUp = async (
         // Always true here: this endpoint only ever creates.
         isNewAccount: true,
       })
-
-      startSessionRefresh()
 
       return { success: true }
     } else {
@@ -644,7 +576,6 @@ export const clearNewAccountFlag = () => {
 
 // Cleanup function for app shutdown
 export const cleanupAuth = () => {
-  stopSessionRefresh()
   authStateListeners = []
   globalAuthState = { ...UNINITIALIZED }
 }
