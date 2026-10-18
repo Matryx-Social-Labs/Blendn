@@ -53,6 +53,12 @@ export function placesKey(
   return `${city ?? '-'}|${at}|${venueType ?? '-'}`
 }
 
+/** First occurrence wins: a venue that went live between two page loads can be on both (`order=live` moves it up the order). */
+export function uniqueById(venues: readonly VenueListItem[], seen: ReadonlySet<string> = new Set()): VenueListItem[] {
+  const taken = new Set(seen)
+  return venues.filter((v) => !taken.has(v.id) && (taken.add(v.id), true))
+}
+
 export function placesReducer(state: PlacesState, action: PlacesAction): PlacesState {
   if (action.type === 'reset') return action.key === state.key ? state : initialPlaces(action.key)
   // A page for another city or another spot is never applied over this one.
@@ -65,13 +71,12 @@ export function placesReducer(state: PlacesState, action: PlacesAction): PlacesS
       return { ...state, status: state.venues.length > 0 ? 'ready' : 'loading', refreshFailed: false }
     case 'loaded': {
       if (action.page <= 1) {
-        return { ...state, status: 'ready', venues: action.venues, page: 1, hasMore: action.hasMore, orderedLive: action.orderedLive === true, loadingMore: false, refreshFailed: false }
+        return { ...state, status: 'ready', venues: uniqueById(action.venues), page: 1, hasMore: action.hasMore, orderedLive: action.orderedLive === true, loadingMore: false, refreshFailed: false }
       }
       // A venue taken over (or back) between pages shifts the offsets; never show one twice.
-      const seen = new Set(state.venues.map((v) => v.id))
       return {
         ...state,
-        venues: [...state.venues, ...action.venues.filter((v) => !seen.has(v.id))],
+        venues: [...state.venues, ...uniqueById(action.venues, new Set(state.venues.map((v) => v.id)))],
         page: action.page,
         hasMore: action.hasMore,
         loadingMore: false,
