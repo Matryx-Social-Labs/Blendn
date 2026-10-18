@@ -142,9 +142,9 @@ describe('paging with thousands of venues', () => {
   })
 })
 
-describe('a server that orders live first (liveFirst)', () => {
+describe('a server that asks for and is given ?order=live', () => {
   it('folded, it reads exactly as far as the last live or open venue — no page cap — and stops at the first quiet one', () => {
-    const state = { page: EAGER_PAGES + 4, hasMore: true, liveFirst: true }
+    const state = { page: EAGER_PAGES + 4, hasMore: true, orderedLive: true }
     expect(mayReadNext(state, false, false)).toBe(true)
     expect(mayReadNext(state, false, true)).toBe(false)
     expect(mayReadNext({ ...state, hasMore: false }, true, true)).toBe(false)
@@ -153,7 +153,7 @@ describe('a server that orders live first (liveFirst)', () => {
   })
 
   it('without it, the first few pages are the cap, as before', () => {
-    expect(mayReadNext({ page: EAGER_PAGES, hasMore: true, liveFirst: false }, false, false)).toBe(false)
+    expect(mayReadNext({ page: EAGER_PAGES, hasMore: true, orderedLive: false }, false, false)).toBe(false)
   })
 })
 

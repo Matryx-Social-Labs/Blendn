@@ -169,7 +169,7 @@ describe('the chips', () => {
   it('each asks the server for that type, afresh, and the selected one is white', async () => {
     getVenues.mockResolvedValue(page([venue('a', { liveNow: '5-9' })]))
     await mount()
-    expect(getVenues).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1, limit: 30, city: 'Bengaluru', sortBy: 'distance', venueType: undefined, liveFirst: true }), { force: true })
+    expect(getVenues).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1, limit: 30, city: 'Bengaluru', sortBy: 'distance', venueType: undefined, order: 'live' }), { force: true })
     await act(async () => {
       fireEvent.press(screen.getByRole('button', { name: 'Breweries' }))
     })
@@ -313,6 +313,17 @@ describe('thousands of venues', () => {
     for (const call of [apiClient.getVenue, apiClient.queuedRequest, apiClient.cachedRequest, offersApi.prefs]) expect(call).not.toHaveBeenCalled()
   })
 
+  it('without the order: "live" echo the first pages are all it reads on its own, even if the server happened to send live venues', async () => {
+    getVenues.mockImplementation(({ page: n }: { page: number }) => Promise.resolve(page(Array.from({ length: 30 }, (_, i) => venue(`x${n}-${i}`, { liveNow: '5-9' })), true, n)))
+    await mount()
+    for (let i = 0; i < 9; i++) {
+      await act(async () => {
+        fireEvent(screen.getByTestId('places-list'), 'endReached')
+      })
+    }
+    expect(getVenues.mock.calls.map(([q]) => q.page)).toEqual([1, 2, 3])
+  })
+
   it('a server that orders live first is read as far as the last live or open venue, with no page cap, and no further once a quiet one shows', async () => {
     const liveFull = (from: number) => Array.from({ length: 30 }, (_, i) => venue(`l${from + i}`, { liveNow: '5-9' }))
     const calls: number[] = []
@@ -320,7 +331,7 @@ describe('thousands of venues', () => {
       calls.push(n)
       // Pages 1-5 are all live; page 6 reaches the quiet ones.
       const venues = n < 6 ? liveFull(n * 100) : full(n * 100)
-      return Promise.resolve({ ...page(venues, true, n), data: { ...page(venues, true, n).data, liveFirst: true } })
+      return Promise.resolve({ ...page(venues, true, n), data: { ...page(venues, true, n).data, pagination: { ...page(venues, true, n).data.pagination, order: 'live' } } })
     })
     await mount()
     const list = screen.getByTestId('places-list')

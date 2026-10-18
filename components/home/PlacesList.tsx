@@ -67,12 +67,12 @@ export function PlacesList({ browse, active, onSummary }: { browse: HomeBrowse; 
       dispatch({ type: 'request', key, page })
       try {
         const res = await apiClient.getVenues(
-          { page, limit: PAGE, city: city ?? undefined, lat, lon, sortBy: lat !== undefined ? 'distance' : 'name', venueType: venueType ?? undefined, liveFirst: true },
+          { page, limit: PAGE, city: city ?? undefined, lat, lon, sortBy: lat !== undefined ? 'distance' : 'name', venueType: venueType ?? undefined, order: 'live' },
           // Opening the pane, pull-to-refresh and Try again are the person asking: never a cached page.
           fresh ? { force: true } : undefined
         )
         if (res.success && res.data) {
-          dispatch({ type: 'loaded', key, page, venues: res.data.venues, hasMore: res.data.pagination.hasMore, liveFirst: res.data.liveFirst })
+          dispatch({ type: 'loaded', key, page, venues: res.data.venues, hasMore: res.data.pagination.hasMore, orderedLive: (res.data.pagination.order ?? res.data.order) === 'live' })
         } else {
           Logger.warn('events', 'Could not load places', { page, error: res.error })
           dispatch({ type: 'failed', key, page })

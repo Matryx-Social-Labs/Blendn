@@ -113,7 +113,7 @@ export const bucketLabel = (bucket: VenueListItem['liveNow']) => (bucket ? liveN
  * nearest few dozen; past that nothing is read until the person unfolds the
  * quiet places and scrolls (thousands of venues: an eager read of all of them
  * would be a hundred requests for a fold).
- * ponytail: the cap is the fallback for a server without `liveFirst`.
+ * ponytail: the cap is the fallback for a server without the echo.
  */
 export const EAGER_PAGES = 3
 
@@ -137,13 +137,13 @@ export function peekLine(strata: PlaceStrata, more: boolean): string | null {
  * without, only the first few pages.
  */
 export function mayReadNext(
-  state: { page: number; hasMore: boolean; liveFirst?: boolean },
+  state: { page: number; hasMore: boolean; orderedLive?: boolean },
   quietOpen: boolean,
   reachedQuiet = false
 ): boolean {
   if (!state.hasMore) return false
   if (quietOpen) return true
-  return state.liveFirst ? !reachedQuiet : state.page < EAGER_PAGES
+  return state.orderedLive ? !reachedQuiet : state.page < EAGER_PAGES
 }
 
 export type PlaceRow =

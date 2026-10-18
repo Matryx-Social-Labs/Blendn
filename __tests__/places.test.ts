@@ -92,12 +92,12 @@ describe('the Places list loads', () => {
 
 describe('a server that orders live first', () => {
   it('the first page says so; later pages keep it; a list for another key forgets it', () => {
-    let s = placesReducer(initialPlaces(KEY), { type: 'loaded', key: KEY, page: 1, venues: [], hasMore: true, liveFirst: true })
-    expect(s.liveFirst).toBe(true)
+    let s = placesReducer(initialPlaces(KEY), { type: 'loaded', key: KEY, page: 1, venues: [], hasMore: true, orderedLive: true })
+    expect(s.orderedLive).toBe(true)
     s = placesReducer(s, { type: 'loaded', key: KEY, page: 2, venues: [], hasMore: true })
-    expect(s.liveFirst).toBe(true)
+    expect(s.orderedLive).toBe(true)
     s = placesReducer(s, { type: 'loaded', key: KEY, page: 1, venues: [], hasMore: true })
-    expect(s.liveFirst).toBe(false)
+    expect(s.orderedLive).toBe(false)
   })
 
   it('the type chip is part of what the list is of', () => {

@@ -770,13 +770,14 @@ export interface VenueListItem {
 }
 
 export interface VenuesListResponse {
-  /**
-   * The server honoured `liveFirst`: venues come live buckets first, then those with an event tonight,
-   * then the rest, so the strata are all in the first pages. Absent from a server that does not know it.
-   */
-  liveFirst?: boolean
   venues: VenueListItem[]
-  pagination: { page: number; limit: number; totalCount: number; totalPages: number; hasMore: boolean }
+  /**
+   * `order: 'live'` is the server saying it honoured `?order=live`: live now, then open tonight, then the
+   * rest, so the strata are all in the first pages. Absent from a server that does not know it.
+   */
+  pagination: { page: number; limit: number; totalCount: number; totalPages: number; hasMore: boolean; order?: string }
+  /** Read too where a server echoes it beside the list rather than in its paging. */
+  order?: string
 }
 
 /** One venue — `GET /api/mobile/venues/:venueId`, as the place screen reads it. */
@@ -1756,7 +1757,7 @@ class ApiClientClass {
    * event's card names the venue instead.
    */
   async getVenues(
-    params: { page?: number; limit?: number; city?: string; lat?: number; lon?: number; sortBy?: 'name' | 'distance'; venueType?: string; liveFirst?: boolean },
+    params: { page?: number; limit?: number; city?: string; lat?: number; lon?: number; sortBy?: 'name' | 'distance'; venueType?: string; order?: 'live' },
     options?: { force?: boolean }
   ): Promise<ApiResponse<VenuesListResponse>> {
     const endpoint = `/api/mobile/venues${toQuery(params)}`

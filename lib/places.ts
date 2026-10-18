@@ -18,8 +18,8 @@ export interface PlacesState {
   /** The last page that arrived. */
   page: number
   hasMore: boolean
-  /** The server ordered this list live first (`liveFirst`): Live now and Open tonight are all in the first pages. */
-  liveFirst: boolean
+  /** The server ordered this list live first (`order: 'live'`): Live now and Open tonight are all in the first pages. */
+  orderedLive: boolean
   /** A page past the first is on its way: `onEndReached` must not ask again. */
   loadingMore: boolean
   /** A refresh failed over a list already shown: keep the list, say so inline, offer a retry. */
@@ -29,7 +29,7 @@ export interface PlacesState {
 export type PlacesAction =
   | { type: 'reset'; key: string }
   | { type: 'request'; key: string; page: number }
-  | { type: 'loaded'; key: string; page: number; venues: VenueListItem[]; hasMore: boolean; liveFirst?: boolean }
+  | { type: 'loaded'; key: string; page: number; venues: VenueListItem[]; hasMore: boolean; orderedLive?: boolean }
   | { type: 'failed'; key: string; page: number }
 
 export const initialPlaces = (key: string): PlacesState => ({
@@ -38,7 +38,7 @@ export const initialPlaces = (key: string): PlacesState => ({
   venues: [],
   page: 0,
   hasMore: false,
-  liveFirst: false,
+  orderedLive: false,
   loadingMore: false,
   refreshFailed: false,
 })
@@ -65,7 +65,7 @@ export function placesReducer(state: PlacesState, action: PlacesAction): PlacesS
       return { ...state, status: state.venues.length > 0 ? 'ready' : 'loading', refreshFailed: false }
     case 'loaded': {
       if (action.page <= 1) {
-        return { ...state, status: 'ready', venues: action.venues, page: 1, hasMore: action.hasMore, liveFirst: action.liveFirst === true, loadingMore: false, refreshFailed: false }
+        return { ...state, status: 'ready', venues: action.venues, page: 1, hasMore: action.hasMore, orderedLive: action.orderedLive === true, loadingMore: false, refreshFailed: false }
       }
       // A venue taken over (or back) between pages shifts the offsets; never show one twice.
       const seen = new Set(state.venues.map((v) => v.id))
