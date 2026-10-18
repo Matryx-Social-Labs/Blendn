@@ -67,6 +67,7 @@ import {
 } from '../../lib/city'
 import { readStoredCity, storeCity } from '../../lib/cityStorage'
 import { formatDistance, getDistanceMetres, roundCoord } from '../../lib/geo'
+import { EVENT_DETAIL_QUERY } from '../../lib/eventDetailQuery'
 import { publishRoomSignal } from '../../lib/roomSignal'
 import {
   featuredDateLabel,
@@ -512,13 +513,9 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
    * featured card once the Pulse settles. Replaces Tonight's per-card detail N+1.
    */
   const warmEvent = useCallback((event: Event) => {
-    apiClient.getEvent(event.id, {
-      include: 'interestedUsers',
-      interestedLimit: 6,
-      lat: roundCoord(userLocation?.latitude),
-      lon: roundCoord(userLocation?.longitude),
-    }).catch(() => {})
-  }, [userLocation?.latitude, userLocation?.longitude])
+    // The page's own query, byte for byte (lib/eventDetailQuery.ts): a different one warms a key nobody reads.
+    apiClient.getEvent(event.id, { ...EVENT_DETAIL_QUERY }).catch(() => {})
+  }, [])
 
   // Memoized callbacks to prevent re-creation
   const handleEventPress = useCallback((event: Event) => {

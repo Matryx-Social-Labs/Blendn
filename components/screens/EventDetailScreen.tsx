@@ -1,6 +1,7 @@
 import { LinearGradient } from 'expo-linear-gradient'
 import ScalePress from '../motion/ScalePress'
 import FadeInUp from '../motion/FadeInUp'
+import { EVENT_DETAIL_QUERY } from '../../lib/eventDetailQuery'
 import { H } from '../../lib/haptics'
 import { MOTION_DURATION, MOTION_STAGGER } from '../../lib/motion'
 import { HeartIcon } from '../motion/HeartIcon'
@@ -386,10 +387,7 @@ export default function EventDetail() {
   const fetchEventDetails = () => {
     Logger.journey('events', 'detail:fetch:start', { eventId: String(id) })
     return apiClient
-      .getEvent(String(id), {
-        include: 'interestedUsers',
-        interestedLimit: 6,
-      })
+      .getEvent(String(id), { ...EVENT_DETAIL_QUERY })
       .then((result) => {
         /*
          * With nothing on screen the page itself says so (below). With the

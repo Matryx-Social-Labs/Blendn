@@ -19,6 +19,7 @@ import { SkeletonBlock } from '../components/Skeleton'
 import { getEvents as fetchEventsApi, type BlendnEvent } from '../lib/api'
 import { apiClient } from '../lib/apiClient'
 import { readStoredCity } from '../lib/cityStorage'
+import { EVENT_DETAIL_QUERY } from '../lib/eventDetailQuery'
 import { formatDistance, getDistanceKm } from '../lib/geo'
 import { getOptimizedImageUrl } from '../lib/photoUtils'
 import { preloadImages } from '../components/OptimizedImage'
@@ -198,10 +199,8 @@ export default function NearbyEventsScreen() {
   }, [loadEvents])
 
   const handleEventPress = useCallback((event: BlendnEvent) => {
-    apiClient.getEvent(event.id, {
-      lat: userLocation?.latitude,
-      lon: userLocation?.longitude,
-    }).catch(() => {})
+    // The page's own query (lib/eventDetailQuery.ts), so the warm is the key the page reads.
+    apiClient.getEvent(event.id, { ...EVENT_DETAIL_QUERY }).catch(() => {})
 
     if (event.cover_image_url) {
       const hero = getOptimizedImageUrl(event.cover_image_url, {
@@ -224,7 +223,7 @@ export default function NearbyEventsScreen() {
         description: event.description || '',
       } as any,
     })
-  }, [userLocation])
+  }, [])
 
   const containerPadding = GUTTER * 2
   const innerW = Math.max(0, screenW - containerPadding)
