@@ -64,3 +64,15 @@ export function formatDistance(km: number | null | undefined): string | null {
   if (km < 10) return `${km.toFixed(1)}km away`
   return `${Math.round(km)}km away`
 }
+
+/**
+ * A coordinate to ~100 m (3 decimals), for anything that is both sent to the
+ * server and used in a cache key. The last-known fix and the live fix a few
+ * metres apart differ in the sixth decimal, which made them two cache keys and
+ * so two requests for one place; a jitter of that size is not a new request.
+ */
+export function roundCoord(n: number): number
+export function roundCoord(n: number | undefined): number | undefined
+export function roundCoord(n: number | undefined): number | undefined {
+  return n === undefined ? undefined : Number(n.toFixed(3))
+}

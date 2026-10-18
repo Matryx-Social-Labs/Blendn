@@ -70,7 +70,7 @@ import {
   type StoredCity,
 } from '../../lib/city'
 import { readStoredCity, storeCity } from '../../lib/cityStorage'
-import { getDistanceMetres } from '../../lib/geo'
+import { getDistanceMetres, roundCoord } from '../../lib/geo'
 import { FIX_MAX_AGE_MS, fixOf, type PreciseFix } from '../../lib/roomButton'
 import { publishRoomSignal } from '../../lib/roomSignal'
 import { homeCardProps, groupByDay } from '../../lib/pulse'
@@ -385,6 +385,8 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   const selectedCity = selection?.city ?? null
   // Decided once the city list has been read: stored, inferred, or none at all.
   const [cityResolved, setCityResolved] = useState(false)
+  // Narrower than `cityResolved`: the feed may fire once the city is *known* (a stored one is, from disk), without waiting for the city list.
+  const [feedCityReady, setFeedCityReady] = useState(false)
   const [cityOptions, setCityOptions] = useState<CityOption[]>([])
   const [deviceCity, setDeviceCity] = useState<string | null>(null)
   const [cityPickerOpen, setCityPickerOpen] = useState(false)
@@ -506,8 +508,8 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     apiClient.getEvent(event.id, {
       include: 'interestedUsers',
       interestedLimit: 6,
-      lat: userLocation?.latitude,
-      lon: userLocation?.longitude,
+      lat: roundCoord(userLocation?.latitude),
+      lon: roundCoord(userLocation?.longitude),
     }).catch(() => {})
   }, [userLocation?.latitude, userLocation?.longitude])
 
@@ -867,8 +869,9 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
        * every section below is a `useMemo` over this one array, so an empty
        * result took the whole page with it, carousels and heroes included.
        */
-      const lat = userLocation?.latitude
-      const lon = userLocation?.longitude
+      // Rounded, so the last-known fix and the live one are one cache key (and one request).
+      const lat = roundCoord(userLocation?.latitude)
+      const lon = roundCoord(userLocation?.longitude)
       const { data: eventsData, error } = await fetchEventsApi({
         page: 0,
         limit: PAGE_SIZE,
@@ -936,8 +939,8 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
         page: 1,
         limit: 1,
         city: selectedCity ?? undefined,
-        lat: userLocation?.latitude,
-        lon: userLocation?.longitude,
+        lat: roundCoord(userLocation?.latitude),
+        lon: roundCoord(userLocation?.longitude),
         search: searchTerm || undefined,
         ...filtersToQuery(draft),
       })
@@ -993,7 +996,8 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   const [refining, setRefining] = useState(false)
 
   useEffect(() => {
-    if (!authLoading && user) {
+    // Not before the city is known: an unscoped /events fired first, then again scoped (a second skeleton).
+    if (!authLoading && user && feedCityReady) {
       const cityChanged = prevSelectedCityRef.current !== selectedCity
       const refinementChanged =
         prevSearchTermRef.current !== searchTerm || prevFiltersRef.current !== filters
@@ -1017,7 +1021,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     // is already handled below (with its own lastFetchLocationRef dedupe) —
     // including it here would fire that fetch a second, unguarded time.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, authLoading, selectedCity, searchTerm, filters])
+  }, [user, authLoading, feedCityReady, selectedCity, searchTerm, filters])
 
   // Preload images - use a ref to track already preloaded URLs and avoid redundant work
   const preloadedUrlsRef = useRef<Set<string>>(new Set())
@@ -1062,10 +1066,14 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      const [stored, response] = await Promise.all([
-        readStoredCity(),
-        apiClient.getEventCities(),
-      ])
+      // From disk, and first: a stored city scopes the feed at once instead of after the cities request.
+      const stored = await readStoredCity()
+      if (cancelled) return
+      if (stored) {
+        setSelection((current) => current ?? stored)
+        setFeedCityReady(true)
+      }
+      const response = await apiClient.getEventCities()
       if (cancelled) return
 
       const available = response.success && response.data ? response.data.cities : []
@@ -1075,11 +1083,17 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
         current ?? resolveBrowseCity({ stored, deviceCity: null, available })
       )
       setCityResolved(true)
+      setFeedCityReady(true)
     })()
     return () => {
       cancelled = true
     }
   }, [])
+
+  // A guess is kept, as a guess (`cityOnResume` treats 'inferred' as replaceable): the next launch starts scoped.
+  useEffect(() => {
+    if (selection?.source === 'inferred') void storeCity(selection.city, 'inferred')
+  }, [selection])
 
   /*
    * Where the device is, in city terms. Used to *offer* a switch and to decide
@@ -1275,7 +1289,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     if (!user || authLoading) return
     if (!userLocation) return
     if (loading) return
-    const key = `${userLocation.latitude},${userLocation.longitude}`
+    const key = `${roundCoord(userLocation.latitude)},${roundCoord(userLocation.longitude)}`
     if (lastFetchLocationRef.current !== key) {
       // Same reasoning as `onSync`: the location changed, the cache key changed
       // with it, so there is nothing stale to force past.
@@ -1304,8 +1318,8 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
         page: page + 1,
         limit: PAGE_SIZE,
         city: selectedCity ?? undefined,
-        lat: userLocation?.latitude,
-        lon: userLocation?.longitude,
+        lat: roundCoord(userLocation?.latitude),
+        lon: roundCoord(userLocation?.longitude),
         include: 'checkins',
         search: searchTerm || undefined,
         ...filtersToQuery(filters),
@@ -1364,11 +1378,11 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   const [weekendState, setWeekendState] = useState<{ key: string; events: Event[] | null } | null>(null)
   const [featuredState, setFeaturedState] = useState<{ key: string; events: Event[] | null } | null>(null)
   const [forYouState, setForYouState] = useState<{ key: string; value: { interest: { name: string; slug: string }; events: Event[] } | null } | null>(null)
-  const sectionRequestsOn = !!user && !authLoading && cityResolved && !isNarrowed
+  const sectionRequestsOn = !!user && !authLoading && feedCityReady && !isNarrowed
   useEffect(() => {
     if (!sectionRequestsOn) return
     let cancelled = false
-    const where = { city: selectedCity ?? undefined, lat: userLocation?.latitude, lon: userLocation?.longitude }
+    const where = { city: selectedCity ?? undefined, lat: roundCoord(userLocation?.latitude), lon: roundCoord(userLocation?.longitude) }
     const window = weekendWindow(Date.now())
     if (!window.skip) {
       fetchEventsApi({ page: 0, limit: 20, ...where, include: 'checkins', startDate: window.startDate, endDate: window.endDate })
