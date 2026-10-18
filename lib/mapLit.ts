@@ -336,16 +336,19 @@ function startLabel(startsAt: string | null, now: number, forSpeech: boolean): s
   return forSpeech ? `${day} ${time}` : `${day} · ${time}`
 }
 
-/** The chip's second line: "LIVE ●", the start ("Fri · 8:00 pm", with the date past six days), or a venue's bucket ("10–19 live"). */
+/** The chip's second line: "LIVE ●", the start ("Fri · 8:00 pm", with the date past six days), or a venue's bucket ("10–19 live"; nothing below 5). */
 export function chipLine(p: ChipSource, now: number = Date.now()): string {
-  if (p.kind === 'venue') return liveNowLabel(p.bucket)
+  if (p.kind === 'venue') return liveNowLabel(p.bucket) ?? ''
   if (p.live) return 'LIVE ●'
   return startLabel(p.startsAt, now, false) ?? ''
 }
 
 /** What a screen reader says for a chip: plain words, no symbols. */
 export function chipSpeech(p: ChipSource & { title: string }, now: number = Date.now()): string {
-  if (p.kind === 'venue') return `${p.title}, ${liveNowLabel(p.bucket).toLowerCase()}`
+  if (p.kind === 'venue') {
+    const label = liveNowLabel(p.bucket)
+    return label ? `${p.title}, ${label.toLowerCase()}` : p.title
+  }
   if (p.live) return `${p.title}, live now`
   const start = startLabel(p.startsAt, now, true)
   return start ? `${p.title}, starts ${start}` : p.title

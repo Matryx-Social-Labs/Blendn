@@ -174,6 +174,6 @@ describe('what a tile is read as', () => {
     expect(label).toBe('Toit. Brewery. 350 m. 10–19 live. 9 PM, Vinyl Night')
     expect(placeLabel(venue({ liveNow: null, distance: null }), NOW)).toBe('Toit. Brewery')
     // A quiet row passes no clock, so its label (and its memo) does not move with it.
-    expect(placeLabel(venue({ liveNow: 'quiet', nextEvent: event(21, 23) }))).toBe('Toit. Brewery. 350 m. Under 5 live')
+    expect(placeLabel(venue({ liveNow: 'quiet', nextEvent: event(21, 23) }))).toBe('Toit. Brewery. 350 m')
   })
 })

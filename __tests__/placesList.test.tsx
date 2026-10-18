@@ -102,10 +102,23 @@ describe('the three strata', () => {
     expect(screen.getByText('1 place')).toBeTruthy()
     expect(screen.getByLabelText('Toit. Brewery. 350 m. 10–19 live. Live, Vinyl Night')).toBeTruthy()
     expect(screen.getByRole('header', { name: 'Open tonight' })).toBeTruthy()
-    expect(screen.getByLabelText('Fandom. Club. 350 m. Under 5 live. Live, Vinyl Night')).toBeTruthy()
+    expect(screen.getByLabelText('Fandom. Club. 350 m. Live, Vinyl Night')).toBeTruthy()
     expect(screen.getByLabelText('2 quiet places')).toBeTruthy()
     // Folded: the quiet rows are not drawn.
     expect(screen.queryByTestId('place-quiet-c')).toBeNull()
+  })
+
+  it('under five draws no live count: a quiet row carries no pill, no "N live" label', async () => {
+    getVenues.mockResolvedValue(page([venue('c', { name: 'Koshy’s', liveNow: 'quiet', venueType: 'cafe', venueTypeLabel: 'Café' })]))
+    await mount()
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('1 quiet place'))
+    })
+    expect(screen.getByTestId('place-quiet-c')).toBeTruthy()
+    expect(screen.getByLabelText('Koshy’s. Café. 350 m')).toBeTruthy()
+    // A count ends in "live" ("5–9 live"); the "Live music" type chip does not.
+    expect(screen.queryByText(/(^|\s)live$/i)).toBeNull()
+    expect(screen.queryByText(/under 5/i)).toBeNull()
   })
 
   it('live is a bucket, never a number: the pill says "10–19 live" and the tile never says who', async () => {

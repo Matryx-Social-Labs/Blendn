@@ -119,20 +119,23 @@ export const DRAWER_SNAP_LABEL: Record<DrawerSnap, string> = {
 /** The server's live-count bucket (`GET /venues`, D-19). Never a number. */
 export type LiveNow = 'quiet' | '5-9' | '10-19' | '20+'
 
-/**
- * How many are live at a place, as the list says it. `quiet` is fewer than 5,
- * none included — the dashboard's wording (`liveCountLabel`), so the two never
- * describe one room differently.
- */
-export function liveNowLabel(bucket: LiveNow | null | undefined): string {
+// Owner ruling 2026-10-18: no "Under 5 live" — below 5 shows nothing.
+/** The number a live bucket shows ("5–9"); null for `quiet` (fewer than 5) and for an older server that sends none. */
+export function liveNowWord(bucket: LiveNow | null | undefined): string | null {
   switch (bucket) {
     case '5-9':
-      return '5–9 live'
+      return '5–9'
     case '10-19':
-      return '10–19 live'
+      return '10–19'
     case '20+':
-      return '20+ live'
+      return '20+'
     default:
-      return 'Under 5 live'
+      return null
   }
+}
+
+/** How many are live at a place, as the list says it ("5–9 live"), or null when it shows nothing. */
+export function liveNowLabel(bucket: LiveNow | null | undefined): string | null {
+  const word = liveNowWord(bucket)
+  return word ? `${word} live` : null
 }

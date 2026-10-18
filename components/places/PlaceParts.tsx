@@ -78,6 +78,7 @@ function TypeLine({ venue, area = false, small = false }: { venue: VenueListItem
 
 const Tile = memo(function Tile({ venue, now }: { venue: VenueListItem; now: number }) {
   const bold = useBoldText()
+  const liveText = bucketLabel(venue.liveNow)
   return (
     <ScalePress
       haptic={false}
@@ -91,9 +92,9 @@ const Tile = memo(function Tile({ venue, now }: { venue: VenueListItem; now: num
     >
       <View style={styles.tilePhoto}>
         <PlaceArt venue={venue} now={now} />
-        {venue.liveNow ? (
+        {liveText ? (
           <View style={styles.tilePill}>
-            <LivePill text={bucketLabel(venue.liveNow) ?? ''} />
+            <LivePill text={liveText} />
           </View>
         ) : null}
       </View>
@@ -208,7 +209,7 @@ export function QuietFold({ count, more, open, onPress }: { count: number; more:
   )
 }
 
-/** A quiet place: a small type plate (no photo), the name, the type and area, "Under 5 live" at the end. */
+/** A quiet place: a small type plate (no photo), the name, the type and area, and a live count at the end only when it shows one (never under 5). */
 export const QuietRow = memo(function QuietRow({ venue }: { venue: VenueListItem }) {
   const bold = useBoldText()
   const words = bucketLabel(venue.liveNow)

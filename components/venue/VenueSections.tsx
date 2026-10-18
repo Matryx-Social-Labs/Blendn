@@ -15,7 +15,8 @@ import { COLOR, FONT_FAMILY, ICON, PRESS, RADIUS, SIZE, SPACE } from '../../lib/
 import { distanceText } from '../../lib/placesPane'
 import { startsLabel } from '../../lib/roomMoments'
 import { useSessionTime } from '../../lib/useSessionTime'
-import { bucketWord, ringWords, timeRange, UPCOMING_SHOWN } from '../../lib/venuePage'
+import { liveNowWord } from '../../lib/home'
+import { ringWords, timeRange, UPCOMING_SHOWN } from '../../lib/venuePage'
 import { VenueMap } from './VenueMap'
 
 /** The ring around the live card (the design's 88, a 56 face inside). */
@@ -170,13 +171,14 @@ export function UpcomingList({
  */
 export function WhosHere({ live, onSeeWho }: { live: VenueDetail['live']; onSeeWho: () => void }) {
   const bold = useBoldText()
+  const liveWord = liveNowWord(live.liveNow)
   return (
     <Section>
       <SectionHeader title="Who’s here" />
       {live.youAreLive ? (
         <>
           <Text style={[font('meta', bold), styles.secondary]}>
-            {live.liveNow ? `${bucketWord(live.liveNow)} live · ` : ''}
+            {liveWord ? `${liveWord} live · ` : ''}
             Pseudonyms only, until someone reveals.
           </Text>
           <Button kind="secondary" size="md" icon="users" label="See who’s here" onPress={onSeeWho} testID="venue-see-who" />

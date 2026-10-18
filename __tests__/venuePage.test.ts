@@ -3,7 +3,6 @@ import {
   againLabel,
   apiChoice,
   boardEventId,
-  bucketWord,
   clock24,
   dayLabel,
   dialChoice,
@@ -69,10 +68,9 @@ describe('the tiles', () => {
     expect(open(-600, -60).value).toBe('Closed')
   })
 
-  it('the live tile is a bucket, never below the floor', () => {
-    for (const bucket of ['quiet', '5-9', '10-19', '20+'] as const) {
-      expect(bucketWord(bucket)).not.toMatch(/(^|[^–\d])[0-4]($|[^\d])/)
-    }
+  it('the live tile is a bucket, and under five there is no live tile at all', () => {
+    expect(venueTiles(detail({ live: { liveNow: 'quiet' } }), NOW)).toEqual([])
+    expect(venueTiles(detail({ live: { liveNow: '20+' } }), NOW)).toEqual([{ label: 'LIVE', value: '20+ so far', mono: false }])
   })
 
   it('a reset hour that is not an hour, or an empty capacity, is not a tile', () => {

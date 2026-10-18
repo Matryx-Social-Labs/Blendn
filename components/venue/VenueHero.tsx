@@ -67,6 +67,7 @@ export function VenueHero({
   const bold = useBoldText()
   const distance = distanceText(km)
   const lead = [typeLabel, area].filter(Boolean).join(' · ')
+  const liveText = liveNowLabel(live.liveNow)
   return (
     <View style={styles.hero} testID="venue-hero">
       {hero.kind === 'cover' ? (
@@ -77,9 +78,9 @@ export function VenueHero({
       <StatusScrim style={styles.headScrim} pointerEvents="none" />
       <PhotoScrim style={styles.scrim} pointerEvents="none" />
       <View style={styles.text}>
-        {live.liveNow || live.youAreLive ? (
+        {liveText || live.youAreLive ? (
           <View style={styles.pills}>
-            {live.liveNow ? <LivePill text={liveNowLabel(live.liveNow)} testID="venue-bucket" /> : null}
+            {liveText ? <LivePill text={liveText} testID="venue-bucket" /> : null}
             {live.youAreLive ? <YouAreLivePill live={live} onZero={onZero} /> : null}
           </View>
         ) : null}

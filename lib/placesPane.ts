@@ -73,7 +73,7 @@ export function tonightEvent(
 export type PlaceStrata = {
   /** 5–9, 10–19 and 20+ live. */
   live: VenueListItem[]
-  /** Under 5 live, with an event tonight. */
+  /** Under 5 (no live label), with an event tonight. */
   open: VenueListItem[]
   /** Everything else. */
   quiet: VenueListItem[]
@@ -104,7 +104,7 @@ export function quietLine(count: number, more: boolean): string {
   return `${n} quiet ${count === 1 && !more ? 'place' : 'places'}`
 }
 
-/** "Under 5 live" for a bucket the row prints; null for a viewer the server tells nothing. */
+/** "5–9 live" for a bucket the row prints; null below 5 and for a viewer the server tells nothing. */
 export const bucketLabel = (bucket: VenueListItem['liveNow']) => (bucket ? liveNowLabel(bucket) : null)
 
 /**

@@ -19,7 +19,7 @@ import { PhotoScrim, StatusScrim } from '../../components/ui/GradientFill'
 import { apiClient } from '../../lib/apiClient'
 import { COMMUNITY_GUIDELINES_URL } from '../../lib/communityGuidelines'
 import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
-import { liveNowLabel } from '../../lib/home'
+import { liveNowWord } from '../../lib/home'
 import { openInApp } from '../../lib/links'
 import { Logger } from '../../lib/logger'
 import { markSeed } from '../../lib/pseudonymAvatar'
@@ -67,7 +67,7 @@ export default function ChatInfo() {
   return <ChatInfoInner />
 }
 
-/** How many are live at the place, as a bucket ("5–9", "Under 5"); null until the place answers. */
+/** How many are live at the place, as a bucket ("5–9"); null below 5, and until the place answers. */
 function usePlaceBucket(venueId: string | undefined): string | null {
   const [bucket, setBucket] = useState<string | null>(null)
   useEffect(() => {
@@ -77,7 +77,7 @@ function usePlaceBucket(venueId: string | undefined): string | null {
       .getVenue(venueId)
       .then((result) => {
         const now = result.success ? result.data?.live?.liveNow : null
-        if (live && now) setBucket(liveNowLabel(now).replace(/ live$/, ''))
+        if (live) setBucket(liveNowWord(now))
       })
       .catch((error) => Logger.warn('chat', 'Could not load the place for its room', { error }))
     return () => {

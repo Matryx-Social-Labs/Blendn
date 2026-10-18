@@ -17,7 +17,7 @@ import type { VenueDetail, VenueListItem } from './apiClient'
 import { BOARD_ENABLED } from './board'
 import type { GoLiveRefusal as SheetKind } from '../components/ds/GoLiveSheet'
 import { countdownLabel, EXTEND_CHOICE, remainingMs, type GoLiveChoice, type GoLiveRefusal, type VenueAction } from './goLive'
-import { liveNowLabel } from './home'
+import { liveNowWord } from './home'
 import { VENUE_PLATES } from './design/tokens'
 import { distanceText, plateFor, type PlateKey } from './placesPane'
 
@@ -45,15 +45,12 @@ export function venueHero(detail: Pick<VenueDetail, 'venue' | 'tonight'>): Venue
   return uri ? { kind: 'cover', uri } : { kind: 'plate', plate: plateFor(detail.venue.venueType) }
 }
 
-/** "5–9", "Under 5": the bucket without its "live". */
-export const bucketWord = (bucket: NonNullable<VenueListItem['liveNow']>) => liveNowLabel(bucket).replace(/ live$/, '')
-
 export type TileSpec = { label: string; value: string; mono: boolean }
 
 /**
  * The page's tiles: Open · Live · Reset · Size. Each is drawn only when its
- * field is here, and Live only for somebody the server tells (a null bucket
- * draws nothing, never "0").
+ * field is here, and Live only for a bucket the server tells that shows (a null
+ * or under-5 bucket draws nothing, never "0" or "Under 5").
  */
 export function venueTiles(detail: Pick<VenueDetail, 'venue' | 'live'>, now: number): TileSpec[] {
   const tiles: TileSpec[] = []
@@ -64,7 +61,8 @@ export function venueTiles(detail: Pick<VenueDetail, 'venue' | 'live'>, now: num
     const value = now < opens ? `Opens ${clockTime(opens)}` : now < closes ? `Till ${clockTime(closes)}` : 'Closed'
     tiles.push({ label: 'OPEN', value, mono: true })
   }
-  if (detail.live.liveNow) tiles.push({ label: 'LIVE', value: `${bucketWord(detail.live.liveNow)} so far`, mono: false })
+  const liveWord = liveNowWord(detail.live.liveNow)
+  if (liveWord) tiles.push({ label: 'LIVE', value: `${liveWord} so far`, mono: false })
   const reset = detail.venue.dayResetHour
   if (typeof reset === 'number' && Number.isInteger(reset) && reset >= 0 && reset <= 23) tiles.push({ label: 'RESET', value: `${pad(reset)}:00`, mono: true })
   const capacity = detail.venue.capacity

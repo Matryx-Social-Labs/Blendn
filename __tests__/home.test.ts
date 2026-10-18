@@ -14,6 +14,7 @@ import {
   drawerContentHeight,
   drawerSnapPoints,
   liveNowLabel,
+  liveNowWord,
   settleSnap,
   snapOnKeyboard,
   stepSnap,
@@ -90,13 +91,18 @@ describe('the drawer, wired to the screen (step 2 review)', () => {
 })
 
 describe('a place in the list', () => {
-  it('says how many are live as a bucket, never a number under five (D-19)', () => {
-    expect(liveNowLabel('quiet')).toBe('Under 5 live')
+  it('says how many are live as a bucket, never a number (D-19)', () => {
     expect(liveNowLabel('5-9')).toBe('5–9 live')
     expect(liveNowLabel('10-19')).toBe('10–19 live')
     expect(liveNowLabel('20+')).toBe('20+ live')
-    // An older server with no field reads as quiet, not as nothing or zero.
-    expect(liveNowLabel(undefined)).toBe('Under 5 live')
+  })
+
+  it('under five shows no live label at all, and an older server with no field shows none either', () => {
+    expect(liveNowLabel('quiet')).toBeNull()
+    expect(liveNowLabel(undefined)).toBeNull()
+    expect(liveNowLabel(null)).toBeNull()
+    expect(liveNowWord('quiet')).toBeNull()
+    expect(liveNowWord('5-9')).toBe('5–9')
   })
 })
 
