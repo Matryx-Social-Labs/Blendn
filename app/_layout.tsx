@@ -724,11 +724,12 @@ function RootLayout() {
       <Stack.Screen name="board/[eventId]" options={{ headerShown: false }} />
       {/* Matching v2's about-you fields, reached from Edit profile (step 10, docs/PLACEHOLDER_SCREENS.md §15). */}
       <Stack.Screen name="edit-about-you" options={{ headerShown: false }} />
-      {/* Crews and Blends (step 9). Placeholder screens (docs/PLACEHOLDER_SCREENS.md §14). */}
+      {/* Crews and Blends (Flow 10). */}
       <Stack.Screen name="crews/index" options={{ headerShown: false }} />
-      <Stack.Screen name="crews/new" options={{ headerShown: false }} />
+      {/* Make a crew is a sheet over Crews (Flow 10 · 10.2): the route is transparent and draws the sheet itself. */}
+      <Stack.Screen name="crews/new" options={{ headerShown: false, presentation: 'transparentModal', animation: 'none' }} />
+      <Stack.Screen name="crews/invite/[crewId]" options={{ headerShown: false }} />
       <Stack.Screen name="crews/[crewId]" options={{ headerShown: false }} />
-      <Stack.Screen name="blend/[blendId]" options={{ headerShown: false }} />
       {/* A place from the Places list. Placeholder until step 5 (docs/PLACEHOLDER_SCREENS.md §10). */}
       <Stack.Screen name="venue/[id]" options={{ headerShown: false }} />
       {/* An offer from a place and its door pass (step 12). Placeholder design (docs/PLACEHOLDER_SCREENS.md §16). */}

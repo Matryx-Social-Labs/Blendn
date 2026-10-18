@@ -13,7 +13,7 @@ import { crewsApi } from './crewsApi'
  * A failed read keeps what is on screen: an empty list would say "no Blends"
  * about a network error.
  */
-export function useBlends(): { blends: Blend[]; loaded: boolean; failed: boolean; reload: () => Promise<void> } {
+export function useBlends(enabled = true): { blends: Blend[]; loaded: boolean; failed: boolean; reload: () => Promise<void> } {
   const [blends, setBlends] = useState<Blend[]>([])
   const [loaded, setLoaded] = useState(false)
   /** The last read failed: a screen must not read "closed" into a network error. */
@@ -32,8 +32,8 @@ export function useBlends(): { blends: Blend[]; loaded: boolean; failed: boolean
 
   useFocusEffect(
     useCallback(() => {
-      void reload()
-    }, [reload])
+      if (enabled) void reload()
+    }, [enabled, reload])
   )
 
   return { blends, loaded, failed, reload }

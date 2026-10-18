@@ -1,64 +1,88 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
-import { useCallback, useState } from 'react'
-import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { useCallback, useState, type ReactNode } from 'react'
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
 
-import { AppHeader } from '../../components/AppHeader'
-import { Face } from '../../components/blendn/Face'
-import { CrewEmblem, FriendPickRow } from '../../components/crews/CrewParts'
-import { LoadError } from '../../components/LoadError'
-import { EmberButton, EmberFieldGroup, EmberToggle } from '../../components/onboarding/EmberControls'
+import { CrewHead } from '../../components/crews/CrewHead'
+import { CrewMembers } from '../../components/crews/CrewMembers'
+import { EditCrewSheet } from '../../components/crews/EditCrewSheet'
+import { InviteFriendsSheet } from '../../components/crews/InviteFriendsSheet'
+import { OverflowMenu } from '../../components/crews/OverflowMenu'
+import { RowsCard } from '../../components/crews/RowsCard'
+import { Banner } from '../../components/ds/Banner'
+import { SectionHeader } from '../../components/ds/SectionHeader'
+import { SettingsRow } from '../../components/ds/SettingsRow'
+import { font, useBoldText } from '../../components/ds/shared'
+import { StateScreen } from '../../components/ds/StateScreen'
+import { TopBar } from '../../components/ds/TopBar'
+import { SkeletonBlock } from '../../components/Skeleton'
 import { useToast } from '../../components/Toast'
-import { PlaceholderBanner } from '../../components/ui/PlaceholderBanner'
-import { Text } from '../../components/ui/Text'
 import { apiClient } from '../../lib/apiClient'
 import {
-  CONSENT_LINE,
   CREW_GONE_LINE,
   CREW_MAX_MEMBERS,
-  KEEP_ANONYMOUS_HELPER,
+  CREW_REPORT_REASONS,
   KEEP_ANONYMOUS_LABEL,
   crewMessage,
   friendsToInvite,
-  hereLine,
-  invitedLine,
-  sizeLine,
   type Crew,
+  type CrewMember,
+  type CrewReportReason,
 } from '../../lib/crews'
-import { crewsApi } from '../../lib/crewsApi'
+import { crewsApi, type CrewPatch } from '../../lib/crewsApi'
+import { leaveSheet, removeSheet, textFieldOf } from '../../lib/crewsScreens'
+import { COLOR, RADIUS, SPACE } from '../../lib/design/tokens'
 import type { Friend } from '../../lib/friends'
+import { isMuted, rememberRoomMute, useRoomMute } from '../../lib/roomMembership'
+import { useRoomRow } from '../../lib/roomRow'
 import { showSheet } from '../../lib/sheet'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, SPACE } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
+import { userMessage } from '../../lib/userMessage'
 
 type Load = { kind: 'loading' } | { kind: 'ready'; crew: Crew } | { kind: 'gone' } | { kind: 'error' }
 
+/** flow10.js `detail`: the sections sit 20 apart. */
+// design-exception: the frame's column gap is 20, between the 16 and 24 steps
+const SECTION_GAP = 20
+const HEAD_SKELETON = 160
+const LEAVE_HEIGHT = 56
+const HIDDEN_LINE = 'This crew is hidden while we look at a report. Only its members can see it.'
+const REPORT_SENT = 'Reported. Thanks — nobody is told it was you.'
+
 /**
- * One of your crews (placeholder design — docs/PLACEHOLDER_SCREENS.md §14).
- *
- * Inside a crew people are named — first name and one photo — because they
- * are friends and each joined by consent. From here: the crew chat, inviting
- * more friends, "We're here", your own "keep me anonymous", and leaving.
+ * One of your crews (Flow 10 · 10.4): the emblem, name, line and tags; the
+ * members by first name and photo; Invite friends; your settings (keep me
+ * anonymous, mute the chat); and Leave. The owner also gets Edit crew and a ⋯
+ * on each member to remove them. People are named here because they are
+ * friends who joined by consent; the crew chat is the existing room screen.
  */
 export default function CrewScreen() {
-  const params = useLocalSearchParams<{ crewId: string; asked?: string; fromChat?: string }>()
+  const params = useLocalSearchParams<{ crewId: string; fromChat?: string }>()
   const crewId = String(params.crewId)
   const { user } = useAuth()
   const myId = user?.id ?? ''
+  const bold = useBoldText()
   const { showToast } = useToast()
   const [load, setLoad] = useState<Load>({ kind: 'loading' })
   const [refreshing, setRefreshing] = useState(false)
-  /** "Asked 3 friends" — the count you asked for, from the screen that made the crew or the last invite. */
-  const [asked, setAsked] = useState<string | null>(() => invitedLine(Number(params.asked)))
-  const [line, setLine] = useState<string | null>(null)
-  const [busy, setBusy] = useState<'here' | 'anon' | 'invite' | 'solo' | null>(null)
-  const [inviting, setInviting] = useState<{ friends: Friend[] | 'failed'; picked: string[] } | null>(null)
+  const [busy, setBusy] = useState<'anon' | 'mute' | 'invite' | 'edit' | null>(null)
+  const [menu, setMenu] = useState(false)
+  const [inviting, setInviting] = useState<{ friends: Friend[] | null | 'failed' } | null>(null)
+  const [editing, setEditing] = useState(false)
+  const [editError, setEditError] = useState<{ field: 'name' | 'bio'; text: string } | null>(null)
+
+  const crew = load.kind === 'ready' ? load.crew : null
+  const owner = crew?.you?.role === 'owner'
+  // The room's own row fills the mute store; every screen reads the one answer.
+  useRoomRow(crew?.chatGroupId ?? null)
+  const muted = isMuted(useRoomMute(crew?.chatGroupId ?? null))
 
   const fetchCrew = useCallback(async () => {
     const result = await crewsApi.crew(crewId)
     if (result.success && result.data) setLoad({ kind: 'ready', crew: result.data })
     // One 404 for gone, left, dissolved or never yours.
-    else setLoad(result.errorCode === 'NOT_FOUND' ? { kind: 'gone' } : { kind: 'error' })
+    else if (result.errorCode === 'NOT_FOUND') setLoad({ kind: 'gone' })
+    // A failed refresh keeps the crew it had.
+    else setLoad((prev) => (prev.kind === 'ready' ? prev : { kind: 'error' }))
   }, [crewId])
 
   useFocusEffect(
@@ -73,253 +97,281 @@ export default function CrewScreen() {
     setRefreshing(false)
   }
 
-  if (load.kind !== 'ready') {
-    return (
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        <AppHeader title="Crew" onBack={() => router.back()} />
-        <View style={styles.centred}>
-          {load.kind === 'gone' ? (
-            <Text variant="bodyStrong">{CREW_GONE_LINE}</Text>
-          ) : load.kind === 'error' ? (
-            <LoadError title="This crew didn't load" onRetry={() => void onRefresh()} retrying={refreshing} />
-          ) : (
-            <Text variant="meta">Loading…</Text>
-          )}
-        </View>
-      </SafeAreaView>
-    )
-  }
-
-  const crew = load.crew
-
-  const openChat = () => {
-    if (!crew.chatGroupId) return
-    // Opened from the crew chat's (i): back to it, rather than a second copy on the stack.
-    if (params.fromChat) {
-      router.back()
-      return
-    }
-    router.push({
-      pathname: '/chat/[id]',
-      params: { id: crew.chatGroupId, roomName: crew.name, kind: 'crew', crewId: crew.crewId } as never,
-    })
-  }
-
   /** A change to this crew, applied to the crew as it is now — never to the one this render saw. */
   const patchCrew = (change: (c: Crew) => Crew) =>
     setLoad((prev) => (prev.kind === 'ready' ? { kind: 'ready', crew: change(prev.crew) } : prev))
 
-  /*
-   * "We're here" names the event you are checked in at now. It checks nobody
-   * else in: each member checks in by their own GPS.
-   */
-  const here = async () => {
-    if (busy) return
-    setBusy('here')
-    setLine(null)
-    const active = await apiClient.getActiveCheckins({ force: true })
-    // An event's check-in, not a place's Go Live: "We're here" is about a night out together.
-    const eventId = active.success
-      ? active.data?.checkIns?.find((c) => c.kind !== 'venue_day')?.eventId
-      : undefined
-    if (!eventId) {
-      setBusy(null)
-      setLine('Check in at the event first — each of you checks in with your own location.')
-      return
-    }
-    const result = await crewsApi.here(crew.crewId, eventId)
-    setBusy(null)
-    setLine(result.success && result.data ? hereLine(result.data) : crewMessage(result, 'crew', 'Couldn’t tell your crew. Try again.'))
-  }
-
   const setAnonymous = async (next: boolean) => {
     if (busy || !myId) return
     setBusy('anon')
-    const result = await crewsApi.setKeepMeAnonymous(crew.crewId, myId, next)
+    const result = await crewsApi.setKeepMeAnonymous(crewId, myId, next)
     setBusy(null)
-    if (!result.success || !result.data) {
-      showToast(crewMessage(result, 'crew', 'Couldn’t save that. Try again.'), 'error')
-      return
-    }
+    if (!result.success || !result.data) return showToast(crewMessage(result, 'crew', 'Couldn’t save that. Try again.'), 'error')
     const keep = result.data.keepMeAnonymous
     patchCrew((c) => ({ ...c, you: c.you ? { ...c.you, keepMeAnonymous: keep } : c.you }))
   }
 
-  /** The owner's "Room for one more": what lets the crew like one person who is open to crews. */
-  const setOpenToSolo = async (next: boolean) => {
-    if (busy) return
-    setBusy('solo')
-    const result = await crewsApi.update(crew.crewId, { openToSolo: next })
+  const setMuted = async (next: boolean) => {
+    const roomId = crew?.chatGroupId
+    if (busy || !roomId) return
+    setBusy('mute')
+    const result = next ? await apiClient.muteChatGroup(roomId, null) : await apiClient.unmuteChatGroup(roomId)
     setBusy(null)
-    if (!result.success || !result.data) {
-      showToast(crewMessage(result, 'crew', 'Couldn’t save that. Try again.'), 'error')
-      return
-    }
-    const fresh = result.data
-    patchCrew(() => fresh)
+    if (!result.success || !result.data) return showToast(userMessage(result, 'Couldn’t save that. Try again.'), 'error')
+    rememberRoomMute(roomId, result.data.mute)
   }
 
   /*
    * Friends not already in the crew. The crew names members by their room
    * handles, never their ids, so a crewmate is found by the server's
-   * `isFriend` and their name and photo (`friendsToInvite`). A failed read
-   * is not "no friends": it says so and offers the retry.
+   * `isFriend` and their name and photo (`friendsToInvite`). A failed read is
+   * not "none to ask": it says so and offers the retry.
    */
   const startInvite = async () => {
+    if (!crew) return
+    setInviting({ friends: null })
     const result = await apiClient.getFriends()
     const friends = result.success && result.data ? friendsToInvite(result.data.friends, crew.members) : ('failed' as const)
-    setInviting({ friends, picked: [] })
+    setInviting({ friends })
   }
 
-  const sendInvites = async () => {
-    if (!inviting || inviting.picked.length === 0 || busy) return
+  const sendInvites = async (userIds: string[]) => {
+    if (busy) return
     setBusy('invite')
-    const result = await crewsApi.invite(crew.crewId, inviting.picked)
+    const result = await crewsApi.invite(crewId, userIds)
+    setBusy(null)
+    if (!result.success || !result.data) return showToast(crewMessage(result, 'crew', 'Couldn’t send the invites. Try again.'), 'error')
+    setInviting(null)
+    // `invited` is how many you asked for, never who got one.
+    showToast(result.data.invited === 1 ? 'Asked 1 friend' : `Asked ${result.data.invited} friends`, 'success')
+  }
+
+  const saveEdit = async (patch: CrewPatch) => {
+    if (busy) return
+    setBusy('edit')
+    setEditError(null)
+    const result = await crewsApi.update(crewId, patch)
     setBusy(null)
     if (!result.success || !result.data) {
-      showToast(crewMessage(result, 'crew', 'Couldn’t send the invites. Try again.'), 'error')
+      const text = crewMessage(result, 'crew', 'Couldn’t save that. Try again.')
+      const field = textFieldOf(text, result.field)
+      if (field) setEditError({ field, text })
+      else showToast(text, 'error')
       return
     }
-    setInviting(null)
-    setAsked(invitedLine(result.data.invited))
+    const fresh = result.data
+    patchCrew(() => fresh)
+    setEditing(false)
   }
 
-  const confirmLeave = () =>
+  const confirmLeave = () => {
+    if (!crew) return
+    const sheet = leaveSheet(crew)
     showSheet({
       kind: 'actions',
-      title: `Leave ${crew.name}?`,
-      message: 'You’ll leave its chat and its Blends. Coming back needs an invite from someone in it.',
+      icon: 'log-out',
+      title: sheet.title,
+      message: sheet.message,
       actions: [
         {
-          label: 'Leave crew',
+          label: sheet.action,
           variant: 'destructive',
           run: async () => {
             if (!myId) return { ok: false, error: 'Couldn’t leave. Try again.' }
-            const result = await crewsApi.leave(crew.crewId, myId)
+            const result = await crewsApi.leave(crewId, myId)
             if (!result.success) return { ok: false, error: crewMessage(result, 'crew', 'Couldn’t leave. Try again.') }
-            router.back()
-            return { ok: true, toast: result.data?.dissolved ? `${crew.name} has ended` : `You left ${crew.name}` }
+            // From the chat, two screens go: the chat of a crew you left has nothing to show.
+            if (params.fromChat) router.dismissTo('/crews')
+            else router.back()
+            return { ok: true, toast: result.data?.dissolved ? `${crew.name} has closed` : `You left ${crew.name}` }
           },
         },
         { label: 'Cancel', cancel: true },
       ],
     })
+  }
+
+  const confirmRemove = (member: CrewMember) => {
+    if (!crew) return
+    const sheet = removeSheet(crew, member.name)
+    showSheet({
+      kind: 'actions',
+      icon: 'user-minus',
+      title: sheet.title,
+      message: sheet.message,
+      actions: [
+        {
+          label: 'Remove',
+          variant: 'destructive',
+          run: async () => {
+            // A member is named by their handle in the crew's room, as the crew sent it.
+            const result = await crewsApi.leave(crewId, member.userId)
+            if (!result.success) return { ok: false, error: crewMessage(result, 'crew', 'Couldn’t remove them. Try again.') }
+            void fetchCrew()
+            return { ok: true, toast: `${member.name} was removed` }
+          },
+        },
+        { label: 'Cancel', cancel: true },
+      ],
+    })
+  }
+
+  const report = () => {
+    if (!crew) return
+    showSheet({
+      kind: 'reasons',
+      title: `Report ${crew.name}`,
+      message: 'Only the crew’s name and bio are reported. Our team is not told who sent it, and the crew isn’t either.',
+      reasons: CREW_REPORT_REASONS.map((r) => ({ value: r.value, label: r.label })),
+      submitLabel: 'Send report',
+      run: async (reason, note) => {
+        const result = await crewsApi.report(crewId, { reason: reason as CrewReportReason, ...(note ? { description: note } : {}) })
+        if (!result.success) return { ok: false, error: crewMessage(result, 'crew', 'Couldn’t send the report. Try again.') }
+        return { ok: true, toast: REPORT_SENT }
+      },
+    })
+  }
+
+  let body: ReactNode
+  if (!crew) {
+    body =
+      load.kind === 'gone' ? (
+        <StateScreen
+          icon="users"
+          title={CREW_GONE_LINE}
+          actions={[{ label: 'Back', kind: 'secondary', onPress: () => router.back() }]}
+          testID="crew-gone"
+        />
+      ) : load.kind === 'error' ? (
+        <StateScreen
+          icon="cloud-off"
+          title="This crew didn’t load"
+          body="Check your connection and try again."
+          actions={[{ label: 'Try again', onPress: () => void onRefresh(), loading: refreshing }]}
+          testID="crew-failed"
+        />
+      ) : (
+        <View style={styles.skeleton} accessibilityLabel="Loading the crew">
+          <SkeletonBlock width={HEAD_SKELETON} height={HEAD_SKELETON} borderRadius={RADIUS.card} />
+        </View>
+      )
+  } else {
+    body = (
+      <>
+        {crew.hidden ? <Banner kind="info" text={HIDDEN_LINE} testID="crew-hidden" /> : null}
+        <CrewHead crew={crew} />
+        <View style={styles.section}>
+          <SectionHeader title="Members" count={crew.members.length} />
+          <CrewMembers
+            members={crew.members}
+            myId={myId}
+            isOwner={owner}
+            canInvite={crew.size < CREW_MAX_MEMBERS}
+            apart={crew.apart === true}
+            onInvite={() => void startInvite()}
+            onMore={confirmRemove}
+          />
+        </View>
+        <View style={styles.section}>
+          <SectionHeader title="Your settings" />
+          <RowsCard testID="crew-settings">
+            <SettingsRow
+              icon="eye-off"
+              title={KEEP_ANONYMOUS_LABEL}
+              trail="switch"
+              value={crew.you?.keepMeAnonymous ?? false}
+              onValueChange={(next) => void setAnonymous(next)}
+              busy={busy === 'anon'}
+              disabled={busy === 'anon'}
+            />
+            <SettingsRow
+              icon="bell-off"
+              title="Mute the crew chat"
+              trail="switch"
+              value={muted}
+              onValueChange={(next) => void setMuted(next)}
+              busy={busy === 'mute'}
+              disabled={busy === 'mute' || !crew.chatGroupId}
+            />
+            {owner ? (
+              <SettingsRow
+                icon="pencil"
+                title="Edit crew"
+                hint="Name, bio, vibe, Room for one more"
+                trail="chevron"
+                onPress={() => {
+                  setEditError(null)
+                  setEditing(true)
+                }}
+              />
+            ) : null}
+          </RowsCard>
+        </View>
+        <Pressable onPress={confirmLeave} accessibilityRole="button" accessibilityLabel="Leave crew" style={styles.leave}>
+          <Text style={[font('button', bold), styles.destructive]}>Leave crew</Text>
+        </Pressable>
+      </>
+    )
+  }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <AppHeader title={crew.name} onBack={() => router.back()} />
+    <View style={styles.container}>
+      <TopBar
+        title=""
+        onBack={() => router.back()}
+        actions={crew ? [{ icon: 'ellipsis', label: 'More', onPress: () => setMenu(true) }] : []}
+        testID="crew-top"
+      />
       <ScrollView
-        contentContainerStyle={styles.content}
         testID="crew-scroll"
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={EMBER.textSecondary} />}
+        contentContainerStyle={[styles.content, crew ? null : styles.centred]}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLOR.textSecondary} />}
+        showsVerticalScrollIndicator={false}
       >
-        <PlaceholderBanner />
-        <View style={styles.head}>
-          <CrewEmblem seed={crew.emblemSeed} size={CONTROL.lg} />
-          <View style={styles.flex}>
-            <Text variant="title" numberOfLines={2}>
-              {crew.name}
-            </Text>
-            <Text variant="meta">{sizeLine(crew.size)}</Text>
-          </View>
-        </View>
-        {crew.bio ? <Text variant="body">{crew.bio}</Text> : null}
-        {asked ? <Text variant="meta">{asked}</Text> : null}
-
-        <EmberButton label="Open crew chat" onPress={openChat} disabled={!crew.chatGroupId} />
-        <EmberButton label="We’re here" variant="secondary" onPress={() => void here()} busy={busy === 'here'} />
-        {line ? (
-          <Text variant="body" accessibilityLiveRegion="polite">
-            {line}
-          </Text>
-        ) : null}
-
-        <EmberFieldGroup label="In the crew">
-          <View style={styles.members}>
-            {crew.members.map((m) => (
-              <View key={m.userId} style={styles.member}>
-                <Face name={m.name} photo={m.photo} size={CONTROL.md} />
-                <Text variant="bodyStrong" style={styles.flex} numberOfLines={1}>
-                  {m.userId === myId ? 'You' : m.name}
-                </Text>
-                {m.role === 'owner' ? <Text variant="meta">Started it</Text> : null}
-              </View>
-            ))}
-          </View>
-        </EmberFieldGroup>
-
-        {crew.size < CREW_MAX_MEMBERS ? (
-          inviting ? (
-            <EmberFieldGroup label="Invite friends" helper="Nobody is told who else was asked.">
-              {inviting.friends === 'failed' ? (
-                <EmberButton label="Your friends didn’t load — try again" variant="secondary" onPress={() => void startInvite()} />
-              ) : inviting.friends.length === 0 ? (
-                <Text variant="meta">Every friend of yours is in this crew, or you have none to ask yet.</Text>
-              ) : (
-                inviting.friends.map((f) => (
-                  <FriendPickRow
-                    key={f.userId}
-                    person={f}
-                    picked={inviting.picked.includes(f.userId)}
-                    onToggle={() =>
-                      setInviting((s) =>
-                        s && {
-                          ...s,
-                          picked: s.picked.includes(f.userId) ? s.picked.filter((id) => id !== f.userId) : [...s.picked, f.userId],
-                        }
-                      )
-                    }
-                  />
-                ))
-              )}
-              <EmberButton
-                label={inviting.picked.length ? `Ask ${inviting.picked.length}` : 'Pick friends to ask'}
-                onPress={() => void sendInvites()}
-                disabled={inviting.picked.length === 0}
-                busy={busy === 'invite'}
-                style={styles.inviteButton}
-              />
-            </EmberFieldGroup>
-          ) : (
-            <EmberButton label="Invite friends" variant="secondary" onPress={() => void startInvite()} />
-          )
-        ) : null}
-
-        {crew.you?.role === 'owner' ? (
-          <EmberToggle
-            label="Room for one more"
-            helper="Somebody on their own who’s open to a crew can match with you — only while you’re 6 or fewer."
-            value={crew.openToSolo}
-            onValueChange={(next) => void setOpenToSolo(next)}
-            disabled={busy === 'solo'}
-          />
-        ) : null}
-
-        <View style={styles.privacy}>
-          <Text variant="meta">{CONSENT_LINE}</Text>
-          <EmberToggle
-            label={KEEP_ANONYMOUS_LABEL}
-            helper={KEEP_ANONYMOUS_HELPER}
-            value={crew.you?.keepMeAnonymous ?? false}
-            onValueChange={(next) => void setAnonymous(next)}
-            disabled={busy === 'anon'}
-          />
-        </View>
-
-        <EmberButton label="Leave crew" variant="secondary" onPress={confirmLeave} />
+        {body}
       </ScrollView>
-    </SafeAreaView>
+      {crew ? (
+        <>
+          <OverflowMenu
+            testID="crew-menu"
+            visible={menu}
+            onClose={() => setMenu(false)}
+            items={[
+              { icon: 'flag', label: 'Report this crew’s name or bio', onPress: report },
+              { icon: 'log-out', label: 'Leave crew', onPress: confirmLeave, destructive: true },
+            ]}
+          />
+          <InviteFriendsSheet
+            visible={!!inviting}
+            friends={inviting?.friends ?? null}
+            room={CREW_MAX_MEMBERS - crew.size}
+            asking={busy === 'invite'}
+            onRetry={() => void startInvite()}
+            onAsk={(ids) => void sendInvites(ids)}
+            onClose={() => setInviting(null)}
+          />
+          {owner ? (
+            <EditCrewSheet
+              visible={editing}
+              crew={crew}
+              saving={busy === 'edit'}
+              serverError={editError}
+              onSave={(patch) => void saveEdit(patch)}
+              onClose={() => setEditing(false)}
+            />
+          ) : null}
+        </>
+      ) : null}
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: EMBER.bg },
-  flex: { flex: 1 },
-  centred: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: GUTTER },
-  content: { paddingHorizontal: GUTTER, paddingBottom: SPACE.xxxl, gap: SPACE.lg },
-  head: { flexDirection: 'row', alignItems: 'center', gap: SPACE.lg },
-  members: { gap: SPACE.md },
-  member: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
-  inviteButton: { marginTop: SPACE.md },
-  privacy: { gap: SPACE.md, padding: SPACE.lg, borderRadius: EMBER_RADIUS.md, backgroundColor: EMBER.surfaceSunken },
+  container: { flex: 1, backgroundColor: COLOR.ink },
+  content: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.sm, paddingBottom: SPACE.xxl, gap: SECTION_GAP },
+  centred: { flexGrow: 1, justifyContent: 'center' },
+  skeleton: { alignItems: 'center' },
+  section: { gap: SPACE.md },
+  leave: { minHeight: LEAVE_HEIGHT, alignItems: 'center', justifyContent: 'center' },
+  destructive: { color: COLOR.destructive },
 })

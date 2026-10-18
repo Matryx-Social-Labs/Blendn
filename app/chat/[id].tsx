@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { FlatList, Platform, StyleSheet, useWindowDimensions, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
+import { useBlendRoom } from '../../components/crews/BlendRoom'
 import { ChatHeader, chatFeedFrame, chatHeaderBottom, SubtitleText } from '../../components/chat/ChatHeader'
 import { BrokenLink } from '../../components/chat/BrokenLink'
 import { KeyboardFrame } from '../../components/chat/KeyboardFrame'
@@ -719,6 +720,8 @@ function GroupChatInner() {
   const line = roomSubtitle(name, eventTitle || undefined, memberCount)
   const subtitle = !line ? null : line === eventTitle ? <SubtitleText>{line}</SubtitleText> : <CountLine count={memberCount ?? 0} />
   const top = chatHeaderBottom(insets.top)
+  /* A Blend's sides sit above the feed in this same room, not on a page of their own (Flow 10 · 10.9). */
+  const blendRoom = useBlendRoom(roomKind === 'blend' ? (blendIdParam ?? null) : null, top, !!outside)
   const dockBottom = keyboardUp ? SPACE.sm : Math.max(insets.bottom, SPACE.lg)
   const lock = composer.lock
   const menuPlan = menu ? planFor(menu.message) : null
@@ -739,7 +742,7 @@ function GroupChatInner() {
               renderItem={renderChatItem}
               keyExtractor={(item) => (item.kind === 'separator' ? item.id : item.message_id)}
               style={[styles.fill, chatFeedFrame(insets.top).style]}
-              contentContainerStyle={[styles.listContent, { paddingTop: chatFeedFrame(insets.top).paddingTop, paddingBottom: dockHeight + dockBottom + SPACE.md }]}
+              contentContainerStyle={[styles.listContent, { paddingTop: chatFeedFrame(insets.top, blendRoom.barSpace).paddingTop, paddingBottom: dockHeight + dockBottom + SPACE.md }]}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode={KEYBOARD_DISMISS}
@@ -849,15 +852,15 @@ function GroupChatInner() {
 
       <ChatHeader
         testID="room-header"
-        title={name}
+        title={blendRoom.title ?? name}
         muted={muted}
-        leading={<RoomCover uri={eventImage} />}
-        subtitle={outside ? null : subtitle}
+        leading={blendRoom.leading ?? <RoomCover uri={eventImage} />}
+        subtitle={outside ? null : (blendRoom.subtitle ?? subtitle)}
         onBack={goBack}
-        moreLabel="Room info"
+        moreLabel={blendRoom.blend ? 'More' : 'Room info'}
         onMore={() =>
-          blendIdParam
-            ? router.push({ pathname: '/blend/[blendId]', params: { blendId: blendIdParam, fromChat: '1' } })
+          blendRoom.blend
+            ? blendRoom.openMenu()
             : crewIdParam
               ? router.push({ pathname: '/crews/[crewId]', params: { crewId: crewIdParam, fromChat: '1' } })
               : router.push({
@@ -866,7 +869,9 @@ function GroupChatInner() {
                 } as never)
         }
       />
-      {outside ? null : <RealtimeStatusBanner status={socketStatus} style={{ ...styles.banner, top }} />}
+      {outside ? null : blendRoom.bar}
+      {blendRoom.overlays}
+      {outside ? null : <RealtimeStatusBanner status={socketStatus} style={{ ...styles.banner, top: top + blendRoom.barSpace }} />}
 
       <LongPressMenu
         testID="room-menu"

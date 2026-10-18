@@ -516,6 +516,8 @@ export interface ApiResponse<T = unknown> {
    * it (`POST /venues/:venueId/live`): check in to that event instead.
    */
   eventId?: string
+  /** The form field a refusal is about (`name`, `bio` on a crew); absent when it is the form's. */
+  field?: string
   errors?: Array<{ path: string; message: string }>
 }
 
@@ -1259,6 +1261,7 @@ class ApiClientClass {
           : Number(response.headers.get('Retry-After')) || undefined,
         ...(typeof parsed.chatGroupId === 'string' ? { chatGroupId: parsed.chatGroupId } : {}),
         ...(typeof parsed.eventId === 'string' ? { eventId: parsed.eventId } : {}),
+        ...(typeof parsed.field === 'string' ? { field: parsed.field } : {}),
         error: this.buildErrorMessage(response, parsed, endpoint),
         errors: parsed?.errors as Array<{ path: string; message: string }> | undefined,
       }

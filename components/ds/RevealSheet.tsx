@@ -38,13 +38,16 @@ export function RevealSheet({
   onClose: () => void
   /** The crew's name; null for a solo member revealing themselves. */
   crew: string | null
-  /** How many people are in this Blend. */
-  audience: number
+  /**
+   * How many people are in this Blend. Left out of the sentence when the count is not the room's
+   * (the server drops anyone with show-online off), because a reveal cannot be undone.
+   */
+  audience?: number
   onReveal: () => void
   revealing?: boolean
 }) {
   const bold = useBoldText()
-  const reach = `to the ${audience} people in this Blend — and nobody else. Not the Room, not your DMs, not another Blend.`
+  const reach = `to the ${audience === undefined ? '' : `${audience} `}people in this Blend — and nobody else. Not the Room, not your DMs, not another Blend.`
   return (
     <Sheet
       visible={visible}
@@ -75,6 +78,13 @@ const TILE_CORNER = RADIUS.thumb + SPACE.xxs
 const FACE = 56
 const PILL = SIZE.tag
 const PILL_EDGE = 0.14
+/** flow10b.js `blendRoom` side: radius 20, padding 10 12, tiles 6 apart. */
+// design-exception: the Blend side row's radius 20 sits between rowInCard (16) and sheet (24)
+const SIDE_RADIUS = 20
+// design-exception: the side row pads 10 vertically, off the SPACE scale
+const SIDE_PAD = 10
+// design-exception: the side row's tiles sit 6 apart, off the SPACE scale
+const TILE_GAP = 6
 
 export type RevealPerson = { pseudonym: string; /** Set once they've revealed. */ photo?: string | null }
 export type RevealSideOf = { kind: 'crew'; name: string; emblemSeed: string } | { kind: 'person'; name: string; pseudonym: string }
@@ -97,12 +107,19 @@ export function RevealSide({
   side,
   people,
   mine = false,
+  status: statusText,
   onReveal,
   testID,
 }: {
   side: RevealSideOf
   people: RevealPerson[]
   mine?: boolean
+  /**
+   * Your own side, when the server has not sent your crew's counts: it never
+   * says who kept private, so the line is what is known ("4 on tonight’s names",
+   * "Revealed"), not a count worked out from `people`.
+   */
+  status?: string
   onReveal?: () => void
   testID?: string
 }) {
@@ -110,9 +127,11 @@ export function RevealSide({
   const contrast = useIncreaseContrast()
   const revealed = people.filter((p) => p.photo)
   const kept = people.length - revealed.length
-  const status = revealed.length
-    ? `${revealed.length} revealed · ${kept} keep${kept === 1 ? 's' : ''} it private`
-    : `${people.length} on tonight’s names`
+  const status =
+    statusText ??
+    (revealed.length
+      ? `${revealed.length} revealed · ${kept} keep${kept === 1 ? 's' : ''} it private`
+      : `${people.length} on tonight’s names`)
   const tiles = revealed.length ? revealed : people
   return (
     <View testID={testID} style={styles.side}>
@@ -182,13 +201,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACE.md,
-    paddingVertical: SPACE.sm,
+    paddingVertical: SIDE_PAD,
     paddingHorizontal: SPACE.md,
-    borderRadius: RADIUS.sheet,
+    borderRadius: SIDE_RADIUS,
     backgroundColor: COLOR.surface,
   },
-  fill: { flex: 1, gap: SPACE.sm },
-  tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
+  fill: { flex: 1, gap: TILE_GAP },
+  tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: TILE_GAP },
   tile: { width: TILE, height: TILE },
   photo: { borderRadius: TILE_CORNER, overflow: 'hidden' },
   kept: { borderRadius: TILE_CORNER, backgroundColor: COLOR.surfaceRaised, alignItems: 'center', justifyContent: 'center' },

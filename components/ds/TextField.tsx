@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode, type Ref } from 'react'
 import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, TextInput, View, type TextInputProps } from 'react-native'
 
 import { Icon } from '../ui/Icon'
@@ -19,6 +19,15 @@ const AREA_MIN_HEIGHT = 160
 
 /** Characters as a person (and Postgres `char_length`) counts them: an emoji is one. */
 const count = (value: string) => [...value].length
+
+/** One ref callback that keeps the field's own ref and hands the node to the caller's. */
+function joinRefs(own: { current: TextInput | null }, theirs?: Ref<TextInput>) {
+  return (node: TextInput | null) => {
+    own.current = node
+    if (typeof theirs === 'function') theirs(node)
+    else if (theirs) (theirs as { current: TextInput | null }).current = node
+  }
+}
 
 /** The label above a field: Geist Mono, uppercase, textSecondary (white under Increase Contrast). */
 export function FieldLabel({ text, bold, contrast }: { text: string; bold: boolean; contrast: boolean }) {
@@ -97,6 +106,8 @@ type FieldProps = Omit<
   limit?: number
   /** The design gallery only: draws focus with no keyboard. */
   previewState?: 'focused'
+  /** The text input itself, for a form that moves focus from one field to the next. */
+  inputRef?: Ref<TextInput>
   testID?: string
 }
 
@@ -127,6 +138,7 @@ export function TextField({
   secure = false,
   defaultRevealed = false,
   previewState,
+  inputRef,
   testID,
   onFocus,
   onBlur,
@@ -158,7 +170,7 @@ export function TextField({
       >
         <TextInput
           {...rest}
-          ref={input}
+          ref={joinRefs(input, inputRef)}
           testID={testID && `${testID}-input`}
           value={value}
           onChangeText={onChangeText}
@@ -227,6 +239,7 @@ export function TextArea({
   measure = count,
   minHeight = AREA_MIN_HEIGHT,
   previewState,
+  inputRef,
   testID,
   onFocus,
   onBlur,
@@ -262,7 +275,7 @@ export function TextArea({
       <Pressable testID={testID && `${testID}-box`} accessible={false} onPress={() => input.current?.focus()} disabled={disabled} style={[styles.area, { minHeight }]}>
         <TextInput
           {...rest}
-          ref={input}
+          ref={joinRefs(input, inputRef)}
           testID={testID && `${testID}-input`}
           multiline
           value={value}

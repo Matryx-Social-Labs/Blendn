@@ -38,6 +38,8 @@ export type CoachMarkId =
   | 'room_reveal'
   /** The door pass, the first time one is live: the staff type the code. */
   | 'door_pass'
+  /** A Blend, the first time anyone opens one: what it is, and that everyone is on tonight's names. */
+  | 'blend_first_open'
 
 type Phase = 'unseen' | 'showing' | 'done'
 
