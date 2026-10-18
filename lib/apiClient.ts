@@ -20,7 +20,8 @@ import type { Friend, FriendInvite, FriendPerson, FriendProfile, FriendRequest, 
 import type { BoardPost, BoardReportReason, BoardRequestStatus, BoardRequests } from './board'
 import type { Badge, Choice, Overlap, ProfileOptions } from './aboutYou'
 import { markSessionExpired, markSessionStarted } from './sessionEvents'
-import { noteServerDate } from './serverClock'
+import { noteServerDate, serverNow } from './serverClock'
+import { msUntilExpiry, REFRESH_SKEW_MS } from './socketAuth'
 import { getPushTokenRef, setPushTokenRef } from './pushTokenRef'
 import type { ChatReaction } from './chatReactions'
 
@@ -998,6 +999,17 @@ export type RefreshOutcome = 'ok' | 'rejected' | 'failed'
 const GENERIC_FAILURE_MESSAGE = 'Something went wrong. Try again.'
 
 export const REFRESH_RETRY_DELAYS_MS = [2000, 5000, 10000] as const
+/**
+ * At most one *proactive* refresh per this window.
+ *
+ * A phone whose clock is wrong reads every token as dead. `serverNow()` corrects
+ * for that once any response has carried a `Date` header, but the very first
+ * request has none, and a token that is genuinely short-lived would otherwise
+ * refresh on every call. The 401 path is not rate-limited by this: it only
+ * governs refreshing *before* we know the token is bad.
+ */
+const PROACTIVE_REFRESH_MIN_GAP_MS = 30_000
+let lastProactiveRefreshAt = 0
 let refreshRetryAttempt = 0
 let refreshRetryTimer: ReturnType<typeof setTimeout> | null = null
 /** The server's sentence from the last rejected refresh, if it gave one. */
@@ -1244,6 +1256,35 @@ class ApiClientClass {
     return { success: true, data: parsed as T }
   }
 
+  /**
+   * The access token to send, refreshed first if it is about to die.
+   *
+   * Tokens live 15 minutes, so a cold start or a resume after that sent the
+   * stale one, took a 401 (a full round trip, ~200-250 ms from Canada), then
+   * refreshed and retried; on foreground four or five requests each burned
+   * their own. Reading the expiry costs nothing. A token whose expiry cannot be
+   * read is sent as is: the server decides, and the 401 path below still
+   * recovers it. Awaiting an in-flight refresh also stops a request that read
+   * the old token just before it rotated from 401ing after the refresh settles
+   * and starting a second rotation.
+   */
+  private async freshAccessToken(): Promise<string | null> {
+    if (refreshPromise) await refreshPromise
+    let token = await TokenStorage.getAccessToken()
+    const remaining = msUntilExpiry(token, serverNow())
+    if (remaining === null || remaining > REFRESH_SKEW_MS) return token
+    // A refresh begun since we read the token is joined, whatever the guard says.
+    const now = Date.now()
+    if (!refreshPromise) {
+      if (now - lastProactiveRefreshAt < PROACTIVE_REFRESH_MIN_GAP_MS) return token
+      lastProactiveRefreshAt = now
+    }
+    // 'failed' / 'rejected': send what we have; the 401 path decides what that means.
+    await this.refreshTokens()
+    token = await TokenStorage.getAccessToken()
+    return token
+  }
+
   private async request<T>(
     endpoint: string,
     options: RequestInit = {},
@@ -1263,7 +1304,7 @@ class ApiClientClass {
     }
 
     if (requireAuth) {
-      const accessToken = await TokenStorage.getAccessToken()
+      const accessToken = await this.freshAccessToken()
       if (accessToken) {
         headers['Authorization'] = `Bearer ${accessToken}`
       }
