@@ -6,7 +6,7 @@ import { apiClient, type RoomPreview } from './apiClient'
 import { subscribeCheckInChanged } from './checkIn'
 import { readStoredCity } from './cityStorage'
 import { liveWindow } from './eventSession'
-import { getDistanceKm } from './geo'
+import { getDistanceKm, roundCoord } from './geo'
 import { Logger } from './logger'
 import { printable } from './pulseSections'
 import { pickTonight } from './roomMoments'
@@ -143,24 +143,25 @@ export function useTonight(): TonightState {
 
   const load = useCallback(async (force: boolean) => {
     const loadId = ++loadIdRef.current
-    const [{ coords, location: where }, stored, rsvps] = await Promise.all([
-      quietLocation(),
-      readStoredCity(),
-      // RSVPs are the other half of "yours". A failure only loses the sort.
-      apiClient.getMyRsvps().catch(() => null),
-    ])
+    // RSVPs are the other half of "yours", but only a sort key: started now, awaited with the events, never before them. A failure only loses the sort.
+    const rsvpsRequest = apiClient.getMyRsvps().catch(() => null)
+    const [{ coords, location: where }, stored] = await Promise.all([quietLocation(), readStoredCity()])
 
-    const result = await getEvents(
-      {
-        page: 0,
-        limit: PULSE_PAGE,
-        city: stored?.city ?? undefined,
-        lat: coords?.latitude,
-        lon: coords?.longitude,
-        include: 'checkins,activeCheckins,profile',
-      },
-      { force }
-    )
+    const [result, rsvps] = await Promise.all([
+      getEvents(
+        {
+          page: 0,
+          limit: PULSE_PAGE,
+          city: stored?.city ?? undefined,
+          // Rounded as the Pulse's are, or this is a different cache key from the feed it says it shares.
+          lat: roundCoord(coords?.latitude),
+          lon: roundCoord(coords?.longitude),
+          include: 'checkins,activeCheckins,profile',
+        },
+        { force }
+      ),
+      rsvpsRequest,
+    ])
     if (loadId !== loadIdRef.current) return
     setLocation(where)
 
