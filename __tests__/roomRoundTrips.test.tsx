@@ -89,6 +89,8 @@ const { useRoom } = require('../lib/useRoom') as typeof import('../lib/useRoom')
 let EVENT = 'e-roundtrips'
 const log: string[] = []
 let chatDelayMs = 0
+// How many dock-message reads are refused before one is served (the early read can beat the rejoin).
+let refuseMessages = 0
 
 function answer(path: string): unknown {
   if (path.startsWith('/api/mobile/checkins/active')) {
@@ -119,6 +121,7 @@ beforeEach(async () => {
   mockBlockedCalls.length = 0
   mockBlockedGate = Promise.resolve()
   chatDelayMs = 0
+  refuseMessages = 0
   mockSecure.clear()
   await TokenStorage.setAccessToken('tok')
   global.fetch = jest.fn(async (input: RequestInfo | URL) => {
@@ -127,6 +130,10 @@ beforeEach(async () => {
     log.push(`${name}:start`)
     if (path.endsWith(`/${EVENT}/chat`) && chatDelayMs) await new Promise((r) => setTimeout(r, chatDelayMs))
     log.push(`${name}:end`)
+    if (path.endsWith('/messages') && refuseMessages > 0) {
+      refuseMessages -= 1
+      return new Response(JSON.stringify({ success: false, error: 'Not a member' }), { status: 403, headers: { 'content-type': 'application/json' } })
+    }
     return new Response(JSON.stringify({ success: true, data: answer(path) }), {
       status: 200,
       headers: { 'content-type': 'application/json' },
@@ -173,6 +180,20 @@ it('on a re-open, asks for the dock messages without waiting for the chat lookup
 
   expect(log.indexOf('messages:start')).toBeGreaterThan(-1)
   expect(log.indexOf('messages:start')).toBeLessThan(log.indexOf('chat:end'))
+  expect(second.result.current.chatHistory).toMatchObject({ groupId: `g-${EVENT}`, failed: false })
+  second.unmount()
+})
+
+it('a re-open whose early message read is refused (the rejoin had not landed) reads again and shows the room', async () => {
+  EVENT = 'e-refused'
+  const first = await openRoom()
+  first.unmount()
+
+  apiClient.clearResponseCache()
+  apiClient.forgetActiveCheckins()
+  refuseMessages = 1
+  const second = await openRoom()
+
   expect(second.result.current.chatHistory).toMatchObject({ groupId: `g-${EVENT}`, failed: false })
   second.unmount()
 })
