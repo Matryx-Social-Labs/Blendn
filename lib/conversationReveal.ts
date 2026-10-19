@@ -51,6 +51,15 @@ export type RevealView = {
   nudge: string | null
 }
 
+/**
+ * What the reveal panel is showing, as a key: its state and whether somebody asked. Folding the panel away
+ * is remembered against this key, so a new state (you asked, they revealed) or a new nudge ("{name} asked
+ * to know who you are") brings it back, and the same one stays folded. Null when there is no panel.
+ */
+export function revealPanelKey(view: Pick<RevealView, 'bar' | 'nudge'> | null): string | null {
+  return view?.bar ? `${view.bar}:${view.nudge ?? ''}` : null
+}
+
 export function revealView(state: ConversationRevealState, askedHere = false): RevealView {
   if (!state.pseudonymous) return { bar: null, line: null, nudge: null }
   if (state.youRevealed && state.theyRevealed) return { bar: null, line: { seen: true, text: 'You can both see each other' }, nudge: null }

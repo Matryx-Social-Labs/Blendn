@@ -31,7 +31,7 @@ import { dmThread, draftOf, failedOf, keepFailed, setDraft } from '../../lib/cha
 import { copyText, linkSheet, notSentSheet } from '../../lib/chatSheets'
 import { idParam, nameParam } from '../../lib/routeParams'
 import { newClientId } from '../../lib/clientId'
-import { revealView, type ConversationRevealState } from '../../lib/conversationReveal'
+import { revealPanelKey, revealView, type ConversationRevealState } from '../../lib/conversationReveal'
 import { COLOR, DURATION, EASING, SIZE, SPACE } from '../../lib/design/tokens'
 import {
   directHeaderAvatar,
@@ -146,6 +146,8 @@ function PrivateChatInner() {
   const [picked, setPicked] = useState<string | null>(null)
   const [dockHeight, setDockHeight] = useState<number>(SIZE.input)
   const [barHeight, setBarHeight] = useState(0)
+  /** The reveal panel the person folded away (`revealPanelKey`): the feed is theirs again until it changes. */
+  const [foldedPanel, setFoldedPanel] = useState<string | null>(null)
   const { showToast } = useToast()
 
   useEffect(() => {
@@ -194,6 +196,12 @@ function PrivateChatInner() {
       : undefined
   const name = reveal?.displayName || nameParam(otherUserName) || 'Chat'
   const view = reveal ? revealView(reveal, asked) : null
+  const panelKey = revealPanelKey(view)
+  const panelOpen = !ended && panelKey !== null && foldedPanel !== panelKey
+  // A touch on the thread folds the panel away (a tap, or the start of a scroll); the header's reveal line brings it back.
+  const foldPanel = () => {
+    if (panelOpen) setFoldedPanel(panelKey)
+  }
 
   /* Ask them: the Asked state on the server's yes. No haptic (Flow 5 DM annotation). */
   const askThem = () => {
@@ -639,7 +647,7 @@ function PrivateChatInner() {
   const photosAllowed = !!reveal && (!reveal.pseudonymous || (reveal.youRevealed && reveal.theyRevealed))
   const top = chatHeaderBottom(insets.top)
   // The feed starts under the reveal bar while there is one.
-  const barSpace = !ended && view?.bar ? barHeight : 0
+  const barSpace = panelOpen ? barHeight : 0
   const dockBottom = keyboardUp ? SPACE.sm : Math.max(insets.bottom, SPACE.lg)
   const lock = composer.lock
 
@@ -671,6 +679,7 @@ function PrivateChatInner() {
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode={KEYBOARD_DISMISS}
+              onTouchStart={foldPanel}
               maxToRenderPerBatch={12}
               windowSize={10}
               initialNumToRender={25}
@@ -775,11 +784,12 @@ function PrivateChatInner() {
         onBack={() => router.back()}
         moreLabel="Conversation options"
         onMore={openOptions}
-        onIdentity={ended ? undefined : openProfile}
-        identityHint="Opens their profile"
+        // Their name once they are one; until then the face and the reveal line reopen a panel that was folded away.
+        onIdentity={ended ? undefined : (openProfile ?? (panelKey !== null && !panelOpen ? () => setFoldedPanel(null) : undefined))}
+        identityHint={openProfile ? 'Opens their profile' : 'Shows the reveal options'}
       />
       {/* The reveal stays in view under the header while either of you is a pseudonym; the feed starts below it. */}
-      {!ended && view?.bar ? (
+      {panelOpen && view?.bar ? (
         <Animated.View
           key={view.bar}
           entering={revealIn}

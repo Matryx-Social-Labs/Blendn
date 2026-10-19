@@ -47,6 +47,8 @@ export function MakeHeader({ step, titleRef }: { step: MakeStep; titleRef: RefOb
 export type NameStepProps = {
   name: string
   onName: (next: string) => void
+  /** The name field lost focus: the screen may refuse a name that is too short or long now, rather than at Next. */
+  onNameBlur?: () => void
   nameError?: string
   bio: string
   onBio: (next: string) => void
@@ -77,6 +79,7 @@ export function NameStep(p: NameStepProps) {
         label="Name"
         value={p.name}
         onChangeText={p.onName}
+        onBlur={p.onNameBlur}
         limit={CREW_NAME_MAX}
         error={p.nameError}
         autoCapitalize="words"

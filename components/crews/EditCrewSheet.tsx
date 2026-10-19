@@ -101,6 +101,7 @@ export function EditCrewSheet({
           edited((e) => ({ ...e, name }))
           setErrors((e) => ({ ...e, name: undefined }))
         }}
+        onNameBlur={() => edit.name.trim() && setErrors((e) => ({ ...e, name: nameError(edit.name) }))}
         nameError={shown.name}
         bio={edit.bio}
         onBio={(bio) => {

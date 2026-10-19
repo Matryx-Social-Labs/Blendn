@@ -4,6 +4,7 @@ import {
   revealConfirmation,
   revealView,
   type ConversationRevealState,
+  revealPanelKey,
 } from '../lib/conversationReveal'
 
 /*
@@ -147,5 +148,19 @@ describe('the blur derivative is small enough to be a blur', () => {
      */
     expect(BLUR_WIDTH).toBeGreaterThan(0)
     expect(BLUR_WIDTH).toBeLessThanOrEqual(64)
+  })
+})
+
+describe('the reveal panel’s key (what a fold is remembered against)', () => {
+  it('is the state plus whether somebody asked, and null with no panel', () => {
+    expect(revealPanelKey(null)).toBeNull()
+    expect(revealPanelKey({ bar: null, nudge: null })).toBeNull()
+    expect(revealPanelKey({ bar: 'none', nudge: null })).toBe('none:')
+    expect(revealPanelKey({ bar: 'none', nudge: 'Mika asked to know who you are' })).toBe('none:Mika asked to know who you are')
+  })
+
+  it('changes with the state and with a new ask, so a fold does not outlive what it folded', () => {
+    expect(revealPanelKey({ bar: 'none', nudge: null })).not.toBe(revealPanelKey({ bar: 'asked', nudge: null }))
+    expect(revealPanelKey({ bar: 'none', nudge: null })).not.toBe(revealPanelKey({ bar: 'none', nudge: 'x' }))
   })
 })

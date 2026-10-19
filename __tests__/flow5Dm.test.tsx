@@ -160,6 +160,62 @@ describe('the reveal bar', () => {
   })
 })
 
+describe('the reveal panel folds away (drive: it stayed over the thread on Android)', () => {
+  const feed = () => screen.getByTestId('dm-feed')
+  const touch = () => act(async () => fireEvent(feed(), 'touchStart'))
+
+  it('a touch on the thread folds it, and the feed gives its room back', async () => {
+    await open()
+    expect(screen.getByLabelText('Show them who you are')).toBeTruthy()
+    await touch()
+    await flush()
+    expect(screen.queryByLabelText('Show them who you are')).toBeNull()
+    // The header still says where things stand.
+    expect(screen.getByText('You’re both anonymous here')).toBeTruthy()
+  })
+
+  it('a scroll folds it too: its first touch is the same event', async () => {
+    await open()
+    await act(async () => fireEvent(feed(), 'scrollBeginDrag'))
+    await act(async () => fireEvent(feed(), 'touchStart'))
+    await flush()
+    expect(screen.queryByLabelText('Show them who you are')).toBeNull()
+  })
+
+  it('the header’s face and line bring it back: there is still one reveal control', async () => {
+    await open()
+    await touch()
+    await flush()
+    await act(async () => fireEvent.press(screen.getByLabelText('Arctic Falcon')))
+    await flush()
+    expect(screen.getByLabelText('Show them who you are')).toBeTruthy()
+  })
+
+  it('a new state brings it back: they asked, or you did', async () => {
+    api.requestReveal.mockResolvedValue({ success: true } as never)
+    await open()
+    await touch()
+    await flush()
+    await act(async () => fireEvent.press(screen.getByLabelText('Arctic Falcon')))
+    await flush()
+    await act(async () => fireEvent.press(screen.getByLabelText('Ask them')))
+    await flush()
+    expect(screen.getByText('Asked · they’ll decide in their own time')).toBeTruthy()
+    await touch()
+    await flush()
+    expect(screen.queryByText('Asked · they’ll decide in their own time')).toBeNull()
+  })
+
+  it('once both have revealed there is no panel to fold and the header is their profile', async () => {
+    api.getConversation.mockResolvedValue({ success: true, data: named } as never)
+    await open()
+    await touch()
+    await flush()
+    expect(screen.queryByLabelText('Show them who you are')).toBeNull()
+    expect(screen.getByLabelText('Mika')).toBeTruthy()
+  })
+})
+
 describe('photos (R9): only once you can both see each other, or nobody was hidden', () => {
   it.each([
     ['both anonymous', anonymous, false],

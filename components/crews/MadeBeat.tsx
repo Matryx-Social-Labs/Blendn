@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
 
-import { COLOR, EASING, SPACE } from '../../lib/design/tokens'
+import { COLOR, EASING, RADIUS, SPACE } from '../../lib/design/tokens'
 import { madeLine } from '../../lib/crewsScreens'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { CrewEmblem } from '../ds/CrewEmblem'
@@ -19,10 +19,10 @@ const TEXT_GAP = 6
 /**
  * The crew is made (Flow 10 · 10.2, Success): the emblem appears, the name in
  * the moment role, "Your crew. 3 invited; it starts when someone joins.", and
- * "The crew chat opens next." Tap anywhere to go on at once. Under Reduce
- * Motion the emblem is simply there.
+ * "The crew chat opens next." It stays until Continue (or a tap anywhere).
+ * Under Reduce Motion the emblem is simply there.
  */
-export function MadeBeat({ name, emblemSeed, invited, onContinue }: { name: string; emblemSeed: string; invited: number; onContinue: () => void }) {
+export function MadeBeat({ name, emblemSeed, invited, onContinue }: { name: string; emblemSeed: string | null; invited: number; onContinue: () => void }) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const reduceMotion = useReducedMotion()
@@ -42,7 +42,7 @@ export function MadeBeat({ name, emblemSeed, invited, onContinue }: { name: stri
     >
       <View style={styles.column}>
         <Animated.View style={emblem}>
-          <CrewEmblem seed={emblemSeed} size={EMBLEM} />
+          {emblemSeed ? <CrewEmblem seed={emblemSeed} size={EMBLEM} /> : <View testID="make-emblem-pending" style={styles.pending} />}
         </Animated.View>
         <View style={styles.text}>
           <Text style={[font('moment', bold), styles.centre, styles.ink]} numberOfLines={2} adjustsFontSizeToFit>
@@ -58,6 +58,8 @@ export function MadeBeat({ name, emblemSeed, invited, onContinue }: { name: stri
 
 const styles = StyleSheet.create({
   fill: { flex: 1, justifyContent: 'center' },
+  /** The emblem's place while the server's seed is on its way: the same square, quiet. */
+  pending: { width: EMBLEM, height: EMBLEM, borderRadius: RADIUS.card, backgroundColor: COLOR.surface },
   column: { alignItems: 'center', gap: COLUMN_GAP, paddingVertical: SPACE.xxl },
   text: { alignItems: 'center', gap: TEXT_GAP },
   centre: { textAlign: 'center' },

@@ -83,6 +83,12 @@ function BlendSubtitle({ blend, now }: { blend: Blend; now: number }) {
 export type BlendRoomChrome = {
   /** The Blend, once the server lists it open to you; null while it loads, or if it is not. */
   blend: Blend | null
+  /**
+   * It was listed open to you and now is not: its clock ran out, its crew closed, or a block across
+   * the sides refused your door (the server's D-9: the pair is hidden from each other, the room goes
+   * on for everyone else). For you that is the Blend closing; the room says so, once and plainly.
+   */
+  gone: boolean
   title: string | null
   leading: ReactNode
   subtitle: ReactNode
@@ -103,10 +109,10 @@ export type BlendRoomChrome = {
  * yours. Reveal is the one confirmed action: it names the crew, goes only to
  * this Blend, and cannot be undone. The ⋯ has Block someone and Leave.
  *
- * Everything is hidden while `hidden` (the room says it is closed instead).
- * `blendId` null is any other room: nothing is read, nothing drawn.
+ * `blendId` null is any other room: nothing is read, nothing drawn. The room draws nothing of this
+ * while it shows an outside state of its own (closed, left, removed).
  */
-export function useBlendRoom(blendId: string | null, top: number, hidden: boolean): BlendRoomChrome {
+export function useBlendRoom(blendId: string | null, top: number): BlendRoomChrome {
   const { user } = useAuth()
   const myId = user?.id
   const bold = useBoldText()
@@ -139,11 +145,16 @@ export function useBlendRoom(blendId: string | null, top: number, hidden: boolea
     }
   }, [eventId])
 
-  const shown = !!blend && !hidden
+  // Seen open once is what makes "not listed now" a closing rather than a Blend that never loaded (state adjusted in render).
+  const [seen, setSeen] = useState(false)
+  if (blend && !seen) setSeen(true)
+  const gone = !!blendId && seen && !blend
+
+  const shown = !!blend
   const coach = useCoachMark('blend_first_open', { ready: shown })
 
   if (!blendId || !blend) {
-    return { blend: null, title: null, leading: null, subtitle: null, bar: null, barSpace: 0, overlays: null, openMenu: () => {} }
+    return { blend: null, gone, title: null, leading: null, subtitle: null, bar: null, barSpace: 0, overlays: null, openMenu: () => {} }
   }
 
   const { mine, theirs } = blendSides(blend, myId)
@@ -274,6 +285,7 @@ export function useBlendRoom(blendId: string | null, top: number, hidden: boolea
 
   return {
     blend,
+    gone: false,
     title,
     leading: <BlendPair mine={mine} theirs={theirs} />,
     subtitle: <BlendSubtitle blend={blend} now={now} />,
