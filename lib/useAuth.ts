@@ -3,6 +3,7 @@ import { apiClient, AuthUser, TokenStorage } from './apiClient'
 import { Logger } from './logger'
 import { syncPurchasesUser } from './purchases'
 import { clearOutbox } from './chatOutbox'
+import { queryCache } from './queryCache'
 import { clearRoomSignal } from './roomSignal'
 import { resetRoomMembership } from './roomMembership'
 import { rateLimitedMessage } from './signInRefusal'
@@ -242,6 +243,8 @@ const clearAuthState = async () => {
    */
   clearOutbox()
   resetRoomMembership()
+  // The cached DM threads are per account, and the next one on this phone has no use for them.
+  queryCache.invalidate('private_messages_')
   /*
    * A Go Live remembered on this phone is that account's (step 5 review, M5).
    * Loaded when needed: `goLive` brings AsyncStorage, which nothing else on
