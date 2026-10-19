@@ -1295,6 +1295,16 @@ export const REFRESH_DEADLINE_MS = 2 * REQUEST_TIMEOUT_MS
  */
 const PROACTIVE_REFRESH_MIN_GAP_MS = 30_000
 let lastProactiveRefreshAt = 0
+/**
+ * When a refresh last came back 'failed' (the server never answered), or 0.
+ *
+ * On a cold start against a hung server the proactive refresh times out, then the
+ * session read, then the launch path asked for a refresh again: a third deadline
+ * for the same silence. `refreshSessionOutcome` reads this and does not ask again
+ * inside the window; the background retries and the 401 path still do.
+ */
+const FAILED_REFRESH_COOLDOWN_MS = 10_000
+let lastRefreshFailedAt = 0
 let refreshRetryAttempt = 0
 let refreshRetryTimer: ReturnType<typeof setTimeout> | null = null
 /** The server's sentence from the last rejected refresh, if it gave one. */
@@ -1598,7 +1608,8 @@ class ApiClientClass {
     // A refresh begun since we read the token is joined, whatever the guard says.
     const now = Date.now()
     if (!refreshPromise) {
-      if (now - lastProactiveRefreshAt < PROACTIVE_REFRESH_MIN_GAP_MS) return token
+      // Read again: the refresh that set the guard may have landed since `token` was read.
+      if (now - lastProactiveRefreshAt < PROACTIVE_REFRESH_MIN_GAP_MS) return withinDeadline(TokenStorage.getAccessToken())
       lastProactiveRefreshAt = now
     }
     // 'failed' / 'rejected': send what we have; the 401 path decides what that means.
@@ -1844,6 +1855,7 @@ class ApiClientClass {
     })
 
     p.then((outcome) => {
+      lastRefreshFailedAt = outcome === 'failed' ? Date.now() : 0
       if (outcome !== 'failed') {
         refreshRetryAttempt = 0
         return
@@ -2202,6 +2214,7 @@ class ApiClientClass {
    * "no answer" as "refused" and cleared a perfectly good session.
    */
   async refreshSessionOutcome(): Promise<RefreshOutcome> {
+    if (!refreshPromise && Date.now() - lastRefreshFailedAt < FAILED_REFRESH_COOLDOWN_MS) return 'failed'
     return this.refreshTokens()
   }
 
