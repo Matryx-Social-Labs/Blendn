@@ -397,13 +397,28 @@ export function Sheet({ visible, onClose, title, body, icon, actions = [], deten
    * being typed in into view (the Board composer's text box sits under the
    * kind cards). The avoiding view has lifted the sheet a frame later, hence
    * the frame's wait.
+   *
+   * Every control stays reachable while it is up, not only the one being typed in: the Board composer's
+   * Spaces stepper sits under the text box, and a capped sheet that looked finished (cards, field, Post)
+   * gave no sign it went on. So the scroll says so (`overflowing`: an indicator while the keyboard is up
+   * and there is more), and the field is brought into view once, not against a hand that has already
+   * taken the scroll over (`handScrolled`).
    */
   const content = useRef<ScrollView>(null)
   const contentHeight = useRef(0)
   const contentSize = useRef(0)
+  const handScrolled = useRef(false)
+  const [overflowing, setOverflowing] = useState(false)
+  const measureOverflow = () => setOverflowing(contentSize.current > contentHeight.current + 1)
+  useEffect(() => {
+    // A new keyboard (or none) is a new gesture: the field may be brought into view again.
+    handScrolled.current = false
+  }, [keyboardUp])
   useEffect(() => {
     if (!keyboardUp) return
     const frame = requestAnimationFrame(() => {
+      // Never against a scroll the person has already started: the field is theirs to place.
+      if (handScrolled.current) return
       const input = TextInput.State.currentlyFocusedInput()
       const inner = content.current?.getInnerViewNode()
       if (!input || !inner) return
@@ -543,13 +558,24 @@ export function Sheet({ visible, onClose, title, body, icon, actions = [], deten
                 // Scrolls only when the sheet is at its cap; otherwise it is exactly its content.
                 <ScrollView
                   ref={content}
-                  onLayout={(e) => (contentHeight.current = e.nativeEvent.layout.height)}
-                  onContentSizeChange={(_w, h) => (contentSize.current = h)}
+                  onLayout={(e) => {
+                    contentHeight.current = e.nativeEvent.layout.height
+                    measureOverflow()
+                  }}
+                  onContentSizeChange={(_w, h) => {
+                    contentSize.current = h
+                    measureOverflow()
+                  }}
+                  onScrollBeginDrag={() => (handScrolled.current = true)}
                   testID={testID && `${testID}-content`}
                   style={styles.content}
                   contentContainerStyle={styles.contentInner}
                   keyboardShouldPersistTaps="handled"
-                  showsVerticalScrollIndicator={false}
+                  // Capped by the keyboard with more below: say so (the indicator), and let the hand scroll it on both platforms.
+                  showsVerticalScrollIndicator={keyboardUp && overflowing}
+                  persistentScrollbar={keyboardUp && overflowing}
+                  nestedScrollEnabled
+                  scrollEnabled
                   bounces={false}
                 >
                   {children}
