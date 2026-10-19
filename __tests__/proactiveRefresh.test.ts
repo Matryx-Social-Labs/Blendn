@@ -13,8 +13,17 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   default: require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
 }))
 const mockSecure = new Map<string, string>()
+// A read that has already captured its value when it is made slow (a keychain that answers late).
+let mockSlowReads = 0
 jest.mock('expo-secure-store', () => ({
-  getItemAsync: async (k: string) => mockSecure.get(k) ?? null,
+  getItemAsync: async (k: string) => {
+    const value = mockSecure.get(k) ?? null
+    if (mockSlowReads > 0) {
+      mockSlowReads -= 1
+      await new Promise((r) => setTimeout(r, 40))
+    }
+    return value
+  },
   setItemAsync: async (k: string, v: string) => {
     mockSecure.set(k, v)
   },
@@ -44,6 +53,8 @@ const jwt = (expiresInSeconds: number) => {
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 
+let refreshDelayMs = 5
+
 /** A server that accepts only `valid`, and rotates to `next` on refresh. */
 function server(valid: string, next: string) {
   const seen: string[] = []
@@ -52,7 +63,7 @@ function server(valid: string, next: string) {
     const auth = (init?.headers as Record<string, string> | undefined)?.Authorization
     seen.push(`${url} ${auth ?? ''}`.trim())
     if (url === '/api/mobile/auth/refresh') {
-      await new Promise((r) => setTimeout(r, 5))
+      await new Promise((r) => setTimeout(r, refreshDelayMs))
       return json(200, { success: true, data: { accessToken: next, refreshToken: 'refresh-2' } })
     }
     return auth === `Bearer ${valid}` ? json(200, { success: true, data: { id: 'u1' } }) : json(401, { success: false })
@@ -131,6 +142,59 @@ describe('proactive refresh', () => {
       '/api/mobile/auth/refresh',
       `/api/mobile/auth/session Bearer ${fresh}`,
     ])
+  })
+})
+
+describe('around the refresh', () => {
+  it('signing out presents the refresh token the proactive refresh just issued, so the server revokes the live one', async () => {
+    const stale = jwt(10)
+    const fresh = jwt(900)
+    await TokenStorage.setTokens(stale, 'refresh-1')
+    let signoutBody: { refreshToken?: string } = {}
+    global.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input).replace(/^https?:\/\/[^/]+/, '')
+      if (url === '/api/mobile/auth/refresh') return json(200, { success: true, data: { accessToken: fresh, refreshToken: 'refresh-2' } })
+      if (url === '/api/mobile/auth/signout') signoutBody = JSON.parse(String(init?.body))
+      return json(200, { success: true })
+    }) as typeof fetch
+
+    await apiClient.signOut()
+
+    expect(signoutBody.refreshToken).toBe('refresh-2')
+  })
+
+  it('a refresh that already failed is not asked again by the launch path', async () => {
+    await TokenStorage.setTokens(jwt(10), 'refresh-1')
+    const seen: string[] = []
+    global.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = String(input).replace(/^https?:\/\/[^/]+/, '')
+      seen.push(url)
+      return json(503, { success: false })
+    }) as typeof fetch
+
+    await apiClient.getSession()
+    const outcome = await apiClient.refreshSessionOutcome()
+
+    expect(outcome).toBe('failed')
+    expect(seen.filter((u) => u === '/api/mobile/auth/refresh')).toHaveLength(1)
+  })
+
+  it('a request held up by the 30 s guard still sends the token the other request just fetched', async () => {
+    const stale = jwt(10)
+    const fresh = jwt(900)
+    await TokenStorage.setTokens(stale, 'refresh-1')
+    refreshDelayMs = 30
+    const seen = server(fresh, fresh)
+    mockSlowReads = 0
+
+    const first = apiClient.getSession()
+    // The second read has captured the stale token, and answers after the first's refresh has landed.
+    mockSlowReads = 1
+    const second = apiClient.getSession()
+    await Promise.all([first, second])
+
+    expect(seen.filter((s) => s.includes(stale))).toHaveLength(0)
+    refreshDelayMs = 5
   })
 })
 
