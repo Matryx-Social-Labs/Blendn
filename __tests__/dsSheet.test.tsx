@@ -11,7 +11,7 @@ import { State } from 'react-native-gesture-handler'
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils'
 import * as Reanimated from 'react-native-reanimated'
 
-import { fieldScroll, settleDetent, Sheet, sheetBottomPadding, sheetMaxHeight } from '../components/ds/Sheet'
+import { fieldScroll, settleDetent, Sheet, sheetBottomPadding, sheetFrame, sheetMaxHeight } from '../components/ds/Sheet'
 import { COLOR, MATERIAL, SPRING } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 
@@ -319,5 +319,137 @@ describe('the field being typed in, scrolled into view (drive 3: the stepper pee
     // A tall form: the field at 40–140, 600 of content.
     expect(fieldScroll(40, 100, 200, 600)).toBe(0)
     expect(fieldScroll(300, 100, 200, 900)).toBe(208)
+  })
+})
+
+/*
+ * The owner's Make a crew defect (iOS sim): typing pushed the sheet far too high. A tall detent sheet is
+ * an explicit 0.92 × screen height, and the avoiding view lifted it by the whole keyboard, so its top
+ * went off the screen. The frame is one function of one keyboard frame: the lift and the clamp together.
+ */
+describe('where the sheet stands over a keyboard (393 × 852, a 336 pt keyboard, a 59 pt top inset)', () => {
+  const SCREEN = 852
+  const KEYBOARD = 336
+  const INSET = 59
+  const tall = Math.round(SCREEN * 0.92)
+  const frame = (keyboard: boolean, detentHeight: number | null) =>
+    sheetFrame({ visibleHeight: SCREEN, insetTop: INSET, keyboardTop: keyboard ? SCREEN - KEYBOARD : null, detentHeight })
+
+  it('a tall detent sheet is shortened to the room above the keyboard, and stands on it', () => {
+    const f = frame(true, tall)
+    expect(f.lift).toBe(KEYBOARD)
+    expect(f.maxHeight).toBe(SCREEN - KEYBOARD - INSET - 8)
+    expect(f.height).toBe(f.maxHeight)
+    // Its top is the status bar's foot and the 8 pt margin; never above it.
+    expect(SCREEN - f.lift - (f.height as number)).toBe(INSET + 8)
+  })
+
+  it('the lift alone, the old behaviour, put the top 268 pt above the screen', () => {
+    expect(SCREEN - KEYBOARD - tall).toBe(-268)
+  })
+
+  it('with no keyboard a detent sheet is its detent and rests on the bottom (a drag may still rubber-band)', () => {
+    const f = frame(false, tall)
+    expect(f).toMatchObject({ lift: 0, height: tall })
+    expect(f.maxHeight).toBe(SCREEN - INSET - 8)
+  })
+
+  it('a detent already shorter than the room is left alone', () => {
+    const short = Math.round(SCREEN * 0.34)
+    expect(frame(true, short).height).toBe(short)
+  })
+
+  it('a tray has no height of its own: it is lifted and capped, nothing more', () => {
+    expect(frame(true, null)).toEqual({ lift: KEYBOARD, maxHeight: SCREEN - KEYBOARD - INSET - 8, height: null })
+    expect(frame(false, null)).toEqual({ lift: 0, maxHeight: SCREEN - INSET - 8, height: null })
+  })
+
+  it('lifts to the keyboard’s top edge, not by its height: Android edge-to-edge leaves the navigation bar out of the height', () => {
+    // A 915 pt modal, a keyboard reporting 300 pt whose top is at 567: the sheet stands on 567.
+    expect(sheetFrame({ visibleHeight: 915, insetTop: 0, keyboardTop: 567, detentHeight: null }).lift).toBe(915 - 567)
+  })
+
+  it('a keyboard taller than the room leaves a sheet no height rather than a negative one', () => {
+    expect(sheetFrame({ visibleHeight: 300, insetTop: 62, keyboardTop: 40, detentHeight: 276 })).toMatchObject({ height: 0, maxHeight: 0 })
+  })
+})
+
+describe('the place view over a keyboard (render)', () => {
+  const handlers: Record<string, (e?: { endCoordinates: { height: number; screenY: number } }) => void> = {}
+  let listen: jest.SpyInstance
+  let dims: jest.SpyInstance
+
+  beforeEach(() => {
+    jest.useFakeTimers()
+    reduceMotion.mockReturnValue(false)
+    const { Keyboard } = require('react-native')
+    listen = jest.spyOn(Keyboard, 'addListener').mockImplementation(((event: string, fn: (typeof handlers)[string]) => {
+      handlers[event] = fn
+      return { remove: () => {} }
+    }) as never)
+    const real = Dimensions.get.bind(Dimensions)
+    dims = jest.spyOn(Dimensions, 'get').mockImplementation(((k: 'window' | 'screen') => (k === 'window' ? { width: 393, height: 852, scale: 3, fontScale: 1 } : real(k))) as never)
+  })
+  afterEach(() => {
+    jest.useRealTimers()
+    listen.mockRestore()
+    dims.mockRestore()
+  })
+
+  /** The place view's style as it is now: its animated values (the lift, the clamped height), not the first paint's. */
+  const place = () => Reanimated.getAnimatedStyle(screen.getByTestId('s-place', { includeHiddenElements: true })) as { marginBottom: number; height?: number }
+  const lay = () => act(async () => fireEvent(screen.getByTestId('s-root', { includeHiddenElements: true }), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 393, height: 852 } } }))
+  // The lift and the clamp ease on `base`: run the clock past it (jumps at once under Reduce Motion).
+  const settle = () => act(async () => jest.advanceTimersByTime(600))
+  const keyboard = async () => {
+    await act(async () => handlers.keyboardWillShow({ endCoordinates: { height: 336, screenY: 852 - 336 } }))
+    await settle()
+  }
+
+  it('a tall sheet: its height is no more than the room above the keyboard, and its foot is on it', async () => {
+    await render(signOut({ detents: ['tall'] }))
+    await lay()
+    expect(place().height).toBe(Math.round(852 * 0.92))
+    expect(place().marginBottom).toBe(0)
+    await keyboard()
+    const room = 852 - 336 // the insets are 0 here: the room is the keyboard's top
+    expect(place().marginBottom).toBe(336)
+    expect(place().height).toBeLessThanOrEqual(room)
+    expect(place().height).toBe(room - 8)
+    // The top lands on screen: bottom edge (852 − lift) less its height.
+    expect(852 - place().marginBottom - (place().height as number)).toBeGreaterThanOrEqual(0)
+    await act(async () => handlers.keyboardWillHide())
+    await settle()
+    expect(place().height).toBe(Math.round(852 * 0.92))
+    expect(place().marginBottom).toBe(0)
+  })
+
+  it('under Reduce Motion it is there within a frame, not eased over `base`', async () => {
+    reduceMotion.mockReturnValue(true)
+    await render(signOut({ detents: ['tall'] }))
+    await lay()
+    await act(async () => handlers.keyboardWillShow({ endCoordinates: { height: 336, screenY: 852 - 336 } }))
+    await act(async () => jest.advanceTimersByTime(20))
+    expect(place()).toMatchObject({ marginBottom: 336, height: 852 - 336 - 8 })
+  })
+
+  it('a tray: lifted onto the keyboard, no fixed height, its content capped', async () => {
+    await render(signOut())
+    await lay()
+    await keyboard()
+    expect(place().marginBottom).toBe(336)
+    expect(place().height).toBeUndefined()
+    expect(flat('glass').maxHeight).toBe(852 - 336 - 8)
+  })
+
+  it('there is one lift: the sheet draws no KeyboardAvoidingView of its own', () => {
+    const src = require('fs').readFileSync(require('path').join(__dirname, '../components/ds/Sheet.tsx'), 'utf8')
+    expect(src).not.toMatch(/<KeyboardAvoidingView|import \{[^}]*KeyboardAvoidingView/)
+  })
+
+  it('drags between detents when no keyboard is up', async () => {
+    await render(signOut({ detents: ['medium', 'tall'] }))
+    await lay()
+    expect(flat('s-place').height).toBe(Math.round(852 * 0.56))
   })
 })

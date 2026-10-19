@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState, type ComponentRef, type React
 import {
   AccessibilityInfo,
   Keyboard,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -22,7 +21,6 @@ import { Icon, type IconName } from '../ui/Icon'
 import { Material } from '../ui/Material'
 import { COLOR, EASING, MATERIAL, RADIUS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
-import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { tint } from '../../lib/theme'
 import { Button, type ButtonKind, type ButtonProps } from './Button'
@@ -64,8 +62,8 @@ export function settleDetent(heights: number[], from: number, height: number, dr
 
 /**
  * The sheet's foot. With the keyboard up the home indicator is under the
- * keyboard, and the avoiding view already lifts the sheet by the keyboard's
- * full height, so the safe-area inset would only leave a dead band between
+ * keyboard, and the sheet already stands on the keyboard's top edge
+ * (`sheetFrame`), so the safe-area inset would only leave a dead band between
  * the last button and the keys (Board composer drive).
  */
 export function sheetBottomPadding(insetBottom: number, keyboardUp: boolean) {
@@ -89,6 +87,38 @@ export const SHEET_TOP_GAP = SPACE.sm
 export function sheetMaxHeight(visibleHeight: number, insetTop: number, keyboardTop: number | null) {
   const bottom = keyboardTop === null ? visibleHeight : Math.min(visibleHeight, keyboardTop)
   return Math.max(0, bottom - insetTop - SHEET_TOP_GAP)
+}
+
+/**
+ * Where the sheet stands, from the one keyboard frame.
+ *
+ * - `lift`: how far its foot is raised, so it stands on the keyboard's top edge.
+ * - `maxHeight`: the room above that edge (`sheetMaxHeight`).
+ * - `height`: a detent sheet's height, clamped to that room only while a
+ *   keyboard is up (`null` for a tray, which is as tall as its content).
+ *
+ * The lift and the clamp come from the same `keyboardTop`, so they cannot
+ * disagree: a lift without the clamp is the defect this replaced — a 92% sheet
+ * lifted by a 336 pt keyboard had its top 268 pt above the screen
+ * (`KeyboardAvoidingView` padded the foot and nothing shortened the sheet).
+ * With no keyboard nothing is clamped, so a drag may still rubber-band past
+ * the top detent.
+ */
+export function sheetFrame({
+  visibleHeight,
+  insetTop,
+  keyboardTop,
+  detentHeight,
+}: {
+  visibleHeight: number
+  insetTop: number
+  keyboardTop: number | null
+  detentHeight: number | null
+}) {
+  const maxHeight = sheetMaxHeight(visibleHeight, insetTop, keyboardTop)
+  const lift = keyboardTop === null ? 0 : Math.max(0, visibleHeight - keyboardTop)
+  const height = detentHeight === null ? null : keyboardTop === null ? detentHeight : Math.min(detentHeight, maxHeight)
+  return { lift, maxHeight, height }
 }
 
 /**
@@ -157,6 +187,9 @@ export type SheetProps = {
   testID?: string
 }
 
+/** No keyboard, no clamp: a number no detent reaches. */
+const NO_CAP = 100000
+
 /**
  * The sheet's motion (#5): mounted while open or leaving, the rise and the
  * scrim, and the drag between detents (`heights`, or the sheet's own height
@@ -169,10 +202,16 @@ function useSheetMotion({
   busy,
   requestClose,
   onGone,
+  lift: liftTo,
+  cap: capTo,
 }: {
   visible: boolean
   /** Lowest first. */
   heights: number[]
+  /** How far the foot is raised onto the keyboard (`sheetFrame`); eased in step with it. */
+  lift: number
+  /** A detent sheet's tallest height while a keyboard is up; `null` without one (`sheetFrame`). */
+  cap: number | null
   /** The index it opens at. */
   opening: number
   busy: boolean
@@ -191,6 +230,23 @@ function useSheetMotion({
   const height = useSharedValue(heights[opening] ?? 0)
   const at = useSharedValue(opening)
   const natural = useSharedValue(0)
+  const lift = useSharedValue(0)
+  const cap = useSharedValue(NO_CAP)
+  const first = useRef(true)
+
+  // The keyboard coming or going: the foot and the height move together, on `base` (jumps under Reduce Motion).
+  useEffect(() => {
+    const to = capTo ?? NO_CAP
+    if (first.current || reduceMotion) {
+      first.current = false
+      lift.set(liftTo)
+      cap.set(to)
+      return
+    }
+    const ease = { duration: motionTokens(false).duration.base, easing: Easing.bezier(...EASING.standard) }
+    lift.set(withTiming(liftTo, ease))
+    cap.set(withTiming(to, ease))
+  }, [liftTo, capTo, reduceMotion, lift, cap])
 
   useEffect(() => {
     const fade = motionTokens(reduceMotion).duration.base
@@ -240,9 +296,11 @@ function useSheetMotion({
       offset.set(withSpring(0, { ...SPRING.fling, velocity: e.velocityY }))
     })
 
+  // `marginBottom` is the one thing that lifts the sheet over the keyboard; the height is clamped to what is left above it.
   const placeStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: offset.get() }],
-    ...(levels ? { height: height.get() } : null),
+    marginBottom: lift.get(),
+    ...(levels ? { height: Math.min(height.get(), cap.get()) } : null),
   }))
   const scrimStyle = useAnimatedStyle(() => ({ opacity: scrim.get() }))
   return { mounted, drag, placeStyle, scrimStyle, natural, fixedHeight: !!levels }
@@ -312,6 +370,12 @@ export function Sheet({ visible, onClose, title, body, icon, actions = [], deten
   }, [busy, onClose])
   const stops = [...new Set(detents)].sort((a, b) => DETENT[a] - DETENT[b])
   const heights = stops.map((d) => Math.round(window.height * DETENT[d]))
+  const frame = sheetFrame({
+    visibleHeight: rootHeight ?? window.height,
+    insetTop: insets.top,
+    keyboardTop: keyboard?.top ?? null,
+    detentHeight: heights.length ? heights[heights.length - 1] : null,
+  })
   const opening = detents ? stops.indexOf(detents[0]) : 0
   const dismissed = useRef(onDismissed)
   useEffect(() => {
@@ -324,6 +388,8 @@ export function Sheet({ visible, onClose, title, body, icon, actions = [], deten
     opening,
     busy,
     requestClose,
+    lift: frame.lift,
+    cap: keyboard ? frame.maxHeight : null,
     onGone: () => {
       if (!ios) dismissed.current?.()
     },
@@ -363,7 +429,15 @@ export function Sheet({ visible, onClose, title, body, icon, actions = [], deten
         style={styles.fill}
         onLayout={(e) => setRootHeight(e.nativeEvent.layout.height)}
       >
-        <KeyboardAvoidingView style={styles.end} behavior={KEYBOARD_BEHAVIOR}>
+        {/*
+         * No KeyboardAvoidingView. This is the one thing that lifts the sheet: the place view's `marginBottom`,
+         * from the keyboard's top edge (`screenY`), the same frame that shortens a detent sheet. The avoiding
+         * view measured its own overlap from its own events and layout, a second answer that on Android
+         * edge-to-edge (react-native-keyboard-controller's KeyboardProvider at the root; the Modal is the whole
+         * screen but the window is not) disagreed with the cap, and on iOS lifted a fixed-height detent sheet
+         * clean off the top. One frame cannot disagree with itself, on either platform.
+         */}
+        <View style={styles.end}>
           <Animated.View
             testID={testID && `${testID}-scrim`}
             style={[StyleSheet.absoluteFill, { backgroundColor: android ? tint(COLOR.ink, ANDROID_SCRIM) : COLOR.backdrop }, scrimStyle]}
@@ -378,7 +452,7 @@ export function Sheet({ visible, onClose, title, body, icon, actions = [], deten
               style={[
                 styles.sheet,
                 fixedHeight && styles.fill,
-                { paddingBottom: sheetBottomPadding(insets.bottom, keyboardUp), maxHeight: sheetMaxHeight(rootHeight ?? window.height, insets.top, keyboard?.top ?? null) },
+                { paddingBottom: sheetBottomPadding(insets.bottom, keyboardUp), maxHeight: frame.maxHeight },
                 contrast && IC_HAIRLINE,
               ]}
             >
@@ -442,7 +516,7 @@ export function Sheet({ visible, onClose, title, body, icon, actions = [], deten
               ) : null}
             </Material>
           </Animated.View>
-        </KeyboardAvoidingView>
+        </View>
       </GestureHandlerRootView>
     </Modal>
   )
