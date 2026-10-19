@@ -36,6 +36,16 @@ interface ToastContextValue {
 // read the message and reach the button.
 const DURATION_MS = 3000
 const DURATION_WITH_ACTION_MS = 5000
+// A message is read in full or it is not a message: a longer one stays a second more for every 8 words past the first 8.
+const WORDS_FREE = 8
+const WORDS_PER_EXTRA_SECOND = 8
+
+/** How long a toast stays: the base, plus time to read a long one. */
+export function toastDwellMs(message: string, withAction: boolean): number {
+  const base = withAction ? DURATION_WITH_ACTION_MS : DURATION_MS
+  const words = message.trim().split(/\s+/).length
+  return base + Math.floor(Math.max(0, words - WORDS_FREE) / WORDS_PER_EXTRA_SECOND) * 1000
+}
 
 const ToastContext = createContext<ToastContextValue>({ showToast: () => {} })
 
@@ -107,7 +117,7 @@ function ToastItem({ toast, onHide }: { toast: ToastMessage; onHide: () => void 
   const config = VARIANT_CONFIG[toast.variant]
 
   React.useEffect(() => {
-    const timer = setTimeout(onHide, toast.action ? DURATION_WITH_ACTION_MS : DURATION_MS)
+    const timer = setTimeout(onHide, toastDwellMs(toast.message, !!toast.action))
     return () => clearTimeout(timer)
     // onHide is a fresh closure from the parent on every render; including it
     // would restart the 3s dismiss timer whenever the parent re-renders. This
@@ -134,7 +144,8 @@ function ToastItem({ toast, onHide }: { toast: ToastMessage; onHide: () => void 
         color={config.iconColor}
         style={styles.icon}
       />
-      <Text style={styles.message} numberOfLines={3}>{toast.message}</Text>
+      {/* Never clamped: a sentence that says what failed is shown whole, wrapping onto as many lines as it needs. */}
+      <Text style={styles.message}>{toast.message}</Text>
       {toast.action ? (
         <Pressable
           onPress={() => {

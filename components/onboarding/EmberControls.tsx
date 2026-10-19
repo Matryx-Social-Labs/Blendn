@@ -6,6 +6,7 @@ import {
   isValidElement,
   ReactNode,
   useCallback,
+  useContext,
   useState,
 } from 'react'
 import {
@@ -24,6 +25,7 @@ import {
 } from 'react-native'
 
 import { isCatchAll, packChips } from '../../lib/chipPacking'
+import { RevealOnFocus } from './revealFocused'
 import {
   CONTROL,
   EMBER,
@@ -298,9 +300,10 @@ interface FieldProps extends TextInputProps {
  * reader once the field has a value.
  */
 export const EmberField = forwardRef<TextInput, FieldProps>(function EmberField(
-  { label, helper, compact, style, ...input },
+  { label, helper, compact, style, onFocus, ...input },
   ref
 ) {
+  const reveal = useContext(RevealOnFocus)
   return (
     <View style={compact ? undefined : styles.fieldBlock}>
       {compact ? null : <Text style={styles.fieldLabel}>{label.toUpperCase()}</Text>}
@@ -316,6 +319,11 @@ export const EmberField = forwardRef<TextInput, FieldProps>(function EmberField(
         accessibilityLabel={label}
         placeholderTextColor={EMBER.textPlaceholder}
         style={[styles.input, compact ? styles.inputCompact : null, style]}
+        onFocus={(e) => {
+          // Moving on (Next to the birth date) must show where focus went.
+          reveal?.()
+          onFocus?.(e)
+        }}
         {...input}
       />
       {helper ? <Text style={styles.helper}>{helper}</Text> : null}

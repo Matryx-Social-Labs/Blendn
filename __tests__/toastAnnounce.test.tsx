@@ -66,3 +66,25 @@ it('marks the toast as a live region for Android, assertive for errors', async (
   while (node && !node.props.accessibilityLiveRegion) node = node.parent
   expect(node?.props.accessibilityLiveRegion).toBe('assertive')
 })
+
+describe('a long message is shown whole', () => {
+  const LONG = 'Saved your badge choices. Not saved: your languages and home state. You’ve hit today’s limit of three changes.'
+
+  it('is never clamped to a number of lines', async () => {
+    await render(
+      <ToastProvider>
+        <Trigger message={LONG} variant="error" />
+      </ToastProvider>
+    )
+    fireEvent.press(screen.getByRole('button'))
+    expect((await screen.findByText(LONG)).props.numberOfLines).toBeUndefined()
+  })
+
+  it('stays longer the longer it is: a second more for every 8 words past the first 8', () => {
+    const { toastDwellMs } = require('../components/Toast')
+    expect(toastDwellMs('Saved', false)).toBe(3000)
+    expect(toastDwellMs('one two three four five six seven eight', false)).toBe(3000)
+    expect(toastDwellMs(LONG, false)).toBe(4000)
+    expect(toastDwellMs(LONG, true)).toBe(6000)
+  })
+})

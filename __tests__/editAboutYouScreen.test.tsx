@@ -126,7 +126,7 @@ describe('"Show my badges" (M3) and the Tier B refusal (H1)', () => {
     expect(api.updateProfile).toHaveBeenCalledWith('me', { show_badges: false })
   })
 
-  it("shows the server's sentence when the day's changes are spent", async () => {
+  it("says the day's limit is spent, and what was not saved", async () => {
     const sentence = 'You can change your languages, home state, sign or field of work three times a day. Try again tomorrow.'
     api.updateProfile.mockResolvedValue({ success: false, error: sentence, errorCode: 'RATE_LIMITED' })
     await open()
@@ -134,7 +134,7 @@ describe('"Show my badges" (M3) and the Tier B refusal (H1)', () => {
       fireEvent.press(screen.getByText('Tulu'))
     })
     await save()
-    expect(mockToast).toHaveBeenCalledWith(`Not saved: your languages. ${sentence}`, 'error')
+    expect(mockToast).toHaveBeenCalledWith('Not saved: your languages. You’ve hit today’s limit of three changes.', 'error')
   })
 })
 
@@ -387,7 +387,7 @@ describe('the Tier B limit (three a day) costs only what it covers', () => {
       ['me', { languages: ['tulu'], sun_sign: 'leo', sign_system: 'western' }],
     ])
     // Said exactly: what saved, what did not, and the server's own sentence.
-    expect(mockToast).toHaveBeenCalledWith(`Saved your badge choices. Not saved: your languages and sign. ${SENTENCE}`, 'error')
+    expect(mockToast).toHaveBeenCalledWith('Saved your badge choices. Not saved: your languages and sign. You’ve hit today’s limit of three changes.', 'error')
     expect(router.back).not.toHaveBeenCalled()
     expect(ProfileCache.clear).toHaveBeenCalled()
   })
@@ -399,7 +399,7 @@ describe('the Tier B limit (three a day) costs only what it covers', () => {
     await tap('Chai')
     await save()
     expect(api.putThisOrThat).toHaveBeenCalledWith({ chai: 'b' })
-    expect(mockToast).toHaveBeenCalledWith(`Saved your this-or-that answers. Not saved: your home state. ${SENTENCE}`, 'error')
+    expect(mockToast).toHaveBeenCalledWith('Saved your this-or-that answers. Not saved: your home state. You’ve hit today’s limit of three changes.', 'error')
   })
 
   it('the person’s edits stay as chosen, and a second Save sends only what did not land', async () => {
@@ -422,7 +422,7 @@ describe('the Tier B limit (three a day) costs only what it covers', () => {
     await open()
     await tap('Goa')
     await save()
-    expect(mockToast).toHaveBeenCalledWith(`Not saved: your home state. ${SENTENCE}`, 'error')
+    expect(mockToast).toHaveBeenCalledWith('Not saved: your home state. You’ve hit today’s limit of three changes.', 'error')
   })
 
   it('a failed badge write stops there: nothing after it is sent as if it landed', async () => {

@@ -19,6 +19,8 @@ import Animated, {
 } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
+import { useKeyboardShown } from '../../lib/keyboard'
+import { RevealOnFocus, useRevealFocused } from './revealFocused'
 import {
   CONTROL,
   EMBER,
@@ -105,6 +107,8 @@ export function OnboardingScreen({
   onBack,
 }: Props) {
   const insets = useSafeAreaInsets()
+  const keyboardUp = useKeyboardShown()
+  const focus = useRevealFocused()
   const percent = step ? progressPercent(step) : 100
   const reduceMotion = useReducedMotion()
   /*
@@ -183,6 +187,10 @@ export function OnboardingScreen({
        */}
       <KeyboardAvoidingView style={styles.flex} behavior={KEYBOARD_BEHAVIOR} keyboardVerticalOffset={0}>
         <ScrollView
+          ref={focus.scrollRef}
+          onScroll={focus.onScroll}
+          scrollEventThrottle={16}
+          onLayout={focus.onViewportLayout}
           style={styles.flex}
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
@@ -214,7 +222,13 @@ export function OnboardingScreen({
             {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
           </View>
 
-          {children ? <View style={styles.body}>{children}</View> : null}
+          {children ? (
+            <RevealOnFocus.Provider value={focus.reveal}>
+              <View ref={focus.bodyRef} onLayout={focus.onBodyLayout} style={styles.body}>
+                {children}
+              </View>
+            </RevealOnFocus.Provider>
+          ) : null}
         </ScrollView>
 
         {/*
@@ -223,9 +237,10 @@ export function OnboardingScreen({
          * screen with six fields a button that scrolls away is a button people
          * think is missing.
          */}
-        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, SPACE.lg) }]}>
+        <View style={[styles.footer, { paddingBottom: keyboardUp ? SPACE.sm : Math.max(insets.bottom, SPACE.lg) }]}>
           <EmberButton label={ctaLabel} onPress={onContinue} disabled={ctaDisabled} busy={ctaBusy} />
-          {secondaryLabel && onSecondary ? (
+          {/* With the keyboard up the page is short: the button stays, the small print waits for the keyboard to go. */}
+          {secondaryLabel && onSecondary && !keyboardUp ? (
             /*
              * Off while the primary is saving: "Skip" tapped during a save
              * used to navigate twice — once for the skip, once when the save
@@ -249,7 +264,7 @@ export function OnboardingScreen({
               </Text>
             </Pressable>
           ) : null}
-          {footerNote ? (
+          {footerNote && !keyboardUp ? (
             <View style={styles.footerNoteRow}>
               <Ionicons name="lock-closed" size={ICON.sm} color={EMBER.textTertiary} />
               <Text style={styles.footerNote}>{footerNote.toUpperCase()}</Text>

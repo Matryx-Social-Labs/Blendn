@@ -180,7 +180,8 @@ export default function EditAboutYouScreen() {
         if (!r.success) {
           if (anySaved) invalidate(authUser.id)
           const lead = saved.length ? `Saved ${saved.join(' and ')}. ` : ''
-          const why = r.errorCode === 'RATE_LIMITED' && r.error ? r.error : 'Try again.'
+          // The server's own sentence is a full paragraph; the toast says the same in a line (the limit is the server's: three a day).
+          const why = r.errorCode === 'RATE_LIMITED' ? 'You’ve hit today’s limit of three changes.' : 'Try again.'
           refuse(`${lead}Not saved: your ${tierBNames(tierB)}. ${why}`)
           return
         }
