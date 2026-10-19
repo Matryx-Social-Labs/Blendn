@@ -63,13 +63,14 @@ export function PlacesList({ browse, active, onSummary }: { browse: HomeBrowse; 
   }, [key])
 
   const request = useCallback(
-    async (page: number, fresh: boolean) => {
+    async (page: number) => {
       dispatch({ type: 'request', key, page })
       try {
         const res = await apiClient.getVenues(
           { page, limit: PAGE, city: city ?? undefined, lat, lon, sortBy: lat !== undefined ? 'distance' : 'name', venueType: venueType ?? undefined, order: 'live' },
-          // Opening the pane, pull-to-refresh and Try again are the person asking: never a cached page.
-          fresh ? { force: true } : undefined
+          // Never a cached page, for any page: with live-first ordering a venue moves up the order between
+          // reads, so a page served from cache against a fresh page 1 skips and repeats venues.
+          { force: true }
         )
         if (res.success && res.data) {
           dispatch({ type: 'loaded', key, page, venues: res.data.venues, hasMore: res.data.pagination.hasMore, orderedLive: (res.data.pagination.order ?? res.data.order) === 'live' })
@@ -93,7 +94,7 @@ export function PlacesList({ browse, active, onSummary }: { browse: HomeBrowse; 
    */
   useEffect(() => {
     if (!active || !ready) return
-    void request(1, true)
+    void request(1)
   }, [active, ready, request])
 
   const now = useNow(MINUTE_MS)
@@ -102,7 +103,7 @@ export function PlacesList({ browse, active, onSummary }: { browse: HomeBrowse; 
   const refresh = useCallback(async () => {
     setRefreshing(true)
     try {
-      await request(1, true)
+      await request(1)
     } finally {
       setRefreshing(false)
     }
@@ -112,7 +113,7 @@ export function PlacesList({ browse, active, onSummary }: { browse: HomeBrowse; 
     if (inFlight.current || !mayLoadMore(state) || !mayReadNext(state, quietOpen, strata.quiet.length > 0)) return
     inFlight.current = true
     try {
-      await request(state.page + 1, false)
+      await request(state.page + 1)
     } finally {
       inFlight.current = false
     }

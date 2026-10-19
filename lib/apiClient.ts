@@ -761,6 +761,12 @@ export interface VenueListItem {
   upcomingEventCount: number
   /** How many are live here, as a bucket and never a number (D-19); null for somebody the venue page would refuse. */
   liveNow: 'quiet' | '5-9' | '10-19' | '20+' | null
+  /**
+   * Which stratum the server put the venue in (`?order=live`): live now, open tonight (an event tonight OR
+   * its hours cover today) or quiet. Absent from a server that does not send it: the client then judges by
+   * `liveNow` and `nextEvent` alone.
+   */
+  tier?: 'live' | 'open' | 'quiet'
   nextEvent: {
     id: string
     title: string

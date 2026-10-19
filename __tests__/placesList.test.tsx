@@ -337,6 +337,37 @@ describe('thousands of venues', () => {
     expect(getVenues.mock.calls.map(([q]) => q.page)).toEqual([1, 2, 3])
   })
 
+  it('with tiers, venues open by hours alone keep the paging going past page 1', async () => {
+    const tiered = (n: number, tier: 'open' | 'quiet') => Array.from({ length: 30 }, (_, i) => venue(`h${n}-${i}`, { tier }))
+    const calls: number[] = []
+    getVenues.mockImplementation(({ page: n }: { page: number }) => {
+      calls.push(n)
+      const p = page(tiered(n, n < 4 ? 'open' : 'quiet'), true, n)
+      return Promise.resolve({ ...p, data: { ...p.data, pagination: { ...p.data.pagination, order: 'live' } } })
+    })
+    await mount()
+    for (let i = 0; i < 9; i++) {
+      await act(async () => {
+        fireEvent(screen.getByTestId('places-list'), 'endReached')
+      })
+    }
+    // Pages 1-3 are open by hours (no event, no live label: the old split read them as quiet and stopped at 1).
+    expect(calls).toEqual([1, 2, 3, 4])
+    expect(screen.getByRole('header', { name: 'Open tonight' })).toBeTruthy()
+  })
+
+  it('every page of a paging session is read fresh: none is served from cache against a fresh page 1', async () => {
+    getVenues.mockImplementation(({ page: n }: { page: number }) => Promise.resolve(page(Array.from({ length: 30 }, (_, i) => venue(`f${n}-${i}`)), true, n)))
+    await mount()
+    for (let i = 0; i < 3; i++) {
+      await act(async () => {
+        fireEvent(screen.getByTestId('places-list'), 'endReached')
+      })
+    }
+    expect(getVenues.mock.calls.length).toBeGreaterThanOrEqual(3)
+    for (const [, options] of getVenues.mock.calls) expect(options).toEqual({ force: true })
+  })
+
   it('a server that orders live first is read as far as the last live or open venue, with no page cap, and no further once a quiet one shows', async () => {
     const liveFull = (from: number) => Array.from({ length: 30 }, (_, i) => venue(`l${from + i}`, { liveNow: '5-9' }))
     const calls: number[] = []

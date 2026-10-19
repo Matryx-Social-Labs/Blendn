@@ -11,6 +11,7 @@ import {
   plateFor,
   quietLine,
   splitPlaces,
+  tierOf,
   tonightEvent,
 } from '../lib/placesPane'
 
@@ -129,6 +130,39 @@ describe('the strata', () => {
   it('every row has its own key, even for a venue in two strata of one list', () => {
     const rows = placeRows(splitPlaces([packed, open, quiet], NOW), true, true)
     expect(new Set(rows.map((r) => r.key)).size).toBe(rows.length)
+  })
+})
+
+describe('the server’s tier (open by hours alone)', () => {
+  const v = (id: string, over: Partial<VenueListItem> = {}) => venue({ id, ...over })
+
+  it('tier wins where it is sent: a venue open by its hours, with no event, is Open tonight, not quiet', () => {
+    expect(tierOf(v('a', { tier: 'open' }), NOW)).toBe('open')
+    expect(tierOf(v('b', { tier: 'live', liveNow: 'quiet' }), NOW)).toBe('live')
+    // The server says quiet even where the client would have found an event: its word is the stratum.
+    expect(tierOf(v('c', { tier: 'quiet', nextEvent: event(21, 23) }), NOW)).toBe('quiet')
+  })
+
+  it('absent, or not one of the three, it falls back to the live bucket and tonight’s event', () => {
+    expect(tierOf(v('a', { liveNow: '5-9' }), NOW)).toBe('live')
+    expect(tierOf(v('b', { nextEvent: event(21, 23) }), NOW)).toBe('open')
+    expect(tierOf(v('c'), NOW)).toBe('quiet')
+    expect(tierOf(v('d', { tier: 'weird' as never, liveNow: '20+' }), NOW)).toBe('live')
+  })
+
+  it('splits the strata by tier, and a mixed list (some with tier, some without) still sorts', () => {
+    const s = splitPlaces([v('hours', { tier: 'open' }), v('q', { tier: 'quiet' }), v('live', { tier: 'live' }), v('old', { liveNow: '10-19' })], NOW)
+    expect(s.live.map((x) => x.id)).toEqual(['live', 'old'])
+    expect(s.open.map((x) => x.id)).toEqual(['hours'])
+    expect(s.quiet.map((x) => x.id)).toEqual(['q'])
+  })
+
+  it('paging goes on through venues open by hours alone, and stops at the first quiet tier', () => {
+    const state = { page: 5, hasMore: true, orderedLive: true }
+    const onlyHours = splitPlaces([v('a', { tier: 'live' }), v('b', { tier: 'open' }), v('c', { tier: 'open' })], NOW)
+    expect(mayReadNext(state, false, onlyHours.quiet.length > 0)).toBe(true)
+    const reached = splitPlaces([v('a', { tier: 'open' }), v('b', { tier: 'quiet' })], NOW)
+    expect(mayReadNext(state, false, reached.quiet.length > 0)).toBe(false)
   })
 })
 

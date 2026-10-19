@@ -8,15 +8,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import {
-  ActivityIndicator,
   Pressable,
   InteractionManager,
   Linking,
-  Modal,
   Share,
   StyleSheet,
   Text,
-  TextInput,
   View
 } from 'react-native';
 import Animated, {
@@ -28,6 +25,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import ActionTray, { type ActionTrayButton } from '../ActionTray';
+import { AnnouncementSheet, EditEventSheet } from '../scene/EventSheets'
 import { showSheet } from '../../lib/sheet'
 import { useSingleFlight } from '../../lib/useSingleFlight'
 import { SkeletonBlock } from '../Skeleton';
@@ -49,7 +47,7 @@ import {
   EventCheckInCallback,
   EventInterestCallback
 } from '../../lib/socketClient';
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, TYPE } from '../../lib/theme';
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme';
 import { PulseTopBar } from '../pulse/PulseTopBar';
 import { SceneHero, sceneHeroHeight } from '../scene/SceneHero';
 import { SceneLightbox } from '../scene/SceneLightbox';
@@ -1412,132 +1410,30 @@ export default function EventDetail() {
         </View>
       ) : null}
 
-      {/*
-        The announcement composer, on both platforms.
-
-        It used to be Android's only: iOS took `Alert.prompt`, which has no
-        character counter, no pending state and no way to disable itself while
-        a send is in flight. Same action, two experiences, and the system one
-        could not carry the app's design. Not in any frame.
-      */}
-      <Modal
+      {/* The announcement composer and the event editor: the app's own Sheet, above the keyboard (components/scene/EventSheets.tsx). */}
+      <AnnouncementSheet
         visible={showAnnouncementModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowAnnouncementModal(false)}
-      >
-        <View style={styles.announcementOverlay}>
-          <View style={styles.announcementModal}>
-            <Text style={styles.announcementTitle}>Send announcement</Text>
-            <Text style={styles.announcementSubtitle}>
-              This message is broadcast to everyone in the event chat.
-            </Text>
-            <TextInput
-              style={styles.announcementInput}
-              placeholder="Enter your announcement…"
-              placeholderTextColor={EMBER.textPlaceholder}
-              value={announcementText}
-              onChangeText={setAnnouncementText}
-              multiline
-              maxLength={1000}
-              autoFocus
-            />
-            <View style={styles.announcementButtons}>
-              <Pressable
-                style={styles.announcementCancel}
-                onPress={() => {
-                  setShowAnnouncementModal(false)
-                  setAnnouncementText('')
-                }}
-                accessibilityRole="button"
-              >
-                <Text style={styles.announcementCancelText}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                style={[
-                  styles.announcementSend,
-                  !announcementText.trim() && styles.announcementSendOff,
-                ]}
-                onPress={sendAnnouncement}
-                disabled={!announcementText.trim() || sendingAnnouncement}
-                accessibilityRole="button"
-              >
-                {sendingAnnouncement ? (
-                  <ActivityIndicator size="small" color={EMBER.onGradient} />
-                ) : (
-                  <Text style={styles.announcementSendText}>Send</Text>
-                )}
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal
+        text={announcementText}
+        onChangeText={setAnnouncementText}
+        sending={sendingAnnouncement}
+        onSend={sendAnnouncement}
+        onClose={() => {
+          setShowAnnouncementModal(false)
+          setAnnouncementText('')
+        }}
+      />
+      <EditEventSheet
         visible={showEditModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowEditModal(false)}
-      >
-        <View style={styles.announcementOverlay}>
-          <View style={styles.announcementModal}>
-            <Text style={styles.announcementTitle}>Edit event</Text>
-            <Text style={styles.announcementSubtitle}>
-              Changes are visible to everyone viewing this event.
-            </Text>
-            <TextInput
-              style={styles.editFieldInput}
-              placeholder="Title"
-              placeholderTextColor={EMBER.textPlaceholder}
-              value={editTitle}
-              onChangeText={setEditTitle}
-              maxLength={120}
-            />
-            <TextInput
-              style={styles.editFieldInput}
-              placeholder="Short description"
-              placeholderTextColor={EMBER.textPlaceholder}
-              value={editShortDescription}
-              onChangeText={setEditShortDescription}
-              maxLength={200}
-            />
-            <TextInput
-              style={styles.announcementInput}
-              placeholder="Description"
-              placeholderTextColor={EMBER.textPlaceholder}
-              value={editDescription}
-              onChangeText={setEditDescription}
-              multiline
-              maxLength={2000}
-            />
-            <View style={styles.announcementButtons}>
-              <Pressable
-                style={styles.announcementCancel}
-                onPress={() => setShowEditModal(false)}
-                accessibilityRole="button"
-              >
-                <Text style={styles.announcementCancelText}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                style={[
-                  styles.announcementSend,
-                  !editTitle.trim() && styles.announcementSendOff,
-                ]}
-                onPress={saveEventEdit}
-                disabled={!editTitle.trim() || savingEdit}
-                accessibilityRole="button"
-              >
-                {savingEdit ? (
-                  <ActivityIndicator size="small" color={EMBER.onGradient} />
-                ) : (
-                  <Text style={styles.announcementSendText}>Save</Text>
-                )}
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
+        title={editTitle}
+        onChangeTitle={setEditTitle}
+        shortDescription={editShortDescription}
+        onChangeShortDescription={setEditShortDescription}
+        description={editDescription}
+        onChangeDescription={setEditDescription}
+        saving={savingEdit}
+        onSave={saveEventEdit}
+        onClose={() => setShowEditModal(false)}
+      />
 
       <ActionTray
         visible={trayState.visible}
@@ -1672,56 +1568,4 @@ const styles = StyleSheet.create({
     backgroundColor: EMBER.surface,
   },
   backButtonText: { ...TYPE.button },
-
-  announcementOverlay: {
-    flex: 1,
-    backgroundColor: EMBER.backdrop,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: GUTTER,
-  },
-  announcementModal: {
-    width: '100%',
-    borderRadius: EMBER_RADIUS.card,
-    backgroundColor: EMBER.bg,
-    padding: SPACE.xl,
-    gap: SPACE.md,
-  },
-  announcementTitle: { ...TYPE.title },
-  announcementSubtitle: { ...TYPE.meta },
-  announcementInput: {
-    ...TYPE.body,
-    minHeight: CONTROL.lg * 2,
-    borderRadius: EMBER_RADIUS.md,
-    backgroundColor: EMBER.surfaceSunken,
-    padding: SPACE.lg,
-    textAlignVertical: 'top',
-  },
-  editFieldInput: {
-    ...TYPE.body,
-    height: CONTROL.lg,
-    borderRadius: EMBER_RADIUS.md,
-    backgroundColor: EMBER.surfaceSunken,
-    paddingHorizontal: SPACE.lg,
-  },
-  announcementButtons: { flexDirection: 'row', gap: SPACE.md, marginTop: SPACE.xs },
-  announcementCancel: {
-    flex: 1,
-    minHeight: CONTROL.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.surface,
-  },
-  announcementCancelText: { ...TYPE.button },
-  announcementSend: {
-    flex: 1,
-    minHeight: CONTROL.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.accent,
-  },
-  announcementSendOff: { opacity: OPACITY.disabled },
-  announcementSendText: { ...TYPE.button, color: EMBER.onGradient },
 })

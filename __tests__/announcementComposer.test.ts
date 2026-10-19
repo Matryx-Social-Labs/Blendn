@@ -17,20 +17,27 @@ const src = readFileSync(
   join(__dirname, "..", "components", "screens", "EventDetailScreen.tsx"),
   "utf8"
 )
-const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "")
+const strip = (text: string) => text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "")
+const code = strip(src)
+const sheets = strip(
+  readFileSync(join(__dirname, "..", "components", "scene", "EventSheets.tsx"), "utf8")
+)
 
 describe("the announcement composer", () => {
   it("sends through the single-flight guard, and disables the control while it runs", () => {
     expect(code).toMatch(/pending: sendingAnnouncement\s*\} = useSingleFlight\(/)
-    expect(code).toMatch(/disabled=\{[^}]*sendingAnnouncement[^}]*\}/)
+    // The screen hands the pending flag to the sheet, whose Send shows it as `loading` (a busy button refuses a second press).
+    expect(code).toMatch(/sending=\{sendingAnnouncement\}/)
+    expect(sheets).toMatch(/loading: sending/)
   })
 
   it("refuses to send nothing", () => {
-    expect(code).toMatch(/disabled=\{[^}]*!announcementText\.trim\(\)[^}]*\}/)
+    expect(sheets).toMatch(/disabled: !text\.trim\(\)/)
   })
 
   it("stops at the server's limit rather than failing the request", () => {
     // `announce/route.ts` refuses over 1,000 characters.
-    expect(code).toContain("maxLength={1000}")
+    expect(sheets).toContain("ANNOUNCEMENT_LIMIT = 1000")
+    expect(sheets).toContain("limit={ANNOUNCEMENT_LIMIT}")
   })
 })

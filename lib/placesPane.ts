@@ -79,17 +79,23 @@ export type PlaceStrata = {
   quiet: VenueListItem[]
 }
 
+/**
+ * The stratum a venue is in. The server's `tier` where it sends one (it counts a
+ * venue as open tonight when it has an event tonight OR its hours cover today,
+ * which the client cannot know from an event alone); else judged by the live
+ * bucket and tonight's event.
+ */
+export function tierOf(venue: VenueListItem, now: number): 'live' | 'open' | 'quiet' {
+  if (venue.tier === 'live' || venue.tier === 'open' || venue.tier === 'quiet') return venue.tier
+  if (venue.liveNow && venue.liveNow !== 'quiet') return 'live'
+  return tonightEvent(venue.nextEvent, now) ? 'open' : 'quiet'
+}
+
 /** Sorts a page-by-page list into the strata, keeping the server's order inside each. */
 export function splitPlaces(venues: readonly VenueListItem[], now: number): PlaceStrata {
-  const live: VenueListItem[] = []
-  const open: VenueListItem[] = []
-  const quiet: VenueListItem[] = []
-  for (const venue of venues) {
-    if (venue.liveNow && venue.liveNow !== 'quiet') live.push(venue)
-    else if (tonightEvent(venue.nextEvent, now)) open.push(venue)
-    else quiet.push(venue)
-  }
-  return { live, open, quiet }
+  const strata: PlaceStrata = { live: [], open: [], quiet: [] }
+  for (const venue of venues) strata[tierOf(venue, now)].push(venue)
+  return strata
 }
 
 /** "3 places" / "1 place". */
@@ -133,7 +139,7 @@ export function peekLine(strata: PlaceStrata, more: boolean): string | null {
 /**
  * Whether the end of the list may read another page now. With a server that
  * orders live first the strata arrive in order, so folded it reads exactly as
- * far as the last live or open venue (until a quiet one shows up) with no cap;
+ * far as the last live or open venue (the first quiet `tier` stops it) with no cap;
  * without, only the first few pages.
  */
 export function mayReadNext(
