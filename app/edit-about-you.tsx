@@ -103,7 +103,8 @@ export default function EditAboutYouScreen() {
       const mine = withinOptions(aboutYouFrom(p), opts.data)
       const answered = answersWithin(tot.data?.answers ?? {}, opts.data)
       setOptions(opts.data)
-      setLoaded(aboutYouFrom(p))
+      // The baseline is what the form starts from: a retired value is in neither, so it never rides along (L4) and its absence is no change.
+      setLoaded(mine)
       setForm(mine)
       setSignOn(!!mine.sign)
       setSystem(mine.sign?.system ?? 'western')

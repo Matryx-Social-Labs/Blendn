@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
-import { ScrollView, StyleSheet, View } from 'react-native'
+import { Linking, ScrollView, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { AppHeader } from '../components/AppHeader'
@@ -12,7 +12,8 @@ import { BLENDN_LINKS, openInApp } from '../lib/links'
 import { MAP_CREDITS } from '../lib/mapStyleEmber'
 import { EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE } from '../lib/theme'
 
-type LinkRow = { icon: keyof typeof Ionicons.glyphMap; title: string; url: string }
+/** `ours`: one of our own pages, opened in the app. Otherwise another site's, opened in the system browser. */
+type LinkRow = { icon: keyof typeof Ionicons.glyphMap; title: string; url: string; ours?: boolean }
 
 /** Who the map is drawn from, with their licences (the map's own credit fades: this is where it stays). */
 const MAP_DATA: LinkRow[] = Object.values(MAP_CREDITS).map((c) => ({
@@ -31,13 +32,14 @@ const MAP_DATA: LinkRow[] = Object.values(MAP_CREDITS).map((c) => ({
 export default function AboutScreen() {
   const { showToast } = useToast()
 
-  const open = (url: string) =>
-    openInApp(url).catch(() => showToast("That page didn't open. Try again.", 'error'))
+  // The in-app browser opens only blendn.app; the map's licence pages (OpenStreetMap's ODbL credit among them) are other sites'.
+  const open = ({ url, ours }: LinkRow) =>
+    (ours ? openInApp(url) : Linking.openURL(url)).catch(() => showToast("That page didn't open. Try again.", 'error'))
 
   const rows: LinkRow[] = [
-    { icon: 'document-text-outline', title: 'Terms of Service', url: BLENDN_LINKS.terms },
-    { icon: 'lock-closed-outline', title: 'Privacy Policy', url: BLENDN_LINKS.privacy },
-    { icon: 'flag-outline', title: 'Community guidelines', url: BLENDN_LINKS.guidelines },
+    { icon: 'document-text-outline', title: 'Terms of Service', url: BLENDN_LINKS.terms, ours: true },
+    { icon: 'lock-closed-outline', title: 'Privacy Policy', url: BLENDN_LINKS.privacy, ours: true },
+    { icon: 'flag-outline', title: 'Community guidelines', url: BLENDN_LINKS.guidelines, ours: true },
   ]
 
   const card = (links: LinkRow[]) => (
@@ -48,7 +50,7 @@ export default function AboutScreen() {
           <ScalePress
             haptic={false}
             pressedScale={0.98}
-            onPress={() => void open(row.url)}
+            onPress={() => void open(row)}
             accessibilityRole="link"
             accessibilityLabel={row.title}
             style={styles.row}

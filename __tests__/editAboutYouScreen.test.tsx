@@ -268,12 +268,12 @@ describe('every field saves what the person chose', () => {
     expect(api.putThisOrThat).toHaveBeenCalledWith({ chai: 'a' })
   })
 
-  it('a slug the server no longer offers is dropped from the form: the save never carries it, and clears a retired home state', async () => {
+  it('a slug the server no longer offers is dropped from the form: the save never carries it, and a retired home state is no change', async () => {
     api.getProfile.mockResolvedValue(profile({ languages: ['tulu', 'klingon'], home_state: 'atlantis' }))
     await open()
     await tap('Kannada')
     await save()
-    expect(api.updateProfile).toHaveBeenCalledWith('me', { languages: ['tulu', 'kannada'], home_state: null })
+    expect(api.updateProfile).toHaveBeenCalledWith('me', { languages: ['tulu', 'kannada'] })
   })
 })
 
@@ -284,6 +284,31 @@ describe('the words and the grouping', () => {
     expect(screen.getByText('Besides English, up to two.')).toBeTruthy()
     expect(screen.getByLabelText('Filter coffee or Chai')).toBeTruthy()
     expect(screen.getByLabelText('Beach or Hills')).toBeTruthy()
+  })
+})
+
+describe('retired values are in neither the baseline nor the form', () => {
+  it('a badges-only save sends no languages and no home state, so the day’s limit cannot name them', async () => {
+    // The server still holds a language and a state it has since retired.
+    api.getProfile.mockResolvedValue(profile({ languages: ['tulu', 'klingon'], home_state: 'atlantis' }))
+    api.updateProfile.mockImplementation(async (_id: string, body: Record<string, unknown>) =>
+      'languages' in body || 'home_state' in body
+        ? { success: false, error: 'limit', errorCode: 'RATE_LIMITED' }
+        : { success: true, data: {} }
+    )
+    await open()
+    await tap('Show my badges')
+    await save()
+    expect(api.updateProfile.mock.calls).toEqual([['me', { show_badges: false }]])
+    expect(mockToast).toHaveBeenCalledWith('Saved', 'success')
+    expect(router.back).toHaveBeenCalled()
+  })
+
+  it('and opening and saving writes nothing', async () => {
+    api.getProfile.mockResolvedValue(profile({ languages: ['klingon'], home_state: 'atlantis' }))
+    await open()
+    await save()
+    expect(api.updateProfile).not.toHaveBeenCalled()
   })
 })
 
