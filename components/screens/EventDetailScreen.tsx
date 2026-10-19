@@ -26,6 +26,7 @@ import Animated, {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import ActionTray, { type ActionTrayButton } from '../ActionTray';
 import { AnnouncementSheet, EditEventSheet } from '../scene/EventSheets'
+import { useAfterSheet } from '../../lib/useAfterSheet'
 import { showSheet } from '../../lib/sheet'
 import { useSingleFlight } from '../../lib/useSingleFlight'
 import { SkeletonBlock } from '../Skeleton';
@@ -724,9 +725,11 @@ export default function EventDetail() {
    * it was simply never used where the shortcut existed.
    */
   const openAnnouncementComposer = () => {
-    setAnnouncementText('')
+    // The text stays from the last try: it is cleared only by a send that went through.
     setShowAnnouncementModal(true)
   }
+  // The result trays wait for their sheet to have left: iOS dismisses a modal presented over one still leaving.
+  const { after: afterSheet, dismissed: sheetDismissed } = useAfterSheet()
 
   // One broadcast per tap, however fast the taps come (`useSingleFlight`).
   const { run: sendAnnouncement, pending: sendingAnnouncement } = useSingleFlight(async () => {
@@ -735,17 +738,17 @@ export default function EventDetail() {
       const result = await apiClient.sendAnnouncement(String(id), announcementText.trim())
       if (result.success) {
         H.success()
+        afterSheet(() => showTray('Announcement sent', 'Your announcement has been broadcast to the event chat.'))
         setShowAnnouncementModal(false)
         setAnnouncementText('')
-        showTray('Announcement sent', 'Your announcement has been broadcast to the event chat.')
       } else {
         H.error()
-        showTray("Couldn't send the announcement", 'Try again.')
+        afterSheet(() => showTray("Couldn't send the announcement", 'Try again.'))
         setShowAnnouncementModal(false)
       }
     } catch {
       H.error()
-      showTray("Couldn't send the announcement", 'Try again.')
+      afterSheet(() => showTray("Couldn't send the announcement", 'Try again.'))
       setShowAnnouncementModal(false)
     }
   })
@@ -769,6 +772,7 @@ export default function EventDetail() {
       })
       if (result.success) {
         H.success()
+        afterSheet(() => showTray('Event updated', 'Your changes have been saved.'))
         setShowEditModal(false)
         setEvent((prev) =>
           prev
@@ -780,15 +784,14 @@ export default function EventDetail() {
               }
             : prev
         )
-        showTray('Event updated', 'Your changes have been saved.')
       } else {
         H.error()
-        showTray("Couldn't save your changes", 'Try again.')
+        afterSheet(() => showTray("Couldn't save your changes", 'Try again.'))
         setShowEditModal(false)
       }
     } catch {
       H.error()
-      showTray("Couldn't save your changes", 'Try again.')
+      afterSheet(() => showTray("Couldn't save your changes", 'Try again.'))
       setShowEditModal(false)
     } finally {
       setSavingEdit(false)
@@ -1417,10 +1420,8 @@ export default function EventDetail() {
         onChangeText={setAnnouncementText}
         sending={sendingAnnouncement}
         onSend={sendAnnouncement}
-        onClose={() => {
-          setShowAnnouncementModal(false)
-          setAnnouncementText('')
-        }}
+        onClose={() => setShowAnnouncementModal(false)}
+        onDismissed={sheetDismissed}
       />
       <EditEventSheet
         visible={showEditModal}
@@ -1433,6 +1434,7 @@ export default function EventDetail() {
         saving={savingEdit}
         onSave={saveEventEdit}
         onClose={() => setShowEditModal(false)}
+        onDismissed={sheetDismissed}
       />
 
       <ActionTray

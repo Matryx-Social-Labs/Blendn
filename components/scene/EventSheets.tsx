@@ -5,8 +5,14 @@ import { CONTROL } from '../../lib/theme'
 /** The multi-line fields start short (two controls tall): a keyboard leaves them little room. */
 const AREA_MIN_HEIGHT = CONTROL.lg * 2
 
-/** The server refuses an announcement over 1,000 characters (`announce/route.ts`). */
+/** The server refuses an announcement over 1,000 characters (`announce/route.ts`); the edit's limits are its zod schema's. */
 export const ANNOUNCEMENT_LIMIT = 1000
+export const EDIT_LIMITS = { title: 120, shortDescription: 200, description: 2000 } as const
+
+/** Over its limit, as the server's zod `max()` counts it: UTF-16 units of what is sent, trimmed (an emoji is two). */
+export const isOver = (value: string, limit: number) => value.trim().length > limit
+const utf16 = (value: string) => value.length
+const overLine = (limit: number) => `Over the ${limit}-character limit.`
 
 /**
  * The announcement composer: the app's own Sheet, which caps at the keyboard's
@@ -23,6 +29,7 @@ export function AnnouncementSheet({
   sending,
   onSend,
   onClose,
+  onDismissed,
 }: {
   visible: boolean
   text: string
@@ -30,20 +37,24 @@ export function AnnouncementSheet({
   sending: boolean
   onSend: () => void
   onClose: () => void
+  /** Once the sheet has left the screen: what must wait for it (the result tray) starts here. */
+  onDismissed?: () => void
 }) {
+  const over = isOver(text, ANNOUNCEMENT_LIMIT)
   return (
     <Sheet
       visible={visible}
       onClose={onClose}
+      onDismissed={onDismissed}
       title="Send announcement"
       body="This message is broadcast to everyone in the event chat."
       actions={[
-        { label: 'Send', kind: 'strong', onPress: onSend, loading: sending, disabled: !text.trim(), testID: 'announcement-send' },
+        { label: 'Send', kind: 'strong', onPress: onSend, loading: sending, disabled: !text.trim() || over, testID: 'announcement-send' },
         { label: 'Cancel', kind: 'tertiary', onPress: onClose },
       ]}
       testID="announcement-sheet"
     >
-      <TextArea value={text} onChangeText={onChangeText} placeholder="Enter your announcement…" limit={ANNOUNCEMENT_LIMIT} minHeight={AREA_MIN_HEIGHT} autoFocus testID="announcement-input" />
+      <TextArea value={text} onChangeText={onChangeText} placeholder="Enter your announcement…" limit={ANNOUNCEMENT_LIMIT} measure={utf16} error={over ? overLine(ANNOUNCEMENT_LIMIT) : undefined} minHeight={AREA_MIN_HEIGHT} autoFocus testID="announcement-input" />
     </Sheet>
   )
 }
@@ -60,6 +71,7 @@ export function EditEventSheet({
   saving,
   onSave,
   onClose,
+  onDismissed,
 }: {
   visible: boolean
   title: string
@@ -71,22 +83,28 @@ export function EditEventSheet({
   saving: boolean
   onSave: () => void
   onClose: () => void
+  /** Once the sheet has left the screen: what must wait for it (the result tray) starts here. */
+  onDismissed?: () => void
 }) {
+  const overTitle = isOver(title, EDIT_LIMITS.title)
+  const overShort = isOver(shortDescription, EDIT_LIMITS.shortDescription)
+  const overDescription = isOver(description, EDIT_LIMITS.description)
   return (
     <Sheet
       visible={visible}
       onClose={onClose}
+      onDismissed={onDismissed}
       title="Edit event"
       body="Changes are visible to everyone viewing this event."
       actions={[
-        { label: 'Save', kind: 'strong', onPress: onSave, loading: saving, disabled: !title.trim(), testID: 'edit-save' },
+        { label: 'Save', kind: 'strong', onPress: onSave, loading: saving, disabled: !title.trim() || overTitle || overShort || overDescription, testID: 'edit-save' },
         { label: 'Cancel', kind: 'tertiary', onPress: onClose },
       ]}
       testID="edit-sheet"
     >
-      <TextField label="Title" value={title} onChangeText={onChangeTitle} placeholder="Title" limit={120} testID="edit-title" />
-      <TextField label="Short description" value={shortDescription} onChangeText={onChangeShortDescription} placeholder="Short description" limit={200} testID="edit-short" />
-      <TextArea label="Description" value={description} onChangeText={onChangeDescription} placeholder="Description" limit={2000} minHeight={AREA_MIN_HEIGHT} testID="edit-description" />
+      <TextField label="Title" value={title} onChangeText={onChangeTitle} placeholder="Title" limit={EDIT_LIMITS.title} error={overTitle ? overLine(EDIT_LIMITS.title) : undefined} testID="edit-title" />
+      <TextField label="Short description" value={shortDescription} onChangeText={onChangeShortDescription} placeholder="Short description" limit={EDIT_LIMITS.shortDescription} error={overShort ? overLine(EDIT_LIMITS.shortDescription) : undefined} testID="edit-short" />
+      <TextArea label="Description" value={description} onChangeText={onChangeDescription} placeholder="Description" limit={EDIT_LIMITS.description} measure={utf16} error={overDescription ? overLine(EDIT_LIMITS.description) : undefined} minHeight={AREA_MIN_HEIGHT} testID="edit-description" />
     </Sheet>
   )
 }

@@ -10,7 +10,7 @@ import React from 'react'
 import { Dimensions, Keyboard } from 'react-native'
 
 import { sheetMaxHeight } from '../components/ds/Sheet'
-import { AnnouncementSheet, EditEventSheet } from '../components/scene/EventSheets'
+import { AnnouncementSheet, ANNOUNCEMENT_LIMIT, EDIT_LIMITS, EditEventSheet, isOver } from '../components/scene/EventSheets'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('react-native-reanimated', () => {
@@ -119,5 +119,41 @@ describe('the edit sheet', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
     await view.rerender(edit({ title: 'Vinyl Night', saving: true, onSave, onClose }))
     expect(screen.getByRole('button', { name: 'Save' }).props.accessibilityState).toMatchObject({ busy: true })
+  })
+})
+
+describe('the limits the old maxLength enforced', () => {
+  const saveDisabled = () => screen.getByRole('button', { name: 'Save' }).props.accessibilityState.disabled
+  const sendDisabled = () => screen.getByRole('button', { name: 'Send' }).props.accessibilityState.disabled
+
+  it('counts what is sent: trimmed, in UTF-16 units (an emoji is two), as the server’s zod max() does', () => {
+    expect(isOver('a'.repeat(120), 120)).toBe(false)
+    expect(isOver('a'.repeat(121), 120)).toBe(true)
+    expect(isOver(`  ${'a'.repeat(120)}  `, 120)).toBe(false)
+    expect(isOver('😀'.repeat(61), 120)).toBe(true)
+    expect(isOver('😀'.repeat(60), 120)).toBe(false)
+  })
+
+  it('Send is refused over 1,000 and says why; at 1,000 it goes', async () => {
+    const view = await render(<AnnouncementSheet visible text={'a'.repeat(ANNOUNCEMENT_LIMIT)} onChangeText={jest.fn()} sending={false} onSend={jest.fn()} onClose={jest.fn()} />)
+    expect(sendDisabled()).toBe(false)
+    await view.rerender(<AnnouncementSheet visible text={'a'.repeat(ANNOUNCEMENT_LIMIT + 1)} onChangeText={jest.fn()} sending={false} onSend={jest.fn()} onClose={jest.fn()} />)
+    expect(sendDisabled()).toBe(true)
+    expect(screen.getByText('Over the 1000-character limit.')).toBeTruthy()
+  })
+
+  it.each([
+    ['title', { title: 'a'.repeat(EDIT_LIMITS.title + 1) }, 'Over the 120-character limit.'],
+    ['short description', { shortDescription: 'a'.repeat(EDIT_LIMITS.shortDescription + 1) }, 'Over the 200-character limit.'],
+    ['description', { description: 'a'.repeat(EDIT_LIMITS.description + 1) }, 'Over the 2000-character limit.'],
+  ])('Save is refused while the %s is over its limit, and the field says so', async (_name, over, line) => {
+    const props = { visible: true, title: 'Vinyl Night', onChangeTitle: jest.fn(), shortDescription: '', onChangeShortDescription: jest.fn(), description: '', onChangeDescription: jest.fn(), saving: false, onSave: jest.fn(), onClose: jest.fn() }
+    const view = await render(<EditEventSheet {...props} />)
+    expect(saveDisabled()).toBe(false)
+    await view.rerender(<EditEventSheet {...props} {...over} />)
+    expect(saveDisabled()).toBe(true)
+    expect(screen.getByText(line)).toBeTruthy()
+    await fireEvent.press(screen.getByRole('button', { name: 'Save' }))
+    expect(props.onSave).not.toHaveBeenCalled()
   })
 })
