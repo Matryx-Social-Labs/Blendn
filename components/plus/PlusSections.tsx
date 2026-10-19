@@ -120,6 +120,7 @@ export function PlusActions({
   onHeight,
   phase,
   restoring,
+  notice,
   action,
   cta,
   disabled,
@@ -130,6 +131,8 @@ export function PlusActions({
   onHeight: (height: number) => void
   phase: 'idle' | 'confirming' | 'pending' | 'slow' | 'done'
   restoring: boolean
+  /** What Restore found when it found nothing or failed: said in the dock until the next tap. */
+  notice?: string | null
   action: DockAction
   cta: ReturnType<typeof ctaParts>
   disabled: boolean
@@ -148,6 +151,8 @@ export function PlusActions({
     <DockLine text={PENDING_LINE} />
   ) : phase === 'done' ? (
     <DockLine text="You're in." strong />
+  ) : notice ? (
+    <DockLine text={notice} strong />
   ) : null
   return (
     <PlusDock onHeight={onHeight}>

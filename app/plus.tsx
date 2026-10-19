@@ -83,6 +83,8 @@ export default function PlusScreen() {
   const [busy, setBusy] = useState<'buy' | 'restore' | null>(null)
   const [phase, setPhase] = useState<Phase>('idle')
   const [picked, setPicked] = useState<string | null>(null)
+  /** What Restore found, in the dock until the next tap: a toast alone is gone in three seconds. */
+  const [notice, setNotice] = useState<string | null>(null)
   const [dockHeight, setDockHeight] = useState(0)
   /** What happened here, so closing after a purchase is not logged as a dismissal. */
   const outcome = useRef<'purchased' | 'pending' | 'restored' | null>(null)
@@ -211,11 +213,13 @@ export default function PlusScreen() {
     if (working.current || !buyable) return
     working.current = true
     setBusy('restore')
+    setNotice(null)
     try {
       const result = await restore(userId)
       if (!mounted.current) return
       if (result.kind === 'nothing' || result.kind === 'failed') {
         const text = result.kind === 'nothing' ? 'No purchases to restore' : result.message
+        setNotice(text)
         if (result.kind === 'failed') H.error()
         showToast(text, result.kind === 'failed' ? 'error' : 'info')
         say(text)
@@ -223,6 +227,7 @@ export default function PlusScreen() {
       }
       outcome.current = 'restored'
       notePaywallEvent('restored', trigger)
+      showToast('Restored', 'success')
       await confirm()
     } finally {
       working.current = false
@@ -352,6 +357,7 @@ export default function PlusScreen() {
           onHeight={setDockHeight}
           phase={phase}
           restoring={busy === 'restore'}
+          notice={notice}
           action={launch ? 'launch' : managing ? 'manage' : forSale ? 'buy' : 'none'}
           cta={ctaParts(pick)}
           disabled={locked || !pick}

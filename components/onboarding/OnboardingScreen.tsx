@@ -19,7 +19,6 @@ import Animated, {
 } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { useKeyboardShown } from '../../lib/keyboard'
 import { RevealOnFocus, useRevealFocused } from './revealFocused'
 import {
   CONTROL,
@@ -34,7 +33,7 @@ import {
 } from '../../lib/theme'
 import { progressPercent, type OnboardingStep } from '../../lib/onboarding'
 import { EmberButton } from './EmberControls'
-import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
+import { KEYBOARD_BEHAVIOR, useKeyboardShown } from '../../lib/keyboard'
 
 /**
  * The frame every onboarding screen sits in.
@@ -108,7 +107,7 @@ export function OnboardingScreen({
 }: Props) {
   const insets = useSafeAreaInsets()
   const keyboardUp = useKeyboardShown()
-  const focus = useRevealFocused()
+  const { scrollRef, bodyRef, reveal, onScroll, onViewportLayout, onBodyLayout } = useRevealFocused()
   const percent = step ? progressPercent(step) : 100
   const reduceMotion = useReducedMotion()
   /*
@@ -187,10 +186,10 @@ export function OnboardingScreen({
        */}
       <KeyboardAvoidingView style={styles.flex} behavior={KEYBOARD_BEHAVIOR} keyboardVerticalOffset={0}>
         <ScrollView
-          ref={focus.scrollRef}
-          onScroll={focus.onScroll}
+          ref={scrollRef}
+          onScroll={onScroll}
           scrollEventThrottle={16}
-          onLayout={focus.onViewportLayout}
+          onLayout={onViewportLayout}
           style={styles.flex}
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
@@ -223,8 +222,8 @@ export function OnboardingScreen({
           </View>
 
           {children ? (
-            <RevealOnFocus.Provider value={focus.reveal}>
-              <View ref={focus.bodyRef} onLayout={focus.onBodyLayout} style={styles.body}>
+            <RevealOnFocus.Provider value={reveal}>
+              <View ref={bodyRef} onLayout={onBodyLayout} style={styles.body}>
                 {children}
               </View>
             </RevealOnFocus.Provider>

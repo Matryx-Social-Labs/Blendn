@@ -211,6 +211,35 @@ describe('buying and restoring say what happened, nothing more', () => {
     expect(await m.restore('u1')).toEqual({ kind: 'restored' })
   })
 
+  it('restore: RevenueCat answering with no entitlements at all is "nothing", not a throw', async () => {
+    const { m, rc } = await asU1()
+    rc.restorePurchases.mockResolvedValueOnce({})
+    expect(await m.restore('u1')).toEqual({ kind: 'nothing' })
+    rc.restorePurchases.mockResolvedValueOnce(undefined)
+    expect(await m.restore('u1')).toEqual({ kind: 'nothing' })
+  })
+
+  it('restore: a store that never answers ends in words after 20 s, never a spinner', async () => {
+    jest.useFakeTimers()
+    try {
+      const { m, rc } = await asU1()
+      rc.restorePurchases.mockReturnValueOnce(new Promise(() => {}))
+      const done = m.restore('u1')
+      await jest.advanceTimersByTimeAsync(m.RESTORE_TIMEOUT_MS)
+      expect(await done).toEqual({ kind: 'failed', message: m.RESTORE_SILENT })
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('restore: an error from the store is a failure with words', async () => {
+    const { m, rc } = await asU1()
+    rc.restorePurchases.mockRejectedValueOnce({ code: '10' })
+    expect(await m.restore('u1')).toMatchObject({ kind: 'failed', message: expect.stringMatching(/connection/i) })
+    rc.restorePurchases.mockRejectedValueOnce(new Error('boom'))
+    expect(await m.restore('u1')).toEqual({ kind: 'failed', message: "Couldn't reach the store. Try again." })
+  })
+
   it('Manage: RevenueCat\'s management URL when it is a store\'s own page — anything else is ignored (review LOW)', async () => {
     const { m, rc } = load()
     await m.syncPurchasesUser('u1')

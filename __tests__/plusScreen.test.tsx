@@ -4,7 +4,7 @@
  * there, every way out is logged, and every state the design draws is on it.
  */
 import React from 'react'
-import { act, fireEvent, render, screen } from '@testing-library/react-native'
+import { act, fireEvent, render, screen, within } from '@testing-library/react-native'
 import { AccessibilityInfo, Linking } from 'react-native'
 import * as WebBrowser from 'expo-web-browser'
 
@@ -174,29 +174,53 @@ it('a cancelled purchase changes nothing and asks nothing', async () => {
   expect(logged()).toEqual(['shown', 'purchase_started'])
 })
 
-describe('restore', () => {
-  it('with nothing to restore says so, in a toast', async () => {
+describe('restore always ends in a visible result', () => {
+  const dock = () => screen.getByTestId('plus-dock')
+
+  it('nothing to restore: a toast, and the words stay in the dock after the toast is gone', async () => {
     ;(restore as jest.Mock).mockResolvedValue({ kind: 'nothing' })
     await mount()
     await act(async () => { fireEvent.press(button('Restore purchases')) })
     expect(mockToast).toHaveBeenCalledWith('No purchases to restore', 'info')
+    expect(within(dock()).getByText('No purchases to restore')).toBeTruthy()
   })
 
-  it('failing says why, as an error toast', async () => {
+  it('failing: an error toast, the reason in the dock, and the error haptic', async () => {
     ;(restore as jest.Mock).mockResolvedValue({ kind: 'failed', message: "Couldn't reach the store. Try again." })
     await mount()
     await act(async () => { fireEvent.press(button('Restore purchases')) })
     expect(mockToast).toHaveBeenCalledWith("Couldn't reach the store. Try again.", 'error')
+    expect(within(dock()).getByText("Couldn't reach the store. Try again.")).toBeTruthy()
   })
 
-  it('finding something waits for the server, like a purchase', async () => {
+  it('restoring: "Restoring…" while it waits, gone when it answers', async () => {
+    let land: (v: unknown) => void = () => {}
+    ;(restore as jest.Mock).mockReturnValue(new Promise((r) => { land = r }))
+    await mount()
+    await act(async () => { fireEvent.press(button('Restore purchases')) })
+    expect(within(dock()).getByText('Restoring…')).toBeTruthy()
+    await act(async () => { land({ kind: 'nothing' }) })
+    expect(within(dock()).queryByText('Restoring…')).toBeNull()
+  })
+
+  it('found something: "Restored", then the server is asked, then "You’re in."', async () => {
     ;(restore as jest.Mock).mockResolvedValue({ kind: 'restored' })
     ;(apiClient.getMyPlus as jest.Mock).mockResolvedValueOnce(none).mockResolvedValue(granted)
     await mount()
     await act(async () => { fireEvent.press(button('Restore purchases')) })
     await act(async () => { await Promise.resolve() })
+    expect(mockToast).toHaveBeenCalledWith('Restored', 'success')
     expect(logged()).toEqual(['shown', 'restored'])
-    expect(screen.getByText("You're in.")).toBeTruthy()
+    expect(within(dock()).getByText("You're in.")).toBeTruthy()
+  })
+
+  it('the next tap clears the last result', async () => {
+    ;(restore as jest.Mock).mockResolvedValueOnce({ kind: 'nothing' }).mockReturnValue(new Promise(() => {}))
+    await mount()
+    await act(async () => { fireEvent.press(button('Restore purchases')) })
+    expect(within(dock()).getByText('No purchases to restore')).toBeTruthy()
+    await act(async () => { fireEvent.press(button('Restore purchases')) })
+    expect(within(dock()).queryByText('No purchases to restore')).toBeNull()
   })
 })
 

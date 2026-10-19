@@ -180,6 +180,23 @@ export type RestoreOutcome = { kind: 'restored' } | { kind: 'nothing' } | { kind
  */
 export async function restore(userId: string | null | undefined): Promise<RestoreOutcome> {
   if (!configured) return { kind: 'failed', message: "Purchases aren't available yet." }
+  // A store that never answers (a sign-in sheet nobody sees, a stalled sandbox) ends in words, not a spinner.
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const silent = new Promise<RestoreOutcome>((resolve) => {
+    timer = setTimeout(() => resolve({ kind: 'failed', message: RESTORE_SILENT }), RESTORE_TIMEOUT_MS)
+  })
+  try {
+    return await Promise.race([restoreFor(userId), silent])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/** How long Restore waits for the store before it says so. */
+export const RESTORE_TIMEOUT_MS = 20_000
+export const RESTORE_SILENT = "The store didn't answer. Try again."
+
+async function restoreFor(userId: string | null | undefined): Promise<RestoreOutcome> {
   if (!(await canBuyAs(userId))) return { kind: 'failed', message: NOT_SIGNED_IN }
   try {
     const info = await Purchases.restorePurchases()
@@ -192,7 +209,7 @@ export async function restore(userId: string | null | undefined): Promise<Restor
 }
 
 function hasSomethingActive(info: CustomerInfo): boolean {
-  return Object.keys(info.entitlements.active).length > 0 || info.activeSubscriptions.length > 0
+  return Object.keys(info?.entitlements?.active ?? {}).length > 0 || (info?.activeSubscriptions?.length ?? 0) > 0
 }
 
 const STORE_SUBSCRIPTIONS = {
