@@ -604,9 +604,11 @@ export function useRoom(): RoomState & RoomActions {
           markRoomJoined(String(id))
           rememberRoomMute(String(id), result.data?.mute)
           // The dock's last line, with the room: it never opens on "Nobody has said anything yet" and then changes.
-          const history = await (lookup.history?.groupId === String(id)
-            ? lookup.history.messages
-            : apiClient.getChatMessages(String(id), { limit: DOCK_HISTORY }).catch(() => null))
+          const early = lookup.history?.groupId === String(id) ? await lookup.history.messages : null
+          // An early read can beat the lookup's rejoin and be refused: ask again, now that the lookup has answered.
+          const history = early?.success
+            ? early
+            : await apiClient.getChatMessages(String(id), { limit: DOCK_HISTORY }).catch(() => null)
           if (cancelled) return
           setChatHistory({ groupId: String(id), data: history?.success ? history.data : null, failed: !history?.success })
         } else if (result.errorCode === 'LEFT_ROOM' && result.chatGroupId) {
