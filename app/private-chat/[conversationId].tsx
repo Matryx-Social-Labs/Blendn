@@ -313,6 +313,16 @@ function PrivateChatInner() {
         if (!cursor) setLoadError(false)
         const msgs = result.data.messages.map(directMessageFrom).reverse()
         let keptOlder = false
+        // Before the branch below marks it done: the first read of a visit sets the cursors even over a cache-seeded list.
+        const firstRead = !initialLoadDoneRef.current
+        /*
+         * A receipt poll is a few rows. When they do not reach what is held (more
+         * arrived than the poll asked for, and the socket missed it), merging would
+         * replace the thread with the poll: read a full page instead.
+         */
+        if (!cursor && limit < DM_PAGE && msgs.length > 0 && messagesRef.current.length > 0 && !messagesRef.current.some((m) => m.id === msgs[0].id)) {
+          return void loadMessages()
+        }
         if (cursor) {
           setMessages((prev) => {
             const existingIds = new Set(prev.map((m) => m.id))
@@ -334,7 +344,7 @@ function PrivateChatInner() {
           initialLoadDoneRef.current = true
         }
         // A short receipt poll is not a page: its cursor says nothing about the thread's start.
-        if (!keptOlder && limit === DM_PAGE) {
+        if ((!keptOlder || firstRead) && limit === DM_PAGE) {
           setHasMore(result.data.hasMore)
           setOldestCursor(result.data.nextCursor)
         }
@@ -395,7 +405,8 @@ function PrivateChatInner() {
   // The cache follows the thread (sends and arrivals too), without what only this phone holds. Not before the first read has answered: that would cache an empty or failed-only list.
   useEffect(() => {
     if (!messagesCacheKey || (loading && !cachedFirstPage)) return
-    const confirmed = messages.filter((m) => !isLocalMessage(m))
+    // One page, as the comment says: the newest.
+    const confirmed = messages.filter((m) => !isLocalMessage(m)).slice(-DM_PAGE)
     if (confirmed.length > 0) queryCache.set(messagesCacheKey, confirmed, MESSAGES_CACHE_TTL)
   }, [messages, messagesCacheKey, loading, cachedFirstPage])
 

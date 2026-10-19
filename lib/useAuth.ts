@@ -8,6 +8,7 @@ import { Logger } from './logger'
 import { outageFrom, type Outage } from './outage'
 import { syncPurchasesUser } from './purchases'
 import { clearOutbox } from './chatOutbox'
+import { queryCache } from './queryCache'
 import { clearRoomSignal } from './roomSignal'
 import { resetRoomMembership } from './roomMembership'
 import { forgetRosters } from './rosterMemory'
@@ -284,6 +285,8 @@ const resetLocalSession = () => {
    */
   clearOutbox()
   resetRoomMembership()
+  // The cached DM threads are per account, and the next one on this phone has no use for them.
+  queryCache.invalidate('private_messages_')
   /*
    * And the rooms' rosters and the events' details this account read: both are keyed by event, not by account, so the next
    * person to sign in on the phone was served the last one's roster and `userStatus` (going, checked in) until they expired
