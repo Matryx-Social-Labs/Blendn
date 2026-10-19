@@ -26,11 +26,9 @@ import { DURATION, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
 
-/** How long the made crew stays on screen before its chat opens; a tap goes on at once. */
-const MADE_DWELL_MS = 1600
 const BIO_TOO_LONG = 'A crew bio is at most 140 characters'
 
-type Made = { crewId: string; chatGroupId: string; invited: number; emblemSeed: string }
+type Made = { crewId: string; chatGroupId: string; invited: number; /** Null until the server's own seed is read. */ emblemSeed: string | null }
 
 /**
  * Make a crew (Flow 10 · 10.2): a sheet over Crews in three steps — name and
@@ -102,12 +100,18 @@ export default function NewCrewScreen() {
       params: { id: made.chatGroupId, roomName: cleanName(name), kind: 'crew', crewId: made.crewId },
     } as never)
   }, [made, name])
-  // Timer-driven, so Reduce Motion and a tap that never comes both still arrive at the chat.
+  // The emblem the server drew, read once the crew exists. The moment does not wait for it: the crew is made.
+  const madeId = made?.crewId
   useEffect(() => {
-    if (!made) return
-    const timer = setTimeout(go, MADE_DWELL_MS)
-    return () => clearTimeout(timer)
-  }, [made, go])
+    if (!madeId) return
+    let live = true
+    void crewsApi.crew(madeId).then((fresh) => {
+      if (live && fresh.success && fresh.data) setMade((m) => (m && m.crewId === madeId ? { ...m, emblemSeed: fresh.data!.emblemSeed } : m))
+    })
+    return () => {
+      live = false
+    }
+  }, [madeId])
 
   const next = () => {
     if (step === 1) {
@@ -149,15 +153,10 @@ export default function NewCrewScreen() {
     }
     H.success()
     const { crewId, chatGroupId, invited } = result.data
-    // The emblem the server drew, for the beat; if it cannot be read the chat simply opens.
-    const fresh = await crewsApi.crew(crewId)
     inFlight.current = false
     setSending(false)
-    if (!fresh.success || !fresh.data) {
-      router.replace({ pathname: '/chat/[id]', params: { id: chatGroupId, roomName: body.name, kind: 'crew', crewId } } as never)
-      return
-    }
-    setMade({ crewId, chatGroupId, invited, emblemSeed: fresh.data.emblemSeed })
+    // The moment plays now, and stays until Continue: it is the crew's first beat, not a loading screen to skip.
+    setMade({ crewId, chatGroupId, invited, emblemSeed: null })
   }
 
   const close = () => {
@@ -172,7 +171,7 @@ export default function NewCrewScreen() {
     setPicked((p) => (p.includes(userId) ? p.filter((id) => id !== userId) : p.length < CREW_MAX_MEMBERS - 1 ? [...p, userId] : p))
 
   const actions: SheetAction[] = made
-    ? []
+    ? [{ label: 'Continue', kind: 'primary', onPress: go, testID: 'make-continue' }]
     : step === 3
       ? [{ label: 'Make the crew', kind: 'primary', onPress: () => void make(), loading: sending, refused: stuck }]
       : [{ label: 'Next', kind: 'primary', onPress: next, disabled: step === 2 && picked.length === 0, refused: stuck }]
@@ -202,6 +201,7 @@ export default function NewCrewScreen() {
                     setName(v)
                     setErrors((e) => ({ ...e, name: undefined }))
                   }}
+                  onNameBlur={() => name.trim() && setErrors((e) => ({ ...e, name: nameError(name) }))}
                   nameError={errors.name}
                   bio={bio}
                   onBio={(v) => {

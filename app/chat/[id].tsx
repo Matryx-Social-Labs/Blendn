@@ -32,7 +32,7 @@ import { copyText, linkSheet, notSentSheet } from '../../lib/chatSheets'
 import { idParam, nameParam } from '../../lib/routeParams'
 import { subscribeCheckInChanged } from '../../lib/checkIn'
 import { newClientId } from '../../lib/clientId'
-import { defaultRoomName, roomClosedLine, roomKindParam } from '../../lib/crews'
+import { BLEND_CLOSED_LINE, defaultRoomName, roomClosedLine, roomKindParam } from '../../lib/crews'
 import { COLOR, SIZE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useKeyboardShown } from '../../lib/keyboard'
@@ -166,10 +166,16 @@ function GroupChatInner() {
   const [closedLine, setClosedLine] = useState<string | null>(null)
   const [rejoining, setRejoining] = useState(false)
   const left = useRoomMembership().left.has(roomId)
+  const top = chatHeaderBottom(insets.top)
+  /* A Blend's sides sit above the feed in this same room, not on a page of their own (Flow 10 · 10.9). */
+  const blendRoom = useBlendRoom(roomKind === 'blend' ? (blendIdParam ?? null) : null, top)
+  // A Blend not listed to you any more after being listed is closed for you: its clock, or a block across its sides refused your door.
   const outside: Outside | null =
     closedLine !== null
       ? { kind: 'closed', line: closedLine }
-      : removedLine !== undefined
+      : blendRoom.gone
+        ? { kind: 'closed', line: BLEND_CLOSED_LINE }
+        : removedLine !== undefined
         ? { kind: 'removed', line: removedLine }
         : gone
           ? { kind: 'gone' }
@@ -719,9 +725,6 @@ function GroupChatInner() {
   // Most rooms are named for their event: then the line is the live count (dot, Geist Mono), else the event's title.
   const line = roomSubtitle(name, eventTitle || undefined, memberCount)
   const subtitle = !line ? null : line === eventTitle ? <SubtitleText>{line}</SubtitleText> : <CountLine count={memberCount ?? 0} />
-  const top = chatHeaderBottom(insets.top)
-  /* A Blend's sides sit above the feed in this same room, not on a page of their own (Flow 10 · 10.9). */
-  const blendRoom = useBlendRoom(roomKind === 'blend' ? (blendIdParam ?? null) : null, top, !!outside)
   const dockBottom = keyboardUp ? SPACE.sm : Math.max(insets.bottom, SPACE.lg)
   const lock = composer.lock
   const menuPlan = menu ? planFor(menu.message) : null
@@ -870,7 +873,7 @@ function GroupChatInner() {
         }
       />
       {outside ? null : blendRoom.bar}
-      {blendRoom.overlays}
+      {outside ? null : blendRoom.overlays}
       {outside ? null : <RealtimeStatusBanner status={socketStatus} style={{ ...styles.banner, top: top + blendRoom.barSpace }} />}
 
       <LongPressMenu

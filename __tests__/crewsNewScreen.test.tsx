@@ -74,6 +74,39 @@ describe('step 1 · name and vibe', () => {
     expect(screen.queryByText('A crew name is 2–32 characters')).toBeNull()
   })
 
+  it('one character is not a name: refused at Next, by the keyboard’s next key, and on leaving the field', async () => {
+    await render(<NewCrewScreen />)
+    await name('x')
+    await fireEvent(screen.getByTestId('make-name-input'), 'blur')
+    expect(screen.getByText('A crew name is 2–32 characters')).toBeTruthy()
+    await name('xy')
+    expect(screen.queryByText('A crew name is 2–32 characters')).toBeNull()
+    await name('x')
+    await press('Next')
+    expect(screen.getByLabelText('Step 1 of 3 · Name and vibe')).toBeTruthy()
+    expect(screen.getByText('A crew name is 2–32 characters')).toBeTruthy()
+    // The keyboard's own next key moves on to the line; it does not move the sheet on.
+    await fireEvent(screen.getByTestId('make-name-input'), 'submitEditing')
+    expect(screen.getByLabelText('Step 1 of 3 · Name and vibe')).toBeTruthy()
+  })
+
+  it('counts an emoji as one character, as the server’s char_length does', async () => {
+    await render(<NewCrewScreen />)
+    await name('🎉')
+    await press('Next')
+    expect(screen.getByText('A crew name is 2–32 characters')).toBeTruthy()
+    await name('🎉🎉')
+    await press('Next')
+    await waitFor(() => screen.getByLabelText('Step 2 of 3 · Invite friends'))
+  })
+
+  it('a name of only spaces is not a name', async () => {
+    await render(<NewCrewScreen />)
+    await name('     ')
+    await press('Next')
+    expect(screen.getByText('A crew name is 2–32 characters')).toBeTruthy()
+  })
+
   it('a bio over 140 characters cannot go on', async () => {
     await render(<NewCrewScreen />)
     await name('Nebula')
@@ -188,7 +221,7 @@ describe('step 3 · consent', () => {
     })
   })
 
-  it('then the crew is made: its name, the count asked, and the chat opens next', async () => {
+  it('then the crew is made: its name, the count asked, and Continue opens the chat — not before', async () => {
     crews.create.mockResolvedValue({ success: true, data: { crewId: 'c1', chatGroupId: 'g1', invited: 2 } })
     crews.crew.mockResolvedValue({ success: true, data: { crewId: 'c1', emblemSeed: 'real-seed' } as never })
     await toConsent()
@@ -196,14 +229,24 @@ describe('step 3 · consent', () => {
     await waitFor(() => screen.getByText('Your crew. 2 invited; it starts when someone joins.'))
     expect(screen.getByText('The crew chat opens next.')).toBeTruthy()
     expect(router.replace).not.toHaveBeenCalled()
-    await fireEvent.press(screen.getByTestId('make-done'))
+    await press('Continue')
     expect(router.replace).toHaveBeenCalledWith({
       pathname: '/chat/[id]',
       params: { id: 'g1', roomName: 'Nebula', kind: 'crew', crewId: 'c1' },
     })
   })
 
-  it('goes on to the chat by itself, with nothing tapped', async () => {
+  it('the moment plays as soon as the crew is made, before its emblem has been read (the old order jumped to the room)', async () => {
+    crews.create.mockResolvedValue({ success: true, data: { crewId: 'c1', chatGroupId: 'g1', invited: 2 } })
+    crews.crew.mockReturnValue(new Promise(() => {}) as never)
+    await toConsent()
+    await press('Make the crew')
+    await waitFor(() => screen.getByText('Your crew. 2 invited; it starts when someone joins.'))
+    expect(screen.getByTestId('make-emblem-pending')).toBeTruthy()
+    expect(router.replace).not.toHaveBeenCalled()
+  })
+
+  it('it stays until Continue: no timer takes the crew on to the chat', async () => {
     jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] })
     try {
       crews.create.mockResolvedValue({ success: true, data: { crewId: 'c1', chatGroupId: 'g1', invited: 2 } })
@@ -211,19 +254,31 @@ describe('step 3 · consent', () => {
       await toConsent()
       await press('Make the crew')
       await waitFor(() => screen.getByTestId('make-done'))
-      await act(async () => jest.advanceTimersByTime(2000))
-      expect(router.replace).toHaveBeenCalledTimes(1)
+      await act(async () => jest.advanceTimersByTime(30_000))
+      expect(router.replace).not.toHaveBeenCalled()
+      expect(screen.getByTestId('make-done')).toBeTruthy()
     } finally {
       jest.useRealTimers()
     }
   })
 
-  it('a made crew whose emblem cannot be read still opens its chat', async () => {
+  it('a crew whose emblem cannot be read is still shown as made, and still opens its chat on Continue', async () => {
     crews.create.mockResolvedValue({ success: true, data: { crewId: 'c1', chatGroupId: 'g1', invited: 2 } })
     crews.crew.mockResolvedValue({ success: false, error: 'No internet connection.' })
     await toConsent()
     await press('Make the crew')
-    await waitFor(() => expect(router.replace).toHaveBeenCalledTimes(1))
+    await waitFor(() => screen.getByText('Your crew. 2 invited; it starts when someone joins.'))
+    expect(router.replace).not.toHaveBeenCalled()
+    await press('Continue')
+    expect(router.replace).toHaveBeenCalledTimes(1)
+  })
+
+  it('the real emblem takes the pending one’s place once it is read', async () => {
+    crews.create.mockResolvedValue({ success: true, data: { crewId: 'c1', chatGroupId: 'g1', invited: 2 } })
+    crews.crew.mockResolvedValue({ success: true, data: { crewId: 'c1', emblemSeed: 'real-seed' } as never })
+    await toConsent()
+    await press('Make the crew')
+    await waitFor(() => expect(screen.queryByTestId('make-emblem-pending')).toBeNull())
   })
 
   it('two fast taps on Make the crew send one create', async () => {
@@ -242,6 +297,14 @@ describe('step 3 · consent', () => {
 })
 
 describe('what the server refuses', () => {
+  it('the server’s own length refusal comes back under the name, with no field named', async () => {
+    crews.create.mockResolvedValue({ success: false, error: 'Validation failed', errorCode: 'VALIDATION_FAILED', errors: [{ path: 'name', message: 'A crew name is 2–32 characters' }] })
+    await toConsent()
+    await press('Make the crew')
+    await waitFor(() => screen.getByLabelText('Step 1 of 3 · Name and vibe'))
+    expect(screen.getByText('A crew name is 2–32 characters')).toBeTruthy()
+  })
+
   it('a name it will not take comes back under the name, on step 1, in its words', async () => {
     crews.create.mockResolvedValue({ success: false, error: 'This can’t be a crew’s name.', errorCode: 'BAD_REQUEST' })
     await toConsent('Blend’n Official')

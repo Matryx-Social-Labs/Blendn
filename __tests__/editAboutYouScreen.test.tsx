@@ -134,7 +134,7 @@ describe('"Show my badges" (M3) and the Tier B refusal (H1)', () => {
       fireEvent.press(screen.getByText('Tulu'))
     })
     await save()
-    expect(mockToast).toHaveBeenCalledWith(sentence, 'error')
+    expect(mockToast).toHaveBeenCalledWith(`Not saved: your languages. ${sentence}`, 'error')
   })
 })
 
@@ -260,15 +260,11 @@ describe('every field saves what the person chose', () => {
     await tap('Show my badges')
     await tap('Show “Shows up” on my card')
     await save()
-    expect(api.updateProfile).toHaveBeenCalledTimes(1)
-    expect(api.updateProfile).toHaveBeenCalledWith('me', {
-      languages: ['tulu'],
-      home_state: 'goa',
-      sun_sign: 'leo',
-      sign_system: 'western',
-      show_badges: false,
-      shows_up_badge: true,
-    })
+    // The badge switches, then the Tier B facts: two writes, each with only its own fields.
+    expect(api.updateProfile.mock.calls).toEqual([
+      ['me', { show_badges: false, shows_up_badge: true }],
+      ['me', { languages: ['tulu'], home_state: 'goa', sun_sign: 'leo', sign_system: 'western' }],
+    ])
     expect(api.putThisOrThat).toHaveBeenCalledWith({ chai: 'a' })
   })
 
@@ -319,7 +315,7 @@ describe('the states', () => {
     await open()
     await tap('Goa')
     await save()
-    expect(mockToast).toHaveBeenCalledWith('Couldn’t save. Try again.', 'error')
+    expect(mockToast).toHaveBeenCalledWith('Not saved: your home state. Try again.', 'error')
     expect(router.back).not.toHaveBeenCalled()
     expect(screen.getByLabelText('Goa').props.accessibilityState).toMatchObject({ selected: true })
   })
@@ -329,7 +325,7 @@ describe('the states', () => {
     await open()
     await tap('Chai')
     await save()
-    expect(mockToast).toHaveBeenCalledWith('Couldn’t save. Try again.', 'error')
+    expect(mockToast).toHaveBeenCalledWith('Couldn’t save the rest. Try again.', 'error')
     expect(router.back).not.toHaveBeenCalled()
   })
 
@@ -340,5 +336,92 @@ describe('the states', () => {
     expect(mockToast).toHaveBeenCalledWith('Saved', 'success')
     expect(ProfileCache.clear).toHaveBeenCalled()
     expect(router.back).toHaveBeenCalled()
+  })
+})
+
+describe('the Tier B limit (three a day) costs only what it covers', () => {
+  const SENTENCE = 'You can change your languages, home state, sign or field of work three times a day. Try again tomorrow.'
+  const refuseTierB = () =>
+    api.updateProfile.mockImplementation(async (_id: string, body: Record<string, unknown>) =>
+      'languages' in body || 'home_state' in body || 'sun_sign' in body
+        ? { success: false, error: SENTENCE, errorCode: 'RATE_LIMITED' }
+        : { success: true, data: {} }
+    )
+
+  it('the badge switches are their own write: refused languages and a sign do not take them down', async () => {
+    refuseTierB()
+    await open()
+    await tap('Tulu')
+    await tap('Show my sign')
+    await tap('Leo ♌')
+    await tap('Show my badges')
+    await tap('Show “Shows up” on my card')
+    await save()
+    expect(api.updateProfile.mock.calls).toEqual([
+      ['me', { show_badges: false, shows_up_badge: true }],
+      ['me', { languages: ['tulu'], sun_sign: 'leo', sign_system: 'western' }],
+    ])
+    // Said exactly: what saved, what did not, and the server's own sentence.
+    expect(mockToast).toHaveBeenCalledWith(`Saved your badge choices. Not saved: your languages and sign. ${SENTENCE}`, 'error')
+    expect(router.back).not.toHaveBeenCalled()
+    expect(ProfileCache.clear).toHaveBeenCalled()
+  })
+
+  it('the this-or-that answers are their own write too, and land before the Tier B facts', async () => {
+    refuseTierB()
+    await open()
+    await tap('Goa')
+    await tap('Chai')
+    await save()
+    expect(api.putThisOrThat).toHaveBeenCalledWith({ chai: 'b' })
+    expect(mockToast).toHaveBeenCalledWith(`Saved your this-or-that answers. Not saved: your home state. ${SENTENCE}`, 'error')
+  })
+
+  it('the person’s edits stay as chosen, and a second Save sends only what did not land', async () => {
+    refuseTierB()
+    await open()
+    await tap('Kannada')
+    await tap('Show my badges')
+    await save()
+    expect(screen.getByLabelText('Kannada').props.accessibilityState).toMatchObject({ selected: true })
+    api.updateProfile.mockClear()
+    api.updateProfile.mockResolvedValue({ success: true, data: {} })
+    await save()
+    // The badge switch landed the first time: only the languages go now.
+    expect(api.updateProfile.mock.calls).toEqual([['me', { languages: ['kannada'] }]])
+    expect(router.back).toHaveBeenCalled()
+  })
+
+  it('a refusal with nothing else changed says only what was not saved', async () => {
+    refuseTierB()
+    await open()
+    await tap('Goa')
+    await save()
+    expect(mockToast).toHaveBeenCalledWith(`Not saved: your home state. ${SENTENCE}`, 'error')
+  })
+
+  it('a failed badge write stops there: nothing after it is sent as if it landed', async () => {
+    api.updateProfile.mockResolvedValue({ success: false, error: 'boom' })
+    await open()
+    await tap('Show my badges')
+    await tap('Goa')
+    await save()
+    expect(api.updateProfile).toHaveBeenCalledTimes(1)
+    expect(mockToast).toHaveBeenCalledWith('Couldn’t save the rest. Try again.', 'error')
+  })
+})
+
+describe('the language cap says so', () => {
+  it('at the cap the rest are dimmed with the reason, and a tap on one changes nothing', async () => {
+    api.getProfile.mockResolvedValue(profile({ languages: ['tulu', 'kannada'] }))
+    await open()
+    const tamil = screen.getByLabelText('Tamil')
+    expect(tamil.props.accessibilityState).toMatchObject({ disabled: true })
+    expect(tamil.props.accessibilityHint).toBe('Up to two')
+    await tap('Tamil')
+    await save()
+    expect(api.updateProfile).not.toHaveBeenCalled()
+    // A chosen one is still taken back.
+    expect(screen.getByLabelText('Tulu').props.accessibilityState).toMatchObject({ disabled: false })
   })
 })

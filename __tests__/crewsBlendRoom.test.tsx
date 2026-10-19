@@ -47,8 +47,8 @@ import { markRoomLeft } from '../lib/roomMembership'
 import { showSheet, type ActionSheet } from '../lib/sheet'
 
 /** The room screen, reduced to what it takes from the hook. */
-function Room({ hidden = false, id = 'b1' }: { hidden?: boolean; id?: string }) {
-  const room = useBlendRoom(id, 0, hidden)
+function Room({ id = 'b1' }: { id?: string }) {
+  const room = useBlendRoom(id, 0)
   return (
     <View>
       {room.title ? <Text>{room.title}</Text> : null}
@@ -61,6 +61,7 @@ function Room({ hidden = false, id = 'b1' }: { hidden?: boolean; id?: string }) 
         </Text>
       ) : null}
       {room.overlays}
+      {room.gone ? <Text testID="gone">gone</Text> : null}
       <Text testID="space">{String(room.barSpace)}</Text>
     </View>
   )
@@ -272,11 +273,44 @@ describe('closing and closed', () => {
     expect(screen.queryByTestId('blend-mine')).toBeNull()
   })
 
-  it('draws nothing while the room is shown as closed', async () => {
+  it('a Blend that was listed and then is not (a block across the sides refuses your door) is gone for you, and its chrome goes', async () => {
     serve(blend())
-    await render(<Room hidden />)
-    await waitFor(() => expect(crews.blends).toHaveBeenCalled())
+    api.blockUser.mockResolvedValue({ success: true, data: { blocked: true } })
+    await open()
+    expect(screen.queryByTestId('gone')).toBeNull()
+    await fireEvent.press(screen.getByLabelText('More'))
+    await fireEvent.press(within(screen.getByTestId('blend-menu')).getByLabelText('Block someone'))
+    const next = (sheetOf().actions.find((a) => a.label === 'Velvet Heron') as { next: () => ActionSheet }).next()
+    // The server's answer from now on: the blocker's door is refused, so the list no longer has it.
+    serve()
+    await act(async () => {
+      await (next.actions.find((a) => a.label === 'Block') as { run: () => Promise<unknown> }).run()
+    })
+    await waitFor(() => screen.getByTestId('gone'))
     expect(screen.queryByTestId('blend-mine')).toBeNull()
+  })
+
+  it('never listed is not gone: a Blend that never loaded is not a closed one', async () => {
+    serve()
+    await render(<Room />)
+    await waitFor(() => expect(crews.blends).toHaveBeenCalled())
+    expect(screen.queryByTestId('gone')).toBeNull()
+  })
+
+  it('a failed re-read keeps the Blend: a network error is not a closing', async () => {
+    serve(blend())
+    api.blockUser.mockResolvedValue({ success: true, data: { blocked: true } })
+    await open()
+    await fireEvent.press(screen.getByLabelText('More'))
+    await fireEvent.press(within(screen.getByTestId('blend-menu')).getByLabelText('Block someone'))
+    const next = (sheetOf().actions.find((a) => a.label === 'Velvet Heron') as { next: () => ActionSheet }).next()
+    crews.blends.mockResolvedValue({ success: false, error: 'No internet connection.' })
+    await act(async () => {
+      await (next.actions.find((a) => a.label === 'Block') as { run: () => Promise<unknown> }).run()
+    })
+    await waitFor(() => expect(crews.blends).toHaveBeenCalledTimes(2))
+    expect(screen.queryByTestId('gone')).toBeNull()
+    expect(screen.getByTestId('blend-mine')).toBeTruthy()
   })
 
   it('M6: a failed read is not a closed Blend: nothing is drawn, and nothing claims it closed', async () => {

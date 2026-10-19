@@ -19,6 +19,8 @@ import {
   withinOptions,
   NO_ABOUT_YOU,
   signName,
+  splitTierB,
+  tierBNames,
   toggleLanguage,
   type AboutYou,
   type Choice,
@@ -139,39 +141,69 @@ export default function EditAboutYouScreen() {
     showToast(text, 'error')
   }
 
+  /**
+   * Three writes, each on its own so one refusal costs only itself: the badge
+   * switches, the this-or-that answers, then the Tier B facts (languages, home
+   * state, sign) last. The server limits Tier B to three changes a day and
+   * refuses the whole request that carries one past it, writing nothing else in
+   * it; sent together, a badge switch was lost with a refused language change.
+   *
+   * What landed is what `loaded` becomes, field by field; what did not stays in
+   * the form as the person chose it, and the toast names it. Nothing is shown as
+   * saved that was not.
+   */
   const save = async () => {
     if (!authUser || saving) return
-    const profileBody = aboutYouUpdate(loaded, form)
+    const { tierB, other } = splitTierB(aboutYouUpdate(loaded, form))
     const answerBody = answersUpdate(answersLoaded, answers)
     setSaving(true)
+    const saved: string[] = []
+    let anySaved = false
     try {
-      if (Object.keys(profileBody).length) {
-        const r = await apiClient.updateProfile(authUser.id, profileBody)
-        // Three Tier B changes a day: the server's own sentence says when to try again.
-        if (!r.success && r.errorCode === 'RATE_LIMITED' && r.error) {
-          refuse(r.error)
-          return
-        }
+      if (Object.keys(other).length) {
+        const r = await apiClient.updateProfile(authUser.id, other)
         if (!r.success) throw new Error(r.error || 'profile')
+        setLoaded((l) => ({ ...l, showBadges: form.showBadges, showsUpBadge: form.showsUpBadge }))
+        saved.push('your badge choices')
+        anySaved = true
       }
       if (Object.keys(answerBody).length) {
         const r = await apiClient.putThisOrThat(answerBody)
         if (!r.success) throw new Error(r.error || 'this-or-that')
+        setAnswersLoaded(answers)
+        saved.push('your this-or-that answers')
+        anySaved = true
       }
-      ProfileCache.clear()
-      queryCache.invalidate(`profile_${authUser.id}`)
-      void refreshAuthUser()
-      setLoaded(form)
-      setAnswersLoaded(answers)
+      if (Object.keys(tierB).length) {
+        const r = await apiClient.updateProfile(authUser.id, tierB)
+        if (!r.success) {
+          if (anySaved) invalidate(authUser.id)
+          const lead = saved.length ? `Saved ${saved.join(' and ')}. ` : ''
+          const why = r.errorCode === 'RATE_LIMITED' && r.error ? r.error : 'Try again.'
+          refuse(`${lead}Not saved: your ${tierBNames(tierB)}. ${why}`)
+          return
+        }
+        setLoaded((l) => ({ ...l, languages: form.languages, homeState: form.homeState, sign: form.sign }))
+        anySaved = true
+      }
+      invalidate(authUser.id)
       H.success()
       showToast('Saved', 'success')
       router.back()
     } catch (error) {
       Logger.error('profile', 'EditAboutYou: save failed', { error })
-      refuse('Couldn’t save. Try again.')
+      if (anySaved) invalidate(authUser.id)
+      const lead = saved.length ? `Saved ${saved.join(' and ')}. ` : ''
+      refuse(`${lead}Couldn’t save the rest. Try again.`)
     } finally {
       setSaving(false)
     }
+  }
+
+  const invalidate = (userId: string) => {
+    ProfileCache.clear()
+    queryCache.invalidate(`profile_${userId}`)
+    void refreshAuthUser()
   }
 
   const sign = form.sign
@@ -212,6 +244,9 @@ export default function EditAboutYouScreen() {
                       key={l.slug}
                       label={l.label}
                       selected={form.languages.includes(l.slug)}
+                      // At the cap the rest dim and say why, instead of a tap that does nothing.
+                      dimmed={!form.languages.includes(l.slug) && form.languages.length >= options.maxLanguages}
+                      capHint={`Up to ${NUMBER_WORDS[options.maxLanguages] ?? options.maxLanguages}`}
                       onPress={() => setForm((f) => ({ ...f, languages: toggleLanguage(f.languages, l.slug, options.maxLanguages) }))}
                     />
                   ))}

@@ -159,3 +159,29 @@ export function aboutLine(p: { languages?: string[] | null; homeState?: string |
   ].filter((x): x is string => !!x)
   return parts.length ? parts.join(' · ') : null
 }
+
+/** The profile fields the server rate-limits together: three changes a day (blendn-admin `lib/tier-b.ts`). */
+const TIER_B_KEYS = ['languages', 'home_state', 'sun_sign', 'sign_system'] as const
+
+/**
+ * A profile body in two: the Tier B facts, and the rest (the badge switches).
+ * They go in separate PUTs because the server refuses a whole request when its
+ * Tier B part is over the day's limit, and writes nothing else in it — so a
+ * badge switch sent beside a refused language change was lost with it.
+ */
+export function splitTierB(body: Record<string, unknown>): { tierB: Record<string, unknown>; other: Record<string, unknown> } {
+  const tierB: Record<string, unknown> = {}
+  const other: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(body)) (TIER_B_KEYS as readonly string[]).includes(key) ? (tierB[key] = value) : (other[key] = value)
+  return { tierB, other }
+}
+
+/** "languages, home state and sign": which of the person's Tier B edits a body carries, in their words. */
+export function tierBNames(body: Record<string, unknown>): string {
+  const names = [
+    'languages' in body ? 'languages' : null,
+    'home_state' in body ? 'home state' : null,
+    'sun_sign' in body || 'sign_system' in body ? 'sign' : null,
+  ].filter((n): n is string => n !== null)
+  return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : (names[0] ?? '')
+}
