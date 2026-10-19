@@ -238,8 +238,8 @@ export function OnboardingScreen({
          */}
         <View style={[styles.footer, { paddingBottom: keyboardUp ? SPACE.sm : Math.max(insets.bottom, SPACE.lg) }]}>
           <EmberButton label={ctaLabel} onPress={onContinue} disabled={ctaDisabled} busy={ctaBusy} />
-          {/* With the keyboard up the page is short: the button stays, the small print waits for the keyboard to go. */}
-          {secondaryLabel && onSecondary && !keyboardUp ? (
+          {/* The way out ("Skip", "Maybe later") stays with the button; only the footnote waits for the keyboard to go. */}
+          {secondaryLabel && onSecondary ? (
             /*
              * Off while the primary is saving: "Skip" tapped during a save
              * used to navigate twice — once for the skip, once when the save

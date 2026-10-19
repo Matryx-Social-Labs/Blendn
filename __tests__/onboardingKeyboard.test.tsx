@@ -39,7 +39,15 @@ describe('revealOffset', () => {
 describe('the footer with the keyboard up', () => {
   function page() {
     return render(
-      <OnboardingScreen step="basics" title="The basics" ctaLabel="Continue" onContinue={jest.fn()} secondaryLabel="Not you? Sign out" onSecondary={jest.fn()}>
+      <OnboardingScreen
+        step="basics"
+        title="The basics"
+        ctaLabel="Continue"
+        onContinue={jest.fn()}
+        secondaryLabel="Not you? Sign out"
+        onSecondary={jest.fn()}
+        footerNote="Never shared"
+      >
         <EmberField label="Your name" helper="In event rooms you go by a made-up name." value="" onChangeText={() => {}} />
       </OnboardingScreen>
     )
@@ -51,7 +59,7 @@ describe('the footer with the keyboard up', () => {
     expect(screen.getByRole('button', { name: 'Not you? Sign out' })).toBeTruthy()
   })
 
-  it('keeps the button and lets the small print wait while the keyboard is up', async () => {
+  it('keeps the button and the way out while the keyboard is up; only the footnote waits', async () => {
     const listeners: Record<string, () => void> = {}
     jest.spyOn(Keyboard, 'addListener').mockImplementation(((event: string, cb: () => void) => {
       listeners[event] = cb
@@ -60,9 +68,10 @@ describe('the footer with the keyboard up', () => {
     await page()
     await act(async () => listeners.keyboardWillShow())
     expect(screen.getByRole('button', { name: 'Continue' })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Not you? Sign out' })).toBeNull()
-    await act(async () => listeners.keyboardWillHide())
     expect(screen.getByRole('button', { name: 'Not you? Sign out' })).toBeTruthy()
+    expect(screen.queryByText('NEVER SHARED')).toBeNull()
+    await act(async () => listeners.keyboardWillHide())
+    expect(screen.getByText('NEVER SHARED')).toBeTruthy()
   })
 })
 

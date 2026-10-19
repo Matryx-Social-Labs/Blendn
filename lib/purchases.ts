@@ -178,15 +178,27 @@ export type RestoreOutcome = { kind: 'restored' } | { kind: 'nothing' } | { kind
  * anything decides only what is said; what unlocks is the server's, once the
  * store tells RevenueCat and RevenueCat tells the server.
  */
-export async function restore(userId: string | null | undefined): Promise<RestoreOutcome> {
+export async function restore(
+  userId: string | null | undefined,
+  /** The store's answer when it lands after the 20 s "didn't answer": it replaces that message, it is never dropped. */
+  onLate?: (outcome: RestoreOutcome) => void
+): Promise<RestoreOutcome> {
   if (!configured) return { kind: 'failed', message: "Purchases aren't available yet." }
   // A store that never answers (a sign-in sheet nobody sees, a stalled sandbox) ends in words, not a spinner.
   let timer: ReturnType<typeof setTimeout> | undefined
+  let timedOut = false
   const silent = new Promise<RestoreOutcome>((resolve) => {
-    timer = setTimeout(() => resolve({ kind: 'failed', message: RESTORE_SILENT }), RESTORE_TIMEOUT_MS)
+    timer = setTimeout(() => {
+      timedOut = true
+      resolve({ kind: 'failed', message: RESTORE_SILENT })
+    }, RESTORE_TIMEOUT_MS)
+  })
+  const answer = restoreFor(userId).then((outcome) => {
+    if (timedOut) onLate?.(outcome)
+    return outcome
   })
   try {
-    return await Promise.race([restoreFor(userId), silent])
+    return await Promise.race([answer, silent])
   } finally {
     clearTimeout(timer)
   }

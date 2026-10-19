@@ -214,6 +214,46 @@ describe('restore always ends in a visible result', () => {
     expect(within(dock()).getByText("You're in.")).toBeTruthy()
   })
 
+  it('a store answer after "didn\'t answer" replaces that message', async () => {
+    let late: (o: unknown) => void = () => {}
+    ;(restore as jest.Mock).mockImplementation(async (_u: string, onLate: (o: unknown) => void) => {
+      late = onLate
+      return { kind: 'failed', message: "The store didn't answer. Try again." }
+    })
+    await mount()
+    await act(async () => { fireEvent.press(button('Restore purchases')) })
+    expect(within(dock()).getByText("The store didn't answer. Try again.")).toBeTruthy()
+    await act(async () => { late({ kind: 'nothing' }) })
+    expect(within(dock()).getByText('No purchases to restore')).toBeTruthy()
+    expect(within(dock()).queryByText("The store didn't answer. Try again.")).toBeNull()
+  })
+
+  it('a late find is confirmed with the server like any restore', async () => {
+    let late: (o: unknown) => void = () => {}
+    ;(restore as jest.Mock).mockImplementation(async (_u: string, onLate: (o: unknown) => void) => {
+      late = onLate
+      return { kind: 'failed', message: "The store didn't answer. Try again." }
+    })
+    ;(apiClient.getMyPlus as jest.Mock).mockResolvedValueOnce(none).mockResolvedValue(granted)
+    await mount()
+    await act(async () => { fireEvent.press(button('Restore purchases')) })
+    await act(async () => { late({ kind: 'restored' }) })
+    await act(async () => { await Promise.resolve() })
+    expect(mockToast).toHaveBeenCalledWith('Restored', 'success')
+    expect(within(dock()).getByText("You're in.")).toBeTruthy()
+  })
+
+  it('starting a purchase clears the last restore result, so it never sits above Buy', async () => {
+    ;(restore as jest.Mock).mockResolvedValue({ kind: 'nothing' })
+    ;(buyPackage as jest.Mock).mockResolvedValue({ kind: 'cancelled' })
+    await mount()
+    await act(async () => { fireEvent.press(button('Restore purchases')) })
+    expect(within(dock()).getByText('No purchases to restore')).toBeTruthy()
+    await act(async () => { fireEvent.press(button(MONTHLY_CTA)) })
+    expect(within(dock()).queryByText('No purchases to restore')).toBeNull()
+    expect(button(MONTHLY_CTA)).toBeTruthy()
+  })
+
   it('the next tap clears the last result', async () => {
     ;(restore as jest.Mock).mockResolvedValueOnce({ kind: 'nothing' }).mockReturnValue(new Promise(() => {}))
     await mount()

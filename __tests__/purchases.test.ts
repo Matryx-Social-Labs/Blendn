@@ -232,6 +232,32 @@ describe('buying and restoring say what happened, nothing more', () => {
     }
   })
 
+  it('restore: an answer that lands after the 20 s message is handed on, not dropped', async () => {
+    jest.useFakeTimers()
+    try {
+      const { m, rc } = await asU1()
+      let land: (v: unknown) => void = () => {}
+      rc.restorePurchases.mockReturnValueOnce(new Promise((r) => { land = r }))
+      const late = jest.fn()
+      const done = m.restore('u1', late)
+      await jest.advanceTimersByTimeAsync(m.RESTORE_TIMEOUT_MS)
+      expect(await done).toEqual({ kind: 'failed', message: m.RESTORE_SILENT })
+      expect(late).not.toHaveBeenCalled()
+      land({ entitlements: { active: { plus: {} } }, activeSubscriptions: ['plus_monthly'] })
+      await jest.advanceTimersByTimeAsync(0)
+      expect(late).toHaveBeenCalledWith({ kind: 'restored' })
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('restore: an answer in time is never also handed on late', async () => {
+    const { m } = await asU1()
+    const late = jest.fn()
+    expect(await m.restore('u1', late)).toEqual({ kind: 'nothing' })
+    expect(late).not.toHaveBeenCalled()
+  })
+
   it('restore: an error from the store is a failure with words', async () => {
     const { m, rc } = await asU1()
     rc.restorePurchases.mockRejectedValueOnce({ code: '10' })

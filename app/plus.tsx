@@ -30,7 +30,7 @@ import {
   waitForPlus,
   type PlusStatus,
 } from '../lib/plus'
-import { buyPackage, canBuyAs, loadPlusOffers, manageSubscriptionUrl, purchasesAvailable, restore, type PlusOffer } from '../lib/purchases'
+import { buyPackage, canBuyAs, loadPlusOffers, manageSubscriptionUrl, purchasesAvailable, restore, type PlusOffer, type RestoreOutcome } from '../lib/purchases'
 import { showSheet } from '../lib/sheet'
 import { useAuth } from '../lib/useAuth'
 import { notePaywallClosed, notePaywallEvent } from '../lib/paywall'
@@ -184,6 +184,7 @@ export default function PlusScreen() {
     if (working.current || !buyable) return
     working.current = true
     setBusy('buy')
+    setNotice(null)
     notePaywallEvent('purchase_started', trigger)
     try {
       const result = await buyPackage(offer.pkg, userId)
@@ -209,26 +210,35 @@ export default function PlusScreen() {
     }
   }
 
+  /** What a restore's answer does: words for nothing or a failure, the server's confirmation for a find. */
+  const settleRestore = async (result: RestoreOutcome) => {
+    if (result.kind === 'nothing' || result.kind === 'failed') {
+      const text = result.kind === 'nothing' ? 'No purchases to restore' : result.message
+      setNotice(text)
+      if (result.kind === 'failed') H.error()
+      showToast(text, result.kind === 'failed' ? 'error' : 'info')
+      say(text)
+      return
+    }
+    setNotice(null)
+    outcome.current = 'restored'
+    notePaywallEvent('restored', trigger)
+    showToast('Restored', 'success')
+    await confirm()
+  }
+
   const restoreAll = async () => {
     if (working.current || !buyable) return
     working.current = true
     setBusy('restore')
     setNotice(null)
     try {
-      const result = await restore(userId)
+      const result = await restore(userId, (late) => {
+        // The store answered after we had said it did not: say what it said.
+        if (mounted.current) void settleRestore(late)
+      })
       if (!mounted.current) return
-      if (result.kind === 'nothing' || result.kind === 'failed') {
-        const text = result.kind === 'nothing' ? 'No purchases to restore' : result.message
-        setNotice(text)
-        if (result.kind === 'failed') H.error()
-        showToast(text, result.kind === 'failed' ? 'error' : 'info')
-        say(text)
-        return
-      }
-      outcome.current = 'restored'
-      notePaywallEvent('restored', trigger)
-      showToast('Restored', 'success')
-      await confirm()
+      await settleRestore(result)
     } finally {
       working.current = false
       if (mounted.current) setBusy(null)

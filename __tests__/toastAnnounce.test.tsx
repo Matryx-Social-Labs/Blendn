@@ -6,8 +6,8 @@
  * to anyone not looking. iOS is told through `announceForAccessibility`;
  * Android reads the toast's live region.
  */
-import { fireEvent, render, screen } from '@testing-library/react-native'
-import { AccessibilityInfo, Pressable, Text } from 'react-native'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react-native'
+import { AccessibilityInfo, Pressable, StyleSheet, Text } from 'react-native'
 
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
@@ -86,5 +86,61 @@ describe('a long message is shown whole', () => {
     expect(toastDwellMs('one two three four five six seven eight', false)).toBe(3000)
     expect(toastDwellMs(LONG, false)).toBe(4000)
     expect(toastDwellMs(LONG, true)).toBe(6000)
+  })
+
+  it('never longer than 10 s, whatever the length', () => {
+    const { toastDwellMs } = require('../components/Toast')
+    const essay = Array.from({ length: 400 }, (_, i) => `word${i}`).join(' ')
+    expect(toastDwellMs(essay, false)).toBe(10_000)
+    expect(toastDwellMs(essay, true)).toBe(10_000)
+  })
+})
+
+describe('a toast with an action can be put away, and keeps clear of the top bar', () => {
+  const { PanResponder } = require('react-native')
+
+  async function withAction() {
+    await render(
+      <ToastProvider>
+        <Trigger message="Message deleted" action />
+      </ToastProvider>
+    )
+    fireEvent.press(screen.getByRole('button', { name: 'show' }))
+    return screen.findByText('Message deleted')
+  }
+
+  it('has a Dismiss button that removes it', async () => {
+    await withAction()
+    fireEvent.press(screen.getByRole('button', { name: 'Dismiss' }))
+    await waitFor(() => expect(screen.queryByText('Message deleted')).toBeNull())
+  })
+
+  it('a plain toast has no Dismiss: it takes no touches and goes by itself', async () => {
+    await render(
+      <ToastProvider>
+        <Trigger message="Saved" />
+      </ToastProvider>
+    )
+    fireEvent.press(screen.getByRole('button', { name: 'show' }))
+    await screen.findByText('Saved')
+    expect(screen.queryByRole('button', { name: 'Dismiss' })).toBeNull()
+    expect(StyleSheet.flatten(screen.getByTestId('toast-lane').props.style).top).toBe(8)
+  })
+
+  it('a swipe up puts it away; a short drag does not', async () => {
+    const create = jest.spyOn(PanResponder, 'create')
+    await withAction()
+    const config = create.mock.calls[create.mock.calls.length - 1][0] as { onPanResponderRelease: (e: unknown, g: { dy: number; vy: number }) => void }
+    config.onPanResponderRelease({}, { dy: -6, vy: -0.1 })
+    expect(screen.getByText('Message deleted')).toBeTruthy()
+    config.onPanResponderRelease({}, { dy: -40, vy: -0.1 })
+    await waitFor(() => expect(screen.queryByText('Message deleted')).toBeNull())
+    create.mockRestore()
+  })
+
+  it('sits below the top bar, so it never covers the back button; a plain one keeps the top', async () => {
+    await withAction()
+    // 0 inset + 8, plus the 44 pt circle and 8 under it.
+    expect(StyleSheet.flatten(screen.getByTestId('toast-lane').props.style).top).toBe(8 + 44 + 8)
   })
 })
