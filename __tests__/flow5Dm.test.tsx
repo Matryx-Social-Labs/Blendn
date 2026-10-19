@@ -162,7 +162,8 @@ describe('the reveal bar', () => {
 
 describe('the reveal panel folds away (drive: it stayed over the thread on Android)', () => {
   const feed = () => screen.getByTestId('dm-feed')
-  const touch = () => act(async () => fireEvent(feed(), 'touchStart'))
+  const touch = () => act(async () => fireEvent(feed(), 'touchEnd'))
+  const padding = () => (screen.getByTestId('dm-feed').props.contentContainerStyle as { paddingTop?: number }[]).flat().map((x) => x?.paddingTop).find((x) => x !== undefined)
 
   it('a touch on the thread folds it, and the feed gives its room back', async () => {
     await open()
@@ -174,12 +175,30 @@ describe('the reveal panel folds away (drive: it stayed over the thread on Andro
     expect(screen.getByText('You’re both anonymous here')).toBeTruthy()
   })
 
-  it('a scroll folds it too: its first touch is the same event', async () => {
+  it('a scroll folds it when the finger lifts', async () => {
     await open()
-    await act(async () => fireEvent(feed(), 'scrollBeginDrag'))
-    await act(async () => fireEvent(feed(), 'touchStart'))
+    await act(async () => fireEvent(feed(), 'scrollEndDrag', { nativeEvent: { contentOffset: { x: 0, y: 0 }, contentSize: { width: 393, height: 2000 }, layoutMeasurement: { width: 393, height: 800 }, velocity: { x: 0, y: 0 } } }))
     await flush()
     expect(screen.queryByLabelText('Show them who you are')).toBeNull()
+  })
+
+  it('nothing moves while the finger is down: the first tap on a message is not cancelled by the feed shifting', async () => {
+    await open()
+    // The panel's height is measured on layout; give it one so the feed has something to give back.
+    let panel = screen.getByTestId('dm-reveal').parent
+    while (panel && !panel.props.onLayout) panel = panel.parent
+    await act(async () => panel!.props.onLayout({ nativeEvent: { layout: { x: 0, y: 0, width: 393, height: 150 } } }))
+    const before = padding()
+    await act(async () => fireEvent(feed(), 'touchStart'))
+    await act(async () => fireEvent(feed(), 'touchMove'))
+    await flush()
+    expect(screen.getByLabelText('Show them who you are')).toBeTruthy()
+    expect(padding()).toBe(before)
+    // The press lands on the message first, and only then does the panel fold.
+    await act(async () => fireEvent(feed(), 'touchEnd'))
+    await flush()
+    expect(screen.queryByLabelText('Show them who you are')).toBeNull()
+    expect(padding()).toBeLessThan(before as number)
   })
 
   it('the header’s face and line bring it back: there is still one reveal control', async () => {

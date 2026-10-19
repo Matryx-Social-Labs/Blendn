@@ -11,7 +11,7 @@ import { State } from 'react-native-gesture-handler'
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils'
 import * as Reanimated from 'react-native-reanimated'
 
-import { fieldScroll, settleDetent, Sheet, sheetBottomPadding, sheetFrame, sheetMaxHeight } from '../components/ds/Sheet'
+import { fieldScroll, settleDetent, Sheet, sheetBottomPadding, sheetFrame, sheetHeightAt, sheetMaxHeight } from '../components/ds/Sheet'
 import { COLOR, MATERIAL, SPRING } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 
@@ -451,5 +451,145 @@ describe('the place view over a keyboard (render)', () => {
     await render(signOut({ detents: ['medium', 'tall'] }))
     await lay()
     expect(flat('s-place').height).toBe(Math.round(852 * 0.56))
+  })
+})
+
+/*
+ * Pre-build review H1: the end state was right and the way there was not. The height was clamped to the
+ * final room by a separate eased cap, so while the lift rose 0 → 336 the 784 pt sheet's top was
+ * 852 − lift − 784 — far above the screen — and snapped back when the cap landed. The height is now
+ * derived from the lift of the same frame, so the top holds still at the clamp for every frame.
+ */
+describe('the sheet’s top on every frame of the keyboard’s show and hide (393 × 852, 59 pt inset)', () => {
+  const SCREEN = 852
+  const INSET = 59
+  const TOP = INSET + 8
+  const tall = Math.round(SCREEN * 0.92)
+  const topAt = (lift: number) => SCREEN - lift - sheetHeightAt(lift, SCREEN, INSET, tall)
+
+  it('never above the status bar and its margin, at any lift from 0 to the keyboard’s height', () => {
+    for (let lift = 0; lift <= 336; lift += 1) {
+      const top = topAt(lift)
+      // At rest the 92% detent sits at 68 (852 − 784), which is already inside the margin.
+      expect(top).toBeGreaterThanOrEqual(Math.min(TOP, SCREEN - tall))
+    }
+  })
+
+  it('the old shape (a cap that only bites at the end) put it 268 pt off at the first frame', () => {
+    const oldHeight = (lift: number, cap: number) => Math.min(tall, cap)
+    // Mid-rise (lift 168, the cap still ~100000): the top is a long way above the screen.
+    expect(SCREEN - 168 - oldHeight(168, 100000)).toBeLessThan(0)
+    expect(topAt(168)).toBeGreaterThanOrEqual(TOP)
+  })
+
+  it('a tray’s clamp is the same line: the foot on the keyboard, the head under the status bar', () => {
+    expect(sheetHeightAt(0, SCREEN, INSET, 500)).toBe(500)
+    expect(sheetHeightAt(336, SCREEN, INSET, 100)).toBe(100)
+  })
+})
+
+describe('the place view frame by frame (render)', () => {
+  const handlers: Record<string, (e?: { endCoordinates: { height: number; screenY: number }; duration?: number }) => void> = {}
+  let spies: jest.SpyInstance[] = []
+  const SCREEN = 852
+  const INSET = 59
+  const place = () => Reanimated.getAnimatedStyle(screen.getByTestId('s-place', { includeHiddenElements: true })) as { marginBottom: number; height: number }
+  const lay = () => act(async () => fireEvent(screen.getByTestId('s-root', { includeHiddenElements: true }), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 393, height: SCREEN } } }))
+
+  beforeEach(() => {
+    jest.useFakeTimers()
+    reduceMotion.mockReturnValue(false)
+    const { Keyboard } = require('react-native')
+    const insets = require('react-native-safe-area-context')
+    const real = Dimensions.get.bind(Dimensions)
+    spies = [
+      jest.spyOn(Keyboard, 'addListener').mockImplementation(((event: string, fn: (typeof handlers)[string]) => {
+        handlers[event] = fn
+        return { remove: () => {} }
+      }) as never),
+      jest.spyOn(Dimensions, 'get').mockImplementation(((k: 'window' | 'screen') => (k === 'window' ? { width: 393, height: SCREEN, scale: 3, fontScale: 1 } : real(k))) as never),
+      jest.spyOn(insets, 'useSafeAreaInsets').mockReturnValue({ top: INSET, bottom: 34, left: 0, right: 0 }),
+    ]
+  })
+  afterEach(() => {
+    jest.useRealTimers()
+    spies.forEach((s) => s.mockRestore())
+  })
+
+  /** Steps the clock a frame at a time and returns where the sheet's top was at each. */
+  const tops = async (ms: number) => {
+    const out: { lift: number; top: number }[] = []
+    for (let t = 0; t < ms; t += 16) {
+      await act(async () => jest.advanceTimersByTime(16))
+      const p = place()
+      out.push({ lift: p.marginBottom, top: SCREEN - p.marginBottom - p.height })
+    }
+    return out
+  }
+  const floor = INSET + 8
+
+  it('show: the top never goes above the margin on any frame, and the lift does rise', async () => {
+    await render(signOut({ detents: ['tall'] }))
+    await lay()
+    await act(async () => jest.advanceTimersByTime(600))
+    await act(async () => handlers.keyboardWillShow({ endCoordinates: { height: 336, screenY: SCREEN - 336 }, duration: 250 }))
+    const frames = await tops(400)
+    expect(frames.some((f) => f.lift > 0 && f.lift < 336)).toBe(true)
+    for (const f of frames) expect(f.top).toBeGreaterThanOrEqual(floor - 0.5)
+    expect(frames.at(-1)).toMatchObject({ lift: 336 })
+  })
+
+  it('hide: the same, back down', async () => {
+    await render(signOut({ detents: ['tall'] }))
+    await lay()
+    await act(async () => handlers.keyboardWillShow({ endCoordinates: { height: 336, screenY: SCREEN - 336 }, duration: 250 }))
+    await act(async () => jest.advanceTimersByTime(600))
+    await act(async () => handlers.keyboardWillHide())
+    const frames = await tops(400)
+    expect(frames.some((f) => f.lift > 0 && f.lift < 336)).toBe(true)
+    // Coming down the sheet grows back to its detent; its top is the margin until it reaches it, then the detent's own.
+    for (const f of frames) expect(f.top).toBeGreaterThanOrEqual(Math.min(floor, SCREEN - Math.round(SCREEN * 0.92)) - 0.5)
+    expect(frames.at(-1)).toMatchObject({ lift: 0 })
+  })
+
+  it('opened while the keyboard is already up: no event ever fires, and it is lifted and clamped from its first frame', async () => {
+    const { Keyboard } = require('react-native')
+    const metrics = jest.spyOn(Keyboard, 'metrics').mockReturnValue({ screenX: 0, screenY: SCREEN - 336, width: 393, height: 336 })
+    try {
+      await render(signOut({ detents: ['tall'] }))
+      await lay()
+      await act(async () => jest.advanceTimersByTime(20))
+      const p = place()
+      expect(p.marginBottom).toBe(336)
+      expect(SCREEN - p.marginBottom - p.height).toBeGreaterThanOrEqual(floor - 0.5)
+    } finally {
+      metrics.mockRestore()
+    }
+  })
+
+  it('Android: the lift begins with the controller’s will-show, not after the keyboard has finished', async () => {
+    on('android')
+    const kc = require('react-native-keyboard-controller')
+    const kcHandlers: Record<string, (e: { height: number; duration: number }) => void> = {}
+    const kcSpy = jest.spyOn(kc.KeyboardEvents, 'addListener').mockImplementation(((event: string, fn: (e: { height: number; duration: number }) => void) => {
+      kcHandlers[event] = fn
+      return { remove: () => {} }
+    }) as never)
+    try {
+      await render(signOut({ detents: ['tall'] }))
+      await lay()
+      // The start of the rise: React Native has said nothing yet.
+      await act(async () => kcHandlers.keyboardWillShow({ height: 300, duration: 250 }))
+      const frames = await tops(100)
+      expect(frames.some((f) => f.lift > 0)).toBe(true)
+      for (const f of frames) expect(f.top).toBeGreaterThanOrEqual(floor - 0.5)
+      // The end of it: the exact top edge replaces the estimate (a 915-less 852 screen here: 34 pt bar).
+      await act(async () => handlers.keyboardDidShow({ endCoordinates: { height: 300, screenY: SCREEN - 334 } }))
+      await act(async () => jest.advanceTimersByTime(600))
+      expect(place().marginBottom).toBe(334)
+    } finally {
+      kcSpy.mockRestore()
+      on('ios')
+    }
   })
 })

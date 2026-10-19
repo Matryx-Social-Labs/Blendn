@@ -13,6 +13,7 @@ import {
   View,
 } from 'react-native'
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler'
+import { KeyboardController, KeyboardEvents } from 'react-native-keyboard-controller'
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { scheduleOnRN } from 'react-native-worklets'
@@ -90,19 +91,31 @@ export function sheetMaxHeight(visibleHeight: number, insetTop: number, keyboard
 }
 
 /**
- * Where the sheet stands, from the one keyboard frame.
+ * A detent sheet's height at one instant, from how far its foot is lifted at that instant.
+ *
+ * Per frame, not once at the end: the sheet's top is `visibleHeight − lift − height`, and it may
+ * never be above `insetTop + SHEET_TOP_GAP`. A height clamped to the final room while the lift is
+ * still rising (or clamped late while it falls) puts the top off the screen for the frames in
+ * between — the sheet jumped up and snapped back on every show and hide. Here the height is
+ * `min(detent, room − lift)` for whatever `lift` the animation has reached, so the top holds still
+ * at the clamp for the whole show and the whole hide. With no lift nothing is clamped, so a drag
+ * may still rubber-band past the top detent.
+ */
+export function sheetHeightAt(lift: number, visibleHeight: number, insetTop: number, detentHeight: number) {
+  'worklet'
+  if (lift <= 0) return detentHeight
+  return Math.max(0, Math.min(detentHeight, visibleHeight - insetTop - SHEET_TOP_GAP - lift))
+}
+
+/**
+ * Where the sheet comes to rest over a keyboard, from the one keyboard frame.
  *
  * - `lift`: how far its foot is raised, so it stands on the keyboard's top edge.
- * - `maxHeight`: the room above that edge (`sheetMaxHeight`).
- * - `height`: a detent sheet's height, clamped to that room only while a
- *   keyboard is up (`null` for a tray, which is as tall as its content).
+ * - `maxHeight`: the room above that edge (`sheetMaxHeight`), a tray's cap.
+ * - `height`: a detent sheet's height at that lift (`sheetHeightAt`); `null` for a tray, which is
+ *   as tall as its content.
  *
- * The lift and the clamp come from the same `keyboardTop`, so they cannot
- * disagree: a lift without the clamp is the defect this replaced — a 92% sheet
- * lifted by a 336 pt keyboard had its top 268 pt above the screen
- * (`KeyboardAvoidingView` padded the foot and nothing shortened the sheet).
- * With no keyboard nothing is clamped, so a drag may still rubber-band past
- * the top detent.
+ * What it does on the way there is the animation's (`sheetHeightAt` at each frame's lift).
  */
 export function sheetFrame({
   visibleHeight,
@@ -117,7 +130,7 @@ export function sheetFrame({
 }) {
   const maxHeight = sheetMaxHeight(visibleHeight, insetTop, keyboardTop)
   const lift = keyboardTop === null ? 0 : Math.max(0, visibleHeight - keyboardTop)
-  const height = detentHeight === null ? null : keyboardTop === null ? detentHeight : Math.min(detentHeight, maxHeight)
+  const height = detentHeight === null ? null : sheetHeightAt(lift, visibleHeight, insetTop, detentHeight)
   return { lift, maxHeight, height }
 }
 
@@ -134,22 +147,57 @@ export function fieldScroll(y: number, h: number, viewport: number, content: num
   return toEnd >= toField && y >= toEnd ? toEnd : toField
 }
 
-/** The keyboard while one is up (its height and its top edge on screen), null otherwise: iOS on `will` (in step with the avoiding view), Android on `did`. */
-function useKeyboard() {
-  const [frame, setFrame] = useState<{ height: number; top: number } | null>(null)
+type KeyboardFrame = { height: number; top: number; duration?: number }
+
+/**
+ * The keyboard while one is up (its height and its top edge on screen), null otherwise.
+ *
+ * - React Native's events carry the exact top edge (`screenY`): iOS on `will` (the start of the
+ *   rise, with its `duration`), Android on `did` (the end of it).
+ * - Android's `did` comes after the keyboard has finished, so the sheet's foot would sit under it for
+ *   the whole animation. react-native-keyboard-controller's `keyboardWillShow` comes at the start with
+ *   the height, so the lift can begin then: an estimate (the height plus the navigation bar the modal
+ *   draws under, `navInset`), replaced by the exact frame when React Native's event lands. If the
+ *   controller's events do not reach this modal, nothing is lost: the exact one still drives it.
+ * - A sheet opened while the keyboard is already up gets no event at all, so it reads the keyboard
+ *   as it stands (`Keyboard.metrics()` on iOS, the controller's state elsewhere).
+ */
+function useKeyboard(visibleHeight: number, navInset: number): KeyboardFrame | null {
+  const [exact, setExact] = useState<KeyboardFrame | null>(() => {
+    const m = Keyboard.metrics?.()
+    return m && m.height > 0 ? { height: m.height, top: m.screenY } : null
+  })
+  const [early, setEarly] = useState<{ height: number; duration?: number } | null>(() => {
+    if (Platform.OS === 'ios' || !KeyboardController.isVisible()) return null
+    const height = KeyboardController.state().height
+    return height > 0 ? { height } : null
+  })
   useEffect(() => {
     const ios = Platform.OS === 'ios'
-    const show = Keyboard.addListener(ios ? 'keyboardWillShow' : 'keyboardDidShow', (e) => {
-      const end = e?.endCoordinates
-      setFrame(end && end.height > 0 ? { height: end.height, top: end.screenY } : null)
-    })
-    const hide = Keyboard.addListener(ios ? 'keyboardWillHide' : 'keyboardDidHide', () => setFrame(null))
-    return () => {
-      show.remove()
-      hide.remove()
+    const clear = () => {
+      setExact(null)
+      setEarly(null)
     }
+    const subs = [
+      Keyboard.addListener(ios ? 'keyboardWillShow' : 'keyboardDidShow', (e) => {
+        const end = e?.endCoordinates
+        if (!end || !(end.height > 0)) return clear()
+        setExact({ height: end.height, top: end.screenY, duration: ios ? e?.duration : undefined })
+        setEarly(null)
+      }),
+      Keyboard.addListener(ios ? 'keyboardWillHide' : 'keyboardDidHide', clear),
+      // Android only: the start of the rise, with the height, which React Native does not say until the end.
+      ...(ios
+        ? []
+        : [
+            KeyboardEvents.addListener('keyboardWillShow', (e) => e.height > 0 && setEarly({ height: e.height, duration: e.duration })),
+            KeyboardEvents.addListener('keyboardWillHide', clear),
+          ]),
+    ]
+    return () => subs.forEach((sub) => sub.remove())
   }, [])
-  return frame
+  if (exact) return exact
+  return early ? { height: early.height, top: visibleHeight - early.height - navInset, duration: early.duration || undefined } : null
 }
 
 export type SheetAction = {
@@ -187,9 +235,6 @@ export type SheetProps = {
   testID?: string
 }
 
-/** No keyboard, no clamp: a number no detent reaches. */
-const NO_CAP = 100000
-
 /**
  * The sheet's motion (#5): mounted while open or leaving, the rise and the
  * scrim, and the drag between detents (`heights`, or the sheet's own height
@@ -203,15 +248,20 @@ function useSheetMotion({
   requestClose,
   onGone,
   lift: liftTo,
-  cap: capTo,
+  liftMs,
+  visibleHeight,
+  insetTop,
 }: {
   visible: boolean
   /** Lowest first. */
   heights: number[]
   /** How far the foot is raised onto the keyboard (`sheetFrame`); eased in step with it. */
   lift: number
-  /** A detent sheet's tallest height while a keyboard is up; `null` without one (`sheetFrame`). */
-  cap: number | null
+  /** How long the keyboard takes (its own, when it says); `base` otherwise. */
+  liftMs?: number
+  /** The modal root's height and the top inset: what a detent sheet's height is derived from, per frame. */
+  visibleHeight: number
+  insetTop: number
   /** The index it opens at. */
   opening: number
   busy: boolean
@@ -231,22 +281,22 @@ function useSheetMotion({
   const at = useSharedValue(opening)
   const natural = useSharedValue(0)
   const lift = useSharedValue(0)
-  const cap = useSharedValue(NO_CAP)
+  const room = useSharedValue({ visibleHeight, insetTop })
   const first = useRef(true)
 
-  // The keyboard coming or going: the foot and the height move together, on `base` (jumps under Reduce Motion).
   useEffect(() => {
-    const to = capTo ?? NO_CAP
+    room.set({ visibleHeight, insetTop })
+  }, [visibleHeight, insetTop, room])
+
+  // The keyboard coming or going: the foot rises with it; a detent sheet's height follows the foot (below).
+  useEffect(() => {
     if (first.current || reduceMotion) {
       first.current = false
       lift.set(liftTo)
-      cap.set(to)
       return
     }
-    const ease = { duration: motionTokens(false).duration.base, easing: Easing.bezier(...EASING.standard) }
-    lift.set(withTiming(liftTo, ease))
-    cap.set(withTiming(to, ease))
-  }, [liftTo, capTo, reduceMotion, lift, cap])
+    lift.set(withTiming(liftTo, { duration: liftMs ?? motionTokens(false).duration.base, easing: Easing.bezier(...EASING.standard) }))
+  }, [liftTo, liftMs, reduceMotion, lift])
 
   useEffect(() => {
     const fade = motionTokens(reduceMotion).duration.base
@@ -296,11 +346,11 @@ function useSheetMotion({
       offset.set(withSpring(0, { ...SPRING.fling, velocity: e.velocityY }))
     })
 
-  // `marginBottom` is the one thing that lifts the sheet over the keyboard; the height is clamped to what is left above it.
+  // `marginBottom` is the one thing that lifts the sheet over the keyboard; a detent sheet's height is what is left above it, at this frame's lift.
   const placeStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: offset.get() }],
     marginBottom: lift.get(),
-    ...(levels ? { height: Math.min(height.get(), cap.get()) } : null),
+    ...(levels ? { height: sheetHeightAt(lift.get(), room.get().visibleHeight, room.get().insetTop, height.get()) } : null),
   }))
   const scrimStyle = useAnimatedStyle(() => ({ opacity: scrim.get() }))
   return { mounted, drag, placeStyle, scrimStyle, natural, fixedHeight: !!levels }
@@ -334,11 +384,12 @@ export function Sheet({ visible, onClose, title, body, icon, actions = [], deten
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const titleRef = useRef<ComponentRef<typeof Text>>(null)
-  const keyboard = useKeyboard()
-  const keyboardUp = keyboard !== null
-  const keyboardHeight = keyboard?.height ?? 0
   /** The modal root's height: the real visible area (the whole screen on Android, translucent bars). */
   const [rootHeight, setRootHeight] = useState<number | null>(null)
+  const visibleHeight = rootHeight ?? window.height
+  const keyboard = useKeyboard(visibleHeight, android ? insets.bottom : 0)
+  const keyboardUp = keyboard !== null
+  const keyboardHeight = keyboard?.height ?? 0
   /*
    * With the keyboard up a capped sheet scrolls its content: bring the field
    * being typed in into view (the Board composer's text box sits under the
@@ -371,7 +422,7 @@ export function Sheet({ visible, onClose, title, body, icon, actions = [], deten
   const stops = [...new Set(detents)].sort((a, b) => DETENT[a] - DETENT[b])
   const heights = stops.map((d) => Math.round(window.height * DETENT[d]))
   const frame = sheetFrame({
-    visibleHeight: rootHeight ?? window.height,
+    visibleHeight,
     insetTop: insets.top,
     keyboardTop: keyboard?.top ?? null,
     detentHeight: heights.length ? heights[heights.length - 1] : null,
@@ -389,7 +440,9 @@ export function Sheet({ visible, onClose, title, body, icon, actions = [], deten
     busy,
     requestClose,
     lift: frame.lift,
-    cap: keyboard ? frame.maxHeight : null,
+    liftMs: keyboard?.duration,
+    visibleHeight,
+    insetTop: insets.top,
     onGone: () => {
       if (!ios) dismissed.current?.()
     },
@@ -452,7 +505,7 @@ export function Sheet({ visible, onClose, title, body, icon, actions = [], deten
               style={[
                 styles.sheet,
                 fixedHeight && styles.fill,
-                { paddingBottom: sheetBottomPadding(insets.bottom, keyboardUp), maxHeight: frame.maxHeight },
+                { paddingBottom: sheetBottomPadding(insets.bottom, keyboardUp), ...(fixedHeight ? null : { maxHeight: frame.maxHeight }) },
                 contrast && IC_HAIRLINE,
               ]}
             >

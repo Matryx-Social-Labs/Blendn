@@ -44,6 +44,7 @@ import { markCoachUsed } from '../lib/coachMarks'
 import type { Blend, BlendSide } from '../lib/crews'
 import { crewsApi } from '../lib/crewsApi'
 import { markRoomLeft } from '../lib/roomMembership'
+import { noteServerDate } from '../lib/serverClock'
 import { showSheet, type ActionSheet } from '../lib/sheet'
 
 /** The room screen, reduced to what it takes from the hook. */
@@ -241,6 +242,33 @@ describe('revealing', () => {
     await open()
     expect(screen.queryByLabelText('Reveal my crew')).toBeNull()
     expect(screen.getByLabelText('Two, Revealed')).toBeTruthy()
+  })
+})
+
+describe('the Blend closes on the server’s clock, not the phone’s', () => {
+  afterEach(() => noteServerDate(new Date().toUTCString()))
+
+  it('a phone that runs slow does not keep a closed Blend open', async () => {
+    // By the phone it closes in 30 minutes; the server is an hour ahead, so it has closed.
+    serve(blend({ closesAt: new Date(Date.now() + 30 * 60_000).toISOString() }))
+    noteServerDate(new Date(Date.now() + 60 * 60_000).toUTCString())
+    await render(<Room />)
+    await waitFor(() => expect(crews.blends).toHaveBeenCalled())
+    expect(screen.queryByTestId('blend-mine')).toBeNull()
+  })
+
+  it('a phone that runs fast does not close a Blend early', async () => {
+    // By the phone it closed a minute ago; the server is two minutes behind, so it is still open.
+    serve(blend({ closesAt: new Date(Date.now() - 60_000).toISOString() }))
+    noteServerDate(new Date(Date.now() - 120_000).toUTCString())
+    await render(<Room />)
+    await waitFor(() => screen.getByTestId('blend-mine'))
+  })
+
+  it('reads the shared clock hook, not a clock of its own', () => {
+    const src = require('fs').readFileSync(require('path').join(__dirname, '../components/crews/BlendRoom.tsx'), 'utf8')
+    expect(src).toMatch(/useNow\(/)
+    expect(src).not.toMatch(/setInterval/)
   })
 })
 

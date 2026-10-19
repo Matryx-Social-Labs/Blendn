@@ -198,7 +198,8 @@ function PrivateChatInner() {
   const view = reveal ? revealView(reveal, asked) : null
   const panelKey = revealPanelKey(view)
   const panelOpen = !ended && panelKey !== null && foldedPanel !== panelKey
-  // A touch on the thread folds the panel away (a tap, or the start of a scroll); the header's reveal line brings it back.
+  // The thread folds the panel away when a touch or a drag ENDS, never while the finger is down: folding on touch-start moves the
+  // feed under the finger and Android cancels the press, so the first tap on a message was eaten. The header's reveal line brings it back.
   const foldPanel = () => {
     if (panelOpen) setFoldedPanel(panelKey)
   }
@@ -679,7 +680,8 @@ function PrivateChatInner() {
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode={KEYBOARD_DISMISS}
-              onTouchStart={foldPanel}
+              onTouchEnd={foldPanel}
+              onScrollEndDrag={foldPanel}
               maxToRenderPerBatch={12}
               windowSize={10}
               initialNumToRender={25}

@@ -23,7 +23,9 @@ import { closesLine } from '../../lib/crews'
 import { markRoomLeft } from '../../lib/roomMembership'
 import { showSheet, type Sheet, type SheetOutcome } from '../../lib/sheet'
 import { useAuth } from '../../lib/useAuth'
+import { serverOffset } from '../../lib/serverClock'
 import { useBlends } from '../../lib/useBlends'
+import { useNow } from '../../lib/useNow'
 import { Button } from '../ds/Button'
 import { Creature, creatureFor } from '../ds/Creature'
 import { CrewEmblem, EMBLEM_SQUIRCLE } from '../ds/CrewEmblem'
@@ -123,15 +125,10 @@ export function useBlendRoom(blendId: string | null, top: number): BlendRoomChro
   const [revealing, setRevealing] = useState(false)
   const [height, setHeight] = useState(0)
   const [venue, setVenue] = useState<string | null>(null)
-  const [now, setNow] = useState(() => Date.now())
+  // The server's clock, not the phone's: a Blend closes when the server says, and a fast or slow phone must not close it early or late.
+  const now = useNow(CLOCK_MS) + serverOffset()
   /** One write at a time: a second tap while the first is in flight sends nothing. */
   const inFlight = useRef(false)
-
-  useEffect(() => {
-    if (!blendId) return
-    const timer = setInterval(() => setNow(Date.now()), CLOCK_MS)
-    return () => clearInterval(timer)
-  }, [blendId])
 
   const listed = blendId ? (blends.find((b) => b.blendId === blendId) ?? null) : null
   const blend = listed && Date.parse(listed.closesAt) > now ? listed : null
