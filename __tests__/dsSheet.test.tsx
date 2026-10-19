@@ -567,7 +567,7 @@ describe('the place view frame by frame (render)', () => {
     }
   })
 
-  it('Android: the lift begins with the controller’s will-show, not after the keyboard has finished', async () => {
+  it('Android: the lift begins with the controller’s will-show, not after the keyboard has finished, and counts the navigation bar once', async () => {
     on('android')
     const kc = require('react-native-keyboard-controller')
     const kcHandlers: Record<string, (e: { height: number; duration: number }) => void> = {}
@@ -579,11 +579,15 @@ describe('the place view frame by frame (render)', () => {
       await render(signOut({ detents: ['tall'] }))
       await lay()
       // The start of the rise: React Native has said nothing yet.
-      await act(async () => kcHandlers.keyboardWillShow({ height: 300, duration: 250 }))
+      // Edge-to-edge: the controller's height already includes the 34 pt navigation bar (300 + 34).
+      await act(async () => kcHandlers.keyboardWillShow({ height: 334, duration: 250 }))
       const frames = await tops(100)
       expect(frames.some((f) => f.lift > 0)).toBe(true)
       for (const f of frames) expect(f.top).toBeGreaterThanOrEqual(floor - 0.5)
-      // The end of it: the exact top edge replaces the estimate (a 915-less 852 screen here: 34 pt bar).
+      // The estimate settles ON the keyboard's top, with no bar added to it again: 334, not 334 + 34.
+      await act(async () => jest.advanceTimersByTime(600))
+      expect(place().marginBottom).toBe(334)
+      // And React Native's exact event, when it comes, agrees: nothing moves.
       await act(async () => handlers.keyboardDidShow({ endCoordinates: { height: 300, screenY: SCREEN - 334 } }))
       await act(async () => jest.advanceTimersByTime(600))
       expect(place().marginBottom).toBe(334)

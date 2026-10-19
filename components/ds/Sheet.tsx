@@ -156,13 +156,15 @@ type KeyboardFrame = { height: number; top: number; duration?: number }
  *   rise, with its `duration`), Android on `did` (the end of it).
  * - Android's `did` comes after the keyboard has finished, so the sheet's foot would sit under it for
  *   the whole animation. react-native-keyboard-controller's `keyboardWillShow` comes at the start with
- *   the height, so the lift can begin then: an estimate (the height plus the navigation bar the modal
- *   draws under, `navInset`), replaced by the exact frame when React Native's event lands. If the
- *   controller's events do not reach this modal, nothing is lost: the exact one still drives it.
+ *   the height, so the lift can begin then. With edge-to-edge that height already includes the
+ *   navigation bar the modal draws under (KeyboardAnimationCallback.kt), so it is the lift as it
+ *   stands, not a figure to add the bar to. The exact frame replaces it when React Native's event
+ *   lands. If the controller's events do not reach this modal, nothing is lost: the exact one still
+ *   drives it.
  * - A sheet opened while the keyboard is already up gets no event at all, so it reads the keyboard
  *   as it stands (`Keyboard.metrics()` on iOS, the controller's state elsewhere).
  */
-function useKeyboard(visibleHeight: number, navInset: number): KeyboardFrame | null {
+function useKeyboard(visibleHeight: number): KeyboardFrame | null {
   const [exact, setExact] = useState<KeyboardFrame | null>(() => {
     const m = Keyboard.metrics?.()
     return m && m.height > 0 ? { height: m.height, top: m.screenY } : null
@@ -197,7 +199,7 @@ function useKeyboard(visibleHeight: number, navInset: number): KeyboardFrame | n
     return () => subs.forEach((sub) => sub.remove())
   }, [])
   if (exact) return exact
-  return early ? { height: early.height, top: visibleHeight - early.height - navInset, duration: early.duration || undefined } : null
+  return early ? { height: early.height, top: visibleHeight - early.height, duration: early.duration || undefined } : null
 }
 
 export type SheetAction = {
@@ -387,7 +389,7 @@ export function Sheet({ visible, onClose, title, body, icon, actions = [], deten
   /** The modal root's height: the real visible area (the whole screen on Android, translucent bars). */
   const [rootHeight, setRootHeight] = useState<number | null>(null)
   const visibleHeight = rootHeight ?? window.height
-  const keyboard = useKeyboard(visibleHeight, android ? insets.bottom : 0)
+  const keyboard = useKeyboard(visibleHeight)
   const keyboardUp = keyboard !== null
   const keyboardHeight = keyboard?.height ?? 0
   /*
