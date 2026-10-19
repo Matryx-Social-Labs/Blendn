@@ -122,6 +122,41 @@ describe('the edit sheet', () => {
   })
 })
 
+describe('the counter and the limit are one unit (UTF-16, trimmed)', () => {
+  const props = { visible: true, title: '', onChangeTitle: jest.fn(), shortDescription: '', onChangeShortDescription: jest.fn(), description: '', onChangeDescription: jest.fn(), saving: false, onSave: jest.fn(), onClose: jest.fn() }
+
+  it('an emoji title reads 122/120 and refuses, never “118/120” beside “Over the limit”', async () => {
+    // 61 emoji: 61 code points, 122 UTF-16 units — what the server's max(120) counts.
+    await render(<EditEventSheet {...props} title={'😀'.repeat(61)} />)
+    expect(screen.getByText('Over the 120-character limit.')).toBeTruthy()
+    expect(screen.getByText('122/120', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.queryByText('61/120', { includeHiddenElements: true })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Save' }).props.accessibilityState.disabled).toBe(true)
+  })
+
+  it('60 emoji is exactly 120: counted 120/120, allowed', async () => {
+    await render(<EditEventSheet {...props} title={'😀'.repeat(60)} />)
+    expect(screen.getByText('120/120', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.queryByText('Over the 120-character limit.')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Save' }).props.accessibilityState.disabled).toBe(false)
+  })
+
+  it('short description and announcement count the same way, and a trailing space is not sent so not counted', async () => {
+    await render(<EditEventSheet {...props} title="T" shortDescription={`${'😀'.repeat(100)}  `} />)
+    expect(screen.getByText('200/200', { includeHiddenElements: true })).toBeTruthy()
+    await render(<AnnouncementSheet visible text={'😀'.repeat(501)} onChangeText={jest.fn()} sending={false} onSend={jest.fn()} onClose={jest.fn()} />)
+    expect(screen.getByText('1002/1000', { includeHiddenElements: true })).toBeTruthy()
+  })
+})
+
+describe('TextField’s measure (additive)', () => {
+  it('defaults to code points, as before', async () => {
+    const { TextField } = require('../components/ds/TextField')
+    await render(<TextField value={'😀'.repeat(3)} onChangeText={jest.fn()} limit={10} />)
+    expect(screen.getByText('3/10', { includeHiddenElements: true })).toBeTruthy()
+  })
+})
+
 describe('the limits the old maxLength enforced', () => {
   const saveDisabled = () => screen.getByRole('button', { name: 'Save' }).props.accessibilityState.disabled
   const sendDisabled = () => screen.getByRole('button', { name: 'Send' }).props.accessibilityState.disabled

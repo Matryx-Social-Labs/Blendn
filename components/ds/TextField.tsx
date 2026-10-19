@@ -135,6 +135,7 @@ export function TextField({
   hint,
   disabled = false,
   limit,
+  measure = count,
   secure = false,
   defaultRevealed = false,
   previewState,
@@ -144,6 +145,8 @@ export function TextField({
   onBlur,
   ...rest
 }: FieldProps & {
+  /** How the limit counts, when the server's rule is not characters: `(v) => v.length` for a zod `max()` (UTF-16 units). */
+  measure?: (value: string) => number
   /** A password: dots, and the eye. */
   secure?: boolean
   /** Start with the password shown (the eye "on"). */
@@ -183,7 +186,7 @@ export function TextField({
           cursorColor={COLOR.textPrimary}
           maxFontSizeMultiplier={CONTROL_FONT_CAP}
           accessibilityLabel={label ?? rest.placeholder}
-          accessibilityHint={spokenHint(error, value, limit, hint)}
+          accessibilityHint={spokenHint(error, value, limit, hint, measure)}
           accessibilityState={{ disabled }}
           style={[dots ? font('body', bold, FONT_FAMILY.mono[500]) : font('body', bold), styles.input, styles.line, dots && styles.dots]}
         />
@@ -194,7 +197,7 @@ export function TextField({
             style={[monoCaption(bold), { color: error ? COLOR.destructive : COLOR.textTertiary }]}
             maxFontSizeMultiplier={CONTROL_FONT_CAP}
           >
-            {`${count(value)}/${limit}`}
+            {`${measure(value)}/${limit}`}
           </Text>
         ) : null}
         {secure ? (

@@ -11,7 +11,8 @@ export const EDIT_LIMITS = { title: 120, shortDescription: 200, description: 200
 
 /** Over its limit, as the server's zod `max()` counts it: UTF-16 units of what is sent, trimmed (an emoji is two). */
 export const isOver = (value: string, limit: number) => value.trim().length > limit
-const utf16 = (value: string) => value.length
+/** The counter's unit is the limit's: what is sent (trimmed), in UTF-16 units. */
+const sent = (value: string) => value.trim().length
 const overLine = (limit: number) => `Over the ${limit}-character limit.`
 
 /**
@@ -54,7 +55,7 @@ export function AnnouncementSheet({
       ]}
       testID="announcement-sheet"
     >
-      <TextArea value={text} onChangeText={onChangeText} placeholder="Enter your announcement…" limit={ANNOUNCEMENT_LIMIT} measure={utf16} error={over ? overLine(ANNOUNCEMENT_LIMIT) : undefined} minHeight={AREA_MIN_HEIGHT} autoFocus testID="announcement-input" />
+      <TextArea value={text} onChangeText={onChangeText} placeholder="Enter your announcement…" limit={ANNOUNCEMENT_LIMIT} measure={sent} error={over ? overLine(ANNOUNCEMENT_LIMIT) : undefined} minHeight={AREA_MIN_HEIGHT} autoFocus testID="announcement-input" />
     </Sheet>
   )
 }
@@ -102,9 +103,9 @@ export function EditEventSheet({
       ]}
       testID="edit-sheet"
     >
-      <TextField label="Title" value={title} onChangeText={onChangeTitle} placeholder="Title" limit={EDIT_LIMITS.title} error={overTitle ? overLine(EDIT_LIMITS.title) : undefined} testID="edit-title" />
-      <TextField label="Short description" value={shortDescription} onChangeText={onChangeShortDescription} placeholder="Short description" limit={EDIT_LIMITS.shortDescription} error={overShort ? overLine(EDIT_LIMITS.shortDescription) : undefined} testID="edit-short" />
-      <TextArea label="Description" value={description} onChangeText={onChangeDescription} placeholder="Description" limit={EDIT_LIMITS.description} measure={utf16} error={overDescription ? overLine(EDIT_LIMITS.description) : undefined} minHeight={AREA_MIN_HEIGHT} testID="edit-description" />
+      <TextField label="Title" value={title} onChangeText={onChangeTitle} placeholder="Title" measure={sent} limit={EDIT_LIMITS.title} error={overTitle ? overLine(EDIT_LIMITS.title) : undefined} testID="edit-title" />
+      <TextField label="Short description" value={shortDescription} onChangeText={onChangeShortDescription} placeholder="Short description" measure={sent} limit={EDIT_LIMITS.shortDescription} error={overShort ? overLine(EDIT_LIMITS.shortDescription) : undefined} testID="edit-short" />
+      <TextArea label="Description" value={description} onChangeText={onChangeDescription} placeholder="Description" limit={EDIT_LIMITS.description} measure={sent} error={overDescription ? overLine(EDIT_LIMITS.description) : undefined} minHeight={AREA_MIN_HEIGHT} testID="edit-description" />
     </Sheet>
   )
 }
