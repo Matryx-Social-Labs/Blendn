@@ -9,7 +9,7 @@
  * shows the server's own sentence.
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
-import { StyleSheet } from 'react-native'
+import { ScrollView, StyleSheet } from 'react-native'
 
 jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: jest.fn(), replace: jest.fn() } }))
 jest.mock('react-native-safe-area-context', () => {
@@ -136,7 +136,7 @@ describe('"Show my badges" (M3) and the Tier B refusal (H1)', () => {
       fireEvent.press(screen.getByText('Tulu'))
     })
     await save()
-    expect(mockToast).toHaveBeenCalledWith('Not saved: your languages. You’ve hit today’s limit of three changes.', 'error', { haptic: 'error' })
+    expect(mockToast).toHaveBeenCalledWith('Couldn’t save. Try again.', 'error', { haptic: 'error' })
   })
 })
 
@@ -375,7 +375,7 @@ describe('the states', () => {
     await open()
     await tap('Goa')
     await save()
-    expect(mockToast).toHaveBeenCalledWith('Not saved: your home state. Try again.', 'error', { haptic: 'error' })
+    expect(mockToast).toHaveBeenCalledWith('Couldn’t save. Try again.', 'error', { haptic: 'error' })
     expect(router.back).not.toHaveBeenCalled()
     expect(screen.getByLabelText('Goa').props.accessibilityState).toMatchObject({ selected: true })
   })
@@ -422,7 +422,7 @@ describe('the Tier B limit (three a day) costs only what it covers', () => {
       ['me', { languages: ['tulu'], sun_sign: 'leo', sign_system: 'western' }],
     ])
     // Said exactly: what saved, what did not, and the server's own sentence.
-    expect(mockToast).toHaveBeenCalledWith('Saved your badge choices. Not saved: your languages and sign. You’ve hit today’s limit of three changes.', 'error', { haptic: 'error' })
+    expect(mockToast).toHaveBeenCalledWith('Saved, except your languages and sign.', 'error', { haptic: 'error' })
     expect(router.back).not.toHaveBeenCalled()
     expect(ProfileCache.clear).toHaveBeenCalled()
   })
@@ -434,7 +434,7 @@ describe('the Tier B limit (three a day) costs only what it covers', () => {
     await tap('Chai')
     await save()
     expect(api.putThisOrThat).toHaveBeenCalledWith({ chai: 'b' })
-    expect(mockToast).toHaveBeenCalledWith('Saved your this-or-that answers. Not saved: your home state. You’ve hit today’s limit of three changes.', 'error', { haptic: 'error' })
+    expect(mockToast).toHaveBeenCalledWith('Saved, except your home state.', 'error', { haptic: 'error' })
   })
 
   it('the person’s edits stay as chosen, and a second Save sends only what did not land', async () => {
@@ -457,7 +457,7 @@ describe('the Tier B limit (three a day) costs only what it covers', () => {
     await open()
     await tap('Goa')
     await save()
-    expect(mockToast).toHaveBeenCalledWith('Not saved: your home state. You’ve hit today’s limit of three changes.', 'error', { haptic: 'error' })
+    expect(mockToast).toHaveBeenCalledWith('Couldn’t save. Try again.', 'error', { haptic: 'error' })
   })
 
   it('a failed badge write stops there: nothing after it is sent as if it landed', async () => {
@@ -523,5 +523,55 @@ describe('the sweep: ChipSet, the this-or-that pair and the card ground', () => 
     await open()
     const chip = StyleSheet.flatten(screen.getByTestId('about-you-languages-tulu').props.style)
     expect(chip.backgroundColor).toBe(COLOR.surfaceSunken)
+  })
+})
+
+describe('a partly saved profile (the sweep §4): the sentence goes under the field, the toast says what landed', () => {
+  const LIMIT = 'Not saved: you’ve changed this three times today. Try again tomorrow.'
+  const refuse = (errorCode?: string) => api.updateProfile.mockResolvedValue({ success: false, error: 'x', errorCode })
+
+  it('a 429 on the Tier B write: the owner’s sentence under Home state, assertive, and "Saved, except your home state."', async () => {
+    refuse('RATE_LIMITED')
+    await open()
+    await tap('Goa')
+    await tap('Chai')
+    await save()
+    const sentence = screen.getByText(LIMIT)
+    expect(sentence.props.accessibilityLiveRegion).toBe('assertive')
+    // Under Home state only: Languages was not sent, so it has none.
+    expect(screen.getAllByText(LIMIT)).toHaveLength(1)
+    expect(mockToast).toHaveBeenCalledWith('Saved, except your home state.', 'error', { haptic: 'error' })
+  })
+
+  it('nothing landed: "Couldn’t save. Try again." and a retry line on any other refusal', async () => {
+    refuse('SERVER_ERROR')
+    await open()
+    await tap('Tulu')
+    await save()
+    expect(screen.getByText('Not saved. Try again.')).toBeTruthy()
+    expect(mockToast).toHaveBeenCalledWith('Couldn’t save. Try again.', 'error', { haptic: 'error' })
+  })
+
+  it('changing the refused field clears its sentence; saving again clears the rest', async () => {
+    refuse('RATE_LIMITED')
+    await open()
+    await tap('Tulu')
+    await tap('Goa')
+    await save()
+    expect(screen.getAllByText(LIMIT)).toHaveLength(2)
+    await tap('Kannada')
+    expect(screen.getAllByText(LIMIT)).toHaveLength(1)
+    api.updateProfile.mockResolvedValue({ success: true, data: {} })
+    await save()
+    expect(screen.queryByText(LIMIT)).toBeNull()
+  })
+
+  it('scrolls the first refused field into view', async () => {
+    refuse('RATE_LIMITED')
+    await open()
+    const scrollTo = jest.spyOn(ScrollView.prototype as unknown as { scrollTo: () => void }, 'scrollTo').mockImplementation(() => {})
+    await tap('Goa')
+    await save()
+    expect(scrollTo).toHaveBeenCalledTimes(1)
   })
 })

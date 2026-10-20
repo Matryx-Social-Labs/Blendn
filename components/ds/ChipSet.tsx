@@ -132,6 +132,7 @@ export function ChipSet({
       ) : null}
       <Animated.View
         layout={reduceMotion ? undefined : LinearTransition.springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping)}
+        testID={testID && `${testID}-wrap`}
         style={[styles.wrap, { rowGap: minTarget() - SIZE.tag }]}
       >
         {visible.map((item) => (revealed.includes(item) ? reveal(item) : chip(item)))}

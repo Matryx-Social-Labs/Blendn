@@ -133,3 +133,16 @@ describe('the fold', () => {
     expect(screen.getByTestId('r-e', { includeHiddenElements: true })).toBeTruthy()
   })
 })
+
+describe('touch targets never overlap (audit U-M13)', () => {
+  const rowGap = () => (StyleSheet.flatten(screen.getByTestId('s-wrap', { includeHiddenElements: true }).props.style) as { rowGap?: number }).rowGap
+
+  it('the row gap is the slop a chip is given: 12 on iOS (44 − 32), 16 on Android (48 − 32), so a wrapped row’s targets only touch', async () => {
+    await draw()
+    expect(rowGap()).toBe(44 - 32)
+    await screen.unmount()
+    Object.defineProperty(Platform, 'OS', { value: 'android', configurable: true })
+    await draw()
+    expect(rowGap()).toBe(48 - 32)
+  })
+})

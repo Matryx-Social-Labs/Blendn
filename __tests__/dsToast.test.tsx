@@ -28,6 +28,8 @@ jest.mock('expo-glass-effect', () => {
   }
 })
 
+/** The safe-area mock has no insets. */
+const INSET_BOTTOM = 0
 const reduceMotion = Reanimated.useReducedMotion as jest.Mock
 const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id, { includeHiddenElements: true }).props.style)
 const on = (os: 'ios' | 'android') => Object.defineProperty(Platform, 'OS', { value: os, configurable: true })
@@ -79,11 +81,21 @@ describe('<Toast>', () => {
     expect(flat('t').bottom).toBe(SPACE.tabBarBottomGapAndroid + SIZE.tabBar + TAB_BAR_HINT_RISE + SPACE.md)
   })
 
-  it('Android off the tab roots: above a dock or composer, higher than the bare gutter', async () => {
+  it('Android: no dock sits at the bottom inset + 16; a dock of 100 lifts it to + 116; the tab roots are unchanged', async () => {
     on('android')
-    await render(<Toast kind="error" text="Couldn’t save." onDismiss={jest.fn()} aboveDock testID="t" />)
-    expect(flat('t').bottom).toBe(SIZE.primary + SPACE.lg * 3)
-    expect(flat('t').bottom as number).toBeGreaterThan(SIZE.primary)
+    await render(<Toast kind="error" text="Couldn’t save." onDismiss={jest.fn()} testID="t" />)
+    expect(flat('t').bottom).toBe(INSET_BOTTOM + SPACE.lg)
+    await render(<Toast kind="error" text="Couldn’t save." onDismiss={jest.fn()} dock={100} testID="d" />)
+    expect(flat('d').bottom).toBe(INSET_BOTTOM + 100 + SPACE.lg)
+    await render(<Toast kind="error" text="Couldn’t save." onDismiss={jest.fn()} aboveTabBar dock={100} testID="r" />)
+    expect(flat('r').bottom).toBe(INSET_BOTTOM + SPACE.tabBarBottomGapAndroid + SIZE.tabBar + TAB_BAR_HINT_RISE + SPACE.md)
+  })
+
+  it('reports its laid-out height, so a screen can leave room under it', async () => {
+    const onHeight = jest.fn()
+    await render(<Toast kind="info" text="Saved" onDismiss={jest.fn()} onHeight={onHeight} testID="t" />)
+    await act(async () => fireEvent(screen.getByTestId('t'), 'layout', { nativeEvent: { layout: { width: 300, height: 52, x: 0, y: 0 } } }))
+    expect(onHeight).toHaveBeenCalledWith(52)
   })
 
   it.each([

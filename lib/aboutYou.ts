@@ -176,6 +176,22 @@ export function splitTierB(body: Record<string, unknown>): { tierB: Record<strin
   return { tierB, other }
 }
 
+export type TierBField = 'languages' | 'homeState' | 'sign'
+
+/** The sentence under a field the server refused: the limit is three changes a day, so "tomorrow" is the honest retry. */
+export const TIER_B_LIMIT_LINE = 'Not saved: you’ve changed this three times today. Try again tomorrow.'
+export const TIER_B_RETRY_LINE = 'Not saved. Try again.'
+
+/** Which fields a refused Tier B body carried, each with its own sentence (`RATE_LIMITED` is the limit; anything else, a retry). */
+export function tierBRefusals(body: Record<string, unknown>, errorCode?: string): Partial<Record<TierBField, string>> {
+  const line = errorCode === 'RATE_LIMITED' ? TIER_B_LIMIT_LINE : TIER_B_RETRY_LINE
+  const out: Partial<Record<TierBField, string>> = {}
+  if ('languages' in body) out.languages = line
+  if ('home_state' in body) out.homeState = line
+  if ('sun_sign' in body || 'sign_system' in body) out.sign = line
+  return out
+}
+
 /** "languages, home state and sign": which of the person's Tier B edits a body carries, in their words. */
 export function tierBNames(body: Record<string, unknown>): string {
   const names = [

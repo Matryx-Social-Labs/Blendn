@@ -12,6 +12,7 @@ import { SettingsGroup, SettingsRow } from '../components/ds/SettingsRow'
 import { StateScreen } from '../components/ds/StateScreen'
 import { TopBar } from '../components/ds/TopBar'
 import { useToast } from '../components/Toast'
+import { useToastInset } from '../components/toastDock'
 import {
   aboutYouFrom,
   aboutYouUpdate,
@@ -22,6 +23,8 @@ import {
   signName,
   splitTierB,
   tierBNames,
+  tierBRefusals,
+  type TierBField,
   toggleLanguage,
   type AboutYou,
   type Choice,
@@ -88,6 +91,13 @@ export default function EditAboutYouScreen() {
   const [scrolled, setScrolled] = useState(false)
   // The bar only needs to hear when the scroll crosses the top, not every frame of it.
   const scrolledRef = useRef(false)
+  /** What the server refused, per field, in a sentence under it; cleared when the person changes that field. */
+  const [tierBError, setTierBError] = useState<Partial<Record<TierBField, string>>>({})
+  const clearError = (field: TierBField) => setTierBError((e) => (e[field] ? { ...e, [field]: undefined } : e))
+  const scrollRef = useRef<ScrollView>(null)
+  /** Where each card and field sat when laid out, to scroll the first refused one into view. */
+  const ys = useRef<Record<string, number>>({})
+  const toastInset = useToastInset()
   const reduceMotion = useReducedMotion()
   const bold = useBoldText()
 
@@ -129,14 +139,19 @@ export default function EditAboutYouScreen() {
 
   // Off clears the pick; on picks nothing until they tap a sign (M4).
   const toggleSign = (on: boolean) => {
+    clearError('sign')
     setSignOn(on)
     if (!on) setForm((f) => ({ ...f, sign: null }))
   }
   const chooseSystem = (next: SignSystem) => {
+    clearError('sign')
     setSystem(next)
     setForm((f) => (f.sign ? { ...f, sign: { ...f.sign, system: next } } : f))
   }
-  const pickSign = (slug: string) => setForm((f) => ({ ...f, sign: { slug, system } }))
+  const pickSign = (slug: string) => {
+    clearError('sign')
+    setForm((f) => ({ ...f, sign: { slug, system } }))
+  }
   const hint = suggestedSign ? (options?.signs.find((x) => x.slug === suggestedSign) ?? null) : null
   // A pair's control reports the side (0 or 1), or null when the chosen one is tapped again: the answer is taken back, not stored empty.
   const setAnswer = (q: string, i: number | null) =>
@@ -167,6 +182,7 @@ export default function EditAboutYouScreen() {
     const { tierB, other } = splitTierB(aboutYouUpdate(loaded, form))
     const answerBody = answersUpdate(answersLoaded, answers)
     setSaving(true)
+    setTierBError({})
     const saved: string[] = []
     let anySaved = false
     try {
@@ -192,10 +208,11 @@ export default function EditAboutYouScreen() {
         const r = await apiClient.updateProfile(authUser.id, tierB)
         if (!r.success) {
           if (anySaved) invalidate(authUser.id)
-          const lead = saved.length ? `Saved ${saved.join(' and ')}. ` : ''
-          // The server's own sentence is a full paragraph; the toast says the same in a line (the limit is the server's: three a day).
-          const why = r.errorCode === 'RATE_LIMITED' ? 'You’ve hit today’s limit of three changes.' : 'Try again.'
-          refuse(`${lead}Not saved: your ${tierBNames(tierB)}. ${why}`)
+          // The sentence goes under the field the server refused (the limit is the server's: three a day); the toast only says what landed.
+          const refused = tierBRefusals(tierB, r.errorCode)
+          setTierBError(refused)
+          scrollToFirstRefused(refused)
+          refuse(anySaved ? `Saved, except your ${tierBNames(tierB)}.` : 'Couldn’t save. Try again.')
           return
         }
         setLoaded((l) => ({
@@ -217,6 +234,14 @@ export default function EditAboutYouScreen() {
     } finally {
       setSaving(false)
     }
+  }
+
+  /** The first refused field, in the order they are drawn, scrolled to just under the bar. */
+  const scrollToFirstRefused = (refused: Partial<Record<TierBField, string>>) => {
+    const first = (['languages', 'homeState', 'sign'] as const).find((f) => refused[f])
+    if (!first) return
+    const y = first === 'sign' ? ys.current.signCard : ys.current.card + (ys.current[first] ?? 0)
+    if (y !== undefined) scrollRef.current?.scrollTo({ y: Math.max(0, y - SPACE.lg), animated: !reduceMotion })
   }
 
   const invalidate = (userId: string) => {
@@ -251,8 +276,9 @@ export default function EditAboutYouScreen() {
         </View>
       ) : (
         <ScrollView
+          ref={scrollRef}
           testID="about-you-scroll"
-          contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + SPACE.xxl }]}
+          contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + SPACE.xxl + toastInset }]}
           onScroll={(e) => {
             const past = e.nativeEvent.contentOffset.y > 0
             if (past === scrolledRef.current) return
@@ -266,46 +292,54 @@ export default function EditAboutYouScreen() {
           {options ? (
             <>
               <GroundProvider value="surface">
-                <View style={styles.card}>
-                  <ChipSet
-                    label="Languages you speak"
-                    hint={`Besides English, ${upTo(options.maxLanguages)}.`}
-                    items={options.languages.map((l) => ({
-                      key: l.slug,
-                      label: l.label,
-                    }))}
-                    selection="multi"
-                    selected={form.languages}
-                    max={options.maxLanguages}
-                    // At the cap the rest dim and say why, instead of a tap that does nothing.
-                    capHint={`Up to ${NUMBER_WORDS[options.maxLanguages] ?? options.maxLanguages}`}
-                    onToggle={(slug) =>
-                      setForm((f) => ({
-                        ...f,
-                        languages: toggleLanguage(f.languages, slug, options.maxLanguages),
-                      }))
-                    }
-                    testID="about-you-languages"
-                  />
-                  <ChipSet
-                    label="Home state"
-                    hint="A state, never a town. Tap again to clear."
-                    items={options.homeStates.map((s) => ({
-                      key: s.slug,
-                      label: s.label,
-                    }))}
-                    selection="single"
-                    selected={form.homeState ? [form.homeState] : []}
-                    foldAfter={HOME_STATES_SHOWN}
-                    foldNoun="home states"
-                    onToggle={(slug) =>
-                      setForm((f) => ({
-                        ...f,
-                        homeState: f.homeState === slug ? null : slug,
-                      }))
-                    }
-                    testID="about-you-home-state"
-                  />
+                <View style={styles.card} onLayout={(e) => (ys.current.card = e.nativeEvent.layout.y)}>
+                  <View onLayout={(e) => (ys.current.languages = e.nativeEvent.layout.y)}>
+                    <ChipSet
+                      label="Languages you speak"
+                      hint={`Besides English, ${upTo(options.maxLanguages)}.`}
+                      items={options.languages.map((l) => ({
+                        key: l.slug,
+                        label: l.label,
+                      }))}
+                      selection="multi"
+                      selected={form.languages}
+                      max={options.maxLanguages}
+                      // At the cap the rest dim and say why, instead of a tap that does nothing.
+                      capHint={`Up to ${NUMBER_WORDS[options.maxLanguages] ?? options.maxLanguages}`}
+                      onToggle={(slug) => {
+                        clearError('languages')
+                        setForm((f) => ({
+                          ...f,
+                          languages: toggleLanguage(f.languages, slug, options.maxLanguages),
+                        }))
+                      }}
+                      error={tierBError.languages}
+                      testID="about-you-languages"
+                    />
+                  </View>
+                  <View onLayout={(e) => (ys.current.homeState = e.nativeEvent.layout.y)}>
+                    <ChipSet
+                      label="Home state"
+                      hint="A state, never a town. Tap again to clear."
+                      items={options.homeStates.map((s) => ({
+                        key: s.slug,
+                        label: s.label,
+                      }))}
+                      selection="single"
+                      selected={form.homeState ? [form.homeState] : []}
+                      foldAfter={HOME_STATES_SHOWN}
+                      foldNoun="home states"
+                      onToggle={(slug) => {
+                        clearError('homeState')
+                        setForm((f) => ({
+                          ...f,
+                          homeState: f.homeState === slug ? null : slug,
+                        }))
+                      }}
+                      error={tierBError.homeState}
+                      testID="about-you-home-state"
+                    />
+                  </View>
                   {options.thisOrThat.length ? (
                     <View style={styles.field}>
                       <FieldLabel text="This or that" bold={bold} contrast={false} />
@@ -343,6 +377,7 @@ export default function EditAboutYouScreen() {
                     entering={reduceMotion ? FadeIn.duration(REDUCED_FADE_MS) : FadeIn.duration(DURATION.base)}
                     exiting={FadeOut.duration(DURATION.quick)}
                     style={styles.card}
+                    onLayout={(e) => (ys.current.signCard = e.nativeEvent.layout.y)}
                   >
                     <SegmentedControl
                       semantics="radio"
@@ -355,6 +390,7 @@ export default function EditAboutYouScreen() {
                       <BirthdaySign
                         text={`From your birthday: ${signName(hint, 'western')} — tap to use`}
                         onPress={() => {
+                          clearError('sign')
                           setSystem('western')
                           setForm((f) => ({
                             ...f,
@@ -371,6 +407,7 @@ export default function EditAboutYouScreen() {
                       selection="single"
                       selected={sign ? [sign.slug] : []}
                       onToggle={pickSign}
+                      error={tierBError.sign}
                       testID="about-you-signs"
                     />
                   </Animated.View>

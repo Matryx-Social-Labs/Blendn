@@ -3,7 +3,7 @@
  * look are the Toast's. The provider only decides which is on screen, and plays no haptic of its own.
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
-import { Pressable, StyleSheet, Text } from 'react-native'
+import { Platform, Pressable, StyleSheet, Text } from 'react-native'
 
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
@@ -11,7 +11,7 @@ jest.mock('react-native-safe-area-context', () => ({
 let mockPath = '/events'
 jest.mock('expo-router', () => ({ usePathname: () => mockPath }))
 
-import { isTabRoot, ToastProvider, useToast } from '../components/Toast'
+import { isTabRoot, ToastProvider, useToast, useToastDock, useToastInset } from '../components/Toast'
 import { SIZE, SPACE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { toast } from '../lib/toast'
@@ -183,5 +183,89 @@ describe('where it sits', () => {
   it('knows the tab roots, whose floating bar an Android snackbar clears', () => {
     for (const p of ['/', '/events', '/going', '/chat', '/profile']) expect(isTabRoot(p)).toBe(true)
     for (const p of ['/crews', '/chat/abc', '/settings', null, undefined]) expect(isTabRoot(p)).toBe(false)
+  })
+})
+
+describe('docks and the room left under a snackbar (Android)', () => {
+  const bottomOf = () => (StyleSheet.flatten(screen.getByTestId('toast').props.style) as { bottom?: number }).bottom
+
+  function Screen({ dock, onInset }: { dock?: number; onInset?: (n: number) => void }) {
+    const { showToast } = useToast()
+    useToastDock(dock ?? 0)
+    onInset?.(useToastInset())
+    return (
+      <Pressable accessibilityRole="button" onPress={() => showToast('Saved', 'success')}>
+        <Text>save</Text>
+      </Pressable>
+    )
+  }
+  const android = () => Object.defineProperty(Platform, 'OS', { value: 'android', configurable: true })
+  afterEach(() => Object.defineProperty(Platform, 'OS', { value: 'ios', configurable: true }))
+
+  it('a screen with a dock registers its height: the snackbar reads it, and unmounting resets it to 0', async () => {
+    android()
+    mockPath = '/venue/v1'
+    await render(
+      <ToastProvider>
+        <Screen dock={80} />
+      </ToastProvider>
+    )
+    await fireEvent.press(screen.getByRole('button', { name: 'save' }))
+    expect(bottomOf()).toBe(80 + SPACE.lg)
+    await screen.unmount()
+    await render(
+      <ToastProvider>
+        <Screen />
+      </ToastProvider>
+    )
+    await fireEvent.press(screen.getByRole('button', { name: 'save' }))
+    expect(bottomOf()).toBe(SPACE.lg)
+  })
+
+  it('the last registrant wins', async () => {
+    android()
+    mockPath = '/chat/abc'
+    await render(
+      <ToastProvider>
+        <Screen dock={60} />
+        <Screen dock={90} />
+      </ToastProvider>
+    )
+    await fireEvent.press(screen.getAllByRole('button', { name: 'save' })[0])
+    expect(bottomOf()).toBe(90 + SPACE.lg)
+  })
+
+  it('the inset is the toast’s height plus a gutter when it stands on the bare screen, and 0 with a dock or on a tab root', async () => {
+    android()
+    mockPath = '/settings'
+    const seen: number[] = []
+    await render(
+      <ToastProvider>
+        <Screen onInset={(n) => seen.push(n)} />
+      </ToastProvider>
+    )
+    expect(seen.at(-1)).toBe(0)
+    await fireEvent.press(screen.getByRole('button', { name: 'save' }))
+    await act(async () => fireEvent(screen.getByTestId('toast'), 'layout', { nativeEvent: { layout: { width: 300, height: 52, x: 0, y: 0 } } }))
+    expect(seen.at(-1)).toBe(52 + SPACE.lg)
+    mockPath = '/events'
+    await screen.rerender(
+      <ToastProvider>
+        <Screen onInset={(n) => seen.push(n)} />
+      </ToastProvider>
+    )
+    expect(seen.at(-1)).toBe(0)
+  })
+
+  it('iOS has no snackbar to make room for', async () => {
+    mockPath = '/settings'
+    const seen: number[] = []
+    await render(
+      <ToastProvider>
+        <Screen onInset={(n) => seen.push(n)} />
+      </ToastProvider>
+    )
+    await fireEvent.press(screen.getByRole('button', { name: 'save' }))
+    expect(seen.at(-1)).toBe(0)
   })
 })

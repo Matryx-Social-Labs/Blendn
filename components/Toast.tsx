@@ -1,10 +1,13 @@
 import { usePathname } from 'expo-router'
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { Platform, StyleSheet, View } from 'react-native'
 
 import { SIZE, SPACE } from '../lib/design/tokens'
 import { setToastHandler, type ToastVariant } from '../lib/toast'
 import { Toast as DsToast } from './ds/Toast'
+import { ToastContext, type ToastAction, type ToastHaptic } from './toastDock'
+
+export { useToastDock, useToastInset } from './toastDock'
 
 /*
  * One toast, the design system's (components/ds/Toast.tsx, DS #19): dwell, held while touched, a swipe that
@@ -13,24 +16,12 @@ import { Toast as DsToast } from './ds/Toast'
  * on screen: one at a time, the rest queued behind it, so two outcomes are never stacked on each other.
  */
 
-/** The outcome haptic a toast plays as it appears (not when queued). Without it a toast is silent: the caller plays its own. */
-type ToastHaptic = 'success' | 'error'
-
-interface ToastAction {
-  label: string
-  onPress: () => void
-}
-
 interface ToastMessage {
   id: number
   message: string
   variant: ToastVariant
   action?: ToastAction
   haptic?: ToastHaptic
-}
-
-interface ToastContextValue {
-  showToast: (message: string, variant?: ToastVariant, options?: { action?: ToastAction; haptic?: ToastHaptic }) => void
 }
 
 /** The top bar's band: its 44 / 48 circle and the 8 pt under it. */
@@ -44,8 +35,6 @@ const queueWith = (prev: ToastMessage[], next: ToastMessage): ToastMessage[] =>
 /** The routes whose floating tab bar an Android snackbar has to clear. */
 const TAB_ROOTS = ['/', '/events', '/going', '/chat', '/profile']
 export const isTabRoot = (pathname: string | null | undefined): boolean => TAB_ROOTS.includes(pathname ?? '')
-
-const ToastContext = createContext<ToastContextValue>({ showToast: () => {} })
 
 export function useToast() {
   return useContext(ToastContext)
@@ -69,10 +58,24 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => setToastHandler(showToast), [showToast])
 
   const head = queue[0]
-  const next = useCallback(() => setQueue((prev) => prev.slice(1)), [])
+  const [headHeight, setHeadHeight] = useState(0)
+  const next = useCallback(() => {
+    setHeadHeight(0)
+    setQueue((prev) => prev.slice(1))
+  }, [])
+
+  const [docks, setDocks] = useState<{ id: string; height: number }[]>([])
+  const registerDock = useCallback((id: string, height: number) => {
+    setDocks((prev) => [...prev.filter((d) => d.id !== id), { id, height }])
+    return () => setDocks((prev) => prev.filter((d) => d.id !== id))
+  }, [])
+  const dock = docks.length ? docks[docks.length - 1].height : 0
+  const tabRoot = isTabRoot(pathname)
+  const inset = head && Platform.OS === 'android' && dock === 0 && !tabRoot ? headHeight + SPACE.lg : 0
+  const value = useMemo(() => ({ showToast, registerDock, inset }), [showToast, registerDock, inset])
 
   return (
-    <ToastContext.Provider value={{ showToast }}>
+    <ToastContext.Provider value={value}>
       {children}
       {head ? (
         <View
@@ -90,8 +93,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             // Silent unless the caller asked for the outcome haptic, which then plays as it appears, not when it was queued.
             haptic={head.haptic}
             silent={!head.haptic}
-            aboveTabBar={isTabRoot(pathname)}
-            aboveDock={!isTabRoot(pathname)}
+            aboveTabBar={tabRoot}
+            dock={dock}
+            onHeight={setHeadHeight}
             onDismiss={next}
             testID="toast"
           />

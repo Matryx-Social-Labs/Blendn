@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated'
+import { useKeyboardContext } from 'react-native-keyboard-controller'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { scheduleOnRN } from 'react-native-worklets'
 
@@ -30,8 +31,6 @@ const ENTER_DISTANCE = 16
 const EXIT_DRIFT = 8
 const SWIPE_DISTANCE = 24
 const SWIPE_VELOCITY = 800
-/** A dock or composer: a 56 pt control between two gutters, and a gutter over it. */
-const DOCK_CLEARANCE = SIZE.primary + SPACE.lg * 3
 
 export function toastDwell(text: string, { action = false, screenReader = false }: { action?: boolean; screenReader?: boolean }) {
   const words = text.trim().split(/\s+/).length
@@ -91,8 +90,10 @@ export type ToastProps = {
   onDismiss: () => void
   /** Android: sit above the floating tab bar. */
   aboveTabBar?: boolean
-  /** Android, off the tab roots: sit above a bottom dock or composer. */
-  aboveDock?: boolean
+  /** Android, off the tab roots: the height of the bottom dock or composer to sit above (0 when there is none). */
+  dock?: number
+  /** Told the toast's laid-out height, so a screen can leave room under it (`useToastInset`). */
+  onHeight?: (height: number) => void
   /** No outcome haptic: Copy (C20), or when the action already played one. */
   silent?: boolean
   /** Which outcome haptic to play as it appears; the kind's own when omitted. */
@@ -105,6 +106,8 @@ export type ToastProps = {
  * dismiss. `leave` plays the exit once, then calls `onDismiss`.
  */
 function useToastMotion(onDismiss: () => void) {
+  // The keyboard's own frame (read from the context, not `useReanimatedKeyboardAnimation`, which flips Android's input mode).
+  const kb = useKeyboardContext().reanimated
   const android = Platform.OS === 'android'
   const insets = useSafeAreaInsets()
   const reduceMotion = useReducedMotion()
@@ -159,7 +162,11 @@ function useToastMotion(onDismiss: () => void) {
       else offset.set(withSpring(0, SPRING.snap))
     })
 
-  const motion = useAnimatedStyle(() => ({ opacity: opacity.get(), transform: [{ translateY: offset.get() }] }))
+  // On Android the snackbar stands on the keyboard when one is up, frame by frame; the bottom inset is already under it.
+  const motion = useAnimatedStyle(() => ({
+    opacity: opacity.get(),
+    transform: [{ translateY: offset.get() - (android ? Math.max(0, -kb.height.get() - insets.bottom) : 0) }],
+  }))
   return { leave, swipe, motion, height }
 }
 
@@ -179,7 +186,7 @@ function useToastMotion(onDismiss: () => void) {
  * "+ fade" and wins over the general rule that glass never fades. Reduce
  * Motion: no movement, a fade in place on both platforms.
  */
-export function Toast({ kind = 'info', text, action, onDismiss, aboveTabBar = false, aboveDock = false, silent = false, haptic, testID }: ToastProps) {
+export function Toast({ kind = 'info', text, action, onDismiss, aboveTabBar = false, dock = 0, onHeight, silent = false, haptic, testID }: ToastProps) {
   const android = Platform.OS === 'android'
   const insets = useSafeAreaInsets()
   const screenReader = useScreenReader()
@@ -198,7 +205,7 @@ export function Toast({ kind = 'info', text, action, onDismiss, aboveTabBar = fa
 
   const place = android
     ? // Above the bar and above the check-in pill that rises from it (drive 3: the pill covered the snackbar's second line).
-      { bottom: insets.bottom + (aboveTabBar ? SPACE.tabBarBottomGapAndroid + SIZE.tabBar + TAB_BAR_HINT_RISE + SPACE.md : aboveDock ? DOCK_CLEARANCE : SPACE.lg) }
+      { bottom: insets.bottom + (aboveTabBar ? SPACE.tabBarBottomGapAndroid + SIZE.tabBar + TAB_BAR_HINT_RISE + SPACE.md : dock + SPACE.lg) }
     : { top: insets.top + SPACE.sm }
   const look = LOOK[kind]
   const radius = android ? RADIUS.pressedAndroid : RADIUS.sheet
@@ -228,7 +235,10 @@ export function Toast({ kind = 'info', text, action, onDismiss, aboveTabBar = fa
       <Animated.View
         testID={testID}
         accessibilityLiveRegion={kind === 'error' ? 'assertive' : 'polite'}
-        onLayout={(e) => height.set(e.nativeEvent.layout.height)}
+        onLayout={(e) => {
+          height.set(e.nativeEvent.layout.height)
+          onHeight?.(e.nativeEvent.layout.height)
+        }}
         onTouchStart={dwell.pause}
         onTouchEnd={dwell.resume}
         onTouchCancel={dwell.resume}

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -5,6 +6,7 @@ import { Button } from '../ds/Button'
 import { PresenceDot } from '../ds/MonoFamily'
 import { font, IC_HAIRLINE, PRESSED_WASH, useBoldText, useIncreaseContrast } from '../ds/shared'
 import { Material } from '../ui/Material'
+import { useToastDock } from '../toastDock'
 import type { VenueDetail } from '../../lib/apiClient'
 import { COLOR, FONT_FAMILY, MATERIAL, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
@@ -111,10 +113,16 @@ export function VenueDock({
 }) {
   const insets = useSafeAreaInsets()
   const contrast = useIncreaseContrast()
+  // The Android snackbar stands above the dock.
+  const [height, setHeight] = useState(0)
+  useToastDock(height)
   return (
     <Material
       role="bar"
-      onLayout={(e) => onHeight(e.nativeEvent.layout.height)}
+      onLayout={(e) => {
+        onHeight(e.nativeEvent.layout.height)
+        setHeight(e.nativeEvent.layout.height)
+      }}
       testID="venue-dock"
       style={[styles.dock, { paddingBottom: Math.max(insets.bottom, SPACE.lg) }, contrast && IC_HAIRLINE]}
     >

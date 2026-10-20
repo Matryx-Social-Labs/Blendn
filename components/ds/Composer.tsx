@@ -7,6 +7,7 @@ import { Icon, type IconName } from '../ui/Icon'
 import { Material } from '../ui/Material'
 import { COLOR, FONT_FAMILY, ICON, MATERIAL, PRESS, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
+import { useToastDock } from '../toastDock'
 import { Button } from './Button'
 import { ReplyPreview } from './ReplyPreview'
 import { focusRing, font, IC_HAIRLINE, minTarget, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
@@ -120,8 +121,12 @@ export function Composer({
 }: ComposerProps) {
   const contrast = useIncreaseContrast()
   useStateChange(state, reason)
+  const gone = state === 'banned' || state === 'left' || state === 'ended'
+  // The Android snackbar stands above the composer while it is drawn.
+  const [height, setHeight] = useState(0)
+  useToastDock(gone ? 0 : height)
 
-  if (state === 'banned' || state === 'left' || state === 'ended') return null
+  if (gone) return null
   const locked = state !== 'normal' && state !== 'failed'
   const shape: StyleProp<ViewStyle> = [
     styles.bar,
@@ -130,7 +135,7 @@ export function Composer({
   ]
 
   return (
-    <View testID={testID}>
+    <View testID={testID} onLayout={(e) => setHeight(e.nativeEvent.layout.height)}>
       <Material role="bar" style={shape}>
         {locked ? (
           <LockedRow state={state} reason={reason} countdown={countdown} action={action} />
