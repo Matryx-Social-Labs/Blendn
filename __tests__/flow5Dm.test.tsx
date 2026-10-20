@@ -29,10 +29,14 @@ jest.mock('../lib/apiClient', () => ({
     revealInConversation: jest.fn(),
   },
 }))
+const mockLive: { onMessage?: (data: unknown) => void }[] = []
 jest.mock('../lib/socketClient', () => {
   const noop = () => () => {}
   return {
-    subscribeToConversation: noop,
+    subscribeToConversation: (_c: string, handlers: { onMessage?: (data: unknown) => void }) => {
+      mockLive.push(handlers)
+      return () => {}
+    },
     subscribeToDelivered: noop,
     startPrivateTyping: jest.fn(),
     stopPrivateTyping: jest.fn(),
@@ -98,6 +102,7 @@ const open = async () => {
 beforeEach(() => {
   jest.clearAllMocks()
   clearOutbox()
+  mockLive.length = 0
   mockParams = { conversationId: 'c1' }
   mockAuth.user = { id: 'u-a' }
   api.getConversation.mockResolvedValue({ success: true, data: anonymous } as never)
@@ -317,5 +322,41 @@ describe('the receipt catches up with a read the socket never announced', () => 
     expect(screen.queryByText('Sent', { includeHiddenElements: true })).toBeNull()
     expect(screen.getByText('Read', { includeHiddenElements: true })).toBeTruthy()
     spy.mockRestore()
+  })
+})
+
+describe('a message that arrives rises (#13), only for a reader at the end', () => {
+  const deliver = (id: string) => {
+    const message = { id, conversationId: 'c1', senderId: 'u-c', sender: { id: 'u-c', name: null, image: null }, text: `hi ${id}`, isRead: false, createdAt: '2026-10-15T19:05:00.000Z' }
+    mockLive.forEach((h) => h.onMessage?.({ message }))
+  }
+  const scrollTo = (y: number) =>
+    act(async () =>
+      fireEvent.scroll(screen.getByTestId('dm-feed'), {
+        nativeEvent: { contentOffset: { y }, contentSize: { height: 4000, width: 400 }, layoutMeasurement: { height: 800, width: 400 } },
+      })
+    )
+  type Host = { props?: Record<string, unknown>; parent: Host | null }
+  const enteringOf = (text: string) => {
+    let node = screen.getByText(text) as unknown as Host | null
+    while (node && !node.props?.entering) node = node.parent
+    return node?.props?.entering
+  }
+
+  it('at the end: theirs has an entering animation, the history does not', async () => {
+    await open()
+    await scrollTo(3200)
+    await act(async () => deliver('m2'))
+    await flush()
+    expect(enteringOf('hi m2')).toBeDefined()
+    expect(enteringOf('See you at the bar?')).toBeUndefined()
+  })
+
+  it('reading back: it just appears', async () => {
+    await open()
+    await scrollTo(0)
+    await act(async () => deliver('m3'))
+    await flush()
+    expect(enteringOf('hi m3')).toBeUndefined()
   })
 })

@@ -204,6 +204,12 @@ function GroupChatInner() {
 
   const flatListRef = useRef<FlatList<ChatListItem>>(null)
   const isAtBottomRef = useRef(true)
+  /* Messages that rise as they mount: a live arrival while you were at the bottom. Cleared after a second. */
+  const arrivingRef = useRef(new Set<string>())
+  const markArriving = (id: string) => {
+    arrivingRef.current.add(id)
+    setTimeout(() => arrivingRef.current.delete(id), 1000)
+  }
   /*
    * Every message id this screen has held. The chip counts a socket message
    * only the first time its id is seen: a redelivery, or one history already
@@ -338,6 +344,8 @@ function GroupChatInner() {
       subscribeToChatMessage(roomId, (data) => {
         const incoming = roomMessageFromSocket(data.message, currentUser?.id)
         const fresh = !seenIds.current.has(incoming.message_id)
+        // At the bottom, somebody else's message rises as it arrives (#13); read back, the list never moves (the chip counts it).
+        if (fresh && isAtBottomRef.current && data.message.userId !== currentUser?.id) markArriving(incoming.message_id)
         seenIds.current.add(incoming.message_id)
         setMessages((prev) =>
           prev.some((m) => m.message_id === incoming.message_id)
@@ -699,6 +707,7 @@ function GroupChatInner() {
         first={place.first}
         last={place.last}
         landed={landed?.id === item.message_id ? landed.emoji : undefined}
+        arriving={arrivingRef.current.has(item.message_id)}
         senderTappable={eventRoom}
         handlers={handlers}
       />

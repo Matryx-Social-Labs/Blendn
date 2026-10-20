@@ -43,7 +43,7 @@ export type SwipeRowProps = {
  * A Banter row that slides (guidelines/components/SwipeRow.html, ROUND3 D
  * 5.11): dragged left, one or two 72 pt actions show under it. Released past
  * halfway (or flung) it settles open, short of it it springs back, on
- * `M.snap`; `H.detent` as it crosses halfway, either way, and nothing on the
+ * `M.snap` carrying the flick's velocity; `H.threshold` as it crosses halfway, either way, and nothing on the
  * spring back. Open, a tap on it closes it. Never swipe-to-delete.
  *
  * The same actions sit in the row's accessibility actions (and its ⋯ and the
@@ -61,10 +61,20 @@ export function SwipeRow({ actions, onPress, accessibilityLabel, open, onOpenCha
   const start = useSharedValue(0)
   const past = useSharedValue(open ?? false)
 
-  const slide = (to: boolean) => {
+  /** Where it was last sent to rest (-width or 0): the effect below re-asking for that same rest must not restart the spring. */
+  const target = useSharedValue(open ? -width : 0)
+
+  /**
+   * Send it to rest, open or closed. `velocity` is a flick's, handed to the spring (no seam between the finger and the
+   * settle). `force` is a release, which always springs: it may be stretched past the edge, or the owner may have refused.
+   */
+  const slide = (to: boolean, velocity = 0, force = false) => {
     'worklet'
     past.set(to)
-    x.set(reduceMotion ? (to ? -width : 0) : withSpring(to ? -width : 0, SPRING.snap))
+    const rest = to ? -width : 0
+    if (!force && target.get() === rest) return
+    target.set(rest)
+    x.set(reduceMotion ? rest : withSpring(rest, { ...SPRING.snap, velocity }))
   }
   // Each answer the row gives bumps `asked`, so a controlled row whose owner keeps `open` as it was slides back to it.
   const [asked, setAsked] = useState(0)
@@ -89,14 +99,16 @@ export function SwipeRow({ actions, onPress, accessibilityLabel, open, onOpenCha
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shownOpen, width, asked])
 
-  const tick = useCallback(() => H.detent(), [])
+  // A gesture crossing its threshold is H.threshold; H.detent is a sheet catching a detent.
+  const tick = useCallback(() => H.threshold(), [])
   const swipe = Gesture.Pan()
     .activeOffsetX([-SPACE.md, SPACE.md])
     .failOffsetY([-SPACE.sm, SPACE.sm])
     .onStart(() => start.set(x.get()))
     .onUpdate((e) => {
       const raw = start.get() + e.translationX
-      const next = raw > 0 ? 0 : raw < -width ? -width + (raw + width) * RUBBER : raw
+      // Past the closed edge it stretches a little and pulls back (rubber band), never a wall.
+      const next = raw > 0 ? raw * RUBBER * RUBBER : raw < -width ? -width + (raw + width) * RUBBER : raw
       x.set(next)
       const beyond = -next >= width / 2
       if (beyond === past.get()) return
@@ -106,11 +118,11 @@ export function SwipeRow({ actions, onPress, accessibilityLabel, open, onOpenCha
     .onEnd((e, success) => {
       // A cancelled drag (a system interrupt) goes back to where it began and answers nothing.
       if (!success) {
-        slide(start.get() < -width / 2)
+        slide(start.get() < -width / 2, 0, true)
         return
       }
       const opened = e.velocityX < -FLING_VELOCITY ? true : e.velocityX > FLING_VELOCITY ? false : -x.get() >= width / 2
-      slide(opened)
+      slide(opened, e.velocityX, true)
       scheduleOnRN(report, opened)
     })
   if (testID) swipe.withTestId(`${testID}-swipe`)

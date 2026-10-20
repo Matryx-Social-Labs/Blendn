@@ -271,6 +271,43 @@ describe('the newest chip counts a message once', () => {
   })
 })
 
+describe('a message that arrives rises (#13), only for a reader at the end', () => {
+  const deliver = (id: string) => {
+    const message = { id, userId: 'u-c', userName: 'Cosmic Panda', content: `hi ${id}`, type: 'text', createdAt: '2026-10-15T19:05:00.000Z' }
+    mockMessage.forEach((cb) => cb({ message }))
+  }
+  const scrollTo = (y: number) =>
+    act(async () =>
+      fireEvent.scroll(screen.getByTestId('room-feed'), {
+        nativeEvent: { contentOffset: { y }, contentSize: { height: 4000, width: 400 }, layoutMeasurement: { height: 800, width: 400 } },
+      })
+    )
+  type Host = { props?: Record<string, unknown>; parent: Host | null }
+  const enteringOf = (text: string) => {
+    const row = screen.getByText(text)
+    let node = row as unknown as Host | null
+    while (node && !node.props?.entering) node = node.parent
+    return node?.props?.entering
+  }
+
+  it('at the end: the new message has an entering animation, the history does not', async () => {
+    await open()
+    await scrollTo(3200)
+    await act(async () => deliver('m2'))
+    await flush()
+    expect(enteringOf('hi m2')).toBeDefined()
+    expect(enteringOf('Anyone near the stage?')).toBeUndefined()
+  })
+
+  it('reading back: a new message just appears (the list never moves under the reader)', async () => {
+    await open()
+    await scrollTo(0)
+    await act(async () => deliver('m3'))
+    await flush()
+    expect(enteringOf('hi m3')).toBeUndefined()
+  })
+})
+
 describe('the composer rides the keyboard', () => {
   /*
    * The floating dock is absolutely positioned. Directly inside the

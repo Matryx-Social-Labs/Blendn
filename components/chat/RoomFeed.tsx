@@ -49,6 +49,7 @@ export const RoomMessageRow = memo(function RoomMessageRow({
   first,
   last,
   landed,
+  arriving = false,
   senderTappable,
   handlers,
 }: {
@@ -60,6 +61,8 @@ export const RoomMessageRow = memo(function RoomMessageRow({
   last: boolean
   /** Your reaction that has just landed: its chip pops (#37). */
   landed?: string
+  /** Somebody else's message that arrived live while you were at the bottom: it rises as it mounts (#13). */
+  arriving?: boolean
   /** An event room's sender opens their card (5.1); a crew's or a Blend's is Flow 10's. */
   senderTappable: boolean
   handlers: RowHandlers
@@ -110,8 +113,8 @@ export const RoomMessageRow = memo(function RoomMessageRow({
         onLongPress={item.removed ? undefined : (anchor) => handlers.menu(item, anchor)}
         onSenderPress={senderTappable && !mine ? () => handlers.sender(item) : undefined}
         onLinkPress={handlers.link}
-        // Only your own sends rise from the composer (#12); history never animates.
-        animateIn={sending ? 'send' : undefined}
+        // Your sends rise from the composer (#12); a live arrival at the bottom rises 12 pt (#13); history never animates.
+        animateIn={sending ? 'send' : arriving ? 'arrive' : undefined}
       />
     </Animated.View>
   )

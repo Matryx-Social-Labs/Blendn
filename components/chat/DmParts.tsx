@@ -202,7 +202,7 @@ export const DmMessageRow = memo(function DmMessageRow({
   first: boolean
   last: boolean
   receipt?: Receipt | null
-  /** Your own send, rising from the composer (#12). */
+  /** Rises into place: your own send (#12), or somebody's that arrived while you were at the bottom (#13). */
   animate: boolean
   handlers: DmRowHandlers
 }) {
@@ -218,7 +218,8 @@ export const DmMessageRow = memo(function DmMessageRow({
     onRetry: () => handlers.retry(item),
     onReply: item.failed || item.removed || item.waiting || item.id.startsWith('local-') ? undefined : () => handlers.reply(item),
     onLongPress: item.removed ? undefined : (anchor: Rect) => handlers.menu(item, anchor),
-    animateIn: animate ? ('send' as const) : undefined,
+    // Yours rise from the composer (#12); theirs arrive with a 12 pt rise and a fade (#13, opacity only under Reduce Motion).
+    animateIn: animate ? (mine ? ('send' as const) : ('arrive' as const)) : undefined,
   }
   return (
     <View style={first ? styles.runStart : styles.inRun}>

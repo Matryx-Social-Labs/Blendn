@@ -121,7 +121,7 @@ describe('each tab screen wires its list', () => {
   it.each([
     ['events.tsx', 'listRef', /forwardedRef=\{listRef/],
     ['going.tsx', 'listRef', /<Animated\.FlatList\s+ref=\{listRef\}/],
-    ['chat.tsx', 'listRef', /<FlatList\s+ref=\{listRef\}/],
+    ['chat.tsx', 'listRef', /<Reanimated\.FlatList\s+ref=\{listRef\}/],
     ['profile.tsx', 'scrollRef', /<ScrollView\s+ref=\{scrollRef\}/],
   ])('%s', (file, ref, attached) => {
     const src = read(file)

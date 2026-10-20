@@ -21,6 +21,8 @@ jest.mock('expo-router', () => {
   }
 })
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
+let mockRM = false
+jest.mock('react-native-reanimated', () => ({ ...jest.requireActual('react-native-reanimated'), __esModule: true, useReducedMotion: () => mockRM }))
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn(), journey: jest.fn() } }))
 jest.mock('../lib/perf', () => ({ ScreenProfiler: ({ children }: { children: React.ReactNode }) => children }))
 const mockAuth: { user: { id: string }; loading: boolean } = { user: { id: 'u-a' }, loading: false }
@@ -97,6 +99,7 @@ beforeEach(() => {
   resetRoomMembership()
   queryCache.invalidate('')
   mockAuth.user = { id: 'u-a' }
+  mockRM = false
   serve()
 })
 
@@ -264,5 +267,56 @@ describe('one press guard for everything in the list (drive 6: the Live now card
     await act(async () => fireEvent.press(card))
     expect(router.push).toHaveBeenCalled()
     now.mockRestore()
+  })
+})
+
+describe('the inbox reorders by gliding, and keeps still under a thumb', () => {
+  type Host = { props?: Record<string, unknown>; parent: Host | null }
+  /** The `layout` the list's cell around a row carries (itemLayoutAnimation lands there). */
+  const layoutAround = (testID: string) => {
+    let node = screen.getByTestId(testID, { includeHiddenElements: true }) as unknown as Host | null
+    while (node && !node.props?.layout) node = node.parent
+    return node?.props?.layout
+  }
+  const ROW = 'banter-row-p:c1'
+
+  it('a row moves with a layout animation', async () => {
+    await open()
+    expect(layoutAround(ROW)).toBeDefined()
+  })
+
+  it('Reduce Motion: the rows just move', async () => {
+    mockRM = true
+    await open()
+    expect(layoutAround(ROW)).toBeUndefined()
+  })
+
+  it('a drag stops the glide, and the lift without speed brings it back', async () => {
+    await open()
+    const list = screen.getByTestId('banter-list')
+    await act(async () => fireEvent(list, 'scrollBeginDrag'))
+    expect(layoutAround(ROW)).toBeUndefined()
+    await act(async () => fireEvent(list, 'scrollEndDrag', { nativeEvent: { velocity: { y: 0 } } }))
+    expect(layoutAround(ROW)).toBeDefined()
+  })
+
+  it('a fling keeps it off until the momentum ends', async () => {
+    await open()
+    const list = screen.getByTestId('banter-list')
+    await act(async () => fireEvent(list, 'scrollBeginDrag'))
+    await act(async () => fireEvent(list, 'scrollEndDrag', { nativeEvent: { velocity: { y: 2 } } }))
+    expect(layoutAround(ROW)).toBeUndefined()
+    await act(async () => fireEvent(list, 'momentumScrollEnd'))
+    expect(layoutAround(ROW)).toBeDefined()
+  })
+})
+
+describe('the unread dot never grows from nothing (DS #28)', () => {
+  it('enters 0.8 to 1 with a fade, and sits still under Reduce Motion', async () => {
+    const parts = require('../components/banter/BanterParts') as typeof import('../components/banter/BanterParts')
+    const start = parts.dotIn().initialValues
+    expect(start.transform[0].scale).toBe(0.8)
+    expect(start.opacity).toBe(0)
+    expect(require('fs').readFileSync(require.resolve('../components/banter/BanterParts'), 'utf8')).not.toMatch(/ZoomIn/)
   })
 })

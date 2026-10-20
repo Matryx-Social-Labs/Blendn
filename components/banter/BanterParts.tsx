@@ -2,10 +2,11 @@ import { useBanterPress } from './pressGuard'
 import { Image } from 'expo-image'
 import type { ReactNode } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
-import Animated, { FadeOut, ZoomIn } from 'react-native-reanimated'
+import Animated, { Easing, FadeOut, withTiming } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { COLOR, DURATION, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { useReducedMotion } from '../../lib/motion'
 import { OPACITY } from '../../lib/theme'
 import { chatClock } from '../../lib/time'
 import { Avatar } from '../ds/Avatar'
@@ -341,6 +342,7 @@ export function BanterRow({
 }) {
   onPress = useBanterPress(onPress)
   const bold = useBoldText()
+  const reduceMotion = useReducedMotion()
   return (
     <Pressable
       testID={testID}
@@ -367,7 +369,7 @@ export function BanterRow({
         </Text>
         <View style={styles.dotSlot}>
           {unread ? (
-            <Animated.View entering={ZoomIn.duration(DURATION.quick)} exiting={FadeOut.duration(DURATION.quick)}>
+            <Animated.View entering={reduceMotion ? undefined : dotIn} exiting={reduceMotion ? undefined : FadeOut.duration(DURATION.quick)}>
               <PresenceDot kind="unread" />
             </Animated.View>
           ) : null}
@@ -375,6 +377,21 @@ export function BanterRow({
       </View>
     </Pressable>
   )
+}
+
+/**
+ * DS #28: the unread dot appears 0.8 → 1 with a fade over quick: never from nothing (the stock zoom starts at scale 0). Under Reduce
+ * Motion it is simply there.
+ */
+export const dotIn = () => {
+  'worklet'
+  return {
+    initialValues: { opacity: 0, transform: [{ scale: 0.8 }] },
+    animations: {
+      opacity: withTiming(1, { duration: DURATION.quick }),
+      transform: [{ scale: withTiming(1, { duration: DURATION.quick, easing: Easing.bezier(...EASING.snapOut) }) }],
+    },
+  }
 }
 
 /** How a row is read: "{title}, {line}, {time}, unread". */

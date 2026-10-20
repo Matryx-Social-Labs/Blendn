@@ -336,7 +336,8 @@ function PrivateChatInner() {
       setMessages((prev) => {
         if (prev.some((m) => m.id === data.message.id)) return prev
         // Your own send echoed before the request resolved is still yours; the first into an empty thread takes over from Say hi.
-        if (prev.length === 0 || data.message.senderId === myId) markArriving(data.message.id)
+        // Theirs rise too (DS #13) when you are at the bottom; read back, nothing moves: the chip counts it.
+        if (prev.length === 0 || data.message.senderId === myId || isAtBottomRef.current) markArriving(data.message.id)
         return [...prev, directMessageFrom(data.message)]
       })
       setIsOtherTyping(false)

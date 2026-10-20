@@ -64,6 +64,8 @@ type Row = {
 type Item = { type: 'heading'; key: string; title: string; markAll?: boolean } | { type: 'row'; key: string; row: Row; index: number }
 
 /** #27: a moved row travels to its new place on M.settle, 300 ms after its preview changed. */
+/** A release slower than this (pt/ms) does not coast. */
+const COAST_MIN_VELOCITY = 0.1
 const REORDER = LinearTransition.delay(300).springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping).mass(SPRING.settle.mass)
 const SEARCH_GAP = SPACE.sm
 /** A press held this long is a hold, not a tap (Pressable's own long-press delay). */
@@ -102,6 +104,7 @@ function ChatInner() {
   const [muteFor, setMuteFor] = useState<string | null>(null)
   const [leaveFor, setLeaveFor] = useState<string | null>(null)
   const [openSwipe, setOpenSwipe] = useState<string | null>(null)
+  const [scrolling, setScrolling] = useState(false)
   // Tapping Banter while already on it goes back to the top (the bar emits `tabPress`).
   const listRef = useRef<FlatList<Item>>(null)
   useScrollToTop(listRef)
@@ -335,7 +338,7 @@ function ChatInner() {
       />
     )
     return (
-      <Reanimated.View entering={entering(item.index)} layout={reduceMotion ? undefined : REORDER}>
+      <Reanimated.View entering={entering(item.index)}>
         {row.swipe.length ? (
           <SwipeRow
             actions={row.swipe}
@@ -452,9 +455,11 @@ function ChatInner() {
     <View style={styles.screen}>
       {/* Every press inside the list, header cards included, goes through one guard. */}
       <BanterPressGuard.Provider value={pressGuard}>
-      <FlatList
+      <Reanimated.FlatList
         ref={listRef}
         testID="banter-list"
+        // A thread that moves up when a message lands glides there after a beat; never while the list is under a finger or coasting.
+        itemLayoutAnimation={reduceMotion || scrolling ? undefined : REORDER}
         data={inbox.loading && !items.length ? [] : shown}
         keyExtractor={(item) => item.key}
         renderItem={renderItem}
@@ -466,14 +471,24 @@ function ChatInner() {
           touchStartAt.current = Date.now()
           step('touchStart')
         }}
-        onScrollBeginDrag={() => step('dragBegin')}
-        onScrollEndDrag={() => step('dragEnd')}
+        onScrollBeginDrag={() => {
+          setScrolling(true)
+          step('dragBegin')
+        }}
+        onScrollEndDrag={(e) => {
+          // A release with speed coasts: the momentum end settles it.
+          if (Math.abs(e.nativeEvent.velocity?.y ?? 0) < COAST_MIN_VELOCITY) setScrolling(false)
+          step('dragEnd')
+        }}
         onTouchEnd={() => step('touchEnd')}
         // iOS can withhold the bubbled touchEnd while a row's Pressable has the touch; the capture phase still sees the lift.
         onTouchEndCapture={() => step('touchEnd')}
         onTouchCancel={() => step('touchEnd')}
         onMomentumScrollBegin={() => step('momentumBegin')}
-        onMomentumScrollEnd={() => step('momentumEnd')}
+        onMomentumScrollEnd={() => {
+          setScrolling(false)
+          step('momentumEnd')
+        }}
         ListEmptyComponent={
           inbox.loading ? (
             <BanterSkeleton />
