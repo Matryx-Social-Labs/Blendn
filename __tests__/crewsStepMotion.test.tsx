@@ -17,19 +17,21 @@ import { apiClient } from '../lib/apiClient'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
 
+const at = (v: 1 | -1) => ({ get: () => v })
+
 describe('the builders', () => {
   it('forward comes from the right by 24, back from the left, and reduce motion from nowhere', () => {
     expect(STEP_SHIFT).toBe(24)
-    expect(stepIn(1, false)().initialValues.transform[0].translateX).toBe(24)
-    expect(stepIn(-1, false)().initialValues.transform[0].translateX).toBe(-24)
-    expect(stepIn(1, true)().initialValues.transform[0].translateX).toBe(0)
-    expect(stepIn(-1, true)().initialValues.opacity).toBe(0)
+    expect(stepIn(at(1), false)().initialValues.transform[0].translateX).toBe(24)
+    expect(stepIn(at(-1), false)().initialValues.transform[0].translateX).toBe(-24)
+    expect(stepIn(at(1), true)().initialValues.transform[0].translateX).toBe(0)
+    expect(stepIn(at(-1), true)().initialValues.opacity).toBe(0)
   })
 
   it('the old step leaves with a short drift the way it was going, and only fades under reduce motion', () => {
-    const out = stepOut(1, false)()
+    const out = stepOut(at(1), false)()
     expect(out.initialValues).toEqual({ opacity: 1, transform: [{ translateX: 0 }] })
-    expect(stepOut(1, true)().initialValues.opacity).toBe(1)
+    expect(stepOut(at(1), true)().initialValues.opacity).toBe(1)
   })
 })
 

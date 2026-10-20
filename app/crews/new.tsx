@@ -1,7 +1,7 @@
 import { router } from 'expo-router'
 import { useCallback, useEffect, useRef, useState, type ComponentRef } from 'react'
 import { StyleSheet, Text } from 'react-native'
-import Animated from 'react-native-reanimated'
+import Animated, { useSharedValue } from 'react-native-reanimated'
 
 import { CrewRefusalSheet, type CrewRefusal } from '../../components/crews/CrewRefusalSheet'
 import { stepIn, stepOut, type StepDir } from '../../components/crews/stepMotion'
@@ -48,8 +48,8 @@ export default function NewCrewScreen() {
   const reduceMotion = useReducedMotion()
   const [open, setOpen] = useState(true)
   const [step, setStep] = useState<MakeStep>(1)
-  /** Which way the last step went: forward from the right, back from the left. Set before the step changes. */
-  const dir = useRef<StepDir>(1)
+  /** Which way the last step went: forward from the right, back from the left. Set before the step changes, read when each animation starts. */
+  const dir = useSharedValue<StepDir>(1)
   const [name, setName] = useState('')
   const [bio, setBio] = useState('')
   const [choice, setChoice] = useState<IntentChoice>('friendship')
@@ -124,10 +124,10 @@ export default function NewCrewScreen() {
         setStuck(true)
         return
       }
-      dir.current = 1
+      dir.set(1)
       setStep(2)
     } else if (step === 2) {
-      dir.current = 1
+      dir.set(1)
       setStep(3)
     }
   }
@@ -149,7 +149,7 @@ export default function NewCrewScreen() {
       const field = textFieldOf(text, result.field)
       if (field) {
         setErrors({ [field]: text })
-        dir.current = -1
+        dir.set(-1)
         setStep(1)
       } else {
         setRefusal({ text, errorCode: result.errorCode })
@@ -170,7 +170,7 @@ export default function NewCrewScreen() {
     if (made) return go()
     // Back a step before out: what was typed is kept.
     if (step > 1) {
-      dir.current = -1
+      dir.set(-1)
       setStep((s) => (s - 1) as MakeStep)
     }
     else setOpen(false)
@@ -205,8 +205,8 @@ export default function NewCrewScreen() {
             <Animated.View
               key={step}
               testID="make-step"
-              entering={stepIn(dir.current, reduceMotion)}
-              exiting={stepOut(dir.current, reduceMotion)}
+              entering={stepIn(dir, reduceMotion)}
+              exiting={stepOut(dir, reduceMotion)}
               style={styles.step}
             >
               {step === 1 ? (
