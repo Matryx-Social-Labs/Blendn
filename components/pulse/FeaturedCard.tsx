@@ -3,6 +3,10 @@ import { Ionicons } from '@expo/vector-icons'
 import { Dimensions, StyleSheet, Text, View } from 'react-native'
 
 import ScalePress from '../motion/ScalePress'
+import { Icon } from '../ui/Icon'
+import { ScrimPill } from '../ds/MonoFamily'
+import { COLOR, ICON as TOKEN_ICON } from '../../lib/design/tokens'
+import { PROMOTED_LABEL } from '../../lib/pulseSections'
 
 import { EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
 import type { FeedMediaItem } from '../../lib/feedMedia'
@@ -118,6 +122,8 @@ interface Props {
   placeLabel?: string | null
   /** "{n} here now" or "{n} going" (`peopleLabel`): read out with the card, so VoiceOver hears who is there. */
   peopleLabel?: string | null
+  /** A paid placement: a "PROMOTED" pill top-right, and the label read first. An editorial pick passes nothing. */
+  promoted?: boolean
   /** Full width when it is the only card — see `FEATURED_CARD_SOLO`. */
   width?: number
   onPress: () => void
@@ -137,6 +143,7 @@ function FeaturedCardImpl({
   dateLabel,
   placeLabel,
   peopleLabel,
+  promoted = false,
   width = FEATURED_CARD_WIDTH,
   onPress,
   onPressIn,
@@ -155,7 +162,7 @@ function FeaturedCardImpl({
       onPressIn={onPressIn}
       onLongPress={onLongPress}
       accessibilityRole="button"
-      accessibilityLabel={`${title}. ${[dateLabel, placeLabel, peopleLabel].filter(Boolean).join(', ')}`}
+      accessibilityLabel={`${promoted ? `${PROMOTED_LABEL}. ` : ''}${title}. ${[dateLabel, placeLabel, peopleLabel].filter(Boolean).join(', ')}`}
       accessibilityActions={onLongPress ? QUICK_ACTIONS : undefined}
       onAccessibilityAction={
         onLongPress
@@ -178,6 +185,17 @@ function FeaturedCardImpl({
         */}
         {playlist.length > 0 ? (
           <FeedMedia playlist={playlist} isActive={isActive} width={width} height={photoHeight} />
+        ) : null}
+
+        {promoted ? (
+          <View style={styles.promoted} testID="featured-promoted">
+            <ScrimPill>
+              <Icon name="megaphone" size={TOKEN_ICON.inline} color={COLOR.textSecondary} />
+              <Text maxFontSizeMultiplier={1.3} style={[TYPE.label, { color: COLOR.textSecondary }]}>
+                {PROMOTED_LABEL.toUpperCase()}
+              </Text>
+            </ScrimPill>
+          </View>
         ) : null}
 
         {tag ? (
@@ -229,6 +247,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: EMBER.surfaceMedia,
   },
+
+  promoted: { position: 'absolute', right: SPACE.lg, top: SPACE.lg },
 
   tagPill: {
     position: 'absolute',

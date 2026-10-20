@@ -15,7 +15,7 @@ import {
   stepSnap,
   type DrawerSnap,
 } from '../../lib/home'
-import { DURATION, EASING, REDUCE_MOTION, SPRING } from '../../lib/design/tokens'
+import { EASING, REDUCE_MOTION, SPRING } from '../../lib/design/tokens'
 import { EMBER, EMBER_RADIUS, SPACE } from '../../lib/theme'
 
 /** Under Reduce Motion the drawer still travels, gently: a short timing on the standard curve, not an instant jump (BUILD-SPEC §0, `drawer`). */

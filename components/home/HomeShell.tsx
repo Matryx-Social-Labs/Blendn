@@ -29,6 +29,8 @@ export interface HomeBrowse {
    * they stand ("Use my current location", the switch banner): the map shows them.
    */
   cityPick: { n: number; here: boolean }
+  /** The Pulse's one-line summary, kept at peek ("3 live now · 14 on tonight"); null while there is nothing to say. */
+  peekLine?: string | null
   /** Ask for the phone's position: the Pulse's own location flow (the OS ask, or its "Turn on location" tray). Settles when it does. */
   requestLocation: () => void | Promise<void>
   /** Open the Pulse's city picker: Places' empty city offers it ("Change city"). */
@@ -68,9 +70,21 @@ export function HomeShell({
   const { height } = useWindowDimensions()
   const focused = useIsFocused()
   const [segment, setSegment] = useState<Segment>('events')
+  const [browse, setBrowse] = useState<HomeBrowse>({
+    city: null,
+    location: null,
+    ready: false,
+    cityCentre: null,
+    cityPick: { n: 0, here: false },
+    requestLocation: () => {},
+    openCityPicker: () => {},
+    peekLine: null,
+  })
+
   /** Places' one-line summary, kept at peek (null while nothing is known: no room is made for a line that is not there). */
   const [placesLine, setPlacesLine] = useState<string | null>(null)
-  const peekExtra = segment === 'places' && placesLine ? DRAWER_PEEK_LINE : 0
+  const peekText = segment === 'places' ? placesLine : (browse.peekLine ?? null)
+  const peekExtra = peekText ? DRAWER_PEEK_LINE : 0
   const points = useMemo(
     () => drawerSnapPoints({ height, topChrome: insets.top + TOP_BAR_HEIGHT, tabBarTop: tabBarTop(height, insets.bottom), peekExtra }),
     [height, insets.top, insets.bottom, peekExtra]
@@ -84,16 +98,6 @@ export function HomeShell({
   const restore = useRef<DrawerSnap | null>(null)
   const [placesOpened, setPlacesOpened] = useState(false)
   const [screenReader, setScreenReader] = useState(false)
-  const [browse, setBrowse] = useState<HomeBrowse>({
-    city: null,
-    location: null,
-    ready: false,
-    cityCentre: null,
-    cityPick: { n: 0, here: false },
-    requestLocation: () => {},
-    openCityPicker: () => {},
-  })
-
   /*
    * With a screen reader the list is the screen: open it, and take the map out
    * of the reading order (it says nothing the list does not). Followed live,
@@ -190,8 +194,8 @@ export function HomeShell({
         onChromeTouch={dismissKeyboard}
         peek={
           peekExtra ? (
-            <Text variant="meta" color={EMBER.textPrimary} numberOfLines={1} testID="places-peek-line">
-              {placesLine}
+            <Text variant="meta" color={EMBER.textPrimary} numberOfLines={1} testID="home-peek-line">
+              {peekText}
             </Text>
           ) : null
         }

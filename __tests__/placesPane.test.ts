@@ -197,7 +197,10 @@ describe('the peek line (Places.html 04)', () => {
     const s = splitPlaces([v('a', { liveNow: '5-9' }), v('b', { liveNow: '20+' }), v('c', { nextEvent: event(21, 23) }), v('d')], NOW)
     expect(peekLine(s, false)).toBe('2 places live · 1 open tonight')
     expect(peekLine(s, true)).toBe('2+ places live · 1+ open tonight')
-    expect(peekLine(splitPlaces([v('a', { liveNow: '5-9' })], NOW), false)).toBe('1 place live · 0 open tonight')
+    // A part whose count is 0 is dropped; both 0 is no line.
+    expect(peekLine(splitPlaces([v('a', { liveNow: '5-9' })], NOW), false)).toBe('1 place live')
+    expect(peekLine(splitPlaces([v('c', { nextEvent: event(21, 23) })], NOW), false)).toBe('1 open tonight')
+    expect(peekLine(splitPlaces([v('q')], NOW), false)).toBeNull()
     expect(peekLine(splitPlaces([], NOW), false)).toBeNull()
   })
 })

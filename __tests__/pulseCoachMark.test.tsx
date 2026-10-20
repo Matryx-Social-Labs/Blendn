@@ -164,7 +164,9 @@ const event = (id: string, cover: string | null) => ({
   latitude: null,
   longitude: null,
 })
-const FEATURED = [event('e1', 'https://img/1.jpg'), event('e2', 'https://img/2.jpg')]
+// Featured is only what is featured; the server's rank (BUILD-SPEC C1) puts e1 first, so the test does not depend on the day's rotation.
+const featured = (id: string, rank: number) => ({ ...event(id, `https://img/${rank}.jpg`), is_featured: true, featured: { kind: 'editorial' as const, rank } })
+const FEATURED = [featured('e1', 1), featured('e2', 2)]
 
 let accounts = 0
 function signIn() {
@@ -199,6 +201,12 @@ async function shell(view: Awaited<ReturnType<typeof render>>, next: { full?: bo
   await settle()
 }
 const mark = () => screen.queryByText(TEXT)
+/** The page's own request gets the list; the weekend and interest requests the screen also makes get none, so one fixture is one section. */
+const serve = (list: unknown[]) =>
+  (getEvents as jest.Mock).mockImplementation(async (params: { startDate?: string; categorySlug?: string }) => ({
+    data: params?.startDate || params?.categorySlug ? [] : list,
+    error: null,
+  }))
 
 beforeEach(async () => {
   measuredNode = null
@@ -210,7 +218,7 @@ beforeEach(async () => {
   mockVisible = true
   mockFull = false
   mockTray.length = 0
-  ;(getEvents as jest.Mock).mockResolvedValue({ data: FEATURED, error: null })
+  ;serve(FEATURED)
   await AsyncStorage.clear()
 })
 
@@ -314,7 +322,7 @@ describe('the Pulse’s coach mark', () => {
 
   it('with nothing featured, it is over the first Upcoming card', async () => {
     signIn()
-    ;(getEvents as jest.Mock).mockResolvedValue({ data: [event('u1', null), event('u2', null)], error: null })
+    ;serve([event('u1', null), event('u2', null)])
     mockFull = true
     await mount()
     expect(mark()).toBeTruthy()
@@ -324,7 +332,7 @@ describe('the Pulse’s coach mark', () => {
 
   it('a sheet or tray over it hides it; closed, it is back (still the one showing)', async () => {
     signIn()
-    ;(getEvents as jest.Mock).mockResolvedValue({ data: [event('u1', null), event('u2', null)], error: null })
+    ;serve([event('u1', null), event('u2', null)])
     mockFull = true
     await mount()
     expect(mark()).toBeTruthy()
@@ -356,7 +364,7 @@ describe('the Pulse’s coach mark', () => {
 describe('the event page, warm before the tap', () => {
   it('the first featured card once the Pulse settles, and a card the finger is on', async () => {
     signIn()
-    ;(getEvents as jest.Mock).mockResolvedValue({ data: [event('e1', 'https://img/1.jpg'), event('u1', null)], error: null })
+    ;serve([featured('e1', 1), event('u1', null)])
     const { apiClient } = jest.requireMock('../lib/apiClient') as { apiClient: { getEvent: jest.Mock } }
     apiClient.getEvent.mockClear()
     await mount()

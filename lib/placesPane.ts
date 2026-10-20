@@ -131,9 +131,10 @@ export const EAGER_PAGES = 3
 export function peekLine(strata: PlaceStrata, more: boolean): string | null {
   const live = strata.live.length
   const open = strata.open.length
-  if (live + open + strata.quiet.length === 0) return null
   const n = (count: number) => `${count}${more ? '+' : ''}`
-  return `${n(live)} ${live === 1 && !more ? 'place' : 'places'} live · ${n(open)} open tonight`
+  // A part whose count is 0 is dropped; both 0 is no line (BUILD-SPEC §0, peek).
+  const parts = [live > 0 ? `${n(live)} ${live === 1 && !more ? 'place' : 'places'} live` : null, open > 0 ? `${n(open)} open tonight` : null].filter(Boolean)
+  return parts.length ? parts.join(' · ') : null
 }
 
 /**

@@ -250,3 +250,27 @@ export function everythingElse<E extends SectionEvent>(page: readonly E[], secti
  */
 export const printable = (n: number | null | undefined): number | null =>
   typeof n === 'number' && Number.isFinite(n) && n >= LIVE_FLOOR ? Math.floor(n) : null
+
+/**
+ * The chips over "Everything else": All, then each top-level category with at
+ * least one event in what is loaded, busiest first, each with its count.
+ */
+export function categoryChips(
+  events: readonly { category_group?: string | null }[],
+  options: readonly { slug: string; name: string }[]
+): { slug: string; name: string; count: number }[] {
+  const counts = new Map<string, number>()
+  for (const e of events) if (e.category_group) counts.set(e.category_group, (counts.get(e.category_group) ?? 0) + 1)
+  return options
+    .map((o) => ({ ...o, count: counts.get(o.slug) ?? 0 }))
+    .filter((o) => o.count >= 1)
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+}
+
+/** The drawer's peek line for the Pulse: "● 3 live now · 14 on tonight"; a part that is 0 is dropped, both 0 is none. */
+export function pulsePeekLine(sections: readonly PulseSection[]): string | null {
+  const live = sections.find((s) => s.key === 'now')?.count ?? 0
+  const tonight = sections.find((s) => s.key === 'tonight')?.count ?? 0
+  const parts = [live > 0 ? `${live} live now` : null, tonight > 0 ? `${tonight} on tonight` : null].filter(Boolean)
+  return parts.length ? parts.join(' · ') : null
+}

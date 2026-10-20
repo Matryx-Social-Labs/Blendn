@@ -1,4 +1,6 @@
 import {
+  categoryChips,
+  pulsePeekLine,
   DAY_RESET_HOUR,
   everythingElse,
   FEATURED_CAP,
@@ -38,8 +40,9 @@ describe('time', () => {
     expect(isLiveNow(ev('a', 18), NOW)).toBe(true)
     expect(isLiveNow(ev('a', 20), NOW)).toBe(false)
     expect(isLiveNow(ev('a', 12), NOW)).toBe(false)
-    expect(isLiveNow({ id: 'b', start_time: at(17), end_time: null }, NOW)).toBe(true)
-    expect(isLiveNow({ id: 'b', start_time: at(14), end_time: null }, NOW)).toBe(false)
+    const open = (h: number): SectionEvent => ({ id: 'b', start_time: at(h), end_time: null })
+    expect(isLiveNow(open(17), NOW)).toBe(true)
+    expect(isLiveNow(open(14), NOW)).toBe(false)
   })
 
   it('tonight ends at the next 06:00: today’s before 06:00, tomorrow’s after', () => {
@@ -219,5 +222,25 @@ describe('the people floor', () => {
     expect(printable(12.7)).toBe(12)
     expect(printable(null)).toBeNull()
     expect(printable(Number.NaN)).toBeNull()
+  })
+})
+
+describe('what the Everything-else chips and the peek line read', () => {
+  it('chips: only categories with an event in what is loaded, busiest first, with counts', () => {
+    const options = [{ slug: 'music', name: 'Live music' }, { slug: 'comedy', name: 'Comedy' }, { slug: 'food', name: 'Food & drink' }]
+    const events = [{ category_group: 'music' }, { category_group: 'music' }, { category_group: 'comedy' }, { category_group: 'other' }, { category_group: '' }]
+    expect(categoryChips(events, options)).toEqual([
+      { slug: 'music', name: 'Live music', count: 2 },
+      { slug: 'comedy', name: 'Comedy', count: 1 },
+    ])
+    expect(categoryChips([], options)).toEqual([])
+  })
+
+  it('peek: “3 live now · 14 on tonight”; a part that is 0 is dropped; both 0 is no line', () => {
+    const sec = (key: 'now' | 'tonight', count: number) => ({ key, events: [], count })
+    expect(pulsePeekLine([sec('now', 3), sec('tonight', 14)])).toBe('3 live now · 14 on tonight')
+    expect(pulsePeekLine([sec('tonight', 6)])).toBe('6 on tonight')
+    expect(pulsePeekLine([sec('now', 2)])).toBe('2 live now')
+    expect(pulsePeekLine([])).toBeNull()
   })
 })

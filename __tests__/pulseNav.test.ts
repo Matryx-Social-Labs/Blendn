@@ -122,7 +122,9 @@ describe('a tap outside the search closes the keyboard', () => {
     expect(list).toContain('keyboardShouldPersistTaps="handled"')
     expect(list).toContain('keyboardDismissMode="on-drag"')
     // Nested in the list: left at the default it would eat a featured card's first tap.
-    const row = src.slice(src.search(/<FlatList\s+horizontal/), src.indexOf('renderItem={({ item, index })'))
+    // Every rail is a horizontal list of its own; left at the default each would eat a card's first tap.
+    const rails = stripComments(read('components/pulse/PulseSections.tsx'))
+    const row = rails.slice(rails.search(/<FlatList\s+testID/), rails.indexOf('initialNumToRender'))
     expect(row).toContain('keyboardShouldPersistTaps="handled"')
   })
 

@@ -6,7 +6,10 @@
  * disagree with, and a rule inside a `<Text>` is a rule nobody can test.
  */
 
-import { printable } from './pulseSections'
+import { liveWindow, type SessionSource } from './eventSession'
+import { isLiveNow, printable } from './pulseSections'
+import { distanceText } from './placesPane'
+import { clockTime } from './roomMoments'
 import { MONTHS, WEEKDAYS } from './time'
 
 /**
@@ -153,6 +156,22 @@ export function placeLabel(event: {
   return city || null
 }
 
+/**
+ * The time on a home card, in the one date grammar: "Live", "9 PM" (later
+ * today), "Sat · 10:30 PM" (this week), "Sat 24 Oct · 9 PM" (further out).
+ * Local time: the question is when to leave the house.
+ */
+export function cardTime(event: SessionSource, now: number): string {
+  if (isLiveNow(event, now)) return 'Live'
+  const start = new Date(liveWindow(event).start_time)
+  if (Number.isNaN(start.getTime())) return ''
+  const clock = clockTime(start.getTime())
+  const days = calendarDaysBetween(new Date(now), start)
+  if (days <= 0) return clock
+  if (days < 7) return `${shortWeekday(start)} · ${clock}`
+  return `${shortWeekday(start)} ${start.getDate()} ${shortMonth(start)} · ${clock}`
+}
+
 /** A count a card may print: five and up (`printable`); a small number of people is not said. */
 const count = printable
 
@@ -220,4 +239,33 @@ function calendarDaysBetween(a: Date, b: Date): number {
   const start = new Date(a.getFullYear(), a.getMonth(), a.getDate())
   const end = new Date(b.getFullYear(), b.getMonth(), b.getDate())
   return Math.round((end.getTime() - start.getTime()) / 86_400_000)
+}
+
+/** What a compact home card draws from one event (the venue, the pills, the cover): pure, so each rule is tested. */
+export function homeCardProps(
+  event: {
+    title: string
+    venue?: { name: string } | null
+    venue_name?: string | null
+    city?: string | null
+    distance?: number | null
+    here_count?: number | null
+    going_count?: number | null
+    cover_image_url?: string | null
+  } & SessionSource,
+  now: number,
+  withDistance: boolean
+) {
+  const live = isLiveNow(event, now)
+  const here = live ? printable(event.here_count) : null
+  const going = live ? null : printable(event.going_count)
+  return {
+    title: event.title,
+    time: cardTime(event, now),
+    venue: event.venue?.name?.trim() || event.venue_name?.trim() || event.city?.trim() || '',
+    distance: withDistance ? (distanceText(event.distance) ?? undefined) : undefined,
+    here: here ?? undefined,
+    going: going ?? undefined,
+    cover: event.cover_image_url ?? null,
+  }
 }

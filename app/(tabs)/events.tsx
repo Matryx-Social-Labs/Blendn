@@ -6,7 +6,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Dimensions,
   AppState,
-  FlatList,
   Keyboard,
   type LayoutChangeEvent,
   Linking,
@@ -22,19 +21,20 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import ActionTray, { type ActionTrayButton, type TraySize } from '../../components/ActionTray'
 import FadeInUp from '../../components/motion/FadeInUp'
 import ScalePress from '../../components/motion/ScalePress'
-import NearbyEventCard from '../../components/NearbyEventCard'
 import { preloadImages } from '../../components/OptimizedImage'
+import { featuredCardLayout } from '../../components/pulse/FeaturedCard'
 import {
-  FeaturedCard,
-  FEATURED_CARD_GAP,
-  featuredCardLayout,
-} from '../../components/pulse/FeaturedCard'
+  EverythingHeader,
+  PulseSkeleton,
+  SectionReveal,
+  SectionStack,
+} from '../../components/pulse/PulseSections'
+import { EventCard } from '../../components/ds/EventCard'
 import { PULSE_HEADER_HEIGHT, PulseHeader } from '../../components/pulse/PulseHeader'
 import { CityArtBanner, CityArtCard } from '../../components/cityArt/CityArtCard'
 import { drawableCityArt } from '../../components/cityArt/drawable'
 import { TAB_BAR_CLEARANCE, tabBarTop } from './_layout'
 import { FilterSheet, type CategoryOption } from '../../components/pulse/FilterControl'
-import { SectionHeader } from '../../components/pulse/SectionHeader'
 import { DayHeading } from '../../components/ui/DayHeading'
 import { HomeShell, type HomeBrowse } from '../../components/home/HomeShell'
 import { DRAWER_HEADER_HEIGHT } from '../../lib/home'
@@ -51,7 +51,6 @@ import {
   NO_FILTERS,
   type EventFilters,
 } from '../../lib/eventFilters'
-import { feedPlaylist } from '../../lib/feedMedia'
 import { useLatest } from '../../lib/useLatest'
 import {
   cityCountLabel,
@@ -69,15 +68,24 @@ import { readStoredCity, storeCity } from '../../lib/cityStorage'
 import { formatDistance, getDistanceMetres } from '../../lib/geo'
 import { publishRoomSignal } from '../../lib/roomSignal'
 import {
-  featuredDateLabel,
-  nextUpLabel,
+  homeCardProps,
   peopleLabel,
   placeLabel,
   groupByDay,
   timeLabel,
 } from '../../lib/pulse'
 import { liveWindow, sessionOver } from '../../lib/eventSession'
-import { featuredPick, seedDateOf } from '../../lib/pulseSections'
+import {
+  categoryChips,
+  everythingElse,
+  pulsePeekLine,
+  pulseSections,
+  seedDateOf,
+  weekendWindow,
+  type PulseSectionKey,
+} from '../../lib/pulseSections'
+import { useNow } from '../../lib/useNow'
+import { COLOR, FONT_FAMILY, TYPE as DESIGN_TYPE } from '../../lib/design/tokens'
 import { mergeEventPage, pageHasMore, pulseEmptyCopy, pulseEmptyKind } from '../../lib/pulseFeed'
 import { checkOutOf } from '../../lib/checkIn'
 import { openBlendn } from '../../lib/blendnOverlay'
@@ -85,13 +93,12 @@ import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import { usePresence } from '../../lib/usePresence'
 import { getOptimizedImageUrl } from '../../lib/photoUtils'
-import { formatTimeRange } from '../../lib/time'
 import { useLiveSync } from '../../lib/useLiveSync'
 import { useMinimumVisible } from '../../lib/useMinimumVisible'
 import { useAuth } from '../../lib/useAuth'
 import { markCoachUsed, useCoachMark } from '../../lib/coachMarks'
 import { useCoachMarkSpot } from '../../components/ds/CoachMarkHost'
-import { CONTROL, EMBER, EMBER_FONTS, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE, tint } from '../../lib/theme'
+import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE, tint } from '../../lib/theme'
 import { RisingSheet, SheetFlatList, SheetModal } from '../../components/motion/RisingSheet'
 import { Grabber } from '../../components/ui/Grabber'
 import Animated from 'react-native-reanimated'
@@ -106,6 +113,9 @@ import { fadeInFast, fadeOutFast } from '../../components/motion/presence'
  */
 type Event = BlendnEvent
 
+/** A row under the sections: a day heading, or an event. */
+type PulseRow = { kind: 'day'; key: string; title: string; weekday: string } | { kind: 'event'; key: string; event: Event }
+
 type EventsTrayState = {
   visible: boolean
   title: string
@@ -114,7 +124,6 @@ type EventsTrayState = {
   size?: TraySize
 }
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window')
 /**
  * The page's rhythm, from the design system (`docs/DESIGN_SYSTEM.md`).
  *
@@ -125,10 +134,6 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window')
 const SCREEN_HEIGHT = Dimensions.get('window').height
 const MAIN_PADDING_HORIZONTAL = GUTTER
 const MAIN_PADDING_BOTTOM = 128
-const MAIN_GAP = SPACE.xxl
-/** A section's own rows; a vertical stack of cards inside one. */
-const SECTION_GAP = SPACE.lg
-const STACK_GAP = SPACE.xl
 
 /**
  * The Pulse's coach mark: the long-press on a card, which nothing on screen
@@ -137,6 +142,10 @@ const STACK_GAP = SPACE.xl
  */
 const PULSE_COACH = 'events_preview_hint'
 const PULSE_COACH_TEXT = 'Hold an event to save, share or preview it.'
+
+/** The hole's corner radius: the card the mark names (a hero, a compact card, or a row). */
+const coachRadius = (section: PulseSectionKey | null) =>
+  section === 'featured' ? EMBER_RADIUS.card : section === 'now' || section === 'forYou' || section === 'weekend' ? EMBER_RADIUS.lg : EMBER_RADIUS.md
 
 /** Started (today's session, `lib/eventSession.ts`) and not over: the card says who is here. */
 const onNow = (event: Event) => Date.parse(liveWindow(event).start_time) <= Date.now() && !sessionOver(event)
@@ -230,9 +239,6 @@ const normalizeEvent = (event: Event): Event => ({
   display_city: resolveDisplayCity(event),
 })
 
-/** Stable identities for the Featured carousel — see `featuredCards`. */
-const featuredKeyExtractor = (item: { id: string }) => `feat-${item.id}`
-const FeaturedSeparator = () => <View style={{ width: FEATURED_CARD_GAP }} />
 
 /*
  * Which events are close enough to check in to, and how far each one is.
@@ -428,28 +434,6 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
    * three, the first two of which nobody sees, against a list flickering
    * underneath them. The sheet edits the draft; only "Show results" commits.
    */
-  /*
-   * Which Featured card the viewport has settled on.
-   *
-   * Only that one walks its media and mounts a player — see `FeedMedia`. A row
-   * where every card played would allocate a decoder per card, and it fails as
-   * dropped frames and battery rather than as an error.
-   *
-   * 60% visible, held for 250ms: a card half-dragged past is not the one you
-   * are looking at, and without the delay a fast flick would start and tear
-   * down a player for every card it crossed.
-   */
-  const [featuredActiveIndex, setFeaturedActiveIndex] = useState(0)
-  // Held in state so the identities are guaranteed never to change. FlatList
-  // throws if either one changes on a mounted list.
-  const [featuredViewability] = useState(() => ({ itemVisiblePercentThreshold: 60, minimumViewTime: 250 }))
-  const [onFeaturedViewable] = useState(
-    () => ({ viewableItems }: { viewableItems: { index: number | null }[] }) => {
-      const first = viewableItems.find((v) => v.index !== null)
-      if (first?.index != null) setFeaturedActiveIndex(first.index)
-    }
-  )
-
   const [filters, setFilters] = useState<EventFilters>(NO_FILTERS)
   const [filterDraft, setFilterDraft] = useState<EventFilters>(NO_FILTERS)
   const [filterSheetOpen, setFilterSheetOpen] = useState(false)
@@ -842,21 +826,6 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       })
   }, [userLocation, getCurrentLocationQuietly])
 
-  // Places browses the same city from the same spot, and the map follows it (components/home/HomeShell.tsx).
-  useEffect(
-    () =>
-      onBrowse({
-        city: selectedCity,
-        location: userLocation,
-        ready: cityResolved,
-        cityCentre: cityOptions.find((c) => c.city === selectedCity)?.centre ?? null,
-        cityPick,
-        requestLocation: requestLocationIfNeeded,
-        openCityPicker: () => setCityPickerOpen(true),
-      }),
-    [onBrowse, selectedCity, userLocation, cityResolved, cityOptions, cityPick, requestLocationIfNeeded]
-  )
-
   // Check location permission status on mount (without requesting)
   useEffect(() => {
     const checkLocationPermission = async () => {
@@ -930,7 +899,8 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
 
   // Pagination, declared ahead of `fetchEvents` because it resets the page.
   const [page, setPage] = useState(0)
-  const PAGE_SIZE = 20
+  // The page the sections are drawn from: Happening now, Featured, Tonight and Nearby all read it (BUILD-SPEC request A).
+  const PAGE_SIZE = 50
   /*
    * Whether another page could exist. A short page is the last one
    * (`pageHasMore`), so the end of a twelve-event city stops asking.
@@ -943,13 +913,6 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
    * to the new one would put another city's events under this one's header.
    */
   const feedGenerationRef = useRef(0)
-  /*
-   * When `events` was last written. "Upcoming" means not started as of the
-   * load, so this is set beside every `setEvents` and not read from the clock
-   * during render.
-   */
-  const [eventsLoadedAt, setEventsLoadedAt] = useState(() => Date.now())
-
   const fetchEvents = useCallback(async (options?: { silent?: boolean; force?: boolean }) => {
     try {
       const isInitial = !initialLoadedRef.current
@@ -992,7 +955,6 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
 
       const normalized = (eventsData || []).map(normalizeEvent)
       setEvents(normalized)
-      setEventsLoadedAt(Date.now())
       /*
        * Hand the centre button what this fetch already knows.
        *
@@ -1395,7 +1357,6 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
         publishRoomSignal(merged)
         return merged
       })
-      setEventsLoadedAt(Date.now())
       setPage(prev => prev + 1)
       const maps = feedMaps(received)
       setInterestStatuses((prev) => ({ ...prev, ...maps.interests }))
@@ -1408,37 +1369,171 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     }
   }, [loading, hasMore, page, userLocation, selectedCity, searchTerm, filters])
 
-  // Cleared once the first content has committed; see `RevealRow`.
+  // Cleared once the first content has committed; see `RevealRow` and `SectionReveal`.
   const mainRowsRevealPending = useRef(true)
 
   /*
-   * The rows under the sections — everything Featured, Upcoming and Nearby did
-   * not draw, and the whole result while searching or filtering.
-   *
-   * The same `UpcomingCard` row as the Upcoming section. This used to be
-   * `EventCard`, the photo-on-top card from before the redesign, with its own
-   * check-in button and "move closer" chips — so scrolling past Nearby dropped
-   * you into the old app. Check-in lives on the event screen, where the
-   * geofence is explained; a row only needs to say when, where and how far.
-   *
-   * Not grouped by day, so the eyebrow carries the date as well as the time.
+   * The minute clock the sections are judged by: what is live, what is later
+   * tonight, the NOW tick. A render never reads the clock itself.
    */
-  const renderEventItem = useCallback(({ item: event, index }: { item: Event; index: number }) => {
-    const isCheckedIn = checkinStatuses[event.id]?.status === 'checked_in'
-    // Today's day of a multi-day run, not the run — `lib/eventSession.ts`.
-    const live = liveWindow(event)
-    const isEnded = sessionOver(event)
-    const note = isCheckedIn ? 'Checked in' : isEnded ? 'Ended' : null
+  const now = useNow(60_000)
+  const seedDate = seedDateOf(now)
+  /** Distances mean something only in the city you are in, with a fix. */
+  const hasFix = !!userLocation && browsingHere
 
+  /*
+   * Requests B and C (BUILD-SPEC §A): "This weekend" and "Because you like", in
+   * parallel with the page. Each draws when its own request resolves; a failure
+   * hides its section and is never an error state for the pane. Held with the
+   * key they were asked for, so another city's answer is never drawn under this
+   * one's header.
+   */
+  const lat3 = userLocation ? userLocation.latitude.toFixed(3) : '-'
+  const lon3 = userLocation ? userLocation.longitude.toFixed(3) : '-'
+  const sectionsKey = `${selectedCity ?? '-'}|${lat3},${lon3}|${seedDate}|${pulls}`
+  const [weekendState, setWeekendState] = useState<{ key: string; events: Event[] | null } | null>(null)
+  const [forYouState, setForYouState] = useState<{ key: string; value: { interest: { name: string; slug: string }; events: Event[] } | null } | null>(null)
+  const sectionRequestsOn = !!user && !authLoading && cityResolved && !isNarrowed
+  useEffect(() => {
+    if (!sectionRequestsOn) return
+    let cancelled = false
+    const where = { city: selectedCity ?? undefined, lat: userLocation?.latitude, lon: userLocation?.longitude }
+    const window = weekendWindow(Date.now())
+    if (!window.skip) {
+      fetchEventsApi({ page: 0, limit: 20, ...where, include: 'checkins', startDate: window.startDate, endDate: window.endDate })
+        .then(({ data, error }) => {
+          if (cancelled) return
+          if (error || !data) Logger.warn('events', 'This weekend did not load', { error: error?.message })
+          setWeekendState({ key: sectionsKey, events: error || !data ? null : data.map(normalizeEvent) })
+        })
+        .catch((error) => Logger.warn('events', 'This weekend threw', { error: String(error) }))
+    }
+    void (async () => {
+      try {
+        const interests = await apiClient.getProfileInterests(user.id)
+        const first = interests.success ? interests.data?.interests?.[0] : undefined
+        if (cancelled) return
+        if (!first) return setForYouState({ key: sectionsKey, value: null })
+        const { data, error } = await fetchEventsApi({ page: 0, limit: 12, ...where, include: 'checkins', categorySlug: first.slug })
+        if (cancelled) return
+        if (error || !data) Logger.warn('events', 'Because you like did not load', { error: error?.message })
+        setForYouState({ key: sectionsKey, value: error || !data ? null : { interest: { name: first.name, slug: first.slug }, events: data.map(normalizeEvent) } })
+      } catch (error) {
+        Logger.warn('events', 'Because you like threw', { error: String(error) })
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+    // The location only moves the key (to ~100 m); the request reads the live fix.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sectionRequestsOn, sectionsKey, user?.id])
+  const weekend = weekendState?.key === sectionsKey ? weekendState.events : null
+  const forYou = forYouState?.key === sectionsKey ? forYouState.value : null
+
+  /** The sections, in order, each claiming its events once (`lib/pulseSections.ts`). Search and filters make the pane a flat list. */
+  const sections = useMemo(
+    () => (isNarrowed ? [] : pulseSections<Event>({ page: events, weekend, forYou, now, hasFix, seedDate })),
+    [isNarrowed, events, weekend, forYou, now, hasFix, seedDate]
+  )
+  const sectionOf = (key: PulseSectionKey) => sections.find((x) => x.key === key)
+
+  // Places browses the same city from the same spot, and the map follows it (components/home/HomeShell.tsx).
+  useEffect(
+    () =>
+      onBrowse({
+        city: selectedCity,
+        location: userLocation,
+        ready: cityResolved,
+        cityCentre: cityOptions.find((c) => c.city === selectedCity)?.centre ?? null,
+        cityPick,
+        requestLocation: requestLocationIfNeeded,
+        openCityPicker: () => setCityPickerOpen(true),
+        peekLine: isNarrowed ? null : pulsePeekLine(sections),
+      }),
+    [onBrowse, selectedCity, userLocation, cityResolved, cityOptions, cityPick, requestLocationIfNeeded, isNarrowed, sections]
+  )
+
+  const firstSection = sections[0]?.key ?? null
+
+  /*
+   * Everything else: what no section drew, day by day (`DayHeading`), narrowed by
+   * the chip. Under a search or a filter it is the whole result, flat.
+   */
+  const [category, setCategory] = useState<string | null>(null)
+  const rest = useMemo(() => (isNarrowed ? events : everythingElse(events, sections)), [isNarrowed, events, sections])
+  const chips = useMemo(() => categoryChips(rest, categoryOptions), [rest, categoryOptions])
+  // A chip whose events are gone (a refresh) is no longer a filter.
+  const chosen = category && chips.some((c) => c.slug === category) ? category : null
+  const rows = useMemo<PulseRow[]>(() => {
+    if (isNarrowed) return events.map((event) => ({ kind: 'event' as const, key: event.id, event }))
+    const shown = (chosen ? rest.filter((e) => e.category_group === chosen) : rest)
+      .slice()
+      .sort((a, b) => Date.parse(liveWindow(a).start_time) - Date.parse(liveWindow(b).start_time))
+    return groupByDay(shown, new Date(now)).flatMap((group) => [
+      { kind: 'day' as const, key: `day-${group.key}`, title: group.title, weekday: group.weekday },
+      ...group.items.map((event) => ({ kind: 'event' as const, key: event.id, event })),
+    ])
+  }, [isNarrowed, events, rest, chosen, now])
+
+  /*
+   * The first card the page draws, the coach mark's hole: the first section's
+   * first event, or, with no section today, the first row under them.
+   */
+  const firstRowId = rows.find((r) => r.kind === 'event')?.key ?? null
+  const firstCardId = isNarrowed ? null : (sections[0]?.events[0]?.id ?? firstRowId)
+
+  const cardHandlers = useMemo(
+    () => ({ onPress: handleEventPress, onPressIn: warmEvent, onLongPress: handleEventPreview }),
+    [handleEventPress, warmEvent, handleEventPreview]
+  )
+
+  /*
+   * A row under the sections: a day heading, or an event. Everything else draws
+   * the same `UpcomingCard` as before, grouped by day so a card only needs its
+   * time; a search or a filter draws the result as 64 pt rows (`EventCard row`),
+   * where a promoted result is not lifted or labelled differently.
+   */
+  const renderRow = useCallback(({ item, index }: { item: PulseRow; index: number }) => {
+    if (item.kind === 'day') {
+      return (
+        <View style={styles.dayRow}>
+          <DayHeading title={item.title} detail={item.weekday} />
+        </View>
+      )
+    }
+    const event = item.event
+    if (isNarrowed) {
+      const card = homeCardProps(event, now, browsingHere)
+      return (
+        <View style={styles.mainRow}>
+          <EventCard
+            kind="row"
+            title={card.title}
+            time={card.time}
+            venue={card.venue}
+            distance={card.distance}
+            cover={card.cover}
+            onPress={() => handleEventPress(event)}
+            onPressIn={() => warmEvent(event)}
+            onLongPress={() => handleEventPreview(event)}
+            testID={`pulse-result-${event.id}`}
+          />
+        </View>
+      )
+    }
+    const isCheckedIn = checkinStatuses[event.id]?.status === 'checked_in'
+    const live = liveWindow(event)
+    const note = isCheckedIn ? 'Checked in' : sessionOver(event) ? 'Ended' : null
     return (
       <RevealRow index={index} pending={mainRowsRevealPending}>
-        <View style={styles.mainRow}>
+        <View style={styles.mainRow} ref={sections.length === 0 && event.id === firstRowId ? coachTarget : undefined} collapsable={false}>
           <UpcomingCard
             title={event.title}
             category={event.category || null}
             imageUrl={event.cover_image_url}
             retry={pulls}
-            timeLabel={nextUpLabel(live.start_time, live.end_time)}
+            timeLabel={timeLabel(live.start_time)}
             placeLabel={placeLabel(event)}
             peopleLabel={peopleLabel(event, onNow(event))}
             distanceLabel={browsingHere ? formatDistance(proximityData[event.id]?.distance_km ?? event.distance) : null}
@@ -1453,349 +1548,23 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
         </View>
       </RevealRow>
     )
-  }, [checkinStatuses, proximityData, interestStatuses, interestPending, browsingHere, handleEventPress, handleEventPreview, warmEvent, toggleInterest, pulls])
+  }, [isNarrowed, sections.length, firstRowId, now, checkinStatuses, proximityData, interestStatuses, interestPending, browsingHere, handleEventPress, handleEventPreview, warmEvent, toggleInterest, pulls])
+  const keyExtractor = useCallback((item: PulseRow) => item.key, [])
 
-  // Memoized keyExtractor
-  const keyExtractor = useCallback((item: Event) => item.id, [])
-
-  const upcomingItems = useMemo(() => {
-    return events
-      .filter(e => new Date(e.start_time).getTime() >= eventsLoadedAt)
-      .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
-  }, [events, eventsLoadedAt])
-
-  const nearbyItems = useMemo(() => {
-    if (!userLocation) return [] as Event[]
-    return events
-      .filter(e => Number.isFinite(e.latitude) && Number.isFinite(e.longitude))
-      .map(e => ({ e, d: proximityData[e.id]?.distance_km ?? Number.POSITIVE_INFINITY }))
-      .filter(x => Number.isFinite(x.d))
-      .sort((a, b) => a.d - b.d)
-      .map(x => x.e)
-  }, [events, userLocation, proximityData])
-
-
-
-  /*
-   * Featured is what is featured, and only that (BUILD-SPEC §D1, A3).
-   *
-   * It was the first six events with a cover image, which drew unfeatured events
-   * under a heading that says they were picked. Now: events the server (or the
-   * admin toggle, until it sends a rank) marks featured, capped and rotated by
-   * the day (`featuredPick`). Never back-filled: with none, the section is
-   * absent. An event with no cover still qualifies; its card draws the brand
-   * orbs hero, as the Scene does.
-   */
-  const featuredItems = useMemo(
-    () => featuredPick(events, eventsLoadedAt, seedDateOf(eventsLoadedAt)),
-    [events, eventsLoadedAt]
-  )
-  /*
-   * The Featured cards' props, computed once per data change.
-   *
-   * `renderItem` used to build these inline: a fresh `feedPlaylist(...)` array
-   * and a fresh `() => handleEventPress(item)` closure for **every card on
-   * every parent render**. Two allocations per card is not the cost -- the cost
-   * is that both are props, so a new identity defeats any memoisation the card
-   * could have, and these are the most expensive components on the screen:
-   * full-bleed heroes carrying images and a video player.
-   *
-   * `handleEventPress` is already a `useCallback` and `featuredItems` is
-   * already a `useMemo`, so binding here is stable for as long as the data is.
-   */
-  const featuredCards = useMemo(
-    () =>
-      featuredItems.map((item) => ({
-        id: item.id,
-        title: item.title,
-        tag: item.category || null,
-        playlist: feedPlaylist(item.media, item.cover_image_url),
-        dateLabel: featuredDateLabel(item.start_time),
-        placeLabel: placeLabel(item),
-        peopleLabel: peopleLabel(item, onNow(item)),
-        onPress: () => handleEventPress(item),
-        onPressIn: () => warmEvent(item),
-        onLongPress: () => handleEventPreview(item),
-      })),
-    [featuredItems, handleEventPress, handleEventPreview, warmEvent]
-  )
-
-  const upcomingStackItems = useMemo(() => {
-    const featuredIds = new Set(featuredItems.map(e => e.id))
-    return upcomingItems.filter(e => !featuredIds.has(e.id)).slice(0, 3)
-  }, [upcomingItems, featuredItems])
-
-  const mainListData = useMemo(() => {
-    /*
-     * A search is a flat list, not a magazine.
-     *
-     * Normally this holds only what the sections above did not already show,
-     * because a carousel and the list beneath it repeating the same event reads
-     * as a bug. Under a search that subtraction becomes the bug: the sections
-     * are hidden, so every id they claim is an id that appears nowhere — and
-     * searching a venue's name would return it and then not show it.
-     */
-    if (isNarrowed) return events
-
-    /*
-     * Subtract exactly what the three sections draw, and nothing else.
-     *
-     * This used to subtract Interested, city-top and nightlife as well. Those
-     * sections are gone, so every id they claimed became an id that appears
-     * **nowhere** — the event is not in a carousel, because there is no
-     * carousel, and it is filtered out of the list underneath for being in one.
-     *
-     * The same bug in the other direction is why `isSearching` returns early
-     * above. Keeping this list in step with what actually renders is the whole
-     * job of this memo, so it now names the three and only the three.
-     */
-    const shown = new Set<string>()
-    featuredItems.forEach(e => shown.add(e.id))
-    upcomingStackItems.forEach(e => shown.add(e.id))
-    nearbyItems.slice(0, 4).forEach(e => shown.add(e.id))
-    return events.filter(e => !shown.has(e.id))
-  }, [isNarrowed, events, featuredItems, upcomingStackItems, nearbyItems])
-
-  const renderFeaturedRow = () => {
-    if (featuredItems.length === 0) return null
-    /*
-     * Sized against the viewport, not only against the frame.
-     *
-     * `Main` is a 390 × 3548 scrolling artboard, so the design never had to fit
-     * this card between the header and the navigation — and at the frame's 85%
-     * of the screen width it does not. Measured on a 440 × 956 device: the card
-     * came out 374 × 508 with its top at 387, putting its bottom at 908 against
-     * a tab bar that starts at ~843. Sixty-five points of the hero card, and
-     * most of the gap under its title, sat beneath the bar.
-     *
-     * The page still runs the full height of the screen and still scrolls
-     * *under* the bar — that is padding, not layout, and it is what makes the
-     * bar read as a floating overlay. It is only this one card, the thing the
-     * screen opens on, that is sized to clear it.
-     */
-    const featured = featuredCardLayout(
-      cardInsets,
-      tabBarTop(SCREEN_HEIGHT, insets.bottom),
-      featuredItems.length === 1,
-      bannersHeight
-    )
-    return (
-      <View style={styles.pulseSection}>
-        {/*
-          No "VIEW ALL". It opened the Nearby list, sorted by distance, which is
-          not the featured events it sat above; and every event not in a section
-          is already in the list further down this screen.
-        */}
-        <SectionHeader title="Featured" />
-        {/*
-          A row of one is not a row.
-
-          With a single featured event the peeking width leaves a third of the
-          screen empty beside it, which reads as a layout that failed rather
-          than as an invitation to scroll. One card fills the width; two or more
-          go back to peeking.
-        */}
-        <View>
-          {featuredItems.length === 1 ? (
-            <View style={[styles.featuredBleed, { paddingHorizontal: featured.inset }]}>
-              <View ref={coachTarget}>
-                <FeaturedCard {...featuredCards[0]} isActive={visible} width={featured.width} />
-              </View>
-            </View>
-          ) : (
-            <FlatList
-              horizontal
-              data={featuredCards}
-              keyExtractor={featuredKeyExtractor}
-              showsHorizontalScrollIndicator={false}
-              /*
-                Full-bleed, then inset by the row's own 24.
-
-                Frame `1141:4660` — the carousel's mask — sits at section-x `-12`,
-                cancelling `Main`'s gutter so the row is the full 390, with card 1
-                starting at x=24 inside it. Built inside the gutter instead, the
-                card began at 12 and the scroll area ended 12pt short of the
-                screen: not centred, and a carousel that looks clipped rather than
-                one running off the edge.
-
-                `snapToInterval` is unchanged and still correct — the leading
-                padding is part of the content, so card N's left edge lands at
-                offset `N × (width + gap)` and snapping puts it back at x=24.
-              */
-              style={styles.featuredBleed}
-              contentContainerStyle={{ paddingHorizontal: featured.inset }}
-              // As the list it sits in: left at the default, this row would eat a card's first tap with the keyboard up.
-              keyboardShouldPersistTaps="handled"
-              snapToAlignment="start"
-              snapToInterval={featured.width + FEATURED_CARD_GAP}
-              decelerationRate="fast"
-              viewabilityConfig={featuredViewability}
-              onViewableItemsChanged={onFeaturedViewable}
-              renderItem={({ item, index }) => (
-                // The first card is the coach mark's target.
-                <View ref={index === 0 ? coachTarget : undefined}>
-                  <FeaturedCard {...item} isActive={visible && index === featuredActiveIndex} width={featured.width} />
-                </View>
-              )}
-              // Hoisted: an inline component is a new type every render, which
-              // remounts every separator rather than reusing them.
-              ItemSeparatorComponent={FeaturedSeparator}
-            />
-          )}
-        </View>
-      </View>
-    )
-  }
-
-  const renderUpcomingStack = () => {
-    if (upcomingStackItems.length === 0) return null
-    return (
-      <View style={styles.pulseSection}>
-        {/*
-          No prev/next arrows. The frame draws a pair beside this heading, and
-          they belong to a horizontal row — this is a vertical stack, so they
-          would scroll nothing. `SectionHeader` only renders them when handlers
-          are passed, which is why they are absent rather than inert.
-        */}
-        <SectionHeader title="Upcoming" />
-        {/*
-          Grouped by day, the way a calendar is (and Luma's event list): the
-          date is said once, above its events, so each card only needs a time.
-        */}
-        <View style={styles.dayGroups}>
-          {groupByDay(upcomingStackItems).map((group, groupIndex) => (
-            <View key={group.key} style={styles.dayGroup}>
-              <DayHeading title={group.title} detail={group.weekday} />
-              {group.items.map((item, index) => (
-                // The page's first card when nothing is featured: the coach mark's target.
-                <View key={`up-${item.id}`} ref={featuredItems.length === 0 && groupIndex === 0 && index === 0 ? coachTarget : undefined}>
-                  <UpcomingCard
-                    title={item.title}
-                    category={item.category || null}
-                    imageUrl={item.cover_image_url}
-                    retry={pulls}
-                    timeLabel={timeLabel(item.start_time)}
-                    placeLabel={placeLabel(item)}
-                    peopleLabel={peopleLabel(item, onNow(item))}
-                    // Distance from you only means something in the city you are in;
-                    // browsing elsewhere it read "6412km away". Same rule as Nearby.
-                    distanceLabel={browsingHere ? formatDistance(item.distance) : null}
-                    onPress={() => handleEventPress(item)}
-                    onPressIn={() => warmEvent(item)}
-                    onLongPress={() => handleEventPreview(item)}
-                    isFavorited={!!interestStatuses[item.id]}
-                    favoriteBusy={!!interestPending[item.id]}
-                    onToggleFavorite={() => toggleInterest(item)}
-                  />
-                </View>
-              ))}
-            </View>
-          ))}
-        </View>
-      </View>
-    )
-  }
-
-  const renderNearbyList = (items: Event[]) => {
-    const day = new Date().toLocaleDateString(undefined, { weekday: 'long' })
-    const place = selectedCity || 'Your area'
-    /*
-     * Relabelled when you are not in the city you are browsing, never hidden.
-     *
-     * "Nearby" is a promise about distance, and distance from a device in
-     * Munich to an event in Bengaluru is noise rather than information — so the
-     * section says *where* instead. Hiding it would change the page's shape for
-     * a reason the user cannot see, and would flicker for someone who *is* in
-     * the city but whose GPS has not resolved yet.
-     */
-    return (
-      <View style={styles.pulseSection}>
-        <SectionHeader
-          title={browsingHere ? 'Nearby' : `In ${place}`}
-          actionLabel="VIEW ALL"
-          onAction={() => router.push('/nearby-events' as any)}
-        />
-        {/*
-          The place is emphasised by family, not by `fontWeight`.
-
-          `fontWeight: '700'` on a nested `<Text>` inheriting Manrope is regular
-          on Android and bold on iOS, from identical code — the same trap the
-          stylesheet's second rule is about, and the one place in the render
-          that fell into it.
-        */}
-        <Text style={styles.sectionSubTitle}>
-          <Text style={{ fontFamily: EMBER_FONTS.bodyBold }}>{place}</Text> / {day}
-        </Text>
-        <View style={styles.pulseStack}>
-        {items.map((ev) => {
-          // The full content width. The old 96%-of-a-16pt-gutter came from a
-          // card that was inset inside a panel; there is no panel now, and the
-          // frame's gutter is the list's.
-          const containerWidth = SCREEN_WIDTH - (MAIN_PADDING_HORIZONTAL * 2)
-          return (
-            <NearbyEventCard
-              key={ev.id}
-              event={ev as any}
-              width={containerWidth}
-              onPress={handleEventPress as any}
-              onLongPress={handleEventPreview as any}
-              // The window the door goes by: a multi-day run's day, not the run.
-              timeLabel={formatTimeRange(liveWindow(ev).start_time, liveWindow(ev).end_time ?? ev.end_time, { includeDate: true, timezone: ev.timezone })}
-              /*
-                How far, when that means something.
-
-                Distance no longer filters anything, so this label is the only
-                thing between "that's across town" and someone tapping into an
-                event they cannot reach. It is shown **only while browsing the
-                city you are in** — measured from a device in Munich to an event
-                in Bengaluru it is a true number and useless information, so the
-                venue name is the better thing to give up the space to.
-              */
-              locationLabel={
-                (browsingHere ? formatDistance(proximityData[ev.id]?.distance_km) : null)
-                  || ev.venue_name || ev.address || ''
-              }
-            />
-          )
-        })}
-        </View>
-      </View>
-    )
-  }
-
-  const renderNearbyPrompt = () => (
-    <View style={styles.pulseSection}>
-      <SectionHeader title="Nearby" />
-      <Text style={styles.sectionSubTitle}>
-        Turn on location to see events near you.
-      </Text>
-      <TouchableOpacity
-        style={styles.nearbyCta}
-        onPress={() => {
-          if (locationStatus === 'denied') {
-            try { (Linking as any)?.openSettings?.() } catch {}
-          } else {
-            requestLocationIfNeeded()
-          }
-        }}
-        accessibilityRole="button"
-        accessibilityHint={
-          locationStatus === 'denied'
-            ? 'Opens Settings so you can allow location'
-            : 'Asks for your location to show events near you'
-        }
-      >
-        <Text style={styles.nearbyCtaText}>
-          {locationStatus === 'denied' ? 'Open settings' : 'Turn on location'}
-        </Text>
-      </TouchableOpacity>
-    </View>
-  )
+  const askForLocation = useCallback(() => {
+    if (locationStatus === 'denied') {
+      try {
+        ;(Linking as any)?.openSettings?.()
+      } catch {}
+    } else {
+      requestLocationIfNeeded()
+    }
+  }, [locationStatus, requestLocationIfNeeded])
 
   const isLoading = authLoading || loading
   const showLoadingSkeleton = useMinimumVisible(isLoading, 720)
   // The first featured card, warm once the Pulse has settled: the likeliest tap.
-  const firstFeatured = showLoadingSkeleton ? undefined : featuredItems[0]
+  const firstFeatured = showLoadingSkeleton ? undefined : sectionOf('featured')?.events[0]
   useEffect(() => {
     if (firstFeatured) warmEvent(firstFeatured)
     // Once per card, not per location fix.
@@ -1803,8 +1572,8 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   }, [firstFeatured?.id])
 
   /*
-   * The coach mark, under the first card the page draws (Featured's first, or
-   * Upcoming's when nothing is featured), caret up: above it, two lines at
+   * The coach mark, under the first card the page draws (the first section's
+   * first card, whichever section that is today), caret up: above it, two lines at
    * 360 dp covered the search bar (R4.1). Ready only with the drawer all the
    * way up and the list at its top -- at half the first card sits under the
    * tab bar -- and with none of this screen's sheets open. The bell's sheet is
@@ -1816,7 +1585,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       listAtTop &&
       !showLoadingSkeleton &&
       !isNarrowed &&
-      upcomingItems.length > 0 &&
+      firstCardId !== null &&
       !trayState.visible &&
       !filterSheetOpen &&
       !cityPickerOpen,
@@ -1833,7 +1602,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     target: coachTarget,
     text: PULSE_COACH_TEXT,
     place: 'below',
-    radius: featuredItems.length > 0 ? EMBER_RADIUS.card : EMBER_RADIUS.md,
+    radius: coachRadius(firstSection),
     onDismiss: coach.dismiss,
     onLost: coach.lose,
     bottomLimit: tabBarTop(SCREEN_HEIGHT, insets.bottom),
@@ -1841,8 +1610,8 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     testID: 'pulse-coach-mark',
   })
   useEffect(() => {
-    if (!showLoadingSkeleton && mainListData.length > 0) mainRowsRevealPending.current = false
-  }, [showLoadingSkeleton, mainListData.length])
+    if (!showLoadingSkeleton && (rows.length > 0 || sections.length > 0)) mainRowsRevealPending.current = false
+  }, [showLoadingSkeleton, rows.length, sections.length])
 
   /*
    * The undesigned rows, rendered into the feed's header rather than above it.
@@ -1979,16 +1748,6 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     />
   )
 
-  /**
-   * Shared with `renderFeaturedRow`'s own copy of this calculation, so the
-   * loading skeleton's hero card is the same size as the real one rather than
-   * an unrelated guess. Kept as a second call rather than a shared variable —
-   * `featuredCardLayout` is pure and cheap, and threading the result through
-   * as a prop would couple two render paths that would otherwise stay
-   * independent.
-   */
-  const featuredSkeleton = featuredCardLayout(cardInsets, tabBarTop(SCREEN_HEIGHT, insets.bottom), false, bannersHeight)
-
   const emptyKind = pulseEmptyKind({
     searching: isSearching,
     filtered: hasActiveFilters(filters),
@@ -2010,8 +1769,8 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     <View style={styles.container}>
         <VirtualizedList
           forwardedRef={listRef as any}
-          data={showLoadingSkeleton ? [] : mainListData}
-          renderItem={renderEventItem}
+          data={showLoadingSkeleton ? [] : rows}
+          renderItem={renderRow}
           keyExtractor={keyExtractor}
           estimatedItemSize={200}
           onEndReachedThreshold={0.5}
@@ -2046,7 +1805,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
           */
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
-          enableVirtualization={!isLoading && mainListData.length > 20}
+          enableVirtualization={!isLoading && rows.length > 20}
           /*
            * 4, not 10.
            *
@@ -2067,7 +1826,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
           initialNumToRender={4}
           maxToRenderPerBatch={5}
           windowSize={10}
-          ListHeaderComponent={(
+          ListHeaderComponent={
             showLoadingSkeleton ? (
               <View>
                 {/*
@@ -2110,57 +1869,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
                     ))}
                   </View>
                 ) : (
-                  <>
-                    {/* Featured — the real card's photo and words, with the next photo peeking. */}
-                    <View style={{ marginTop: MAIN_GAP, gap: SECTION_GAP }}>
-                      <View style={styles.sectionHeaderRow}>
-                        <SkeletonLine width={100} />
-                        <SkeletonLine width={64} />
-                      </View>
-                      <View style={[styles.featuredBleed, { flexDirection: 'row', paddingHorizontal: featuredSkeleton.inset, gap: FEATURED_CARD_GAP }]}>
-                        <View style={{ gap: SPACE.lg }}>
-                          <SkeletonBlock width={featuredSkeleton.width} height={featuredSkeleton.photoHeight} borderRadius={EMBER_RADIUS.card} />
-                          <View style={{ gap: SPACE.sm }}>
-                            <SkeletonLine width={featuredSkeleton.width * 0.8} />
-                            <SkeletonLine width={featuredSkeleton.width * 0.5} />
-                          </View>
-                        </View>
-                        <SkeletonBlock width={featuredSkeleton.width * 0.3} height={featuredSkeleton.photoHeight} borderRadius={EMBER_RADIUS.card} />
-                      </View>
-                    </View>
-
-                    {/* Upcoming — one day heading over `UpcomingCard` rows: words left, square photo right. */}
-                    <View style={{ marginTop: MAIN_GAP, gap: SECTION_GAP }}>
-                      <View style={styles.sectionHeaderRow}>
-                        <SkeletonLine width={120} />
-                      </View>
-                      <View style={styles.dayGroup}>
-                        <SkeletonLine width={80} />
-                        {[...Array(3)].map((_, i) => (
-                          <UpcomingSkeletonRow key={`s-up-${i}`} />
-                        ))}
-                      </View>
-                    </View>
-
-                    {/* Nearby — image cards at their real aspect ratio (363:249), full content width. */}
-                    <View style={{ marginTop: MAIN_GAP, gap: SECTION_GAP }}>
-                      <View style={styles.sectionHeaderRow}>
-                        <SkeletonLine width={90} />
-                        <SkeletonLine width={64} />
-                      </View>
-                      <SkeletonLine width={140} />
-                      <View style={{ gap: STACK_GAP }}>
-                        {[...Array(3)].map((_, i) => (
-                          <SkeletonBlock
-                            key={`s-near-${i}`}
-                            width={'100%'}
-                            height={(SCREEN_WIDTH - MAIN_PADDING_HORIZONTAL * 2) * (249 / 363)}
-                            borderRadius={EMBER_RADIUS.lg}
-                          />
-                        ))}
-                      </View>
-                    </View>
-                  </>
+                  <PulseSkeleton />
                 )}
                 <View style={{ height: SPACE.sm }} />
               </View>
@@ -2292,66 +2001,44 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
                   </FadeInUp>
                 )}
                 {/*
-                  Under a search, none of the curated sections render.
-
-                  A hero, three carousels and a nightlife rail are how you
-                  browse when you do not know what you want. Somebody who has
-                  typed a venue's name knows exactly what they want, and
-                  making them scroll past five editorial rails to reach it is
-                  the screen ignoring the question it was just asked.
+                  Under a search, none of the sections render: somebody who has
+                  typed a venue's name knows what they want. The pane is the
+                  result, flat, under its count.
                 */}
-                {/*
-                  Three sections, in the frame's order, and nothing else.
-
-                  Frame `1141:4643` draws Featured at y=277, Upcoming at y=839
-                  and Nearby at y=2335. That is the whole screen.
-
-                  What used to be here, and is now gone: an invite hero, an
-                  Interested carousel, a "{City}'s Top Events" fancy carousel and
-                  a nightlife hero. None of them is in any frame. They were three
-                  designs' worth of sediment stacked in one list, which is why
-                  every fix landed next to something older that contradicted it —
-                  and why `renderFeaturedRow`, the one function built *from* the
-                  frame, had no caller at all while six that were not still ran.
-
-                  Their data is untouched in the behaviour half above, so each
-                  comes back as a section the day it has a frame.
-                */}
-                {!isNarrowed ? (
-                  <FadeInUp delay={SECTION_MOTION_BASE_DELAY + SECTION_MOTION_STAGGER} distance={10}>
-                    {renderFeaturedRow()}
-                  </FadeInUp>
-                ) : null}
-
-                {!isNarrowed && upcomingItems.length > 0 ? (
-                  <FadeInUp delay={SECTION_MOTION_BASE_DELAY + (SECTION_MOTION_STAGGER * 2)} distance={8}>
-                    {renderUpcomingStack()}
-                  </FadeInUp>
-                ) : null}
-
-                {isNarrowed
-                  ? null
-                  : userLocation
-                  ? (nearbyItems.length > 0 ? (
-                    <FadeInUp delay={SECTION_MOTION_BASE_DELAY + (SECTION_MOTION_STAGGER * 3)} distance={8}>
-                      {renderNearbyList(nearbyItems.slice(0, 4))}
-                    </FadeInUp>
-                  ) : null)
-                  : ((locationStatus === 'denied' || locationStatus === 'undetermined') ? (
-                    <FadeInUp delay={SECTION_MOTION_BASE_DELAY + (SECTION_MOTION_STAGGER * 3)} distance={8}>
-                      {renderNearbyPrompt()}
-                    </FadeInUp>
-                  ) : null)}
-                {/* Names the rows that follow, so they read as a section rather than as overflow. */}
-                {!isNarrowed && mainListData.length > 0 ? (
-                  <View style={[styles.pulseSection, { marginBottom: SECTION_GAP }]}>
-                    <SectionHeader title="More events" />
+                {isNarrowed && events.length > 0 ? (
+                  <View style={styles.resultsLabel}>
+                    <Text style={styles.resultsLabelText} accessibilityRole="header">
+                      <Text style={styles.resultsCount}>{events.length}</Text>
+                      {` ${events.length === 1 ? 'event' : 'events'}${selectedCity ? ` · ${selectedCity}` : ''}`}
+                    </Text>
                   </View>
+                ) : null}
+                {!isNarrowed ? (
+                  <View style={styles.bleed}>
+                    <SectionStack
+                      sections={sections}
+                      now={now}
+                      withDistance={hasFix}
+                      visible={visible}
+                      handlers={cardHandlers}
+                      coachRef={coachTarget}
+                      pending={mainRowsRevealPending}
+                      featuredLayout={(solo) => featuredCardLayout(cardInsets, tabBarTop(SCREEN_HEIGHT, insets.bottom), solo, bannersHeight)}
+                      askForLocation={!userLocation && (locationStatus === 'denied' || locationStatus === 'undetermined') ? { denied: locationStatus === 'denied', onAsk: askForLocation } : null}
+                    />
+                  </View>
+                ) : null}
+                {!isNarrowed && rows.length > 0 ? (
+                  <SectionReveal index={sections.length + 1} pending={mainRowsRevealPending}>
+                    <View style={styles.bleed}>
+                      <EverythingHeader chips={chips} selected={chosen} onSelect={setCategory} />
+                    </View>
+                  </SectionReveal>
                 ) : null}
                 <View style={{ height: SPACE.sm }} />
               </View>
             )
-          )}
+          }
         />
 
       {/*
@@ -2563,38 +2250,17 @@ const styles = StyleSheet.create({
 
   /* ---- Sections: Featured, Upcoming, Nearby ------------------------------ */
 
-  /**
-   * `Main` is `gap-[48px]`; a section is `gap-[24px]` inside.
-   *
-   * The gap is a `marginTop` on the section rather than a `gap` on the list's
-   * header, because the header also holds the banners and the empty state and
-   * those are not `Main` children — they are rows with no frame, and giving
-   * them the frame's section rhythm would assert a design that does not exist.
-   */
-  pulseSection: {
-    gap: SECTION_GAP,
-    marginTop: MAIN_GAP,
-  },
-  /*
-   * Cancels `Main`'s gutter so the Featured row runs edge to edge.
-   *
-   * The frame does this with a mask at section-x `-12` (`1141:4660`); a
-   * negative margin is the React Native equivalent. The section *header* keeps
-   * the gutter — only the scrolling row bleeds, which is what the frame draws.
-   */
-  featuredBleed: {
-    marginHorizontal: -MAIN_PADDING_HORIZONTAL,
-  },
-  /** A vertical column of cards inside a section — Nearby. */
-  pulseStack: {
-    gap: STACK_GAP,
-  },
-  /** Upcoming: days a section's gap apart, rows within a day close together. */
-  dayGroups: { gap: SPACE.xl },
-  dayGroup: { gap: SPACE.md },
   /** The coach mark, under the card it names: its caret's tip just clear of the card's edge; the design's 300 at most. */
   /** A row in the list under the sections: the Upcoming stack's spacing. */
   mainRow: { paddingBottom: SPACE.md },
+  /** The sections run edge to edge (rails and the Set list carry their own gutter); the list's padding is cancelled around them. */
+  bleed: { marginHorizontal: -MAIN_PADDING_HORIZONTAL },
+  /** A day's heading over its rows: a section gap above the first, the stack's rhythm below. */
+  dayRow: { paddingTop: SPACE.lg, paddingBottom: SPACE.xs },
+  /** "6 events · Bengaluru": the flat result's label. */
+  resultsLabel: { paddingTop: SPACE.xl, paddingBottom: SPACE.md },
+  resultsLabelText: { ...DESIGN_TYPE.label, color: COLOR.textSecondary },
+  resultsCount: { fontFamily: FONT_FAMILY.mono[700], color: COLOR.textPrimary },
   /**
    * The loading skeleton's Upcoming row — `UpcomingCard`'s own `card` style
    * (`surfaceSunken`, `EMBER_RADIUS.md`, 16 padding, 16 gap), so the
@@ -2611,39 +2277,9 @@ const styles = StyleSheet.create({
   },
   /** The search/filter skeleton: rows spaced like `mainRow`. */
   narrowedSkeleton: { marginTop: SPACE.xl, gap: SPACE.md },
-  /** "{City} / Tuesday", under a section heading. */
-  sectionSubTitle: {
-    ...TYPE.meta,
-  },
-  /**
-   * Skeletons only. The real headings are `SectionHeader`, which carries its
-   * own row; this exists so a loading placeholder lines up with the heading it
-   * stands in for rather than drifting a few points off it.
-   */
-  sectionHeaderRow: {
-    marginBottom: SPACE.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
 
   /* ---- Nearby, when there is no location -------------------------------- */
 
-  nearbyCta: {
-    marginTop: SPACE.md,
-    minHeight: CONTROL.md,
-    justifyContent: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: EMBER.surface,
-    paddingHorizontal: SPACE.lg,
-    paddingVertical: SPACE.sm,
-    borderRadius: EMBER_RADIUS.pill,
-  },
-  nearbyCtaText: {
-    ...TYPE.button,
-    // Neutral: the screen's one accent is the title (docs/DESIGN_SYSTEM.md).
-    color: EMBER.textPrimary,
-  },
 
   /* ---- The rows with behaviour and no frame ----------------------------- */
   /*

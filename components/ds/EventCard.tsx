@@ -4,8 +4,10 @@ import { Platform, Pressable, StyleSheet, Text, View, type StyleProp, type ViewS
 
 import ScalePress from '../motion/ScalePress'
 import { PhotoScrim } from '../ui/GradientFill'
-import { COLOR, FONT_FAMILY, PRESS, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
-import { ScrimPill, TimeBadge } from './MonoFamily'
+import { COLOR, FONT_FAMILY, ICON, PRESS, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { Icon } from '../ui/Icon'
+import { PROMOTED_LABEL } from '../../lib/pulseSections'
+import { PresenceDot, ScrimPill, TimeBadge } from './MonoFamily'
 import { CONTROL_FONT_CAP, focusRing, font, IC_HAIRLINE, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
 
 export type EventCardKind = 'hero' | 'compact' | 'row'
@@ -19,10 +21,23 @@ export type EventCardProps = {
   /** "1.2 km". */
   distance?: string
   going?: number
+  /** Inside now, shown as "{n} here now" in place of `going` on a live card. The caller applies the floor of five. */
+  here?: number
+  /** A paid placement: a "PROMOTED" scrim pill top-right, read first. Editorial picks carry none. */
+  promoted?: boolean
+  /**
+   * `distance`: a row leads with the distance in a 64 pt Geist Mono column (the Pulse's Nearby), and its
+   * meta reads "● Live · {venue}" or "{when} · {venue}" (the distance has its own column).
+   */
+  lead?: 'distance'
   cover?: string | null
   /** You're going: the ribbon reads "You're going · {saved}" ("9 PM"). */
   saved?: string
   onPress?: () => void
+  /** The finger is down: a screen warms what the press opens (~100 ms before it). */
+  onPressIn?: () => void
+  /** The quick-actions tray (save, share, preview), also reached by a screen reader's "Quick actions" action. */
+  onLongPress?: () => void
   /** The design gallery only: draws a transient state with no finger or keyboard. */
   previewState?: 'pressed' | 'focused'
   testID?: string
@@ -42,10 +57,24 @@ const ROW_HEIGHT = 64
  */
 const FOOT_FONT_CAP = 1.5
 const PILL_HEIGHT = 28
+const QUICK_ACTIONS = [{ name: 'quickActions', label: 'Quick actions' }]
 
 /** "{You're going, }{title}, {time}, at {venue}, {distance}, {N} going": the pills are not separate elements. */
-export function eventLabel({ title, time, venue, distance, going, saved }: Pick<EventCardProps, 'title' | 'time' | 'venue' | 'distance' | 'going' | 'saved'>) {
-  return [saved ? 'You’re going' : null, title, time, `at ${venue}`, distance, going ? `${going} going` : null].filter(Boolean).join(', ')
+export function eventLabel({
+  title,
+  time,
+  venue,
+  distance,
+  going,
+  here,
+  promoted,
+  saved,
+}: Pick<EventCardProps, 'title' | 'time' | 'venue' | 'distance' | 'going' | 'here' | 'promoted' | 'saved'>) {
+  const people = here ? `${here} here now` : going ? `${going} going` : null
+  // "Live" leads the way "Promoted" does: it is the first thing to know about the card.
+  const live = time === 'Live'
+  const parts = [saved ? 'You’re going' : null, title, live ? null : time, `at ${venue}`, distance, people].filter(Boolean).join(', ')
+  return [promoted ? PROMOTED_LABEL : null, live ? 'Live' : null, parts].filter(Boolean).join('. ')
 }
 
 /**
@@ -65,14 +94,25 @@ export function eventLabel({ title, time, venue, distance, going, saved }: Pick<
  * on the card and the scrim 20% deeper.
  */
 export function EventCard(props: EventCardProps) {
-  const { kind, title, time, venue, distance, going, cover, saved, onPress, previewState, testID, style } = props
+  const { kind, title, time, venue, distance, going, here, promoted, lead, cover, saved, onPress, onPressIn, onLongPress, previewState, testID, style } = props
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const android = Platform.OS === 'android'
   const [focused, setFocused] = useState(false)
   const label = eventLabel(props)
   const ring = focused || previewState === 'focused'
-  const a11y = { accessibilityRole: 'button' as const, accessibilityLabel: label }
+  const a11y = {
+    accessibilityRole: 'button' as const,
+    accessibilityLabel: label,
+    ...(onLongPress
+      ? {
+          accessibilityActions: QUICK_ACTIONS,
+          onAccessibilityAction: (e: { nativeEvent: { actionName: string } }) => {
+            if (e.nativeEvent.actionName === 'quickActions') onLongPress()
+          },
+        }
+      : null),
+  }
 
   if (kind === 'row') {
     return (
@@ -80,12 +120,19 @@ export function EventCard(props: EventCardProps) {
         <Pressable
           testID={testID}
           onPress={onPress}
+          onPressIn={onPressIn}
+          onLongPress={onLongPress}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           android_ripple={{ color: PRESSED_WASH.android }}
           {...a11y}
           style={({ pressed }) => [styles.row, (pressed || previewState === 'pressed') && !android && styles.rowPressed]}
         >
+          {lead === 'distance' ? (
+            <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('title', bold, FONT_FAMILY.mono[700]), styles.ink, styles.tabular, styles.lead]} testID={testID && `${testID}-lead`}>
+              {distance ?? ''}
+            </Text>
+          ) : null}
           <View testID={testID && `${testID}-thumb`} style={styles.thumb}>
             {cover ? <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} /> : null}
           </View>
@@ -95,12 +142,26 @@ export function EventCard(props: EventCardProps) {
             </Text>
             {/* The venue gives way to a long name; the time, the thing the row is for, never does. */}
             <View style={styles.rowMeta}>
-              <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary, styles.shrink]}>
-                {[venue, distance].filter(Boolean).join(' · ')} ·
-              </Text>
-              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary, styles.tabular]}>
-                {time}
-              </Text>
+              {lead === 'distance' ? (
+                <>
+                  {time === 'Live' ? <PresenceDot kind="live" /> : null}
+                  <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[time === 'Live' ? font('meta', bold) : font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary, styles.tabular]}>
+                    {time === 'Live' ? 'Live' : time}
+                  </Text>
+                  <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary, styles.shrink]}>
+                    {` · ${venue}`}
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary, styles.shrink]}>
+                    {[venue, distance].filter(Boolean).join(' · ')} ·
+                  </Text>
+                  <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary, styles.tabular]}>
+                    {time}
+                  </Text>
+                </>
+              )}
             </View>
           </View>
         </Pressable>
@@ -119,6 +180,8 @@ export function EventCard(props: EventCardProps) {
       <ScalePress
         testID={testID}
         onPress={onPress}
+        onPressIn={onPressIn}
+        onLongPress={onLongPress}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         pressedScale={android ? 1 : PRESS.scale}
@@ -130,7 +193,14 @@ export function EventCard(props: EventCardProps) {
         <PhotoScrim testID={testID && `${testID}-scrim`} contrast={contrast} style={styles.scrim} />
         <View style={styles.pills}>
           <TimeBadge when={time} />
-          {going ? (
+          {here ? (
+            <ScrimPill testID={testID && `${testID}-here`}>
+              <Text style={[font('caption', bold), styles.ink]} maxFontSizeMultiplier={CONTROL_FONT_CAP}>
+                <Text style={[font('caption', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{here}</Text>
+                {' here now'}
+              </Text>
+            </ScrimPill>
+          ) : going ? (
             <ScrimPill>
               <Text style={[font('caption', bold), styles.ink]} maxFontSizeMultiplier={CONTROL_FONT_CAP}>
                 {`${going} going`}
@@ -138,6 +208,16 @@ export function EventCard(props: EventCardProps) {
             </ScrimPill>
           ) : null}
         </View>
+        {promoted ? (
+          <View style={styles.promoted} testID={testID && `${testID}-promoted`}>
+            <ScrimPill>
+              <Icon name="megaphone" size={ICON.inline} color={COLOR.textSecondary} />
+              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('label', bold), styles.secondary]}>
+                {PROMOTED_LABEL.toUpperCase()}
+              </Text>
+            </ScrimPill>
+          </View>
+        ) : null}
         {saved ? (
           <View testID={testID && `${testID}-saved`} style={styles.saved}>
             <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), styles.onWhite]}>
@@ -177,6 +257,9 @@ const styles = StyleSheet.create({
   card: { flex: 1, overflow: 'hidden', backgroundColor: COLOR.surface },
   scrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: SCRIM_HEIGHT },
   pills: { position: 'absolute', top: SPACE.md, left: SPACE.md, flexDirection: 'row', gap: SPACE.sm },
+  promoted: { position: 'absolute', top: SPACE.md, right: SPACE.md },
+  /** The row's distance column (Pulse › Nearby): 64 wide, Geist Mono 700. */
+  lead: { width: SIZE.tag * 2, flexShrink: 0 },
   saved: {
     position: 'absolute',
     top: SPACE.md + PILL_HEIGHT + SPACE.sm,
