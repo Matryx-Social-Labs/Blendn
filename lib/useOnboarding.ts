@@ -45,6 +45,9 @@ export async function syncInterests(userId: string, wanted: string[]): Promise<b
   return ok
 }
 
+/** The save that never reached the server (Flow 2 `SAVE_FAIL`): the step stays, and Continue is the retry. */
+const SAVE_FAILED_OFFLINE = 'Couldn’t save that. Check your connection and tap Continue to try again.'
+
 const FINISH_FAILED =
   'We could not finish setting up your profile. Check your connection and try again — nothing you entered has been lost.'
 
@@ -284,7 +287,7 @@ export function useOnboarding(step: OnboardingStep) {
         }
       } catch (error) {
         Logger.warn('auth', 'Onboarding step threw while saving', { step, error })
-        failure = "Couldn't save that. Check your connection and try again."
+        failure = SAVE_FAILED_OFFLINE
       } finally {
         // In `finally` rather than after the call: a throw here used to leave
         // this stuck true, which is what made the button spin forever.

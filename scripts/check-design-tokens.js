@@ -70,11 +70,8 @@ const ICON = new Set([TOKENS.icon.inline, TOKENS.icon.control, TOKENS.icon.nav])
  */
 const GRADIENT_LEGACY = Object.fromEntries(
   [
-    'app/onboarding/media.tsx',
     'components/NearbyEventCard.tsx',
     'components/blendn/Face.tsx',
-    'components/onboarding/LookingForCards.tsx',
-    'components/onboarding/PermissionIllustration.tsx',
     'components/profile/MemoryTile.tsx',
     'components/profile/PhotoStack.tsx',
     'components/profile/ProfileSections.tsx',

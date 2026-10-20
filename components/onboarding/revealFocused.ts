@@ -1,4 +1,4 @@
-import { createContext, useCallback, useRef, type RefObject } from 'react'
+import { createContext, useCallback, useContext, useRef, type RefObject } from 'react'
 import { ScrollView, TextInput, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native'
 
 /** Room kept above the field for its label, and below it for the hint (two or three lines of small print). */
@@ -18,8 +18,18 @@ export function revealOffset(field: { top: number; bottom: number }, scrollY: nu
   return null
 }
 
-/** What `EmberField` calls when it takes focus: bring me into view. Absent outside an onboarding screen. */
+/** What a field calls when it takes focus: bring me into view. Absent outside an onboarding screen. */
 export const RevealOnFocus = createContext<(() => void) | null>(null)
+
+/**
+ * The `onFocus` a field on an onboarding page takes, so the page follows it: spread it into a `TextField` (which chains it to
+ * its own). Nothing outside an onboarding page, where there is no page to ask. A `DateField`'s boxes are covered by the
+ * viewport change when the keyboard arrives.
+ */
+export function useRevealProps(): { onFocus?: () => void } {
+  const reveal = useContext(RevealOnFocus)
+  return reveal ? { onFocus: reveal } : {}
+}
 
 /**
  * The onboarding page's scroll, taught to follow the focused field.

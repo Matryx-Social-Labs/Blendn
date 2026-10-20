@@ -1,7 +1,7 @@
 import { Stack } from 'expo-router'
 import { Platform } from 'react-native'
 
-import { EMBER } from '../../lib/theme'
+import { COLOR } from '../../lib/design/tokens'
 
 /**
  * The onboarding stack.
@@ -30,7 +30,7 @@ export default function OnboardingLayout() {
         // The root stack's transition, so a step pushes like every other
         // screen: iOS's own parallax push, not the Android-style slide.
         animation: Platform.OS === 'ios' ? 'ios_from_right' : 'slide_from_right',
-        contentStyle: { backgroundColor: EMBER.bg },
+        contentStyle: { backgroundColor: COLOR.ink },
       }}
     >
       {/*

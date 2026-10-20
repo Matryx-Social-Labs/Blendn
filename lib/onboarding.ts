@@ -215,6 +215,8 @@ export interface OnboardingDraft {
   occupation?: string
   education?: string
   work_field?: string
+  /** What they do within `work_field`: up to three of the server's curated slugs, prefixed with their field. */
+  expertise?: string[]
   interests?: string[]
   /**
    * The structured graph — `user_interests` category ids, not the free-text
@@ -252,7 +254,7 @@ const STEP_FIELDS: Record<OnboardingStep, readonly (keyof OnboardingDraft)[]> = 
   notifications: ['push_enabled'],
   location: ['share_location'],
   preferences: ['orientations', 'show_orientation', 'looking_for', 'reveal_by_default'],
-  journey: ['location', 'occupation', 'education', 'work_field'],
+  journey: ['location', 'occupation', 'education', 'work_field', 'expertise'],
   details: ['interests', 'bio'],
   media: ['photos'],
   ready: [],
@@ -274,7 +276,6 @@ export function stepPayload(
   for (const field of STEP_FIELDS[step]) {
     const value = draft[field]
     if (value !== undefined) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ;(body as any)[field] = value
     }
   }
@@ -598,4 +599,35 @@ export async function askOsPermission(
   } catch {
     return { granted: false, blocked: false }
   }
+}
+
+/**
+ * The bio with a writing prompt added (Flow 2 details: a tap on "Ask me about…" puts it in the box): on its own line after
+ * what is there, and only when the whole still fits `limit` (counted in UTF-16 units, as the server's `max()` does). A prompt
+ * that would not fit leaves the bio as it was.
+ */
+export function bioWithPrompt(bio: string, prompt: string, limit: number): string {
+  const next = bio.trim() ? `${bio.replace(/\s+$/, '')}\n${prompt} ` : `${prompt} `
+  return next.length <= limit ? next : bio
+}
+
+/** The most specialisms the server takes when it does not say (`MAX_EXPERTISE`). */
+export const DEFAULT_MAX_EXPERTISE = 3
+
+type Expertises = Readonly<Record<string, readonly { slug: string }[]>>
+
+/**
+ * The specialisms that still belong to `field` (Flow 2 journey, expertise as step two of the field of work). A slug carries
+ * its field, so changing the field clears what no longer fits, as the server's `pruneExpertise` would on the next write;
+ * choosing nothing clears them all.
+ */
+export function keepExpertise(expertise: readonly string[], field: string | undefined, byField: Expertises | undefined): string[] {
+  const allowed = new Set((field ? byField?.[field] : undefined)?.map((entry) => entry.slug))
+  return expertise.filter((slug) => allowed.has(slug))
+}
+
+/** A specialism picked or put back; at the cap a new one is refused (the chips beyond it are dimmed, never hidden). */
+export function toggleExpertise(expertise: readonly string[], slug: string, max: number = DEFAULT_MAX_EXPERTISE): string[] {
+  if (expertise.includes(slug)) return expertise.filter((held) => held !== slug)
+  return expertise.length >= max ? [...expertise] : [...expertise, slug]
 }

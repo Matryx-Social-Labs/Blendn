@@ -1,14 +1,20 @@
 import * as Location from 'expo-location'
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { AppState, StyleSheet, Text, View } from 'react-native'
 
+import { font, useBoldText } from '../../components/ds/shared'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import { SettingsTray } from '../../components/onboarding/SettingsTray'
 import { LocationIllustration } from '../../components/onboarding/PermissionIllustration'
+import { isPreciseLocationOff } from '../../components/onboarding/preciseLocation'
+import { Icon } from '../../components/ui/Icon'
+import { readStoredCity } from '../../lib/cityStorage'
+import { COLOR, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
 import { askOsPermission } from '../../lib/onboarding'
 import { useOnboarding } from '../../lib/useOnboarding'
 
 /**
- * Step three — location.
+ * Step three: location.
  *
  * Same shape as notifications, and the same reason for existing: the OS dialog
  * fires once, so the explanation has to come first.
@@ -25,12 +31,41 @@ import { useOnboarding } from '../../lib/useOnboarding'
  * the sharing preference follows it because the design has one control, and
  * both are editable in Settings afterwards.
  */
-const SETTINGS_HINT = "Blend'n uses location to see who is around you, and check in to events."
+const SETTINGS_HINT = 'Blend’n uses your location to show events near you, and to check you in when you arrive at one.'
+const PRECISE_OFF_NOTICE = 'Precise location is off, so check-in can’t confirm you’re inside the venue. Turn it on in Settings.'
+
+/**
+ * Whether location is allowed but only roughly: asked on arrival, after each answer, and on coming back from Settings
+ * (where the switch is). Nothing asked of the person: reading the setting never prompts.
+ */
+function usePreciseLocationOff() {
+  const [off, setOff] = useState(false)
+  const read = useCallback(async () => {
+    const permission = await Location.getForegroundPermissionsAsync().catch(() => null)
+    setOff(isPreciseLocationOff(permission))
+  }, [])
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the setting's own read
+    void read()
+    const sub = AppState.addEventListener('change', (status) => {
+      if (status === 'active') void read()
+    })
+    return () => sub.remove()
+  }, [read])
+  return { off, read }
+}
 
 export default function LocationScreen() {
   const { saving, commit, goBack } = useOnboarding('location')
+  const bold = useBoldText()
   const [asking, setAsking] = useState(false)
   const [settingsPrompt, setSettingsPrompt] = useState(false)
+  const precise = usePreciseLocationOff()
+  // The city the person has browsed, when there is one: "Near you · Bengaluru". Before any, the line says only "Near you".
+  const [city, setCity] = useState<string | null>(null)
+  useEffect(() => {
+    void readStoredCity().then((stored) => setCity(stored?.city ?? null))
+  }, [])
 
   const ask = async () => {
     setAsking(true)
@@ -39,6 +74,7 @@ export default function LocationScreen() {
       async () => (await Location.requestForegroundPermissionsAsync()).status === 'granted'
     )
     setAsking(false)
+    void precise.read()
 
     if (blocked) {
       // The answer comes from the tray; the step waits for it.
@@ -52,8 +88,8 @@ export default function LocationScreen() {
   return (
     <OnboardingScreen
       step="location"
-      title="See who's around"
-      subtitle="Blend'n uses your location to show events near you, and to check you in when you arrive at one."
+      title="See who’s around"
+      subtitle="Blend’n uses your location to show events near you, and to check you in when you arrive at one."
       ctaLabel="Allow location"
       ctaBusy={saving || asking}
       onContinue={() => void ask()}
@@ -64,9 +100,16 @@ export default function LocationScreen() {
       footerNote="Your precise location is never shared with strangers."
       onBack={goBack}
     >
-      <LocationIllustration />
+      {precise.off ? (
+        <View testID="precise-off-notice" accessibilityRole="alert" style={styles.notice}>
+          <Icon name="triangle-alert" size={ICON.control} color={COLOR.warning} />
+          <Text style={[font('meta', bold), styles.noticeText]}>{PRECISE_OFF_NOTICE}</Text>
+        </View>
+      ) : null}
+      <LocationIllustration city={city} notice={precise.off} />
       <SettingsTray
         visible={settingsPrompt}
+        icon="map-pin-off"
         hint={SETTINGS_HINT}
         onClose={() => setSettingsPrompt(false)}
         onNotNow={() => {
@@ -77,3 +120,16 @@ export default function LocationScreen() {
     </OnboardingScreen>
   )
 }
+
+const styles = StyleSheet.create({
+  notice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: SPACE.md,
+    borderRadius: RADIUS.rowInCard,
+    backgroundColor: COLOR.surface,
+    paddingVertical: SPACE.md,
+    paddingHorizontal: SPACE.lg,
+  },
+  noticeText: { flex: 1, color: COLOR.textPrimary },
+})

@@ -1,255 +1,163 @@
-import { Ionicons } from '@expo/vector-icons'
-import { LinearGradient } from 'expo-linear-gradient'
 import { StyleSheet, Text, View } from 'react-native'
-import { Image } from 'expo-image'
 
-import { CONTROL, EMBER, EMBER_RADIUS, ICON, SPACE, tint, TYPE } from '../../lib/theme'
-
-/**
- * The picture in the middle of a permission screen.
- *
- * These two screens were shipped with an empty middle and a note saying the
- * illustrations had never been exported. They had — the frames carry real
- * exported assets, and the empty space was me not looking hard enough.
- *
- * Both images are **committed to the repo**, not linked. Figma's asset URLs
- * expire after about seven days, so a build referencing one is a build whose
- * artwork disappears a week later.
- *
- * What is *not* an image is the card floating over each one: the notification
- * bubble and the location footer are real views, drawn with the same tokens as
- * the rest of the app. That is deliberate — they are a preview of something the
- * product actually does, and a screenshot of a notification would go stale the
- * first time the notification copy changed.
- */
-
-const NOTIFICATION_ART = require('../../assets/onboarding/notifications.jpg')
-const LOCATION_ART = require('../../assets/onboarding/location-map.jpg')
+import { Avatar } from '../ds/Avatar'
+import { DiscMark } from '../ds/DiscMark'
+import { Orbs } from '../ds/Orbs'
+import { font, useBoldText } from '../ds/shared'
+import { monoCaption } from '../ds/MonoFamily'
+import { Icon } from '../ui/Icon'
+import FadeInUp from '../motion/FadeInUp'
+import { COLOR, ICON, RADIUS, RISE, SPACE } from '../../lib/design/tokens'
 
 /**
- * The people on the map, exactly as the frame places them.
- *
- * Positions are the frame's own percentages, measured inside a box inset 32px
- * from the card — which is why they are expressed as percentages of that inner
- * box rather than of the card.
- *
- * I left these out on the first pass and changed the footer copy at the same
- * time, on the reasoning that stock portraits of strangers sit oddly on the
- * screen asking to find real people nearby. That was a judgement to raise, not
- * to act on unilaterally, and it was overruled: the frame is the spec.
+ * The picture in the middle of a permission step (Flow 2 notifications 01, location 01), drawn from design-system parts: no
+ * stock photographs. Both are decorative, hidden from a screen reader (the title and sentence say what the step is for), and
+ * a preview of something the product really does, so they are views, not screenshots that go stale with the copy.
  */
-const NEARBY = [
-  { art: require('../../assets/onboarding/nearby-1.jpg'), size: 48, left: '15%', top: '20%' },
-  { art: require('../../assets/onboarding/nearby-2.jpg'), size: 48, left: '62%', top: '53%' },
-  { art: require('../../assets/onboarding/nearby-3.jpg'), size: 40, left: '10%', top: '60%' },
-] as const
 
-const YOU_ART = require('../../assets/onboarding/you.jpg')
+const NOTIFICATION_HEIGHT = 260
+const MAP_HEIGHT = 300
+/** The map card's height with the "Precise location is off" notice above it (the frame draws 232). */
+export const MAP_HEIGHT_WITH_NOTICE = 232
+/** The orbs behind the notification, at the page's strength for a card (`orbs-moment` at 0.35). */
+const MOMENT_LEVEL = 0.35
+/** The sample app icon on the notification, 40 pt. */
+const APP_ICON = 40
 
-/** The moon, with a sample notification laid over it. */
+/** The moon-and-orbs card, with a sample notification dropped over it (it lands once). */
 export function NotificationIllustration() {
+  const bold = useBoldText()
   return (
     <View
+      testID="notification-illustration"
       accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants" style={styles.card}>
-      <Image source={NOTIFICATION_ART} style={styles.art} contentFit="cover" transition={180} cachePolicy="memory-disk" />
-      {/* Bottom-to-top scrim so the card reads against a bright patch of art. */}
-      <LinearGradient
-        colors={[EMBER.bgClear, tint(EMBER.bg, 0.75)]}
-        style={StyleSheet.absoluteFill}
-        pointerEvents="none"
-      />
-
-      <View style={styles.bubble}>
-        <View style={styles.bubbleIcon}>
-          <Ionicons name="flash" size={ICON.md} color={EMBER.textPrimary} />
-        </View>
-
-        <View style={styles.bubbleText}>
-          <View style={styles.bubbleTop}>
-            <Text style={styles.bubbleTitle}>New Spark Nearby</Text>
-            <Text style={styles.bubbleWhen}>Just now</Text>
-          </View>
-          <Text style={styles.bubbleBody}>Someone active is ready to connect!</Text>
-        </View>
+      importantForAccessibility="no-hide-descendants"
+      style={[styles.card, { height: NOTIFICATION_HEIGHT }]}
+    >
+      <View style={[StyleSheet.absoluteFill, { opacity: MOMENT_LEVEL }]}>
+        <Orbs set="moment" />
       </View>
+      {/* The banner is a solid raised surface (Tier B): it previews the real thing. It drops in once; Reduce Motion fades it. */}
+      <FadeInUp distance={-RISE.modal} style={styles.bannerSlot}>
+        <View style={styles.banner}>
+          <View style={styles.appIcon}>
+            <DiscMark height={ICON.nav} fill="gradient" />
+          </View>
+          <View style={styles.bannerText}>
+            <View style={styles.bannerTop}>
+              <Text style={[font('caption', bold), styles.app]}>Blend’n</Text>
+              <Text style={[monoCaption(bold), styles.when]}>Just now</Text>
+            </View>
+            <Text style={[font('button', bold), styles.bannerTitle]}>New Spark Nearby</Text>
+            <Text style={[font('meta', bold), styles.bannerBody]}>Someone active is ready to connect!</Text>
+          </View>
+          <Icon name="zap" size={ICON.control} color={COLOR.textPrimary} />
+        </View>
+      </FadeInUp>
     </View>
   )
 }
+
+/** Where the three nearby creatures sit, as fractions of the card (never strangers' faces: everyone is anonymous by default). */
+const NEARBY = [
+  { pseudonym: 'Quiet Heron', x: 0.2, y: 0.28 },
+  { pseudonym: 'Velvet Lynx', x: 0.76, y: 0.22 },
+  { pseudonym: 'Amber Otter', x: 0.7, y: 0.72 },
+] as const
+const NEARBY_SIZE = 40
+const YOU_SIZE = 72
+/** The two rings around "you": 160 and 240 across, the frame's. */
+const RINGS = [160, 240] as const
+/** The streets: hairlines at the frame's angles, not orange (the accent is not for decoration). */
+const STREETS = [
+  { at: 0.18, vertical: true },
+  { at: 0.46, vertical: true },
+  { at: 0.78, vertical: true },
+  { at: 0.3, vertical: false },
+  { at: 0.62, vertical: false },
+] as const
+const STREET_TILT = { vertical: '8deg', horizontal: '-6deg' } as const
 
 /**
- * The map, with the zone footer over it.
- *
- * The frame also floats four stock portraits on the map as nearby people. They
- * are left out: they are photographs of strangers used as decoration, on the
- * one screen that is asking permission to find real people nearby, and the
- * concentric rings carry the same idea without implying these are anybody.
+ * The rings over the map: "you" in the middle, three creatures around, the footer line over a scrim. `city` is the browse
+ * city when one is known, and only then: before a fix there is nowhere to say.
  */
-export function LocationIllustration() {
+export function LocationIllustration({ city, notice = false }: { city?: string | null; notice?: boolean }) {
+  const bold = useBoldText()
+  const height = notice ? MAP_HEIGHT_WITH_NOTICE : MAP_HEIGHT
   return (
     <View
+      testID="location-illustration"
       accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants" style={styles.card}>
-      {/*
-        The map sits at 40% opacity in the frame, which is what stops it
-        competing with the pins on top of it.
-      */}
-      <Image source={LOCATION_ART} style={[styles.art, styles.mapDim]} contentFit="cover" transition={180} cachePolicy="memory-disk" />
-
-      {/* Everything below is positioned inside a box inset 32px from the card,
-          because that is the frame the design measures its pins against. */}
-      <View style={styles.pinField}>
-        <View style={styles.ring} />
-        <View style={[styles.ring, styles.ringOuter]} />
-
-        {NEARBY.map((person, i) => (
-          <View
-            key={i}
-            style={[
-              styles.nearby,
-              { left: person.left, top: person.top, width: person.size, height: person.size },
-            ]}
-          >
-            <Image source={person.art} style={styles.nearbyPhoto} contentFit="cover" transition={180} cachePolicy="memory-disk" />
-          </View>
-        ))}
-
-        <View style={styles.youWrap}>
-          <View style={styles.you}>
-            <Image source={YOU_ART} style={styles.youPhoto} contentFit="cover" transition={180} cachePolicy="memory-disk" />
-          </View>
-          <View style={styles.youTag}>
-            <Text style={styles.youTagText}>YOU</Text>
-          </View>
+      importantForAccessibility="no-hide-descendants"
+      style={[styles.card, styles.map, { height }]}
+    >
+      {STREETS.map((street, i) => (
+        <View
+          key={i}
+          style={[
+            street.vertical ? styles.streetV : styles.streetH,
+            street.vertical ? { left: `${street.at * 100}%`, transform: [{ rotate: STREET_TILT.vertical }] } : { top: `${street.at * 100}%`, transform: [{ rotate: STREET_TILT.horizontal }] },
+          ]}
+        />
+      ))}
+      {RINGS.map((side) => (
+        <View key={side} style={[styles.ring, { width: side, height: side, borderRadius: side / 2, marginLeft: -side / 2, marginTop: -side / 2 }]} />
+      ))}
+      {NEARBY.map((p) => (
+        <View key={p.pseudonym} style={{ position: 'absolute', left: `${p.x * 100}%`, top: `${p.y * 100}%` }}>
+          <Avatar kind="creature" pseudonym={p.pseudonym} size={NEARBY_SIZE} />
         </View>
+      ))}
+      <View style={styles.you}>
+        <View style={styles.youRing}>
+          <Avatar kind="creature" pseudonym="You" size={YOU_SIZE - SPACE.sm} />
+        </View>
+        <Text style={[font('caption', bold), styles.youTag]}>You</Text>
       </View>
-
-      <LinearGradient
-        colors={[EMBER.bgClear, tint(EMBER.bg, 0.8)]}
-        style={styles.mapFooter}
-        pointerEvents="none"
-      />
-      <View style={styles.mapFooterText}>
-        <View style={styles.zoneRow}>
-          <Ionicons name="location" size={ICON.sm} color={EMBER.textPrimary} />
-          <Text style={styles.zone}>CURRENT ZONE: OLD GOA</Text>
+      <View style={styles.footer}>
+        <View style={styles.footerRow}>
+          <Icon name="map-pin" size={ICON.inline} color={COLOR.textPrimary} />
+          <Text style={[font('label', bold), styles.footerLabel]}>{city ? `NEAR YOU · ${city.toUpperCase()}` : 'NEAR YOU'}</Text>
         </View>
-        <View style={styles.divider} />
-        <Text style={styles.zoneSub}>Real-time local presence active</Text>
+        <Text style={[font('meta', bold), styles.footerBody]}>Check-in only works while you’re inside the venue.</Text>
       </View>
     </View>
   )
 }
+
+const SCRIM_FOOT = `linear-gradient(180deg, ${COLOR.surfaceSunken}00 0%, ${COLOR.surfaceSunken} 60%)`
 
 const styles = StyleSheet.create({
-  card: {
-    width: '100%',
-    aspectRatio: 4 / 5,
-    borderRadius: EMBER_RADIUS.card,
-    overflow: 'hidden',
-    backgroundColor: EMBER.surfaceMedia,
-    borderWidth: 1,
-    borderColor: EMBER.separator,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  art: { ...StyleSheet.absoluteFill, width: '100%', height: '100%' },
-
-  bubble: {
-    position: 'absolute',
-    left: SPACE.lg,
-    right: SPACE.lg,
+  card: { borderRadius: RADIUS.card, backgroundColor: COLOR.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: COLOR.hairline, overflow: 'hidden' },
+  map: { backgroundColor: COLOR.surfaceSunken },
+  bannerSlot: { position: 'absolute', left: SPACE.lg, right: SPACE.lg, top: 0, bottom: 0, justifyContent: 'center' },
+  banner: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: SPACE.md,
-    padding: SPACE.md,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.surface,
-    borderWidth: 1,
-    borderColor: EMBER.separator,
+    borderRadius: RADIUS.sheet,
+    backgroundColor: COLOR.surfaceRaised,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: COLOR.hairlineStrong,
+    paddingVertical: SPACE.md,
+    paddingHorizontal: SPACE.lg,
   },
-  bubbleIcon: {
-    width: CONTROL.md,
-    height: CONTROL.md,
-    borderRadius: EMBER_RADIUS.pill,
-    // One step darker than the `surface` bubble it sits in, or the well vanishes.
-    backgroundColor: EMBER.surfaceSunken,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  bubbleText: { flex: 1, gap: SPACE.xxs },
-  bubbleTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  bubbleTitle: TYPE.bodyStrong,
-  bubbleWhen: { ...TYPE.caption, color: EMBER.textTertiary },
-  bubbleBody: { ...TYPE.meta, color: EMBER.textTertiary },
-
-  // design-exception: part of the drawing, not a control state
-  mapDim: { opacity: 0.4 },
-  // 32pt in from every edge — the frame measures its pin positions against
-  // this box, not against the card.
-  pinField: { position: 'absolute', top: SPACE.xxl, left: SPACE.xxl, right: SPACE.xxl, bottom: SPACE.xxl },
-
-  nearby: {
-    position: 'absolute',
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.surface,
-    padding: 2,
-    overflow: 'hidden',
-  },
-  nearbyPhoto: { width: '100%', height: '100%', borderRadius: EMBER_RADIUS.pill },
-
-  // The frame centres this pair at 38.41% / 41.15% of the pin field.
-  youWrap: { position: 'absolute', left: '38%', top: '41%', alignItems: 'center' },
-  you: {
-    width: 64,
-    height: 64,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.textPrimary,
-    padding: 4,
-  },
-  youPhoto: {
-    width: '100%',
-    height: '100%',
-    borderRadius: EMBER_RADIUS.pill,
-    borderWidth: 2,
-    borderColor: EMBER.bg,
-  },
-  youTag: {
-    marginTop: -SPACE.sm,
-    paddingHorizontal: SPACE.sm,
-    paddingVertical: SPACE.xxs,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.textPrimary,
-  },
-  youTagText: { ...TYPE.caption, color: EMBER.bg },
-
-  ring: {
-    position: 'absolute',
-    alignSelf: 'center',
-    top: '50%',
-    // design-exception: half the ring's 192pt size, to centre it — geometry, not spacing
-    marginTop: -96,
-    width: 192,
-    height: 192,
-    borderRadius: EMBER_RADIUS.pill,
-    borderWidth: 1,
-    // `separator` at full strength: the hairline is already a 10% white, and
-    // the outer ring fades it further.
-    borderColor: EMBER.separator,
-  },
-  ringOuter: {
-    width: 288,
-    height: 288,
-    // design-exception: half the ring's 288pt size, to centre it — geometry, not spacing
-    marginTop: -144,
-    // design-exception: part of the drawing, not a control state
-    opacity: 0.5,
-  },
-
-  mapFooter: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 110 },
-  mapFooterText: { position: 'absolute', left: SPACE.xl, right: SPACE.xl, bottom: SPACE.xl, gap: SPACE.sm },
-  zoneRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs },
-  zone: { ...TYPE.label, color: EMBER.textPrimary },
-  divider: { height: 1, backgroundColor: EMBER.separator },
-  zoneSub: { ...TYPE.meta, color: EMBER.textTertiary },
+  appIcon: { width: APP_ICON, height: APP_ICON, borderRadius: RADIUS.thumb, backgroundColor: COLOR.ink, alignItems: 'center', justifyContent: 'center' },
+  bannerText: { flex: 1, minWidth: 0, gap: SPACE.xxs },
+  bannerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
+  app: { color: COLOR.textSecondary },
+  when: { color: COLOR.textTertiary },
+  bannerTitle: { color: COLOR.textPrimary },
+  bannerBody: { color: COLOR.textPrimary },
+  streetV: { position: 'absolute', top: 0, bottom: 0, width: StyleSheet.hairlineWidth, backgroundColor: COLOR.hairline },
+  streetH: { position: 'absolute', left: 0, right: 0, height: StyleSheet.hairlineWidth, backgroundColor: COLOR.hairline },
+  ring: { position: 'absolute', left: '50%', top: '50%', borderWidth: 1, borderColor: COLOR.hairlineStrong },
+  you: { position: 'absolute', left: '50%', top: '50%', marginLeft: -YOU_SIZE / 2, marginTop: -YOU_SIZE / 2, width: YOU_SIZE, alignItems: 'center', gap: SPACE.xs },
+  youRing: { width: YOU_SIZE, height: YOU_SIZE, borderRadius: RADIUS.capsule, backgroundColor: COLOR.selectionFill, alignItems: 'center', justifyContent: 'center' },
+  youTag: { color: COLOR.textPrimary, backgroundColor: COLOR.ink, paddingHorizontal: SPACE.sm, borderRadius: RADIUS.capsule, overflow: 'hidden' },
+  footer: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingTop: SPACE.xxxl, paddingHorizontal: SPACE.lg, paddingBottom: SPACE.lg, gap: SPACE.xs, experimental_backgroundImage: SCRIM_FOOT },
+  footerRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
+  footerLabel: { color: COLOR.textPrimary },
+  footerBody: { color: COLOR.textSecondary },
 })

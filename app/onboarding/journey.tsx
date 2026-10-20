@@ -1,11 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
 
+import { StyleSheet, View } from 'react-native'
+
 import { ChipSet } from '../../components/ds/ChipSet'
-import { EmberCardSection, EmberField, EmberFieldGroup } from '../../components/onboarding/EmberControls'
+import { FieldLabel, TextField } from '../../components/ds/TextField'
+import { useBoldText, useIncreaseContrast } from '../../components/ds/shared'
+import { CardSection } from '../../components/onboarding/CardSection'
 import { ListLoadState, type ListStatus } from '../../components/onboarding/ListLoadState'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
-import { apiClient } from '../../lib/apiClient'
+import { useRevealProps } from '../../components/onboarding/revealFocused'
+import { COLOR, SPACE } from '../../lib/design/tokens'
+import { apiClient, type WorkFieldsResponse } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
+import { DEFAULT_MAX_EXPERTISE, keepExpertise, toggleExpertise } from '../../lib/onboarding'
 import { useOnboarding } from '../../lib/useOnboarding'
 
 /**
@@ -23,14 +30,27 @@ import { useOnboarding } from '../../lib/useOnboarding'
  * The frame's Education block also has a "class year" box with no column. Left
  * out for the same reason — a field that saves nowhere is a lie told in a form.
  */
+/** The server's caps, which typing stops at as a `maxLength` did: a city is 200, a job title and a school 100. */
+const LOCATION_MAX = 200
+const TEXT_MAX = 100
+
 export default function JourneyScreen() {
   const { draft, loaded, saving, commit, skip, goBack } = useOnboarding('journey')
+  const reveal = useRevealProps()
+  const bold = useBoldText()
+  const contrast = useIncreaseContrast()
 
   const [location, setLocation] = useState('')
   const [occupation, setOccupation] = useState('')
   const [education, setEducation] = useState('')
   const [workField, setWorkField] = useState<string | undefined>()
   const [fields, setFields] = useState<{ slug: string; label: string }[]>([])
+  /** What someone does within each field, from the same response (the server's curated list), and how many they may pick. */
+  const [expertiseByField, setExpertiseByField] = useState<WorkFieldsResponse['expertiseByField']>()
+  const [maxExpertise, setMaxExpertise] = useState(DEFAULT_MAX_EXPERTISE)
+  const [expertise, setExpertise] = useState<string[]>([])
+  // Sent only once it has been seen or answered: a person who never reached the field's specialisms has not said "none".
+  const [expertiseTouched, setExpertiseTouched] = useState(false)
   const [fieldsStatus, setFieldsStatus] = useState<ListStatus>('loading')
 
   // Prefilled once, in the render that first sees `loaded`.
@@ -41,6 +61,7 @@ export default function JourneyScreen() {
     setOccupation(draft.occupation ?? '')
     setEducation(draft.education ?? '')
     setWorkField(draft.work_field)
+    setExpertise(draft.expertise ?? [])
   }
 
   /*
@@ -57,6 +78,8 @@ export default function JourneyScreen() {
       const result = await apiClient.getWorkFields()
       if (result.success && result.data) {
         setFields(result.data.workFields)
+        setExpertiseByField(result.data.expertiseByField)
+        setMaxExpertise(result.data.maxExpertise ?? DEFAULT_MAX_EXPERTISE)
         setFieldsStatus('ready')
         return
       }
@@ -77,7 +100,22 @@ export default function JourneyScreen() {
     occupation: occupation.trim(),
     education: education.trim(),
     work_field: workField,
+    // Only once it has been touched, or the draft already held it: sending `[]` unasked would clear what was set elsewhere.
+    ...(expertiseTouched || draft.expertise !== undefined ? { expertise } : {}),
   }
+
+  /** The field moves, and the specialisms that were under the old one go with it. */
+  const chooseField = (slug: string) => {
+    const next = workField === slug ? undefined : slug
+    setWorkField(next)
+    const kept = keepExpertise(expertise, next, expertiseByField)
+    if (kept.length !== expertise.length) {
+      setExpertise(kept)
+      setExpertiseTouched(true)
+    }
+  }
+  const specialisms = workField ? (expertiseByField?.[workField] ?? []) : []
+  const fieldLabel = fields.find((field) => field.slug === workField)?.label
 
   return (
     <OnboardingScreen
@@ -98,47 +136,42 @@ export default function JourneyScreen() {
     >
       {/*
         Three cards, not seven stacked fields.
-        
+
         The screen asks three unrelated questions — where you are, what you do,
         where you studied — and without a boundary between them they read as one
         long form. Enclosing each is what makes them three things, which is what
         the frame does and what "just casual boxes" was describing.
       */}
-      <EmberCardSection
-        icon="location-outline"
-        title="Where you live"
-        caption="Used to show you events nearby"
-      >
-        <EmberField
+      <CardSection icon="map-pin" title="Where you live" caption="Used to show you events nearby">
+        <TextField
           label="City"
           placeholder="Search city"
           value={location}
-          onChangeText={setLocation}
+          onChangeText={(value) => setLocation(value.slice(0, LOCATION_MAX))}
           autoCapitalize="words"
-          maxLength={200}
+          testID="onboarding-city"
+          {...reveal}
         />
-      </EmberCardSection>
+      </CardSection>
 
-      <EmberCardSection
-        icon="briefcase-outline"
-        title="Occupation"
-        caption="Your job title and where you work"
-      >
-        <EmberField
+      <CardSection icon="briefcase" title="Occupation" caption="Your job title and where you work">
+        <TextField
           label="Job title"
           placeholder="e.g. Product designer"
           value={occupation}
-          onChangeText={setOccupation}
+          onChangeText={(value) => setOccupation(value.slice(0, TEXT_MAX))}
           autoCapitalize="sentences"
-          maxLength={100}
+          testID="onboarding-job"
+          {...reveal}
         />
 
         {/* The chips once the server has answered; until then, or if it did
             not, the section says so rather than silently missing. */}
         {fieldsStatus !== 'ready' ? (
-          <EmberFieldGroup label="Field of work">
+          <View style={styles.fieldBlock}>
+            <FieldLabel text="Field of work" bold={bold} contrast={contrast} />
             <ListLoadState status={fieldsStatus} what="fields of work" onRetry={() => void loadFields()} />
-          </EmberFieldGroup>
+          </View>
         ) : fields.length > 0 ? (
           <ChipSet
             label="Field of work"
@@ -146,26 +179,49 @@ export default function JourneyScreen() {
             items={fields.map((field) => ({ key: field.slug, label: field.label }))}
             selection="single"
             selected={workField ? [workField] : []}
-            onToggle={(slug) => setWorkField(workField === slug ? undefined : slug)}
+            onToggle={chooseField}
             testID="onboarding-field-of-work"
           />
         ) : null}
-      </EmberCardSection>
 
-      <EmberCardSection
-        icon="school-outline"
-        title="Education"
-        caption="Where you studied, if you want to say"
-      >
-        <EmberField
+        {/* Step two of the field: what you do within it. Not drawn for a field with none ("Something else"). */}
+        {fieldsStatus === 'ready' && specialisms.length > 0 ? (
+          <View style={styles.expertise}>
+            <ChipSet
+              label={`Expertise · ${fieldLabel ?? ''}`}
+              items={specialisms.map((entry) => ({ key: entry.slug, label: entry.label }))}
+              selection="multi"
+              selected={expertise}
+              max={maxExpertise}
+              capHint={`Up to ${maxExpertise}`}
+              hint="Up to three. If you change the field, these clear."
+              onToggle={(slug) => {
+                setExpertise((current) => toggleExpertise(current, slug, maxExpertise))
+                setExpertiseTouched(true)
+              }}
+              testID="onboarding-expertise"
+            />
+          </View>
+        ) : null}
+      </CardSection>
+
+      <CardSection icon="graduation-cap" title="Education" caption="Where you studied, if you want to say">
+        <TextField
           label="School / University"
           placeholder="Where you studied"
           value={education}
-          onChangeText={setEducation}
+          onChangeText={(value) => setEducation(value.slice(0, TEXT_MAX))}
           autoCapitalize="words"
-          maxLength={100}
+          testID="onboarding-school"
+          {...reveal}
         />
-      </EmberCardSection>
+      </CardSection>
     </OnboardingScreen>
   )
 }
+
+const styles = StyleSheet.create({
+  fieldBlock: { gap: SPACE.sm },
+  // Under the field's chips, set off by the card's hairline: it is the second half of the same question.
+  expertise: { gap: SPACE.sm, paddingTop: SPACE.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: COLOR.hairline },
+})
