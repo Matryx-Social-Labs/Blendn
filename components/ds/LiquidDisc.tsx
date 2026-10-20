@@ -1,9 +1,20 @@
 import { useEffect, type ReactNode } from 'react'
 import { StyleSheet, View } from 'react-native'
-import Animated, { cancelAnimation, Easing, useAnimatedProps, useSharedValue, withRepeat, withTiming, type SharedValue } from 'react-native-reanimated'
+import Animated, {
+  cancelAnimation,
+  Easing,
+  ReduceMotion,
+  useAnimatedProps,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSpring,
+  withTiming,
+  type SharedValue,
+} from 'react-native-reanimated'
 import Svg, { ClipPath, Circle, Defs, G, Path } from 'react-native-svg'
 
-import { COLOR } from '../../lib/design/tokens'
+import { COLOR, DURATION, SPRING } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
 import { tint } from '../../lib/theme'
 import { BrandGradient, DiscMark } from './DiscMark'
@@ -35,16 +46,28 @@ const BUBBLES = [
 ] as const
 const BUBBLE_ALPHA = 0.35
 const EDGE_ALPHA = 0.16
+/** Under Reduce Motion the level moves, plainly, in this long (the audit: "200 ms linear-ish, no spring"). */
+const REDUCED_LEVEL_MS = 200
+/** The stamp lands down onto the disc from this scale (a stamp, never scale-from-nothing). */
+const STAMP_FROM_SCALE = 1.12
+/** The wave and the bubbles fade over this much of the level at each end (empty, full): a full disc is still. */
+const ENDS = 1 / 8
 
 export type LiquidDiscProps = {
   size: number
-  /** 0 empty · 1 full. */
+  /** 0 empty · 1 full. A change settles there (M.settle); Reduce Motion moves it over 200 ms. */
   level: number
   /** Stops the wave and the bubbles (a spent pass); Reduce Motion stops them too. */
   still?: boolean
-  /** Over the disc, centred at the foot: the stamp. */
+  /** Over the disc, centred at the foot: the stamp. It lands when it mounts. */
   stamp?: ReactNode
   testID?: string
+}
+
+/** How alive the surface is at a level: 1 through the middle, fading to 0 at empty and at full. */
+function aliveAt(level: number) {
+  'worklet'
+  return Math.max(0, Math.min(1, level / ENDS, (1 - level) / ENDS))
 }
 
 /** The surface as a closed path: a sine at `phase`, rotated nowhere (the tilt is the phone's, not drawn). */
@@ -57,14 +80,33 @@ function surface(size: number, level: number, amplitude: number, phase: number) 
   return `${d} L${2 * size} ${2 * size} L${-size} ${2 * size} Z`
 }
 
-function Bubble({ size, level, bubble, clock, moving }: { size: number; level: number; bubble: (typeof BUBBLES)[number]; clock: SharedValue<number>; moving: boolean }) {
-  const top = size * (1 - level)
+function Bubble({ size, level, bubble, clock }: { size: number; level: SharedValue<number>; bubble: (typeof BUBBLES)[number]; clock: SharedValue<number> }) {
   const props = useAnimatedProps(() => {
-    // Rises from just under the foot to the surface, then starts again.
-    const t = moving ? (clock.get() * bubble.speed + bubble.from) % 1 : bubble.from
-    return { cy: size + 4 - t * (size + 4 - top) }
+    // Rises from just under the foot to the surface (wherever it is now), then starts again; gone with the liquid's ends.
+    const l = level.get()
+    const t = (clock.get() * bubble.speed + bubble.from) % 1
+    return { cy: size + 4 - t * (size + 4 - size * (1 - l)), opacity: aliveAt(l) }
   })
   return <AnimatedCircle cx={size * bubble.x} r={bubble.r} fill={tint(COLOR.textPrimary, BUBBLE_ALPHA)} animatedProps={props} />
+}
+
+/**
+ * The stamp lands (Flow 13 · 13.2: "stamp · liquid settles to a solid fill"):
+ * down onto the disc from 1.12 as it fades in, on M.settle; under Reduce Motion
+ * it only fades. Plays when the stamp mounts, which is the render the server's
+ * "redeemed" arrives in, the same one that starts the liquid.
+ */
+export function stampIn(reduceMotion: boolean) {
+  return () => {
+    'worklet'
+    return {
+      initialValues: { opacity: 0, transform: [{ scale: reduceMotion ? 1 : STAMP_FROM_SCALE }] },
+      animations: {
+        opacity: withTiming(1, { duration: reduceMotion ? REDUCED_LEVEL_MS : DURATION.base, reduceMotion: ReduceMotion.Never }),
+        transform: [{ scale: reduceMotion ? 1 : withSpring(1, { ...SPRING.settle, reduceMotion: ReduceMotion.Never }) }],
+      },
+    }
+  }
 }
 
 /**
@@ -74,16 +116,28 @@ function Bubble({ size, level, bubble, clock, moving }: { size: number; level: n
  * waves over about four seconds and bubbles that rise. A pass being live is
  * visible at a glance: a screenshot does not move.
  *
- * Reduce Motion (or `still`) stops the wave and the bubbles; the level stays.
+ * The level is a shared value: a new `level` (a pass redeemed) settles the
+ * liquid there on M.settle, the surface, the bubbles and the ink mark moving
+ * with it on the UI thread; Reduce Motion moves it over 200 ms instead. The
+ * wave and the bubbles fade out as it fills, so a full disc is solid. Reduce
+ * Motion (or `still`) stops the wave and the bubbles; the level still moves.
  * The tilt that keeps the liquid level (the phone's gyroscope) is not drawn:
  * it needs a motion-sensor module this app does not carry. The disc is
  * decorative and hidden from a screen reader; the stamp over it is not.
  */
 export function LiquidDisc({ size, level, still = false, stamp, testID }: LiquidDiscProps) {
   const reduceMotion = useReducedMotion()
-  const moving = !still && !reduceMotion && level > 0 && level < 1
+  const moving = !still && !reduceMotion
   const wave = useSharedValue(0)
   const clock = useSharedValue(0)
+  const lvl = useSharedValue(level)
+  useEffect(() => {
+    lvl.set(
+      reduceMotion
+        ? withTiming(level, { duration: REDUCED_LEVEL_MS, easing: Easing.linear, reduceMotion: ReduceMotion.Never })
+        : withSpring(level, { ...SPRING.settle, reduceMotion: ReduceMotion.Never })
+    )
+  }, [level, reduceMotion, lvl])
   useEffect(() => {
     if (!moving) return
     wave.set(withRepeat(withTiming(Math.PI * 2, { duration: WAVE_MS, easing: Easing.linear }), -1))
@@ -95,10 +149,14 @@ export function LiquidDisc({ size, level, still = false, stamp, testID }: Liquid
   }, [moving, wave, clock])
 
   const r = size / 2
-  const amplitude = moving ? size * WAVE_AMPLITUDE : 0
-  const liquid = useAnimatedProps(() => ({ d: surface(size, level, amplitude, wave.get()) }))
+  const amplitude = size * WAVE_AMPLITUDE
+  const liquid = useAnimatedProps(() => {
+    const l = lvl.get()
+    return { d: surface(size, l, moving ? amplitude * aliveAt(l) : 0, wave.get()) }
+  })
+  // The ink half of the mark: absolute and childless in its clip, so its height is free to animate (no sibling re-lays out).
+  const inkClip = useAnimatedStyle(() => ({ height: size * lvl.get() }))
   const markHeight = size * MARK_SHARE
-  const filled = size * level
 
   return (
     <View testID={testID} style={{ width: size, height: size }}>
@@ -112,8 +170,8 @@ export function LiquidDisc({ size, level, still = false, stamp, testID }: Liquid
           </Defs>
           <G clipPath="url(#disc)">
             <Circle cx={r} cy={r} r={r} fill={COLOR.surfaceSunken} />
-            {level > 0 ? <AnimatedPath fill="url(#liquid)" animatedProps={liquid} /> : null}
-            {moving ? BUBBLES.map((b) => <Bubble key={b.x} size={size} level={level} bubble={b} clock={clock} moving />) : null}
+            <AnimatedPath fill="url(#liquid)" animatedProps={liquid} />
+            {moving ? BUBBLES.map((b) => <Bubble key={b.x} size={size} level={lvl} bubble={b} clock={clock} />) : null}
           </G>
           <Circle cx={r} cy={r} r={r - 0.5} fill="none" stroke={tint(COLOR.textPrimary, EDGE_ALPHA)} strokeWidth={1} />
         </Svg>
@@ -121,15 +179,17 @@ export function LiquidDisc({ size, level, still = false, stamp, testID }: Liquid
         <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.centre]}>
           <DiscMark height={markHeight} fill="white" />
         </View>
-        {filled > 0 ? (
-          <View pointerEvents="none" style={[styles.liquidMark, { height: filled }]}>
-            <View style={[styles.centre, styles.inkBox, { width: size, height: size }]}>
-              <DiscMark height={markHeight} fill="ink" />
-            </View>
+        <Animated.View pointerEvents="none" style={[styles.liquidMark, inkClip]}>
+          <View style={[styles.centre, styles.inkBox, { width: size, height: size }]}>
+            <DiscMark height={markHeight} fill="ink" />
           </View>
-        ) : null}
+        </Animated.View>
       </View>
-      {stamp ? <View style={styles.stamp}>{stamp}</View> : null}
+      {stamp ? (
+        <Animated.View testID={testID && `${testID}-stamp`} entering={stampIn(reduceMotion)} style={styles.stamp}>
+          {stamp}
+        </Animated.View>
+      ) : null}
     </View>
   )
 }
