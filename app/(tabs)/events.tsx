@@ -663,8 +663,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       }
       setInterestStatuses(prev => ({ ...prev, [event.id]: result.data!.interested }))
       setInterestCounts(prev => ({ ...prev, [event.id]: result.data!.interestCount }))
-      // Outcome after truth: a save the server kept. Taking one back is silent.
-      if (result.data!.interested) H.success()
+      // Silent: saving is not an outcome that earns a Success (audit U-M17); a failure plays its error through the tray.
       Logger.journey('events', result.data!.interested ? 'interest:mark' : 'interest:unmark', { eventId: event.id })
     } catch {
       fail()

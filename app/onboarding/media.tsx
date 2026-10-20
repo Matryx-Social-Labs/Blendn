@@ -149,7 +149,7 @@ function MediaScreenInner() {
     // validator's or the server's words ("Photo must be less than 5MB"); it
     // used to say nothing, and the empty slot looked like a tap that missed.
     if (result.success && result.url) setPhotos((current) => [...current, result.url!])
-    else if (!result.cancelled) showToast(result.error || "That photo wasn't added. Try again.", 'error')
+    else if (!result.cancelled) showToast(result.error || "That photo wasn't added. Try again.", 'error', { haptic: 'error' })
   }
 
   const reduceMotion = useReducedMotion()

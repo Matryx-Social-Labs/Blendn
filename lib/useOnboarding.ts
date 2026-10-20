@@ -294,7 +294,7 @@ export function useOnboarding(step: OnboardingStep) {
       }
 
       if (failure) {
-        showToast(failure, 'error')
+        showToast(failure, 'error', { haptic: 'error' })
         return false
       }
 
@@ -378,7 +378,7 @@ export function useOnboarding(step: OnboardingStep) {
         Logger.warn('auth', 'Could not complete onboarding', { error: result.error })
         // A toast, as every other step reports a failed save: the ready
         // screen's own sentence sat below the fold (SCRUM-492).
-        showToast(result.error || FINISH_FAILED, 'error')
+        showToast(result.error || FINISH_FAILED, 'error', { haptic: 'error' })
         return false
       }
 
@@ -393,7 +393,7 @@ export function useOnboarding(step: OnboardingStep) {
     } catch (error) {
       // A throw here used to leave `saving` true and the button spinning.
       Logger.warn('auth', 'Finishing onboarding threw', { error })
-      showToast(FINISH_FAILED, 'error')
+      showToast(FINISH_FAILED, 'error', { haptic: 'error' })
       return false
     } finally {
       inFlight.current = false

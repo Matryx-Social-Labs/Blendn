@@ -32,7 +32,7 @@ describe('an onboarding save that fails stays on the step', () => {
   it('says what failed and does not advance', () => {
     const failed = commit.indexOf('if (failure) {')
     expect(failed).toBeGreaterThan(-1)
-    expect(commit.slice(failed)).toMatch(/if \(failure\) \{\s*showToast\(failure, 'error'\)\s*return false\s*\}/)
+    expect(commit.slice(failed)).toMatch(/if \(failure\) \{\s*showToast\(failure, 'error', \{ haptic: 'error' \}\)\s*return false\s*\}/)
     expect(commit.indexOf('advanceTo(after)')).toBeGreaterThan(failed)
   })
 

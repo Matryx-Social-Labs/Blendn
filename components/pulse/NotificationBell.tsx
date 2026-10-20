@@ -12,6 +12,7 @@ import Animated from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { apiClient } from '../../lib/apiClient'
+import { H } from '../../lib/haptics'
 import { Logger } from '../../lib/logger'
 import { badgeLabel, notificationAge, notificationLabel, type NotificationItem } from '../../lib/notificationFormat'
 import { navigateFromNotificationData } from '../../lib/notifications'
@@ -20,6 +21,7 @@ import ActionTray from '../ActionTray'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, TYPE } from '../../lib/theme'
 import { popIn, popOut } from '../motion/presence'
 import ScalePress from '../motion/ScalePress'
+import { useToast } from '../Toast'
 import { RisingSheet, SheetFlatList, SheetModal } from '../motion/RisingSheet'
 import { Grabber } from '../ui/Grabber'
 
@@ -47,6 +49,7 @@ import { Grabber } from '../ui/Grabber'
  */
 export function NotificationBell() {
   const [open, setOpen] = useState(false)
+  const { showToast } = useToast()
   const [items, setItems] = useState<NotificationItem[]>([])
   const [unread, setUnread] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -209,10 +212,13 @@ export function NotificationBell() {
           </View>
 
           {loading && items.length === 0 ? (
-            <ActivityIndicator style={styles.loading} color={EMBER.textSecondary} />
+            <ActivityIndicator style={styles.loading} color={EMBER.textSecondary} accessibilityLabel="Loading notifications" />
           ) : loadFailed && items.length === 0 ? (
             <View style={styles.empty}>
-              <Ionicons name="cloud-offline-outline" size={ICON.lg} color={EMBER.textTertiary} />
+              {/* Decorative: the words say it (a glyph is Text, which TalkBack would otherwise focus). */}
+              <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+                <Ionicons name="cloud-offline-outline" size={ICON.lg} color={EMBER.textTertiary} />
+              </View>
               <Text style={styles.emptyText}>Couldn&apos;t load notifications</Text>
               <Text style={styles.emptyHint}>Check your connection and try again.</Text>
               <ScalePress
@@ -230,7 +236,9 @@ export function NotificationBell() {
               means rather than showing a blank panel that reads as broken.
             */
             <View style={styles.empty}>
-              <Ionicons name="notifications-off-outline" size={28} color={EMBER.textTertiary} />
+              <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+                <Ionicons name="notifications-off-outline" size={28} color={EMBER.textTertiary} />
+              </View>
               <Text style={styles.emptyText}>Nothing yet</Text>
               <Text style={styles.emptyHint}>
                 Friend requests, matches and event updates land here.
@@ -289,11 +297,18 @@ export function NotificationBell() {
               label: 'Clear all',
               variant: 'destructive',
               onPress: () => {
+                // The confirm was just pressed: the destructive tick (§10.2). A failure answers once, from its toast.
+                H.destructive()
+                const before = { items, unread }
                 setConfirmClear(false)
                 setItems([])
                 setUnread(0)
                 apiClient.clearNotifications().catch((error) => {
                   Logger.warn('notifications', 'clear:failed', { error: error as never })
+                  // They were never cleared: put them back and say so, rather than have them return next time without a word.
+                  setItems(before.items)
+                  setUnread(before.unread)
+                  showToast('Couldn’t clear. Try again.', 'error', { haptic: 'error' })
                 })
               },
             },

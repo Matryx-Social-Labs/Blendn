@@ -103,7 +103,7 @@ it('lets a failed save be retried', async () => {
     outcome = await result.current.commit({ occupation: 'Designer' })
   })
   expect(outcome).toBe(false)
-  expect(mockShowToast).toHaveBeenCalledWith('Bad city', 'error')
+  expect(mockShowToast).toHaveBeenCalledWith('Bad city', 'error', { haptic: 'error' })
 
   await act(async () => {
     outcome = await result.current.commit({ occupation: 'Designer' })

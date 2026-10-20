@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from 'react'
-import { Platform, RefreshControl, StyleSheet, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native'
+import { RefreshControl, StyleSheet, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native'
 import Animated, { LinearTransition, useReducedMotion } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -17,7 +17,6 @@ import { PlacesSkeleton } from '../places/PlacesSkeleton'
 import { SectionHeader } from '../ds/SectionHeader'
 import { apiClient, type VenueListItem } from '../../lib/apiClient'
 import { COLOR, SPACE, SPRING } from '../../lib/design/tokens'
-import { H } from '../../lib/haptics'
 import { roundCoordinate } from '../../lib/coordinates'
 import { Logger } from '../../lib/logger'
 import { getNetworkState, subscribeNetworkState } from '../../lib/networkStatus'
@@ -381,11 +380,8 @@ export function PlacesList({
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={() => {
-              // iOS's UIRefreshControl ticks by itself at the threshold; a second tick doubled it. Android has no such tick.
-              if (Platform.OS === 'android') H.threshold()
-              void refresh()
-            }}
+            // A refresh is silent everywhere: RefreshControl reports only the start, and H.threshold is "armed" (audit U-L9).
+            onRefresh={() => void refresh()}
             tintColor={COLOR.textSecondary}
           />
         }
