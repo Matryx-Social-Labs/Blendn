@@ -348,7 +348,7 @@ describe('"Let them know I’m a regular"', () => {
       init?.method === 'PUT' ? Promise.resolve({ success: false, error: 'Add your date of birth first.' }) : Promise.resolve({ success: true, data: regular })
     )
     await act(async () => { fireEvent.press(button('Let The Humming Tree know')) })
-    expect(mockToast).toHaveBeenCalledWith('Add your date of birth first.', 'error')
+    expect(mockToast).toHaveBeenCalledWith('Add your date of birth first.', 'error', { haptic: 'error' })
     expect(screen.getByText(/^Let The Humming Tree know you’re a regular/)).toBeTruthy()
   })
 })

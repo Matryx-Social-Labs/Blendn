@@ -144,7 +144,7 @@ export default function EditAboutYouScreen() {
     })
 
   const refuse = (text: string) => {
-    showToast(text, 'error')
+    showToast(text, 'error', { haptic: 'error' })
   }
 
   /**
@@ -194,7 +194,7 @@ export default function EditAboutYouScreen() {
         anySaved = true
       }
       invalidate(authUser.id)
-      showToast('Saved', 'success')
+      showToast('Saved', 'success', { haptic: 'success' })
       router.back()
     } catch (error) {
       Logger.error('profile', 'EditAboutYou: save failed', { error })

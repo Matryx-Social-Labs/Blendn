@@ -13,6 +13,9 @@ import { Toast as DsToast } from './ds/Toast'
  * on screen: one at a time, the rest queued behind it, so two outcomes are never stacked on each other.
  */
 
+/** The outcome haptic a toast plays as it appears (not when queued). Without it a toast is silent: the caller plays its own. */
+type ToastHaptic = 'success' | 'error'
+
 interface ToastAction {
   label: string
   onPress: () => void
@@ -23,10 +26,11 @@ interface ToastMessage {
   message: string
   variant: ToastVariant
   action?: ToastAction
+  haptic?: ToastHaptic
 }
 
 interface ToastContextValue {
-  showToast: (message: string, variant?: ToastVariant, options?: { action?: ToastAction }) => void
+  showToast: (message: string, variant?: ToastVariant, options?: { action?: ToastAction; haptic?: ToastHaptic }) => void
 }
 
 /** The top bar's band: its 44 / 48 circle and the 8 pt under it. */
@@ -54,9 +58,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
 
   const showToast = useCallback(
-    (message: string, variant: ToastVariant = 'info', options?: { action?: ToastAction }) => {
+    (message: string, variant: ToastVariant = 'info', options?: { action?: ToastAction; haptic?: ToastHaptic }) => {
       const id = ++nextId
-      setQueue((prev) => queueWith(prev, { id, message, variant, action: options?.action }))
+      setQueue((prev) => queueWith(prev, { id, message, variant, action: options?.action, haptic: options?.haptic }))
     },
     []
   )
@@ -83,7 +87,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             kind={head.variant}
             text={head.message}
             action={head.action}
-            // The outcome haptic plays as the toast appears, not when it was queued behind another.
+            // Silent unless the caller asked for the outcome haptic, which then plays as it appears, not when it was queued.
+            haptic={head.haptic}
+            silent={!head.haptic}
             aboveTabBar={isTabRoot(pathname)}
             aboveDock={!isTabRoot(pathname)}
             onDismiss={next}

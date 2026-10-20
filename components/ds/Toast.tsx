@@ -95,6 +95,8 @@ export type ToastProps = {
   aboveDock?: boolean
   /** No outcome haptic: Copy (C20), or when the action already played one. */
   silent?: boolean
+  /** Which outcome haptic to play as it appears; the kind's own when omitted. */
+  haptic?: 'success' | 'error'
   testID?: string
 }
 
@@ -177,7 +179,7 @@ function useToastMotion(onDismiss: () => void) {
  * "+ fade" and wins over the general rule that glass never fades. Reduce
  * Motion: no movement, a fade in place on both platforms.
  */
-export function Toast({ kind = 'info', text, action, onDismiss, aboveTabBar = false, aboveDock = false, silent = false, testID }: ToastProps) {
+export function Toast({ kind = 'info', text, action, onDismiss, aboveTabBar = false, aboveDock = false, silent = false, haptic, testID }: ToastProps) {
   const android = Platform.OS === 'android'
   const insets = useSafeAreaInsets()
   const screenReader = useScreenReader()
@@ -187,7 +189,8 @@ export function Toast({ kind = 'info', text, action, onDismiss, aboveTabBar = fa
   const dwell = useDwell(toastDwell(text, { action: !!action, screenReader }), leave)
 
   useEffect(() => {
-    if (!silent && kind !== 'info') H[kind]()
+    const played = haptic ?? (kind === 'info' ? undefined : kind)
+    if (!silent && played) H[played]()
     if (!android) AccessibilityInfo.announceForAccessibility(action ? `${text.replace(/[.!?]$/, '')}. ${action.label} is available.` : text)
     // Once, as it appears.
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -143,7 +143,7 @@ export default function OfferScreen() {
         if (saved) showToast(saved, 'success')
         return true
       }
-      showToast(res.error || "That didn't save. Try again.", 'error')
+      showToast(res.error || "That didn't save. Try again.", 'error', { haptic: 'error' })
       return false
     } finally {
       setSaving(false)

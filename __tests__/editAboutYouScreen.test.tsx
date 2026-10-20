@@ -134,7 +134,7 @@ describe('"Show my badges" (M3) and the Tier B refusal (H1)', () => {
       fireEvent.press(screen.getByText('Tulu'))
     })
     await save()
-    expect(mockToast).toHaveBeenCalledWith('Not saved: your languages. You’ve hit today’s limit of three changes.', 'error')
+    expect(mockToast).toHaveBeenCalledWith('Not saved: your languages. You’ve hit today’s limit of three changes.', 'error', { haptic: 'error' })
   })
 })
 
@@ -333,7 +333,7 @@ describe('retired values are in neither the baseline nor the form', () => {
     await tap('Show my badges')
     await save()
     expect(api.updateProfile.mock.calls).toEqual([['me', { show_badges: false }]])
-    expect(mockToast).toHaveBeenCalledWith('Saved', 'success')
+    expect(mockToast).toHaveBeenCalledWith('Saved', 'success', { haptic: 'success' })
     expect(router.back).toHaveBeenCalled()
   })
 
@@ -373,7 +373,7 @@ describe('the states', () => {
     await open()
     await tap('Goa')
     await save()
-    expect(mockToast).toHaveBeenCalledWith('Not saved: your home state. Try again.', 'error')
+    expect(mockToast).toHaveBeenCalledWith('Not saved: your home state. Try again.', 'error', { haptic: 'error' })
     expect(router.back).not.toHaveBeenCalled()
     expect(screen.getByLabelText('Goa').props.accessibilityState).toMatchObject({ selected: true })
   })
@@ -383,7 +383,7 @@ describe('the states', () => {
     await open()
     await tap('Chai')
     await save()
-    expect(mockToast).toHaveBeenCalledWith('Couldn’t save the rest. Try again.', 'error')
+    expect(mockToast).toHaveBeenCalledWith('Couldn’t save the rest. Try again.', 'error', { haptic: 'error' })
     expect(router.back).not.toHaveBeenCalled()
   })
 
@@ -391,7 +391,7 @@ describe('the states', () => {
     await open()
     await tap('Goa')
     await save()
-    expect(mockToast).toHaveBeenCalledWith('Saved', 'success')
+    expect(mockToast).toHaveBeenCalledWith('Saved', 'success', { haptic: 'success' })
     expect(ProfileCache.clear).toHaveBeenCalled()
     expect(router.back).toHaveBeenCalled()
   })
@@ -420,7 +420,7 @@ describe('the Tier B limit (three a day) costs only what it covers', () => {
       ['me', { languages: ['tulu'], sun_sign: 'leo', sign_system: 'western' }],
     ])
     // Said exactly: what saved, what did not, and the server's own sentence.
-    expect(mockToast).toHaveBeenCalledWith('Saved your badge choices. Not saved: your languages and sign. You’ve hit today’s limit of three changes.', 'error')
+    expect(mockToast).toHaveBeenCalledWith('Saved your badge choices. Not saved: your languages and sign. You’ve hit today’s limit of three changes.', 'error', { haptic: 'error' })
     expect(router.back).not.toHaveBeenCalled()
     expect(ProfileCache.clear).toHaveBeenCalled()
   })
@@ -432,7 +432,7 @@ describe('the Tier B limit (three a day) costs only what it covers', () => {
     await tap('Chai')
     await save()
     expect(api.putThisOrThat).toHaveBeenCalledWith({ chai: 'b' })
-    expect(mockToast).toHaveBeenCalledWith('Saved your this-or-that answers. Not saved: your home state. You’ve hit today’s limit of three changes.', 'error')
+    expect(mockToast).toHaveBeenCalledWith('Saved your this-or-that answers. Not saved: your home state. You’ve hit today’s limit of three changes.', 'error', { haptic: 'error' })
   })
 
   it('the person’s edits stay as chosen, and a second Save sends only what did not land', async () => {
@@ -455,7 +455,7 @@ describe('the Tier B limit (three a day) costs only what it covers', () => {
     await open()
     await tap('Goa')
     await save()
-    expect(mockToast).toHaveBeenCalledWith('Not saved: your home state. You’ve hit today’s limit of three changes.', 'error')
+    expect(mockToast).toHaveBeenCalledWith('Not saved: your home state. You’ve hit today’s limit of three changes.', 'error', { haptic: 'error' })
   })
 
   it('a failed badge write stops there: nothing after it is sent as if it landed', async () => {
@@ -465,7 +465,7 @@ describe('the Tier B limit (three a day) costs only what it covers', () => {
     await tap('Goa')
     await save()
     expect(api.updateProfile).toHaveBeenCalledTimes(1)
-    expect(mockToast).toHaveBeenCalledWith('Couldn’t save the rest. Try again.', 'error')
+    expect(mockToast).toHaveBeenCalledWith('Couldn’t save the rest. Try again.', 'error', { haptic: 'error' })
   })
 })
 

@@ -70,7 +70,7 @@ describe('the provider', () => {
     expect(await screen.findByText('Saved')).toBeTruthy()
   })
 
-  it('plays the outcome haptic as the toast appears, and a queued one waits for its turn', async () => {
+  it('a toast without `haptic` plays nothing on mount: the caller owns its own', async () => {
     const error = jest.spyOn(H, 'error').mockImplementation(() => {})
     const success = jest.spyOn(H, 'success').mockImplementation(() => {})
     await render(
@@ -79,13 +79,41 @@ describe('the provider', () => {
       </ToastProvider>
     )
     await fireEvent.press(screen.getByRole('button', { name: 'error' }))
-    await fireEvent.press(screen.getByRole('button', { name: 'second' }))
-    // Queued behind the error: its success has not played.
+    expect(screen.getByTestId('toast')).toBeTruthy()
+    expect(error).not.toHaveBeenCalled()
+    expect(success).not.toHaveBeenCalled()
+  })
+
+  it('with `haptic` it plays once, as the toast mounts: a queued one waits for its turn', async () => {
+    const error = jest.spyOn(H, 'error').mockImplementation(() => {})
+    const success = jest.spyOn(H, 'success').mockImplementation(() => {})
+    function Both() {
+      const { showToast } = useToast()
+      return (
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => {
+            showToast('Couldn’t save that. Try again.', 'error', { haptic: 'error' })
+            showToast('Saved', 'success', { haptic: 'success' })
+          }}
+        >
+          <Text>both</Text>
+        </Pressable>
+      )
+    }
+    await render(
+      <ToastProvider>
+        <Both />
+      </ToastProvider>
+    )
+    await fireEvent.press(screen.getByRole('button', { name: 'both' }))
+    // The error is showing; the success is queued and has not played.
     expect(error).toHaveBeenCalledTimes(1)
     expect(success).not.toHaveBeenCalled()
     await advance(11000)
     expect(await screen.findByText('Saved')).toBeTruthy()
     expect(success).toHaveBeenCalledTimes(1)
+    expect(error).toHaveBeenCalledTimes(1)
   })
 
   it('a toast raised from lib/ (no hook) is the same one', async () => {

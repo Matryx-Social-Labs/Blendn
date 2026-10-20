@@ -468,7 +468,7 @@ function GroupChatInner() {
     } catch (error) {
       Logger.warn('chat', 'send failed', { error })
       setMessage(optimistic.message_id, (m) => ({ ...m, failed: true, waiting: false }))
-      showToast("Couldn't send. Try again.", 'error')
+      showToast("Couldn't send. Try again.", 'error', { haptic: 'error' })
     }
   }
 
@@ -569,7 +569,7 @@ function GroupChatInner() {
     const result = await apiClient.rsvpToEvent(eventId, 'going')
     setRsvping(false)
     if (!result.success) {
-      return showToast(userMessage(result, "Couldn't save your RSVP. Try again."), 'error')
+      return showToast(userMessage(result, "Couldn't save your RSVP. Try again."), 'error', { haptic: 'error' })
     }
     H.success()
     composer.setLock(null)

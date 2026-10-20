@@ -84,10 +84,10 @@ export function VenueRegulars({ venueId, venueName }: { venueId: string; venueNa
         setPrefs(res.data)
         after?.(res.data)
       } else {
-        showToast(res.error || "That didn't save. Try again.", 'error')
+        showToast(res.error || "That didn't save. Try again.", 'error', { haptic: 'error' })
       }
     } catch {
-      showToast("That didn't save. Try again.", 'error')
+      showToast("That didn't save. Try again.", 'error', { haptic: 'error' })
     } finally {
       setSaving(null)
     }

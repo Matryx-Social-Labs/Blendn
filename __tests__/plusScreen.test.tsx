@@ -189,7 +189,7 @@ describe('restore always ends in a visible result', () => {
     ;(restore as jest.Mock).mockResolvedValue({ kind: 'failed', message: "Couldn't reach the store. Try again." })
     await mount()
     await act(async () => { fireEvent.press(button('Restore purchases')) })
-    expect(mockToast).toHaveBeenCalledWith("Couldn't reach the store. Try again.", 'error')
+    expect(mockToast).toHaveBeenCalledWith("Couldn't reach the store. Try again.", 'error', { haptic: 'error' })
     expect(within(dock()).getByText("Couldn't reach the store. Try again.")).toBeTruthy()
   })
 

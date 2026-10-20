@@ -651,7 +651,7 @@ describe('live', () => {
     await act(async () => {
       fireEvent.press(screen.getByRole('button', { name: 'Stop' }))
     })
-    expect(mockShowToast).toHaveBeenCalledWith("Couldn't stop. Try again.", 'error')
+    expect(mockShowToast).toHaveBeenCalledWith("Couldn't stop. Try again.", 'error', { haptic: 'error' })
     expect((apiClient.getVenue as jest.Mock).mock.calls.length).toBe(reads + 1)
   })
 
@@ -756,7 +756,7 @@ describe('regulars (Flow 13 · 13.4)', () => {
       fireEvent.press(row)
     })
     expect(request).toHaveBeenLastCalledWith('/api/mobile/venues/v1/regular', { method: 'PUT', body: '{"offersMuted":true}' }, true, 2)
-    expect(mockShowToast).toHaveBeenCalledWith('Nope', 'error')
+    expect(mockShowToast).toHaveBeenCalledWith('Nope', 'error', { haptic: 'error' })
     expect(screen.getByTestId('venue-offers-muted').props.accessibilityState).toMatchObject({ checked: false })
   })
 
