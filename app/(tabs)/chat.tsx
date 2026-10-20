@@ -37,7 +37,6 @@ import { BOARD_ENABLED } from '../../lib/board'
 import { dmThread, outboxLine, roomThread, useOutbox, type Thread } from '../../lib/chatOutbox'
 import { crewRoomTitle, type CrewRoomRow } from '../../lib/crews'
 import { COLOR, DURATION, EASING, SPACE, SPRING, STAGGER } from '../../lib/design/tokens'
-import { H } from '../../lib/haptics'
 import { matchRowPreview } from '../../lib/matchOpener'
 import { ScreenProfiler } from '../../lib/perf'
 import { isMuted, useRoomMembership } from '../../lib/roomMembership'
@@ -95,7 +94,7 @@ function ChatInner() {
   const { showToast } = useToast()
   const inbox = useBanterInbox()
   const { groupChats, setGroupChats, crewRooms, setCrewRooms, personalChats, setPersonalChats, incomingRequests, user } = inbox
-  const crews = useCrewInbox(useCallback((text: string) => showToast(text, 'error'), [showToast]))
+  const crews = useCrewInbox(useCallback((text: string) => showToast(text, 'error', { haptic: 'error' }), [showToast]))
   const outbox = useOutbox()
   const membership = useRoomMembership()
   const [boardCount, setBoardCount] = useState(0)
@@ -418,10 +417,7 @@ function ChatInner() {
                 time={inboxTimeLabel(invite.invitedAt)}
                 accept="Join"
                 // Join is the consent screen (Flow 10 · 10.3): it reveals you to the crew, so it asks there.
-                onAccept={() => {
-                  H.primary()
-                  router.push({ pathname: '/crews/invite/[crewId]', params: { crewId: invite.crewId } })
-                }}
+                onAccept={() => router.push({ pathname: '/crews/invite/[crewId]', params: { crewId: invite.crewId } })}
                 onDecline={() => crews.decline(invite)}
               />
             </Reanimated.View>
@@ -453,6 +449,22 @@ function ChatInner() {
 
   return (
     <View style={styles.screen}>
+      {/* First in the tree, so a screen reader reaches the header (bell, search, mark all) before the list; zIndex keeps it on top. */}
+      <BanterHeader
+        bell={<NotificationBell />}
+        searching={searching}
+        onSearch={() => {
+          setSearching((s) => !s)
+          setQuery('')
+        }}
+        canMarkAll={hasUnread}
+        onMarkAll={() => void inbox.handleMarkAllRead()}
+      />
+      {searching ? (
+        <View style={[styles.search, { top: headerHeight + SPACE.sm }]}>
+          <SearchField value={query} onChangeText={setQuery} placeholder="Search conversations" autoFocus testID="banter-search" />
+        </View>
+      ) : null}
       {/* Every press inside the list, header cards included, goes through one guard. */}
       <BanterPressGuard.Provider value={pressGuard}>
       <Reanimated.FlatList
@@ -523,10 +535,8 @@ function ChatInner() {
         refreshControl={
           <RefreshControl
             refreshing={inbox.refreshing}
-            onRefresh={() => {
-              H.threshold()
-              void inbox.onRefresh()
-            }}
+            // A refresh is silent everywhere: RefreshControl reports only the start, and H.threshold is "armed".
+            onRefresh={() => void inbox.onRefresh()}
             tintColor={COLOR.textSecondary}
             progressViewOffset={listTop}
           />
@@ -534,21 +544,6 @@ function ChatInner() {
       />
       </BanterPressGuard.Provider>
 
-      <BanterHeader
-        bell={<NotificationBell />}
-        searching={searching}
-        onSearch={() => {
-          setSearching((s) => !s)
-          setQuery('')
-        }}
-        canMarkAll={hasUnread}
-        onMarkAll={() => void inbox.handleMarkAllRead()}
-      />
-      {searching ? (
-        <View style={[styles.search, { top: headerHeight + SPACE.sm }]}>
-          <SearchField value={query} onChangeText={setQuery} placeholder="Search conversations" autoFocus testID="banter-search" />
-        </View>
-      ) : null}
       <RealtimeStatusBanner status={inbox.socketStatus} style={{ ...styles.banner, top: listTop - SPACE.sm }} />
       {newAbove ? (
         <NewAbovePill

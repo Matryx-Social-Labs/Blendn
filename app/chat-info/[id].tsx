@@ -169,6 +169,11 @@ function ChatInfoInner() {
 
   return (
     <View style={styles.screen}>
+      {/* First in the tree, so a screen reader reaches Back before the list; zIndex keeps it over the scroll and its shield. */}
+      <View style={[styles.back, { top: insets.top + SPACE.sm }]}>
+        <IconButton icon="chevron-left" tier="media" accessibilityLabel="Back" onPress={() => router.back()} testID="info-back" />
+      </View>
+
       <Animated.ScrollView
         contentContainerStyle={{ paddingBottom: insets.bottom + SPACE.xxl }}
         onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
@@ -343,10 +348,6 @@ function ChatInfoInner() {
         style={[styles.shield, { height: shieldHeight, opacity: scrollY.interpolate({ inputRange: [HERO_HEIGHT - 2 * shieldHeight, HERO_HEIGHT - shieldHeight], outputRange: [0, 1], extrapolate: 'clamp' }) }]}
       />
 
-      <View style={[styles.back, { top: insets.top + SPACE.sm }]}>
-        <IconButton icon="chevron-left" tier="media" accessibilityLabel="Back" onPress={() => router.back()} testID="info-back" />
-      </View>
-
       <MuteSheet chatGroupId={sheet === 'mute' ? chatGroupId : null} onClose={() => setSheet(null)} />
       <LeaveRoomSheet chatGroupId={sheet === 'leave' ? chatGroupId : null} place={place} onClose={() => setSheet(null)} onLeft={() => router.dismissTo('/(tabs)/chat')} />
 
@@ -394,8 +395,8 @@ const styles = StyleSheet.create({
   },
   pressed: { opacity: OPACITY.pressed },
   leaveText: { flex: 1, paddingVertical: SPACE.md },
-  back: { position: 'absolute', left: SPACE.lg },
-  shield: { position: 'absolute', left: 0, right: 0, top: 0, backgroundColor: COLOR.ink },
+  back: { position: 'absolute', left: SPACE.lg, zIndex: 2 },
+  shield: { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 1, backgroundColor: COLOR.ink },
   headScrim: { position: 'absolute', left: 0, right: 0, top: 0, height: STATUS_SCRIM_HEIGHT },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
