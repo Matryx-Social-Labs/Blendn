@@ -3,6 +3,7 @@ import { useFocusEffect } from 'expo-router'
 import { useCallback, useEffect, useState } from 'react'
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -20,6 +21,8 @@ import { subscribeToBell } from '../../lib/socketClient'
 import ActionTray from '../ActionTray'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, TYPE } from '../../lib/theme'
 import { Badge } from '../ds/MonoFamily'
+import { Material } from '../ui/Material'
+import { COLOR, SIZE, SPACE as DS_SPACE } from '../../lib/design/tokens'
 import { popIn, popOut } from '../motion/presence'
 import ScalePress from '../motion/ScalePress'
 import { useToast } from '../Toast'
@@ -48,7 +51,11 @@ import { Grabber } from '../ui/Grabber'
  * the sheet does not blank out the moment it opens; only the server-side count
  * is cleared.
  */
-export function NotificationBell() {
+/**
+ * `glass`: the home frame's bell (Flow 3 discovery, guidelines/flow-3/flow3.js): a glass control circle over the map,
+ * 44 pt iOS · 48 dp Android, its badge ringed in ink. Without it, the bare glyph the Scene's bar still uses.
+ */
+export function NotificationBell({ glass = false }: { glass?: boolean } = {}) {
   const [open, setOpen] = useState(false)
   const { showToast } = useToast()
   const [items, setItems] = useState<NotificationItem[]>([])
@@ -162,9 +169,11 @@ export function NotificationBell() {
         }
         // The box is the glyph, so its right edge lands on the page margin like
         // the city chip below it; `hitSlop` makes the target 48pt.
-        hitSlop={12}
-        style={styles.bell}
+        hitSlop={glass ? undefined : 12}
+        style={glass ? glassCircle : styles.bell}
+        testID="notification-bell"
       >
+        {glass ? <Material role="control" style={[StyleSheet.absoluteFill, { borderRadius: glassCircle.borderRadius }]} /> : null}
         <Ionicons name="notifications-outline" size={ICON.lg} color={EMBER.textPrimary} />
         {/*
           The badge pops in when there is something new (0 → any) and out when
@@ -173,9 +182,9 @@ export function NotificationBell() {
           ticks up is not a new arrival.
         */}
         {badge ? (
-          <Animated.View style={styles.badge} pointerEvents="none" entering={popIn} exiting={popOut}>
-            {/* The design system's badge: a mono caption in a pill that grows with the text, ringed in the page colour. */}
-            <Badge text={badge} ring={EMBER.bg} testID="bell-badge" />
+          <Animated.View style={glass ? styles.badgeOnGlass : styles.badge} pointerEvents="none" entering={popIn} exiting={popOut}>
+            {/* The design system's badge: a mono caption in a pill that grows with the text, ringed in what is under it. */}
+            <Badge text={badge} ring={glass ? COLOR.ink : EMBER.bg} testID="bell-badge" />
           </Animated.View>
         ) : null}
       </ScalePress>
@@ -319,6 +328,9 @@ export function NotificationBell() {
   )
 }
 
+const glassSize = Platform.OS === 'android' ? SIZE.circleButtonAndroid : SIZE.circleButton
+const glassCircle = { width: glassSize, height: glassSize, borderRadius: glassSize / 2, alignItems: 'center', justifyContent: 'center' } as const
+
 const styles = StyleSheet.create({
   bell: {
     width: ICON.lg,
@@ -327,6 +339,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   badge: { position: 'absolute', top: -SPACE.sm, right: -SPACE.sm },
+  // The frame: the badge sits on the circle's corner, 2 pt out.
+  badgeOnGlass: { position: 'absolute', top: -DS_SPACE.xxs, right: -DS_SPACE.xxs },
 
   // Transparent: `SheetModal` draws the dim and fades it on its own.
   scrim: { ...StyleSheet.absoluteFill },

@@ -60,7 +60,7 @@ const dismissKeyboard = () => Keyboard.dismiss()
  *
  * ## The top bar
  *
- * `PulseTopBar` floats over the map holding the wordmark and the bell, and the
+ * `PulseTopBar` floats over the map holding the wordmark and the bell (glass, no band: Flow 3's frame), and the
  * drawer's `full` stops under it, so the bell is always reachable. It reserves
  * no height: the map runs under it edge to edge.
  */
@@ -199,7 +199,7 @@ export function HomeShell({
           />
         ) : null}
       </View>
-      <PulseTopBar actions={<NotificationBell />} />
+      <PulseTopBar floating actions={<NotificationBell glass />} />
       <HomeDrawer
         y={drawerTop}
         points={points}
