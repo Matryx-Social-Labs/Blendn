@@ -1,42 +1,29 @@
-import { Ionicons } from '@expo/vector-icons'
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useRef, useState } from 'react'
-import {
-  Image,
-  KeyboardAvoidingView,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 
 import { LegalLine } from '../components/LegalLine'
 import { Logger } from '../lib/logger'
-import { AUTH_FORM_STYLES, AUTH_LOCKUP, currentDeviceInfo } from '../components/onboarding/authForm'
+import { currentDeviceInfo } from '../components/onboarding/authForm'
+import { Backdrop, ORB_LEVEL } from '../components/onboarding/Backdrop'
+import { Dock } from '../components/onboarding/Dock'
+import { FormError } from '../components/onboarding/FormError'
+import { FormHeader } from '../components/onboarding/FormHeader'
+import { useRevealFocused } from '../components/onboarding/revealFocused'
+import { useRefusedPulse } from '../components/onboarding/useRefusedPulse'
+import { Button } from '../components/ds/Button'
 import { SegmentedControl } from '../components/ds/SegmentedControl'
-import { EmberButton } from '../components/onboarding/EmberControls'
-import { EMBER, ICON, MAX_FONT_SCALE, SPACE, TYPE } from '../lib/theme'
+import { TextField } from '../components/ds/TextField'
+import { font, useBoldText } from '../components/ds/shared'
+import { COLOR, SPACE } from '../lib/design/tokens'
 import { signInWithEmail, signUp } from '../lib/useAuth'
-import { KEYBOARD_BEHAVIOR } from '../lib/keyboard'
+import { KEYBOARD_BEHAVIOR, useKeyboardShown } from '../lib/keyboard'
 import { accountAgeError } from '../lib/onboarding'
 import { PendingInvite } from '../components/friends/PendingInvite'
 
 
 /**
- * Email sign-in and account creation.
- *
- * ## DESIGN IS A PLACEHOLDER — LOGIC IS NOT
- *
- * Every field, rule, error path and endpoint here is deliberate and should
- * survive a redesign. Nothing about how it *looks* is decided: no type ramp, no
- * spacing system, no brand colour beyond the ink-on-white button. It is a
- * functional stand-in so the flow can be exercised end to end and handed over.
- *
- * `docs/PLACEHOLDER_SCREENS.md` has the per-screen brief — what must not break
- * and why, and what is still missing.
+ * Email sign-in and account creation (Flow 1 `/sign-in`).
  *
  * ## Why one screen and not two
  *
@@ -47,13 +34,18 @@ import { PendingInvite } from '../components/friends/PendingInvite'
  * ## The plumbing already existed
  *
  * `signInWithEmail` and `signUp` have been in `lib/useAuth.ts` since the app was
- * built, calling endpoints that have been live for months. Neither had a single
- * caller. This screen is the caller — no auth logic is added here, and none
- * needed changing.
+ * built, calling endpoints that have been live for months. This screen is the
+ * caller — no auth logic is added here, and none needed changing.
  *
  * Navigation is deliberately absent: the root layout's routing effect sees the
  * new auth state and moves the user itself, the same way the Google and Apple
  * paths work. Navigating from here as well would race it.
+ *
+ * ## What it says, and where
+ *
+ * Each problem with the form is its own sentence under its own field, all at once, with focus on the first. The server's
+ * refusal of the whole form is a tinted card above the primary. The primary is docked, and shakes with one `H.error` when
+ * either happens (its `refused`): the screen plays no haptic of its own for the same failure.
  */
 
 /*
@@ -66,20 +58,38 @@ import { PendingInvite } from '../components/friends/PendingInvite'
  */
 const MIN_PASSWORD_LENGTH = 12
 
+/** The age box takes three digits. */
+const AGE_DIGITS = 3
+
 type Mode = 'signin' | 'signup'
+type Field = 'name' | 'email' | 'password' | 'age'
+type FieldErrors = Partial<Record<Field, string>>
+
+/** The order the form walks in, which is the order the first bad field is found in. */
+const FIELD_ORDER: readonly Field[] = ['name', 'email', 'password', 'age']
 
 export default function SignIn() {
+  const bold = useBoldText()
+  const keyboardUp = useKeyboardShown()
   const [mode, setMode] = useState<Mode>('signin')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
   const [age, setAge] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
   const [busy, setBusy] = useState(false)
+  /** The server's sentence for the whole form (wrong password, already registered, the wait), or ours when it never answered. */
   const [error, setError] = useState<string | null>(null)
+  const [waiting, setWaiting] = useState(false)
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
+  const nameRef = useRef<TextInput>(null)
   const emailRef = useRef<TextInput>(null)
   const passwordRef = useRef<TextInput>(null)
   const ageRef = useRef<TextInput>(null)
+  const refs: Record<Field, React.RefObject<TextInput | null>> = { name: nameRef, email: emailRef, password: passwordRef, age: ageRef }
+  const { refused, refuse } = useRefusedPulse()
+  // Four fields and a segmented control do not fit above the keyboard: the page follows the field being typed in.
+  const { scrollRef, bodyRef, reveal, onScroll, onViewportLayout, onBodyLayout } = useRevealFocused()
+  const focusing = { onFocus: reveal }
   /*
    * A ref as well as `busy`: the keyboard's "go" and the button can land in
    * the same frame, and both read the `busy` of the render before either set
@@ -104,33 +114,50 @@ export default function SignIn() {
     // Errors belong to the attempt that produced them. Carrying "wrong
     // password" across to the signup form would be nonsense.
     setError(null)
+    setWaiting(false)
+    setFieldErrors({})
   }
 
-  const validate = (): string | null => {
-    if (!trimmedEmail.includes('@')) return 'Enter a valid email address.'
-    if (isSignup && !name.trim()) return 'Enter your name.'
+  /** A field's sentence stays until its value changes (DS: the ring stays until the value changes). */
+  const edit = (field: Field, set: (value: string) => void) => (value: string) => {
+    set(value)
+    if (fieldErrors[field]) setFieldErrors((current) => ({ ...current, [field]: undefined }))
+  }
+
+  /** Every problem with the form, each under its own field (Flow 1 R4.1 sign-in 06). */
+  const validate = (): FieldErrors => {
+    const problems: FieldErrors = {}
+    if (!trimmedEmail.includes('@')) problems.email = 'Enter a valid email address.'
+    if (isSignup && !name.trim()) problems.name = 'Enter your name.'
     if (isSignup) {
       const ageProblem = accountAgeError(age, { required: true })
-      if (ageProblem) return ageProblem
+      if (ageProblem) problems.age = ageProblem
     }
-    if (!password) return 'Enter your password.'
-    if (isSignup && password.length < MIN_PASSWORD_LENGTH) {
-      return `Use at least ${MIN_PASSWORD_LENGTH} characters. Length beats symbols.`
+    if (!password) problems.password = 'Enter your password.'
+    else if (isSignup && password.length < MIN_PASSWORD_LENGTH) {
+      problems.password = `Use at least ${MIN_PASSWORD_LENGTH} characters. Length beats symbols.`
     }
-    return null
+    return problems
   }
 
   const submit = async () => {
     if (inFlight.current) return
-    const problem = validate()
-    if (problem) {
-      setError(problem)
+    const problems = validate()
+    const first = FIELD_ORDER.find((field) => problems[field])
+    if (first) {
+      setFieldErrors(problems)
+      setError(null)
+      // The first bad field takes focus; the primary shakes with the one H.error.
+      refs[first].current?.focus()
+      refuse()
       return
     }
 
     inFlight.current = true
     setBusy(true)
     setError(null)
+    setWaiting(false)
+    setFieldErrors({})
     try {
       const deviceInfo = currentDeviceInfo()
 
@@ -154,6 +181,8 @@ export default function SignIn() {
          * them with "something went wrong" would make the form unusable.
          */
         setError(result.error || (isSignup ? "Couldn't create your account." : "Couldn't sign you in."))
+        setWaiting(result.errorCode === 'RATE_LIMITED')
+        refuse()
         return
       }
       // Both cases: the root layout's routing effect takes it from here. A new
@@ -162,6 +191,7 @@ export default function SignIn() {
     } catch (e) {
       Logger.error('auth', 'Email auth failed', { error: e })
       setError('Something went wrong. Please try again.')
+      refuse()
     } finally {
       inFlight.current = false
       setBusy(false)
@@ -169,58 +199,38 @@ export default function SignIn() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={KEYBOARD_BEHAVIOR}
-      >
+    <View style={styles.root}>
+      <Backdrop level={ORB_LEVEL.form} paused={keyboardUp} />
+
+      <FormHeader testID="sign-in-header" />
+
+      <KeyboardAvoidingView style={styles.flex} behavior={KEYBOARD_BEHAVIOR}>
         <ScrollView
+          ref={scrollRef}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
+          onLayout={onViewportLayout}
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           showsVerticalScrollIndicator={false}
         >
-          <Pressable
-            onPress={() => router.back()}
-            style={styles.back}
-            accessibilityRole="button"
-            accessibilityLabel="Go back"
-            hitSlop={12}
-          >
-            <Ionicons name="chevron-back" size={ICON.lg} color={EMBER.textPrimary} />
-          </Pressable>
-
-          {/*
-            Decorative. The wordmark is a picture of the product's name, and
-            the name is not what somebody needs read to them here — the buttons
-            below say what this screen does. Announced, it is one more stop
-            before the first thing you can act on.
-          */}
-          <Image
-            source={AUTH_LOCKUP}
-            style={styles.lockup}
-            resizeMode="contain"
-            accessibilityElementsHidden
-            importantForAccessibility="no-hide-descendants"
-          />
-
-          <PendingInvite />
+          <PendingInvite signIn />
 
           {notice && !error ? (
-            <Text style={styles.notice} accessibilityRole="alert">
+            <Text style={[font('meta', bold), styles.notice]} accessibilityRole="alert">
               {notice}
             </Text>
           ) : null}
 
-          {/* Two tabs over one form: the design system's segmented control (it plays H.select on landing, and slides on M.snap). */}
-          <View style={styles.modeSwitch}>
-            <SegmentedControl
-              items={MODE_LABELS}
-              selected={isSignup ? 1 : 0}
-              onChange={(i) => switchMode(i === 0 ? 'signin' : 'signup')}
-              disabled={busy}
-              testID="sign-in-mode"
-            />
-          </View>
+          {/* Two tabs over one form: the design system's segmented control (it plays H.select, and slides on M.snap). */}
+          <SegmentedControl
+            items={MODE_LABELS}
+            selected={isSignup ? 1 : 0}
+            onChange={(i) => switchMode(i === 0 ? 'signin' : 'signup')}
+            disabled={busy}
+            testID="sign-in-mode"
+          />
 
           {/*
             One order for the keyboard to walk: name, email, password, then
@@ -228,17 +238,15 @@ export default function SignIn() {
             fields, so Next on the name opened a number pad and Next on the
             number pad (which has none on iOS) was a dead end.
           */}
-          {isSignup && (
-            <View style={styles.field}>
-              <Text style={styles.label}>NAME</Text>
-              <TextInput
-                style={styles.input}
+          <View ref={bodyRef} onLayout={onBodyLayout} style={styles.fields}>
+            {isSignup && (
+              <TextField
+                inputRef={nameRef}
+                label="Name"
                 value={name}
-                onChangeText={setName}
-                placeholder="What should we call you?"
-                placeholderTextColor={EMBER.textPlaceholder}
-                accessibilityLabel="Name"
-                maxFontSizeMultiplier={MAX_FONT_SCALE.button}
+                onChangeText={edit('name', setName)}
+                error={fieldErrors.name}
+                placeholder="Your first name"
                 autoCapitalize="words"
                 // A name is not a word to correct.
                 autoCorrect={false}
@@ -247,22 +255,18 @@ export default function SignIn() {
                 returnKeyType="next"
                 submitBehavior="submit"
                 onSubmitEditing={() => emailRef.current?.focus()}
-                maxLength={100}
+                testID="sign-in-name"
+                {...focusing}
               />
-            </View>
-          )}
+            )}
 
-          <View style={styles.field}>
-            <Text style={styles.label}>EMAIL</Text>
-            <TextInput
-              ref={emailRef}
-              style={styles.input}
+            <TextField
+              inputRef={emailRef}
+              label="Email"
               value={email}
-              onChangeText={setEmail}
+              onChangeText={edit('email', setEmail)}
+              error={fieldErrors.email}
               placeholder="you@example.com"
-              placeholderTextColor={EMBER.textPlaceholder}
-              accessibilityLabel="Email"
-              maxFontSizeMultiplier={MAX_FONT_SCALE.button}
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="email-address"
@@ -271,123 +275,92 @@ export default function SignIn() {
               returnKeyType="next"
               submitBehavior="submit"
               onSubmitEditing={() => passwordRef.current?.focus()}
+              testID="sign-in-email"
+              {...focusing}
             />
-          </View>
 
-          <View style={styles.field}>
-            <Text style={styles.label}>PASSWORD</Text>
-            <View style={styles.passwordRow}>
-              <TextInput
-                ref={passwordRef}
-                style={[styles.input, styles.passwordInput]}
-                value={password}
-                onChangeText={setPassword}
-                placeholder={isSignup ? `At least ${MIN_PASSWORD_LENGTH} characters` : 'Your password'}
-                placeholderTextColor={EMBER.textPlaceholder}
-                accessibilityLabel="Password"
-                maxFontSizeMultiplier={MAX_FONT_SCALE.button}
-                secureTextEntry={!showPassword}
-                autoCapitalize="none"
-                autoCorrect={false}
-                /*
-                 * `newPassword` on signup so the keychain offers to generate and
-                 * save one, `password` on sign-in so it offers the saved one.
-                 * Getting this wrong is why password managers so often fail to
-                 * fill on React Native.
-                 */
-                autoComplete={isSignup ? 'new-password' : 'current-password'}
-                textContentType={isSignup ? 'newPassword' : 'password'}
-                // Sign-in ends here; sign-up goes on to the age.
-                returnKeyType={isSignup ? 'next' : 'go'}
-                submitBehavior={isSignup ? 'submit' : 'blurAndSubmit'}
-                onSubmitEditing={isSignup ? () => ageRef.current?.focus() : () => void submit()}
-              />
-              <Pressable
-                onPress={() => setShowPassword((v) => !v)}
-                style={styles.reveal}
-                accessibilityRole="button"
-                accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
-                hitSlop={8}
-              >
-                <Ionicons
-                  name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                  size={ICON.md}
-                  color={EMBER.textSecondary}
-                />
-              </Pressable>
-            </View>
-          </View>
+            <TextField
+              inputRef={passwordRef}
+              label="Password"
+              secure
+              value={password}
+              onChangeText={edit('password', setPassword)}
+              error={fieldErrors.password}
+              placeholder={isSignup ? `At least ${MIN_PASSWORD_LENGTH} characters` : 'Your password'}
+              autoCapitalize="none"
+              autoCorrect={false}
+              /*
+               * `newPassword` on signup so the keychain offers to generate and
+               * save one, `password` on sign-in so it offers the saved one.
+               * Getting this wrong is why password managers so often fail to
+               * fill on React Native.
+               */
+              autoComplete={isSignup ? 'new-password' : 'current-password'}
+              textContentType={isSignup ? 'newPassword' : 'password'}
+              // Sign-in ends here; sign-up goes on to the age.
+              returnKeyType={isSignup ? 'next' : 'go'}
+              submitBehavior={isSignup ? 'submit' : 'blurAndSubmit'}
+              onSubmitEditing={isSignup ? () => ageRef.current?.focus() : () => void submit()}
+              testID="sign-in-password"
+              {...focusing}
+            />
 
-          {isSignup && (
-            <View style={styles.field}>
-              {/* Required: Blend'n is 18+ (SCRUM-330). */}
-              <Text style={styles.label}>AGE</Text>
-              <TextInput
-                ref={ageRef}
-                style={styles.input}
+            {isSignup && (
+              // Required: Blend'n is 18+ (SCRUM-330).
+              <TextField
+                inputRef={ageRef}
+                label="Age"
                 value={age}
-                onChangeText={(t) => setAge(t.replace(/[^0-9]/g, ''))}
-                placeholder="You must be 18 or over"
-                placeholderTextColor={EMBER.textPlaceholder}
-                accessibilityLabel="Age"
-                maxFontSizeMultiplier={MAX_FONT_SCALE.button}
+                onChangeText={edit('age', (value) => setAge(value.replace(/[^0-9]/g, '').slice(0, AGE_DIGITS)))}
+                error={fieldErrors.age}
+                placeholder="18 or over"
                 keyboardType="number-pad"
                 returnKeyType="go"
                 onSubmitEditing={() => void submit()}
-                maxLength={3}
+                testID="sign-in-age"
+                {...focusing}
+              />
+            )}
+          </View>
+
+          {error ? <FormError message={error} waiting={waiting} testID="sign-in-error" /> : null}
+        </ScrollView>
+
+        {/* Docked: the primary is one thumb away; over the keyboard it rides on glass, at rest it is only the button on the page. */}
+        <Dock glass={keyboardUp} keyboardUp={keyboardUp} testID="sign-in-dock">
+          <Button label={isSignup ? 'Create account' : 'Sign in'} onPress={() => void submit()} loading={busy} refused={refused} testID="sign-in-primary" />
+          {!keyboardUp && !isSignup ? (
+            <View style={styles.forgot}>
+              <Button
+                label="Forgot your password?"
+                kind="tertiary"
+                size="sm"
+                // The address typed here goes with them, so it is not typed twice.
+                onPress={() =>
+                  router.push(
+                    trimmedEmail
+                      ? { pathname: '/forgot-password', params: { email: trimmedEmail } }
+                      : '/forgot-password'
+                  )
+                }
+                testID="sign-in-forgot"
               />
             </View>
-          )}
-
-          {error && (
-            <Text style={styles.error} accessibilityRole="alert">
-              {error}
-            </Text>
-          )}
-
-          <EmberButton
-            label={isSignup ? 'Create account' : 'Sign in'}
-            onPress={() => void submit()}
-            busy={busy}
-            style={styles.primary}
-          />
-
-          {!isSignup && (
-            <Pressable
-              // The address typed here goes with them, so it is not typed twice.
-              onPress={() =>
-                router.push(
-                  trimmedEmail
-                    ? { pathname: '/forgot-password', params: { email: trimmedEmail } }
-                    : '/forgot-password'
-                )
-              }
-              style={styles.linkButton}
-              accessibilityRole="button"
-            >
-              <Text style={styles.link}>FORGOT YOUR PASSWORD?</Text>
-            </Pressable>
-          )}
-
-          {isSignup && (
-            <LegalLine lead="By creating an account you" style={styles.legal} />
-          )}
-        </ScrollView>
+          ) : null}
+          {!keyboardUp && isSignup ? <LegalLine lead="By creating an account you" /> : null}
+        </Dock>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   )
 }
 
 const MODE_LABELS = ['Sign in', 'Create account'] as const
 
 const styles = StyleSheet.create({
-  ...AUTH_FORM_STYLES,
-  modeSwitch: { marginBottom: SPACE.sm },
-
-  passwordRow: { justifyContent: 'center' },
-  passwordInput: { paddingRight: SPACE.xxxl },
-  reveal: { position: 'absolute', right: SPACE.lg, padding: SPACE.xs },
-
-  legal: { marginTop: SPACE.xs },
-  notice: { ...TYPE.meta, color: EMBER.textSecondary, textAlign: 'center' },
+  root: { flex: 1, backgroundColor: COLOR.ink },
+  flex: { flex: 1 },
+  scroll: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.sm, paddingBottom: SPACE.xl, gap: SPACE.lg },
+  fields: { gap: SPACE.md },
+  notice: { color: COLOR.textSecondary, textAlign: 'center' },
+  forgot: { alignItems: 'center' },
 })
