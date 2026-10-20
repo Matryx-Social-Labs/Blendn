@@ -47,6 +47,7 @@ import OfferScreen from '../app/offer/[id]'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { router } from 'expo-router'
 import { apiClient } from '../lib/apiClient'
+import { H } from '../lib/haptics'
 import { noteServerDate } from '../lib/serverClock'
 import { showSheet, type ActionSheet, type ReasonSheet } from '../lib/sheet'
 /* eslint-enable import/first */
@@ -129,6 +130,19 @@ describe('the live pass', () => {
     expect(screen.queryByText('K7Q 4M2')).toBeNull()
     // The first-time note about the code is spent by the redeem.
     expect(await AsyncStorage.getItem('door_pass_seen_u1')).toBe('1')
+  })
+
+  it('the success haptic plays once, on the render the server’s "redeemed" arrives in: the one that starts the liquid and the stamp', async () => {
+    const success = jest.spyOn(H, 'success').mockImplementation(() => {})
+    await mount()
+    expect(success).not.toHaveBeenCalled()
+    reads = [offer('redeemed', null)]
+    await act(async () => { jest.advanceTimersByTime(10_000) })
+    expect(screen.getByLabelText('Redeemed')).toBeTruthy()
+    expect(success).toHaveBeenCalledTimes(1)
+    await act(async () => { jest.advanceTimersByTime(20_000) })
+    expect(success).toHaveBeenCalledTimes(1)
+    success.mockRestore()
   })
 
   it('hides a code past its turn when no fresh one came (L2), and says it needs a connection', async () => {
