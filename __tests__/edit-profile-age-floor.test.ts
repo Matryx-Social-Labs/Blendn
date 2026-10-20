@@ -152,7 +152,7 @@ describe('one age rule for every form that takes an age', () => {
     expect(src).toMatch(/onLayout=\{\(e\) => \{ basicInfoY\.current = e\.nativeEvent\.layout\.y \}\}>\s*<Text style=\{styles\.cardTitle\}>BASIC INFORMATION/)
     // ...and focus on the field to fix, not left on Save.
     expect(refused).toContain('(errors.name ? nameInputRef : ageInputRef).current?.focus()')
-    expect(src).toMatch(/ref=\{nameInputRef\}\s*accessibilityLabel="Name"/)
-    expect(src).toMatch(/ref=\{ageInputRef\}\s*accessibilityLabel="Age"/)
+    expect(src).toMatch(/label="Name"\s*inputRef=\{nameInputRef\}/)
+    expect(src).toMatch(/label="Age"\s*inputRef=\{ageInputRef\}/)
   })
 })

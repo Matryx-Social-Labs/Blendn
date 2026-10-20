@@ -23,7 +23,7 @@ describe('onboarding secondaries wired to skip()', () => {
 describe('the bio cap', () => {
   it('is the same number on the onboarding step and the profile editor', () => {
     const limit = Number(read('app/onboarding/details.tsx').match(/const BIO_LIMIT = (\d+)/)?.[1])
-    const editor = Number(read('app/edit-profile.tsx').match(/\{bio\.length\}\/(\d+)/)?.[1])
+    const editor = Number(read('app/edit-profile.tsx').match(/const BIO_LIMIT = (\d+)/)?.[1])
     expect(limit).toBe(editor)
     expect(limit).toBe(500)
   })

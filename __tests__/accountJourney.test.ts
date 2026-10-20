@@ -27,8 +27,10 @@ describe('Edit profile', () => {
     const src = read('app/edit-profile.tsx')
     // usePreventRemove covers the header's back, the swipe and Android's back alike.
     expect(src).toContain('usePreventRemove(dirty && !leaving,')
-    expect(src).toContain('title="Discard changes?"')
-    expect(src).toContain("{ label: 'Keep editing', onPress: () => setDiscardOpen(false) }")
+    // The app's one sheet: Discard is its destructive confirm (the one destructive tick), Keep editing its Cancel.
+    expect(src).toContain("title: 'Discard changes?'")
+    expect(src).toContain("{ label: 'Discard', variant: 'destructive', then: discardChanges }")
+    expect(src).toContain("{ label: 'Keep editing', cancel: true }")
     // A save moves the baseline, so the OK after "Profile Updated" leaves without asking.
     expect(src).toContain('setSavedSnapshot(currentSnapshot)')
   })

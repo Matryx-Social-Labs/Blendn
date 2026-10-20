@@ -3,7 +3,6 @@ import { router, useNavigation } from 'expo-router'
 import { usePreventRemove, type NavigationAction } from 'expo-router/react-navigation'
 import React, { useEffect, useRef, useState } from 'react'
 import {
-  AccessibilityInfo,
   KeyboardAvoidingView,
   Modal,
   Pressable,
@@ -15,8 +14,8 @@ import {
   View,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import ActionTray from '../components/ActionTray'
-import { AppHeader } from '../components/AppHeader'
+import { TextArea, TextField } from '../components/ds/TextField'
+import { TopBar } from '../components/ds/TopBar'
 import PhotoManager from '../components/PhotoManager'
 import { MatchingFields, type Intent } from '../components/profile/MatchingFields'
 import { mayDate, type Gender, type Orientation } from '../lib/dating'
@@ -26,6 +25,8 @@ import { apiClient, ProfileCache } from '../lib/apiClient'
 import { Logger } from '../lib/logger'
 import { useToast } from '../components/Toast'
 import { queryCache } from '../lib/queryCache'
+import { showSheet } from '../lib/sheet'
+import { useTopBarState } from '../lib/useTopBarState'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, TYPE } from '../lib/theme'
 import { useAuth, refreshAuthUser } from '../lib/useAuth'
 import { KEYBOARD_BEHAVIOR } from '../lib/keyboard'
@@ -51,6 +52,13 @@ interface UserProfile {
 }
 
 type TagInputMode = 'goal' | 'lookingFor'
+
+/** The same cap as the onboarding step and the server's schema (__tests__/onboarding-labels-and-caps). */
+const BIO_LIMIT = 500
+const NAME_LIMIT = 50
+const FIELD_LIMIT = 100
+const PHONE_LIMIT = 20
+const AGE_DIGITS = 3
 
 /** The add-a-tag sheet's words, per field. */
 const TAG_INPUT: Record<TagInputMode, { title: string; placeholder: string }> = {
@@ -166,7 +174,6 @@ export default function EditProfile() {
    */
   const navigation = useNavigation()
   const [savedSnapshot, setSavedSnapshot] = useState<string | null>(null)
-  const [discardOpen, setDiscardOpen] = useState(false)
   const [leaving, setLeaving] = useState<NavigationAction | null>(null)
   const pendingLeave = useRef<NavigationAction | null>(null)
   const currentSnapshot = formSnapshot({
@@ -175,12 +182,26 @@ export default function EditProfile() {
   })
   const dirty = savedSnapshot !== null && currentSnapshot !== savedSnapshot
 
-  usePreventRemove(dirty && !leaving, ({ data }) => {
-    pendingLeave.current = data.action
-    setDiscardOpen(true)
-  })
+  const bar = useTopBarState()
 
   // Discard lifts the guard first, then replays the exit that was stopped.
+  const discardChanges = () => setLeaving(pendingLeave.current)
+
+  usePreventRemove(dirty && !leaving, ({ data }) => {
+    pendingLeave.current = data.action
+    // The app's one sheet: Discard is the destructive confirm, so it plays the one destructive tick like every other.
+    showSheet({
+      kind: 'actions',
+      icon: 'triangle-alert',
+      title: 'Discard changes?',
+      message: "You have edits that aren't saved. Leave now and they're gone.",
+      actions: [
+        { label: 'Discard', variant: 'destructive', then: discardChanges },
+        { label: 'Keep editing', cancel: true },
+      ],
+    })
+  })
+
   useEffect(() => {
     if (leaving) navigation.dispatch(leaving)
   }, [leaving, navigation])
@@ -195,11 +216,6 @@ export default function EditProfile() {
   useEffect(() => {
     if (leaveAfterSave && !dirty) router.back()
   }, [leaveAfterSave, dirty])
-
-  const discardChanges = () => {
-    setDiscardOpen(false)
-    setLeaving(pendingLeave.current)
-  }
 
   // Declared inside the effect: it sets state only after its requests return.
   useEffect(() => {
@@ -368,9 +384,8 @@ export default function EditProfile() {
       // a refused Save looked like a dead button, so bring the card into view —
       // its own offset, not 0, which is the photo grid for anyone with photos.
       scrollRef.current?.scrollTo({ y: basicInfoY.current, animated: true })
-      // The red text under the field is silent to a screen reader; say it, and
-      // put focus on the field that needs fixing rather than leaving it on Save.
-      AccessibilityInfo.announceForAccessibility((errors.name ?? errors.age) as string)
+      // The field says its own error to a screen reader (TextField's assertive note); put focus on the
+      // field that needs fixing rather than leaving it on Save.
       ;(errors.name ? nameInputRef : ageInputRef).current?.focus()
       return
     }
@@ -460,14 +475,14 @@ export default function EditProfile() {
        * returns to already shows the change. The baseline moved above, so
        * the leave guard lets this through without asking.
        */
-      showToast('Profile saved', 'success')
+      showToast('Profile saved', 'success', { haptic: 'success' })
       setLeaveAfterSave(true)
 
     } catch (error) {
       Logger.error('profile', 'EditProfile: Save profile error', { error })
       // Never the thrown message: it is the server's or the client's wording
       // for a developer ("Failed to update profile"), not for the person.
-      showToast("Couldn't save your profile. Try again.", 'error')
+      showToast("Couldn't save your profile. Try again.", 'error', { haptic: 'error' })
     } finally {
       setSaving(false)
     }
@@ -504,7 +519,7 @@ export default function EditProfile() {
   const isLoading = loading
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       <KeyboardAvoidingView
         style={styles.container}
         // `undefined` on Android: the window already resizes for the keyboard
@@ -512,16 +527,20 @@ export default function EditProfile() {
         // same fix components/onboarding/OnboardingScreen.tsx carries.
         behavior={KEYBOARD_BEHAVIOR}
       >
-        <AppHeader
+        <TopBar
           title="Edit profile"
+          state={bar.state}
           onBack={() => router.back()}
-          rightTextButton={{ label: 'Save', onPress: handleSave, loading: saving, disabled: saving }}
+          save={{ onPress: handleSave, saving, disabled: saving }}
+          testID="edit-profile-top"
         />
 
         <ScrollView
           ref={scrollRef}
           style={styles.content}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          {...bar.scrollProps}
         >
           {/* Photos Card */}
           <View style={styles.card}>
@@ -548,98 +567,69 @@ export default function EditProfile() {
                 <SkeletonBlock width={'100%'} height={CONTROL.lg} borderRadius={EMBER_RADIUS.pill} />
               </>
             ) : (
-              <>
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>NAME *</Text>
-                  <TextInput
-                    ref={nameInputRef}
-                    accessibilityLabel="Name"
-                    style={[styles.input, nameError && styles.inputError]}
-                    value={name}
-                    onChangeText={(value) => {
-                      setName(value)
-                      if (nameError && value.trim()) setNameError(null)
-                    }}
-                    placeholder="Enter your name"
-                    placeholderTextColor={EMBER.textPlaceholder}
-                    maxLength={50}
-                  />
-                  {!!nameError && <Text style={styles.errorText}>{nameError}</Text>}
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>AGE</Text>
-                  <TextInput
-                    ref={ageInputRef}
-                    accessibilityLabel="Age"
-                    style={[styles.input, ageError && styles.inputError]}
-                    value={age}
-                    onChangeText={(value) => {
-                      const sanitized = value.replace(/[^0-9]/g, '')
-                      setAge(sanitized)
-                      if (ageError && sanitized) setAgeError(null)
-                    }}
-                    placeholder="Enter your age"
-                    placeholderTextColor={EMBER.textPlaceholder}
-                    keyboardType="numeric"
-                    maxLength={3}
-                  />
-                  {!!ageError && <Text style={styles.errorText}>{ageError}</Text>}
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>LOCATION</Text>
-                  <TextInput
-                    accessibilityLabel="Location"
-                    style={styles.input}
-                    value={location}
-                    onChangeText={setLocation}
-                    placeholder="City, State"
-                    placeholderTextColor={EMBER.textPlaceholder}
-                    maxLength={100}
-                  />
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>OCCUPATION</Text>
-                  <TextInput
-                    accessibilityLabel="Occupation"
-                    style={styles.input}
-                    value={occupation}
-                    onChangeText={setOccupation}
-                    placeholder="e.g. Software Engineer"
-                    placeholderTextColor={EMBER.textPlaceholder}
-                    maxLength={100}
-                  />
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>EDUCATION</Text>
-                  <TextInput
-                    accessibilityLabel="Education"
-                    style={styles.input}
-                    value={education}
-                    onChangeText={setEducation}
-                    placeholder="e.g. University of California"
-                    placeholderTextColor={EMBER.textPlaceholder}
-                    maxLength={100}
-                  />
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>PHONE</Text>
-                  <TextInput
-                    accessibilityLabel="Phone"
-                    style={styles.input}
-                    value={phone}
-                    onChangeText={setPhone}
-                    placeholder="Phone number"
-                    placeholderTextColor={EMBER.textPlaceholder}
-                    keyboardType="phone-pad"
-                    maxLength={20}
-                  />
-                </View>
-              </>
+              <View style={styles.fields}>
+                <TextField
+                  label="Name"
+                  inputRef={nameInputRef}
+                  value={name}
+                  onChangeText={(value) => {
+                    setName(value.slice(0, NAME_LIMIT))
+                    if (nameError && value.trim()) setNameError(null)
+                  }}
+                  onBlur={() => setNameError(profileFormErrors({ name, age, storedAge: profile?.age ?? null }).name)}
+                  error={nameError ?? undefined}
+                  placeholder="Enter your name"
+                  autoComplete="name"
+                  textContentType="name"
+                  testID="edit-profile-name"
+                />
+                <TextField
+                  label="Age"
+                  inputRef={ageInputRef}
+                  value={age}
+                  onChangeText={(value) => {
+                    const sanitized = value.replace(/[^0-9]/g, '').slice(0, AGE_DIGITS)
+                    setAge(sanitized)
+                    if (ageError && sanitized) setAgeError(null)
+                  }}
+                  onBlur={() => setAgeError(profileFormErrors({ name, age, storedAge: profile?.age ?? null }).age)}
+                  error={ageError ?? undefined}
+                  placeholder="Enter your age"
+                  keyboardType="numeric"
+                  testID="edit-profile-age"
+                />
+                <TextField
+                  label="Location"
+                  value={location}
+                  onChangeText={(value) => setLocation(value.slice(0, FIELD_LIMIT))}
+                  placeholder="City, State"
+                  testID="edit-profile-location"
+                />
+                <TextField
+                  label="Occupation"
+                  value={occupation}
+                  onChangeText={(value) => setOccupation(value.slice(0, FIELD_LIMIT))}
+                  placeholder="e.g. Software Engineer"
+                  testID="edit-profile-occupation"
+                />
+                <TextField
+                  label="Education"
+                  value={education}
+                  onChangeText={(value) => setEducation(value.slice(0, FIELD_LIMIT))}
+                  placeholder="e.g. University of California"
+                  testID="edit-profile-education"
+                />
+                <TextField
+                  label="Phone"
+                  value={phone}
+                  onChangeText={(value) => setPhone(value.slice(0, PHONE_LIMIT))}
+                  placeholder="Phone number"
+                  keyboardType="phone-pad"
+                  autoComplete="tel"
+                  textContentType="telephoneNumber"
+                  testID="edit-profile-phone"
+                />
+              </View>
             )}
           </View>
 
@@ -652,21 +642,14 @@ export default function EditProfile() {
                 <SkeletonBlock width={'100%'} height={100} borderRadius={EMBER_RADIUS.lg} />
               </>
             ) : (
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>BIO</Text>
-                <TextInput
-                  accessibilityLabel="Bio"
-                  style={[styles.input, styles.bioInput]}
-                  value={bio}
-                  onChangeText={setBio}
-                  placeholder="Tell people about yourself..."
-                  placeholderTextColor={EMBER.textPlaceholder}
-                  multiline
-                  numberOfLines={4}
-                  maxLength={500}
-                />
-                <Text style={styles.characterCount}>{bio.length}/500</Text>
-              </View>
+              <TextArea
+                label="Bio"
+                value={bio}
+                onChangeText={(value) => setBio(value.slice(0, BIO_LIMIT))}
+                limit={BIO_LIMIT}
+                placeholder="Tell people about yourself..."
+                testID="edit-profile-bio"
+              />
             )}
           </View>
 
@@ -792,16 +775,6 @@ export default function EditProfile() {
         </Modal>
       </KeyboardAvoidingView>
 
-      <ActionTray
-        visible={discardOpen}
-        title="Discard changes?"
-        message="You have edits that aren't saved. Leave now and they're gone."
-        onClose={() => setDiscardOpen(false)}
-        buttons={[
-          { label: 'Keep editing', onPress: () => setDiscardOpen(false) },
-          { label: 'Discard', variant: 'destructive', onPress: discardChanges },
-        ]}
-      />
     </SafeAreaView>
   )
 }
@@ -829,46 +802,9 @@ const styles = StyleSheet.create({
     marginBottom: SPACE.lg,
   },
 
-  // Form inputs
-  inputGroup: {
-    marginBottom: SPACE.lg,
-  },
-  label: {
-    ...TYPE.label,
-    marginBottom: SPACE.sm,
-  },
-  /* Size and family only: a lineHeight on a single-line TextInput misplaces the text on iOS. */
-  input: {
-    borderWidth: 1,
-    borderColor: EMBER.separator,
-    // Pill, like the sign-in and onboarding inputs. The multiline bio overrides it.
-    borderRadius: EMBER_RADIUS.pill,
-    minHeight: CONTROL.lg,
-    paddingHorizontal: SPACE.lg,
-    paddingVertical: SPACE.md,
-    fontFamily: TYPE.body.fontFamily,
-    fontSize: TYPE.body.fontSize,
-    backgroundColor: EMBER.surfaceMedia,
-    color: EMBER.textPrimary,
-  },
-  inputError: {
-    borderColor: EMBER.destructive,
-  },
-  errorText: {
-    ...TYPE.meta,
-    marginTop: SPACE.xs,
-    color: EMBER.destructive,
-  },
-  // A box, not a control: a pill radius on a 100pt multiline field is a stadium.
-  bioInput: {
-    height: 100,
-    borderRadius: EMBER_RADIUS.lg,
-    textAlignVertical: 'top',
-  },
-  characterCount: {
-    ...TYPE.caption,
-    textAlign: 'right',
-    marginTop: SPACE.xs,
+  // Form fields: the design system's TextField / TextArea, one gap between them.
+  fields: {
+    gap: SPACE.lg,
   },
 
   // Tags: the same chip as MatchingFields, one height and one fill.
