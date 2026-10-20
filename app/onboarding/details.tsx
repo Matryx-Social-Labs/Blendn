@@ -1,12 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
-import {
-  EmberChip,
-  EmberChipRow,
-  EmberField,
-  EmberFieldGroup,
-} from '../../components/onboarding/EmberControls'
+import { ChipSet } from '../../components/ds/ChipSet'
+import { EmberField } from '../../components/onboarding/EmberControls'
 import { ListLoadState, type ListStatus } from '../../components/onboarding/ListLoadState'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import { apiClient } from '../../lib/apiClient'
@@ -153,18 +149,18 @@ export default function DetailsScreen() {
       ) : null}
 
       {groups.map((group) => (
-        <EmberFieldGroup key={group.id} label={group.name}>
-          <EmberChipRow pack>
-            {group.items.map((item) => (
-              <EmberChip
-                key={item.id}
-                label={item.name}
-                selected={interests.includes(item.name)}
-                onPress={() => toggle(item.id, item.name)}
-              />
-            ))}
-          </EmberChipRow>
-        </EmberFieldGroup>
+        <ChipSet
+          key={group.id}
+          label={group.name}
+          items={group.items.map((item) => ({ key: item.id, label: item.name }))}
+          selection="multi"
+          selected={group.items.filter((item) => interests.includes(item.name)).map((item) => item.id)}
+          onToggle={(id) => {
+            const item = group.items.find((i) => i.id === id)
+            if (item) toggle(item.id, item.name)
+          }}
+          testID={`onboarding-interests-${group.id}`}
+        />
       ))}
 
 

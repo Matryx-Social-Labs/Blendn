@@ -5,6 +5,7 @@ import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, w
 import { scheduleOnRN } from 'react-native-worklets'
 
 import { Grabber } from '../ui/Grabber'
+import { GroundProvider } from '../ds/shared'
 import {
   DRAWER_HANDLE_HEIGHT,
   DRAWER_HEADER_HEIGHT,
@@ -90,27 +91,29 @@ export function HomeDrawer({
   const tapStep = () => onSnap(snap === 'full' ? 'half' : stepSnap(snap, 'up'))
 
   return (
-    <Animated.View style={[styles.drawer, { top: points.full }, moved]}>
-      <GestureDetector gesture={pan}>
-        <View style={styles.header} onTouchStart={onChromeTouch}>
-          <Pressable
-            onPress={tapStep}
-            style={styles.handle}
-            accessibilityRole="adjustable"
-            accessibilityLabel="Events and places"
-            accessibilityHint="Swipe up or down to show more or less of the list"
-            accessibilityValue={{ text: DRAWER_SNAP_LABEL[snap] }}
-            accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
-            onAccessibilityAction={(e) => onSnap(stepSnap(snap, e.nativeEvent.actionName === 'increment' ? 'up' : 'down'))}
-          >
-            <Grabber />
-          </Pressable>
-          {header}
-        </View>
-      </GestureDetector>
-      <View style={{ height: drawerContentHeight(points, snap, height) }}>{children}</View>
-      {snap === 'peek' && peek ? <View style={styles.peek}>{peek}</View> : null}
-    </Animated.View>
+    <GroundProvider value="glass">
+      <Animated.View style={[styles.drawer, { top: points.full }, moved]}>
+        <GestureDetector gesture={pan}>
+          <View style={styles.header} onTouchStart={onChromeTouch}>
+            <Pressable
+              onPress={tapStep}
+              style={styles.handle}
+              accessibilityRole="adjustable"
+              accessibilityLabel="Events and places"
+              accessibilityHint="Swipe up or down to show more or less of the list"
+              accessibilityValue={{ text: DRAWER_SNAP_LABEL[snap] }}
+              accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
+              onAccessibilityAction={(e) => onSnap(stepSnap(snap, e.nativeEvent.actionName === 'increment' ? 'up' : 'down'))}
+            >
+              <Grabber />
+            </Pressable>
+            {header}
+          </View>
+        </GestureDetector>
+        <View style={{ height: drawerContentHeight(points, snap, height) }}>{children}</View>
+        {snap === 'peek' && peek ? <View style={styles.peek}>{peek}</View> : null}
+      </Animated.View>
+    </GroundProvider>
   )
 }
 

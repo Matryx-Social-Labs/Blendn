@@ -17,12 +17,13 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import Animated, { Easing, FadeIn, FadeOut, useReducedMotion, withTiming } from 'react-native-reanimated'
 
 import { Face } from '../../components/blendn/Face'
+import { ChipSet } from '../../components/ds/ChipSet'
+import { RadioCard } from '../../components/ds/RadioCard'
 import ScalePress from '../../components/motion/ScalePress'
 import { fadeInFast } from '../../components/motion/presence'
 import { useToast } from '../../components/Toast'
 import { Text } from '../../components/ui/Text'
 import { apiClient, type PeerRatingIssue } from '../../lib/apiClient'
-import { H } from '../../lib/haptics'
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
 import { Logger } from '../../lib/logger'
 import { askAboutNight, ratePeople, type RatePerson } from '../../lib/ratePeople'
@@ -108,13 +109,6 @@ const riseIn = () => {
 const fadeInStage = FadeIn.duration(220).easing(EASE_OUT)
 const fadeOutStage = FadeOut.duration(120).easing(EASE_OUT)
 
-// A state change on a control someone is looking at: short, and ease-out.
-// The `transition` shorthand, not `transitionProperty` & co.: SDK 53's
-// react-native-web types declare those as CSS strings, which collide with
-// Reanimated's; the shorthand string satisfies both (see FilterControl).
-const FILL_TRANSITION = { transition: 'background-color 150ms cubic-bezier(0.23, 1, 0.32, 1)' }
-const LABEL_TRANSITION = { transition: 'color 150ms cubic-bezier(0.23, 1, 0.32, 1)' }
-
 const ISSUES: { value: PeerRatingIssue; label: string }[] = [
   { value: 'none', label: 'Nothing went wrong' },
   { value: 'uncomfortable', label: 'They made me uncomfortable' },
@@ -165,26 +159,18 @@ function Scale({
 }) {
   return (
     <View style={styles.scale}>
-      <View style={styles.scaleRow}>
-        {[1, 2, 3, 4, 5].map((n) => (
-          <ScalePress
-            key={n}
-            haptic={false}
-            disabled={disabled}
-            onPress={() => onChoose(n)}
-            style={styles.scaleCell}
-            accessibilityRole="button"
-            accessibilityState={{ selected: value === n, disabled }}
-            accessibilityLabel={`${subject}: ${n} out of 5${n === 1 ? `, ${low}` : n === 5 ? `, ${high}` : ''}`}
-          >
-            <Animated.View style={[styles.chip, value === n && styles.chipSelected, FILL_TRANSITION]}>
-              <Animated.Text style={[styles.chipText, value === n && styles.chipTextSelected, LABEL_TRANSITION]}>
-                {n}
-              </Animated.Text>
-            </Animated.View>
-          </ScalePress>
-        ))}
-      </View>
+      <ChipSet
+        items={[1, 2, 3, 4, 5].map((n) => ({
+          key: String(n),
+          label: String(n),
+          dimmed: disabled,
+          accessibilityLabel: `${subject}: ${n} out of 5${n === 1 ? `, ${low}` : n === 5 ? `, ${high}` : ''}`,
+        }))}
+        selection="single"
+        selected={value === null ? [] : [String(value)]}
+        onToggle={(key) => onChoose(Number(key))}
+        testID={`scale-${subject}`}
+      />
       <View style={styles.scaleEnds} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
         <Text variant="meta" color={EMBER.textTertiary}>
           {low}
@@ -223,19 +209,9 @@ export default function RatePeers() {
     return () => sub.remove()
   }, [])
 
-  // One tick per changed answer. Re-tapping the current choice is not a change.
-  const chooseRating = useCallback((n: number) => {
-    setRating((prev) => {
-      if (prev !== n) H.select()
-      return n
-    })
-  }, [])
-  const chooseIssue = useCallback((value: PeerRatingIssue) => {
-    setIssue((prev) => {
-      if (prev !== value) H.select()
-      return value
-    })
-  }, [])
+  // The chip and the card play the selection tick themselves: one event, one haptic.
+  const chooseRating = useCallback((n: number) => setRating(n), [])
+  const chooseIssue = useCallback((value: PeerRatingIssue) => setIssue(value), [])
 
   /*
    * Four reads, one of which decides the screen. The ratable list is the
@@ -293,7 +269,6 @@ export default function RatePeers() {
   const rateNight = useCallback(
     async (n: number) => {
       if (submitting) return
-      H.select()
       setEventRating(n)
       setSubmitting(true)
       try {
@@ -510,21 +485,7 @@ export default function RatePeers() {
                 Did anything go wrong?
               </Text>
               {ISSUES.map((opt) => (
-                <ScalePress
-                  key={opt.value}
-                  haptic={false}
-                  onPress={() => chooseIssue(opt.value)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: issue === opt.value }}
-                >
-                  <Animated.View style={[styles.option, issue === opt.value && styles.optionSelected, FILL_TRANSITION]}>
-                    <Animated.Text
-                      style={[styles.optionText, issue === opt.value && styles.optionTextSelected, LABEL_TRANSITION]}
-                    >
-                      {opt.label}
-                    </Animated.Text>
-                  </Animated.View>
-                </ScalePress>
+                <RadioCard key={opt.value} title={opt.label} selected={issue === opt.value} onPress={() => chooseIssue(opt.value)} />
               ))}
 
               {/* Faded, not popped: it lands mid-form, under the finger's eye line. */}
@@ -603,28 +564,7 @@ const styles = StyleSheet.create({
   who: { alignItems: 'center', gap: SPACE.sm, paddingBottom: SPACE.lg },
   h2: { marginTop: SPACE.lg },
   scale: { gap: SPACE.sm, marginTop: SPACE.sm },
-  scaleRow: { flexDirection: 'row', gap: SPACE.sm },
-  scaleCell: { flex: 1 },
   scaleEnds: { flexDirection: 'row', justifyContent: 'space-between' },
-  chip: {
-    height: CONTROL.md,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  chipSelected: { backgroundColor: EMBER.textPrimary },
-  chipText: { ...TYPE.bodyStrong, color: EMBER.textPrimary },
-  chipTextSelected: { color: EMBER.bg },
-  option: {
-    padding: SPACE.lg,
-    borderRadius: EMBER_RADIUS.md,
-    backgroundColor: EMBER.surface,
-    marginTop: SPACE.xs,
-  },
-  optionSelected: { backgroundColor: EMBER.textPrimary },
-  optionText: { ...TYPE.body, color: EMBER.textPrimary },
-  optionTextSelected: { color: EMBER.bg },
   warning: { ...TYPE.meta, color: EMBER.destructive, marginTop: SPACE.sm },
   input: {
     ...TYPE.body,

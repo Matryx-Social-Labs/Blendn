@@ -1,9 +1,8 @@
 import { useState } from 'react'
 import { View } from 'react-native'
 
+import { ChipSet } from '../../components/ds/ChipSet'
 import {
-  EmberChip,
-  EmberChipRow,
   EmberInlineToggle,
   EmberSection,
   EmberToggle,
@@ -215,17 +214,14 @@ export default function PreferencesScreen() {
           </View>
         }
       >
-        <EmberChipRow pack>
-          {ORIENTATIONS.map((option) => (
-            <EmberChip
-              key={option.value}
-              label={option.label}
-              selected={orientations.includes(option.value)}
-              disabled={orientationDisabled(orientations, option.value)}
-              onPress={() => setOrientations(toggleOrientation(orientations, option.value))}
-            />
-          ))}
-        </EmberChipRow>
+        <ChipSet
+          items={ORIENTATIONS.map((option) => ({ key: option.value, label: option.label, dimmed: orientationDisabled(orientations, option.value) }))}
+          selection="multi"
+          selected={orientations}
+          capHint="Up to three"
+          onToggle={(value) => setOrientations(toggleOrientation(orientations, value as Orientation))}
+          testID="onboarding-orientations"
+        />
       </EmberSection>
       )}
 

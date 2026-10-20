@@ -343,7 +343,8 @@ export const EverythingHeader = memo(function EverythingHeader({
           testID="pulse-everything-chips"
           renderItem={({ item }) => (
             <Chip
-              label={item.slug ? `${item.name} ${item.count}` : item.name}
+              label={item.name}
+              count={item.slug ? item.count : undefined}
               accessibilityLabel={item.slug ? `${item.name}, ${item.count} events` : 'All'}
               selected={(item.slug || null) === selected}
               onPress={() => {

@@ -164,9 +164,8 @@ describe('the editor is on the app’s palette', () => {
      * `rgba(255,255,255,0.16)` -- a 10% lightness step.
      */
     const src = codeOnly(read('components/profile/MatchingFields.tsx'))
-    // The design system's selected chip: `textPrimary` fill, `bg` text.
-    expect(src).toContain('chipOn: { backgroundColor: EMBER.textPrimary')
-    expect(src).toContain('chipTextOn: { color: EMBER.bg }')
-    expect(src).not.toMatch(/EMBER\.(accent|onGradientChip)/)
+    // The design system's chip (white fill, ink type) through ChipSet: the editor draws none of its own.
+    expect(src).toContain('<ChipSet')
+    expect(src).not.toMatch(/chipOn|EMBER\./)
   })
 })

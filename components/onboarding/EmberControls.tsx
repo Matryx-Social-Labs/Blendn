@@ -1,18 +1,7 @@
 import { Ionicons } from '@expo/vector-icons'
-import {
-  Children,
-  cloneElement,
-  forwardRef,
-  isValidElement,
-  ReactNode,
-  useCallback,
-  useContext,
-  useState,
-} from 'react'
+import { forwardRef, ReactNode, useContext } from 'react'
 import {
   ActivityIndicator,
-  Dimensions,
-  LayoutChangeEvent,
   Pressable,
   StyleProp,
   StyleSheet,
@@ -24,13 +13,11 @@ import {
   ViewStyle,
 } from 'react-native'
 
-import { isCatchAll, packChips } from '../../lib/chipPacking'
 import { RevealOnFocus } from './revealFocused'
 import {
   CONTROL,
   EMBER,
   EMBER_RADIUS,
-  GUTTER,
   ICON,
   MAX_FONT_SCALE,
   OPACITY,
@@ -119,166 +106,6 @@ export function EmberButton({
       </View>
     </Pressable>
   )
-}
-
-/* -------------------------------------------------------------------------- */
-
-interface ChipProps {
-  label: string
-  selected: boolean
-  onPress: () => void
-  /*
-   * Selectable, but not right now — a row with a cap that has been reached.
-   *
-   * Dimmed rather than hidden. The unreachable chips are what tell somebody the
-   * limit exists; removing them makes three-of-eight look like eight-of-eight
-   * that stops working, and a tap that does nothing with no explanation reads
-   * as a broken screen.
-   */
-  disabled?: boolean
-}
-
-/**
- * One choice in a row of them.
- *
- * `accessibilityRole` is deliberately `button` with a `selected` state rather
- * than `radio`: several of these rows are multi-select, and a screen reader
- * announcing "radio button" on a list where three answers are allowed is worse
- * than the generic role.
- */
-export function EmberChip({ label, selected, onPress, disabled }: ChipProps) {
-  return (
-    /*
-     * One box, not two.
-     *
-     * This was a `Pressable` wrapping a styled `View`, and the wrapper did not
-     * size to its child — so each chip claimed more width than its visible pill
-     * and rows wrapped early, sometimes leaving half the screen empty beside a
-     * gap the next chip would have fitted into.
-     *
-     * The padding, the radius and the border now live on the `Pressable`
-     * itself, so the thing being measured and the thing being drawn are the
-     * same box, and the selected fill is that box's own background.
-     *
-     * `alignSelf: 'flex-start'` because a wrap container stretches its items on
-     * the cross axis, and a chip should be as tall as its own content rather
-     * than as tall as the tallest chip on its line.
-     */
-    <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      accessibilityRole="button"
-      accessibilityState={{ selected, disabled }}
-      accessibilityLabel={label}
-      style={({ pressed }) => [
-        styles.chip,
-        selected ? styles.chipSelected : styles.chipIdle,
-        disabled && styles.chipDisabled,
-        pressed && styles.pressed,
-      ]}
-    >
-      <Text style={[styles.chipLabel, selected ? styles.chipLabelSelected : styles.chipLabelIdle]}>
-        {label}
-      </Text>
-    </Pressable>
-  )
-}
-
-/**
- * A row of chips that wraps.
- *
- * Spacing is margins with a negative offset on the container, not `gap`.
- *
- * `gap` inside a `flexWrap` container measures the trailing gap as part of the
- * line, so Yoga wraps while there is still room for the next item — which is
- * exactly the reported symptom: rows breaking early with space to spare, and a
- * chip that would plainly have fitted pushed to the next line.
- *
- * Half the spacing on each chip, and the container pulled back by the same
- * amount so the row still starts and ends flush with everything above it. It is
- * the oldest trick in wrapped-layout and it does not depend on how any given
- * Yoga version accounts for `gap`.
- */
-export function EmberChipRow({
-  children,
-  pack,
-  width,
-}: {
-  children: ReactNode
-  /**
-   * Reorder the chips to fill the rows.
-   *
-   * Flexbox wraps greedily *in order*, so a long label pushes a short one to
-   * the next line and leaves the gap behind it. Filling those gaps means
-   * changing the order, which flexbox cannot do.
-   *
-   * Opt-in: only worth the churn where labels vary enough to leave real gaps.
-   */
-  pack?: boolean
-  /** Room the row actually has. Defaults to the page width less its padding. */
-  width?: number
-}) {
-  const items = Children.toArray(children)
-  const labelOf = (child: ReactNode) =>
-    isValidElement(child) ? String((child.props as { label?: unknown }).label ?? '') : ''
-
-  /*
-   * Measured, not estimated.
-   *
-   * Two rounds of estimating from character counts were not close enough — a
-   * per-character average cannot know that "Prefer not to say" is mostly narrow
-   * letters while "Web3 APIs" is mostly wide ones, and being wrong by a few
-   * points is the difference between a chip fitting a row and being held back
-   * from it. Every correction to the coefficient just moved which labels it was
-   * wrong about.
-   *
-   * So the chips report their own width on layout and the order is computed
-   * from the real numbers. One extra pass on mount, and the reorder is a single
-   * frame before anyone has read the row — cheaper than a layout that is
-   * visibly wrong for as long as the screen is open.
-   *
-   * Keyed by label so it survives a reorder: the same chip measured under a new
-   * index is the same width, and re-measuring on every shuffle would loop.
-   */
-  const [measured, setMeasured] = useState<Record<string, number>>({})
-
-  const record = useCallback((label: string, w: number) => {
-    if (!label || w <= 0) return
-    setMeasured((current) =>
-      // Ignore a repeat of a width already known. Without this, the reorder
-      // triggers a layout, which records, which reorders.
-      Math.abs((current[label] ?? 0) - w) < 1 ? current : { ...current, [label]: w }
-    )
-  }, [])
-
-  const withMeasurement = items.map((child, i) =>
-    isValidElement(child)
-      ? cloneElement(child as React.ReactElement<{ onLayout?: (e: LayoutChangeEvent) => void }>, {
-          key: (child as { key?: string | null }).key ?? `chip-${i}`,
-          onLayout: (e: LayoutChangeEvent) => record(labelOf(child), e.nativeEvent.layout.width),
-        })
-      : child
-  )
-
-  let ordered = withMeasurement
-  const everyWidthKnown = items.every((c) => measured[labelOf(c)] !== undefined)
-
-  if (pack && everyWidthKnown) {
-    // Catch-alls out first so packing cannot hoist them, back on at the end.
-    // "Prefer not to say" in row one is a worse list than any gap it fills.
-    const isEnd = (c: ReactNode) => isCatchAll(labelOf(c))
-    ordered = [
-      ...packChips(
-        withMeasurement.filter((c) => !isEnd(c)),
-        // The measured pill, plus the margin the row spaces them with.
-        (child) => measured[labelOf(child)] + CHIP_SPACING,
-        width ?? Dimensions.get('window').width - GUTTER * 2
-      ),
-      ...withMeasurement.filter(isEnd),
-    ]
-  }
-
-  return <View style={styles.chipRow}>{ordered}</View>
 }
 
 /* -------------------------------------------------------------------------- */
@@ -538,9 +365,6 @@ export function EmberFieldGroup({
   )
 }
 
-/** Space between chips. Applied as margin, halved — see `EmberChipRow`. */
-const CHIP_SPACING = SPACE.md
-
 const styles = StyleSheet.create({
   pressed: { opacity: OPACITY.pressed },
 
@@ -560,73 +384,6 @@ const styles = StyleSheet.create({
     gap: SPACE.md,
   },
   buttonLabel: { ...TYPE.button, color: EMBER.onGradient },
-
-  chipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    // Cancels the per-chip margin at the edges, so the row lines up with the
-    // heading above it rather than sitting 6pt inside it.
-    marginHorizontal: -CHIP_SPACING / 2,
-    marginVertical: -CHIP_SPACING / 2,
-  },
-  chip: {
-    /*
-     * A transparent border on *both* states, so selecting a chip does not
-     * change its width.
-     *
-     * The idle style added `borderWidth: 1` and the selected fill had
-     * none, which made every unselected chip two points wider than its
-     * selected self. Tapping one therefore re-flowed the whole wrapped row —
-     * chips jumping to a different line the moment you chose one, which is why
-     * picking "Asexual" appeared to tidy the layout up. It was not tidying; it
-     * was re-packing around a chip that had just shrunk.
-     *
-     * 16/12 padding: the frame's 25/13 snapped to the spacing scale.
-     */
-    borderWidth: 1,
-    borderColor: 'transparent',
-    margin: CHIP_SPACING / 2,
-    /*
-     * A chip may shrink, and may not exceed the row.
-     *
-     * The `gap` fix sorted the wrap arithmetic, but two screens draw their
-     * labels from the server — work fields, and category names like "Classical
-     * and Carnatic" — and a chip wider than the line it is on forces its own
-     * row and leaves the rest of that line empty. `flexShrink` lets an
-     * oversized one give ground instead, and `maxWidth` stops any of them
-     * running past the container in the first place.
-     */
-    flexShrink: 1,
-    maxWidth: '100%',
-    /*
-     * 16, not the frame's 25.
-     *
-     * The frame lays its chips out at fixed positions on a 390pt artboard; a
-     * real screen has to wrap them, and 25 each side puts "Prefer not to say"
-     * at roughly half the usable width on its own. 16 keeps the pill shape and
-     * fits noticeably more per line.
-     */
-    paddingHorizontal: SPACE.lg,
-    paddingVertical: SPACE.md,
-    borderRadius: EMBER_RADIUS.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    // A wrap container stretches on the cross axis. A chip should be its own
-    // height, not the height of the tallest one sharing its line.
-    alignSelf: 'flex-start',
-    // Over the 44pt floor, and stated so a shorter label cannot shrink below it.
-    minHeight: CONTROL.md,
-  },
-  // Pill controls sit on `surface` with a hairline; the `textPrimary` fill is
-  // the only thing that marks a chip as chosen.
-  chipIdle: { backgroundColor: EMBER.surface, borderColor: EMBER.separator },
-  chipSelected: { backgroundColor: EMBER.textPrimary },
-  // Opacity only, so the chip keeps its measured width and the row does not
-  // re-pack every time the cap is reached or released.
-  chipDisabled: { opacity: OPACITY.disabled },
-  chipLabel: TYPE.bodyStrong,
-  chipLabelSelected: { color: EMBER.bg },
-  chipLabelIdle: { color: EMBER.textPrimary },
 
   toggleRow: {
     flexDirection: 'row',

@@ -1,0 +1,164 @@
+import { useState } from 'react'
+import { StyleSheet, Text, View } from 'react-native'
+import Animated, { FadeIn, LinearTransition } from 'react-native-reanimated'
+
+import { type IconName } from '../ui/Icon'
+import { COLOR, DURATION, REDUCE_MOTION, SPACE, SPRING, STAGGER } from '../../lib/design/tokens'
+import { useReducedMotion } from '../../lib/motion'
+import { Chip } from './Chip'
+import { monoCaption } from './MonoFamily'
+import { useBoldText, useIncreaseContrast } from './shared'
+import { FieldLabel, FieldNotes } from './TextField'
+
+export type ChipItem = {
+  key: string
+  label: string
+  icon?: IconName
+  count?: number | string
+  accessibilityLabel?: string
+  /** The caller's own cap rule (a chip that does not count toward `max`): overrides the set's. */
+  dimmed?: boolean
+}
+
+/**
+ * The chips a collapsed set shows: the first `n`, and any chosen one beyond them (a pick is never hidden). The rest are
+ * `hidden`; with none hidden there is nothing to fold.
+ */
+export function foldedItems(items: readonly ChipItem[], selected: readonly string[], n: number) {
+  const shown = items.filter((item, i) => i < n || selected.includes(item.key))
+  return { shown, hidden: items.filter((item) => !shown.includes(item)) }
+}
+
+export type ChipSetProps = {
+  /** The field label (Geist Mono, uppercase). Omit where a control above already heads the set. */
+  label?: string
+  items: readonly ChipItem[]
+  selection: 'single' | 'multi'
+  /** Keys: `single` holds none or one. */
+  selected: readonly string[]
+  /** The caller owns the state (and the rule that tapping the chosen one clears it). */
+  onToggle: (key: string) => void
+  /** `multi`: a counter "n of max", and the rest dim at the cap, saying `capHint`. */
+  max?: number
+  capHint?: string
+  /** Replaces the counter ("Any", "2 chosen"). */
+  counter?: string
+  /** Fold everything past this many into a "+n more" chip; a chosen one beyond it stays drawn. */
+  foldAfter?: number
+  /** Read by a screen reader as "18 more home states". */
+  foldNoun?: string
+  hint?: string
+  /** The one sentence under the set, assertive. */
+  error?: string
+  testID?: string
+}
+
+/**
+ * One labelled set of chips (the sweep's chips.html): a header with the label and its counter, a wrapping row of chips, then
+ * the hint or the error. `multi` draws the + / ✓ slot and caps at `max`; `single` is a plain pick. A long set folds behind a
+ * "+n more" chip, which opens in place (the revealed chips stagger in; the set glides down). Reduce Motion fades them
+ * and moves nothing.
+ */
+export function ChipSet({
+  label,
+  items,
+  selection,
+  selected,
+  onToggle,
+  max,
+  capHint,
+  counter,
+  foldAfter,
+  foldNoun = 'more',
+  hint,
+  error,
+  testID,
+}: ChipSetProps) {
+  const bold = useBoldText()
+  const contrast = useIncreaseContrast()
+  const reduceMotion = useReducedMotion()
+  const [open, setOpen] = useState(false)
+  const multi = selection === 'multi'
+  const atCap = multi && max !== undefined && selected.length >= max
+  const text = counter ?? (multi && max !== undefined ? `${selected.length} of ${max}` : undefined)
+  const { shown, hidden } = foldAfter === undefined ? { shown: items, hidden: [] } : foldedItems(items, selected, foldAfter)
+  const visible = open ? items : shown
+  const revealed = open ? hidden : []
+
+  const chip = (item: ChipItem) => {
+    const on = selected.includes(item.key)
+    return (
+      <Chip
+        key={item.key}
+        label={item.label}
+        icon={item.icon}
+        count={item.count}
+        selection={selection}
+        selected={on}
+        dimmed={item.dimmed ?? (atCap && !on)}
+        capHint={capHint}
+        accessibilityLabel={item.accessibilityLabel}
+        onPress={() => onToggle(item.key)}
+        testID={testID && `${testID}-${item.key}`}
+      />
+    )
+  }
+  const reveal = (item: ChipItem) => {
+    const i = revealed.indexOf(item)
+    return (
+      <Animated.View
+        key={item.key}
+        entering={FadeIn.duration(reduceMotion ? REDUCE_MOTION.duration.base : DURATION.quick).delay(
+          reduceMotion ? 0 : Math.min(i, STAGGER.itemsMax) * STAGGER.tight
+        )}
+        style={styles.item}
+      >
+        {chip(item)}
+      </Animated.View>
+    )
+  }
+
+  return (
+    <View testID={testID} style={styles.set}>
+      {label || text ? (
+        <View style={styles.header}>
+          {label ? <FieldLabel text={label} bold={bold} contrast={contrast} /> : <View />}
+          {text ? (
+            <Text testID={testID && `${testID}-counter`} style={[monoCaption(bold), { color: COLOR.textSecondary }]}>
+              {text}
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
+      <Animated.View
+        layout={reduceMotion ? undefined : LinearTransition.springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping)}
+        style={styles.wrap}
+      >
+        {visible.map((item) => (revealed.includes(item) ? reveal(item) : chip(item)))}
+        {hidden.length ? (
+          <Chip
+            kind="more"
+            expanded={open}
+            label={open ? 'Show fewer' : `+${hidden.length} more`}
+            accessibilityLabel={open ? 'Show fewer' : `${hidden.length} more ${foldNoun}`}
+            onPress={() => setOpen((o) => !o)}
+            testID={testID && `${testID}-more`}
+          />
+        ) : null}
+      </Animated.View>
+      <FieldNotes error={error} hint={hint} bold={bold} />
+    </View>
+  )
+}
+
+const styles = StyleSheet.create({
+  set: { gap: SPACE.sm },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingLeft: SPACE.xs,
+  },
+  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
+  item: { maxWidth: '100%' },
+})

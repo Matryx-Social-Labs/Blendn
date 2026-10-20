@@ -1,15 +1,15 @@
 import { router } from 'expo-router'
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import Animated, { Easing, FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { Chip } from '../components/ds/Chip'
+import { ChipSet } from '../components/ds/ChipSet'
+import { FieldLabel, FieldNotes } from '../components/ds/TextField'
 import { SegmentedControl } from '../components/ds/SegmentedControl'
-import { font, useBoldText } from '../components/ds/shared'
+import { font, GroundProvider, useBoldText } from '../components/ds/shared'
 import { SettingsGroup, SettingsRow } from '../components/ds/SettingsRow'
 import { StateScreen } from '../components/ds/StateScreen'
-import { FieldLabel, FieldNotes } from '../components/ds/TextField'
 import { TopBar } from '../components/ds/TopBar'
 import { useToast } from '../components/Toast'
 import {
@@ -44,6 +44,8 @@ const upTo = (n: number) => `up to ${NUMBER_WORDS[n] ?? n}`
 /** The two calendars, in the order the control draws them: `SIGN_SYSTEMS[index]`. */
 const SIGN_SYSTEMS: readonly SignSystem[] = ['western', 'rashi']
 const SIGN_SYSTEM_LABELS = ['Western', 'My rashi instead'] as const
+/** Home states drawn before "+n more"; a chosen one beyond them stays drawn. */
+const HOME_STATES_SHOWN = 9
 
 /**
  * Languages, home state, your sign and this-or-that — matching v2's "about
@@ -87,20 +89,21 @@ export default function EditAboutYouScreen() {
   // The bar only needs to hear when the scroll crosses the top, not every frame of it.
   const scrolledRef = useRef(false)
   const reduceMotion = useReducedMotion()
+  const bold = useBoldText()
 
   useEffect(() => {
     if (!authUser) return
     let cancelled = false
     void (async () => {
       setLoadFailed(false)
-      const [opts, profile, tot] = await Promise.all([
-        apiClient.getProfileOptions(),
-        apiClient.getProfile(authUser.id),
-        apiClient.getThisOrThat(),
-      ])
+      const [opts, profile, tot] = await Promise.all([apiClient.getProfileOptions(), apiClient.getProfile(authUser.id), apiClient.getThisOrThat()])
       if (cancelled) return
       if (!opts.success || !opts.data || !profile.success || !tot.success) {
-        Logger.warn('profile', 'EditAboutYou: load failed', { opts: opts.error, profile: profile.error, tot: tot.error })
+        Logger.warn('profile', 'EditAboutYou: load failed', {
+          opts: opts.error,
+          profile: profile.error,
+          tot: tot.error,
+        })
         setLoadFailed(true)
         return
       }
@@ -134,12 +137,13 @@ export default function EditAboutYouScreen() {
     setForm((f) => (f.sign ? { ...f, sign: { ...f.sign, system: next } } : f))
   }
   const pickSign = (slug: string) => setForm((f) => ({ ...f, sign: { slug, system } }))
-  const hint = suggestedSign ? options?.signs.find((x) => x.slug === suggestedSign) ?? null : null
-  const pick = (q: string, c: Choice) =>
+  const hint = suggestedSign ? (options?.signs.find((x) => x.slug === suggestedSign) ?? null) : null
+  // A pair's control reports the side (0 or 1), or null when the chosen one is tapped again: the answer is taken back, not stored empty.
+  const setAnswer = (q: string, i: number | null) =>
     setAnswers((a) => {
       const next = { ...a }
-      if (next[q] === c) delete next[q]
-      else next[q] = c
+      if (i === null) delete next[q]
+      else next[q] = i === 0 ? 'a' : 'b'
       return next
     })
 
@@ -169,7 +173,11 @@ export default function EditAboutYouScreen() {
       if (Object.keys(other).length) {
         const r = await apiClient.updateProfile(authUser.id, other)
         if (!r.success) throw new Error(r.error || 'profile')
-        setLoaded((l) => ({ ...l, showBadges: form.showBadges, showsUpBadge: form.showsUpBadge }))
+        setLoaded((l) => ({
+          ...l,
+          showBadges: form.showBadges,
+          showsUpBadge: form.showsUpBadge,
+        }))
         saved.push('your badge choices')
         anySaved = true
       }
@@ -190,7 +198,12 @@ export default function EditAboutYouScreen() {
           refuse(`${lead}Not saved: your ${tierBNames(tierB)}. ${why}`)
           return
         }
-        setLoaded((l) => ({ ...l, languages: form.languages, homeState: form.homeState, sign: form.sign }))
+        setLoaded((l) => ({
+          ...l,
+          languages: form.languages,
+          homeState: form.homeState,
+          sign: form.sign,
+        }))
         anySaved = true
       }
       invalidate(authUser.id)
@@ -219,7 +232,11 @@ export default function EditAboutYouScreen() {
         title="About you"
         state={scrolled ? 'scrolled' : 'rest'}
         onBack={() => router.back()}
-        save={{ onPress: () => void save(), saving, disabled: saving || !options }}
+        save={{
+          onPress: () => void save(),
+          saving,
+          disabled: saving || !options,
+        }}
         testID="about-you-top"
       />
       {loadFailed ? (
@@ -248,41 +265,65 @@ export default function EditAboutYouScreen() {
           <Intro />
           {options ? (
             <>
-              <View style={styles.card}>
-                <Field label="Languages you speak" hint={`Besides English, ${upTo(options.maxLanguages)}.`}>
-                  {options.languages.map((l) => (
-                    <Chip
-                      key={l.slug}
-                      label={l.label}
-                      selected={form.languages.includes(l.slug)}
-                      // At the cap the rest dim and say why, instead of a tap that does nothing.
-                      dimmed={!form.languages.includes(l.slug) && form.languages.length >= options.maxLanguages}
-                      capHint={`Up to ${NUMBER_WORDS[options.maxLanguages] ?? options.maxLanguages}`}
-                      onPress={() => setForm((f) => ({ ...f, languages: toggleLanguage(f.languages, l.slug, options.maxLanguages) }))}
-                    />
-                  ))}
-                </Field>
-                <Field label="Home state" hint="A state, never a town. Tap again to clear.">
-                  {options.homeStates.map((s) => (
-                    <Chip
-                      key={s.slug}
-                      label={s.label}
-                      selected={form.homeState === s.slug}
-                      onPress={() => setForm((f) => ({ ...f, homeState: f.homeState === s.slug ? null : s.slug }))}
-                    />
-                  ))}
-                </Field>
-                {options.thisOrThat.length ? (
-                  <Field label="This or that" hint="Pick one, or leave it. Tap again to take it back.">
-                    {options.thisOrThat.map((q) => (
-                      <View key={q.slug} style={styles.pair} accessibilityLabel={`${q.a} or ${q.b}`}>
-                        <Chip label={q.a} selected={answers[q.slug] === 'a'} onPress={() => pick(q.slug, 'a')} />
-                        <Chip label={q.b} selected={answers[q.slug] === 'b'} onPress={() => pick(q.slug, 'b')} />
-                      </View>
-                    ))}
-                  </Field>
-                ) : null}
-              </View>
+              <GroundProvider value="surface">
+                <View style={styles.card}>
+                  <ChipSet
+                    label="Languages you speak"
+                    hint={`Besides English, ${upTo(options.maxLanguages)}.`}
+                    items={options.languages.map((l) => ({
+                      key: l.slug,
+                      label: l.label,
+                    }))}
+                    selection="multi"
+                    selected={form.languages}
+                    max={options.maxLanguages}
+                    // At the cap the rest dim and say why, instead of a tap that does nothing.
+                    capHint={`Up to ${NUMBER_WORDS[options.maxLanguages] ?? options.maxLanguages}`}
+                    onToggle={(slug) =>
+                      setForm((f) => ({
+                        ...f,
+                        languages: toggleLanguage(f.languages, slug, options.maxLanguages),
+                      }))
+                    }
+                    testID="about-you-languages"
+                  />
+                  <ChipSet
+                    label="Home state"
+                    hint="A state, never a town. Tap again to clear."
+                    items={options.homeStates.map((s) => ({
+                      key: s.slug,
+                      label: s.label,
+                    }))}
+                    selection="single"
+                    selected={form.homeState ? [form.homeState] : []}
+                    foldAfter={HOME_STATES_SHOWN}
+                    foldNoun="home states"
+                    onToggle={(slug) =>
+                      setForm((f) => ({
+                        ...f,
+                        homeState: f.homeState === slug ? null : slug,
+                      }))
+                    }
+                    testID="about-you-home-state"
+                  />
+                  {options.thisOrThat.length ? (
+                    <View style={styles.field}>
+                      <FieldLabel text="This or that" bold={bold} contrast={false} />
+                      {options.thisOrThat.map((q) => (
+                        <SegmentedControl
+                          key={q.slug}
+                          pair
+                          items={[q.a, q.b]}
+                          selected={answers[q.slug] === 'a' ? 0 : answers[q.slug] === 'b' ? 1 : null}
+                          onChange={(i) => setAnswer(q.slug, i)}
+                          testID={`about-you-pair-${q.slug}`}
+                        />
+                      ))}
+                      <FieldNotes hint="Pick one, or leave it. Tap again to take it back." bold={bold} />
+                    </View>
+                  ) : null}
+                </View>
+              </GroundProvider>
 
               <SettingsGroup>
                 <SettingsRow
@@ -296,33 +337,44 @@ export default function EditAboutYouScreen() {
               </SettingsGroup>
               {signOn ? (
                 // The calendar and the twelve signs arrive and leave over base, not with a cut; what is below glides.
-                <Animated.View
-                  testID="about-you-sign-card"
-                  entering={reduceMotion ? FadeIn.duration(REDUCED_FADE_MS) : FadeIn.duration(DURATION.base)}
-                  exiting={FadeOut.duration(DURATION.quick)}
-                  style={styles.card}
-                >
-                  <SegmentedControl
-                    items={SIGN_SYSTEM_LABELS}
-                    selected={SIGN_SYSTEMS.indexOf(system)}
-                    onChange={(i) => chooseSystem(SIGN_SYSTEMS[i])}
-                    testID="about-you-system"
-                  />
-                  {hint && !sign ? (
-                    <BirthdaySign
-                      text={`From your birthday: ${signName(hint, 'western')} — tap to use`}
-                      onPress={() => {
-                        setSystem('western')
-                        setForm((f) => ({ ...f, sign: { slug: hint.slug, system: 'western' } }))
-                      }}
+                <GroundProvider value="surface">
+                  <Animated.View
+                    testID="about-you-sign-card"
+                    entering={reduceMotion ? FadeIn.duration(REDUCED_FADE_MS) : FadeIn.duration(DURATION.base)}
+                    exiting={FadeOut.duration(DURATION.quick)}
+                    style={styles.card}
+                  >
+                    <SegmentedControl
+                      semantics="radio"
+                      items={SIGN_SYSTEM_LABELS}
+                      selected={SIGN_SYSTEMS.indexOf(system)}
+                      onChange={(i) => chooseSystem(SIGN_SYSTEMS[i])}
+                      testID="about-you-system"
                     />
-                  ) : null}
-                  <View style={styles.chips}>
-                    {options.signs.map((s) => (
-                      <Chip key={s.slug} label={signName(s, system)} selected={sign?.slug === s.slug} onPress={() => pickSign(s.slug)} />
-                    ))}
-                  </View>
-                </Animated.View>
+                    {hint && !sign ? (
+                      <BirthdaySign
+                        text={`From your birthday: ${signName(hint, 'western')} — tap to use`}
+                        onPress={() => {
+                          setSystem('western')
+                          setForm((f) => ({
+                            ...f,
+                            sign: { slug: hint.slug, system: 'western' },
+                          }))
+                        }}
+                      />
+                    ) : null}
+                    <ChipSet
+                      items={options.signs.map((s) => ({
+                        key: s.slug,
+                        label: signName(s, system),
+                      }))}
+                      selection="single"
+                      selected={sign ? [sign.slug] : []}
+                      onToggle={pickSign}
+                      testID="about-you-signs"
+                    />
+                  </Animated.View>
+                </GroundProvider>
               ) : null}
 
               <Animated.View layout={reduceMotion ? undefined : LinearTransition.duration(DURATION.base).easing(Easing.bezier(...EASING.standard))}>
@@ -373,27 +425,22 @@ function BirthdaySign({ text, onPress }: { text: string; onPress: () => void }) 
   )
 }
 
-/** A labelled set of chips on the card: the mono label, the chips wrapping, a hint under. */
-function Field({ label, hint, children }: { label: string; hint: string; children: ReactNode }) {
-  const bold = useBoldText()
-  return (
-    <View style={styles.field}>
-      <FieldLabel text={label} bold={bold} contrast={false} />
-      <View style={styles.chips}>{children}</View>
-      <FieldNotes hint={hint} bold={bold} />
-    </View>
-  )
-}
-
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: COLOR.ink },
-  content: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.sm, gap: SPACE.lg },
+  content: {
+    paddingHorizontal: SPACE.gutter,
+    paddingTop: SPACE.sm,
+    gap: SPACE.lg,
+  },
   state: { flex: 1, paddingHorizontal: SPACE.gutter, justifyContent: 'center' },
   intro: { color: COLOR.textSecondary },
   ink: { color: COLOR.textPrimary },
   birthday: { minHeight: SIZE.targetAndroid, justifyContent: 'center' },
-  card: { borderRadius: RADIUS.card, backgroundColor: COLOR.surface, padding: SPACE.lg, gap: SPACE.lg },
+  card: {
+    borderRadius: RADIUS.card,
+    backgroundColor: COLOR.surface,
+    padding: SPACE.lg,
+    gap: SPACE.lg,
+  },
   field: { gap: SPACE.sm },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
-  pair: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
 })

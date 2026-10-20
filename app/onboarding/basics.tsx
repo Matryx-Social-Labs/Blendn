@@ -6,12 +6,8 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 
 import ActionTray from '../../components/ActionTray'
 
-import {
-  EmberChip,
-  EmberChipRow,
-  EmberField,
-  EmberFieldGroup,
-} from '../../components/onboarding/EmberControls'
+import { ChipSet } from '../../components/ds/ChipSet'
+import { EmberField, EmberFieldGroup } from '../../components/onboarding/EmberControls'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import {
   ADULTS_ONLY,
@@ -172,20 +168,16 @@ function BasicsScreenInner() {
         maxLength={100}
       />
 
-      <EmberFieldGroup label="Gender identity">
-        <EmberChipRow>
-          {GENDERS.map((option) => (
-            <EmberChip
-              key={option.value}
-              label={option.label}
-              selected={gender === option.value}
-              // Tapping the chosen one again clears it. Gender is optional and
-              // there is otherwise no way back to "unanswered" once tapped.
-              onPress={() => setGender(gender === option.value ? undefined : option.value)}
-            />
-          ))}
-        </EmberChipRow>
-      </EmberFieldGroup>
+      <ChipSet
+        label="Gender identity"
+        items={GENDERS.map((option) => ({ key: option.value, label: option.label }))}
+        selection="single"
+        selected={gender ? [gender] : []}
+        // Tapping the chosen one again clears it. Gender is optional and
+        // there is otherwise no way back to "unanswered" once tapped.
+        onToggle={(value) => setGender(gender === value ? undefined : (value as typeof gender))}
+        testID="onboarding-gender"
+      />
 
       <EmberFieldGroup
         label="Date of birth"

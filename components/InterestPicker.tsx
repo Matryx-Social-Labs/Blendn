@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 
 import { apiClient } from '../lib/apiClient'
 import { pickableItems, toPickerTree, type CategoryGroup, type CategoryNode } from '../lib/categories'
-import { H } from '../lib/haptics'
 import { Logger } from '../lib/logger'
-import { CONTROL, EMBER, EMBER_RADIUS, SPACE, TYPE } from '../lib/theme'
+import { SPACE, TYPE } from '../lib/theme'
+import { ChipSet } from './ds/ChipSet'
 
 /**
  * Pick what you are into, from the server's taxonomy.
@@ -48,6 +48,8 @@ import { CONTROL, EMBER, EMBER_RADIUS, SPACE, TYPE } from '../lib/theme'
  * top of every list in the room.
  */
 export const MAX_INTERESTS = 10
+/** Interests drawn per group before "+n more"; a chosen one beyond them stays drawn. */
+const INTERESTS_SHOWN = 12
 
 export function InterestPicker({
   selected,
@@ -87,15 +89,9 @@ export function InterestPicker({
   const available = useMemo(() => pickableItems(groups).length, [groups])
 
   const toggle = (id: string) => {
-    if (selected.includes(id)) {
-      H.select()
-      onChange(selected.filter((i) => i !== id))
-      return
-    }
-    // At the cap the tap does nothing, silently: the counter already reads
-    // 10/10, and the vocabulary has no haptic for local validation (§10.2).
+    // The chip plays H.select itself; at the cap the rest are dimmed and a tap does nothing.
+    if (selected.includes(id)) return onChange(selected.filter((i) => i !== id))
     if (selected.length >= MAX_INTERESTS) return
-    H.select()
     onChange([...selected, id])
   }
 
@@ -122,31 +118,25 @@ export function InterestPicker({
       */}
       {groups.map((group) => (
         <View key={group.id} style={styles.group}>
-          <Text style={styles.groupHeading} accessibilityRole="header">
-            {group.name.toUpperCase()}
-          </Text>
-          <View style={styles.grid}>
-            {group.items.map((category) => {
-              const isSelected = selected.includes(category.id)
-              return (
-                <TouchableOpacity
-                  key={category.id}
-                  style={[styles.chip, isSelected ? styles.chipSelected : styles.chipIdle]}
-                  onPress={() => toggle(category.id)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: isSelected }}
-                  // The group name is in the label because "Workshops" appears
-                  // under both Arts & Culture and Business, and a screen reader
-                  // moving chip to chip has no other way to tell them apart.
-                  accessibilityLabel={`${category.name}, in ${group.name}`}
-                >
-                  <Text style={[styles.chipText, isSelected ? styles.chipTextSelected : null]}>
-                    {category.icon ? `${category.icon} ${category.name}` : category.name}
-                  </Text>
-                </TouchableOpacity>
-              )
-            })}
-          </View>
+          <ChipSet
+            label={group.name.toUpperCase()}
+            items={group.items.map((category) => ({
+              key: category.id,
+              label: category.icon ? `${category.icon} ${category.name}` : category.name,
+              // The group name is in the label because "Workshops" appears under both Arts & Culture and Business, and a
+              // screen reader moving chip to chip has no other way to tell them apart.
+              accessibilityLabel: `${category.name}, in ${group.name}`,
+              // The cap is the picker's, across every group: the rest dim, and say why.
+              dimmed: selected.length >= MAX_INTERESTS && !selected.includes(category.id),
+            }))}
+            selection="multi"
+            selected={selected}
+            capHint={`Up to ${MAX_INTERESTS}`}
+            foldAfter={INTERESTS_SHOWN}
+            foldNoun={`in ${group.name}`}
+            onToggle={toggle}
+            testID={`interests-${group.id}`}
+          />
         </View>
       ))}
     </View>
@@ -155,48 +145,6 @@ export function InterestPicker({
 
 const styles = StyleSheet.create({
   group: { marginBottom: SPACE.xl },
-  groupHeading: { ...TYPE.label, marginBottom: SPACE.md },
   counter: { ...TYPE.meta, marginBottom: SPACE.md },
   notice: { ...TYPE.meta, marginBottom: SPACE.md },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: SPACE.md,
-  },
-  chip: {
-    minHeight: CONTROL.md,
-    justifyContent: 'center',
-    paddingHorizontal: SPACE.lg,
-    paddingVertical: SPACE.sm,
-    borderRadius: EMBER_RADIUS.pill,
-    borderWidth: 1,
-  },
-  /*
-   * The same chip as `profile/MatchingFields`, which is one card below this one
-   * on the same screen.
-   *
-   * They disagreed: work field filled when picked, interests went to a white
-   * outline — two answers to "what does chosen look like",
-   * a thumb-scroll apart. This file also carried six raw colour values, where
-   * the other is on `EMBER` throughout, so aligning to it is the direction that
-   * removes literals rather than adding them.
-   *
-   * Not extracted into a shared `Chip` yet, deliberately: the client has no
-   * primitives layer, and the plan sequences tokens before primitives precisely
-   * so a shared component is not built on values still being resolved. When it
-   * is built, these two are its first callers.
-   */
-  chipIdle: {
-    backgroundColor: EMBER.surface,
-    borderColor: EMBER.separator,
-  },
-  // Selected is the neutral answer every screen uses: white fill, page-colour
-  // text. The accent is the screen's primary action (docs/DESIGN_SYSTEM.md).
-  chipSelected: {
-    backgroundColor: EMBER.textPrimary,
-    borderColor: EMBER.textPrimary,
-  },
-  // One weight in both states, so selecting a chip does not change its width.
-  chipText: TYPE.bodyStrong,
-  chipTextSelected: { color: EMBER.bg },
 })

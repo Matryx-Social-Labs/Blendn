@@ -7,6 +7,7 @@ import type { FeedMediaItem } from '../../lib/feedMedia'
 import { H } from '../../lib/haptics'
 import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, OPACITY, SPACE, TYPE, tint } from '../../lib/theme'
+import { InterestChip } from '../ds/Chip'
 import { fadeInFast, fadeOutFast } from '../motion/presence'
 import ScalePress from '../motion/ScalePress'
 import { OptimizedImage } from '../OptimizedImage'
@@ -207,14 +208,7 @@ export function ProfileInterests({
   return (
     <View style={styles.chipWrap}>
       {interests.map((interest) => (
-        <View
-          key={interest}
-          style={[styles.chip, shared.has(interest.toLowerCase()) ? styles.chipShared : styles.chipPlain]}
-        >
-          <Text style={styles.chipLabel} maxFontSizeMultiplier={1.4}>
-            {interest}
-          </Text>
-        </View>
+        <InterestChip key={interest} label={interest} shared={shared.has(interest.toLowerCase())} />
       ))}
     </View>
   )
@@ -450,21 +444,6 @@ const styles = StyleSheet.create({
   bio: { ...TYPE.body, color: EMBER.textSecondary },
 
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.md },
-  chip: {
-    minHeight: CONTROL.md,
-    justifyContent: 'center',
-    paddingHorizontal: SPACE.lg,
-    borderRadius: EMBER_RADIUS.pill,
-    overflow: 'hidden',
-  },
-  chipPlain: { backgroundColor: EMBER.surface },
-  // A primary outline, not a hairline: `separator` vanishes against the fill.
-  chipShared: {
-    backgroundColor: EMBER.surface,
-    borderWidth: 1,
-    borderColor: EMBER.textPrimary,
-  },
-  chipLabel: { ...TYPE.bodyStrong },
 
   detailCard: {
     backgroundColor: EMBER.surfaceMedia,

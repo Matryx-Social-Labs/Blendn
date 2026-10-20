@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
 import { StyleSheet, Text, View } from 'react-native'
 
+import { InterestChip } from '../../components/ds/Chip'
 import { OptimizedImage } from '../../components/OptimizedImage'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import { H } from '../../lib/haptics'
@@ -119,9 +120,7 @@ export default function ReadyScreen() {
           <Text style={styles.interestsHeading}>Interests</Text>
           <View style={styles.interestsRow}>
             {draft.interests.map((interest) => (
-              <View key={interest} style={styles.chip}>
-                <Text style={styles.chipText}>{interest}</Text>
-              </View>
+              <InterestChip key={interest} label={interest} />
             ))}
           </View>
         </View>
@@ -213,15 +212,6 @@ const styles = StyleSheet.create({
   },
   interestsHeading: TYPE.heading,
   interestsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
-  chip: {
-    backgroundColor: EMBER.surface,
-    borderRadius: EMBER_RADIUS.pill,
-    paddingHorizontal: SPACE.lg,
-    paddingVertical: SPACE.sm,
-    minHeight: CONTROL.sm,
-    justifyContent: 'center',
-  },
-  chipText: TYPE.bodyStrong,
 
   summary: {
     flexDirection: 'row',

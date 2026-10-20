@@ -69,7 +69,7 @@ describe('the details step carries category ids, not only names', () => {
     const src = read('app/onboarding/details.tsx')
 
     // The picker has had `item.id` all along; the screen used only `item.name`.
-    expect(src).toMatch(/onPress=\{\(\) => toggle\(item\.id, item\.name\)\}/)
+    expect(src).toMatch(/toggle\(item\.id, item\.name\)/)
     expect(src).toMatch(/setInterestIds\(/)
     // And both are committed, because both are still read.
     expect(src).toMatch(/commit\(\{ interests, interestIds, bio: bio\.trim\(\) \}\)/)

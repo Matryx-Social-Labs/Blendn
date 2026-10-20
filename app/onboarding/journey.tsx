@@ -1,19 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 
-import {
-  EmberCardSection,
-  EmberChip,
-  EmberChipRow,
-  EmberField,
-  EmberFieldGroup,
-} from '../../components/onboarding/EmberControls'
+import { ChipSet } from '../../components/ds/ChipSet'
+import { EmberCardSection, EmberField, EmberFieldGroup } from '../../components/onboarding/EmberControls'
 import { ListLoadState, type ListStatus } from '../../components/onboarding/ListLoadState'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
-import { Dimensions } from 'react-native'
-
 import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
-import { GUTTER, SPACE } from '../../lib/theme'
 import { useOnboarding } from '../../lib/useOnboarding'
 
 /**
@@ -148,22 +140,15 @@ export default function JourneyScreen() {
             <ListLoadState status={fieldsStatus} what="fields of work" onRetry={() => void loadFields()} />
           </EmberFieldGroup>
         ) : fields.length > 0 ? (
-          <EmberFieldGroup
+          <ChipSet
             label="Field of work"
-            helper="The only part of this shown in a room. Your job title and employer are not."
-          >
-            {/* The page gutters, less the card's own SPACE.lg padding each side. */}
-            <EmberChipRow pack width={Dimensions.get('window').width - GUTTER * 2 - SPACE.lg * 2}>
-              {fields.map((field) => (
-                <EmberChip
-                  key={field.slug}
-                  label={field.label}
-                  selected={workField === field.slug}
-                  onPress={() => setWorkField(workField === field.slug ? undefined : field.slug)}
-                />
-              ))}
-            </EmberChipRow>
-          </EmberFieldGroup>
+            hint="The only part of this shown in a room. Your job title and employer are not."
+            items={fields.map((field) => ({ key: field.slug, label: field.label }))}
+            selection="single"
+            selected={workField ? [workField] : []}
+            onToggle={(slug) => setWorkField(workField === slug ? undefined : slug)}
+            testID="onboarding-field-of-work"
+          />
         ) : null}
       </EmberCardSection>
 

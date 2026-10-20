@@ -9,6 +9,7 @@
  * shows the server's own sentence.
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
+import { StyleSheet } from 'react-native'
 
 jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: jest.fn(), replace: jest.fn() } }))
 jest.mock('react-native-safe-area-context', () => {
@@ -41,6 +42,7 @@ jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), info: jest.fn(),
 import { router } from 'expo-router'
 import EditAboutYouScreen from '../app/edit-about-you'
 import { apiClient, ProfileCache } from '../lib/apiClient'
+import { COLOR } from '../lib/design/tokens'
 
 const api = apiClient as unknown as Record<string, jest.Mock>
 
@@ -481,5 +483,45 @@ describe('the language cap says so', () => {
     expect(api.updateProfile).not.toHaveBeenCalled()
     // A chosen one is still taken back.
     expect(screen.getByLabelText('Tulu').props.accessibilityState).toMatchObject({ disabled: false })
+  })
+})
+
+describe('the sweep: ChipSet, the this-or-that pair and the card ground', () => {
+  it('Languages counts "n of max" and dims the rest at the cap, saying why', async () => {
+    await open()
+    expect(screen.getByText('0 of 2')).toBeTruthy()
+    await tap('Tulu')
+    await tap('Kannada')
+    expect(screen.getByText('2 of 2')).toBeTruthy()
+    const tamil = screen.getByTestId('about-you-languages-tamil')
+    expect(tamil.props.accessibilityState).toMatchObject({ disabled: true })
+    expect(tamil.props.accessibilityHint).toBe('Up to two')
+  })
+
+  it('a language chip is pick-any: its slot is a plus off and a check on', async () => {
+    await open()
+    expect(screen.getByTestId('about-you-languages-tulu-slot')).toBeTruthy()
+    await tap('Tulu')
+    expect(screen.getByTestId('about-you-languages-tulu-check', { includeHiddenElements: true }).props.jestInlineStyle).toBeDefined()
+  })
+
+  it('Home state is a single pick with no slot and no counter', async () => {
+    await open()
+    expect(screen.queryByTestId('about-you-home-state-kerala-slot')).toBeNull()
+    await tap('Kerala')
+    expect(screen.getByTestId('about-you-home-state-kerala').props.accessibilityState).toMatchObject({ selected: true })
+  })
+
+  it('each this-or-that is a radio pair named by both sides; the chosen side says how to clear it', async () => {
+    await open()
+    expect(screen.getByLabelText('Beach or Hills').props.accessibilityRole).toBe('radiogroup')
+    await tap('Beach')
+    expect(screen.getByRole('radio', { name: 'Beach' }).props.accessibilityHint).toBe('Double-tap to clear')
+  })
+
+  it('the cards are on the surface ground: a chip off is the sunken surface', async () => {
+    await open()
+    const chip = StyleSheet.flatten(screen.getByTestId('about-you-languages-tulu').props.style)
+    expect(chip.backgroundColor).toBe(COLOR.surfaceSunken)
   })
 })

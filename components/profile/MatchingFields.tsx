@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, View } from 'react-native'
 
 import {
   GENDERS,
@@ -12,7 +12,8 @@ import {
   type Gender,
   type Orientation,
 } from '../../lib/dating'
-import { CONTROL, EMBER, EMBER_RADIUS, OPACITY, SPACE, TYPE } from '../../lib/theme'
+import { ChipSet } from '../ds/ChipSet'
+import { SPACE } from '../../lib/theme'
 
 /**
  * The five fields matching runs on: intent, work field, and — only when dating
@@ -108,14 +109,15 @@ export function MatchingFields({
 
   return (
     <>
-      <Text style={styles.section}>WHAT ARE YOU OPEN TO?</Text>
-      <View style={styles.row}>
-        {offered.map((intent) => (
-          <Chip key={intent.value} on={intents.includes(intent.value)} onPress={() => onToggleIntent(intent.value)}>
-            {intent.label}
-            {intent.hint ? ` · ${intent.hint}` : ''}
-          </Chip>
-        ))}
+      <View style={styles.set}>
+        <ChipSet
+          label="WHAT ARE YOU OPEN TO?"
+          items={offered.map((intent) => ({ key: intent.value, label: `${intent.label}${intent.hint ? ` · ${intent.hint}` : ''}` }))}
+          selection="multi"
+          selected={intents}
+          onToggle={(value) => onToggleIntent(value as Intent)}
+          testID="matching-intents"
+        />
       </View>
 
       {afterIntents}
@@ -126,128 +128,65 @@ export function MatchingFields({
             Only here, and only while dating is ticked. `blendn-admin/docs/DESIGN_HANDOFF.md`
             is explicit: a networking user is never asked their gender.
           */}
-          <Text style={styles.section}>YOU ARE</Text>
-          <View style={styles.row}>
-            {GENDERS.map((g) => (
-              <Chip key={g} on={gender === g} onPress={() => onChangeGender(g)}>
-                {GENDER_LABELS[g]}
-              </Chip>
-            ))}
+          <View style={styles.set}>
+            <ChipSet
+              label="YOU ARE"
+              items={GENDERS.map((g) => ({ key: g, label: GENDER_LABELS[g] }))}
+              selection="single"
+              selected={gender ? [gender] : []}
+              onToggle={(value) => onChangeGender(value as Gender)}
+              testID="matching-gender"
+            />
           </View>
 
-          <Text style={styles.section}>YOU IDENTIFY AS</Text>
-          <Text style={styles.hint}>Select all that apply — up to three.</Text>
-          <View style={styles.row}>
-            {ORIENTATIONS.map((o) => (
-              // Dimmed rather than removed at the cap: the chips you cannot
-              // reach are what tell you the limit exists.
-              <Chip
-                key={o}
-                on={orientations.includes(o)}
-                onPress={() => onChangeOrientations(toggleOrientation(orientations, o))}
-                disabled={orientationDisabled(orientations, o)}
-              >
-                {ORIENTATION_LABELS[o]}
-              </Chip>
-            ))}
+          <View style={styles.set}>
+            {/* Dimmed rather than removed at the cap: the chips you cannot reach are what tell you the limit exists. */}
+            <ChipSet
+              label="YOU IDENTIFY AS"
+              hint="Select all that apply — up to three."
+              items={ORIENTATIONS.map((o) => ({ key: o, label: ORIENTATION_LABELS[o], dimmed: orientationDisabled(orientations, o) }))}
+              selection="multi"
+              selected={orientations}
+              capHint="Up to three"
+              onToggle={(value) => onChangeOrientations(toggleOrientation(orientations, value as Orientation))}
+              testID="matching-orientations"
+            />
           </View>
 
           {askInterestedIn ? (
-            <>
-              {/*
-                Shown when the pair does not imply a target set — "straight"
-                plus "non-binary", or "queer", which are identities rather
-                than tables. Without this the server stores nothing and the
-                dating tag never appears, with no explanation.
-              */}
-              <Text style={styles.section}>INTERESTED IN</Text>
-              <View style={styles.row}>
-                {GENDERS.map((g) => {
-                  const on = interestedIn.includes(g)
-                  return (
-                    <Chip
-                      key={g}
-                      on={on}
-                      onPress={() => onChangeInterestedIn(on ? interestedIn.filter((x) => x !== g) : [...interestedIn, g])}
-                    >
-                      {GENDER_LABELS[g]}
-                    </Chip>
-                  )
-                })}
-              </View>
-            </>
+            // Shown when the pair does not imply a target set — "straight" plus "non-binary", or "queer", which are identities
+            // rather than tables. Without this the server stores nothing and the dating tag never appears, with no explanation.
+            <View style={styles.set}>
+              <ChipSet
+                label="INTERESTED IN"
+                items={GENDERS.map((g) => ({ key: g, label: GENDER_LABELS[g] }))}
+                selection="multi"
+                selected={interestedIn}
+                onToggle={(value) => {
+                  const g = value as Gender
+                  onChangeInterestedIn(interestedIn.includes(g) ? interestedIn.filter((x) => x !== g) : [...interestedIn, g])
+                }}
+                testID="matching-interested-in"
+              />
+            </View>
           ) : null}
         </>
       ) : null}
 
-      <Text style={styles.section}>WHAT DO YOU DO?</Text>
-      <View style={styles.row}>
-        {workFields.map((f) => (
-          <Chip key={f.slug} on={workField === f.slug} onPress={() => onChangeWorkField(workField === f.slug ? null : f.slug)}>
-            {f.label}
-          </Chip>
-        ))}
+      <View style={styles.set}>
+        <ChipSet
+          label="WHAT DO YOU DO?"
+          items={workFields.map((f) => ({ key: f.slug, label: f.label }))}
+          selection="single"
+          selected={workField ? [workField] : []}
+          onToggle={(slug) => onChangeWorkField(workField === slug ? null : slug)}
+          testID="matching-work-field"
+        />
       </View>
     </>
   )
 }
 
-/** One selectable chip. `disabled` is reported to screen readers only when it is given. */
-function Chip({
-  on,
-  onPress,
-  disabled,
-  children,
-}: {
-  on: boolean
-  onPress: () => void
-  disabled?: boolean
-  children: ReactNode
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      style={[styles.chip, on ? styles.chipOn : styles.chipOff, disabled && styles.chipDisabled]}
-      accessibilityRole="button"
-      accessibilityState={disabled === undefined ? { selected: on } : { selected: on, disabled }}
-    >
-      <Text style={[styles.chipText, on && styles.chipTextOn]}>{children}</Text>
-    </Pressable>
-  )
-}
-
-/*
- * EMBER, now that the extraction itself is merged and verified.
- *
- * These were `about-you`'s raw hexes, copied character for character on
- * purpose: changing the markup and the palette in one step would have made an
- * onboarding regression impossible to tell from an intentional change. That
- * step is done, so this one is safe — and it lifts onboarding onto the app's
- * palette at the same time, which it was never on.
- *
- * A selected chip takes a white (`textPrimary`) *fill* with `bg` text rather
- * than a brighter grey. On a screen of a dozen chips, "which are on" has to be
- * answerable at a glance, and a 10% lightness step is not.
- */
 const styles = StyleSheet.create({
-  // `label` text: the strings above are written uppercase (no textTransform).
-  section: {
-    ...TYPE.label,
-    marginTop: SPACE.xl,
-    marginBottom: SPACE.md,
-  },
-  row: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.md },
-  chip: { minHeight: CONTROL.md, justifyContent: 'center', paddingHorizontal: SPACE.lg, borderRadius: EMBER_RADIUS.pill, borderWidth: 1 },
-  chipOff: { backgroundColor: EMBER.surface, borderColor: EMBER.separator },
-  chipOn: { backgroundColor: EMBER.textPrimary, borderColor: EMBER.textPrimary },
-  // Opacity only, so a chip that becomes unreachable keeps its width and the
-  // row does not reflow under your thumb.
-  chipDisabled: { opacity: OPACITY.disabled },
-  chipText: { ...TYPE.bodyStrong },
-  chipTextOn: { color: EMBER.bg },
-  hint: {
-    ...TYPE.meta,
-    marginTop: SPACE.sm,
-  },
+  set: { marginTop: SPACE.xl },
 })

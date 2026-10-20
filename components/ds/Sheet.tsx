@@ -25,7 +25,7 @@ import { H } from '../../lib/haptics'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { OPACITY, tint } from '../../lib/theme'
 import { Button, type ButtonKind, type ButtonProps } from './Button'
-import { font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast } from './shared'
+import { font, GroundProvider, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast } from './shared'
 
 export type Detent = 'short' | 'medium' | 'tall'
 
@@ -664,7 +664,7 @@ export function Sheet({ visible, onClose, title, headerAction, body, icon, actio
                   scrollEnabled
                   bounces={false}
                 >
-                  {children}
+                  <GroundProvider value={android ? 'surface' : 'glass'}>{children}</GroundProvider>
                 </ScrollView>
               ) : null}
               {sorted.length ? (

@@ -7,10 +7,11 @@ import { INTENT_CHOICES, stepLine, type IntentChoice, type MakeStep } from '../.
 import type { Friend } from '../../lib/friends'
 import { OPACITY, tint } from '../../lib/theme'
 import { Avatar } from '../ds/Avatar'
-import { Chip } from '../ds/Chip'
+import { ChipSet } from '../ds/ChipSet'
 import { CrewCard } from '../ds/CrewCard'
 import { CrewEmblem } from '../ds/CrewEmblem'
 import { font, minTarget, useBoldText, useIncreaseContrast } from '../ds/shared'
+import { SegmentedControl } from '../ds/SegmentedControl'
 import { FieldLabel, TextArea, TextField } from '../ds/TextField'
 import { Toggle } from '../ds/Toggle'
 import { Icon } from '../ui/Icon'
@@ -69,7 +70,6 @@ export type NameStepProps = {
 export function NameStep(p: NameStepProps) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
-  const full = p.tags.length >= CREW_MAX_TAGS
   const secondary = contrast ? COLOR.textPrimary : COLOR.textSecondary
   const bioInput = useRef<TextInput>(null)
   const labels = CREW_TAGS.filter((t) => p.tags.includes(t.slug)).map((t) => t.label)
@@ -103,39 +103,42 @@ export function NameStep(p: NameStepProps) {
         <View style={styles.labelRow}>
           <FieldLabel text="Here for" bold={bold} contrast={contrast} />
         </View>
-        <View style={styles.chips} accessibilityRole="radiogroup">
-          {INTENT_CHOICES.map((c) => (
-            <Chip key={c.value} label={c.label} selected={p.choice === c.value} onPress={() => p.onChoice(c.value)} />
-          ))}
-        </View>
+        {p.choice === null ? (
+          // An intent the picker has no segment for (Edit crew): nothing is picked for the person.
+          <ChipSet
+            items={INTENT_CHOICES.map((c) => ({
+              key: c.value,
+              label: c.label,
+            }))}
+            selection="single"
+            selected={[]}
+            onToggle={(key) => p.onChoice(key as IntentChoice)}
+            testID="make-intent"
+          />
+        ) : (
+          <SegmentedControl
+            semantics="radio"
+            items={INTENT_CHOICES.map((c) => c.label)}
+            selected={INTENT_CHOICES.findIndex((c) => c.value === p.choice)}
+            onChange={(i) => p.onChoice(INTENT_CHOICES[i].value)}
+            testID="make-intent"
+          />
+        )}
       </View>
-      <View style={styles.group}>
-        <View style={[styles.labelRow, styles.spread]}>
-          <FieldLabel text="Tags" bold={bold} contrast={contrast} />
-          <Text style={[font('meta', bold), styles.tertiary]}>{`${p.tags.length} of ${CREW_MAX_TAGS}`}</Text>
-        </View>
-        <View style={styles.chips}>
-          {CREW_TAGS.map((t) => {
-            const on = p.tags.includes(t.slug)
-            return (
-              <Chip
-                key={t.slug}
-                label={t.label}
-                selected={on}
-                dimmed={full && !on}
-                capHint={`Up to ${CREW_MAX_TAGS}`}
-                onPress={() => p.onTag(t.slug)}
-              />
-            )
-          })}
-        </View>
-      </View>
+      <ChipSet
+        label="Tags"
+        items={CREW_TAGS.map((t) => ({ key: t.slug, label: t.label }))}
+        selection="multi"
+        selected={p.tags}
+        max={CREW_MAX_TAGS}
+        capHint={`Up to ${CREW_MAX_TAGS}`}
+        onToggle={p.onTag}
+        testID="make-tags"
+      />
       <View style={styles.toggleRow}>
         <View style={styles.fill}>
           <Text style={[font('bodyStrong', bold), styles.ink]}>Room for one more</Text>
-          <Text style={[font('meta', bold), { color: secondary }]}>
-            Solo people who opt in can be liked for the crew. Crews of 6 or fewer.
-          </Text>
+          <Text style={[font('meta', bold), { color: secondary }]}>Solo people who opt in can be liked for the crew. Crews of 6 or fewer.</Text>
         </View>
         <Toggle value={p.openToSolo} onValueChange={p.onOpenToSolo} accessibilityLabel="Room for one more" />
       </View>
@@ -221,7 +224,12 @@ export function FriendsStep({ friends, picked, onToggle, onRetry, none = NO_FRIE
         ) : (
           friends.map((f, i) => (
             <View key={f.userId} style={i ? styles.divided : undefined}>
-              <FriendPick friend={f} picked={picked.includes(f.userId)} capped={full && !picked.includes(f.userId)} onToggle={() => onToggle(f.userId)} />
+              <FriendPick
+                friend={f}
+                picked={picked.includes(f.userId)}
+                capped={full && !picked.includes(f.userId)}
+                onToggle={() => onToggle(f.userId)}
+              />
             </View>
           ))
         )}
@@ -279,17 +287,29 @@ export function ConsentStep({ name, summary, previewSeed, keepAnonymous, onKeepA
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: SPACE.md },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    gap: SPACE.md,
+  },
   fill: { flex: 1 },
   ink: { color: COLOR.textPrimary },
-  tertiary: { color: COLOR.textTertiary },
   centre: { textAlign: 'center' },
   group: { gap: SPACE.sm },
   labelRow: { paddingHorizontal: SPACE.xs },
-  spread: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
-  toggleRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, minHeight: minTarget() },
-  list: { borderRadius: RADIUS.sheet, backgroundColor: SHEET_FILL, overflow: 'hidden', padding: 0 },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACE.md,
+    minHeight: minTarget(),
+  },
+  list: {
+    borderRadius: RADIUS.sheet,
+    backgroundColor: SHEET_FILL,
+    overflow: 'hidden',
+    padding: 0,
+  },
   friend: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -298,15 +318,40 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.lg,
     minHeight: FRIEND_ROW,
   },
-  divided: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: COLOR.hairline },
-  pick: { width: PICK, height: PICK, borderRadius: RADIUS.capsule, alignItems: 'center', justifyContent: 'center' },
+  divided: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: COLOR.hairline,
+  },
+  pick: {
+    width: PICK,
+    height: PICK,
+    borderRadius: RADIUS.capsule,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   pickOn: { backgroundColor: COLOR.selectionFill },
-  pickOff: { borderWidth: 1.5, borderColor: tint(COLOR.textPrimary, PICK_RING) },
+  pickOff: {
+    borderWidth: 1.5,
+    borderColor: tint(COLOR.textPrimary, PICK_RING),
+  },
   capped: { opacity: OPACITY.disabled },
   note: { flexShrink: 1, textAlign: 'right' },
-  footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  consent: { borderRadius: RADIUS.sheet, backgroundColor: SHEET_FILL, padding: SPACE.lg, gap: SPACE.md },
-  consentLine: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.md },
+  footer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  consent: {
+    borderRadius: RADIUS.sheet,
+    backgroundColor: SHEET_FILL,
+    padding: SPACE.lg,
+    gap: SPACE.md,
+  },
+  consentLine: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: SPACE.md,
+  },
   anon: {
     flexDirection: 'row',
     alignItems: 'center',
