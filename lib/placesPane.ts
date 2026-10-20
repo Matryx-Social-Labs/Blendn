@@ -239,9 +239,9 @@ export const WHATS_ON = [
 /** "How far", in kilometres (the list's `radius` param); null is any. */
 export const HOW_FAR = [
   { km: null, label: 'Any' },
-  { km: 2, label: 'Under 2 km' },
-  { km: 5, label: 'Under 5 km' },
-  { km: 10, label: 'Under 10 km' },
+  { km: 2, label: '2 km' },
+  { km: 5, label: '5 km' },
+  { km: 10, label: '10 km' },
 ] as const
 export type HowFar = (typeof HOW_FAR)[number]['km']
 

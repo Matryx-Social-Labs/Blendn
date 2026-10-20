@@ -1,17 +1,20 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
-import { Chip } from '../ds/Chip'
+import { ChipSet } from '../ds/ChipSet'
+import { SegmentedControl } from '../ds/SegmentedControl'
 import { Sheet } from '../ds/Sheet'
-import { font, useBoldText } from '../ds/shared'
-import { COLOR, FONT_FAMILY, SPACE } from '../../lib/design/tokens'
-import { HOW_FAR, NO_FILTERS, PLACE_TYPES, WHATS_ON, type PlaceFilters } from '../../lib/placesPane'
-
-/** The "Show n places" count settles this long after the last tap (BUILD-SPEC B9). */
-export const COUNT_DEBOUNCE_MS = 250
+import { font, useBoldText, useIncreaseContrast } from '../ds/shared'
+import { FieldLabel } from '../ds/TextField'
+import { VENUE_PLATE_GLYPHS } from '../ds/VenuePlate'
+import { COLOR, SPACE } from '../../lib/design/tokens'
+import { useDraftCount } from '../../lib/filterCount'
+import { HOW_FAR, KIND_TILES, NO_FILTERS, plateFor, WHATS_ON, type PlaceFilters } from '../../lib/placesPane'
 
 const sameFilters = (a: PlaceFilters, b: PlaceFilters) => a.venueType === b.venueType && a.whatsOn === b.whatsOn && a.radiusKm === b.radiusKm
 /** What the count was asked of: the kind and the radius (What's on is judged here, on the strata, and has no count of its own). */
+/** What an empty result tells you to do. */
+const NOTHING_MATCHES = 'Nothing matches. Try a wider distance or another kind.'
 const countKey = (f: PlaceFilters) => `${f.venueType ?? '-'}|${f.radiusKm ?? '-'}`
 
 /**
@@ -44,26 +47,11 @@ export function PlacesFilterSheet({
     setSeenVisible(visible)
     if (visible) setDraft(filters)
   }
-  const [counted, setCounted] = useState<{ key: string; n: number } | null>(null)
-  const key = countKey(draft)
-  useEffect(() => {
-    if (!visible) return
-    let live = true
-    const timer = setTimeout(() => {
-      countFor(draft)
-        .then((n) => live && n !== null && setCounted({ key, n }))
-        .catch(() => undefined)
-    }, COUNT_DEBOUNCE_MS)
-    return () => {
-      live = false
-      clearTimeout(timer)
-    }
-    // The draft's kind and radius are what a count depends on (`key`); `countFor` is the list's own and changes with it.
-  }, [visible, key]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const n = draft.whatsOn === 'all' && counted?.key === key ? counted.n : null
-  const label = n === null ? 'Show places' : `Show ${n.toLocaleString('en-US')} ${n === 1 ? 'place' : 'places'}`
-  const label12 = [font('label', bold, FONT_FAMILY.mono[500]), styles.secondary]
+  const counted = useDraftCount(visible, countKey(draft), () => countFor(draft))
+  const n = draft.whatsOn === 'all' ? counted : null
+  const empty = n === 0
+  const contrast = useIncreaseContrast()
+  const kindKeys = draft.venueType ? [draft.venueType] : []
 
   return (
     <Sheet
@@ -71,32 +59,48 @@ export function PlacesFilterSheet({
       onClose={onClose}
       title="Filters"
       headerAction={{ label: 'Clear all', onPress: () => setDraft(NO_FILTERS), disabled: sameFilters(draft, NO_FILTERS) }}
-      detents={['tall']}
-      actions={[{ label, kind: 'primary', onPress: () => onApply(draft), testID: 'places-filter-apply' }]}
+      actions={[
+        n === null || empty
+          ? { label: 'Show places', kind: 'primary', onPress: () => onApply(draft), disabled: empty, testID: 'places-filter-apply' }
+          : { label: n === 1 ? 'Show {n} place' : 'Show {n} places', count: n, kind: 'primary', onPress: () => onApply(draft), testID: 'places-filter-apply' },
+      ]}
       testID="places-filter-sheet"
     >
       <View style={styles.body}>
-        <Text style={label12}>KIND</Text>
-        <View style={styles.chips}>
-          {PLACE_TYPES.map((t) => (
-            <Chip key={t.label} label={t.label} selected={t.venueType === draft.venueType} onPress={() => setDraft((d) => ({ ...d, venueType: t.venueType }))} testID={`places-filter-kind-${t.venueType ?? 'all'}`} />
-          ))}
-        </View>
-        <Text style={label12}>WHAT’S ON</Text>
-        <View style={styles.chips}>
-          {WHATS_ON.map((w) => (
-            <Chip key={w.value} label={w.label} selected={w.value === draft.whatsOn} onPress={() => setDraft((d) => ({ ...d, whatsOn: w.value }))} testID={`places-filter-on-${w.value}`} />
-          ))}
+        <ChipSet
+          label="Kind"
+          counter={kindKeys.length ? `${kindKeys.length} chosen` : 'Any'}
+          // One kind until the server takes a list (§C7); an empty selection is "Any", so there is no "All" chip.
+          selection="single"
+          items={KIND_TILES.map((t) => ({ key: t.venueType, label: t.label, icon: VENUE_PLATE_GLYPHS[plateFor(t.venueType)] }))}
+          selected={kindKeys}
+          onToggle={(key) => setDraft((d) => ({ ...d, venueType: d.venueType === key ? null : (key as PlaceFilters['venueType']) }))}
+          testID="places-filter-kind"
+        />
+        <View style={styles.group}>
+          <FieldLabel text="What’s on" bold={bold} contrast={contrast} />
+          <SegmentedControl
+            semantics="radio"
+            items={WHATS_ON.map((w) => w.label)}
+            selected={WHATS_ON.findIndex((w) => w.value === draft.whatsOn)}
+            onChange={(i) => setDraft((d) => ({ ...d, whatsOn: WHATS_ON[i].value }))}
+            testID="places-filter-on"
+          />
         </View>
         {hasFix ? (
-          <>
-            <Text style={label12}>HOW FAR</Text>
-            <View style={styles.chips}>
-              {HOW_FAR.map((h) => (
-                <Chip key={h.label} label={h.label} selected={h.km === draft.radiusKm} onPress={() => setDraft((d) => ({ ...d, radiusKm: h.km }))} testID={`places-filter-far-${h.km ?? 'any'}`} />
-              ))}
-            </View>
-          </>
+          <ChipSet
+            label="Within"
+            selection="single"
+            items={HOW_FAR.map((h) => ({ key: String(h.km ?? 'any'), label: h.label }))}
+            selected={[String(draft.radiusKm ?? 'any')]}
+            onToggle={(key) => setDraft((d) => ({ ...d, radiusKm: key === 'any' || String(d.radiusKm) === key ? null : (Number(key) as PlaceFilters['radiusKm']) }))}
+            testID="places-filter-far"
+          />
+        ) : null}
+        {empty ? (
+          <Text accessibilityLiveRegion="polite" style={[font('meta', bold), styles.nothing]}>
+            {NOTHING_MATCHES}
+          </Text>
         ) : null}
       </View>
     </Sheet>
@@ -104,7 +108,7 @@ export function PlacesFilterSheet({
 }
 
 const styles = StyleSheet.create({
-  body: { gap: SPACE.md, paddingBottom: SPACE.lg },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
-  secondary: { color: COLOR.textSecondary },
+  body: { gap: SPACE.xl, paddingBottom: SPACE.lg },
+  group: { gap: SPACE.sm },
+  nothing: { color: COLOR.textSecondary, textAlign: 'center' },
 })

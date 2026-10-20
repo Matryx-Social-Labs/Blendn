@@ -1,5 +1,5 @@
 import { memo, useEffect, useState } from 'react'
-import { StyleSheet, Text, View } from 'react-native'
+import { ScrollView, StyleSheet, Text, View } from 'react-native'
 
 import { Chip } from '../ds/Chip'
 import { IconButton } from '../ds/IconButton'
@@ -7,7 +7,7 @@ import { Badge } from '../ds/MonoFamily'
 import { SearchField } from '../ds/SearchField'
 import { font, useBoldText } from '../ds/shared'
 import { COLOR, FONT_FAMILY, SPACE } from '../../lib/design/tokens'
-import { PLACE_TYPES, type PlaceTypeFilter } from '../../lib/placesPane'
+import { HOW_FAR, PLACE_TYPES, WHATS_ON, type PlaceFilters } from '../../lib/placesPane'
 
 /**
  * The top of Places (BUILD-SPEC B1), in two rows of the list: the title (headline, city control, stat line;
@@ -46,7 +46,7 @@ export const PlacesTitle = memo(function PlacesTitle({
 export const SEARCH_DEBOUNCE_MS = 300
 
 /**
- * The search field with its filter button, and the chosen kind as a removable chip (B1, B8). It holds what is
+ * The search field with its filter button, and each applied filter as a removable chip under it (B1, B8). It holds what is
  * typed itself and hands the list only the settled text, so a keystroke re-renders this row and nothing else.
  * It is a sticky row of the list, which keeps it mounted however far the list scrolls: a focused field is
  * never unmounted by a long scroll.
@@ -56,22 +56,30 @@ export const PlacesSearch = memo(function PlacesSearch({
   searching,
   filterCount,
   onPressFilter,
-  venueType,
-  onClearKind,
+  filters,
+  onClear,
 }: {
   onSearch: (text: string) => void
   searching: boolean
   filterCount: number
   onPressFilter: () => void
-  venueType: PlaceTypeFilter
-  onClearKind: () => void
+  filters: PlaceFilters
+  /** Each × clears its own field only. */
+  onClear: (field: keyof PlaceFilters) => void
 }) {
   const [query, setQuery] = useState('')
   useEffect(() => {
     const timer = setTimeout(() => onSearch(query), SEARCH_DEBOUNCE_MS)
     return () => clearTimeout(timer)
   }, [query, onSearch])
-  const kind = PLACE_TYPES.find((t) => t.venueType === venueType && venueType !== null)
+  const kind = PLACE_TYPES.find((t) => t.venueType === filters.venueType && filters.venueType !== null)
+  const whatsOn = filters.whatsOn !== 'all' ? WHATS_ON.find((w) => w.value === filters.whatsOn) : undefined
+  const far = filters.radiusKm !== null ? HOW_FAR.find((h) => h.km === filters.radiusKm) : undefined
+  type Applied = { field: keyof PlaceFilters; label: string; testID: string }
+  const applied: Applied[] = []
+  if (kind) applied.push({ field: 'venueType', label: kind.label, testID: 'places-kind-chip' })
+  if (whatsOn) applied.push({ field: 'whatsOn', label: whatsOn.label, testID: 'places-on-chip' })
+  if (far) applied.push({ field: 'radiusKm', label: `Within ${far.label}`, testID: 'places-far-chip' })
   return (
     <View style={styles.searchWrap}>
       <View style={styles.searchRow}>
@@ -87,10 +95,13 @@ export const PlacesSearch = memo(function PlacesSearch({
           ) : null}
         </View>
       </View>
-      {kind ? (
-        <View style={styles.kindChip}>
-          <Chip label={kind.label} selected onRemove={onClearKind} accessibilityLabel={`${kind.label}, remove filter`} testID="places-kind-chip" />
-        </View>
+      {applied.length ? (
+        // Bled to the screen edges: the chips scroll under the gutter instead of wrapping.
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={styles.applied} contentContainerStyle={styles.appliedRow} testID="places-applied">
+          {applied.map((a) => (
+            <Chip key={a.field} label={a.label} selected onRemove={() => onClear(a.field)} testID={a.testID} />
+          ))}
+        </ScrollView>
       ) : null}
     </View>
   )
@@ -105,7 +116,8 @@ const styles = StyleSheet.create({
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   search: { flex: 1 },
   badge: { position: 'absolute', top: -SPACE.xs, right: -SPACE.xs },
-  kindChip: { flexDirection: 'row' },
+  applied: { marginHorizontal: -SPACE.gutter },
+  appliedRow: { paddingHorizontal: SPACE.gutter, gap: SPACE.sm },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
 })

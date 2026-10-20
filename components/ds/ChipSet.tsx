@@ -3,11 +3,11 @@ import { StyleSheet, Text, View } from 'react-native'
 import Animated, { FadeIn, LinearTransition } from 'react-native-reanimated'
 
 import { type IconName } from '../ui/Icon'
-import { COLOR, DURATION, REDUCE_MOTION, SPACE, SPRING, STAGGER } from '../../lib/design/tokens'
+import { COLOR, DURATION, REDUCE_MOTION, SIZE, SPACE, SPRING, STAGGER } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
 import { Chip } from './Chip'
 import { monoCaption } from './MonoFamily'
-import { useBoldText, useIncreaseContrast } from './shared'
+import { minTarget, useBoldText, useIncreaseContrast } from './shared'
 import { FieldLabel, FieldNotes } from './TextField'
 
 export type ChipItem = {
@@ -132,7 +132,7 @@ export function ChipSet({
       ) : null}
       <Animated.View
         layout={reduceMotion ? undefined : LinearTransition.springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping)}
-        style={styles.wrap}
+        style={[styles.wrap, { rowGap: minTarget() - SIZE.tag }]}
       >
         {visible.map((item) => (revealed.includes(item) ? reveal(item) : chip(item)))}
         {hidden.length ? (

@@ -5,11 +5,12 @@ import Animated, { ReduceMotion, useAnimatedStyle, useSharedValue, withSequence,
 import ScalePress from '../motion/ScalePress'
 import { GradientFill } from '../ui/GradientFill'
 import { Icon, type IconName } from '../ui/Icon'
-import { COLOR, FONT_FAMILY, ICON, MATERIAL, PRESS, RADIUS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
+import { COLOR, DURATION, FONT_FAMILY, ICON, MATERIAL, PRESS, RADIUS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { OPACITY } from '../../lib/theme'
 import { Spinner } from './Loader'
+import { RollingNumber } from './RollingNumber'
 import {
   CONTROL_FONT_CAP,
   focusRing,
@@ -48,6 +49,17 @@ function fill(kind: ButtonKind, size: ButtonSize, onGlass: boolean) {
 
 /** Kinds that play a haptic on press-in (§10.2): the screen's one primary, and the destructive button in a confirm. */
 const PRESS_HAPTIC: Partial<Record<ButtonKind, () => void>> = { primary: () => H.primary(), destructive: () => H.destructive() }
+
+/** A value once it has stopped changing for `DURATION.medium`: what a screen reader is told of a count that is still rolling. */
+function useSettled(value: number | undefined) {
+  const [settled, setSettled] = useState(value)
+  useEffect(() => {
+    if (value === settled) return
+    const timer = setTimeout(() => setSettled(value), DURATION.medium)
+    return () => clearTimeout(timer)
+  }, [value, settled])
+  return settled
+}
 
 /** The 300 ms grace before a busy control swaps its label for a spinner. */
 export function useGrace(loading: boolean) {
@@ -88,6 +100,11 @@ export type ButtonProps = {
    * before it; pass `accessibilityLabel` with the whole thing, since the price is not part of `label`.
    */
   price?: { amount: string; per?: string }
+  /**
+   * A number inside the label ("Show {n} places"): `label` holds `{n}`, the words before it, the count rolling in
+   * Geist Mono (grouped, "6,422"), then the words after. Read as the whole sentence, once the number has settled.
+   */
+  count?: number
   /** A leading glyph: 20 pt, 16 at `sm` and `raised`. */
   icon?: IconName
   /** A leading mark that is not a glyph, in its place: a crew's emblem on "Like for Nebula" (R2-D1). Decorative. */
@@ -139,6 +156,7 @@ export function Button({
   size = 'lg',
   icon,
   price,
+  count,
   leading,
   disabled = false,
   loading = false,
@@ -181,6 +199,10 @@ export function Button({
   const slop = (minTarget() - height) / 2
   const labelFont = sm ? font('meta', bold, FONT_FAMILY.brand[700]) : font('button', bold)
   const outlined = contrast && (kind === 'secondary' || kind === 'tertiary')
+  const settled = useSettled(count)
+  const [before, after = ''] = count === undefined ? [label, ''] : label.split('{n}')
+  // The sentence a screen reader gets: the number formatted in, and only once it has stopped changing.
+  const sentence = settled === undefined ? label : label.replace('{n}', settled.toLocaleString('en-US'))
 
   return (
     <Animated.View style={[sm ? styles.inline : null, pressed && !android ? styles.pressedIos : null, shake, style]}>
@@ -198,7 +220,8 @@ export function Button({
         onBlur={() => setFocused(false)}
         android_ripple={{ color: PRESSED_WASH.android, foreground: true }}
         accessibilityRole="button"
-        accessibilityLabel={accessibilityLabel ?? label}
+        accessibilityLabel={accessibilityLabel ?? sentence}
+        accessibilityLiveRegion={count === undefined ? undefined : 'polite'}
         accessibilityHint={accessibilityHint}
         accessibilityState={{ disabled, busy: loading }}
         style={[
@@ -213,12 +236,28 @@ export function Button({
         {pressed && android ? <View style={[StyleSheet.absoluteFill, { backgroundColor: PRESSED_WASH.android }]} /> : null}
         <View style={[styles.content, spinner && styles.hidden]}>
           {leading ?? (icon ? <Icon name={icon} size={compact ? ICON.inline : ICON.control} color={ink} /> : null)}
+          {count !== undefined ? (
+            // A rolling number is a row of columns, not a run of text: the sentence is a row, a word space apart.
+            <View style={styles.sentence}>
+              {before.trim() ? (
+                <Text style={[labelFont, { color: ink }]} maxFontSizeMultiplier={CONTROL_FONT_CAP} numberOfLines={1}>
+                  {before.trim()}
+                </Text>
+              ) : null}
+              <RollingNumber value={count} role="button" grouping color={ink} testID={testID && `${testID}-count`} />
+              {after.trim() ? (
+                <Text style={[labelFont, { color: ink }]} maxFontSizeMultiplier={CONTROL_FONT_CAP} numberOfLines={1}>
+                  {after.trim()}
+                </Text>
+              ) : null}
+            </View>
+          ) : (
           <Text
             style={[labelFont, { color: ink }]}
             maxFontSizeMultiplier={CONTROL_FONT_CAP}
             numberOfLines={android ? 2 : 1}
           >
-            {label}
+            {before}
             {price ? (
               <>
                 {' '}
@@ -227,6 +266,7 @@ export function Button({
               </>
             ) : null}
           </Text>
+          )}
         </View>
         {spinner ? (
           <View style={[StyleSheet.absoluteFill, styles.center]}>
@@ -257,6 +297,7 @@ const styles = StyleSheet.create({
   bodyLg: { paddingHorizontal: SPACE.lg },
   bodySm: { paddingHorizontal: SPACE.lg, minWidth: ROW_ACTION_MIN_WIDTH },
   content: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
+  sentence: { flexDirection: 'row', alignItems: 'center', columnGap: SPACE.xs },
   hidden: { opacity: 0 },
   center: { alignItems: 'center', justifyContent: 'center' },
   refused: { borderWidth: SPACE.xxs, borderColor: COLOR.destructive },

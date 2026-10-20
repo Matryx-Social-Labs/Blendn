@@ -232,7 +232,7 @@ export function PlacesList({
   const seeAllLive = useCallback(() => focus('live'), [focus])
   const seeAllOpen = useCallback(() => focus('open'), [focus])
   const openFilters = useCallback(() => setFiltersOpen(true), [])
-  const clearKind = useCallback(() => chooseKind(null), [chooseKind])
+  const clearFilter = useCallback((field: keyof PlaceFilters) => setFilters((f) => ({ ...f, [field]: NO_FILTERS[field] })), [])
   // The list has scrolled past its title: the sticky search takes its bar.
   const [barOn, setBarOn] = useState(false)
   const onScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => setBarOn(e.nativeEvent.contentOffset.y > STICKY_BAR_AFTER), [])
@@ -275,8 +275,8 @@ export function PlacesList({
                 searching={searching && state.status === 'loading'}
                 filterCount={activeFilterCount(filters)}
                 onPressFilter={openFilters}
-                venueType={venueType}
-                onClearKind={clearKind}
+                filters={filters}
+                onClear={clearFilter}
               />
             </StickyBar>
           )
@@ -359,8 +359,8 @@ export function PlacesList({
       }
     },
     [
-      city, openCityPicker, stat, searching, state.status, state.readAt, state.refreshFailed, filters, venueType, offline, now, search, whatsOn, typeLabel, barOn,
-      chooseKind, refresh, requestLocation, onShowNearOnMap, toggleFold, seeAllLive, seeAllOpen, openFilters, clearKind,
+      city, openCityPicker, stat, searching, state.status, state.readAt, state.refreshFailed, filters, offline, now, search, whatsOn, typeLabel, barOn,
+      chooseKind, refresh, requestLocation, onShowNearOnMap, toggleFold, seeAllLive, seeAllOpen, openFilters, clearFilter,
     ]
   )
 

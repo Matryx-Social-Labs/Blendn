@@ -242,3 +242,26 @@ describe('accessibility settings', () => {
     expect(screen.queryByTestId('b-contrast')).toBeNull()
   })
 })
+
+describe('a count in the label ("Show {n} places")', () => {
+  it('the words, the rolling number (grouped, mono) and the words after; read as the whole sentence once settled', async () => {
+    jest.useFakeTimers()
+    await render(<Button label="Show {n} places" count={6422} testID="b" />)
+    expect(screen.getByText('Show')).toBeTruthy()
+    expect(screen.getByText('places')).toBeTruthy()
+    expect(screen.getByTestId('b-count')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Show 6,422 places' })).toBeTruthy()
+    await screen.rerender(<Button label="Show {n} places" count={212} testID="b" />)
+    // Still rolling: the screen reader keeps the last settled sentence, then the new one.
+    expect(screen.getByRole('button', { name: 'Show 6,422 places' })).toBeTruthy()
+    await act(async () => jest.advanceTimersByTime(400))
+    expect(screen.getByRole('button', { name: 'Show 212 places' })).toBeTruthy()
+    expect(screen.getByTestId('b').props.accessibilityLiveRegion).toBe('polite')
+  })
+
+  it('without a count the label is a plain label and nothing is a live region', async () => {
+    await render(<Button label="Show places" testID="b" />)
+    expect(screen.getByTestId('b').props.accessibilityLiveRegion).toBeUndefined()
+    expect(screen.queryByTestId('b-count')).toBeNull()
+  })
+})

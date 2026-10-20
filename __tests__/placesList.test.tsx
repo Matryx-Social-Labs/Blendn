@@ -331,7 +331,7 @@ describe('the filter sheet', () => {
     await open()
     await act(async () => {
       fireEvent.press(screen.getByTestId('places-filter-kind-cafe'))
-      fireEvent.press(screen.getByTestId('places-filter-on-live'))
+      fireEvent.press(screen.getByTestId('places-filter-on-1'))
       fireEvent.press(screen.getByTestId('places-filter-far-5'))
     })
     await act(async () => {
@@ -339,6 +339,29 @@ describe('the filter sheet', () => {
     })
     await waitFor(() => expect(listCalls().at(-1)?.[0]).toMatchObject({ venueType: 'cafe', radius: 5 }))
     expect(screen.getByTestId('places-filter-badge', HIDDEN)).toBeTruthy()
+  })
+
+  it('each applied filter is a removable chip under the search, and each × clears only its own', async () => {
+    serve([venue('a', { liveNow: '5-9' })])
+    await mount()
+    await open()
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('places-filter-kind-cafe'))
+      fireEvent.press(screen.getByTestId('places-filter-on-1'))
+      fireEvent.press(screen.getByTestId('places-filter-far-5'))
+    })
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('places-filter-apply'))
+    })
+    expect(screen.getByTestId('places-kind-chip', HIDDEN)).toBeTruthy()
+    expect(screen.getByTestId('places-on-chip', HIDDEN)).toBeTruthy()
+    expect(screen.getByLabelText('Within 5 km, remove filter')).toBeTruthy()
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Within 5 km, remove filter'))
+    })
+    expect(screen.queryByTestId('places-far-chip', HIDDEN)).toBeNull()
+    expect(screen.getByTestId('places-kind-chip', HIDDEN)).toBeTruthy()
+    expect(screen.getByTestId('places-on-chip', HIDDEN)).toBeTruthy()
   })
 
   it('"Show n places" is the server’s count for the draft, after 250 ms', async () => {
@@ -358,7 +381,12 @@ describe('the filter sheet', () => {
         await Promise.resolve()
       })
       expect(getVenues.mock.calls.filter(([q]) => q.limit === 1).at(-1)?.[0]).toMatchObject({ venueType: 'cafe', page: 1, limit: 1 })
-      expect(screen.getByText('Show 212 places')).toBeTruthy()
+      await act(async () => {
+        jest.advanceTimersByTime(400)
+      })
+      // The button's number rolls (a RollingNumber), so it is read as the sentence, once settled.
+      expect(screen.getByRole('button', { name: 'Show 212 places' })).toBeTruthy()
+      expect(screen.getByTestId('places-filter-apply-count')).toBeTruthy()
     } finally {
       jest.useRealTimers()
     }
@@ -376,7 +404,8 @@ describe('the filter sheet', () => {
     await act(async () => {
       fireEvent.press(screen.getByTestId('places-filter-sheet-header-action'))
     })
-    expect(screen.getByTestId('places-filter-kind-all').props.accessibilityState).toMatchObject({ selected: true })
+    expect(screen.getByTestId('places-filter-kind-cafe').props.accessibilityState).toMatchObject({ selected: false })
+    expect(screen.getByTestId('places-filter-kind-counter').props.children).toBe('Any')
   })
 })
 

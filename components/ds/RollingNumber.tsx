@@ -1,17 +1,17 @@
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { StyleSheet, View, useWindowDimensions, type TextStyle } from 'react-native'
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated'
 
 import { COLOR, FONT_FAMILY, MAX_FONT_SCALE, SPRING } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
-import { font, useBoldText } from './shared'
+import { CONTROL_FONT_CAP, font, useBoldText } from './shared'
 
 /**
  * The three sizes on the type roles: `numericDisplay` (40, the Room's count),
  * `title` (the recap tiles; the page's 28 is between roles), `bodyStrong` (17,
- * beside a heading).
+ * beside a heading), and `button` (Geist Mono 700 at the button's 16/20, for a count inside a button label).
  */
-export type RollingRole = 'numericDisplay' | 'title' | 'bodyStrong'
+export type RollingRole = 'numericDisplay' | 'title' | 'bodyStrong' | 'button'
 
 type Roll = { from: string | null; q?: number }
 
@@ -93,12 +93,15 @@ export function RollingNumber({
   value,
   role = 'numericDisplay',
   color = COLOR.textPrimary,
+  grouping = false,
   preview,
   testID,
 }: {
   value: number
   role?: RollingRole
   color?: string
+  /** A static "," every three digits from the right (en-US): "6,422". It never rolls. */
+  grouping?: boolean
   /** The design gallery only: a frozen frame `q` of the way from `from`. */
   preview?: { from: number; q: number }
   testID?: string
@@ -106,31 +109,42 @@ export function RollingNumber({
   const bold = useBoldText()
   const { fontScale } = useWindowDimensions()
   const digits = String(Math.max(0, Math.round(value)))
+  const spoken = grouping ? Number(digits).toLocaleString('en-US') : digits
   // ponytail: columns past the first draw's width roll in; one that leaves and comes back (100 → 99 → 100) just appears.
   const [firstWidth] = useState(digits.length)
   const old = preview ? String(Math.max(0, Math.round(preview.from))).padStart(digits.length, ' ') : null
-  const cap = MAX_FONT_SCALE[role]
+  // A button's count scales with its label: the control's cap, not the reading text's.
+  const cap = role === 'button' ? CONTROL_FONT_CAP : MAX_FONT_SCALE[role]
   const base = font(role, bold, FONT_FAMILY.mono[700])
   const height = Math.ceil(base.lineHeight * Math.min(fontScale || 1, cap))
   const text: TextStyle[] = [base, styles.digit, { color }]
 
   return (
-    <View testID={testID} accessible accessibilityLabel={digits} style={styles.row}>
+    <View testID={testID} accessible accessibilityLabel={spoken} style={styles.row}>
       {[...digits].map((char, i) => {
         // Keyed from the right, so 9 → 10 keeps the ones column and adds a tens.
         const fromRight = digits.length - 1 - i
         const was = old?.[i]
+        const comma = grouping && fromRight > 0 && fromRight % 3 === 0
         return (
-          <Column
-            key={fromRight}
-            char={char}
-            roll={preview && was !== char ? { from: was?.trim() || '0', q: preview.q } : undefined}
-            rollIn={fromRight >= firstWidth}
-            height={height}
-            cap={cap}
-            text={text}
-            testID={testID && `${testID}-${fromRight}`}
-          />
+          <Fragment key={fromRight}>
+            {comma ? (
+              <View testID={testID && `${testID}-comma-${fromRight}`} style={[styles.column, { height }]}>
+                <Animated.Text maxFontSizeMultiplier={cap} style={text}>
+                  ,
+                </Animated.Text>
+              </View>
+            ) : null}
+            <Column
+              char={char}
+              roll={preview && was !== char ? { from: was?.trim() || '0', q: preview.q } : undefined}
+              rollIn={fromRight >= firstWidth}
+              height={height}
+              cap={cap}
+              text={text}
+              testID={testID && `${testID}-${fromRight}`}
+            />
+          </Fragment>
         )
       })}
     </View>

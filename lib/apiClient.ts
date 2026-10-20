@@ -572,7 +572,8 @@ export interface AuthUser {
 export interface PaginationMeta {
   page: number
   limit: number
-  total: number
+  /** What the server sends: the count for these params, whatever the page. */
+  totalCount: number
   totalPages: number
   hasMore?: boolean
 }

@@ -1015,6 +1015,23 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     }
   }, [userLocation, selectedCity, searchTerm, filters])
 
+  /** The filter sheet's "Show n events": the server's own count for the draft, in the scope of the list (city, search). */
+  const countEventsFor = useCallback(
+    async (draft: EventFilters) => {
+      const r = await apiClient.getEvents({
+        page: 1,
+        limit: 1,
+        city: selectedCity ?? undefined,
+        lat: userLocation?.latitude,
+        lon: userLocation?.longitude,
+        search: searchTerm || undefined,
+        ...filtersToQuery(draft),
+      })
+      return r.success && r.data?.pagination ? r.data.pagination.totalCount : null
+    },
+    [userLocation, selectedCity, searchTerm]
+  )
+
   /*
    * NOT memoised, and that is the fix.
    *
@@ -2211,6 +2228,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
           setFilterSheetOpen(false)
         }}
         onClose={() => setFilterSheetOpen(false)}
+        countFor={countEventsFor}
       />
 
       <ActionTray
