@@ -1,7 +1,6 @@
 import { usePathname } from 'expo-router'
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { Platform, StyleSheet, View } from 'react-native'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { SIZE, SPACE } from '../lib/design/tokens'
 import { setToastHandler, type ToastVariant } from '../lib/toast'
@@ -50,7 +49,6 @@ let nextId = 0
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [queue, setQueue] = useState<ToastMessage[]>([])
-  const insets = useSafeAreaInsets()
   const pathname = usePathname()
 
   const showToast = useCallback(

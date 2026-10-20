@@ -391,6 +391,8 @@ function useSheetMotion({
       height.set(h <= max ? Math.max(h, stops[0]) : max + (h - max) * RUBBER_BAND)
       offset.set(Math.max(0, stops[0] - h))
     })
+    // The compiler reads `dragClose` (it checks `visibleRef` inside a timer, never in render) as a ref read during render.
+    // eslint-disable-next-line react-hooks/refs
     .onEnd((e) => {
       const stops = levels ?? [natural.get()]
       const to = settleDetent(stops, at.get(), height.get(), offset.get(), e.velocityY)
