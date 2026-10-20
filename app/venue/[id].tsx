@@ -469,6 +469,7 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
           km={km}
           live={live}
           onZero={load}
+          scrollY={scrollY}
         />
         <PageWash color={washColor(venueHero(detail))} pointerEvents="none" style={styles.wash} />
         <View style={styles.body}>

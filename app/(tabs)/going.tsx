@@ -36,7 +36,7 @@ import { liveWindow, sessionOver } from '../../lib/eventSession'
 import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { OPACITY } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
-import { MOTION_DURATION } from '../../lib/motion'
+import { DURATION, EASING, SPRING } from '../../lib/motion'
 import { openInMaps } from '../../lib/openInMaps'
 import { addToCalendar } from '../../lib/calendar'
 import { openPaywall } from '../../lib/paywall'
@@ -720,15 +720,16 @@ const SKELETON_ROW = 72
 const HEART = SIZE.tag
 
 /*
- * Removing a save: the row fades out while the ones below close the gap,
+ * Removing a save (DS #16): the row fades out on quick while the ones below close the gap,
  * instead of vanishing and letting the list snap up — the snap hid where the
  * row went. Undo fades it back in at its old place and the list opens for it.
  * The rows carry no blur or shadow, which is what makes a layout transition
  * safe here (see tasks/lessons.md). Reduce Motion: the list simply updates.
  */
-const ROW_OUT = FadeOut.duration(MOTION_DURATION.fast)
-const ROW_BACK = FadeIn.duration(MOTION_DURATION.normal)
-const ROW_REFLOW = LinearTransition.duration(MOTION_DURATION.normal).easing(Easing.bezier(0.77, 0, 0.175, 1))
+const ROW_OUT = FadeOut.duration(DURATION.quick).easing(Easing.bezier(...EASING.exit))
+const ROW_BACK = FadeIn.duration(DURATION.base).easing(Easing.bezier(...EASING.entrance))
+// The reflow is M.settle (DS #16), the system's own spring, not a timed ease.
+const ROW_REFLOW = LinearTransition.springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping).mass(SPRING.settle.mass)
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent' },

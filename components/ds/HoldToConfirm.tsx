@@ -8,7 +8,6 @@ import { GradientFill } from '../ui/GradientFill'
 import { Icon, type IconName } from '../ui/Icon'
 import { COLOR, DURATION, ICON, RADIUS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
-import { useReducedMotion } from '../../lib/motion'
 import { OPACITY } from '../../lib/theme'
 import { Button } from './Button'
 import { CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast, useScreenReader } from './shared'
@@ -16,6 +15,8 @@ import { CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast, 
 /** A finger may drift this far and still be holding. */
 const MAX_DRIFT = SPACE.xl
 const QUARTERS = 4
+/** The rewind and the drain: M.settle, and kept under Reduce Motion (DS #8: "Identical" — letting go still settles, it never snaps empty). */
+const REWIND = { ...SPRING.settle, reduceMotion: ReduceMotion.Never }
 /** A long label ("Go live when you’re here · 350 m") shrinks this far before it would lose its tail. */
 const LABEL_MIN_SCALE = 0.8
 
@@ -51,8 +52,8 @@ export type HoldToConfirmProps = {
  * `H.tick` at 25 / 50 / 75% and `H.commit` at 100%, fired from the UI thread on
  * the frame the fill crosses; the outcome's `H.success` / `H.error` is the
  * caller's, on the server's answer (#8). Letting go before the end rewinds on
- * `M.settle`, silently; Reduce Motion cuts the rewind but keeps the fill (the
- * hold's speed is information). Busy keeps the fill full under its label. A
+ * `M.settle`, silently; Reduce Motion changes neither the rewind nor the fill
+ * (DS #8 "Identical": the hold's speed is information). Busy keeps the fill full under its label. A
  * refusal (#10, R3-D4 4.7): `H.error` at t0 and the fill drains on `M.settle`,
  * not a bounce (the refusal sheet is the screen's). A yes (#9, the Flow 4
  * prototype): the fill stays full under "You're in" and the pour (MomentPour)
@@ -79,7 +80,6 @@ export function HoldToConfirm({
   testID,
 }: HoldToConfirmProps) {
   const screenReader = useScreenReader()
-  const reduceMotion = useReducedMotion()
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const [width, setWidth] = useState(0)
@@ -110,9 +110,9 @@ export function HoldToConfirm({
   useEffect(() => {
     if (previewProgress != null) progress.set(previewProgress)
     else if (full) progress.set(1)
-    else if (wasFull.current || refused) progress.set(reduceMotion ? 0 : withSpring(0, SPRING.settle))
+    else if (wasFull.current || refused) progress.set(withSpring(0, REWIND))
     wasFull.current = full
-  }, [full, refused, previewProgress, reduceMotion, progress])
+  }, [full, refused, previewProgress, progress])
 
   // #10: the refusal's one haptic, as it arrives.
   useEffect(() => {
@@ -136,7 +136,7 @@ export function HoldToConfirm({
     })
     .onFinalize((_e, success) => {
       // A cancel after the edge (busy disables the gesture, an Android drift) is not a release: it committed.
-      if (!success && !committed.get()) progress.set(reduceMotion ? 0 : withSpring(0, SPRING.settle))
+      if (!success && !committed.get()) progress.set(withSpring(0, REWIND))
     })
   if (testID) hold.withTestId(`${testID}-hold`)
 

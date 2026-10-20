@@ -1,5 +1,5 @@
 import { Image } from 'expo-image'
-import { StyleSheet, Text, View } from 'react-native'
+import { Animated, StyleSheet, Text, View } from 'react-native'
 
 import { LivePill } from '../ds/MonoFamily'
 import { font, useBoldText } from '../ds/shared'
@@ -46,6 +46,15 @@ function YouAreLivePill({ live, onZero }: { live: VenueDetail['live']; onZero: (
   )
 }
 
+/**
+ * Overscroll at the top stretches the picture (DS #32, audit P2): scaled from
+ * its foot by 1 + pull / height, which is exactly what the bounce uncovers, so
+ * the top edge stays on the screen's top and no ink shows above the hero. A
+ * direct manipulation (it follows the finger), so Reduce Motion keeps it.
+ */
+export const stretchScale = (scrollY: Animated.Value) =>
+  scrollY.interpolate({ inputRange: [-VENUE_HERO_HEIGHT, 0], outputRange: [2, 1], extrapolateRight: 'clamp' })
+
 export function VenueHero({
   hero,
   name,
@@ -54,6 +63,7 @@ export function VenueHero({
   km,
   live,
   onZero,
+  scrollY,
 }: {
   hero: Hero
   name: string
@@ -63,6 +73,8 @@ export function VenueHero({
   km: number | null
   live: VenueDetail['live']
   onZero: () => void
+  /** The page's scroll offset (core `Animated`, native driver): the picture stretches while it is negative. */
+  scrollY?: Animated.Value
 }) {
   const bold = useBoldText()
   const distance = distanceText(km)
@@ -70,11 +82,16 @@ export function VenueHero({
   const liveText = liveNowLabel(live.liveNow)
   return (
     <View style={styles.hero} testID="venue-hero">
-      {hero.kind === 'cover' ? (
-        <Image source={{ uri: hero.uri }} contentFit="cover" cachePolicy="memory-disk" style={StyleSheet.absoluteFill} accessible={false} />
-      ) : (
-        <VenuePlate type={hero.plate} />
-      )}
+      <Animated.View
+        testID="venue-hero-media"
+        style={[StyleSheet.absoluteFill, scrollY && { transform: [{ scale: stretchScale(scrollY) }], transformOrigin: 'bottom' }]}
+      >
+        {hero.kind === 'cover' ? (
+          <Image source={{ uri: hero.uri }} contentFit="cover" cachePolicy="memory-disk" style={StyleSheet.absoluteFill} accessible={false} />
+        ) : (
+          <VenuePlate type={hero.plate} />
+        )}
+      </Animated.View>
       <StatusScrim style={styles.headScrim} pointerEvents="none" />
       <PhotoScrim style={styles.scrim} pointerEvents="none" />
       <View style={styles.text}>
@@ -105,7 +122,8 @@ export function VenueHero({
 }
 
 const styles = StyleSheet.create({
-  hero: { height: VENUE_HERO_HEIGHT, backgroundColor: COLOR.surface, overflow: 'hidden', justifyContent: 'flex-end' },
+  // Not clipped: the stretched picture grows upward past the hero's top edge to fill what the bounce uncovers.
+  hero: { height: VENUE_HERO_HEIGHT, backgroundColor: COLOR.surface, justifyContent: 'flex-end' },
   headScrim: { position: 'absolute', left: 0, right: 0, top: 0, height: HEAD_SCRIM },
   scrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '66%' },
   text: { paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.xxl, gap: SPACE.sm },
