@@ -178,7 +178,7 @@ export function useCrewActions(
       return
     }
     setTold((t) => ({ ...t, [crew.crewId]: 'no' }))
-    showToast(crewMessage(result, 'crew', 'Couldn’t tell your crew. Try again.'), 'error')
+    showToast(crewMessage(result, 'crew', 'Couldn’t tell your crew. Try again.'), 'error', { haptic: 'error' })
   }
 
   const like = async (card: CrewCard) => {
@@ -200,7 +200,7 @@ export function useCrewActions(
       const result = await crewsApi.likeCrew(eventId, card.crewId, asCrewId ?? undefined)
       setLiking(null)
       if (!result.success || !result.data) {
-        showToast(crewMessage(result, 'card', 'Couldn’t send the like. Try again.'), 'error')
+        showToast(crewMessage(result, 'card', 'Couldn’t send the like. Try again.'), 'error', { haptic: 'error' })
         if (result.errorCode === 'NOT_FOUND') void reload()
         return
       }
@@ -301,7 +301,7 @@ export function useOpenToCrews(eventId: string, checkInKey: string) {
     setBusy(false)
     if (!result.success || !result.data) {
       setValue(before)
-      showToast(crewMessage(result, 'card', 'Couldn’t save that. Try again.'), 'error')
+      showToast(crewMessage(result, 'card', 'Couldn’t save that. Try again.'), 'error', { haptic: 'error' })
       return
     }
     openToCrewsByCheckIn.set(key, result.data.openToCrews)

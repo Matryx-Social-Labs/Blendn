@@ -42,7 +42,7 @@ describe('PhotoManager', () => {
     photoUtils.selectAndUploadPhoto.mockResolvedValue({ success: false, error: 'Upload failed with status 502' })
     await mount(1)
     await fireEvent.press(screen.getByLabelText('Add photo'))
-    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("Couldn't upload that photo. Try again.", 'error'))
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("Couldn't upload that photo. Try again.", 'error', { haptic: 'error' }))
     expect(mockShowSheet).not.toHaveBeenCalled()
   })
 
@@ -50,7 +50,7 @@ describe('PhotoManager', () => {
     photoUtils.selectAndUploadPhoto.mockResolvedValue({ success: false, error: 'Photo must be less than 5MB' })
     await mount(1)
     await fireEvent.press(screen.getByLabelText('Add photo'))
-    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Photo must be less than 5MB.', 'error'))
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Photo must be less than 5MB.', 'error', { haptic: 'error' }))
   })
 
   it('stays quiet when the picker is cancelled', async () => {
@@ -66,7 +66,7 @@ describe('PhotoManager', () => {
     photoUtils.reorderPhotos.mockResolvedValue({ ok: false, error: 'That looks like a blank image.' })
     await mount(1)
     await fireEvent.press(screen.getByLabelText('Add photo'))
-    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('That looks like a blank image.', 'error'))
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('That looks like a blank image.', 'error', { haptic: 'error' }))
     expect(screen.queryByLabelText(/Photo 2 of 2/)).toBeNull()
   })
 
@@ -100,7 +100,7 @@ describe('PhotoManager', () => {
     const remove = (mockShowSheet.mock.calls[0][0] as ActionSheet).actions[0] as unknown as { then: () => Promise<void> }
     await act(() => remove.then())
     expect(photoUtils.deletePhoto).not.toHaveBeenCalled()
-    expect(mockShowToast).toHaveBeenCalledWith("Couldn't save your photos. Try again.", 'error')
+    expect(mockShowToast).toHaveBeenCalledWith("Couldn't save your photos. Try again.", 'error', { haptic: 'error' })
   })
 
   it('a full grid is an info toast, not a popup', async () => {

@@ -211,7 +211,7 @@ describe('Connect', () => {
     fireEvent.press(await screen.findByText('Connect'))
     fireEvent.press(await screen.findByText('Send request'))
 
-    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("Your request didn't send. Try again.", 'error'))
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("Your request didn't send. Try again.", 'error', { haptic: 'error' }))
     expect(screen.getByText('Connect')).toBeTruthy()
     expect(screen.queryByText('Requested')).toBeNull()
     // The sheet stays open, with the message in it.

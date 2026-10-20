@@ -82,7 +82,7 @@ it('stays put and says so when the request fails', async () => {
   await screen.findByText('Ana')
   fireEvent.press(screen.getByText('Send friend request'))
 
-  await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("That didn't go through. Try again.", 'error'))
+  await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("That didn't go through. Try again.", 'error', { haptic: 'error' }))
   expect(screen.getByText('Send friend request')).toBeTruthy()
 })
 
@@ -93,7 +93,7 @@ it('accepting from the link makes you friends at once', async () => {
 
   fireEvent.press(await screen.findByText('Accept friend request'))
   await screen.findByText('View profile')
-  expect(mockShowToast).toHaveBeenCalledWith('You and Ana are friends', 'success')
+  expect(mockShowToast).toHaveBeenCalledWith('You and Ana are friends', 'success', { haptic: 'success' })
 
   fireEvent.press(screen.getByText('View profile'))
   expect(router.replace).toHaveBeenCalledWith({ pathname: '/friends/[userId]', params: { userId: 'u_ana' } })

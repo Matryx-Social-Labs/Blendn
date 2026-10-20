@@ -269,7 +269,7 @@ describe('an invite', () => {
     await fireEvent.press(screen.getByLabelText('Not now'))
     const sheet = (showSheet as jest.Mock).mock.calls.at(-1)[0] as ActionSheet
     await act(async () => (sheet.actions.find((a) => a.label === 'Decline') as { then: () => void }).then())
-    await waitFor(() => expect(mockToast).toHaveBeenCalledWith('Couldn’t decline. Try again.', 'error'))
+    await waitFor(() => expect(mockToast).toHaveBeenCalledWith('Couldn’t decline. Try again.', 'error', { haptic: 'error' }))
     expect(router.back).not.toHaveBeenCalled()
   })
 })

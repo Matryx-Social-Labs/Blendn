@@ -632,7 +632,7 @@ export function useBanterInbox() {
       const result = await apiClient.respondToMessageRequest(requestId, action)
       if (!result.success) {
         Logger.error('chat', `Failed to ${action} request`, { requestId, error: result.error })
-        showToast(userMessage(result, `Couldn't ${action} that request. Try again.`), 'error')
+        showToast(userMessage(result, `Couldn't ${action} that request. Try again.`), 'error', { haptic: 'error' })
         await loadChats(true, true)
         return
       }
@@ -653,7 +653,7 @@ export function useBanterInbox() {
       await loadChats(true, true)
     } catch (e) {
       Logger.error('chat', `Error ${action}ing request`, { requestId, error: e })
-      showToast(`Couldn't ${action} that request. Try again.`, 'error')
+      showToast(`Couldn't ${action} that request. Try again.`, 'error', { haptic: 'error' })
       await loadChats(true, true)
     } finally {
       setRequestPending((prev) => {

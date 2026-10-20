@@ -535,7 +535,7 @@ function GroupChatInner() {
     if (reactRefused === 'left') markRoomLeft(roomId)
     else if (reactRefused === 'not_live') setNotLive(true)
     else if (lockFor(result.errorCode)) composer.apply(result.errorCode, undefined, result.error)
-    showToast(userMessage(result, "Couldn't add your reaction. Try again."), 'error')
+    showToast(userMessage(result, "Couldn't add your reaction. Try again."), 'error', { haptic: 'error' })
   }
 
   /* Back in, or the server's refusal in its own words; a room you were never in is its 404 (check in). */
@@ -547,7 +547,7 @@ function GroupChatInner() {
     if (!result.success) {
       const closed = roomKind ? roomClosedLine(roomKind, result.errorCode) : null
       if (closed) return setClosedLine(closed)
-      showToast(result.errorCode === 'NOT_FOUND' ? 'Check in at the event to join its room.' : userMessage(result, "Couldn't rejoin this room. Try again."), 'error')
+      showToast(result.errorCode === 'NOT_FOUND' ? 'Check in at the event to join its room.' : userMessage(result, "Couldn't rejoin this room. Try again."), 'error', { haptic: 'error' })
       return
     }
     markRoomJoined(roomId)

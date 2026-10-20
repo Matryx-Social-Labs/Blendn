@@ -88,7 +88,7 @@ export default function FriendProfileScreen() {
     const conversationId = friend.conversationId ?? (await apiClient.openFriendConversation(friend.userId)).data?.conversationId
     setOpening(false)
     if (!conversationId) {
-      showToast("The conversation didn't open. Try again.", 'error')
+      showToast("The conversation didn't open. Try again.", 'error', { haptic: 'error' })
       return
     }
     router.push({

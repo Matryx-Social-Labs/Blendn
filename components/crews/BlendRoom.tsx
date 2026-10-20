@@ -174,7 +174,7 @@ export function useBlendRoom(blendId: string | null, top: number): BlendRoomChro
     inFlight.current = false
     setRevealing(false)
     setAsking(false)
-    if (!result.success) return showToast(crewMessage(result, 'blend', 'Couldn’t reveal. Try again.'), 'error')
+    if (!result.success) return showToast(crewMessage(result, 'blend', 'Couldn’t reveal. Try again.'), 'error', { haptic: 'error' })
     H.success()
     if (myId) rememberReveal(myId, blend.blendId)
     // No toast: its "N revealed · M keep it private" needs the server's counts, which do not exist yet.

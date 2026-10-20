@@ -22,6 +22,7 @@ import {
 } from '../lib/photoUtils'
 import { Logger } from '../lib/logger'
 import { showSheet } from '../lib/sheet'
+import { minTarget } from './ds/shared'
 import { fadeOutFast } from './motion/presence'
 import { useToast } from './Toast'
 import { OptimizedImage } from './OptimizedImage'
@@ -156,7 +157,7 @@ export default function PhotoManager({ userId, maxPhotos = 6 }: PhotoManagerProp
           // The server's sentence when it gave one -- "That looks like a
           // blank image" says what to do; a generic retry does not.
           // (`reorderPhotos` curates it: the server's refusal, or its own line.)
-          showToast(saved.error, 'error')
+          showToast(saved.error, 'error', { haptic: 'error' })
           return
         }
         H.success()
@@ -170,11 +171,11 @@ export default function PhotoManager({ userId, maxPhotos = 6 }: PhotoManagerProp
          * for the person; everything else it returns ("Upload failed with
          * status 502") is not, and gets the app's sentence.
          */
-        showToast(/^Photo must be /.test(result.error) ? `${result.error}.` : "Couldn't upload that photo. Try again.", 'error')
+        showToast(/^Photo must be /.test(result.error) ? `${result.error}.` : "Couldn't upload that photo. Try again.", 'error', { haptic: 'error' })
       }
     } catch (error) {
       Logger.error('profile', 'PhotoManager: Add photo error', { error, userId })
-      showToast("Couldn't upload that photo. Try again.", 'error')
+      showToast("Couldn't upload that photo. Try again.", 'error', { haptic: 'error' })
     } finally {
       writing.current = false
       setUploading(false)
@@ -212,7 +213,7 @@ export default function PhotoManager({ userId, maxPhotos = 6 }: PhotoManagerProp
         const saved = await reorderPhotos(userId, reordered.map((p) => p.url), photos[0]?.url)
         if (!saved.ok) {
           setPhotos(photos)
-          showToast(saved.error, 'error')
+          showToast(saved.error, 'error', { haptic: 'error' })
           return
         }
         H.success()
@@ -255,7 +256,7 @@ export default function PhotoManager({ userId, maxPhotos = 6 }: PhotoManagerProp
               const saved = await reorderPhotos(userId, newPhotos.map(p => p.url), photos[0]?.url)
               if (!saved.ok) {
                 setPhotos(photos)
-                showToast(saved.error, 'error')
+                showToast(saved.error, 'error', { haptic: 'error' })
                 return
               }
 
@@ -269,7 +270,7 @@ export default function PhotoManager({ userId, maxPhotos = 6 }: PhotoManagerProp
               Logger.info('profile', 'PhotoManager: Photo removed', { userId, url: photo.url })
             } catch (error) {
               Logger.error('profile', 'PhotoManager: Remove photo error', { error, userId })
-              showToast("Couldn't remove that photo. Try again.", 'error')
+              showToast("Couldn't remove that photo. Try again.", 'error', { haptic: 'error' })
               // Reload photos to restore state
               setLoading(true)
               loadPhotos()
@@ -352,7 +353,7 @@ export default function PhotoManager({ userId, maxPhotos = 6 }: PhotoManagerProp
             disabled={busy}
             accessibilityRole="button"
             accessibilityLabel={`Remove photo ${index + 1}`}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            hitSlop={REMOVE_SLOP}
           >
             <Ionicons name="close-circle" size={ICON.lg} color={EMBER.destructive} />
           </TouchableOpacity>
@@ -432,6 +433,12 @@ export default function PhotoManager({ userId, maxPhotos = 6 }: PhotoManagerProp
     </View>
   )
 }
+
+/** The × glyph reaches the 44 pt iOS / 48 dp Android target. */
+const REMOVE_SLOP = (() => {
+  const slop = Math.max(0, (minTarget() - ICON.lg) / 2)
+  return { top: slop, bottom: slop, left: slop, right: slop }
+})()
 
 const styles = StyleSheet.create({
   container: {

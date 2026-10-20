@@ -83,7 +83,7 @@ export function useRoomControls(eventId: string | null, initiallyRevealed: boole
       if (!result.success) {
         setRevealed(!next)
         Logger.warn('match', 'reveal toggle refused', { error: result.error })
-        showToast(result.error || REVEAL_FAILED, 'error')
+        showToast(result.error || REVEAL_FAILED, 'error', { haptic: 'error' })
       } else if (typeof result.data?.revealed === 'boolean') {
         // The server's answer wins over the optimistic one.
         setRevealed(result.data.revealed)
@@ -91,7 +91,7 @@ export function useRoomControls(eventId: string | null, initiallyRevealed: boole
     } catch (e) {
       setRevealed(!next)
       Logger.error('match', 'reveal toggle failed', { error: e })
-      showToast(REVEAL_FAILED, 'error')
+      showToast(REVEAL_FAILED, 'error', { haptic: 'error' })
     } finally {
       setRevealBusy(false)
     }
@@ -118,11 +118,11 @@ export function useRoomControls(eventId: string | null, initiallyRevealed: boole
       const result = await checkOutOf(eventId)
       if (result.success) return true
       Logger.warn('presence', 'check out refused', { error: result.error })
-      showToast(result.error || CHECKOUT_FAILED, 'error')
+      showToast(result.error || CHECKOUT_FAILED, 'error', { haptic: 'error' })
       return false
     } catch (e) {
       Logger.error('presence', 'check out failed', { error: e })
-      showToast(CHECKOUT_FAILED, 'error')
+      showToast(CHECKOUT_FAILED, 'error', { haptic: 'error' })
       return false
     } finally {
       setCheckOutBusy(false)

@@ -134,7 +134,7 @@ describe('answering an ask', () => {
 
     await fireEvent.press(await screen.findByLabelText('Accept the request from Arctic Falcon'))
 
-    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Only the person who was asked can answer', 'error'))
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Only the person who was asked can answer', 'error', { haptic: 'error' }))
     expect(router.push).not.toHaveBeenCalled()
     expect(screen.getByText('Arctic Falcon')).toBeTruthy()
   })
@@ -169,7 +169,7 @@ describe('answering an ask', () => {
 
     await fireEvent.press(await screen.findByLabelText('Decline the request from Arctic Falcon'))
     expect(await screen.findByText('Arctic Falcon')).toBeTruthy()
-    expect(mockShowToast).toHaveBeenCalledWith('No internet connection. Check your network and try again.', 'error')
+    expect(mockShowToast).toHaveBeenCalledWith('No internet connection. Check your network and try again.', 'error', { haptic: 'error' })
   })
 
   it('answers once for two taps', async () => {

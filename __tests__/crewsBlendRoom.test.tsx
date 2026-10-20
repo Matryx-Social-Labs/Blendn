@@ -213,7 +213,7 @@ describe('revealing', () => {
     await open()
     await fireEvent.press(screen.getByLabelText('Reveal my crew'))
     await fireEvent.press(screen.getByLabelText('Reveal Two'))
-    await waitFor(() => expect(mockToast).toHaveBeenCalledWith('This Blend has closed.', 'error'))
+    await waitFor(() => expect(mockToast).toHaveBeenCalledWith('This Blend has closed.', 'error', { haptic: 'error' }))
     expect(screen.getByLabelText('Reveal my crew')).toBeTruthy()
   })
 

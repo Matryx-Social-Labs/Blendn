@@ -150,7 +150,7 @@ export default function CrewInviteScreen() {
     const result = await crewsApi.decline(crewId)
     inFlight.current = false
     if (!result.success && result.errorCode !== 'NOT_FOUND') {
-      showToast(crewMessage(result, 'join', 'Couldn’t decline. Try again.'), 'error')
+      showToast(crewMessage(result, 'join', 'Couldn’t decline. Try again.'), 'error', { haptic: 'error' })
       return
     }
     // Told to nobody, and a gone invite is as good as declined.

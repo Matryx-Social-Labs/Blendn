@@ -276,7 +276,7 @@ export default function RatePeers() {
         if (!res.success) {
           setEventRating(null)
           Logger.warn('events', 'Event rating refused', { error: res.error })
-          showToast(SAVE_FAILED, 'error')
+          showToast(SAVE_FAILED, 'error', { haptic: 'error' })
           return
         }
         setSent((s) => s + 1)
@@ -285,7 +285,7 @@ export default function RatePeers() {
       } catch (e) {
         Logger.error('events', 'Failed to rate the event', { error: e })
         setEventRating(null)
-        showToast(SAVE_FAILED, 'error')
+        showToast(SAVE_FAILED, 'error', { haptic: 'error' })
       } finally {
         setSubmitting(false)
       }
@@ -308,7 +308,7 @@ export default function RatePeers() {
       })
       if (!res.success) {
         Logger.warn('match', 'Peer rating refused', { error: res.error })
-        showToast(SAVE_FAILED, 'error')
+        showToast(SAVE_FAILED, 'error', { haptic: 'error' })
         return
       }
       setSent((s) => s + 1)
@@ -316,7 +316,7 @@ export default function RatePeers() {
       advance()
     } catch (e) {
       Logger.error('match', 'Failed to submit peer rating', { error: e })
-      showToast(SAVE_FAILED, 'error')
+      showToast(SAVE_FAILED, 'error', { haptic: 'error' })
     } finally {
       setSubmitting(false)
     }

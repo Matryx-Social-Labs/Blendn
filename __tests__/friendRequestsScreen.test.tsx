@@ -53,7 +53,7 @@ it('accepts from the list', async () => {
 
   await waitFor(() => expect(api.respondToFriendRequest).toHaveBeenCalledWith('req-ben', 'accept'))
   expect(await screen.findByText('No requests')).toBeTruthy()
-  expect(mockShowToast).toHaveBeenCalledWith('You and Ben are friends', 'success')
+  expect(mockShowToast).toHaveBeenCalledWith('You and Ben are friends', 'success', { haptic: 'success' })
 })
 
 it('does not call a failed load "No requests"', async () => {

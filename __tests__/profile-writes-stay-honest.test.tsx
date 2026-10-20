@@ -63,7 +63,7 @@ describe('adding a photo', () => {
 
     await waitFor(() => expect(pu.reorderPhotos).toHaveBeenCalledWith('u', ['https://cdn/a.jpg', 'https://cdn/b.jpg', 'https://cdn/c.jpg'], 'https://cdn/a.jpg'))
     // The server's own sentence, not a generic retry.
-    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('That looks like a blank image. Pick a photo of yourself.', 'error'))
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('That looks like a blank image. Pick a photo of yourself.', 'error', { haptic: 'error' }))
     // Two tiles, not three: the one the server does not have is not shown.
     expect(screen.getAllByLabelText(/^Photo \d of/)).toHaveLength(2)
   })
@@ -100,7 +100,7 @@ describe('making a photo the main one', () => {
     await screen.findByLabelText('Photo 2 of 2')
     fireEvent.press(screen.getAllByLabelText('Make this my main photo')[0])
 
-    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Could not save your photos', 'error'))
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Could not save your photos', 'error', { haptic: 'error' }))
     // The grid is back to what the server holds: a first, b second.
     const tiles = screen.getAllByLabelText(/^Photo \d of 2/)
     expect(tiles[0].props.accessibilityLabel).toBe('Photo 1 of 2, main photo')
@@ -122,7 +122,7 @@ describe('removing a photo', () => {
     fireEvent.press(screen.getByLabelText('Remove photo 2'))
     confirmRemove()
 
-    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('That looks like a blank image. Pick a photo of yourself.', 'error'))
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('That looks like a blank image. Pick a photo of yourself.', 'error', { haptic: 'error' }))
     expect(pu.deletePhoto).not.toHaveBeenCalled()
     expect(screen.getAllByLabelText(/^Photo \d of/)).toHaveLength(2)
   })

@@ -129,7 +129,7 @@ it("shows the server's sentence when a save is refused, and stays on the screen"
   await fireEvent.press(await screen.findByRole('button', { name: /^Making friends/ }))
   await fireEvent.press(screen.getByRole('button', { name: 'Save' }))
 
-  await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Dating is for 18+', 'error'))
+  await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Dating is for 18+', 'error', { haptic: 'error' }))
   expect(router.back).not.toHaveBeenCalled()
 })
 
@@ -139,7 +139,7 @@ it('says it could not save when a refusal carries no sentence', async () => {
   await fireEvent.press(await screen.findByRole('button', { name: /^Making friends/ }))
   await fireEvent.press(screen.getByRole('button', { name: 'Save' }))
 
-  await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Could not save. Try again.', 'error'))
+  await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Could not save. Try again.', 'error', { haptic: 'error' }))
   expect(router.back).not.toHaveBeenCalled()
 })
 

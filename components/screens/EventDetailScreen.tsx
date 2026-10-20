@@ -534,8 +534,7 @@ export default function EventDetail() {
       }
       setUserInterested(result.data.interested)
       setInterestCount(result.data.interestCount || 0)
-      // Outcome after truth: a save the server kept. Taking one back is silent.
-      if (result.data.interested) H.success()
+      // Saving is silent everywhere (the heart's fill is the cue); only a refusal buzzes (above).
     } catch {
       H.error()
       showTray("Couldn't save the event", 'Try again.')

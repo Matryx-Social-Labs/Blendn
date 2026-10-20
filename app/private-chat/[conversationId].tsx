@@ -212,7 +212,7 @@ function PrivateChatInner() {
       .requestReveal(conversation)
       .then((r) => {
         if (r.success) setAsked(true)
-        else showToast(userMessage(r, "Couldn't ask them. Try again."), 'error')
+        else showToast(userMessage(r, "Couldn't ask them. Try again."), 'error', { haptic: 'error' })
       })
       .finally(() => setRevealBusy(false))
   }

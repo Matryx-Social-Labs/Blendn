@@ -183,13 +183,13 @@ export default function EventPreferences() {
       if (!res.success) {
         // The server's sentence when it has one — "Dating is for 18+" is
         // actionable; "could not save" is not.
-        showToast(res.error || 'Could not save. Try again.', 'error')
+        showToast(res.error || 'Could not save. Try again.', 'error', { haptic: 'error' })
         return
       }
       router.back()
     } catch (e) {
       Logger.error('match', 'Failed to save match preferences', { error: e })
-      showToast('Could not save. Try again.', 'error')
+      showToast('Could not save. Try again.', 'error', { haptic: 'error' })
     } finally {
       setSaving(false)
     }

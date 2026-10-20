@@ -357,7 +357,8 @@ function UserProfileInner() {
         setLiked(false)
         // Said, the way the room says it: about the room or the network, never about them.
         const refusal = likeRefusal(result.errorCode, result.error)
-        showToast(refusal.message, refusal.variant)
+        if (refusal.variant === 'error') showToast(refusal.message, 'error', { haptic: 'error' })
+        else showToast(refusal.message, refusal.variant)
         return
       }
       if (result.data?.mutual && result.data.conversationId) {
@@ -370,7 +371,7 @@ function UserProfileInner() {
     } catch (e) {
       setLiked(false)
       Logger.error('profile', 'like failed', { error: e })
-      showToast("That didn't go through. Try again.", 'error')
+      showToast("That didn't go through. Try again.", 'error', { haptic: 'error' })
     } finally {
       setLikeBusy(false)
     }
@@ -398,11 +399,11 @@ function UserProfileInner() {
         setConnectOpen(false)
       } else {
         Logger.warn('profile', 'connect request failed', { error: result.error })
-        showToast("Your request didn't send. Try again.", 'error')
+        showToast("Your request didn't send. Try again.", 'error', { haptic: 'error' })
       }
     } catch (e) {
       Logger.error('profile', 'connect request error', { error: e })
-      showToast("Your request didn't send. Try again.", 'error')
+      showToast("Your request didn't send. Try again.", 'error', { haptic: 'error' })
     } finally {
       setConnectSending(false)
     }

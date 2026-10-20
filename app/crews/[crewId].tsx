@@ -126,7 +126,7 @@ export default function CrewScreen() {
     setBusy('anon')
     const result = await crewsApi.setKeepMeAnonymous(crewId, myId, next)
     setBusy(null)
-    if (!result.success || !result.data) return showToast(crewMessage(result, 'crew', 'Couldn’t save that. Try again.'), 'error')
+    if (!result.success || !result.data) return showToast(crewMessage(result, 'crew', 'Couldn’t save that. Try again.'), 'error', { haptic: 'error' })
     const keep = result.data.keepMeAnonymous
     patchCrew((c) => ({ ...c, you: c.you ? { ...c.you, keepMeAnonymous: keep } : c.you }))
   }
@@ -137,7 +137,7 @@ export default function CrewScreen() {
     setBusy('mute')
     const result = next ? await apiClient.muteChatGroup(roomId, null) : await apiClient.unmuteChatGroup(roomId)
     setBusy(null)
-    if (!result.success || !result.data) return showToast(userMessage(result, 'Couldn’t save that. Try again.'), 'error')
+    if (!result.success || !result.data) return showToast(userMessage(result, 'Couldn’t save that. Try again.'), 'error', { haptic: 'error' })
     rememberRoomMute(roomId, result.data.mute)
   }
 
@@ -160,7 +160,7 @@ export default function CrewScreen() {
     setBusy('invite')
     const result = await crewsApi.invite(crewId, userIds)
     setBusy(null)
-    if (!result.success || !result.data) return showToast(crewMessage(result, 'crew', 'Couldn’t send the invites. Try again.'), 'error')
+    if (!result.success || !result.data) return showToast(crewMessage(result, 'crew', 'Couldn’t send the invites. Try again.'), 'error', { haptic: 'error' })
     setInviting(null)
     // `invited` is how many you asked for, never who got one.
     showToast(result.data.invited === 1 ? 'Asked 1 friend' : `Asked ${result.data.invited} friends`, 'success')
@@ -176,7 +176,7 @@ export default function CrewScreen() {
       const text = crewMessage(result, 'crew', 'Couldn’t save that. Try again.')
       const field = textFieldOf(text, result.field)
       if (field) setEditError({ field, text })
-      else showToast(text, 'error')
+      else showToast(text, 'error', { haptic: 'error' })
       return
     }
     const fresh = result.data
