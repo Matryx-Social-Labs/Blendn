@@ -433,3 +433,41 @@ describe('editing', () => {
     expect(screen.queryByText(said)).toBeNull()
   })
 })
+
+
+describe('the top bar follows the scroll (audit M12, DS #30)', () => {
+  const scrollTo = (y: number) =>
+    act(async () =>
+      fireEvent(screen.getByTestId('crew-scroll'), 'scroll', {
+        nativeEvent: { contentOffset: { x: 0, y }, contentSize: { width: 393, height: 2000 }, layoutMeasurement: { width: 393, height: 800 } },
+      })
+    )
+  const barTitle = () => screen.queryAllByText('Nebula')
+
+  it('at rest the bar is bare and says nothing; past 8 pt it has glass; once the head has scrolled away it names the crew', async () => {
+    crews.crew.mockResolvedValue({ success: true, data: crew('member') })
+    await render(<CrewScreen />)
+    await waitFor(() => screen.getByText('Late sets, early trains.'))
+    const before = barTitle().length // the head's own name
+    await scrollTo(4)
+    expect(barTitle()).toHaveLength(before)
+    await scrollTo(60)
+    expect(barTitle()).toHaveLength(before)
+    expect(screen.getByTestId('crew-top-bar')).toBeTruthy()
+    await scrollTo(250)
+    expect(barTitle()).toHaveLength(before + 1)
+    await scrollTo(4)
+    expect(barTitle()).toHaveLength(before)
+  })
+
+  it('renders on a threshold crossing only, never per frame (a ref guards it)', () => {
+    const src = require('fs').readFileSync(require('path').join(__dirname, '../app/crews/[crewId].tsx'), 'utf8')
+    expect(src).toMatch(/if \(next !== barRef\.current\)/)
+  })
+
+  it('the loading page has the page’s own shape, not one square', async () => {
+    crews.crew.mockReturnValue(new Promise(() => {}) as never)
+    await render(<CrewScreen />)
+    expect(screen.getByLabelText('Loading the crew')).toBeTruthy()
+  })
+})

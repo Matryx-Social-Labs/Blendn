@@ -1,6 +1,7 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
-import { useCallback, useState, type ReactNode } from 'react'
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { useCallback, useRef, useState, type ReactNode } from 'react'
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native'
+import Animated from 'react-native-reanimated'
 
 import { CrewHead } from '../../components/crews/CrewHead'
 import { CrewMembers } from '../../components/crews/CrewMembers'
@@ -13,7 +14,8 @@ import { SectionHeader } from '../../components/ds/SectionHeader'
 import { SettingsRow } from '../../components/ds/SettingsRow'
 import { font, useBoldText } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
-import { TopBar } from '../../components/ds/TopBar'
+import { TopBar, type TopBarState } from '../../components/ds/TopBar'
+import { useSkeletonCrossfade } from '../../components/motion/useSkeletonCrossfade'
 import { SkeletonBlock } from '../../components/Skeleton'
 import { useToast } from '../../components/Toast'
 import { apiClient } from '../../lib/apiClient'
@@ -29,7 +31,7 @@ import {
   type CrewReportReason,
 } from '../../lib/crews'
 import { crewsApi, type CrewPatch } from '../../lib/crewsApi'
-import { leaveSheet, removeSheet, textFieldOf } from '../../lib/crewsScreens'
+import { crewBarState, leaveSheet, removeSheet, textFieldOf } from '../../lib/crewsScreens'
 import { COLOR, RADIUS, SPACE } from '../../lib/design/tokens'
 import type { Friend } from '../../lib/friends'
 import { isMuted, rememberRoomMute, useRoomMute } from '../../lib/roomMembership'
@@ -44,6 +46,12 @@ type Load = { kind: 'loading' } | { kind: 'ready'; crew: Crew } | { kind: 'gone'
 // design-exception: the frame's column gap is 20, between the 16 and 24 steps
 const SECTION_GAP = 20
 const HEAD_SKELETON = 160
+/** The head's name and line, and the two rows under them. */
+const SKELETON_NAME = 200
+const SKELETON_NAME_H = 24
+const SKELETON_LINE = 260
+const SKELETON_LINE_H = 17
+const SKELETON_ROW = 56
 const LEAVE_HEIGHT = 56
 const HIDDEN_LINE = 'This crew is hidden while we look at a report. Only its members can see it.'
 const REPORT_SENT = 'Reported. Thanks — nobody is told it was you.'
@@ -66,11 +74,23 @@ export default function CrewScreen() {
   const [refreshing, setRefreshing] = useState(false)
   const [busy, setBusy] = useState<'anon' | 'mute' | 'invite' | 'edit' | null>(null)
   const [menu, setMenu] = useState(false)
+  // The bar's glass and the crew's name in it follow the scroll: a render per threshold crossing, never per frame.
+  const [barState, setBarState] = useState<TopBarState>('rest')
+  const barRef = useRef<TopBarState>('rest')
+  const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const next = crewBarState(e.nativeEvent.contentOffset.y)
+    if (next !== barRef.current) {
+      barRef.current = next
+      setBarState(next)
+    }
+  }
   const [inviting, setInviting] = useState<{ friends: Friend[] | null | 'failed' } | null>(null)
   const [editing, setEditing] = useState(false)
   const [editError, setEditError] = useState<{ field: 'name' | 'bio'; text: string } | null>(null)
 
   const crew = load.kind === 'ready' ? load.crew : null
+  // The page fades in over the skeleton only if a skeleton was drawn (a load under 300 ms just shows the page).
+  const arrive = useSkeletonCrossfade(load.kind === 'loading')
   const owner = crew?.you?.role === 'owner'
   // The room's own row fills the mute store; every screen reads the one answer.
   useRoomRow(crew?.chatGroupId ?? null)
@@ -251,13 +271,24 @@ export default function CrewScreen() {
           testID="crew-failed"
         />
       ) : (
-        <View style={styles.skeleton} accessibilityLabel="Loading the crew">
-          <SkeletonBlock width={HEAD_SKELETON} height={HEAD_SKELETON} borderRadius={RADIUS.card} />
+        <View style={styles.skeletonPage} accessibilityLabel="Loading the crew">
+          {/* The page's own shape (DS #17): the emblem, the name, a line, then two rows. */}
+          <View style={styles.skeleton}>
+            <SkeletonBlock width={HEAD_SKELETON} height={HEAD_SKELETON} borderRadius={RADIUS.card} />
+          </View>
+          <View style={styles.skeleton}>
+            <SkeletonBlock width={SKELETON_NAME} height={SKELETON_NAME_H} borderRadius={RADIUS.thumb} />
+          </View>
+          <View style={styles.skeleton}>
+            <SkeletonBlock width={SKELETON_LINE} height={SKELETON_LINE_H} borderRadius={RADIUS.thumb} />
+          </View>
+          <SkeletonBlock height={SKELETON_ROW} borderRadius={RADIUS.sheet} />
+          <SkeletonBlock height={SKELETON_ROW} borderRadius={RADIUS.sheet} />
         </View>
       )
   } else {
     body = (
-      <>
+      <Animated.View entering={arrive} style={styles.page}>
         {crew.hidden ? <Banner kind="info" text={HIDDEN_LINE} testID="crew-hidden" /> : null}
         <CrewHead crew={crew} />
         <View style={styles.section}>
@@ -310,20 +341,23 @@ export default function CrewScreen() {
         <Pressable onPress={confirmLeave} accessibilityRole="button" accessibilityLabel="Leave crew" style={styles.leave}>
           <Text style={[font('button', bold), styles.destructive]}>Leave crew</Text>
         </Pressable>
-      </>
+      </Animated.View>
     )
   }
 
   return (
     <View style={styles.container}>
       <TopBar
-        title=""
+        title={crew && barState === 'condensed' ? crew.name : ''}
+        state={barState}
         onBack={() => router.back()}
         actions={crew ? [{ icon: 'ellipsis', label: 'More', onPress: () => setMenu(true) }] : []}
         testID="crew-top"
       />
       <ScrollView
         testID="crew-scroll"
+        onScroll={onScroll}
+        scrollEventThrottle={16}
         contentContainerStyle={[styles.content, crew ? null : styles.centred]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLOR.textSecondary} />}
         showsVerticalScrollIndicator={false}
@@ -371,6 +405,8 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.sm, paddingBottom: SPACE.xxl, gap: SECTION_GAP },
   centred: { flexGrow: 1, justifyContent: 'center' },
   skeleton: { alignItems: 'center' },
+  skeletonPage: { gap: SPACE.lg },
+  page: { gap: SECTION_GAP },
   section: { gap: SPACE.md },
   leave: { minHeight: LEAVE_HEIGHT, alignItems: 'center', justifyContent: 'center' },
   destructive: { color: COLOR.destructive },

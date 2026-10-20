@@ -278,7 +278,10 @@ describe('step 3 · consent', () => {
     crews.crew.mockResolvedValue({ success: true, data: { crewId: 'c1', emblemSeed: 'real-seed' } as never })
     await toConsent()
     await press('Make the crew')
-    await waitFor(() => expect(screen.queryByTestId('make-emblem-pending')).toBeNull())
+    await waitFor(() => screen.getByTestId('make-emblem'))
+    // The placeholder stays underneath: the emblem fades in over it, not instead of it.
+    expect(screen.getByTestId('make-emblem-pending')).toBeTruthy()
+    expect(screen.getByTestId('make-emblem').props.entering).toBeDefined()
   })
 
   it('two fast taps on Make the crew send one create', async () => {

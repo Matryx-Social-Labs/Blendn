@@ -10,6 +10,8 @@ import {
   rememberReveal,
   revealRemembered,
   closesAtLine,
+  CREW_HEAD_HEIGHT,
+  crewBarState,
   closingSoon,
   CREW_NAME_ERROR,
   crewRowSub,
@@ -303,5 +305,16 @@ describe('a side as RevealSide draws it', () => {
     const solo = side({ kind: 'person', crewId: null, name: null, emblemSeed: null, mine: true, count: 1, revealed: null, keptPrivate: null, people: [person('me', 'Cosmic Panda', 'Sam', 's.jpg')] })
     expect(sideShape(solo, 'me').side).toEqual({ kind: 'person', name: 'You', pseudonym: 'Cosmic Panda' })
     expect(sideShape(solo, 'me').status).toBe('1 on tonight’s names')
+  })
+})
+
+describe('the crew page’s bar', () => {
+  it('is bare at rest, glass past 8 pt, and condensed once the head has gone', () => {
+    expect(crewBarState(0)).toBe('rest')
+    expect(crewBarState(8)).toBe('rest')
+    expect(crewBarState(9)).toBe('scrolled')
+    expect(crewBarState(CREW_HEAD_HEIGHT)).toBe('scrolled')
+    expect(crewBarState(CREW_HEAD_HEIGHT + 1)).toBe('condensed')
+    expect(crewBarState(-40)).toBe('rest')
   })
 })

@@ -1,6 +1,7 @@
 import { router, useFocusEffect } from 'expo-router'
 import { useCallback, useState, type ReactNode } from 'react'
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
+import Animated from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { InviteRow } from '../../components/crews/InviteRow'
@@ -11,6 +12,7 @@ import { SectionHeader } from '../../components/ds/SectionHeader'
 import { font, useBoldText } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { TopBar } from '../../components/ds/TopBar'
+import { useSkeletonCrossfade } from '../../components/motion/useSkeletonCrossfade'
 import { SkeletonBlock } from '../../components/Skeleton'
 import { type Crew, type CrewInvite } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
@@ -46,6 +48,8 @@ export default function CrewsScreen() {
   const insets = useSafeAreaInsets()
   const [load, setLoad] = useState<Load>({ kind: 'loading' })
   const [refreshing, setRefreshing] = useState(false)
+  // The list fades in over its skeleton only if one was drawn (a wait under 300 ms shows no skeleton).
+  const arrive = useSkeletonCrossfade(load.kind === 'loading')
 
   const read = useCallback(async () => {
     const result = await crewsApi.myCrews()
@@ -107,7 +111,7 @@ export default function CrewsScreen() {
   } else {
     const rows = inviteRows(load.invites)
     body = (
-      <View style={styles.sections}>
+      <Animated.View entering={arrive} style={styles.sections}>
         {rows.length ? (
           <View style={styles.section}>
             <SectionHeader title="Invites" count={rows.length} />
@@ -136,7 +140,7 @@ export default function CrewsScreen() {
             <Text style={[font('meta', bold), styles.footnote]}>{FOOTNOTE}</Text>
           </View>
         ) : null}
-      </View>
+      </Animated.View>
     )
   }
 

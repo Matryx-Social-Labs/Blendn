@@ -1,8 +1,10 @@
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
+import Animated, { withSpring, withTiming } from 'react-native-reanimated'
 
 import { Icon } from '../ui/Icon'
-import { COLOR, ICON, MATERIAL, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, ICON, MATERIAL, RADIUS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
+import { useReducedMotion } from '../../lib/motion'
 import { ACHIEVEMENT, AchievementBadge, type AchievementKind } from './AchievementBadge'
 import { Button } from './Button'
 import { Chip } from './Chip'
@@ -148,19 +150,43 @@ export function CrewCard({
   )
 }
 
+/**
+ * DS #15: Like becomes Liked at t0 (the swap), then M.pop 0.85 → 1 over the new plate. Never from nothing (0.85, not 0), and
+ * under Reduce Motion a 180 ms fade in place. The haptic is the press-in's own (`H.like`).
+ */
+export const popIn = (reduceMotion: boolean) => () => {
+  'worklet'
+  return {
+    initialValues: { opacity: reduceMotion ? 0 : 1, transform: [{ scale: reduceMotion ? 1 : 0.85 }] },
+    animations: {
+      opacity: withTiming(1, { duration: 180 }),
+      transform: [{ scale: withSpring(1, SPRING.pop) }],
+    },
+  }
+}
+
 function LikeButton({ like }: { like: CrewLike }) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
+  const reduceMotion = useReducedMotion()
   if (!like.liked) return <Button kind="primary" label={like.as ? `Like for ${like.as}` : 'Like'} pressHaptic={H.like} onPress={like.onPress} />
   const text = like.as ? `Liked for ${like.as}` : 'Liked'
   // Settled: words in the button's place, not a button (a second like does nothing, §10.2).
   return (
-    <View accessible accessibilityRole="text" accessibilityLabel={text} style={[styles.liked, contrast && IC_HAIRLINE]}>
+    <Animated.View
+      testID="crew-liked"
+      entering={popIn(reduceMotion)}
+      accessible
+      accessibilityRole="text"
+      accessibilityLabel={text}
+      style={[styles.liked, contrast && IC_HAIRLINE]}
+    >
       <Icon name="check" size={ICON.control} active />
-      <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('button', bold), styles.ink]}>
+      {/* A legal 32-character crew name at 1.3× wraps to a second line rather than clipping in the plate. */}
+      <Text numberOfLines={2} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('button', bold), styles.ink, styles.likedText]}>
         {text}
       </Text>
-    </View>
+    </Animated.View>
   )
 }
 
@@ -229,7 +255,9 @@ const styles = StyleSheet.create({
   clearMore: { paddingRight: MORE },
   meta: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: SPACE.sm },
   liked: {
-    height: SIZE.primary,
+    minHeight: SIZE.primary,
+    paddingHorizontal: SPACE.lg,
+    paddingVertical: SPACE.sm,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -237,6 +265,7 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.button,
     backgroundColor: COLOR.surface,
   },
+  likedText: { flexShrink: 1, textAlign: 'center' },
   overlap: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   more: {
     position: 'absolute',

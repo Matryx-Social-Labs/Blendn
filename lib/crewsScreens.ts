@@ -355,3 +355,20 @@ export function sideShape(side: BlendSide, myId: string | null | undefined, reve
     status: shown ? 'Revealed' : `${side.count} on tonight’s names`,
   }
 }
+
+/* -------------------------------------------------------------------------- */
+/* The crew page's top bar                                                    */
+/* -------------------------------------------------------------------------- */
+
+export type CrewBarState = 'rest' | 'scrolled' | 'condensed'
+
+/** The head's height: the 160 emblem, the 10 gap and the 30-line title. Once it has scrolled under the bar, the bar names the crew. */
+export const CREW_HEAD_HEIGHT = 200
+/** Glass appears once the content has moved this far (DS #30: 8 pt). */
+export const CREW_BAR_GLASS_AT = 8
+
+/** The bar's state at a scroll offset: bare, glass behind, then the crew's name condensed in it. */
+export function crewBarState(offsetY: number): CrewBarState {
+  if (offsetY > CREW_HEAD_HEIGHT) return 'condensed'
+  return offsetY > CREW_BAR_GLASS_AT ? 'scrolled' : 'rest'
+}

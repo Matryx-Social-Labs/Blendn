@@ -1,6 +1,7 @@
 import { router } from 'expo-router'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
+import Animated, { FadeOut } from 'react-native-reanimated'
 import Svg, { Path } from 'react-native-svg'
 
 import { apiClient } from '../../lib/apiClient'
@@ -17,8 +18,9 @@ import {
   revealRemembered,
   sideShape,
 } from '../../lib/crewsScreens'
-import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, DURATION, FONT_FAMILY, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
+import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { closesLine } from '../../lib/crews'
 import { markRoomLeft } from '../../lib/roomMembership'
 import { showSheet, type Sheet, type SheetOutcome } from '../../lib/sheet'
@@ -119,6 +121,8 @@ export function useBlendRoom(blendId: string | null, top: number): BlendRoomChro
   const myId = user?.id
   const bold = useBoldText()
   const { showToast } = useToast()
+  const reduceMotion = useReducedMotion()
+  const cardOut = FadeOut.duration(reduceMotion ? motionTokens(true).duration.base : DURATION.quick)
   const { blends, reload } = useBlends(!!blendId)
   const [menu, setMenu] = useState(false)
   const [asking, setAsking] = useState(false)
@@ -263,7 +267,8 @@ export function useBlendRoom(blendId: string | null, top: number): BlendRoomChro
         </Text>
       ) : null}
       {coach.visible ? (
-        <View style={styles.card} testID="blend-first-open">
+        // "Got it" and Leave take it away with a fade (200 under Reduce Motion); the feed's top inset follows its height a frame later.
+        <Animated.View style={styles.card} testID="blend-first-open" exiting={cardOut}>
           <View style={styles.well}>
             <Icon name="users" size={ICON.nav} />
           </View>
@@ -275,7 +280,7 @@ export function useBlendRoom(blendId: string | null, top: number): BlendRoomChro
             <Button kind="strong" size="md" label="Got it" pressHaptic={false} onPress={() => markCoachUsed('blend_first_open')} style={styles.flex} />
             <Button kind="secondary" size="md" label="Leave" onPress={leave} style={styles.flex} />
           </View>
-        </View>
+        </Animated.View>
       ) : null}
     </View>
   ) : null

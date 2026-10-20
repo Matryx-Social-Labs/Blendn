@@ -177,17 +177,22 @@ function Tile({ person, order, testID }: { person: RevealPerson; order: number; 
   useEffect(() => {
     if (photo.current === person.photo) return
     photo.current = person.photo
-    const to = person.photo ? 1 : 0
-    if (reduceMotion) shown.set(to)
-    else shown.set(withDelay(order * STAGGER.loose, withTiming(to, { duration: motionTokens(reduceMotion).duration.base, easing: Easing.bezier(...EASING.standard) })))
-  }, [person.photo, order, reduceMotion, shown])
+    // A photo that has not decoded yet waits at 0 for `onLoad` (below); only taking one away is immediate.
+    if (!person.photo) shown.set(0)
+  }, [person.photo, shown])
+  // The tween starts when the image has loaded, so a cold cache never fades to an empty tile and then pops the photo in.
+  const loaded = () => {
+    if (shown.get() === 1) return
+    if (reduceMotion) shown.set(1)
+    else shown.set(withDelay(order * STAGGER.loose, withTiming(1, { duration: motionTokens(reduceMotion).duration.base, easing: Easing.bezier(...EASING.standard) })))
+  }
   const photoStyle = useAnimatedStyle(() => ({ opacity: shown.get() }))
   return (
     <View testID={testID} style={styles.tile} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
       <Creature {...creatureFor(person.pseudonym)} size={TILE} />
       {person.photo ? (
         <Animated.View style={[StyleSheet.absoluteFill, styles.photo, photoStyle]}>
-          <Image source={{ uri: person.photo }} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} />
+          <Image source={{ uri: person.photo }} onLoad={loaded} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} />
         </Animated.View>
       ) : null}
     </View>

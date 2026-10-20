@@ -1,8 +1,8 @@
 import { useEffect } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
+import Animated, { Easing, FadeIn, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated'
 
-import { COLOR, EASING, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, RADIUS, SPACE, SPRING } from '../../lib/design/tokens'
 import { madeLine } from '../../lib/crewsScreens'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { CrewEmblem } from '../ds/CrewEmblem'
@@ -20,18 +20,22 @@ const TEXT_GAP = 6
  * The crew is made (Flow 10 · 10.2, Success): the emblem appears, the name in
  * the moment role, "Your crew. 3 invited; it starts when someone joins.", and
  * "The crew chat opens next." It stays until Continue (or a tap anywhere).
- * Under Reduce Motion the emblem is simply there.
+ * The emblem settles in from 0.8 and fades; the real one crossfades over the
+ * placeholder. Under Reduce Motion: a fade, no scale.
  */
 export function MadeBeat({ name, emblemSeed, invited, onContinue }: { name: string; emblemSeed: string | null; invited: number; onContinue: () => void }) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const reduceMotion = useReducedMotion()
   const scale = useSharedValue(reduceMotion ? 1 : FROM_SCALE)
+  const opacity = useSharedValue(0)
   useEffect(() => {
-    if (reduceMotion) return
-    scale.set(withTiming(1, { duration: motionTokens(false).duration.base, easing: Easing.bezier(...EASING.standard) }))
-  }, [reduceMotion, scale])
-  const emblem = useAnimatedStyle(() => ({ transform: [{ scale: scale.get() }] }))
+    // It fades in under Reduce Motion too (gentler, not zero); the scale is the only thing that goes.
+    opacity.set(withTiming(1, { duration: motionTokens(reduceMotion).duration.base, easing: Easing.bezier(...EASING.gentle) }))
+    // A settle, critically damped: no gesture carried momentum into this, so nothing should overshoot.
+    if (!reduceMotion) scale.set(withSpring(1, SPRING.settle))
+  }, [reduceMotion, scale, opacity])
+  const emblem = useAnimatedStyle(() => ({ opacity: opacity.get(), transform: [{ scale: scale.get() }] }))
   return (
     <Pressable
       testID="make-done"
@@ -42,7 +46,13 @@ export function MadeBeat({ name, emblemSeed, invited, onContinue }: { name: stri
     >
       <View style={styles.column}>
         <Animated.View style={emblem}>
-          {emblemSeed ? <CrewEmblem seed={emblemSeed} size={EMBLEM} /> : <View testID="make-emblem-pending" style={styles.pending} />}
+          {/* The quiet square stays under the emblem, which fades in over it when the server's seed arrives: no cut. */}
+          <View testID="make-emblem-pending" style={styles.pending} />
+          {emblemSeed ? (
+            <Animated.View testID="make-emblem" entering={FadeIn.duration(DURATION.base)} style={styles.emblem}>
+              <CrewEmblem seed={emblemSeed} size={EMBLEM} />
+            </Animated.View>
+          ) : null}
         </Animated.View>
         <View style={styles.text}>
           <Text style={[font('moment', bold), styles.centre, styles.ink]} numberOfLines={2} adjustsFontSizeToFit>
@@ -59,6 +69,7 @@ export function MadeBeat({ name, emblemSeed, invited, onContinue }: { name: stri
 const styles = StyleSheet.create({
   fill: { flex: 1, justifyContent: 'center' },
   /** The emblem's place while the server's seed is on its way: the same square, quiet. */
+  emblem: { position: 'absolute', top: 0, left: 0, width: EMBLEM, height: EMBLEM },
   pending: { width: EMBLEM, height: EMBLEM, borderRadius: RADIUS.card, backgroundColor: COLOR.surface },
   column: { alignItems: 'center', gap: COLUMN_GAP, paddingVertical: SPACE.xxl },
   text: { alignItems: 'center', gap: TEXT_GAP },

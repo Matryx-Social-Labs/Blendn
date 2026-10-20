@@ -368,6 +368,13 @@ describe('around the room', () => {
     expect(markCoachUsed).toHaveBeenCalledWith('blend_first_open')
   })
 
+  it('the card leaves with a fade rather than a cut (audit L12)', async () => {
+    mockCoachVisible = true
+    serve(blend())
+    await open()
+    expect(screen.getByTestId('blend-first-open').props.exiting).toBeDefined()
+  })
+
   it('no card once it has been seen', async () => {
     serve(blend())
     await open()
