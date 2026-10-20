@@ -141,3 +141,31 @@ describe('a tap outside the search closes the keyboard', () => {
     expect(stripComments(read('components/home/HomeDrawer.tsx'))).toContain('<View style={styles.header} onTouchStart={onChromeTouch}>')
   })
 })
+
+describe('the sticky search', () => {
+  it('the search is data row 0, pinned under the title header, and is in the list in every state (loading too)', () => {
+    const src = SCREEN()
+    // The title header is cell 0, the search (row 0) cell 1.
+    expect(src).toContain('const STICKY_SEARCH = [1]')
+    expect(src).toContain('stickyHeaderIndices={STICKY_SEARCH}')
+    expect(src).toContain("const LEAD: PulseRow[] = [{ kind: 'search', key: 'search' }, { kind: 'body', key: 'body' }]")
+    // Loading shows the lead rows only: the field outlives the thing it searches.
+    expect(src).toContain('showLoadingSkeleton ? LEAD : [...LEAD, ...rows]')
+  })
+
+  it('the header holds only the title: the search is not in ListHeaderComponent', () => {
+    const src = SCREEN()
+    const header = src.slice(src.indexOf('ListHeaderComponent={'), src.indexOf('</PulseSlots.Provider>'))
+    expect(header).toContain('pulseTitle')
+    expect(header).not.toContain('searchNode')
+    expect(header).not.toContain('<PulseSearch')
+  })
+
+  it('a keystroke re-renders the search and body rows (context), not every card (renderRow does not close over them)', () => {
+    const src = SCREEN()
+    const render = src.slice(src.indexOf('const renderRow = useCallback'), src.indexOf('const keyExtractor'))
+    expect(render).not.toContain('searchNode')
+    expect(render).not.toContain('bodyNode')
+    expect(render).toContain('<PulseSlot slot={item.kind} />')
+  })
+})

@@ -2,7 +2,7 @@ import { ScreenProfiler } from '../../lib/perf'
 import { Ionicons } from '@expo/vector-icons'
 import * as Location from 'expo-location'
 import { router, useScrollToTop } from 'expo-router'
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   Dimensions,
   AppState,
@@ -30,7 +30,8 @@ import {
 } from '../../components/pulse/PulseSections'
 import { SectionReveal } from '../../components/pulse/Rail'
 import { EventCard } from '../../components/ds/EventCard'
-import { PULSE_HEADER_HEIGHT, PulseHeader } from '../../components/pulse/PulseHeader'
+import { PULSE_HEADER_HEIGHT, PulseSearch, PulseTitle } from '../../components/pulse/PulseHeader'
+import { StickyBar, STICKY_BAR_AFTER } from '../../components/pulse/StickyBar'
 import { CityArtBanner, CityArtCard } from '../../components/cityArt/CityArtCard'
 import { drawableCityArt } from '../../components/cityArt/drawable'
 import { TAB_BAR_CLEARANCE, tabBarTop } from './_layout'
@@ -114,7 +115,31 @@ import { fadeInFast, fadeOutFast } from '../../components/motion/presence'
 type Event = BlendnEvent
 
 /** A row under the sections: a day heading, or an event. */
-type PulseRow = { kind: 'day'; key: string; title: string; weekday: string } | { kind: 'event'; key: string; event: Event }
+type PulseRow =
+  | { kind: 'search'; key: 'search' }
+  | { kind: 'body'; key: 'body' }
+  | { kind: 'day'; key: string; title: string; weekday: string }
+  | { kind: 'event'; key: string; event: Event }
+
+/** The search is data row 0, under the list's title header (index 0): the sticky one is cell 1. */
+const STICKY_SEARCH = [1]
+/** The two rows before the first day or event, which the stagger does not count. */
+const LEAD_ROWS = 2
+const LEAD: PulseRow[] = [{ kind: 'search', key: 'search' }, { kind: 'body', key: 'body' }]
+
+/** What the search and body rows draw, from the screen: held in context so a keystroke re-renders those two rows and not the cards. */
+const PulseSlots = createContext<{ search: ReactNode; body: ReactNode; scrolled: boolean }>({ search: null, body: null, scrolled: false })
+function PulseSlot({ slot }: { slot: 'search' | 'body' }) {
+  const { search, body, scrolled } = useContext(PulseSlots)
+  if (slot === 'body') return <>{body}</>
+  return (
+    <View style={styles.bleed}>
+      <StickyBar scrolled={scrolled}>
+        <View style={styles.stickyInner}>{search}</View>
+      </StickyBar>
+    </View>
+  )
+}
 
 type EventsTrayState = {
   visible: boolean
@@ -406,8 +431,11 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   /** The first card the page draws: the coach mark's hole. */
   const coachTarget = useRef<View>(null)
   const coachShowingRef = useRef(false)
+  /** The list has scrolled past its title: the sticky search takes its bar. */
+  const [searchBarOn, setSearchBarOn] = useState(false)
   const onListScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
     listOffsetRef.current = e.nativeEvent.contentOffset.y
+    setSearchBarOn(e.nativeEvent.contentOffset.y > STICKY_BAR_AFTER)
     if (!coachShowingRef.current) setListAtTop(e.nativeEvent.contentOffset.y < PULSE_HEADER_HEIGHT)
   }, [])
 
@@ -1382,7 +1410,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   const hasFix = !!userLocation && browsingHere
 
   /*
-   * Requests B and C (BUILD-SPEC §A): "This weekend" and "Because you like", in
+   * Requests B, C and D (BUILD-SPEC §A, C1): "This weekend", "Because you like" and the featured five, in
    * parallel with the page. Each draws when its own request resolves; a failure
    * hides its section and is never an error state for the pane. Held with the
    * key they were asked for, so another city's answer is never drawn under this
@@ -1392,6 +1420,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   const lon3 = userLocation ? userLocation.longitude.toFixed(3) : '-'
   const sectionsKey = `${selectedCity ?? '-'}|${lat3},${lon3}|${seedDate}|${pulls}`
   const [weekendState, setWeekendState] = useState<{ key: string; events: Event[] | null } | null>(null)
+  const [featuredState, setFeaturedState] = useState<{ key: string; events: Event[] | null } | null>(null)
   const [forYouState, setForYouState] = useState<{ key: string; value: { interest: { name: string; slug: string }; events: Event[] } | null } | null>(null)
   const sectionRequestsOn = !!user && !authLoading && cityResolved && !isNarrowed
   useEffect(() => {
@@ -1408,6 +1437,14 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
         })
         .catch((error) => Logger.warn('events', 'This weekend threw', { error: String(error) }))
     }
+    // Request D: the city's featured events, in the server's rank order, whatever page they would be on.
+    fetchEventsApi({ page: 0, limit: 5, ...where, include: 'checkins', featured: true })
+      .then(({ data, error }) => {
+        if (cancelled) return
+        if (error || !data) Logger.warn('events', 'Featured did not load', { error: error?.message })
+        setFeaturedState({ key: sectionsKey, events: error || !data ? null : data.map(normalizeEvent) })
+      })
+      .catch((error) => Logger.warn('events', 'Featured threw', { error: String(error) }))
     void (async () => {
       try {
         const interests = await apiClient.getProfileInterests(user.id)
@@ -1429,12 +1466,13 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sectionRequestsOn, sectionsKey, user?.id])
   const weekend = weekendState?.key === sectionsKey ? weekendState.events : null
+  const featuredRequested = featuredState?.key === sectionsKey ? featuredState.events : null
   const forYou = forYouState?.key === sectionsKey ? forYouState.value : null
 
   /** The sections, in order, each claiming its events once (`lib/pulseSections.ts`). Search and filters make the pane a flat list. */
   const sections = useMemo(
-    () => (isNarrowed ? [] : pulseSections<Event>({ page: events, weekend, forYou, now, hasFix, seedDate })),
-    [isNarrowed, events, weekend, forYou, now, hasFix, seedDate]
+    () => (isNarrowed ? [] : pulseSections<Event>({ page: events, weekend, featured: featuredRequested, forYou, now, hasFix, seedDate })),
+    [isNarrowed, events, weekend, featuredRequested, forYou, now, hasFix, seedDate]
   )
   const sectionOf = (key: PulseSectionKey) => sections.find((x) => x.key === key)
 
@@ -1495,6 +1533,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
    * where a promoted result is not lifted or labelled differently.
    */
   const renderRow = useCallback(({ item, index }: { item: PulseRow; index: number }) => {
+    if (item.kind === 'search' || item.kind === 'body') return <PulseSlot slot={item.kind} />
     if (item.kind === 'day') {
       return (
         <View style={styles.dayRow}>
@@ -1526,7 +1565,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     const live = liveWindow(event)
     const note = isCheckedIn ? 'Checked in' : sessionOver(event) ? 'Ended' : null
     return (
-      <RevealRow index={index} pending={mainRowsRevealPending}>
+      <RevealRow index={Math.max(0, index - LEAD_ROWS)} pending={mainRowsRevealPending}>
         <View style={styles.mainRow} ref={sections.length === 0 && event.id === firstRowId ? coachTarget : undefined} collapsable={false}>
           <UpcomingCard
             title={event.title}
@@ -1731,12 +1770,9 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
           </View>
   )
 
-  const pulseHeader = (
-    <PulseHeader
-      title="The "
-      titleAccent="Pulse"
-      city={selectedCity}
-      onPressCity={() => setCityPickerOpen(true)}
+  const pulseTitle = <PulseTitle title="The " titleAccent="Pulse" city={selectedCity} onPressCity={() => setCityPickerOpen(true)} />
+  const searchNode = (
+    <PulseSearch
       query={searchInput}
       onChangeQuery={changeSearchInput}
       searching={refining}
@@ -1756,6 +1792,214 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   })
   const emptyCopy = pulseEmptyCopy(emptyKind, { city: selectedCity, term: searchTerm })
 
+  /*
+   * Under the search, as a row of the list: the loading skeleton, the empty and failed states, the results
+   * count, the sections and the "Everything else" header. The search above it is a row of its own, sticky and
+   * always in the list, so it outlives the thing it is searching (typing triggers a load, and a field that
+   * unmounted with the loaded branch lost its focus and its text).
+   */
+  const bodyNode = showLoadingSkeleton ? (
+        <View>
+          {/*
+            Shaped like the screen it stands in for, not like a generic
+            loading state.
+
+            This used to be a horizontal row of five 260x120 thumbnails
+            (an "Interested" rail this screen no longer has), then a
+            horizontal Upcoming carousel (Upcoming is a vertical stack —
+            `pulseStack` — and has been since the restyle), then a lone
+            474pt block and six generic cards belonging to sections
+            ("Nightlife", a fancy carousel) that were removed from this
+            screen entirely. None of it echoed what was about to appear,
+            so the swap from skeleton to content was itself a layout
+            jump. `isNarrowed` is checked the same way the loaded branch
+            checks it, so a search or filter loading for the first time
+            does not skeleton three sections it is about to hide.
+          */}
+          {isNarrowed ? (
+            /*
+              The rows a search or filter returns are `UpcomingCard`s
+              (`renderEventItem`), so the placeholder is that row — not
+              the 200pt photo card it used to be, which the results then
+              replaced with something a third of its height.
+            */
+            <View style={styles.narrowedSkeleton}>
+              {[...Array(4)].map((_, i) => (
+                <UpcomingSkeletonRow key={`s-flat-${i}`} />
+              ))}
+            </View>
+          ) : (
+            <PulseSkeleton />
+          )}
+          <View style={{ height: SPACE.sm }} />
+        </View>
+  ) : (
+        <View>
+          {/*
+            Empty means "this city has nothing on", and says so.
+
+            The old copy was "No events nearby / Try refreshing or explore
+            with location enabled" — which named the cause as the cure.
+            Location *was* enabled; enabling it is what produced the 10km
+            box that emptied the screen. Refresh could not help, because
+            nothing about the query would change.
+
+            The way out is now a real one: browse a different city. The
+            picker is the primary action, and it is reachable even when
+            every other section is empty.
+          */}
+          {/*
+            The first load failed: nothing on screen, and the page says
+            why with one way forward. It used to be a thin red banner
+            above a blank page, which read as a screen that had loaded
+            and was empty.
+          */}
+          {events.length === 0 && !!netError && (
+            <FadeInUp delay={SECTION_MOTION_BASE_DELAY} distance={10}>
+              <View style={styles.emptyState} accessibilityLiveRegion="polite">
+                <View style={styles.emptyGlyph}>
+                  <Ionicons name="cloud-offline-outline" size={36} color={EMBER.textTertiary} />
+                </View>
+                <Text style={styles.emptyTitle}>Couldn&apos;t load events</Text>
+                <Text style={styles.emptySub}>Check your connection and try again.</Text>
+                <ScalePress
+                  style={styles.ctaPrimary}
+                  onPress={() => fetchEvents({ force: true })}
+                  accessibilityRole="button"
+                  accessibilityLabel="Try again"
+                >
+                  <Text style={styles.ctaPrimaryText}>Try again</Text>
+                </ScalePress>
+              </View>
+            </FadeInUp>
+          )}
+          {events.length === 0 && !netError && (
+            <FadeInUp delay={SECTION_MOTION_BASE_DELAY} distance={10}>
+              <View style={styles.emptyState}>
+                {/*
+                  The city itself, when we have drawn it. An empty week in
+                  Bengaluru is still Bengaluru, and the skyline says which
+                  city this is before the copy does. A search or filter
+                  miss keeps the glyph: that empty is about the query,
+                  not the place.
+                */}
+                {emptyKind !== 'search' && emptyKind !== 'filters' && drawableCityArt(selectedCity) ? (
+                  <CityArtBanner art={drawableCityArt(selectedCity)!} height={140} />
+                ) : (
+                  <View style={styles.emptyGlyph}>
+                    <Ionicons
+                      name={
+                        emptyKind === 'notLive'
+                          ? 'rocket-outline'
+                          : emptyKind === 'search' || emptyKind === 'filters'
+                            ? 'search-outline'
+                            : 'calendar-outline'
+                      }
+                      size={36}
+                      color={EMBER.textTertiary}
+                    />
+                  </View>
+                )}
+                {/*
+                  Four different empties, and conflating them is a lie
+                  (`lib/pulseFeed.ts`). A city with nothing this week is
+                  a quiet week; a city not on the list is one we have not
+                  launched in; and a search or a filter that found nothing
+                  is about the query, not the city. "Nothing on in
+                  Bengaluru" over a "this weekend, 2 km" filter told
+                  somebody the city was empty when it was not.
+                */}
+                <Text style={styles.emptyTitle}>{emptyCopy.title}</Text>
+                <Text style={styles.emptySub}>{emptyCopy.message}</Text>
+                {emptyKind === 'search' ? (
+                  <ScalePress
+                    style={styles.ctaGhost}
+                    onPress={() => changeSearchInput('')}
+                    accessibilityRole="button"
+                    accessibilityLabel="Clear search"
+                  >
+                    <Text style={styles.ctaGhostText}>Clear search</Text>
+                  </ScalePress>
+                ) : emptyKind === 'filters' ? (
+                  // One way out: the filters are the reason, so they are the fix.
+                  <ScalePress
+                    style={styles.ctaGhost}
+                    onPress={() => {
+                      setFilters(NO_FILTERS)
+                      setFilterDraft(NO_FILTERS)
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Clear filters"
+                  >
+                    <Text style={styles.ctaGhostText}>Clear filters</Text>
+                  </ScalePress>
+                ) : (
+                  <>
+                    {cityOptions.length > 0 && (
+                      <ScalePress
+                        style={styles.ctaGhost}
+                        onPress={() => setCityPickerOpen(true)}
+                        accessibilityRole="button"
+                        accessibilityLabel="Choose a different city"
+                      >
+                        <Text style={styles.ctaGhostText}>Change city</Text>
+                      </ScalePress>
+                    )}
+                    <ScalePress
+                      style={styles.ctaGhost}
+                      onPress={() => fetchEvents({ force: true })}
+                      accessibilityRole="button"
+                      accessibilityLabel="Refresh events"
+                    >
+                      <Text style={styles.ctaGhostText}>Refresh</Text>
+                    </ScalePress>
+                  </>
+                )}
+              </View>
+            </FadeInUp>
+          )}
+          {/*
+            Under a search, none of the sections render: somebody who has
+            typed a venue's name knows what they want. The pane is the
+            result, flat, under its count.
+          */}
+          {isNarrowed && events.length > 0 ? (
+            <View style={styles.resultsLabel}>
+              <Text style={styles.resultsLabelText} accessibilityRole="header">
+                <Text style={styles.resultsCount}>{events.length}</Text>
+                {` ${events.length === 1 ? 'event' : 'events'}${selectedCity ? ` · ${selectedCity}` : ''}`}
+              </Text>
+            </View>
+          ) : null}
+          {!isNarrowed ? (
+            <View style={styles.bleed}>
+              <SectionStack
+                sections={sections}
+                now={now}
+                withDistance={hasFix}
+                visible={visible}
+                handlers={cardHandlers}
+                coachRef={coachTarget}
+                pending={mainRowsRevealPending}
+                featuredLayout={(solo) => featuredCardLayout(cardInsets, tabBarTop(SCREEN_HEIGHT, insets.bottom), solo, bannersHeight)}
+                askForLocation={!userLocation && (locationStatus === 'denied' || locationStatus === 'undetermined') ? { denied: locationStatus === 'denied', onAsk: askForLocation } : null}
+              />
+            </View>
+          ) : null}
+          {!isNarrowed && rows.length > 0 ? (
+            <SectionReveal index={sections.length + 1} pending={mainRowsRevealPending}>
+              <View style={styles.bleed}>
+                <EverythingHeader chips={chips} selected={chosen} onSelect={setCategory} />
+              </View>
+            </SectionReveal>
+          ) : null}
+          <View style={{ height: SPACE.sm }} />
+        </View>
+  )
+
+  const listData = useMemo(() => (showLoadingSkeleton ? LEAD : [...LEAD, ...rows]), [showLoadingSkeleton, rows])
+  const slots = useMemo(() => ({ search: searchNode, body: bodyNode, scrolled: searchBarOn }), [searchNode, bodyNode, searchBarOn])
+
   return (
     /*
      * A plain `View`, not a `SafeAreaView`.
@@ -1767,9 +2011,10 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
      * and ends clear of the hardware.
      */
     <View style={styles.container}>
+      <PulseSlots.Provider value={slots}>
         <VirtualizedList
           forwardedRef={listRef as any}
-          data={showLoadingSkeleton ? [] : rows}
+          data={listData}
           renderItem={renderRow}
           keyExtractor={keyExtractor}
           estimatedItemSize={200}
@@ -1823,223 +2068,18 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
            * smoothness for memory — a trade worth making against a measurement
            * rather than against an estimate.
            */
-          initialNumToRender={4}
+          initialNumToRender={4 + LEAD_ROWS}
           maxToRenderPerBatch={5}
           windowSize={10}
+          stickyHeaderIndices={STICKY_SEARCH}
           ListHeaderComponent={
-            showLoadingSkeleton ? (
-              <View>
-                {/*
-                  In both branches, deliberately.
-
-                  Searching triggers a load, and a header that only exists on
-                  the loaded branch unmounts the moment you finish typing — the
-                  field loses focus, the keyboard drops, and the text you just
-                  entered disappears while the results for it arrive. The search
-                  box has to outlive the thing it is searching.
-                */}
-                {banners}
-                {pulseHeader}
-                {/*
-                  Shaped like the screen it stands in for, not like a generic
-                  loading state.
-
-                  This used to be a horizontal row of five 260x120 thumbnails
-                  (an "Interested" rail this screen no longer has), then a
-                  horizontal Upcoming carousel (Upcoming is a vertical stack —
-                  `pulseStack` — and has been since the restyle), then a lone
-                  474pt block and six generic cards belonging to sections
-                  ("Nightlife", a fancy carousel) that were removed from this
-                  screen entirely. None of it echoed what was about to appear,
-                  so the swap from skeleton to content was itself a layout
-                  jump. `isNarrowed` is checked the same way the loaded branch
-                  checks it, so a search or filter loading for the first time
-                  does not skeleton three sections it is about to hide.
-                */}
-                {isNarrowed ? (
-                  /*
-                    The rows a search or filter returns are `UpcomingCard`s
-                    (`renderEventItem`), so the placeholder is that row — not
-                    the 200pt photo card it used to be, which the results then
-                    replaced with something a third of its height.
-                  */
-                  <View style={styles.narrowedSkeleton}>
-                    {[...Array(4)].map((_, i) => (
-                      <UpcomingSkeletonRow key={`s-flat-${i}`} />
-                    ))}
-                  </View>
-                ) : (
-                  <PulseSkeleton />
-                )}
-                <View style={{ height: SPACE.sm }} />
-              </View>
-            ) : (
-              <View>
-                {banners}
-                {pulseHeader}
-                {/*
-                  Empty means "this city has nothing on", and says so.
-
-                  The old copy was "No events nearby / Try refreshing or explore
-                  with location enabled" — which named the cause as the cure.
-                  Location *was* enabled; enabling it is what produced the 10km
-                  box that emptied the screen. Refresh could not help, because
-                  nothing about the query would change.
-
-                  The way out is now a real one: browse a different city. The
-                  picker is the primary action, and it is reachable even when
-                  every other section is empty.
-                */}
-                {/*
-                  The first load failed: nothing on screen, and the page says
-                  why with one way forward. It used to be a thin red banner
-                  above a blank page, which read as a screen that had loaded
-                  and was empty.
-                */}
-                {events.length === 0 && !!netError && (
-                  <FadeInUp delay={SECTION_MOTION_BASE_DELAY} distance={10}>
-                    <View style={styles.emptyState} accessibilityLiveRegion="polite">
-                      <View style={styles.emptyGlyph}>
-                        <Ionicons name="cloud-offline-outline" size={36} color={EMBER.textTertiary} />
-                      </View>
-                      <Text style={styles.emptyTitle}>Couldn&apos;t load events</Text>
-                      <Text style={styles.emptySub}>Check your connection and try again.</Text>
-                      <ScalePress
-                        style={styles.ctaPrimary}
-                        onPress={() => fetchEvents({ force: true })}
-                        accessibilityRole="button"
-                        accessibilityLabel="Try again"
-                      >
-                        <Text style={styles.ctaPrimaryText}>Try again</Text>
-                      </ScalePress>
-                    </View>
-                  </FadeInUp>
-                )}
-                {events.length === 0 && !netError && (
-                  <FadeInUp delay={SECTION_MOTION_BASE_DELAY} distance={10}>
-                    <View style={styles.emptyState}>
-                      {/*
-                        The city itself, when we have drawn it. An empty week in
-                        Bengaluru is still Bengaluru, and the skyline says which
-                        city this is before the copy does. A search or filter
-                        miss keeps the glyph: that empty is about the query,
-                        not the place.
-                      */}
-                      {emptyKind !== 'search' && emptyKind !== 'filters' && drawableCityArt(selectedCity) ? (
-                        <CityArtBanner art={drawableCityArt(selectedCity)!} height={140} />
-                      ) : (
-                        <View style={styles.emptyGlyph}>
-                          <Ionicons
-                            name={
-                              emptyKind === 'notLive'
-                                ? 'rocket-outline'
-                                : emptyKind === 'search' || emptyKind === 'filters'
-                                  ? 'search-outline'
-                                  : 'calendar-outline'
-                            }
-                            size={36}
-                            color={EMBER.textTertiary}
-                          />
-                        </View>
-                      )}
-                      {/*
-                        Four different empties, and conflating them is a lie
-                        (`lib/pulseFeed.ts`). A city with nothing this week is
-                        a quiet week; a city not on the list is one we have not
-                        launched in; and a search or a filter that found nothing
-                        is about the query, not the city. "Nothing on in
-                        Bengaluru" over a "this weekend, 2 km" filter told
-                        somebody the city was empty when it was not.
-                      */}
-                      <Text style={styles.emptyTitle}>{emptyCopy.title}</Text>
-                      <Text style={styles.emptySub}>{emptyCopy.message}</Text>
-                      {emptyKind === 'search' ? (
-                        <ScalePress
-                          style={styles.ctaGhost}
-                          onPress={() => changeSearchInput('')}
-                          accessibilityRole="button"
-                          accessibilityLabel="Clear search"
-                        >
-                          <Text style={styles.ctaGhostText}>Clear search</Text>
-                        </ScalePress>
-                      ) : emptyKind === 'filters' ? (
-                        // One way out: the filters are the reason, so they are the fix.
-                        <ScalePress
-                          style={styles.ctaGhost}
-                          onPress={() => {
-                            setFilters(NO_FILTERS)
-                            setFilterDraft(NO_FILTERS)
-                          }}
-                          accessibilityRole="button"
-                          accessibilityLabel="Clear filters"
-                        >
-                          <Text style={styles.ctaGhostText}>Clear filters</Text>
-                        </ScalePress>
-                      ) : (
-                        <>
-                          {cityOptions.length > 0 && (
-                            <ScalePress
-                              style={styles.ctaGhost}
-                              onPress={() => setCityPickerOpen(true)}
-                              accessibilityRole="button"
-                              accessibilityLabel="Choose a different city"
-                            >
-                              <Text style={styles.ctaGhostText}>Change city</Text>
-                            </ScalePress>
-                          )}
-                          <ScalePress
-                            style={styles.ctaGhost}
-                            onPress={() => fetchEvents({ force: true })}
-                            accessibilityRole="button"
-                            accessibilityLabel="Refresh events"
-                          >
-                            <Text style={styles.ctaGhostText}>Refresh</Text>
-                          </ScalePress>
-                        </>
-                      )}
-                    </View>
-                  </FadeInUp>
-                )}
-                {/*
-                  Under a search, none of the sections render: somebody who has
-                  typed a venue's name knows what they want. The pane is the
-                  result, flat, under its count.
-                */}
-                {isNarrowed && events.length > 0 ? (
-                  <View style={styles.resultsLabel}>
-                    <Text style={styles.resultsLabelText} accessibilityRole="header">
-                      <Text style={styles.resultsCount}>{events.length}</Text>
-                      {` ${events.length === 1 ? 'event' : 'events'}${selectedCity ? ` · ${selectedCity}` : ''}`}
-                    </Text>
-                  </View>
-                ) : null}
-                {!isNarrowed ? (
-                  <View style={styles.bleed}>
-                    <SectionStack
-                      sections={sections}
-                      now={now}
-                      withDistance={hasFix}
-                      visible={visible}
-                      handlers={cardHandlers}
-                      coachRef={coachTarget}
-                      pending={mainRowsRevealPending}
-                      featuredLayout={(solo) => featuredCardLayout(cardInsets, tabBarTop(SCREEN_HEIGHT, insets.bottom), solo, bannersHeight)}
-                      askForLocation={!userLocation && (locationStatus === 'denied' || locationStatus === 'undetermined') ? { denied: locationStatus === 'denied', onAsk: askForLocation } : null}
-                    />
-                  </View>
-                ) : null}
-                {!isNarrowed && rows.length > 0 ? (
-                  <SectionReveal index={sections.length + 1} pending={mainRowsRevealPending}>
-                    <View style={styles.bleed}>
-                      <EverythingHeader chips={chips} selected={chosen} onSelect={setCategory} />
-                    </View>
-                  </SectionReveal>
-                ) : null}
-                <View style={{ height: SPACE.sm }} />
-              </View>
-            )
+            <View>
+              {banners}
+              <View style={styles.titleBlock}>{pulseTitle}</View>
+            </View>
           }
         />
+      </PulseSlots.Provider>
 
       {/*
         The city picker.
@@ -2257,6 +2297,9 @@ const styles = StyleSheet.create({
   bleed: { marginHorizontal: -MAIN_PADDING_HORIZONTAL },
   /** A day's heading over its rows: a section gap above the first, the stack's rhythm below. */
   dayRow: { paddingTop: SPACE.lg, paddingBottom: SPACE.xs },
+  /** The headline above the sticky search: the gap the search used to sit a gap below. */
+  titleBlock: { paddingBottom: SPACE.sm },
+  stickyInner: { marginHorizontal: MAIN_PADDING_HORIZONTAL },
   /** "6 events · Bengaluru": the flat result's label. */
   resultsLabel: { paddingTop: SPACE.xl, paddingBottom: SPACE.md },
   resultsLabelText: { ...DESIGN_TYPE.label, color: COLOR.textSecondary },

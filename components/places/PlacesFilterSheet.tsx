@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 
 import { Chip } from '../ds/Chip'
 import { Sheet } from '../ds/Sheet'
-import { font, minTarget, useBoldText } from '../ds/shared'
+import { font, useBoldText } from '../ds/shared'
 import { COLOR, FONT_FAMILY, SPACE } from '../../lib/design/tokens'
 import { HOW_FAR, NO_FILTERS, PLACE_TYPES, WHATS_ON, type PlaceFilters } from '../../lib/placesPane'
 
@@ -70,21 +70,12 @@ export function PlacesFilterSheet({
       visible={visible}
       onClose={onClose}
       title="Filters"
+      headerAction={{ label: 'Clear all', onPress: () => setDraft(NO_FILTERS), disabled: sameFilters(draft, NO_FILTERS) }}
       detents={['tall']}
       actions={[{ label, kind: 'primary', onPress: () => onApply(draft), testID: 'places-filter-apply' }]}
       testID="places-filter-sheet"
     >
       <View style={styles.body}>
-        <Pressable
-          onPress={() => setDraft(NO_FILTERS)}
-          disabled={sameFilters(draft, NO_FILTERS)}
-          accessibilityRole="button"
-          accessibilityLabel="Clear all"
-          style={[styles.clear, { minHeight: minTarget() }]}
-          testID="places-filter-clear"
-        >
-          <Text style={[font('meta', bold, FONT_FAMILY.brand[700]), sameFilters(draft, NO_FILTERS) ? styles.secondary : styles.ink]}>Clear all</Text>
-        </Pressable>
         <Text style={label12}>KIND</Text>
         <View style={styles.chips}>
           {PLACE_TYPES.map((t) => (
@@ -114,8 +105,6 @@ export function PlacesFilterSheet({
 
 const styles = StyleSheet.create({
   body: { gap: SPACE.md, paddingBottom: SPACE.lg },
-  clear: { alignSelf: 'flex-end', justifyContent: 'center' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
-  ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
 })

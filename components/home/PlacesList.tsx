@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from 'react'
-import { Platform, RefreshControl, StyleSheet, View } from 'react-native'
+import { Platform, RefreshControl, StyleSheet, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native'
 import Animated, { LinearTransition, useReducedMotion } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -10,7 +10,8 @@ import { StateScreen } from '../ds/StateScreen'
 import { SectionReveal } from '../pulse/Rail'
 import { KindGrid, LiveSection, NearSection, OpenSection } from '../places/PlaceCards'
 import { PlacesFilterSheet } from '../places/PlacesFilterSheet'
-import { PlacesHeader } from '../places/PlacesHeader'
+import { PlacesSearch, PlacesTitle } from '../places/PlacesHeader'
+import { StickyBar, STICKY_BAR_AFTER } from '../pulse/StickyBar'
 import { PlacesSkeleton, QuietFold, QuietRow, RefreshFailed } from '../places/PlaceParts'
 import { SectionHeader } from '../ds/SectionHeader'
 import { apiClient, type VenueListItem } from '../../lib/apiClient'
@@ -26,6 +27,7 @@ import {
   NEAR_COUNT,
   NO_FILTERS,
   peekLine,
+  PLACES_STICKY,
   PLACE_TYPES,
   placeRows,
   splitPlaces,
@@ -43,8 +45,6 @@ import type { HomeBrowse } from './HomeShell'
 const PAGE = 30
 /** The clock the strata are judged by moves a minute at a time: "In 25 min" does not need a render per second. */
 const MINUTE_MS = 60_000
-/** A typed search is asked of the server this long after the last key. */
-const SEARCH_DEBOUNCE_MS = 300
 /** The fold opens in place on `M.settle`; Reduce Motion is a cut. */
 const UNFOLD = LinearTransition.springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping).mass(SPRING.settle.mass)
 const NO_STRATA: PlaceStrata = { live: [], open: [], quiet: [] }
@@ -91,7 +91,6 @@ export function PlacesList({
   const { venueType, whatsOn, radiusKm } = filters
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [quietOpen, setQuietOpen] = useState(false)
-  const [query, setQuery] = useState('')
   const [search, setSearch] = useState('')
   const searching = search.trim().length > 0
   // To ~100 m, as the key is: a GPS jitter is not a new request.
@@ -108,12 +107,6 @@ export function PlacesList({
   useEffect(() => {
     dispatch({ type: 'reset', key })
   }, [key])
-
-  // What is typed reaches the server a beat later.
-  useEffect(() => {
-    const timer = setTimeout(() => setSearch(query), SEARCH_DEBOUNCE_MS)
-    return () => clearTimeout(timer)
-  }, [query])
 
   const request = useCallback(
     async (page: number) => {
@@ -234,6 +227,13 @@ export function PlacesList({
   const focus = useCallback((next: WhatsOn) => setFilters((f) => ({ ...f, whatsOn: next })), [])
   const chooseKind = useCallback((next: PlaceFilters['venueType']) => setFilters((f) => ({ ...f, venueType: next })), [])
   const toggleFold = useCallback(() => setQuietOpen((o) => !o), [])
+  const seeAllLive = useCallback(() => focus('live'), [focus])
+  const seeAllOpen = useCallback(() => focus('open'), [focus])
+  const openFilters = useCallback(() => setFiltersOpen(true), [])
+  const clearKind = useCallback(() => chooseKind(null), [chooseKind])
+  // The list has scrolled past its title: the sticky search takes its bar.
+  const [barOn, setBarOn] = useState(false)
+  const onScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => setBarOn(e.nativeEvent.contentOffset.y > STICKY_BAR_AFTER), [])
 
   const countFor = useCallback(
     async (draft: PlaceFilters) => {
@@ -253,39 +253,41 @@ export function PlacesList({
   const renderItem = useCallback(
     ({ item }: { item: PlaceRow }) => {
       switch (item.kind) {
-        case 'header':
+        case 'title':
           return (
             <View>
-              <PlacesHeader
-                city={city}
-                onPressCity={openCityPicker}
-                stat={stat}
-                query={query}
-                onChangeQuery={setQuery}
-                searching={searching && state.status === 'loading'}
-                filterCount={activeFilterCount(filters)}
-                onPressFilter={() => setFiltersOpen(true)}
-                venueType={venueType}
-                onClearKind={() => chooseKind(null)}
-              />
+              <PlacesTitle city={city} onPressCity={openCityPicker} stat={stat} />
               {offline ? (
                 <View style={styles.banner}>
-                  <Banner kind="offline" text={state.readAt ? `Offline. Live as of ${clockTime(state.readAt)}.` : 'Offline. Showing what loaded earlier.'} testID="places-offline" />
+                  <Banner kind="offline" text="Offline. Live as of" mono={state.readAt ? clockTime(state.readAt) : undefined} testID="places-offline" />
                 </View>
               ) : null}
               {state.refreshFailed && !offline ? <RefreshFailed onRetry={() => void refresh()} /> : null}
             </View>
           )
+        case 'search':
+          return (
+            <StickyBar scrolled={barOn}>
+              <PlacesSearch
+                onSearch={setSearch}
+                searching={searching && state.status === 'loading'}
+                filterCount={activeFilterCount(filters)}
+                onPressFilter={openFilters}
+                venueType={venueType}
+                onClearKind={clearKind}
+              />
+            </StickyBar>
+          )
         case 'live':
           return (
             <SectionReveal index={0} pending={revealPending}>
-              <LiveSection venues={item.venues} total={item.total} focused={item.focused} now={now} onSeeAll={() => focus('live')} />
+              <LiveSection venues={item.venues} total={item.total} focused={item.focused} now={now} onSeeAll={seeAllLive} />
             </SectionReveal>
           )
         case 'open':
           return (
             <SectionReveal index={1} pending={revealPending}>
-              <OpenSection venues={item.venues} total={item.total} focused={item.focused} now={now} onSeeAll={() => focus('open')} />
+              <OpenSection venues={item.venues} total={item.total} focused={item.focused} now={now} onSeeAll={seeAllOpen} />
             </SectionReveal>
           )
         case 'near':
@@ -294,6 +296,9 @@ export function PlacesList({
               <NearSection venues={item.venues} hasFix={item.hasFix} onAsk={() => void requestLocation()} onShowOnMap={onShowNearOnMap} />
             </SectionReveal>
           )
+        case 'areas':
+          // The By area section waits for the owner's neighbourhood list (SHOW_AREA_SECTION).
+          return null
         case 'kinds':
           return (
             <SectionReveal index={3} pending={revealPending}>
@@ -352,8 +357,8 @@ export function PlacesList({
       }
     },
     [
-      city, openCityPicker, stat, query, searching, state.status, state.readAt, state.refreshFailed, filters, venueType, offline, now, search, whatsOn, typeLabel,
-      chooseKind, focus, refresh, requestLocation, onShowNearOnMap, toggleFold,
+      city, openCityPicker, stat, searching, state.status, state.readAt, state.refreshFailed, filters, venueType, offline, now, search, whatsOn, typeLabel, barOn,
+      chooseKind, refresh, requestLocation, onShowNearOnMap, toggleFold, seeAllLive, seeAllOpen, openFilters, clearKind,
     ]
   )
 
@@ -364,6 +369,9 @@ export function PlacesList({
         keyExtractor={keyOf}
         renderItem={renderItem}
         itemLayoutAnimation={reduceMotion ? undefined : UNFOLD}
+        stickyHeaderIndices={PLACES_STICKY}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
         ListFooterComponent={state.loadingMore ? <View style={styles.more}><Spinner /></View> : null}
         testID="places-list"
         onEndReachedThreshold={0.5}

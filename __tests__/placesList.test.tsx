@@ -130,9 +130,9 @@ describe('the sections', () => {
   it('the glow is the bucket’s: a 10–19 tile has the middle step, a quiet one has none', async () => {
     serve([venue('a', { liveNow: '10-19' }), venue('b', { liveNow: '5-9' })])
     await mount()
-    expect(screen.getByTestId('place-glow-10-19', HIDDEN)).toBeTruthy()
-    expect(screen.getByTestId('place-glow-5-9', HIDDEN)).toBeTruthy()
-    expect(screen.queryByTestId('place-glow-quiet', HIDDEN)).toBeNull()
+    expect(screen.getByTestId('place-glow-10-19-now', HIDDEN)).toBeTruthy()
+    expect(screen.getByTestId('place-glow-5-9-now', HIDDEN)).toBeTruthy()
+    expect(screen.queryByTestId('place-glow-quiet-now', HIDDEN)).toBeNull()
   })
 
   it('under five draws no live count: a quiet row carries no pill, no "N live" label', async () => {
@@ -374,9 +374,44 @@ describe('the filter sheet', () => {
     })
     expect(screen.getByTestId('places-filter-kind-cafe').props.accessibilityState).toMatchObject({ selected: true })
     await act(async () => {
-      fireEvent.press(screen.getByTestId('places-filter-clear'))
+      fireEvent.press(screen.getByTestId('places-filter-sheet-header-action'))
     })
     expect(screen.getByTestId('places-filter-kind-all').props.accessibilityState).toMatchObject({ selected: true })
+  })
+})
+
+describe('the sticky search', () => {
+  it('is the list’s second row, pinned, with its bar behind it; scrolling the list does not remount the field or lose its text', async () => {
+    serve(Array.from({ length: 20 }, (_, i) => venue(`v${i}`, { liveNow: '5-9' })))
+    await mount()
+    const list = screen.getByTestId('places-list')
+    expect(list.props.stickyHeaderIndices).toEqual([1])
+    expect(screen.getByTestId('sticky-search-bar', HIDDEN)).toBeTruthy()
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId('places-search-input'), 'toi')
+    })
+    await act(async () => {
+      fireEvent.scroll(list, { nativeEvent: { contentOffset: { y: 2000 }, contentSize: { height: 6000, width: 400 }, layoutMeasurement: { height: 800, width: 400 } } })
+    })
+    expect(screen.getByTestId('places-search-input').props.value).toBe('toi')
+  })
+
+  it('typing re-renders the search row only: the list is not asked again until the text settles', async () => {
+    jest.useFakeTimers()
+    try {
+      serve([venue('a', { liveNow: '5-9' })])
+      await mount()
+      const before = listCalls().length
+      await act(async () => {
+        fireEvent.changeText(screen.getByTestId('places-search-input'), 't')
+        fireEvent.changeText(screen.getByTestId('places-search-input'), 'to')
+        fireEvent.changeText(screen.getByTestId('places-search-input'), 'toi')
+        jest.advanceTimersByTime(299)
+      })
+      expect(listCalls()).toHaveLength(before)
+    } finally {
+      jest.useRealTimers()
+    }
   })
 })
 
@@ -529,7 +564,7 @@ describe('loading, failing, empty', () => {
       markOffline()
     })
     expect(screen.getByTestId('places-offline')).toBeTruthy()
-    expect(screen.getByText(/^Offline\. Live as of \d{1,2}(:\d{2})? (AM|PM)\.$/)).toBeTruthy()
+    expect(screen.getByText(/^Offline\. Live as of \d{1,2}(:\d{2})? (AM|PM)$/)).toBeTruthy()
     expect(screen.getByTestId('place-tile-a')).toBeTruthy()
   })
 })

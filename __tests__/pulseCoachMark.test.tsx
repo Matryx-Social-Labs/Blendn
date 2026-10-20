@@ -77,9 +77,9 @@ jest.mock('../components/pulse/PulseHeader', () => {
   const { Pressable, View } = require('react-native')
   return {
     PULSE_HEADER_HEIGHT: 104,
-    PulseHeader: (p: { onPressCity: () => void; onPressFilter: () => void }) => (
+    PulseTitle: (p: { onPressCity: () => void }) => <Pressable testID="open-city" onPress={p.onPressCity} />,
+    PulseSearch: (p: { onPressFilter: () => void }) => (
       <View>
-        <Pressable testID="open-city" onPress={p.onPressCity} />
         <Pressable testID="open-filters" onPress={p.onPressFilter} />
       </View>
     ),

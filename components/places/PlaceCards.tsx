@@ -1,5 +1,5 @@
 import { Image } from 'expo-image'
-import { memo, useEffect, useRef } from 'react'
+import { memo, useEffect, useState } from 'react'
 import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg'
@@ -59,30 +59,21 @@ function PlaceArt({ venue, now, size, radius }: { venue: VenueListItem; now: num
   return <VenuePlate type={plateFor(venue.venueType)} size={size} radius={radius} />
 }
 
-/**
- * The bucket's glow, anchored at the tile's bottom centre: a radial gradient of the bucket's alpha and radius.
- * Static; when the bucket changes it cross-fades over `DURATION.medium` (Reduce Motion: a cut). Decorative.
- */
-function Glow({ bucket, size }: { bucket: VenueListItem['liveNow']; size: number }) {
+type Bucket = VenueListItem['liveNow']
+
+/** One glow: the bucket's radial gradient at the tile's bottom centre, at `fadeTo` opacity (1 or 0), starting from `from`. */
+function GlowLayer({ bucket, size, from, fadeTo, layer }: { bucket: Bucket; size: number; from: 0 | 1; fadeTo: 0 | 1; layer: 'now' | 'old' }) {
   const step = glowFor(bucket)
-  const reduceMotion = useReducedMotion()
-  const opacity = useSharedValue(1)
-  const first = useRef(true)
+  const opacity = useSharedValue<number>(from)
   useEffect(() => {
-    // A tile scrolling into view is not a change: only a bucket moving while it is on screen fades.
-    if (first.current) {
-      first.current = false
-      return
-    }
-    if (reduceMotion) return
-    opacity.value = 0
-    opacity.value = withTiming(1, { duration: DURATION.medium, easing: Easing.bezier(...EASING.standard) })
-  }, [bucket, reduceMotion, opacity])
-  const style = useAnimatedStyle(() => ({ opacity: opacity.value }))
+    opacity.set(withTiming(fadeTo, { duration: DURATION.medium, easing: Easing.bezier(...EASING.standard) }))
+  }, [fadeTo, opacity])
+  const style = useAnimatedStyle(() => ({ opacity: opacity.get() }))
   if (!step) return null
-  const id = `glow-${bucket}`
+  // Distinct per layer: the old and the new gradient of one tile are on screen together while they cross.
+  const id = `glow-${bucket}-${layer}`
   return (
-    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, style]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" testID={`place-glow-${bucket}`}>
+    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, style]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" testID={`place-glow-${bucket}-${layer}`}>
       <Svg width={size} height={size}>
         <Defs>
           <RadialGradient id={id} cx={size / 2} cy={size} r={step.radius} gradientUnits="userSpaceOnUse">
@@ -93,6 +84,30 @@ function Glow({ bucket, size }: { bucket: VenueListItem['liveNow']; size: number
         <Rect width={size} height={size} fill={`url(#${id})`} />
       </Svg>
     </Animated.View>
+  )
+}
+
+/**
+ * The bucket's glow (B2). Static; when the bucket changes while the tile is on screen it is a true cross-fade
+ * over `DURATION.medium`: the previous bucket's glow fades 1 to 0 under the new one's 0 to 1, then is dropped.
+ * A tile scrolling into view is not a change, and under Reduce Motion the swap is instant. Decorative.
+ */
+function Glow({ bucket, size }: { bucket: Bucket; size: number }) {
+  const reduceMotion = useReducedMotion()
+  const [layers, setLayers] = useState<{ now: Bucket; old: Bucket | null }>({ now: bucket, old: null })
+  // The bucket moved: keep the one it left, to fade it out.
+  if (layers.now !== bucket) setLayers({ now: bucket, old: reduceMotion ? null : layers.now })
+  const { now, old } = layers
+  useEffect(() => {
+    if (old === null) return
+    const done = setTimeout(() => setLayers((l) => ({ ...l, old: null })), DURATION.medium)
+    return () => clearTimeout(done)
+  }, [old])
+  return (
+    <>
+      {old !== null ? <GlowLayer key={`old-${old}`} bucket={old} size={size} from={1} fadeTo={0} layer="old" /> : null}
+      <GlowLayer key={`now-${now}`} bucket={now} size={size} from={old !== null ? 0 : 1} fadeTo={1} layer="now" />
+    </>
   )
 }
 

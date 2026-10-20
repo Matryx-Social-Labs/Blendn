@@ -96,18 +96,31 @@ describe('Featured', () => {
   })
 
   it('the server’s rank wins when it sends one', () => {
-    const page = [flagged('a', { featured: { kind: 'editorial', rank: 2 } }), flagged('b', { featured: { kind: 'paid', rank: 1 } }), flagged('c', { featured: { kind: 'editorial', rank: 3 } })]
+    const page = [flagged('a', { featured: { kind: 'editorial', rank: 2 } }), flagged('b', { featured: { kind: 'promoted', rank: 1 } }), flagged('c', { featured: { kind: 'editorial', rank: 3 } })]
     expect(featuredPick(page, NOW, SEED).map((e) => e.id)).toEqual(['b', 'a', 'c'])
+  })
+
+  it('the featured request shows an event outside the first page, in the server’s rank order', () => {
+    const requested = [flagged('x', { featured: { kind: 'promoted', rank: 1 } }), flagged('y', { featured: { kind: 'editorial', rank: 2 } })]
+    const page = [flagged('a', { featured: { kind: 'editorial', rank: 3 } }), ev('plain', 20)]
+    const featured = pulseSections<E>({ page, featured: requested, ...empty }).find((s) => s.key === 'featured')!
+    expect(featured.events.map((e) => e.id)).toEqual(['x', 'y', 'a'])
+  })
+
+  it('an unflagged event from that request is not featured (a server that ignores featured=true)', () => {
+    const featured = pulseSections<E>({ page: [], featured: [ev('plain', 20)], ...empty }).find((s) => s.key === 'featured')
+    expect(featured).toBeUndefined()
   })
 
   it('an event that is over is never featured', () => {
     expect(featuredPick([flagged('a', { start_time: at(10), end_time: at(12) })], NOW, SEED)).toEqual([])
   })
 
-  it('only a paid placement is labelled Promoted; an editorial pick and the admin toggle carry none', () => {
-    expect(featuredLabel(flagged('a', { featured: { kind: 'paid', rank: 1 } }))).toBe('Promoted')
+  it('only a promoted placement is labelled Promoted (the server’s word; "paid" is not one); an editorial pick and the admin toggle carry none', () => {
+    expect(featuredLabel(flagged('a', { featured: { kind: 'promoted', rank: 1 } }))).toBe('Promoted')
     expect(featuredLabel(flagged('a', { featured: { kind: 'editorial', rank: 1 } }))).toBeNull()
     expect(featuredLabel(flagged('a'))).toBeNull()
+    expect(featuredLabel(flagged('a', { featured: { kind: 'paid', rank: 1 } as never }))).toBeNull()
   })
 })
 

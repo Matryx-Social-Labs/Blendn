@@ -1,4 +1,4 @@
-import { memo } from 'react'
+import { memo, useEffect, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { Chip } from '../ds/Chip'
@@ -11,38 +11,21 @@ import { COLOR, FONT_FAMILY, ICON, SPACE } from '../../lib/design/tokens'
 import { PLACE_TYPES, type PlaceTypeFilter } from '../../lib/placesPane'
 
 /**
- * The top of Places (BUILD-SPEC B1, B8): the title with the city chip, the stat line (one text for a screen
- * reader), the search with its filter button, and the chosen kind as a removable chip. It is a row of the
- * list, so it scrolls away at full height.
- * ponytail: not sticky at full height yet (no scroll-edge fade); the list's `stickyHeaderIndices` is the way.
+ * The top of Places (BUILD-SPEC B1), in two rows of the list: the title (headline, city control, stat line;
+ * scrolls away) and the search (sticky under it; see `PlacesSearch`).
  */
-export const PlacesHeader = memo(function PlacesHeader({
+export const PlacesTitle = memo(function PlacesTitle({
   city,
   onPressCity,
   stat,
-  query,
-  onChangeQuery,
-  searching,
-  filterCount,
-  onPressFilter,
-  venueType,
-  onClearKind,
 }: {
   city: string | null
   onPressCity: () => void
   stat: { text: string; spoken: string } | null
-  query: string
-  onChangeQuery: (text: string) => void
-  searching: boolean
-  filterCount: number
-  onPressFilter: () => void
-  venueType: PlaceTypeFilter
-  onClearKind: () => void
 }) {
   const bold = useBoldText()
-  const kind = PLACE_TYPES.find((t) => t.venueType === venueType && venueType !== null)
   return (
-    <View style={styles.wrap} testID="places-header">
+    <View style={styles.titleWrap} testID="places-header">
       <View style={styles.titleRow}>
         <Text accessibilityRole="header" style={[font('display', bold), styles.ink, styles.title]} numberOfLines={1}>
           Places
@@ -64,18 +47,49 @@ export const PlacesHeader = memo(function PlacesHeader({
         </Pressable>
       </View>
       {stat ? (
-        <Text
-          accessibilityLabel={stat.spoken}
-          style={[font('label', bold, FONT_FAMILY.mono[500]), styles.secondary]}
-          numberOfLines={1}
-          testID="places-stat"
-        >
+        <Text accessibilityLabel={stat.spoken} style={[font('label', bold, FONT_FAMILY.mono[500]), styles.secondary]} numberOfLines={1} testID="places-stat">
           {stat.text.toUpperCase()}
         </Text>
       ) : null}
+    </View>
+  )
+})
+
+/** A typed search reaches the list this long after the last key. */
+export const SEARCH_DEBOUNCE_MS = 300
+
+/**
+ * The search field with its filter button, and the chosen kind as a removable chip (B1, B8). It holds what is
+ * typed itself and hands the list only the settled text, so a keystroke re-renders this row and nothing else.
+ * It is a sticky row of the list, which keeps it mounted however far the list scrolls: a focused field is
+ * never unmounted by a long scroll.
+ */
+export const PlacesSearch = memo(function PlacesSearch({
+  onSearch,
+  searching,
+  filterCount,
+  onPressFilter,
+  venueType,
+  onClearKind,
+}: {
+  onSearch: (text: string) => void
+  searching: boolean
+  filterCount: number
+  onPressFilter: () => void
+  venueType: PlaceTypeFilter
+  onClearKind: () => void
+}) {
+  const [query, setQuery] = useState('')
+  useEffect(() => {
+    const timer = setTimeout(() => onSearch(query), SEARCH_DEBOUNCE_MS)
+    return () => clearTimeout(timer)
+  }, [query, onSearch])
+  const kind = PLACE_TYPES.find((t) => t.venueType === venueType && venueType !== null)
+  return (
+    <View style={styles.searchWrap}>
       <View style={styles.searchRow}>
         <View style={styles.search}>
-          <SearchField value={query} onChangeText={onChangeQuery} placeholder="Search places or areas" busy={searching} testID="places-search" />
+          <SearchField value={query} onChangeText={setQuery} placeholder="Search places or areas" busy={searching} testID="places-search" />
         </View>
         <View>
           <IconButton icon="sliders-horizontal" accessibilityLabel="Filters" accessibilityHint={filterCount ? `${filterCount} applied` : undefined} onPress={onPressFilter} testID="places-filter" />
@@ -96,11 +110,12 @@ export const PlacesHeader = memo(function PlacesHeader({
 })
 
 const styles = StyleSheet.create({
-  wrap: { paddingHorizontal: SPACE.gutter, gap: SPACE.md, paddingBottom: SPACE.xl },
+  titleWrap: { paddingHorizontal: SPACE.gutter, gap: SPACE.md, paddingBottom: SPACE.md },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.md },
   title: { flexShrink: 1 },
   city: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs, flexShrink: 0, maxWidth: '50%' },
   cityText: { flexShrink: 1 },
+  searchWrap: { paddingHorizontal: SPACE.gutter, gap: SPACE.md },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   search: { flex: 1 },
   badge: { position: 'absolute', top: -SPACE.xs, right: -SPACE.xs },

@@ -22,7 +22,7 @@ import { fnv1a } from './pseudonymAvatar'
 export const LIVE_FLOOR = 5
 /** Featured shows at most this many per city. */
 export const FEATURED_CAP = 5
-/** A paid placement is always labelled this; an editorial pick carries no label. */
+/** A promoted (paid) placement is always labelled this; an editorial pick carries no label. */
 export const PROMOTED_LABEL = 'Promoted'
 /** `null`: an editorial pick is unlabelled. Set a word to label it. */
 export const EDITORIAL_LABEL: string | null = null
@@ -64,7 +64,7 @@ export interface SectionEvent extends SessionSource {
   /** The admin toggle that exists today. */
   is_featured?: boolean
   /** The server's placement (BUILD-SPEC C1), when it sends one. */
-  featured?: { kind: 'paid' | 'editorial'; rank: number; by?: string | null } | null
+  featured?: { kind: 'promoted' | 'editorial'; rank: number; by?: string | null } | null
 }
 
 export type PulseSection<E extends SectionEvent = SectionEvent> = {
@@ -81,6 +81,8 @@ export type PulseSectionsInput<E extends SectionEvent> = {
   page: readonly E[]
   /** Request B: Friday 17:00 to Sunday 23:59, or null (not loaded, failed, skipped). */
   weekend: readonly E[] | null
+  /** Request D: `featured=true&limit=5`, so a featured event outside the first page still shows; or null (not loaded, failed). */
+  featured?: readonly E[] | null
   /** Request C: the first interest's events, or null. */
   forYou: { interest: { name: string; slug: string }; events: readonly E[] } | null
   now: number
@@ -156,13 +158,13 @@ export function weekendLabel(saturday: Date, sunday: Date): string {
 export const isFeaturedEvent = (e: SectionEvent) => !!e.featured || e.is_featured === true
 
 /**
- * The label a featured card carries: "Promoted" for a paid placement, the
+ * The label a featured card carries: "Promoted" for a promoted (paid) placement, the
  * editorial label (none by default) otherwise, and nothing for an event that
  * is only flagged by the admin toggle: no card is labelled Promoted until the
  * server says it was paid for (C1/C2).
  */
 export function featuredLabel(e: SectionEvent): string | null {
-  if (e.featured?.kind === 'paid') return PROMOTED_LABEL
+  if (e.featured?.kind === 'promoted') return PROMOTED_LABEL
   return e.featured?.kind === 'editorial' ? EDITORIAL_LABEL : null
 }
 
@@ -208,7 +210,8 @@ export function pulseSections<E extends SectionEvent>(input: PulseSectionsInput<
         .sort((a, b) => (b.here_count ?? 0) - (a.here_count ?? 0) || byStart(a, b))
       if (live.length) take('now', live, NOW_LIMIT)
     } else if (key === 'featured') {
-      const picked = featuredPick(fresh(page), now, seedDate)
+      // Featured events from their own request come first in the pool: an event outside the page's first 50 still shows.
+      const picked = featuredPick(fresh(unique([...(input.featured ?? []), ...page])), now, seedDate)
       if (picked.length) take('featured', picked, FEATURED_CAP)
     } else if (key === 'tonight') {
       const cut = nextDayReset(now)

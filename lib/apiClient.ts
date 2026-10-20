@@ -620,10 +620,10 @@ export interface EventApiItem {
   check_in_radius?: number
   isFeatured: boolean
   /**
-   * The placement behind a featured event (BUILD-SPEC C1): `paid` is labelled "Promoted", `editorial` is not.
+   * The placement behind a featured event (BUILD-SPEC C1): `promoted` (a paid placement) is labelled "Promoted", `editorial` is not.
    * Absent from a server that does not send it: `isFeatured` (the admin toggle) is all there is.
    */
-  featured?: { kind: 'paid' | 'editorial'; rank: number; by?: string | null } | null
+  featured?: { kind: 'promoted' | 'editorial'; rank: number; by?: string | null } | null
   isRecurring: boolean
   externalLink: string | null
   createdAt: string
@@ -763,6 +763,8 @@ export interface VenueListItem {
   venueTypeLabel: string
   /** Kilometres from the `lat`/`lon` sent, or null. */
   distance: number | null
+  /** The neighbourhood (§C4), named on a row's line in place of the street address. Absent from a server that does not send it. */
+  area?: string | null
   upcomingEventCount: number
   /** How many are live here, as a bucket and never a number (D-19); null for somebody the venue page would refuse. */
   liveNow: 'quiet' | '5-9' | '10-19' | '20+' | null
@@ -773,7 +775,8 @@ export interface VenueListItem {
    */
   tier?: 'live' | 'open' | 'quiet'
   /**
-   * Tonight's opening hours from the venue's own (`§C6`, not sent yet): "Open till" / "Opens" on an Open tonight card.
+   * Tonight's opening hours (§C6): wall-clock "HH:MM" strings in the venue's timezone ("18:00", "01:30"; a close at or
+   * before the open is past midnight). "Open till" / "Opens" on an Open tonight card.
    * Absent from a server that does not send it: the card then shows its event line, or nothing.
    */
   tonight?: { opensAt: string; closesAt: string } | null
@@ -1762,6 +1765,8 @@ class ApiClientClass {
     sortOrder?: 'asc' | 'desc'
     include?: string
     interestedPreviewLimit?: number
+    /** At most five published, public, age-gated, not-ended events, in the server's `featured.rank` order (BUILD-SPEC C1). */
+    featured?: boolean
   }, options?: { force?: boolean }): Promise<ApiResponse<EventsListResponse>> {
     const endpoint = `/api/mobile/events${toQuery(params)}`
     if (options?.force) {

@@ -75,35 +75,10 @@ interface Props {
   activeFilterCount?: number
 }
 
-export function PulseHeader({
-  title,
-  titleAccent,
-  city,
-  onPressCity,
-  query,
-  onChangeQuery,
-  searching = false,
-  onPressFilter,
-  activeFilterCount = 0,
-}: Props) {
-  const [focused, setFocused] = useState(false)
-  const input = useRef<TextInput>(null)
-  /*
-   * Android only: Back closes the keyboard and leaves the field focused, so a
-   * tap on it opened no keyboard. A keyboard that actually left blurs it, and
-   * the next tap is a fresh focus. Never on iOS: there a hide can arrive while
-   * you type (a frame change), and blurring on it closed the keyboard after
-   * every character (drive 3). The text is the screen's (`query`), so it stays.
-   */
-  useEffect(() => {
-    if (!focused || Platform.OS !== 'android') return
-    const sub = Keyboard.addListener('keyboardDidHide', (e) => {
-      if (keyboardLeft(e, Dimensions.get('screen').height)) input.current?.blur()
-    })
-    return () => sub.remove()
-  }, [focused])
+/** The headline and the city control. */
+export function PulseTitle({ title, titleAccent, city, onPressCity }: Pick<Props, 'title' | 'titleAccent' | 'city' | 'onPressCity'>) {
   return (
-    <View style={styles.wrap}>
+    <>
       {/*
         The city sits **on** the headline, not under it.
 
@@ -149,7 +124,39 @@ export function PulseHeader({
           <Ionicons name="chevron-down" size={ICON.sm} color={EMBER.textSecondary} />
         </ScalePress>
       </View>
+    </>
+  )
+}
 
+/**
+ * The search field and the filter button: a row of the list of its own, sticky under the title, so a focused
+ * field is never unmounted by a long scroll and the filter is always in reach.
+ */
+export function PulseSearch({
+  query,
+  onChangeQuery,
+  searching = false,
+  onPressFilter,
+  activeFilterCount = 0,
+}: Pick<Props, 'query' | 'onChangeQuery' | 'searching' | 'onPressFilter' | 'activeFilterCount'>) {
+  const [focused, setFocused] = useState(false)
+  const input = useRef<TextInput>(null)
+  /*
+   * Android only: Back closes the keyboard and leaves the field focused, so a
+   * tap on it opened no keyboard. A keyboard that actually left blurs it, and
+   * the next tap is a fresh focus. Never on iOS: there a hide can arrive while
+   * you type (a frame change), and blurring on it closed the keyboard after
+   * every character (drive 3). The text is the screen's (`query`), so it stays.
+   */
+  useEffect(() => {
+    if (!focused || Platform.OS !== 'android') return
+    const sub = Keyboard.addListener('keyboardDidHide', (e) => {
+      if (keyboardLeft(e, Dimensions.get('screen').height)) input.current?.blur()
+    })
+    return () => sub.remove()
+  }, [focused])
+  return (
+    <>
       {/*
         One box, with the icon absolutely placed inside its padding.
 
@@ -260,6 +267,15 @@ export function PulseHeader({
           </ScalePress>
         ) : null}
       </View>
+    </>
+  )
+}
+
+export function PulseHeader(props: Props) {
+  return (
+    <View style={styles.wrap}>
+      <PulseTitle {...props} />
+      <PulseSearch {...props} />
     </View>
   )
 }

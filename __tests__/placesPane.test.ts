@@ -11,6 +11,9 @@ import {
   mayReadNext,
   moreLine,
   nearLabel,
+  placeArea,
+  PLACES_STICKY,
+  SHOW_AREA_SECTION,
   nearPins,
   NO_FILTERS,
   openLabel,
@@ -156,18 +159,18 @@ describe('the rows (BUILD-SPEC B)', () => {
   const nearby = [venue({ id: 'n1' }), venue({ id: 'n2' })]
 
   it('header, Live now, Open tonight, Near you, the kinds, then the fold; each stratum is one rail row', () => {
-    expect(kinds(viewOf([packed, open, quiet, later], { near: nearby }))).toEqual(['header', 'live', 'open', 'near', 'kinds', 'fold'])
+    expect(kinds(viewOf([packed, open, quiet, later], { near: nearby }))).toEqual(['title', 'search', 'live', 'open', 'near', 'kinds', 'fold'])
   })
 
   it('quiet rows only when the fold is open', () => {
-    expect(kinds(viewOf([quiet, later], { quietOpen: true }))).toEqual(['header', 'kinds', 'fold', 'quiet', 'quiet'])
+    expect(kinds(viewOf([quiet, later], { quietOpen: true }))).toEqual(['title', 'search', 'kinds', 'fold', 'quiet', 'quiet'])
     expect(placeRows(viewOf([packed, open, quiet, later])).find((r) => r.kind === 'fold')).toMatchObject({ count: 2, more: false, open: false, nearest: true })
   })
 
   it('Live now and Open tonight are absent at 0: no quiet filler, no apology', () => {
-    expect(kinds(viewOf([quiet]))).toEqual(['header', 'kinds', 'fold'])
-    expect(kinds(viewOf([open, quiet]))).toEqual(['header', 'open', 'kinds', 'fold'])
-    expect(kinds(viewOf([live, quiet]))).toEqual(['header', 'live', 'kinds', 'fold'])
+    expect(kinds(viewOf([quiet]))).toEqual(['title', 'search', 'kinds', 'fold'])
+    expect(kinds(viewOf([open, quiet]))).toEqual(['title', 'search', 'open', 'kinds', 'fold'])
+    expect(kinds(viewOf([live, quiet]))).toEqual(['title', 'search', 'live', 'kinds', 'fold'])
   })
 
   it('Near you: the location card without a fix, absent with a fix and no places, rows with both', () => {
@@ -192,27 +195,27 @@ describe('the rows (BUILD-SPEC B)', () => {
     const focused = placeRows(focusedView).find((r) => r.kind === 'live') as { venues: unknown[]; focused: boolean }
     expect(focused.venues).toHaveLength(20)
     expect(focused.focused).toBe(true)
-    expect(kinds(focusedView)).toEqual(['header', 'live'])
+    expect(kinds(focusedView)).toEqual(['title', 'search', 'live'])
   })
 
   it('a kind chosen hides the kinds grid and Near you (a chip carries it); the strata stay', () => {
-    expect(kinds(viewOf([packed, quiet], { near: nearby, filters: { ...NO_FILTERS, venueType: 'brewery' } }))).toEqual(['header', 'live', 'fold'])
+    expect(kinds(viewOf([packed, quiet], { near: nearby, filters: { ...NO_FILTERS, venueType: 'brewery' } }))).toEqual(['title', 'search', 'live', 'fold'])
   })
 
   it('a search is a flat list under one label, whatever the strata', () => {
-    expect(kinds(viewOf([packed, open, quiet], { searching: true }))).toEqual(['header', 'label', 'quiet', 'quiet', 'quiet'])
+    expect(kinds(viewOf([packed, open, quiet], { searching: true }))).toEqual(['title', 'search', 'label', 'quiet', 'quiet', 'quiet'])
   })
 
   it('loading, failing and empty are rows under the real header', () => {
-    expect(kinds(viewOf([], { status: 'loading' }))).toEqual(['header', 'skeleton'])
-    expect(kinds(viewOf([], { status: 'idle' }))).toEqual(['header', 'skeleton'])
-    expect(kinds(viewOf([], { status: 'error' }))).toEqual(['header', 'error'])
-    expect(kinds(viewOf([], { status: 'ready' }))).toEqual(['header', 'empty'])
+    expect(kinds(viewOf([], { status: 'loading' }))).toEqual(['title', 'search', 'skeleton'])
+    expect(kinds(viewOf([], { status: 'idle' }))).toEqual(['title', 'search', 'skeleton'])
+    expect(kinds(viewOf([], { status: 'error' }))).toEqual(['title', 'search', 'error'])
+    expect(kinds(viewOf([], { status: 'ready' }))).toEqual(['title', 'search', 'empty'])
   })
 
   it('a focused stratum with nothing in it is the empty row, not the header alone', () => {
     const view = viewOf([open, quiet], { filters: { ...NO_FILTERS, whatsOn: 'live' } })
-    expect(placeRows(view).map((r) => r.kind)).toEqual(['header', 'empty'])
+    expect(placeRows(view).map((r) => r.kind)).toEqual(['title', 'search', 'empty'])
     expect(emptyReason(view)).toBe('filters')
   })
 
@@ -226,6 +229,33 @@ describe('the rows (BUILD-SPEC B)', () => {
   it('every row has its own key, even for a venue in two strata of one list', () => {
     const rows = placeRows(viewOf([packed, open, quiet], { quietOpen: true, more: true, near: nearby }))
     expect(new Set(rows.map((r) => r.key)).size).toBe(rows.length)
+  })
+})
+
+describe('the area (BUILD-SPEC B5, C4)', () => {
+  it('a row names the server’s area, else the address, else the city', () => {
+    expect(placeArea({ area: ' Indiranagar ', address: '298, 100 Feet Road', city: 'Bengaluru' })).toBe('Indiranagar')
+    expect(placeArea({ area: null, address: '298, 100 Feet Road', city: 'Bengaluru' })).toBe('298, 100 Feet Road')
+    expect(placeArea({ address: null, city: 'Bengaluru' })).toBe('Bengaluru')
+    expect(placeArea({ area: '', address: ' ', city: null })).toBeNull()
+    expect(tileLabel(venue({ area: 'Indiranagar' }))).toContain('Brewery, Indiranagar, 350 metres')
+  })
+
+  it('the By area section stays hidden behind its constant, even with areas to show', () => {
+    expect(SHOW_AREA_SECTION).toBe(false)
+    const areas = [{ slug: 'a', name: 'A', count: 4, liveCount: 1 }, { slug: 'b', name: 'B', count: 3, liveCount: 0 }]
+    expect(kinds(viewOf([venue({ id: 'q' })], { areas }))).not.toContain('areas')
+  })
+})
+
+describe('the sticky search', () => {
+  it('the title is row 0 and the search row 1, the one the list pins, in every state', () => {
+    expect(PLACES_STICKY).toEqual([1])
+    for (const status of ['idle', 'loading', 'error', 'ready'] as const) {
+      const rows = placeRows(viewOf([], { status }))
+      expect(rows.slice(0, 2).map((r) => r.kind)).toEqual(['title', 'search'])
+    }
+    expect(kinds(viewOf([venue({ id: 'q' })], { searching: true })).slice(0, 2)).toEqual(['title', 'search'])
   })
 })
 
@@ -292,7 +322,7 @@ describe('what a card is read as', () => {
 
   it('an open card: tonight’s event, or hours when the item carries them, or just where it is', () => {
     expect(openLabel(venue({ nextEvent: event(21, 23) }), NOW)).toBe('Toit. Brewery, 298, 100 Feet Road, 350 metres. Tonight 9 PM, Vinyl Night.')
-    expect(openLabel(venue({ tonight: { opensAt: at(12), closesAt: at(23, 30) } }), NOW)).toContain('Open till 11:30 PM.')
+    expect(openLabel(venue({ tonight: { opensAt: '12:00', closesAt: '23:30' } }), NOW)).toContain('Open till 11:30 PM.')
     expect(openLabel(venue(), NOW)).toBe('Toit. Brewery, 298, 100 Feet Road, 350 metres')
   })
 
@@ -300,12 +330,33 @@ describe('what a card is read as', () => {
     expect(nearLabel(venue({ distance: 0.35 }), 2)).toBe('2 of 5 nearest. Toit, Brewery, 298, 100 Feet Road, 350 metres')
   })
 
-  it('the hours line: Opens before opening, Open till after, nothing when it is over or unreadable', () => {
-    expect(hoursLine({ opensAt: at(19), closesAt: at(23) }, NOW)).toEqual({ lead: 'Opens', time: '7 PM' })
-    expect(hoursLine({ opensAt: at(12), closesAt: at(23) }, NOW)).toEqual({ lead: 'Open till', time: '11 PM' })
-    expect(hoursLine({ opensAt: at(12), closesAt: at(17) }, NOW)).toBeNull()
-    expect(hoursLine({ opensAt: '6 PM', closesAt: '1 AM' }, NOW)).toBeNull()
+  it('the hours line: wall-clock strings, Opens before opening, Open till while open, nothing once it is over', () => {
+    // NOW is 18:00.
+    expect(hoursLine({ opensAt: '19:00', closesAt: '23:00' }, NOW)).toEqual({ lead: 'Opens', time: '7 PM' })
+    expect(hoursLine({ opensAt: '12:00', closesAt: '23:00' }, NOW)).toEqual({ lead: 'Open till', time: '11 PM' })
+    expect(hoursLine({ opensAt: '12:00', closesAt: '17:00' }, NOW)).toBeNull()
+    expect(hoursLine({ opensAt: '17:30', closesAt: '22:30' }, NOW)).toEqual({ lead: 'Open till', time: '10:30 PM' })
     expect(hoursLine(undefined, NOW)).toBeNull()
+    expect(hoursLine(null, NOW)).toBeNull()
+  })
+
+  it('a close at or before the open is past midnight: open from the evening, and still open in the small hours', () => {
+    expect(hoursLine({ opensAt: '17:00', closesAt: '01:30' }, NOW)).toEqual({ lead: 'Open till', time: '1:30 AM' })
+    expect(hoursLine({ opensAt: '19:00', closesAt: '01:30' }, NOW)).toEqual({ lead: 'Opens', time: '7 PM' })
+    // 00:30 on the clock: last night's opening is still running.
+    const small = new Date(2026, 9, 18, 0, 30).getTime()
+    expect(hoursLine({ opensAt: '17:00', closesAt: '01:30' }, small)).toEqual({ lead: 'Open till', time: '1:30 AM' })
+    // 03:00: it closed at 01:30 and opens at 17:00 again.
+    const late = new Date(2026, 9, 18, 3, 0).getTime()
+    expect(hoursLine({ opensAt: '17:00', closesAt: '01:30' }, late)).toEqual({ lead: 'Opens', time: '5 PM' })
+    // 24 hours (open 00:00, close 00:00) reads as always open.
+    expect(hoursLine({ opensAt: '00:00', closesAt: '00:00' }, NOW)).toEqual({ lead: 'Open till', time: '12 AM' })
+  })
+
+  it('times it cannot read are no line: a guess is worse than a blank', () => {
+    expect(hoursLine({ opensAt: '6 PM', closesAt: '1 AM' }, NOW)).toBeNull()
+    expect(hoursLine({ opensAt: '25:00', closesAt: '23:00' }, NOW)).toBeNull()
+    expect(hoursLine({ opensAt: '', closesAt: '23:00' }, NOW)).toBeNull()
   })
 })
 

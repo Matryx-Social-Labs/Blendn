@@ -46,8 +46,18 @@ export function plateFor(venueType: string | null | undefined): PlateKey {
   return (venueType && PLATE_BY_TYPE[venueType]) || 'bar'
 }
 
-/** The area a place is named by on its lines: the street address, else the city. */
-export const placeArea = (venue: { address: string | null; city: string | null }) => venue.address?.trim() || venue.city?.trim() || null
+/** The area a place is named by on its lines: the server's `area` (§C4) when it sends one, else the street address, else the city. */
+export const placeArea = (venue: { area?: string | null; address: string | null; city: string | null }) =>
+  venue.area?.trim() || venue.address?.trim() || venue.city?.trim() || null
+
+/**
+ * The "By area" section (B5) stays hidden until the owner approves the neighbourhood list (the areas are
+ * ours to name): a row's own area line is shown, the section and its page are not.
+ */
+export const SHOW_AREA_SECTION = false
+
+/** An area on the By area grid, from the venue summary (§C5). */
+export type PlaceAreaSummary = { slug: string; name: string; count: number; liveCount: number }
 
 /** "350 m" under a kilometre (to the nearest 50), "4.8 km" above; null with no fix. */
 export function distanceText(km: number | null | undefined): string | null {
@@ -110,16 +120,32 @@ const SPOKEN_BUCKET = { '5-9': '5 to 9 people live', '10-19': '10 to 19 people l
 /** "5 to 9 people live" for a bucket the card prints; null below 5. */
 export const spokenBucket = (bucket: VenueListItem['liveNow']) => (bucket && bucket !== 'quiet' ? SPOKEN_BUCKET[bucket] : null)
 
+/** "18:00" → minutes since midnight and "6 PM" in the one clock grammar; null for anything else. */
+function wallClock(hhmm: string): { minutes: number; text: string } | null {
+  const m = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(hhmm.trim())
+  if (!m) return null
+  const [h, min] = [Number(m[1]), Number(m[2])]
+  return { minutes: h * 60 + min, text: clockTime(new Date(2000, 0, 1, h, min).getTime()) }
+}
+
 /**
- * The hours line on an Open tonight card (§C6): "Opens 6 PM" before opening, "Open till 1 AM" after. Null when
- * the item carries no hours, or times this cannot read: a guess is worse than a blank line.
+ * The hours line on an Open tonight card (§C6): "Opens 6 PM" before opening, "Open till 1 AM" while open.
+ * The server's `tonight` is wall-clock "HH:MM" in the venue's timezone, so they are formatted as they are
+ * (a Date cannot parse them); a close at or before the open runs past midnight. Null when the item has no
+ * hours, they are unreadable, or the night is over.
+ * ponytail: "now" is the phone's clock, which is the venue's whenever the person is in the venue's city;
+ * the server sending an `open` flag would make this exact anywhere.
  */
 export function hoursLine(tonight: VenueListItem['tonight'], now: number): { lead: string; time: string } | null {
   if (!tonight) return null
-  const opens = new Date(tonight.opensAt).getTime()
-  const closes = new Date(tonight.closesAt).getTime()
-  if (Number.isNaN(opens) || Number.isNaN(closes) || closes <= now) return null
-  return opens > now ? { lead: 'Opens', time: clockTime(opens) } : { lead: 'Open till', time: clockTime(closes) }
+  const open = wallClock(tonight.opensAt)
+  const close = wallClock(tonight.closesAt)
+  if (!open || !close) return null
+  const d = new Date(now)
+  const at = d.getHours() * 60 + d.getMinutes()
+  const pastMidnight = close.minutes <= open.minutes
+  if (at < open.minutes) return pastMidnight && at < close.minutes ? { lead: 'Open till', time: close.text } : { lead: 'Opens', time: open.text }
+  return pastMidnight || at < close.minutes ? { lead: 'Open till', time: close.text } : null
 }
 
 /** What a live tile is read as: "{name}. {type}, {area}, {distance}. 10 to 19 people live." */
@@ -289,11 +315,18 @@ export function emptyReason(view: Pick<PlaceView, 'searching' | 'filters'>): Emp
   return venueType ? 'kind' : 'city'
 }
 
+/** The title and the search lead the list. */
+const LEAD_ROWS = 2
+/** `stickyHeaderIndices` for the list: the search row (there is no ListHeaderComponent to offset it). */
+export const PLACES_STICKY = [1]
+
 export type PlaceRow =
-  | { kind: 'header'; key: 'header' }
+  | { kind: 'title'; key: 'title' }
+  | { kind: 'search'; key: 'search' }
   | { kind: 'live'; key: 'live'; venues: VenueListItem[]; total: number; focused: boolean }
   | { kind: 'open'; key: 'open'; venues: VenueListItem[]; total: number; focused: boolean }
   | { kind: 'near'; key: 'near'; venues: VenueListItem[]; hasFix: boolean }
+  | { kind: 'areas'; key: 'areas'; areas: PlaceAreaSummary[] }
   | { kind: 'kinds'; key: 'kinds' }
   | { kind: 'fold'; key: 'fold'; count: number; more: boolean; open: boolean; nearest: boolean }
   | { kind: 'quiet'; key: string; venue: VenueListItem }
@@ -313,6 +346,8 @@ export type PlaceView = {
   filters: PlaceFilters
   /** A search is typed: the answer is a flat list of places, no strata. */
   searching: boolean
+  /** The top areas, from §C5 (not read yet): drawn only when `SHOW_AREA_SECTION` and there are two or more. */
+  areas?: readonly PlaceAreaSummary[]
 }
 
 /**
@@ -323,7 +358,8 @@ export type PlaceView = {
  */
 export function placeRows(view: PlaceView): PlaceRow[] {
   const { status, strata, more, quietOpen, near, hasFix, filters, searching } = view
-  const rows: PlaceRow[] = [{ kind: 'header', key: 'header' }]
+  // The title and the search are rows 0 and 1; the search is the sticky one (`PLACES_STICKY`).
+  const rows: PlaceRow[] = [{ kind: 'title', key: 'title' }, { kind: 'search', key: 'search' }]
   const all = [...strata.live, ...strata.open, ...strata.quiet]
   if (all.length === 0) {
     if (status === 'error') rows.push({ kind: 'error', key: 'error' })
@@ -344,12 +380,13 @@ export function placeRows(view: PlaceView): PlaceRow[] {
   if (showOpen) rows.push({ kind: 'open', key: 'open', venues: cap(strata.open, whatsOn === 'open'), total: strata.open.length, focused: whatsOn === 'open' })
   // A focused stratum with nothing in it says so, rather than leaving the header alone.
   if (whatsOn !== 'all') {
-    if (rows.length === 1) rows.push({ kind: 'empty', key: 'empty', reason: emptyReason(view) })
+    if (rows.length === LEAD_ROWS) rows.push({ kind: 'empty', key: 'empty', reason: emptyReason(view) })
     return rows
   }
   if (venueType === null) {
     if (!hasFix) rows.push({ kind: 'near', key: 'near', venues: [], hasFix: false })
     else if (near.length > 0) rows.push({ kind: 'near', key: 'near', venues: near.slice(0, NEAR_COUNT), hasFix: true })
+    if (SHOW_AREA_SECTION && (view.areas?.length ?? 0) >= 2) rows.push({ kind: 'areas', key: 'areas', areas: [...view.areas!] })
     rows.push({ kind: 'kinds', key: 'kinds' })
   }
   if (strata.quiet.length) {
