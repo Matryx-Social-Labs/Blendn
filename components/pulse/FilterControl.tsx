@@ -78,9 +78,10 @@ export function FilterSheet({
       title="Filters"
       headerAction={{ label: 'Clear all', onPress: () => onChange(NO_FILTERS), disabled: chosen === 0 }}
       actions={[
-        counted === null || empty
-          ? { label: 'Show results', kind: 'primary', onPress: onApply, disabled: empty, testID: 'pulse-filter-apply' }
-          : { label: counted === 1 ? 'Show {n} event' : 'Show {n} events', count: counted, kind: 'primary', onPress: onApply, testID: 'pulse-filter-apply' },
+        // "Show results" only before the first answer; after it the count rolls in one Button (keyed by its testID).
+        counted === null
+          ? { label: 'Show results', kind: 'primary', onPress: onApply, testID: 'pulse-filter-apply' }
+          : { label: counted === 1 ? 'Show {n} event' : 'Show {n} events', count: counted, kind: 'primary', onPress: onApply, disabled: empty, testID: 'pulse-filter-apply' },
       ]}
       testID="pulse-filter-sheet"
     >

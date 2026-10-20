@@ -5,7 +5,7 @@ import { Platform, StyleSheet, View } from 'react-native'
 import { SIZE, SPACE } from '../lib/design/tokens'
 import { setToastHandler, type ToastVariant } from '../lib/toast'
 import { Toast as DsToast } from './ds/Toast'
-import { ToastContext, type ToastAction, type ToastHaptic } from './toastDock'
+import { ToastContext, ToastDockContext, ToastInsetContext, type ToastAction, type ToastHaptic } from './toastDock'
 
 export { useToastDock, useToastInset } from './toastDock'
 
@@ -46,13 +46,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [queue, setQueue] = useState<ToastMessage[]>([])
   const pathname = usePathname()
 
-  const showToast = useCallback(
-    (message: string, variant: ToastVariant = 'info', options?: { action?: ToastAction; haptic?: ToastHaptic }) => {
-      const id = ++nextId
-      setQueue((prev) => queueWith(prev, { id, message, variant, action: options?.action, haptic: options?.haptic }))
-    },
-    []
-  )
+  const showToast = useCallback((message: string, variant: ToastVariant = 'info', options?: { action?: ToastAction; haptic?: ToastHaptic }) => {
+    const id = ++nextId
+    setQueue((prev) => queueWith(prev, { id, message, variant, action: options?.action, haptic: options?.haptic }))
+  }, [])
 
   // Lets `lib/` helpers with no hook (the photo picker) raise a toast too.
   useEffect(() => setToastHandler(showToast), [showToast])
@@ -72,35 +69,39 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const dock = docks.length ? docks[docks.length - 1].height : 0
   const tabRoot = isTabRoot(pathname)
   const inset = head && Platform.OS === 'android' && dock === 0 && !tabRoot ? headHeight + SPACE.lg : 0
-  const value = useMemo(() => ({ showToast, registerDock, inset }), [showToast, registerDock, inset])
+  const value = useMemo(() => ({ showToast }), [showToast])
 
   return (
     <ToastContext.Provider value={value}>
-      {children}
-      {head ? (
-        <View
-          testID="toast-lane"
-          pointerEvents="box-none"
-          // Every toast sits below the top bar's band, so the back and ⋯ buttons stay tappable for as long as one shows.
-          style={styles.lane}
-        >
-          <DsToast
-            // A new toast is a new mount: its own enter, its own dwell.
-            key={head.id}
-            kind={head.variant}
-            text={head.message}
-            action={head.action}
-            // Silent unless the caller asked for the outcome haptic, which then plays as it appears, not when it was queued.
-            haptic={head.haptic}
-            silent={!head.haptic}
-            aboveTabBar={tabRoot}
-            dock={dock}
-            onHeight={setHeadHeight}
-            onDismiss={next}
-            testID="toast"
-          />
-        </View>
-      ) : null}
+      <ToastDockContext.Provider value={registerDock}>
+        <ToastInsetContext.Provider value={inset}>
+          {children}
+          {head ? (
+            <View
+              testID="toast-lane"
+              pointerEvents="box-none"
+              // Every toast sits below the top bar's band, so the back and ⋯ buttons stay tappable for as long as one shows.
+              style={styles.lane}
+            >
+              <DsToast
+                // A new toast is a new mount: its own enter, its own dwell.
+                key={head.id}
+                kind={head.variant}
+                text={head.message}
+                action={head.action}
+                // Silent unless the caller asked for the outcome haptic, which then plays as it appears, not when it was queued.
+                haptic={head.haptic}
+                silent={!head.haptic}
+                aboveTabBar={tabRoot}
+                dock={dock}
+                onHeight={setHeadHeight}
+                onDismiss={next}
+                testID="toast"
+              />
+            </View>
+          ) : null}
+        </ToastInsetContext.Provider>
+      </ToastDockContext.Provider>
     </ToastContext.Provider>
   )
 }

@@ -14,6 +14,7 @@ import { StateScreen } from '../../components/ds/StateScreen'
 import { TopBar } from '../../components/ds/TopBar'
 import { useSkeletonCrossfade } from '../../components/motion/useSkeletonCrossfade'
 import { SkeletonBlock } from '../../components/Skeleton'
+import { useToastDock } from '../../components/toastDock'
 import { type Crew, type CrewInvite } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
 import { crewRowSub, inviteRows } from '../../lib/crewsScreens'
@@ -146,6 +147,8 @@ export default function CrewsScreen() {
 
   // The dock is a crew screen's one action once there is a list to put a crew in.
   const docked = load.kind === 'ready' && (load.crews.length > 0 || load.invites.length > 0)
+  // The Android snackbar stands above the docked button (the toast adds the bottom inset itself).
+  useToastDock(docked ? SIZE.primary + DOCK_GAP : 0)
 
   return (
     <View style={styles.container}>

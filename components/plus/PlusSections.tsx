@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode } from 'react'
+import { Fragment, useState, type ReactNode } from 'react'
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -10,6 +10,7 @@ import { PlusMark } from '../ds/ManageStatusRow'
 import { CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from '../ds/shared'
 import { Icon } from '../ui/Icon'
 import { Material } from '../ui/Material'
+import { useToastDock } from '../toastDock'
 import { COLOR, MATERIAL, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { OPACITY } from '../../lib/theme'
 import type { ctaParts, PlusFeature } from '../../lib/plus'
@@ -78,10 +79,16 @@ export function PlusHeader({ done, onClose }: { done: boolean; onClose: () => vo
 export function PlusDock({ onHeight, children }: { onHeight: (height: number) => void; children: ReactNode }) {
   const insets = useSafeAreaInsets()
   const contrast = useIncreaseContrast()
+  // The Android snackbar stands above the dock (its own bottom inset is the toast's already).
+  const [height, setHeight] = useState(0)
+  useToastDock(Math.max(0, height - insets.bottom))
   return (
     <View
       testID="plus-dock"
-      onLayout={(e) => onHeight(e.nativeEvent.layout.height)}
+      onLayout={(e) => {
+        onHeight(e.nativeEvent.layout.height)
+        setHeight(e.nativeEvent.layout.height)
+      }}
       style={[styles.dock, { paddingBottom: insets.bottom + SPACE.lg }]}
     >
       <View pointerEvents="none" style={StyleSheet.absoluteFill}>

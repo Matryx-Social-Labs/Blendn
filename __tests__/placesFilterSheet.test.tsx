@@ -92,7 +92,7 @@ describe('the primary', () => {
     const { onApply } = await draw({ countFor: async () => 0 })
     await settle()
     expect(screen.getByText('Nothing matches. Try a wider distance or another kind.').props.accessibilityLiveRegion).toBe('polite')
-    const button = screen.getByRole('button', { name: 'Show places' })
+    const button = screen.getByRole('button', { name: 'Show 0 places' })
     expect(button.props.accessibilityState).toMatchObject({ disabled: true })
     await act(async () => fireEvent.press(button))
     expect(onApply).not.toHaveBeenCalled()
@@ -114,5 +114,39 @@ describe('the primary', () => {
     await act(async () => jest.advanceTimersByTime(1))
     expect(countFor).toHaveBeenCalledTimes(1)
     expect(countFor).toHaveBeenCalledWith(expect.objectContaining({ venueType: 'cafe' }))
+  })
+})
+
+describe('the count survives the next read (review M3)', () => {
+  it('keeps the last number while the next loads, in the same Button, and rolls to the new one', async () => {
+    let answer = 212
+    const countFor = jest.fn(async () => answer as number | null)
+    await draw({ countFor })
+    await settle()
+    const before = screen.getByTestId('places-filter-apply')
+    expect(screen.getByRole('button', { name: 'Show 212 places' })).toBeTruthy()
+    // A new draft: the old number stays until the new answer lands (no "Show places" flash).
+    answer = 40
+    await act(async () => fireEvent.press(screen.getByTestId('places-filter-kind-cafe')))
+    expect(screen.getByTestId('places-filter-apply-count')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Show places' })).toBeNull()
+    await settle()
+    await settle()
+    expect(screen.getByRole('button', { name: 'Show 40 places' })).toBeTruthy()
+    // Not remounted: the rolling number is the same instance, so it rolls.
+    expect(screen.getByTestId('places-filter-apply')).toBe(before)
+  })
+
+  it('1 → many changes the label in place, without remounting the Button', async () => {
+    let answer = 1
+    await draw({ countFor: async () => answer })
+    await settle()
+    const before = screen.getByTestId('places-filter-apply')
+    answer = 9
+    await act(async () => fireEvent.press(screen.getByTestId('places-filter-kind-cafe')))
+    await settle()
+    await settle()
+    expect(screen.getByRole('button', { name: 'Show 9 places' })).toBeTruthy()
+    expect(screen.getByTestId('places-filter-apply')).toBe(before)
   })
 })

@@ -42,7 +42,8 @@ export function Badge({ text, size = 18, ring, testID }: { text: string | number
         testID={testID}
         accessibilityElementsHidden
         importantForAccessibility="no-hide-descendants"
-        style={[styles.badge, { height: size, minWidth: size, paddingHorizontal: BADGE_PAD[size] }]}
+        // `minHeight`: at a large text size the digit's line grows past 18 and the pill grows with it, never clipping it.
+        style={[styles.badge, { minHeight: size, minWidth: size, paddingHorizontal: BADGE_PAD[size] }]}
       >
         <Text
           style={[font('caption', bold, FONT_FAMILY.mono[700]), styles.badgeText]}

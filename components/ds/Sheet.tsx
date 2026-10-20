@@ -688,7 +688,8 @@ export function Sheet({ visible, onClose, title, headerAction, headerNote, body,
                 <View style={[styles.actions, fixedHeight && styles.pinned]}>
                   {sorted.map(({ kind = 'secondary', disabled, loading, ...action }) => (
                     <Button
-                      key={`${kind}-${action.label}`}
+                      // Keyed by testID when there is one, so a label that changes in place ("Show 1 place" → "Show 2 places") keeps its Button.
+                      key={`${kind}-${action.testID ?? action.label}`}
                       kind={kind}
                       loading={loading}
                       disabled={disabled || (busy && !loading)}

@@ -1,11 +1,11 @@
 import { Image } from 'expo-image'
 import { memo, useEffect, useState } from 'react'
-import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
+import { Platform, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg'
 
 import ScalePress from '../motion/ScalePress'
-import { Badge, LivePill, PresenceDot } from '../ds/MonoFamily'
+import { LivePill } from '../ds/MonoFamily'
 import { font, PRESSED_WASH, useBoldText } from '../ds/shared'
 import { VenuePlate } from '../ds/VenuePlate'
 import { LocationAskCard } from '../pulse/LocationAskCard'

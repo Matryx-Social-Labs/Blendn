@@ -227,7 +227,8 @@ export function SegmentedControl({
   const onLayout = (e: LayoutChangeEvent) => {
     segmentWidth.set(Math.max(1, (e.nativeEvent.layout.width - SPACE.xs * 2) / n))
   }
-  const trackStyle: ViewStyle = { backgroundColor: trackFill(ground) }
+  // A pair's labels may take two lines: its track grows with them at large text (`minHeight`), where a plain control stays 48.
+  const trackStyle: ViewStyle = { backgroundColor: trackFill(ground), ...(pair ? { height: undefined, minHeight: SIZE.control } : null) }
   const dividerStyle = { opacity: selected === null ? 1 : 0, transition: DIVIDER_FADE } as unknown as ViewStyle
 
   return (
@@ -241,7 +242,7 @@ export function SegmentedControl({
           style={[styles.control, trackStyle, contrast && styles.contrast, disabled && { opacity: OPACITY.disabled }]}
         >
           <View style={styles.track} pointerEvents="none">
-            {pair ? <View testID={testID && `${testID}-divider`} style={[styles.divider, dividerStyle]} /> : null}
+            {pair ? <Animated.View testID={testID && `${testID}-divider`} style={[styles.divider, dividerStyle]} /> : null}
             {showThumb ? (
               <Animated.View testID={testID && `${testID}-thumb`} style={[styles.thumb, { width: `${100 / n}%` }, thumbStyle]}>
                 <Animated.View

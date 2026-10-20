@@ -2014,7 +2014,8 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   )
 
   const listData = useMemo(() => (showLoadingSkeleton ? LEAD : [...LEAD, ...rows]), [showLoadingSkeleton, rows])
-  const slots = useMemo(() => ({ search: searchNode, body: bodyNode, scrolled: searchBarOn }), [searchNode, bodyNode, searchBarOn])
+  // Not memoised: the two nodes are new elements every render, so a memo here would never hold.
+  const slots = { search: searchNode, body: bodyNode, scrolled: searchBarOn }
 
   return (
     /*

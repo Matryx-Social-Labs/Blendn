@@ -146,3 +146,26 @@ describe('touch targets never overlap (audit U-M13)', () => {
     expect(rowGap()).toBe(48 - 32)
   })
 })
+
+describe('the fold glides (review L10)', () => {
+  const layoutOf = (id: string) => {
+    let node = screen.getByTestId(id, { includeHiddenElements: true }) as unknown as { props?: Record<string, unknown>; parent: unknown } | null
+    while (node && !node.props?.layout) node = node.parent as typeof node
+    return node?.props?.layout
+  }
+
+  it('every chip, the fold chip included, has a layout transition, so the rest glide as it opens', async () => {
+    await draw({ foldAfter: 4 })
+    expect(layoutOf('s-a')).toBeDefined()
+    expect(layoutOf('s-more')).toBeDefined()
+    await fireEvent.press(screen.getByTestId('s-more'))
+    expect(layoutOf('s-e')).toBeDefined()
+  })
+
+  it('Reduce Motion: nothing glides', async () => {
+    reduceMotion.mockReturnValue(true)
+    await draw({ foldAfter: 4 })
+    expect(layoutOf('s-a')).toBeUndefined()
+    expect(layoutOf('s-more')).toBeUndefined()
+  })
+})

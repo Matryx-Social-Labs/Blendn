@@ -19,6 +19,7 @@ import { navigateFromNotificationData } from '../../lib/notifications'
 import { subscribeToBell } from '../../lib/socketClient'
 import ActionTray from '../ActionTray'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, TYPE } from '../../lib/theme'
+import { Badge } from '../ds/MonoFamily'
 import { popIn, popOut } from '../motion/presence'
 import ScalePress from '../motion/ScalePress'
 import { useToast } from '../Toast'
@@ -173,9 +174,8 @@ export function NotificationBell() {
         */}
         {badge ? (
           <Animated.View style={styles.badge} pointerEvents="none" entering={popIn} exiting={popOut}>
-            <Text style={styles.badgeText} maxFontSizeMultiplier={1.2}>
-              {badge}
-            </Text>
+            {/* The design system's badge: a mono caption in a pill that grows with the text, ringed in the page colour. */}
+            <Badge text={badge} ring={EMBER.bg} testID="bell-badge" />
           </Animated.View>
         ) : null}
       </ScalePress>
@@ -326,23 +326,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  badge: {
-    position: 'absolute',
-    top: -SPACE.sm,
-    right: -SPACE.sm,
-    minWidth: CONTROL.badge,
-    height: CONTROL.badge,
-    paddingHorizontal: SPACE.xs,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.textPrimary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    // The page colour, so the badge reads as sitting *on* the bar rather than
-    // floating behind the glyph.
-    borderWidth: 2,
-    borderColor: EMBER.bg,
-  },
-  badgeText: { ...TYPE.caption, color: EMBER.bg },
+  badge: { position: 'absolute', top: -SPACE.sm, right: -SPACE.sm },
 
   // Transparent: `SheetModal` draws the dim and fades it on its own.
   scrim: { ...StyleSheet.absoluteFill },

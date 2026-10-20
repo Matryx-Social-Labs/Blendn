@@ -119,3 +119,25 @@ describe('Show n events', () => {
     expect(screen.getByRole('button', { name: 'Show results' })).toBeTruthy()
   })
 })
+
+describe('the count survives the next read (review M3)', () => {
+  it('"Show results" only before the first answer; then the last number stays while the next loads', async () => {
+    let answer = 42
+    const countFor = jest.fn(async (_: EventFilters) => answer as number | null)
+    const { onChange } = await draw({ countFor })
+    expect(screen.getByRole('button', { name: 'Show results' })).toBeTruthy()
+    await settle()
+    expect(screen.getByRole('button', { name: 'Show 42 events' })).toBeTruthy()
+    const before = screen.getByTestId('pulse-filter-apply')
+    answer = 7
+    await screen.rerender(
+      <FilterSheet visible draft={{ when: 'today' }} categories={CATEGORIES} hasLocation onChange={onChange} onApply={jest.fn()} onClose={jest.fn()} countFor={countFor} />
+    )
+    expect(screen.queryByRole('button', { name: 'Show results' })).toBeNull()
+    expect(screen.getByTestId('pulse-filter-apply-count')).toBeTruthy()
+    await settle()
+    await settle()
+    expect(screen.getByRole('button', { name: 'Show 7 events' })).toBeTruthy()
+    expect(screen.getByTestId('pulse-filter-apply')).toBe(before)
+  })
+})

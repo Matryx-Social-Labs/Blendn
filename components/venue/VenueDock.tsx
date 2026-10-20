@@ -115,7 +115,8 @@ export function VenueDock({
   const contrast = useIncreaseContrast()
   // The Android snackbar stands above the dock.
   const [height, setHeight] = useState(0)
-  useToastDock(height)
+  // The toast adds the bottom inset itself, and this dock's height already holds it.
+  useToastDock(Math.max(0, height - insets.bottom))
   return (
     <Material
       role="bar"

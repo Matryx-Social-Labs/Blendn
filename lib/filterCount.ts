@@ -5,18 +5,22 @@ export const COUNT_DEBOUNCE_MS = 250
 
 /**
  * The server's count for a sheet's draft, read once the draft has stopped changing. `key` names what the count depends on
- * (a draft change that cannot change the count, like a segment judged on the phone, leaves it alone); the number is
- * handed back only while it is the answer to the current `key`, so a stale count is never shown on a new draft.
+ * (a draft change that cannot change the count, like a segment judged on the phone, leaves it alone). The last answer is
+ * kept while the next is read, so the button's number rolls from one count to the next instead of blinking out; it is
+ * dropped when the sheet closes, so a reopened sheet never shows the last visit's count.
  * `load` is the caller's own and changes with it, so it is not a dependency. Null: not known (yet, or the read failed).
  */
 export function useDraftCount(visible: boolean, key: string, load: () => Promise<number | null>): number | null {
-  const [counted, setCounted] = useState<{ key: string; n: number } | null>(null)
+  const [counted, setCounted] = useState<number | null>(null)
   useEffect(() => {
-    if (!visible) return
+    if (!visible) {
+      setCounted(null)
+      return
+    }
     let live = true
     const timer = setTimeout(() => {
       load()
-        .then((n) => live && n !== null && setCounted({ key, n }))
+        .then((n) => live && n !== null && setCounted(n))
         .catch(() => undefined)
     }, COUNT_DEBOUNCE_MS)
     return () => {
@@ -24,5 +28,5 @@ export function useDraftCount(visible: boolean, key: string, load: () => Promise
       clearTimeout(timer)
     }
   }, [visible, key]) // eslint-disable-line react-hooks/exhaustive-deps
-  return counted?.key === key ? counted.n : null
+  return counted
 }

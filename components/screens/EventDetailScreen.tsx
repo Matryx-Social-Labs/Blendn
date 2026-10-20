@@ -37,6 +37,7 @@ import { openInMaps as openPlaceInMaps } from '../../lib/openInMaps'
 import { addToCalendar } from '../../lib/calendar'
 import { openBlendn, openPass } from '../../lib/blendnOverlay'
 import { useToast } from '../Toast'
+import { useToastDock } from '../toastDock'
 import { amenityTiles, type ServerAmenity } from '../../lib/amenityTile'
 import { eventDetailBlocks, type ServerEventDetails } from '../../lib/eventDetails'
 import { showEventReportOptions } from '../../lib/safetyUtils'
@@ -193,6 +194,9 @@ const SECTION_DELAY = [0, 1, 2, 3].map((i) => i * MOTION_STAGGER.normal)
 export default function EventDetail() {
   const { id, title, cover, venue, city, start, end, category, description: descriptionParam, interestCount: interestCountParam } = useLocalSearchParams()
   const insets = useSafeAreaInsets()
+  // The Android snackbar stands above the CTA dock.
+  const [ctaDockHeight, setCtaDockHeight] = useState(0)
+  useToastDock(ctaDockHeight)
   /*
    * The scroll position, for the hero's parallax and pull-down stretch.
    *
@@ -1347,7 +1351,7 @@ export default function EventDetail() {
         `Main`, not a child. `box-none` so the gap either side still scrolls the
         page underneath; only the pill takes touches.
       */}
-      <View style={styles.ctaDock} pointerEvents="box-none">
+      <View style={styles.ctaDock} pointerEvents="box-none" onLayout={(e) => setCtaDockHeight(e.nativeEvent.layout.height)}>
         {/*
           The page fading out under the pill, instead of a glow around it: the
           pill no longer carries a blur or a shadow, so this is what keeps a

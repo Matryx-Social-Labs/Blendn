@@ -16,6 +16,7 @@ import { Toggle } from '../../../components/ds/Toggle'
 import { TopBar } from '../../../components/ds/TopBar'
 import { Icon } from '../../../components/ui/Icon'
 import { useToast } from '../../../components/Toast'
+import { useToastDock } from '../../../components/toastDock'
 import { askCrewPush } from '../../../lib/crewPushAsk'
 import { CONSENT_LINE, KEEP_ANONYMOUS_LABEL, crewMessage, type CrewInvite } from '../../../lib/crews'
 import { crewsApi } from '../../../lib/crewsApi'
@@ -55,6 +56,9 @@ export default function CrewInviteScreen() {
   const [load, setLoad] = useState<Load>({ kind: 'loading' })
   const [keepAnonymous, setKeepAnonymous] = useState(false)
   const [joining, setJoining] = useState(false)
+  // The Android snackbar stands above the consent dock (the toast adds the bottom inset itself).
+  const [dockHeight, setDockHeight] = useState(0)
+  useToastDock(Math.max(0, dockHeight - insets.bottom))
   /** The server said yes: Join reads "Joined" for a beat, quiet, before the chat opens (R3-D10 #45). */
   const [joined, setJoined] = useState<{ chatGroupId: string; name: string } | null>(null)
   const [refusal, setRefusal] = useState<CrewRefusal | null>(null)
@@ -195,7 +199,11 @@ export default function CrewInviteScreen() {
           <Text style={[font('meta', bold), styles.centre, styles.tertiary]}>You’ll see who’s in it once you join.</Text>
         </View>
       </ScrollView>
-      <View testID="invite-dock" style={[styles.dock, { paddingBottom: insets.bottom + SPACE.xl }]}>
+      <View
+        testID="invite-dock"
+        onLayout={(e) => setDockHeight(e.nativeEvent.layout.height)}
+        style={[styles.dock, { paddingBottom: insets.bottom + SPACE.xl }]}
+      >
         <View style={[styles.consent, contrast && IC_HAIRLINE]}>
           <View style={styles.consentLine}>
             <Icon name="eye" size={ICON.control} />

@@ -58,7 +58,8 @@ function useSettled(value: number | undefined) {
     const timer = setTimeout(() => setSettled(value), DURATION.medium)
     return () => clearTimeout(timer)
   }, [value, settled])
-  return settled
+  // The first number has nothing rolling to wait for: it is spoken at once.
+  return value === undefined ? undefined : (settled ?? value)
 }
 
 /** The 300 ms grace before a busy control swaps its label for a spinner. */

@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
-import { StyleSheet, View } from 'react-native'
+import { StyleSheet } from 'react-native'
 
+import { Badge } from '../ds/MonoFamily'
 import ScalePress from '../motion/ScalePress'
 import { Text } from '../ui/Text'
 import { CONTROL, EMBER, EMBER_RADIUS, ICON, SPACE } from '../../lib/theme'
@@ -29,9 +30,7 @@ export function RequestsRow({ count }: { count: number }) {
     >
       <Ionicons name="person-add-outline" size={ICON.md} color={EMBER.textPrimary} />
       <Text variant="bodyStrong" style={styles.label} maxFontSizeMultiplier={1.4}>Friend requests</Text>
-      <View style={styles.badge}>
-        <Text variant="caption" color={EMBER.bg} maxFontSizeMultiplier={1.2}>{count > 99 ? '99+' : count}</Text>
-      </View>
+      <Badge text={count > 99 ? '99+' : count} testID="requests-badge" />
       <Ionicons name="chevron-forward" size={ICON.sm} color={EMBER.textSecondary} />
     </ScalePress>
   )
@@ -48,13 +47,4 @@ const styles = StyleSheet.create({
     backgroundColor: EMBER.surfaceSunken,
   },
   label: { flex: 1 },
-  badge: {
-    minWidth: CONTROL.badge,
-    height: CONTROL.badge,
-    paddingHorizontal: SPACE.xs,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.textPrimary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
 })

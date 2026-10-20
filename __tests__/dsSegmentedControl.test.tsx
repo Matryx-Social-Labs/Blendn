@@ -292,3 +292,25 @@ describe('the drag', () => {
     expect(onChange).not.toHaveBeenCalled()
   })
 })
+
+describe('a pair at large text (review L6, L7)', () => {
+  const PAIR = ['Beach', 'Mountains']
+
+  it('grows instead of clipping a two-line label: a pair has minHeight 48, a plain control a height of 48', async () => {
+    await draw({ pair: true, items: PAIR, selected: null })
+    expect(flat('s')).toMatchObject({ minHeight: SIZE.control })
+    expect(flat('s').height).toBeUndefined()
+    await screen.unmount()
+    await draw()
+    expect(flat('s').height).toBe(SIZE.control)
+  })
+
+  it('the divider is an animated view that carries the opacity transition, so it fades out as a side is chosen', async () => {
+    await draw({ pair: true, items: PAIR, selected: null })
+    const divider = screen.getByTestId('s-divider')
+    expect(String(StyleSheet.flatten(divider.props.jestInlineStyle).transition)).toContain('opacity 160ms')
+    expect(flat('s-divider').opacity).toBe(1)
+    await screen.rerender(<SegmentedControl pair items={PAIR} selected={0} onChange={jest.fn()} testID="s" />)
+    expect(flat('s-divider').opacity).toBe(0)
+  })
+})

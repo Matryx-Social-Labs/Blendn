@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { scheduleOnRN } from 'react-native-worklets'
 
 import { apiClient } from '../../lib/apiClient'
@@ -13,6 +14,7 @@ import { subscribeToChatMessage } from '../../lib/socketClient'
 import { Badge } from '../ds/MonoFamily'
 import { CONTROL_FONT_CAP, font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast } from '../ds/shared'
 import ScalePress from '../motion/ScalePress'
+import { useToastDock } from '../toastDock'
 import { Icon } from '../ui/Icon'
 import { Material } from '../ui/Material'
 
@@ -81,6 +83,10 @@ export function ChatDock({
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const [message, setMessage] = useState<DockLine | null>(null)
+  // The Android snackbar stands above this dock (the toast adds the bottom inset itself).
+  const insets = useSafeAreaInsets()
+  const [height, setHeight] = useState(0)
+  useToastDock(height > 0 ? Math.max(0, bottomInset + height - insets.bottom) : 0)
   const [fresh, setFresh] = useState(0)
   // The history request failed: not the same as a quiet room, so it says so.
   const [failed, setFailed] = useState(false)
@@ -164,7 +170,7 @@ export function ChatDock({
 
   return (
     <GestureDetector gesture={pull}>
-      <Animated.View style={[styles.place, { bottom: bottomInset }, liftStyle]}>
+      <Animated.View onLayout={(e) => setHeight(e.nativeEvent.layout.height)} style={[styles.place, { bottom: bottomInset }, liftStyle]}>
         <ScalePress
           testID="room-dock"
           onPress={() => (waveRow ? onOpenPerson((last as Extract<DockLine, { kind: 'wave' }>).fromUserId) : open())}

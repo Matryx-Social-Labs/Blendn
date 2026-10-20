@@ -103,11 +103,14 @@ export function ChipSet({
       />
     )
   }
+  // The chips glide to their new places as the fold opens and closes; Reduce Motion moves nothing.
+  const glide = reduceMotion ? undefined : LinearTransition.springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping)
   const reveal = (item: ChipItem) => {
     const i = revealed.indexOf(item)
     return (
       <Animated.View
         key={item.key}
+        layout={glide}
         entering={FadeIn.duration(reduceMotion ? REDUCE_MOTION.duration.base : DURATION.quick).delay(
           reduceMotion ? 0 : Math.min(i, STAGGER.itemsMax) * STAGGER.tight
         )}
@@ -130,21 +133,27 @@ export function ChipSet({
           ) : null}
         </View>
       ) : null}
-      <Animated.View
-        layout={reduceMotion ? undefined : LinearTransition.springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping)}
-        testID={testID && `${testID}-wrap`}
-        style={[styles.wrap, { rowGap: minTarget() - SIZE.tag }]}
-      >
-        {visible.map((item) => (revealed.includes(item) ? reveal(item) : chip(item)))}
+      <Animated.View layout={glide} testID={testID && `${testID}-wrap`} style={[styles.wrap, { rowGap: minTarget() - SIZE.tag }]}>
+        {visible.map((item) =>
+          revealed.includes(item) ? (
+            reveal(item)
+          ) : (
+            <Animated.View key={item.key} layout={glide} style={styles.item}>
+              {chip(item)}
+            </Animated.View>
+          )
+        )}
         {hidden.length ? (
-          <Chip
-            kind="more"
-            expanded={open}
-            label={open ? 'Show fewer' : `+${hidden.length} more`}
-            accessibilityLabel={open ? 'Show fewer' : `${hidden.length} more ${foldNoun}`}
-            onPress={() => setOpen((o) => !o)}
-            testID={testID && `${testID}-more`}
-          />
+          <Animated.View layout={glide} style={styles.item}>
+            <Chip
+              kind="more"
+              expanded={open}
+              label={open ? 'Show fewer' : `+${hidden.length} more`}
+              accessibilityLabel={open ? 'Show fewer' : `${hidden.length} more ${foldNoun}`}
+              onPress={() => setOpen((o) => !o)}
+              testID={testID && `${testID}-more`}
+            />
+          </Animated.View>
         ) : null}
       </Animated.View>
       <FieldNotes error={error} hint={hint} bold={bold} />

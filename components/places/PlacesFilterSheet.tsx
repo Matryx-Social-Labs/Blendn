@@ -60,9 +60,10 @@ export function PlacesFilterSheet({
       title="Filters"
       headerAction={{ label: 'Clear all', onPress: () => setDraft(NO_FILTERS), disabled: sameFilters(draft, NO_FILTERS) }}
       actions={[
-        n === null || empty
-          ? { label: 'Show places', kind: 'primary', onPress: () => onApply(draft), disabled: empty, testID: 'places-filter-apply' }
-          : { label: n === 1 ? 'Show {n} place' : 'Show {n} places', count: n, kind: 'primary', onPress: () => onApply(draft), testID: 'places-filter-apply' },
+        // One Button throughout (keyed by its testID), so the number rolls from count to count instead of remounting.
+        n === null
+          ? { label: 'Show places', kind: 'primary', onPress: () => onApply(draft), testID: 'places-filter-apply' }
+          : { label: n === 1 ? 'Show {n} place' : 'Show {n} places', count: n, kind: 'primary', onPress: () => onApply(draft), disabled: empty, testID: 'places-filter-apply' },
       ]}
       testID="places-filter-sheet"
     >

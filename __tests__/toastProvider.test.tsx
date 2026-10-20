@@ -9,7 +9,8 @@ jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
 }))
 let mockPath = '/events'
-jest.mock('expo-router', () => ({ usePathname: () => mockPath }))
+let mockFocused = true
+jest.mock('expo-router', () => ({ usePathname: () => mockPath, useIsFocused: () => mockFocused }))
 
 import { isTabRoot, ToastProvider, useToast, useToastDock, useToastInset } from '../components/Toast'
 import { SIZE, SPACE } from '../lib/design/tokens'
@@ -267,5 +268,66 @@ describe('docks and the room left under a snackbar (Android)', () => {
     )
     await fireEvent.press(screen.getByRole('button', { name: 'save' }))
     expect(seen.at(-1)).toBe(0)
+  })
+})
+
+describe('review fixes: focus-scoped docks and split contexts', () => {
+  const android = () => Object.defineProperty(Platform, 'OS', { value: 'android', configurable: true })
+  afterEach(() => {
+    Object.defineProperty(Platform, 'OS', { value: 'ios', configurable: true })
+    mockFocused = true
+  })
+  const bottomOf = () => (StyleSheet.flatten(screen.getByTestId('toast').props.style) as { bottom?: number }).bottom
+
+  function Docked({ height, label }: { height: number; label: string }) {
+    const { showToast } = useToast()
+    useToastDock(height)
+    return (
+      <Pressable accessibilityRole="button" onPress={() => showToast('Saved', 'success')}>
+        <Text>{label}</Text>
+      </Pressable>
+    )
+  }
+
+  it('a dock under a screen that is not in front (Room → Room info) is not registered: its height is dropped, and comes back on return', async () => {
+    android()
+    mockPath = '/chat-info/abc'
+    mockFocused = false
+    const tree = (
+      <ToastProvider>
+        <Docked height={90} label="composer" />
+      </ToastProvider>
+    )
+    await render(tree)
+    await fireEvent.press(screen.getByRole('button', { name: 'composer' }))
+    expect(bottomOf()).toBe(SPACE.lg)
+    mockFocused = true
+    await screen.rerender(<ToastProvider><Docked height={90} label="composer" /></ToastProvider>)
+    expect(bottomOf()).toBe(90 + SPACE.lg)
+  })
+
+  it('a consumer of useToast() is not re-rendered when a dock registers or a toast measures itself', async () => {
+    android()
+    mockPath = '/settings'
+    let renders = 0
+    function Raiser() {
+      renders += 1
+      const { showToast } = useToast()
+      return (
+        <Pressable accessibilityRole="button" onPress={() => showToast('Saved', 'success')}>
+          <Text>raise</Text>
+        </Pressable>
+      )
+    }
+    await render(
+      <ToastProvider>
+        <Raiser />
+        <Docked height={70} label="dock" />
+      </ToastProvider>
+    )
+    const settled = renders
+    await fireEvent.press(screen.getByRole('button', { name: 'raise' }))
+    await act(async () => fireEvent(screen.getByTestId('toast'), 'layout', { nativeEvent: { layout: { width: 300, height: 52, x: 0, y: 0 } } }))
+    expect(renders).toBe(settled)
   })
 })

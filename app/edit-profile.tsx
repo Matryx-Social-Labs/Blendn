@@ -522,9 +522,8 @@ export default function EditProfile() {
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <KeyboardAvoidingView
         style={styles.container}
-        // `undefined` on Android: the window already resizes for the keyboard
-        // (adjustResize), and 'height' on top of it double-compensated — the
-        // same fix components/onboarding/OnboardingScreen.tsx carries.
+        // 'padding' on both platforms (lib/keyboard.ts): an edge-to-edge Android window ignores adjustResize, so the
+        // content has to move itself out from under the keyboard.
         behavior={KEYBOARD_BEHAVIOR}
       >
         <TopBar

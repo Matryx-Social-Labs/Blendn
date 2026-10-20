@@ -17,7 +17,7 @@ const text = (t: string) => screen.getByText(t, { includeHiddenElements: true })
 describe('<Badge>', () => {
   it('is an 18 pt white pill with ink digits in Geist Mono 700, capped at 1.3×', async () => {
     await render(<Badge text={3} testID="b" />)
-    expect(flat('b')).toMatchObject({ height: 18, minWidth: 18, backgroundColor: COLOR.textPrimary })
+    expect(flat('b')).toMatchObject({ minHeight: 18, minWidth: 18, backgroundColor: COLOR.textPrimary })
     const digits = text('3')
     expect(StyleSheet.flatten(digits.props.style)).toMatchObject({ color: COLOR.ink, fontFamily: FONT_FAMILY.mono[700] })
     expect(digits.props.maxFontSizeMultiplier).toBe(1.3)
@@ -25,7 +25,7 @@ describe('<Badge>', () => {
 
   it('is a 22 pt pill as a label (“3 new”)', async () => {
     await render(<Badge text="3 new" size={22} testID="b" />)
-    expect(flat('b')).toMatchObject({ height: 22, minWidth: 22 })
+    expect(flat('b')).toMatchObject({ minHeight: 22, minWidth: 22 })
   })
 
   it('cuts out of what it sits on with a 2 pt ring in the ground colour', async () => {
