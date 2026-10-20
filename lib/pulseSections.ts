@@ -28,12 +28,21 @@ export const PROMOTED_LABEL = 'Promoted'
 export const EDITORIAL_LABEL: string | null = null
 /** Featured rotates daily: its order is seeded by the date. `false` keeps one fixed order (by id). */
 export const FEATURED_ROTATES_DAILY = true
-/** The order the sections draw in, and (Nearby aside) the order they claim events in. Featured is second. */
-export const SECTION_ORDER: readonly PulseSectionKey[] = ['now', 'featured', 'tonight', 'nearby', 'forYou', 'weekend']
+/**
+ * The order the sections draw in, and (Nearby and the two area sections aside) the order they claim events in.
+ * Featured is always first, above Happening now (owner ruling, travel-mode-and-area-discovery §5.1).
+ */
+export const SECTION_ORDER: readonly PulseSectionKey[] = ['featured', 'now', 'inArea', 'tonight', 'aroundArea', 'nearby', 'forYou', 'weekend']
+
+/**
+ * "Events in {area}" and "Around {area}" need the area endpoints of plan phase P3, which are not built: until
+ * then both are absent and the sections after Tonight keep their slots. Flip it when `area` and `areas` exist.
+ */
+export const AREA_SECTIONS_READY = false
 
 /* -------------------------------------------------------------------------- */
 
-export type PulseSectionKey = 'now' | 'featured' | 'tonight' | 'nearby' | 'forYou' | 'weekend'
+export type PulseSectionKey = 'featured' | 'now' | 'inArea' | 'tonight' | 'aroundArea' | 'nearby' | 'forYou' | 'weekend'
 
 export const NOW_LIMIT = 8
 export const TONIGHT_LIMIT = 4
@@ -204,8 +213,11 @@ export function pulseSections<E extends SectionEvent>(input: PulseSectionsInput<
   const fresh = (list: readonly E[]) => list.filter((e) => !claimed.has(e.id))
 
   for (const key of SECTION_ORDER) {
-    if (key === 'now') {
-      const live = page
+    if (key === 'inArea' || key === 'aroundArea') {
+      // Hidden until P3 (`AREA_SECTIONS_READY`); the area sections are exempt from the time dedupe when they arrive.
+      if (!AREA_SECTIONS_READY) continue
+    } else if (key === 'now') {
+      const live = fresh(page)
         .filter((e) => isLiveNow(e, now))
         .sort((a, b) => (b.here_count ?? 0) - (a.here_count ?? 0) || byStart(a, b))
       if (live.length) take('now', live, NOW_LIMIT)

@@ -18,6 +18,7 @@ import { SectionHeader } from '../ds/SectionHeader'
 import { apiClient, type VenueListItem } from '../../lib/apiClient'
 import { COLOR, SPACE, SPRING } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
+import { roundCoordinate } from '../../lib/coordinates'
 import { Logger } from '../../lib/logger'
 import { getNetworkState, subscribeNetworkState } from '../../lib/networkStatus'
 import { initialPlaces, mayLoadMore, placesKey, placesReducer, readStamp } from '../../lib/places'
@@ -95,8 +96,8 @@ export function PlacesList({
   const [search, setSearch] = useState('')
   const searching = search.trim().length > 0
   // To ~100 m, as the key is: a GPS jitter is not a new request.
-  const lat = location ? Number(location.latitude.toFixed(3)) : undefined
-  const lon = location ? Number(location.longitude.toFixed(3)) : undefined
+  const lat = location ? roundCoordinate(location.latitude) : undefined
+  const lon = location ? roundCoordinate(location.longitude) : undefined
   const hasFix = lat !== undefined
   const key = placesKey(city, location, venueType, searching ? search.trim() : null, radiusKm)
   const [state, dispatch] = useReducer(placesReducer, key, initialPlaces)

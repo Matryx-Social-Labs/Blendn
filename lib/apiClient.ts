@@ -3,6 +3,7 @@
  * Replaces direct Supabase calls with admin backend API calls
  */
 
+import { roundCoordinate } from './coordinates'
 import { markCheckIn } from './checkInTiming'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { AttendancePayload, RsvpEventsPayload, SavedEventsPayload } from './savedEvents'
@@ -203,7 +204,9 @@ const requestQueue = new RequestQueue()
 function toQuery(params: object = {}): string {
   const searchParams = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined && value !== null) searchParams.append(key, String(value))
+    if (value === undefined || value === null) continue
+    // A position never leaves in a URL at more than ~110 m (`lib/coordinates.ts`): the server logs query strings.
+    searchParams.append(key, (key === 'lat' || key === 'lon') && typeof value === 'number' ? String(roundCoordinate(value)) : String(value))
   }
   const query = searchParams.toString()
   return query ? `?${query}` : ''
@@ -1856,8 +1859,8 @@ class ApiClientClass {
   ): Promise<ApiResponse<EventApiItem>> {
     const searchParams = new URLSearchParams()
     if (params) {
-      if (params.lat !== undefined) searchParams.append('lat', String(params.lat))
-      if (params.lon !== undefined) searchParams.append('lon', String(params.lon))
+      if (params.lat !== undefined) searchParams.append('lat', String(roundCoordinate(params.lat)))
+      if (params.lon !== undefined) searchParams.append('lon', String(roundCoordinate(params.lon)))
       if (params.include) searchParams.append('include', params.include)
       if (params.interestedLimit !== undefined) {
         searchParams.append('interestedLimit', String(params.interestedLimit))

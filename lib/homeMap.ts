@@ -8,6 +8,7 @@
  * and the map never draws one (`__tests__/homeMap.test.ts`).
  */
 
+import { roundCoordinate } from './coordinates'
 import { getDistanceKm } from './geo'
 import { liveWindow } from './eventSession'
 import type { LiveNow } from './home'
@@ -244,7 +245,7 @@ export type PinQuery = { lat: number; lon: number; radius: number }
 
 /** To ~100 m and 10 m of radius: a pan of a few metres is the same question. */
 export function roundQuery(q: PinQuery): PinQuery {
-  return { lat: Math.round(q.lat * 1e3) / 1e3, lon: Math.round(q.lon * 1e3) / 1e3, radius: Math.round(q.radius * 100) / 100 }
+  return { lat: roundCoordinate(q.lat), lon: roundCoordinate(q.lon), radius: Math.round(q.radius * 100) / 100 }
 }
 
 /**

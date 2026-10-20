@@ -1,5 +1,7 @@
 import {
+  AREA_SECTIONS_READY,
   categoryChips,
+  SECTION_ORDER,
   pulsePeekLine,
   DAY_RESET_HOUR,
   everythingElse,
@@ -195,21 +197,43 @@ describe('This weekend', () => {
 })
 
 describe('the order and the dedupe', () => {
-  it('draws Now, Featured, Tonight, Nearby, Because you like, This weekend; an event is claimed by the first that wants it', () => {
+  it('draws Featured first, then Now, Tonight, Nearby, Because you like, This weekend; an event is claimed by the first that wants it', () => {
     const live = ev('live', 17, { is_featured: true, distance: 1 })
+    const running = ev('running', 17, { distance: 4 })
     const feat = ev('feat', 22, { is_featured: true, distance: 2 })
     const tonight = ev('tonight', 21, { distance: 3 })
     const s = pulseSections<E>({
-      page: [tonight, feat, live],
+      page: [tonight, feat, running, live],
       ...empty,
       forYou: { interest: { name: 'Jazz', slug: 'jazz' }, events: [ev('y1', 21, {}, 1), ev('y2', 21, {}, 2), ev('y3', 21, {}, 3)] },
       weekend: [ev('w1', 21, {}, 4), ev('w2', 21, {}, 5)],
     })
-    expect(s.map((x) => x.key)).toEqual(['now', 'featured', 'tonight', 'nearby', 'forYou', 'weekend'])
-    expect(s[0].events.map((e) => e.id)).toEqual(['live'])
-    // 'live' is featured too, but Happening now claimed it first.
-    expect(s[1].events.map((e) => e.id)).toEqual(['feat'])
+    expect(s.map((x) => x.key)).toEqual(['featured', 'now', 'tonight', 'nearby', 'forYou', 'weekend'])
+    // Featured claims first, even a running event: it is not repeated under Happening now.
+    expect(s[0].events.map((e) => e.id).sort()).toEqual(['feat', 'live'])
+    expect(s[1].events.map((e) => e.id)).toEqual(['running'])
     expect(s[2].events.map((e) => e.id)).toEqual(['tonight'])
+  })
+
+  it('Featured is the top section, above Happening now, whatever else is on', () => {
+    expect(SECTION_ORDER.slice(0, 2)).toEqual(['featured', 'now'])
+    const s = pulseSections<E>({ page: [ev('r', 17), ev('f', 22, { is_featured: true })], ...empty })
+    expect(s[0].key).toBe('featured')
+  })
+
+  it('"Events in {area}" and "Around {area}" hold their slots (after Now, and after Tonight) but are hidden until the area endpoints exist', () => {
+    expect(SECTION_ORDER).toEqual(['featured', 'now', 'inArea', 'tonight', 'aroundArea', 'nearby', 'forYou', 'weekend'])
+    expect(AREA_SECTIONS_READY).toBe(false)
+    const s = pulseSections<E>({ page: [ev('a', 21, { distance: 1 }), ev('r', 17)], ...empty })
+    expect(s.map((x) => x.key)).not.toContain('inArea')
+    expect(s.map((x) => x.key)).not.toContain('aroundArea')
+    // The sections after Tonight keep their slots.
+    expect(s.map((x) => x.key)).toEqual(['now', 'tonight', 'nearby'])
+  })
+
+  it('the count floor of five holds: a live event with 4 here prints nothing, with 5 prints 5', () => {
+    expect(printable(4)).toBeNull()
+    expect(printable(5)).toBe(5)
   })
 
   it('Everything else is the page minus every event a section drew, Nearby’s included', () => {
