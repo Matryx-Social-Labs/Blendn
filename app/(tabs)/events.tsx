@@ -77,6 +77,7 @@ import {
   timeLabel,
 } from '../../lib/pulse'
 import { liveWindow, sessionOver } from '../../lib/eventSession'
+import { featuredPick, seedDateOf } from '../../lib/pulseSections'
 import { mergeEventPage, pageHasMore, pulseEmptyCopy, pulseEmptyKind } from '../../lib/pulseFeed'
 import { checkOutOf } from '../../lib/checkIn'
 import { openBlendn } from '../../lib/blendnOverlay'
@@ -1476,21 +1477,18 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
 
 
   /*
-   * Featured, then Upcoming — the frame's two sections, from one sorted list.
+   * Featured is what is featured, and only that (BUILD-SPEC §D1, A3).
    *
-   * `upcomingItems` is already ordered by start time, so the split is a slice
-   * rather than a second query. **Featured takes only events that have a cover
-   * image**: the card is a photograph with words on it, and one without an image
-   * is a dark rectangle with a headline — worse than not being featured. The
-   * stack below reads fine either way, so everything else falls through to it.
-   *
-   * `featuredIds` is what stops the two sections showing the same event twice,
-   * which is the same subtraction `mainListData` does further down for the same
-   * reason.
+   * It was the first six events with a cover image, which drew unfeatured events
+   * under a heading that says they were picked. Now: events the server (or the
+   * admin toggle, until it sends a rank) marks featured, capped and rotated by
+   * the day (`featuredPick`). Never back-filled: with none, the section is
+   * absent. An event with no cover still qualifies; its card draws the brand
+   * orbs hero, as the Scene does.
    */
   const featuredItems = useMemo(
-    () => upcomingItems.filter(e => !!e.cover_image_url).slice(0, 6),
-    [upcomingItems]
+    () => featuredPick(events, eventsLoadedAt, seedDateOf(eventsLoadedAt)),
+    [events, eventsLoadedAt]
   )
   /*
    * The Featured cards' props, computed once per data change.

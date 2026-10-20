@@ -151,6 +151,15 @@ describe('peopleLabel', () => {
     expect(peopleLabel({ here_count: 0, going_count: 39 }, true)).toBe('39 going')
   })
 
+  it('the floor is five: "3 going" and "4 here now" say nothing, five and up do (BUILD-SPEC §0)', () => {
+    expect(peopleLabel({ going_count: 4 }, false)).toBeNull()
+    expect(peopleLabel({ going_count: 5 }, false)).toBe('5 going')
+    expect(peopleLabel({ here_count: 4, going_count: 4 }, true)).toBeNull()
+    // Four inside is not said, so the line falls to the going count, which clears its own floor.
+    expect(peopleLabel({ here_count: 4, going_count: 30 }, true)).toBe('30 going')
+    expect(peopleLabel({ here_count: 5, going_count: 3 }, true)).toBe('5 here now')
+  })
+
   it('reads hereCount, never checkInCount: 12 inside of 14 who came is "12 here now" (final drive)', () => {
     const card = eventFromApi({ id: 'e1', title: 'Evening Ragas', startTime: '2026-10-16T13:00:00.000Z', hereCount: 12, checkInCount: 14, currentCapacity: 14, goingCount: 30 } as never)
     expect(peopleLabel(card, true)).toBe('12 here now')
@@ -165,7 +174,7 @@ describe('peopleLabel', () => {
 
   it('zero, or a count the server did not send, is nothing to say', () => {
     expect(peopleLabel({ here_count: 0, going_count: 0 }, false)).toBeNull()
-    expect(peopleLabel({ here_count: 3, going_count: null }, false)).toBeNull()
+    expect(peopleLabel({ here_count: 30, going_count: null }, false)).toBeNull()
     expect(peopleLabel({ going_count: -3 }, false)).toBeNull()
     expect(peopleLabel({ going_count: Number.NaN }, false)).toBeNull()
     expect(peopleLabel({}, true)).toBeNull()

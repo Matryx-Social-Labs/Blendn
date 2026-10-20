@@ -6,6 +6,7 @@
  * disagree with, and a rule inside a `<Text>` is a rule nobody can test.
  */
 
+import { printable } from './pulseSections'
 import { MONTHS, WEEKDAYS } from './time'
 
 /**
@@ -152,7 +153,8 @@ export function placeLabel(event: {
   return city || null
 }
 
-const count = (n: number | null | undefined) => (typeof n === 'number' && Number.isFinite(n) && n >= 1 ? Math.floor(n) : null)
+/** A count a card may print: five and up (`printable`); a small number of people is not said. */
+const count = printable
 
 /**
  * The card's people line (the design's EventCard pill): "{n} here now" while
@@ -161,9 +163,10 @@ const count = (n: number | null | undefined) => (typeof n === 'number' && Number
  * count (`current_capacity`, everybody who came): it read "1 joined" on an
  * event 19 were going to, and "14 here now" with 12 inside.
  *
- * Zero is `null` on purpose. "0 going" reads as a verdict on the event, and
- * every event is 0 for a while. No line reads as "this has not started filling
- * up", which is the true statement.
+ * Under five is `null` on purpose (`LIVE_FLOOR`). "0 going" reads as a verdict
+ * on the event, "3 going" names whoever they are, and every event is small for a
+ * while. No line reads as "this has not started filling up", which is the true
+ * statement.
  */
 export function peopleLabel(
   event: { here_count?: number | null; going_count?: number | null },

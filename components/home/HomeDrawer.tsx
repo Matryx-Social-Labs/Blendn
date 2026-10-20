@@ -1,7 +1,7 @@
 import { useEffect, useMemo, type ReactNode } from 'react'
 import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
-import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, type SharedValue } from 'react-native-reanimated'
+import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming, type SharedValue } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
 
 import { Grabber } from '../ui/Grabber'
@@ -15,10 +15,11 @@ import {
   stepSnap,
   type DrawerSnap,
 } from '../../lib/home'
+import { DURATION, EASING, REDUCE_MOTION, SPRING } from '../../lib/design/tokens'
 import { EMBER, EMBER_RADIUS, SPACE } from '../../lib/theme'
 
-/** Settles without a bounce: a drawer, not a toy. */
-const SETTLE = { damping: 28, stiffness: 260, mass: 0.9 } as const
+/** Under Reduce Motion the drawer still travels, gently: a short timing on the standard curve, not an instant jump (BUILD-SPEC §0, `drawer`). */
+const REDUCED_SETTLE = { duration: REDUCE_MOTION.duration.base, easing: Easing.bezier(...EASING.standard) } as const
 
 /**
  * The home screen's pull-up drawer: peek, half, full (plan v2 step 2).
@@ -61,7 +62,7 @@ export function HomeDrawer({
   const dragStart = useSharedValue(0)
 
   useEffect(() => {
-    y.set(reduceMotion ? points[snap] : withSpring(points[snap], SETTLE))
+    y.set(reduceMotion ? withTiming(points[snap], REDUCED_SETTLE) : withSpring(points[snap], SPRING.settle))
   }, [snap, points, reduceMotion, y])
 
   // Built once per set of snap points, not on every render.
@@ -79,10 +80,10 @@ export function HomeDrawer({
         .onEnd((e) => {
           const next = settleSnap(y.get(), e.velocityY, points)
           // The release's own speed carries into the settle, so a flick does not stall and restart.
-          y.set(withSpring(points[next], { ...SETTLE, velocity: e.velocityY }))
+          y.set(reduceMotion ? withTiming(points[next], REDUCED_SETTLE) : withSpring(points[next], { ...SPRING.settle, velocity: e.velocityY }))
           scheduleOnRN(onSnap, next)
         }),
-    [points, onSnap, y, dragStart]
+    [points, onSnap, y, dragStart, reduceMotion]
   )
 
   const moved = useAnimatedStyle(() => ({ transform: [{ translateY: y.get() - points.full }] }))

@@ -619,6 +619,11 @@ export interface EventApiItem {
   checkInRadius: number
   check_in_radius?: number
   isFeatured: boolean
+  /**
+   * The placement behind a featured event (BUILD-SPEC C1): `paid` is labelled "Promoted", `editorial` is not.
+   * Absent from a server that does not send it: `isFeatured` (the admin toggle) is all there is.
+   */
+  featured?: { kind: 'paid' | 'editorial'; rank: number; by?: string | null } | null
   isRecurring: boolean
   externalLink: string | null
   createdAt: string
