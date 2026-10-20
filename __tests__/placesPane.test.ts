@@ -1,18 +1,33 @@
 import type { VenueListItem } from '../lib/apiClient'
 import {
+  activeFilterCount,
   distanceText,
   EAGER_PAGES,
+  emptyReason,
+  fitBounds,
+  glowFor,
+  hoursLine,
+  KIND_TILES,
   mayReadNext,
+  moreLine,
+  nearLabel,
+  nearPins,
+  NO_FILTERS,
+  openLabel,
   peekLine,
   placeLabel,
   placeRows,
   PLACE_TYPES,
   placesCount,
   plateFor,
-  quietLine,
+  RAIL_CAP,
   splitPlaces,
+  statLine,
   tierOf,
+  tileLabel,
   tonightEvent,
+  type PlaceFilters,
+  type PlaceView,
 } from '../lib/placesPane'
 
 const NOW = new Date(2026, 9, 17, 18, 0).getTime()
@@ -56,8 +71,10 @@ describe('the plates', () => {
   })
 
   it('the chip row asks the server for a type it has', () => {
-    expect(PLACE_TYPES.map((t) => t.label)).toEqual(['All', 'Bars', 'Breweries', 'Clubs', 'Live music', 'Cafés'])
-    expect(PLACE_TYPES.map((t) => t.venueType)).toEqual([null, 'pub_bar', 'brewery', 'nightclub', 'live_music_venue', 'cafe'])
+    expect(PLACE_TYPES.map((t) => t.label)).toEqual(['All', 'Bars', 'Breweries', 'Clubs', 'Live music', 'Rooftops', 'Cafés'])
+    expect(PLACE_TYPES.map((t) => t.venueType)).toEqual([null, 'pub_bar', 'brewery', 'nightclub', 'live_music_venue', 'lounge_rooftop', 'cafe'])
+    // The kind plates are the same set without "All", in the design's order.
+    expect(KIND_TILES.map((t) => t.label)).toEqual(['Bars', 'Breweries', 'Clubs', 'Live music', 'Rooftops', 'Cafés'])
   })
 })
 
@@ -73,10 +90,10 @@ describe('words', () => {
   it('counts and the fold line', () => {
     expect(placesCount(1)).toBe('1 place')
     expect(placesCount(3)).toBe('3 places')
-    expect(quietLine(1, false)).toBe('1 quiet place')
-    expect(quietLine(12, false)).toBe('12 quiet places')
+    expect(moreLine(1, false)).toBe('1 more place')
+    expect(moreLine(12, false)).toBe('12 more places')
     // Pages remain: the number is what has been read, not a total.
-    expect(quietLine(12, true)).toBe('12+ quiet places')
+    expect(moreLine(12, true)).toBe('12+ more places')
   })
 })
 
@@ -114,22 +131,181 @@ describe('the strata', () => {
     expect(s.quiet.map((v) => v.id)).toEqual(['quiet', 'later', 'unknown'])
   })
 
-  it('rows: live tiles in one row, open rows under their heading, the fold, then quiet rows only when unfolded', () => {
-    const s = splitPlaces([packed, open, quiet, later], NOW)
-    expect(placeRows(s, false, false).map((r) => r.kind)).toEqual(['live', 'openHeader', 'open', 'fold'])
-    expect(placeRows(s, true, false).map((r) => r.kind)).toEqual(['live', 'openHeader', 'open', 'fold', 'quiet', 'quiet'])
-    expect(placeRows(s, false, false).find((r) => r.kind === 'fold')).toMatchObject({ count: 2, more: false, open: false })
+})
+
+/** A view with a fix and nothing set, over the given venues; each test changes what it is about. */
+const viewOf = (venues: VenueListItem[], over: Partial<PlaceView> = {}): PlaceView => ({
+  status: 'ready',
+  strata: splitPlaces(venues, NOW),
+  more: false,
+  quietOpen: false,
+  near: [],
+  hasFix: true,
+  filters: NO_FILTERS,
+  searching: false,
+  ...over,
+})
+const kinds = (view: PlaceView) => placeRows(view).map((r) => r.kind)
+
+describe('the rows (BUILD-SPEC B)', () => {
+  const live = venue({ id: 'live', liveNow: '5-9' })
+  const packed = venue({ id: 'packed', liveNow: '20+', nextEvent: event(21, 23) })
+  const open = venue({ id: 'open', nextEvent: event(21, 23) })
+  const quiet = venue({ id: 'quiet' })
+  const later = venue({ id: 'later', nextEvent: event(21, 23, 1) })
+  const nearby = [venue({ id: 'n1' }), venue({ id: 'n2' })]
+
+  it('header, Live now, Open tonight, Near you, the kinds, then the fold; each stratum is one rail row', () => {
+    expect(kinds(viewOf([packed, open, quiet, later], { near: nearby }))).toEqual(['header', 'live', 'open', 'near', 'kinds', 'fold'])
   })
 
-  it('no live, no open: just the fold; nothing quiet: no fold', () => {
-    expect(placeRows(splitPlaces([quiet], NOW), false, false).map((r) => r.kind)).toEqual(['fold'])
-    expect(placeRows(splitPlaces([live], NOW), false, false).map((r) => r.kind)).toEqual(['live'])
-    expect(placeRows(splitPlaces([], NOW), false, false)).toEqual([])
+  it('quiet rows only when the fold is open', () => {
+    expect(kinds(viewOf([quiet, later], { quietOpen: true }))).toEqual(['header', 'kinds', 'fold', 'quiet', 'quiet'])
+    expect(placeRows(viewOf([packed, open, quiet, later])).find((r) => r.kind === 'fold')).toMatchObject({ count: 2, more: false, open: false, nearest: true })
+  })
+
+  it('Live now and Open tonight are absent at 0: no quiet filler, no apology', () => {
+    expect(kinds(viewOf([quiet]))).toEqual(['header', 'kinds', 'fold'])
+    expect(kinds(viewOf([open, quiet]))).toEqual(['header', 'open', 'kinds', 'fold'])
+    expect(kinds(viewOf([live, quiet]))).toEqual(['header', 'live', 'kinds', 'fold'])
+  })
+
+  it('Near you: the location card without a fix, absent with a fix and no places, rows with both', () => {
+    const noFix = placeRows(viewOf([quiet], { hasFix: false })).find((r) => r.kind === 'near')
+    expect(noFix).toMatchObject({ kind: 'near', hasFix: false, venues: [] })
+    expect(kinds(viewOf([quiet], { near: [] }))).not.toContain('near')
+    const rows = placeRows(viewOf([quiet], { near: [...nearby, ...nearby, ...nearby] }))
+    // Never more than five.
+    expect((rows.find((r) => r.kind === 'near') as { venues: unknown[] }).venues).toHaveLength(5)
+  })
+
+  it('a fold with no fix says A–Z (nearest: false)', () => {
+    expect(placeRows(viewOf([quiet], { hasFix: false })).find((r) => r.kind === 'fold')).toMatchObject({ nearest: false })
+  })
+
+  it('a rail holds twelve; focusing the stratum ("See all") lifts the cap and hides the other sections', () => {
+    const many = Array.from({ length: 20 }, (_, i) => venue({ id: `l${i}`, liveNow: '5-9' }))
+    const capped = placeRows(viewOf(many)).find((r) => r.kind === 'live') as { venues: unknown[]; total: number; focused: boolean }
+    expect(capped.venues).toHaveLength(RAIL_CAP)
+    expect(capped.total).toBe(20)
+    const focusedView = viewOf([...many, open, quiet], { filters: { ...NO_FILTERS, whatsOn: 'live' } })
+    const focused = placeRows(focusedView).find((r) => r.kind === 'live') as { venues: unknown[]; focused: boolean }
+    expect(focused.venues).toHaveLength(20)
+    expect(focused.focused).toBe(true)
+    expect(kinds(focusedView)).toEqual(['header', 'live'])
+  })
+
+  it('a kind chosen hides the kinds grid and Near you (a chip carries it); the strata stay', () => {
+    expect(kinds(viewOf([packed, quiet], { near: nearby, filters: { ...NO_FILTERS, venueType: 'brewery' } }))).toEqual(['header', 'live', 'fold'])
+  })
+
+  it('a search is a flat list under one label, whatever the strata', () => {
+    expect(kinds(viewOf([packed, open, quiet], { searching: true }))).toEqual(['header', 'label', 'quiet', 'quiet', 'quiet'])
+  })
+
+  it('loading, failing and empty are rows under the real header', () => {
+    expect(kinds(viewOf([], { status: 'loading' }))).toEqual(['header', 'skeleton'])
+    expect(kinds(viewOf([], { status: 'idle' }))).toEqual(['header', 'skeleton'])
+    expect(kinds(viewOf([], { status: 'error' }))).toEqual(['header', 'error'])
+    expect(kinds(viewOf([], { status: 'ready' }))).toEqual(['header', 'empty'])
+  })
+
+  it('a focused stratum with nothing in it is the empty row, not the header alone', () => {
+    const view = viewOf([open, quiet], { filters: { ...NO_FILTERS, whatsOn: 'live' } })
+    expect(placeRows(view).map((r) => r.kind)).toEqual(['header', 'empty'])
+    expect(emptyReason(view)).toBe('filters')
+  })
+
+  it('why it is empty decides the words', () => {
+    expect(emptyReason({ searching: true, filters: NO_FILTERS })).toBe('search')
+    expect(emptyReason({ searching: false, filters: { ...NO_FILTERS, radiusKm: 2 } })).toBe('filters')
+    expect(emptyReason({ searching: false, filters: { ...NO_FILTERS, venueType: 'cafe' } })).toBe('kind')
+    expect(emptyReason({ searching: false, filters: NO_FILTERS })).toBe('city')
   })
 
   it('every row has its own key, even for a venue in two strata of one list', () => {
-    const rows = placeRows(splitPlaces([packed, open, quiet], NOW), true, true)
+    const rows = placeRows(viewOf([packed, open, quiet], { quietOpen: true, more: true, near: nearby }))
     expect(new Set(rows.map((r) => r.key)).size).toBe(rows.length)
+  })
+})
+
+describe('the stat line', () => {
+  const strata = splitPlaces([venue({ id: 'a', liveNow: '5-9' }), venue({ id: 'b', nextEvent: event(21, 23) }), venue({ id: 'c', nextEvent: event(20, 23) })], NOW)
+
+  it('"{total} places · {live} live · {open} open tonight", with the total as the server counts it', () => {
+    expect(statLine({ total: 6422, strata, more: false, kind: null })).toEqual({
+      text: '6,422 places · 1 live · 2 open tonight',
+      spoken: '6,422 places, 1 live, 2 open tonight',
+    })
+  })
+
+  it('"+" on the strata while pages remain; the total is the server’s and never has one', () => {
+    expect(statLine({ total: 6422, strata, more: true, kind: null })?.text).toBe('6,422 places · 1+ live · 2+ open tonight')
+  })
+
+  it('a part that is 0 is dropped; nothing known is no line', () => {
+    expect(statLine({ total: 40, strata: splitPlaces([], NOW), more: false, kind: null })?.text).toBe('40 places')
+    expect(statLine({ total: null, strata: splitPlaces([], NOW), more: false, kind: null })).toBeNull()
+  })
+
+  it('a kind chosen names it: "96 breweries · 1 live"', () => {
+    expect(statLine({ total: 96, strata: splitPlaces([venue({ id: 'a', liveNow: '5-9' })], NOW), more: false, kind: 'brewery' })?.text).toBe('96 breweries · 1 live')
+  })
+})
+
+describe('the glow and the pins', () => {
+  it('the glow steps with the bucket and a quiet or unknown one has none', () => {
+    expect(glowFor('5-9')).toEqual({ alpha: 0.35, radius: 40 })
+    expect(glowFor('10-19')).toEqual({ alpha: 0.6, radius: 60 })
+    expect(glowFor('20+')).toEqual({ alpha: 0.9, radius: 84 })
+    expect(glowFor('quiet')).toBeNull()
+    expect(glowFor(null)).toBeNull()
+  })
+
+  it('pins are numbered as the rows are, only those with a position, at most five', () => {
+    const vs = [1, 2, 3, 4, 5, 6].map((n) => venue({ id: `p${n}`, latitude: n === 2 ? null : 12 + n / 100, longitude: 77 }))
+    expect(nearPins(vs).map((p) => [p.id, p.n])).toEqual([['p1', 1], ['p3', 3], ['p4', 4], ['p5', 5]])
+  })
+
+  it('"Show on map" fits the pins and you', () => {
+    const pins = nearPins([venue({ id: 'a', latitude: 12.9, longitude: 77.5 }), venue({ id: 'b', latitude: 13, longitude: 77.7 })])
+    expect(fitBounds(pins, { latitude: 12.8, longitude: 77.6 })).toEqual([77.5, 12.8, 77.7, 13])
+    expect(fitBounds(pins, null)).toEqual([77.5, 12.9, 77.7, 13])
+    expect(fitBounds([], null)).toBeNull()
+  })
+})
+
+describe('the filters', () => {
+  it('count the ones set, for the badge', () => {
+    const f = (over: Partial<PlaceFilters>) => ({ ...NO_FILTERS, ...over })
+    expect(activeFilterCount(NO_FILTERS)).toBe(0)
+    expect(activeFilterCount(f({ venueType: 'cafe', whatsOn: 'live', radiusKm: 5 }))).toBe(3)
+    expect(activeFilterCount(f({ whatsOn: 'open' }))).toBe(1)
+  })
+})
+
+describe('what a card is read as', () => {
+  it('a tile: name, type, area, distance spoken, and the bucket in words', () => {
+    expect(tileLabel(venue({ liveNow: '10-19', distance: 0.35 }))).toBe('Toit. Brewery, 298, 100 Feet Road, 350 metres. 10 to 19 people live')
+    expect(tileLabel(venue({ liveNow: '20+', distance: 4.8 }))).toContain('4.8 kilometres. 20 or more people live')
+  })
+
+  it('an open card: tonight’s event, or hours when the item carries them, or just where it is', () => {
+    expect(openLabel(venue({ nextEvent: event(21, 23) }), NOW)).toBe('Toit. Brewery, 298, 100 Feet Road, 350 metres. Tonight 9 PM, Vinyl Night.')
+    expect(openLabel(venue({ tonight: { opensAt: at(12), closesAt: at(23, 30) } }), NOW)).toContain('Open till 11:30 PM.')
+    expect(openLabel(venue(), NOW)).toBe('Toit. Brewery, 298, 100 Feet Road, 350 metres')
+  })
+
+  it('a near row: its place in the five', () => {
+    expect(nearLabel(venue({ distance: 0.35 }), 2)).toBe('2 of 5 nearest. Toit, Brewery, 298, 100 Feet Road, 350 metres')
+  })
+
+  it('the hours line: Opens before opening, Open till after, nothing when it is over or unreadable', () => {
+    expect(hoursLine({ opensAt: at(19), closesAt: at(23) }, NOW)).toEqual({ lead: 'Opens', time: '7 PM' })
+    expect(hoursLine({ opensAt: at(12), closesAt: at(23) }, NOW)).toEqual({ lead: 'Open till', time: '11 PM' })
+    expect(hoursLine({ opensAt: at(12), closesAt: at(17) }, NOW)).toBeNull()
+    expect(hoursLine({ opensAt: '6 PM', closesAt: '1 AM' }, NOW)).toBeNull()
+    expect(hoursLine(undefined, NOW)).toBeNull()
   })
 })
 

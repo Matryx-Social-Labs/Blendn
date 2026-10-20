@@ -128,3 +128,24 @@ describe('a venue that goes live between page loads is listed once (order=live)'
     expect(input).toHaveLength(2)
   })
 })
+
+describe('what the stat line and the offline banner read', () => {
+  const v = (id: string) => ({ id }) as never
+  it('keeps the server’s total and when page 1 arrived; a later page updates the total, never the time', () => {
+    let s = placesReducer(initialPlaces(KEY), { type: 'loaded', key: KEY, page: 1, venues: [v('a')], hasMore: true, total: 6422, at: 1000 })
+    expect(s).toMatchObject({ total: 6422, readAt: 1000 })
+    s = placesReducer(s, { type: 'loaded', key: KEY, page: 2, venues: [v('b')], hasMore: true, total: 6423, at: 2000 })
+    expect(s).toMatchObject({ total: 6423, readAt: 1000 })
+    // A page that does not say keeps what was known.
+    s = placesReducer(s, { type: 'loaded', key: KEY, page: 3, venues: [v('c')], hasMore: false })
+    expect(s.total).toBe(6423)
+    expect(initialPlaces(KEY)).toMatchObject({ total: null, readAt: null })
+  })
+
+  it('a search or a radius is a different list', () => {
+    const base = placesKey('Bengaluru', null)
+    expect(placesKey('Bengaluru', null, null, 'toit')).not.toBe(base)
+    expect(placesKey('Bengaluru', null, null, null, 5)).not.toBe(base)
+    expect(placesKey('Bengaluru', null, null, 'toit', 5)).not.toBe(placesKey('Bengaluru', null, null, 'toit', 2))
+  })
+})

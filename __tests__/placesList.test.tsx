@@ -29,6 +29,7 @@ import type { HomeBrowse } from '../components/home/HomeShell'
 import { apiClient } from '../lib/apiClient'
 import { offersApi } from '../lib/offers'
 import { H } from '../lib/haptics'
+import { markOffline, markOnline } from '../lib/networkStatus'
 /* eslint-enable import/first */
 
 const getVenues = apiClient.getVenues as jest.Mock
@@ -63,6 +64,14 @@ const page = (venues: VenueListItem[], hasMore = false, pageNo = 1) => ({
   data: { venues, pagination: { page: pageNo, limit: 30, totalCount: venues.length, totalPages: 1, hasMore } },
 })
 
+/** Any read answers with the list, but Near you's (`limit: 5`), which answers with `near`. */
+const serve = (venues: VenueListItem[], near: VenueListItem[] = []) =>
+  getVenues.mockImplementation((q: { limit: number }) => Promise.resolve(q.limit === 5 ? page(near) : page(venues)))
+/** The calls that asked for the list itself. */
+/** The glow and the badge are decoration for a screen reader: found by id, not by reading order. */
+const HIDDEN = { includeHiddenElements: true }
+const listCalls = () => getVenues.mock.calls.filter(([q]) => q.limit === 30)
+
 const browse = (over: Partial<HomeBrowse> = {}): HomeBrowse => ({
   city: 'Bengaluru',
   location: { latitude: 12.97, longitude: 77.59 },
@@ -82,12 +91,14 @@ async function mount(b: HomeBrowse = browse(), active = true) {
   return view
 }
 
+afterEach(() => markOnline())
+
 beforeEach(() => {
   jest.spyOn(H, 'select').mockImplementation(() => {})
   jest.spyOn(H, 'threshold').mockImplementation(() => {})
 })
 
-describe('the three strata', () => {
+describe('the sections', () => {
   const venues = [
     venue('a', { name: 'Toit', liveNow: '10-19', nextEvent: tonight() }),
     venue('b', { name: 'Fandom', liveNow: 'quiet', nextEvent: tonight(), venueType: 'nightclub', venueTypeLabel: 'Club' }),
@@ -95,42 +106,57 @@ describe('the three strata', () => {
     venue('d', { name: 'Arbor', venueType: null }),
   ]
 
-  it('Live now as tiles, Open tonight as rows with the event line, the rest folded behind one line with a count', async () => {
-    getVenues.mockResolvedValue(page(venues))
+  it('Live now as glow tiles, Open tonight as cards with the event line, the rest folded behind one line with a count', async () => {
+    serve(venues)
     await mount()
-    expect(screen.getByRole('header', { name: 'Live now' })).toBeTruthy()
-    expect(screen.getByText('1 place')).toBeTruthy()
-    expect(screen.getByLabelText('Toit. Brewery. 350 m. 10–19 live. Live, Vinyl Night')).toBeTruthy()
-    expect(screen.getByRole('header', { name: 'Open tonight' })).toBeTruthy()
-    expect(screen.getByLabelText('Fandom. Club. 350 m. Live, Vinyl Night')).toBeTruthy()
-    expect(screen.getByLabelText('2 quiet places')).toBeTruthy()
+    expect(screen.getByRole('header', { name: 'Live now, 1' })).toBeTruthy()
+    expect(screen.getByLabelText('Toit. Brewery, a Main Road, 350 metres. 10 to 19 people live')).toBeTruthy()
+    expect(screen.getByRole('header', { name: 'Open tonight, 1' })).toBeTruthy()
+    expect(screen.getByLabelText('Fandom. Club, b Main Road, 350 metres. Live, Vinyl Night.')).toBeTruthy()
+    expect(screen.getByLabelText('2 more places. Nearest first')).toBeTruthy()
     // Folded: the quiet rows are not drawn.
     expect(screen.queryByTestId('place-quiet-c')).toBeNull()
   })
 
+  it('the stat line is one text for a screen reader, the total the server’s and the strata the ones read', async () => {
+    getVenues.mockImplementation((q: { limit: number }) =>
+      Promise.resolve(q.limit === 5 ? page([]) : { success: true, data: { venues, pagination: { page: 1, limit: 30, totalCount: 6422, totalPages: 215, hasMore: false } } })
+    )
+    await mount()
+    expect(screen.getByLabelText('6,422 places, 1 live, 1 open tonight')).toBeTruthy()
+    expect(screen.getByText('6,422 PLACES · 1 LIVE · 1 OPEN TONIGHT')).toBeTruthy()
+  })
+
+  it('the glow is the bucket’s: a 10–19 tile has the middle step, a quiet one has none', async () => {
+    serve([venue('a', { liveNow: '10-19' }), venue('b', { liveNow: '5-9' })])
+    await mount()
+    expect(screen.getByTestId('place-glow-10-19', HIDDEN)).toBeTruthy()
+    expect(screen.getByTestId('place-glow-5-9', HIDDEN)).toBeTruthy()
+    expect(screen.queryByTestId('place-glow-quiet', HIDDEN)).toBeNull()
+  })
+
   it('under five draws no live count: a quiet row carries no pill, no "N live" label', async () => {
-    getVenues.mockResolvedValue(page([venue('c', { name: 'Koshy’s', liveNow: 'quiet', venueType: 'cafe', venueTypeLabel: 'Café' })]))
+    serve([venue('c', { name: 'Koshy’s', liveNow: 'quiet', venueType: 'cafe', venueTypeLabel: 'Café' })])
     await mount()
     await act(async () => {
-      fireEvent.press(screen.getByLabelText('1 quiet place'))
+      fireEvent.press(screen.getByLabelText('1 more place. Nearest first'))
     })
     expect(screen.getByTestId('place-quiet-c')).toBeTruthy()
     expect(screen.getByLabelText('Koshy’s. Café. 350 m')).toBeTruthy()
-    // A count ends in "live" ("5–9 live"); the "Live music" type chip does not.
     expect(screen.queryByText(/(^|\s)live$/i)).toBeNull()
     expect(screen.queryByText(/under 5/i)).toBeNull()
   })
 
   it('live is a bucket, never a number: the pill says "10–19 live" and the tile never says who', async () => {
-    getVenues.mockResolvedValue(page(venues))
+    serve(venues)
     await mount()
     expect(screen.getByText('10–19 live')).toBeTruthy()
   })
 
   it('the fold opens in place and says "expanded"; a second tap closes it', async () => {
-    getVenues.mockResolvedValue(page(venues))
+    serve(venues)
     await mount()
-    const fold = screen.getByLabelText('2 quiet places')
+    const fold = screen.getByLabelText('2 more places. Nearest first')
     expect(fold.props.accessibilityState).toMatchObject({ expanded: false })
     await act(async () => {
       fireEvent.press(fold)
@@ -138,15 +164,15 @@ describe('the three strata', () => {
     expect(H.select).toHaveBeenCalledTimes(1)
     expect(screen.getByTestId('place-quiet-c')).toBeTruthy()
     expect(screen.getByTestId('place-quiet-d')).toBeTruthy()
-    expect(screen.getByLabelText('2 quiet places').props.accessibilityState).toMatchObject({ expanded: true })
+    expect(screen.getByLabelText('2 more places. Nearest first').props.accessibilityState).toMatchObject({ expanded: true })
     await act(async () => {
-      fireEvent.press(screen.getByLabelText('2 quiet places'))
+      fireEvent.press(screen.getByLabelText('2 more places. Nearest first'))
     })
     expect(screen.queryByTestId('place-quiet-c')).toBeNull()
   })
 
-  it('a tile and a row open the place, handing over the distance the list showed', async () => {
-    getVenues.mockResolvedValue(page(venues))
+  it('a tile, a card and a near row open the place, handing over the distance the list showed', async () => {
+    serve(venues, [venue('n1', { name: 'Nearest' })])
     await mount()
     await act(async () => {
       fireEvent.press(screen.getByTestId('place-tile-a'))
@@ -156,10 +182,14 @@ describe('the three strata', () => {
       fireEvent.press(screen.getByTestId('place-open-b'))
     })
     expect(router.push).toHaveBeenLastCalledWith({ pathname: '/venue/[id]', params: { id: 'b', km: '0.35' } })
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('place-near-n1'))
+    })
+    expect(router.push).toHaveBeenLastCalledWith({ pathname: '/venue/[id]', params: { id: 'n1', km: '0.35' } })
   })
 
   it('a place with no distance opens without one', async () => {
-    getVenues.mockResolvedValue(page([venue('a', { liveNow: '5-9', distance: null })]))
+    serve([venue('a', { liveNow: '5-9', distance: null })])
     await mount()
     await act(async () => {
       fireEvent.press(screen.getByTestId('place-tile-a'))
@@ -168,44 +198,233 @@ describe('the three strata', () => {
   })
 
   it('a viewer the server tells nothing sees no live pill and no live words', async () => {
-    getVenues.mockResolvedValue(page([venue('a', { liveNow: null })]))
+    serve([venue('a', { liveNow: null })])
     await mount()
     await act(async () => {
-      fireEvent.press(screen.getByLabelText('1 quiet place'))
+      fireEvent.press(screen.getByLabelText('1 more place. Nearest first'))
     })
     expect(screen.getByLabelText('Place a. Brewery. 350 m')).toBeTruthy()
     expect(screen.queryByText(/live$/)).toBeNull()
   })
+
+  it('"See all" on Live now focuses the stratum: the other sections go, the filter badge shows one', async () => {
+    serve(venues)
+    await mount()
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('places-live-header-action'))
+    })
+    expect(screen.queryByRole('header', { name: /Open tonight/ })).toBeNull()
+    expect(screen.queryByTestId('places-quiet-fold')).toBeNull()
+    expect(screen.getByTestId('places-filter-badge', HIDDEN)).toBeTruthy()
+  })
 })
 
-describe('the chips', () => {
-  it('each asks the server for that type, afresh, and the selected one is white', async () => {
-    getVenues.mockResolvedValue(page([venue('a', { liveNow: '5-9' })]))
+describe('Near you', () => {
+  it('asks for the five nearest by distance, once, and draws them numbered under the heading', async () => {
+    serve([venue('a', { liveNow: '5-9' })], [venue('n1', { name: 'One', liveNow: '10-19' }), venue('n2', { name: 'Two' })])
     await mount()
-    expect(getVenues).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1, limit: 30, city: 'Bengaluru', sortBy: 'distance', venueType: undefined, order: 'live' }), { force: true })
-    await act(async () => {
-      fireEvent.press(screen.getByRole('button', { name: 'Breweries' }))
-    })
-    await waitFor(() => expect(getVenues).toHaveBeenLastCalledWith(expect.objectContaining({ venueType: 'brewery' }), { force: true }))
-    expect(screen.getByRole('button', { name: 'Breweries' }).props.accessibilityState).toMatchObject({ selected: true })
+    const near = getVenues.mock.calls.filter(([q]) => q.limit === 5)
+    expect(near).toHaveLength(1)
+    expect(near[0][0]).toMatchObject({ page: 1, limit: 5, lat: 12.97, lon: 77.59, sortBy: 'distance' })
+    expect(screen.getByRole('header', { name: 'Near you' })).toBeTruthy()
+    expect(screen.getByLabelText('1 of 5 nearest. One, Brewery, n1 Main Road, 350 metres')).toBeTruthy()
+    expect(screen.getByLabelText('2 of 5 nearest. Two, Brewery, n2 Main Road, 350 metres')).toBeTruthy()
+    // The live caption only from a bucket of 5 or more.
+    expect(screen.getAllByText('10–19 live').length).toBeGreaterThan(0)
   })
 
-  it('a type with nothing in this city says so and keeps the chips to change it', async () => {
-    getVenues.mockResolvedValueOnce(page([venue('a', { liveNow: '5-9' })]))
+  it('reports its pins to the map, numbered, and takes them back when the pane is not the one in front', async () => {
+    const onNearPins = jest.fn()
+    serve([venue('a', { liveNow: '5-9' })], [venue('n1'), venue('n2')])
+    const b = browse()
+    const view = await render(<PlacesList browse={b} active onNearPins={onNearPins} />)
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(onNearPins).toHaveBeenLastCalledWith([expect.objectContaining({ id: 'n1', n: 1 }), expect.objectContaining({ id: 'n2', n: 2 })])
+    await view.rerender(<PlacesList browse={b} active={false} onNearPins={onNearPins} />)
+    expect(onNearPins).toHaveBeenLastCalledWith([])
+  })
+
+  it('"Show on map" asks the shell to lift the drawer and fit the pins', async () => {
+    const onShow = jest.fn()
+    serve([venue('a', { liveNow: '5-9' })], [venue('n1')])
+    await render(<PlacesList browse={browse()} active onShowNearOnMap={onShow} />)
+    await act(async () => {
+      await Promise.resolve()
+    })
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('places-near-header-action'))
+    })
+    expect(onShow).toHaveBeenCalledTimes(1)
+  })
+
+  it('without a fix there is no request, no distance, no pins: the location card asks', async () => {
+    const b = browse({ location: null })
+    const onNearPins = jest.fn()
+    serve([venue('a', { liveNow: '5-9', distance: null })])
+    await render(<PlacesList browse={b} active onNearPins={onNearPins} />)
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(getVenues.mock.calls.filter(([q]) => q.limit === 5)).toHaveLength(0)
+    expect(screen.getByText('Turn on location to see the places closest to you, numbered on the map.')).toBeTruthy()
+    expect(onNearPins).toHaveBeenLastCalledWith([])
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('places-near-ask-button'))
+    })
+    expect(b.requestLocation).toHaveBeenCalledTimes(1)
+    // The list asks for names, not distances.
+    expect(listCalls()[0][0]).toMatchObject({ sortBy: 'name' })
+  })
+
+  it('a fix and no places near: the section is absent', async () => {
+    serve([venue('a', { liveNow: '5-9' })], [])
+    await mount()
+    expect(screen.queryByRole('header', { name: 'Near you' })).toBeNull()
+  })
+})
+
+describe('the kinds', () => {
+  it('a plate per kind, in the design’s order; tapping one asks the server for it, afresh, and the chip carries it', async () => {
+    serve([venue('a', { liveNow: '5-9' })])
+    await mount()
+    for (const t of ['pub_bar', 'brewery', 'nightclub', 'live_music_venue', 'lounge_rooftop', 'cafe']) expect(screen.getByTestId(`places-kind-${t}`)).toBeTruthy()
+    expect(listCalls().at(-1)?.[0]).toEqual(expect.objectContaining({ page: 1, limit: 30, city: 'Bengaluru', sortBy: 'distance', venueType: undefined, order: 'live' }))
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('places-kind-brewery'))
+    })
+    expect(H.select).toHaveBeenCalled()
+    await waitFor(() => expect(listCalls().at(-1)?.[1]).toEqual({ force: true }))
+    expect(listCalls().at(-1)?.[0]).toMatchObject({ venueType: 'brewery' })
+    // The kinds grid and Near you go; the chip stays under the search and removes itself.
+    expect(screen.queryByTestId('places-kind-brewery')).toBeNull()
+    expect(screen.getByTestId('places-kind-chip')).toBeTruthy()
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Breweries, remove filter'))
+    })
+    await waitFor(() => expect(listCalls().at(-1)?.[0]).toMatchObject({ venueType: undefined }))
+  })
+
+  it('a kind with nothing in this city says so and keeps the chip to clear it', async () => {
+    serve([venue('a', { liveNow: '5-9' })])
     await mount()
     getVenues.mockResolvedValue(page([]))
     await act(async () => {
-      fireEvent.press(screen.getByRole('button', { name: 'Clubs' }))
+      fireEvent.press(screen.getByTestId('places-kind-nightclub'))
     })
     await waitFor(() => expect(screen.getByText('No clubs in Bengaluru yet')).toBeTruthy())
-    expect(screen.getByRole('button', { name: 'Clubs' })).toBeTruthy()
+    expect(screen.getByTestId('places-kind-chip')).toBeTruthy()
+  })
+})
+
+describe('the filter sheet', () => {
+  const open = async () => {
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('places-filter'))
+    })
+  }
+
+  it('applies a kind, a stratum and a radius together: the server gets the kind and the radius, the badge counts three', async () => {
+    serve([venue('a', { liveNow: '5-9' })])
+    await mount()
+    await open()
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('places-filter-kind-cafe'))
+      fireEvent.press(screen.getByTestId('places-filter-on-live'))
+      fireEvent.press(screen.getByTestId('places-filter-far-5'))
+    })
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('places-filter-apply'))
+    })
+    await waitFor(() => expect(listCalls().at(-1)?.[0]).toMatchObject({ venueType: 'cafe', radius: 5 }))
+    expect(screen.getByTestId('places-filter-badge', HIDDEN)).toBeTruthy()
+  })
+
+  it('"Show n places" is the server’s count for the draft, after 250 ms', async () => {
+    jest.useFakeTimers()
+    try {
+      getVenues.mockImplementation((q: { limit: number; venueType?: string }) =>
+        Promise.resolve(q.limit === 1 ? { success: true, data: { venues: [], pagination: { page: 1, limit: 1, totalCount: q.venueType === 'cafe' ? 212 : 6422, totalPages: 1, hasMore: false } } } : q.limit === 5 ? page([]) : page([venue('a', { liveNow: '5-9' })]))
+      )
+      await mount()
+      await open()
+      await act(async () => {
+        fireEvent.press(screen.getByTestId('places-filter-kind-cafe'))
+      })
+      expect(getVenues.mock.calls.filter(([q]) => q.limit === 1)).toHaveLength(0)
+      await act(async () => {
+        jest.advanceTimersByTime(250)
+        await Promise.resolve()
+      })
+      expect(getVenues.mock.calls.filter(([q]) => q.limit === 1).at(-1)?.[0]).toMatchObject({ venueType: 'cafe', page: 1, limit: 1 })
+      expect(screen.getByText('Show 212 places')).toBeTruthy()
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('"Clear all" empties the draft; without a fix there is no "How far"', async () => {
+    serve([venue('a', { liveNow: '5-9', distance: null })])
+    await mount(browse({ location: null }))
+    await open()
+    expect(screen.queryByTestId('places-filter-far-5')).toBeNull()
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('places-filter-kind-cafe'))
+    })
+    expect(screen.getByTestId('places-filter-kind-cafe').props.accessibilityState).toMatchObject({ selected: true })
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('places-filter-clear'))
+    })
+    expect(screen.getByTestId('places-filter-kind-all').props.accessibilityState).toMatchObject({ selected: true })
+  })
+})
+
+describe('search', () => {
+  it('asks the server after a beat, and the answer is a flat list of places under one label', async () => {
+    jest.useFakeTimers()
+    try {
+      serve([venue('a', { liveNow: '5-9' })])
+      await mount()
+      getVenues.mockImplementation((q: { search?: string; limit: number }) => Promise.resolve(q.limit === 5 ? page([]) : page(q.search ? [venue('t1', { name: 'Toit' })] : [venue('a', { liveNow: '5-9' })])))
+      await act(async () => {
+        fireEvent.changeText(screen.getByTestId('places-search-input'), 'toi')
+      })
+      expect(listCalls().some(([q]) => q.search)).toBe(false)
+      await act(async () => {
+        jest.advanceTimersByTime(300)
+        await Promise.resolve()
+      })
+      expect(listCalls().at(-1)?.[0]).toMatchObject({ search: 'toi' })
+      expect(screen.getByTestId('places-results-header')).toBeTruthy()
+      expect(screen.getByTestId('place-quiet-t1')).toBeTruthy()
+      expect(screen.queryByTestId('place-tile-a')).toBeNull()
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('a search that matches nothing says so', async () => {
+    jest.useFakeTimers()
+    try {
+      serve([venue('a', { liveNow: '5-9' })])
+      await mount()
+      serve([])
+      await act(async () => {
+        fireEvent.changeText(screen.getByTestId('places-search-input'), 'zzz')
+        jest.advanceTimersByTime(300)
+      })
+      await waitFor(() => expect(screen.getByText('No places match “zzz”')).toBeTruthy())
+    } finally {
+      jest.useRealTimers()
+    }
   })
 })
 
 describe('the peek line', () => {
   it('the pane reports “N places live · M open tonight” for the drawer to keep at peek, and nothing before it knows', async () => {
     const onSummary = jest.fn()
-    getVenues.mockResolvedValue(page([venue('a', { liveNow: '5-9' }), venue('b', { nextEvent: tonight() }), venue('c')]))
+    serve([venue('a', { liveNow: '5-9' }), venue('b', { nextEvent: tonight() }), venue('c')])
     await render(<PlacesList browse={browse()} active onSummary={onSummary} />)
     await act(async () => {
       await Promise.resolve()
@@ -215,50 +434,51 @@ describe('the peek line', () => {
   })
 })
 
-describe('the chips stay while a type is chosen', () => {
-  it('a tap on a chip keeps the row up through the load and through a failed load', async () => {
-    getVenues.mockResolvedValueOnce(page([venue('a', { liveNow: '5-9' })]))
+describe('the header stays while a kind is chosen', () => {
+  it('a tap on a plate keeps the header and search up through the load and through a failed load', async () => {
+    serve([venue('a', { liveNow: '5-9' })])
     await mount()
     getVenues.mockReturnValue(new Promise(() => {}))
     await act(async () => {
-      fireEvent.press(screen.getByRole('button', { name: 'Cafés' }))
+      fireEvent.press(screen.getByTestId('places-kind-cafe'))
     })
     expect(screen.getByTestId('places-skeleton')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Cafés' }).props.accessibilityState).toMatchObject({ selected: true })
+    expect(screen.getByTestId('places-search')).toBeTruthy()
+    expect(screen.getByTestId('places-kind-chip')).toBeTruthy()
     getVenues.mockResolvedValue({ success: false, error: 'offline' })
     await act(async () => {
-      fireEvent.press(screen.getByRole('button', { name: 'Clubs' }))
+      fireEvent.press(screen.getByLabelText('Cafés, remove filter'))
     })
     await waitFor(() => expect(screen.getByTestId('places-error')).toBeTruthy())
-    expect(screen.getByRole('button', { name: 'Clubs' })).toBeTruthy()
+    expect(screen.getByTestId('places-search')).toBeTruthy()
   })
 })
 
 describe('loading, failing, empty', () => {
-  it('loading: a static skeleton and no chips', async () => {
+  it('loading: the real header and search, then static blocks at the new sections’ geometry', async () => {
     getVenues.mockReturnValue(new Promise(() => {}))
     await mount()
     expect(screen.getByTestId('places-skeleton')).toBeTruthy()
-    // Nothing chosen and nothing read: no chips to offer yet.
-    expect(screen.queryByTestId('places-type-chips')).toBeNull()
+    expect(screen.getByTestId('places-search')).toBeTruthy()
+    expect(screen.getByRole('header', { name: 'Places' })).toBeTruthy()
   })
 
-  it('the first load failing replaces the pane: "Couldn’t load places" and Try again reads afresh', async () => {
+  it('the first load failing replaces the sections: "Couldn’t load places" and Try again reads afresh', async () => {
     getVenues.mockResolvedValueOnce({ success: false, error: 'offline' })
+    getVenues.mockResolvedValue(page([]))
     await mount()
     expect(screen.getByText('Couldn’t load places')).toBeTruthy()
     expect(screen.getByText('Check your connection and try again.')).toBeTruthy()
-    expect(screen.queryByTestId('places-type-chips')).toBeNull()
-    getVenues.mockResolvedValue(page([venue('a', { liveNow: '5-9' })]))
+    serve([venue('a', { liveNow: '5-9' })])
     await act(async () => {
       fireEvent.press(screen.getByRole('button', { name: 'Try again' }))
     })
     await waitFor(() => expect(screen.getByTestId('place-tile-a')).toBeTruthy())
-    expect(getVenues).toHaveBeenLastCalledWith(expect.anything(), { force: true })
+    expect(listCalls().at(-1)?.[1]).toEqual({ force: true })
   })
 
   it('an empty city says so and offers the city picker', async () => {
-    getVenues.mockResolvedValue(page([]))
+    serve([])
     const b = browse()
     await mount(b)
     expect(screen.getByText('No places in Bengaluru yet')).toBeTruthy()
@@ -269,15 +489,25 @@ describe('loading, failing, empty', () => {
     expect(b.openCityPicker).toHaveBeenCalledTimes(1)
   })
 
+  it('the city chip in the header opens the same picker', async () => {
+    serve([venue('a', { liveNow: '5-9' })])
+    const b = browse()
+    await mount(b)
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('places-city'))
+    })
+    expect(b.openCityPicker).toHaveBeenCalledTimes(1)
+  })
+
   it('no city decided yet asks nothing; the pane waits', async () => {
-    getVenues.mockResolvedValue(page([]))
+    serve([])
     await mount(browse({ ready: false }))
     expect(getVenues).not.toHaveBeenCalled()
     expect(screen.getByTestId('places-skeleton')).toBeTruthy()
   })
 
   it('a refresh failing over a list keeps the list and says so inline', async () => {
-    getVenues.mockResolvedValueOnce(page([venue('a', { liveNow: '5-9' })]))
+    serve([venue('a', { liveNow: '5-9' })])
     const b = browse()
     const view = await mount(b, true)
     expect(screen.getByTestId('place-tile-a')).toBeTruthy()
@@ -291,13 +521,38 @@ describe('loading, failing, empty', () => {
     expect(screen.getByText('Places didn’t refresh.')).toBeTruthy()
     expect(screen.getByTestId('place-tile-a')).toBeTruthy()
   })
+
+  it('offline with a list: a banner saying when it was live, and the content stays', async () => {
+    serve([venue('a', { liveNow: '5-9' })])
+    await mount()
+    await act(async () => {
+      markOffline()
+    })
+    expect(screen.getByTestId('places-offline')).toBeTruthy()
+    expect(screen.getByText(/^Offline\. Live as of \d{1,2}(:\d{2})? (AM|PM)\.$/)).toBeTruthy()
+    expect(screen.getByTestId('place-tile-a')).toBeTruthy()
+  })
+})
+
+describe('pull to refresh', () => {
+  it('re-reads the list and Near you, and plays no haptic on iOS (UIRefreshControl ticks by itself)', async () => {
+    serve([venue('a', { liveNow: '5-9' })], [venue('n1')])
+    await mount()
+    getVenues.mockClear()
+    await act(async () => {
+      screen.getByTestId('places-list').props.refreshControl.props.onRefresh()
+    })
+    expect(listCalls()).toHaveLength(1)
+    expect(getVenues.mock.calls.filter(([q]) => q.limit === 5)).toHaveLength(1)
+    expect(H.threshold).not.toHaveBeenCalled()
+  })
 })
 
 describe('thousands of venues', () => {
   const full = (from: number) => Array.from({ length: 30 }, (_, i) => venue(`v${from + i}`))
 
   it('folded, it reads the first few pages on its own and then stops; unfolded, it reads on as the end is reached', async () => {
-    getVenues.mockImplementation(({ page: n }: { page: number }) => Promise.resolve(page(full(n * 100), true, n)))
+    getVenues.mockImplementation(({ page: n, limit }: { page: number; limit: number }) => Promise.resolve(limit === 5 ? page([]) : page(full(n * 100), true, n)))
     await mount()
     const list = screen.getByTestId('places-list')
     for (let i = 0; i < 6; i++) {
@@ -306,41 +561,44 @@ describe('thousands of venues', () => {
       })
     }
     // Page 1 on opening, then pages 2 and 3 — and no more while the quiet places are folded.
-    expect(getVenues.mock.calls.map(([q]) => q.page)).toEqual([1, 2, 3])
+    expect(listCalls().map(([q]) => q.page)).toEqual([1, 2, 3])
     await act(async () => {
-      fireEvent.press(screen.getByLabelText('90+ quiet places'))
+      fireEvent.press(screen.getByLabelText('90+ more places. Nearest first'))
     })
     await act(async () => {
       fireEvent(list, 'endReached')
     })
-    expect(getVenues.mock.calls.map(([q]) => q.page)).toEqual([1, 2, 3, 4])
+    expect(listCalls().map(([q]) => q.page)).toEqual([1, 2, 3, 4])
   })
 
-  it('no row fetches anything: the list asks, once, and no other API call of any kind is made — not a venue, not a request, not a prefs read', async () => {
-    getVenues.mockResolvedValue(page(Array.from({ length: 25 }, (_, i) => venue(`t${i}`, { liveNow: i % 3 ? '5-9' : 'quiet', nextEvent: i % 2 ? tonight() : null }))))
+  it('no row fetches anything: the list asks once, Near you once, and no other API call of any kind is made — not a venue, not a request, not a prefs read', async () => {
+    serve(Array.from({ length: 25 }, (_, i) => venue(`t${i}`, { liveNow: i % 3 ? '5-9' : 'quiet', nextEvent: i % 2 ? tonight() : null })), [venue('n1'), venue('n2')])
     await mount()
     await act(async () => {
-      fireEvent.press(screen.getByLabelText(/quiet places?$/))
+      fireEvent.press(screen.getByLabelText(/more places?\. /))
     })
-    expect(getVenues).toHaveBeenCalledTimes(1)
+    // The list once, and Near you once: the one extra request. Nothing per row.
+    expect(listCalls()).toHaveLength(1)
+    expect(getVenues).toHaveBeenCalledTimes(2)
     for (const call of [apiClient.getVenue, apiClient.queuedRequest, apiClient.cachedRequest, offersApi.prefs]) expect(call).not.toHaveBeenCalled()
   })
 
   it('without the order: "live" echo the first pages are all it reads on its own, even if the server happened to send live venues', async () => {
-    getVenues.mockImplementation(({ page: n }: { page: number }) => Promise.resolve(page(Array.from({ length: 30 }, (_, i) => venue(`x${n}-${i}`, { liveNow: '5-9' })), true, n)))
+    getVenues.mockImplementation(({ page: n, limit }: { page: number; limit: number }) => limit === 5 ? Promise.resolve(page([])) : Promise.resolve(page(Array.from({ length: 30 }, (_, i) => venue(`x${n}-${i}`, { liveNow: '5-9' })), true, n)))
     await mount()
     for (let i = 0; i < 9; i++) {
       await act(async () => {
         fireEvent(screen.getByTestId('places-list'), 'endReached')
       })
     }
-    expect(getVenues.mock.calls.map(([q]) => q.page)).toEqual([1, 2, 3])
+    expect(listCalls().map(([q]) => q.page)).toEqual([1, 2, 3])
   })
 
   it('with tiers, venues open by hours alone keep the paging going past page 1', async () => {
     const tiered = (n: number, tier: 'open' | 'quiet') => Array.from({ length: 30 }, (_, i) => venue(`h${n}-${i}`, { tier }))
     const calls: number[] = []
-    getVenues.mockImplementation(({ page: n }: { page: number }) => {
+    getVenues.mockImplementation(({ page: n, limit }: { page: number; limit: number }) => {
+      if (limit === 5) return Promise.resolve(page([]))
       calls.push(n)
       const p = page(tiered(n, n < 4 ? 'open' : 'quiet'), true, n)
       return Promise.resolve({ ...p, data: { ...p.data, pagination: { ...p.data.pagination, order: 'live' } } })
@@ -353,11 +611,11 @@ describe('thousands of venues', () => {
     }
     // Pages 1-3 are open by hours (no event, no live label: the old split read them as quiet and stopped at 1).
     expect(calls).toEqual([1, 2, 3, 4])
-    expect(screen.getByRole('header', { name: 'Open tonight' })).toBeTruthy()
+    expect(screen.getByRole('header', { name: /^Open tonight/ })).toBeTruthy()
   })
 
   it('every page of a paging session is read fresh: none is served from cache against a fresh page 1', async () => {
-    getVenues.mockImplementation(({ page: n }: { page: number }) => Promise.resolve(page(Array.from({ length: 30 }, (_, i) => venue(`f${n}-${i}`)), true, n)))
+    getVenues.mockImplementation(({ page: n, limit }: { page: number; limit: number }) => limit === 5 ? Promise.resolve(page([])) : Promise.resolve(page(Array.from({ length: 30 }, (_, i) => venue(`f${n}-${i}`)), true, n)))
     await mount()
     for (let i = 0; i < 3; i++) {
       await act(async () => {
@@ -371,7 +629,8 @@ describe('thousands of venues', () => {
   it('a server that orders live first is read as far as the last live or open venue, with no page cap, and no further once a quiet one shows', async () => {
     const liveFull = (from: number) => Array.from({ length: 30 }, (_, i) => venue(`l${from + i}`, { liveNow: '5-9' }))
     const calls: number[] = []
-    getVenues.mockImplementation(({ page: n }: { page: number }) => {
+    getVenues.mockImplementation(({ page: n, limit }: { page: number; limit: number }) => {
+      if (limit === 5) return Promise.resolve(page([]))
       calls.push(n)
       // Pages 1-5 are all live; page 6 reaches the quiet ones.
       const venues = n < 6 ? liveFull(n * 100) : full(n * 100)

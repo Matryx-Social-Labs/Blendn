@@ -772,6 +772,11 @@ export interface VenueListItem {
    * `liveNow` and `nextEvent` alone.
    */
   tier?: 'live' | 'open' | 'quiet'
+  /**
+   * Tonight's opening hours from the venue's own (`§C6`, not sent yet): "Open till" / "Opens" on an Open tonight card.
+   * Absent from a server that does not send it: the card then shows its event line, or nothing.
+   */
+  tonight?: { opensAt: string; closesAt: string } | null
   nextEvent: {
     id: string
     title: string
@@ -1771,7 +1776,7 @@ class ApiClientClass {
    * event's card names the venue instead.
    */
   async getVenues(
-    params: { page?: number; limit?: number; city?: string; lat?: number; lon?: number; sortBy?: 'name' | 'distance'; venueType?: string; order?: 'live' },
+    params: { page?: number; limit?: number; city?: string; lat?: number; lon?: number; sortBy?: 'name' | 'distance'; venueType?: string; order?: 'live'; search?: string; radius?: number },
     options?: { force?: boolean }
   ): Promise<ApiResponse<VenuesListResponse>> {
     const endpoint = `/api/mobile/venues${toQuery(params)}`

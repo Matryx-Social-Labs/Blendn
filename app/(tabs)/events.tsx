@@ -26,9 +26,9 @@ import { featuredCardLayout } from '../../components/pulse/FeaturedCard'
 import {
   EverythingHeader,
   PulseSkeleton,
-  SectionReveal,
   SectionStack,
 } from '../../components/pulse/PulseSections'
+import { SectionReveal } from '../../components/pulse/Rail'
 import { EventCard } from '../../components/ds/EventCard'
 import { PULSE_HEADER_HEIGHT, PulseHeader } from '../../components/pulse/PulseHeader'
 import { CityArtBanner, CityArtCard } from '../../components/cityArt/CityArtCard'

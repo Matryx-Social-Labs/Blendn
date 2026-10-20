@@ -53,8 +53,10 @@ import {
 } from '../../lib/mapStyleEmber'
 import { MAP_THEME } from '../../lib/mapTheme'
 import { SPACE } from '../../lib/theme'
+import { fitBounds, type NearPin } from '../../lib/placesPane'
 import { LocateButton } from './LocateButton'
 import { MapCredit } from './MapCredit'
+import { NearPins } from './NearPins'
 import { Chips, CityBuildings, GroundGlow, LitBuildings, OwnBuildings, useReduceMotion } from './MapLitLayers'
 import { useMapLighting, type Collection, type MapView, type Segment } from './useMapLighting'
 
@@ -144,6 +146,8 @@ export const HomeMap = memo(function HomeMap({
   drawerSnapTop,
   focused,
   glowVisible,
+  nearPins,
+  fitNear,
 }: {
   center: { latitude: number; longitude: number } | null
   /** The selected city's centre (`shouldFollowCity` says when the map goes there). */
@@ -168,6 +172,10 @@ export const HomeMap = memo(function HomeMap({
   focused: boolean
   /** The map can be seen (focused, the drawer not full, no screen reader): only then may a glow breathe. */
   glowVisible: boolean
+  /** Places' five numbered pins (empty where they are not shown: the Pulse, a full drawer). */
+  nearPins: NearPin[]
+  /** Bumped by "Show on map": fit the camera to the pins and you, in the map the half drawer leaves. */
+  fitNear: number
 }) {
   const { width, height } = useWindowDimensions()
   const map = useRef<MapRef>(null)
@@ -294,6 +302,16 @@ export const HomeMap = memo(function HomeMap({
     }, 0)
     return () => clearTimeout(timer)
   }, [padding.top, padding.bottom]) // eslint-disable-line react-hooks/exhaustive-deps -- only a settled snap re-centres
+
+  // "Show on map" (Places' Near you): the pins and you, in the map the drawer will leave at half.
+  useEffect(() => {
+    if (!fitNear) return
+    const bounds = fitBounds(nearPins, center)
+    if (!bounds) return
+    const half = mapPadding({ topChrome, mapHeight, drawerTop: drawer.half })
+    const sides = SPACE.xl
+    stop({ bounds, padding: { ...half, left: sides, right: sides }, duration: reduceMotion ? 0 : MAP_THEME.camera.easeMs })
+  }, [fitNear]) // eslint-disable-line react-hooks/exhaustive-deps -- only the button asks
 
   const [query, setQuery] = useState<PinQuery | null>(null)
   // Read again when the app comes back to the foreground (a venue may have filled up).
@@ -568,6 +586,7 @@ export const HomeMap = memo(function HomeMap({
           />
         </GeoJSONSource>
         <Chips chips={lit.chips} onOpen={open} />
+        <NearPins pins={nearPins} />
       </Map>
       {mapUp ? <MapCredit text={mapCreditLine(ownTiles, typeof style !== 'string')} top={topChrome + SPACE.sm} gestures={gestures} /> : null}
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.fade, fadeStyle]} />

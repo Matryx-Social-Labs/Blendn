@@ -1,5 +1,5 @@
 import { useIsFocused } from 'expo-router'
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AccessibilityInfo, Dimensions, Keyboard, Platform, Pressable, StyleSheet, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native'
 import { useSharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -10,6 +10,7 @@ import { PulseTopBar, TOP_BAR_HEIGHT } from '../pulse/PulseTopBar'
 import { Text } from '../ui/Text'
 import { DRAWER_PEEK_LINE, DRAWER_SEGMENTED_HEIGHT, drawerSnapPoints, keyboardLeft, snapOnKeyboard, type DrawerSnap } from '../../lib/home'
 import { Logger } from '../../lib/logger'
+import type { NearPin } from '../../lib/placesPane'
 import { EMBER, EMBER_RADIUS, SPACE } from '../../lib/theme'
 import { HomeDrawer } from './HomeDrawer'
 import { HomeMap } from './HomeMap'
@@ -38,6 +39,8 @@ export interface HomeBrowse {
 }
 
 type Segment = 'events' | 'places'
+
+const NO_PINS: NearPin[] = []
 
 /**
  * Off the list, nothing closes the keyboard by itself: the list does it for
@@ -97,6 +100,13 @@ export function HomeShell({
   const onLayout = (e: LayoutChangeEvent) => setMapHeight(e.nativeEvent.layout.height)
   const restore = useRef<DrawerSnap | null>(null)
   const [placesOpened, setPlacesOpened] = useState(false)
+  /** Places' numbered pins, and the count "Show on map" bumps to make the map fit them. */
+  const [nearPinList, setNearPinList] = useState<NearPin[]>(NO_PINS)
+  const [fitNear, setFitNear] = useState(0)
+  const showNearOnMap = useCallback(() => {
+    setSnap('half')
+    setFitNear((n) => n + 1)
+  }, [])
   const [screenReader, setScreenReader] = useState(false)
   /*
    * With a screen reader the list is the screen: open it, and take the map out
@@ -182,6 +192,9 @@ export function HomeShell({
             focused={focused}
             // Nothing breathes where nobody can see it: the drawer full over the map, or a screen reader (which hides the map).
             glowVisible={focused && snap !== 'full' && !screenReader}
+            // Places' five pins, at peek and half only: the full drawer covers the map.
+            nearPins={segment === 'places' && snap !== 'full' ? nearPinList : NO_PINS}
+            fitNear={fitNear}
           />
         ) : null}
       </View>
@@ -221,7 +234,7 @@ export function HomeShell({
         <View style={[styles.pane, segment !== 'events' && styles.hidden]}>{events}</View>
         {placesOpened ? (
           <View style={[styles.pane, segment !== 'places' && styles.hidden]}>
-            <PlacesList browse={browse} active={focused && segment === 'places'} onSummary={setPlacesLine} />
+            <PlacesList browse={browse} active={focused && segment === 'places'} onSummary={setPlacesLine} onNearPins={setNearPinList} onShowNearOnMap={showNearOnMap} />
           </View>
         ) : null}
       </HomeDrawer>

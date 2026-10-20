@@ -56,7 +56,7 @@ describe('the screen wires the Featured row in', () => {
     // The Featured rail snaps by the drawn width plus its gap (`Rail`: interval = itemWidth + gap).
     expect(SECTIONS()).toContain('itemWidth={layout.width}')
     expect(SECTIONS()).toContain('gap={FEATURED_CARD_GAP}')
-    expect(SECTIONS()).toContain('snapToInterval={interval}')
+    expect(read('components', 'pulse', 'Rail.tsx')).toContain('snapToInterval={interval}')
   })
 
   it('the page still scrolls under the bar rather than stopping at it', () => {

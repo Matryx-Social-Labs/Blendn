@@ -21,6 +21,7 @@ export const PLACE_TYPES = [
   { label: 'Breweries', venueType: 'brewery' },
   { label: 'Clubs', venueType: 'nightclub' },
   { label: 'Live music', venueType: 'live_music_venue' },
+  { label: 'Rooftops', venueType: 'lounge_rooftop' },
   { label: 'Cafés', venueType: 'cafe' },
 ] as const
 
@@ -98,16 +99,59 @@ export function splitPlaces(venues: readonly VenueListItem[], now: number): Plac
   return strata
 }
 
+/** "350 m" read aloud: "350 metres", "4.8 kilometres". */
+export function spokenDistance(km: number | null | undefined): string | null {
+  const text = distanceText(km)
+  return text && text.replace(/ m$/, ' metres').replace(/ km$/, ' kilometres')
+}
+
+const SPOKEN_BUCKET = { '5-9': '5 to 9 people live', '10-19': '10 to 19 people live', '20+': '20 or more people live' } as const
+
+/** "5 to 9 people live" for a bucket the card prints; null below 5. */
+export const spokenBucket = (bucket: VenueListItem['liveNow']) => (bucket && bucket !== 'quiet' ? SPOKEN_BUCKET[bucket] : null)
+
+/**
+ * The hours line on an Open tonight card (§C6): "Opens 6 PM" before opening, "Open till 1 AM" after. Null when
+ * the item carries no hours, or times this cannot read: a guess is worse than a blank line.
+ */
+export function hoursLine(tonight: VenueListItem['tonight'], now: number): { lead: string; time: string } | null {
+  if (!tonight) return null
+  const opens = new Date(tonight.opensAt).getTime()
+  const closes = new Date(tonight.closesAt).getTime()
+  if (Number.isNaN(opens) || Number.isNaN(closes) || closes <= now) return null
+  return opens > now ? { lead: 'Opens', time: clockTime(opens) } : { lead: 'Open till', time: clockTime(closes) }
+}
+
+/** What a live tile is read as: "{name}. {type}, {area}, {distance}. 10 to 19 people live." */
+export function tileLabel(venue: VenueListItem): string {
+  const where = [venue.venueTypeLabel, placeArea(venue), spokenDistance(venue.distance)].filter(Boolean).join(', ')
+  return [venue.name, where, spokenBucket(venue.liveNow)].filter(Boolean).join('. ')
+}
+
+/** What an Open tonight card is read as: "{name}. {type}, {area}, {distance}. Tonight 9 PM, {title}." or "Open till 1 AM." */
+export function openLabel(venue: VenueListItem, now: number): string {
+  const where = [venue.venueTypeLabel, placeArea(venue), spokenDistance(venue.distance)].filter(Boolean).join(', ')
+  const tonight = tonightEvent(venue.nextEvent, now)
+  const hours = hoursLine(venue.tonight, now)
+  const line = tonight ? `${/^\d/.test(tonight.when) ? `Tonight ${tonight.when}` : tonight.when}, ${tonight.title}.` : hours ? `${hours.lead} ${hours.time}.` : null
+  return [venue.name, where, line].filter(Boolean).join('. ').replace(/\.\./g, '.')
+}
+
+/** What a Near you row is read as: "2 of 5 nearest. {name}, {type}, {area}, {distance}". */
+export function nearLabel(venue: VenueListItem, n: number): string {
+  const where = [venue.name, venue.venueTypeLabel, placeArea(venue), spokenDistance(venue.distance)].filter(Boolean).join(', ')
+  return `${n} of ${NEAR_COUNT} nearest. ${where}`
+}
+
 /** "3 places" / "1 place". */
 export const placesCount = (n: number) => `${n} ${n === 1 ? 'place' : 'places'}`
 
 /**
- * The fold's line. The list is paged: while there are pages left, the number is
- * what has been read so far, so it says "N+" rather than a total it does not know.
+ * The fold's line: "N more places". The list is paged: while there are pages left, the number is what has
+ * been read so far, so it says "N+" rather than a total it does not know.
  */
-export function quietLine(count: number, more: boolean): string {
-  const n = `${count}${more ? '+' : ''}`
-  return `${n} quiet ${count === 1 && !more ? 'place' : 'places'}`
+export function moreLine(count: number, more: boolean): string {
+  return `${count}${more ? '+' : ''} more ${count === 1 && !more ? 'place' : 'places'}`
 }
 
 /** "5–9 live" for a bucket the row prints; null below 5 and for a viewer the server tells nothing. */
@@ -153,23 +197,163 @@ export function mayReadNext(
   return state.orderedLive ? !reachedQuiet : state.page < EAGER_PAGES
 }
 
-export type PlaceRow =
-  | { kind: 'live'; key: 'live'; venues: VenueListItem[] }
-  | { kind: 'openHeader'; key: 'openHeader'; count: number }
-  | { kind: 'open'; key: string; venue: VenueListItem }
-  | { kind: 'fold'; key: 'fold'; count: number; more: boolean; open: boolean }
-  | { kind: 'quiet'; key: string; venue: VenueListItem }
+/** The rails hold twelve (BUILD-SPEC B2, B3); "See all" lifts the cap by focusing the stratum. */
+export const RAIL_CAP = 12
+/** Near you: the five nearest, numbered on the map. */
+export const NEAR_COUNT = 5
 
-/** The flat list the pane renders (one virtualised FlatList; the live tiles are a single horizontal row). */
-export function placeRows(strata: PlaceStrata, quietOpen: boolean, more: boolean): PlaceRow[] {
-  const rows: PlaceRow[] = []
-  if (strata.live.length) rows.push({ kind: 'live', key: 'live', venues: strata.live })
-  if (strata.open.length) {
-    rows.push({ kind: 'openHeader', key: 'openHeader', count: strata.open.length })
-    for (const venue of strata.open) rows.push({ kind: 'open', key: `open:${venue.id}`, venue })
+/** "What's on" in the filter sheet: applied here, to the strata the paged list already holds. */
+export type WhatsOn = 'all' | 'live' | 'open'
+export const WHATS_ON = [
+  { value: 'all', label: 'Everything' },
+  { value: 'live', label: 'Live now' },
+  { value: 'open', label: 'Open tonight' },
+] as const satisfies readonly { value: WhatsOn; label: string }[]
+
+/** "How far", in kilometres (the list's `radius` param); null is any. */
+export const HOW_FAR = [
+  { km: null, label: 'Any' },
+  { km: 2, label: 'Under 2 km' },
+  { km: 5, label: 'Under 5 km' },
+  { km: 10, label: 'Under 10 km' },
+] as const
+export type HowFar = (typeof HOW_FAR)[number]['km']
+
+/** What the filter sheet holds; `venueType` is the kind (single-select until the server takes a list, §C7). */
+export type PlaceFilters = { venueType: PlaceTypeFilter; whatsOn: WhatsOn; radiusKm: HowFar }
+export const NO_FILTERS: PlaceFilters = { venueType: null, whatsOn: 'all', radiusKm: null }
+
+/** How many filters are set: the badge on the filter button. */
+export const activeFilterCount = (f: PlaceFilters) => (f.venueType ? 1 : 0) + (f.whatsOn !== 'all' ? 1 : 0) + (f.radiusKm !== null ? 1 : 0)
+
+/** The kind plates, in the design's order (B6): every type but "All". */
+export const KIND_TILES = PLACE_TYPES.filter((t): t is Extract<(typeof PLACE_TYPES)[number], { venueType: string }> => t.venueType !== null)
+
+/** The bucket's glow on a live tile (`palettes.map.glow.steps`): few 5–9, busy 10–19, packed 20+. */
+export const GLOW_STEPS = {
+  '5-9': { alpha: 0.35, radius: 40 },
+  '10-19': { alpha: 0.6, radius: 60 },
+  '20+': { alpha: 0.9, radius: 84 },
+} as const
+
+/** A quiet or unknown bucket has no glow. */
+export function glowFor(bucket: VenueListItem['liveNow']): { alpha: number; radius: number } | null {
+  return bucket && bucket !== 'quiet' ? GLOW_STEPS[bucket] : null
+}
+
+/** The map's numbered pins: Near you's rows, in order, those with a position. */
+export type NearPin = { id: string; lat: number; lon: number; n: number }
+export function nearPins(venues: readonly VenueListItem[]): NearPin[] {
+  const pins: NearPin[] = []
+  venues.slice(0, NEAR_COUNT).forEach((v, i) => {
+    if (v.latitude != null && v.longitude != null) pins.push({ id: v.id, lat: v.latitude, lon: v.longitude, n: i + 1 })
+  })
+  return pins
+}
+
+const thousands = (n: number) => n.toLocaleString('en-US')
+
+/**
+ * The stat line under the title (B1, B8): "6,422 places · 4 live · 31 open tonight". `total` is the server's
+ * count; live and open are the strata read so far, "+" while pages remain. A part that is 0 is dropped.
+ * `spoken` is the same as one sentence.
+ */
+export function statLine({
+  total,
+  strata,
+  more,
+  kind,
+}: {
+  total: number | null
+  strata: PlaceStrata
+  more: boolean
+  kind: PlaceTypeFilter
+}): { text: string; spoken: string } | null {
+  const n = (count: number) => `${thousands(count)}${more ? '+' : ''}`
+  const noun = kind ? (PLACE_TYPES.find((t) => t.venueType === kind)?.label.toLowerCase() ?? 'places') : 'places'
+  const parts = [
+    total ? (kind ? `${thousands(total)} ${noun}` : placesCount(total).replace(String(total), thousands(total))) : null,
+    strata.live.length ? `${n(strata.live.length)} live` : null,
+    strata.open.length ? `${n(strata.open.length)} open tonight` : null,
+  ].filter((p): p is string => p !== null)
+  return parts.length ? { text: parts.join(' · '), spoken: parts.join(', ') } : null
+}
+
+/** Why a ready list shows nothing, which decides the words: the city has none, a kind has none, a search matched nothing, or the filters left none. */
+export type EmptyReason = 'city' | 'kind' | 'search' | 'filters'
+
+export function emptyReason(view: Pick<PlaceView, 'searching' | 'filters'>): EmptyReason {
+  const { whatsOn, venueType, radiusKm } = view.filters
+  if (view.searching) return 'search'
+  if (whatsOn !== 'all' || radiusKm !== null) return 'filters'
+  return venueType ? 'kind' : 'city'
+}
+
+export type PlaceRow =
+  | { kind: 'header'; key: 'header' }
+  | { kind: 'live'; key: 'live'; venues: VenueListItem[]; total: number; focused: boolean }
+  | { kind: 'open'; key: 'open'; venues: VenueListItem[]; total: number; focused: boolean }
+  | { kind: 'near'; key: 'near'; venues: VenueListItem[]; hasFix: boolean }
+  | { kind: 'kinds'; key: 'kinds' }
+  | { kind: 'fold'; key: 'fold'; count: number; more: boolean; open: boolean; nearest: boolean }
+  | { kind: 'quiet'; key: string; venue: VenueListItem }
+  | { kind: 'label'; key: 'label'; text: string }
+  | { kind: 'skeleton'; key: 'skeleton' }
+  | { kind: 'error'; key: 'error' }
+  | { kind: 'empty'; key: 'empty'; reason: EmptyReason }
+
+/** Everything the rows are a function of: kept as data so each section's rule is tested without a render. */
+export type PlaceView = {
+  status: 'idle' | 'loading' | 'ready' | 'error'
+  strata: PlaceStrata
+  more: boolean
+  quietOpen: boolean
+  near: readonly VenueListItem[]
+  hasFix: boolean
+  filters: PlaceFilters
+  /** A search is typed: the answer is a flat list of places, no strata. */
+  searching: boolean
+}
+
+/**
+ * The flat list the pane renders (one virtualised FlatList; a rail or a grid is a single row). Each section
+ * has an empty rule: Live now and Open tonight are absent at 0, Near you is the location card without a fix
+ * and absent with a fix and no places, the kinds go while a kind is chosen, the fold goes while a stratum is
+ * focused.
+ */
+export function placeRows(view: PlaceView): PlaceRow[] {
+  const { status, strata, more, quietOpen, near, hasFix, filters, searching } = view
+  const rows: PlaceRow[] = [{ kind: 'header', key: 'header' }]
+  const all = [...strata.live, ...strata.open, ...strata.quiet]
+  if (all.length === 0) {
+    if (status === 'error') rows.push({ kind: 'error', key: 'error' })
+    else if (status === 'ready') rows.push({ kind: 'empty', key: 'empty', reason: emptyReason(view) })
+    else rows.push({ kind: 'skeleton', key: 'skeleton' })
+    return rows
+  }
+  if (searching) {
+    rows.push({ kind: 'label', key: 'label', text: 'Places' })
+    for (const venue of all) rows.push({ kind: 'quiet', key: `quiet:${venue.id}`, venue })
+    return rows
+  }
+  const { whatsOn, venueType } = filters
+  const showLive = whatsOn !== 'open' && strata.live.length > 0
+  const showOpen = whatsOn !== 'live' && strata.open.length > 0
+  const cap = (venues: VenueListItem[], focused: boolean) => (focused ? venues : venues.slice(0, RAIL_CAP))
+  if (showLive) rows.push({ kind: 'live', key: 'live', venues: cap(strata.live, whatsOn === 'live'), total: strata.live.length, focused: whatsOn === 'live' })
+  if (showOpen) rows.push({ kind: 'open', key: 'open', venues: cap(strata.open, whatsOn === 'open'), total: strata.open.length, focused: whatsOn === 'open' })
+  // A focused stratum with nothing in it says so, rather than leaving the header alone.
+  if (whatsOn !== 'all') {
+    if (rows.length === 1) rows.push({ kind: 'empty', key: 'empty', reason: emptyReason(view) })
+    return rows
+  }
+  if (venueType === null) {
+    if (!hasFix) rows.push({ kind: 'near', key: 'near', venues: [], hasFix: false })
+    else if (near.length > 0) rows.push({ kind: 'near', key: 'near', venues: near.slice(0, NEAR_COUNT), hasFix: true })
+    rows.push({ kind: 'kinds', key: 'kinds' })
   }
   if (strata.quiet.length) {
-    rows.push({ kind: 'fold', key: 'fold', count: strata.quiet.length, more, open: quietOpen })
+    rows.push({ kind: 'fold', key: 'fold', count: strata.quiet.length, more, open: quietOpen, nearest: hasFix })
     if (quietOpen) for (const venue of strata.quiet) rows.push({ kind: 'quiet', key: `quiet:${venue.id}`, venue })
   }
   return rows
@@ -188,4 +372,16 @@ export function placeLabel(venue: VenueListItem, now?: number): string {
   ]
     .filter(Boolean)
     .join('. ')
+}
+
+/**
+ * The box "Show on map" fits: the pins and, with a fix, where you stand. `[west, south, east, north]`; null
+ * with nothing to fit. The camera adds the drawer's padding.
+ */
+export function fitBounds(pins: readonly NearPin[], you: { latitude: number; longitude: number } | null): [number, number, number, number] | null {
+  const points = [...pins.map((p) => ({ lat: p.lat, lon: p.lon })), ...(you ? [{ lat: you.latitude, lon: you.longitude }] : [])]
+  if (points.length === 0) return null
+  const lats = points.map((p) => p.lat)
+  const lons = points.map((p) => p.lon)
+  return [Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)]
 }
