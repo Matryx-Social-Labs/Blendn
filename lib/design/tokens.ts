@@ -338,6 +338,10 @@ export const DURATION = {
   ambientA: 28000,
   ambientB: 36000,
   hold: 900,
+  toastDwell: 5000,
+  toastDwellAction: 10000,
+  spinnerPeriod: 900,
+  loaderMorph: 320,
 } as const
 
 /** Cubic-bezier control points, for `Easing.bezier(...)`. */

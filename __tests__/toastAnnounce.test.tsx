@@ -6,7 +6,7 @@
  * to anyone not looking. iOS is told through `announceForAccessibility`;
  * Android reads the toast's live region.
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native'
+import { fireEvent, render, screen } from '@testing-library/react-native'
 import { AccessibilityInfo, Pressable, StyleSheet, Text } from 'react-native'
 
 jest.mock('react-native-safe-area-context', () => ({
@@ -36,8 +36,10 @@ it('announces the message on iOS', async () => {
   )
   fireEvent.press(screen.getByRole('button'))
 
-  expect(announce).toHaveBeenCalledWith("Couldn't save that. Try again.")
   expect(await screen.findByText("Couldn't save that. Try again.")).toBeTruthy()
+  // Once, by the Toast itself: the provider adds none of its own.
+  expect(announce).toHaveBeenCalledTimes(1)
+  expect(announce).toHaveBeenCalledWith("Couldn't save that. Try again.")
 })
 
 it('says an action is there, since the toast is then a control', async () => {
@@ -49,6 +51,8 @@ it('says an action is there, since the toast is then a control', async () => {
   )
   fireEvent.press(screen.getAllByRole('button')[0])
 
+  await screen.findByText('Removed from saved.')
+  expect(announce).toHaveBeenCalledTimes(1)
   expect(announce).toHaveBeenCalledWith('Removed from saved. Undo is available.')
 })
 
@@ -80,25 +84,15 @@ describe('a long message is shown whole', () => {
     expect((await screen.findByText(LONG)).props.numberOfLines).toBeUndefined()
   })
 
-  it('stays longer the longer it is: a second more for every 8 words past the first 8', () => {
-    const { toastDwellMs } = require('../components/Toast')
-    expect(toastDwellMs('Saved', false)).toBe(3000)
-    expect(toastDwellMs('one two three four five six seven eight', false)).toBe(3000)
-    expect(toastDwellMs(LONG, false)).toBe(4000)
-    expect(toastDwellMs(LONG, true)).toBe(6000)
-  })
-
-  it('never longer than 10 s, whatever the length', () => {
-    const { toastDwellMs } = require('../components/Toast')
-    const essay = Array.from({ length: 400 }, (_, i) => `word${i}`).join(' ')
-    expect(toastDwellMs(essay, false)).toBe(10_000)
-    expect(toastDwellMs(essay, true)).toBe(10_000)
+  it('stays longer the longer it is: the design’s dwell, 5 s and a second more per 8 words', () => {
+    const { toastDwell } = require('../components/ds/Toast')
+    expect(toastDwell('Saved', {})).toBe(5000)
+    expect(toastDwell(LONG, {})).toBe(7000)
+    expect(toastDwell(LONG, { action: true })).toBe(10000)
   })
 })
 
-describe('a toast with an action can be put away, and keeps clear of the top bar', () => {
-  const { PanResponder } = require('react-native')
-
+describe('a toast with an action keeps clear of the top bar', () => {
   async function withAction() {
     await render(
       <ToastProvider>
@@ -109,13 +103,11 @@ describe('a toast with an action can be put away, and keeps clear of the top bar
     return screen.findByText('Message deleted')
   }
 
-  it('has a Dismiss button that removes it', async () => {
+  it('sits below the top bar, so it never covers the back button; a plain one keeps its place', async () => {
     await withAction()
-    fireEvent.press(screen.getByRole('button', { name: 'Dismiss' }))
-    await waitFor(() => expect(screen.queryByText('Message deleted')).toBeNull())
-  })
-
-  it('a plain toast has no Dismiss: it takes no touches and goes by itself', async () => {
+    // The 44 pt circle and 8 under it.
+    expect(StyleSheet.flatten(screen.getByTestId('toast-lane').props.style).top).toBe(44 + 8)
+    await screen.unmount()
     await render(
       <ToastProvider>
         <Trigger message="Saved" />
@@ -123,24 +115,26 @@ describe('a toast with an action can be put away, and keeps clear of the top bar
     )
     fireEvent.press(screen.getByRole('button', { name: 'show' }))
     await screen.findByText('Saved')
-    expect(screen.queryByRole('button', { name: 'Dismiss' })).toBeNull()
-    expect(StyleSheet.flatten(screen.getByTestId('toast-lane').props.style).top).toBe(8)
+    expect(StyleSheet.flatten(screen.getByTestId('toast-lane').props.style).top).toBe(0)
   })
 
-  it('a swipe up puts it away; a short drag does not', async () => {
-    const create = jest.spyOn(PanResponder, 'create')
-    await withAction()
-    const config = create.mock.calls[create.mock.calls.length - 1][0] as { onPanResponderRelease: (e: unknown, g: { dy: number; vy: number }) => void }
-    config.onPanResponderRelease({}, { dy: -6, vy: -0.1 })
-    expect(screen.getByText('Message deleted')).toBeTruthy()
-    config.onPanResponderRelease({}, { dy: -40, vy: -0.1 })
-    await waitFor(() => expect(screen.queryByText('Message deleted')).toBeNull())
-    create.mockRestore()
-  })
-
-  it('sits below the top bar, so it never covers the back button; a plain one keeps the top', async () => {
-    await withAction()
-    // 0 inset + 8, plus the 44 pt circle and 8 under it.
-    expect(StyleSheet.flatten(screen.getByTestId('toast-lane').props.style).top).toBe(8 + 44 + 8)
+  it('its action runs the caller’s handler', async () => {
+    const onPress = jest.fn()
+    function Undoable() {
+      const { showToast } = useToast()
+      return (
+        <Pressable accessibilityRole="button" onPress={() => showToast('Message deleted', 'info', { action: { label: 'Undo', onPress } })}>
+          <Text>go</Text>
+        </Pressable>
+      )
+    }
+    await render(
+      <ToastProvider>
+        <Undoable />
+      </ToastProvider>
+    )
+    fireEvent.press(screen.getByRole('button', { name: 'go' }))
+    fireEvent.press(await screen.findByRole('button', { name: 'Undo' }))
+    expect(onPress).toHaveBeenCalledTimes(1)
   })
 })

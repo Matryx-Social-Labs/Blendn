@@ -161,3 +161,65 @@ describe('the Board composer over the keyboard', () => {
     })
   })
 })
+
+/*
+ * Audit M4 / DS #34: the sheet's foot follows the keyboard's own frame while it moves (iOS), on the system's curve,
+ * not ours. At rest the exact frame React Native reports still decides.
+ */
+describe('following the keyboard frame by frame (iOS)', () => {
+  const kc = require('react-native-keyboard-controller')
+  const Reanimated = require('react-native-reanimated')
+  const place = () => Reanimated.getAnimatedStyle(screen.getByTestId('board-composer-place', { includeHiddenElements: true })) as { marginBottom: number }
+  const frame = (progress: number, height: number) =>
+    kc.useKeyboardContext.mockReturnValue({ reanimated: { progress: { get: () => progress }, height: { get: () => height } } })
+  const rest = () => kc.useKeyboardContext.mockReturnValue({ reanimated: { progress: { get: () => 0 }, height: { get: () => 0 } }, animated: {} })
+
+  beforeEach(() => jest.useFakeTimers())
+  afterEach(() => {
+    jest.useRealTimers()
+    rest()
+  })
+
+  it('while the keyboard moves, the foot is its height from the controller, not the eased value', async () => {
+    frame(0.5, -168)
+    await render(composer())
+    await act(async () => jest.advanceTimersByTime(20))
+    expect(place().marginBottom).toBe(168)
+  })
+
+  it('a frame later it has moved on: the foot is wherever the keyboard now is', async () => {
+    frame(0.5, -168)
+    await render(composer())
+    await act(async () => jest.advanceTimersByTime(20))
+    frame(0.8, -269)
+    await screen.rerender(composer())
+    await act(async () => jest.advanceTimersByTime(20))
+    expect(place().marginBottom).toBe(269)
+  })
+
+  it('at rest (progress 1) the exact frame decides, not the controller', async () => {
+    frame(1, -300)
+    await render(composer())
+    await keyboardUp() // React Native says 336
+    await act(async () => jest.advanceTimersByTime(600))
+    expect(place().marginBottom).toBe(336)
+  })
+
+  it('Android does not follow the controller: its frames are not known to reach the Modal', async () => {
+    Object.defineProperty(Platform, 'OS', { value: 'android', configurable: true })
+    try {
+      frame(0.5, -168)
+      await render(composer())
+      await act(async () => jest.advanceTimersByTime(20))
+      expect(place().marginBottom).toBe(0)
+    } finally {
+      Object.defineProperty(Platform, 'OS', { value: 'ios', configurable: true })
+    }
+  })
+
+  it('reads the controller’s context, not useReanimatedKeyboardAnimation (which flips Android’s input mode)', () => {
+    const src = require('fs').readFileSync(require('path').join(__dirname, '../components/ds/Sheet.tsx'), 'utf8')
+    expect(src).toMatch(/useKeyboardContext\(\)\.reanimated/)
+    expect(src).not.toMatch(/import \{[^}]*useReanimatedKeyboardAnimation/)
+  })
+})

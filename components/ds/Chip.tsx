@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { Platform, StyleSheet, Text, View } from 'react-native'
+import { Platform, StyleSheet, Text, View, type ViewStyle } from 'react-native'
+import Animated from 'react-native-reanimated'
 
 import ScalePress from '../motion/ScalePress'
 import { Icon, type IconName } from '../ui/Icon'
-import { COLOR, FONT_FAMILY, ICON, MATERIAL, PRESS, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, MATERIAL, PRESS, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { OPACITY, tint } from '../../lib/theme'
 import { CONTROL_FONT_CAP, focusRing, font, minTarget, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
@@ -12,6 +13,16 @@ import { CONTROL_FONT_CAP, focusRing, font, minTarget, PRESSED_WASH, useBoldText
 const HAIRLINE = 0.5
 /** `outline`: clear, with a 1 pt edge at 22% white (A31: crew tags, overlap labels). */
 const OUTLINE_EDGE = { borderWidth: 1, borderColor: tint(COLOR.textPrimary, 0.22) } as const
+
+/**
+ * DS Flow 10, 10.2: "tag chip · H.select · fill 0 → 1 on quick". The fill crosses over `quick` on the gentle curve, as a CSS
+ * transition (Reanimated 4), the way `CountTicks` does: interruptible, off the JS thread, no shared value for a two-state
+ * flip. The label's ink steps at t0 (text colour does not cross-fade cleanly); the fill carries the change.
+ */
+const CURVE = `cubic-bezier(${EASING.gentle.join(', ')})`
+// ScalePress is a Reanimated Pressable, so the transition applies; its style prop is typed as a plain ViewStyle.
+export const FILL = { transition: `background-color ${DURATION.quick}ms ${CURVE}` } as unknown as ViewStyle
+const EDGE_FADE = { transition: `opacity ${DURATION.quick}ms ${CURVE}` } as unknown as ViewStyle
 
 export type ChipVariant = 'default' | 'outline'
 
@@ -80,15 +91,14 @@ export function Chip({
   const radius = android && pressed ? RADIUS.thumb : RADIUS.capsule
   const slop = (minTarget() - SIZE.tag) / 2
 
+  // The edge the chip has when it is off; a selected chip keeps it drawn at 0 opacity, so it fades out as the fill comes in.
   const edge = shared
     ? { borderWidth: 1, borderColor: COLOR.textPrimary }
-    : selected
-      ? null
-      : contrast
-        ? { borderWidth: 1, borderColor: MATERIAL.hairlineIncreaseContrast }
-        : outline
-          ? OUTLINE_EDGE
-          : { borderWidth: HAIRLINE, borderColor: COLOR.hairline }
+    : contrast
+      ? { borderWidth: 1, borderColor: MATERIAL.hairlineIncreaseContrast }
+      : variant === 'outline'
+        ? OUTLINE_EDGE
+        : { borderWidth: HAIRLINE, borderColor: COLOR.hairline }
 
   const body = (
     <>
@@ -99,7 +109,11 @@ export function Chip({
         {label}
       </Text>
       {onRemove ? <Icon name="x" size={ICON.inline} color={ink} /> : null}
-      {edge ? <View testID={testID && `${testID}-edge`} pointerEvents="none" style={[StyleSheet.absoluteFill, edge, { borderRadius: radius }]} /> : null}
+      <Animated.View
+        testID={testID && `${testID}-edge`}
+        pointerEvents="none"
+        style={[StyleSheet.absoluteFill, edge, { borderRadius: radius, opacity: selected && !shared ? 0 : 1 }, EDGE_FADE]}
+      />
     </>
   )
   const look = [
@@ -136,7 +150,8 @@ export function Chip({
         accessibilityLabel={onRemove ? `${label}, remove filter` : label}
         accessibilityHint={dimmed ? capHint : undefined}
         accessibilityState={{ selected: onRemove ? undefined : selected, disabled: dimmed || disabled }}
-        style={look}
+        // Kept under Reduce Motion: a colour change is not movement (animate-expo §9). A read-only chip never changes.
+        style={[look, FILL]}
       >
         {body}
       </ScalePress>

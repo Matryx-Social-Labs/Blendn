@@ -11,13 +11,13 @@ import * as Reanimated from 'react-native-reanimated'
 
 import { Toast, toastDwell } from '../components/ds/Toast'
 import { TAB_BAR_HINT_RISE } from '../components/ds/TabBar'
-import { COLOR, RADIUS, SIZE, SPACE } from '../lib/design/tokens'
+import { COLOR, DURATION, RADIUS, SIZE, SPACE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('react-native-reanimated', () => {
   const actual = jest.requireActual('react-native-reanimated')
-  return { ...actual, __esModule: true, useReducedMotion: jest.fn(() => false), withSpring: jest.fn(actual.withSpring) }
+  return { ...actual, __esModule: true, useReducedMotion: jest.fn(() => false), withSpring: jest.fn(actual.withSpring), withTiming: jest.fn(actual.withTiming) }
 })
 jest.mock('expo-glass-effect', () => {
   const { View } = jest.requireActual('react-native')
@@ -172,5 +172,53 @@ describe('<Toast>', () => {
     reduceMotion.mockReturnValue(true)
     await render(<Toast kind="info" text="Hi" onDismiss={jest.fn()} />)
     expect(Reanimated.withSpring).not.toHaveBeenCalled()
+  })
+
+  describe('#19: it fades as it enters and leaves, on both platforms (the Toast page: "+ fade")', () => {
+    const withTiming = Reanimated.withTiming as jest.Mock
+    beforeEach(() => withTiming.mockClear())
+    const fadedIn = (duration: number) => withTiming.mock.calls.some(([to, cfg]) => to === 1 && cfg.duration === duration)
+    const fadedOut = () => withTiming.mock.calls.some(([to, cfg]) => to === 0 && cfg.duration === 160)
+
+    it('iOS: opacity starts at 0 and fades in over quick, on the gentle curve', async () => {
+      await render(<Toast kind="info" text="Hi" onDismiss={jest.fn()} testID="t" />)
+      expect(fadedIn(160)).toBe(true)
+    })
+
+    it('Android: the same', async () => {
+      on('android')
+      await render(<Toast kind="info" text="Hi" onDismiss={jest.fn()} testID="t" />)
+      expect(fadedIn(160)).toBe(true)
+    })
+
+    it.each(['ios', 'android'] as const)('%s: it fades out over quick when it leaves', async (os) => {
+      on(os)
+      await render(<Toast kind="info" text="Hi" action={{ label: 'Undo', onPress: () => {} }} onDismiss={jest.fn()} />)
+      withTiming.mockClear()
+      await fireEvent.press(screen.getByRole('button', { name: 'Undo' }))
+      expect(fadedOut()).toBe(true)
+    })
+
+    it.each(['ios', 'android'] as const)('%s, Reduce Motion: no move, a fade in place over 200, and out over quick', async (os) => {
+      on(os)
+      reduceMotion.mockReturnValue(true)
+      ;(Reanimated.withSpring as jest.Mock).mockClear()
+      const onDismiss = jest.fn()
+      await render(<Toast kind="info" text="Hi" action={{ label: 'Undo', onPress: () => {} }} onDismiss={onDismiss} />)
+      expect(Reanimated.withSpring).not.toHaveBeenCalled()
+      expect(fadedIn(200)).toBe(true)
+      withTiming.mockClear()
+      await fireEvent.press(screen.getByRole('button', { name: 'Undo' }))
+      expect(fadedOut()).toBe(true)
+      // It stays for the length of the fade, not a frame: iOS used to vanish at once.
+      expect(onDismiss).not.toHaveBeenCalled()
+      await advance(200)
+      expect(onDismiss).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  it('takes its dwell from the design tokens', () => {
+    expect(DURATION.toastDwell).toBe(5000)
+    expect(DURATION.toastDwellAction).toBe(10000)
   })
 })

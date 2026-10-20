@@ -1,6 +1,6 @@
 import { Tabs } from 'expo-router/js-tabs'
 import React, { memo, useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { AppState, Platform, StyleSheet, View } from 'react-native'
+import { AppState, Easing, Platform, StyleSheet, View } from 'react-native'
 
 import { BlendnScreen } from '../../components/blendn/BlendnScreen'
 import { InAppBanner } from '../../components/ds/InAppBanner'
@@ -10,7 +10,7 @@ import { markCoachUsed, useCoachMark } from '../../lib/coachMarks'
 import { apiClient } from '../../lib/apiClient'
 import { openBlendn, setLiveHint, useBlendnOpen } from '../../lib/blendnOverlay'
 import { subscribeCheckInChanged } from '../../lib/checkIn'
-import { COLOR, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, SIZE, SPACE } from '../../lib/design/tokens'
 import { Logger } from '../../lib/logger'
 import { roomButtonTarget, type RoomButtonTarget } from '../../lib/roomButton'
 import { getRoomSignal, subscribeRoomSignal } from '../../lib/roomSignal'
@@ -285,6 +285,12 @@ export default function TabLayout() {
         headerShown: false,
         tabBarShowLabel: false,
         sceneStyle: { backgroundColor: COLOR.ink },
+        /*
+         * The content crossfades between tabs over `quick` (DS #2): opacity only, never a slide or a shift, because
+         * tabs are peers and nothing here implies depth. Reduce Motion keeps it (opacity is not movement), so no branch.
+         */
+        animation: 'fade',
+        transitionSpec: { animation: 'timing', config: { duration: DURATION.quick, easing: Easing.bezier(...EASING.gentle) } },
         /*
          * Absolute, so the scene fills the screen and the bar floats over it.
          *

@@ -116,3 +116,33 @@ describe('Increase Contrast', () => {
     expect(flat('c-edge')).toMatchObject({ borderWidth: 1, borderColor: MATERIAL.hairlineIncreaseContrast })
   })
 })
+
+describe('the fill crosses over quick (DS Flow 10, 10.2: "fill 0 → 1 on quick")', () => {
+  /** Reanimated's jest build keeps a CSS transition only in the inline style it was given (as CountTicks' test reads it). */
+  const transition = (id: string) => String(StyleSheet.flatten(screen.getByTestId(id, { includeHiddenElements: true }).props.jestInlineStyle).transition)
+
+  it('the pressable carries a CSS transition on its fill: 160 ms on the gentle curve', async () => {
+    await draw()
+    expect(transition('c')).toBe('background-color 160ms cubic-bezier(0.33, 1, 0.68, 1)')
+  })
+
+  it('the hairline fades out as the fill comes in: always drawn, at 0 opacity once selected', async () => {
+    await draw({ selected: true })
+    expect(flat('c-edge')).toMatchObject({ opacity: 0 })
+    expect(transition('c-edge')).toBe('opacity 160ms cubic-bezier(0.33, 1, 0.68, 1)')
+    await screen.rerender(<Chip label="Live music" onPress={jest.fn()} testID="c" selected={false} />)
+    // Back on: the edge it had (whichever the system’s contrast setting makes it).
+    expect(flat('c-edge').opacity).toBe(1)
+    expect(flat('c-edge').borderWidth).toBeGreaterThan(0)
+  })
+
+  it('a shared (outlined) interest keeps its edge whatever', async () => {
+    await render(<Chip label="Jazz" shared testID="c" />)
+    expect(flat('c-edge')).toMatchObject({ borderWidth: 1, borderColor: COLOR.textPrimary, opacity: 1 })
+  })
+
+  it('has no Reduce Motion branch: a colour change is not movement', () => {
+    const src = require('fs').readFileSync(require('path').join(__dirname, '../components/ds/Chip.tsx'), 'utf8')
+    expect(src).not.toMatch(/useReducedMotion|reduceMotion/)
+  })
+})

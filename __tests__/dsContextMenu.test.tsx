@@ -18,7 +18,7 @@ import { H } from '../lib/haptics'
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('react-native-reanimated', () => {
   const actual = jest.requireActual('react-native-reanimated')
-  return { ...actual, __esModule: true, useReducedMotion: jest.fn(() => false), withSpring: jest.fn(actual.withSpring) }
+  return { ...actual, __esModule: true, useReducedMotion: jest.fn(() => false), withSpring: jest.fn(actual.withSpring), withTiming: jest.fn(actual.withTiming) }
 })
 /*
  * RN's Modal stays mounted and presented on iOS after `visible` turns false,
@@ -202,5 +202,59 @@ describe('<LongPressMenu>', () => {
     reduceMotion.mockReturnValue(true)
     await render(menu())
     expect(withSpring).not.toHaveBeenCalled()
+  })
+
+  describe('the exit (DS #6: a quick fade with an 8 pt drop)', () => {
+    const withTiming = Reanimated.withTiming as jest.Mock
+    beforeEach(() => {
+      jest.useFakeTimers()
+      withTiming.mockClear()
+      reduceMotion.mockReturnValue(false)
+    })
+    afterEach(() => jest.useRealTimers())
+
+    it('fades the dim and the menu out over quick when it closes, instead of vanishing', async () => {
+      const view = await render(menu())
+      withTiming.mockClear()
+      await view.rerender(menu({ visible: false }))
+      const outs = withTiming.mock.calls.filter(([to, cfg]) => cfg.duration === 160 && (to === 0 || to === 1))
+      // The dim to 0, and the menu's own exit (0 → 1 of its `leave`).
+      expect(outs.map(([to]) => to).sort()).toEqual([0, 1])
+    })
+
+    it('stays mounted for the exit, then goes', async () => {
+      const view = await render(menu())
+      await view.rerender(menu({ visible: false }))
+      expect(screen.getByTestId('lp-menu', { includeHiddenElements: true })).toBeTruthy()
+      await act(async () => jest.advanceTimersByTime(60))
+      expect(screen.getByTestId('lp-menu', { includeHiddenElements: true })).toBeTruthy()
+      await act(async () => jest.advanceTimersByTime(120))
+      expect(screen.queryByTestId('lp-menu', { includeHiddenElements: true })).toBeNull()
+    })
+
+    it('drops the menu 8 pt as it goes, and under Reduce Motion fades in place', async () => {
+      const style = () => Reanimated.getAnimatedStyle(screen.getByTestId('lp-menu', { includeHiddenElements: true })) as { opacity: number; transform: { translateY?: number }[] }
+      const view = await render(menu())
+      await view.rerender(menu({ visible: false }))
+      await act(async () => jest.advanceTimersByTime(150))
+      expect(style().transform[0].translateY).toBeGreaterThan(0)
+      expect(style().transform[0].translateY).toBeLessThanOrEqual(8)
+      expect(style().opacity).toBeLessThan(1)
+      reduceMotion.mockReturnValue(true)
+      const rm = await render(menu())
+      await rm.rerender(menu({ visible: false }))
+      await act(async () => jest.advanceTimersByTime(150))
+      expect(style().transform[0].translateY).toBe(0)
+    })
+
+    it('opens the next time as it always did, whatever the last exit was', async () => {
+      const view = await render(menu())
+      await view.rerender(menu({ visible: false }))
+      await act(async () => jest.advanceTimersByTime(300))
+      await view.rerender(menu())
+      await act(async () => jest.advanceTimersByTime(300))
+      const menuNode = Reanimated.getAnimatedStyle(screen.getByTestId('lp-menu', { includeHiddenElements: true })) as { opacity: number }
+      expect(menuNode.opacity).toBe(1)
+    })
   })
 })

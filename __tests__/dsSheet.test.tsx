@@ -18,7 +18,7 @@ import { H } from '../lib/haptics'
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('react-native-reanimated', () => {
   const actual = jest.requireActual('react-native-reanimated')
-  return { ...actual, __esModule: true, useReducedMotion: jest.fn(() => false), withSpring: jest.fn(actual.withSpring) }
+  return { ...actual, __esModule: true, useReducedMotion: jest.fn(() => false), withSpring: jest.fn(actual.withSpring), withTiming: jest.fn(actual.withTiming) }
 })
 jest.mock('expo-glass-effect', () => {
   const { View } = jest.requireActual('react-native')
@@ -491,6 +491,7 @@ describe('the sheet’s top on every frame of the keyboard’s show and hide (39
 describe('the place view frame by frame (render)', () => {
   const handlers: Record<string, (e?: { endCoordinates: { height: number; screenY: number }; duration?: number }) => void> = {}
   let spies: jest.SpyInstance[] = []
+  let insetsModule: { useSafeAreaInsets: jest.Mock }
   const SCREEN = 852
   const INSET = 59
   const place = () => Reanimated.getAnimatedStyle(screen.getByTestId('s-place', { includeHiddenElements: true })) as { marginBottom: number; height: number }
@@ -510,10 +511,13 @@ describe('the place view frame by frame (render)', () => {
       jest.spyOn(Dimensions, 'get').mockImplementation(((k: 'window' | 'screen') => (k === 'window' ? { width: 393, height: SCREEN, scale: 3, fontScale: 1 } : real(k))) as never),
       jest.spyOn(insets, 'useSafeAreaInsets').mockReturnValue({ top: INSET, bottom: 34, left: 0, right: 0 }),
     ]
+    insetsModule = insets
   })
   afterEach(() => {
     jest.useRealTimers()
     spies.forEach((s) => s.mockRestore())
+    // A spy restored over a jest.fn leaves it answering nothing: put the plain zero insets back for whatever runs next.
+    insetsModule.useSafeAreaInsets.mockReturnValue({ top: 0, bottom: 0, left: 0, right: 0 })
   })
 
   /** Steps the clock a frame at a time and returns where the sheet's top was at each. */
@@ -595,5 +599,123 @@ describe('the place view frame by frame (render)', () => {
       kcSpy.mockRestore()
       on('ios')
     }
+  })
+})
+
+/*
+ * Audit H3 / M3 / L6: a flick down to dismiss kept stopping dead (the offset sprang back toward 0, then a fresh
+ * 220 ms curve started from rest once `visible` flipped). The release hands its velocity to the exit.
+ */
+describe('the swipe-to-dismiss hands its velocity on (DS #5: release on M.fling)', () => {
+  const withSpring = Reanimated.withSpring as jest.Mock
+  const withTiming = Reanimated.withTiming as jest.Mock
+  const flick = async (id: string, velocityY: number, translationY = 300) => {
+    await act(async () =>
+      fireGestureHandler(getByGestureTestId(id), [
+        { state: State.BEGAN },
+        { state: State.ACTIVE, translationY: 0 },
+        { state: State.ACTIVE, translationY },
+        { state: State.END, translationY, velocityY },
+      ])
+    )
+    // `scheduleOnRN` hands the close back to React on the next tick.
+    await act(async () => jest.advanceTimersByTime(1))
+  }
+
+  beforeEach(() => {
+    jest.useFakeTimers()
+    withSpring.mockClear()
+    withTiming.mockClear()
+  })
+  afterEach(() => jest.useRealTimers())
+
+  it('(a) a flick closes it, and the exit is a clamped spring carrying that velocity: no spring back first, no curve from rest', async () => {
+    const Host = () => {
+      const [visible, setVisible] = React.useState(true)
+      return signOut({ visible, onClose: () => setVisible(false), detents: ['medium'], testID: 'make' })
+    }
+    await render(<Host />)
+    withSpring.mockClear()
+    await flick('make-drag', 1200)
+    // The exit: the sheet's own height or more, with the flick's speed, never past the bottom.
+    expect(withSpring).toHaveBeenCalledWith(expect.any(Number), expect.objectContaining({ velocity: 1200, overshootClamping: true }))
+    // And it was not sprung back toward 0 on the way: the only spring toward 0 after the release would be the wall.
+    const toZero = withSpring.mock.calls.filter(([to]) => to === 0)
+    expect(toZero).toHaveLength(0)
+    // It goes after the flick has had room to land.
+    await act(async () => jest.advanceTimersByTime(400))
+    expect(screen.queryByTestId('make-place')).toBeNull()
+  })
+
+  it('a close from the scrim, with no flick, is the timed exit it always was', async () => {
+    const Host = () => {
+      const [visible, setVisible] = React.useState(true)
+      return signOut({ visible, onClose: () => setVisible(false), detents: ['medium'], testID: 'make' })
+    }
+    await render(<Host />)
+    withSpring.mockClear()
+    withTiming.mockClear()
+    await fireEvent.press(screen.getByLabelText('Dismiss'))
+    expect(withSpring).not.toHaveBeenCalledWith(expect.any(Number), expect.objectContaining({ overshootClamping: true }))
+    expect(withTiming).toHaveBeenCalledWith(expect.any(Number), expect.objectContaining({ duration: 220 }))
+  })
+
+  it('(b) an owner who refuses the close (a "discard changes?" ask): the sheet springs back a beat later', async () => {
+    const onClose = jest.fn()
+    await render(signOut({ visible: true, onClose, detents: ['medium'], testID: 'make' }))
+    withSpring.mockClear()
+    await flick('make-drag', 1200)
+    expect(onClose).toHaveBeenCalled()
+    // Nothing has sprung back yet: the answer may still be a close.
+    expect(withSpring).not.toHaveBeenCalledWith(0, expect.objectContaining({ stiffness: SPRING.fling.stiffness }))
+    await act(async () => jest.advanceTimersByTime(40))
+    expect(withSpring).toHaveBeenCalledWith(0, expect.objectContaining({ stiffness: SPRING.fling.stiffness, damping: SPRING.fling.damping }))
+  })
+
+  it('a re-open while it is still leaving rises from where it is, not from the bottom', async () => {
+    const r = await render(signOut({ visible: true, testID: 'make' }))
+    await r.rerender(signOut({ visible: false, testID: 'make' }))
+    await act(async () => jest.advanceTimersByTime(100))
+    withSpring.mockClear()
+    await r.rerender(signOut({ visible: true, testID: 'make' }))
+    expect(withSpring).toHaveBeenCalledWith(0, expect.objectContaining({ stiffness: SPRING.travel.stiffness }))
+  })
+
+  it('the scrim eases on the gentle curve, over base', async () => {
+    withTiming.mockClear()
+    await render(signOut({ visible: true, testID: 'make' }))
+    expect(withTiming).toHaveBeenCalledWith(1, expect.objectContaining({ duration: 220 }))
+  })
+
+  describe('(c) Reduce Motion: a 200 ms fade in and out of place, and the drag still tracks', () => {
+    beforeEach(() => reduceMotion.mockReturnValue(true))
+
+    it('opens by fading in over 200', async () => {
+      await render(signOut({ visible: true, testID: 'make' }))
+      expect(withTiming).toHaveBeenCalledWith(1, expect.objectContaining({ duration: 200 }))
+      expect(withSpring).not.toHaveBeenCalledWith(0, expect.objectContaining({ stiffness: SPRING.travel.stiffness }))
+    })
+
+    it('closes by fading out over 200: the sheet is not left opaque while only the scrim fades', async () => {
+      const r = await render(signOut({ visible: true, testID: 'make' }))
+      withTiming.mockClear()
+      await r.rerender(signOut({ visible: false, testID: 'make' }))
+      const fades = withTiming.mock.calls.filter(([to, cfg]) => to === 0 && cfg.duration === 200)
+      // The scrim and the sheet itself.
+      expect(fades.length).toBeGreaterThanOrEqual(2)
+    })
+
+    it('a flick still dismisses, with no travelling exit', async () => {
+      const Host = () => {
+        const [visible, setVisible] = React.useState(true)
+        return signOut({ visible, onClose: () => setVisible(false), detents: ['medium'], testID: 'make' })
+      }
+      await render(<Host />)
+      withSpring.mockClear()
+      await flick('make-drag', 1200)
+      expect(withSpring).not.toHaveBeenCalledWith(expect.any(Number), expect.objectContaining({ overshootClamping: true }))
+      await act(async () => jest.advanceTimersByTime(250))
+      expect(screen.queryByTestId('make-place')).toBeNull()
+    })
   })
 })

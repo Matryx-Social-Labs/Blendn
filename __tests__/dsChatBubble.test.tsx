@@ -13,14 +13,16 @@ import { AccessibilityInfo, StyleSheet } from 'react-native'
 import { State } from 'react-native-gesture-handler'
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils'
 
-import { ChatBubble, type ChatBubbleProps } from '../components/ds/ChatBubble'
+import * as Reanimated from 'react-native-reanimated'
+
+import { ChatBubble, PRESS_DELAY_MS, type ChatBubbleProps } from '../components/ds/ChatBubble'
 import { avatarOf, emojiOnly, linkHost, linkParts, replyOffset } from '../components/ds/chatShared'
 import { COLOR, MATERIAL } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 
 jest.mock('react-native-reanimated', () => {
   const actual = jest.requireActual('react-native-reanimated')
-  return { ...actual, __esModule: true, useReducedMotion: jest.fn(() => false) }
+  return { ...actual, __esModule: true, useReducedMotion: jest.fn(() => false), withDelay: jest.fn(actual.withDelay) }
 })
 
 const PANDA = { name: 'Cosmic Panda' }
@@ -359,5 +361,27 @@ describe('<ChatBubble>', () => {
     await render(bubble())
     await act(async () => {})
     expect(flat('b-bubble').borderColor).toBe(MATERIAL.hairlineIncreaseContrast)
+  })
+})
+
+
+describe('the press squash waits for a touch that stays (audit L2: bubbles flickered under a scrolling thumb)', () => {
+  const withDelay = Reanimated.withDelay as jest.Mock
+
+  it('squashes after a 120 ms hold, not on touch-down', async () => {
+    expect(PRESS_DELAY_MS).toBe(120)
+    await render(bubble({ onLongPress: jest.fn() }))
+    withDelay.mockClear()
+    await act(async () => fireGestureHandler(getByGestureTestId('b-hold'), [{ state: State.BEGAN }]))
+    expect(withDelay).toHaveBeenCalledWith(120, expect.anything())
+  })
+
+  it('a touch that ends first springs straight back: nothing was ever squashed', async () => {
+    await render(bubble({ onLongPress: jest.fn() }))
+    withDelay.mockClear()
+    await act(async () => fireGestureHandler(getByGestureTestId('b-hold'), [{ state: State.BEGAN }, { state: State.FAILED }]))
+    // The release is a plain spring to 1 (it replaces the pending delayed squash), never delayed itself.
+    const delays = withDelay.mock.calls.map(([ms]) => ms)
+    expect(delays).toEqual([120])
   })
 })

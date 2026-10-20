@@ -16,6 +16,7 @@ import {
 } from '../lib/notifications';
 import { initSocketWithAppState, cleanup as cleanupSocket, disconnect as disconnectSocket } from '../lib/socketClient';
 import { ONBOARDING_ROUTES, mayParticipate, resumeStep } from '../lib/onboarding';
+import { useReducedMotion } from '../lib/motion';
 import { openWhenReady, setRouteReady, takePendingRoute } from '../lib/pendingRoute';
 import { readOnboarding } from '../lib/onboardingStorage';
 import { hasDeclinedPush } from '../lib/pushDecline';
@@ -86,7 +87,9 @@ function RootLayout() {
   const lastRedirectRef = useRef<string | null>(null);
   const pushInitRef = useRef<boolean>(false);
   const isNavigatingRef = useRef<boolean>(false);
-  const routeTransition = Platform.OS === 'ios' ? 'ios_from_right' : 'slide_from_right';
+  // Reduce Motion: every push is the system cross-fade (DS #3 rm), not a slide across the screen.
+  const reduceMotion = useReducedMotion();
+  const routeTransition = reduceMotion ? 'fade' : Platform.OS === 'ios' ? 'ios_from_right' : 'slide_from_right';
   const [imagesReady, setImagesReady] = useState(false);
 
   /*
@@ -682,7 +685,7 @@ function RootLayout() {
            * be closed.
            */
           presentation: 'modal',
-          animation: Platform.OS === 'ios' ? 'default' : 'slide_from_bottom',
+          animation: reduceMotion ? 'fade' : Platform.OS === 'ios' ? 'default' : 'slide_from_bottom',
         }}
       />
       <Stack.Screen 
@@ -737,9 +740,9 @@ function RootLayout() {
       {/* The Blendn+ paywall, a modal with "Not now" (step 11). Placeholder design (docs/PLACEHOLDER_SCREENS.md §13). */}
       <Stack.Screen
         name="plus"
-        options={{ headerShown: false, presentation: 'modal', animation: Platform.OS === 'ios' ? 'default' : 'slide_from_bottom' }}
+        options={{ headerShown: false, presentation: 'modal', animation: reduceMotion ? 'fade' : Platform.OS === 'ios' ? 'default' : 'slide_from_bottom' }}
       />
-      <Stack.Screen name="f/[token]"options={{ headerShown: false, presentation: 'modal', animation: 'slide_from_bottom' }} />
+      <Stack.Screen name="f/[token]" options={{ headerShown: false, presentation: 'modal', animation: reduceMotion ? 'fade' : 'slide_from_bottom' }} />
           </Stack>
           {/*
             Watches whether somebody is still at the event they checked into,

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ComponentRef, type ReactNode, type RefObject } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ComponentRef, type ReactNode, type RefObject } from 'react'
 import {
   AccessibilityInfo,
   Keyboard,
@@ -13,14 +13,14 @@ import {
   View,
 } from 'react-native'
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler'
-import { KeyboardController, KeyboardEvents } from 'react-native-keyboard-controller'
+import { KeyboardController, KeyboardEvents, useKeyboardContext } from 'react-native-keyboard-controller'
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { scheduleOnRN } from 'react-native-worklets'
 
 import { Icon, type IconName } from '../ui/Icon'
 import { Material } from '../ui/Material'
-import { COLOR, EASING, MATERIAL, RADIUS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, MATERIAL, RADIUS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { tint } from '../../lib/theme'
@@ -237,6 +237,9 @@ export type SheetProps = {
   testID?: string
 }
 
+/** How long a drag-dismiss waits for the owner's answer before it springs back to where it was (a JS round trip to `visible`). */
+const DRAG_CLOSE_ASK_MS = 32
+
 /**
  * The sheet's motion (#5): mounted while open or leaving, the rise and the
  * scrim, and the drag between detents (`heights`, or the sheet's own height
@@ -279,10 +282,31 @@ function useSheetMotion({
 
   const offset = useSharedValue(reduceMotion ? 0 : window.height)
   const scrim = useSharedValue(0)
+  /** Reduce Motion's way in and out (DS #5 rm: "200ms fade; drag still tracks"): the sheet does not travel, it fades. */
+  const fade = useSharedValue(reduceMotion ? 0 : 1)
+  /** The flick's speed (pt/s, downward) a drag-dismiss hands to the exit, so there is no seam between the finger and the slide. */
+  const flingV = useSharedValue(0)
+  /** `visible` as of now, for a timer that was set before it changed. */
+  const visibleRef = useRef(visible)
+  useLayoutEffect(() => {
+    visibleRef.current = visible
+  })
+  /** The Modal was already on screen (open or leaving) when `visible` last turned true: a re-open mid-exit rises from where it is. */
+  const wasMounted = useRef(false)
   const height = useSharedValue(heights[opening] ?? 0)
   const at = useSharedValue(opening)
   const natural = useSharedValue(0)
   const lift = useSharedValue(0)
+  /*
+   * The keyboard's own frame, every frame, on the UI thread (DS #34: follow it frame by frame). iOS only for now: there
+   * the controller's height is the keyboard's height as the system moves it, so while it is moving the sheet's foot is
+   * glued to the keys on the system's curve, not ours. The eased `lift` stays: it is the resting value (the exact
+   * frame React Native reports) and the bridge across the first frame, before the controller has moved. Android waits
+   * for a drive to show the controller's frames reach this Modal (see `useKeyboard`). Read from the context, not
+   * `useReanimatedKeyboardAnimation`: that hook also flips Android's input mode on mount and back on unmount.
+   */
+  const kb = useKeyboardContext().reanimated
+  const follow = Platform.OS === 'ios'
   const room = useSharedValue({ visibleHeight, insetTop })
   const first = useRef(true)
 
@@ -301,24 +325,41 @@ function useSheetMotion({
   }, [liftTo, liftMs, reduceMotion, lift])
 
   useEffect(() => {
-    const fade = motionTokens(reduceMotion).duration.base
+    const base = motionTokens(reduceMotion).duration.base
+    const gentle = Easing.bezier(...EASING.gentle)
     if (visible) {
       at.set(opening)
       height.set(heights[opening] ?? 0)
-      if (!reduceMotion) {
-        offset.set(window.height)
+      flingV.set(0)
+      if (reduceMotion) {
+        offset.set(0)
+        fade.set(withTiming(1, { duration: base, easing: gentle }))
+      } else {
+        // From the bottom, unless it is already on its way out: then from wherever it is (DS #5: from the presentation value).
+        if (!wasMounted.current) offset.set(window.height)
         offset.set(withSpring(0, SPRING.travel))
+        fade.set(1)
       }
-      scrim.set(withTiming(1, { duration: fade, easing: Easing.bezier(...EASING.standard) }))
+      wasMounted.current = true
+      scrim.set(withTiming(1, { duration: base, easing: gentle }))
       return
     }
-    const out = { duration: fade, easing: Easing.bezier(...EASING.sheet) }
-    if (!reduceMotion) offset.set(withTiming(window.height, out))
-    scrim.set(withTiming(0, out))
-    const timer = setTimeout(() => {
-      setMounted(false)
-      onGone()
-    }, fade)
+    const out = { duration: base, easing: Easing.bezier(...EASING.sheet) }
+    // A flick down hands its speed to the slide out: a spring that carries it, clamped at the bottom, never a fresh curve from rest.
+    const v = flingV.get()
+    flingV.set(0)
+    if (reduceMotion) fade.set(withTiming(0, { duration: base, easing: gentle }))
+    else offset.set(v > 0 ? withSpring(window.height, { ...SPRING.fling, velocity: v, overshootClamping: true }) : withTiming(window.height, out))
+    scrim.set(withTiming(0, { duration: base, easing: gentle }))
+    // A spring has no end time: give the flick the room it needs to reach the bottom before the Modal goes.
+    const timer = setTimeout(
+      () => {
+        wasMounted.current = false
+        setMounted(false)
+        onGone()
+      },
+      v > 0 && !reduceMotion ? DURATION.medium : base
+    )
     return () => clearTimeout(timer)
     // On `visible` only: the rest is read as it stood when the sheet opened or closed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -326,6 +367,20 @@ function useSheetMotion({
 
   const playDetent = useCallback(() => H.detent(), [])
   const levels = heights.length ? heights : null
+  /*
+   * A drag past the dismiss line asks to close, and does NOT spring back first: a spring toward 0 and then a slide
+   * away from it was the wall a flick hit. If the owner refuses (a "discard changes?" ask leaves `visible` true), the
+   * sheet springs back a beat later; if it closes, the exit carries the flick's velocity on (`flingV`).
+   */
+  const dragClose = useCallback(() => {
+    requestClose()
+    setTimeout(() => {
+      if (!visibleRef.current) return
+      flingV.set(0)
+      offset.set(withSpring(0, SPRING.fling))
+      height.set(withSpring((levels ?? [natural.get()])[at.get()], SPRING.fling))
+    }, DRAG_CLOSE_ASK_MS)
+  }, [requestClose, levels, offset, height, at, natural, flingV])
   const drag = Gesture.Pan()
     .enabled(visible && !busy)
     .activeOffsetY([-SPACE.sm, SPACE.sm])
@@ -339,21 +394,29 @@ function useSheetMotion({
     .onEnd((e) => {
       const stops = levels ?? [natural.get()]
       const to = settleDetent(stops, at.get(), height.get(), offset.get(), e.velocityY)
-      // A dismiss the owner refuses (a "discard changes?" ask) springs back to where it was.
-      const next = to === 'dismiss' ? at.get() : to
-      if (to === 'dismiss') scheduleOnRN(requestClose)
-      else if (to !== at.get()) scheduleOnRN(playDetent)
-      at.set(next)
-      height.set(withSpring(stops[next], { ...SPRING.fling, velocity: -e.velocityY }))
+      if (to === 'dismiss') {
+        flingV.set(e.velocityY)
+        scheduleOnRN(dragClose)
+        return
+      }
+      if (to !== at.get()) scheduleOnRN(playDetent)
+      at.set(to)
+      height.set(withSpring(stops[to], { ...SPRING.fling, velocity: -e.velocityY }))
       offset.set(withSpring(0, { ...SPRING.fling, velocity: e.velocityY }))
     })
 
   // `marginBottom` is the one thing that lifts the sheet over the keyboard; a detent sheet's height is what is left above it, at this frame's lift.
-  const placeStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: offset.get() }],
-    marginBottom: lift.get(),
-    ...(levels ? { height: sheetHeightAt(lift.get(), room.get().visibleHeight, room.get().insetTop, height.get()) } : null),
-  }))
+  const placeStyle = useAnimatedStyle(() => {
+    const p = kb.progress.get()
+    // Moving: the keyboard's own frame. Still (progress 0 or 1): the exact resting value.
+    const liftNow = follow && p > 0 && p < 1 ? Math.max(0, -kb.height.get()) : lift.get()
+    return {
+      opacity: fade.get(),
+      transform: [{ translateY: offset.get() }],
+      marginBottom: liftNow,
+      ...(levels ? { height: sheetHeightAt(liftNow, room.get().visibleHeight, room.get().insetTop, height.get()) } : null),
+    }
+  })
   const scrimStyle = useAnimatedStyle(() => ({ opacity: scrim.get() }))
   return { mounted, drag, placeStyle, scrimStyle, natural, fixedHeight: !!levels }
 }

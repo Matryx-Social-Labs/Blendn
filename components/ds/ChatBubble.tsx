@@ -10,6 +10,7 @@ import Animated, {
   ReduceMotion,
   useAnimatedStyle,
   useSharedValue,
+  withDelay,
   withSpring,
 } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
@@ -30,6 +31,8 @@ import { focusRing, font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContra
 /** #36: the hold that opens the menu. */
 const HOLD_MS = 400
 const PRESS_SPRING = { ...SPRING.press, reduceMotion: ReduceMotion.Never }
+/** The bubble squashes only for a touch that stays: a scroll's first touch-down ends sooner than this. */
+export const PRESS_DELAY_MS = 120
 /** The page's not-sent bubble at 70%. */
 const FAILED_OPACITY = 0.7
 /** R3-D5 5.11: one to three emoji alone at 32 pt, no bubble. */
@@ -150,7 +153,8 @@ function useBubbleGestures({ onLongPress, onReply, removed, failed, testID }: Pi
   const hold = Gesture.LongPress()
     .enabled(!!onLongPress && !removed)
     .minDuration(HOLD_MS)
-    .onBegin(() => press.set(withSpring(PRESS.scale, PRESS_SPRING)))
+    // A hold shows in time; a flick's touch-down is gone (onFinalize) before it, so a scrolling thumb never squashes a bubble.
+    .onBegin(() => press.set(withDelay(PRESS_DELAY_MS, withSpring(PRESS.scale, PRESS_SPRING))))
     .onStart((e) => {
       const { width, height } = size.get()
       scheduleOnRN(openMenu, { x: e.absoluteX - e.x, y: e.absoluteY - e.y, width, height })
