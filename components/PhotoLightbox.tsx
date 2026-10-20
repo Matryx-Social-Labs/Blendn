@@ -1,18 +1,21 @@
-import { Ionicons } from '@expo/vector-icons'
 import React, { useCallback, useRef, useState } from 'react'
 import {
   Dimensions,
   FlatList,
   Modal,
+  Platform,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
   ViewToken,
 } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { IconButton } from './ds/IconButton'
+import { monoCaption } from './ds/MonoFamily'
+import { useBoldText } from './ds/shared'
 import { SwipeToDismiss } from './motion/SwipeToDismiss'
 import { ZoomableImage } from './motion/ZoomableImage'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE, tint } from '../lib/theme'
+import { COLOR, MATERIAL, RADIUS, SIZE, SPACE } from '../lib/design/tokens'
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window')
 
@@ -33,6 +36,11 @@ export default function PhotoLightbox({ photos, initialIndex = 0, visible, onClo
   // until it is back at 1×. See `ZoomableImage`.
   const [zoomed, setZoomed] = useState(false)
   const listRef = useRef<FlatList>(null)
+  const insets = useSafeAreaInsets()
+  const bold = useBoldText()
+  // The top row's height: the close circle, 44 pt on iOS and 48 dp on Android.
+  const circle = Platform.OS === 'android' ? SIZE.circleButtonAndroid : SIZE.circleButton
+  const top = insets.top + SPACE.sm
 
   // Sync to initialIndex when lightbox opens
   const handleShow = useCallback(() => {
@@ -89,23 +97,32 @@ export default function PhotoLightbox({ photos, initialIndex = 0, visible, onClo
           getItemLayout={(_, index) => ({ length: SCREEN_W, offset: SCREEN_W * index, index })}
         />
 
-        {/* Counter */}
-        {photos.length > 1 && (
-          <View style={styles.counter} pointerEvents="none">
-            <Text style={styles.counterText}>{currentIndex + 1} / {photos.length}</Text>
+        {/* The photo's chrome, read before the pictures: the page is modal, Close is first, then where you are. */}
+        <View accessibilityViewIsModal style={StyleSheet.absoluteFill} pointerEvents="box-none">
+          <View style={[styles.closeBtn, { top, left: SPACE.lg }]}>
+            <IconButton icon="x" tier="media" accessibilityLabel="Close" onPress={onClose} />
           </View>
-        )}
-
-        {/* Close button */}
-        <TouchableOpacity style={styles.closeBtn} onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-          <View style={styles.closeBtnInner}>
-            <Ionicons name="close" size={ICON.md} color={EMBER.textPrimary} />
-          </View>
-        </TouchableOpacity>
+          {photos.length > 1 && (
+            <View style={[styles.counterRow, { top, height: circle }]} pointerEvents="none">
+              <View
+                accessible
+                accessibilityLabel={`Photo ${currentIndex + 1} of ${photos.length}`}
+                style={styles.counter}
+              >
+                <Text style={[monoCaption(bold), styles.counterText]}>{currentIndex + 1} / {photos.length}</Text>
+              </View>
+            </View>
+          )}
+        </View>
 
         {/* Dot indicators */}
         {photos.length > 1 && photos.length <= 10 && (
-          <View style={styles.dots} pointerEvents="none">
+          <View
+            style={[styles.dots, { bottom: insets.bottom + SPACE.xl }]}
+            pointerEvents="none"
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+          >
             {photos.map((_, i) => (
               <View key={i} style={[styles.dot, i === currentIndex && styles.dotActive]} />
             ))}
@@ -125,34 +142,18 @@ const styles = StyleSheet.create({
   },
   closeBtn: {
     position: 'absolute',
-    top: 56,
-    right: GUTTER,
     zIndex: 10,
   },
-  closeBtnInner: {
-    width: CONTROL.sm,
-    height: CONTROL.sm,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.scrim,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  counterRow: { position: 'absolute', left: 0, right: 0, alignItems: 'center', justifyContent: 'center' },
   counter: {
-    position: 'absolute',
-    top: 60,
-    alignSelf: 'center',
-    backgroundColor: EMBER.scrim,
+    backgroundColor: MATERIAL.scrimPill,
     paddingHorizontal: SPACE.md,
     paddingVertical: SPACE.xs,
-    borderRadius: EMBER_RADIUS.pill,
+    borderRadius: RADIUS.capsule,
   },
-  counterText: {
-    ...TYPE.caption,
-    color: EMBER.textPrimary,
-  },
+  counterText: { color: COLOR.textPrimary },
   dots: {
     position: 'absolute',
-    bottom: 48,
     alignSelf: 'center',
     flexDirection: 'row',
     gap: SPACE.sm,
@@ -160,11 +161,11 @@ const styles = StyleSheet.create({
   dot: {
     width: 6,
     height: 6,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: tint(EMBER.textPrimary, 0.4),
+    borderRadius: RADIUS.capsule,
+    backgroundColor: COLOR.textTertiary,
   },
   dotActive: {
-    backgroundColor: EMBER.textPrimary,
+    backgroundColor: COLOR.textPrimary,
     width: 18,
   },
 })
