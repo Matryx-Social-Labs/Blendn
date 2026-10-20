@@ -5,15 +5,14 @@ import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from '
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg'
 
 import ScalePress from '../motion/ScalePress'
-import { Button } from '../ds/Button'
-import { LivePill, PresenceDot } from '../ds/MonoFamily'
+import { Badge, LivePill, PresenceDot } from '../ds/MonoFamily'
 import { font, PRESSED_WASH, useBoldText } from '../ds/shared'
 import { VenuePlate } from '../ds/VenuePlate'
-import { Icon } from '../ui/Icon'
+import { LocationAskCard } from '../pulse/LocationAskCard'
 import { Rail, RAIL_GAP } from '../pulse/Rail'
 import { SectionHeader } from '../ds/SectionHeader'
 import type { VenueListItem } from '../../lib/apiClient'
-import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, PRESS, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, PRESS, RADIUS, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
 import {
@@ -30,20 +29,18 @@ import {
   tonightEvent,
   type PlaceTypeFilter,
 } from '../../lib/placesPane'
+import { QuietRow } from './PlaceParts'
 import { openPlace } from './openPlace'
 
 /** The live tile is a square (BUILD-SPEC B2); the open card is 200 × 132 (B3). */
 export const TILE_WIDTH = 156
 export const OPEN_CARD_WIDTH = 200
-const OPEN_CARD_ART = 132
-/** Near you's row (B4): 60 tall, a 28 pt numbered disc, a 40 pt plate. */
-const NEAR_ROW = 60
-const NEAR_DISC = 28
-const NEAR_PLATE = 40
-// design-exception: places.js quiet rows and Near you draw the thumb at radius 10 (RADIUS.thumb is 8, rowInCard 16)
-const NEAR_PLATE_RADIUS = 10
-// design-exception: the map glow colour is oklch(0.68 0.14 345), which the token generator does not emit (React Native cannot parse oklch); sRGB per BUILD-SPEC B2, to be confirmed against the export
-const GLOW_COLOUR = '#D87AA6'
+export const OPEN_CARD_ART = 132
+/**
+ * The glow is brand rose, `COLOR.brandRose`: the colour the map's own venue lights are drawn from (`lib/mapTheme.ts`:
+ * the venue roof's foot and a later pin). The design tokens' `map.glow` colour is oklch, which the generator cannot emit.
+ */
+const GLOW_COLOUR = COLOR.brandRose
 
 /** Art for a place: tonight's cover when it has an event with one, else its type's plate. Decorative. */
 function PlaceArt({ venue, now, size, radius }: { venue: VenueListItem; now: number; size: number; radius: number }) {
@@ -214,58 +211,6 @@ export const OpenSection = memo(function OpenSection({ venues, total, now, onSee
   )
 })
 
-/** One of the five nearest: the number the map's pin carries, the plate, the name, the distance and the live caption (≥ 5 only). */
-export const NearRow = memo(function NearRow({ venue, n }: { venue: VenueListItem; n: number }) {
-  const bold = useBoldText()
-  const live = bucketLabel(venue.liveNow)
-  return (
-    <Pressable
-      testID={`place-near-${venue.id}`}
-      onPress={() => openPlace(venue)}
-      android_ripple={{ color: PRESSED_WASH.android }}
-      accessibilityRole="button"
-      accessibilityLabel={nearLabel(venue, n)}
-      style={({ pressed }) => [styles.nearRow, pressed && Platform.OS === 'ios' && styles.pressed]}
-    >
-      <View style={styles.nearDisc} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-        <Text style={[font('meta', bold, FONT_FAMILY.mono[700]), styles.nearNumber]}>{n}</Text>
-      </View>
-      <VenuePlate type={plateFor(venue.venueType)} size={NEAR_PLATE} radius={NEAR_PLATE_RADIUS} />
-      <View style={styles.nearText}>
-        <Text numberOfLines={1} style={[font('bodyStrong', bold), styles.nearName, styles.ink]}>
-          {venue.name}
-        </Text>
-        <Text numberOfLines={1} style={[font('meta', bold), styles.secondary, styles.nearMeta]}>
-          {[venue.venueTypeLabel, placeArea(venue)].filter(Boolean).join(' · ')}
-        </Text>
-      </View>
-      <View style={styles.nearEnd}>
-        <Text style={[font('bodyStrong', bold, FONT_FAMILY.mono[500]), styles.ink, styles.tabular, styles.nearDistance]}>{distanceText(venue.distance) ?? ''}</Text>
-        {live ? (
-          <View style={styles.nearLive}>
-            <PresenceDot kind="live" />
-            <Text style={[font('caption', bold), styles.secondary]}>{live}</Text>
-          </View>
-        ) : null}
-      </View>
-    </Pressable>
-  )
-})
-
-/** The location card: no fix, no distances and no pins; one button asks. */
-function NearLocationCard({ onAsk }: { onAsk: () => void }) {
-  const bold = useBoldText()
-  return (
-    <View style={styles.askCard} testID="places-near-ask">
-      <Icon name="map-pin" size={ICON.control} color={COLOR.textSecondary} />
-      <Text style={[font('body', bold), styles.ink]}>Turn on location to see the places closest to you, numbered on the map.</Text>
-      <View style={styles.askButton}>
-        <Button label="Turn on location" kind="secondary" size="sm" onPress={onAsk} testID="places-near-ask-button" />
-      </View>
-    </View>
-  )
-}
-
 /** Near you: five rows, or (without a fix) the location card. "Show on map" lifts the drawer to half and fits the pins. */
 export const NearSection = memo(function NearSection({ venues, hasFix, onAsk, onShowOnMap }: { venues: VenueListItem[]; hasFix: boolean; onAsk: () => void; onShowOnMap?: () => void }) {
   return (
@@ -274,13 +219,13 @@ export const NearSection = memo(function NearSection({ venues, hasFix, onAsk, on
         <SectionHeader title="Near you" action={hasFix && onShowOnMap ? { label: 'Show on map', onPress: onShowOnMap } : undefined} testID="places-near-header" />
       </View>
       {hasFix ? (
-        <View style={styles.nearList}>
+        <View>
           {venues.map((venue, i) => (
-            <NearRow key={venue.id} venue={venue} n={i + 1} />
+            <QuietRow key={venue.id} venue={venue} n={i + 1} label={nearLabel(venue, i + 1)} testID={`place-near-${venue.id}`} />
           ))}
         </View>
       ) : (
-        <NearLocationCard onAsk={onAsk} />
+        <LocationAskCard body="Turn on location to see the places closest to you, numbered on the map." label="Turn on location" icon="navigation" onAsk={onAsk} testID="places-near-ask" />
       )}
     </View>
   )
@@ -315,7 +260,7 @@ export const KindGrid = memo(function KindGrid({ onSelect }: { onSelect: (venueT
             <View style={{ width: tile, height: tile, borderRadius: RADIUS.mediaInCard, overflow: 'hidden' }}>
               <VenuePlate type={plateFor(t.venueType)} />
             </View>
-            <Text numberOfLines={1} style={[font('bodyStrong', bold), styles.kindLabel, styles.ink]}>
+            <Text numberOfLines={1} style={[font('bodyStrong', bold), styles.ink]}>
               {t.label}
             </Text>
           </ScalePress>
@@ -335,26 +280,7 @@ const styles = StyleSheet.create({
   tileText: { gap: SPACE.xxs, paddingHorizontal: SPACE.xs },
   openCard: { width: OPEN_CARD_WIDTH, gap: SPACE.sm },
   openArt: { width: OPEN_CARD_WIDTH, height: OPEN_CARD_ART, borderRadius: RADIUS.mediaInCard, overflow: 'hidden', backgroundColor: COLOR.surface },
-  nearList: { paddingHorizontal: SPACE.gutter },
-  nearRow: { height: NEAR_ROW, flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
-  pressed: { backgroundColor: PRESSED_WASH.ios },
-  nearDisc: { width: NEAR_DISC, height: NEAR_DISC, borderRadius: NEAR_DISC / 2, backgroundColor: COLOR.textPrimary, alignItems: 'center', justifyContent: 'center' },
-  nearNumber: { color: COLOR.ink },
-  nearText: { flex: 1, minWidth: 0 },
-  // design-exception: Near you rows are 15/20 names with a 13 meta, as the quiet row (between the type roles)
-  nearName: { fontSize: 15, lineHeight: 20 },
-  // design-exception: Near you meta 13/20
-  nearMeta: { fontSize: 13, lineHeight: 20 },
-  nearEnd: { alignItems: 'flex-end' },
-  // design-exception: Near you's distance is Geist Mono 15
-  nearDistance: { fontSize: 15, lineHeight: 20 },
-  nearLive: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs },
-  // design-exception: 20, as the Pulse's location card (between SPACE.lg and SPACE.xl)
-  askCard: { marginHorizontal: SPACE.gutter, borderRadius: RADIUS.mediaInCard, backgroundColor: COLOR.surface, padding: 20, gap: SPACE.sm + SPACE.xxs },
-  askButton: { alignSelf: 'flex-start' },
   kinds: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: SPACE.gutter, columnGap: RAIL_GAP, rowGap: SPACE.lg },
-  // design-exception: kind labels are 15/20 medium (places.html), between the type roles
-  kindLabel: { fontSize: 15, lineHeight: 20 },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
   tabular: { fontVariant: ['tabular-nums'] },

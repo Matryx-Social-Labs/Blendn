@@ -99,7 +99,7 @@ jest.mock('../components/cityArt/drawable', () => ({ drawableCityArt: () => null
 jest.mock('../components/NearbyEventCard', () => () => null)
 jest.mock('../components/OptimizedImage', () => ({ preloadImages: jest.fn(async () => {}) }))
 jest.mock('../components/RealtimeStatusBanner', () => () => null)
-jest.mock('../components/Skeleton', () => ({ SkeletonBlock: () => null, SkeletonLine: () => null }))
+jest.mock('../components/Skeleton', () => ({ Skeleton: () => null, SkeletonBlock: () => null, SkeletonLine: () => null }))
 jest.mock('../components/motion/FadeInUp', () => ({ children }: { children: React.ReactNode }) => children)
 jest.mock('../components/motion/RisingSheet', () => {
   const { Pressable } = require('react-native')

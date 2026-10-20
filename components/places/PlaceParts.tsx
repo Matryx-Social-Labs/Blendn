@@ -1,14 +1,15 @@
 import { memo } from 'react'
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 
-import { font, minTarget, PRESSED_WASH, useBoldText } from '../ds/shared'
+import { Banner } from '../ds/Banner'
+import { Badge } from '../ds/MonoFamily'
+import { font, PRESSED_WASH, useBoldText } from '../ds/shared'
 import { VenuePlate } from '../ds/VenuePlate'
 import { Icon } from '../ui/Icon'
 import type { VenueListItem } from '../../lib/apiClient'
 import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { bucketLabel, distanceText, moreLine, placeArea, placeLabel, plateFor } from '../../lib/placesPane'
-import { OPEN_CARD_WIDTH, TILE_WIDTH } from './PlaceCards'
 import { openPlace } from './openPlace'
 
 /** The quiet row: 56 tall, a 40 thumb. */
@@ -16,8 +17,6 @@ const QUIET_ROW = SIZE.primary
 const QUIET_THUMB = 40
 // design-exception: places.js quiet rows draw the thumb at radius 10 (RADIUS.thumb is 8, rowInCard 16)
 const QUIET_THUMB_RADIUS = 10
-/** The skeleton's open card is the card's height. */
-const OPEN_CARD_ART = 132
 
 /** "Brewery · 350 m": the type, and the distance in Geist Mono. */
 function TypeLine({ venue, area = false, small = false }: { venue: VenueListItem; area?: boolean; small?: boolean }) {
@@ -70,19 +69,20 @@ export function QuietFold({ count, more, open, nearest, onPress }: { count: numb
   )
 }
 
-/** A quiet place: a small type plate (no photo), the name, the type and area, and a live count at the end only when it shows one (never under 5). */
-export const QuietRow = memo(function QuietRow({ venue }: { venue: VenueListItem }) {
+/** A quiet place (and, with `n`, one of Near you's five: the design system's Badge numbers it, as it numbers the map's pin): a small type plate (no photo), the name, the type and area, and a live count at the end only when it shows one (never under 5). */
+export const QuietRow = memo(function QuietRow({ venue, n, label, testID }: { venue: VenueListItem; n?: number; label?: string; testID?: string }) {
   const bold = useBoldText()
   const words = bucketLabel(venue.liveNow)
   return (
     <Pressable
-      testID={`place-quiet-${venue.id}`}
+      testID={testID ?? `place-quiet-${venue.id}`}
       onPress={() => openPlace(venue)}
       android_ripple={{ color: PRESSED_WASH.android }}
       accessibilityRole="button"
-      accessibilityLabel={placeLabel(venue)}
+      accessibilityLabel={label ?? placeLabel(venue)}
       style={({ pressed }) => [styles.quietRow, styles.gutter, pressed && Platform.OS === 'ios' && styles.pressed]}
     >
+      {n !== undefined ? <Badge text={n} size={22} /> : null}
       <VenuePlate type={plateFor(venue.venueType)} size={QUIET_THUMB} radius={QUIET_THUMB_RADIUS} />
       <View style={styles.rowText}>
         <Text numberOfLines={1} style={[font('bodyStrong', bold), styles.quietName, styles.ink]}>
@@ -99,61 +99,17 @@ export const QuietRow = memo(function QuietRow({ venue }: { venue: VenueListItem
   )
 })
 
-/**
- * Loading (B10): static blocks at the new sections' geometry. A 130 × 26 bar and three 156 squares with two
- * text bars each; a 150 × 26 bar and two 200 × 132; a 100 × 26 bar and four 132-tall area blocks. Nothing loops.
- */
-const SKELETON = { bar: 26, text: 12, area: 132, headers: [130, 150, 100] } as const
-const block = (width: number | string, height: number, radius: number, key?: string) => (
-  <View key={key} style={{ width: width as number, height, borderRadius: radius, backgroundColor: COLOR.surfaceSunken }} />
-)
-export function PlacesSkeleton() {
-  return (
-    <View accessibilityLabel="Loading places" accessibilityState={{ busy: true }} testID="places-skeleton">
-      <View style={styles.section}>
-        <View style={styles.gutter}>{block(SKELETON.headers[0], SKELETON.bar, RADIUS.thumb)}</View>
-        <View style={styles.rail}>
-          {[0, 1, 2].map((i) => (
-            <View key={i} style={{ gap: SPACE.sm }}>
-              {block(TILE_WIDTH, TILE_WIDTH, RADIUS.mediaInCard)}
-              {block(TILE_WIDTH * 0.8, SKELETON.text, RADIUS.capsule)}
-              {block(TILE_WIDTH * 0.5, SKELETON.text, RADIUS.capsule)}
-            </View>
-          ))}
-        </View>
-      </View>
-      <View style={styles.section}>
-        <View style={styles.gutter}>{block(SKELETON.headers[1], SKELETON.bar, RADIUS.thumb)}</View>
-        <View style={styles.rail}>{[0, 1].map((i) => block(OPEN_CARD_WIDTH, OPEN_CARD_ART, RADIUS.mediaInCard, `o${i}`))}</View>
-      </View>
-      <View style={styles.section}>
-        <View style={styles.gutter}>{block(SKELETON.headers[2], SKELETON.bar, RADIUS.thumb)}</View>
-        <View style={[styles.gutter, styles.areas]}>{[0, 1, 2, 3].map((i) => <View key={i} style={styles.area} />)}</View>
-      </View>
-    </View>
-  )
-}
-
-/** "Places didn’t refresh." over a list already shown: the list stays, and one tap tries again. Styled as the destructive banner. */
+/** "Places didn’t refresh." over a list already shown: the list stays, and one tap tries again. The design system's destructive-tint Banner. */
 export function RefreshFailed({ onRetry }: { onRetry: () => void }) {
-  const bold = useBoldText()
   return (
-    <View style={styles.failed} accessibilityLiveRegion="polite" testID="places-refresh-failed">
-      <Icon name="cloud-off" size={ICON.control} color={COLOR.textPrimary} />
-      <Text style={[font('meta', bold), styles.ink, styles.failedText]}>Places didn’t refresh.</Text>
-      <Pressable onPress={onRetry} accessibilityRole="button" accessibilityLabel="Try again" style={[styles.retry, { minHeight: minTarget() }]}>
-        <Text style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>Try again</Text>
-      </Pressable>
+    <View style={styles.failed} testID="places-refresh-failed">
+      <Banner kind="offline" icon="cloud-off" text="Places didn’t refresh." action={{ label: 'Try again', onPress: onRetry }} />
     </View>
   )
 }
 
 const styles = StyleSheet.create({
   gutter: { paddingHorizontal: SPACE.gutter },
-  section: { gap: SPACE.md, paddingBottom: SPACE.xl },
-  rail: { paddingHorizontal: SPACE.gutter, gap: SPACE.md, flexDirection: 'row' },
-  areas: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.md },
-  area: { width: '47%', height: SKELETON.area, borderRadius: RADIUS.mediaInCard, backgroundColor: COLOR.surfaceSunken },
   foldGap: { paddingVertical: SPACE.sm },
   foldEnd: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   rowText: { flex: 1, minWidth: 0 },
@@ -168,18 +124,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: SPACE.lg,
   },
-  failed: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACE.md,
-    marginHorizontal: SPACE.gutter,
-    marginBottom: SPACE.md,
-    paddingHorizontal: SPACE.lg,
-    borderRadius: RADIUS.rowInCard,
-    backgroundColor: COLOR.destructiveTint,
-  },
-  failedText: { flex: 1 },
-  retry: { justifyContent: 'center' },
+  failed: { marginHorizontal: SPACE.gutter, marginBottom: SPACE.md },
   // design-exception: places.js quiet rows are 15/20 with a 13 meta and a 12 mono — between the type roles
   quietName: { fontSize: 15, lineHeight: 20 },
   // design-exception: places.js quiet rows meta 13/20

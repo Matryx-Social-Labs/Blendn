@@ -7,7 +7,7 @@ import { PhotoScrim } from '../ui/GradientFill'
 import { COLOR, FONT_FAMILY, ICON, PRESS, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { Icon } from '../ui/Icon'
 import { PROMOTED_LABEL } from '../../lib/pulseSections'
-import { PresenceDot, ScrimPill, TimeBadge } from './MonoFamily'
+import { ScrimPill, TimeBadge } from './MonoFamily'
 import { CONTROL_FONT_CAP, focusRing, font, IC_HAIRLINE, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
 
 export type EventCardKind = 'hero' | 'compact' | 'row'
@@ -25,11 +25,6 @@ export type EventCardProps = {
   here?: number
   /** A paid placement: a "PROMOTED" scrim pill top-right, read first. Editorial picks carry none. */
   promoted?: boolean
-  /**
-   * `distance`: a row leads with the distance in a 64 pt Geist Mono column (the Pulse's Nearby), and its
-   * meta reads "● Live · {venue}" or "{when} · {venue}" (the distance has its own column).
-   */
-  lead?: 'distance'
   cover?: string | null
   /** You're going: the ribbon reads "You're going · {saved}" ("9 PM"). */
   saved?: string
@@ -94,7 +89,7 @@ export function eventLabel({
  * on the card and the scrim 20% deeper.
  */
 export function EventCard(props: EventCardProps) {
-  const { kind, title, time, venue, distance, going, here, promoted, lead, cover, saved, onPress, onPressIn, onLongPress, previewState, testID, style } = props
+  const { kind, title, time, venue, distance, going, here, promoted, cover, saved, onPress, onPressIn, onLongPress, previewState, testID, style } = props
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const android = Platform.OS === 'android'
@@ -128,11 +123,6 @@ export function EventCard(props: EventCardProps) {
           {...a11y}
           style={({ pressed }) => [styles.row, (pressed || previewState === 'pressed') && !android && styles.rowPressed]}
         >
-          {lead === 'distance' ? (
-            <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('title', bold, FONT_FAMILY.mono[700]), styles.ink, styles.tabular, styles.lead]} testID={testID && `${testID}-lead`}>
-              {distance ?? ''}
-            </Text>
-          ) : null}
           <View testID={testID && `${testID}-thumb`} style={styles.thumb}>
             {cover ? <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} /> : null}
           </View>
@@ -142,26 +132,12 @@ export function EventCard(props: EventCardProps) {
             </Text>
             {/* The venue gives way to a long name; the time, the thing the row is for, never does. */}
             <View style={styles.rowMeta}>
-              {lead === 'distance' ? (
-                <>
-                  {time === 'Live' ? <PresenceDot kind="live" /> : null}
-                  <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[time === 'Live' ? font('meta', bold) : font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary, styles.tabular]}>
-                    {time === 'Live' ? 'Live' : time}
-                  </Text>
-                  <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary, styles.shrink]}>
-                    {` · ${venue}`}
-                  </Text>
-                </>
-              ) : (
-                <>
-                  <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary, styles.shrink]}>
-                    {[venue, distance].filter(Boolean).join(' · ')} ·
-                  </Text>
-                  <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary, styles.tabular]}>
-                    {time}
-                  </Text>
-                </>
-              )}
+              <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary, styles.shrink]}>
+                {[venue, distance].filter(Boolean).join(' · ')} ·
+              </Text>
+              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary, styles.tabular]}>
+                {time}
+              </Text>
             </View>
           </View>
         </Pressable>
@@ -258,8 +234,6 @@ const styles = StyleSheet.create({
   scrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: SCRIM_HEIGHT },
   pills: { position: 'absolute', top: SPACE.md, left: SPACE.md, flexDirection: 'row', gap: SPACE.sm },
   promoted: { position: 'absolute', top: SPACE.md, right: SPACE.md },
-  /** The row's distance column (Pulse › Nearby): 64 wide, Geist Mono 700. */
-  lead: { width: SIZE.tag * 2, flexShrink: 0 },
   saved: {
     position: 'absolute',
     top: SPACE.md + PILL_HEIGHT + SPACE.sm,

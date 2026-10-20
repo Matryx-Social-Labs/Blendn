@@ -1,13 +1,12 @@
 import { memo, useEffect, useState } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 
 import { Chip } from '../ds/Chip'
 import { IconButton } from '../ds/IconButton'
 import { Badge } from '../ds/MonoFamily'
 import { SearchField } from '../ds/SearchField'
-import { font, PRESSED_WASH, useBoldText } from '../ds/shared'
-import { Icon } from '../ui/Icon'
-import { COLOR, FONT_FAMILY, ICON, SPACE } from '../../lib/design/tokens'
+import { font, useBoldText } from '../ds/shared'
+import { COLOR, FONT_FAMILY, SPACE } from '../../lib/design/tokens'
 import { PLACE_TYPES, type PlaceTypeFilter } from '../../lib/placesPane'
 
 /**
@@ -30,21 +29,9 @@ export const PlacesTitle = memo(function PlacesTitle({
         <Text accessibilityRole="header" style={[font('display', bold), styles.ink, styles.title]} numberOfLines={1}>
           Places
         </Text>
-        <Pressable
-          onPress={onPressCity}
-          android_ripple={{ color: PRESSED_WASH.android }}
-          accessibilityRole="button"
-          accessibilityLabel={city ? `Browsing ${city}. Change city` : 'Choose a city'}
-          hitSlop={SPACE.md}
-          style={styles.city}
-          testID="places-city"
-        >
-          <Icon name="map-pin" size={ICON.inline} color={COLOR.textSecondary} />
-          <Text numberOfLines={1} style={[font('meta', bold), styles.ink, styles.cityText]}>
-            {city ?? 'Choose city'}
-          </Text>
-          <Icon name="chevron-down" size={ICON.inline} color={COLOR.textSecondary} />
-        </Pressable>
+        <View style={styles.city}>
+          <Chip label={city ?? 'Choose city'} icon="map-pin" onPress={onPressCity} testID="places-city" />
+        </View>
       </View>
       {stat ? (
         <Text accessibilityLabel={stat.spoken} style={[font('label', bold, FONT_FAMILY.mono[500]), styles.secondary]} numberOfLines={1} testID="places-stat">
@@ -113,8 +100,7 @@ const styles = StyleSheet.create({
   titleWrap: { paddingHorizontal: SPACE.gutter, gap: SPACE.md, paddingBottom: SPACE.md },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.md },
   title: { flexShrink: 1 },
-  city: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs, flexShrink: 0, maxWidth: '50%' },
-  cityText: { flexShrink: 1 },
+  city: { flexShrink: 1, maxWidth: '50%' },
   searchWrap: { paddingHorizontal: SPACE.gutter, gap: SPACE.md },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   search: { flex: 1 },

@@ -386,13 +386,15 @@ describe('the sticky search', () => {
     await mount()
     const list = screen.getByTestId('places-list')
     expect(list.props.stickyHeaderIndices).toEqual([1])
-    expect(screen.getByTestId('sticky-search-bar', HIDDEN)).toBeTruthy()
+    // The bar (the design system's Material) is mounted once the list has scrolled, not before.
+    expect(screen.queryByTestId('sticky-search-bar', HIDDEN)).toBeNull()
     await act(async () => {
       fireEvent.changeText(screen.getByTestId('places-search-input'), 'toi')
     })
     await act(async () => {
       fireEvent.scroll(list, { nativeEvent: { contentOffset: { y: 2000 }, contentSize: { height: 6000, width: 400 }, layoutMeasurement: { height: 800, width: 400 } } })
     })
+    expect(screen.getByTestId('sticky-search-bar', HIDDEN)).toBeTruthy()
     expect(screen.getByTestId('places-search-input').props.value).toBe('toi')
   })
 

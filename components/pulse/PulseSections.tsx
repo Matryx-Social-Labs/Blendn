@@ -2,6 +2,7 @@ import { router } from 'expo-router'
 import { memo, useCallback, useMemo, useState, type ReactNode, type RefObject } from 'react'
 import { FlatList, StyleSheet, Text, View, type ListRenderItemInfo } from 'react-native'
 
+import { Skeleton } from '../Skeleton'
 import { Button } from '../ds/Button'
 import { Chip } from '../ds/Chip'
 import { EventCard } from '../ds/EventCard'
@@ -11,6 +12,7 @@ import { Sheet } from '../ds/Sheet'
 import { font, useBoldText } from '../ds/shared'
 import { Icon } from '../ui/Icon'
 import { FeaturedCard, FEATURED_CARD_GAP } from './FeaturedCard'
+import { LocationAskCard } from './LocationAskCard'
 import { Rail, RAIL_GAP, SectionReveal } from './Rail'
 import { SetList } from './SetList'
 import type { BlendnEvent } from '../../lib/api'
@@ -110,9 +112,7 @@ function WhyThese({ visible, onClose }: { visible: boolean; onClose: () => void 
         <Text style={[font('meta', bold), styles.secondary, styles.fill]}>{WHY_THESE.promoted}</Text>
       </View>
       <View style={styles.whyRow}>
-        <View style={styles.noLabel}>
-          <Text style={[font('caption', bold), styles.ink]}>No label</Text>
-        </View>
+        <Chip label="No label" variant="outline" />
         <Text style={[font('meta', bold), styles.secondary, styles.fill]}>{WHY_THESE.picked}</Text>
       </View>
     </Sheet>
@@ -248,7 +248,6 @@ export const NearbySection = memo(function NearbySection({
           <View key={event.id} ref={i === 0 ? coachRef : undefined} collapsable={false} style={styles.nearRow}>
             <EventCard
               kind="row"
-              lead="distance"
               title={card.title}
               time={card.time}
               venue={card.venue}
@@ -268,16 +267,16 @@ export const NearbySection = memo(function NearbySection({
 
 /** No fix: one card that asks in place; denied reads "Open Settings" and sends there. */
 export function NearbyLocationCard({ denied, onAsk }: { denied: boolean; onAsk: () => void }) {
-  const bold = useBoldText()
   return (
     <View style={styles.section}>
-      <View style={styles.askCard} testID="pulse-nearby-ask">
-        <Text accessibilityRole="header" style={[font('heading', bold), styles.ink]}>
-          Nearby
-        </Text>
-        <Text style={[font('meta', bold), styles.secondary]}>Turn on location to see what’s on near you. Distances stay on your phone until you open an event.</Text>
-        <Button kind="secondary" size="raised" icon="navigation" label={denied ? 'Open Settings' : 'Turn on location'} onPress={onAsk} style={styles.askButton} testID="pulse-nearby-ask-button" />
-      </View>
+      <LocationAskCard
+        heading="Nearby"
+        body="Turn on location to see what’s on near you. Distances stay on your phone until you open an event."
+        label={denied ? 'Open Settings' : 'Turn on location'}
+        icon="navigation"
+        onAsk={onAsk}
+        testID="pulse-nearby-ask"
+      />
     </View>
   )
 }
@@ -427,16 +426,27 @@ export const SectionStack = memo(function SectionStack({
  */
 const SKELETON = { bar: 26, hero: { width: 313, height: 340 }, headerNow: 160, headerFeatured: 110 } as const
 export function PulseSkeleton() {
-  const block = (width: number, height: number, radius: number, key: string) => <View key={key} style={{ width, height, borderRadius: radius, backgroundColor: COLOR.surfaceSunken }} />
   return (
     <View accessibilityLabel="Loading events" accessibilityState={{ busy: true }} testID="pulse-skeleton">
       <View style={[styles.section, styles.skeletonFirst]}>
-        <View style={styles.gutter}>{block(SKELETON.headerNow, SKELETON.bar, RADIUS.thumb, 'h1')}</View>
-        <View style={styles.rail}>{[0, 1].map((i) => block(COMPACT_WIDTH, COMPACT_HEIGHT, RADIUS.mediaInCard, `c${i}`))}</View>
+        <View style={styles.gutter}>
+          <Skeleton width={SKELETON.headerNow} height={SKELETON.bar} />
+        </View>
+        <View style={styles.rail}>
+          {[0, 1].map((i) => (
+            <Skeleton key={`c${i}`} width={COMPACT_WIDTH} height={COMPACT_HEIGHT} borderRadius={RADIUS.mediaInCard} />
+          ))}
+        </View>
       </View>
       <View style={styles.section}>
-        <View style={styles.gutter}>{block(SKELETON.headerFeatured, SKELETON.bar, RADIUS.thumb, 'h2')}</View>
-        <View style={styles.rail}>{[0, 1].map((i) => block(SKELETON.hero.width, SKELETON.hero.height, RADIUS.card, `f${i}`))}</View>
+        <View style={styles.gutter}>
+          <Skeleton width={SKELETON.headerFeatured} height={SKELETON.bar} />
+        </View>
+        <View style={styles.rail}>
+          {[0, 1].map((i) => (
+            <Skeleton key={`f${i}`} width={SKELETON.hero.width} height={SKELETON.hero.height} borderRadius={RADIUS.card} />
+          ))}
+        </View>
       </View>
     </View>
   )
@@ -456,14 +466,10 @@ const styles = StyleSheet.create({
   soloBleed: {},
   skeletonFirst: { marginTop: SPACE.lg + SPACE.xs },
   nearRow: { paddingHorizontal: SPACE.gutter },
-  // design-exception: 20, as the Flow 3 location card (between SPACE.lg and SPACE.xl)
-  askCard: { marginHorizontal: SPACE.gutter, borderRadius: RADIUS.mediaInCard, backgroundColor: COLOR.surface, padding: 20, gap: SPACE.sm + SPACE.xxs },
-  askButton: { alignSelf: 'flex-start' },
   everything: { marginTop: SPACE.xxl, gap: SPACE.md },
   chipsScroll: { flexGrow: 0 },
   chips: { paddingHorizontal: SPACE.gutter, gap: SPACE.sm },
   whyRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, paddingVertical: SPACE.sm + SPACE.xxs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: COLOR.hairline },
-  noLabel: { height: 28, paddingHorizontal: SPACE.md, borderRadius: RADIUS.capsule, backgroundColor: COLOR.surface, justifyContent: 'center' },
   fill: { flex: 1 },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
