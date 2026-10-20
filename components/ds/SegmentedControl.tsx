@@ -241,25 +241,6 @@ export function SegmentedControl({
           accessibilityLabel={pair ? `${items[0]} or ${items[1]}` : undefined}
           style={[styles.control, trackStyle, contrast && styles.contrast, disabled && { opacity: OPACITY.disabled }]}
         >
-          <View style={styles.track} pointerEvents="none">
-            {pair ? <Animated.View testID={testID && `${testID}-divider`} style={[styles.divider, dividerStyle]} /> : null}
-            {showThumb ? (
-              <Animated.View testID={testID && `${testID}-thumb`} style={[styles.thumb, { width: `${100 / n}%` }, thumbStyle]}>
-                <Animated.View
-                  testID={testID && `${testID}-ink`}
-                  accessibilityElementsHidden
-                  importantForAccessibility="no-hide-descendants"
-                  style={[styles.ink, { width: `${n * 100}%` }, inkStyle]}
-                >
-                  {items.map((item, i) => (
-                    <View key={item} style={styles.segment}>
-                      <SegmentLabel item={item} badge={badges?.[i] ?? null} ink pair={pair} bold={bold} android={android} />
-                    </View>
-                  ))}
-                </Animated.View>
-              </Animated.View>
-            ) : null}
-          </View>
           {items.map((item, i) => {
             const on = i === selected
             return (
@@ -284,6 +265,27 @@ export function SegmentedControl({
               </Pressable>
             )
           })}
+          {/* Above the labels: the opaque thumb covers the white label under it, so only its own ink label shows. Drawn
+              underneath, the white 500 label bled through the ink 700 one (two weights, two widths: garbled text). */}
+          <View style={styles.track} pointerEvents="none">
+            {pair ? <Animated.View testID={testID && `${testID}-divider`} style={[styles.divider, dividerStyle]} /> : null}
+            {showThumb ? (
+              <Animated.View testID={testID && `${testID}-thumb`} style={[styles.thumb, { width: `${100 / n}%` }, thumbStyle]}>
+                <Animated.View
+                  testID={testID && `${testID}-ink`}
+                  accessibilityElementsHidden
+                  importantForAccessibility="no-hide-descendants"
+                  style={[styles.ink, { width: `${n * 100}%` }, inkStyle]}
+                >
+                  {items.map((item, i) => (
+                    <View key={item} style={styles.segment}>
+                      <SegmentLabel item={item} badge={badges?.[i] ?? null} ink pair={pair} bold={bold} android={android} />
+                    </View>
+                  ))}
+                </Animated.View>
+              </Animated.View>
+            ) : null}
+          </View>
         </View>
       </GestureDetector>
       {focused || previewState === 'focused'

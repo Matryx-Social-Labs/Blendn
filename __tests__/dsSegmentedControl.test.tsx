@@ -134,6 +134,21 @@ describe('<SegmentedControl>', () => {
 })
 
 describe('the ink layer', () => {
+  it('draws above the white labels, so the opaque thumb hides the label under it (no garbled double text)', async () => {
+    await draw()
+    const control = screen.getByTestId('s')
+    const kids = React.Children.toArray(control.props.children) as React.ReactElement[]
+    // The segments come first and the thumb's layer last: later siblings paint on top.
+    const segmentAt = kids.findIndex((k) => (k.props as { testID?: string }).testID === 's-1')
+    const thumbLayerAt = kids.findIndex((k) => (k.props as { pointerEvents?: string }).pointerEvents === 'none')
+    expect(segmentAt).toBeGreaterThanOrEqual(0)
+    expect(thumbLayerAt).toBeGreaterThan(segmentAt)
+    // And it never takes a touch from the segments it covers.
+    const onChange = jest.fn()
+    await draw({ onChange })
+    await act(async () => fireEvent.press(screen.getAllByRole('tab')[1]))
+    expect(onChange).toHaveBeenCalledWith(1)
+  })
   it('is a row inside the thumb, as wide as the control, that slides the other way', async () => {
     await draw({ selected: 1 })
     const ink = screen.getByTestId('s-ink', { includeHiddenElements: true })
