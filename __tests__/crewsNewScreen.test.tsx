@@ -55,7 +55,7 @@ describe('step 1 · name and vibe', () => {
   it('opens on the title and "1 of 3 · Name and vibe", with the limits on the fields', async () => {
     await render(<NewCrewScreen />)
     expect(screen.getByText('Make a crew')).toBeTruthy()
-    expect(screen.getByLabelText('Step 1 of 3 · Name and vibe')).toBeTruthy()
+    expect(screen.getByLabelText('Step 1 of 3, Name and vibe')).toBeTruthy()
     // The counters are drawn for the eye; the fields speak their limits to a screen reader.
     expect(screen.getByText('0/32', { includeHiddenElements: true })).toBeTruthy()
     expect(screen.getByText('0/140', { includeHiddenElements: true })).toBeTruthy()
@@ -83,11 +83,11 @@ describe('step 1 · name and vibe', () => {
     expect(screen.queryByText('A crew name is 2–32 characters')).toBeNull()
     await name('x')
     await press('Next')
-    expect(screen.getByLabelText('Step 1 of 3 · Name and vibe')).toBeTruthy()
+    expect(screen.getByLabelText('Step 1 of 3, Name and vibe')).toBeTruthy()
     expect(screen.getByText('A crew name is 2–32 characters')).toBeTruthy()
     // The keyboard's own next key moves on to the line; it does not move the sheet on.
     await fireEvent(screen.getByTestId('make-name-input'), 'submitEditing')
-    expect(screen.getByLabelText('Step 1 of 3 · Name and vibe')).toBeTruthy()
+    expect(screen.getByLabelText('Step 1 of 3, Name and vibe')).toBeTruthy()
   })
 
   it('counts an emoji as one character, as the server’s char_length does', async () => {
@@ -97,7 +97,7 @@ describe('step 1 · name and vibe', () => {
     expect(screen.getByText('A crew name is 2–32 characters')).toBeTruthy()
     await name('🎉🎉')
     await press('Next')
-    await waitFor(() => screen.getByLabelText('Step 2 of 3 · Invite friends'))
+    await waitFor(() => screen.getByLabelText('Step 2 of 3, Invite friends'))
   })
 
   it('a name of only spaces is not a name', async () => {
@@ -145,7 +145,7 @@ describe('step 2 · invite friends', () => {
   it('lists your friends with a count of how many, and Next waits for one', async () => {
     await toFriends()
     await waitFor(() => screen.getByRole('checkbox', { name: 'Ask Priya' }))
-    expect(screen.getByLabelText('Step 2 of 3 · Invite friends')).toBeTruthy()
+    expect(screen.getByLabelText('Step 2 of 3, Invite friends')).toBeTruthy()
     expect(screen.getByLabelText('Next')).toBeDisabled()
     await fireEvent.press(screen.getByRole('checkbox', { name: 'Ask Priya' }))
     expect(screen.getByRole('checkbox', { name: 'Ask Priya' }).props.accessibilityState).toEqual({ checked: true, disabled: false })
@@ -185,7 +185,7 @@ describe('step 2 · invite friends', () => {
 describe('step 3 · consent', () => {
   it('shows the sentence, the anonymity switch and the summary, with nothing sent yet', async () => {
     await toConsent()
-    expect(screen.getByLabelText('Step 3 of 3 · Consent')).toBeTruthy()
+    expect(screen.getByLabelText('Step 3 of 3, Consent')).toBeTruthy()
     expect(screen.getByRole('switch', { name: KEEP_ANONYMOUS_LABEL })).toBeTruthy()
     expect(screen.getByText('2 invited · Friendship')).toBeTruthy()
         expect(crews.create).not.toHaveBeenCalled()
@@ -304,7 +304,7 @@ describe('what the server refuses', () => {
     crews.create.mockResolvedValue({ success: false, error: 'Validation failed', errorCode: 'VALIDATION_FAILED', errors: [{ path: 'name', message: 'A crew name is 2–32 characters' }] })
     await toConsent()
     await press('Make the crew')
-    await waitFor(() => screen.getByLabelText('Step 1 of 3 · Name and vibe'))
+    await waitFor(() => screen.getByLabelText('Step 1 of 3, Name and vibe'))
     expect(screen.getByText('A crew name is 2–32 characters')).toBeTruthy()
   })
 
@@ -313,7 +313,7 @@ describe('what the server refuses', () => {
     await toConsent('Blend’n Official')
     await press('Make the crew')
     await waitFor(() => screen.getByText('This can’t be a crew’s name.'))
-    expect(screen.getByLabelText('Step 1 of 3 · Name and vibe')).toBeTruthy()
+    expect(screen.getByLabelText('Step 1 of 3, Name and vibe')).toBeTruthy()
   })
 
   it('contact details with no field are the form’s: a sheet in the server’s words, not under the line', async () => {
@@ -322,7 +322,7 @@ describe('what the server refuses', () => {
     await toConsent()
     await press('Make the crew')
     await waitFor(() => screen.getByText(said))
-    expect(screen.getByLabelText('Step 3 of 3 · Consent')).toBeTruthy()
+    expect(screen.getByLabelText('Step 3 of 3, Consent')).toBeTruthy()
   })
 
   it('the server naming the line puts its sentence under the line', async () => {
@@ -330,7 +330,7 @@ describe('what the server refuses', () => {
     crews.create.mockResolvedValue({ success: false, error: said, errorCode: 'BAD_REQUEST', field: 'bio' })
     await toConsent()
     await press('Make the crew')
-    await waitFor(() => screen.getByLabelText('Step 1 of 3 · Name and vibe'))
+    await waitFor(() => screen.getByLabelText('Step 1 of 3, Name and vibe'))
     expect(screen.getByText(said)).toBeTruthy()
   })
 
@@ -366,7 +366,7 @@ describe('going back', () => {
   it('system back goes back a step before it closes, and keeps what was typed', async () => {
     await toFriends()
     await act(async () => screen.getByTestId('make-modal').props.onRequestClose())
-    await waitFor(() => screen.getByLabelText('Step 1 of 3 · Name and vibe'))
+    await waitFor(() => screen.getByLabelText('Step 1 of 3, Name and vibe'))
     expect(screen.getByTestId('make-name-input').props.value).toBe('Nebula')
   })
 })

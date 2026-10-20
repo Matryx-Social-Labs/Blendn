@@ -1,9 +1,9 @@
-import { useRef, type ComponentRef, type RefObject } from 'react'
+import { useRef } from 'react'
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 
 import { COLOR, FONT_FAMILY, ICON, MATERIAL, RADIUS, SPACE } from '../../lib/design/tokens'
 import { CONSENT_LINE, CREW_BIO_MAX, CREW_MAX_MEMBERS, CREW_MAX_TAGS, CREW_NAME_MAX, CREW_TAGS, KEEP_ANONYMOUS_LABEL } from '../../lib/crews'
-import { INTENT_CHOICES, stepLine, type IntentChoice, type MakeStep } from '../../lib/crewsScreens'
+import { INTENT_CHOICES, type IntentChoice } from '../../lib/crewsScreens'
 import type { Friend } from '../../lib/friends'
 import { OPACITY, tint } from '../../lib/theme'
 import { Avatar } from '../ds/Avatar'
@@ -26,24 +26,6 @@ const PICK = 28
 const PICK_RING = 0.35
 /** flow10.js `make`: a block inside the sheet is 8% white on iOS glass, sunken on Android's solid sheet. */
 const SHEET_FILL = Platform.OS === 'android' ? COLOR.surfaceSunken : MATERIAL.fillOnGlass
-
-/** The sheet's title row: "Make a crew" at the title role and "1 of 3 · Name and vibe" at its baseline. */
-export function MakeHeader({ step, titleRef }: { step: MakeStep; titleRef: RefObject<ComponentRef<typeof Text> | null> }) {
-  const bold = useBoldText()
-  const contrast = useIncreaseContrast()
-  const [position, ...rest] = stepLine(step).split(' of ')
-  return (
-    <View style={styles.header}>
-      <Text ref={titleRef} accessibilityRole="header" style={[font('title', bold), styles.ink, styles.fill]}>
-        Make a crew
-      </Text>
-      <Text accessibilityLabel={`Step ${stepLine(step)}`} style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>
-        <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.ink]}>{position}</Text>
-        {` of ${rest.join(' of ')}`}
-      </Text>
-    </View>
-  )
-}
 
 export type NameStepProps = {
   name: string

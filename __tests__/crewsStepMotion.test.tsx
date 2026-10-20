@@ -47,10 +47,10 @@ describe('the screen', () => {
     await render(<NewCrewScreen />)
     await fireEvent.changeText(screen.getByTestId('make-name-input'), 'Nebula')
     await fireEvent.press(screen.getByLabelText('Next'))
-    await waitFor(() => screen.getByLabelText('Step 2 of 3 · Invite friends'))
+    await waitFor(() => screen.getByLabelText('Step 2 of 3, Invite friends'))
     expect(entering()().initialValues.transform[0].translateX).toBe(24)
     await fireEvent(screen.getByTestId('make-modal'), 'requestClose')
-    await waitFor(() => screen.getByLabelText('Step 1 of 3 · Name and vibe'))
+    await waitFor(() => screen.getByLabelText('Step 1 of 3, Name and vibe'))
     expect(entering()().initialValues.transform[0].translateX).toBe(-24)
   })
 
@@ -59,7 +59,7 @@ describe('the screen', () => {
     await render(<NewCrewScreen />)
     await fireEvent.changeText(screen.getByTestId('make-name-input'), 'Nebula')
     await fireEvent.press(screen.getByLabelText('Next'))
-    await waitFor(() => screen.getByLabelText('Step 2 of 3 · Invite friends'))
+    await waitFor(() => screen.getByLabelText('Step 2 of 3, Invite friends'))
     expect(entering()().initialValues.transform[0].translateX).toBe(0)
   })
 

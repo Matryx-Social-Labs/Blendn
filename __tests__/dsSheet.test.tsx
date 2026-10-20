@@ -12,7 +12,7 @@ import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-han
 import * as Reanimated from 'react-native-reanimated'
 
 import { fieldScroll, settleDetent, Sheet, sheetBottomPadding, sheetFrame, sheetHeightAt, sheetMaxHeight } from '../components/ds/Sheet'
-import { COLOR, MATERIAL, SPRING } from '../lib/design/tokens'
+import { COLOR, FONT_FAMILY, MATERIAL, SPRING } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
@@ -58,6 +58,34 @@ const signOut = (props: Partial<React.ComponentProps<typeof Sheet>> = {}) => (
     {...props}
   />
 )
+
+describe('headerNote (audit D5)', () => {
+  const note = { lead: '1', text: ' of 3 · Name and vibe', label: 'Step 1 of 3, Name and vibe' }
+
+  it('is two sibling Texts, the lead in Geist Mono white: no Text is a child of another Text', async () => {
+    await render(signOut({ headerNote: note }))
+    const box = screen.getByTestId('s-note')
+    // Two host Texts side by side, each holding only a string: nothing is nested in a Text.
+    expect(box.children).toHaveLength(2)
+    for (const child of box.children) expect((child as { children: unknown[] }).children.every((c) => typeof c === 'string')).toBe(true)
+    expect(StyleSheet.flatten(screen.getByText('1').props.style)).toMatchObject({ fontFamily: FONT_FAMILY.mono[500], color: COLOR.textPrimary })
+    expect(StyleSheet.flatten(screen.getByText(/of 3 · Name and vibe/).props.style).color).toBe(COLOR.textSecondary)
+  })
+
+  it('gives ground under a long title: the note shrinks, the row wraps, and the title holds its width', async () => {
+    await render(signOut({ headerNote: note, title: 'A title that is long enough to fill a phone’s row on its own' }))
+    expect(StyleSheet.flatten(screen.getByTestId('s-note').props.style)).toMatchObject({ flexShrink: 1, minWidth: 0 })
+    expect(StyleSheet.flatten(screen.getByText(/A title that is long/).props.style)).toMatchObject({ flexShrink: 0, maxWidth: '100%' })
+  })
+
+  it('is read as one element: its label, or its words', async () => {
+    await render(signOut({ headerNote: note }))
+    expect(screen.getByLabelText('Step 1 of 3, Name and vibe')).toBeTruthy()
+    await screen.unmount()
+    await render(signOut({ headerNote: { text: 'Step 1 of 3' } }))
+    expect(screen.getByLabelText('Step 1 of 3')).toBeTruthy()
+  })
+})
 
 describe('headerAction', () => {
   it('is right-aligned in the title row, runs its handler, and a sheet without one is unchanged', async () => {

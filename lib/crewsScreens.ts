@@ -145,6 +145,13 @@ export const MAKE_STEPS = ['Name and vibe', 'Invite friends', 'Consent'] as cons
 export type MakeStep = 1 | 2 | 3
 export const stepLine = (step: MakeStep): string => `${step} of ${MAKE_STEPS.length} · ${MAKE_STEPS[step - 1]}`
 
+/** The sheet's note beside "Make a crew": "1" in mono, then " of 3 · Name and vibe"; read as "Step 1 of 3, Name and vibe". */
+export const stepNote = (step: MakeStep) => ({
+  lead: String(step),
+  text: ` of ${MAKE_STEPS.length} · ${MAKE_STEPS[step - 1]}`,
+  label: `Step ${step} of ${MAKE_STEPS.length}, ${MAKE_STEPS[step - 1]}`,
+})
+
 /** "3 invited · Friendship · Dance floor, Techno heads": the summary under the consent. */
 export function makeSummary(args: { invited: number; intent: readonly CrewIntent[]; tags: readonly string[] }): string {
   return [`${args.invited} invited`, intentLine(args.intent), args.tags.length ? args.tags.join(', ') : undefined]

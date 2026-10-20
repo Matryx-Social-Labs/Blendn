@@ -108,12 +108,18 @@ export function RevealSide({
   people,
   mine = false,
   status: statusText,
+  count,
   onReveal,
   testID,
 }: {
   side: RevealSideOf
   people: RevealPerson[]
   mine?: boolean
+  /**
+   * How many people the status speaks of, when more than `people` holds (your side shows you alone: "4 on tonight’s
+   * names"). Before anyone has revealed, the rest are drawn as one "+n" tile, so the row is never one tile for four people.
+   */
+  count?: number
   /**
    * Your own side, when the server has not sent your crew's counts: it never
    * says who kept private, so the line is what is known ("4 on tonight’s names",
@@ -137,33 +143,44 @@ export function RevealSide({
     <View testID={testID} style={styles.side}>
       {side.kind === 'crew' ? <CrewEmblem seed={side.emblemSeed} size={FACE} /> : <Avatar kind="creature" pseudonym={side.pseudonym} size={FACE} />}
       <View style={styles.fill}>
-        <View accessible accessibilityLabel={`${side.name}, ${status}`}>
-          <Text style={[font('bodyStrong', bold), styles.ink]}>
-            {`${side.name} `}
-            <Text style={{ color: COLOR.textSecondary }}>·</Text>
-            <Text style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{` ${status}`}</Text>
+        {/* Two Texts, one line each: a long name truncates on its own line and never pushes the status out (audit D3). */}
+        <View accessible accessibilityLabel={`${side.name}, ${status}`} style={styles.words}>
+          <Text numberOfLines={1} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>
+            {side.name}
+          </Text>
+          <Text numberOfLines={1} style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>
+            {status}
           </Text>
         </View>
-        <View style={styles.tiles}>
-          {tiles.map((p, i) => (
-            <Tile key={p.pseudonym} person={p} order={i} testID={testID && `${testID}-tile-${i}`} />
-          ))}
-          {revealed.length && kept ? (
-            <View style={[styles.tile, styles.kept]}>
-              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[monoCaption(bold), { color: COLOR.textSecondary }]}>{`+${kept}`}</Text>
+        <View style={styles.tilesRow}>
+          <View style={styles.tiles}>
+            {tiles.map((p, i) => (
+              <Tile key={p.pseudonym} person={p} order={i} testID={testID && `${testID}-tile-${i}`} />
+            ))}
+            {revealed.length && kept ? (
+              <View style={[styles.tile, styles.kept]}>
+                <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[monoCaption(bold), { color: COLOR.textSecondary }]}>{`+${kept}`}</Text>
+              </View>
+            ) : null}
+            {!revealed.length && count !== undefined && count > tiles.length ? (
+              <View testID={testID && `${testID}-more`} style={[styles.tile, styles.kept]}>
+                <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[monoCaption(bold), { color: COLOR.textSecondary }]}>{`+${count - tiles.length}`}</Text>
+              </View>
+            ) : null}
+          </View>
+          {mine && revealed.length ? (
+            <View style={[styles.pill, styles.revealed, styles.action]}>
+              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[700]), { color: COLOR.textSecondary }]}>
+                Revealed
+              </Text>
+            </View>
+          ) : mine && onReveal ? (
+            <View style={styles.action}>
+              <Button kind="strong" size="sm" label={side.kind === 'crew' ? 'Reveal my crew' : 'Reveal me'} onPress={onReveal} />
             </View>
           ) : null}
         </View>
       </View>
-      {mine && revealed.length ? (
-        <View style={[styles.pill, styles.revealed]}>
-          <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[700]), { color: COLOR.textSecondary }]}>
-            Revealed
-          </Text>
-        </View>
-      ) : mine && onReveal ? (
-        <Button kind="strong" size="sm" label={side.kind === 'crew' ? 'Reveal my crew' : 'Reveal me'} onPress={onReveal} />
-      ) : null}
     </View>
   )
 }
@@ -212,7 +229,11 @@ const styles = StyleSheet.create({
     backgroundColor: COLOR.surface,
   },
   fill: { flex: 1, gap: TILE_GAP },
-  tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: TILE_GAP },
+  words: { gap: SPACE.xxs },
+  // The tiles wrap among themselves; the Reveal button / Revealed pill rides the same row at the far edge.
+  tilesRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
+  action: { marginLeft: 'auto' },
+  tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: TILE_GAP, flexShrink: 1 },
   tile: { width: TILE, height: TILE },
   photo: { borderRadius: TILE_CORNER, overflow: 'hidden' },
   kept: { borderRadius: TILE_CORNER, backgroundColor: COLOR.surfaceRaised, alignItems: 'center', justifyContent: 'center' },

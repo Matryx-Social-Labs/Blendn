@@ -18,11 +18,21 @@ const on = (os: 'ios' | 'android') => Object.defineProperty(Platform, 'OS', { va
 
 beforeEach(() => on('ios'))
 
-it('the title is heading 20, white, one line that truncates before the action wraps', async () => {
-  await render(<SectionHeader title="People you might have missed tonight" action={{ label: 'See all', onPress: jest.fn() }} />)
+it('the title is heading 20, white, and never ellipsized beside a slot: it holds its width and may take two lines', async () => {
+  await render(<SectionHeader title="People you might have missed tonight" action={{ label: 'See all', onPress: jest.fn() }} testID="h" />)
   const title = screen.getByText('People you might have missed tonight', { includeHiddenElements: true })
-  expect(StyleSheet.flatten(title.props.style)).toMatchObject({ fontFamily: TYPE.heading.fontFamily, fontSize: TYPE.heading.fontSize, color: COLOR.textPrimary, flexShrink: 1 })
-  expect(title.props.numberOfLines).toBe(1)
+  expect(StyleSheet.flatten(title.props.style)).toMatchObject({ fontFamily: TYPE.heading.fontFamily, fontSize: TYPE.heading.fontSize, color: COLOR.textPrimary, flexShrink: 0 })
+  expect(title.props.numberOfLines).toBe(2)
+})
+
+it('the row wraps: the title’s side holds its size (capped at the row), the slot yields and rides to the right edge (audit D4)', async () => {
+  await render(<SectionHeader title="Crews here" right={<Text>chip</Text>} testID="h" />)
+  const row = StyleSheet.flatten(screen.getByTestId('h').props.style)
+  expect(row).toMatchObject({ flexWrap: 'wrap', justifyContent: 'space-between' })
+  const left = StyleSheet.flatten(screen.getByRole('header').props.style)
+  expect(left).toMatchObject({ flexShrink: 0, maxWidth: '100%' })
+  const slot = StyleSheet.flatten(screen.getByText('chip').parent?.props.style)
+  expect(slot).toMatchObject({ flexShrink: 1, minWidth: 0, marginLeft: 'auto' })
 })
 
 it('the count is "· N" in Geist Mono 700, tabular, at textSecondary; the heading reads "{title}, {N}"', async () => {

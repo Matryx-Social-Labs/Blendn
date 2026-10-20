@@ -5,8 +5,9 @@
  * the server answers, the discs cross-fade to photos and the line reads
  * "3 revealed · 1 keeps it private".
  */
-import { fireEvent, render, screen } from '@testing-library/react-native'
+import { fireEvent, render, screen, within } from '@testing-library/react-native'
 import React from 'react'
+import { StyleSheet } from 'react-native'
 
 import { RevealSheet, RevealSide } from '../components/ds/RevealSheet'
 import { H } from '../lib/haptics'
@@ -89,5 +90,51 @@ describe('<RevealSide>', () => {
     await render(<RevealSide side={{ kind: 'crew', name: 'Orbit', emblemSeed: 'orbit' }} people={PEOPLE.slice(0, 3)} />)
     expect(screen.queryByRole('button')).toBeNull()
     expect(screen.getByText('3 on tonight’s names')).toBeTruthy()
+  })
+})
+
+describe('<RevealSide> headers (audit D3)', () => {
+  const orbit = { kind: 'crew' as const, name: 'Midnight Vinyl Collective Bengaluru', emblemSeed: 'orbit' }
+
+  it('the name and the status are two Texts of their own, one line each: a long name never pushes the status out', async () => {
+    await render(<RevealSide side={orbit} people={PEOPLE.slice(0, 2)} testID="r" />)
+    const name = screen.getByText(orbit.name)
+    const status = screen.getByText('2 on tonight’s names')
+    expect(name.props.numberOfLines).toBe(1)
+    expect(status.props.numberOfLines).toBe(1)
+    expect(name).not.toBe(status)
+    // Neither is nested in the other.
+    expect(status.parent?.props.numberOfLines).not.toBe(1)
+    expect(screen.getByLabelText(`${orbit.name}, 2 on tonight’s names`)).toBeTruthy()
+  })
+
+  it('count={2} with one person draws two tiles, the second a neutral "+1"', async () => {
+    await render(<RevealSide side={orbit} people={PEOPLE.slice(0, 1)} count={2} testID="r" />)
+    expect(screen.getAllByTestId(/^r-tile-/, { includeHiddenElements: true })).toHaveLength(1)
+    expect(screen.getByTestId('r-more', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByText('+1', { includeHiddenElements: true })).toBeTruthy()
+  })
+
+  it('no "+n" once someone has revealed (the kept count has its own tile), or when the people are all there', async () => {
+    const one = [{ ...PEOPLE[0], photo: 'https://example.com/0.jpg' }, PEOPLE[1]]
+    await render(<RevealSide side={orbit} people={one} count={5} testID="r" />)
+    expect(screen.queryByTestId('r-more', { includeHiddenElements: true })).toBeNull()
+    await screen.unmount()
+    await render(<RevealSide side={orbit} people={PEOPLE.slice(0, 2)} count={2} testID="r" />)
+    expect(screen.queryByTestId('r-more', { includeHiddenElements: true })).toBeNull()
+  })
+
+  it('the Reveal button is in the tiles row, at the far edge', async () => {
+    await render(<RevealSide side={orbit} people={PEOPLE.slice(0, 2)} mine onReveal={jest.fn()} testID="r" />)
+    const button = screen.getByRole('button', { name: 'Reveal my crew' })
+    let node: typeof button | null = button
+    let slot: typeof button | null = null
+    while (node && !slot) {
+      if (StyleSheet.flatten(node.props.style)?.marginLeft === 'auto') slot = node
+      node = node.parent
+    }
+    expect(slot).not.toBeNull()
+    // Its parent row holds the tiles too.
+    expect(within(slot!.parent!).getAllByTestId(/^r-tile-/, { includeHiddenElements: true })).toHaveLength(2)
   })
 })

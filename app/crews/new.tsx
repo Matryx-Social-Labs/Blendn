@@ -1,12 +1,12 @@
 import { router } from 'expo-router'
-import { useCallback, useEffect, useRef, useState, type ComponentRef } from 'react'
-import { StyleSheet, Text } from 'react-native'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { StyleSheet } from 'react-native'
 import Animated, { useSharedValue } from 'react-native-reanimated'
 
 import { CrewRefusalSheet, type CrewRefusal } from '../../components/crews/CrewRefusalSheet'
 import { stepIn, stepOut, type StepDir } from '../../components/crews/stepMotion'
 import { MadeBeat } from '../../components/crews/MadeBeat'
-import { ConsentStep, FriendsStep, MakeHeader, NameStep } from '../../components/crews/MakeSteps'
+import { ConsentStep, FriendsStep, NameStep } from '../../components/crews/MakeSteps'
 import { Sheet, type SheetAction } from '../../components/ds/Sheet'
 import { apiClient } from '../../lib/apiClient'
 import { CREW_MAX_MEMBERS, CREW_TAGS, createCrewBody, crewMessage, toggleTag } from '../../lib/crews'
@@ -21,6 +21,7 @@ import {
   textFieldOf,
   type IntentChoice,
   type MakeStep,
+  stepNote,
 } from '../../lib/crewsScreens'
 import type { Friend } from '../../lib/friends'
 import { SPACE } from '../../lib/design/tokens'
@@ -66,7 +67,6 @@ export default function NewCrewScreen() {
   const [made, setMade] = useState<Made | null>(null)
   /** The stand-in emblem for the preview: the server draws the real one, from its own seed, when the crew is made. */
   const [previewSeed] = useState(() => `preview-${Math.random().toString(36).slice(2)}`)
-  const titleRef = useRef<ComponentRef<typeof Text>>(null)
   /** One create at a time: `sending` lags a fast second tap by a render. */
   const inFlight = useRef(false)
 
@@ -191,7 +191,8 @@ export default function NewCrewScreen() {
         visible={open}
         onClose={close}
         onDismissed={() => router.back()}
-        focusRef={titleRef}
+        title={made ? undefined : 'Make a crew'}
+        headerNote={made ? undefined : stepNote(step)}
         detents={['tall']}
         actions={actions}
         testID="make"
@@ -200,7 +201,6 @@ export default function NewCrewScreen() {
           <MadeBeat name={cleanName(name)} emblemSeed={made.emblemSeed} invited={made.invited} onContinue={go} />
         ) : (
           <>
-            <MakeHeader step={step} titleRef={titleRef} />
             {/* The step slides 24 pt from the side it travels from on `base`, the old one leaving first (flow10 · 10.2); Reduce Motion fades. */}
             <Animated.View
               key={step}

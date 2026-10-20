@@ -219,6 +219,12 @@ export type SheetProps = {
   title?: string
   /** A text action right-aligned in the title row (Clear all). Additive: a sheet without one is unchanged. */
   headerAction?: { label: string; onPress: () => void; disabled?: boolean }
+  /**
+   * A line beside the title that is not an action ("1 of 3 · Name and vibe"): `lead` in Geist Mono white, then `text` in the
+   * meta role. Two sibling Texts, never one nested in the other (Android measures a nested span in its parent's font). It
+   * wraps under a long title rather than shortening it. `label` is what a screen reader gets, when more than the words.
+   */
+  headerNote?: { lead?: string; text: string; label?: string }
   /** What a screen reader lands on as it opens, when there is no title: the content's own header. */
   focusRef?: RefObject<ComponentRef<typeof View> | null>
   /** The consequence, above the buttons. */
@@ -446,7 +452,7 @@ function useSheetMotion({
  * ponytail: focus is not handed back to the opener on close (the opener
  * knows what it was); the material does not grow more opaque near full height.
  */
-export function Sheet({ visible, onClose, title, headerAction, body, icon, actions = [], detents, children, focusRef, onDismissed, testID }: SheetProps) {
+export function Sheet({ visible, onClose, title, headerAction, headerNote, body, icon, actions = [], detents, children, focusRef, onDismissed, testID }: SheetProps) {
   const android = Platform.OS === 'android'
   const insets = useSafeAreaInsets()
   const window = useWindowDimensions()
@@ -613,7 +619,7 @@ export function Sheet({ visible, onClose, title, headerAction, body, icon, actio
                       <Icon name={icon} />
                     </View>
                   ) : null}
-                  {title || headerAction ? (
+                  {title || headerAction || headerNote ? (
                     <View style={styles.titleRow}>
                       {title ? (
                         <Text ref={titleRef} accessibilityRole="header" style={[font('title', bold), styles.title, styles.titleText]}>
@@ -622,6 +628,17 @@ export function Sheet({ visible, onClose, title, headerAction, body, icon, actio
                       ) : (
                         <View style={styles.titleText} />
                       )}
+                      {headerNote ? (
+                        <View
+                          accessible
+                          accessibilityLabel={headerNote.label ?? `${headerNote.lead ?? ''}${headerNote.text}`}
+                          testID={testID && `${testID}-note`}
+                          style={styles.note}
+                        >
+                          {headerNote.lead ? <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.title]}>{headerNote.lead}</Text> : null}
+                          <Text style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{headerNote.text}</Text>
+                        </View>
+                      ) : null}
                       {headerAction ? (
                         <Pressable
                           testID={testID && `${testID}-header-action`}
@@ -717,8 +734,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
-  titleText: { flex: 1 },
+  titleRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: SPACE.md, rowGap: SPACE.xs },
+  // The title keeps its width (up to the row): a note or an action wraps under it instead of shortening it.
+  titleText: { flexGrow: 1, flexShrink: 0, maxWidth: '100%' },
+  note: { flexDirection: 'row', flexShrink: 1, minWidth: 0, justifyContent: 'flex-end' },
   title: { color: COLOR.textPrimary },
   actions: { gap: SPACE.sm },
   content: { flexGrow: 0, flexShrink: 1 },

@@ -54,7 +54,7 @@ export function SectionHeader({
               <PresenceDot kind="live" testID={testID && `${testID}-live`} />
             </View>
           ) : null}
-          <Text numberOfLines={1} style={[font('heading', bold), styles.title]}>
+          <Text numberOfLines={2} style={[font('heading', bold), styles.title]}>
             {title}
           </Text>
           {count != null ? (
@@ -100,13 +100,14 @@ export function SectionHeader({
 
 const styles = StyleSheet.create({
   block: { gap: SPACE.xs },
-  row: { flexDirection: 'row', justifyContent: 'space-between', gap: SPACE.md },
-  left: { flexDirection: 'row', alignItems: 'baseline', gap: SPACE.xs, flexShrink: 1 },
+  // The title is never given up for a slot: when the two do not fit, the slot wraps under it instead.
+  row: { flexDirection: 'row', flexWrap: 'wrap', rowGap: SPACE.xs, columnGap: SPACE.md, justifyContent: 'space-between' },
+  left: { flexDirection: 'row', alignItems: 'baseline', gap: SPACE.xs, flexShrink: 0, maxWidth: '100%' },
   dot: { alignSelf: 'center', marginRight: SPACE.xs },
-  title: { color: COLOR.textPrimary, flexShrink: 1 },
+  title: { color: COLOR.textPrimary, flexShrink: 0 },
   muted: { color: COLOR.textSecondary },
   tabular: { fontVariant: ['tabular-nums'] },
-  right: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, flexShrink: 0 },
+  right: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, flexShrink: 1, minWidth: 0, marginLeft: 'auto' },
   action: { color: COLOR.textPrimary },
   /** A short action ("Edit") still reaches the 44 / 48 width; the label sits at the right edge. */
   actionBox: { alignItems: 'flex-end' },

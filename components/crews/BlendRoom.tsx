@@ -257,10 +257,11 @@ export function useBlendRoom(blendId: string | null, top: number): BlendRoomChro
           side={mineShape.side}
           people={mineShape.people}
           status={mineShape.status}
+          count={mine?.count}
           onReveal={revealed ? undefined : () => setAsking(true)}
         />
       ) : null}
-      {theirShape ? <RevealSide testID="blend-theirs" side={theirShape.side} people={theirShape.people} /> : null}
+      {theirShape ? <RevealSide testID="blend-theirs" side={theirShape.side} people={theirShape.people} count={theirs?.count} /> : null}
       {closing ? (
         <Text accessibilityLiveRegion="polite" style={[font('meta', bold), styles.quiet]}>
           {closing}
