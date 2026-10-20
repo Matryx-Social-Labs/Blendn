@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons'
 import { router, useLocalSearchParams } from 'expo-router'
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useRef, useState } from 'react'
 import {
   Image,
   KeyboardAvoidingView,
@@ -11,14 +11,14 @@ import {
   TextInput,
   View,
 } from 'react-native'
-import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { LegalLine } from '../components/LegalLine'
 import { Logger } from '../lib/logger'
 import { AUTH_FORM_STYLES, AUTH_LOCKUP, currentDeviceInfo } from '../components/onboarding/authForm'
+import { SegmentedControl } from '../components/ds/SegmentedControl'
 import { EmberButton } from '../components/onboarding/EmberControls'
-import { CONTROL, EMBER, EMBER_RADIUS, ICON, MAX_FONT_SCALE, SPACE, TYPE } from '../lib/theme'
+import { EMBER, ICON, MAX_FONT_SCALE, SPACE, TYPE } from '../lib/theme'
 import { signInWithEmail, signUp } from '../lib/useAuth'
 import { KEYBOARD_BEHAVIOR } from '../lib/keyboard'
 import { accountAgeError } from '../lib/onboarding'
@@ -96,20 +96,6 @@ export default function SignIn() {
   const notice = typeof params.notice === 'string' && params.notice ? params.notice : null
 
   const isSignup = mode === 'signup'
-  /*
-   * The selected segment's background slides between the two rather than
-   * jumping: 200ms ease-in-out, a movement on screen, on the UI thread. It is
-   * one absolute, childless view under the labels, so only a transform moves.
-   * Reduce Motion: it is simply under the selected one.
-   */
-  const reduceMotion = useReducedMotion()
-  const [segmentWidth, setSegmentWidth] = useState(0)
-  const thumbX = useSharedValue(0)
-  useEffect(() => {
-    const target = isSignup ? segmentWidth : 0
-    thumbX.set(reduceMotion ? target : withTiming(target, { duration: 200, easing: SEGMENT_EASE }))
-  }, [isSignup, segmentWidth, reduceMotion, thumbX])
-  const thumbStyle = useAnimatedStyle(() => ({ transform: [{ translateX: thumbX.get() }] }))
   const trimmedEmail = email.trim().toLowerCase()
 
   const switchMode = (next: Mode) => {
@@ -225,38 +211,15 @@ export default function SignIn() {
             </Text>
           ) : null}
 
-          {/*
-            Two tabs over one form. The selected one is the system's selected
-            treatment — a `textPrimary` fill with `bg` text — not `surface` on
-            `surfaceSunken`, which was one step of grey apart and read as two
-            unselected halves (tasks/lessons.md).
-          */}
-          <View
-            style={styles.segmented}
-            accessibilityRole="tablist"
-            onLayout={(e) => setSegmentWidth((e.nativeEvent.layout.width - SEGMENTED_PADDING * 2) / 2)}
-          >
-            {segmentWidth > 0 ? (
-              <Animated.View pointerEvents="none" style={[styles.segmentThumb, { width: segmentWidth }, thumbStyle]} />
-            ) : null}
-            {(['signin', 'signup'] as const).map((m) => (
-              <Pressable
-                key={m}
-                onPress={() => switchMode(m)}
-                disabled={busy}
-                style={styles.segment}
-                accessibilityRole="tab"
-                accessibilityLabel={m === 'signin' ? 'Sign in' : 'Create account'}
-                accessibilityState={{ selected: mode === m, disabled: busy }}
-              >
-                <Text
-                  style={[styles.segmentText, mode === m && styles.segmentTextActive]}
-                  maxFontSizeMultiplier={MAX_FONT_SCALE.button}
-                >
-                  {m === 'signin' ? 'Sign in' : 'Create account'}
-                </Text>
-              </Pressable>
-            ))}
+          {/* Two tabs over one form: the design system's segmented control (it plays H.select on landing, and slides on M.snap). */}
+          <View style={styles.modeSwitch}>
+            <SegmentedControl
+              items={MODE_LABELS}
+              selected={isSignup ? 1 : 0}
+              onChange={(i) => switchMode(i === 0 ? 'signin' : 'signup')}
+              disabled={busy}
+              testID="sign-in-mode"
+            />
           </View>
 
           {/*
@@ -415,30 +378,11 @@ export default function SignIn() {
   )
 }
 
-const SEGMENTED_PADDING = SPACE.xs
-const SEGMENT_EASE = Easing.bezier(0.77, 0, 0.175, 1)
+const MODE_LABELS = ['Sign in', 'Create account'] as const
 
 const styles = StyleSheet.create({
   ...AUTH_FORM_STYLES,
-  segmented: {
-    flexDirection: 'row',
-    height: CONTROL.md,
-    backgroundColor: EMBER.surfaceSunken,
-    borderRadius: EMBER_RADIUS.pill,
-    padding: SEGMENTED_PADDING,
-    marginBottom: SPACE.sm,
-  },
-  segment: { flex: 1, borderRadius: EMBER_RADIUS.pill, alignItems: 'center', justifyContent: 'center' },
-  segmentThumb: {
-    position: 'absolute',
-    top: SEGMENTED_PADDING,
-    bottom: SEGMENTED_PADDING,
-    left: SEGMENTED_PADDING,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.textPrimary,
-  },
-  segmentText: { ...TYPE.bodyStrong, color: EMBER.textSecondary },
-  segmentTextActive: { color: EMBER.bg },
+  modeSwitch: { marginBottom: SPACE.sm },
 
   passwordRow: { justifyContent: 'center' },
   passwordInput: { paddingRight: SPACE.xxxl },

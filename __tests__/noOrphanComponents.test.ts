@@ -65,7 +65,6 @@ const KNOWN_ORPHANS: Record<string, string> = {
   'LookingForCard.tsx': 'redesign P1 input; the onboarding preferences step adopts it in place of LookingForCards (Flow 2)',
   'ProgressBar.tsx': 'redesign P1 input; the onboarding header adopts it (Flow 2)',
   /* P5, sets and moments (ROUND3 B4), built ahead of their flows; each goes with the first flow that adopts it. */
-  'MomentReady.tsx': 'redesign P5 moment (Flow 2); /onboarding/ready plays it on the server’s yes with the onboarding redesign',
   /* The P3 chat and gesture components (ROUND3 B4), built ahead of Flow 5; the room and the DM adopt them, the Banter takes SwipeRow. */
   'PollBubble.tsx': 'redesign P3 component; the organiser poll in the room — the room says a poll as a notice until a `poll` message carries its poll id (server; docs/CHAT.md) (Flow 15 #8)',
   /* The P2 events and people (ROUND3 B4), built ahead of their flows; each goes with the first flow that adopts it. */

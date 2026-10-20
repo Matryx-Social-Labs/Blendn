@@ -1,12 +1,20 @@
 import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
+import { useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
 import { InterestChip } from '../../components/ds/Chip'
+import { MomentReady } from '../../components/ds/MomentReady'
 import { OptimizedImage } from '../../components/OptimizedImage'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
-import { H } from '../../lib/haptics'
-import { CONTROL, EMBER, EMBER_RADIUS, ICON, SPACE, TYPE } from '../../lib/theme'
+import {
+  CONTROL,
+  EMBER,
+  EMBER_RADIUS,
+  ICON,
+  SPACE,
+  TYPE,
+} from '../../lib/theme'
 import { useOnboarding } from '../../lib/useOnboarding'
 
 /**
@@ -27,111 +35,130 @@ import { useOnboarding } from '../../lib/useOnboarding'
 export default function ReadyScreen() {
   const { draft, saving, finish, goBack, jumpTo } = useOnboarding('ready')
 
+  const [celebrating, setCelebrating] = useState(false)
+
   const complete = async () => {
-    if (await finish()) {
-      // Once per account, and it lands with the fade into the tabs.
-      H.success({ important: true })
-      // "Bring your friends" first, then the app — see app/onboarding/friends.tsx.
-      router.replace('/onboarding/friends')
-    } else {
-      H.error({ blocking: true })
-      // Kept here rather than pushed on regardless. This is the write that
-      // decides whether the account is finished, and letting someone through
-      // on a failure would leave them permanently mid-funnel with no screen
-      // left that could fix it. `finish()` has said why, in a toast: this
-      // screen's own sentence sat below the fold, so the button looked dead
-      // (SCRUM-492).
-    }
+    // The server said yes: the one celebration plays, and it plays the success haptic itself as its mark completes
+    // (Reduce Motion: at once), so the haptic always lands on a frame where something moves. Then "Bring your friends"
+    // first, then the app (see app/onboarding/friends.tsx). Once per account.
+    if (await finish()) setCelebrating(true)
+    // On a failure the person stays here, rather than being pushed on regardless: this is the write that decides whether
+    // the account is finished, and letting someone through would leave them permanently mid-funnel with no screen left
+    // that could fix it. `finish()` has said why, in a toast that plays the one error haptic (this screen's own sentence
+    // sat below the fold, so the button looked dead: SCRUM-492).
   }
 
   const name = draft.name?.trim()
   const primaryPhoto = draft.photos?.[0]
 
   return (
-    <OnboardingScreen
-      step="ready"
-      title="You're all set"
-      titleAccent={name ? `, ${name}` : undefined}
-      subtitle="Your profile is ready for the community. Review it before you start blending."
-      ctaLabel="Start Blend'n"
-      ctaBusy={saving}
-      onContinue={() => void complete()}
-      secondaryLabel="Edit my details"
-      onSecondary={() => jumpTo('basics')}
-      onBack={goBack}
-    >
-      <View style={styles.card}>
-        {/*
-         * The frame's checkmark badge in the top-right corner — a completion
-         * marker, not a control. Hidden from screen readers for that reason.
-         */}
-        <View
-          accessibilityElementsHidden
-          importantForAccessibility="no-hide-descendants"
-          style={styles.badge}
-        >
-          <Ionicons name="checkmark" size={ICON.md} color={EMBER.textPrimary} />
-        </View>
-
-        {/*
-         * `OptimizedImage`, not React Native's `<Image>`.
-         *
-         * This is a 128pt avatar drawing whatever the person uploaded — which
-         * `blendn-admin/docs/MEDIA.md` asks to be 2048 square. RN's Image decodes the file
-         * at its native size regardless of the box it is drawn in, so a
-         * summary card was holding a four-megapixel bitmap to show a thumbnail,
-         * and re-downloading it on every mount because RN's cache is separate
-         * from the one the rest of the app warms.
-         *
-         * `width`/`height` are the decode hint, so the bitmap is the size of
-         * the thing on screen.
-         */}
-        <View style={styles.avatarRing}>
-          <View style={styles.avatarBorder}>
-            {primaryPhoto ? (
-              <OptimizedImage
-                source={primaryPhoto}
-                style={styles.avatar}
-                width={AVATAR}
-                height={AVATAR}
-                contentFit="cover"
-              />
-            ) : (
-              <View style={[styles.avatar, styles.avatarEmpty]} />
-            )}
+    <>
+      <OnboardingScreen
+        step="ready"
+        title="You're all set"
+        titleAccent={name ? `, ${name}` : undefined}
+        subtitle="Your profile is ready for the community. Review it before you start blending."
+        ctaLabel="Start Blend'n"
+        ctaBusy={saving}
+        onContinue={() => void complete()}
+        secondaryLabel="Edit my details"
+        onSecondary={() => jumpTo('basics')}
+        onBack={goBack}
+      >
+        <View style={styles.card}>
+          {/*
+           * The frame's checkmark badge in the top-right corner — a completion
+           * marker, not a control. Hidden from screen readers for that reason.
+           */}
+          <View
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            style={styles.badge}
+          >
+            <Ionicons
+              name="checkmark"
+              size={ICON.md}
+              color={EMBER.textPrimary}
+            />
           </View>
+
+          {/*
+           * `OptimizedImage`, not React Native's `<Image>`.
+           *
+           * This is a 128pt avatar drawing whatever the person uploaded — which
+           * `blendn-admin/docs/MEDIA.md` asks to be 2048 square. RN's Image decodes the file
+           * at its native size regardless of the box it is drawn in, so a
+           * summary card was holding a four-megapixel bitmap to show a thumbnail,
+           * and re-downloading it on every mount because RN's cache is separate
+           * from the one the rest of the app warms.
+           *
+           * `width`/`height` are the decode hint, so the bitmap is the size of
+           * the thing on screen.
+           */}
+          <View style={styles.avatarRing}>
+            <View style={styles.avatarBorder}>
+              {primaryPhoto ? (
+                <OptimizedImage
+                  source={primaryPhoto}
+                  style={styles.avatar}
+                  width={AVATAR}
+                  height={AVATAR}
+                  contentFit="cover"
+                />
+              ) : (
+                <View style={[styles.avatar, styles.avatarEmpty]} />
+              )}
+            </View>
+          </View>
+
+          <Text style={styles.name}>{name || 'Your name'}</Text>
+          {draft.occupation ? (
+            <Text style={styles.role}>{draft.occupation}</Text>
+          ) : null}
+
+          {draft.bio ? (
+            <>
+              <View style={styles.divider} />
+              <Text style={styles.bio}>&ldquo;{draft.bio}&rdquo;</Text>
+            </>
+          ) : null}
         </View>
 
-        <Text style={styles.name}>{name || 'Your name'}</Text>
-        {draft.occupation ? <Text style={styles.role}>{draft.occupation}</Text> : null}
-
-        {draft.bio ? (
-          <>
-            <View style={styles.divider} />
-            <Text style={styles.bio}>&ldquo;{draft.bio}&rdquo;</Text>
-          </>
-        ) : null}
-      </View>
-
-      {/* Only what was actually answered. Empty rows labelled "Interests" and
+        {/* Only what was actually answered. Empty rows labelled "Interests" and
           "Primary hub" would read as data we lost rather than as skipped. */}
-      {draft.interests?.length ? (
-        <View style={styles.interestsCard}>
-          <Text style={styles.interestsHeading}>Interests</Text>
-          <View style={styles.interestsRow}>
-            {draft.interests.map((interest) => (
-              <InterestChip key={interest} label={interest} />
-            ))}
+        {draft.interests?.length ? (
+          <View style={styles.interestsCard}>
+            <Text style={styles.interestsHeading}>Interests</Text>
+            <View style={styles.interestsRow}>
+              {draft.interests.map((interest) => (
+                <InterestChip key={interest} label={interest} />
+              ))}
+            </View>
           </View>
-        </View>
+        ) : null}
+        {draft.location ? (
+          <Summary
+            icon="location"
+            label="Where you live"
+            value={draft.location}
+          />
+        ) : null}
+        {draft.looking_for?.length ? (
+          <Summary
+            icon="people"
+            label="Looking for"
+            value={draft.looking_for.join(' · ')}
+          />
+        ) : null}
+      </OnboardingScreen>
+      {celebrating ? (
+        <MomentReady
+          testID="ready-moment"
+          name={name}
+          onDone={() => router.replace('/onboarding/friends')}
+        />
       ) : null}
-      {draft.location ? (
-        <Summary icon="location" label="Where you live" value={draft.location} />
-      ) : null}
-      {draft.looking_for?.length ? (
-        <Summary icon="people" label="Looking for" value={draft.looking_for.join(' · ')} />
-      ) : null}
-    </OnboardingScreen>
+    </>
   )
 }
 

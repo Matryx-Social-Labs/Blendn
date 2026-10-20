@@ -28,3 +28,11 @@ describe('the bio cap', () => {
     expect(limit).toBe(500)
   })
 })
+
+describe('the undrawn curation card is gone from basics (audit D2)', () => {
+  it('draws no curation card, no art and no image under the date’s hint', () => {
+    const src = require('fs').readFileSync(require('path').join(__dirname, '../app/onboarding/basics.tsx'), 'utf8')
+    expect(src).not.toMatch(/curation|expo-image|expo-linear-gradient/i)
+    expect(require('fs').existsSync(require('path').join(__dirname, '../assets/onboarding/curation.png'))).toBe(false)
+  })
+})

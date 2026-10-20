@@ -1,7 +1,5 @@
 import { ScreenProfiler } from '../../lib/perf'
 import { useRef, useState } from 'react'
-import { Image } from 'expo-image'
-import { LinearGradient } from 'expo-linear-gradient'
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 
 import ActionTray from '../../components/ActionTray'
@@ -18,11 +16,10 @@ import {
   splitDateOfBirth,
   type OnboardingGender,
 } from '../../lib/onboarding'
-import { EMBER, EMBER_RADIUS, SPACE, TYPE } from '../../lib/theme'
+import { EMBER, SPACE, TYPE } from '../../lib/theme'
 import { useOnboarding } from '../../lib/useOnboarding'
 import { signOut, useAuth } from '../../lib/useAuth'
 
-const CURATION_ART = require('../../assets/onboarding/curation.png')
 
 /**
  * Step one — a name, a gender, a birth date.
@@ -263,34 +260,6 @@ function BasicsScreenInner() {
         ) : null}
       </EmberFieldGroup>
 
-      {/*
-        Purely decorative — a preview of the feed personalization the app does
-        after onboarding, not a control. Hidden from screen readers for that
-        reason, same as the permission-screen illustrations.
-      */}
-      <View
-        accessibilityElementsHidden
-        importantForAccessibility="no-hide-descendants"
-        style={styles.curationCard}
-      >
-        <Image
-          source={CURATION_ART}
-          style={styles.curationArt}
-          contentFit="cover"
-          transition={180}
-          cachePolicy="memory-disk"
-        />
-        <LinearGradient
-          colors={[EMBER.bgClear, EMBER.bg]}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
-        />
-        <View style={styles.curationText}>
-          <Text style={styles.curationEyebrow}>NEXT</Text>
-          <Text style={styles.curationCaption}>A few quick questions, then your Pulse is personalised around you.</Text>
-        </View>
-      </View>
-
       <ActionTray
         visible={confirmSignOut}
         title="Sign out?"
@@ -324,20 +293,6 @@ const styles = StyleSheet.create({
   signOutInline: { alignSelf: 'flex-start' },
   // A text action (DESIGN_SYSTEM.md): `label` in `textPrimary`.
   textAction: { ...TYPE.label, color: EMBER.textPrimary },
-
-  curationCard: {
-    width: '100%',
-    height: 192,
-    borderRadius: EMBER_RADIUS.card,
-    overflow: 'hidden',
-    backgroundColor: EMBER.surfaceMedia,
-    justifyContent: 'flex-end',
-  },
-  // design-exception: decorative art dimmed under its caption, not a control state
-  curationArt: { ...StyleSheet.absoluteFill, width: '100%', height: '100%', opacity: 0.6 },
-  curationText: { padding: SPACE.xl, gap: SPACE.xs },
-  curationEyebrow: { ...TYPE.label, color: EMBER.textSecondary },
-  curationCaption: TYPE.meta,
 })
 
 
