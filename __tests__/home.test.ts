@@ -69,8 +69,8 @@ describe('the drawer, wired to the screen (step 2 review)', () => {
 
   it('gives the handle and each segment a 44pt target', () => {
     expect(DRAWER_HANDLE_HEIGHT).toBeGreaterThanOrEqual(44)
-    // Two segments inside a 4pt inset.
-    expect(DRAWER_SEGMENTED_HEIGHT - 8).toBeGreaterThanOrEqual(44)
+    // The DS SegmentedControl's 48; its 40 pt segments reach 48 through a 4 pt hit slop.
+    expect(DRAWER_SEGMENTED_HEIGHT).toBe(48)
     expect(DRAWER_HEADER_HEIGHT).toBeGreaterThanOrEqual(DRAWER_HANDLE_HEIGHT + DRAWER_SEGMENTED_HEIGHT)
   })
 
@@ -161,5 +161,17 @@ describe('Places takes the server at its word (HM-CU04)', () => {
     // One rule, `lib/venue-visibility.ts`. A second copy here is how the list and the map come to disagree.
     const src = read('components/home/PlacesList.tsx')
     expect(src).not.toMatch(/Date\.now\(|new Date\(|startTime|endTime/)
+  })
+})
+
+describe('the Events | Places switch is the DS control, tap only', () => {
+  const shell = read('components/home/HomeShell.tsx')
+
+  it('uses the SegmentedControl with no drag (it would compete with the drawer and map gestures)', () => {
+    expect(shell).toMatch(/<SegmentedControl[\s\S]*?draggable=\{false\}[\s\S]*?testID="home-segmented"/)
+  })
+
+  it('keeps no segment of its own, and plays no haptic of its own (the control plays H.select)', () => {
+    expect(shell).not.toMatch(/styles\.segment|segmentOn|EMBER_RADIUS|H\.select/)
   })
 })

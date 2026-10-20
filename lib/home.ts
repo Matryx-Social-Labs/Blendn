@@ -4,6 +4,8 @@
  * in a plain node test.
  */
 
+import { SIZE } from './design/tokens'
+
 export type DrawerSnap = 'full' | 'half' | 'peek'
 
 /** Top to bottom: the order a drag passes them in. */
@@ -11,8 +13,8 @@ export const DRAWER_SNAPS: readonly DrawerSnap[] = ['full', 'half', 'peek']
 
 /** The handle's touch target: 44pt tall, the platform minimum (step 2 review). */
 export const DRAWER_HANDLE_HEIGHT = 44
-/** The Events | Places control: 44pt segments inside a 4pt inset. */
-export const DRAWER_SEGMENTED_HEIGHT = 52
+/** The Events | Places control, the DS SegmentedControl: 40 pt segments + 4 pt slop = 48. */
+export const DRAWER_SEGMENTED_HEIGHT = SIZE.control
 /** Space under the control, before the pane. */
 const DRAWER_HEADER_GAP = 8
 

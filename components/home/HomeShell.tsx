@@ -1,17 +1,18 @@
 import { useIsFocused } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { AccessibilityInfo, Dimensions, Keyboard, Platform, Pressable, StyleSheet, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native'
+import { AccessibilityInfo, Dimensions, Keyboard, Platform, StyleSheet, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native'
 import { useSharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { tabBarTop } from '../../app/(tabs)/_layout'
 import { NotificationBell } from '../pulse/NotificationBell'
 import { PulseTopBar, TOP_BAR_HEIGHT } from '../pulse/PulseTopBar'
+import { SegmentedControl } from '../ds/SegmentedControl'
 import { Text } from '../ui/Text'
-import { DRAWER_PEEK_LINE, DRAWER_SEGMENTED_HEIGHT, drawerSnapPoints, keyboardLeft, snapOnKeyboard, type DrawerSnap } from '../../lib/home'
+import { DRAWER_PEEK_LINE, drawerSnapPoints, keyboardLeft, snapOnKeyboard, type DrawerSnap } from '../../lib/home'
 import { Logger } from '../../lib/logger'
 import type { NearPin } from '../../lib/placesPane'
-import { EMBER, EMBER_RADIUS, SPACE } from '../../lib/theme'
+import { EMBER } from '../../lib/theme'
 import { HomeDrawer } from './HomeDrawer'
 import { HomeMap } from './HomeMap'
 import { PlacesList } from './PlacesList'
@@ -213,22 +214,14 @@ export function HomeShell({
           ) : null
         }
         header={
-          <View style={styles.segmented} accessibilityRole="tablist">
-            {(['events', 'places'] as const).map((s) => (
-              <Pressable
-                key={s}
-                onPress={() => choose(s)}
-                style={[styles.segment, segment === s && styles.segmentOn]}
-                accessibilityRole="tab"
-                accessibilityLabel={s === 'events' ? 'Events' : 'Places'}
-                accessibilityState={{ selected: segment === s }}
-              >
-                <Text variant="bodyStrong" color={segment === s ? EMBER.bg : EMBER.textSecondary}>
-                  {s === 'events' ? 'Events' : 'Places'}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
+          // Tap only: a drag on the thumb would compete with the drawer's and the map's gestures.
+          <SegmentedControl
+            items={SEGMENT_LABELS}
+            selected={segment === 'events' ? 0 : 1}
+            onChange={(i) => choose(i === 0 ? 'events' : 'places')}
+            draggable={false}
+            testID="home-segmented"
+          />
         }
       >
         <View style={[styles.pane, segment !== 'events' && styles.hidden]}>{events}</View>
@@ -242,18 +235,10 @@ export function HomeShell({
   )
 }
 
+const SEGMENT_LABELS = ['Events', 'Places'] as const
+
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: EMBER.bg },
-  // 44pt segments inside a 4pt inset.
-  segmented: {
-    flexDirection: 'row',
-    height: DRAWER_SEGMENTED_HEIGHT,
-    padding: SPACE.xs,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.surfaceSunken,
-  },
-  segment: { flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: EMBER_RADIUS.pill },
-  segmentOn: { backgroundColor: EMBER.textPrimary },
   pane: { flex: 1 },
   hidden: { display: 'none' },
 })

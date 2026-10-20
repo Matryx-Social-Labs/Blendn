@@ -4,19 +4,22 @@
  * on M.snap; H.select when it changes, none on the current segment; 45%
  * disabled.
  */
-import { act, fireEvent, render, screen } from '@testing-library/react-native'
+import { act, fireEvent, render, screen, within } from '@testing-library/react-native'
 import React from 'react'
 import { AccessibilityInfo, Platform, StyleSheet } from 'react-native'
+import { State } from 'react-native-gesture-handler'
+import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils'
 import * as Reanimated from 'react-native-reanimated'
 
-import { SegmentedControl } from '../components/ds/SegmentedControl'
+import { GroundProvider } from '../components/ds/shared'
+import { landOn, rubberBand, SegmentedControl } from '../components/ds/SegmentedControl'
 import { COLOR, FONT_FAMILY, MATERIAL, RADIUS, SIZE, SPRING } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { OPACITY } from '../lib/theme'
 
 jest.mock('react-native-reanimated', () => {
   const actual = jest.requireActual('react-native-reanimated')
-  return { ...actual, __esModule: true, useReducedMotion: jest.fn(() => false), withSpring: jest.fn(actual.withSpring) }
+  return { ...actual, __esModule: true, useReducedMotion: jest.fn(() => false), withSpring: jest.fn(actual.withSpring), withTiming: jest.fn(actual.withTiming) }
 })
 
 const reduceMotion = Reanimated.useReducedMotion as jest.Mock
@@ -32,8 +35,9 @@ beforeEach(() => {
 })
 
 const ITEMS = ['Sign in', 'Create account']
-const draw = (props: Partial<React.ComponentProps<typeof SegmentedControl>> = {}) =>
-  render(<SegmentedControl items={ITEMS} selected={0} onChange={jest.fn()} testID="s" {...props} />)
+type Props = React.ComponentProps<typeof SegmentedControl>
+const draw = (props: Record<string, unknown> = {}) =>
+  render(<SegmentedControl {...({ items: ITEMS, selected: 0, onChange: jest.fn(), testID: 's', ...props } as Props)} />)
 
 describe('<SegmentedControl>', () => {
   it('is a 48 pt surface capsule with a white thumb, never glass', async () => {
@@ -42,10 +46,13 @@ describe('<SegmentedControl>', () => {
     expect(flat('s-thumb').backgroundColor).toBe(COLOR.selectionFill)
   })
 
-  it('the selected label is ink at 700, the others white at 500', async () => {
+  it('the labels are white at 500 on the track; the ink at 700 is inside the thumb', async () => {
     await draw()
-    expect(text('Sign in')).toMatchObject({ color: COLOR.selectionInk, fontFamily: FONT_FAMILY.brand[700] })
+    expect(text('Sign in')).toMatchObject({ color: COLOR.textPrimary, fontFamily: FONT_FAMILY.brand[500] })
     expect(text('Create account')).toMatchObject({ color: COLOR.textPrimary, fontFamily: FONT_FAMILY.brand[500] })
+    const ink = within(screen.getByTestId('s-ink', { includeHiddenElements: true })).getAllByText(/./, { includeHiddenElements: true })
+    expect(ink).toHaveLength(2)
+    for (const label of ink) expect(StyleSheet.flatten(label.props.style)).toMatchObject({ color: COLOR.selectionInk, fontFamily: FONT_FAMILY.brand[700] })
   })
 
   it('is a tab-like group: each segment a tab, the current one selected', async () => {
@@ -123,5 +130,165 @@ describe('<SegmentedControl>', () => {
     await draw()
     await act(async () => {})
     expect(flat('s').borderColor).toBe(MATERIAL.hairlineIncreaseContrast)
+  })
+})
+
+describe('the ink layer', () => {
+  it('is a row inside the thumb, as wide as the control, that slides the other way', async () => {
+    await draw({ selected: 1 })
+    const ink = screen.getByTestId('s-ink', { includeHiddenElements: true })
+    expect(StyleSheet.flatten(ink.props.style).width).toBe('200%')
+    expect(Reanimated.getAnimatedStyle(ink).left).toBe('-100%')
+    expect(flat('s-thumb').overflow).toBe('hidden')
+    // It is read by nobody: the real labels are the track's.
+    expect(ink.props.accessibilityElementsHidden).toBe(true)
+  })
+})
+
+describe('a pair (this-or-that)', () => {
+  const PAIR = ['Beach', 'Mountains']
+
+  it('with nothing chosen draws no thumb, and the hairline between the two', async () => {
+    await draw({ pair: true, items: PAIR, selected: null })
+    expect(screen.queryByTestId('s-thumb')).toBeNull()
+    expect(flat('s-divider')).toMatchObject({ width: 1, height: 20, backgroundColor: COLOR.hairlineStrong })
+  })
+
+  it('a first pick chooses it with H.select; the chosen side, pressed again, clears with H.select', async () => {
+    const onChange = jest.fn()
+    await draw({ pair: true, items: PAIR, selected: null, onChange })
+    await fireEvent.press(screen.getByRole('radio', { name: 'Beach' }))
+    expect(onChange).toHaveBeenLastCalledWith(0)
+    expect(select).toHaveBeenCalledTimes(1)
+    await draw({ pair: true, items: PAIR, selected: 0, onChange })
+    await fireEvent.press(screen.getAllByRole('radio', { name: 'Beach' })[0])
+    expect(onChange).toHaveBeenLastCalledWith(null)
+    expect(select).toHaveBeenCalledTimes(2)
+  })
+
+  it('is a radio group named by both sides, and the chosen one says how to clear it', async () => {
+    await draw({ pair: true, items: PAIR, selected: 1 })
+    expect(screen.getByLabelText('Beach or Mountains').props.accessibilityRole).toBe('radiogroup')
+    const chosen = screen.getByRole('radio', { name: 'Mountains' })
+    expect(chosen.props.accessibilityState).toMatchObject({ checked: true })
+    expect(chosen.props.accessibilityHint).toBe('Double-tap to clear')
+    expect(screen.getByRole('radio', { name: 'Beach' }).props.accessibilityHint).toBeUndefined()
+  })
+
+  it('the thumb fades in on the first pick instead of sliding, and out when cleared (Reduce Motion: the same, opacity only)', async () => {
+    await draw({ pair: true, items: PAIR, selected: null })
+    await screen.rerender(<SegmentedControl pair items={PAIR} selected={1} onChange={jest.fn()} testID="s" />)
+    expect(Reanimated.withSpring).not.toHaveBeenCalled()
+    expect(Reanimated.withTiming).toHaveBeenCalledWith(1, expect.objectContaining({ duration: 160 }))
+    jest.mocked(Reanimated.withTiming).mockClear()
+    await screen.rerender(<SegmentedControl pair items={PAIR} selected={null} onChange={jest.fn()} testID="s" />)
+    expect(Reanimated.withTiming).toHaveBeenCalledWith(0, expect.objectContaining({ duration: 160 }))
+  })
+})
+
+describe('badges', () => {
+  it('a count is Geist Mono 500 and is spoken with the label; a dot is the live colour', async () => {
+    await draw({ items: ['People', 'Crews'], badges: [14, 'dot'] })
+    expect(StyleSheet.flatten(screen.getByText('14').props.style)).toMatchObject({ fontFamily: FONT_FAMILY.mono[500], color: COLOR.textSecondary })
+    expect(screen.getByRole('tab', { name: 'People, 14' })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: 'Crews, someone’s live' })).toBeTruthy()
+  })
+
+  it('the count inside the thumb is the secondary ink', async () => {
+    await draw({ items: ['People', 'Crews'], badges: [14, null] })
+    const ink = within(screen.getByTestId('s-ink', { includeHiddenElements: true })).getByText('14', { includeHiddenElements: true })
+    expect(StyleSheet.flatten(ink.props.style).color).toBe(COLOR.selectionInkSecondary)
+  })
+})
+
+describe('semantics and ground', () => {
+  it('radio semantics: a radio group of radios', async () => {
+    await draw({ semantics: 'radio' })
+    expect(screen.getByTestId('s').props.accessibilityRole).toBe('radiogroup')
+    expect(screen.getByRole('radio', { name: 'Sign in' }).props.accessibilityState).toMatchObject({ checked: true })
+  })
+
+  it('on a surface card the track is the sunken surface', async () => {
+    await render(
+      <GroundProvider value="surface">
+        <SegmentedControl items={ITEMS} selected={0} onChange={jest.fn()} testID="s" />
+      </GroundProvider>
+    )
+    expect(flat('s').backgroundColor).toBe(COLOR.surfaceSunken)
+  })
+
+  it('on glass the track is still solid', async () => {
+    await render(
+      <GroundProvider value="glass">
+        <SegmentedControl items={ITEMS} selected={0} onChange={jest.fn()} testID="s" />
+      </GroundProvider>
+    )
+    expect(flat('s').backgroundColor).toBe(COLOR.surface)
+  })
+})
+
+describe('the drag', () => {
+  it('rubber-bands past an end: a unit of travel shows as a third of one', () => {
+    expect(rubberBand(1)).toBeCloseTo(0.355, 3)
+    expect(rubberBand(-1)).toBeCloseTo(-0.355, 3)
+    expect(rubberBand(0)).toBe(0)
+  })
+
+  it('lands on the nearest segment, a flick adding its run, and never outside the control', () => {
+    expect(landOn(0.6, 0, 160, 2)).toBe(1)
+    expect(landOn(0.4, 0, 160, 2)).toBe(0)
+    expect(landOn(0.2, 900, 160, 2)).toBe(1)
+    expect(landOn(1.4, 2000, 160, 2)).toBe(1)
+    expect(landOn(0.6, -2000, 160, 2)).toBe(0)
+    expect(landOn(1.2, 900, 160, 3)).toBe(2)
+  })
+
+  const drag = (to: number) =>
+    act(async () =>
+      fireGestureHandler(getByGestureTestId('s-pan'), [
+        { state: State.BEGAN },
+        { state: State.ACTIVE, translationX: 0 },
+        { translationX: to / 2, velocityX: 0 },
+        { state: State.END, translationX: to, velocityX: 0 },
+      ])
+    )
+
+  it('a drag past the middle changes the segment once, with one H.select, on release', async () => {
+    const onChange = jest.fn()
+    await draw({ onChange })
+    // The control's layout gives each segment 100 pt.
+    await act(async () => fireEvent(screen.getByTestId('s'), 'layout', { nativeEvent: { layout: { width: 208, height: 48 } } }))
+    await drag(120)
+    expect(onChange).toHaveBeenCalledTimes(1)
+    expect(onChange).toHaveBeenCalledWith(1)
+    expect(select).toHaveBeenCalledTimes(1)
+  })
+
+  it('Reduce Motion: the thumb tracks the finger and lands with no spring', async () => {
+    reduceMotion.mockReturnValue(true)
+    const onChange = jest.fn()
+    await draw({ onChange })
+    await act(async () => fireEvent(screen.getByTestId('s'), 'layout', { nativeEvent: { layout: { width: 208, height: 48 } } }))
+    jest.mocked(Reanimated.withSpring).mockClear()
+    await drag(120)
+    expect(onChange).toHaveBeenCalledWith(1)
+    expect(Reanimated.withSpring).not.toHaveBeenCalled()
+  })
+
+  it('a short drag springs back and changes nothing', async () => {
+    const onChange = jest.fn()
+    await draw({ onChange })
+    await act(async () => fireEvent(screen.getByTestId('s'), 'layout', { nativeEvent: { layout: { width: 208, height: 48 } } }))
+    await drag(30)
+    expect(onChange).not.toHaveBeenCalled()
+    expect(select).not.toHaveBeenCalled()
+  })
+
+  it('a screen that asks for taps only never drags (the home switch)', async () => {
+    const onChange = jest.fn()
+    await draw({ onChange, draggable: false })
+    await act(async () => fireEvent(screen.getByTestId('s'), 'layout', { nativeEvent: { layout: { width: 208, height: 48 } } }))
+    await drag(120)
+    expect(onChange).not.toHaveBeenCalled()
   })
 })

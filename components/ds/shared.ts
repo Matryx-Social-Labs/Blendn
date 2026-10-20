@@ -4,7 +4,7 @@
  * draw that `design/tokens.json` does not carry yet (each named here once, with
  * the page it comes from, rather than as a literal in a component).
  */
-import { useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useState } from 'react'
 import { AccessibilityInfo, Platform, type AccessibilityChangeEventName, type ViewStyle } from 'react-native'
 
 import { COLOR, FONT_FAMILY, MATERIAL, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
@@ -123,3 +123,16 @@ export function focusRing(radius: number): ViewStyle[] {
 export function announceOutcome(text: string) {
   if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(text)
 }
+
+/**
+ * What a control sits on (prompt 13 §0): the ink page, a surface card, or glass (a Sheet on iOS, the home drawer). Chip and
+ * SegmentedControl read it, so a call site never passes a fill.
+ */
+export type Ground = 'ink' | 'surface' | 'glass'
+const GroundContext = createContext<Ground>('ink')
+export const GroundProvider = GroundContext.Provider
+export const useGround = () => useContext(GroundContext)
+/** The resting fill of a chip on this ground. */
+export const chipRest = (ground: Ground) => (ground === 'glass' ? COLOR.chipFillOnGlass : ground === 'surface' ? COLOR.surfaceSunken : COLOR.surface)
+/** A SegmentedControl's track: solid even on glass (§12). */
+export const trackFill = (ground: Ground) => (ground === 'surface' ? COLOR.surfaceSunken : COLOR.surface)

@@ -44,6 +44,7 @@ export const COLOR = {
   destructiveTint: 'rgba(255,90,79,0.16)',
   selectionFill: '#FFFFFF',
   selectionInk: '#0D0C0C',
+  selectionInkSecondary: 'rgba(13,12,12,0.60)',
   tabCapsule: 'rgba(255,255,255,0.22)',
   switchOffTrack: '#959090',
   chipFillOnGlass: 'rgba(255,255,255,0.08)',
