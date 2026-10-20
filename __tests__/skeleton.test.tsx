@@ -34,7 +34,7 @@ describe('<Skeleton>', () => {
     expect(mockDuration).toHaveBeenCalledWith(160)
   })
 
-  it('draws the design’s surface, not a legacy grey', async () => {
+  it('draws the design’s sunken surface, not a legacy grey', async () => {
     await render(
       <>
         <Skeleton />
@@ -43,7 +43,7 @@ describe('<Skeleton>', () => {
       </>
     )
     const bg = screen.toJSON()
-    expect(JSON.stringify(bg)).toContain(COLOR.surface)
+    expect(JSON.stringify(bg)).toContain(COLOR.surfaceSunken)
   })
 
   it('has no loop: the source never repeats a thing', () => {

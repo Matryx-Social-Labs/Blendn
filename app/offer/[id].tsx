@@ -143,7 +143,6 @@ export default function OfferScreen() {
         if (saved) showToast(saved, 'success')
         return true
       }
-      H.error()
       showToast(res.error || "That didn't save. Try again.", 'error')
       return false
     } finally {

@@ -32,8 +32,10 @@ interface ToastContextValue {
 /** The top bar's band: its 44 / 48 circle and the 8 pt under it. */
 const TOP_BAR_BAND = (Platform.OS === 'android' ? SIZE.circleButtonAndroid : SIZE.circleButton) + SPACE.sm
 
-/** How many toasts wait: the one showing and two behind it. A fourth outcome in a row drops the oldest waiting. */
+/** How many toasts wait: the one showing and two behind it. A fourth outcome in a row drops the oldest waiting, never the one showing. */
 const QUEUE_MAX = 3
+const queueWith = (prev: ToastMessage[], next: ToastMessage): ToastMessage[] =>
+  prev.length < QUEUE_MAX ? [...prev, next] : [prev[0], ...prev.slice(2), next]
 
 /** The routes whose floating tab bar an Android snackbar has to clear. */
 const TAB_ROOTS = ['/', '/events', '/going', '/chat', '/profile']
@@ -54,7 +56,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const showToast = useCallback(
     (message: string, variant: ToastVariant = 'info', options?: { action?: ToastAction }) => {
       const id = ++nextId
-      setQueue((prev) => [...prev.slice(-(QUEUE_MAX - 1)), { id, message, variant, action: options?.action }])
+      setQueue((prev) => queueWith(prev, { id, message, variant, action: options?.action }))
     },
     []
   )
@@ -72,8 +74,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         <View
           testID="toast-lane"
           pointerEvents="box-none"
-          // A toast with an action sits below the top bar's back circle, so it never covers it (the Toast keeps its own place).
-          style={[styles.lane, head.action ? { top: TOP_BAR_BAND } : null]}
+          // Every toast sits below the top bar's band, so the back and ⋯ buttons stay tappable for as long as one shows.
+          style={styles.lane}
         >
           <DsToast
             // A new toast is a new mount: its own enter, its own dwell.
@@ -81,9 +83,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             kind={head.variant}
             text={head.message}
             action={head.action}
-            // Callers already play their outcome haptic (a venue go-live, Plus, About you): one event, one haptic.
-            silent
+            // The outcome haptic plays as the toast appears, not when it was queued behind another.
             aboveTabBar={isTabRoot(pathname)}
+            aboveDock={!isTabRoot(pathname)}
             onDismiss={next}
             testID="toast"
           />
@@ -94,5 +96,5 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 }
 
 const styles = StyleSheet.create({
-  lane: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999 },
+  lane: { position: 'absolute', top: TOP_BAR_BAND, left: 0, right: 0, bottom: 0, zIndex: 9999 },
 })

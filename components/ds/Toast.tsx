@@ -30,6 +30,8 @@ const ENTER_DISTANCE = 16
 const EXIT_DRIFT = 8
 const SWIPE_DISTANCE = 24
 const SWIPE_VELOCITY = 800
+/** A dock or composer: a 56 pt control between two gutters, and a gutter over it. */
+const DOCK_CLEARANCE = SIZE.primary + SPACE.lg * 3
 
 export function toastDwell(text: string, { action = false, screenReader = false }: { action?: boolean; screenReader?: boolean }) {
   const words = text.trim().split(/\s+/).length
@@ -89,6 +91,8 @@ export type ToastProps = {
   onDismiss: () => void
   /** Android: sit above the floating tab bar. */
   aboveTabBar?: boolean
+  /** Android, off the tab roots: sit above a bottom dock or composer. */
+  aboveDock?: boolean
   /** No outcome haptic: Copy (C20), or when the action already played one. */
   silent?: boolean
   testID?: string
@@ -173,7 +177,7 @@ function useToastMotion(onDismiss: () => void) {
  * "+ fade" and wins over the general rule that glass never fades. Reduce
  * Motion: no movement, a fade in place on both platforms.
  */
-export function Toast({ kind = 'info', text, action, onDismiss, aboveTabBar = false, silent = false, testID }: ToastProps) {
+export function Toast({ kind = 'info', text, action, onDismiss, aboveTabBar = false, aboveDock = false, silent = false, testID }: ToastProps) {
   const android = Platform.OS === 'android'
   const insets = useSafeAreaInsets()
   const screenReader = useScreenReader()
@@ -191,7 +195,7 @@ export function Toast({ kind = 'info', text, action, onDismiss, aboveTabBar = fa
 
   const place = android
     ? // Above the bar and above the check-in pill that rises from it (drive 3: the pill covered the snackbar's second line).
-      { bottom: insets.bottom + (aboveTabBar ? SPACE.tabBarBottomGapAndroid + SIZE.tabBar + TAB_BAR_HINT_RISE + SPACE.md : SPACE.lg) }
+      { bottom: insets.bottom + (aboveTabBar ? SPACE.tabBarBottomGapAndroid + SIZE.tabBar + TAB_BAR_HINT_RISE + SPACE.md : aboveDock ? DOCK_CLEARANCE : SPACE.lg) }
     : { top: insets.top + SPACE.sm }
   const look = LOOK[kind]
   const radius = android ? RADIUS.pressedAndroid : RADIUS.sheet

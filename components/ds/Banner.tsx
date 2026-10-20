@@ -18,6 +18,8 @@ const LOOK: Record<BannerKind, { fill: string; icon: IconName }> = {
 export type BannerProps = {
   kind: BannerKind
   text: string
+  /** Drawn in Geist Mono right after `text` (a time: "since 9:41"). */
+  mono?: string
   /** The kind's own glyph unless given. */
   icon?: IconName
   action?: { label: string; onPress: () => void }
@@ -37,7 +39,7 @@ export type BannerProps = {
  * VisibilityBanner is read in place. Text scales freely; past 1.3× the action
  * wraps under the sentence. Increase Contrast adds the 50% hairline.
  */
-export function Banner({ kind, text, icon, action, busy = false, testID }: BannerProps) {
+export function Banner({ kind, text, mono, icon, action, busy = false, testID }: BannerProps) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const { fontScale } = useWindowDimensions()
@@ -45,8 +47,8 @@ export function Banner({ kind, text, icon, action, busy = false, testID }: Banne
   const wrapped = fontScale > CONTROL_FONT_CAP
 
   useEffect(() => {
-    if (announced && Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(text)
-  }, [announced, text])
+    if (announced && Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(mono ? `${text} ${mono}` : text)
+  }, [announced, text, mono])
 
   return (
     <View
@@ -55,7 +57,14 @@ export function Banner({ kind, text, icon, action, busy = false, testID }: Banne
     >
       <Icon name={icon ?? LOOK[kind].icon} size={ICON.control} />
       <Text accessibilityLiveRegion={announced ? 'polite' : 'none'} style={[font('meta', bold), styles.text]}>
-        {text}
+        {mono ? (
+          <>
+            {text}
+            <Text style={font('meta', bold, FONT_FAMILY.mono[500])}>{` ${mono}`}</Text>
+          </>
+        ) : (
+          text
+        )}
       </Text>
       {action ? (
         <Pressable

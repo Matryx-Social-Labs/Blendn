@@ -641,7 +641,7 @@ describe('live', () => {
     expect(screen.getByRole('header', { name: 'Stop being live at The Humming Tree?' })).toBeTruthy()
   })
 
-  it('a failed End is an error toast with H.error, and the place is read again', async () => {
+  it('a failed End is an error toast, and the place is read again', async () => {
     ;(checkOutOf as jest.Mock).mockResolvedValue({ success: false, error: '' })
     await mount(venue({ live: liveOver() }))
     await act(async () => {
@@ -652,7 +652,6 @@ describe('live', () => {
       fireEvent.press(screen.getByRole('button', { name: 'Stop' }))
     })
     expect(mockShowToast).toHaveBeenCalledWith("Couldn't stop. Try again.", 'error')
-    expect(H.error).toHaveBeenCalled()
     expect((apiClient.getVenue as jest.Mock).mock.calls.length).toBe(reads + 1)
   })
 

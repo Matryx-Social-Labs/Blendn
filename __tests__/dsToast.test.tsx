@@ -79,6 +79,13 @@ describe('<Toast>', () => {
     expect(flat('t').bottom).toBe(SPACE.tabBarBottomGapAndroid + SIZE.tabBar + TAB_BAR_HINT_RISE + SPACE.md)
   })
 
+  it('Android off the tab roots: above a dock or composer, higher than the bare gutter', async () => {
+    on('android')
+    await render(<Toast kind="error" text="Couldn’t save." onDismiss={jest.fn()} aboveDock testID="t" />)
+    expect(flat('t').bottom).toBe(SIZE.primary + SPACE.lg * 3)
+    expect(flat('t').bottom as number).toBeGreaterThan(SIZE.primary)
+  })
+
   it.each([
     ['success', 'success'],
     ['error', 'error'],

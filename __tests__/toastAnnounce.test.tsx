@@ -103,7 +103,7 @@ describe('a toast with an action keeps clear of the top bar', () => {
     return screen.findByText('Message deleted')
   }
 
-  it('sits below the top bar, so it never covers the back button; a plain one keeps its place', async () => {
+  it('sits below the top bar, so it never covers the back button; a plain one does too', async () => {
     await withAction()
     // The 44 pt circle and 8 under it.
     expect(StyleSheet.flatten(screen.getByTestId('toast-lane').props.style).top).toBe(44 + 8)
@@ -115,7 +115,7 @@ describe('a toast with an action keeps clear of the top bar', () => {
     )
     fireEvent.press(screen.getByRole('button', { name: 'show' }))
     await screen.findByText('Saved')
-    expect(StyleSheet.flatten(screen.getByTestId('toast-lane').props.style).top).toBe(0)
+    expect(StyleSheet.flatten(screen.getByTestId('toast-lane').props.style).top).toBe(44 + 8)
   })
 
   it('its action runs the caller’s handler', async () => {

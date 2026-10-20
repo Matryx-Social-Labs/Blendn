@@ -30,7 +30,6 @@ import {
 } from '../lib/aboutYou'
 import { apiClient, ProfileCache } from '../lib/apiClient'
 import { COLOR, DURATION, EASING, RADIUS, SIZE, SPACE } from '../lib/design/tokens'
-import { H } from '../lib/haptics'
 import { Logger } from '../lib/logger'
 import { useReducedMotion } from '../lib/motion'
 import { queryCache } from '../lib/queryCache'
@@ -145,7 +144,6 @@ export default function EditAboutYouScreen() {
     })
 
   const refuse = (text: string) => {
-    H.error()
     showToast(text, 'error')
   }
 
@@ -196,7 +194,6 @@ export default function EditAboutYouScreen() {
         anySaved = true
       }
       invalidate(authUser.id)
-      H.success()
       showToast('Saved', 'success')
       router.back()
     } catch (error) {

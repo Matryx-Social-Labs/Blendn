@@ -9,7 +9,7 @@ import React from 'react'
 import { AccessibilityInfo, Dimensions, Platform, StyleSheet } from 'react-native'
 
 import { Banner, VisibilityBanner } from '../components/ds/Banner'
-import { COLOR, MATERIAL, RADIUS } from '../lib/design/tokens'
+import { COLOR, FONT_FAMILY, MATERIAL, RADIUS } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { OPACITY } from '../lib/theme'
 
@@ -29,6 +29,12 @@ describe('<Banner>', () => {
   ] as const)('%s is solid, 16 pt corners, its own fill', async (kind, fill) => {
     await render(<Banner kind={kind} text="Offline. Showing what loaded last." testID="b" />)
     expect(flat('b')).toMatchObject({ backgroundColor: fill, borderRadius: RADIUS.rowInCard })
+  })
+
+  it('draws a mono suffix after the sentence in Geist Mono, and announces both', async () => {
+    await render(<Banner kind="offline" text="Offline. Showing what loaded last at" mono="9:41 PM" testID="b" />)
+    expect(screen.getByText('9:41 PM', { exact: false }).props.style).toMatchObject({ fontFamily: FONT_FAMILY.mono[500] })
+    expect(announce).toHaveBeenCalledWith('Offline. Showing what loaded last at 9:41 PM')
   })
 
   it('is announced politely when it arrives, and plays no haptic', async () => {

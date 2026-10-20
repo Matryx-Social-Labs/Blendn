@@ -35,7 +35,6 @@ import { checkOutOf, subscribeCheckInChanged } from '../../lib/checkIn'
 import { claimUrlFrom } from '../../lib/claimLink'
 import { COLOR, FONT_FAMILY, SIZE, SPACE } from '../../lib/design/tokens'
 import { EXTEND_CHOICE, oneTapChoice, readLiveSession, venueAction, type GoLiveChoice } from '../../lib/goLive'
-import { H } from '../../lib/haptics'
 import { type ShowTray, type TrayButton, type TrayExtra } from '../../lib/locationFix'
 import { Logger } from '../../lib/logger'
 import { openInMaps } from '../../lib/openInMaps'
@@ -363,14 +362,12 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
     try {
       const res = await checkOutOf(venueDayId)
       if (!res.success) {
-        H.error()
         showToast(res.error || "Couldn't stop. Try again.", 'error')
       } else {
         closeSession()
       }
     } catch (error) {
       Logger.warn('events', 'stop live failed', { error: String(error) })
-      H.error()
       showToast("Couldn't stop. Try again.", 'error')
     } finally {
       setLeaving(false)

@@ -8,7 +8,6 @@ import { font, minTarget, useBoldText } from '../ds/shared'
 import { Icon, type IconName } from '../ui/Icon'
 import { useToast } from '../Toast'
 import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
-import { H } from '../../lib/haptics'
 import { Logger } from '../../lib/logger'
 import { offersApi, type RegularPrefs } from '../../lib/offers'
 
@@ -85,11 +84,9 @@ export function VenueRegulars({ venueId, venueName }: { venueId: string; venueNa
         setPrefs(res.data)
         after?.(res.data)
       } else {
-        H.error()
         showToast(res.error || "That didn't save. Try again.", 'error')
       }
     } catch {
-      H.error()
       showToast("That didn't save. Try again.", 'error')
     } finally {
       setSaving(null)

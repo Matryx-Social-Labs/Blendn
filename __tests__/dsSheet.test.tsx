@@ -59,6 +59,27 @@ const signOut = (props: Partial<React.ComponentProps<typeof Sheet>> = {}) => (
   />
 )
 
+describe('headerAction', () => {
+  it('is right-aligned in the title row, runs its handler, and a sheet without one is unchanged', async () => {
+    const onPress = jest.fn()
+    await render(signOut({ headerAction: { label: 'Clear all', onPress } }))
+    await fireEvent.press(screen.getByRole('button', { name: 'Clear all' }))
+    expect(onPress).toHaveBeenCalledTimes(1)
+    expect(screen.getByText('Sign out?')).toBeTruthy()
+    await screen.rerender(signOut())
+    expect(screen.queryByText('Clear all')).toBeNull()
+  })
+
+  it('disabled: held, dimmed, and says so', async () => {
+    const onPress = jest.fn()
+    await render(signOut({ headerAction: { label: 'Clear all', onPress, disabled: true } }))
+    const action = screen.getByTestId('s-header-action')
+    expect(action.props.accessibilityState).toMatchObject({ disabled: true })
+    await fireEvent.press(action)
+    expect(onPress).not.toHaveBeenCalled()
+  })
+})
+
 describe('settleDetent', () => {
   const heights = [300, 500, 800]
 

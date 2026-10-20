@@ -467,7 +467,6 @@ function GroupChatInner() {
       markDomainsDirty(['chat'])
     } catch (error) {
       Logger.warn('chat', 'send failed', { error })
-      H.error()
       setMessage(optimistic.message_id, (m) => ({ ...m, failed: true, waiting: false }))
       showToast("Couldn't send. Try again.", 'error')
     }
@@ -570,7 +569,6 @@ function GroupChatInner() {
     const result = await apiClient.rsvpToEvent(eventId, 'going')
     setRsvping(false)
     if (!result.success) {
-      H.error()
       return showToast(userMessage(result, "Couldn't save your RSVP. Try again."), 'error')
     }
     H.success()

@@ -3,7 +3,7 @@
  * look are the Toast's. The provider only decides which is on screen, and plays no haptic of its own.
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
-import { Pressable, Text } from 'react-native'
+import { Pressable, StyleSheet, Text } from 'react-native'
 
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
@@ -12,6 +12,7 @@ let mockPath = '/events'
 jest.mock('expo-router', () => ({ usePathname: () => mockPath }))
 
 import { isTabRoot, ToastProvider, useToast } from '../components/Toast'
+import { SIZE, SPACE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { toast } from '../lib/toast'
 
@@ -69,7 +70,7 @@ describe('the provider', () => {
     expect(await screen.findByText('Saved')).toBeTruthy()
   })
 
-  it('plays no haptic of its own: the caller already played the outcome', async () => {
+  it('plays the outcome haptic as the toast appears, and a queued one waits for its turn', async () => {
     const error = jest.spyOn(H, 'error').mockImplementation(() => {})
     const success = jest.spyOn(H, 'success').mockImplementation(() => {})
     await render(
@@ -78,8 +79,13 @@ describe('the provider', () => {
       </ToastProvider>
     )
     await fireEvent.press(screen.getByRole('button', { name: 'error' }))
-    expect(error).not.toHaveBeenCalled()
+    await fireEvent.press(screen.getByRole('button', { name: 'second' }))
+    // Queued behind the error: its success has not played.
+    expect(error).toHaveBeenCalledTimes(1)
     expect(success).not.toHaveBeenCalled()
+    await advance(11000)
+    expect(await screen.findByText('Saved')).toBeTruthy()
+    expect(success).toHaveBeenCalledTimes(1)
   })
 
   it('a toast raised from lib/ (no hook) is the same one', async () => {
@@ -103,12 +109,49 @@ describe('the provider', () => {
       </ToastProvider>
     )
     await fireEvent.press(screen.getByRole('button', { name: 'many' }))
-    // a was dropped with the fourth: b is the head.
-    expect(screen.getByText('b')).toBeTruthy()
+    // a is showing and stays; b, the oldest waiting, went with the fourth.
+    expect(screen.getByText('a')).toBeTruthy()
+    await advance(10000)
+    await advance(1000)
+    expect(await screen.findByText('c')).toBeTruthy()
+    await advance(10000)
+    await advance(1000)
+    expect(await screen.findByText('d')).toBeTruthy()
   })
 })
 
 describe('where it sits', () => {
+  const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id).props.style) as { top?: number }
+
+  it('every toast sits below the top bar, so back stays tappable while one shows', async () => {
+    const back = jest.fn()
+    function Screen() {
+      const { showToast } = useToast()
+      return (
+        <>
+          <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={back}>
+            <Text>back</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" onPress={() => showToast('Saved', 'success')}>
+            <Text>save</Text>
+          </Pressable>
+        </>
+      )
+    }
+    await render(
+      <ToastProvider>
+        <Screen />
+      </ToastProvider>
+    )
+    await fireEvent.press(screen.getByRole('button', { name: 'save' }))
+    // The lane starts below the 44 pt circle and the 8 under it; it lets touches through; the toast adds the safe area on top.
+    expect(flat('toast-lane').top).toBe(SIZE.circleButton + SPACE.sm)
+    expect(screen.getByTestId('toast-lane').props.pointerEvents).toBe('box-none')
+    expect(flat('toast').top).toBeGreaterThanOrEqual(SPACE.sm)
+    await fireEvent.press(screen.getByLabelText('Back'))
+    expect(back).toHaveBeenCalledTimes(1)
+  })
+
   it('knows the tab roots, whose floating bar an Android snackbar clears', () => {
     for (const p of ['/', '/events', '/going', '/chat', '/profile']) expect(isTabRoot(p)).toBe(true)
     for (const p of ['/crews', '/chat/abc', '/settings', null, undefined]) expect(isTabRoot(p)).toBe(false)

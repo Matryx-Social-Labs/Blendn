@@ -215,7 +215,6 @@ export default function PlusScreen() {
     if (result.kind === 'nothing' || result.kind === 'failed') {
       const text = result.kind === 'nothing' ? 'No purchases to restore' : result.message
       setNotice(text)
-      if (result.kind === 'failed') H.error()
       showToast(text, result.kind === 'failed' ? 'error' : 'info')
       say(text)
       return

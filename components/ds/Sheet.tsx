@@ -20,10 +20,10 @@ import { scheduleOnRN } from 'react-native-worklets'
 
 import { Icon, type IconName } from '../ui/Icon'
 import { Material } from '../ui/Material'
-import { COLOR, DURATION, EASING, MATERIAL, RADIUS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, MATERIAL, RADIUS, SIZE, SPACE, SPRING, TYPE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
-import { tint } from '../../lib/theme'
+import { OPACITY, tint } from '../../lib/theme'
 import { Button, type ButtonKind, type ButtonProps } from './Button'
 import { font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast } from './shared'
 
@@ -217,6 +217,8 @@ export type SheetProps = {
   onClose: () => void
   /** Omitted only when the content carries its own header (the PersonCard's name beside its face): pass `focusRef` then. */
   title?: string
+  /** A text action right-aligned in the title row (Clear all). Additive: a sheet without one is unchanged. */
+  headerAction?: { label: string; onPress: () => void; disabled?: boolean }
   /** What a screen reader lands on as it opens, when there is no title: the content's own header. */
   focusRef?: RefObject<ComponentRef<typeof View> | null>
   /** The consequence, above the buttons. */
@@ -444,7 +446,7 @@ function useSheetMotion({
  * ponytail: focus is not handed back to the opener on close (the opener
  * knows what it was); the material does not grow more opaque near full height.
  */
-export function Sheet({ visible, onClose, title, body, icon, actions = [], detents, children, focusRef, onDismissed, testID }: SheetProps) {
+export function Sheet({ visible, onClose, title, headerAction, body, icon, actions = [], detents, children, focusRef, onDismissed, testID }: SheetProps) {
   const android = Platform.OS === 'android'
   const insets = useSafeAreaInsets()
   const window = useWindowDimensions()
@@ -611,10 +613,29 @@ export function Sheet({ visible, onClose, title, body, icon, actions = [], deten
                       <Icon name={icon} />
                     </View>
                   ) : null}
-                  {title ? (
-                    <Text ref={titleRef} accessibilityRole="header" style={[font('title', bold), styles.title]}>
-                      {title}
-                    </Text>
+                  {title || headerAction ? (
+                    <View style={styles.titleRow}>
+                      {title ? (
+                        <Text ref={titleRef} accessibilityRole="header" style={[font('title', bold), styles.title, styles.titleText]}>
+                          {title}
+                        </Text>
+                      ) : (
+                        <View style={styles.titleText} />
+                      )}
+                      {headerAction ? (
+                        <Pressable
+                          testID={testID && `${testID}-header-action`}
+                          accessibilityRole="button"
+                          accessibilityState={{ disabled: !!headerAction.disabled }}
+                          disabled={headerAction.disabled}
+                          hitSlop={(minTarget() - TYPE.meta.lineHeight) / 2}
+                          onPress={headerAction.onPress}
+                          style={headerAction.disabled && { opacity: OPACITY.disabled }}
+                        >
+                          <Text style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.title]}>{headerAction.label}</Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
                   ) : null}
                   {body ? <Text style={[font('body', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{body}</Text> : null}
                 </View>
@@ -696,6 +717,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
+  titleText: { flex: 1 },
   title: { color: COLOR.textPrimary },
   actions: { gap: SPACE.sm },
   content: { flexGrow: 0, flexShrink: 1 },
