@@ -1,16 +1,15 @@
-import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
 import { useState } from 'react'
-import { FlatList, RefreshControl, StyleSheet, View } from 'react-native'
+import { FlatList, RefreshControl, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
-import { AppHeader } from '../../components/AppHeader'
+import { StateScreen } from '../../components/ds/StateScreen'
+import { TopBar } from '../../components/ds/TopBar'
 import { IncomingRequestRow } from '../../components/friends/IncomingRequestRow'
 import { PersonRowSkeleton } from '../../components/friends/PersonRow'
-import { LoadError } from '../../components/LoadError'
-import { Text } from '../../components/ui/Text'
-import { EMBER, GUTTER, ICON, SPACE } from '../../lib/theme'
+import { EMBER, GUTTER, SPACE } from '../../lib/theme'
 import { useFriendRequests } from '../../lib/useFriendRequests'
+import { useTopBarState } from '../../lib/useTopBarState'
 
 /**
  * People asking to be your friend — what "Requests" on the Me tab and at the
@@ -23,6 +22,7 @@ import { useFriendRequests } from '../../lib/useFriendRequests'
 export default function FriendRequestsScreen() {
   const { incoming, loaded, failed, load, respond, busy } = useFriendRequests()
   const [refreshing, setRefreshing] = useState(false)
+  const bar = useTopBarState()
 
   const onRefresh = async () => {
     setRefreshing(true)
@@ -31,20 +31,23 @@ export default function FriendRequestsScreen() {
   }
 
   const empty = failed ? (
-    <LoadError title="Your requests didn't load" onRetry={() => void onRefresh()} retrying={refreshing} />
+    <StateScreen
+      icon="cloud-off"
+      title="Your requests didn't load"
+      body="Check your connection and try again."
+      actions={[{ label: 'Try again', onPress: () => void onRefresh(), loading: refreshing }]}
+    />
   ) : (
-    <View style={styles.empty}>
-      <Ionicons name="person-add-outline" size={ICON.lg} color={EMBER.textTertiary} />
-      <Text variant="title" style={styles.center}>No requests</Text>
-      <Text variant="body" color={EMBER.textSecondary} style={styles.center}>
-        When somebody opens your link and asks to be your friend, they&apos;ll be here.
-      </Text>
-    </View>
+    <StateScreen
+      icon="user-plus"
+      title="No requests"
+      body="When somebody opens your link and asks to be your friend, they'll be here."
+    />
   )
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <AppHeader title="Requests" onBack={() => router.back()} />
+    <SafeAreaView style={styles.container} edges={['bottom']}>
+      <TopBar title="Requests" state={bar.state} onBack={() => router.back()} />
       {!loaded && !failed ? (
         <PersonRowSkeleton />
       ) : (
@@ -63,6 +66,7 @@ export default function FriendRequestsScreen() {
           // `textSecondary`, the one pull-to-refresh colour (docs/DESIGN_SYSTEM.md).
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={EMBER.textSecondary} />}
           showsVerticalScrollIndicator={false}
+          {...bar.scrollProps}
         />
       )}
     </SafeAreaView>
@@ -73,6 +77,4 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: EMBER.bg },
   list: { paddingHorizontal: GUTTER, paddingVertical: SPACE.sm },
   emptyList: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: GUTTER },
-  empty: { alignItems: 'center', gap: SPACE.lg },
-  center: { textAlign: 'center' },
 })

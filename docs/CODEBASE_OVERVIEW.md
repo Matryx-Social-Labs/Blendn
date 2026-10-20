@@ -104,7 +104,6 @@ blendn/
 │   │   ├── ScalePress.tsx          # Haptic pressable with scale anim
 │   │   └── FadeInUp.tsx
 │   ├── ActionTray.tsx
-│   ├── AppHeader.tsx
 │   ├── ErrorBoundary.tsx
 │   ├── EventCard.tsx
 │   ├── LazyWrapper.tsx
@@ -419,7 +418,6 @@ In-flight dedup prevents overlapping fetches.
 | `FadeInUp` | `components/motion/FadeInUp.tsx` | Animated entrance wrapper |
 | `Skeleton` | `components/Skeleton.tsx` | Loading shimmer placeholder |
 | `Toast` | `components/Toast.tsx` | Global toast notification system |
-| `AppHeader` | `components/AppHeader.tsx` | Reusable screen header |
 | `RealtimeStatusBanner` | `components/RealtimeStatusBanner.tsx` | Socket connection status indicator |
 | `PhotoManager` | `components/PhotoManager.tsx` | Photo upload/manage UI |
 | `PhotoLightbox` | `components/PhotoLightbox.tsx` | Full-screen photo viewer |

@@ -3,7 +3,7 @@ import { router } from 'expo-router'
 import { Linking, ScrollView, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
-import { AppHeader } from '../components/AppHeader'
+import { TopBar } from '../components/ds/TopBar'
 import ScalePress from '../components/motion/ScalePress'
 import { EmberButton } from '../components/onboarding/EmberControls'
 import { useToast } from '../components/Toast'
@@ -12,6 +12,7 @@ import { appVersionLabel, platformLabel, SUPPORT_EMAIL, supportMailto } from '..
 import { BLENDN_LINKS, openInApp } from '../lib/links'
 import { EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE } from '../lib/theme'
 import { useAuth } from '../lib/useAuth'
+import { useTopBarState } from '../lib/useTopBarState'
 
 /**
  * Contact support: an email to a person, with what they will ask for already in it.
@@ -23,6 +24,7 @@ import { useAuth } from '../lib/useAuth'
 export default function SupportScreen() {
   const { user } = useAuth()
   const { showToast } = useToast()
+  const bar = useTopBarState()
 
   const email = () =>
     Linking.openURL(supportMailto({ subject: "Blend'n support", userId: user?.id })).catch(() =>
@@ -34,9 +36,9 @@ export default function SupportScreen() {
     openInApp(BLENDN_LINKS.help).catch(() => showToast("That page didn't open. Try again.", 'error'))
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <AppHeader title="Contact support" onBack={() => router.back()} />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
+      <TopBar title="Contact support" state={bar.state} onBack={() => router.back()} />
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} {...bar.scrollProps}>
         <View style={styles.section}>
           <Text variant="body" color={EMBER.textSecondary}>
             Tell us what happened and we&apos;ll write back by email. Your draft includes these details so we

@@ -1,17 +1,18 @@
 import { router } from 'expo-router'
 import React, { useEffect, useState } from 'react'
-import { FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native'
+import { FlatList, RefreshControl, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { AppHeader } from '../components/AppHeader'
+import { Button } from '../components/ds/Button'
+import { StateScreen } from '../components/ds/StateScreen'
+import { TopBar } from '../components/ds/TopBar'
 import { PersonRow } from '../components/friends/PersonRow'
-import { LoadError, LoadState } from '../components/LoadError'
 import { SkeletonCircle, SkeletonLine } from '../components/Skeleton'
-import { Text } from '../components/ui/Text'
 import { apiClient } from '../lib/apiClient'
 import { Logger } from '../lib/logger'
 import { getReportTypeLabel, unblockUser, type BlockedUser, type ReportType } from '../lib/safetyUtils'
 import { showSheet } from '../lib/sheet'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, OPACITY, SPACE } from '../lib/theme'
+import { CONTROL, EMBER, GUTTER, SPACE } from '../lib/theme'
+import { useTopBarState } from '../lib/useTopBarState'
 
 /**
  * "Blocked Sep 12 · Harassment".
@@ -47,6 +48,7 @@ export default function BlockedUsers() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [failed, setFailed] = useState(false)
+  const bar = useTopBarState()
 
   /*
    * The API client directly, not `getBlockedUsers` from safetyUtils: that one
@@ -112,15 +114,7 @@ export default function BlockedUsers() {
         person={{ userId: item.blocked_id, name, photo: item.blocked_user_photo }}
         detail={blockedDetail(item)}
         trailing={
-          <Pressable
-            onPress={() => handleUnblock(item)}
-            accessibilityRole="button"
-            accessibilityLabel={`Unblock ${name}`}
-            hitSlop={SPACE.sm}
-            style={({ pressed }) => [styles.unblock, pressed && styles.pressed]}
-          >
-            <Text variant="button" numberOfLines={1} maxFontSizeMultiplier={1.3}>Unblock</Text>
-          </Pressable>
+          <Button kind="secondary" size="sm" label="Unblock" accessibilityLabel={`Unblock ${name}`} onPress={() => handleUnblock(item)} />
         }
       />
     )
@@ -128,18 +122,23 @@ export default function BlockedUsers() {
 
   const renderEmptyState = () =>
     failed ? (
-      <LoadError title="Blocked users didn't load" onRetry={() => void onRefresh()} retrying={refreshing} />
+      <StateScreen
+        icon="cloud-off"
+        title="Blocked users didn't load"
+        body="Check your connection and try again."
+        actions={[{ label: 'Try again', onPress: () => void onRefresh(), loading: refreshing }]}
+      />
     ) : (
-      <LoadState
-        icon="shield-checkmark-outline"
+      <StateScreen
+        icon="shield-check"
         title="No blocked users"
-        message="People you block show up here, and you can unblock them any time."
+        body="People you block show up here, and you can unblock them any time."
       />
     )
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <AppHeader title="Blocked users" onBack={() => router.back()} />
+    <SafeAreaView style={styles.container} edges={['bottom']}>
+      <TopBar title="Blocked users" state={bar.state} onBack={() => router.back()} />
 
       {loading ? (
         <View style={styles.listContent} accessibilityLabel="Loading">
@@ -162,6 +161,7 @@ export default function BlockedUsers() {
           ListEmptyComponent={renderEmptyState}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={EMBER.textSecondary} />}
           showsVerticalScrollIndicator={false}
+          {...bar.scrollProps}
         />
       )}
     </SafeAreaView>
@@ -174,13 +174,4 @@ const styles = StyleSheet.create({
   emptyList: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: GUTTER },
   skeletonRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, paddingVertical: SPACE.md },
   skeletonText: { flex: 1, gap: SPACE.sm },
-  unblock: {
-    height: CONTROL.sm,
-    paddingHorizontal: SPACE.lg,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pressed: { opacity: OPACITY.pressed },
 })

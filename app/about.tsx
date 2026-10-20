@@ -3,10 +3,11 @@ import { router } from 'expo-router'
 import { Linking, ScrollView, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
-import { AppHeader } from '../components/AppHeader'
+import { TopBar } from '../components/ds/TopBar'
 import ScalePress from '../components/motion/ScalePress'
 import { useToast } from '../components/Toast'
 import { Text } from '../components/ui/Text'
+import { useTopBarState } from '../lib/useTopBarState'
 import { appVersionLabel } from '../lib/support'
 import { BLENDN_LINKS, openInApp } from '../lib/links'
 import { MAP_CREDITS } from '../lib/mapStyleEmber'
@@ -31,6 +32,7 @@ const MAP_DATA: LinkRow[] = Object.values(MAP_CREDITS).map((c) => ({
  */
 export default function AboutScreen() {
   const { showToast } = useToast()
+  const bar = useTopBarState()
 
   // The in-app browser opens only blendn.app; the map's licence pages (OpenStreetMap's ODbL credit among them) are other sites'.
   const open = ({ url, ours }: LinkRow) =>
@@ -65,9 +67,9 @@ export default function AboutScreen() {
   )
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <AppHeader title="About Blend'n" onBack={() => router.back()} />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
+      <TopBar title="About Blend'n" state={bar.state} onBack={() => router.back()} />
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} {...bar.scrollProps}>
         <View style={styles.section} accessible accessibilityLabel={`Version ${appVersionLabel()}`}>
           <Text variant="label">VERSION</Text>
           <Text variant="bodyStrong" selectable>{appVersionLabel()}</Text>

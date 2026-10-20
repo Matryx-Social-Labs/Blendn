@@ -3,7 +3,9 @@ import { useState } from 'react'
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
-import { AppHeader } from '../../components/AppHeader'
+import { Button } from '../../components/ds/Button'
+import { minTarget } from '../../components/ds/shared'
+import { TopBar } from '../../components/ds/TopBar'
 import { IncomingRequestRow } from '../../components/friends/IncomingRequestRow'
 import { InviteLinkCard } from '../../components/friends/InviteLinkCard'
 import { PersonRow } from '../../components/friends/PersonRow'
@@ -12,9 +14,10 @@ import { EmberButton } from '../../components/onboarding/EmberControls'
 import { ProfileHeading } from '../../components/profile/ProfileSections'
 import { Text } from '../../components/ui/Text'
 import { showSheet } from '../../lib/sheet'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, SPACE } from '../../lib/theme'
+import { EMBER, GUTTER, SPACE } from '../../lib/theme'
 import { useFriendInvite } from '../../lib/useFriendInvite'
 import { useFriendRequests } from '../../lib/useFriendRequests'
+import { useTopBarState } from '../../lib/useTopBarState'
 
 /**
  * Add friends: your link, and the requests waiting either way.
@@ -32,6 +35,7 @@ export default function AddFriendsScreen() {
   const { incoming, outgoing, busy, respond, withdraw } = requests
   const [refreshing, setRefreshing] = useState(false)
   const [reloadingLink, setReloadingLink] = useState(false)
+  const bar = useTopBarState()
 
   const onRefresh = async () => {
     setRefreshing(true)
@@ -64,9 +68,10 @@ export default function AddFriendsScreen() {
     })
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <AppHeader title="Add friends" onBack={() => router.back()} />
+    <SafeAreaView style={styles.container} edges={['bottom']}>
+      <TopBar title="Add friends" state={bar.state} onBack={() => router.back()} />
       <ScrollView
+        {...bar.scrollProps}
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={EMBER.textSecondary} />}
         showsVerticalScrollIndicator={false}
@@ -103,15 +108,14 @@ export default function AddFriendsScreen() {
           <View style={styles.section}>
             <ProfileHeading title="Requests" />
             <Text variant="body" color={EMBER.textSecondary}>Your requests didn&apos;t load.</Text>
-            <ScalePress
+            <Button
+              kind="secondary"
+              size="sm"
+              label="Try again"
+              accessibilityLabel="Try again, loading requests"
               onPress={() => void requests.load()}
-              haptic={false}
-              accessibilityRole="button"
-              accessibilityLabel="Try loading requests again"
-              style={[styles.pill, styles.start]}
-            >
-              <Text variant="bodyStrong">Try again</Text>
-            </ScalePress>
+              style={styles.start}
+            />
           </View>
         ) : null}
 
@@ -138,16 +142,14 @@ export default function AddFriendsScreen() {
                 person={request.person}
                 detail="Requested"
                 trailing={
-                  <ScalePress
+                  <Button
+                    kind="secondary"
+                    size="sm"
+                    label="Withdraw"
+                    accessibilityLabel={`Withdraw request to ${request.person.name}`}
                     onPress={() => void withdraw(request)}
                     disabled={busy.has(request.id)}
-                    haptic={false}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Withdraw request to ${request.person.name}`}
-                    style={styles.pill}
-                  >
-                    <Text variant="bodyStrong">Withdraw</Text>
-                  </ScalePress>
+                  />
                 }
               />
             ))}
@@ -162,13 +164,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: EMBER.bg },
   content: { paddingHorizontal: GUTTER, paddingVertical: SPACE.lg, gap: SPACE.xxl },
   section: { gap: SPACE.md },
-  quiet: { alignSelf: 'center', paddingVertical: SPACE.sm },
+  // The 44 / 48 target as a floor: padding alone made it 40.
+  quiet: { alignSelf: 'center', minHeight: minTarget(), justifyContent: 'center' },
   start: { alignSelf: 'flex-start' },
-  pill: {
-    height: CONTROL.sm,
-    paddingHorizontal: SPACE.md,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.surface,
-    justifyContent: 'center',
-  },
 })

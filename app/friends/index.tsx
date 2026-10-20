@@ -4,16 +4,15 @@ import { useCallback, useState } from 'react'
 import { FlatList, RefreshControl, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
-import { AppHeader } from '../../components/AppHeader'
+import { StateScreen } from '../../components/ds/StateScreen'
+import { TopBar } from '../../components/ds/TopBar'
 import { PersonRow, PersonRowSkeleton } from '../../components/friends/PersonRow'
 import { RequestsRow } from '../../components/friends/RequestsRow'
-import { LoadError } from '../../components/LoadError'
-import { EmberButton } from '../../components/onboarding/EmberControls'
-import { Text } from '../../components/ui/Text'
 import { apiClient } from '../../lib/apiClient'
 import { friendsSinceLabel, type Friend } from '../../lib/friends'
 import { EMBER, GUTTER, ICON, SPACE } from '../../lib/theme'
 import { useFriendRequests } from '../../lib/useFriendRequests'
+import { useTopBarState } from '../../lib/useTopBarState'
 
 /**
  * Your friends — the list the count on the Me tab opens.
@@ -27,6 +26,7 @@ export default function FriendsScreen() {
   const [failed, setFailed] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const requests = useFriendRequests()
+  const bar = useTopBarState()
 
   const load = useCallback(async () => {
     const result = await apiClient.getFriends()
@@ -54,24 +54,28 @@ export default function FriendsScreen() {
   const openAdd = () => router.push('/friends/add')
 
   const empty = failed ? (
-    <LoadError title="Your friends didn't load" onRetry={() => void onRefresh()} retrying={refreshing} />
+    <StateScreen
+      icon="cloud-off"
+      title="Your friends didn't load"
+      body="Check your connection and try again."
+      actions={[{ label: 'Try again', onPress: () => void onRefresh(), loading: refreshing }]}
+    />
   ) : (
-    <View style={styles.empty}>
-      <Ionicons name="people-outline" size={ICON.lg} color={EMBER.textTertiary} />
-      <Text variant="title" style={styles.center}>No friends yet</Text>
-      <Text variant="body" color={EMBER.textSecondary} style={styles.center}>
-        Nobody can find you by searching. Share your link with the people you want here.
-      </Text>
-      <EmberButton label="Add friends" onPress={openAdd} />
-    </View>
+    <StateScreen
+      icon="users"
+      title="No friends yet"
+      body="Nobody can find you by searching. Share your link with the people you want here."
+      actions={[{ label: 'Add friends', onPress: openAdd }]}
+    />
   )
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <AppHeader
+    <SafeAreaView style={styles.container} edges={['bottom']}>
+      <TopBar
         title="Friends"
+        state={bar.state}
         onBack={() => router.back()}
-        rightIconButton={{ name: 'person-add-outline', onPress: openAdd, accessibilityLabel: 'Add friends' }}
+        actions={[{ icon: 'user-plus', label: 'Add friends', onPress: openAdd }]}
       />
       {requests.incoming.length > 0 ? (
         <View style={styles.requests}>
@@ -97,6 +101,7 @@ export default function FriendsScreen() {
           // `textSecondary`, the one pull-to-refresh colour (docs/DESIGN_SYSTEM.md).
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={EMBER.textSecondary} />}
           showsVerticalScrollIndicator={false}
+          {...bar.scrollProps}
         />
       )}
     </SafeAreaView>
@@ -108,6 +113,4 @@ const styles = StyleSheet.create({
   list: { paddingHorizontal: GUTTER, paddingVertical: SPACE.sm },
   emptyList: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: GUTTER },
   requests: { paddingHorizontal: GUTTER, paddingBottom: SPACE.sm },
-  empty: { alignItems: 'center', gap: SPACE.lg },
-  center: { textAlign: 'center' },
 })
