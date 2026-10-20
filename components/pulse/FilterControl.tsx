@@ -68,8 +68,8 @@ export function FilterSheet({
 }) {
   const bold = useBoldText()
   const chosen = activeFilterCount(draft)
-  const counted = useDraftCount(visible && !!countFor, countKey(draft), () => countFor?.(draft) ?? Promise.resolve(null))
-  const empty = counted === 0
+  const { n: counted, current } = useDraftCount(visible && !!countFor, countKey(draft), () => countFor?.(draft) ?? Promise.resolve(null))
+  const empty = current && counted === 0
 
   return (
     <Sheet

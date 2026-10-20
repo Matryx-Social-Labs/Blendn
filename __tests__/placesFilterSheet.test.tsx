@@ -137,6 +137,22 @@ describe('the count survives the next read (review M3)', () => {
     expect(screen.getByTestId('places-filter-apply')).toBe(before)
   })
 
+  it('a stale zero does not block the next draft: Apply is live while its read is pending, and stays live if it fails', async () => {
+    let fail = false
+    const { onApply } = await draw({ countFor: async () => (fail ? Promise.reject(new Error('offline')) : 0) })
+    await settle()
+    expect(screen.getByRole('button', { name: 'Show 0 places' }).props.accessibilityState).toMatchObject({ disabled: true })
+    // The next draft's read fails: the kept 0 is no longer this draft's, so it must not disable Apply.
+    fail = true
+    await act(async () => fireEvent.press(screen.getByTestId('places-filter-kind-cafe')))
+    await settle()
+    const button = screen.getByTestId('places-filter-apply')
+    expect(button.props.accessibilityState?.disabled).toBeFalsy()
+    expect(screen.queryByText('Nothing matches. Try a wider distance or another kind.')).toBeNull()
+    await act(async () => fireEvent.press(button))
+    expect(onApply).toHaveBeenCalledWith(expect.objectContaining({ venueType: 'cafe' }))
+  })
+
   it('1 → many changes the label in place, without remounting the Button', async () => {
     let answer = 1
     await draw({ countFor: async () => answer })

@@ -47,9 +47,9 @@ export function PlacesFilterSheet({
     setSeenVisible(visible)
     if (visible) setDraft(filters)
   }
-  const counted = useDraftCount(visible, countKey(draft), () => countFor(draft))
+  const { n: counted, current } = useDraftCount(visible, countKey(draft), () => countFor(draft))
   const n = draft.whatsOn === 'all' ? counted : null
-  const empty = n === 0
+  const empty = current && n === 0
   const contrast = useIncreaseContrast()
   const kindKeys = draft.venueType ? [draft.venueType] : []
 
