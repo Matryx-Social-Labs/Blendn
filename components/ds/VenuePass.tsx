@@ -1,6 +1,7 @@
 import { Image } from 'expo-image'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { AccessibilityInfo, StyleSheet, Text, View } from 'react-native'
+import Animated, { cancelAnimation, Easing, ReduceMotion, useAnimatedProps, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated'
 import Svg, { Circle } from 'react-native-svg'
 
 import { Icon } from '../ui/Icon'
@@ -148,8 +149,9 @@ export function VenuePass({
 const CODE_PERIOD_S = 30
 const RING = 36
 const RING_STROKE = SPACE.xxs
-/** The ring and the seconds redraw this often; the code itself comes from the server. */
-const TICK_MS = 250
+/** The seconds beside the ring change once a second; the ring itself drains on the UI thread, and the code comes from the server. */
+const TICK_MS = 1000
+const AnimatedCircle = Animated.createAnimatedComponent(Circle)
 
 /** "K7QM2X" → "K7Q M2X"; read "K 7 Q, M 2 X". */
 const grouped = (code: string) => `${code.slice(0, 3)} ${code.slice(3)}`
@@ -207,6 +209,23 @@ export function DoorCode({ state, code = '', rotatesAt = 0, redeemedAt, endedLab
     if (active) AccessibilityInfo.announceForAccessibility(spoken(code))
   }, [live, active, code])
 
+  /*
+   * The ring drains from where this code is now to empty at its turn, in one
+   * linear run on the UI thread (constant motion; the pass's security function,
+   * so Reduce Motion keeps it): React is not re-rendered to move it.
+   */
+  const fraction = useSharedValue(1)
+  useEffect(() => {
+    if (!live || !active) {
+      cancelAnimation(fraction)
+      return
+    }
+    const leftMs = Math.max(0, rotatesAt - Date.now())
+    fraction.set(Math.min(1, leftMs / (CODE_PERIOD_S * 1000)))
+    fraction.set(withTiming(0, { duration: leftMs, easing: Easing.linear, reduceMotion: ReduceMotion.Never }))
+    return () => cancelAnimation(fraction)
+  }, [live, active, rotatesAt, code, fraction])
+
   const left = Math.min(CODE_PERIOD_S, Math.max(0, Math.ceil((rotatesAt - now) / 1000)))
   const still = state === 'redeemed' || state === 'used' || state === 'ended' ? STILL[state] : null
   const codeFont = [font('display', bold, FONT_FAMILY.mono[700]), styles.code]
@@ -237,7 +256,7 @@ export function DoorCode({ state, code = '', rotatesAt = 0, redeemedAt, endedLab
       </View>
       {live ? (
         <View testID={testID && `${testID}-ring`} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.ringCol}>
-          <CountdownRing fraction={left / CODE_PERIOD_S} />
+          <CountdownRing fraction={fraction} />
           <Text style={[font('caption', bold, FONT_FAMILY.mono[500]), styles.secondary, styles.tabular]}>{`${left} s`}</Text>
         </View>
       ) : state === 'offline' ? (
@@ -250,13 +269,14 @@ export function DoorCode({ state, code = '', rotatesAt = 0, redeemedAt, endedLab
 }
 
 /** A 36 pt ring that drains clockwise from the top: 16% white track, white arc. */
-function CountdownRing({ fraction }: { fraction: number }) {
+function CountdownRing({ fraction }: { fraction: SharedValue<number> }) {
   const r = RING / 2 - RING_STROKE
   const c = 2 * Math.PI * r
+  const arc = useAnimatedProps(() => ({ strokeDashoffset: c * (1 - fraction.get()) }))
   return (
     <Svg width={RING} height={RING} viewBox={`0 0 ${RING} ${RING}`} style={styles.ring}>
       <Circle cx={RING / 2} cy={RING / 2} r={r} fill="none" stroke={COLOR.hairlineStrong} strokeWidth={RING_STROKE} />
-      <Circle
+      <AnimatedCircle
         cx={RING / 2}
         cy={RING / 2}
         r={r}
@@ -265,7 +285,7 @@ function CountdownRing({ fraction }: { fraction: number }) {
         strokeWidth={RING_STROKE}
         strokeLinecap="round"
         strokeDasharray={c}
-        strokeDashoffset={c * (1 - fraction)}
+        animatedProps={arc}
       />
     </Svg>
   )
