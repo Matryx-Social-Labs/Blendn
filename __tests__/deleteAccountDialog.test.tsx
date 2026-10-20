@@ -39,15 +39,24 @@ jest.mock('../lib/apiClient', () => ({
     getMyPlus: jest.fn(async () => ({ success: true, data: { active: false, gated: false, product: null, source: null, expiresAt: null } })),
   },
 }))
+const mockShowToast = jest.fn()
+jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShowToast }) }))
 jest.mock('../lib/notifications', () => ({
   initializePushNotifications: jest.fn(),
   removePushTokenFromProfile: jest.fn(),
 }))
 
+import { View } from 'react-native'
 import SettingsScreen from '../app/settings'
+import { SheetHost } from '../components/SheetHost'
 
 it('says what is kept, and links to the page that lists it', async () => {
-  await render(<SettingsScreen />)
+  await render(
+    <View>
+      <SettingsScreen />
+      <SheetHost />
+    </View>
+  )
 
   fireEvent.press(await screen.findByRole('button', { name: 'Delete account' }))
 

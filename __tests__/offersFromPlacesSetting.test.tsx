@@ -76,12 +76,12 @@ beforeEach(() => {
 describe('Offers from places (step 12 review M6)', () => {
   it('shows what the server keeps, and turning it off sends exactly that', async () => {
     await render(<SettingsScreen />)
-    const row = await screen.findByLabelText('Offers from places')
-    await waitFor(() => expect(screen.getByLabelText('Offers from places').props.accessibilityState).toMatchObject({ checked: true }))
-    await act(async () => { fireEvent.press(screen.getByLabelText('Offers from places')) })
+    const row = await screen.findByLabelText(/^Offers from places/)
+    await waitFor(() => expect(screen.getByLabelText(/^Offers from places/).props.accessibilityState).toMatchObject({ checked: true }))
+    await act(async () => { fireEvent.press(screen.getByLabelText(/^Offers from places/)) })
     void row
     expect(api.queuedRequest).toHaveBeenLastCalledWith('/api/mobile/me/offers', { method: 'PUT', body: '{"enabled":false}' }, true, 2)
-    expect(screen.getByLabelText('Offers from places').props.accessibilityState).toMatchObject({ checked: false })
+    expect(screen.getByLabelText(/^Offers from places/).props.accessibilityState).toMatchObject({ checked: false })
   })
 })
 

@@ -139,6 +139,6 @@ it('the link opens the guidelines', async () => {
 // A link: it opens a web page, and says so with its role and its open-outline mark.
 it('the Settings row opens the same page', async () => {
   await render(<SettingsScreen />)
-  await fireEvent.press(await screen.findByRole('link', { name: 'Community guidelines' }))
+  await fireEvent.press(await screen.findByRole('link', { name: /^Community guidelines/ }))
   await waitFor(() => expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(COMMUNITY_GUIDELINES_URL, expect.any(Object)))
 })
