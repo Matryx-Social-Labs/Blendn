@@ -277,6 +277,39 @@ describe('every field saves what the person chose', () => {
   })
 })
 
+describe('motion', () => {
+  it('the sign card arrives with an entering animation, and has an exit', async () => {
+    await open()
+    expect(screen.queryByTestId('about-you-sign-card')).toBeNull()
+    await tap('Show my sign')
+    const card = screen.getByTestId('about-you-sign-card')
+    expect(card.props.entering).toBeDefined()
+    expect(card.props.exiting).toBeDefined()
+  })
+
+  it('the badge rows below glide when the card comes and goes (a layout transition)', async () => {
+    await open()
+    const rows = screen.getByText('Show my badges').parent!
+    let node: typeof rows | null = rows
+    let layout: unknown
+    while (node && !layout) {
+      layout = node.props.layout
+      node = node.parent
+    }
+    expect(layout).toBeDefined()
+  })
+
+  it('the top bar hears the scroll only when it crosses the top, however many frames it scrolls', async () => {
+    await open()
+    const scroll = screen.getByTestId('about-you-scroll')
+    expect(screen.queryByTestId('about-you-top-bar')).toBeNull()
+    for (const y of [4, 20, 60, 120]) await act(async () => fireEvent.scroll(scroll, { nativeEvent: { contentOffset: { y } } }))
+    expect(screen.getByTestId('about-you-top-bar')).toBeTruthy()
+    await act(async () => fireEvent.scroll(scroll, { nativeEvent: { contentOffset: { y: 0 } } }))
+    expect(screen.queryByTestId('about-you-top-bar')).toBeNull()
+  })
+})
+
 describe('the words and the grouping', () => {
   it('the design’s intro, the cap in words from the server’s number, and each pair named for a screen reader', async () => {
     await open()

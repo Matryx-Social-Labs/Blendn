@@ -1,6 +1,7 @@
 import { router } from 'expo-router'
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import Animated, { Easing, FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Chip } from '../components/ds/Chip'
@@ -28,12 +29,15 @@ import {
   type SignSystem,
 } from '../lib/aboutYou'
 import { apiClient, ProfileCache } from '../lib/apiClient'
-import { COLOR, RADIUS, SIZE, SPACE } from '../lib/design/tokens'
+import { COLOR, DURATION, EASING, RADIUS, SIZE, SPACE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { Logger } from '../lib/logger'
+import { useReducedMotion } from '../lib/motion'
 import { queryCache } from '../lib/queryCache'
 import { refreshAuthUser, useAuth } from '../lib/useAuth'
 
+/** Under Reduce Motion the sign card still fades: the change is explained, not moved. */
+const REDUCED_FADE_MS = 200
 const NUMBER_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten']
 /** "up to five" from the server's cap (the design wrote "up to three"; the server's number is the true one). */
 const upTo = (n: number) => `up to ${NUMBER_WORDS[n] ?? n}`
@@ -81,6 +85,9 @@ export default function EditAboutYouScreen() {
   const [system, setSystem] = useState<SignSystem>('western')
   const [attempt, setAttempt] = useState(0)
   const [scrolled, setScrolled] = useState(false)
+  // The bar only needs to hear when the scroll crosses the top, not every frame of it.
+  const scrolledRef = useRef(false)
+  const reduceMotion = useReducedMotion()
 
   useEffect(() => {
     if (!authUser) return
@@ -232,7 +239,12 @@ export default function EditAboutYouScreen() {
         <ScrollView
           testID="about-you-scroll"
           contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + SPACE.xxl }]}
-          onScroll={(e) => setScrolled(e.nativeEvent.contentOffset.y > 0)}
+          onScroll={(e) => {
+            const past = e.nativeEvent.contentOffset.y > 0
+            if (past === scrolledRef.current) return
+            scrolledRef.current = past
+            setScrolled(past)
+          }}
           scrollEventThrottle={16}
           keyboardShouldPersistTaps="handled"
         >
@@ -286,7 +298,13 @@ export default function EditAboutYouScreen() {
                 />
               </SettingsGroup>
               {signOn ? (
-                <View style={styles.card}>
+                // The calendar and the twelve signs arrive and leave over base, not with a cut; what is below glides.
+                <Animated.View
+                  testID="about-you-sign-card"
+                  entering={reduceMotion ? FadeIn.duration(REDUCED_FADE_MS) : FadeIn.duration(DURATION.base)}
+                  exiting={FadeOut.duration(DURATION.quick)}
+                  style={styles.card}
+                >
                   <SegmentedControl
                     items={SIGN_SYSTEM_LABELS}
                     selected={SIGN_SYSTEMS.indexOf(system)}
@@ -307,27 +325,29 @@ export default function EditAboutYouScreen() {
                       <Chip key={s.slug} label={signName(s, system)} selected={sign?.slug === s.slug} onPress={() => pickSign(s.slug)} />
                     ))}
                   </View>
-                </View>
+                </Animated.View>
               ) : null}
 
-              <SettingsGroup>
-                <SettingsRow
-                  icon="badge-check"
-                  title="Show my badges"
-                  hint="Earned by checking in — like “Regular here”. Off hides every badge on your card."
-                  trail="switch"
-                  value={form.showBadges}
-                  onValueChange={(v) => setForm((f) => ({ ...f, showBadges: v }))}
-                />
-                <SettingsRow
-                  icon="calendar-check"
-                  title="Show “Shows up” on my card"
-                  hint="Once you've checked in to 80% of the events you said you'd go to (at least 3)."
-                  trail="switch"
-                  value={form.showsUpBadge}
-                  onValueChange={(v) => setForm((f) => ({ ...f, showsUpBadge: v }))}
-                />
-              </SettingsGroup>
+              <Animated.View layout={reduceMotion ? undefined : LinearTransition.duration(DURATION.base).easing(Easing.bezier(...EASING.standard))}>
+                <SettingsGroup>
+                  <SettingsRow
+                    icon="badge-check"
+                    title="Show my badges"
+                    hint="Earned by checking in — like “Regular here”. Off hides every badge on your card."
+                    trail="switch"
+                    value={form.showBadges}
+                    onValueChange={(v) => setForm((f) => ({ ...f, showBadges: v }))}
+                  />
+                  <SettingsRow
+                    icon="calendar-check"
+                    title="Show “Shows up” on my card"
+                    hint="Once you've checked in to 80% of the events you said you'd go to (at least 3)."
+                    trail="switch"
+                    value={form.showsUpBadge}
+                    onValueChange={(v) => setForm((f) => ({ ...f, showsUpBadge: v }))}
+                  />
+                </SettingsGroup>
+              </Animated.View>
             </>
           ) : null}
         </ScrollView>
