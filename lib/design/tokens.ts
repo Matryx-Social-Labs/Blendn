@@ -342,8 +342,8 @@ export const DURATION = {
   medium: 320,
   long: 520,
   moment: 1000,
-  ambientA: 28000,
-  ambientB: 36000,
+  ambientA: 9000,
+  ambientB: 11600,
   hold: 900,
   toastDwell: 5000,
   toastDwellAction: 10000,
@@ -393,7 +393,7 @@ export const RISE = {
 } as const
 
 export const ORBS = {
-  drift: 24,
+  drift: 40,
   scaleMin: 0.96,
   scaleMax: 1.04,
 } as const
