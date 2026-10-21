@@ -3,6 +3,7 @@ import { Platform, StyleSheet, Text, View, type ViewStyle } from 'react-native'
 import Animated from 'react-native-reanimated'
 
 import ScalePress from '../motion/ScalePress'
+import { Glyph } from '../ui/Glyph'
 import { Icon, type IconName } from '../ui/Icon'
 import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, MATERIAL, PRESS, RADIUS, REDUCE_MOTION, SIZE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
@@ -58,14 +59,10 @@ export const DRAIN = asStyle({
 const REDUCED_TRANSITION = `opacity ${REDUCE_MOTION.duration.quick}ms ${CURVE}`
 export const POUR_REDUCED = asStyle({ opacity: 1, transition: REDUCED_TRANSITION })
 export const DRAIN_REDUCED = asStyle({ opacity: 0, transition: REDUCED_TRANSITION })
-/** The + → ✓ slot: the plus fades out as the check fades and settles in (scale .85 → 1); the slot never changes width. */
+/** The + → ✓ slot: the plus fades out as the check fades in and draws itself (`Glyph`); the slot never changes width. */
 const SLOT_FADE = {
   transition: `opacity ${DURATION.quick}ms ${CURVE}`,
 } as unknown as ViewStyle
-const SLOT_POP = {
-  transition: `opacity ${DURATION.quick}ms ${CURVE}, transform ${DURATION.quick}ms cubic-bezier(${EASING.snapOut.join(', ')})`,
-} as unknown as ViewStyle
-const CHECK_FROM = 0.85
 
 export type ChipVariant = 'default' | 'outline'
 /** `single` picks one of a set; `multi` is pick-any and draws the + / ✓ slot. */
@@ -188,20 +185,13 @@ export function Chip({
           </Animated.View>
           <Animated.View
             testID={testID && `${testID}-check`}
-            style={[
-              styles.stack,
-              {
-                opacity: selected ? 1 : 0,
-                transform: reduceMotion ? [] : [{ scale: selected ? 1 : CHECK_FROM }],
-              },
-              reduceMotion ? SLOT_FADE : SLOT_POP,
-            ]}
+            style={[styles.stack, { opacity: selected ? 1 : 0 }, SLOT_FADE]}
           >
-            <Icon name="check" size={ICON.inline} color={sel.glyph} />
+            <Glyph name="check" size={ICON.inline} color={sel.glyph} play={selected} testID={testID && `${testID}-check-glyph`} />
           </Animated.View>
         </View>
       ) : icon ? (
-        <Icon name={icon} size={ICON.inline} color={selected ? sel.glyph : ink} active={selected} />
+        <Glyph name={icon} size={ICON.inline} color={selected ? sel.glyph : ink} active={selected} play={selected} />
       ) : null}
       <Text
         style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.label, { color: ink }]}

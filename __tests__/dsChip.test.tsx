@@ -255,25 +255,57 @@ describe('pick-any: the + / ✓ slot (the sweep, chips.html)', () => {
     await screen.rerender(<Chip label="Live music" selection="multi" selected onPress={jest.fn()} testID="c" />)
     expect(flat('c-slot')).toMatchObject({ width: ICON.inline, height: ICON.inline })
     expect(flat('c-check').opacity).toBe(1)
-    expect(flat('c-check').transform).toEqual([{ scale: 1 }])
+    expect(flat('c-check').transform).toBeUndefined()
   })
 
-  it('the check starts at .85 and settles on the snap-out curve; the plus fades on the gentle one', async () => {
-    await multi()
-    expect(flat('c-check').transform).toEqual([{ scale: 0.85 }])
-    expect(transition('c-check')).toBe('opacity 160ms cubic-bezier(0.33, 1, 0.68, 1), transform 160ms cubic-bezier(0.23, 1, 0.32, 1)')
-  })
-
-  it('Reduce Motion: the check only fades, with no scale', async () => {
-    reduceMotion.mockReturnValue(true)
-    await multi()
-    expect(flat('c-check').transform).toEqual([])
+  it('the check is a drawn glyph in the hue: it strokes itself in as the plus fades out (SLOT_FADE)', async () => {
+    await multi({ selected: true })
+    expect(screen.getByTestId('c-check-glyph', { includeHiddenElements: true })).toBeTruthy()
     expect(transition('c-check')).toBe('opacity 160ms cubic-bezier(0.33, 1, 0.68, 1)')
+    expect(flat('c-check').transform).toBeUndefined()
+  })
+
+  it('choosing it draws the check once, and H.select plays once', async () => {
+    const timing = jest.spyOn(Reanimated, 'withTiming')
+    await multi()
+    await fireEvent.press(screen.getByTestId('c'))
+    await screen.rerender(<Chip label="Live music" selection="multi" selected onPress={jest.fn()} testID="c" />)
+    expect(select).toHaveBeenCalledTimes(1)
+    expect(timing).toHaveBeenCalledTimes(1)
+    timing.mockRestore()
+  })
+
+  it('mounting chosen draws nothing: the check is already there', async () => {
+    const timing = jest.spyOn(Reanimated, 'withTiming')
+    await multi({ selected: true })
+    expect(timing).not.toHaveBeenCalled()
+    timing.mockRestore()
+  })
+
+  it('Reduce Motion: the check is drawn still and only the slot crossfades', async () => {
+    reduceMotion.mockReturnValue(true)
+    const timing = jest.spyOn(Reanimated, 'withTiming')
+    await multi()
+    await screen.rerender(<Chip label="Live music" selection="multi" selected onPress={jest.fn()} testID="c" />)
+    expect(timing).not.toHaveBeenCalled()
+    expect(flat('c-check').opacity).toBe(1)
+    expect(transition('c-check')).toBe('opacity 160ms cubic-bezier(0.33, 1, 0.68, 1)')
+    timing.mockRestore()
   })
 
   it('a chip with its own glyph shows it in place of the plus', async () => {
     await multi({ icon: 'music' })
     expect(screen.getByTestId('c-slot')).toBeTruthy()
+  })
+
+  it('a leading glyph plays its verb once when the chip is chosen, and never on mount', async () => {
+    const spring = jest.spyOn(Reanimated, 'withSpring')
+    await draw({ icon: 'sparkles', selected: true })
+    expect(spring).not.toHaveBeenCalled()
+    await screen.rerender(<Chip label="Live music" icon="sparkles" onPress={jest.fn()} testID="c" />)
+    await screen.rerender(<Chip label="Live music" icon="sparkles" selected onPress={jest.fn()} testID="c" />)
+    expect(spring).toHaveBeenCalledTimes(1)
+    spring.mockRestore()
   })
 
   it('a single chip has no slot, so nothing about it changes', async () => {

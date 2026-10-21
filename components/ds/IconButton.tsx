@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { Platform, StyleSheet, View } from 'react-native'
 
 import ScalePress from '../motion/ScalePress'
-import { Icon, type IconName } from '../ui/Icon'
+import { Glyph } from '../ui/Glyph'
+import { type IconName } from '../ui/Icon'
 import { Material } from '../ui/Material'
 import { COLOR, PRESS, RADIUS, SIZE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
@@ -29,7 +30,7 @@ export type IconButtonProps = {
  * The glass circle (DESIGN-BRIEF §12, guidelines/components/IconButton.html):
  * 44 pt on iOS, 48 dp on Android, a 24 pt outlined glyph. Navigation (back,
  * close, share) is silent; a toggle plays `H.select` and, when selected, flips
- * to a white disc with an ink glyph (§4.7). Never two touching: 8 pt apart.
+ * to a white disc with an ink glyph (§4.7) that plays its verb once (DS #15: Like pops). Never two touching: 8 pt apart.
  *
  * Press: iOS scales 0.97; Android ripples and squares to a 12 dp corner.
  * Disabled dims the glyph, not the circle: glass never fades (§5.2 rule 6).
@@ -62,7 +63,7 @@ export function IconButton({
 
   const glyph = (
     <View testID={testID && `${testID}-glyph`} style={disabled && { opacity: OPACITY.disabled }}>
-      <Icon name={icon} color={selected ? COLOR.selectionInk : COLOR.textPrimary} />
+      <Glyph name={icon} color={selected ? COLOR.selectionInk : COLOR.textPrimary} play={selected} />
     </View>
   )
 
@@ -87,15 +88,16 @@ export function IconButton({
         accessibilityState={{ disabled, selected }}
         style={[shape, styles.clip]}
       >
+        {/* The disc and the glass swap under the glyph, which stays one mounted node: a glyph remounted by the swap could
+            never see `selected` rise, and so never pop. */}
         {selected ? (
-          <View testID={testID && `${testID}-selected`} style={[StyleSheet.absoluteFill, styles.center, styles.selected]}>
-            {glyph}
-          </View>
+          <View testID={testID && `${testID}-selected`} style={[StyleSheet.absoluteFill, styles.selected]} />
         ) : (
-          <Material role={tier} style={[StyleSheet.absoluteFill, styles.center, { borderRadius: radius }]}>
-            {glyph}
-          </Material>
+          <Material role={tier} style={[StyleSheet.absoluteFill, { borderRadius: radius }]} />
         )}
+        <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.center]}>
+          {glyph}
+        </View>
         {/* Android's live press is the ripple; the wash stands in for it only in the gallery. */}
         {previewState === 'pressed' && android ? <View style={[StyleSheet.absoluteFill, styles.wash]} /> : null}
         {contrast ? (

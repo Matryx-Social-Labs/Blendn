@@ -31,7 +31,7 @@ import ArrowUp from 'lucide-react-native/icons/arrow-up'
 import ArrowUpRight from 'lucide-react-native/icons/arrow-up-right'
 import BadgeCheck from 'lucide-react-native/icons/badge-check'
 import Ban from 'lucide-react-native/icons/ban'
-import Beer from 'lucide-react-native/icons/beer'
+import Beer, { __iconData as beerData } from 'lucide-react-native/icons/beer'
 import Bell from 'lucide-react-native/icons/bell'
 import BellOff from 'lucide-react-native/icons/bell-off'
 import Bookmark from 'lucide-react-native/icons/bookmark'
@@ -45,7 +45,7 @@ import CameraOff from 'lucide-react-native/icons/camera-off'
 import Car from 'lucide-react-native/icons/car'
 import Cat from 'lucide-react-native/icons/cat'
 import ChartColumn from 'lucide-react-native/icons/chart-column'
-import Check from 'lucide-react-native/icons/check'
+import Check, { __iconData as checkData } from 'lucide-react-native/icons/check'
 import CheckCheck from 'lucide-react-native/icons/check-check'
 import ChevronDown from 'lucide-react-native/icons/chevron-down'
 import ChevronLeft from 'lucide-react-native/icons/chevron-left'
@@ -53,14 +53,14 @@ import ChevronRight from 'lucide-react-native/icons/chevron-right'
 import ChevronUp from 'lucide-react-native/icons/chevron-up'
 import Cigarette from 'lucide-react-native/icons/cigarette'
 import CircleAlert from 'lucide-react-native/icons/circle-alert'
-import CircleCheck from 'lucide-react-native/icons/circle-check'
+import CircleCheck, { __iconData as circleCheckData } from 'lucide-react-native/icons/circle-check'
 import CirclePause from 'lucide-react-native/icons/circle-pause'
 import CircleQuestionMark from 'lucide-react-native/icons/circle-question-mark'
 import CircleSlash from 'lucide-react-native/icons/circle-slash'
 import CircleUserRound from 'lucide-react-native/icons/circle-user-round'
 import Clock from 'lucide-react-native/icons/clock'
 import CloudOff from 'lucide-react-native/icons/cloud-off'
-import Coffee from 'lucide-react-native/icons/coffee'
+import Coffee, { __iconData as coffeeData } from 'lucide-react-native/icons/coffee'
 import Copy from 'lucide-react-native/icons/copy'
 import CreditCard from 'lucide-react-native/icons/credit-card'
 import Disc3 from 'lucide-react-native/icons/disc-3'
@@ -106,7 +106,7 @@ import MicOff from 'lucide-react-native/icons/mic-off'
 import Minus from 'lucide-react-native/icons/minus'
 import Moon from 'lucide-react-native/icons/moon'
 import Music from 'lucide-react-native/icons/music'
-import Music2 from 'lucide-react-native/icons/music-2'
+import Music2, { __iconData as music2Data } from 'lucide-react-native/icons/music-2'
 import Navigation from 'lucide-react-native/icons/navigation'
 import Pencil from 'lucide-react-native/icons/pencil'
 import Play from 'lucide-react-native/icons/play'
@@ -326,3 +326,15 @@ export function Icon({
   const Glyph = ICONS[name]
   return <Glyph size={size} color={color} strokeWidth={active ? ICON.strokeActive : ICON.stroke} />
 }
+
+/**
+ * The geometry of the glyphs that draw themselves (`Glyph.tsx`, the `draw` verb): read here, beside the map, because
+ * `lucide-react-native` belongs to this file alone.
+ */
+export const DRAW_NODES = {
+  beer: beerData.node,
+  check: checkData.node,
+  'circle-check': circleCheckData.node,
+  coffee: coffeeData.node,
+  'music-2': music2Data.node,
+} as const

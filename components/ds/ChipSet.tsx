@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import Animated, { FadeIn, LinearTransition } from 'react-native-reanimated'
 
@@ -28,6 +28,28 @@ export function foldedItems(items: readonly ChipItem[], selected: readonly strin
   const shown = items.filter((item, i) => i < n || selected.includes(item.key))
   return { shown, hidden: items.filter((item) => !shown.includes(item)) }
 }
+
+type SetChipProps = {
+  itemKey: string
+  label: string
+  icon?: IconName
+  count?: number | string
+  accessibilityLabel?: string
+  selection: 'single' | 'multi'
+  on: boolean
+  dimmed: boolean
+  capHint?: string
+  onToggle: (key: string) => void
+  testID?: string
+}
+
+/**
+ * A chip of the set, taking only primitives and a stable callback: a tap re-renders the chips whose state changed and no
+ * other, so a set of thirty never animates (or even renders) as one.
+ */
+const SetChip = memo(function SetChip({ itemKey, onToggle, on, ...rest }: SetChipProps) {
+  return <Chip {...rest} selected={on} onPress={() => onToggle(itemKey)} />
+})
 
 export type ChipSetProps = {
   /** The field label (Geist Mono, uppercase). Omit where a control above already heads the set. */
@@ -85,20 +107,28 @@ export function ChipSet({
   const visible = open ? items : shown
   const revealed = open ? hidden : []
 
+  // The caller's `onToggle` is usually an inline arrow: the chips hold this stable one, which calls the latest.
+  const latestToggle = useRef(onToggle)
+  useEffect(() => {
+    latestToggle.current = onToggle
+  })
+  const toggle = useCallback((key: string) => latestToggle.current(key), [])
+
   const chip = (item: ChipItem) => {
     const on = selected.includes(item.key)
     return (
-      <Chip
+      <SetChip
         key={item.key}
+        itemKey={item.key}
         label={item.label}
         icon={item.icon}
         count={item.count}
         selection={selection}
-        selected={on}
+        on={on}
         dimmed={item.dimmed ?? (atCap && !on)}
         capHint={capHint}
         accessibilityLabel={item.accessibilityLabel}
-        onPress={() => onToggle(item.key)}
+        onToggle={toggle}
         testID={testID && `${testID}-${item.key}`}
       />
     )

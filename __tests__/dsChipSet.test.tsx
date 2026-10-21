@@ -7,6 +7,7 @@ import React from 'react'
 import { AccessibilityInfo, Platform, StyleSheet } from 'react-native'
 import * as Reanimated from 'react-native-reanimated'
 
+import * as ChipModule from '../components/ds/Chip'
 import { ChipSet, foldedItems, type ChipItem } from '../components/ds/ChipSet'
 import { OPACITY } from '../lib/theme'
 import { H } from '../lib/haptics'
@@ -167,5 +168,37 @@ describe('the fold glides (review L10)', () => {
     await draw({ foldAfter: 4 })
     expect(layoutOf('s-a')).toBeUndefined()
     expect(layoutOf('s-more')).toBeUndefined()
+  })
+})
+
+describe('only the changed chip moves', () => {
+  const MANY: ChipItem[] = Array.from({ length: 30 }, (_, i) => ({ key: `k${i}`, label: `Kind ${i}`, icon: 'sparkles' as const }))
+  // Callers pass fresh items and a fresh arrow every render, as the screens do.
+  const Set = ({ selected }: { selected: string[] }) => (
+    <ChipSet items={MANY.map((item) => ({ ...item }))} selection="single" selected={selected} onToggle={() => {}} testID="s" />
+  )
+
+  it('a pick re-renders the chip lit and the chip let go, not the other 28; and one verb plays', async () => {
+    const chip = jest.spyOn(ChipModule, 'Chip')
+    const spring = jest.spyOn(Reanimated, 'withSpring')
+    await render(<Set selected={['k3']} />)
+    chip.mockClear()
+    await screen.rerender(<Set selected={['k7']} />)
+    expect(chip).toHaveBeenCalledTimes(2)
+    expect(spring).toHaveBeenCalledTimes(1)
+    chip.mockRestore()
+    spring.mockRestore()
+  })
+
+  it('a tap calls the latest onToggle with the chip’s key, once', async () => {
+    const first = jest.fn()
+    const second = jest.fn()
+    await render(<ChipSet items={MANY} selection="single" selected={[]} onToggle={first} testID="s" />)
+    await screen.rerender(<ChipSet items={MANY} selection="single" selected={[]} onToggle={second} testID="s" />)
+    await fireEvent.press(screen.getByTestId('s-k4'))
+    expect(first).not.toHaveBeenCalled()
+    expect(second).toHaveBeenCalledTimes(1)
+    expect(second).toHaveBeenCalledWith('k4')
+    expect(select).toHaveBeenCalledTimes(1)
   })
 })
