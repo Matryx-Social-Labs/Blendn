@@ -10,6 +10,7 @@
  * with it. Live is a bucket, never a number, and never who.
  */
 
+import type { IconName } from '../components/ui/Icon'
 import type { VenueListItem } from './apiClient'
 import { liveNowLabel } from './home'
 import { clockTime, startsLabel } from './roomMoments'
@@ -231,10 +232,10 @@ export const NEAR_COUNT = 5
 /** "What's on" in the filter sheet: applied here, to the strata the paged list already holds. */
 export type WhatsOn = 'all' | 'live' | 'open'
 export const WHATS_ON = [
-  { value: 'all', label: 'Everything' },
-  { value: 'live', label: 'Live now' },
-  { value: 'open', label: 'Open tonight' },
-] as const satisfies readonly { value: WhatsOn; label: string }[]
+  { value: 'all', label: 'Everything', icon: 'sparkles' },
+  { value: 'live', label: 'Live now', icon: 'radio' },
+  { value: 'open', label: 'Open tonight', icon: 'moon' },
+] as const satisfies readonly { value: WhatsOn; label: string; icon: IconName }[]
 
 /** "How far", in kilometres (the list's `radius` param); null is any. */
 export const HOW_FAR = [

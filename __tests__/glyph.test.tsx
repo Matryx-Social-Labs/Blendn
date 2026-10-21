@@ -10,6 +10,8 @@ import { __iconData as beer } from 'lucide-react-native/icons/beer'
 import { __iconData as check } from 'lucide-react-native/icons/check'
 import { __iconData as circleCheck } from 'lucide-react-native/icons/circle-check'
 import { __iconData as coffee } from 'lucide-react-native/icons/coffee'
+import { __iconData as handshake } from 'lucide-react-native/icons/handshake'
+import { __iconData as mountain } from 'lucide-react-native/icons/mountain'
 import { __iconData as music2 } from 'lucide-react-native/icons/music-2'
 
 import { DrawnGlyph, Glyph, GLYPH_LENGTHS, GLYPH_VERB, type GlyphProps } from '../components/ui/Glyph'
@@ -51,6 +53,12 @@ describe('the verb table', () => {
     ['check', 'draw'],
     ['sparkles', 'pop'],
     ['heart', 'pop'],
+    ['handshake', 'draw'],
+    ['mountain', 'draw'],
+    ['palette', 'pop'],
+    ['cpu', 'pop'],
+    ['trophy', 'hop'],
+    ['mic-vocal', 'tilt'],
   ] as const)('%s is %s', (name, verb) => {
     expect(GLYPH_VERB[name]).toBe(verb)
   })
@@ -63,7 +71,7 @@ describe('the verb table', () => {
 })
 
 describe('the draw lengths', () => {
-  const data = { beer, 'music-2': music2, coffee, check, 'circle-check': circleCheck } as const
+  const data = { beer, 'music-2': music2, coffee, check, 'circle-check': circleCheck, handshake, mountain } as const
 
   it.each(Object.entries(data))('%s has one length per stroke of the Lucide geometry', (name, icon) => {
     expect(GLYPH_LENGTHS[name as keyof typeof GLYPH_LENGTHS]).toHaveLength(icon.node.length)

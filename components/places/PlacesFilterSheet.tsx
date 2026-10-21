@@ -2,10 +2,8 @@ import { useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
 import { ChipSet } from '../ds/ChipSet'
-import { SegmentedControl } from '../ds/SegmentedControl'
 import { Sheet } from '../ds/Sheet'
-import { font, useBoldText, useIncreaseContrast } from '../ds/shared'
-import { FieldLabel } from '../ds/TextField'
+import { font, useBoldText } from '../ds/shared'
 import { VENUE_PLATE_GLYPHS } from '../ds/VenuePlate'
 import { COLOR, SPACE } from '../../lib/design/tokens'
 import { useDraftCount } from '../../lib/filterCount'
@@ -50,7 +48,6 @@ export function PlacesFilterSheet({
   const { n: counted, current } = useDraftCount(visible, countKey(draft), () => countFor(draft))
   const n = draft.whatsOn === 'all' ? counted : null
   const empty = current && n === 0
-  const contrast = useIncreaseContrast()
   const kindKeys = draft.venueType ? [draft.venueType] : []
 
   return (
@@ -78,16 +75,15 @@ export function PlacesFilterSheet({
           onToggle={(key) => setDraft((d) => ({ ...d, venueType: d.venueType === key ? null : (key as PlaceFilters['venueType']) }))}
           testID="places-filter-kind"
         />
-        <View style={styles.group}>
-          <FieldLabel text="What’s on" bold={bold} contrast={contrast} />
-          <SegmentedControl
-            semantics="radio"
-            items={WHATS_ON.map((w) => w.label)}
-            selected={WHATS_ON.findIndex((w) => w.value === draft.whatsOn)}
-            onChange={(i) => setDraft((d) => ({ ...d, whatsOn: WHATS_ON[i].value }))}
-            testID="places-filter-on"
-          />
-        </View>
+        <ChipSet
+          label="What’s on"
+          selection="single"
+          items={WHATS_ON.map((w) => ({ key: w.value, label: w.label, icon: w.icon }))}
+          selected={[draft.whatsOn]}
+          // Tapping the chosen one returns it to everything, as the filter contract says.
+          onToggle={(key) => setDraft((d) => ({ ...d, whatsOn: d.whatsOn === key ? 'all' : (key as PlaceFilters['whatsOn']) }))}
+          testID="places-filter-on"
+        />
         {hasFix ? (
           <ChipSet
             label="Within"

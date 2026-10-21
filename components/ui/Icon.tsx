@@ -159,6 +159,13 @@ import Wine from 'lucide-react-native/icons/wine'
 import Wrench from 'lucide-react-native/icons/wrench'
 import X from 'lucide-react-native/icons/x'
 import Zap from 'lucide-react-native/icons/zap'
+// Foundations (category glyphs, `lib/categoryGlyph.ts`): kept in one block, apart from the alphabetical map above and below.
+import Cpu from 'lucide-react-native/icons/cpu'
+import Handshake, { __iconData as handshakeData } from 'lucide-react-native/icons/handshake'
+import MicVocal from 'lucide-react-native/icons/mic-vocal'
+import Mountain, { __iconData as mountainData } from 'lucide-react-native/icons/mountain'
+import Palette from 'lucide-react-native/icons/palette'
+import Trophy from 'lucide-react-native/icons/trophy'
 import { COLOR, ICON } from '../../lib/design/tokens'
 
 const ICONS = {
@@ -301,6 +308,13 @@ const ICONS = {
   wrench: Wrench,
   x: X,
   zap: Zap,
+  // Foundations: the category glyphs.
+  cpu: Cpu,
+  handshake: Handshake,
+  'mic-vocal': MicVocal,
+  mountain: Mountain,
+  palette: Palette,
+  trophy: Trophy,
 } as const satisfies Record<string, LucideIcon>
 
 export type IconName = keyof typeof ICONS
@@ -337,4 +351,6 @@ export const DRAW_NODES = {
   'circle-check': circleCheckData.node,
   coffee: coffeeData.node,
   'music-2': music2Data.node,
+  handshake: handshakeData.node,
+  mountain: mountainData.node,
 } as const

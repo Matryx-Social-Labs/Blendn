@@ -13,6 +13,7 @@ import {
   type When,
 } from '../../lib/eventFilters'
 import { COLOR, SPACE } from '../../lib/design/tokens'
+import { categoryGlyph } from '../../lib/categoryGlyph'
 import { useDraftCount } from '../../lib/filterCount'
 
 export interface CategoryOption {
@@ -92,7 +93,7 @@ export function FilterSheet({
             label="What"
             counter={draft.categorySlug ? '1 chosen' : 'Any'}
             selection="single"
-            items={categories.map((c) => ({ key: c.slug, label: c.name }))}
+            items={categories.map((c) => ({ key: c.slug, label: c.name, icon: categoryGlyph(c.slug) }))}
             selected={draft.categorySlug ? [draft.categorySlug] : []}
             onToggle={(slug) => onChange({ ...draft, categorySlug: draft.categorySlug === slug ? undefined : slug })}
             testID="pulse-filter-what"

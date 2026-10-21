@@ -122,7 +122,8 @@ export function InterestPicker({
             label={group.name.toUpperCase()}
             items={group.items.map((category) => ({
               key: category.id,
-              label: category.icon ? `${category.icon} ${category.name}` : category.name,
+              // The server's emoji is not drawn (no emoji as UI); the chip's ✓ draws on select.
+              label: category.name,
               // The group name is in the label because "Workshops" appears under both Arts & Culture and Business, and a
               // screen reader moving chip to chip has no other way to tell them apart.
               accessibilityLabel: `${category.name}, in ${group.name}`,

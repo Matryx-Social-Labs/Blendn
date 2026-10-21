@@ -17,6 +17,7 @@ import { Rail, RAIL_GAP, SectionReveal } from './Rail'
 import { SetList } from './SetList'
 import type { BlendnEvent } from '../../lib/api'
 import { COLOR, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
+import { categoryGlyph } from '../../lib/categoryGlyph'
 import { feedPlaylist } from '../../lib/feedMedia'
 import { featuredDateLabel, homeCardProps, peopleLabel, placeLabel } from '../../lib/pulse'
 import { featuredLabel, isLiveNow, PROMOTED_LABEL, SECTION_ORDER, weekendWindow, type PulseSection, type PulseSectionKey } from '../../lib/pulseSections'
@@ -344,6 +345,7 @@ export const EverythingHeader = memo(function EverythingHeader({
           renderItem={({ item }) => (
             <Chip
               label={item.name}
+              icon={item.slug ? categoryGlyph(item.slug) : undefined}
               count={item.slug ? item.count : undefined}
               accessibilityLabel={item.slug ? `${item.name}, ${item.count} events` : 'All'}
               selected={(item.slug || null) === selected}

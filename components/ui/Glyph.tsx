@@ -41,6 +41,12 @@ export const GLYPH_VERB: Partial<Record<IconName, GlyphVerb>> = {
   utensils: 'tilt',
   moon: 'tilt',
   radio: 'flicker',
+  handshake: 'draw',
+  mountain: 'draw',
+  palette: 'pop',
+  trophy: 'hop',
+  cpu: 'pop',
+  'mic-vocal': 'tilt',
 }
 
 const verbOf = (name: IconName): GlyphVerb => GLYPH_VERB[name] ?? 'pop'
@@ -56,6 +62,8 @@ export const GLYPH_LENGTHS = {
   coffee: [2, 2, 65.28, 2],
   check: [22.63],
   'circle-check': [62.84, 11.31],
+  handshake: [9.5, 43.74, 13.05, 26.9, 8],
+  mountain: [70.8],
 } as const
 
 type DrawName = keyof typeof GLYPH_LENGTHS
