@@ -37,10 +37,10 @@ export const CHECK_IN_CODES = {
   EVENT_NOT_STARTED: "EVENT_NOT_STARTED",
   EVENT_ENDED: "EVENT_ENDED",
   AGE_RESTRICTED: "AGE_RESTRICTED",
-  /** An unfinished profile is a 403 `FORBIDDEN` at the door (`lib/check-in-core.ts`); proposed: `PROFILE_INCOMPLETE`. */
+  /** An unfinished profile is a 403 `FORBIDDEN` at the door (`lib/check-in-core.ts`); a current server adds `reasonCode: PROFILE_INCOMPLETE`. */
   FORBIDDEN: "FORBIDDEN",
   PROFILE_INCOMPLETE: "PROFILE_INCOMPLETE",
-  /** Proposed: an age refusal for an age that is simply not on file, the one the person can fix. Today it is `AGE_RESTRICTED` with its sentence. */
+  /** The `reasonCode` of an `AGE_RESTRICTED` refusal for an age that is simply not on file, the one the person can fix. An old server says it only in the sentence. */
   AGE_UNKNOWN: "AGE_UNKNOWN",
   ALREADY_CHECKED_IN: "ALREADY_CHECKED_IN",
   EVENT_FULL: "EVENT_FULL",
@@ -97,6 +97,7 @@ const AGE_FIX: CheckInRefusal = {
   fix: { kind: "add_age", label: "Add your age" },
 }
 
+/** `code` is the server's `reasonCode ?? errorCode` (`reasonOf`): `AGE_UNKNOWN` beside `AGE_RESTRICTED`, `PROFILE_INCOMPLETE` beside `FORBIDDEN`. */
 export function checkInRefusal(
   errorCode: string | undefined,
   serverMessage: string | undefined

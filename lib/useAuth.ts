@@ -395,7 +395,7 @@ export const getCurrentUser = async (): Promise<AuthUser | null> => {
 export const signInWithGoogle = async (
   idToken: string,
   deviceInfo?: { platform?: string; device?: string; appVersion?: string }
-): Promise<{ success: boolean; error?: string; errorCode?: string; retryAfter?: number; isNewUser?: boolean }> => {
+): Promise<{ success: boolean; error?: string; errorCode?: string; reasonCode?: string; retryAfter?: number; isNewUser?: boolean }> => {
   try {
     Logger.info('auth', 'Signing in with Google...')
     updateAuthState({ loading: true })
@@ -423,7 +423,7 @@ export const signInWithGoogle = async (
     } else {
       Logger.error('auth', 'Google sign in failed', { error: result.error })
       updateAuthState({ loading: false })
-      return { success: false, error: result.error || 'Sign in failed', errorCode: result.errorCode, retryAfter: result.retryAfter }
+      return { success: false, error: result.error || 'Sign in failed', errorCode: result.errorCode, reasonCode: result.reasonCode, retryAfter: result.retryAfter }
     }
   } catch (error) {
     Logger.error('auth', 'Google sign in exception', { error })
@@ -437,7 +437,7 @@ export const signInWithApple = async (
   identityToken: string,
   fullName?: { givenName?: string | null; familyName?: string | null },
   deviceInfo?: { platform?: string; device?: string; appVersion?: string }
-): Promise<{ success: boolean; error?: string; errorCode?: string; retryAfter?: number; isNewUser?: boolean }> => {
+): Promise<{ success: boolean; error?: string; errorCode?: string; reasonCode?: string; retryAfter?: number; isNewUser?: boolean }> => {
   try {
     Logger.info('auth', 'Signing in with Apple...')
     updateAuthState({ loading: true })
@@ -465,7 +465,7 @@ export const signInWithApple = async (
     } else {
       Logger.error('auth', 'Apple sign in failed', { error: result.error })
       updateAuthState({ loading: false })
-      return { success: false, error: result.error || 'Sign in failed', errorCode: result.errorCode, retryAfter: result.retryAfter }
+      return { success: false, error: result.error || 'Sign in failed', errorCode: result.errorCode, reasonCode: result.reasonCode, retryAfter: result.retryAfter }
     }
   } catch (error) {
     Logger.error('auth', 'Apple sign in exception', { error })
@@ -479,7 +479,7 @@ export const signInWithEmail = async (
   email: string,
   password: string,
   deviceInfo?: { platform?: string; device?: string; appVersion?: string }
-): Promise<{ success: boolean; error?: string; errorCode?: string }> => {
+): Promise<{ success: boolean; error?: string; errorCode?: string; reasonCode?: string }> => {
   try {
     Logger.info('auth', 'Signing in with email...')
     updateAuthState({ loading: true })
@@ -515,7 +515,7 @@ export const signInWithEmail = async (
         }
       }
       // The code travels so the form can tell a refused account (suspended, staff) from a failed attempt (Flow 15 #1, #2).
-      return { success: false, error: result.error || 'Sign in failed', errorCode: result.errorCode }
+      return { success: false, error: result.error || 'Sign in failed', errorCode: result.errorCode, reasonCode: result.reasonCode }
     }
   } catch (error) {
     Logger.error('auth', 'Email sign in exception', { error })

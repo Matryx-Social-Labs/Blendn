@@ -155,8 +155,10 @@ export function goLiveRefusal(
       return { kind: 'refused', reason: 'gps', title: 'GPS signal too weak', message, offerDirections: false, action: 'retry' }
     case GO_LIVE_CODES.NO_CHECK_IN_AREA:
       return { kind: 'refused', reason: 'noArea', title: 'No check-in area here', message, offerDirections: false }
+    case CHECK_IN_CODES.AGE_UNKNOWN:
     case CHECK_IN_CODES.AGE_RESTRICTED:
       return { kind: 'refused', reason: 'age', title: 'Not open to you', message, offerDirections: false, action: 'add_age' }
+    case CHECK_IN_CODES.PROFILE_INCOMPLETE:
     case GO_LIVE_CODES.FORBIDDEN:
       return { kind: 'refused', reason: 'age', title: 'Finish your profile first', message, offerDirections: false }
     case GO_LIVE_CODES.NOT_FOUND:

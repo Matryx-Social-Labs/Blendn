@@ -1,11 +1,12 @@
 /**
  * Why a session ended, or why an account was refused, as a typed reason (Flow 15 #1 to #4).
  *
- * The server says it two ways. Proposed, and read first: an `errorCode` per reason (`ACCOUNT_SUSPENDED`,
- * `ACCOUNT_STAFF`, `ACCOUNT_DELETED`, `SESSION_REVOKED_ELSEWHERE`, `PASSWORD_RESET`). Today, and the fallback until the
- * server sends them: a 403 `FORBIDDEN` whose sentence is one of the two the server writes for a suspended or a staff
- * account (`lib/mobile-auth.ts` SUSPENDED_MESSAGE, STAFF_MESSAGE), and a Google or Apple 401 "Account not found" for a
- * deleted one. The fallback is one function, here, so that when the codes arrive it is deleted and nothing else changes.
+ * The server says it two ways. Read first: the body's `reasonCode` (`ACCOUNT_SUSPENDED`, `ACCOUNT_STAFF`,
+ * `ACCOUNT_DELETED`, `SESSION_REVOKED_ELSEWHERE`, `PASSWORD_RESET`), which sits beside an `errorCode` that keeps its old
+ * value (`FORBIDDEN`, `NOT_FOUND`) for builds in the field; a refresh 401 repeats the reason in both. So a client reads
+ * `reasonCode ?? errorCode` (`reasonOf`). The fallback, for a server that sends neither: a 403 `FORBIDDEN` whose
+ * sentence is one of the two the server writes for a suspended or a staff account (`lib/mobile-auth.ts`
+ * SUSPENDED_MESSAGE, STAFF_MESSAGE), and a Google or Apple 401 "Account not found" for a deleted one.
  *
  * A reason the client cannot tell stays `expired`, which is today's generic notice.
  */
@@ -24,10 +25,15 @@ export const SESSION_END_CODES: Record<string, SessionEndReason> = {
   PASSWORD_RESET: 'reset',
 }
 
-type Failure = { error?: string; errorCode?: string; status?: number }
+type Failure = { error?: string; errorCode?: string; reasonCode?: string; status?: number }
+
+/** The server's reason for a refusal: `reasonCode` when it sends one, else the `errorCode` it always sent. */
+export const reasonOf = (failure: { errorCode?: string; reasonCode?: string } | null | undefined): string | undefined =>
+  failure?.reasonCode ?? failure?.errorCode
 
 /**
- * ponytail: the fallback reads the server's own sentences. Delete `fromSentence` when `SESSION_END_CODES` are sent.
+ * ponytail: the fallback reads the server's own sentences, for a server that sends no `reasonCode` (an old one). Delete it
+ * when none is left in the field.
  * The prefixes are the two constants' first words, so a rewording of the rest cannot break it.
  */
 function fromSentence({ error, errorCode }: Failure): SessionEndReason | null {
@@ -43,7 +49,8 @@ function fromSentence({ error, errorCode }: Failure): SessionEndReason | null {
 
 /** The reason in a refused response: the code first, the sentence while the server does not send one. */
 export function classifySessionEnd(failure: Failure): SessionEndReason {
-  const coded = failure.errorCode ? SESSION_END_CODES[failure.errorCode] : undefined
+  const code = reasonOf(failure)
+  const coded = code ? SESSION_END_CODES[code] : undefined
   return coded ?? fromSentence(failure) ?? 'expired'
 }
 

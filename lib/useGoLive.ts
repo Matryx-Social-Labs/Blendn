@@ -4,6 +4,7 @@ import { Platform } from 'react-native'
 
 import { apiClient, type GoLiveResult } from './apiClient'
 import { checkInChanged } from './checkIn'
+import { reasonOf } from './sessionEnd'
 import { goLiveRefusal, rememberLiveSession, type GoLiveChoice, type GoLiveRefusal } from './goLive'
 import { H } from './haptics'
 import { getCurrentLocation, type ShowTray } from './locationFix'
@@ -195,9 +196,9 @@ export function useGoLive({
       }
       // No code: a timeout or no network. The POST may have landed, so everything that shows it re-reads (M2).
       if (!result.errorCode) checkInChanged()
-      const refusal = goLiveRefusal(result.errorCode, result.error, result.eventId, result.retryAfter)
+      const refusal = goLiveRefusal(reasonOf(result), result.error, result.eventId, result.retryAfter)
       // No haptic on a refusal (R4-D11 11-1): a refusal about the place is not about you.
-      Logger.info('events', 'go live refused', { code: result.errorCode })
+      Logger.info('events', 'go live refused', { code: reasonOf(result) })
       const seePlus = () => void openPaywall('go_live_expiry', { userInitiated: true })
       if (refusal.kind === 'plus') {
         // "Stay" is Blendn+'s in this city: the paywall, if its policy lets it come now (step 11) —

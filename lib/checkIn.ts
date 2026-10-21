@@ -3,6 +3,7 @@ import { Platform } from 'react-native'
 import { apiClient } from './apiClient'
 import { CHECK_IN_CODES, checkInRefusal, type CheckInRefusal } from './checkInRefusal'
 import { forgetEventDetailCache } from './eventDetailCache'
+import { reasonOf } from './sessionEnd'
 import { revealPromptText, revealReadiness } from './reveal'
 import { forgetRoster } from './rosterMemory'
 import { PUBLIC_CHECKIN_WARNING, shouldWarnBeforePublicCheckIn } from './roomVisibility'
@@ -80,7 +81,7 @@ export type CheckInOutcome =
   | {
       kind: 'refused'
       refusal: CheckInRefusal
-      /** The server's code, when it sent one (`isExpectedRefusal`). */
+      /** The server's reason, when it sent one: `reasonCode ?? errorCode` (`isExpectedRefusal`). */
       errorCode?: string
       /** Refused only because they already are — treat as checked in. */
       alreadyCheckedIn: boolean
@@ -115,8 +116,8 @@ export async function submitCheckIn(
     if (alreadyCheckedIn) checkInChanged(eventId)
     return {
       kind: 'refused',
-      refusal: checkInRefusal(result.errorCode, result.error),
-      errorCode: result.errorCode,
+      refusal: checkInRefusal(reasonOf(result), result.error),
+      errorCode: reasonOf(result),
       alreadyCheckedIn,
     }
   }

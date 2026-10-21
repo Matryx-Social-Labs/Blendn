@@ -20,7 +20,7 @@ import type { NotificationFeed } from './notificationFormat'
 import type { Friend, FriendInvite, FriendPerson, FriendProfile, FriendRequest, FriendState } from './friends'
 import type { BoardPost, BoardReportReason, BoardRequestStatus, BoardRequests } from './board'
 import type { Badge, Choice, Overlap, ProfileOptions } from './aboutYou'
-import { SESSION_END_CODES } from './sessionEnd'
+import { reasonOf, SESSION_END_CODES } from './sessionEnd'
 import { appVersionNumber } from './appVersion'
 import { isUpdateRefusal, markUpdateRequired } from './updateRequired'
 import { markSessionExpired, markSessionStarted } from './sessionEvents'
@@ -511,6 +511,12 @@ export interface ApiResponse<T = unknown> {
    * with no idea they were muted.
    */
   errorCode?: string
+  /**
+   * The specific reason, when the server names one beside an `errorCode` that keeps its old value for builds in the
+   * field: `ACCOUNT_SUSPENDED`, `ACCOUNT_STAFF`, `ACCOUNT_DELETED`, `PROFILE_INCOMPLETE`, `AGE_UNKNOWN`, `PASSWORD_RESET`,
+   * `SESSION_REVOKED_ELSEWHERE`. Read `reasonCode ?? errorCode` (`reasonOf`, `lib/sessionEnd.ts`).
+   */
+  reasonCode?: string
   /**
    * Seconds until a `RATE_LIMITED` refusal lifts. `lib/rate-limit.ts` on the
    * server computes it and sends it both in the body and as `Retry-After`;
@@ -1298,6 +1304,7 @@ class ApiClientClass {
         // Carried through so a screen can branch on the reason rather than
         // guess from the sentence. See ApiResponse.errorCode.
         errorCode: typeof parsed.errorCode === 'string' ? parsed.errorCode : undefined,
+        ...(typeof parsed.reasonCode === 'string' ? { reasonCode: parsed.reasonCode } : {}),
         // Body first, then the header, because only the body survives a proxy
         // that strips Retry-After.
         retryAfter: typeof parsed.retryAfter === 'number'
@@ -1472,15 +1479,23 @@ class ApiClientClass {
           // in the attendee app. Keep the sentence for the entry screen.
           if (response.status === 403) {
             try {
-              const body = JSON.parse(raw) as { error?: unknown; errorCode?: unknown }
+              const body = JSON.parse(raw) as { error?: unknown; errorCode?: unknown; reasonCode?: unknown }
               if (typeof body?.error === 'string') rejectedReason = body.error
-              if (typeof body?.errorCode === 'string') rejectedCode = body.errorCode
+              const code = reasonOf({
+                errorCode: typeof body?.errorCode === 'string' ? body.errorCode : undefined,
+                reasonCode: typeof body?.reasonCode === 'string' ? body.reasonCode : undefined,
+              })
+              if (code) rejectedCode = code
             } catch {}
           } else if (response.status === 401) {
             // A 401's sentence ("Invalid or expired refresh token") is not for a person; only a named reason is kept.
             try {
-              const body = JSON.parse(raw) as { errorCode?: unknown }
-              if (typeof body?.errorCode === 'string' && body.errorCode in SESSION_END_CODES) rejectedCode = body.errorCode
+              const body = JSON.parse(raw) as { errorCode?: unknown; reasonCode?: unknown }
+              const code = reasonOf({
+                errorCode: typeof body?.errorCode === 'string' ? body.errorCode : undefined,
+                reasonCode: typeof body?.reasonCode === 'string' ? body.reasonCode : undefined,
+              })
+              if (code && code in SESSION_END_CODES) rejectedCode = code
             } catch {}
           }
           return 'rejected'

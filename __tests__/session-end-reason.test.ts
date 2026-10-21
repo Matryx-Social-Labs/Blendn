@@ -284,3 +284,47 @@ describe('every request names the build (Flow 15 15.14), and a refusal to serve 
     }
   })
 })
+
+describe('the refresh names the reason in reasonCode, beside an errorCode that keeps its old value', () => {
+  const refreshAnswers = (status: number, body: Record<string, unknown>) => {
+    global.fetch = jest.fn(async (input: RequestInfo | URL) =>
+      String(input).endsWith('/api/mobile/auth/refresh') ? json(status, { success: false, ...body }) : json(401, { success: false, error: 'Unauthorized' }),
+    ) as typeof fetch
+  }
+  const endedBy = async (status: number, body: Record<string, unknown>) => {
+    markSessionStarted()
+    await TokenStorage.setTokens('access-1', 'refresh-1')
+    refreshAnswers(status, body)
+    await apiClient.getSession()
+    await settle()
+    return (await consumeSessionEnd())?.reason
+  }
+
+  it('a 403 FORBIDDEN with ACCOUNT_STAFF is a staff account, even in a sentence the client does not know', async () => {
+    expect(await endedBy(403, { error: 'Staff, reworded.', errorCode: 'FORBIDDEN', reasonCode: 'ACCOUNT_STAFF' })).toBe('staff')
+  })
+
+  it('a 401 PASSWORD_RESET (both fields) is a reset; SESSION_REVOKED_ELSEWHERE is elsewhere', async () => {
+    const body = { error: 'Invalid or expired refresh token' }
+    expect(await endedBy(401, { ...body, errorCode: 'PASSWORD_RESET', reasonCode: 'PASSWORD_RESET' })).toBe('reset')
+    expect(await endedBy(401, { ...body, errorCode: 'SESSION_REVOKED_ELSEWHERE', reasonCode: 'SESSION_REVOKED_ELSEWHERE' })).toBe('elsewhere')
+  })
+
+  it('an old server (errorCode only) is read the same', async () => {
+    expect(await endedBy(403, { error: SUSPENDED, errorCode: 'FORBIDDEN' })).toBe('suspended')
+    expect(await endedBy(401, { error: 'Invalid or expired refresh token', errorCode: 'PASSWORD_RESET' })).toBe('reset')
+  })
+
+  it('a bare 401 learns no reason', async () => {
+    expect(await endedBy(401, { error: 'Invalid or expired refresh token', errorCode: 'UNAUTHORIZED' })).toBe('expired')
+  })
+
+  it('ApiResponse carries reasonCode through, beside the errorCode', async () => {
+    await TokenStorage.setTokens('access-1', 'refresh-1')
+    global.fetch = jest.fn(async () => json(403, { success: false, error: 'Finish up first', errorCode: 'FORBIDDEN', reasonCode: 'PROFILE_INCOMPLETE' })) as typeof fetch
+    const res = await apiClient.getSession()
+    expect(res).toMatchObject({ success: false, errorCode: 'FORBIDDEN', reasonCode: 'PROFILE_INCOMPLETE' })
+    global.fetch = jest.fn(async () => json(403, { success: false, error: 'Nope', errorCode: 'FORBIDDEN' })) as typeof fetch
+    expect(await apiClient.getSession()).not.toHaveProperty('reasonCode')
+  })
+})
