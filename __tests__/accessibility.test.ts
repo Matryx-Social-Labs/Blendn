@@ -32,7 +32,6 @@ describe('text in a fixed-height box is capped', () => {
     ['the tab bar label (the 64 pt capsule)', ['components', 'ds', 'TabBar.tsx']],
     ['the featured card (fixed aspect)', ['components', 'pulse', 'FeaturedCard.tsx']],
     ['the hero title (48/56)', ['components', 'scene', 'SceneHero.tsx']],
-    ['the amenity tiles (126pt)', ['components', 'scene', 'SceneSections.tsx']],
     ['the bell badge (18pt)', ['components', 'pulse', 'NotificationBell.tsx']],
   ]
 
@@ -79,12 +78,8 @@ describe('the Scene keeps what the earlier pass gave it', () => {
     expect(read('components', 'scene', 'SceneHero.tsx')).toContain('accessibilityRole="header"')
   })
 
-  it('does not let the avatar row announce the creatures', () => {
-    // Unlabelled it says "butterfly, turtle, fox" — worse than silence,
-    // because it is confidently wrong about what is on screen.
-    const sections = read('components', 'scene', 'SceneSections.tsx')
-    // The discs are hidden; the count is read with its heading instead.
-    expect(sections).toMatch(/style=\{styles\.stack\}\s*\n\s*accessibilityElementsHidden/)
-    expect(sections).toContain('accessibilityLabel={`${label}, ${count}`}')
+  it('keeps the bar\'s small title out of the reading order (the hero\'s own title is the header)', () => {
+    const bar = read('components', 'scene', 'SceneBar.tsx')
+    expect(bar).toMatch(/testID="scene-bar-title"[\s\S]{0,120}accessibilityElementsHidden[\s\S]{0,60}no-hide-descendants/)
   })
 })

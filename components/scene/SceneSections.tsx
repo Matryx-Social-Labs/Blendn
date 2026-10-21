@@ -1,75 +1,34 @@
 import { useEffect, useState } from 'react'
-import { MaterialIcons } from '@expo/vector-icons'
 import { Image } from 'expo-image'
-import { LinearGradient } from 'expo-linear-gradient'
-import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-  type StyleProp,
-  type ViewStyle,
-} from 'react-native'
-
-import type { DetailBlock } from '../../lib/eventDetails'
-import type { FeedMediaItem } from '../../lib/feedMedia'
-import { avatarStack, pseudonymAvatar } from '../../lib/pseudonymAvatar'
-import MapView, { Marker } from 'react-native-maps'
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native'
 import Animated, {
   Easing,
   FadeIn,
-  cubicBezier,
   LayoutAnimationConfig,
   ReduceMotion,
+  cubicBezier,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated'
-import { GradientFill } from '../ui/GradientFill'
-import { COLOR, DURATION, EASING, MATERIAL, RISE } from '../../lib/design/tokens'
+
+import type { DetailBlock } from '../../lib/eventDetails'
+import type { FeedMediaItem } from '../../lib/feedMedia'
+import { SectionHeader } from '../ds/SectionHeader'
+import { font, useBoldText } from '../ds/shared'
 import ScalePress from '../motion/ScalePress'
 import { fadeInFast, popIn } from '../motion/presence'
-import { MOTION_DURATION, MOTION_EASING } from '../../lib/motion'
-import { DARK_MAP_STYLE, LOCATION_CARD_DELTA } from '../../lib/mapStyle'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
-
-/** An amenity tile's floor: glyph, name and a one-line note at default text size. */
-const AMENITY_TILE_MIN_HEIGHT = 126
-
-/*
- * A value that changed rises 6pt into place and fades in; the old one simply
- * goes. Used by the CTA's label and icon and by the attendee count — anything
- * that swaps in place inside a content-width row, where crossfading two copies
- * would have each push the other's layout. Always keyed, and always under
- * `LayoutAnimationConfig skipEntering`, so only a *change* animates, never the
- * first paint.
- *
- * Reduce Motion keeps the fade, which is what says the value changed, and
- * drops the rise.
- */
-const RISE_EASE_OUT = Easing.bezier(...MOTION_EASING.entrance)
-/** The same curve, in the form a CSS transition takes. */
-const RISE_EASE_OUT_CSS = cubicBezier(...MOTION_EASING.entrance)
-
-const riseIn = () => {
-  'worklet'
-  return {
-    initialValues: { opacity: 0, transform: [{ translateY: 6 }] },
-    animations: {
-      opacity: withTiming(1, { duration: MOTION_DURATION.normal, easing: RISE_EASE_OUT }),
-      transform: [{ translateY: withTiming(0, { duration: MOTION_DURATION.normal, easing: RISE_EASE_OUT }) }],
-    },
-  }
-}
-const changeFade = FadeIn.duration(MOTION_DURATION.fast).reduceMotion(ReduceMotion.Never)
+import { GradientFill } from '../ui/GradientFill'
+import { Icon } from '../ui/Icon'
+import { COLOR, DURATION, EASING, ICON, MATERIAL, RADIUS, RISE, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 
 /*
  * The CTA's label change (#45, A78 approved in Prompt 10): the old label exits
  * up 8 pt over `quick`, the new one rises 8 pt over `base`. Reduce Motion: the
  * two crossfade in place.
  */
+const changeFade = FadeIn.duration(DURATION.quick).reduceMotion(ReduceMotion.Never)
 const ctaLabelIn = () => {
   'worklet'
   return {
@@ -94,541 +53,42 @@ const ctaFadeOut = () => {
   'worklet'
   return { initialValues: { opacity: 1 }, animations: { opacity: withTiming(0, { duration: DURATION.quick }) } }
 }
+/** The FAQ chevron's turn, as a CSS transition curve. */
+const TURN_EASE = cubicBezier(...EASING.entrance)
 
 /**
- * The Scene's body sections — frame `1141:4875` and `1227:2903`.
- *
- * Presentational only: every one of these takes formatted strings and draws
- * them. The screen keeps the data, the permissions and the handlers, which is
- * what lets these be rendered in `__preview` with fixtures and no auth — the
- * only way anyone has ever actually *looked* at this design rendered.
- *
- * ## Layout constants, straight off the frame
- *
- * The content grid is inset to the screen gutter and stacks with the scale's
- * between-sections gap (`docs/DESIGN_SYSTEM.md`).
+ * The Scene's body sections (Flow 3 `scene`): the experience, the organiser's details, the gallery, and the dock's
+ * call to action. Presentational only: every one takes formatted strings and draws them; the screen keeps the data,
+ * the permissions and the handlers. The 2 x 2 facts are the DS `AmenityGrid`, the headings its `SectionHeader`.
  */
-export const SCENE_PADDING_HORIZONTAL = GUTTER
+export const SCENE_PADDING_HORIZONTAL = SPACE.gutter
 export const SCENE_SECTION_GAP = SPACE.xxl
-/** Frame `1141:4910`: the map band inside the Location card. */
-export const MAP_HEIGHT = 256
+
 /**
- * Frame `1227:2903`: the floating CTA's own band, and its inset.
- *
- * The node is named **"Floating CTA"** and is a *sibling* of `Main`, not a child
- * — it lives outside the scrolling content. Built inside the ScrollView it
- * became the last thing on a ~1900pt page, which put the only action this
- * screen has as far from the reader as the layout allows.
- *
- * `SCENE_CTA_INSET` is the same `GUTTER` as the content grid.
- *
- * ## 56, not the frame's 74 — a deliberate deviation
- *
- * The frame's pill is 74 because it holds a **40pt** icon (`1227:2912`), and a
- * 40pt icon beside a 28pt line of text sets the height on its own. Docked, that
- * 74 sits on top of a 24pt dock gutter and an ~88pt tab bar: **186pt of
- * permanent chrome**, better than a fifth of a 874pt screen, on a page whose
- * whole job is to show you an event.
- *
- * The frame measured the CTA floating over a scroll, where it was the only
- * thing at the bottom. It is not — the tab bar is under it. So the icon drops
- * to 24, which is the size at which it stops driving the height and the label
- * does, and the pill lands at `CONTROL.lg`, 56.
- *
- * Recorded in `docs/SCENE.md` so the
- * frame and the build disagreeing here is a decision and not drift.
+ * The dock's button is the scale's primary-action height; the dock itself is `components/ds/Dock` (a glass bar with
+ * the gutter on both sides), so a page pays for it by its measured height, not a constant.
  */
-export const SCENE_CTA_HEIGHT = CONTROL.lg
-export const SCENE_CTA_INSET = GUTTER
+export const SCENE_CTA_HEIGHT = SIZE.primary
 
 /** The CTA's icon. Sized here, not at the call site, because it sets the pill's height. */
-export const SCENE_CTA_ICON = ICON.lg
+export const SCENE_CTA_ICON = ICON.nav
 
 /** A gallery tile. Square, and sized so a second one is partly visible. */
 export const GALLERY_TILE = 160
 
-/** "The Experience", "Attendees", "Gallery". `TYPE.heading`. */
-export function SceneHeading({ children }: { children: string }) {
-  return <Text style={styles.heading}>{children}</Text>
-}
-
 /**
- * Who is putting it on, and — while it runs — how many are there right now.
+ * The prose under a heading: `body` on `textSecondary`.
  *
- * The organiser has been on the payload since the Scene was built and drawn
- * nowhere; "who's hosting" is one of the first things somebody deciding
- * whether to go looks for. The live count is the room's own "here now"
- * (`room-preview`), a still green dot beside it: the same mark the Room and
- * Tonight use for live, never a pulse.
- *
- * Renders nothing when it has neither, so an unhosted, unstarted event does
- * not get an empty row.
- */
-export function SceneByline({ host, hereNow }: { host?: string | null; hereNow?: number | null }) {
-  const live = typeof hereNow === 'number' && hereNow > 0
-  if (!host && !live) return null
-  return (
-    <View style={styles.byline}>
-      {host ? (
-        <Text style={styles.bylineHost} numberOfLines={1}>
-          By <Text style={styles.bylineName}>{host}</Text>
-        </Text>
-      ) : null}
-      {live ? (
-        <View
-          style={styles.bylineLive}
-          accessible
-          accessibilityLabel={`${hereNow} ${hereNow === 1 ? 'person' : 'people'} here now`}
-        >
-          <View style={styles.liveDot} />
-          <Text style={styles.bylineHost}>{hereNow} here now</Text>
-        </View>
-      ) : null}
-    </View>
-  )
-}
-
-/**
- * The prose under a heading. `TYPE.body` on `textSecondary`.
- *
- * A caller with a phrase to lift (the event's own name, matched exactly)
- * wraps it in `SceneBodyAccent`, which raises it from `textSecondary` to
- * `textPrimary`. Not the orange the frame draws: that belongs to the CTA, the
- * screen's one accent (docs/DESIGN_SYSTEM.md).
+ * A caller with a phrase to lift (the event's own name, matched exactly) wraps it in `SceneBodyAccent`, which raises it
+ * from `textSecondary` to `textPrimary`.
  */
 export function SceneBody({ children }: { children: React.ReactNode }) {
-  return <Text style={styles.body}>{children}</Text>
+  const bold = useBoldText()
+  return <Text style={[font('body', bold), styles.secondary]}>{children}</Text>
 }
 
 export function SceneBodyAccent({ children }: { children: string }) {
-  return <Text style={styles.bodyAccent}>{children}</Text>
-}
-
-/**
- * Attendees — a heading, and a count.
- *
- * ## The faces are not coming back
- *
- * The frame draws two photographs and "+121". `GET /events` used to return
- * exactly that — `interestedPreview`, real photographs of everyone who had
- * favourited an event, to any authenticated caller with no identity gate — and
- * it was removed as a security fix (blendn-admin #229, SCRUM-25). A face is
- * identity, and it was harvestable by topic: favourite an event, ask, collect
- * the faces of everyone else interested in that category.
- *
- * The stack stays; the **faces** do not. Each disc is a generated mark from
- * `pseudonymAvatar`, seeded by the event and the position, so the row keeps the
- * composition the frame is reaching for while encoding nothing about who is
- * attending. It is the same treatment the room already uses for anonymous
- * participants, so it reads as a deliberate convention rather than as missing
- * photographs.
- *
- * Real faces come back only with the friend graph (deferred), where "people you
- * have matched with" is a set the viewer is already entitled to see.
- */
-/**
- * Who is here, or who says they will be.
- *
- * The heading is a prop because the number means two different things either
- * side of the doors. Before an event nobody has checked in, so "Attendees: —"
- * is the screen reporting emptiness for a night that has not happened; the
- * honest figure then is how many people said they are coming. Once it starts,
- * the interesting number is who actually turned up.
- */
-export function SceneAttendees({
-  count,
-  seed,
-  label = 'Attendees',
-}: {
-  count: number
-  seed: string
-  label?: string
-}) {
-  const { shown, remainder } = avatarStack(count)
-  const reduceMotion = useReducedMotion()
-  return (
-    <View style={styles.attendeesSection}>
-      {/* One stop, read as the heading says it: "Going, 12". */}
-      <View style={styles.attendees} accessible accessibilityLabel={`${label}, ${count}`}>
-        <SceneHeading>{label}</SceneHeading>
-        {/*
-          Keyed by the number, so a save or a check-in arriving over the socket
-          rises in as the new figure. The first paint does not animate.
-        */}
-        <LayoutAnimationConfig skipEntering>
-          <Animated.Text
-            key={count}
-            entering={reduceMotion ? changeFade : riseIn}
-            style={styles.attendeeCount}
-          >
-            {count > 0 ? String(count) : '—'}
-          </Animated.Text>
-        </LayoutAnimationConfig>
-      </View>
-      {shown > 0 ? (
-        /*
-          Hidden from the screen reader, not three creatures.
-          A screen reader walking this row unlabelled announces the emoji —
-          "butterfly", "turtle", "fox" — which is worse than silence: it is
-          confidently wrong about what is on the screen. The discs carry no
-          information a blind user needs; the *count* beside them is the whole
-          message, and it is already in the heading above.
-        */
-        <View
-          style={styles.stack}
-          accessibilityElementsHidden
-          importantForAccessibility="no-hide-descendants"
-        >
-          {Array.from({ length: shown }, (_, i) => {
-            /*
-             * Seeded by the event and the position — deliberately *not* by any
-             * attendee.
-             *
-             * These are marks meaning "people are going", not portraits of
-             * particular ones, and the payload does not carry the identities to
-             * draw them from even if we wanted to. Seeding this way keeps them
-             * stable across renders (so the row does not reshuffle on every
-             * scroll) while encoding nothing about who is attending.
-             *
-             * ## A creature, not a letter
-             *
-             * These drew `.initial`, which is `seed[0]` — and the seed here is
-             * the *event* id, so all three discs showed the same letter. On the
-             * harness that was a row reading "T T T", which looks like a
-             * rendering fault rather than three people.
-             *
-             * A *varied* letter would have been worse, not better: a letter on
-             * a disc reads as somebody's initial, and nobody's initial is what
-             * this is. The faces were removed from this stack as a security fix
-             * because a face is identity (blendn-admin #229); inventing
-             * initials re-adds a weaker version of the same claim about people
-             * the payload does not even describe.
-             *
-             * A creature says "a person is here" and nothing else — and it is
-             * the convention the product already uses, since the pseudonyms it
-             * hands out are adjective-plus-animal.
-             */
-            const { colors, character } = pseudonymAvatar(`${seed}:${i}`)
-            return (
-              <LinearGradient
-                key={i}
-                colors={colors as [string, string]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={[styles.avatar, i > 0 && styles.avatarOverlap]}
-              >
-                <Text style={styles.avatarCharacter}>{character}</Text>
-              </LinearGradient>
-            )
-          })}
-          {remainder > 0 ? (
-            <View style={[styles.avatar, styles.avatarMore, styles.avatarOverlap]}>
-              <Text style={styles.avatarMoreText}>+{remainder}</Text>
-            </View>
-          ) : null}
-        </View>
-      ) : null}
-    </View>
-  )
-}
-
-const MAP_FADE_IN = FadeIn.duration(MOTION_DURATION.normal)
-  .easing(RISE_EASE_OUT)
-  .reduceMotion(ReduceMotion.Never)
-
-/**
- * The map inside the Location card — a `MapView` with every gesture off.
- *
- * ## Why the SDK, and why it is still not interactive
- *
- * This was a Google Static Maps image, which is billed per request and needs a
- * key that ships in the bundle and cannot be restricted to this app: the Static
- * Maps web service is a plain HTTPS GET and carries no app identity for Google
- * to check. Mobile SDK map loads are free and their keys *are* restricted to a
- * bundle identifier or a package plus signing certificate, so the same picture
- * costs nothing and the key is bound to this app.
- *
- * The original objection stands and is honoured: "an interactive map inside a
- * scrolling card is a gesture fight nobody asked for". Every gesture is
- * disabled, so this is a static picture that happens to be drawn by the SDK —
- * the tap still belongs to the card and still opens external maps. Panning
- * belongs in Hotspots' "Explore the Grid", where it is the point, and the SDK
- * being here is what makes that a component change rather than a project one.
- *
- * ## Absent is still a supported state
- *
- * No coordinate means a plain surface, exactly as before — a broken map inside
- * a card makes the card look broken, and the frame's map is decorative enough
- * that its absence costs nothing. That is also the no-key state: without a key
- * the SDK draws an empty grid rather than throwing, and `liteMode` on Android
- * keeps even that cheap.
- */
-export function SceneMap({
-  latitude,
-  longitude,
-}: {
-  latitude: number
-  longitude: number
-}) {
-  /*
-   * 0,0 is in the Gulf of Guinea and is what an unset coordinate looks like in
-   * this schema, so it is treated as absent rather than drawn — carried over
-   * from `staticMapUrl`, which made the same check.
-   */
-  const hasCoords = !!latitude && !!longitude
-
-  /*
-   * The map mounts late (after interactions settle), so it fades in rather
-   * than popping onto a card that is already on screen. A fade is already the
-   * reduced form, so it stays under Reduce Motion.
-   */
-  const body = hasCoords ? (
-    <Animated.View style={StyleSheet.absoluteFill} entering={MAP_FADE_IN} pointerEvents="none">
-      <MapView
-        style={StyleSheet.absoluteFill}
-        customMapStyle={DARK_MAP_STYLE}
-        initialRegion={{
-          latitude,
-          longitude,
-          latitudeDelta: LOCATION_CARD_DELTA,
-          longitudeDelta: LOCATION_CARD_DELTA,
-        }}
-        /*
-         * Every gesture off. This is a picture, not a map you steer — the tap
-         * belongs to the card, which opens external maps.
-         */
-        scrollEnabled={false}
-        zoomEnabled={false}
-        rotateEnabled={false}
-        pitchEnabled={false}
-        toolbarEnabled={false}
-        /*
-         * Android's lite mode renders a single bitmap instead of a live map
-         * surface. Cheaper, and correct here for the same reason the gestures are
-         * off: nothing about this slot needs a live map.
-         */
-        liteMode
-        pointerEvents="none"
-      >
-        <Marker
-          coordinate={{ latitude, longitude }}
-          /*
-           * `textPrimary`, not the accent: the accent is the CTA's on this screen
-           * (docs/DESIGN_SYSTEM.md). A white pin still reads as ours rather than
-           * as Google's default red, without shipping an icon.
-           */
-          pinColor={EMBER.textPrimary}
-        />
-      </MapView>
-    </Animated.View>
-  ) : null
-
-  return <View style={styles.map}>{body}</View>
-}
-
-/**
- * The venue card. Frame `1141:4900`: #141313, 32pt radius, hairline border.
- *
- * `map` stays a slot so the card can be rendered without a coordinate — the
- * harness does exactly that, and an event with no venue geocoded should show
- * the address without an empty grey rectangle under it.
- */
-export function SceneLocationCard({
-  venue,
-  area,
-  map,
-}: {
-  venue: string
-  area: string
-  map?: React.ReactNode
-}) {
-  return (
-    <View style={styles.card}>
-      <View style={styles.cardBody}>
-        <Text style={styles.eyebrow}>LOCATION</Text>
-        <Text style={styles.venue}>{venue}</Text>
-        <View style={styles.addressRow}>
-          {/* Frame `1141:4907`: a 16x20 filled pin — Material `location_on`. */}
-          <MaterialIcons name="location-on" size={16} color={EMBER.textSecondary} />
-          <Text style={styles.address} numberOfLines={2}>
-            {area}
-          </Text>
-        </View>
-      </View>
-      {/* Not wrapped — `SceneMap` is its own 256pt band, and nesting it in a
-          second one stacked two of them. */}
-      {map}
-    </View>
-  )
-}
-
-/**
- * The organiser's photographs, swipeable, opening full screen on tap.
- *
- * ## Not on the frame, and it should be
- *
- * `1141:4853` has no gallery. The organiser form has had a reorderable gallery
- * the whole time — it is the same `event_media` the feed card cycles — so
- * without this, everything past the first item is authored and then never
- * shown anywhere a guest looks. That is a feature with a write path and no
- * read path, which is worse than one that does not exist.
- *
- * ## A rail, not a grid
- *
- * A grid commits vertical space proportional to the count, and the count is the
- * organiser's, so a diligent one pushes the Location card off the screen. A
- * rail costs one row whatever they upload, and swiping it is the same gesture
- * as the lightbox it opens.
- *
- * Videos are excluded: the hero already plays them, and a muted autoplaying
- * tile in a horizontal rail is the thing that makes a scroll stutter. The rail
- * is stills, and `SceneHero` is motion.
- */
-export function SceneGallery({
-  items,
-  onOpen,
-}: {
-  items: FeedMediaItem[]
-  onOpen: (index: number) => void
-}) {
-  if (items.length === 0) return null
-  return (
-    <View style={styles.gallerySection}>
-      <SceneHeading>Gallery</SceneHeading>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.galleryScroll}
-        contentContainerStyle={styles.galleryRail}
-        // Lands on a tile rather than between two, without paging the whole
-        // width — the rail deliberately shows part of the next one as an
-        // affordance that there is a next one.
-        snapToInterval={GALLERY_TILE + SPACE.md}
-        decelerationRate="fast"
-      >
-        {items.map((item, i) => {
-          /*
-           * A clip shows its **poster**, never the clip.
-           *
-           * A rail of muted autoplaying videos is the single most reliable way
-           * to make a scroll stutter, and it would also mean several decoders
-           * alive at once for tiles nobody has asked to watch. The badge says
-           * there is motion behind it; the lightbox is where it plays.
-           */
-          const uri = item.kind === 'image' ? item.url : item.posterUrl
-          return (
-            <ScalePress
-              key={`${item.url}-${i}`}
-              haptic={false}
-              onPress={() => onOpen(i)}
-              accessibilityRole="imagebutton"
-              accessibilityLabel={
-                item.kind === 'video'
-                  ? `Video ${i + 1} of ${items.length}`
-                  : `Photo ${i + 1} of ${items.length}`
-              }
-            >
-              <Image
-                source={{ uri }}
-                style={styles.galleryTile}
-                contentFit="cover"
-                cachePolicy="memory-disk"
-                transition={150}
-                recyclingKey={uri}
-              />
-              {item.kind === 'video' ? (
-                <View style={styles.playBadge} pointerEvents="none">
-                  <MaterialIcons name="play-arrow" size={ICON.md} color={EMBER.textPrimary} />
-                </View>
-              ) : null}
-            </ScalePress>
-          )
-        })}
-      </ScrollView>
-    </View>
-  )
-}
-
-/**
- * An amenity tile. Frame `1141:4918`: 2-up, 16pt gap, 32pt radius, 24pt pad.
- *
- * **The vocabulary now exists**, so the screen draws these. This used to say
- * "nothing populates these yet" and set the condition for drawing them: "not
- * until there is something true to put in it". `amenities` is a curated table
- * with `name`, `subtitle`, `icon` and `sort_order`, joined per event and
- * serialised on the detail payload — so the condition is met and the comment
- * that recorded it would otherwise have outlived the thing it described.
- *
- * `house_rules` is still free text and still a different thing.
- */
-/**
- * The tile tints, in order.
- *
- * `1141:4919` is `#F79EFF` and `1141:4925` is `#FF6D8D`. The violet stays
- * (`EMBER.violet`); the rose was the brand gradient's pink end and is now
- * `textSecondary`, because the accent family is the CTA's on this screen
- * (docs/DESIGN_SYSTEM.md). Two tones still keep a pair of tiles reading as two
- * things rather than one element repeated.
- *
- * Alternated by index rather than mapped per amenity: the vocabulary is
- * curated and open-ended, and a per-slug colour map would leave every amenity
- * added later with no colour, or send somebody to the client to add one.
- */
-export const AMENITY_TINTS = [EMBER.violet, EMBER.textSecondary] as const
-
-export function SceneAmenity({
-  icon,
-  title,
-  subtitle,
-  /**
-   * The glyph colour. Callers alternate `AMENITY_TINTS` so a pair of tiles
-   * reads as two things; alone, a tile is `textSecondary`, never the accent.
-   */
-  color = EMBER.textSecondary,
-  /**
-   * The frame's two icons are **different sizes** — `1141:4919` is 18 and
-   * `1141:4925` is 20 — and both were built at 20.
-   *
-   * That is not a mistake in the design: `local_bar` is a tall narrow glass and
-   * `camera` is a wide circle, so matching their box sizes makes the cocktail
-   * read larger than the camera. The frame sized them to look equal, which is
-   * what optical sizing is for, and copying the numbers is the whole point of
-   * measuring rather than eyeballing.
-   */
-  iconSize = 20,
-  style,
-}: {
-  icon: React.ComponentProps<typeof MaterialIcons>['name']
-  title: string
-  subtitle: string
-  color?: string
-  iconSize?: number
-  style?: StyleProp<ViewStyle>
-}) {
-  return (
-    /*
-      Grouped, and its type is capped.
-
-      Two Texts in a 126pt-minimum box: at a large accessibility size the title
-      and subtitle together would grow the tile past its neighbour's rhythm. 1.5 is the largest step both lines still fit at.
-
-      `accessible` collapses the pair into one announcement — "Open Bar,
-      Premium Spirits" — rather than two stops that each say half of it.
-    */
-    <View
-      style={[styles.amenity, style]}
-      accessible
-      accessibilityLabel={`${title}. ${subtitle}`}
-    >
-      <MaterialIcons name={icon} size={iconSize} color={color} />
-      <Text style={styles.amenityTitle} maxFontSizeMultiplier={1.5} numberOfLines={1}>
-        {title}
-      </Text>
-      <Text style={styles.amenitySubtitle} maxFontSizeMultiplier={1.5} numberOfLines={2}>
-        {subtitle}
-      </Text>
-    </View>
-  )
+  return <Text style={styles.ink}>{children}</Text>
 }
 
 /**
@@ -644,7 +104,7 @@ export function SceneAmenity({
  * inventing a commitment the product cannot honour. The label says joining,
  * which is what actually happens.
  */
-export type SceneCTAState = 'rsvp' | 'rsvpd' | 'waitlisted' | 'join' | 'going' | 'ended' | 'rate'
+export type SceneCTAState = 'rsvp' | 'rsvpd' | 'waitlisted' | 'join' | 'going' | 'ended' | 'rate' | 'cancelled'
 
 /**
  * What the button says, per state.
@@ -686,6 +146,8 @@ const CTA_LABEL: Record<SceneCTAState, string> = {
   going: "You're in",
   ended: "See what's on tonight",
   rate: 'Rate who you met',
+  // The organiser called it off (Flow 15 #10): one neutral line, and nothing to press.
+  cancelled: 'Cancelled',
 }
 
 /**
@@ -712,7 +174,7 @@ export function sceneCtaLabel(state: SceneCTAState, alone = false): string {
  * the same reason `going` is not accompanied by a "leave" button: one slot,
  * one subject, and the state tells you which way the tap goes.
  */
-const CTA_QUIET: readonly SceneCTAState[] = ['rsvpd', 'waitlisted', 'going', 'ended']
+const CTA_QUIET: readonly SceneCTAState[] = ['rsvpd', 'waitlisted', 'going', 'ended', 'cancelled']
 
 /** Before the doors: the RSVP slot's state from the server's answer. */
 export function rsvpCtaState(status: string | null | undefined): 'rsvp' | 'rsvpd' | 'waitlisted' {
@@ -844,7 +306,7 @@ export function SceneDetails({ blocks }: { blocks: readonly DetailBlock[] }) {
     <View style={styles.detailGroup}>
       {blocks.map((block) => (
         <View key={block.key} style={styles.detailBlock}>
-          <SceneHeading>{block.title}</SceneHeading>
+          <SectionHeader title={block.title} />
 
           {block.kind === 'prose' ? <SceneBody>{block.body}</SceneBody> : null}
 
@@ -891,11 +353,11 @@ export function SceneDetails({ blocks }: { blocks: readonly DetailBlock[] }) {
                         style={{
                           transform: [{ rotate: isOpen ? '180deg' : '0deg' }],
                           transitionProperty: 'transform',
-                          transitionDuration: reduceMotion ? 0 : MOTION_DURATION.normal,
-                          transitionTimingFunction: RISE_EASE_OUT_CSS,
+                          transitionDuration: reduceMotion ? 0 : DURATION.base,
+                          transitionTimingFunction: TURN_EASE,
                         }}
                       >
-                        <MaterialIcons name="expand-more" size={ICON.md} color={EMBER.textSecondary} />
+                        <Icon name="chevron-down" size={ICON.control} color={COLOR.textSecondary} />
                       </Animated.View>
                     </View>
                   </ScalePress>
@@ -914,193 +376,146 @@ export function SceneDetails({ blocks }: { blocks: readonly DetailBlock[] }) {
   )
 }
 
-const styles = StyleSheet.create({
-  heading: { ...TYPE.heading },
-  body: { ...TYPE.body, color: EMBER.textSecondary },
-  bodyAccent: { color: EMBER.textPrimary },
+/**
+ * The organiser's photographs, swipeable, opening full screen on tap.
+ *
+ * ## Not on the frame, and it should be
+ *
+ * `1141:4853` has no gallery. The organiser form has had a reorderable gallery
+ * the whole time — it is the same `event_media` the feed card cycles — so
+ * without this, everything past the first item is authored and then never
+ * shown anywhere a guest looks. That is a feature with a write path and no
+ * read path, which is worse than one that does not exist.
+ *
+ * ## A rail, not a grid
+ *
+ * A grid commits vertical space proportional to the count, and the count is the
+ * organiser's, so a diligent one pushes the Location card off the screen. A
+ * rail costs one row whatever they upload, and swiping it is the same gesture
+ * as the lightbox it opens.
+ *
+ * Videos are excluded: the hero already plays them, and a muted autoplaying
+ * tile in a horizontal rail is the thing that makes a scroll stutter. The rail
+ * is stills, and `SceneHero` is motion.
+ */
+export function SceneGallery({
+  items,
+  onOpen,
+}: {
+  items: FeedMediaItem[]
+  onOpen: (index: number) => void
+}) {
+  if (items.length === 0) return null
+  return (
+    <View style={styles.gallerySection}>
+      <SectionHeader title="Gallery" />
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.galleryScroll}
+        contentContainerStyle={styles.galleryRail}
+        // Lands on a tile rather than between two, without paging the whole
+        // width — the rail deliberately shows part of the next one as an
+        // affordance that there is a next one.
+        snapToInterval={GALLERY_TILE + SPACE.md}
+        decelerationRate="fast"
+      >
+        {items.map((item, i) => {
+          /*
+           * A clip shows its **poster**, never the clip.
+           *
+           * A rail of muted autoplaying videos is the single most reliable way
+           * to make a scroll stutter, and it would also mean several decoders
+           * alive at once for tiles nobody has asked to watch. The badge says
+           * there is motion behind it; the lightbox is where it plays.
+           */
+          const uri = item.kind === 'image' ? item.url : item.posterUrl
+          return (
+            <ScalePress
+              key={`${item.url}-${i}`}
+              haptic={false}
+              onPress={() => onOpen(i)}
+              accessibilityRole="imagebutton"
+              accessibilityLabel={
+                item.kind === 'video'
+                  ? `Video ${i + 1} of ${items.length}`
+                  : `Photo ${i + 1} of ${items.length}`
+              }
+            >
+              <Image
+                source={{ uri }}
+                style={styles.galleryTile}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+                transition={150}
+                recyclingKey={uri}
+              />
+              {item.kind === 'video' ? (
+                <View style={styles.playBadge} pointerEvents="none">
+                  <Icon name="play" size={ICON.control} color={COLOR.textPrimary} />
+                </View>
+              ) : null}
+            </ScalePress>
+          )
+        })}
+      </ScrollView>
+    </View>
+  )
+}
 
-  byline: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', columnGap: SPACE.lg, rowGap: SPACE.xs },
-  bylineHost: { ...TYPE.meta, color: EMBER.textSecondary },
-  bylineName: { ...TYPE.meta, color: EMBER.textPrimary },
-  bylineLive: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
-  liveDot: { width: SPACE.sm, height: SPACE.sm, borderRadius: EMBER_RADIUS.pill, backgroundColor: EMBER.success },
+
+const styles = StyleSheet.create({
+  ink: { color: COLOR.textPrimary },
+  secondary: { color: COLOR.textSecondary },
 
   detailGroup: { gap: SPACE.xxl },
   detailBlock: { gap: SPACE.lg },
   detailPairs: { gap: SPACE.md },
   detailPair: { gap: SPACE.xxs },
-  detailPairLabel: { ...TYPE.bodyStrong },
-  detailPairValue: { ...TYPE.body, color: EMBER.textSecondary },
-  /*
-   * `CONTROL.md` minimum: this is the one control in the section, and a question
-   * people are trying to tap is the wrong place to be stingy with the target.
-   */
+  detailPairLabel: { ...TYPE.bodyStrong, color: COLOR.textPrimary },
+  detailPairValue: { ...TYPE.body, color: COLOR.textSecondary },
+  // A question people are trying to tap is the wrong place to be stingy with the target.
   detailQuestion: { gap: SPACE.sm },
-  detailQuestionButton: { minHeight: CONTROL.md, justifyContent: 'center' },
-  detailQuestionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: SPACE.md,
-  },
-  detailQuestionText: { ...TYPE.bodyStrong, flex: 1 },
-  detailAnswer: { ...TYPE.body, color: EMBER.textSecondary, paddingBottom: SPACE.xs },
-
-  attendees: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-  },
-  /*
-   * The heading's role, so the pair reads as one row. Secondary rather than the
-   * accent: the CTA is this screen's one accent.
-   */
-  attendeeCount: { ...TYPE.heading, color: EMBER.textSecondary },
-
-  attendeesSection: { gap: SPACE.lg },
-  /* Frame `1141:4890`: 56pt discs, 4pt page-coloured ring, overlapping 16. */
-  stack: { flexDirection: 'row', alignItems: 'center' },
-  avatar: {
-    width: 56,
-    height: 56,
-    borderRadius: EMBER_RADIUS.pill,
-    borderWidth: 4,
-    borderColor: EMBER.bg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarOverlap: { marginLeft: -SPACE.lg },
-  /*
-   * 26 inside a 48pt inner circle — the disc is 56 with a 4pt border, so the
-   * usable area is 48 and this fills 54% of it, which centres a glyph without
-   * letting its bounding box touch the ring.
-   *
-   * No `fontFamily`: an emoji has to resolve to the system colour font, and
-   * naming a text face here makes some platforms fall back to a monochrome
-   * outline.
-   */
-  avatarCharacter: {
-    // design-exception: emoji glyph sized to fill the 48pt inner disc
-    fontSize: 26, lineHeight: 32,
-    textAlign: 'center',
-  },
-  avatarMore: { backgroundColor: EMBER.surfaceSunken },
-  avatarMoreText: { ...TYPE.bodyStrong },
-
-  card: {
-    backgroundColor: EMBER.surfaceMedia,
-    borderWidth: 1,
-    borderColor: EMBER.separator,
-    borderRadius: EMBER_RADIUS.card,
-    overflow: 'hidden',
-  },
-  /*
-   * Card padding (24) on three sides, `gap-[8px]`.
-   *
-   * The bottom is **56** (`1141:4901`). It is the gap between the address line
-   * and the map band below it, and at 32 the two crowded — the card read as
-   * text sitting on a photograph rather than as a caption above a map.
-   */
-  // design-exception: 56 gap to the map band, pinned by sceneCta.test.ts (1141:4901)
-  cardBody: { paddingTop: SPACE.xl, paddingHorizontal: SPACE.xl, paddingBottom: 56, gap: SPACE.sm },
-  /*
-   * `1141:4903`: Plus Jakarta **Regular**, not Bold.
-   *
-   * Both this and the venue name were built Bold. The frame sets the whole card
-   * in Regular and lets the 1.6px tracking and the `#AEAAAA` do the eyebrow's
-   * work — bold at 16pt with wide tracking reads as a heading competing with
-   * "The Experience" above it, which is a heading.
-   */
-  eyebrow: TYPE.label,
-  /*
-   * `1141:4904` is `pt-[16px]`, and `1141:4905` is Plus Jakarta **Regular**.
-   *
-   * The 8 came from reusing the card's `gap`; the frame gives this container
-   * its own top padding on top of that gap, so the venue name sits 24 below the
-   * eyebrow rather than 16.
-   */
-  venue: { ...TYPE.body, paddingTop: SPACE.lg },
-  addressRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
-  address: { ...TYPE.body, color: EMBER.textSecondary, flexShrink: 1 },
-  map: { height: MAP_HEIGHT, backgroundColor: EMBER.surfaceSunken },
+  detailQuestionButton: { minHeight: SIZE.control, justifyContent: 'center' },
+  detailQuestionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.md },
+  detailQuestionText: { ...TYPE.bodyStrong, color: COLOR.textPrimary, flex: 1 },
+  detailAnswer: { ...TYPE.body, color: COLOR.textSecondary, paddingBottom: SPACE.xs },
 
   gallerySection: { gap: SPACE.lg },
-  // Bleeds past the page gutter so the rail runs to the edge, which is what
-  // says "this scrolls" without needing a chevron. The first tile still starts
-  // on the gutter.
+  // Bleeds past the page gutter so the rail runs to the edge, which is what says "this scrolls".
   galleryScroll: { marginHorizontal: -SCENE_PADDING_HORIZONTAL },
   galleryRail: { gap: SPACE.md, paddingHorizontal: SCENE_PADDING_HORIZONTAL },
-  galleryTile: {
-    width: GALLERY_TILE,
-    height: GALLERY_TILE,
-    borderRadius: EMBER_RADIUS.lg,
-    backgroundColor: EMBER.surfaceSunken,
-  },
+  galleryTile: { width: GALLERY_TILE, height: GALLERY_TILE, borderRadius: RADIUS.mediaInCard, backgroundColor: COLOR.surfaceSunken },
   playBadge: {
     position: 'absolute',
     left: SPACE.md,
     bottom: SPACE.md,
-    width: CONTROL.sm,
-    height: CONTROL.sm,
-    borderRadius: EMBER_RADIUS.pill,
+    width: SIZE.tag,
+    height: SIZE.tag,
+    borderRadius: RADIUS.capsule,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: EMBER.scrim,
+    backgroundColor: COLOR.scrim,
   },
-
-  /*
-   * `1141:4917` is `grid-rows-[126px]` — a **fixed** 126, not content height.
-   *
-   * Content-sized, the two tiles agreed only while their text wrapped the same
-   * way. "Open Bar / Premium Spirits" and "Pro Photo / Digital Gallery" both
-   * fit one line each, so the row looked right — until an amenity with a longer
-   * subtitle wrapped and one tile grew taller than its neighbour, which is a
-   * ragged row rather than a pair.
-   *
-   * A grid row is a floor and a ceiling in CSS; here it is `minHeight`, with
-   * the row stretching both tiles to the taller one, so the pair stays level
-   * and a large text size grows the tile instead of clipping its words.
-   */
-  amenity: {
-    flex: 1,
-    minHeight: AMENITY_TILE_MIN_HEIGHT,
-    backgroundColor: EMBER.surfaceMedia,
-    borderWidth: 1,
-    borderColor: EMBER.separator,
-    borderRadius: EMBER_RADIUS.card,
-    padding: SPACE.xl,
-  },
-  amenityTitle: { ...TYPE.bodyStrong, paddingTop: SPACE.md },
-  amenitySubtitle: { ...TYPE.meta },
 
   ctaFill: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: SPACE.md,
-    /*
-     * Full width (Flow 3's dock, A78): the label changes in place and the
-     * width never has to follow it. The fill clips the gradient to the pill.
-     */
+    // Full width (the dock's gutters stretch it): the label changes in place and the width never has to follow it.
     paddingHorizontal: SPACE.xl,
-    // 15, with a 24pt icon and a 24pt line: 1 + 15 + 24 + 15 + 1 = 56, which is
-    // SCENE_CTA_HEIGHT. Change either and the dock's reserved band is wrong.
-    // design-exception: 15 lands the bordered pill on CONTROL.lg (56)
+    // 15, with a 24pt icon and a 24pt line: 1 + 15 + 24 + 15 + 1 = 56, which is SCENE_CTA_HEIGHT. Change either and the dock is wrong.
+    // design-exception: 15 lands the bordered pill on SIZE.primary (56)
     paddingVertical: 15,
-    borderRadius: EMBER_RADIUS.pill,
+    borderRadius: RADIUS.capsule,
     overflow: 'hidden',
     // Present in both states so the height never changes between them.
     borderWidth: 1,
   },
   // The gradient layer draws the to-do fill; the 8% white is under it in both states.
-  ctaFillLoud: {
-    backgroundColor: MATERIAL.fillOnGlass,
-    borderColor: 'transparent',
-  },
-  ctaFillQuiet: {
-    backgroundColor: MATERIAL.fillOnGlass,
-    borderColor: 'transparent',
-  },
+  ctaFillLoud: { backgroundColor: MATERIAL.fillOnGlass, borderColor: 'transparent' },
+  ctaFillQuiet: { backgroundColor: MATERIAL.fillOnGlass, borderColor: 'transparent' },
   // TYPE.button's 24pt line is one of the terms SCENE_CTA_HEIGHT is summed from.
   ctaLabel: { ...TYPE.button },
   ctaInk: { color: COLOR.textOnGradient },

@@ -1,9 +1,9 @@
 import { Sheet } from '../ds/Sheet'
 import { TextArea, TextField } from '../ds/TextField'
-import { CONTROL } from '../../lib/theme'
+import { SIZE } from '../../lib/design/tokens'
 
 /** The multi-line fields start short (two controls tall): a keyboard leaves them little room. */
-const AREA_MIN_HEIGHT = CONTROL.lg * 2
+const AREA_MIN_HEIGHT = SIZE.primary * 2
 
 /** The server refuses an announcement over 1,000 characters (`announce/route.ts`); the edit's limits are its zod schema's. */
 export const ANNOUNCEMENT_LIMIT = 1000

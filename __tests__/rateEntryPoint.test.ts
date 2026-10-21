@@ -50,7 +50,8 @@ describe("the entry point to peer rating", () => {
      * `PLACEHOLDER_SCREENS.md`: "Only after the event ends — during the night a
      * rating is leverage; afterwards it is reflection."
      */
-    expect(CTA_STATE).toMatch(/^const ctaState: SceneCTAState = isEnded/)
+    // A cancelled event has nothing to rate; otherwise the first question is whether it has ended.
+    expect(CTA_STATE).toMatch(/^const ctaState: SceneCTAState = cancelled\s*\? 'cancelled'\s*: isEnded/)
   })
 
   it("only appears to somebody who was actually there", () => {
@@ -96,7 +97,7 @@ describe("the entry point to peer rating", () => {
     // Nothing after the end is disabled: `rate` rates, `ended` offers tonight.
     expect(CTA).toMatch(/const disabled = !onPress/)
     // The CTA is never disabled now: a check-in is the pass's, so there is no busy state here (Flow 4).
-    expect(DETAIL).toMatch(/onPress=\{primaryActionPress\}/)
+    expect(DETAIL).toMatch(/onPress=\{cancelled \? undefined : primaryActionPress\}/)
   })
 
   it("sends somebody who wasn't there to tonight, not to a dead pill", () => {
