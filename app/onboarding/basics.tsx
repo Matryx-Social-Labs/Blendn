@@ -1,11 +1,12 @@
 import { ScreenProfiler } from '../../lib/perf'
-import { useRef, useState } from 'react'
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { useState } from 'react'
+import { StyleSheet, View } from 'react-native'
 
-import ActionTray from '../../components/ActionTray'
-
+import { Button } from '../../components/ds/Button'
 import { ChipSet } from '../../components/ds/ChipSet'
-import { EmberField, EmberFieldGroup } from '../../components/onboarding/EmberControls'
+import { DateField, type DateParts } from '../../components/ds/DateField'
+import { Sheet } from '../../components/ds/Sheet'
+import { TextField } from '../../components/ds/TextField'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import {
   ADULTS_ONLY,
@@ -16,13 +17,12 @@ import {
   splitDateOfBirth,
   type OnboardingGender,
 } from '../../lib/onboarding'
-import { EMBER, SPACE, TYPE } from '../../lib/theme'
+import { SPACE } from '../../lib/design/tokens'
 import { useOnboarding } from '../../lib/useOnboarding'
 import { signOut, useAuth } from '../../lib/useAuth'
 
-
 /**
- * Step one — a name, a gender, a birth date.
+ * Step one: a name, a gender, a birth date.
  *
  * The only step that cannot be skipped. The birth date is why: every age rule
  * on the server derives from it, and an account without one is refused dating
@@ -47,24 +47,20 @@ const GENDERS: { label: string; value: OnboardingGender }[] = [
   { label: 'Prefer not to say', value: 'prefer_not_to_say' },
 ]
 
+/** What the date's hint says while there is nothing to correct (Flow 2 basics 01). */
+const DOB_HINT = 'Your age will be private and used only for verification.'
+/** Under the name: what rooms show of it (SCRUM-493). */
+const NAME_HINT = 'In event rooms you go by a made-up name. If you choose to show yours, people there see your full name.'
+/** The server's cap on a name; typing stops there, as a `maxLength` did. */
+const NAME_MAX = 100
+const NOT_A_DATE = 'That is not a date we recognise.'
+
 function BasicsScreenInner() {
   const { draft, loaded, saving, commit } = useOnboarding('basics')
 
   const [name, setName] = useState('')
   const [gender, setGender] = useState<OnboardingGender | undefined>()
   const [dob, setDob] = useState({ day: '', month: '', year: '' })
-
-  /*
-   * Three boxes, and the keyboard should walk between them.
-   *
-   * Typing `1` `7` into DD and then having to *aim* at MM is the kind of
-   * friction that reads as the app being slow rather than as one extra tap.
-   * Advancing on a full box is what every date field and every OTP field does,
-   * so it is also what people already expect.
-   */
-  const dayRef = useRef<TextInput>(null)
-  const monthRef = useRef<TextInput>(null)
-  const yearRef = useRef<TextInput>(null)
 
   // Prefilled once storage has answered, not on every render — otherwise a
   // rehydrate landing mid-edit would overwrite what is being typed. Done during
@@ -114,11 +110,25 @@ function BasicsScreenInner() {
   const dateOfBirth = joinDateOfBirth(dob.day, dob.month, dob.year)
   const patch = { name: name.trim(), gender, dateOfBirth }
   const ready = canContinue('basics', patch)
-  // The keyboard's own "go" on the last box does what Continue does, and only
-  // when Continue could. `commit` refuses a second save while one is running.
+  // Continue commits only when it could, and `commit` refuses a second save while one is running.
   const submit = () => {
     if (ready && !saving) void commit(patch)
   }
+
+  /*
+   * Why Continue is off, shown only once all three boxes are full
+   * (`joinDateOfBirth` is undefined until then) — complaining while
+   * someone is halfway through typing 1998 is nagging, not helping.
+   *
+   * Under 18 first: Blend'n is 18+ (SCRUM-330), and every Google and
+   * Apple account passes this screen before it can finish onboarding.
+   * Anything else that is not a usable birth date — 30 February, the
+   * future — is "not a date". That branch used to test `!dateOfBirth`,
+   * which is never true once the boxes are full, so it never showed.
+   */
+  const underAge = isUnderAccountAge(dateOfBirth)
+  const notADate = !underAge && !!dateOfBirth && !isCompleteDateOfBirth(dateOfBirth)
+  const dateError = underAge ? ADULTS_ONLY : notADate ? NOT_A_DATE : undefined
 
   return (
     <OnboardingScreen
@@ -132,169 +142,88 @@ function BasicsScreenInner() {
       secondaryLabel="Not you? Sign out"
       onSecondary={() => setConfirmSignOut(true)}
     >
-      {/*
+      {(reveal) => (
+        <>
+          {/*
         Full name; a made-up name in rooms until the person shows theirs, and
         then the whole of it (`roomIdentity`, admin lib/identity.ts). The
         helper said "only your first name" and nothing shortens it (SCRUM-493).
-        
+
         `User.name` is one field and holds whatever signup wrote, so collecting
         the whole thing costs nothing and the room is protected by the pseudonym
         regardless — a full name is only ever seen by someone who has matched,
         opened a conversation, or been revealed to.
-        
-        It also matters at exactly the moment it is seen. "Julian" is thin for
-        someone deciding whether to trust a stranger they are about to meet;
-        the reveal is supposed to be a real identity, and half of one is a
-        strange thing to reveal.
       */}
-      <EmberField
-        label="Your name"
-        placeholder="First and last name"
-        helper="In event rooms you go by a made-up name. If you choose to show yours, people there see your full name."
-        value={name}
-        onChangeText={setName}
-        autoCapitalize="words"
-        // A name is not a word to correct.
-        autoCorrect={false}
-        autoComplete="name"
-        textContentType="name"
-        returnKeyType="next"
-        // Next goes to the birth date, and the keyboard stays up on the way.
-        submitBehavior="submit"
-        onSubmitEditing={() => dayRef.current?.focus()}
-        maxLength={100}
-      />
+          <TextField
+            label="Your name"
+            placeholder="First and last name"
+            hint={NAME_HINT}
+            value={name}
+            onChangeText={(value) => setName(value.slice(0, NAME_MAX))}
+            autoCapitalize="words"
+            // A name is not a word to correct.
+            autoCorrect={false}
+            autoComplete="name"
+            textContentType="name"
+            // The birth date is three boxes of its own, which the keyboard cannot walk to: done puts it away.
+            returnKeyType="done"
+            testID="onboarding-name"
+            {...reveal}
+          />
 
-      <ChipSet
-        label="Gender identity"
-        items={GENDERS.map((option) => ({ key: option.value, label: option.label }))}
-        selection="single"
-        selected={gender ? [gender] : []}
-        // Tapping the chosen one again clears it. Gender is optional and
-        // there is otherwise no way back to "unanswered" once tapped.
-        onToggle={(value) => setGender(gender === value ? undefined : (value as typeof gender))}
-        testID="onboarding-gender"
-      />
+          <ChipSet
+            label="Gender identity"
+            items={GENDERS.map((option) => ({ key: option.value, label: option.label }))}
+            selection="single"
+            selected={gender ? [gender] : []}
+            // Tapping the chosen one again clears it. Gender is optional and
+            // there is otherwise no way back to "unanswered" once tapped.
+            onToggle={(value) => setGender(gender === value ? undefined : (value as typeof gender))}
+            testID="onboarding-gender"
+          />
 
-      <EmberFieldGroup
-        label="Date of birth"
-        helper="Your age will be private and used only for verification."
-      >
-        <View style={styles.dateRow}>
-          <View style={styles.dateSmall}>
-            <EmberField
-              compact
-              label="Day of birth"
-              placeholder="DD"
-              ref={dayRef}
-              value={dob.day}
-              onChangeText={(value) => {
-                const day = digits(value, 2)
-                setDob({ ...dob, day })
-                // Two digits, or a leading digit that cannot start a valid day
-                // (`4`–`9` means April..., not the 4th of a two-digit day).
-                if (day.length === 2 || Number(day) > 3) monthRef.current?.focus()
-              }}
-              keyboardType="number-pad"
-              maxLength={2}
+          <View style={styles.date}>
+            <DateField
+              label="Date of birth"
+              value={[dob.day, dob.month, dob.year] as DateParts}
+              onChange={([day, month, year]) => setDob({ day, month, year })}
+              error={dateError}
+              hint={dateError ? undefined : DOB_HINT}
+              testID="onboarding-dob"
             />
+            {/* Under 18 is a dead end on this account, so the exit sits beside the sentence. */}
+            {underAge ? (
+              <Button
+                label="Sign out"
+                kind="tertiary"
+                size="sm"
+                onPress={() => setConfirmSignOut(true)}
+                testID="onboarding-under-age-sign-out"
+              />
+            ) : null}
           </View>
-          <View style={styles.dateSmall}>
-            <EmberField
-              compact
-              label="Month of birth"
-              placeholder="MM"
-              ref={monthRef}
-              value={dob.month}
-              onChangeText={(value) => {
-                const month = digits(value, 2)
-                setDob({ ...dob, month })
-                if (month.length === 2 || Number(month) > 1) yearRef.current?.focus()
-              }}
-              keyboardType="number-pad"
-              maxLength={2}
-            />
-          </View>
-          <View style={styles.dateLarge}>
-            <EmberField
-              compact
-              label="Year of birth"
-              placeholder="YYYY"
-              ref={yearRef}
-              value={dob.year}
-              onChangeText={(year) => setDob({ ...dob, year: digits(year, 4) })}
-              keyboardType="number-pad"
-              returnKeyType="go"
-              onSubmitEditing={submit}
-              maxLength={4}
-            />
-          </View>
-        </View>
-        {/*
-         * Why Continue is off, shown only once all three boxes are full
-         * (`joinDateOfBirth` is undefined until then) — complaining while
-         * someone is halfway through typing 1998 is nagging, not helping.
-         *
-         * Under 18 first: Blend'n is 18+ (SCRUM-330), and every Google and
-         * Apple account passes this screen before it can finish onboarding.
-         * Anything else that is not a usable birth date — 30 February, the
-         * future — is "not a date". That branch used to test `!dateOfBirth`,
-         * which is never true once the boxes are full, so it never showed.
-         */}
-        {isUnderAccountAge(dateOfBirth) ? (
-          <Text style={styles.error} accessibilityLiveRegion="polite">{ADULTS_ONLY}</Text>
-        ) : dateOfBirth && !isCompleteDateOfBirth(dateOfBirth) ? (
-          <Text style={styles.error} accessibilityLiveRegion="polite">That is not a date we recognise.</Text>
-        ) : null}
-        {/* Under 18 is a dead end on this account, so the exit sits beside it. */}
-        {isUnderAccountAge(dateOfBirth) ? (
-          <Pressable
-            onPress={() => setConfirmSignOut(true)}
-            accessibilityRole="button"
-            accessibilityLabel="Sign out"
-            hitSlop={SPACE.md}
-            style={styles.signOutInline}
-          >
-            <Text style={styles.textAction}>SIGN OUT</Text>
-          </Pressable>
-        ) : null}
-      </EmberFieldGroup>
 
-      <ActionTray
-        visible={confirmSignOut}
-        title="Sign out?"
-        message="What you've filled in stays on this phone, so you can pick up here when you sign back in."
-        onClose={() => setConfirmSignOut(false)}
-        buttons={[
-          { label: 'Cancel', variant: 'secondary', onPress: () => setConfirmSignOut(false), disabled: signingOut },
-          { label: 'Sign out', variant: 'primary', onPress: () => void leave(), loading: signingOut },
-        ]}
-      />
+          <Sheet
+            visible={confirmSignOut}
+            onClose={() => setConfirmSignOut(false)}
+            icon="log-out"
+            title="Sign out?"
+            body="What you’ve filled in stays on this phone, so you can pick up here when you sign back in."
+            actions={[
+              { label: 'Cancel', kind: 'secondary', onPress: () => setConfirmSignOut(false), disabled: signingOut },
+              { label: 'Sign out', kind: 'primary', onPress: () => void leave(), loading: signingOut },
+            ]}
+            testID="sign-out-sheet"
+          />
+        </>
+      )}
     </OnboardingScreen>
   )
 }
 
-/**
- * Digits only, capped.
- *
- * `keyboardType="number-pad"` is a hint, not a constraint — a hardware
- * keyboard, a paste, and several Android IMEs all put letters into a number
- * pad, and `'1a'` would sail through `maxLength` into the date string.
- */
-function digits(value: string, max: number): string {
-  return value.replace(/\D/g, '').slice(0, max)
-}
-
 const styles = StyleSheet.create({
-  dateRow: { flexDirection: 'row', gap: SPACE.md },
-  dateSmall: { flex: 1 },
-  dateLarge: { flex: 1.5 },
-  error: { ...TYPE.meta, color: EMBER.destructive },
-  signOutInline: { alignSelf: 'flex-start' },
-  // A text action (DESIGN_SYSTEM.md): `label` in `textPrimary`.
-  textAction: { ...TYPE.label, color: EMBER.textPrimary },
+  date: { gap: SPACE.sm },
 })
-
 
 /*
  * Wrapped so `lib/perf.tsx` can report what this screen costs to render.

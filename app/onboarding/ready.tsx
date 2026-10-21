@@ -1,20 +1,14 @@
-import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
 import { useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
 import { InterestChip } from '../../components/ds/Chip'
 import { MomentReady } from '../../components/ds/MomentReady'
+import { font, useBoldText, useSelection } from '../../components/ds/shared'
 import { OptimizedImage } from '../../components/OptimizedImage'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
-import {
-  CONTROL,
-  EMBER,
-  EMBER_RADIUS,
-  ICON,
-  SPACE,
-  TYPE,
-} from '../../lib/theme'
+import { Icon, type IconName } from '../../components/ui/Icon'
+import { COLOR, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
 import { useOnboarding } from '../../lib/useOnboarding'
 
 /**
@@ -50,15 +44,17 @@ export default function ReadyScreen() {
 
   const name = draft.name?.trim()
   const primaryPhoto = draft.photos?.[0]
+  const bold = useBoldText()
+  const sel = useSelection()
 
   return (
     <>
       <OnboardingScreen
         step="ready"
-        title="You're all set"
+        title="You’re all set"
         titleAccent={name ? `, ${name}` : undefined}
         subtitle="Your profile is ready for the community. Review it before you start blending."
-        ctaLabel="Start Blend'n"
+        ctaLabel="Start Blend’n"
         ctaBusy={saving}
         onContinue={() => void complete()}
         secondaryLabel="Edit my details"
@@ -70,56 +66,33 @@ export default function ReadyScreen() {
            * The frame's checkmark badge in the top-right corner — a completion
            * marker, not a control. Hidden from screen readers for that reason.
            */}
-          <View
-            accessibilityElementsHidden
-            importantForAccessibility="no-hide-descendants"
-            style={styles.badge}
-          >
-            <Ionicons
-              name="checkmark"
-              size={ICON.md}
-              color={EMBER.textPrimary}
-            />
+          <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.badge}>
+            <Icon name="check" size={ICON.control} color={COLOR.textPrimary} />
           </View>
 
           {/*
-           * `OptimizedImage`, not React Native's `<Image>`.
-           *
-           * This is a 128pt avatar drawing whatever the person uploaded — which
-           * `blendn-admin/docs/MEDIA.md` asks to be 2048 square. RN's Image decodes the file
-           * at its native size regardless of the box it is drawn in, so a
-           * summary card was holding a four-megapixel bitmap to show a thumbnail,
-           * and re-downloading it on every mount because RN's cache is separate
-           * from the one the rest of the app warms.
-           *
-           * `width`/`height` are the decode hint, so the bitmap is the size of
-           * the thing on screen.
+           * The payoff: a ring around the avatar in the screen's hue (violet: you), a 4 pt surface gap; the gradient stays on the mark
+           * and the primary. `OptimizedImage`, not React Native's `<Image>`: this is a 128 pt avatar drawing whatever the person
+           * uploaded, which `blendn-admin/docs/MEDIA.md` asks to be 2048 square. `width`/`height` are the decode hint, so the
+           * bitmap is the size of the thing on screen.
            */}
-          <View style={styles.avatarRing}>
-            <View style={styles.avatarBorder}>
+          <View style={[styles.avatarRing, { backgroundColor: sel.edge }, !primaryPhoto && styles.avatarRingEmpty]}>
+            <View style={styles.avatarGap}>
               {primaryPhoto ? (
-                <OptimizedImage
-                  source={primaryPhoto}
-                  style={styles.avatar}
-                  width={AVATAR}
-                  height={AVATAR}
-                  contentFit="cover"
-                />
+                <OptimizedImage source={primaryPhoto} style={styles.avatar} width={AVATAR} height={AVATAR} contentFit="cover" />
               ) : (
                 <View style={[styles.avatar, styles.avatarEmpty]} />
               )}
             </View>
           </View>
 
-          <Text style={styles.name}>{name || 'Your name'}</Text>
-          {draft.occupation ? (
-            <Text style={styles.role}>{draft.occupation}</Text>
-          ) : null}
+          <Text style={[font('title', bold), styles.name]}>{name || 'Your name'}</Text>
+          {draft.occupation ? <Text style={[font('meta', bold), styles.role]}>{draft.occupation}</Text> : null}
 
           {draft.bio ? (
             <>
               <View style={styles.divider} />
-              <Text style={styles.bio}>&ldquo;{draft.bio}&rdquo;</Text>
+              <Text style={[font('body', bold), styles.bio]}>{`“${draft.bio}”`}</Text>
             </>
           ) : null}
         </View>
@@ -128,7 +101,9 @@ export default function ReadyScreen() {
           "Primary hub" would read as data we lost rather than as skipped. */}
         {draft.interests?.length ? (
           <View style={styles.interestsCard}>
-            <Text style={styles.interestsHeading}>Interests</Text>
+            <Text accessibilityRole="header" style={[font('heading', bold), styles.heading]}>
+              Interests
+            </Text>
             <View style={styles.interestsRow}>
               {draft.interests.map((interest) => (
                 <InterestChip key={interest} label={interest} />
@@ -136,127 +111,71 @@ export default function ReadyScreen() {
             </View>
           </View>
         ) : null}
-        {draft.location ? (
-          <Summary
-            icon="location"
-            label="Where you live"
-            value={draft.location}
-          />
-        ) : null}
-        {draft.looking_for?.length ? (
-          <Summary
-            icon="people"
-            label="Looking for"
-            value={draft.looking_for.join(' · ')}
-          />
-        ) : null}
+        {draft.location ? <Summary icon="map-pin" label="Where you live" value={draft.location} /> : null}
+        {draft.looking_for?.length ? <Summary icon="users" label="Looking for" value={draft.looking_for.join(' · ')} /> : null}
       </OnboardingScreen>
       {celebrating ? (
-        <MomentReady
-          testID="ready-moment"
-          name={name}
-          onDone={() => router.replace('/onboarding/friends')}
-        />
+        <MomentReady testID="ready-moment" name={name} onDone={() => router.replace('/onboarding/friends')} />
       ) : null}
     </>
   )
 }
 
-function Summary({
-  icon,
-  label,
-  value,
-}: {
-  icon: keyof typeof Ionicons.glyphMap
-  label: string
-  value: string
-}) {
+function Summary({ icon, label, value }: { icon: IconName; label: string; value: string }) {
+  const bold = useBoldText()
   return (
-    <View style={styles.summary}>
-      <View style={styles.summaryIcon}>
-        <Ionicons name={icon} size={ICON.md} color={EMBER.textSecondary} />
-      </View>
-      <View style={styles.summaryText}>
-        <Text style={styles.summaryLabel}>{label}</Text>
-        <Text style={styles.summaryValue}>{value}</Text>
-      </View>
+    <View accessible accessibilityLabel={`${label}, ${value}`} style={styles.summary}>
+      <Icon name={icon} size={ICON.control} color={COLOR.textPrimary} />
+      <Text style={[font('meta', bold), styles.summaryLabel]}>{label}</Text>
+      <Text style={[font('bodyStrong', bold), styles.summaryValue]}>{value}</Text>
     </View>
   )
 }
 
 /** One number, so the box and the decode hint cannot drift apart. */
 const AVATAR = 128
-/** The ring's own thickness plus the gap between it and the photo. */
-const RING = 8
+/** The ring around it: the avatar, a 4 pt gap on each side, and the ring's own 4. */
+const RING = 140
+const GAP = 136
+const BADGE = 40
+const RULE = 96
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: EMBER.surfaceMedia,
-    borderRadius: EMBER_RADIUS.card,
+    alignItems: 'center',
+    gap: SPACE.sm,
     padding: SPACE.xl,
-    alignItems: 'flex-start',
-    gap: SPACE.md,
+    borderRadius: RADIUS.card,
+    backgroundColor: COLOR.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: COLOR.hairline,
   },
   badge: {
     position: 'absolute',
     top: SPACE.lg,
     right: SPACE.lg,
-    width: CONTROL.md,
-    height: CONTROL.md,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.surface,
+    width: BADGE,
+    height: BADGE,
+    borderRadius: RADIUS.capsule,
+    backgroundColor: COLOR.surfaceSunken,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarRing: {
-    width: AVATAR + RING,
-    height: AVATAR + RING,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.textTertiary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarBorder: {
-    width: AVATAR,
-    height: AVATAR,
-    borderRadius: EMBER_RADIUS.pill,
-    borderWidth: 4,
-    borderColor: EMBER.surfaceMedia,
-    overflow: 'hidden',
-  },
-  avatar: { width: '100%', height: '100%' },
-  avatarEmpty: { backgroundColor: EMBER.surfaceSunken },
-  name: TYPE.title,
-  role: { ...TYPE.body, color: EMBER.textSecondary },
-  divider: { width: 96, height: 1, backgroundColor: EMBER.separator },
-  bio: { ...TYPE.body, color: EMBER.textSecondary },
+  avatarRing: { width: RING, height: RING, borderRadius: RADIUS.capsule, alignItems: 'center', justifyContent: 'center', marginBottom: SPACE.sm },
+  avatarRingEmpty: { backgroundColor: COLOR.textTertiary },
+  avatarGap: { width: GAP, height: GAP, borderRadius: RADIUS.capsule, backgroundColor: COLOR.surface, alignItems: 'center', justifyContent: 'center' },
+  avatar: { width: AVATAR, height: AVATAR, borderRadius: RADIUS.capsule, overflow: 'hidden' },
+  avatarEmpty: { backgroundColor: COLOR.surfaceSunken },
+  name: { color: COLOR.textPrimary, textAlign: 'center' },
+  role: { color: COLOR.textSecondary, textAlign: 'center' },
+  divider: { width: RULE, height: StyleSheet.hairlineWidth, backgroundColor: COLOR.hairlineStrong, marginVertical: SPACE.sm },
+  bio: { color: COLOR.textPrimary, textAlign: 'center' },
 
-  interestsCard: {
-    backgroundColor: EMBER.surfaceSunken,
-    borderRadius: EMBER_RADIUS.card,
-    padding: SPACE.xl,
-    gap: SPACE.lg,
-  },
-  interestsHeading: TYPE.heading,
+  interestsCard: { gap: SPACE.md, padding: SPACE.lg, borderRadius: RADIUS.mediaInCard, backgroundColor: COLOR.surfaceSunken },
+  heading: { color: COLOR.textPrimary },
   interestsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
 
-  summary: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACE.lg,
-    backgroundColor: EMBER.surfaceMedia,
-    borderRadius: EMBER_RADIUS.md,
-    padding: SPACE.xl,
-  },
-  summaryIcon: {
-    width: CONTROL.md,
-    height: CONTROL.md,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  summaryText: { flex: 1, gap: SPACE.xxs },
-  summaryLabel: TYPE.meta,
-  summaryValue: TYPE.bodyStrong,
+  summary: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, paddingHorizontal: SPACE.xs },
+  summaryLabel: { color: COLOR.textSecondary },
+  summaryValue: { flex: 1, textAlign: 'right', color: COLOR.textPrimary },
 })

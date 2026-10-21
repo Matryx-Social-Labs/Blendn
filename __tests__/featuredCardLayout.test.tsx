@@ -79,9 +79,11 @@ describe('featuredCardLayout', () => {
   it('makes room for a banner above the header by shrinking, not by running under the bar', () => {
     // "You're in San Francisco — nothing here yet" once pushed the card's date
     // and venue under the bar: the fit assumed nothing sat above the header.
-    const { featuredCardLayout, CHROME_ABOVE_CARD } = cardFor(390, 844)
+    // A short phone: the header is only the search row now (the title is the drawer's tabs), so on a 844 pt one the card
+    // reaches its cap with room to spare and the clamp has nothing to do.
+    const { featuredCardLayout, CHROME_ABOVE_CARD } = cardFor(390, 720)
     const insets = { top: 47, bottom: 34 }
-    const barTop = tabBarTop(844, 34)
+    const barTop = tabBarTop(720, 34)
     const plain = featuredCardLayout(insets, barTop)
     const banner = featuredCardLayout(insets, barTop, false, 40)
     expect(banner.height).toBeLessThan(plain.height)

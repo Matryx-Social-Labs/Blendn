@@ -6,7 +6,7 @@
  * chips asking the server; and the paging rule that keeps thousands of venues
  * from being a hundred requests.
  */
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native'
 import React from 'react'
 
 import type { VenueListItem } from '../lib/apiClient'
@@ -331,7 +331,7 @@ describe('the filter sheet', () => {
     await open()
     await act(async () => {
       fireEvent.press(screen.getByTestId('places-filter-kind-cafe'))
-      fireEvent.press(screen.getByTestId('places-filter-on-1'))
+      fireEvent.press(screen.getByTestId('places-filter-on-live'))
       fireEvent.press(screen.getByTestId('places-filter-far-5'))
     })
     await act(async () => {
@@ -347,7 +347,7 @@ describe('the filter sheet', () => {
     await open()
     await act(async () => {
       fireEvent.press(screen.getByTestId('places-filter-kind-cafe'))
-      fireEvent.press(screen.getByTestId('places-filter-on-1'))
+      fireEvent.press(screen.getByTestId('places-filter-on-live'))
       fireEvent.press(screen.getByTestId('places-filter-far-5'))
     })
     await act(async () => {
@@ -526,7 +526,9 @@ describe('loading, failing, empty', () => {
     await mount()
     expect(screen.getByTestId('places-skeleton')).toBeTruthy()
     expect(screen.getByTestId('places-search')).toBeTruthy()
-    expect(screen.getByRole('header', { name: 'Places' })).toBeTruthy()
+    // The title is the drawer's tabs now: the pane draws none of its own.
+    expect(screen.queryByRole('header', { name: 'Places' })).toBeNull()
+    expect(screen.getByTestId('places-header')).toBeTruthy()
   })
 
   it('the first load failing replaces the sections: "Couldn’t load places" and Try again reads afresh', async () => {
@@ -555,14 +557,13 @@ describe('loading, failing, empty', () => {
     expect(b.openCityPicker).toHaveBeenCalledTimes(1)
   })
 
-  it('the city chip in the header opens the same picker', async () => {
+  it('the header has no title and no city chip (the drawer’s title tabs carry both), and keeps the stat line', async () => {
     serve([venue('a', { liveNow: '5-9' })])
-    const b = browse()
-    await mount(b)
-    await act(async () => {
-      fireEvent.press(screen.getByTestId('places-city'))
-    })
-    expect(b.openCityPicker).toHaveBeenCalledTimes(1)
+    await mount(browse())
+    await waitFor(() => expect(screen.getByTestId('place-tile-a')).toBeTruthy())
+    expect(screen.queryByTestId('places-city')).toBeNull()
+    expect(within(screen.getByTestId('places-header')).queryByText('Places')).toBeNull()
+    expect(within(screen.getByTestId('places-header')).getByTestId('places-stat')).toBeTruthy()
   })
 
   it('no city decided yet asks nothing; the pane waits', async () => {

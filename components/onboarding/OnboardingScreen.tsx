@@ -1,94 +1,69 @@
-import { Ionicons } from '@expo/vector-icons'
-import { ReactNode, useEffect } from 'react'
-import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native'
-import Animated, {
-  Easing,
-  useAnimatedStyle,
-  useReducedMotion,
-  useSharedValue,
-  withDelay,
-  withTiming,
-} from 'react-native-reanimated'
+import { ReactNode } from 'react'
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { RevealOnFocus, useRevealFocused } from './revealFocused'
-import {
-  CONTROL,
-  EMBER,
-  EMBER_RADIUS,
-  GUTTER,
-  ICON,
-  MAX_FONT_SCALE,
-  OPACITY,
-  SPACE,
-  TYPE,
-} from '../../lib/theme'
-import { progressPercent, type OnboardingStep } from '../../lib/onboarding'
-import { EmberButton } from './EmberControls'
+import { Backdrop, ORB_LEVEL } from './Backdrop'
+import { Dock } from '../ds/Dock'
+import { useRevealFocused } from './revealFocused'
+import { Button } from '../ds/Button'
+import { IconButton } from '../ds/IconButton'
+import { ProgressBar } from '../ds/ProgressBar'
+import { font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from '../ds/shared'
+import { Icon } from '../ui/Icon'
+import { Material } from '../ui/Material'
+import { COLOR, FONT_FAMILY, SIZE, SPACE } from '../../lib/design/tokens'
 import { KEYBOARD_BEHAVIOR, useKeyboardShown } from '../../lib/keyboard'
+import { ONBOARDING_STEPS, progress, stepIndex, type OnboardingStep } from '../../lib/onboarding'
 
 /**
- * The frame every onboarding screen sits in.
+ * The frame every onboarding screen sits in (guidelines/flow-2, `frame`).
  *
- * Eight screens share a header, a scrolling middle and a pinned footer, and the
- * only things that differ are the headline, the fields and the label on the
- * button. Written once here rather than eight times: the parts that are easy to
- * get subtly different across eight files — the safe-area maths, the keyboard
- * behaviour, the progress arithmetic — are exactly the parts nobody notices are
- * inconsistent until a device shows it.
+ * Eight screens share a header, a scrolling middle and a pinned dock, and the only things that differ are the headline, the
+ * fields and the label on the button. Written once here rather than eight times: the parts that are easy to get subtly
+ * different across eight files (the safe-area maths, the keyboard behaviour, the progress arithmetic) are exactly the parts
+ * nobody notices are inconsistent until a device shows it.
+ *
+ * L0 the brand orbs at 0.45 (held while the keyboard is up), L2 a glass header with the back circle and "Step n of 8", the
+ * 4 pt progress bar under it, the body, and an L2 glass dock with the gradient primary, a text secondary and the lock note.
  */
 
 interface Props {
   /**
-   * Drives the progress bar. Absent on the one screen after the last step —
-   * "Bring your friends" — which is past the flow's 100% and draws no bar.
+   * Drives the header and the progress bar. Absent on the one screen after the last step, "Bring your friends", which is past
+   * the flow's 100% and draws neither.
    */
   step?: OnboardingStep
   title: string
-  /**
-   * The second half of the headline, set as its own span. Optional. It is
-   * `textPrimary` like the rest: the accent on these screens is the CTA's.
-   */
+  /** The second half of the headline, set as its own span. It is `textPrimary` like the rest: the accent on these screens is the CTA's. */
   titleAccent?: string
   subtitle?: string
   /**
-   * The form body. Optional because the two permission screens have none —
-   * their content is the headline, the explanation and the two buttons. The
-   * design puts an illustration there; there is no exported asset for it, and
-   * an invented one would be a drawing nobody designed.
+   * The form body. Optional because the two permission screens have no form: their content is an illustration, which is
+   * still a child. A screen with nothing to scroll does not scroll.
+   *
+   * A function when the body has text fields: it is handed the `onFocus` that makes the page follow the field (spread it on a
+   * `TextField`). A render prop rather than a context, because the page owns the scroll and its fields are drawn by the screen
+   * above it, which a provider inside the page cannot reach.
    */
-  children?: ReactNode
+  children?: ReactNode | ((page: { onFocus: () => void }) => ReactNode)
 
   ctaLabel: string
   onContinue: () => void
   ctaDisabled?: boolean
   ctaBusy?: boolean
 
-  /** Rendered under the primary button. "Maybe later", "Save as draft". */
+  /** Under the primary: "Maybe later", "Skip". */
   secondaryLabel?: string
   onSecondary?: () => void
 
-  /**
-   * A reassurance line under the secondary button — e.g. location's "your
-   * precise location is never shared with strangers." Optional: most screens
-   * have nothing sensitive enough to need one.
-   */
+  /** A reassurance line under the secondary button, with the lock (location's "your precise location is never shared"). */
   footerNote?: string
 
   onBack?: () => void
 }
 
-const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1)
-/** The width the bar last showed, so the next step's bar can start from it. */
-let lastShownPercent = 0
+/** The subtitle's reading measure, from the frame. */
+const SUBTITLE_MEASURE = 340
 
 export function OnboardingScreen({
   step,
@@ -106,236 +81,109 @@ export function OnboardingScreen({
   onBack,
 }: Props) {
   const insets = useSafeAreaInsets()
+  const bold = useBoldText()
+  const contrast = useIncreaseContrast()
   const keyboardUp = useKeyboardShown()
   const { scrollRef, bodyRef, reveal, onScroll, onViewportLayout, onBodyLayout } = useRevealFocused()
-  const percent = step ? progressPercent(step) : 100
-  const reduceMotion = useReducedMotion()
-  /*
-   * The bar fills from where the last step left it.
-   *
-   * Every step is its own screen, so each mounted with the fill already at
-   * its new width — the bar never visibly moved, and "you are further along"
-   * went unsaid. Now it starts at the previous step's width (going back, it
-   * drains) and eases to this one once the push has mostly landed.
-   *
-   * `width`, which is normally off-limits: the fill is absolutely positioned
-   * and has no children that lay out, so nothing else re-flows — and `scaleX`
-   * would squash its rounded end. Reduce Motion: it is simply at its width.
-   */
-  const fill = useSharedValue(reduceMotion ? percent : lastShownPercent)
-  useEffect(() => {
-    lastShownPercent = percent
-    if (reduceMotion) {
-      fill.set(percent)
-      return
-    }
-    fill.set(withDelay(200, withTiming(percent, { duration: 300, easing: EASE_OUT })))
-  }, [percent, reduceMotion, fill])
-  const fillStyle = useAnimatedStyle(() => ({ width: `${fill.get()}%` }))
+  const android = Platform.OS === 'android'
+  const circle = android ? SIZE.circleButtonAndroid : SIZE.circleButton
 
   return (
     <View style={styles.root}>
-      <View style={[styles.header, { paddingTop: insets.top + SPACE.md }]}>
-        {/*
-         * The back chevron keeps its footprint when there is nowhere to go
-         * back to, rather than being removed — otherwise the progress bar
-         * shifts left on the first screen and jumps right on the second. The
-         * empty footprint is a plain view: it used to be a disabled "Go back"
-         * button that a screen reader still stopped on.
-         *
-         * `chevron-back` at `ICON.lg`, the same back mark as every other
-         * screen's top bar (it was the only `arrow-back` in the app).
-         */}
-        {onBack ? (
-          <Pressable
-            onPress={onBack}
-            hitSlop={SPACE.md}
-            accessibilityRole="button"
-            accessibilityLabel="Go back"
-            style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}
-          >
-            <Ionicons name="chevron-back" size={ICON.lg} color={EMBER.textPrimary} />
-          </Pressable>
-        ) : (
-          <View style={styles.backButton} />
-        )}
+      <Backdrop level={ORB_LEVEL.onboarding} paused={keyboardUp} testID="onboarding-backdrop" />
 
-        {step ? (
-          <>
-            <View
-              style={styles.progressTrack}
-              accessibilityRole="progressbar"
-              accessibilityValue={{ min: 0, max: 100, now: percent }}
-            >
-              <Animated.View style={[styles.progressFill, fillStyle]} />
-            </View>
+      {/* The glass bar is there on every step, the empty one too (Bring your friends, the first step's missing back). */}
+      <Material role="bar" testID="onboarding-header" style={[styles.header, { paddingTop: insets.top + SPACE.sm }, contrast && IC_HAIRLINE]}>
+        <View style={[styles.headerRow, { height: circle }]}>
+          {onBack ? (
+            <IconButton icon={android ? 'arrow-left' : 'chevron-left'} accessibilityLabel="Back" onPress={onBack} testID="onboarding-back" />
+          ) : null}
+          {step ? (
+            <Text testID="onboarding-step" style={[styles.stepLabel, styles.step]}>
+              {`Step ${stepIndex(step) + 1} of ${ONBOARDING_STEPS.length}`}
+            </Text>
+          ) : null}
+        </View>
+      </Material>
 
-            <Text style={styles.progressLabel}>{percent}%</Text>
-          </>
-        ) : null}
-      </View>
+      {step ? (
+        <View style={styles.progress}>
+          <ProgressBar progress={progress(step)} testID="onboarding-progress" />
+        </View>
+      ) : null}
 
       {/*
-       * The avoiding view holds the scroll AND the footer, with no offset.
-       *
-       * It used to hold only the scroll, offset by the top inset: the footer
-       * sat outside it, so the keyboard covered Continue, and the offset (a
-       * header's worth of the wrong number — this view starts below the
-       * header, not at the top of the window) left a gap over the keyboard.
-       * The view's own frame is what `padding` measures against, so 0 is right.
+       * The avoiding view holds the scroll AND the dock, with no offset: it used to hold only the scroll, so the keyboard
+       * covered Continue. Its own frame is what `padding` measures against, so 0 is right.
        */}
       <KeyboardAvoidingView style={styles.flex} behavior={KEYBOARD_BEHAVIOR} keyboardVerticalOffset={0}>
         <ScrollView
           ref={scrollRef}
+          testID="onboarding-scroll"
           onScroll={onScroll}
           scrollEventThrottle={16}
           onLayout={onViewportLayout}
           style={styles.flex}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, step ? null : styles.scrollContentBare]}
           keyboardShouldPersistTaps="handled"
           // Drag the form down to put the keyboard away, as in Messages.
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           showsVerticalScrollIndicator={false}
-          /*
-           * A screen with nothing to scroll must not scroll.
-           *
-           * The two permission screens have no body at all — headline, a
-           * sentence, two buttons — and a ScrollView bounces by default even
-           * when its content fits. That rubber-band on a fixed page reads as
-           * the screen being broken, or as content hiding below the fold that
-           * never arrives.
-           *
-           * `alwaysBounceVertical` off is the general rule: bounce only when
-           * there is genuinely something below. `scrollEnabled` off when there
-           * is no body at all makes those two pages properly immovable rather
-           * than merely still.
-           */
+          // A screen with nothing to scroll must not rubber-band: it reads as the screen being broken.
           alwaysBounceVertical={false}
           scrollEnabled={!!children}
         >
-          <View style={styles.headlineBlock}>
-            <Text style={styles.title} accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.display}>
+          <View style={styles.headline}>
+            <Text style={[font('display', bold), styles.title]} accessibilityRole="header">
               {title}
-              {titleAccent ? <Text style={styles.titleAccent}>{titleAccent}</Text> : null}
+              {titleAccent ? <Text>{titleAccent}</Text> : null}
             </Text>
-            {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+            {subtitle ? <Text style={[font('body', bold), styles.subtitle]}>{subtitle}</Text> : null}
           </View>
 
           {children ? (
-            <RevealOnFocus.Provider value={reveal}>
-              <View ref={bodyRef} onLayout={onBodyLayout} style={styles.body}>
-                {children}
-              </View>
-            </RevealOnFocus.Provider>
+            <View ref={bodyRef} testID="onboarding-body" onLayout={onBodyLayout} style={styles.body}>
+              {typeof children === 'function' ? children({ onFocus: reveal }) : children}
+            </View>
           ) : null}
         </ScrollView>
 
-        {/*
-         * Pinned rather than at the end of the scroll, and opaque over the
-         * page: the design puts the action within one-handed reach, and on a
-         * screen with six fields a button that scrolls away is a button people
-         * think is missing.
-         */}
-        <View style={[styles.footer, { paddingBottom: keyboardUp ? SPACE.sm : Math.max(insets.bottom, SPACE.lg) }]}>
-          <EmberButton label={ctaLabel} onPress={onContinue} disabled={ctaDisabled} busy={ctaBusy} />
-          {/* The way out ("Skip", "Maybe later") stays with the button; only the footnote waits for the keyboard to go. */}
+        <Dock keyboardUp={keyboardUp} testID="onboarding-dock">
+          <Button label={ctaLabel} onPress={onContinue} disabled={ctaDisabled} loading={ctaBusy} testID="onboarding-primary" />
+          {/* The way out stays with the button; only the note waits for the keyboard to go. Off while the primary saves: a Skip during a save navigated twice. */}
           {secondaryLabel && onSecondary ? (
-            /*
-             * Off while the primary is saving: "Skip" tapped during a save
-             * used to navigate twice — once for the skip, once when the save
-             * landed. `useOnboarding` also refuses a second move in flight.
-             */
-            <Pressable
-              onPress={onSecondary}
-              disabled={ctaBusy}
-              hitSlop={SPACE.sm}
-              accessibilityRole="button"
-              accessibilityLabel={secondaryLabel}
-              accessibilityState={{ disabled: !!ctaBusy }}
-              style={({ pressed }) => [
-                styles.secondaryButton,
-                ctaBusy && styles.disabled,
-                pressed && styles.pressed,
-              ]}
-            >
-              <Text style={styles.secondary} maxFontSizeMultiplier={MAX_FONT_SCALE.button}>
-                {secondaryLabel}
-              </Text>
-            </Pressable>
+            <Button label={secondaryLabel} kind="tertiary" size="md" onPress={onSecondary} disabled={ctaBusy} testID="onboarding-secondary" />
           ) : null}
           {footerNote && !keyboardUp ? (
-            <View style={styles.footerNoteRow}>
-              <Ionicons name="lock-closed" size={ICON.sm} color={EMBER.textTertiary} />
-              <Text style={styles.footerNote}>{footerNote.toUpperCase()}</Text>
+            <View style={styles.note}>
+              {/* design-exception: the frame draws the lock at 14 and the note at 11/16, a step under the scale */}
+              <Icon name="lock" size={14} color={COLOR.textTertiary} />
+              <Text style={[font('label', bold), styles.noteText, styles.noteSize]}>{footerNote.toUpperCase()}</Text>
             </View>
           ) : null}
-        </View>
+        </Dock>
       </KeyboardAvoidingView>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: EMBER.bg },
+  root: { flex: 1, backgroundColor: COLOR.ink },
   flex: { flex: 1 },
-
-
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACE.lg,
-    paddingHorizontal: GUTTER,
-    paddingBottom: SPACE.xl,
-  },
-  backButton: { width: ICON.lg, height: ICON.lg, alignItems: 'center', justifyContent: 'center' },
-  pressed: { opacity: OPACITY.pressed },
-  disabled: { opacity: OPACITY.disabled },
-  progressTrack: {
-    flex: 1,
-    height: 6,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.surfaceSunken,
-    overflow: 'hidden',
-  },
-  // Flat, like every surface (docs/DESIGN_SYSTEM.md): a plain fill whose
-  // width animates, clipped to the track's pill by `overflow: hidden`.
-  progressFill: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.textPrimary,
-  },
-  progressLabel: TYPE.label,
-
-  scrollContent: { paddingHorizontal: GUTTER, paddingTop: SPACE.sm, paddingBottom: SPACE.xxl },
-  headlineBlock: { gap: SPACE.sm, marginBottom: SPACE.xxl },
-  title: TYPE.display,
-  titleAccent: { color: EMBER.textPrimary },
-  // design-exception: a reading measure for the subtitle, from the frame
-  subtitle: { ...TYPE.body, color: EMBER.textSecondary, maxWidth: 300 },
-  body: { gap: SPACE.xxl },
-
-  footer: {
-    paddingHorizontal: GUTTER,
-    paddingTop: SPACE.lg,
-    gap: SPACE.md,
-    // Opaque page colour, so scrolled text never shows through the button.
-    backgroundColor: EMBER.bg,
-  },
-  // 48pt tall, so the link under the button is a real target, not a line of text.
-  secondaryButton: { minHeight: CONTROL.md, justifyContent: 'center' },
-  secondary: {
-    ...TYPE.body,
-    textAlign: 'center',
-    color: EMBER.textSecondary,
-  },
-  footerNoteRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: SPACE.xs,
-  },
-  footerNote: { ...TYPE.label, color: EMBER.textTertiary },
+  header: { paddingHorizontal: SPACE.lg, paddingBottom: SPACE.sm },
+  headerRow: { flexDirection: 'row', alignItems: 'center' },
+  step: { position: 'absolute', left: 0, right: 0, textAlign: 'center', color: COLOR.textSecondary },
+  progress: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.sm },
+  scrollContent: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.lg, paddingBottom: SPACE.xxl, gap: SPACE.xl },
+  scrollContentBare: { paddingTop: SPACE.xl },
+  headline: { gap: SPACE.sm },
+  title: { color: COLOR.textPrimary },
+  subtitle: { color: COLOR.textSecondary, maxWidth: SUBTITLE_MEASURE },
+  body: { gap: SPACE.xl },
+  note: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center', gap: SPACE.xs, paddingHorizontal: SPACE.sm },
+  noteText: { color: COLOR.textTertiary, textAlign: 'center', flexShrink: 1 },
+  // design-exception: the frame sets the note at 11/16 and the step label at 13 with 0.3 tracking, off the type scale
+  noteSize: { fontSize: 11, lineHeight: 16 },
+  // design-exception: the frame's step label is Geist Mono 13 with 0.3 tracking
+  stepLabel: { fontFamily: FONT_FAMILY.mono[500], fontSize: 13, lineHeight: 16, letterSpacing: 0.3, fontVariant: ['tabular-nums'] },
 })

@@ -1,13 +1,13 @@
 /*
  * The Places filter sheet (the sweep's filters.html): sized to its content, Kind as a ChipSet with no "All" chip (empty is
- * "Any"), What's on as a radio SegmentedControl, Within as chips, and a primary that carries the server's count.
+ * "Any"), What's on as a single ChipSet with a glyph each, Within as chips, and a primary that carries the server's count.
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
 
 import { PlacesFilterSheet } from '../components/places/PlacesFilterSheet'
 import { COUNT_DEBOUNCE_MS } from '../lib/filterCount'
-import { HOW_FAR, NO_FILTERS, type PlaceFilters } from '../lib/placesPane'
+import { HOW_FAR, NO_FILTERS, WHATS_ON, type PlaceFilters } from '../lib/placesPane'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('expo-glass-effect', () => {
@@ -50,11 +50,36 @@ describe('the sheet', () => {
     expect(screen.getByTestId('places-filter-kind-cafe').props.accessibilityState).toMatchObject({ selected: false })
   })
 
-  it('What’s on is a radio group of three, Everything first', async () => {
+  it('What’s on is a single ChipSet of three with a glyph each, Everything first and chosen', async () => {
     await draw()
-    expect(screen.getByTestId('places-filter-on').props.accessibilityRole).toBe('radiogroup')
-    expect(screen.getByRole('radio', { name: 'Everything' }).props.accessibilityState).toMatchObject({ checked: true })
-    expect(screen.getAllByRole('radio')).toHaveLength(3)
+    expect(WHATS_ON.map((w) => [w.label, w.icon])).toEqual([
+      ['Everything', 'sparkles'],
+      ['Live now', 'radio'],
+      ['Open tonight', 'moon'],
+    ])
+    expect(screen.getByText('What’s on')).toBeTruthy()
+    for (const key of ['all', 'live', 'open']) expect(screen.getByTestId(`places-filter-on-${key}`)).toBeTruthy()
+    expect(screen.getByTestId('places-filter-on-all').props.accessibilityState).toMatchObject({ selected: true })
+    expect(screen.getByTestId('places-filter-on-live').props.accessibilityState).toMatchObject({ selected: false })
+    expect(screen.queryByTestId('places-filter-on-counter')).toBeNull()
+  })
+
+  it('choosing one lights it alone, and tapping the chosen one returns it to everything', async () => {
+    const { onApply } = await draw()
+    await act(async () => fireEvent.press(screen.getByTestId('places-filter-on-live')))
+    expect(screen.getByTestId('places-filter-on-live').props.accessibilityState).toMatchObject({ selected: true })
+    expect(screen.getByTestId('places-filter-on-all').props.accessibilityState).toMatchObject({ selected: false })
+    await act(async () => fireEvent.press(screen.getByTestId('places-filter-on-live')))
+    expect(screen.getByTestId('places-filter-on-all').props.accessibilityState).toMatchObject({ selected: true })
+    await settle()
+    await act(async () => fireEvent.press(screen.getByTestId('places-filter-apply')))
+    expect(onApply).toHaveBeenCalledWith(expect.objectContaining({ whatsOn: 'all' }))
+  })
+
+  it('tapping Everything while it is chosen leaves it chosen', async () => {
+    await draw()
+    await act(async () => fireEvent.press(screen.getByTestId('places-filter-on-all')))
+    expect(screen.getByTestId('places-filter-on-all').props.accessibilityState).toMatchObject({ selected: true })
   })
 
   it('Within reads Any, 2 km, 5 km, 10 km, and tapping the chosen distance clears it', async () => {
@@ -100,7 +125,7 @@ describe('the primary', () => {
 
   it('with What’s on set the button carries no number it cannot vouch for', async () => {
     await draw()
-    await act(async () => fireEvent.press(screen.getByRole('radio', { name: 'Live now' })))
+    await act(async () => fireEvent.press(screen.getByTestId('places-filter-on-live')))
     await settle()
     expect(screen.getByRole('button', { name: 'Show places' })).toBeTruthy()
     expect(screen.queryByTestId('places-filter-apply-count')).toBeNull()

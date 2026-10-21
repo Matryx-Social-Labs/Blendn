@@ -26,9 +26,9 @@ describe('<PlanCard>', () => {
     expect(radio.props.accessibilityState).toMatchObject({ checked: true })
   })
 
-  it('the ring: 22 pt, a white 6 pt ring when picked, a faint 1.5 pt one when not', async () => {
+  it('the ring: 22 pt, the hue’s 6 pt ring when picked, a faint 1.5 pt one when not', async () => {
     await render(<PlanCard name="Monthly" price="₹199" per="/ month" selected onPress={jest.fn()} testID="p" />)
-    expect(flat('p-ring')).toMatchObject({ width: 22, height: 22, borderWidth: 6, borderColor: COLOR.selectionFill })
+    expect(flat('p-ring')).toMatchObject({ width: 22, height: 22, borderWidth: 6, borderColor: COLOR.brandOrange })
     await render(<PlanCard name="Monthly" price="₹199" per="/ month" onPress={jest.fn()} testID="p" />)
     expect(flat('p-ring').borderWidth).toBe(1.5)
   })

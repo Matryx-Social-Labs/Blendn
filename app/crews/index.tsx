@@ -9,7 +9,7 @@ import { RowsCard } from '../../components/crews/RowsCard'
 import { Button } from '../../components/ds/Button'
 import { CrewRow } from '../../components/ds/CrewCard'
 import { SectionHeader } from '../../components/ds/SectionHeader'
-import { font, useBoldText } from '../../components/ds/shared'
+import { font, HueProvider, useBoldText } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { TopBar } from '../../components/ds/TopBar'
 import { useSkeletonCrossfade } from '../../components/motion/useSkeletonCrossfade'
@@ -44,7 +44,7 @@ const FOOTNOTE = 'Who’s where shows once you’ve checked in at a night. Crews
  * crew's presence only to someone checked in. Make a crew is the docked
  * primary. A lapsed invite dims and says Expired.
  */
-export default function CrewsScreen() {
+function CrewsScreenContent() {
   const bold = useBoldText()
   const insets = useSafeAreaInsets()
   const [load, setLoad] = useState<Load>({ kind: 'loading' })
@@ -191,3 +191,12 @@ const styles = StyleSheet.create({
   footnote: { color: COLOR.textTertiary, paddingHorizontal: SPACE.xs },
   dock: { position: 'absolute', left: SPACE.gutter, right: SPACE.gutter },
 })
+
+/** Rose world: one hue on this screen (`HueProvider`). */
+export default function CrewsScreen() {
+  return (
+    <HueProvider value="rose">
+      <CrewsScreenContent />
+    </HueProvider>
+  )
+}

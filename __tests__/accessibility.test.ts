@@ -55,7 +55,7 @@ describe('decoration is hidden from the accessibility tree', () => {
   const DECORATIVE: Array<[string, string[]]> = [
     ['the splash animation', ['components', 'IntroAnimation.tsx']],
     ['the permission illustrations', ['components', 'onboarding', 'PermissionIllustration.tsx']],
-    ['the sign-in wordmark', ['app', 'sign-in.tsx']],
+    ['the lockup on the entry screens', ['components', 'onboarding', 'Lockup.tsx']],
   ]
 
   it.each(DECORATIVE)('%s carries both platform flags', (_label, parts) => {

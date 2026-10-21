@@ -407,8 +407,11 @@ function Message({
   )
 }
 
-/** The upload's determinate ring over a 35% veil (R3-D5 5.9 #33): a fraction, read as a percentage. */
-function UploadRing({ progress }: { progress: number }) {
+/**
+ * The upload's determinate ring over a 35% veil (R3-D5 5.9 #33): a fraction, read as a percentage. A photo message's, and the
+ * onboarding photo tile's (`label`: what a screen reader says it is doing).
+ */
+export function UploadRing({ progress, label = 'Sending photo' }: { progress: number; label?: string }) {
   const r = (RING.size - RING.stroke) / 2
   const around = 2 * Math.PI * r
   const done = Math.max(0, Math.min(1, progress))
@@ -416,7 +419,7 @@ function UploadRing({ progress }: { progress: number }) {
     <View
       accessible
       accessibilityRole="progressbar"
-      accessibilityLabel="Sending photo"
+      accessibilityLabel={label}
       accessibilityValue={{ min: 0, max: 100, now: Math.round(done * 100) }}
       style={[StyleSheet.absoluteFill, styles.veil]}
     >

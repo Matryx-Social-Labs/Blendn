@@ -1,7 +1,8 @@
 import { Stack } from 'expo-router'
 import { Platform } from 'react-native'
 
-import { EMBER } from '../../lib/theme'
+import { HueProvider } from '../../components/ds/shared'
+import { COLOR } from '../../lib/design/tokens'
 
 /**
  * The onboarding stack.
@@ -22,22 +23,25 @@ import { EMBER } from '../../lib/theme'
  * here blocked movement *between* steps too, which was never the intent.
  */
 export default function OnboardingLayout() {
+  // Onboarding is you: the violet world, for every step (the progress, the chips, the cards and the photo ring).
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-        gestureEnabled: true,
-        // The root stack's transition, so a step pushes like every other
-        // screen: iOS's own parallax push, not the Android-style slide.
-        animation: Platform.OS === 'ios' ? 'ios_from_right' : 'slide_from_right',
-        contentStyle: { backgroundColor: EMBER.bg },
-      }}
-    >
-      {/*
-        After the last step, with the finished steps still underneath: a swipe
-        here would reopen one. See app/onboarding/friends.tsx.
-      */}
-      <Stack.Screen name="friends" options={{ gestureEnabled: false }} />
-    </Stack>
+    <HueProvider value="violet">
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          gestureEnabled: true,
+          // The root stack's transition, so a step pushes like every other
+          // screen: iOS's own parallax push, not the Android-style slide.
+          animation: Platform.OS === 'ios' ? 'ios_from_right' : 'slide_from_right',
+          contentStyle: { backgroundColor: COLOR.ink },
+        }}
+      >
+        {/*
+          After the last step, with the finished steps still underneath: a swipe
+          here would reopen one. See app/onboarding/friends.tsx.
+        */}
+        <Stack.Screen name="friends" options={{ gestureEnabled: false }} />
+      </Stack>
+    </HueProvider>
   )
 }

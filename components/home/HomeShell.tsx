@@ -7,7 +7,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { tabBarTop } from '../../app/(tabs)/_layout'
 import { NotificationBell } from '../pulse/NotificationBell'
 import { PulseTopBar, TOP_BAR_HEIGHT } from '../pulse/PulseTopBar'
-import { SegmentedControl } from '../ds/SegmentedControl'
+import { Chip } from '../ds/Chip'
+import { TitleTabs } from '../ds/TitleTabs'
 import { Text } from '../ui/Text'
 import { DRAWER_PEEK_LINE, drawerSnapPoints, keyboardLeft, snapOnKeyboard, type DrawerSnap } from '../../lib/home'
 import { Logger } from '../../lib/logger'
@@ -214,12 +215,13 @@ export function HomeShell({
           ) : null
         }
         header={
-          // Tap only: a drag on the thumb would compete with the drawer's and the map's gestures.
-          <SegmentedControl
+          // The pane's title is the switch: words, tap only (a drag would compete with the drawer's and the map's gestures). The
+          // city lives in the same row, so neither pane draws a title of its own.
+          <TitleTabs
             items={SEGMENT_LABELS}
             selected={segment === 'events' ? 0 : 1}
             onChange={(i) => choose(i === 0 ? 'events' : 'places')}
-            draggable={false}
+            trailing={<Chip label={browse.city ?? 'Choose city'} icon="map-pin" onPress={browse.openCityPicker} testID="home-city" />}
             testID="home-segmented"
           />
         }

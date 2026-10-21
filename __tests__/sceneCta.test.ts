@@ -42,7 +42,7 @@ describe('the CTA pays for its own height', () => {
     // Anything pinned over a scroll has to pay for its own height in the
     // content inset, or it silently eats the end of the page. The dock reports it (`ds/Dock`).
     expect(DETAIL()).toContain('paddingBottom: ctaDockHeight + SPACE.xl')
-    expect(DETAIL()).toContain('<Dock onHeight={setCtaDockHeight}')
+    expect(DETAIL()).toContain('<Dock floating onHeight={setCtaDockHeight}')
   })
 })
 

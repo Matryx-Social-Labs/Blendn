@@ -15,7 +15,7 @@ import { StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native'
 import { SCENE_PALETTES, type CityArtInfo } from '../../lib/cityArt'
 import { COLOR, RADIUS, SPACE } from '../../lib/design/tokens'
 import { CheckDisc } from '../ds/RadioCard'
-import { font, useBoldText } from '../ds/shared'
+import { font, useBoldText, useSelection } from '../ds/shared'
 import ScalePress from '../motion/ScalePress'
 import { CityScene, useSceneTime } from './CityScene'
 
@@ -47,10 +47,11 @@ interface CardProps {
 /**
  * A picker row for a city that has art (Flow 3 `city`, R4.1 3-6): the skyline, the name over it and the city's own
  * script beside its count, "You're here" as a white pill when the phone is in it. The chosen city wears the DS
- * selection mark, the white ring and the check disc.
+ * selection mark in the screen's hue: the ring and the check disc.
  */
 export function CityArtCard({ city, art, countLabel, active, here, onPress }: CardProps) {
   const bold = useBoldText()
+  const sel = useSelection()
   const [width, onLayout] = useWidth()
   const tod = useSceneTime(art.timeZone)
   const ink = SCENE_PALETTES[tod].ink
@@ -81,8 +82,8 @@ export function CityArtCard({ city, art, countLabel, active, here, onPress }: Ca
             <Text style={[font('caption', bold), styles.onWhite]}>You’re here</Text>
           </View>
         ) : null}
-        {active ? <CheckDisc testID="city-art-check" /> : null}
-        {active ? <View pointerEvents="none" style={styles.ring} /> : null}
+        <CheckDisc selected={active} testID="city-art-check" />
+        {active ? <View pointerEvents="none" style={[styles.ring, { borderColor: sel.edge }]} /> : null}
       </View>
     </ScalePress>
   )
@@ -119,6 +120,6 @@ const styles = StyleSheet.create({
   // The check disc owns the corner (24 pt, 10 in): the pill steps left of it.
   hereBesideCheck: { right: SPACE.md + 24 + SPACE.sm },
   onWhite: { color: COLOR.ink },
-  ring: { ...StyleSheet.absoluteFill, borderRadius: RADIUS.mediaInCard, borderWidth: SPACE.xxs, borderColor: COLOR.selectionFill },
+  ring: { ...StyleSheet.absoluteFill, borderRadius: RADIUS.mediaInCard, borderWidth: SPACE.xxs },
   banner: { alignSelf: 'stretch', borderRadius: RADIUS.mediaInCard, overflow: 'hidden', backgroundColor: COLOR.surface, marginBottom: SPACE.lg },
 })

@@ -257,7 +257,7 @@ export function PlacesList({
         case 'title':
           return (
             <View>
-              <PlacesTitle city={city} onPressCity={openCityPicker} stat={stat} />
+              <PlacesTitle stat={stat} />
               {offline ? (
                 <View style={styles.banner}>
                   <Banner kind="offline" text="Offline. Live as of" mono={state.readAt ? clockTime(state.readAt) : undefined} testID="places-offline" />

@@ -27,6 +27,7 @@ import type { Friend } from '../../lib/friends'
 import { SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
+import { HueProvider } from '../../components/ds/shared'
 
 const BIO_TOO_LONG = 'A crew bio is at most 140 characters'
 
@@ -45,7 +46,7 @@ type Made = { crewId: string; chatGroupId: string; invited: number; /** Null unt
  * belong: a name or bio it refuses under that field, a cap or the 18+ gate in
  * a sheet. System back, the scrim and a drag go back a step before they close.
  */
-export default function NewCrewScreen() {
+function NewCrewScreenContent() {
   const reduceMotion = useReducedMotion()
   const [open, setOpen] = useState(true)
   const [step, setStep] = useState<MakeStep>(1)
@@ -255,3 +256,12 @@ export default function NewCrewScreen() {
 
 /** The step's own column, so the slide moves a block that lays out like the sheet's content. */
 const styles = StyleSheet.create({ step: { gap: SPACE.md } })
+
+/** Rose world: one hue on this screen (`HueProvider`). */
+export default function NewCrewScreen() {
+  return (
+    <HueProvider value="rose">
+      <NewCrewScreenContent />
+    </HueProvider>
+  )
+}

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Image } from 'expo-image'
+import MapView, { Marker } from 'react-native-maps'
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native'
 import Animated, {
   Easing,
@@ -15,13 +16,17 @@ import Animated, {
 
 import type { DetailBlock } from '../../lib/eventDetails'
 import type { FeedMediaItem } from '../../lib/feedMedia'
+import { Avatar } from '../ds/Avatar'
+import { RollingNumber } from '../ds/RollingNumber'
 import { SectionHeader } from '../ds/SectionHeader'
 import { font, useBoldText } from '../ds/shared'
 import ScalePress from '../motion/ScalePress'
 import { fadeInFast, popIn } from '../motion/presence'
 import { GradientFill } from '../ui/GradientFill'
 import { Icon } from '../ui/Icon'
-import { COLOR, DURATION, EASING, ICON, MATERIAL, RADIUS, RISE, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, MATERIAL, RADIUS, RISE, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
+import { DARK_MAP_STYLE, LOCATION_CARD_DELTA } from '../../lib/mapStyle'
+import { avatarStack } from '../../lib/pseudonymAvatar'
 
 /*
  * The CTA's label change (#45, A78 approved in Prompt 10): the old label exits
@@ -75,6 +80,136 @@ export const SCENE_CTA_ICON = ICON.nav
 
 /** A gallery tile. Square, and sized so a second one is partly visible. */
 export const GALLERY_TILE = 160
+
+/** The map band inside the Location card. */
+export const MAP_HEIGHT = 256
+
+/**
+ * Who is putting it on, and, while it runs, how many are there right now (kept from before the redesign; the frame
+ * draws neither). A still green dot beside the room's own "here now": the same mark the Room and Tonight use for live,
+ * never a pulse. Nothing when it has neither, so an unhosted, unstarted event gets no empty row.
+ */
+export function SceneByline({ host, hereNow }: { host?: string | null; hereNow?: number | null }) {
+  const bold = useBoldText()
+  const live = typeof hereNow === 'number' && hereNow > 0
+  if (!host && !live) return null
+  return (
+    <View style={styles.byline} testID="scene-byline">
+      {host ? (
+        <Text numberOfLines={1} style={[font('meta', bold), styles.secondary]}>
+          By <Text style={styles.ink}>{host}</Text>
+        </Text>
+      ) : null}
+      {live ? (
+        <View style={styles.bylineLive} accessible accessibilityLabel={`${hereNow} ${hereNow === 1 ? 'person' : 'people'} here now`}>
+          <View style={styles.liveDot} />
+          <Text style={[font('meta', bold), styles.secondary]}>{hereNow} here now</Text>
+        </View>
+      ) : null}
+    </View>
+  )
+}
+
+/**
+ * Attendees: a heading, the count rolling beside it, and a stack of creatures (kept from before the redesign).
+ *
+ * ## The faces are not coming back
+ *
+ * `GET /events` used to return real photographs of everyone who had favourited an event, to any authenticated caller
+ * with no identity gate, and it was removed as a security fix (blendn-admin #229): a face is identity, and it was
+ * harvestable by topic. So each disc is the DS `Avatar` creature, seeded by the event and the position, never by anyone
+ * attending: "a person is here", and nothing about who. Hidden from a screen reader (unlabelled it would say "butterfly,
+ * turtle, fox", confidently wrong); the count beside the heading is the message.
+ *
+ * The heading is a prop because the number means two different things either side of the doors: who said they are coming,
+ * then who turned up.
+ */
+export function SceneAttendees({ count, seed, label = 'Attendees' }: { count: number; seed: string; label?: string }) {
+  const bold = useBoldText()
+  const { shown, remainder } = avatarStack(count)
+  return (
+    <View style={styles.attendeesSection} testID="scene-attendees">
+      <View accessible accessibilityRole="header" accessibilityLabel={`${label}, ${count}`} style={styles.attendees}>
+        <SectionHeader title={label} />
+        <RollingNumber value={count} role="numericDisplay" color={COLOR.textSecondary} />
+      </View>
+      {shown > 0 ? (
+        <View style={styles.stack} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          {Array.from({ length: shown }, (_, i) => (
+            <View key={i} style={i > 0 ? styles.overlap : undefined}>
+              <Avatar kind="creature" pseudonym={`${seed}:${i}`} size={AVATAR} ring={COLOR.ink} />
+            </View>
+          ))}
+          {remainder > 0 ? (
+            <View style={[styles.more, styles.overlap]}>
+              <Text style={[font('bodyStrong', bold, FONT_FAMILY.mono[700]), styles.ink]}>+{remainder}</Text>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+    </View>
+  )
+}
+const AVATAR = 56
+
+const MAP_FADE_IN = FadeIn.duration(DURATION.base).easing(Easing.bezier(...EASING.entrance)).reduceMotion(ReduceMotion.Never)
+
+/**
+ * The map inside the Location card: a `MapView` with every gesture off. The SDK's loads are free and its keys are
+ * restricted to this app, unlike the old Static Maps image; it stays a picture, not a map you steer (the tap belongs to
+ * the card, which opens external maps). No coordinate, or 0,0 (an unset one in this schema), is a plain surface rather
+ * than a broken map.
+ */
+export function SceneMap({ latitude, longitude }: { latitude: number; longitude: number }) {
+  const hasCoords = !!latitude && !!longitude
+  return (
+    <View style={styles.map}>
+      {hasCoords ? (
+        <Animated.View style={StyleSheet.absoluteFill} entering={MAP_FADE_IN} pointerEvents="none">
+          <MapView
+            style={StyleSheet.absoluteFill}
+            customMapStyle={DARK_MAP_STYLE}
+            initialRegion={{ latitude, longitude, latitudeDelta: LOCATION_CARD_DELTA, longitudeDelta: LOCATION_CARD_DELTA }}
+            scrollEnabled={false}
+            zoomEnabled={false}
+            rotateEnabled={false}
+            pitchEnabled={false}
+            toolbarEnabled={false}
+            // Android's lite mode renders one bitmap instead of a live surface: nothing about this slot needs a live map.
+            liteMode
+            pointerEvents="none"
+          >
+            <Marker coordinate={{ latitude, longitude }} pinColor={COLOR.textPrimary} />
+          </MapView>
+        </Animated.View>
+      ) : null}
+    </View>
+  )
+}
+
+/**
+ * The venue card under the page's sections (kept from before the redesign; the frame's Where tile opens the same map):
+ * a `surface` card at the card radius, the venue and its address over the map band. `map` is a slot, so an event with no
+ * geocoded venue shows the address without an empty grey rectangle under it.
+ */
+export function SceneLocationCard({ venue, area, map }: { venue: string; area: string; map?: React.ReactNode }) {
+  const bold = useBoldText()
+  return (
+    <View style={styles.locationCard} testID="scene-location">
+      <View style={styles.cardBody}>
+        <Text style={[font('label', bold), styles.secondary]}>LOCATION</Text>
+        <Text style={[font('bodyStrong', bold), styles.ink]}>{venue}</Text>
+        <View style={styles.addressRow}>
+          <Icon name="map-pin" size={ICON.inline} color={COLOR.textSecondary} />
+          <Text numberOfLines={2} style={[font('meta', bold), styles.secondary, styles.shrink]}>
+            {area}
+          </Text>
+        </View>
+      </View>
+      {map}
+    </View>
+  )
+}
 
 /**
  * The prose under a heading: `body` on `textSecondary`.
@@ -467,6 +602,22 @@ export function SceneGallery({
 const styles = StyleSheet.create({
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
+
+  shrink: { flexShrink: 1 },
+  byline: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', columnGap: SPACE.lg, rowGap: SPACE.xs },
+  bylineLive: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
+  liveDot: { width: SPACE.sm, height: SPACE.sm, borderRadius: RADIUS.capsule, backgroundColor: COLOR.live },
+  attendeesSection: { gap: SPACE.lg },
+  attendees: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
+  stack: { flexDirection: 'row', alignItems: 'center' },
+  overlap: { marginLeft: -SPACE.lg },
+  more: { width: AVATAR, height: AVATAR, borderRadius: RADIUS.capsule, borderWidth: SPACE.xxs, borderColor: COLOR.ink, backgroundColor: COLOR.surfaceSunken, alignItems: 'center', justifyContent: 'center' },
+  map: { height: MAP_HEIGHT, backgroundColor: COLOR.surfaceSunken },
+  locationCard: { backgroundColor: COLOR.surface, borderRadius: RADIUS.card, overflow: 'hidden' },
+  // The bottom is the gap to the map band: at 32 the two crowded, and the card read as text on a photograph.
+  // design-exception: 56 gap to the map band
+  cardBody: { paddingTop: SPACE.xl, paddingHorizontal: SPACE.xl, paddingBottom: 56, gap: SPACE.sm },
+  addressRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
 
   detailGroup: { gap: SPACE.xxl },
   detailBlock: { gap: SPACE.lg },

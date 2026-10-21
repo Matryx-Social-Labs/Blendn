@@ -39,6 +39,10 @@ jest.mock('../lib/calendar', () => ({ addToCalendar: jest.fn() }))
 jest.mock('../lib/openInMaps', () => ({ openInMaps: jest.fn() }))
 jest.mock('../lib/safetyUtils', () => ({ showEventReportOptions: jest.fn() }))
 jest.mock('../lib/eventDetailCache', () => ({ getEventDetailCache: () => null, setEventDetailCache: jest.fn() }))
+jest.mock('react-native-maps', () => {
+  const { View } = jest.requireActual('react-native')
+  return { __esModule: true, default: (p: object) => <View {...p} testID="map" />, Marker: () => null }
+})
 jest.mock('../lib/sheet', () => ({ showSheet: jest.fn() }))
 jest.mock('../lib/checkIn', () => ({ subscribeCheckInChanged: () => () => {} }))
 
@@ -205,5 +209,30 @@ describe('the RSVP answers are the app\'s Sheet, not a tray', () => {
     await fireEvent.press(await screen.findByRole('button', { name: 'I\'m going' }))
     await waitFor(() => expect(showSheet).toHaveBeenCalledWith(expect.objectContaining({ title: 'Couldn’t RSVP' })))
     expect(error).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('the sections kept from before the redesign, on the design system, behind the frame\'s layout', () => {
+  it('the byline: who is putting it on, and the live count while it runs', async () => {
+    api.getEvent.mockResolvedValue(detail() as never)
+    await open()
+    expect(await screen.findByTestId('scene-byline')).toHaveTextContent(/By Toit/)
+  })
+
+  it('attendees: the heading read as one "Going, 42"', async () => {
+    api.getEvent.mockResolvedValue(detail() as never)
+    await open()
+    const attendees = await screen.findByTestId('scene-attendees')
+    expect(within(attendees).getByRole('header', { name: 'Going, 42' })).toBeTruthy()
+  })
+
+  it('the location card: the venue, its address and the map, and a tap opens Maps', async () => {
+    api.getEvent.mockResolvedValue(detail() as never)
+    await open()
+    const card = await screen.findByTestId('scene-location')
+    expect(card).toHaveTextContent(/Toit/)
+    expect(card).toHaveTextContent(/Indiranagar/)
+    await fireEvent.press(screen.getByRole('button', { name: 'Open Toit in Maps' }))
+    expect(openInMaps).toHaveBeenCalled()
   })
 })

@@ -1,18 +1,22 @@
 /*
  * <RadioCard> and <LookingForCard> (guidelines/components/RadioCard.html,
  * LookingForCard.html): a choice that deserves a picture. Selected is the 2 pt
- * white ring and the check disc; H.select on a change, never on the selected
+ * ring in the screen's hue, the card's fill stepping to the hue's, and the check disc; H.select on a change, never on the selected
  * card or a disabled one; Android has no ripple (the ring is the feedback).
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
 import { AccessibilityInfo, Platform, StyleSheet } from 'react-native'
+import * as Reanimated from 'react-native-reanimated'
 
 import { LookingForCard } from '../components/ds/LookingForCard'
 import { RadioCard } from '../components/ds/RadioCard'
+import { HueProvider, SELECTION } from '../components/ds/shared'
 import { COLOR, MATERIAL, RADIUS } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { OPACITY } from '../lib/theme'
+
+jest.mock('react-native-reanimated', () => ({ ...jest.requireActual('react-native-reanimated'), __esModule: true, useReducedMotion: jest.fn(() => false) }))
 
 const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id, { includeHiddenElements: true }).props.style)
 const on = (os: 'ios' | 'android') => Object.defineProperty(Platform, 'OS', { value: os, configurable: true })
@@ -34,10 +38,42 @@ describe('<RadioCard>', () => {
     expect(StyleSheet.flatten(screen.getByText('Nobody here sees your name or photo.').props.style).color).toBe(COLOR.textSecondary)
   })
 
-  it('selected: the 2 pt white ring and the check disc', async () => {
+  it('selected: the 2 pt ember ring, the card’s fill stepped to the hue, the check disc in the glyph colour', async () => {
     await render(card({ selected: true }))
-    expect(flat('r-ring')).toMatchObject({ borderWidth: 2, borderColor: COLOR.selectionFill })
-    expect(flat('r-check').backgroundColor).toBe(COLOR.selectionFill)
+    expect(flat('r-ring')).toMatchObject({ borderWidth: 2, borderColor: COLOR.brandOrange, opacity: 1 })
+    expect(flat('r').backgroundColor).toBe(COLOR.selectionEmberFill)
+    expect(flat('r-check')).toMatchObject({ backgroundColor: COLOR.selectionEmberGlyph, opacity: 1 })
+  })
+
+  it('off: the ring and the check are drawn at 0 opacity, so they fade rather than appear', async () => {
+    await render(card())
+    expect(flat('r-ring').opacity).toBe(0)
+    expect(flat('r-check').opacity).toBe(0)
+    expect(flat('r').backgroundColor).toBe(COLOR.surface)
+    expect(String(StyleSheet.flatten(screen.getByTestId('r', { includeHiddenElements: true }).props.jestInlineStyle).transition)).toContain('background-color 160ms')
+  })
+
+  it.each(['ember', 'rose', 'violet'] as const)('under the %s hue the ring, the fill and the disc follow it', async (hue) => {
+    await render(
+      <HueProvider value={hue}>
+        <RadioCard title="A" selected onPress={jest.fn()} testID="r" />
+      </HueProvider>
+    )
+    expect(flat('r-ring').borderColor).toBe(SELECTION[hue].edge)
+    expect(flat('r').backgroundColor).toBe(SELECTION[hue].fill)
+    expect(flat('r-check').backgroundColor).toBe(SELECTION[hue].glyph)
+  })
+
+  it('the ✓ is ink on the disc, and draws once when the card is picked (never on mount)', async () => {
+    const timing = jest.spyOn(Reanimated, 'withTiming')
+    await render(card({ selected: true }))
+    expect(screen.getByTestId('r-check-glyph', { includeHiddenElements: true })).toBeTruthy()
+    expect(timing).not.toHaveBeenCalled()
+    await screen.rerender(card({ selected: false }))
+    expect(timing).not.toHaveBeenCalled()
+    await screen.rerender(card({ selected: true }))
+    expect(timing).toHaveBeenCalled()
+    timing.mockRestore()
   })
 
   it('is a radio button that reads its title and consequence', async () => {
@@ -103,9 +139,9 @@ describe('<LookingForCard>', () => {
     expect(screen.getByText('Friendship').props.maxFontSizeMultiplier).toBe(1.3)
   })
 
-  it('on: the 2 pt white ring outside the tile, and the check disc', async () => {
+  it('on: the 2 pt hue ring outside the tile, and the check disc', async () => {
     await render(tile({ selected: true }))
-    expect(flat('l-ring')).toMatchObject({ borderWidth: 2, borderColor: COLOR.selectionFill })
+    expect(flat('l-ring')).toMatchObject({ borderWidth: 2, borderColor: COLOR.brandOrange })
     expect(screen.getByTestId('l-check', { includeHiddenElements: true })).toBeTruthy()
   })
 

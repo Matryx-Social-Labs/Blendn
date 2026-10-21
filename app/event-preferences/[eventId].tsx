@@ -12,7 +12,7 @@ import { Orbs } from '../../components/ds/Orbs'
 import { RadioCard } from '../../components/ds/RadioCard'
 import { SectionHeader } from '../../components/ds/SectionHeader'
 import { SettingsRow } from '../../components/ds/SettingsRow'
-import { font, useBoldText } from '../../components/ds/shared'
+import { font, HueProvider, useBoldText } from '../../components/ds/shared'
 import { fadeInFast } from '../../components/motion/presence'
 import { useToast } from '../../components/Toast'
 import { apiClient } from '../../lib/apiClient'
@@ -316,7 +316,7 @@ function EventPreferencesContent() {
         {askIntent ? revealBlock : intentBlock}
       </ScrollView>
       {/* Docked, not at the end of the scroll: with four intents it fell below the fold. The first-door answer cannot be nothing: an empty save would write an empty default. */}
-      <Dock onHeight={setDockHeight} testID="prefs-dock">
+      <Dock floating onHeight={setDockHeight} testID="prefs-dock">
         <Button
           label="Save"
           kind="primary"
@@ -345,7 +345,11 @@ const styles = StyleSheet.create({
   secondary: { color: COLOR.textSecondary },
 })
 
-/** The screen's default export is a wrapper, so a hue provider can be added around the content without touching it. */
+/** Violet world: one hue on this screen (`HueProvider`). */
 export default function EventPreferences() {
-  return <EventPreferencesContent />
+  return (
+    <HueProvider value="violet">
+      <EventPreferencesContent />
+    </HueProvider>
+  )
 }

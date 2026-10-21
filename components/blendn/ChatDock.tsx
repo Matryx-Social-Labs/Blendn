@@ -215,7 +215,7 @@ export function ChatDock({
                 <Text style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>{state === 'failed' ? 'Try again' : 'Rejoin'}</Text>
               </Pressable>
             ) : fresh > 0 ? (
-              <Badge text={`${fresh} new`} size={22} testID="room-dock-new" />
+              <Badge text={`${fresh} new`} size={22} arrive testID="room-dock-new" />
             ) : null}
           </Material>
         </ScalePress>

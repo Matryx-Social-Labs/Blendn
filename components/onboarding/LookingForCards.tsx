@@ -1,51 +1,28 @@
-import { Ionicons } from '@expo/vector-icons'
-import { Image } from 'expo-image'
-import { LinearGradient } from 'expo-linear-gradient'
-import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Fragment } from 'react'
+import { StyleSheet, View } from 'react-native'
 
-import { EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, tint, TYPE } from '../../lib/theme'
+import { LookingForCard } from '../ds/LookingForCard'
+import { SPACE } from '../../lib/design/tokens'
 
 /**
- * "What brings you to Blend'n today?" — five picture cards, two across.
+ * "What brings you to Blend'n today?" as the design system's picture tiles, two across (Flow 2 preferences 01).
  *
- * The frame draws these as image tiles rather than chips, and the difference is
- * doing work: five words in a row of pills is a form, five pictures is a
- * question about how you want to spend an evening. Worth the five assets.
+ * The frame draws these as image tiles rather than chips, and the difference is doing work: five words in a row of pills is
+ * a form, five pictures is a question about how you want to spend an evening.
  *
- * Images are committed rather than linked — Figma's URLs expire in about a
- * week, so a build referencing one loses its artwork seven days later.
- *
- * The icons are Ionicons rather than the frame's exported SVGs. They are five
- * generic glyphs (heart, people, briefcase, compass, infinity) already in the
- * bundle, and shipping five more files to draw the same shapes is weight for
- * nothing. If the designer wants their exact set, that is a swap of five
- * imports.
+ * Images are committed rather than linked: Figma's URLs expire in about a week, so a build referencing one loses its artwork
+ * seven days later.
  */
-
-/*
- * The card size, computed rather than declared as a percentage.
- *
- * These were `width: '48%'` with `aspectRatio: 1`, and they rendered as five
- * thin lines. Every child of a card is absolutely positioned — the image, the
- * scrim, the label — so the card has no in-flow content to derive a height
- * from, and `aspectRatio` against a percentage width did not supply one. The
- * result collapsed to the border and nothing else.
- *
- * Real numbers have no such failure mode: 24pt of screen padding each side, a
- * 16pt gap, split in two. It is also what `app/(tabs)/events.tsx` already does
- * for its carousel, for the same reason.
- */
-const SCREEN_PADDING = GUTTER
-const GRID_GAP = SPACE.lg
-const CARD = Math.floor((Dimensions.get('window').width - SCREEN_PADDING * 2 - GRID_GAP) / 2)
-
 export const LOOKING_FOR_OPTIONS = [
-  { value: 'Dating', icon: 'heart' as const, art: require('../../assets/onboarding/looking-dating.jpg') },
-  { value: 'Friendship', icon: 'people' as const, art: require('../../assets/onboarding/looking-friendship.jpg') },
-  { value: 'Networking', icon: 'briefcase' as const, art: require('../../assets/onboarding/looking-networking.jpg') },
-  { value: 'Travel', icon: 'compass' as const, art: require('../../assets/onboarding/looking-travel.jpg') },
-  { value: 'Open', icon: 'infinite' as const, art: require('../../assets/onboarding/looking-open.jpg') },
+  { value: 'Dating', art: require('../../assets/onboarding/looking-dating.jpg') },
+  { value: 'Friendship', art: require('../../assets/onboarding/looking-friendship.jpg') },
+  { value: 'Networking', art: require('../../assets/onboarding/looking-networking.jpg') },
+  { value: 'Travel', art: require('../../assets/onboarding/looking-travel.jpg') },
+  { value: 'Open', art: require('../../assets/onboarding/looking-open.jpg') },
 ]
+
+/** Two to a row. */
+const PER_ROW = 2
 
 export function LookingForCards({
   selected,
@@ -54,63 +31,36 @@ export function LookingForCards({
 }: {
   selected: readonly string[]
   onToggle: (value: string) => void
-  /** Under 18: dating is refused, so it is not offered (SCRUM-294). */
+  /** Under 18: dating is refused, so it is not offered (SCRUM-294). Not disabled: a minor never sees it. */
   withoutDating?: boolean
 }) {
-  const options = withoutDating
-    ? LOOKING_FOR_OPTIONS.filter((option) => option.value !== 'Dating')
-    : LOOKING_FOR_OPTIONS
+  const options = withoutDating ? LOOKING_FOR_OPTIONS.filter((option) => option.value !== 'Dating') : LOOKING_FOR_OPTIONS
+  const rows = Array.from({ length: Math.ceil(options.length / PER_ROW) }, (_, i) => options.slice(i * PER_ROW, (i + 1) * PER_ROW))
   return (
     <View style={styles.grid}>
-      {options.map((option) => {
-        const isOn = selected.includes(option.value)
-        return (
-          <Pressable
-            key={option.value}
-            onPress={() => onToggle(option.value)}
-            accessibilityRole="button"
-            accessibilityState={{ selected: isOn }}
-            accessibilityLabel={option.value}
-            style={[styles.card, isOn && styles.cardOn]}
-          >
-            {/*
-              40% opacity, per the frame. At full strength the photographs
-              fight the label and each other; dimmed they read as texture and
-              the word stays the thing you scan.
-            */}
-            <Image source={option.art} style={styles.art} contentFit="cover" transition={180} cachePolicy="memory-disk" />
-            <LinearGradient
-              colors={[EMBER.bgClear, EMBER.bgClear, tint(EMBER.bg, 0.95)]}
-              style={StyleSheet.absoluteFill}
-              pointerEvents="none"
-            />
-            <View style={styles.label}>
-              <Ionicons name={option.icon} size={ICON.md} color={EMBER.textPrimary} />
-              <Text style={styles.labelText}>{option.value}</Text>
-            </View>
-          </Pressable>
-        )
-      })}
+      {rows.map((row) => (
+        <View key={row[0].value} style={styles.row}>
+          {row.map((option) => (
+            <Fragment key={option.value}>
+              <LookingForCard
+                label={option.value}
+                image={option.art}
+                selected={selected.includes(option.value)}
+                onPress={() => onToggle(option.value)}
+                testID={`looking-for-${option.value}`}
+              />
+            </Fragment>
+          ))}
+          {/* An odd tile keeps its half of the row. */}
+          {row.length < PER_ROW ? <View style={styles.filler} /> : null}
+        </View>
+      ))}
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GRID_GAP },
-  card: {
-    width: CARD,
-    height: CARD,
-    borderRadius: EMBER_RADIUS.card,
-    overflow: 'hidden',
-    backgroundColor: EMBER.surface,
-    // A transparent border at rest so selecting one does not resize it — a
-    // 4px border appearing from nothing shifts every card in the row.
-    borderWidth: 4,
-    borderColor: 'transparent',
-  },
-  cardOn: { borderColor: EMBER.textPrimary },
-  // design-exception: decorative art dimmed under its label, not a control state
-  art: { ...StyleSheet.absoluteFill, width: '100%', height: '100%', opacity: 0.4 },
-  label: { position: 'absolute', left: SPACE.lg, right: SPACE.lg, bottom: SPACE.lg, gap: SPACE.sm },
-  labelText: TYPE.button,
+  grid: { gap: SPACE.md },
+  row: { flexDirection: 'row', gap: SPACE.md },
+  filler: { flex: 1 },
 })

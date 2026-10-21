@@ -125,12 +125,12 @@ describe('one age rule for every form that takes an age', () => {
 
   it('tells "The basics" why Continue is off: under 18, or not a usable date', () => {
     const src = read('app/onboarding/basics.tsx')
-    // Announced as it appears (a live region), so the attributes may grow.
-    expect(src).toMatch(/isUnderAccountAge\(dateOfBirth\) \? \(\s*<Text style=\{styles\.error\}[^>]*>\{ADULTS_ONLY\}<\/Text>/)
+    // The date field announces its own sentence as it appears (assertive, with the ring), so the screen only chooses it.
+    expect(src).toContain('const underAge = isUnderAccountAge(dateOfBirth)')
+    expect(src).toContain('const dateError = underAge ? ADULTS_ONLY : notADate ? NOT_A_DATE : undefined')
+    expect(src).toContain("const NOT_A_DATE = 'That is not a date we recognise.'")
     // `!dateOfBirth` is never true once the boxes are full, so 30 February showed nothing.
-    expect(src).toMatch(
-      /dateOfBirth && !isCompleteDateOfBirth\(dateOfBirth\) \? \(\s*<Text style=\{styles\.error\}[^>]*>That is not a date we recognise\.<\/Text>/
-    )
+    expect(src).toMatch(/const notADate = !underAge && !!dateOfBirth && !isCompleteDateOfBirth\(dateOfBirth\)/)
     expect(src).not.toMatch(/&& !dateOfBirth \? \(/)
     // The two cases are disjoint: an impossible date is never "under 18".
     expect(isUnderAccountAge('2010-02-30')).toBe(false)

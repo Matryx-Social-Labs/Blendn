@@ -26,11 +26,11 @@ import {
 } from '../../components/pulse/PulseSections'
 import { SectionReveal } from '../../components/pulse/Rail'
 import { EventCard } from '../../components/ds/EventCard'
+import { IconButton } from '../../components/ds/IconButton'
 import { ScrimPill } from '../../components/ds/MonoFamily'
 import { DayHeading } from '../../components/ds/DayHeading'
 import { font } from '../../components/ds/shared'
 import { PULSE_HEADER_HEIGHT, PulseSearch } from '../../components/pulse/PulseHeader'
-import { PulseTitle } from '../../components/pulse/PulseTitle'
 import { PulseBanners } from '../../components/pulse/PulseBanners'
 import { CityPicker } from '../../components/pulse/CityPicker'
 import { PulseEmpty, PulseLoadFailed } from '../../components/pulse/PulseEmpty'
@@ -316,6 +316,8 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
    */
   const [interestStatuses, setInterestStatuses] = useState<{ [eventId: string]: boolean }>({})
   const [interestCounts, setInterestCounts] = useState<Record<string, number>>({})
+  /** A save or an unsave is out: the heart holds still until the server answers. */
+  const [interestPending, setInterestPending] = useState<Record<string, boolean>>({})
 
   /*
    * The four maps every action handler reads, held so they do not force the
@@ -592,6 +594,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
         return
       }
       interestInFlightRef.current.add(event.id)
+      setInterestPending((prev) => ({ ...prev, [event.id]: true }))
       prevInterested = !!latestInterestStatusesRef.current[event.id]
       prevCount = latestInterestCountsRef.current[event.id] ?? event.favorite_count ?? 0
       const optimisticCount = Math.max(0, prevInterested ? prevCount - 1 : prevCount + 1)
@@ -612,6 +615,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       fail()
     } finally {
       interestInFlightRef.current.delete(event.id)
+      setInterestPending((prev) => ({ ...prev, [event.id]: false }))
     }
   }, [user, showToast, latestInterestStatusesRef, latestInterestCountsRef])
 
@@ -1473,10 +1477,19 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
               <Text style={[font('caption', false), styles.ink]}>{note}</Text>
             </ScrimPill>
           ) : null}
+          {/* Saving is the whole of `event_favorites` and what the Going tab's Saved is built from: a silent toggle beside the row. */}
+          <IconButton
+            icon="heart"
+            selected={!!interestStatuses[event.id]}
+            disabled={!!interestPending[event.id]}
+            accessibilityLabel={interestStatuses[event.id] ? `Saved, ${event.title}` : `Save ${event.title}`}
+            onPress={() => void toggleInterest(event)}
+            testID={`pulse-row-save-${event.id}`}
+          />
         </View>
       </RevealRow>
     )
-  }, [isNarrowed, sections.length, firstRowId, now, hasFix, checkinStatuses, handleEventPress, openPeek, warmEvent])
+  }, [isNarrowed, sections.length, firstRowId, now, hasFix, checkinStatuses, interestStatuses, interestPending, handleEventPress, openPeek, warmEvent, toggleInterest])
   const keyExtractor = useCallback((item: PulseRow) => item.key, [])
 
   const askForLocation = useCallback(() => {
@@ -1571,7 +1584,6 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       })),
     [filters, categoryOptions]
   )
-  const pulseTitle = <PulseTitle city={selectedCity} onPressCity={() => setCityPickerOpen(true)} />
   const searchNode = (
     <PulseSearch
       query={searchInput}
@@ -1737,10 +1749,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
           windowSize={10}
           stickyHeaderIndices={STICKY_SEARCH}
           ListHeaderComponent={
-            <View>
-              {banners}
-              <View style={styles.titleBlock}>{pulseTitle}</View>
-            </View>
+            <View>{banners}</View>
           }
         />
       </PulseSlots.Provider>
@@ -1803,8 +1812,6 @@ const styles = StyleSheet.create({
   moreRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
   /** A day's heading over its rows: a section gap above the first, the stack's rhythm below. */
   dayRow: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.lg, paddingBottom: SPACE.xs },
-  /** The headline above the sticky search. */
-  titleBlock: { paddingBottom: SPACE.lg },
   /** "6 events · Bengaluru": the flat result's label. */
   resultsLabel: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.xl, paddingBottom: SPACE.md },
   resultsLabelText: { ...DESIGN_TYPE.label, color: COLOR.textSecondary },

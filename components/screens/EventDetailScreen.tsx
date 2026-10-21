@@ -2,7 +2,7 @@ import FadeInUp from '../motion/FadeInUp'
 import { H } from '../../lib/haptics'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { Linking, Platform, Share, StyleSheet, View } from 'react-native'
+import { InteractionManager, Linking, Platform, Share, StyleSheet, View } from 'react-native'
 import Animated, { FadeIn, LayoutAnimationConfig, LinearTransition, ReduceMotion, useAnimatedScrollHandler, useReducedMotion, useSharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { OverflowMenu } from '../crews/OverflowMenu'
@@ -45,16 +45,21 @@ import { PAGE_WASH, PageWash } from '../ui/GradientFill'
 import { Icon, type IconName } from '../ui/Icon'
 import { SceneHero, sceneHeroHeight, type ScenePill } from '../scene/SceneHero'
 import { SceneLightbox } from '../scene/SceneLightbox'
+import ScalePress from '../motion/ScalePress'
 import { BoardEntry } from '../board/BoardSections'
 import { BOARD_ENABLED, boardClosed } from '../../lib/board'
 import {
   SCENE_CTA_ICON,
   SCENE_PADDING_HORIZONTAL,
   SCENE_SECTION_GAP,
+  SceneAttendees,
   SceneBody,
   SceneBodyAccent,
+  SceneByline,
   SceneCTA,
   SceneGallery,
+  SceneLocationCard,
+  SceneMap,
   SceneDetails,
   rsvpCtaState,
   type SceneCTAState,
@@ -280,6 +285,8 @@ export default function EventDetail() {
   const [rsvpStatus, setRsvpStatus] = useState<RsvpStatus | null>(null)
   const lastFetchRef = React.useRef<number>(0)
   const [menuOpen, setMenuOpen] = useState(false)
+  /** The map mounts once the push has settled, so it does not cost the transition a frame. */
+  const [showMap, setShowMap] = useState(false)
   const [isOrganizer, setIsOrganizer] = useState(false)
   const [showAnnouncementModal, setShowAnnouncementModal] = useState(false)
   /** Which gallery item the lightbox is on, or null when it is closed. */
@@ -442,6 +449,11 @@ export default function EventDetail() {
     // read to set the organizer flag inside its own callback — adding either
     // would refetch on every render/auth-object refresh instead of once per id.
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
+
+  useEffect(() => {
+    const task = InteractionManager.runAfterInteractions(() => setShowMap(true))
+    return () => task?.cancel?.()
   }, [id])
 
   // Real-time event updates via Socket.io
@@ -1030,6 +1042,11 @@ export default function EventDetail() {
       ? { label: 'HERE NOW', count: hereNow ?? detailHere ?? checkInCount }
       : { label: goingCount > 0 ? 'GOING' : 'INTERESTED', count: goingCount || interestCount }
 
+  // The count means two things either side of the doors: who said they are coming (RSVPs, else saves), then who turned up.
+  const attendeeBlock = hasStarted
+    ? { label: 'Attendees', count: checkInCount }
+    : { label: goingCount > 0 ? 'Going' : 'Interested', count: goingCount || interestCount }
+
   const ctaState: SceneCTAState = cancelled
     ? 'cancelled'
     : isEnded
@@ -1169,9 +1186,15 @@ export default function EventDetail() {
                 <AmenityGrid tiles={tiles} testID="scene-tiles" />
               </FadeInUp>
 
+              {event?.organizer || isLive ? (
+                <FadeInUp delay={SECTION_DELAY[0]}>
+                  <SceneByline host={event?.organizer} hereNow={isLive ? hereNow ?? detailHere : null} />
+                </FadeInUp>
+              ) : null}
+
               {event?.description ? (
                 <FadeInUp delay={SECTION_DELAY[1]} style={styles.section}>
-                  <SectionHeader title="The experience" caption={event.organizer ? `By ${event.organizer}` : undefined} />
+                  <SectionHeader title="The experience" />
                   <SceneBody>
                     {highlightEntities(event.description, entities).map((seg, i) =>
                       seg.entity ? <SceneBodyAccent key={i}>{seg.text}</SceneBodyAccent> : seg.text
@@ -1199,6 +1222,12 @@ export default function EventDetail() {
                 </FadeInUp>
               ) : null}
 
+              {attendeeBlock.count > 0 ? (
+                <FadeInUp delay={SECTION_DELAY[3]}>
+                  <SceneAttendees count={attendeeBlock.count} label={attendeeBlock.label} seed={event?.id || 'scene'} />
+                </FadeInUp>
+              ) : null}
+
               {/*
                 The board: going alone, and looking for somebody to go with. Before doors only — after them the room is
                 the place, and the board is closed. Reading needs an RSVP or a save; the board itself says so if
@@ -1208,6 +1237,19 @@ export default function EventDetail() {
               {event && BOARD_ENABLED && !boardClosed(event.start_time) ? (
                 <FadeInUp delay={SECTION_DELAY[3]}>
                   <BoardEntry onPress={() => router.push({ pathname: '/board/[eventId]', params: { eventId: event.id } } as never)} />
+                </FadeInUp>
+              ) : null}
+
+              {event?.venue_name ? (
+                <FadeInUp delay={SECTION_DELAY[3]}>
+                  {/* No haptic: it leaves the app, and the Maps hand-off is the feedback. */}
+                  <ScalePress pressedScale={0.98} haptic={false} onPress={openInMaps} accessibilityRole="button" accessibilityLabel={`Open ${event.venue_name} in Maps`}>
+                    <SceneLocationCard
+                      venue={event.venue_name}
+                      area={event.address || event.city || ''}
+                      map={showMap && event.latitude && event.longitude ? <SceneMap latitude={event.latitude} longitude={event.longitude} /> : null}
+                    />
+                  </ScalePress>
                 </FadeInUp>
               ) : null}
 
@@ -1235,7 +1277,7 @@ export default function EventDetail() {
       </Animated.ScrollView>
 
       {/* The dock: a glass bar outside the scroll, so the one action stays where the thumb is. */}
-      <Dock onHeight={setCtaDockHeight} testID="scene-dock">
+      <Dock floating onHeight={setCtaDockHeight} testID="scene-dock">
         <SceneCTA
           state={ctaState}
           pending={rsvpPending}

@@ -6,6 +6,9 @@ import { InviteLinkCard } from '../../components/friends/InviteLinkCard'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import { useFriendInvite } from '../../lib/useFriendInvite'
 
+/** The primary by state (Flow 2 friends 02 · 03 · 04): a link that did not load is retried from the same button, never a dead one (U-M14). */
+export const friendsPrimary = (shared: boolean, failed: boolean) => (shared ? 'Start Blend’n' : failed ? 'Try again' : 'Share my link')
+
 /**
  * Bring your friends — shown once, after the last onboarding step and before
  * the app.
@@ -21,8 +24,9 @@ import { useFriendInvite } from '../../lib/useFriendInvite'
  * straight to the app, and the link is always on the Me tab.
  */
 export default function FriendsIntroScreen() {
-  const { invite, failed, share } = useFriendInvite()
+  const { invite, failed, share, reload } = useFriendInvite()
   const [shared, setShared] = useState(false)
+  const [retrying, setRetrying] = useState(false)
 
   const enterApp = () => router.replace('/(tabs)/events')
 
@@ -46,20 +50,25 @@ export default function FriendsIntroScreen() {
     if (await share()) setShared(true)
   }
 
+  const retry = async () => {
+    setRetrying(true)
+    await reload()
+    setRetrying(false)
+  }
+
   return (
     <OnboardingScreen
       title="Bring your "
       titleAccent="friends."
-      subtitle="Nobody can find you on Blend'n by searching. Share your link, and anyone you send it to can ask to be your friend."
-      ctaLabel={shared ? "Start Blend'n" : 'Share my link'}
-      ctaBusy={!invite && !failed}
-      ctaDisabled={!shared && failed}
-      onContinue={() => void (shared ? enterApp() : shareLink())}
+      subtitle="Nobody can find you on Blend’n by searching. Share your link, and anyone you send it to can ask to be your friend."
+      ctaLabel={friendsPrimary(shared, failed)}
+      ctaBusy={(!invite && !failed) || retrying}
+      onContinue={() => void (shared ? enterApp() : failed ? retry() : shareLink())}
       secondaryLabel={shared ? 'Share again' : 'Maybe later'}
       onSecondary={() => void (shared ? shareLink() : enterApp())}
       footerNote="In a room, friends see your pseudonym like everyone else. You can change that in Settings."
     >
-      <InviteLinkCard url={invite?.url} failed={failed} />
+      <InviteLinkCard url={invite?.url} failed={failed && !retrying} shared={shared} />
     </OnboardingScreen>
   )
 }

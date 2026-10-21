@@ -14,7 +14,6 @@ import { PROMOTED_LABEL } from '../../lib/pulseSections'
 import type { FeedMediaItem } from '../../lib/feedMedia'
 import { FeedMedia } from './FeedMedia'
 import { PULSE_HEADER_HEIGHT } from './PulseHeader'
-import { PULSE_TITLE_HEIGHT } from './PulseTitle'
 import { TOP_BAR_HEIGHT } from './PulseTopBar'
 
 const SCREEN_WIDTH = Dimensions.get('window').width
@@ -58,7 +57,7 @@ export const FEATURED_CARD_SOLO = SCREEN_WIDTH - FEATURED_ROW_INSET * 2
  * that draws it, so changing one moves this with it.
  */
 export const CHROME_ABOVE_CARD =
-  TOP_BAR_HEIGHT + SPACE.lg + PULSE_TITLE_HEIGHT + PULSE_HEADER_HEIGHT + SPACE.xxl + TYPE.heading.lineHeight + SPACE.lg
+  TOP_BAR_HEIGHT + SPACE.lg + PULSE_HEADER_HEIGHT + SPACE.xxl + TYPE.heading.lineHeight + SPACE.lg
 
 /** Daylight between the card's bottom edge and the tab bar. */
 const CARD_BOTTOM_BREATH = SPACE.xl

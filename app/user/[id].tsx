@@ -30,6 +30,7 @@ import { Logger } from '../../lib/logger'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
+import { HueProvider } from '../../components/ds/shared'
 const { width: WINDOW_WIDTH } = Dimensions.get('window')
 
 interface UserProfileView {
@@ -730,10 +731,19 @@ const styles = StyleSheet.create({
  * Wrapped so `lib/perf.tsx` can report what this screen costs to render.
  * `ScreenProfiler` is the children untouched in production — see its header.
  */
-export default function UserProfile() {
+function UserProfileContent() {
   return (
     <ScreenProfiler id="attendee">
       <UserProfileInner />
     </ScreenProfiler>
+  )
+}
+
+/** Rose world: one hue on this screen (`HueProvider`). */
+export default function UserProfile() {
+  return (
+    <HueProvider value="rose">
+      <UserProfileContent />
+    </HueProvider>
   )
 }

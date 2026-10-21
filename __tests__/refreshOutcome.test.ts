@@ -43,7 +43,7 @@ describe('a session the server ended is explained on the entry screen (SCRUM-142
     // for real in session-end-reason.test.ts (SCRUM-292).
     expect(events).toMatch(/await s\.removeItem\(ENDED_KEY\)/)
     expect(entry).toContain('consumeSessionEndedNotice().then((ended) => {')
-    expect(entry).toMatch(/\{!error && notice && \(\s*<Text style=\{styles\.notice\} accessibilityRole="alert">/)
+    expect(entry).toMatch(/\{!error && notice && \(\s*<Text style=\{\[[^}]*styles\.notice\]\} accessibilityRole="alert">/)
   })
 
   it('says what happened and what to do', () => {

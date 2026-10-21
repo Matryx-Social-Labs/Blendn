@@ -14,7 +14,7 @@ import { RadioCard } from '../../components/ds/RadioCard'
 import { SectionHeader } from '../../components/ds/SectionHeader'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { TextArea } from '../../components/ds/TextField'
-import { font, useBoldText } from '../../components/ds/shared'
+import { font, HueProvider, useBoldText } from '../../components/ds/shared'
 import { fadeInFast } from '../../components/motion/presence'
 import { OfflineBanner, useOffline } from '../../components/OfflineBanner'
 import { SkeletonBlock, SkeletonCircle } from '../../components/Skeleton'
@@ -499,11 +499,11 @@ function RatePeersContent() {
           ) : null}
         </View>
         {done ? (
-          <Dock onHeight={setDockHeight} testID="rate-dock">
+          <Dock floating onHeight={setDockHeight} testID="rate-dock">
             <Button label="Done" kind="primary" onPress={close} testID="rate-done" />
           </Dock>
         ) : person ? (
-          <Dock onHeight={setDockHeight} testID="rate-dock">
+          <Dock floating onHeight={setDockHeight} testID="rate-dock">
             <Button label="Submit" kind="primary" onPress={() => void submit()} disabled={rating === null || noteTooLong || offline} loading={submitting} testID="rate-submit" />
             {/* Skipping is a first-class outcome. No nagging, no guilt copy. */}
             <Button label="Skip this person" kind="tertiary" size="md" onPress={advance} disabled={submitting} testID="rate-skip-person" />
@@ -536,7 +536,11 @@ const styles = StyleSheet.create({
   tertiary: { color: COLOR.textTertiary },
 })
 
-/** The screen's default export is a wrapper, so a hue provider can be added around the content without touching it. */
+/** Rose world: one hue on this screen (`HueProvider`). */
 export default function RatePeers() {
-  return <RatePeersContent />
+  return (
+    <HueProvider value="rose">
+      <RatePeersContent />
+    </HueProvider>
+  )
 }

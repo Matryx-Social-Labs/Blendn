@@ -12,7 +12,7 @@ import { RowsCard } from '../../components/crews/RowsCard'
 import { Banner } from '../../components/ds/Banner'
 import { SectionHeader } from '../../components/ds/SectionHeader'
 import { SettingsRow } from '../../components/ds/SettingsRow'
-import { font, useBoldText } from '../../components/ds/shared'
+import { font, HueProvider, useBoldText } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { TopBar, type TopBarState } from '../../components/ds/TopBar'
 import { useSkeletonCrossfade } from '../../components/motion/useSkeletonCrossfade'
@@ -63,7 +63,7 @@ const REPORT_SENT = 'Reported. Thanks — nobody is told it was you.'
  * on each member to remove them. People are named here because they are
  * friends who joined by consent; the crew chat is the existing room screen.
  */
-export default function CrewScreen() {
+function CrewScreenContent() {
   const params = useLocalSearchParams<{ crewId: string; fromChat?: string }>()
   const crewId = String(params.crewId)
   const { user } = useAuth()
@@ -411,3 +411,12 @@ const styles = StyleSheet.create({
   leave: { minHeight: LEAVE_HEIGHT, alignItems: 'center', justifyContent: 'center' },
   destructive: { color: COLOR.destructive },
 })
+
+/** Rose world: one hue on this screen (`HueProvider`). */
+export default function CrewScreen() {
+  return (
+    <HueProvider value="rose">
+      <CrewScreenContent />
+    </HueProvider>
+  )
+}

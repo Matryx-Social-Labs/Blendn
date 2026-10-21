@@ -15,7 +15,7 @@ const read = (rel: string) => readFileSync(join(__dirname, '..', rel), 'utf8')
  */
 describe('onboarding tells the truth about names in rooms', () => {
   it('does not promise that only a first name shows', () => {
-    const helper = read('app/onboarding/basics.tsx').match(/label="Your name"[\s\S]*?helper="([^"]+)"/)?.[1]
+    const helper = read('app/onboarding/basics.tsx').match(/const NAME_HINT = '([^']+)'/)?.[1]
     expect(helper).toBeDefined()
     expect(helper).not.toMatch(/first name/i)
     expect(helper).toMatch(/made-up name/)
@@ -23,7 +23,7 @@ describe('onboarding tells the truth about names in rooms', () => {
   })
 
   it('says the switch offers a reveal at check-in, not that it reveals', () => {
-    const helper = read('app/onboarding/preferences.tsx').match(/label="Stay anonymous at events"\s*helper="([^"]+)"/)?.[1]
+    const helper = read('app/onboarding/preferences.tsx').match(/const ANONYMITY_HELP = '([^']+)'/)?.[1]
     expect(helper).toBeDefined()
     expect(helper).not.toMatch(/everyone there sees/i)
     expect(helper).toMatch(/offer to show your name and photo when you check in/)

@@ -43,9 +43,20 @@ jest.mock('expo-location', () => ({
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }))
 jest.mock('../lib/perf', () => ({ ScreenProfiler: ({ children }: { children: React.ReactNode }) => children }))
 // The shell reports what the drawer is doing; the test decides it.
+// The city lives in the shell's title tabs now: its chip calls what the screen reported as `openCityPicker`.
+let mockBrowse: { openCityPicker: () => void } | null = null
 jest.mock('../components/home/HomeShell', () => ({
-  HomeShell: ({ renderEvents }: { renderEvents: (b: () => void, visible: boolean, full: boolean) => React.ReactNode }) =>
-    renderEvents(() => {}, mockVisible, mockFull),
+  HomeShell: ({ renderEvents }: { renderEvents: (b: (browse: { openCityPicker: () => void }) => void, visible: boolean, full: boolean) => React.ReactNode }) => {
+    const { Pressable } = require('react-native')
+    return (
+      <>
+        {renderEvents((browse) => {
+          mockBrowse = browse
+        }, mockVisible, mockFull)}
+        <Pressable testID="open-city" onPress={() => mockBrowse?.openCityPicker()} />
+      </>
+    )
+  },
 }))
 jest.mock('../app/(tabs)/_layout', () => ({ TAB_BAR_CLEARANCE: 92, tabBarTop: () => 800 }))
 jest.mock('../components/pulse/FeaturedCard', () => {
@@ -70,14 +81,7 @@ jest.mock('../components/ds/EventCard', () => {
     ),
   }
 })
-// The two sheets the header opens, each with a way to close it.
-jest.mock('../components/pulse/PulseTitle', () => {
-  const { Pressable } = require('react-native')
-  return {
-    PULSE_TITLE_HEIGHT: 56,
-    PulseTitle: (p: { onPressCity: () => void }) => <Pressable testID="open-city" onPress={p.onPressCity} />,
-  }
-})
+// The two sheets the header opens, each with a way to close it (the city's is opened from the shell, above).
 jest.mock('../components/pulse/PulseHeader', () => {
   const { Pressable, View } = require('react-native')
   return {
@@ -102,7 +106,8 @@ jest.mock('../components/cityArt/drawable', () => ({ drawableCityArt: () => null
 jest.mock('../components/OptimizedImage', () => ({ preloadImages: jest.fn(async () => {}) }))
 jest.mock('../components/RealtimeStatusBanner', () => () => null)
 jest.mock('../components/Skeleton', () => ({ Skeleton: () => null, SkeletonBlock: () => null, SkeletonLine: () => null }))
-jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn() }) }))
+const mockShowToast = jest.fn()
+jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShowToast }) }))
 jest.mock('../components/pulse/PulseBanners', () => ({ PulseBanners: () => null }))
 jest.mock('../components/motion/FadeInUp', () => ({ children }: { children: React.ReactNode }) => children)
 // The city picker's sheet, with a way to close it (the Sheet needs a modal host).
@@ -362,5 +367,21 @@ describe('the event page, warm before the tap', () => {
     expect(apiClient.getEvent.mock.calls.map((c) => c[0])).toEqual(['e1'])
     await act(async () => fireEvent(screen.getByTestId('row-Event u1'), 'pressIn'))
     expect(apiClient.getEvent).toHaveBeenLastCalledWith('u1', expect.objectContaining({ include: 'interestedUsers' }))
+  })
+})
+
+describe('the save heart beside each Everything-else row (kept)', () => {
+  it('is a named toggle; a refused save puts it back and says so in a toast with the error haptic', async () => {
+    signIn()
+    ;serve([event('u1', null), event('u2', null)])
+    mockShowToast.mockClear()
+    await mount()
+    const heart = screen.getByRole('button', { name: 'Save Event u2' })
+    expect(heart.props.accessibilityState).toMatchObject({ selected: false })
+    await act(async () => fireEvent.press(heart))
+    await settle()
+    expect(mockShowToast).toHaveBeenCalledWith("Couldn't save this event. Try again.", 'error', { haptic: 'error' })
+    // Rolled back: still offering Save, not "Saved".
+    expect(screen.getByRole('button', { name: 'Save Event u2' })).toBeTruthy()
   })
 })

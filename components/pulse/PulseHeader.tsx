@@ -10,11 +10,13 @@ import { keyboardLeft } from '../../lib/home'
 
 /**
  * The search row of The Pulse (Flow 3 `home`): sticky under the title, the DS `SearchField`, the filter button with its
- * badge, and each applied filter as a removable chip. The same row Places draws, so the panes read as one. The title and
- * the city control are the home shell's (`PulseTitle` until the title tabs land there).
+ * badge, and each applied filter as a removable chip. The same row Places draws, so the panes read as one.
  */
 
-/** The search row's height: the field and the filter circle are one 48 pt row. */
+/**
+ * The Pulse's header on home: the search row alone (the field and the filter circle, 48 pt). The title and the city are the
+ * drawer's title tabs (`TitleTabs`).
+ */
 export const PULSE_HEADER_HEIGHT = SIZE.control
 
 export type AppliedChip = { key: string; label: string; onRemove: () => void }

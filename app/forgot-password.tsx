@@ -1,27 +1,26 @@
-import { Ionicons } from '@expo/vector-icons'
-import { router, useLocalSearchParams } from 'expo-router'
+import { useLocalSearchParams } from 'expo-router'
 import React, { useEffect, useRef, useState } from 'react'
-import {
-  Image,
-  KeyboardAvoidingView,
-  Linking,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { KeyboardAvoidingView, Linking, ScrollView, StyleSheet, Text, View } from 'react-native'
+import Animated from 'react-native-reanimated'
 
 import { useToast } from '../components/Toast'
 import { apiClient } from '../lib/apiClient'
 import { Logger } from '../lib/logger'
 import { forgotPasswordMessage } from '../lib/signInRefusal'
-import { AUTH_FORM_STYLES, AUTH_LOCKUP } from '../components/onboarding/authForm'
-import { EmberButton } from '../components/onboarding/EmberControls'
-import { CONTROL, EMBER, EMBER_RADIUS, ICON, MAX_FONT_SCALE, SPACE, TYPE } from '../lib/theme'
-import { KEYBOARD_BEHAVIOR } from '../lib/keyboard'
+import { Backdrop, ORB_LEVEL } from '../components/onboarding/Backdrop'
+import { CooldownRing } from '../components/onboarding/CooldownRing'
+import { Dock } from '../components/ds/Dock'
+import { FormHeader } from '../components/onboarding/FormHeader'
+import { useRefusedPulse } from '../components/onboarding/useRefusedPulse'
+import { useSettleIn } from '../components/onboarding/useSettleIn'
+import { Banner } from '../components/ds/Banner'
+import { Button } from '../components/ds/Button'
+import { GlyphWell } from '../components/ds/StateScreen'
+import { TextField } from '../components/ds/TextField'
+import { font, useBoldText } from '../components/ds/shared'
+import { COLOR, FONT_FAMILY, SPACE } from '../lib/design/tokens'
+import { H } from '../lib/haptics'
+import { KEYBOARD_BEHAVIOR, useKeyboardShown } from '../lib/keyboard'
 
 
 /**
@@ -30,6 +29,9 @@ import { KEYBOARD_BEHAVIOR } from '../lib/keyboard'
  * somebody whose mail really did not come is not left waiting.
  */
 const RESEND_COOLDOWN_S = 30
+
+/** The envelope settles in from 0.8 (Flow 1 forgot 03). */
+const ENVELOPE_FROM_SCALE = 0.8
 
 /**
  * Request a password reset link.
@@ -64,8 +66,18 @@ export default function ForgotPassword() {
   const [email, setEmail] = useState(typeof params.email === 'string' ? params.email : '')
   const [busy, setBusy] = useState(false)
   const [sent, setSent] = useState(false)
+  /** The server's refusal, or ours when it never answered: a card above the primary. */
   const [error, setError] = useState<string | null>(null)
+  const [waiting, setWaiting] = useState(false)
+  /** The address is not one: under the field, in its own sentence. */
+  const [invalid, setInvalid] = useState<string | null>(null)
   const [cooldown, setCooldown] = useState(0)
+  const bold = useBoldText()
+  const keyboardUp = useKeyboardShown()
+  const settle = useSettleIn(ENVELOPE_FROM_SCALE)
+  // One shake, one H.error per refusal, on the button that asked (Resend is its own).
+  const { refused, refuse } = useRefusedPulse()
+  const { refused: resendRefused, refuse: refuseResend } = useRefusedPulse()
   // The keyboard's "go" and the button can land in one frame; one request.
   const inFlight = useRef(false)
 
@@ -78,17 +90,21 @@ export default function ForgotPassword() {
     return () => clearTimeout(timer)
   }, [cooldown])
 
-  /** Returns whether the request landed. Both the form and Resend use it. */
-  const send = async (): Promise<boolean> => {
+  /** Returns whether the request landed. Both the form and Resend use it; a refusal answers on the button that asked. */
+  const send = async (asked: 'form' | 'resend'): Promise<boolean> => {
     if (inFlight.current) return false
+    const refusedBy = asked === 'form' ? refuse : refuseResend
     if (!address.includes('@')) {
-      setError('Enter a valid email address.')
+      setInvalid('Enter a valid email address.')
+      refusedBy()
       return false
     }
 
     inFlight.current = true
     setBusy(true)
     setError(null)
+    setWaiting(false)
+    setInvalid(null)
     try {
       const result = await apiClient.forgotPassword(address)
       /*
@@ -100,6 +116,8 @@ export default function ForgotPassword() {
        */
       if (!result.success) {
         setError(forgotPasswordMessage(result))
+        setWaiting(result.errorCode === 'RATE_LIMITED')
+        refusedBy()
         return false
       }
       setCooldown(RESEND_COOLDOWN_S)
@@ -107,6 +125,7 @@ export default function ForgotPassword() {
     } catch (e) {
       Logger.error('auth', 'Forgot password request failed', { error: e })
       setError("Couldn't send the reset link. Try again.")
+      refusedBy()
       return false
     } finally {
       inFlight.current = false
@@ -115,11 +134,16 @@ export default function ForgotPassword() {
   }
 
   const submit = async () => {
-    if (await send()) setSent(true)
+    if (await send('form')) {
+      // The server's yes, once; the envelope settles in as the page changes.
+      H.success()
+      setSent(true)
+    }
   }
 
+  // The outcome plays its success haptic with its toast, as it appears.
   const resend = async () => {
-    if (await send()) showToast('Sent again. Give it a minute to arrive.', 'success')
+    if (await send('resend')) showToast('Sent again. Give it a minute to arrive.', 'success', { haptic: 'success' })
   }
 
   /*
@@ -143,140 +167,115 @@ export default function ForgotPassword() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <View style={styles.root}>
+      <Backdrop level={ORB_LEVEL.form} paused={keyboardUp} />
+      <FormHeader testID="forgot-header" />
+
       <KeyboardAvoidingView style={styles.flex} behavior={KEYBOARD_BEHAVIOR}>
-        <ScrollView
-          contentContainerStyle={styles.scroll}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          <Pressable
-            onPress={() => router.back()}
-            style={styles.back}
-            accessibilityRole="button"
-            accessibilityLabel="Go back"
-            hitSlop={12}
-          >
-            <Ionicons name="chevron-back" size={ICON.lg} color={EMBER.textPrimary} />
-          </Pressable>
-
-          {/* Decorative, as on sign-in: the buttons say what the screen does. */}
-          <Image
-            source={AUTH_LOCKUP}
-            style={styles.lockup}
-            resizeMode="contain"
-            accessibilityElementsHidden
-            importantForAccessibility="no-hide-descendants"
-          />
-
-          {sent ? (
-            <View style={styles.sent}>
-              <View
-                style={styles.iconWell}
-                accessibilityElementsHidden
-                importantForAccessibility="no-hide-descendants"
-              >
-                <Ionicons name="mail-outline" size={ICON.lg} color={EMBER.textPrimary} />
-              </View>
-              <Text style={styles.title} accessibilityRole="header">
-                Check your inbox
-              </Text>
-              <Text style={styles.body}>
-                If <Text style={styles.address}>{address}</Text> has an account, a reset link is
-                on its way. It opens in your browser and expires in an hour.
-              </Text>
-
-              {error && (
-                <Text style={styles.error} accessibilityRole="alert">
-                  {error}
+        {sent ? (
+          <>
+            <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+              {/* The envelope settles in once, on M.settle (Reduce Motion: it fades). */}
+              <Animated.View style={[styles.well, settle]}>
+                <GlyphWell icon="mail" size="screen" testID="forgot-sent-well" />
+              </Animated.View>
+              <View style={styles.headline}>
+                <Text style={[font('title', bold), styles.title, styles.centre]} accessibilityRole="header">
+                  Check your inbox
                 </Text>
-              )}
+                <Text style={[font('body', bold), styles.body, styles.centre]}>
+                  If <Text style={[font('body', bold, FONT_FAMILY.brand[700]), styles.address]}>{address}</Text> has an account, a reset link is on its way. It
+                  opens in your browser and expires in an hour.
+                </Text>
+              </View>
 
-              <EmberButton label="Open mail app" onPress={() => void openMail()} style={styles.primary} />
+              {error ? <Banner kind="error" text={error} icon={waiting ? 'clock' : undefined} testID="forgot-error" /> : null}
+            </ScrollView>
 
-              {/* Counting down: still readable, plainly not ready. */}
-              <EmberButton
-                variant="secondary"
+            <Dock glass={false} keyboardUp={false} testID="forgot-dock">
+              <Button label="Open mail app" onPress={() => void openMail()} testID="forgot-open-mail" />
+
+              {/* Counting down: still readable, plainly not ready, and the ring says how long. */}
+              <Button
                 label={cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend link'}
+                kind="secondary"
                 onPress={() => void resend()}
                 disabled={cooldown > 0}
-                busy={busy}
+                loading={busy}
+                refused={resendRefused}
+                leading={cooldown > 0 ? <CooldownRing left={cooldown} total={RESEND_COOLDOWN_S} testID="forgot-ring" /> : undefined}
+                testID="forgot-resend"
               />
 
-              <Pressable
-                onPress={() => {
-                  setSent(false)
-                  setError(null)
-                }}
-                style={styles.linkButton}
-                accessibilityRole="button"
-              >
-                <Text style={styles.link}>USE A DIFFERENT EMAIL</Text>
-              </Pressable>
-            </View>
-          ) : (
-            <>
-              <View style={styles.headline}>
-                <Text style={styles.title} accessibilityRole="header">
-                  Forgot your password?
-                </Text>
-                <Text style={styles.body}>
-                  Enter the email you signed up with and we&apos;ll send you a link to set a new
-                  one.
-                </Text>
-              </View>
-
-              <View style={styles.field}>
-                <Text style={styles.label}>EMAIL</Text>
-                <TextInput
-                  style={styles.input}
-                  value={email}
-                  onChangeText={setEmail}
-                  placeholder="you@example.com"
-                  placeholderTextColor={EMBER.textPlaceholder}
-                  accessibilityLabel="Email"
-                  maxFontSizeMultiplier={MAX_FONT_SCALE.button}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  keyboardType="email-address"
-                  autoComplete="email"
-                  textContentType="emailAddress"
-                  returnKeyType="go"
-                  onSubmitEditing={() => void submit()}
-                  autoFocus={!email}
+              <View style={styles.other}>
+                <Button
+                  label="Use a different email"
+                  kind="tertiary"
+                  size="sm"
+                  onPress={() => {
+                    setSent(false)
+                    setError(null)
+                  }}
+                  testID="forgot-different"
                 />
               </View>
-
-              {error && (
-                <Text style={styles.error} accessibilityRole="alert">
-                  {error}
+            </Dock>
+          </>
+        ) : (
+          <>
+            <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              <View style={styles.headline}>
+                <Text style={[font('title', bold), styles.title]} accessibilityRole="header">
+                  Forgot your password?
                 </Text>
-              )}
+                <Text style={[font('body', bold), styles.body]}>
+                  Enter your email and we’ll send a link to reset it. The link opens in your browser.
+                </Text>
+              </View>
 
-              <EmberButton label="Send reset link" onPress={() => void submit()} busy={busy} style={styles.primary} />
-            </>
-          )}
-        </ScrollView>
+              <TextField
+                label="Email"
+                value={email}
+                onChangeText={(value) => {
+                  setEmail(value)
+                  if (invalid) setInvalid(null)
+                }}
+                error={invalid ?? undefined}
+                placeholder="you@example.com"
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="email-address"
+                autoComplete="email"
+                textContentType="emailAddress"
+                returnKeyType="go"
+                onSubmitEditing={() => void submit()}
+                autoFocus={!email}
+                testID="forgot-email"
+              />
+
+              {error ? <Banner kind="error" text={error} icon={waiting ? 'clock' : undefined} testID="forgot-error" /> : null}
+            </ScrollView>
+
+            <Dock glass={keyboardUp} keyboardUp={keyboardUp} testID="forgot-dock">
+              {/* The server's answer plays its own haptic within a second (H.success, or the refusal's H.error), so the press-in is silent. */}
+              <Button label="Send reset link" onPress={() => void submit()} loading={busy} refused={refused} pressHaptic={false} testID="forgot-send" />
+            </Dock>
+          </>
+        )}
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
-  ...AUTH_FORM_STYLES,
+  root: { flex: 1, backgroundColor: COLOR.ink },
+  flex: { flex: 1 },
+  scroll: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.xl, paddingBottom: SPACE.xl, gap: SPACE.lg },
   headline: { gap: SPACE.sm },
-  title: TYPE.title,
-  body: { ...TYPE.body, color: EMBER.textSecondary },
-  address: { color: EMBER.textPrimary },
-
-  sent: { gap: SPACE.lg },
-  // A decorative well: `surface` fill, `textPrimary` glyph (DESIGN_SYSTEM.md).
-  iconWell: {
-    width: CONTROL.lg,
-    height: CONTROL.lg,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  title: { color: COLOR.textPrimary },
+  body: { color: COLOR.textSecondary },
+  centre: { textAlign: 'center' },
+  address: { color: COLOR.textPrimary },
+  well: { alignSelf: 'center' },
+  other: { alignItems: 'center' },
 })

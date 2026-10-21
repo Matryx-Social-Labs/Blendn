@@ -10,7 +10,7 @@ import { useAuth } from '../../lib/useAuth'
 import { useOnboarding } from '../../lib/useOnboarding'
 
 /**
- * Step two — notifications.
+ * Step two: notifications.
  *
  * A permission screen, which means the button does not grant anything: it opens
  * the OS dialog, and the OS decides. What this screen is actually for is being
@@ -22,7 +22,7 @@ import { useOnboarding } from '../../lib/useOnboarding'
  * `push_enabled` records the answer either way. Someone who declines has said
  * something, and the profile should say it rather than keep the default.
  */
-const SETTINGS_HINT = "Blend'n uses notifications to know when someone nearby wants to connect."
+const SETTINGS_HINT = 'Blend’n uses notifications to know when someone nearby wants to connect.'
 
 export default function NotificationsScreen() {
   const { saving, commit, goBack } = useOnboarding('notifications')
@@ -87,6 +87,7 @@ export default function NotificationsScreen() {
       <NotificationIllustration />
       <SettingsTray
         visible={settingsPrompt}
+        icon="bell-off"
         hint={SETTINGS_HINT}
         onClose={() => setSettingsPrompt(false)}
         onNotNow={() => {
