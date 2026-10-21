@@ -1,7 +1,7 @@
 import { router, useFocusEffect } from 'expo-router'
 import { useCallback, useState } from 'react'
 import { FlatList, RefreshControl, StyleSheet, View } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { StateScreen } from '../../components/ds/StateScreen'
 import { TopBar } from '../../components/ds/TopBar'
@@ -29,6 +29,7 @@ function FriendsScreenContent() {
   const [refreshing, setRefreshing] = useState(false)
   const requests = useFriendRequests()
   const bar = useTopBarState()
+  const insets = useSafeAreaInsets()
   const offline = useOffline()
 
   const load = useCallback(async () => {
@@ -73,7 +74,7 @@ function FriendsScreenContent() {
   )
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
+    <View style={styles.container}>
       <TopBar
         title="Friends"
         state={bar.state}
@@ -110,7 +111,7 @@ function FriendsScreenContent() {
               />
             )
           }}
-          contentContainerStyle={friends?.length ? styles.list : styles.emptyList}
+          contentContainerStyle={[friends?.length ? styles.list : styles.emptyList, { paddingBottom: insets.bottom + SPACE.xl }]}
           ListEmptyComponent={empty}
           // `textSecondary`, the one pull-to-refresh colour (docs/DESIGN_SYSTEM.md).
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLOR.textSecondary} />}
@@ -118,7 +119,7 @@ function FriendsScreenContent() {
           {...bar.scrollProps}
         />
       )}
-    </SafeAreaView>
+    </View>
   )
 }
 
@@ -126,7 +127,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLOR.ink },
   list: { paddingHorizontal: SPACE.gutter, paddingVertical: SPACE.sm },
   emptyList: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: SPACE.gutter },
-  requests: { paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.sm },
+  requests: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.xs, paddingBottom: SPACE.sm },
 })
 
 /** Rose world: one hue on this screen (`HueProvider`). */

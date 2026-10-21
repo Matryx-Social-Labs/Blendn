@@ -37,7 +37,7 @@ describe('blockedLine', () => {
 
 describe('the scroll owns its foot', () => {
   const src = (rel: string) => readFileSync(join(__dirname, '..', rel), 'utf8')
-  it.each(['app/settings.tsx', 'app/blocked-users.tsx', 'app/about.tsx', 'app/support.tsx'])(
+  it.each(['app/settings.tsx', 'app/blocked-users.tsx', 'app/about.tsx', 'app/support.tsx', 'app/friends/index.tsx', 'app/friends/add.tsx', 'app/friends/requests.tsx'])(
     '%s has no SafeAreaView around the scroll, and pads its foot by the inset',
     (rel) => {
       const code = src(rel)

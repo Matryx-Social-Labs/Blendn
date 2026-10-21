@@ -1,7 +1,7 @@
 import { router } from 'expo-router'
 import { useState } from 'react'
 import { FlatList, RefreshControl, StyleSheet, View } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { StateScreen } from '../../components/ds/StateScreen'
 import { TopBar } from '../../components/ds/TopBar'
@@ -24,6 +24,7 @@ function FriendRequestsScreenContent() {
   const { incoming, loaded, failed, load, respond, busy } = useFriendRequests()
   const [refreshing, setRefreshing] = useState(false)
   const bar = useTopBarState()
+  const insets = useSafeAreaInsets()
   const offline = useOffline()
 
   const onRefresh = async () => {
@@ -48,7 +49,7 @@ function FriendRequestsScreenContent() {
   )
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
+    <View style={styles.container}>
       <TopBar title="Requests" state={bar.state} onBack={() => router.back()} />
       {offline ? (
         <View style={styles.offline}>
@@ -68,7 +69,7 @@ function FriendRequestsScreenContent() {
               onRespond={(action) => void respond(item, action)}
             />
           )}
-          contentContainerStyle={incoming.length ? styles.list : styles.emptyList}
+          contentContainerStyle={[incoming.length ? styles.list : styles.emptyList, { paddingBottom: insets.bottom + SPACE.xl }]}
           ListEmptyComponent={empty}
           // `textSecondary`, the one pull-to-refresh colour (docs/DESIGN_SYSTEM.md).
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLOR.textSecondary} />}
@@ -76,7 +77,7 @@ function FriendRequestsScreenContent() {
           {...bar.scrollProps}
         />
       )}
-    </SafeAreaView>
+    </View>
   )
 }
 

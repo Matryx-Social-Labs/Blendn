@@ -1,7 +1,7 @@
 import { router } from 'expo-router'
 import { useState } from 'react'
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Button } from '../../components/ds/Button'
 import { Grain } from '../../components/ds/Grain'
@@ -37,6 +37,7 @@ function AddFriendsScreenContent() {
   const [refreshing, setRefreshing] = useState(false)
   const [reloadingLink, setReloadingLink] = useState(false)
   const bar = useTopBarState()
+  const insets = useSafeAreaInsets()
   const bold = useBoldText()
   const { user } = useAuth()
 
@@ -71,13 +72,13 @@ function AddFriendsScreenContent() {
     })
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
+    <View style={styles.container}>
       <Orbs set="brand" />
       <Grain />
       <TopBar title="Add friends" state={bar.state} onBack={() => router.back()} />
       <ScrollView
         {...bar.scrollProps}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + SPACE.xl }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLOR.textSecondary} />}
         showsVerticalScrollIndicator={false}
       >
@@ -141,7 +142,7 @@ function AddFriendsScreenContent() {
           </View>
         ) : null}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   )
 }
 
