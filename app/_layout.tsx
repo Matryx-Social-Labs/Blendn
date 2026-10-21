@@ -659,8 +659,11 @@ function RootLayout() {
            * the right with an × where every pushed screen has a back chevron,
            * and the edge-swipe dismissed a screen that looked like it had to
            * be closed.
+           *
+           * Full screen, because the frame is (Flow 3 `prefs`: the ✕ under a status bar): a page sheet drew the top inset a
+           * second time inside itself, so the ✕ landed 62 pt into the sheet, and on Android the dock lost the bottom inset.
            */
-          presentation: 'modal',
+          presentation: 'fullScreenModal',
           animation: reduceMotion ? 'fade' : Platform.OS === 'ios' ? 'default' : 'slide_from_bottom',
         }}
       />
@@ -716,7 +719,7 @@ function RootLayout() {
       {/* The Blendn+ paywall, a modal with "Not now" (step 11). Placeholder design (docs/PLACEHOLDER_SCREENS.md §13). */}
       <Stack.Screen
         name="plus"
-        options={{ headerShown: false, presentation: 'modal', animation: reduceMotion ? 'fade' : Platform.OS === 'ios' ? 'default' : 'slide_from_bottom' }}
+        options={{ headerShown: false, presentation: 'fullScreenModal', animation: reduceMotion ? 'fade' : Platform.OS === 'ios' ? 'default' : 'slide_from_bottom' }}
       />
       <Stack.Screen name="f/[token]" options={{ headerShown: false, presentation: 'modal', animation: reduceMotion ? 'fade' : 'slide_from_bottom' }} />
           </Stack>

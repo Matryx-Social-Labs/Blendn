@@ -1,14 +1,13 @@
-import { barCircleBottom, barTop } from '../../lib/barGeometry'
+import { TopBar } from '../../components/ds/TopBar'
+import { useTopBarOverlay } from '../../lib/useTopBarState'
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useState } from 'react'
-import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { ScrollView, StyleSheet, Text, View } from 'react-native'
 import Animated, { LinearTransition, useReducedMotion } from 'react-native-reanimated'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Avatar } from '../../components/ds/Avatar'
 import { Button } from '../../components/ds/Button'
 import { Dock } from '../../components/ds/Dock'
-import { IconButton } from '../../components/ds/IconButton'
 import { Orbs } from '../../components/ds/Orbs'
 import { RadioCard } from '../../components/ds/RadioCard'
 import { SectionHeader } from '../../components/ds/SectionHeader'
@@ -95,7 +94,7 @@ function EventPreferencesContent() {
   useEffect(() => (askIntent ? intentAnswered : undefined), [askIntent])
   const { showToast } = useToast()
   const { user } = useAuth()
-  const insets = useSafeAreaInsets()
+  const bar = useTopBarOverlay()
   const reduceMotion = useReducedMotion()
   const bold = useBoldText()
 
@@ -296,12 +295,11 @@ function EventPreferencesContent() {
   return (
     <View style={styles.screen}>
       <Orbs set="feed" />
-      {/* First in the tree: the focus order starts at Close. */}
-      <View style={[styles.close, { top: barTop(insets.top) }]}>
-        <IconButton icon="x" accessibilityLabel="Close" onPress={() => router.back()} testID="prefs-close" />
-      </View>
       <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingTop: barCircleBottom(insets.top, Platform.OS === 'android') + SPACE.xl, paddingBottom: dockHeight + SPACE.xl }]}
+        testID="prefs-scroll"
+        {...bar.scrollProps}
+        contentContainerStyle={[styles.scroll, { paddingTop: bar.contentTop + SPACE.md, paddingBottom: dockHeight + SPACE.xl }]}
+        scrollIndicatorInsets={{ top: bar.indicatorTop }}
         showsVerticalScrollIndicator={false}
       >
         {/*
@@ -316,6 +314,14 @@ function EventPreferencesContent() {
         <View accessibilityElementsHidden importantForAccessibility="no" style={styles.divider} />
         {askIntent ? revealBlock : intentBlock}
       </ScrollView>
+      {/*
+        The bar over the scroll (Flow 3 `prefs`: a ✕ and nothing else), so the copy passes under glass when it scrolls and never
+        under the ✕ or, on Android, the status bar. Last of the page's pieces in the tree but first to be read: the page is
+        modal, and Close is the first thing a screen reader should land on.
+      */}
+      <View style={bar.barPin} pointerEvents="box-none">
+        <TopBar close state={bar.state} onBack={() => router.back()} testID="prefs-top" />
+      </View>
       {/* Docked, not at the end of the scroll: with four intents it fell below the fold. The first-door answer cannot be nothing: an empty save would write an empty default. */}
       <Dock floating onHeight={setDockHeight} testID="prefs-dock">
         <Button
@@ -334,7 +340,6 @@ function EventPreferencesContent() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: COLOR.ink },
-  close: { position: 'absolute', left: SPACE.lg, zIndex: 2 },
   scroll: { paddingHorizontal: SPACE.gutter, gap: SPACE.xl },
   section: { gap: SPACE.lg },
   headline: { gap: SPACE.sm },

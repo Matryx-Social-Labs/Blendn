@@ -206,3 +206,33 @@ describe('the redesigned cards', () => {
     expect(screen.getByRole('radio', { name: /^Anonymous/ }).props.accessibilityState).toMatchObject({ checked: true })
   })
 })
+
+describe('the top bar (visual QA r5: the ✕ floated and the copy scrolled under it, and under the Android status bar)', () => {
+  it('is the DS TopBar with a ✕ named Close and no heading, pinned over the scroller', async () => {
+    await render(<EventPreferences />)
+    const close = screen.getByRole('button', { name: 'Close' })
+    fireEvent.press(close)
+    expect(router.back).toHaveBeenCalledTimes(1)
+    // The screen draws only its circle (Flow 3 `prefs`): no title of its own in the bar.
+    expect(screen.queryByTestId('prefs-top-condensed')).toBeNull()
+  })
+
+  it('the glass comes up once the page scrolls, so copy passes under glass and not under the ✕', async () => {
+    await render(<EventPreferences />)
+    expect(screen.queryByTestId('prefs-top-bar')).toBeNull()
+    await fireEvent.scroll(screen.getByTestId('prefs-scroll'), { nativeEvent: { contentOffset: { y: 40 } } })
+    expect(screen.getByTestId('prefs-top-bar', { includeHiddenElements: true })).toBeTruthy()
+  })
+
+  it('the first row starts under the bar (content top), not behind it', () => {
+    const src = readFileSync(join(__dirname, '..', 'app', 'event-preferences', '[eventId].tsx'), 'utf8')
+    expect(src).toContain('paddingTop: bar.contentTop')
+    expect(src).not.toMatch(/insets\.top/)
+  })
+
+  it('is presented full screen, as the frame is: a page sheet drew the inset twice and cost Android its dock inset', () => {
+    const layout = readFileSync(join(__dirname, '..', 'app', '_layout.tsx'), 'utf8')
+    const prefs = layout.slice(layout.indexOf('name="event-preferences/[eventId]"'))
+    expect(prefs.slice(0, prefs.indexOf('/>'))).toContain("presentation: 'fullScreenModal'")
+  })
+})

@@ -26,7 +26,6 @@ const CHROME = [
   'components/screens/EventDetailScreen.tsx',
   'app/rate/[eventId].tsx',
   'app/chat-info/[id].tsx',
-  'app/event-preferences/[eventId].tsx',
   'app/venue/[id].tsx',
 ]
 
@@ -38,6 +37,10 @@ it('the bars take their row top from lib/barGeometry, so there is one place to r
   for (const file of CHROME) {
     expect(read(file)).toMatch(/barTop|barHeight|barCircleBottom|BAR_BOTTOM/)
   }
+})
+
+it('Event preferences draws the DS TopBar (a ✕ and no heading) instead of a floating circle', () => {
+  expect(read('app/event-preferences/[eventId].tsx')).toMatch(/<TopBar close state=\{bar\.state\}/)
 })
 
 it('the floating Pulse capsule and bell start at the top of their band, not centred in it', () => {

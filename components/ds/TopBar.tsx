@@ -14,12 +14,15 @@ import { CONTROL_FONT_CAP, font, useBoldText, useIncreaseContrast } from './shar
 export type TopBarState = 'rest' | 'scrolled' | 'condensed'
 
 export type TopBarProps = {
-  title: string
+  /** Omitted on a screen that draws only its circle (Event preferences: the ✕, no heading). */
+  title?: string
   /** A line under the title ("4 people · 2 here now"). */
   sub?: string
   /** The screen decides from its scroll offset. */
   state?: TopBarState
   onBack: () => void
+  /** The leading circle is a ✕ named Close, for a screen presented as a modal (Flow 3 `prefs`, Flow 12 `page`), not a back arrow. */
+  close?: boolean
   /** Glass circles on the right, named by what they do. */
   actions?: readonly { icon: IconName; label: string; onPress: () => void }[]
   /** The Save pill: `H.primary` on press-in; `H.success` is the screen's, when the save lands. */
@@ -43,7 +46,7 @@ export type TopBarProps = {
  *
  * Save is the 48 pt `md` button: Button has no 44.
  */
-export function TopBar({ title, sub, state = 'rest', onBack, actions = [], save, testID }: TopBarProps) {
+export function TopBar({ title, sub, state = 'rest', onBack, close = false, actions = [], save, testID }: TopBarProps) {
   const android = Platform.OS === 'android'
   const insets = useSafeAreaInsets()
   const bold = useBoldText()
@@ -65,9 +68,9 @@ export function TopBar({ title, sub, state = 'rest', onBack, actions = [], save,
         </View>
       ) : null}
       <View style={[styles.row, { minHeight: circle }]}>
-        <IconButton icon={android ? 'arrow-left' : 'chevron-left'} accessibilityLabel="Back" onPress={onBack} />
+        <IconButton icon={close ? 'x' : android ? 'arrow-left' : 'chevron-left'} accessibilityLabel={close ? 'Close' : 'Back'} onPress={onBack} testID={testID && `${testID}-back`} />
         <View style={styles.titles}>
-          {condensed ? null : (
+          {condensed || !title ? null : (
             <>
               <Text
                 accessibilityRole="header"
@@ -88,7 +91,7 @@ export function TopBar({ title, sub, state = 'rest', onBack, actions = [], save,
           {save ? <Button label="Save" size="md" onPress={save.onPress} loading={save.saving} disabled={save.disabled} /> : null}
         </View>
       </View>
-      {condensed ? (
+      {condensed && title ? (
         <View testID={testID && `${testID}-condensed`} pointerEvents="none" style={[styles.condensed, { top, height: circle, left: inset, right: inset }]}>
           <Text
             accessibilityRole="header"
