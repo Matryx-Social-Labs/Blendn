@@ -5,10 +5,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { COLOR, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { useToastDock } from '../toastDock'
 import { PhotoScrim } from '../ui/GradientFill'
-import { font, useBoldText, useIncreaseContrast } from '../ds/shared'
+import { font, useBoldText } from '../ds/shared'
 
-/** The ink fade behind the dock: the frame's 120 pt (U-H3), and always taller than the dock so the line above the tray sits on ink. */
-const FADE = 120
+/** The ink fade above the dock: it ends in solid ink exactly where the dock begins, so the note and the tray never sit on a photo. */
+const FADE = SPACE.xxxl
 
 /**
  * How far the page's last section must clear: the tray (a 56 pt primary in 12 pt of padding), the line above it, the
@@ -39,7 +39,6 @@ export function ProfileDock({
 }) {
   const insets = useSafeAreaInsets()
   const bold = useBoldText()
-  const contrast = useIncreaseContrast()
   const [height, setHeight] = useState(0)
   const onLayout = (e: LayoutChangeEvent) => {
     setHeight(e.nativeEvent.layout.height)
@@ -50,8 +49,12 @@ export function ProfileDock({
 
   return (
     <View testID={testID} pointerEvents="box-none" onLayout={onLayout} style={styles.dock}>
-      <PhotoScrim testID={testID && `${testID}-fade`} contrast={contrast} pointerEvents="none" style={[styles.fade, { height: Math.max(FADE, height + SPACE.xl) }]} />
-      <View style={[styles.stack, { paddingBottom: insets.bottom + SPACE.lg }]}>
+      {/*
+        The foot is SOLID ink (the note and the tray read on it, not on the top of a fade that is still near-clear: the note overprinted
+        the interest chips), and the fade is above it, ending at 100% ink where the foot begins.
+      */}
+      <PhotoScrim testID={testID && `${testID}-fade`} foot={1} pointerEvents="none" style={[styles.fade, { bottom: height, height: FADE }]} />
+      <View testID={testID && `${testID}-foot`} style={[styles.stack, { paddingTop: SPACE.sm, paddingBottom: insets.bottom + SPACE.lg }]}>
         {note ? <Text style={[font('meta', bold), styles.note]}>{note}</Text> : null}
         <View testID={testID && `${testID}-tray`} style={styles.tray}>
           {children}
@@ -63,8 +66,8 @@ export function ProfileDock({
 
 const styles = StyleSheet.create({
   dock: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 1 },
-  fade: { position: 'absolute', left: 0, right: 0, bottom: 0 },
-  stack: { paddingHorizontal: SPACE.gutter, gap: SPACE.sm },
+  fade: { position: 'absolute', left: 0, right: 0 },
+  stack: { paddingHorizontal: SPACE.gutter, gap: SPACE.sm, backgroundColor: COLOR.ink },
   note: { color: COLOR.textSecondary, textAlign: 'center' },
   tray: { flexDirection: 'row', gap: SPACE.sm, padding: SPACE.md, borderRadius: RADIUS.card, backgroundColor: COLOR.surfaceSunken },
 })

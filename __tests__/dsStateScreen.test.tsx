@@ -88,3 +88,19 @@ describe('<StateScreen>', () => {
     expect(text('People show up as they check in.').color).toBe(COLOR.textPrimary)
   })
 })
+
+describe('<StateScreen gutter> (Going’s empty state: the frame’s left 24 / right 24)', () => {
+  it('stops the body and the action at the page margins when asked, and adds nothing by default', async () => {
+    await render(<StateScreen icon="calendar" title="Nothing here yet" body="Tap the heart." actions={[{ label: 'Browse events', onPress: jest.fn() }]} gutter testID="s" />)
+    expect(flat('s')).toMatchObject({ paddingHorizontal: 24 })
+    await render(<StateScreen icon="calendar" title="Nothing here yet" testID="s" />)
+    expect(flat('s').paddingHorizontal).toBeUndefined()
+  })
+
+  it('Going draws both its states with it, 96 pt under the title (the frame: title at 124, state at 260)', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'app', '(tabs)', 'going.tsx'), 'utf8') as string
+    expect(src.match(/gutter\n\s*testID="going-(empty|failed)"/g)).toHaveLength(2)
+    expect(src).toMatch(/stateBlock: \{ marginTop: SPACE\.xxxl \* 2 \}/)
+  })
+})

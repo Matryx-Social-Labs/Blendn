@@ -543,6 +543,7 @@ function GoingScreenInner() {
         // The banner above is the state: not "couldn't load", not "nothing here yet".
         <View />
       ) : items.length === 0 && loadFailed ? (
+        <View style={styles.stateBlock}>
         <StateScreen
           icon="cloud-off"
           title="Couldn’t load your events"
@@ -556,16 +557,21 @@ function GoingScreenInner() {
               },
             },
           ]}
+          gutter
           testID="going-failed"
         />
+        </View>
       ) : items.length === 0 ? (
+        <View style={styles.stateBlock}>
         <StateScreen
           icon="calendar"
           title="Nothing here yet"
           body="Tap “I’m going” or the heart on an event and it shows up here."
           actions={[{ label: 'Browse events', onPress: () => router.navigate('/(tabs)/events' as any) }]}
+          gutter
           testID="going-empty"
         />
+        </View>
       ) : (
         /*
          * The list fades up over the skeleton's place as one piece, instead of
@@ -760,6 +766,8 @@ const styles = StyleSheet.create({
   pressed: { opacity: OPACITY.pressed },
   list: { flex: 1 },
   inset: { marginHorizontal: SPACE.gutter },
+  // Flow 3 `going` empty: the title at 124, the state at 260: 96 under the title's own 40 pt line and its 24 pt top.
+  stateBlock: { marginTop: SPACE.xxxl * 2 },
   // flow4.js going `dayH`: 8 above a heading after a row's own 4, 12 under it before the next row's 4.
   heading: { marginTop: SPACE.md, marginBottom: SPACE.sm },
   // The card's 20 below it, then the heading's 8.

@@ -34,8 +34,9 @@ export const PHOTO_SCRIM = { foot: 0.88, contrast: 0.2 } as const
  * colour, never under anything but text on a photo (DESIGN-BRIEF §4.5: white
  * text over at least 60%). The caller places it (its height is the page's).
  */
-export function PhotoScrim({ contrast = false, ...rest }: ViewProps & { contrast?: boolean }) {
-  const foot = Math.min(1, PHOTO_SCRIM.foot + (contrast ? PHOTO_SCRIM.contrast : 0))
+export function PhotoScrim({ contrast = false, foot: ends, ...rest }: ViewProps & { contrast?: boolean; foot?: number }) {
+  // `foot` where the scrim must meet solid ink with no seam (a hero over the page, a dock over its fade): 1, not the photo's 0.88.
+  const foot = ends ?? Math.min(1, PHOTO_SCRIM.foot + (contrast ? PHOTO_SCRIM.contrast : 0))
   return <LinearGradient {...rest} colors={[tint(COLOR.ink, 0), tint(COLOR.ink, foot)]} />
 }
 

@@ -3,7 +3,7 @@
  * the docked tray's reach on a small phone, and the paged viewer's counter.
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
-import { StyleSheet } from 'react-native'
+import { processColor, StyleSheet } from 'react-native'
 
 const mockInsets = { top: 59, bottom: 34, left: 0, right: 0 }
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => mockInsets }))
@@ -20,7 +20,8 @@ import { nextPage } from '../components/profile/ProfileHeroPager'
 import { counterOf, pageAt } from '../components/profile/PhotoViewer'
 import { nightLabel, nightsView } from '../lib/meProfile'
 import { compactCount, STAT_MAX } from '../components/profile/MeSections'
-import { SIZE, SPACE } from '../lib/design/tokens'
+import { COLOR, SIZE, SPACE } from '../lib/design/tokens'
+import { tint } from '../lib/theme'
 /* eslint-enable import/first */
 
 const night = (n: number) => ({ id: `e${n}`, title: `Night ${n}`, start_time: new Date(Date.now() - n * 86_400_000).toISOString(), cover_image_url: null })
@@ -126,6 +127,22 @@ describe('the docked tray reaches the thumb on an iPhone SE', () => {
     expect(dock.position).toBe('absolute')
     expect(dock.bottom).toBe(0)
     expect(screen.getByText(/Connect sends a request/)).toBeTruthy()
+  })
+  it('the note and the tray sit on SOLID ink, with the fade above it ending at 100% where the dock begins (the note overprinted the interest chips)', async () => {
+    await render(
+      <ProfileDock testID="dock" note="Connect sends a request and reveals your name and photo.">
+        <Banner kind="info" text="child" />
+      </ProfileDock>
+    )
+    await act(async () => {
+      fireEvent(screen.getByTestId('dock'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 390, height: 160 } } })
+    })
+    expect(StyleSheet.flatten(screen.getByTestId('dock-foot').props.style).backgroundColor).toBe(COLOR.ink)
+    const fade = screen.getByTestId('dock-fade', { includeHiddenElements: true })
+    // It starts where the foot ends (above the measured dock), and its last stop is the opaque ink the foot is.
+    expect(StyleSheet.flatten(fade.props.style).bottom).toBe(160)
+    expect(fade.props.colors[fade.props.colors.length - 1]).toBe(processColor(tint(COLOR.ink, 1)))
+    expect(fade.props.colors[0]).toBe(processColor(tint(COLOR.ink, 0)))
   })
   it('keeps the tray clear of the hero: dock top sits below the name on a 667 pt phone', () => {
     // iPhone SE: 375 × 667, no island, a 0 inset. The hero's name sits 44 above its foot.
