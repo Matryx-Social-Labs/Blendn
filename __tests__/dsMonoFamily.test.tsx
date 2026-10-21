@@ -31,6 +31,21 @@ describe('<Badge> motion (DS #28, #26)', () => {
     }
   })
 
+  /** The badge's own root layer, as it reaches the host. */
+  const root = () => (screen.toJSON() as { props: { entering?: unknown; exiting?: unknown } }).props
+
+  it('a badge in a row has no entering or exiting animation: scrolling and first paint never pop', async () => {
+    await render(<Badge text={3} testID="b" />)
+    expect(root().entering).toBeUndefined()
+    expect(root().exiting).toBeUndefined()
+  })
+
+  it('with `arrive` (the bell, a filter count, a dock’s “n new”) it arrives and leaves', async () => {
+    await render(<Badge text={3} arrive testID="b" />)
+    expect(root().entering).toBe(badgeIn)
+    expect(root().exiting).toBeDefined()
+  })
+
   it('it arrives from 0.8 and fades in over quick; Reduce Motion is the fade alone', () => {
     const entering = badgeIn()
     expect(entering.initialValues).toEqual({ opacity: 0, transform: [{ scale: 0.8 }] })

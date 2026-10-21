@@ -183,7 +183,7 @@ export function NotificationBell({ glass = false }: { glass?: boolean } = {}) {
         <View style={glass ? styles.badgeOnGlass : styles.badge} pointerEvents="none">
           {badge ? (
             // The design system's badge: a mono caption in a pill that grows with the text, ringed in what is under it.
-            <Badge text={badge} ring={glass ? COLOR.ink : EMBER.bg} testID="bell-badge" />
+            <Badge text={badge} ring={glass ? COLOR.ink : EMBER.bg} arrive testID="bell-badge" />
           ) : null}
         </View>
       </ScalePress>

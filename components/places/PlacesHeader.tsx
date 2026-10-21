@@ -74,7 +74,7 @@ export const PlacesSearch = memo(function PlacesSearch({
           <IconButton icon="sliders-horizontal" accessibilityLabel="Filters" accessibilityHint={filterCount ? `${filterCount} applied` : undefined} onPress={onPressFilter} testID="places-filter" />
           {filterCount > 0 ? (
             <View style={styles.badge} pointerEvents="none">
-              <Badge text={filterCount} testID="places-filter-badge" />
+              <Badge text={filterCount} arrive testID="places-filter-badge" />
             </View>
           ) : null}
         </View>
