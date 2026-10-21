@@ -123,14 +123,16 @@ export function TitleTabs({ items, selected, onChange, badges, trailing, testID 
           style={[styles.underline, { backgroundColor: sel.edge, opacity: place ? 1 : 0 }, underline]}
         />
       </View>
-      {trailing}
+      {/* The words keep their width; a long city truncates inside the chip rather than pushing the row wider. */}
+      {trailing ? <View style={styles.trailing}>{trailing}</View> : null}
     </View>
   )
 }
 
 const styles = StyleSheet.create({
   row: { height: SIZE.control, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.md },
-  words: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xl },
+  words: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xl, flexShrink: 0 },
+  trailing: { flexShrink: 1, minWidth: 0 },
   word: { height: SIZE.control, flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   underline: { position: 'absolute', bottom: SPACE.xxs, height: SPACE.xs, borderRadius: RADIUS.capsule },
 })
