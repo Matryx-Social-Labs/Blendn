@@ -1,0 +1,149 @@
+/**
+ * Flow 6's shared chrome: the bar's thresholds (DS #30), the hero's stretch cap (DS #32), what Nights out draws (Me 04 · 05 · 06),
+ * the docked tray's reach on a small phone, and the paged viewer's counter.
+ */
+import { fireEvent, render, screen } from '@testing-library/react-native'
+import { StyleSheet } from 'react-native'
+
+const mockInsets = { top: 59, bottom: 34, left: 0, right: 0 }
+jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => mockInsets }))
+jest.mock('../components/OptimizedImage', () => ({ OptimizedImage: () => null }))
+
+/* eslint-disable import/first */
+import { Banner } from '../components/ds/Banner'
+import { NightsOut, nightsLine, FIRST_NIGHT, NIGHTS_FAILED } from '../components/profile/NightsOut'
+import { BAR_GLASS_AT, BAR_TITLE_SWAP, barStateAt } from '../components/profile/ProfileBar'
+import { dockClearance, ProfileDock } from '../components/profile/ProfileDock'
+import { HERO_STRETCH_MAX, heroHeightFor, stretchScale } from '../components/profile/ProfileHeroStage'
+import { nextPage } from '../components/profile/ProfileHeroPager'
+import { counterOf, pageAt } from '../components/profile/PhotoViewer'
+import { nightLabel, nightsView } from '../lib/meProfile'
+import { SIZE, SPACE } from '../lib/design/tokens'
+/* eslint-enable import/first */
+
+const night = (n: number) => ({ id: `e${n}`, title: `Night ${n}`, start_time: new Date(Date.now() - n * 86_400_000).toISOString(), cover_image_url: null })
+
+describe('the bar (DS #30)', () => {
+  it('mounts glass past 8 pt and not at it', () => {
+    expect(BAR_GLASS_AT).toBe(8)
+    expect(barStateAt(8).glass).toBe(false)
+    expect(barStateAt(9).glass).toBe(true)
+  })
+  it('crossfades the small title between 24 and 56 pt', () => {
+    expect(barStateAt(0).titleOpacity).toBe(0)
+    expect(barStateAt(24).titleOpacity).toBe(0)
+    expect(barStateAt(40).titleOpacity).toBeCloseTo(0.5)
+    expect(barStateAt(56).titleOpacity).toBe(1)
+    expect(barStateAt(500).titleOpacity).toBe(1)
+    expect(BAR_TITLE_SWAP).toBe(40)
+  })
+})
+
+describe('the hero (DS #32)', () => {
+  it('is 1.3 times the width, so the name sits above the fold', () => {
+    expect(heroHeightFor(390)).toBe(507)
+    expect(heroHeightFor(375)).toBe(488)
+  })
+  it('stretches with the pull, never past 1.15, never below 1', () => {
+    expect(stretchScale(0, 500)).toBe(1)
+    expect(stretchScale(-20, 500)).toBe(1)
+    expect(stretchScale(50, 500)).toBeCloseTo(1.1)
+    expect(stretchScale(400, 500)).toBe(HERO_STRETCH_MAX)
+  })
+  it('advances the pager and wraps', () => {
+    expect(nextPage(0, 3)).toBe(1)
+    expect(nextPage(2, 3)).toBe(0)
+    expect(nextPage(0, 0)).toBe(0)
+  })
+})
+
+describe('Nights out chooses its state (Me 04 · 05 · 06)', () => {
+  it('is a skeleton grid while the first load runs', () => {
+    expect(nightsView('loading', []).kind).toBe('loading')
+  })
+  it('is an invitation, not a grid, for someone with no night yet', () => {
+    expect(nightsView('ready', []).kind).toBe('first')
+  })
+  it('keeps the last good tiles when a refresh failed', () => {
+    expect(nightsView('failed', [night(1)])).toMatchObject({ kind: 'tiles', failed: true })
+  })
+  it('says a failure with nothing to show without tiles', () => {
+    expect(nightsView('failed', []).kind).toBe('failed')
+  })
+  it('labels a night the way the tile reads', () => {
+    expect(nightLabel(new Date(2025, 9, 3, 20).toISOString())).toBe('Fri 3 Oct')
+    expect(nightLabel('nope')).toBe('')
+  })
+  it('counts in one voice', () => {
+    expect(nightsLine(1)).toBe('1 night out in the last 12 weeks')
+    expect(nightsLine(6)).toBe('6 nights out in the last 12 weeks')
+  })
+
+  const draw = (status: 'loading' | 'ready' | 'failed', events: ReturnType<typeof night>[]) =>
+    render(<NightsOut status={status} events={events} onOpenEvent={jest.fn()} onSeeAll={jest.fn()} onRetry={jest.fn()} onFirstNight={jest.fn()} />)
+
+  it('renders the skeleton grid', async () => {
+    await draw('loading', [])
+    expect(screen.getByTestId('nights-loading')).toBeTruthy()
+    expect(screen.queryByTestId('nights-grid')).toBeNull()
+  })
+  it('renders the first-night invitation with its button', async () => {
+    const onFirst = jest.fn()
+    await render(<NightsOut status="ready" events={[]} onOpenEvent={jest.fn()} onSeeAll={jest.fn()} onRetry={jest.fn()} onFirstNight={onFirst} />)
+    expect(screen.getByText(FIRST_NIGHT.title)).toBeTruthy()
+    fireEvent.press(screen.getByText(FIRST_NIGHT.action))
+    expect(onFirst).toHaveBeenCalledTimes(1)
+    expect(screen.queryByTestId('nights-grid')).toBeNull()
+  })
+  it('renders the failed notice over the last good tiles, with Try again', async () => {
+    const onRetry = jest.fn()
+    await render(<NightsOut status="failed" events={[night(1), night(2)]} onOpenEvent={jest.fn()} onSeeAll={jest.fn()} onRetry={onRetry} onFirstNight={jest.fn()} />)
+    expect(screen.getByText(NIGHTS_FAILED.withTiles)).toBeTruthy()
+    expect(screen.getByTestId('nights-grid')).toBeTruthy()
+    fireEvent.press(screen.getByText('Try again'))
+    expect(onRetry).toHaveBeenCalledTimes(1)
+  })
+  it('draws at most six tiles', async () => {
+    await draw('ready', [1, 2, 3, 4, 5, 6, 7, 8].map(night))
+    expect(screen.getAllByLabelText(/^Night \d/)).toHaveLength(6)
+  })
+})
+
+describe('the docked tray reaches the thumb on an iPhone SE', () => {
+  it('floats SPACE.lg over the bottom inset, on the screen gutters', async () => {
+    await render(
+      <ProfileDock testID="dock" note="Connect sends a request and reveals your name and photo.">
+        <Banner kind="info" text="child" />
+      </ProfileDock>
+    )
+    const dock = StyleSheet.flatten(screen.getByTestId('dock').props.style)
+    expect(dock.position).toBe('absolute')
+    expect(dock.bottom).toBe(0)
+    expect(screen.getByText(/Connect sends a request/)).toBeTruthy()
+  })
+  it('keeps the tray clear of the hero: dock top sits below the name on a 667 pt phone', () => {
+    // iPhone SE: 375 × 667, no island, a 0 inset. The hero's name sits 44 above its foot.
+    const hero = heroHeightFor(375)
+    const nameTop = hero - 44 - 40
+    const dockTop = 667 - dockClearance(0) - SPACE.xl
+    expect(dockTop).toBeGreaterThan(nameTop)
+    // And the primary is on screen at all: its foot is inside the window.
+    expect(667 - dockClearance(0) + SIZE.primary).toBeLessThan(667)
+  })
+  it('clears the Android navigation bar by the inset it is given', () => {
+    expect(dockClearance(48) - dockClearance(0)).toBe(48)
+  })
+})
+
+describe('the paged viewer', () => {
+  it('rests on the page the offset is nearest, inside the set', () => {
+    expect(pageAt(0, 390, 5)).toBe(0)
+    expect(pageAt(400, 390, 5)).toBe(1)
+    expect(pageAt(10_000, 390, 5)).toBe(4)
+    expect(pageAt(-50, 390, 5)).toBe(0)
+  })
+  it('names where you are for a set, and nothing for one photo', () => {
+    expect(counterOf(1, 5)).toEqual({ text: '2 / 5', spoken: 'Photo 2 of 5' })
+    expect(counterOf(0, 1)).toBeNull()
+  })
+})

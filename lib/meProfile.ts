@@ -7,7 +7,7 @@
  * value that is missing drops its part rather than printing a placeholder.
  */
 
-import { MONTHS } from './time'
+import { MONTHS, WEEKDAYS } from './time'
 
 /** Interest names from a profile payload: plain strings, or `{ id, name, slug, icon }` objects. */
 export const interestNames = (raw: unknown): string[] =>
@@ -29,6 +29,12 @@ function memberDate(memberSince: string | null | undefined): Date | null {
 export function joinedLabel(memberSince: string | null | undefined): string | null {
   const d = memberDate(memberSince)
   return d ? `Joined ${MONTHS[d.getMonth()]} ${d.getFullYear()}` : null
+}
+
+/** "Mar 2025": the date alone, for the screen that draws it in Geist Mono. */
+export function joinedDate(memberSince: string | null | undefined): string | null {
+  const d = memberDate(memberSince)
+  return d ? `${MONTHS[d.getMonth()]} ${d.getFullYear()}` : null
 }
 
 /** "Bengaluru · Joined Mar 2025", dropping whichever part is missing. */
@@ -161,4 +167,34 @@ export function agoLabel(startTime: string, now: Date = new Date()): string {
   const months = (now.getFullYear() - start.getFullYear()) * 12 + now.getMonth() - start.getMonth()
   if (months < 12) return `${months} MONTHS AGO`
   return months < 24 ? 'LAST YEAR' : `${Math.floor(months / 12)} YEARS AGO`
+}
+
+/** "Fri 3 Oct": the eyebrow on a night's tile (Flow 6 `me`). Empty when the date is unreadable. */
+export function nightLabel(startTime: string): string {
+  const d = new Date(startTime)
+  return Number.isNaN(d.getTime()) ? '' : `${WEEKDAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`
+}
+
+/** How many nights the Me tab's grid shows (Flow 6 `me`: two rows of three). */
+export const NIGHT_TILES = 6
+
+/** Where the attendance request stands, as the screen knows it. */
+export type NightsStatus = 'loading' | 'ready' | 'failed'
+
+/**
+ * What Nights out draws (Flow 6 `me` 04 · 05 · 06): a skeleton grid while the first load runs, the tiles when it has answered,
+ * the tiles with a notice and Try again when a refresh failed (it keeps the last good list), and an invitation, never a grid,
+ * for someone with no night yet. A load that failed with nothing to show says so and offers Try again, without tiles. Pure, so the
+ * choice between them is testable.
+ */
+export type NightsView =
+  | { kind: 'loading' }
+  | { kind: 'first' }
+  | { kind: 'failed' }
+  | { kind: 'tiles'; failed: boolean; nights: number }
+
+export function nightsView(status: NightsStatus, rows: readonly { id: string; start_time: string }[], now: Date = new Date()): NightsView {
+  if (rows.length > 0) return { kind: 'tiles', failed: status === 'failed', nights: nightsGrid(rows as { id: string; start_time: string }[], now).nights }
+  if (status === 'loading') return { kind: 'loading' }
+  return status === 'failed' ? { kind: 'failed' } : { kind: 'first' }
 }
