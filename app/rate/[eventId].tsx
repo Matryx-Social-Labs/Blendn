@@ -19,7 +19,7 @@ import { fadeInFast } from '../../components/motion/presence'
 import { SkeletonBlock, SkeletonCircle } from '../../components/Skeleton'
 import { useToast } from '../../components/Toast'
 import { apiClient, type PeerRatingIssue } from '../../lib/apiClient'
-import { COLOR, DURATION, EASING, FONT_FAMILY, RISE, SPACE, SPRING } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, RADIUS, RISE, SPACE, SPRING } from '../../lib/design/tokens'
 import { Logger } from '../../lib/logger'
 import { askAboutNight, ratePeople, type RatePerson } from '../../lib/ratePeople'
 import { isNightRated, markNightRated } from '../../lib/ratedNights'
@@ -347,8 +347,8 @@ export default function RatePeers() {
         {/* Shaped like what is coming: a face and two lines (U-L1), not a lone spinner. */}
         <View accessibilityLabel="Loading who you met" accessibilityState={{ busy: true }} style={styles.skeleton} testID="rate-skeleton">
           <SkeletonCircle width={FACE} />
-          <SkeletonBlock width="60%" height={30} borderRadius={8} />
-          <SkeletonBlock width="80%" height={20} borderRadius={6} />
+          <SkeletonBlock width="60%" height={30} borderRadius={RADIUS.thumb} />
+          <SkeletonBlock width="80%" height={20} borderRadius={RADIUS.thumb} />
         </View>
       </View>
     )

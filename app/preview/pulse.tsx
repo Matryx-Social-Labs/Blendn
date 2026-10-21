@@ -53,7 +53,6 @@ import { TAB_BAR_CLEARANCE, tabBarTop } from '../(tabs)/_layout'
 /** Frame `1141:4643` → Main: `paddingHorizontal 12`, `gap 48`. */
 const MAIN_PADDING_HORIZONTAL = 12
 const MAIN_GAP = 48
-const SCREEN_W = Dimensions.get('window').width
 const SCREEN_HEIGHT = Dimensions.get('window').height
 
 /*

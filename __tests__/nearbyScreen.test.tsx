@@ -45,9 +45,9 @@ const ev = (id: string, title: string, lat: number) => ({
 beforeEach(() => {
   jest.clearAllMocks()
   markOnline()
-  mockLocation.requestForegroundPermissionsAsync.mockResolvedValue({ status: 'granted' })
-  mockLocation.getForegroundPermissionsAsync.mockResolvedValue({ status: 'granted' })
-  mockLocation.getCurrentPositionAsync.mockResolvedValue({ coords: { latitude: 12.97, longitude: 77.6 } })
+  mockLocation.requestForegroundPermissionsAsync.mockResolvedValue({ status: 'granted' } as never)
+  mockLocation.getForegroundPermissionsAsync.mockResolvedValue({ status: 'granted' } as never)
+  mockLocation.getCurrentPositionAsync.mockResolvedValue({ coords: { latitude: 12.97, longitude: 77.6 } } as never)
 })
 
 const open = async () => {
@@ -72,7 +72,7 @@ it('shows the static rows while loading, busy', async () => {
 })
 
 it('denied: says why, and Open Settings goes to the settings', async () => {
-  mockLocation.requestForegroundPermissionsAsync.mockResolvedValue({ status: 'denied' })
+  mockLocation.requestForegroundPermissionsAsync.mockResolvedValue({ status: 'denied' } as never)
   const open_ = jest.spyOn(Linking, 'openSettings').mockResolvedValue()
   await open()
   expect(await screen.findByText('Location access needed')).toBeTruthy()
@@ -85,7 +85,7 @@ it('permission but no fix: "Location unavailable" with Try again, not an empty c
   await open()
   expect(await screen.findByText('Location unavailable')).toBeTruthy()
   expect(screen.queryByText('No nearby events')).toBeNull()
-  mockLocation.getCurrentPositionAsync.mockResolvedValue({ coords: { latitude: 12.97, longitude: 77.6 } })
+  mockLocation.getCurrentPositionAsync.mockResolvedValue({ coords: { latitude: 12.97, longitude: 77.6 } } as never)
   events.mockResolvedValue({ data: [ev('a', 'Alpha Night', 12.98)], error: null })
   await fireEvent.press(screen.getByRole('button', { name: 'Try again' }))
   await waitFor(() => expect(screen.getByRole('button', { name: /Alpha Night/ })).toBeTruthy())
