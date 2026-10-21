@@ -4,10 +4,10 @@
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { Platform } from 'react-native'
-import { makeMutable } from 'react-native-reanimated'
+import { Platform, StyleSheet } from 'react-native'
+import { getAnimatedStyle, makeMutable } from 'react-native-reanimated'
 
-import { SceneBar } from '../components/scene/SceneBar'
+import { SceneBar, sceneBarTitleSpan } from '../components/scene/SceneBar'
 import { SceneHero } from '../components/scene/SceneHero'
 import { H } from '../lib/haptics'
 
@@ -52,19 +52,48 @@ describe('SceneBar', () => {
     expect(screen.getByRole('button', { name: 'Back' })).toBeTruthy()
   })
 
-  it('mounts the glass bar only once the page has scrolled past 8 pt (never at rest)', async () => {
+  it('keeps the glass mounted and clear at rest, and fully there past 8 pt (no pop)', async () => {
     const scrollY = makeMutable(0)
     await render(bar({ scrollY }))
-    expect(screen.queryByTestId('scene-bar-glass')).toBeNull()
+    const opacity = () => getAnimatedStyle(screen.getByTestId('scene-bar-glass', { includeHiddenElements: true })).opacity
+    expect(opacity()).toBe(0)
+    // Mounted from the first frame: scrolling changes only its opacity, so there is no mount to pop.
+    expect(screen.getByTestId('scene-bar-glass', { includeHiddenElements: true })).toBeTruthy()
     await act(async () => {
       scrollY.set(20)
     })
-    expect(await screen.findByTestId('scene-bar-glass')).toBeTruthy()
+    await act(async () => jest.runOnlyPendingTimers())
+    expect(opacity()).toBe(1)
+    expect(screen.getAllByTestId('scene-bar-glass', { includeHiddenElements: true })).toHaveLength(1)
   })
 
   it('keeps the small title out of the reading order', async () => {
     await render(bar())
     expect(screen.getByTestId('scene-bar-title', { includeHiddenElements: true }).props.accessibilityElementsHidden).toBe(true)
+  })
+})
+
+describe('the small title\'s room', () => {
+  it.each([
+    [360, 'ios', 44],
+    [393, 'ios', 44],
+    [412, 'android', 48],
+  ] as const)('%i wide (%s): back on the left, three circles on the right, at least 100 pt between', (width, _os, side) => {
+    const span = sceneBarTitleSpan(width, side)
+    expect(span.left).toBe(16 + side + 12)
+    expect(span.right).toBe(16 + 3 * side + 2 * 8 + 12)
+    expect(span.width).toBe(width - span.left - span.right)
+    expect(span.width).toBeGreaterThanOrEqual(100)
+  })
+
+  it('is 145 pt on a 393 pt iPhone, not the 41 a symmetric inset left', () => {
+    expect(sceneBarTitleSpan(393, 44).width).toBe(145)
+  })
+
+  it('the title View stands in that span', async () => {
+    jest.spyOn(require('react-native'), 'useWindowDimensions').mockReturnValue({ width: 393, height: 852, scale: 3, fontScale: 1 })
+    await render(bar())
+    expect(StyleSheet.flatten(screen.getByTestId('scene-bar-title', { includeHiddenElements: true }).props.style)).toMatchObject({ left: 72, right: 176 })
   })
 })
 
