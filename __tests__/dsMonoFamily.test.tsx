@@ -155,7 +155,7 @@ describe('a mono run divided by middots', () => {
       </Text>,
     )
     const run = screen.getByTestId('run')
-    const divider = run.children.find((c) => typeof c !== 'string' && c.props.children === ' · ') as unknown as { props: { style: object } }
+    const divider = run.children.find((c) => typeof c !== 'string' && c.props.children === ' · ') as unknown as { props: { style: { fontFamily: string } } }
     expect(StyleSheet.flatten(divider.props.style).fontFamily).toBe(FONT_FAMILY.brand[500])
     expect(screen.getByText('Sun · 3:30 PM')).toBeTruthy()
     await render(<TimeBadge when="Live" testID="tb" />)
