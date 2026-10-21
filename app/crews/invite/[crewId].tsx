@@ -10,7 +10,7 @@ import { Chip } from '../../../components/ds/Chip'
 import { CrewEmblem } from '../../../components/ds/CrewEmblem'
 import { Grain } from '../../../components/ds/Grain'
 import { Orbs } from '../../../components/ds/Orbs'
-import { font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from '../../../components/ds/shared'
+import { font, HueProvider, IC_HAIRLINE, useBoldText, useIncreaseContrast } from '../../../components/ds/shared'
 import { StateScreen } from '../../../components/ds/StateScreen'
 import { Toggle } from '../../../components/ds/Toggle'
 import { TopBar } from '../../../components/ds/TopBar'
@@ -45,7 +45,7 @@ const NOT_OPEN = 'This invite isn’t open any more'
  * is final for 30 days; leaving by Back keeps the invite open. One 404 covers
  * lapsed, withdrawn, left and blocked.
  */
-export default function CrewInviteScreen() {
+function CrewInviteScreenContent() {
   const { crewId: param } = useLocalSearchParams<{ crewId: string }>()
   const crewId = String(param)
   const bold = useBoldText()
@@ -256,3 +256,12 @@ const styles = StyleSheet.create({
   secondary: { color: COLOR.textSecondary, textAlign: 'center' },
   tertiary: { color: COLOR.textTertiary },
 })
+
+/** Rose world: one hue on this screen (`HueProvider`). */
+export default function CrewInviteScreen() {
+  return (
+    <HueProvider value="rose">
+      <CrewInviteScreenContent />
+    </HueProvider>
+  )
+}

@@ -6,12 +6,14 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
 import { AccessibilityInfo, Platform, StyleSheet } from 'react-native'
+import * as Reanimated from 'react-native-reanimated'
 
 import { IconButton } from '../components/ds/IconButton'
 import { COLOR, MATERIAL, RADIUS, SIZE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { OPACITY } from '../lib/theme'
 
+jest.mock('react-native-reanimated', () => ({ ...jest.requireActual('react-native-reanimated'), __esModule: true, useReducedMotion: jest.fn(() => false) }))
 jest.mock('expo-glass-effect', () => {
   const { View } = jest.requireActual('react-native')
   return {
@@ -110,5 +112,42 @@ describe('<IconButton>', () => {
     await draw()
     await act(async () => {})
     expect(flat('i-contrast').borderColor).toBe(MATERIAL.hairlineIncreaseContrast)
+  })
+})
+
+describe('the pop (DS #15)', () => {
+  const reduceMotion = Reanimated.useReducedMotion as jest.Mock
+  const toggle = (selected: boolean) => (
+    <IconButton icon="heart" accessibilityLabel="Like" selected={selected} onPress={jest.fn()} testID="i" />
+  )
+
+  it('a toggle pops its glyph once when it is switched on, with H.select once', async () => {
+    reduceMotion.mockReturnValue(false)
+    const spring = jest.spyOn(Reanimated, 'withSpring')
+    await render(toggle(false))
+    await fireEvent.press(screen.getByTestId('i'))
+    await screen.rerender(toggle(true))
+    expect(select).toHaveBeenCalledTimes(1)
+    expect(spring).toHaveBeenCalledTimes(1)
+    spring.mockRestore()
+  })
+
+  it('switched off, or mounted on, it plays nothing; and Reduce Motion plays nothing', async () => {
+    const spring = jest.spyOn(Reanimated, 'withSpring')
+    reduceMotion.mockReturnValue(false)
+    await render(toggle(true))
+    await screen.rerender(toggle(false))
+    expect(spring).not.toHaveBeenCalled()
+    reduceMotion.mockReturnValue(true)
+    await screen.rerender(toggle(true))
+    expect(spring).not.toHaveBeenCalled()
+    spring.mockRestore()
+  })
+
+  it('a button that is not a toggle never animates', async () => {
+    const spring = jest.spyOn(Reanimated, 'withSpring')
+    await render(<IconButton icon="heart" accessibilityLabel="Like" testID="i" />)
+    expect(spring).not.toHaveBeenCalled()
+    spring.mockRestore()
   })
 })

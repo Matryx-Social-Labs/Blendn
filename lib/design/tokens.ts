@@ -45,6 +45,12 @@ export const COLOR = {
   selectionFill: '#FFFFFF',
   selectionInk: '#0D0C0C',
   selectionInkSecondary: 'rgba(13,12,12,0.60)',
+  selectionEmberFill: '#552D21',
+  selectionEmberGlyph: '#FF8A5C',
+  selectionRoseFill: '#4C3036',
+  selectionRoseGlyph: '#EB8EA1',
+  selectionVioletFill: '#433247',
+  selectionVioletGlyph: '#B58FD0',
   tabCapsule: 'rgba(255,255,255,0.22)',
   switchOffTrack: '#959090',
   chipFillOnGlass: 'rgba(255,255,255,0.08)',
@@ -363,6 +369,16 @@ export const STAGGER = {
   loose: 40,
   windowMax: 200,
   itemsMax: 8,
+} as const
+
+/** The glyph verbs’ numbers (Glyph.tsx): the pop’s start scale, the hop in pt, the spin and tilt in degrees, the flicker’s dips and steps (fractions of `DURATION.medium`). */
+export const GLYPH = {
+  popFrom: 0.85,
+  hop: 4,
+  spin: 180,
+  tilt: 14,
+  flickerDips: [0.35, 0.6],
+  flickerSteps: [0.25, 0.1875, 0.25, 0.3125],
 } as const
 
 export const PRESS = {

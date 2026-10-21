@@ -489,10 +489,10 @@ describe('the language cap says so', () => {
 describe('the sweep: ChipSet, the this-or-that pair and the card ground', () => {
   it('Languages counts "n of max" and dims the rest at the cap, saying why', async () => {
     await open()
-    expect(screen.getByText('0 of 2')).toBeTruthy()
+    expect(screen.getByLabelText('0 of 2')).toBeTruthy()
     await tap('Tulu')
     await tap('Kannada')
-    expect(screen.getByText('2 of 2')).toBeTruthy()
+    expect(screen.getByLabelText('2 of 2')).toBeTruthy()
     const tamil = screen.getByTestId('about-you-languages-tamil')
     expect(tamil.props.accessibilityState).toMatchObject({ disabled: true })
     expect(tamil.props.accessibilityHint).toBe('Up to two')

@@ -32,6 +32,7 @@ import { useAuth, refreshAuthUser } from '../lib/useAuth'
 import { KEYBOARD_BEHAVIOR } from '../lib/keyboard'
 import { profileFormErrors } from '../lib/onboarding'
 import { normaliseIntents, toggleIntent } from '../lib/intents'
+import { HueProvider } from '../components/ds/shared'
 
 interface UserProfile {
   id: string
@@ -93,7 +94,7 @@ function formSnapshot(f: {
   return JSON.stringify({ ...f, interestIds: [...f.interestIds].sort() })
 }
 
-export default function EditProfile() {
+function EditProfileContent() {
   const { user: authUser } = useAuth()
   const { showToast } = useToast()
   const [profile, setProfile] = useState<UserProfile | null>(null)
@@ -917,3 +918,12 @@ const styles = StyleSheet.create({
     color: EMBER.onGradient,
   },
 })
+
+/** Violet world: one hue on this screen (`HueProvider`). */
+export default function EditProfile() {
+  return (
+    <HueProvider value="violet">
+      <EditProfileContent />
+    </HueProvider>
+  )
+}

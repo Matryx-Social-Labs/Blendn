@@ -4,7 +4,7 @@ import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { Button } from '../../components/ds/Button'
-import { minTarget } from '../../components/ds/shared'
+import { HueProvider, minTarget } from '../../components/ds/shared'
 import { TopBar } from '../../components/ds/TopBar'
 import { IncomingRequestRow } from '../../components/friends/IncomingRequestRow'
 import { InviteLinkCard } from '../../components/friends/InviteLinkCard'
@@ -29,7 +29,7 @@ import { useTopBarState } from '../../lib/useTopBarState'
  * is never told. Your own requests stay "Requested" whatever the other person
  * did, for the same reason.
  */
-export default function AddFriendsScreen() {
+function AddFriendsScreenContent() {
   const { invite, failed, reload, share, reset } = useFriendInvite()
   const requests = useFriendRequests()
   const { incoming, outgoing, busy, respond, withdraw } = requests
@@ -168,3 +168,12 @@ const styles = StyleSheet.create({
   quiet: { alignSelf: 'center', minHeight: minTarget(), justifyContent: 'center' },
   start: { alignSelf: 'flex-start' },
 })
+
+/** Rose world: one hue on this screen (`HueProvider`). */
+export default function AddFriendsScreen() {
+  return (
+    <HueProvider value="rose">
+      <AddFriendsScreenContent />
+    </HueProvider>
+  )
+}

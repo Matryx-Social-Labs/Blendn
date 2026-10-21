@@ -43,9 +43,20 @@ jest.mock('expo-location', () => ({
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }))
 jest.mock('../lib/perf', () => ({ ScreenProfiler: ({ children }: { children: React.ReactNode }) => children }))
 // The shell reports what the drawer is doing; the test decides it.
+// The city lives in the shell's title tabs now: its chip calls what the screen reported as `openCityPicker`.
+let mockBrowse: { openCityPicker: () => void } | null = null
 jest.mock('../components/home/HomeShell', () => ({
-  HomeShell: ({ renderEvents }: { renderEvents: (b: () => void, visible: boolean, full: boolean) => React.ReactNode }) =>
-    renderEvents(() => {}, mockVisible, mockFull),
+  HomeShell: ({ renderEvents }: { renderEvents: (b: (browse: { openCityPicker: () => void }) => void, visible: boolean, full: boolean) => React.ReactNode }) => {
+    const { Pressable } = require('react-native')
+    return (
+      <>
+        {renderEvents((browse) => {
+          mockBrowse = browse
+        }, mockVisible, mockFull)}
+        <Pressable testID="open-city" onPress={() => mockBrowse?.openCityPicker()} />
+      </>
+    )
+  },
 }))
 jest.mock('../app/(tabs)/_layout', () => ({ TAB_BAR_CLEARANCE: 92, tabBarTop: () => 800 }))
 jest.mock('../components/pulse/FeaturedCard', () => {
@@ -72,12 +83,11 @@ jest.mock('../components/pulse/UpcomingCard', () => {
     ),
   }
 })
-// The two sheets the header opens, each with a way to close it.
+// The two sheets the header opens, each with a way to close it (the city's is opened from the shell, above).
 jest.mock('../components/pulse/PulseHeader', () => {
   const { Pressable, View } = require('react-native')
   return {
     PULSE_HEADER_HEIGHT: 104,
-    PulseTitle: (p: { onPressCity: () => void }) => <Pressable testID="open-city" onPress={p.onPressCity} />,
     PulseSearch: (p: { onPressFilter: () => void }) => (
       <View>
         <Pressable testID="open-filters" onPress={p.onPressFilter} />

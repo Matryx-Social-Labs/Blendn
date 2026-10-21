@@ -1,5 +1,5 @@
 import { Easing, FadeIn, FadeOut, ReduceMotion, withTiming } from 'react-native-reanimated'
-import { DURATION, EASING } from '../../lib/design/tokens'
+import { DURATION, EASING, REDUCE_MOTION } from '../../lib/design/tokens'
 
 /*
  * Entering/exiting presets for small things that appear and disappear —
@@ -47,6 +47,23 @@ export const popOut = () => {
     },
   }
 }
+
+/*
+ * A badge arriving and leaving (DS #28, `Badge`'s own): it arrives from 0.8 and settles while it fades in over `quick`, and
+ * leaves as a fade over `quick`. Reduce Motion: the fade alone, over the Reduce Motion `quick`.
+ */
+const GENTLE = Easing.bezier(...EASING.gentle)
+const BADGE_FROM = 0.8
+export const badgeIn = () => {
+  'worklet'
+  const t = { duration: DURATION.quick, easing: GENTLE, reduceMotion: ReduceMotion.Never }
+  return {
+    initialValues: { opacity: 0, transform: [{ scale: BADGE_FROM }] },
+    animations: { opacity: withTiming(1, t), transform: [{ scale: withTiming(1, t) }] },
+  }
+}
+export const badgeFadeIn = FadeIn.duration(REDUCE_MOTION.duration.quick).easing(GENTLE).reduceMotion(ReduceMotion.Never)
+export const badgeOut = FadeOut.duration(DURATION.quick).easing(GENTLE).reduceMotion(ReduceMotion.Never)
 
 /*
  * A glass pill arriving (ROUND4 B8, approved with Prompt 10): the pill rises

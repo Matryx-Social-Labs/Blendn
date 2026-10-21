@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { ChipSet } from '../components/ds/ChipSet'
 import { FieldLabel, FieldNotes } from '../components/ds/TextField'
 import { SegmentedControl } from '../components/ds/SegmentedControl'
-import { font, GroundProvider, useBoldText } from '../components/ds/shared'
+import { font, GroundProvider, HueProvider, useBoldText } from '../components/ds/shared'
 import { SettingsGroup, SettingsRow } from '../components/ds/SettingsRow'
 import { StateScreen } from '../components/ds/StateScreen'
 import { TopBar } from '../components/ds/TopBar'
@@ -72,7 +72,7 @@ const HOME_STATES_SHOWN = 9
  * Nothing on this route asks for or changes a birthday: the 18+ gate is the
  * basics step's and Edit profile's, not this screen's.
  */
-export default function EditAboutYouScreen() {
+function EditAboutYouScreenContent() {
   const { user: authUser } = useAuth()
   const { showToast } = useToast()
   const insets = useSafeAreaInsets()
@@ -481,3 +481,12 @@ const styles = StyleSheet.create({
   },
   field: { gap: SPACE.sm },
 })
+
+/** Violet world: one hue on this screen (`HueProvider`). */
+export default function EditAboutYouScreen() {
+  return (
+    <HueProvider value="violet">
+      <EditAboutYouScreenContent />
+    </HueProvider>
+  )
+}

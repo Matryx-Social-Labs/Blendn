@@ -30,7 +30,7 @@ import {
 } from '../../components/pulse/PulseSections'
 import { SectionReveal } from '../../components/pulse/Rail'
 import { EventCard } from '../../components/ds/EventCard'
-import { PULSE_HEADER_HEIGHT, PulseSearch, PulseTitle } from '../../components/pulse/PulseHeader'
+import { PULSE_HEADER_HEIGHT, PulseSearch } from '../../components/pulse/PulseHeader'
 import { StickyBar, STICKY_BAR_AFTER } from '../../components/pulse/StickyBar'
 import { CityArtBanner, CityArtCard } from '../../components/cityArt/CityArtCard'
 import { drawableCityArt } from '../../components/cityArt/drawable'
@@ -1786,7 +1786,6 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
           </View>
   )
 
-  const pulseTitle = <PulseTitle title="The " titleAccent="Pulse" city={selectedCity} onPressCity={() => setCityPickerOpen(true)} />
   const searchNode = (
     <PulseSearch
       query={searchInput}
@@ -2090,10 +2089,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
           windowSize={10}
           stickyHeaderIndices={STICKY_SEARCH}
           ListHeaderComponent={
-            <View>
-              {banners}
-              <View style={styles.titleBlock}>{pulseTitle}</View>
-            </View>
+            <View>{banners}</View>
           }
         />
       </PulseSlots.Provider>
@@ -2316,7 +2312,6 @@ const styles = StyleSheet.create({
   /** A day's heading over its rows: a section gap above the first, the stack's rhythm below. */
   dayRow: { paddingTop: SPACE.lg, paddingBottom: SPACE.xs },
   /** The headline above the sticky search: the gap the search used to sit a gap below. */
-  titleBlock: { paddingBottom: SPACE.sm },
   stickyInner: { marginHorizontal: MAIN_PADDING_HORIZONTAL },
   /** "6 events · Bengaluru": the flat result's label. */
   resultsLabel: { paddingTop: SPACE.xl, paddingBottom: SPACE.md },

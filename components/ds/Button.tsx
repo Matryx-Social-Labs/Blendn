@@ -18,6 +18,7 @@ import {
   IC_HAIRLINE,
   minTarget,
   PRESSED_WASH,
+  quickTransition,
   SPINNER_GRACE_MS,
   useBoldText,
   useIncreaseContrast,
@@ -39,6 +40,7 @@ const HEIGHT: Record<ButtonSize, number> = { lg: SIZE.primary, md: SIZE.control,
 /** #20: translateX 0, −8, 8, −6, 6, −3, 0, as fractions of `SHAKE.distance`. */
 const SHAKE_STEPS = [-1, 1, -0.75, 0.75, -0.375, 0]
 const PRESS_SPRING = { ...SPRING.press, reduceMotion: ReduceMotion.Never }
+const DISABLE_FADE = quickTransition('opacity')
 
 function fill(kind: ButtonKind, size: ButtonSize, onGlass: boolean) {
   if (kind === 'strong') return COLOR.textPrimary
@@ -229,7 +231,9 @@ export function Button({
           styles.body,
           sm ? styles.bodySm : styles.bodyLg,
           { height, backgroundColor: fill(kind, size, onGlass) },
-          disabled && { opacity: OPACITY.disabled },
+          // Enabled ↔ disabled crosses over `quick` (a count arriving, a field becoming valid), never snaps.
+          { opacity: disabled ? OPACITY.disabled : 1 },
+          DISABLE_FADE,
           pressShape,
         ]}
       >

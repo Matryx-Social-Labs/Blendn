@@ -29,6 +29,7 @@ import { Logger } from '../../lib/logger'
 import { askAboutNight, ratePeople, type RatePerson } from '../../lib/ratePeople'
 import { isNightRated, markNightRated } from '../../lib/ratedNights'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, TYPE } from '../../lib/theme'
+import { HueProvider } from '../../components/ds/shared'
 
 /**
  * After the night: how it was, and how the people you met were.
@@ -183,7 +184,7 @@ function Scale({
   )
 }
 
-export default function RatePeers() {
+function RatePeersContent() {
   const { eventId } = useLocalSearchParams<{ eventId: string }>()
   const { showToast } = useToast()
 
@@ -589,3 +590,12 @@ const styles = StyleSheet.create({
   buttonDisabled: { opacity: OPACITY.disabled },
   skipButton: { alignItems: 'center', justifyContent: 'center', height: CONTROL.md },
 })
+
+/** Rose world: one hue on this screen (`HueProvider`). */
+export default function RatePeers() {
+  return (
+    <HueProvider value="rose">
+      <RatePeersContent />
+    </HueProvider>
+  )
+}

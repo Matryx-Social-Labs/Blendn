@@ -49,6 +49,37 @@ beforeEach(() => {
 })
 afterEach(() => jest.useRealTimers())
 
+describe('the success check draws (foundations)', () => {
+  it('success is a drawn circle-check; error and info stay still', async () => {
+    await render(<Toast kind="success" text="Saved to Going" onDismiss={jest.fn()} testID="t" />)
+    expect(screen.getByTestId('t-glyph', { includeHiddenElements: true })).toBeTruthy()
+    await render(<Toast kind="error" text="Couldn’t save" onDismiss={jest.fn()} testID="e" />)
+    expect(screen.queryByTestId('e-glyph', { includeHiddenElements: true })).toBeNull()
+    await render(<Toast kind="info" text="Copied" onDismiss={jest.fn()} testID="i" />)
+    expect(screen.queryByTestId('i-glyph', { includeHiddenElements: true })).toBeNull()
+  })
+
+  it('it strokes in as the toast appears, on the frame H.success plays, and not for an error', async () => {
+    const stroke = jest.spyOn(Reanimated, 'withDelay')
+    await render(<Toast kind="success" text="Saved to Going" onDismiss={jest.fn()} testID="t" />)
+    expect(haptic.success).toHaveBeenCalledTimes(1)
+    // circle-check is two strokes, one delay each.
+    expect(stroke).toHaveBeenCalledTimes(2)
+    stroke.mockClear()
+    await render(<Toast kind="error" text="Couldn’t save" onDismiss={jest.fn()} testID="e" />)
+    expect(stroke).not.toHaveBeenCalled()
+    stroke.mockRestore()
+  })
+
+  it('Reduce Motion: the check stands drawn, nothing strokes in', async () => {
+    reduceMotion.mockReturnValue(true)
+    const stroke = jest.spyOn(Reanimated, 'withDelay')
+    await render(<Toast kind="success" text="Saved to Going" onDismiss={jest.fn()} testID="t" />)
+    expect(stroke).not.toHaveBeenCalled()
+    stroke.mockRestore()
+  })
+})
+
 describe('toastDwell', () => {
   it('is at least 5 s, plus 1 s per 8 words', () => {
     expect(toastDwell('Saved to Going', {})).toBe(5000)

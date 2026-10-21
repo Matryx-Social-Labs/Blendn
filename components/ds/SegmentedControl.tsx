@@ -9,7 +9,7 @@ import { H } from '../../lib/haptics'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { OPACITY } from '../../lib/theme'
 import { monoCaption } from './MonoFamily'
-import { CONTROL_FONT_CAP, focusRing, font, trackFill, useBoldText, useGround, useIncreaseContrast, useScreenReader } from './shared'
+import { CONTROL_FONT_CAP, focusRing, font, trackFill, useBoldText, useGround, useIncreaseContrast, useScreenReader, useSelection } from './shared'
 
 /** Under a finger, a segment the thumb isn't on dims before the thumb moves (the page's pressed state). */
 const PRESSED_SEGMENT = 0.7
@@ -23,6 +23,8 @@ const DRAG_FAIL_Y = 10
 const BADGE_GAP = SPACE.xs + SPACE.xxs
 const DOT = 8
 const DIVIDER_HEIGHT = 20
+/** The thumb's rim in the hue's edge colour. */
+const RIM = 1
 
 /** How far past an end (in segments) the thumb is shown for `over` segments of finger travel. */
 export const rubberBand = (over: number) => {
@@ -61,10 +63,10 @@ export type SegmentedControlProps = Choice & {
   testID?: string
 }
 
-/** A segment's label and badge, drawn twice: white under the thumb's edge, ink inside it. */
+/** A segment's label and badge, drawn twice: 500 on the track, 700 inside the thumb. */
 function SegmentLabel({ item, badge, ink, pair, bold, android }: { item: string; badge: SegmentBadge; ink: boolean; pair: boolean; bold: boolean; android: boolean }) {
   const family = ink ? FONT_FAMILY.brand[700] : FONT_FAMILY.brand[500]
-  const color = ink ? COLOR.selectionInk : COLOR.textPrimary
+  const color = COLOR.textPrimary
   return (
     <View style={styles.labelRow}>
       <Text
@@ -78,7 +80,7 @@ function SegmentLabel({ item, badge, ink, pair, bold, android }: { item: string;
       {typeof badge === 'number' ? (
         <Text
           maxFontSizeMultiplier={CONTROL_FONT_CAP}
-          style={[monoCaption(bold), { color: ink ? COLOR.selectionInkSecondary : COLOR.textSecondary }]}
+          style={[monoCaption(bold), { color: COLOR.textSecondary }]}
         >
           {badge}
         </Text>
@@ -90,16 +92,16 @@ function SegmentLabel({ item, badge, ink, pair, bold, android }: { item: string;
 const FADE_CURVE = Easing.bezier(...EASING.snapOut)
 const DIVIDER_FADE = `opacity ${DURATION.quick}ms cubic-bezier(${EASING.gentle.join(',')})`
 
-const spoken = (item: string, badge: SegmentBadge) =>
+export const spoken = (item: string, badge: SegmentBadge) =>
   badge === 'dot' ? `${item}, someone’s live` : typeof badge === 'number' ? `${item}, ${badge}` : item
 
 /**
  * The segmented control (guidelines/components/SegmentedControl.html; ROUND3
- * B10; the sweep's switch.html): a 48 pt solid capsule with a white thumb. The
+ * B10; the sweep's switch.html): a 48 pt solid capsule with a hue thumb. The
  * thumb is the one selection colour, so the control is never coloured (§12), and
  * it is solid even on glass. The track follows its ground (`GroundProvider`).
  *
- * The labels are drawn twice: white 500 on the track and ink 700 in a row
+ * The labels are drawn twice: white 500 on the track and white 700 in a row
  * inside the thumb, so the colour changes exactly at the thumb's edge, mid-slide
  * or mid-drag. Badges ride the labels (a count, or a live dot).
  *
@@ -129,6 +131,7 @@ export function SegmentedControl({
   const contrast = useIncreaseContrast()
   const screenReader = useScreenReader()
   const ground = useGround()
+  const sel = useSelection()
   const [focused, setFocused] = useState(false)
   const n = items.length
   const pair = pairProp === true
@@ -270,7 +273,7 @@ export function SegmentedControl({
           <View style={styles.track} pointerEvents="none">
             {pair ? <Animated.View testID={testID && `${testID}-divider`} style={[styles.divider, dividerStyle]} /> : null}
             {showThumb ? (
-              <Animated.View testID={testID && `${testID}-thumb`} style={[styles.thumb, { width: `${100 / n}%` }, thumbStyle]}>
+              <Animated.View testID={testID && `${testID}-thumb`} style={[styles.thumb, { width: `${100 / n}%`, backgroundColor: sel.fill }, thumbStyle]}>
                 <Animated.View
                   testID={testID && `${testID}-ink`}
                   accessibilityElementsHidden
@@ -283,6 +286,8 @@ export function SegmentedControl({
                     </View>
                   ))}
                 </Animated.View>
+                {/* The rim is its own layer, so the ink row keeps the thumb's full width and the labels stay in register. */}
+                <View testID={testID && `${testID}-rim`} pointerEvents="none" style={[styles.rim, { borderColor: sel.edge }]} />
               </Animated.View>
             ) : null}
           </View>
@@ -306,7 +311,8 @@ const styles = StyleSheet.create({
   },
   contrast: { borderWidth: 1, borderColor: MATERIAL.hairlineIncreaseContrast },
   track: { position: 'absolute', top: SPACE.xs, bottom: SPACE.xs, left: SPACE.xs, right: SPACE.xs },
-  thumb: { position: 'absolute', top: 0, bottom: 0, borderRadius: RADIUS.capsule, backgroundColor: COLOR.selectionFill, overflow: 'hidden' },
+  thumb: { position: 'absolute', top: 0, bottom: 0, borderRadius: RADIUS.capsule, overflow: 'hidden' },
+  rim: { ...StyleSheet.absoluteFill, borderRadius: RADIUS.capsule, borderWidth: RIM },
   ink: { position: 'absolute', top: 0, bottom: 0, flexDirection: 'row' },
   divider: { position: 'absolute', top: '50%', left: '50%', width: 1, height: DIVIDER_HEIGHT, marginTop: -DIVIDER_HEIGHT / 2, backgroundColor: COLOR.hairlineStrong },
   segment: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: SPACE.xs },

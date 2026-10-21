@@ -10,6 +10,7 @@ import React from 'react'
 import { AccessibilityInfo, Platform, StyleSheet } from 'react-native'
 import * as Reanimated from 'react-native-reanimated'
 
+import { HueProvider } from '../components/ds/shared'
 import { ProgressBar } from '../components/ds/ProgressBar'
 import { Stepper } from '../components/ds/Stepper'
 import { COLOR, FONT_FAMILY, MATERIAL, RADIUS, SIZE, SPRING } from '../lib/design/tokens'
@@ -119,10 +120,10 @@ describe('<Stepper>', () => {
 })
 
 describe('<ProgressBar>', () => {
-  it('a 4 pt surfaceSunken track with a white fill, hidden from screen readers', async () => {
+  it('a 4 pt surfaceSunken track with a fill in the hue, hidden from screen readers', async () => {
     await render(<ProgressBar progress={0.25} testID="p" />)
     expect(flat('p')).toMatchObject({ height: 4, borderRadius: RADIUS.capsule, backgroundColor: COLOR.surfaceSunken })
-    expect(flat('p-fill').backgroundColor).toBe(COLOR.textPrimary)
+    expect(flat('p-fill').backgroundColor).toBe(COLOR.brandOrange)
     expect(screen.getByTestId('p', { includeHiddenElements: true }).props.accessibilityElementsHidden).toBe(true)
     expect(Reanimated.getAnimatedStyle(screen.getByTestId('p-fill', { includeHiddenElements: true })).width).toBe('25%')
   })
@@ -174,5 +175,19 @@ describe('Increase Contrast', () => {
     expect(flat('s-minus').borderColor).toBe(MATERIAL.hairlineIncreaseContrast)
     await render(<ProgressBar progress={0.5} testID="p" />)
     expect(flat('p').borderColor).toBe(MATERIAL.hairlineIncreaseContrast)
+  })
+})
+
+describe('<ProgressBar> in a hue', () => {
+  it.each([
+    ['rose', COLOR.brandRose],
+    ['violet', COLOR.brandViolet],
+  ] as const)('the fill is %s’s edge colour', async (hue, color) => {
+    await render(
+      <HueProvider value={hue}>
+        <ProgressBar progress={0.5} testID="p" />
+      </HueProvider>
+    )
+    expect(flat('p-fill').backgroundColor).toBe(color)
   })
 })

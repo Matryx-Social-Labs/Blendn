@@ -21,6 +21,7 @@ import { revealReadiness, type RevealReadiness } from '../../lib/reveal'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, SWITCH_COLORS, TYPE } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
 import { toggleIntent } from '../../lib/intents'
+import { HueProvider } from '../../components/ds/shared'
 
 /**
  * Why you are here tonight, and whether people can see who you are.
@@ -79,7 +80,7 @@ const EASE = `cubic-bezier(${MOTION_EASING.entrance.join(', ')})`
 const FILL_TRANSITION = { transition: `background-color ${MOTION_DURATION.fast}ms ${EASE}` }
 const LABEL_TRANSITION = { transition: `color ${MOTION_DURATION.fast}ms ${EASE}` }
 
-export default function EventPreferences() {
+function EventPreferencesContent() {
   // `revealed` arrives from the status chip, which already knows it. There is
   // no GET for per-event preferences, and adding a round trip to learn
   // something the caller is holding would be the wrong trade.
@@ -423,3 +424,12 @@ const styles = StyleSheet.create({
 
   footer: { paddingHorizontal: GUTTER, paddingTop: SPACE.md, paddingBottom: SPACE.lg },
 })
+
+/** Violet world: one hue on this screen (`HueProvider`). */
+export default function EventPreferences() {
+  return (
+    <HueProvider value="violet">
+      <EventPreferencesContent />
+    </HueProvider>
+  )
+}

@@ -13,6 +13,7 @@ import { friendsSinceLabel, type Friend } from '../../lib/friends'
 import { EMBER, GUTTER, ICON, SPACE } from '../../lib/theme'
 import { useFriendRequests } from '../../lib/useFriendRequests'
 import { useTopBarState } from '../../lib/useTopBarState'
+import { HueProvider } from '../../components/ds/shared'
 
 /**
  * Your friends — the list the count on the Me tab opens.
@@ -21,7 +22,7 @@ import { useTopBarState } from '../../lib/useTopBarState'
  * profile; the top-right opens Add friends, which is where your link is.
  * Requests waiting on you sit above the list, when there are any.
  */
-export default function FriendsScreen() {
+function FriendsScreenContent() {
   const [friends, setFriends] = useState<Friend[] | null>(null)
   const [failed, setFailed] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -114,3 +115,12 @@ const styles = StyleSheet.create({
   emptyList: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: GUTTER },
   requests: { paddingHorizontal: GUTTER, paddingBottom: SPACE.sm },
 })
+
+/** Rose world: one hue on this screen (`HueProvider`). */
+export default function FriendsScreen() {
+  return (
+    <HueProvider value="rose">
+      <FriendsScreenContent />
+    </HueProvider>
+  )
+}

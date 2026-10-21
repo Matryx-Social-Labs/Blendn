@@ -23,6 +23,7 @@ import { isGone } from '../../lib/loadFailure'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
 import { showSheet } from '../../lib/sheet'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE } from '../../lib/theme'
+import { HueProvider } from '../../components/ds/shared'
 
 /**
  * A friend's profile — opened from the friends list, never from a room.
@@ -36,7 +37,7 @@ import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE } from '../.
  * nobody is told, and the DM stays. Report or block is in the corner, as on
  * every profile.
  */
-export default function FriendProfileScreen() {
+function FriendProfileScreenContent() {
   const { userId } = useLocalSearchParams<{ userId: string }>()
   const insets = useSafeAreaInsets()
   const { width } = useWindowDimensions()
@@ -290,3 +291,12 @@ const styles = StyleSheet.create({
   },
   pressed: { opacity: OPACITY.pressed },
 })
+
+/** Rose world: one hue on this screen (`HueProvider`). */
+export default function FriendProfileScreen() {
+  return (
+    <HueProvider value="rose">
+      <FriendProfileScreenContent />
+    </HueProvider>
+  )
+}

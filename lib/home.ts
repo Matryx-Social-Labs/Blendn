@@ -13,7 +13,7 @@ export const DRAWER_SNAPS: readonly DrawerSnap[] = ['full', 'half', 'peek']
 
 /** The handle's touch target: 44pt tall, the platform minimum (step 2 review). */
 export const DRAWER_HANDLE_HEIGHT = 44
-/** The Events | Places control, the DS SegmentedControl: 40 pt segments + 4 pt slop = 48. */
+/** The drawer's title tabs, Events | Places: one 48 pt row. */
 export const DRAWER_SEGMENTED_HEIGHT = SIZE.control
 /** Space under the control, before the pane. */
 const DRAWER_HEADER_GAP = 8

@@ -59,7 +59,7 @@ describe('step 1 · name and vibe', () => {
     // The counters are drawn for the eye; the fields speak their limits to a screen reader.
     expect(screen.getByText('0/32', { includeHiddenElements: true })).toBeTruthy()
     expect(screen.getByText('0/140', { includeHiddenElements: true })).toBeTruthy()
-    expect(screen.getByText('0 of 3')).toBeTruthy()
+    expect(screen.getByLabelText('0 of 3')).toBeTruthy()
     expect(screen.getByText('Room for one more')).toBeTruthy()
   })
 
@@ -119,11 +119,11 @@ describe('step 1 · name and vibe', () => {
     await render(<NewCrewScreen />)
     // The first is the picker's chip; the card below it draws the picked ones too.
     for (const t of ['Quiz team', 'Run club', 'Foodies']) await fireEvent.press(screen.getAllByLabelText(t)[0])
-    expect(screen.getByText('3 of 3')).toBeTruthy()
+    expect(screen.getByLabelText('3 of 3')).toBeTruthy()
     await fireEvent.press(screen.getAllByLabelText('Book club')[0])
-    expect(screen.getByText('3 of 3')).toBeTruthy()
+    expect(screen.getByLabelText('3 of 3')).toBeTruthy()
     await fireEvent.press(screen.getAllByLabelText('Run club')[0])
-    expect(screen.getByText('2 of 3')).toBeTruthy()
+    expect(screen.getByLabelText('2 of 3')).toBeTruthy()
   })
 
   it('draws the card as strangers will see it as you type', async () => {

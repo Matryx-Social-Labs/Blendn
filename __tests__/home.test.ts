@@ -69,7 +69,7 @@ describe('the drawer, wired to the screen (step 2 review)', () => {
 
   it('gives the handle and each segment a 44pt target', () => {
     expect(DRAWER_HANDLE_HEIGHT).toBeGreaterThanOrEqual(44)
-    // The DS SegmentedControl's 48; its 40 pt segments reach 48 through a 4 pt hit slop.
+    // The title tabs' 48: each word is a 48 pt target.
     expect(DRAWER_SEGMENTED_HEIGHT).toBe(48)
     expect(DRAWER_HEADER_HEIGHT).toBeGreaterThanOrEqual(DRAWER_HANDLE_HEIGHT + DRAWER_SEGMENTED_HEIGHT)
   })
@@ -164,11 +164,14 @@ describe('Places takes the server at its word (HM-CU04)', () => {
   })
 })
 
-describe('the Events | Places switch is the DS control, tap only', () => {
+describe('the Events | Places switch is the drawer’s title tabs, tap only', () => {
   const shell = read('components/home/HomeShell.tsx')
 
-  it('uses the SegmentedControl with no drag (it would compete with the drawer and map gestures)', () => {
-    expect(shell).toMatch(/<SegmentedControl[\s\S]*?draggable=\{false\}[\s\S]*?testID="home-segmented"/)
+  it('uses TitleTabs, which has no drag (it would compete with the drawer and map gestures), with the city chip trailing', () => {
+    expect(shell).toMatch(/<TitleTabs[\s\S]*?testID="home-segmented"/)
+    expect(shell).toContain('testID="home-city"')
+    expect(shell).toContain('onPress={browse.openCityPicker}')
+    expect(shell).not.toMatch(/SegmentedControl|draggable/)
   })
 
   it('keeps no segment of its own, and plays no haptic of its own (the control plays H.select)', () => {

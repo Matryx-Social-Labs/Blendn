@@ -4,7 +4,7 @@ import Animated, { ReduceMotion, useAnimatedStyle, useSharedValue, withDelay, wi
 
 import { COLOR, MATERIAL, RADIUS, SPACE, SPRING } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
-import { useIncreaseContrast } from './shared'
+import { useIncreaseContrast, useSelection } from './shared'
 
 /** The fill waits this long, so it grows once the next step has pushed in (the Flow 2 prototype). */
 const HOLD_MS = 200
@@ -15,7 +15,7 @@ const clamp = (n: number) => Math.min(1, Math.max(0, n))
 
 /**
  * The onboarding progress (guidelines/components/ProgressBar.html): a 4 pt
- * surfaceSunken track with a white fill, determinate only. It sits under the
+ * surfaceSunken track with a fill in the screen's hue, determinate only. It sits under the
  * header, whose "Step n of 8" is what a screen reader hears; the bar itself is
  * hidden. Waiting on a server is the loader, never this.
  *
@@ -25,6 +25,7 @@ const clamp = (n: number) => Math.min(1, Math.max(0, n))
 export function ProgressBar({ progress, testID }: { progress: number; testID?: string }) {
   const reduceMotion = useReducedMotion()
   const contrast = useIncreaseContrast()
+  const sel = useSelection()
   const to = clamp(progress)
   const fill = useSharedValue(to)
   // The last target asked for, not the value mid-flight: a flip back during the hold still lands.
@@ -43,7 +44,7 @@ export function ProgressBar({ progress, testID }: { progress: number; testID?: s
       importantForAccessibility="no-hide-descendants"
       style={[styles.track, contrast && styles.contrast]}
     >
-      <Animated.View testID={testID && `${testID}-fill`} style={[styles.fill, fillStyle]} />
+      <Animated.View testID={testID && `${testID}-fill`} style={[styles.fill, { backgroundColor: sel.edge }, fillStyle]} />
     </View>
   )
 }
@@ -51,5 +52,5 @@ export function ProgressBar({ progress, testID }: { progress: number; testID?: s
 const styles = StyleSheet.create({
   track: { height: SPACE.xs, borderRadius: RADIUS.capsule, backgroundColor: COLOR.surfaceSunken, overflow: 'hidden' },
   contrast: { borderWidth: CONTRAST_HAIRLINE, borderColor: MATERIAL.hairlineIncreaseContrast },
-  fill: { height: '100%', borderRadius: RADIUS.capsule, backgroundColor: COLOR.textPrimary },
+  fill: { height: '100%', borderRadius: RADIUS.capsule },
 })

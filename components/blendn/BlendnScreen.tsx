@@ -37,7 +37,7 @@ import { MomentPour, ORBS_LIFT_MS, type PourFrame } from '../ds/MomentPour'
 import { MomentRecap } from '../ds/MomentRecap'
 import { PersonCard, type PersonVariant } from '../ds/PersonCard'
 import { Sheet } from '../ds/Sheet'
-import { CONTROL_FONT_CAP, font, minTarget, useBoldText } from '../ds/shared'
+import { CONTROL_FONT_CAP, font, HueProvider, minTarget, useBoldText } from '../ds/shared'
 import { Toast, type ToastKind } from '../ds/Toast'
 import { ConnectSheet } from '../grid/ConnectSheet'
 import ScalePress from '../motion/ScalePress'
@@ -137,10 +137,13 @@ export function BlendnScreen() {
     return () => sub.remove()
   }, [close])
 
+  // The Room is people: the rose world, one hue for the whole screen (People | Crews, the chips, the sheets).
   return (
-    <RoomStage ref={stage} onClosed={blendnClosed}>
-      <BlendnContent onClose={close} />
-    </RoomStage>
+    <HueProvider value="rose">
+      <RoomStage ref={stage} onClosed={blendnClosed}>
+        <BlendnContent onClose={close} />
+      </RoomStage>
+    </HueProvider>
   )
 }
 

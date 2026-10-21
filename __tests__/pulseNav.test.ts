@@ -153,10 +153,11 @@ describe('the sticky search', () => {
     expect(src).toContain('showLoadingSkeleton ? LEAD : [...LEAD, ...rows]')
   })
 
-  it('the header holds only the title: the search is not in ListHeaderComponent', () => {
+  it('the header holds only the banners: no title (the drawer’s tabs name the pane) and the search is not in ListHeaderComponent', () => {
     const src = SCREEN()
     const header = src.slice(src.indexOf('ListHeaderComponent={'), src.indexOf('</PulseSlots.Provider>'))
-    expect(header).toContain('pulseTitle')
+    expect(header).toContain('{banners}')
+    expect(header).not.toContain('pulseTitle')
     expect(header).not.toContain('searchNode')
     expect(header).not.toContain('<PulseSearch')
   })
