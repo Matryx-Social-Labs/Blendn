@@ -189,7 +189,7 @@ function UserProfileInner() {
         setCtaMessage(CTA_HINT.requested)
         // One they sent you: their note, and the answer, here (R4.1 6.2). Not found (a room handle): it stays "Requested".
         if (connection.request === 'received') {
-          const pending = await apiClient.getMessageRequests({ status: 'pending' }, { force: true }).catch(() => null)
+          const pending = await apiClient.getMessageRequests({ status: 'pending' }).catch(() => null)
           if (pending?.success && pending.data?.requests) setIncoming(incomingRequestFrom(pending.data.requests, targetUserId))
         }
       } else {
