@@ -16,6 +16,7 @@ import { apiClient } from '../lib/apiClient'
 import { readStoredCity } from '../lib/cityStorage'
 import { COLOR, RADIUS, SPACE, STAGGER } from '../lib/design/tokens'
 import { getDistanceKm } from '../lib/geo'
+import { LOCATION_FIX_TIMEOUT_MS } from '../lib/locationFix'
 import { getOptimizedImageUrl } from '../lib/photoUtils'
 import { homeCardProps } from '../lib/pulse'
 import { useMinimumVisible } from '../lib/useMinimumVisible'
@@ -33,6 +34,18 @@ const SKELETON_ROWS = 6
 const MINUTE_MS = 60_000
 
 type Row = BlendnEvent & { _distance: number }
+
+/**
+ * A fix that never comes (an emulator with no signal, GPS off indoors) is "Location unavailable" after the same 15 s every other
+ * fix gets, not a skeleton for ever: `getCurrentPositionAsync` has no deadline of its own.
+ */
+function withDeadline<T>(work: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(Object.assign(new Error('Location timed out'), { code: 'E_LOCATION_TIMEOUT' })), ms)
+  })
+  return Promise.race([work, deadline]).finally(() => clearTimeout(timer))
+}
 
 /**
  * A row that fades up on the list's first reveal, and is a plain view after.
@@ -96,7 +109,7 @@ export default function NearbyEventsScreen() {
           }
           setLocationDenied(false)
           try {
-            const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
+            const position = await withDeadline(Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }), LOCATION_FIX_TIMEOUT_MS)
             const coords = { latitude: position.coords.latitude, longitude: position.coords.longitude }
             setUserLocation(coords)
             setLocationFailed(false)

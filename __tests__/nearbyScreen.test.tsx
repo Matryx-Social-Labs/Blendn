@@ -91,6 +91,25 @@ it('permission but no fix: "Location unavailable" with Try again, not an empty c
   await waitFor(() => expect(screen.getByRole('button', { name: /Alpha Night/ })).toBeTruthy())
 })
 
+it('a fix that never comes is "Location unavailable" after 15 s, not a skeleton for ever', async () => {
+  jest.useFakeTimers()
+  try {
+    mockLocation.getCurrentPositionAsync.mockReturnValue(new Promise(() => {}) as never)
+    await open()
+    expect(screen.getByTestId('nearby-skeleton')).toBeTruthy()
+    await act(async () => {
+      jest.advanceTimersByTime(15_000)
+    })
+    await act(async () => {
+      jest.advanceTimersByTime(1_000)
+    })
+    expect(screen.getByText('Location unavailable')).toBeTruthy()
+    expect(screen.queryByTestId('nearby-skeleton')).toBeNull()
+  } finally {
+    jest.useRealTimers()
+  }
+})
+
 it('a failed load is "Couldn’t load events"; an empty one offers Browse events', async () => {
   events.mockResolvedValue({ data: null, error: new Error('x') })
   await open()
