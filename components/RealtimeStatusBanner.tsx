@@ -2,9 +2,9 @@ import React, { useEffect, useState, useSyncExternalStore } from 'react'
 import type { ViewStyle } from 'react-native'
 import { connect, SocketConnectionStatus } from '../lib/socketClient'
 import { getNetworkState, subscribeNetworkState, type NetworkState } from '../lib/networkStatus'
-import Animated from 'react-native-reanimated'
+import Animated, { useReducedMotion } from 'react-native-reanimated'
 import { Banner } from './ds/Banner'
-import { fadeInFast, fadeOutFast } from './motion/presence'
+import { bannerFadeIn, bannerIn, bannerOut } from './motion/presence'
 
 /**
  * Two different failures wearing one banner.
@@ -66,18 +66,20 @@ export default function RealtimeStatusBanner({
   }, [socketDown])
   const isSocketIssue = socketDown && downLong
 
-  if (!isOffline && !isSocketIssue) return null
-
-  const isReconnecting = status.state === 'reconnecting' || retrying
+  const reduceMotion = useReducedMotion()
+  const kind = realtimeBannerKind({ offline: isOffline, socketIssue: isSocketIssue, reconnecting: status.state === 'reconnecting' || retrying })
+  if (!kind) return null
 
   /*
    * What it means for the person, not which subsystem failed (the design's
-   * system banners, Flow 5): offline is the error (actions will fail); a
-   * dropped socket is a warning (what is on screen stops updating), tinted
-   * apart by the DS Banner. Try again is busy while a reconnect runs.
+   * system banners, Flow 5, Flow 7 pieces): offline is the error (actions will
+   * fail); a dropped socket is a warning (what is on screen stops updating),
+   * tinted apart by the DS Banner; while a reconnect runs it says so, in the
+   * same warning tint and with nothing to press (frame 03).
    */
   const handleRetry = async () => {
-    if (isOffline || isReconnecting) return
+    if (kind !== 'paused')
+      return
     setRetrying(true)
     try {
       await connect()
@@ -87,16 +89,29 @@ export default function RealtimeStatusBanner({
   }
 
   return (
-    <Animated.View entering={fadeInFast} exiting={fadeOutFast} style={style}>
-      {isOffline ? (
-        <Banner kind="offline" text={OFFLINE} />
-      ) : (
-        <Banner kind="paused" text={PAUSED} action={{ label: 'Try again', onPress: handleRetry }} busy={isReconnecting} />
-      )}
+    // DS #44: it slides 16 pt and fades in over `base`, leaves in a quick fade; Reduce Motion: the fade alone.
+    <Animated.View entering={reduceMotion ? bannerFadeIn : bannerIn} exiting={bannerOut} style={style}>
+      {kind === 'offline' ? <Banner kind="offline" text={OFFLINE} /> : null}
+      {kind === 'reconnecting' ? <Banner kind="paused" text={RECONNECTING} testID="realtime-reconnecting" /> : null}
+      {kind === 'paused' ? <Banner kind="paused" text={PAUSED} action={{ label: 'Try again', onPress: handleRetry }} /> : null}
     </Animated.View>
   )
 }
 
-/** The design's system banners (Flow 5 #12, #13). */
+/** The design's system banners (Flow 5 #12, #13; Flow 7 pieces 03). */
 export const OFFLINE = 'Offline. Some actions won’t work until you’re back.'
 export const PAUSED = 'Updates paused. Trying to reconnect.'
+/** While a reconnect runs: the warning tint, no action (Flow 7 pieces 03). */
+export const RECONNECTING = 'Reconnecting…'
+
+export type RealtimeBannerKind = 'offline' | 'paused' | 'reconnecting'
+
+/**
+ * Which banner, if any. Offline wins (actions will fail, and there is nothing to retry); a socket that has been down past
+ * the grace is paused, with Try again, or reconnecting, with nothing to press, while a reconnect is under way.
+ */
+export function realtimeBannerKind({ offline, socketIssue, reconnecting }: { offline: boolean; socketIssue: boolean; reconnecting: boolean }): RealtimeBannerKind | null {
+  if (offline) return 'offline'
+  if (!socketIssue) return null
+  return reconnecting ? 'reconnecting' : 'paused'
+}

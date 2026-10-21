@@ -15,6 +15,7 @@ import {
   type AskState,
   type BoardDraft,
 } from '../../components/board/BoardSections'
+import { OfflineBanner } from '../../components/OfflineBanner'
 import { SkeletonBlock } from '../../components/Skeleton'
 import { apiClient } from '../../lib/apiClient'
 import {
@@ -415,6 +416,10 @@ export function BoardScreen() {
   return (
     <View style={styles.container}>
       <TopBar title="The Board" sub={event?.title} onBack={() => router.back()} testID="board-top" />
+      {/* Flow 15 #16: reads stay, and the screen says what it is showing. */}
+      <View style={styles.banner}>
+        <OfflineBanner text="Offline. Showing what you had." testID="board-offline" />
+      </View>
       {load.kind === 'ready' && !closed ? content : <View style={styles.state}>{content}</View>}
       <BoardComposer
         key={posted}
@@ -455,6 +460,7 @@ const styles = StyleSheet.create({
   header: { gap: SPACE.lg, marginBottom: SPACE.lg },
   list: { paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.xxl, gap: SPACE.lg },
   state: { flex: 1, paddingHorizontal: SPACE.gutter, justifyContent: 'center' },
+  banner: { paddingHorizontal: SPACE.gutter },
   skeleton: { gap: SPACE.lg },
 })
 

@@ -5,6 +5,7 @@ import { AppState, FlatList, Pressable, Share, StyleSheet, Text, View } from 're
 import Animated, { Easing, FadeIn, FadeOut, LinearTransition, useReducedMotion } from 'react-native-reanimated'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { EventCover } from '../../components/EventCover'
+import { OfflineBanner } from '../../components/OfflineBanner'
 import { SkeletonBlock } from '../../components/Skeleton'
 import FadeInUp from '../../components/motion/FadeInUp'
 import ScalePress from '../../components/motion/ScalePress'
@@ -515,6 +516,10 @@ function GoingScreenInner() {
       */}
       <View style={styles.headerRow}>
         <Text accessibilityRole="header" style={[font('display', bold), styles.ink]}>Going</Text>
+      </View>
+      {/* Flow 15 #16: reads stay, and the screen says what it is showing. */}
+      <View style={styles.inset}>
+        <OfflineBanner text="Offline. Showing what you had." testID="going-offline" />
       </View>
       {loading ? (
         // The shapes the list fades into: the next-up card, then two rows.
