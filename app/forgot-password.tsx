@@ -9,7 +9,7 @@ import { Logger } from '../lib/logger'
 import { forgotPasswordMessage } from '../lib/signInRefusal'
 import { Backdrop, ORB_LEVEL } from '../components/onboarding/Backdrop'
 import { CooldownRing } from '../components/onboarding/CooldownRing'
-import { Dock } from '../components/onboarding/Dock'
+import { Dock } from '../components/ds/Dock'
 import { FormHeader } from '../components/onboarding/FormHeader'
 import { useRefusedPulse } from '../components/onboarding/useRefusedPulse'
 import { useSettleIn } from '../components/onboarding/useSettleIn'
@@ -217,6 +217,7 @@ export default function ForgotPassword() {
                     setError(null)
                   }}
                   testID="forgot-different"
+                  style={styles.centred}
                 />
               </View>
             </Dock>
@@ -268,6 +269,7 @@ export default function ForgotPassword() {
 }
 
 const styles = StyleSheet.create({
+  centred: { alignSelf: 'center' },
   root: { flex: 1, backgroundColor: COLOR.ink },
   flex: { flex: 1 },
   scroll: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.xl, paddingBottom: SPACE.xl, gap: SPACE.lg },

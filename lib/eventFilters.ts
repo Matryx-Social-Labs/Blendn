@@ -143,3 +143,23 @@ export function filtersToQuery(
 
   return q
 }
+
+export type AppliedFilter = { field: keyof EventFilters; label: string }
+
+/**
+ * Each choice the person has made, as the removable chip under the search ("Live music", "This weekend", "Within 5 km"):
+ * not just a count (Flow 3 `home` · filters applied). A category the list no longer knows is named by its slug rather
+ * than hidden, so a filter that is on is always visible.
+ */
+export function appliedFilters(f: EventFilters, categories: readonly { slug: string; name: string }[]): AppliedFilter[] {
+  const out: AppliedFilter[] = []
+  if (f.categorySlug) out.push({ field: 'categorySlug', label: categories.find((c) => c.slug === f.categorySlug)?.name ?? f.categorySlug })
+  if (f.when !== 'any') out.push({ field: 'when', label: WHEN_LABELS[f.when] })
+  if (typeof f.radiusKm === 'number') out.push({ field: 'radiusKm', label: `Within ${f.radiusKm} km` })
+  return out
+}
+
+/** The filters with one choice taken back (a chip's ×): the others stay. */
+export function withoutFilter(f: EventFilters, field: keyof EventFilters): EventFilters {
+  return field === 'when' ? { ...f, when: 'any' } : { ...f, [field]: undefined }
+}

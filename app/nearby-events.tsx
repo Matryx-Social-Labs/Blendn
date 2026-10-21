@@ -1,42 +1,38 @@
-import { Ionicons } from '@expo/vector-icons'
 import * as Location from 'expo-location'
 import { router } from 'expo-router'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import {
-    AppState,
-    Dimensions,
-    FlatList,
-    Linking,
-    StyleSheet,
-    Text,
-    View,
-} from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
-import NearbyEventCard, { NEARBY_CARD_ASPECT } from '../components/NearbyEventCard'
+import { AppState, FlatList, Linking, Platform, RefreshControl, StyleSheet, View } from 'react-native'
+
+import { EventCard } from '../components/ds/EventCard'
+import { Orbs } from '../components/ds/Orbs'
+import { StateScreen } from '../components/ds/StateScreen'
+import { TopBar } from '../components/ds/TopBar'
 import FadeInUp from '../components/motion/FadeInUp'
-import ScalePress from '../components/motion/ScalePress'
+import { OfflineBanner } from '../components/OfflineBanner'
+import { preloadImages } from '../components/OptimizedImage'
 import { SkeletonBlock } from '../components/Skeleton'
 import { getEvents as fetchEventsApi, type BlendnEvent } from '../lib/api'
 import { apiClient } from '../lib/apiClient'
 import { readStoredCity } from '../lib/cityStorage'
-import { formatDistance, getDistanceKm } from '../lib/geo'
+import { COLOR, RADIUS, SPACE, STAGGER } from '../lib/design/tokens'
+import { getDistanceKm } from '../lib/geo'
 import { getOptimizedImageUrl } from '../lib/photoUtils'
-import { preloadImages } from '../components/OptimizedImage'
-import { MOTION_STAGGER } from '../lib/motion'
-import { featuredDateLabel, timeLabel } from '../lib/pulse'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../lib/theme'
+import { homeCardProps } from '../lib/pulse'
 import { useMinimumVisible } from '../lib/useMinimumVisible'
-
-const screenW = Dimensions.get('window').width
-
-/** An empty state's illustration, not an inline icon (DESIGN_SYSTEM: 28+). */
-const EMPTY_ICON = ICON.lg * 2
+import { useNow } from '../lib/useNow'
+import { useTopBarState } from '../lib/useTopBarState'
 
 /*
  * The rows that fade up when the list first appears — about a screenful. Rows
  * below arrive by scrolling, where an entrance would only read as lag.
  */
 const STAGGER_ROWS = 6
+/** The frame's 72 pt row rhythm. */
+const ROW_HEIGHT = 72
+const SKELETON_ROWS = 6
+const MINUTE_MS = 60_000
+
+type Row = BlendnEvent & { _distance: number }
 
 /**
  * A row that fades up on the list's first reveal, and is a plain view after.
@@ -47,13 +43,24 @@ const STAGGER_ROWS = 6
  */
 function RevealRow({ animate, delay, children }: { animate: boolean; delay: number; children: React.ReactNode }) {
   const [animateOnMount] = useState(animate)
-  if (!animateOnMount) return <View style={styles.cardWrapper}>{children}</View>
-  return <FadeInUp delay={delay} style={styles.cardWrapper}>{children}</FadeInUp>
+  if (!animateOnMount) return <View style={styles.row}>{children}</View>
+  return (
+    <FadeInUp delay={delay} style={styles.row}>
+      {children}
+    </FadeInUp>
+  )
 }
 
+/**
+ * Nearby (the "See all" behind the Pulse's Nearby section; Flow 3 `nearby`): nearest first, the distance in a Geist
+ * Mono column and then the design system's `EventCard` row. One sort, so there is no sort control: a pill that
+ * could only say "Nearest" would be a dead control.
+ */
 export default function NearbyEventsScreen() {
+  const bar = useTopBarState()
+  const now = useNow(MINUTE_MS)
   const [loading, setLoading] = useState(true)
-  const [events, setEvents] = useState<BlendnEvent[]>([])
+  const [events, setEvents] = useState<Row[]>([])
   const [refreshing, setRefreshing] = useState(false)
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null)
   const [locationDenied, setLocationDenied] = useState(false)
@@ -72,91 +79,99 @@ export default function NearbyEventsScreen() {
   }, [showList])
 
   useEffect(() => {
-    return () => { mountedRef.current = false }
+    return () => {
+      mountedRef.current = false
+    }
   }, [])
 
   // This and `loadEvents` set state only in their callbacks, once a request has
   // settled, so the effect below can start them.
-  const getLocation = useCallback(() =>
-    Location.requestForegroundPermissionsAsync()
-      .then(async ({ status }) => {
-        if (status !== 'granted') {
-          setLocationDenied(true)
-          return null
-        }
-        setLocationDenied(false)
-        try {
-          const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
-          const coords = { latitude: position.coords.latitude, longitude: position.coords.longitude }
-          setUserLocation(coords)
-          setLocationFailed(false)
-          return coords
-        } catch {
+  const getLocation = useCallback(
+    () =>
+      Location.requestForegroundPermissionsAsync()
+        .then(async ({ status }) => {
+          if (status !== 'granted') {
+            setLocationDenied(true)
+            return null
+          }
+          setLocationDenied(false)
+          try {
+            const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
+            const coords = { latitude: position.coords.latitude, longitude: position.coords.longitude }
+            setUserLocation(coords)
+            setLocationFailed(false)
+            return coords
+          } catch {
+            setLocationFailed(true)
+            return null
+          }
+        })
+        .catch(() => {
           setLocationFailed(true)
           return null
-        }
-      })
-      .catch(() => {
-        setLocationFailed(true)
-        return null
-      }), [])
+        }),
+    []
+  )
 
-  const loadEvents = useCallback((force = false) =>
-    Promise.resolve(userLocation || getLocation())
-      .then(async (coords) => {
-        if (!coords) {
-          setEvents([])
-          return
-        }
+  const loadEvents = useCallback(
+    (force = false) =>
+      Promise.resolve(userLocation || getLocation())
+        .then(async (coords) => {
+          if (!coords) {
+            setEvents([])
+            return
+          }
 
-        /*
-         * The same city as the home screen, nearest first.
-         *
-         * This is the "View all" behind the Nearby section, so it has to expand
-         * that section rather than answer a different question. It used to send
-         * `radius: 50` — the same hard cut that blanked the home screen, just at
-         * a bigger number, so someone 60km from everything got an empty list with
-         * no way to tell whether that meant "nothing here" or "you are too far".
-         *
-         * The city comes from the same stored selection the home screen uses, so
-         * "View all" cannot silently show a different city than the one you were
-         * just looking at.
-         */
-        const result = await fetchEventsApi({
-          city: (await readStoredCity())?.city,
-          lat: coords.latitude,
-          lon: coords.longitude,
-          limit: 50,
-          sortBy: 'distance',
-          sortOrder: 'asc',
-          status: 'published',
-        }, { force })
+          /*
+           * The same city as the home screen, nearest first.
+           *
+           * This is the "View all" behind the Nearby section, so it has to expand
+           * that section rather than answer a different question. It used to send
+           * `radius: 50` — the same hard cut that blanked the home screen, just at
+           * a bigger number, so someone 60km from everything got an empty list with
+           * no way to tell whether that meant "nothing here" or "you are too far".
+           *
+           * The city comes from the same stored selection the home screen uses, so
+           * "View all" cannot silently show a different city than the one you were
+           * just looking at.
+           */
+          const result = await fetchEventsApi(
+            {
+              city: (await readStoredCity())?.city,
+              lat: coords.latitude,
+              lon: coords.longitude,
+              limit: 50,
+              sortBy: 'distance',
+              sortOrder: 'asc',
+              status: 'published',
+            },
+            { force }
+          )
 
-        if (!mountedRef.current) return
+          if (!mountedRef.current) return
 
-        if (result.data) {
-          // Filter to events that have coordinates, then sort by distance
-          const withDistance = result.data
-            .filter((e: any) => Number.isFinite(e.latitude) && Number.isFinite(e.longitude))
-            .map((e: any) => ({
-              ...e,
-              _distance: getDistanceKm(coords.latitude, coords.longitude, e.latitude, e.longitude),
-            }))
-            .sort((a: any, b: any) => a._distance - b._distance)
+          if (result.data) {
+            // Filter to events that have coordinates, then sort by distance
+            const withDistance: Row[] = result.data
+              .filter((e): e is BlendnEvent & { latitude: number; longitude: number } => Number.isFinite(e.latitude) && Number.isFinite(e.longitude))
+              .map((e) => ({ ...e, _distance: getDistanceKm(coords.latitude, coords.longitude, e.latitude, e.longitude) }))
+              .sort((a, b) => a._distance - b._distance)
 
-          setEvents(withDistance)
-          setLoadFailed(false)
-        } else {
-          setLoadFailed(true)
-        }
-      })
-      .catch(() => {
-        // Keep what is on screen: a network error is not "no events near you".
-        if (mountedRef.current) setLoadFailed(true)
-      })
-      .finally(() => {
-        if (mountedRef.current) setLoading(false)
-      }), [userLocation, getLocation])
+            setEvents(withDistance)
+            setLoadFailed(false)
+          } else {
+            setLoadFailed(true)
+          }
+        })
+        .catch(() => {
+          // Keep what is on screen: a network error is not "no events near you".
+          if (mountedRef.current) setLoadFailed(true)
+        })
+        .finally(() => {
+          if (mountedRef.current) setLoading(false)
+        }),
+    [userLocation, getLocation]
+  )
 
   useEffect(() => {
     loadEvents(true)
@@ -191,197 +206,156 @@ export default function NearbyEventsScreen() {
     void loadEvents(true)
   }, [loadEvents])
 
+  const retryLoad = useCallback(() => {
+    setLoading(true)
+    void loadEvents(true)
+  }, [loadEvents])
+
+  // A refresh is silent everywhere (audit U-L9): RefreshControl reports only its start, and H.threshold is "armed".
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
     await loadEvents(true)
     setRefreshing(false)
   }, [loadEvents])
 
-  const handleEventPress = useCallback((event: BlendnEvent) => {
-    apiClient.getEvent(event.id, {
-      lat: userLocation?.latitude,
-      lon: userLocation?.longitude,
-    }).catch(() => {})
+  const handleEventPress = useCallback(
+    (event: BlendnEvent) => {
+      apiClient
+        .getEvent(event.id, {
+          lat: userLocation?.latitude,
+          lon: userLocation?.longitude,
+        })
+        .catch(() => {})
 
-    if (event.cover_image_url) {
-      const hero = getOptimizedImageUrl(event.cover_image_url, {
-        width: 1080, height: 520, resize: 'cover', quality: 70, format: 'webp',
+      if (event.cover_image_url) {
+        const hero = getOptimizedImageUrl(event.cover_image_url, {
+          width: 1080,
+          height: 520,
+          resize: 'cover',
+          quality: 70,
+          format: 'webp',
+        })
+        if (hero) preloadImages([hero], 'high').catch(() => {})
+      }
+
+      router.push({
+        pathname: '/event/[id]',
+        params: {
+          id: event.id,
+          title: event.title,
+          cover: event.cover_image_url || '',
+          venue: event.venue_name,
+          city: event.display_city || event.city || '',
+          start: event.start_time,
+          end: event.end_time,
+          category: event.category || '',
+          description: event.description || '',
+        } as never,
       })
-      if (hero) preloadImages([hero], 'high').catch(() => {})
-    }
+    },
+    [userLocation]
+  )
 
-    router.push({
-      pathname: '/event/[id]',
-      params: {
-        id: event.id,
-        title: event.title,
-        cover: event.cover_image_url || '',
-        venue: event.venue_name,
-        city: (event as any).display_city || event.city || '',
-        start: event.start_time,
-        end: event.end_time,
-        category: event.category || '',
-        description: event.description || '',
-      } as any,
-    })
-  }, [userLocation])
+  const renderItem = useCallback(
+    ({ item, index }: { item: Row; index: number }) => {
+      // The distance leads the row (`lead`), so nearest-first can be scanned; the card says when and where.
+      const card = homeCardProps({ ...item, distance: item._distance }, now, true)
+      return (
+        <RevealRow animate={!listRevealedRef.current && index < STAGGER_ROWS} delay={index * STAGGER.base}>
+          <View style={styles.card}>
+            <EventCard
+              kind="row"
+              lead="distance"
+              title={card.title}
+              time={card.time}
+              venue={card.venue}
+              distance={card.distance}
+              cover={card.cover}
+              onPress={() => handleEventPress(item)}
+              testID={`nearby-${item.id}`}
+            />
+          </View>
+        </RevealRow>
+      )
+    },
+    [handleEventPress, now]
+  )
 
-  const containerPadding = GUTTER * 2
-  const innerW = Math.max(0, screenW - containerPadding)
-  const cardWidth = Math.min(420, innerW)
+  const keyExtractor = useCallback((item: Row) => item.id, [])
 
-  const renderItem = useCallback(({ item, index }: { item: BlendnEvent; index: number }) => {
-    const dist = (item as any)._distance
-    // Shared with the home screen's Nearby cards, so the same event does not
-    // read "1.2km away" on one screen and "1km away" on the other.
-    const distLabel = formatDistance(dist)
-
-    return (
-      <RevealRow
-        animate={!listRevealedRef.current && index < STAGGER_ROWS}
-        delay={index * MOTION_STAGGER.normal}
-      >
-        <NearbyEventCard
-          event={item as any}
-          width={cardWidth}
-          onPress={handleEventPress as any}
-          // The day as well as the hour: "9:00 PM" alone could be any night.
-          timeLabel={`${featuredDateLabel(item.start_time)} · ${timeLabel(item.start_time)}`}
-          locationLabel={distLabel || item.venue_name || item.address || ''}
-        />
-      </RevealRow>
-    )
-  }, [cardWidth, handleEventPress])
-
-  const keyExtractor = useCallback((item: BlendnEvent) => item.id, [])
+  const state = locationDenied ? (
+    <StateScreen
+      icon="map-pin-off"
+      title="Location access needed"
+      body="Turn on location to see events near you."
+      actions={[{ label: 'Open Settings', onPress: () => void Linking.openSettings().catch(() => {}) }]}
+      testID="nearby-denied"
+    />
+  ) : locationFailed ? (
+    <StateScreen
+      icon="navigation"
+      title="Location unavailable"
+      body="Couldn’t find where you are. Try again in a moment."
+      actions={[{ label: 'Try again', onPress: retryLocation }]}
+      testID="nearby-unavailable"
+    />
+  ) : events.length === 0 && loadFailed ? (
+    <StateScreen
+      icon="cloud-off"
+      title="Couldn’t load events"
+      body="Check your connection and try again."
+      actions={[{ label: 'Try again', onPress: retryLoad }]}
+      testID="nearby-failed"
+    />
+  ) : events.length === 0 ? (
+    <StateScreen
+      icon="calendar"
+      title="No nearby events"
+      body="There are no events near your current location."
+      // A way on from a dead end: everything in the city, not just nearby.
+      actions={[{ label: 'Browse events', onPress: () => router.navigate('/(tabs)/events' as never) }]}
+      testID="nearby-empty"
+    />
+  ) : null
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <View style={styles.headerRow}>
-        <ScalePress
-          onPress={() => router.back()}
-          style={styles.backBtn}
-          pressedScale={0.9}
-          haptic={false}
-          accessibilityRole="button"
-          accessibilityLabel="Back"
-        >
-          <Ionicons name="chevron-back" size={ICON.lg} color={EMBER.textPrimary} />
-        </ScalePress>
-        <Text style={styles.headerTitle} accessibilityRole="header">Nearby events</Text>
-        {/* The back button's width less its negative margin, so the title stays centred. */}
-        <View style={{ width: CONTROL.md - SPACE.md }} />
+    <View style={styles.screen}>
+      <Orbs set="feed" />
+      <TopBar title="Nearby" state={Platform.OS === 'ios' ? 'condensed' : bar.state} onBack={() => router.back()} testID="nearby-top" />
+      <View style={styles.banner}>
+        <OfflineBanner text="Offline. Showing what you had." testID="nearby-offline" />
       </View>
 
       {showSkeleton ? (
-        // The cards the list fades up into: same width, ratio and radius.
-        <View style={styles.listContent} accessibilityLabel="Loading nearby events" accessible>
-          {[0, 1, 2].map((i) => (
-            <View key={i} style={[styles.cardWrapper, styles.skeletonCard]}>
-              <SkeletonBlock width={cardWidth} height={cardWidth / NEARBY_CARD_ASPECT} borderRadius={EMBER_RADIUS.lg} />
-            </View>
+        // The rows the list fades up into: the frame's 72 pt rows, static (DS #17).
+        <View style={styles.list} accessibilityLabel="Loading nearby events" accessibilityState={{ busy: true }} accessible testID="nearby-skeleton">
+          {Array.from({ length: SKELETON_ROWS }, (_, i) => (
+            <SkeletonBlock key={i} width="100%" height={ROW_HEIGHT} borderRadius={RADIUS.rowInCard} style={styles.skeletonRow} />
           ))}
         </View>
-      ) : locationDenied ? (
-        <FadeInUp style={styles.empty}>
-          <Ionicons name="location-outline" size={EMPTY_ICON} color={EMBER.textSecondary} style={styles.emptyIcon} />
-          <Text style={styles.emptyTitle}>Location access needed</Text>
-          <Text style={styles.emptySub}>Turn on location to see events near you.</Text>
-          <ScalePress
-            style={styles.settingsBtn}
-            onPress={() => { try { (Linking as any)?.openSettings?.() } catch {} }}
-            accessibilityRole="button"
-          >
-            <Text style={styles.settingsBtnText}>Open Settings</Text>
-          </ScalePress>
-        </FadeInUp>
-      ) : locationFailed ? (
-        <FadeInUp style={styles.empty}>
-          <Ionicons name="navigate-outline" size={EMPTY_ICON} color={EMBER.textSecondary} style={styles.emptyIcon} />
-          <Text style={styles.emptyTitle}>Location unavailable</Text>
-          <Text style={styles.emptySub}>Couldn&apos;t find where you are. Try again in a moment.</Text>
-          <ScalePress style={styles.settingsBtn} onPress={retryLocation} accessibilityRole="button">
-            <Text style={styles.settingsBtnText}>Try again</Text>
-          </ScalePress>
-        </FadeInUp>
-      ) : events.length === 0 && loadFailed ? (
-        <FadeInUp style={styles.empty}>
-          <Ionicons name="cloud-offline-outline" size={EMPTY_ICON} color={EMBER.textSecondary} style={styles.emptyIcon} />
-          <Text style={styles.emptyTitle}>Couldn&apos;t load events</Text>
-          <Text style={styles.emptySub}>Check your connection and try again.</Text>
-          <ScalePress
-            style={styles.settingsBtn}
-            onPress={() => {
-              setLoading(true)
-              void loadEvents(true)
-            }}
-            accessibilityRole="button"
-          >
-            <Text style={styles.settingsBtnText}>Try again</Text>
-          </ScalePress>
-        </FadeInUp>
-      ) : events.length === 0 ? (
-        <FadeInUp style={styles.empty}>
-          <Ionicons name="calendar-outline" size={EMPTY_ICON} color={EMBER.textSecondary} style={styles.emptyIcon} />
-          <Text style={styles.emptyTitle}>No nearby events</Text>
-          <Text style={styles.emptySub}>There are no events near your current location.</Text>
-          {/* A way on from a dead end: everything in the city, not just nearby. */}
-          <ScalePress
-            style={styles.settingsBtn}
-            onPress={() => router.navigate('/(tabs)/events' as any)}
-            accessibilityRole="button"
-          >
-            <Text style={styles.settingsBtnText}>Browse events</Text>
-          </ScalePress>
-        </FadeInUp>
+      ) : state ? (
+        <FadeInUp style={styles.state}>{state}</FadeInUp>
       ) : (
         <FlatList
           data={events}
           renderItem={renderItem}
           keyExtractor={keyExtractor}
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          contentContainerStyle={styles.listContent}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLOR.textSecondary} />}
+          contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={false}
+          {...bar.scrollProps}
         />
       )}
-    </SafeAreaView>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: 'transparent' },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: GUTTER,
-    paddingTop: SPACE.sm,
-    paddingBottom: SPACE.md,
-  },
-  // 48pt target; the negative margin puts the chevron on the gutter.
-  backBtn: { width: CONTROL.md, height: CONTROL.md, marginLeft: -SPACE.md, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { ...TYPE.heading },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: GUTTER },
-  emptyIcon: { marginBottom: SPACE.md },
-  emptyTitle: { ...TYPE.title, marginBottom: SPACE.sm, textAlign: 'center' },
-  emptySub: { ...TYPE.body, color: EMBER.textSecondary, textAlign: 'center' },
-  settingsBtn: {
-    marginTop: SPACE.xl,
-    height: CONTROL.lg,
-    paddingHorizontal: SPACE.xl,
-    justifyContent: 'center',
-    backgroundColor: EMBER.accent,
-    borderRadius: EMBER_RADIUS.pill,
-  },
-  settingsBtnText: { ...TYPE.button, color: EMBER.onGradient },
-  listContent: {
-    paddingHorizontal: GUTTER,
-    paddingBottom: SPACE.xl,
-  },
-  // The whole gap between cards: GUTTER. The card carries no margin of its own.
-  cardWrapper: {
-    marginBottom: SPACE.xl,
-  },
-  // Stands in for the next row's gap, so the placeholders sit where the cards will.
-  skeletonCard: { paddingBottom: SPACE.xl, alignSelf: 'center' },
+  screen: { flex: 1, backgroundColor: COLOR.ink },
+  banner: { paddingHorizontal: SPACE.gutter },
+  state: { flex: 1, paddingHorizontal: SPACE.gutter, paddingTop: SPACE.xxxl * 2 },
+  list: { paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.xxl },
+  row: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, minHeight: ROW_HEIGHT },
+  card: { flex: 1, minWidth: 0 },
+  skeletonRow: { marginBottom: SPACE.xs },
 })

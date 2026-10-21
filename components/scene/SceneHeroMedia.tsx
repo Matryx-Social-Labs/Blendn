@@ -3,7 +3,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { Pressable, ScrollView, StyleSheet, View, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native'
 
 import type { FeedMediaItem } from '../../lib/feedMedia'
-import { EMBER, EMBER_RADIUS, GUTTER, SPACE, tint } from '../../lib/theme'
+import { COLOR, RADIUS, SPACE } from '../../lib/design/tokens'
+import { tint } from '../../lib/theme'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { useReducedMotion } from 'react-native-reanimated'
 
@@ -240,26 +241,23 @@ export function SceneHeroMedia({
 
 const styles = StyleSheet.create({
   /*
-   * Above the gradient's foot but clear of the title block.
-   *
-   * The hero's caption sits at the gutter from the bottom and is roughly 150 tall,
-   * so the dots go above it rather than beside it — overlapping the title with
-   * page indicators is how you get a carousel that looks like a bug.
+   * Level with the pills, at the hero's right edge, and clear of the title block and of the circles above.
    */
   dots: {
     position: 'absolute',
-    top: GUTTER,
-    right: GUTTER,
+    // design-exception: frame 22 (video hero) rides the dots 126 pt up, level with the pills, clear of the circles above
+    bottom: 126,
+    right: SPACE.gutter,
     flexDirection: 'row',
     gap: SPACE.sm,
   },
   dot: {
     width: 6,
     height: 6,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: tint(EMBER.textPrimary, 0.4),
+    borderRadius: RADIUS.capsule,
+    backgroundColor: tint(COLOR.textPrimary, 0.4),
   },
-  dotActive: { backgroundColor: EMBER.textPrimary, width: 18 },
+  dotActive: { backgroundColor: COLOR.textPrimary, width: 18 },
 })
 
 /**

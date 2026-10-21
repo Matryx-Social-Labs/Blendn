@@ -6,7 +6,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
 import { Text } from 'react-native'
 
-import { Dock } from '../components/onboarding/Dock'
+import { Dock } from '../components/ds/Dock'
 import { ToastDockContext } from '../components/toastDock'
 
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 34, left: 0, right: 0 }) }))

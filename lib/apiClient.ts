@@ -608,6 +608,10 @@ export interface EventApiItem {
   timezone: string
   status: string
   visibility: string
+  /** The organiser's age floor (the detail route sends it): the Scene's Door tile and its "21+" pill. Absent from an older server. */
+  minAge?: number | null
+  /** `open`, `guest_list`, `members_only` or `invite_only` (`lib/scarcity.ts`). Absent from an older server. */
+  doorPolicy?: string | null
   venueName: string | null
   venue_name?: string | null
   /**

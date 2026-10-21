@@ -84,3 +84,20 @@ export const glassRiseIn = () => {
   }
 }
 export const glassContentsIn = FadeIn.duration(PILL_IN).easing(ENTRANCE).reduceMotion(ReduceMotion.Never)
+
+/*
+ * A system banner arriving or leaving (DS #44): it slides 16 pt and fades over `base` on the entrance curve, and
+ * leaves in a quick fade; the content below shifts on `M.settle` (the parent's layout transition). Reduce Motion: the
+ * fade alone, and the content shifts at once.
+ */
+const BANNER_RISE = 16
+export const bannerIn = () => {
+  'worklet'
+  const t = { duration: DURATION.base, easing: ENTRANCE, reduceMotion: ReduceMotion.System }
+  return {
+    initialValues: { opacity: 0, transform: [{ translateY: -BANNER_RISE }] },
+    animations: { opacity: withTiming(1, t), transform: [{ translateY: withTiming(0, t) }] },
+  }
+}
+export const bannerFadeIn = FadeIn.duration(DURATION.base).easing(ENTRANCE).reduceMotion(ReduceMotion.Never)
+export const bannerOut = FadeOut.duration(DURATION.quick).easing(Easing.bezier(...EASING.exit)).reduceMotion(ReduceMotion.Never)

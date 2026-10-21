@@ -3,13 +3,15 @@
  * and under Reduce Motion a short timing on the standard curve rather than an
  * instant jump.
  */
-import { render } from '@testing-library/react-native'
+import { render, screen } from '@testing-library/react-native'
+import { StyleSheet } from 'react-native'
 import React from 'react'
 import { Text } from 'react-native'
 import * as Reanimated from 'react-native-reanimated'
 
 import { HomeDrawer } from '../components/home/HomeDrawer'
-import { EASING, REDUCE_MOTION, SPRING } from '../lib/design/tokens'
+import { COLOR, EASING, REDUCE_MOTION, SPRING } from '../lib/design/tokens'
+import { tint } from '../lib/theme'
 
 jest.mock('react-native-reanimated', () => {
   const actual = jest.requireActual('react-native-reanimated')
@@ -54,5 +56,16 @@ describe('the drawer travels', () => {
     expect(Reanimated.withTiming).toHaveBeenCalledWith(points.full, expect.objectContaining({ duration: REDUCE_MOTION.duration.base }))
     expect(REDUCE_MOTION.duration.base).toBe(200)
     expect(EASING.standard).toHaveLength(4)
+  })
+})
+
+describe('the drawer\'s fill is the design system\'s, not a flat ember page', () => {
+  it('is the sheet glass, with an ink-96% wash that is clear at half and opaque at full', async () => {
+    reduceMotion.mockReturnValue(false)
+    await render(drawer('half'))
+    const wash = screen.getByTestId('drawer-opaque', { includeHiddenElements: true })
+    expect(StyleSheet.flatten(wash.props.style).backgroundColor).toBe(tint(COLOR.ink, 0.96))
+    // At the half detent (y = half) the wash is fully clear; it only fills as the drawer reaches full.
+    expect(StyleSheet.flatten(wash.props.style).opacity).toBe(0)
   })
 })

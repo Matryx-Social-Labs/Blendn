@@ -70,11 +70,6 @@ const ICON = new Set([TOKENS.icon.inline, TOKENS.icon.control, TOKENS.icon.nav])
  */
 const GRADIENT_LEGACY = Object.fromEntries(
   [
-    'components/NearbyEventCard.tsx',
-    'components/blendn/Face.tsx',
-    'components/scene/SceneHero.tsx',
-    'components/scene/SceneSections.tsx',
-    'components/screens/EventDetailScreen.tsx',
   ].map((f) => [f, 'pre-redesign: moves to <GradientFill> or the redesign scrim with its screen'])
 )
 

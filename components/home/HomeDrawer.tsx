@@ -1,10 +1,11 @@
 import { useEffect, useMemo, type ReactNode } from 'react'
 import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
-import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming, type SharedValue } from 'react-native-reanimated'
+import Animated, { Easing, interpolate, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming, type SharedValue } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
 
 import { Grabber } from '../ui/Grabber'
+import { Material } from '../ui/Material'
 import { GroundProvider } from '../ds/shared'
 import {
   DRAWER_HANDLE_HEIGHT,
@@ -16,8 +17,11 @@ import {
   stepSnap,
   type DrawerSnap,
 } from '../../lib/home'
-import { EASING, REDUCE_MOTION, SPRING } from '../../lib/design/tokens'
-import { EMBER, EMBER_RADIUS, SPACE } from '../../lib/theme'
+import { COLOR, EASING, RADIUS, REDUCE_MOTION, SPACE, SPRING } from '../../lib/design/tokens'
+import { tint } from '../../lib/theme'
+
+/** The drawer at full height is ink at 96%, not glass (Flow 3 `home` 03). */
+const FULL_INK = 0.96
 
 /** Under Reduce Motion the drawer still travels, gently: a short timing on the standard curve, not an instant jump (BUILD-SPEC §0, `drawer`). */
 const REDUCED_SETTLE = { duration: REDUCE_MOTION.duration.base, easing: Easing.bezier(...EASING.standard) } as const
@@ -88,11 +92,15 @@ export function HomeDrawer({
   )
 
   const moved = useAnimatedStyle(() => ({ transform: [{ translateY: y.get() - points.full }] }))
+  // Full height is the opaque surface (Flow 3 `home` 03: ink at 96%); the glass shows at half and peek. A wash over the glass, which itself never fades.
+  const opaque = useAnimatedStyle(() => ({ opacity: interpolate(y.get(), [points.half, points.full], [0, 1], 'clamp') }))
   const tapStep = () => onSnap(snap === 'full' ? 'half' : stepSnap(snap, 'up'))
 
   return (
     <GroundProvider value="glass">
       <Animated.View style={[styles.drawer, { top: points.full }, moved]}>
+        <Material role="sheet" pointerEvents="none" style={StyleSheet.absoluteFill} />
+        <Animated.View testID="drawer-opaque" pointerEvents="none" style={[StyleSheet.absoluteFill, styles.opaque, opaque]} />
         <GestureDetector gesture={pan}>
           <View style={styles.header} onTouchStart={onChromeTouch}>
             <Pressable
@@ -123,14 +131,12 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: EMBER.bg,
-    borderTopLeftRadius: EMBER_RADIUS.lg,
-    borderTopRightRadius: EMBER_RADIUS.lg,
-    borderTopWidth: 1,
-    borderColor: EMBER.separator,
+    borderTopLeftRadius: RADIUS.sheet,
+    borderTopRightRadius: RADIUS.sheet,
     overflow: 'hidden',
   },
-  peek: { position: 'absolute', left: 0, right: 0, top: DRAWER_HEADER_HEIGHT, height: DRAWER_PEEK_LINE, paddingHorizontal: SPACE.xl, backgroundColor: EMBER.bg },
+  opaque: { backgroundColor: tint(COLOR.ink, FULL_INK) },
+  peek: { position: 'absolute', left: 0, right: 0, top: DRAWER_HEADER_HEIGHT, height: DRAWER_PEEK_LINE, paddingHorizontal: SPACE.xl, backgroundColor: COLOR.ink },
   header: { height: DRAWER_HEADER_HEIGHT, paddingHorizontal: SPACE.xl },
   // The whole width and 44pt tall: the grabber is the drawing, this is the target.
   handle: { height: DRAWER_HANDLE_HEIGHT, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },

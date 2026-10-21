@@ -73,10 +73,12 @@ describe('the stylesheet, frame 1141:4643', () => {
     return src.slice(src.indexOf('const styles = StyleSheet.create({'))
   }
 
-  it('the gutter is applied once, on the scroll content', () => {
+  it('the scroll content has no gutter of its own: each row carries it, so the rails and the Set list can bleed', () => {
     const sheet = SHEET()
-    const hits = sheet.match(/paddingHorizontal: MAIN_PADDING_HORIZONTAL/g) || []
-    expect(hits).toHaveLength(1)
+    expect(sheet).toMatch(/listContainer: \{\}/)
+    expect(sheet).not.toContain('MAIN_PADDING_HORIZONTAL')
+    // The rows that sit inside the gutter say so once each, in the token.
+    expect(sheet.match(/paddingHorizontal: SPACE\.gutter/g)?.length).toBeGreaterThanOrEqual(4)
   })
 
   it('has no key nothing uses', () => {

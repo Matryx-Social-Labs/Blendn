@@ -3,7 +3,7 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } fr
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Backdrop, ORB_LEVEL } from './Backdrop'
-import { Dock } from './Dock'
+import { Dock } from '../ds/Dock'
 import { useRevealFocused } from './revealFocused'
 import { Button } from '../ds/Button'
 import { IconButton } from '../ds/IconButton'

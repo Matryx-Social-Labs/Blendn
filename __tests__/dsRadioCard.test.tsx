@@ -93,6 +93,24 @@ describe('<RadioCard>', () => {
     expect(select).toHaveBeenCalledTimes(1)
   })
 
+  it('deselectable: a tap on the selected card clears it, plays H.select, and it reads as a checkbox', async () => {
+    const onPress = jest.fn()
+    await render(card({ selected: true, deselectable: true, onPress }))
+    await fireEvent.press(screen.getByTestId('r'))
+    expect(onPress).toHaveBeenCalledTimes(1)
+    expect(select).toHaveBeenCalledTimes(1)
+    const box = screen.getByRole('checkbox', { name: 'Anonymous, Nobody here sees your name or photo.' })
+    expect(box.props.accessibilityState).toMatchObject({ checked: true })
+    expect(screen.queryByRole('radio')).toBeNull()
+  })
+
+  it('deselectable stays opt-in: the default selected card is still inert', async () => {
+    const onPress = jest.fn()
+    await render(card({ selected: true, onPress }))
+    await fireEvent.press(screen.getByTestId('r'))
+    expect(onPress).not.toHaveBeenCalled()
+  })
+
   it('disabled (blocked) dims to 60% so the reason stays readable, and does nothing', async () => {
     const onPress = jest.fn()
     await render(card({ disabled: true, hint: 'Add a photo to your profile first.', onPress }))

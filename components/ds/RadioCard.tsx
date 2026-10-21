@@ -52,6 +52,11 @@ export type RadioCardProps = {
   onPress?: () => void
   /** Blocked, with the reason as `hint`. */
   disabled?: boolean
+  /**
+   * A tap on the selected card is a change too (it clears the choice): the caller holds a set, not exactly
+   * one. It then reads as a checkbox, since "exactly one" no longer holds, and plays `H.select` both ways.
+   */
+  deselectable?: boolean
   /** The design gallery only: draws a transient state with no finger or keyboard. */
   previewState?: 'pressed' | 'focused'
   testID?: string
@@ -64,12 +69,13 @@ export type RadioCardProps = {
  * the screen's hue, the card's fill stepping to the hue's fill, and the check disc. Exactly one in a group is selected: the caller
  * holds it.
  *
- * `H.select` on a change; none on the selected card or a blocked one. iOS
+ * `H.select` on a change; none on the selected card (unless `deselectable`, where tapping it clears it) or
+ * a blocked one. iOS
  * presses scale 0.97; Android has no ripple and no scale (the ring is the
  * feedback, §13). The card grows with its text. Increase Contrast: the
  * unselected card takes the 50% hairline and the consequence goes white.
  */
-export function RadioCard({ title, hint, icon, avatar, selected = false, onPress, disabled = false, previewState, testID }: RadioCardProps) {
+export function RadioCard({ title, hint, icon, avatar, selected = false, onPress, disabled = false, deselectable = false, previewState, testID }: RadioCardProps) {
   const android = Platform.OS === 'android'
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
@@ -83,7 +89,7 @@ export function RadioCard({ title, hint, icon, avatar, selected = false, onPress
       <ScalePress
         testID={testID}
         onPress={() => {
-          if (selected) return
+          if (selected && !deselectable) return
           H.select()
           onPress?.()
         }}
@@ -91,7 +97,7 @@ export function RadioCard({ title, hint, icon, avatar, selected = false, onPress
         pressedScale={android ? 1 : PRESS.scale}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
-        accessibilityRole="radio"
+        accessibilityRole={deselectable ? 'checkbox' : 'radio'}
         accessibilityLabel={hint ? `${title}, ${hint}` : title}
         accessibilityState={{ checked: selected, disabled }}
         style={[styles.card, { backgroundColor: selected ? sel.fill : COLOR.surface, opacity: disabled ? BLOCKED_OPACITY : 1 }, FILL]}

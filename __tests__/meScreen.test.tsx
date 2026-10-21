@@ -42,7 +42,7 @@ const api = apiClient as jest.Mocked<typeof apiClient>
 const PROFILE = {
   success: true,
   data: {
-    id: 'me', name: 'Sam', age: 28, location: 'Bengaluru', occupation: 'Product designer', bio: 'Records and late trains.',
+    id: 'me', name: 'Sam', age: 28, education: 'NID Ahmedabad', location: 'Bengaluru', occupation: 'Product designer', bio: 'Records and late trains.',
     interests: ['Vinyl'], photos: ['https://cdn/a.jpg'], memberSince: '2025-03-04T00:00:00Z',
     stats: { eventsAttended: 14, eventsFavorited: 6, eventsOrganized: 0 },
   },
@@ -74,6 +74,9 @@ it('draws the frame: name, circles, requests, crews with its count and dot, stat
   expect(screen.getByLabelText('14 Attended')).toBeTruthy()
   expect(screen.getByLabelText('9 Friends')).toBeTruthy()
   await screen.findByTestId('nights-grid')
+  // What you entered stays visible on your own page: occupation under the name, education under About.
+  expect(screen.getByText('Product designer')).toBeTruthy()
+  expect(screen.getByLabelText('education, NID Ahmedabad')).toBeTruthy()
   // Hosted is left out at zero.
   expect(screen.queryByLabelText(/Hosted/)).toBeNull()
 })

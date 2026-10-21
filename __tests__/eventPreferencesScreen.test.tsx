@@ -23,7 +23,10 @@ jest.mock('expo-router', () => ({
 jest.mock('react-native-safe-area-context', () => {
   const React = require('react')
   const { View } = require('react-native')
-  return { SafeAreaView: (p: object) => React.createElement(View, p) }
+  return {
+    SafeAreaView: (p: object) => React.createElement(View, p),
+    useSafeAreaInsets: () => ({ top: 0, bottom: 34, left: 0, right: 0 }),
+  }
 })
 const mockAuth = { user: { id: 'u_me' } }
 jest.mock('../lib/useAuth', () => ({ useAuth: () => mockAuth }))
@@ -68,27 +71,27 @@ it('exposes Save as a button, disabled until the first-door question has an answ
   const save = await screen.findByRole('button', { name: 'Save' })
   expect(save.props.accessibilityState).toMatchObject({ disabled: true })
 
-  await fireEvent.press(screen.getByRole('button', { name: /^Networking/ }))
+  await fireEvent.press(screen.getByRole('checkbox', { name: /^Networking/ }))
   expect(screen.getByRole('button', { name: 'Save' }).props.accessibilityState).toMatchObject({ disabled: false })
 })
 
 it('says which intents are chosen, and "Just here" clears the rest', async () => {
   await render(<EventPreferences />)
-  const networking = () => screen.getByRole('button', { name: /^Networking/ })
-  const justHere = () => screen.getByRole('button', { name: /^Just here for the event/ })
+  const networking = () => screen.getByRole('checkbox', { name: /^Networking/ })
+  const justHere = () => screen.getByRole('checkbox', { name: /^Just here for the event/ })
 
-  expect(networking().props.accessibilityState).toMatchObject({ selected: false })
+  expect(networking().props.accessibilityState).toMatchObject({ checked: false })
   await fireEvent.press(networking())
-  expect(networking().props.accessibilityState).toMatchObject({ selected: true })
+  expect(networking().props.accessibilityState).toMatchObject({ checked: true })
 
   await fireEvent.press(justHere())
-  expect(justHere().props.accessibilityState).toMatchObject({ selected: true })
-  expect(networking().props.accessibilityState).toMatchObject({ selected: false })
+  expect(justHere().props.accessibilityState).toMatchObject({ checked: true })
+  expect(networking().props.accessibilityState).toMatchObject({ checked: false })
 })
 
 it('saves exactly what it did before the redesign, then goes back', async () => {
   await render(<EventPreferences />)
-  await fireEvent.press(await screen.findByRole('button', { name: /^Making friends/ }))
+  await fireEvent.press(await screen.findByRole('checkbox', { name: /^Making friends/ }))
   await fireEvent.press(screen.getByRole('button', { name: 'Save' }))
 
   await waitFor(() => expect(router.back).toHaveBeenCalledTimes(1))
@@ -126,7 +129,7 @@ it("shows the server's sentence when a save is refused, and stays on the screen"
   // "Dating is for 18+" is something a person can act on; "could not save" is not.
   api.setMatchPreferences.mockResolvedValue({ success: false, error: 'Dating is for 18+' } as never)
   await render(<EventPreferences />)
-  await fireEvent.press(await screen.findByRole('button', { name: /^Making friends/ }))
+  await fireEvent.press(await screen.findByRole('checkbox', { name: /^Making friends/ }))
   await fireEvent.press(screen.getByRole('button', { name: 'Save' }))
 
   await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Dating is for 18+', 'error', { haptic: 'error' }))
@@ -136,7 +139,7 @@ it("shows the server's sentence when a save is refused, and stays on the screen"
 it('says it could not save when a refusal carries no sentence', async () => {
   api.setMatchPreferences.mockResolvedValue({ success: false } as never)
   await render(<EventPreferences />)
-  await fireEvent.press(await screen.findByRole('button', { name: /^Making friends/ }))
+  await fireEvent.press(await screen.findByRole('checkbox', { name: /^Making friends/ }))
   await fireEvent.press(screen.getByRole('button', { name: 'Save' }))
 
   await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Could not save. Try again.', 'error', { haptic: 'error' }))
@@ -149,7 +152,7 @@ it('never offers Dating to a minor', async () => {
     data: { name: 'Kid', profile: { age: 17, name: 'Kid', photos: [] } },
   } as never)
   await render(<EventPreferences />)
-  await waitFor(() => expect(screen.queryByRole('button', { name: /^Dating/ })).toBeNull())
+  await waitFor(() => expect(screen.queryByRole('checkbox', { name: /^Dating/ })).toBeNull())
   // And with no photo, the reveal switch says what is missing.
   expect(await screen.findByText(/to your profile first/)).toBeTruthy()
 })
@@ -163,4 +166,43 @@ it('tells a waiting check-in when the first-door question goes, so the room come
   await view.unmount()
   await Promise.resolve()
   expect(answered).toHaveBeenCalledTimes(1)
+})
+
+describe('the redesigned cards', () => {
+  it('a second tap on a chosen intent clears it, and the empty answer is what is saved', async () => {
+    Object.assign(mockParams, { askIntent: undefined })
+    await render(<EventPreferences />)
+    const friends = () => screen.getByRole('checkbox', { name: /^Making friends/ })
+    await fireEvent.press(friends())
+    expect(friends().props.accessibilityState).toMatchObject({ checked: true })
+    await fireEvent.press(friends())
+    expect(friends().props.accessibilityState).toMatchObject({ checked: false })
+    await fireEvent.press(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(api.setMatchPreferences).toHaveBeenCalled())
+    expect(api.setMatchPreferences.mock.calls[0][1]).toMatchObject({ intent: [], revealed: false })
+  })
+
+  it('Named reveals, and only then offers "Do this at future events too"', async () => {
+    Object.assign(mockParams, { askIntent: undefined })
+    await render(<EventPreferences />)
+    expect(screen.queryByText('Do this at future events too')).toBeNull()
+    expect(screen.getByRole('radio', { name: /^Anonymous/ }).props.accessibilityState).toMatchObject({ checked: true })
+
+    await fireEvent.press(await screen.findByRole('radio', { name: /^Named/ }))
+    expect(screen.getByRole('radio', { name: /^Named/ }).props.accessibilityState).toMatchObject({ checked: true })
+    await fireEvent.press(await screen.findByText('Do this at future events too'))
+    await fireEvent.press(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(api.setMatchPreferences).toHaveBeenCalled())
+    expect(api.setMatchPreferences.mock.calls[0][1]).toMatchObject({ revealed: true, rememberReveal: true })
+  })
+
+  it('Named is blocked, with the reason as its sentence, when there is no photo yet', async () => {
+    Object.assign(mockParams, { askIntent: undefined })
+    api.getProfile.mockResolvedValue({ success: true, data: { name: 'Kid', profile: { age: 30, name: 'Kid', photos: [] } } } as never)
+    await render(<EventPreferences />)
+    const named = await screen.findByRole('radio', { name: /Add a photo to your profile first/ })
+    expect(named.props.accessibilityState).toMatchObject({ disabled: true })
+    await fireEvent.press(named)
+    expect(screen.getByRole('radio', { name: /^Anonymous/ }).props.accessibilityState).toMatchObject({ checked: true })
+  })
 })

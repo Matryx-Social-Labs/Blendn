@@ -1,6 +1,10 @@
 import { Image } from 'expo-image'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Platform, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
+
+import { H } from '../../lib/haptics'
+import { measureAnchor } from './anchor'
+import type { Rect } from './chatShared'
 
 import ScalePress from '../motion/ScalePress'
 import { PhotoScrim } from '../ui/GradientFill'
@@ -20,6 +24,11 @@ export type EventCardProps = {
   venue: string
   /** "1.2 km". */
   distance?: string
+  /**
+   * `row` only: `distance` leads the row in its own 64 pt column, in Geist Mono 700 17 (Nearby, "nearest first":
+   * Flow 3 `nearby`, the Pulse's Nearby section), instead of riding the meta line. A row with no distance has no column.
+   */
+  lead?: 'distance'
   going?: number
   /** Inside now, shown as "{n} here now" in place of `going` on a live card. The caller applies the floor of five. */
   here?: number
@@ -31,8 +40,11 @@ export type EventCardProps = {
   onPress?: () => void
   /** The finger is down: a screen warms what the press opens (~100 ms before it). */
   onPressIn?: () => void
-  /** The quick-actions tray (save, share, preview), also reached by a screen reader's "Quick actions" action. */
-  onLongPress?: () => void
+  /**
+   * The peek (save, share, preview, check in or out), also reached by a screen reader's "Quick actions" action. It plays
+   * `H.longPress` as the hold completes and hands over the card's frame in the window, for the screen to lift (`LongPressMenu`).
+   */
+  onLongPress?: (anchor: Rect) => void
   /** The design gallery only: draws a transient state with no finger or keyboard. */
   previewState?: 'pressed' | 'focused'
   testID?: string
@@ -45,6 +57,7 @@ const DEFAULT_SIZE: Record<'hero' | 'compact', ViewStyle> = { hero: { height: 30
 /** The scrim covers the lower 62% of the photo (the page). */
 const SCRIM_HEIGHT = '62%'
 const ROW_HEIGHT = 64
+const LEAD_WIDTH = 64
 /**
  * The words on the photo stop at 1.5×: the card is a fixed size, and past it a
  * two-line title runs up under the pills (the page lets them scale freely; a
@@ -89,12 +102,19 @@ export function eventLabel({
  * on the card and the scrim 20% deeper.
  */
 export function EventCard(props: EventCardProps) {
-  const { kind, title, time, venue, distance, going, here, promoted, cover, saved, onPress, onPressIn, onLongPress, previewState, testID, style } = props
+  const { kind, title, time, venue, distance, lead, going, here, promoted, cover, saved, onPress, onPressIn, onLongPress, previewState, testID, style } = props
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const android = Platform.OS === 'android'
   const [focused, setFocused] = useState(false)
   const label = eventLabel(props)
+  const box = useRef<View>(null)
+  const hold = onLongPress
+    ? () => {
+        H.longPress()
+        measureAnchor(box.current, onLongPress)
+      }
+    : undefined
   const ring = focused || previewState === 'focused'
   const a11y = {
     accessibilityRole: 'button' as const,
@@ -103,28 +123,34 @@ export function EventCard(props: EventCardProps) {
       ? {
           accessibilityActions: QUICK_ACTIONS,
           onAccessibilityAction: (e: { nativeEvent: { actionName: string } }) => {
-            if (e.nativeEvent.actionName === 'quickActions') onLongPress()
+            if (e.nativeEvent.actionName === 'quickActions') measureAnchor(box.current, onLongPress)
           },
         }
       : null),
   }
 
   if (kind === 'row') {
+    const leading = lead === 'distance' && !!distance
     return (
-      <View style={style}>
+      <View ref={box} collapsable={false} style={style}>
         <Pressable
           testID={testID}
           onPress={onPress}
           onPressIn={onPressIn}
-          onLongPress={onLongPress}
+          onLongPress={hold}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           android_ripple={{ color: PRESSED_WASH.android }}
           {...a11y}
           style={({ pressed }) => [styles.row, (pressed || previewState === 'pressed') && !android && styles.rowPressed]}
         >
+          {leading ? (
+            <Text testID={testID && `${testID}-lead`} numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold, FONT_FAMILY.mono[700]), styles.lead]}>
+              {distance}
+            </Text>
+          ) : null}
           <View testID={testID && `${testID}-thumb`} style={styles.thumb}>
-            {cover ? <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} /> : null}
+            {cover ? <Image source={{ uri: cover }} recyclingKey={cover} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} /> : null}
           </View>
           <View style={styles.rowText}>
             <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold), styles.ink]}>
@@ -133,7 +159,7 @@ export function EventCard(props: EventCardProps) {
             {/* The venue gives way to a long name; the time, the thing the row is for, never does. */}
             <View style={styles.rowMeta}>
               <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary, styles.shrink]}>
-                {[venue, distance].filter(Boolean).join(' · ')} ·
+                {[venue, leading ? undefined : distance].filter(Boolean).join(' · ')} ·
               </Text>
               <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary, styles.tabular]}>
                 {time}
@@ -150,6 +176,8 @@ export function EventCard(props: EventCardProps) {
   const radius = hero ? RADIUS.card : RADIUS.mediaInCard
   return (
     <View
+      ref={box}
+      collapsable={false}
       testID={testID && `${testID}-scale`}
       style={[DEFAULT_SIZE[kind], style, previewState === 'pressed' && !android && styles.pressed]}
     >
@@ -157,7 +185,7 @@ export function EventCard(props: EventCardProps) {
         testID={testID}
         onPress={onPress}
         onPressIn={onPressIn}
-        onLongPress={onLongPress}
+        onLongPress={hold}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         pressedScale={android ? 1 : PRESS.scale}
@@ -165,7 +193,7 @@ export function EventCard(props: EventCardProps) {
         {...a11y}
         style={[styles.card, { borderRadius: radius }]}
       >
-        {cover ? <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} /> : null}
+        {cover ? <Image source={{ uri: cover }} recyclingKey={cover} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} /> : null}
         <PhotoScrim testID={testID && `${testID}-scrim`} contrast={contrast} style={styles.scrim} />
         <View style={styles.pills}>
           <TimeBadge when={time} />
@@ -254,6 +282,7 @@ const styles = StyleSheet.create({
   wash: { backgroundColor: PRESSED_WASH.android },
   row: { height: ROW_HEIGHT, flexDirection: 'row', alignItems: 'center', gap: SPACE.md, borderRadius: RADIUS.rowInCard },
   rowPressed: { backgroundColor: PRESSED_WASH.ios },
+  lead: { width: LEAD_WIDTH, color: COLOR.textPrimary, fontVariant: ['tabular-nums'] },
   thumb: { width: SIZE.primary, height: SIZE.primary, borderRadius: RADIUS.thumb, overflow: 'hidden', backgroundColor: COLOR.surface },
   rowText: { flex: 1, minWidth: 0 },
   rowMeta: { flexDirection: 'row', alignItems: 'baseline', gap: SPACE.xs },

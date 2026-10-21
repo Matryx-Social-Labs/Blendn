@@ -18,7 +18,7 @@ import { PhotoViewer } from '../../components/profile/PhotoViewer'
 import { ProfileBar } from '../../components/profile/ProfileBar'
 import { RequestsRow } from '../../components/friends/RequestsRow'
 import { ProfileRow } from '../../components/profile/ProfileRow'
-import { ProfileBio, ProfileInterests, ProfileSection, SECTION_GAP } from '../../components/profile/ProfileSections'
+import { ProfileBio, ProfileDetail, ProfileInterests, ProfileSection, SECTION_GAP } from '../../components/profile/ProfileSections'
 import { CrewEmblem } from '../../components/ds/CrewEmblem'
 import type { Rect } from '../../components/ds/chatShared'
 import { apiClient } from '../../lib/apiClient'
@@ -419,12 +419,14 @@ function ProfileInner() {
           />
         </FadeInUp>
 
-        {profile?.bio || interests.length > 0 ? (
+        {profile?.bio || interests.length > 0 || profile?.education ? (
           <FadeInUp delay={next()}>
             <ProfileSection title="About" testID="about">
               {profile?.bio ? <ProfileBio text={profile.bio} /> : null}
               {/* Your own chips, so nothing is "shared" -- plain chips only. */}
               {interests.length > 0 ? <ProfileInterests interests={interests} /> : null}
+              {/* Not in the frame, but entered by you and shown to others: it stays visible on your own page, under About (owner decides). */}
+              {profile?.education ? <ProfileDetail label="EDUCATION" value={profile.education} variant="ruled" /> : null}
             </ProfileSection>
           </FadeInUp>
         ) : null}

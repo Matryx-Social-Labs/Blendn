@@ -1,155 +1,52 @@
-import { Ionicons } from '@expo/vector-icons'
 import { useEffect, useRef, useState } from 'react'
-import { ActivityIndicator, Dimensions, Keyboard, Platform, StyleSheet, Text, TextInput, View } from 'react-native'
-import Animated, { LayoutAnimationConfig } from 'react-native-reanimated'
+import { Dimensions, Keyboard, Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native'
 
-import { CONTROL, EMBER, EMBER_RADIUS, ICON, SPACE, TYPE } from '../../lib/theme'
-import ScalePress from '../motion/ScalePress'
-import { fadeInFast, fadeOutFast } from '../motion/presence'
+import { Chip } from '../ds/Chip'
+import { IconButton } from '../ds/IconButton'
+import { Badge } from '../ds/MonoFamily'
+import { SearchField } from '../ds/SearchField'
+import { SIZE, SPACE } from '../../lib/design/tokens'
 import { keyboardLeft } from '../../lib/home'
 
 /**
- * The top of The Pulse — the headline, where you are, and the search field.
- *
- * ## The city line is not in the frame, and it has to be
- *
- * Frame `1141:4643` draws a headline and a search field, and nothing that says
- * which city you are looking at. This screen filters by city, and the picker is
- * the **only way out of an empty state**: a city we have not launched in
- * returns nothing, refreshing will never help, and the copy that used to say
- * "try refreshing or explore with location enabled" named the cause as the cure.
- *
- * So it stays — but **on** the headline rather than under it. As its own row it
- * cost 70pt and pushed the search field away from the title it belongs to,
- * which is what made the top of this screen read as loose beside the design.
- * "The Pulse" uses about two thirds of the heading row; the chip goes in the
- * space that was already there, and adds no height.
- *
- * The date went with the row. It was decoration — every card carries the date
- * that matters, and today's is on the status bar three inches above. Raised for
- * the designer in `docs/PULSE.md` rather than silently invented.
- *
- * ## The accent is flat, not a gradient
- *
- * The frame fills "Pulse" with the 135° gradient. React Native cannot gradient
- * a glyph without `@react-native-masked-view`, which is a native module and
- * therefore a new dev client for everyone testing, so the accent word is flat
- * `EMBER.accent`. The Pulse has no primary action, so its title's accent word
- * is the screen's one accent (docs/DESIGN_SYSTEM.md). The onboarding headlines
- * print their second half in `textPrimary` instead: there the accent is the
- * CTA's. Noted in `docs/PULSE.md`.
+ * The search row of The Pulse (Flow 3 `home`): sticky under the title, the DS `SearchField`, the filter button with its
+ * badge, and each applied filter as a removable chip. The same row Places draws, so the panes read as one.
  */
-/*
- * The search field's focus ring fades in rather than snapping. A colour
- * change, so it is already the reduced form and runs under Reduce Motion; the
- * shorthand for the same typing reason as `FilterControl`'s chips, and the
- * same 150ms curve, so the two controls in this row change state alike.
- */
-const EASE_OUT = 'cubic-bezier(0.23, 1, 0.32, 1)'
 
 /**
- * The Pulse's header on home: the search row alone. The title and the city are the drawer's title tabs (`TitleTabs`);
- * `PulseTitle` below is only the preview's.
+ * The Pulse's header on home: the search row alone (the field and the filter circle, 48 pt). The title and the city are the
+ * drawer's title tabs (`TitleTabs`).
  */
-export const PULSE_HEADER_HEIGHT = CONTROL.md
+export const PULSE_HEADER_HEIGHT = SIZE.control
 
-interface Props {
-  /** Second half of the headline, in the accent colour. */
-  title: string
-  titleAccent: string
-  /** `null` while the city is still being resolved — the chip reads "Choose city". */
-  city: string | null
-  onPressCity: () => void
+export type AppliedChip = { key: string; label: string; onRemove: () => void }
+
+type SearchProps = {
   query: string
   onChangeQuery: (next: string) => void
-  /**
-   * A search or filter refetch is in flight, quietly, against a list already
-   * on screen — see `events.tsx`'s `refining`. Swaps the search glyph for a
-   * spinner so typing and being ignored do not look identical; nothing else
-   * on the screen moves, because that fetch is deliberately silent.
-   */
+  /** A search or filter refetch is in flight, quietly, against a list already on screen: the glyph becomes the spinner. */
   searching?: boolean
-  /**
-   * Opens the filter sheet. The count is drawn beside the label so an active
-   * filter is visible without opening anything — a filter you cannot see is one
-   * you forget you set, and then the app looks like it has no events.
-   */
+  /** Opens the filter sheet. */
   onPressFilter?: () => void
   activeFilterCount?: number
-}
-
-/** The headline and the city control. */
-export function PulseTitle({ title, titleAccent, city, onPressCity }: Pick<Props, 'title' | 'titleAccent' | 'city' | 'onPressCity'>) {
-  return (
-    <>
-      {/*
-        The city sits **on** the headline, not under it.
-
-        The frame (`1141:4644`) draws no city line at all. We need one anyway: it is the way out of "Nothing on in Bengaluru", and it is the
-        only control that answers "why is this screen empty".
-
-        A third row cost 70pt and pushed the search field away from the title it
-        belongs to, which is what made the top of the screen read as loose next
-        to the design. The control goes in the dead space beside the title.
-        Zero added height, and it reads as "The Pulse *in*
-        Bengaluru" — which is what it means.
-
-        Right-aligned with a pin and a chevron so it reads as a control rather
-        than as a subtitle. The date that used to ride along with it is gone:
-        every card carries the date that actually matters, and today's date is on
-        the status bar three inches above.
-      */}
-      <View style={styles.titleRow}>
-        <Text style={styles.title} accessibilityRole="header">
-          {title}
-          <Text style={styles.titleAccent}>{titleAccent}</Text>
-        </Text>
-
-        {/* No haptic on either control here: each opens a sheet, and the sheet is the answer. */}
-        <ScalePress
-          haptic={false}
-          onPress={onPressCity}
-          accessibilityRole="button"
-          accessibilityLabel={city ? `Browsing ${city}. Change city` : 'Choose a city'}
-          hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
-          style={styles.cityChip}
-        >
-          <Ionicons name="location-outline" size={ICON.sm} color={EMBER.textSecondary} />
-          {/*
-            Truncated rather than wrapped. "Thiruvananthapuram" would otherwise
-            take a second line and reintroduce the height this change removes;
-            the first several characters are enough to recognise, and tapping it
-            opens the full list.
-          */}
-          <Text style={styles.cityText} numberOfLines={1}>
-            {city ?? 'Choose city'}
-          </Text>
-          <Ionicons name="chevron-down" size={ICON.sm} color={EMBER.textSecondary} />
-        </ScalePress>
-      </View>
-    </>
-  )
+  /** Each applied filter, removable: a filter you cannot see is one you forget you set. */
+  applied?: AppliedChip[]
+  /** "12 events": announced once when results settle. */
+  resultsLabel?: string
 }
 
 /**
- * The search field and the filter button: a row of the list of its own, sticky under the title, so a focused
- * field is never unmounted by a long scroll and the filter is always in reach.
+ * The search field and the filter button: a row of the list of its own, sticky under the title, so a focused field is
+ * never unmounted by a long scroll and the filter is always in reach.
  */
-export function PulseSearch({
-  query,
-  onChangeQuery,
-  searching = false,
-  onPressFilter,
-  activeFilterCount = 0,
-}: Pick<Props, 'query' | 'onChangeQuery' | 'searching' | 'onPressFilter' | 'activeFilterCount'>) {
+export function PulseSearch({ query, onChangeQuery, searching = false, onPressFilter, activeFilterCount = 0, applied = [], resultsLabel }: SearchProps) {
   const [focused, setFocused] = useState(false)
   const input = useRef<TextInput>(null)
   /*
-   * Android only: Back closes the keyboard and leaves the field focused, so a
-   * tap on it opened no keyboard. A keyboard that actually left blurs it, and
-   * the next tap is a fresh focus. Never on iOS: there a hide can arrive while
-   * you type (a frame change), and blurring on it closed the keyboard after
-   * every character (drive 3). The text is the screen's (`query`), so it stays.
+   * Android only: Back closes the keyboard and leaves the field focused, so a tap on it opened no keyboard. A keyboard
+   * that actually left blurs it, and the next tap is a fresh focus. Never on iOS: there a hide can arrive while you type
+   * (a frame change), and blurring on it closed the keyboard after every character (drive 3). The text is the screen's
+   * (`query`), so it stays.
    */
   useEffect(() => {
     if (!focused || Platform.OS !== 'android') return
@@ -159,198 +56,55 @@ export function PulseSearch({
     return () => sub.remove()
   }, [focused])
   return (
-    <>
-      {/*
-        One box, with the icon absolutely placed inside its padding.
-
-        The alternative — an icon and a `TextInput` as siblings in a row — makes
-        the row the measured box and the input a child of unknown width, which
-        is the same mistake the chips made: the thing being measured stops being
-        the thing being drawn.
-      */}
+    <View style={styles.searchWrap}>
       <View style={styles.searchRow}>
-        {/*
-          Focus is the one state the field had no way to show: the cursor alone
-          is easy to miss on a dark fill. A 1pt ring, always there and only
-          coloured when focused, so the box never changes size. `textTertiary`,
-          not the accent — the accent is the title's — and one clear step from
-          the `surface` it outlines.
-        */}
-        <Animated.View
-          style={[
-            styles.searchBox,
-            styles.searchBoxFlex,
-            {
-              borderColor: focused ? EMBER.textTertiary : 'transparent',
-              transition: `border-color 150ms ${EASE_OUT}`,
-            },
-          ]}
-        >
-        {/*
-          The glyph and the spinner crossfade in the same spot: both are
-          absolutely placed, so the outgoing one fades over the incoming one
-          without either pushing the field. Nothing animates on first paint.
-        */}
-        <LayoutAnimationConfig skipEntering>
-          {searching ? (
-            <Animated.View key="searching" entering={fadeInFast} exiting={fadeOutFast} style={styles.searchIcon}>
-              <ActivityIndicator size="small" color={EMBER.textPlaceholder} />
-            </Animated.View>
-          ) : (
-            <Animated.View key="idle" entering={fadeInFast} exiting={fadeOutFast} style={styles.searchIcon}>
-              <Ionicons name="search" size={ICON.md} color={EMBER.textPlaceholder} />
-            </Animated.View>
-          )}
-        </LayoutAnimationConfig>
-        <TextInput
-          ref={input}
-          value={query}
-          onChangeText={onChangeQuery}
-          placeholder="Search events…"
-          placeholderTextColor={EMBER.textPlaceholder}
-          returnKeyType="search"
-          autoCorrect={false}
-          accessibilityLabel="Search events"
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          style={styles.searchInput}
-        />
-          {/* Fades rather than pops as the first character lands and the last one goes. */}
-          {query.length > 0 ? (
-            <Animated.View entering={fadeInFast} exiting={fadeOutFast}>
-              <ScalePress
-                haptic={false}
-                pressedScale={0.9}
-                onPress={() => onChangeQuery('')}
-                accessibilityRole="button"
-                accessibilityLabel="Clear search"
-                hitSlop={{ top: 14, right: 14, bottom: 14, left: 14 }}
-              >
-                <Ionicons name="close-circle" size={ICON.md} color={EMBER.textTertiary} />
-              </ScalePress>
-            </Animated.View>
-          ) : null}
-        </Animated.View>
-
-        {/*
-          FILTER, beside the search field rather than floating over the feed.
-
-          The frame draws a floating button (`1141:4815`) bottom-right. It reads
-          well on an artboard and badly on a device: it sits on top of the card
-          artwork it is meant to help you search, and it has to negotiate z-order
-          with a nav that is itself an overlay.
-
-          Search and filter are the same job — narrowing — so they belong
-          together: an icon button at the search field's height and fill, so
-          the row reads as one control group rather than a pill and a word.
-
-          The cost, stated rather than hidden: this scrolls away, so somebody
-          deep in the feed must scroll up to change a filter. Accepted, because
-          the count below means they can always *see* one is on, which is the
-          failure that actually matters.
-        */}
+        <View style={styles.search}>
+          <SearchField
+            value={query}
+            onChangeText={onChangeQuery}
+            placeholder="Search events…"
+            busy={searching}
+            resultsLabel={resultsLabel}
+            inputRef={input}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+            testID="pulse-search"
+          />
+        </View>
         {onPressFilter ? (
-          <ScalePress
-            haptic={false}
-            pressedScale={0.9}
-            onPress={onPressFilter}
-            accessibilityRole="button"
-            accessibilityLabel="Filters"
-            accessibilityValue={
-              activeFilterCount > 0 ? { text: `${activeFilterCount} active` } : undefined
-            }
-            style={styles.filterAction}
-          >
-            <Ionicons name="options-outline" size={ICON.md} color={EMBER.textPrimary} />
+          <View>
+            <IconButton
+              icon="sliders-horizontal"
+              accessibilityLabel="Filters"
+              accessibilityHint={activeFilterCount ? `${activeFilterCount} applied` : undefined}
+              onPress={onPressFilter}
+              testID="pulse-filter"
+            />
             {activeFilterCount > 0 ? (
-              <View style={styles.filterCount}>
-                <Text style={styles.filterCountText}>{activeFilterCount}</Text>
+              <View style={styles.badge} pointerEvents="none">
+                <Badge text={activeFilterCount} testID="pulse-filter-badge" />
               </View>
             ) : null}
-          </ScalePress>
+          </View>
         ) : null}
       </View>
-    </>
-  )
-}
-
-export function PulseHeader(props: Props) {
-  return (
-    <View style={styles.wrap}>
-      <PulseTitle {...props} />
-      <PulseSearch {...props} />
+      {applied.length ? (
+        // Bled to the screen edges: the chips scroll under the gutter instead of wrapping.
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={styles.applied} contentContainerStyle={styles.appliedRow} testID="pulse-applied">
+          {applied.map((a) => (
+            <Chip key={a.key} label={a.label} selected onRemove={a.onRemove} testID={`pulse-applied-${a.key}`} />
+          ))}
+        </ScrollView>
+      ) : null}
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  // The page supplies the side margin (`GUTTER`); this block adds none.
-  wrap: { gap: SPACE.lg },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: SPACE.md,
-  },
-  // Only the title flexes. The city must never be the thing that truncates
-  // first: a clipped headline is cosmetic, a clipped city is the control you
-  // cannot read.
-  title: { ...TYPE.display, flexShrink: 1 },
-  titleAccent: { color: EMBER.accent },
-
-  cityChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACE.xs,
-    // Bounded so a long name cannot squeeze the headline to nothing; the text
-    // truncates inside it instead.
-    maxWidth: '42%',
-    height: CONTROL.sm,
-    paddingHorizontal: SPACE.md,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.surface,
-    // `CONTROL.sm` is under the 44pt touch floor, so it gets `hitSlop` at the
-    // call site rather than a box taller than the headline beside it.
-  },
-  cityText: { ...TYPE.meta, flexShrink: 1, color: EMBER.textPrimary },
-
-  searchRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
-  // Only the field flexes; the filter button is a fixed square.
-  searchBoxFlex: { flex: 1 },
-  // Same height and fill as the search field beside it: one row, one control style.
-  filterAction: {
-    width: CONTROL.md,
-    height: CONTROL.md,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  filterCount: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    minWidth: CONTROL.badge,
-    height: CONTROL.badge,
-    paddingHorizontal: SPACE.xs,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.textPrimary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  filterCountText: { ...TYPE.caption, color: EMBER.bg },
-  searchBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACE.md,
-    height: CONTROL.md,
-    backgroundColor: EMBER.surface,
-    borderRadius: EMBER_RADIUS.pill,
-    borderWidth: 1,
-    // The search glyph sits inside this inset: 16 + a 20pt icon + 12 of air.
-    paddingLeft: SPACE.xxxl,
-    paddingRight: SPACE.lg,
-  },
-  searchIcon: { position: 'absolute', left: SPACE.lg },
-  searchInput: { ...TYPE.body, flex: 1, padding: 0 },
+  searchWrap: { paddingHorizontal: SPACE.gutter, gap: SPACE.md },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
+  search: { flex: 1 },
+  badge: { position: 'absolute', top: -SPACE.xs, right: -SPACE.xs },
+  applied: { marginHorizontal: -SPACE.gutter },
+  appliedRow: { paddingHorizontal: SPACE.gutter, gap: SPACE.sm },
 })

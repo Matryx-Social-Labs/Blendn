@@ -7,7 +7,6 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { StatusBar } from 'expo-status-bar';
 import { ErrorBoundary } from '../components/ErrorBoundary';
-import { IntroAnimation } from '../components/IntroAnimation';
 import { ToastProvider } from '../components/Toast';
 import {
     initializePushNotifications,
@@ -75,9 +74,6 @@ SplashScreen.setOptions({ fade: true, duration: 200 });
 
 const LOGO_ASSET = require('../assets/logo/monogram-gradient.png');
 const PLACEHOLDER_ASSET = require('../assets/images/icon.png');
-// Preloaded with the rest, so the splash hands over to a decoded animation
-// rather than to an empty frame that pops in a moment later.
-const INTRO_ASSET = require('../assets/logo/intro.webp');
 
 function RootLayout() {
   const { user, loading, isNewAccount, unreachable } = useAuth();
@@ -107,7 +103,6 @@ function RootLayout() {
   const [fontsLoaded, fontError] = useFonts(EMBER_FONT_MODULES);
   const fontsReady = fontsLoaded || !!fontError;
   const assetsReady = imagesReady && fontsReady;
-  const [showIntro, setShowIntro] = useState(true);
 
   /*
    * This used to fire and gate nothing — `Asset.loadAsync(...).catch(() => {})`,
@@ -128,7 +123,7 @@ function RootLayout() {
      * on this promise, and 388 KB of local images resolves long before auth
      * does.
      */
-    Asset.loadAsync([LOGO_ASSET, PLACEHOLDER_ASSET, INTRO_ASSET, ...ONBOARDING_IMAGES])
+    Asset.loadAsync([LOGO_ASSET, PLACEHOLDER_ASSET, ...ONBOARDING_IMAGES])
       // ...then warm `expo-image`'s cache with the same files, because that is
       // the one the onboarding screens actually read from. Downloading is not
       // decoding, and the two libraries do not share a cache.
@@ -538,30 +533,7 @@ function RootLayout() {
             (`Appearance.setColorScheme('dark')` above).
           */}
           <StatusBar style="light" />
-          {/*
-            * Rendered last in the tree but drawn on top, so it covers whatever
-            * the router settles on. Deliberately not a gate — auth and routing
-            * both resolve underneath while it plays, and it is simply removed
-            * when done. It never delays a signed-in user.
-            *
-            * `assetsReady` gates the *mount*, though, and that is not the same
-            * thing as gating startup. The intro used to mount on the first
-            * render, which is before the native splash has been dismissed —
-            * so its timers ran while the splash was still covering it, and on
-            * a slow cold start the animation was already partway through by
-            * the time anyone could see it. It survived because the old asset
-            * opened on a static monogram identical to the splash, so the
-            * frames being eaten were indistinguishable from the splash
-            * itself. The asset now opens by drawing that monogram, and eaten
-            * frames would mean the logo appearing half-drawn.
-            *
-            * Same condition `hideAsync` waits on, and it flips in the render
-            * before the effect fires, so the overlay is up before the splash
-            * begins fading out. Nothing shows between them.
-            */}
-          {showIntro && assetsReady && (
-            <IntroAnimation onDone={() => setShowIntro(false)} />
-          )}
+          {/* No launch animation (owner, 2026-10-21): the static native splash hands straight to the first screen. */}
           <Stack
             screenOptions={{
               // Every pushed screen sits on the same flat surface as the root.

@@ -334,6 +334,7 @@ describe('every door is this flow', () => {
     // A check-in always goes through the hold (docs/redesign/SCREENS.md, Pulse).
     const src = read('app/(tabs)/events.tsx')
     expect(src).not.toContain('submitCheckIn(')
-    expect(src).toMatch(/label: 'Blend in',[\s\S]{0,200}closeTray\(\)\s*openBlendn\(\)/)
+    // The peek's Check in item (the frame's label) is the pass's hold: it only ever opens the overlay.
+    expect(src).toMatch(/action === 'checkIn'\) return openBlendn\(\)/)
   })
 })

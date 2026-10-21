@@ -1,13 +1,16 @@
 import { Image } from 'expo-image'
-import { memo, type RefObject } from 'react'
+import { memo, useRef, type RefObject } from 'react'
 import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 
+import { measureAnchor } from '../ds/anchor'
+import type { Rect } from '../ds/chatShared'
 import { font, PRESSED_WASH, useBoldText } from '../ds/shared'
 import type { BlendnEvent } from '../../lib/api'
 import { COLOR, FONT_FAMILY, RADIUS, SPACE } from '../../lib/design/tokens'
 import { liveWindow } from '../../lib/eventSession'
 import { distanceText } from '../../lib/placesPane'
 import { clockTime } from '../../lib/roomMoments'
+import { H } from '../../lib/haptics'
 import { printable } from '../../lib/pulseSections'
 
 /**
@@ -46,6 +49,8 @@ export function setRowLabel(event: BlendnEvent, withDistance: boolean): string {
   ].join('. ')
 }
 
+const QUICK_ACTIONS = [{ name: 'quickActions', label: 'Quick actions' }]
+
 type RowProps = {
   event: BlendnEvent
   /** Distances mean something (a fix, in the city you are in). */
@@ -53,7 +58,7 @@ type RowProps = {
   stacked: boolean
   onPress: (event: BlendnEvent) => void
   onPressIn?: (event: BlendnEvent) => void
-  onLongPress?: (event: BlendnEvent) => void
+  onLongPress?: (event: BlendnEvent, anchor: Rect) => void
 }
 
 const Row = memo(function Row({ event, withDistance, stacked, onPress, onPressIn, onLongPress }: RowProps) {
@@ -62,12 +67,30 @@ const Row = memo(function Row({ event, withDistance, stacked, onPress, onPressIn
   const { time, meridiem } = splitClock(start)
   const distance = withDistance ? distanceText(event.distance) : null
   const going = printable(event.going_count)
+  const box = useRef<View>(null)
   return (
     <Pressable
+      ref={box}
+      collapsable={false}
       testID={`set-row-${event.id}`}
       onPress={() => onPress(event)}
       onPressIn={onPressIn ? () => onPressIn(event) : undefined}
-      onLongPress={onLongPress ? () => onLongPress(event) : undefined}
+      onLongPress={
+        onLongPress
+          ? () => {
+              H.longPress()
+              measureAnchor(box.current, (anchor) => onLongPress(event, anchor))
+            }
+          : undefined
+      }
+      accessibilityActions={onLongPress ? QUICK_ACTIONS : undefined}
+      onAccessibilityAction={
+        onLongPress
+          ? (e) => {
+              if (e.nativeEvent.actionName === 'quickActions') measureAnchor(box.current, (anchor) => onLongPress(event, anchor))
+            }
+          : undefined
+      }
       android_ripple={{ color: PRESSED_WASH.android }}
       accessibilityRole="button"
       accessibilityLabel={setRowLabel(event, withDistance)}
@@ -150,7 +173,7 @@ export const SetList = memo(function SetList({
   coachRef?: RefObject<View | null>
   onPress: (event: BlendnEvent) => void
   onPressIn?: (event: BlendnEvent) => void
-  onLongPress?: (event: BlendnEvent) => void
+  onLongPress?: (event: BlendnEvent, anchor: Rect) => void
 }) {
   const { fontScale } = useWindowDimensions()
   const stacked = fontScale >= STACK_AT_FONT_SCALE

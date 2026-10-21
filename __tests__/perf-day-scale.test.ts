@@ -33,7 +33,6 @@ describe("the Pulse handlers keep their identity", () => {
   it("reads the volatile maps through refs inside handlers", () => {
     for (const ref of [
       "latestCheckinStatusesRef",
-      "latestProximityDataRef",
       "latestInterestStatusesRef",
       "latestInterestCountsRef",
     ]) {
@@ -62,7 +61,7 @@ describe("the Pulse handlers keep their identity", () => {
       "handleEventPress",
       "handleCheckOut",
       "toggleInterest",
-      "handleEventPreview",
+      "onPeekAction",
     ]
     const depArrays = HANDLERS.map((name) => {
       const start = src.indexOf(`const ${name} = useCallback(`)
@@ -88,7 +87,7 @@ describe("the Pulse handlers keep their identity", () => {
      * the re-render count by never re-rendering.
      */
     expect(src).toMatch(
-      /\}, \[isNarrowed, sections.length, firstRowId, now, checkinStatuses, proximityData, interestStatuses,/
+      /\}, \[isNarrowed, sections.length, firstRowId, now, hasFix, checkinStatuses,/
     )
   })
 })

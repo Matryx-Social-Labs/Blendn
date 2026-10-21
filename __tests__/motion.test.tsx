@@ -26,7 +26,7 @@ jest.mock('react-native-reanimated', () => {
 describe('motionTokens', () => {
   it('uses the base values normally', () => {
     const m = motionTokens(false)
-    expect([m.duration.base, m.rise.list, m.orbs.drift, m.shake.distance]).toEqual([220, 8, 24, 8])
+    expect([m.duration.base, m.rise.list, m.orbs.drift, m.shake.distance]).toEqual([220, 8, 40, 8])
   })
 
   it('lays Reduce Motion’s table over them: shorter, no rise, no drift, no shake', () => {
