@@ -4,7 +4,7 @@ import Animated, { type AnimatedProps } from 'react-native-reanimated'
 import { Button } from '../ds/Button'
 import { UploadRing } from '../ds/ChatBubble'
 import { ScrimPill, monoCaption } from '../ds/MonoFamily'
-import { font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from '../ds/shared'
+import { font, IC_HAIRLINE, useBoldText, useIncreaseContrast, useSelection } from '../ds/shared'
 import { OptimizedImage } from '../OptimizedImage'
 import { Icon } from '../ui/Icon'
 import type { PhotoTile as Tile } from './photoTiles'
@@ -45,6 +45,7 @@ export function PhotoTile({
   animation?: Pick<AnimatedProps<object>, 'layout' | 'exiting' | 'entering'>
 }) {
   const bold = useBoldText()
+  const sel = useSelection()
   const contrast = useIncreaseContrast()
   const primary = index === 0
   const ready = tile.state === 'ready'
@@ -59,8 +60,8 @@ export function PhotoTile({
           : `Make photo ${index + 1} your main photo`
 
   return (
-    <Animated.View {...animation} testID={`photo-tile-${index}`} style={[styles.tile, { height }, primary ? styles.main : { width: slot }, primary && styles.chosen]}>
-      {/* "Make main" moves the photo to the front and grows it; the ring on the main one is the third signal, after size and the label. */}
+    <Animated.View {...animation} testID={`photo-tile-${index}`} style={[styles.tile, { height }, primary ? styles.main : { width: slot }, primary && styles.chosen, primary && { borderColor: sel.edge }]}>
+      {/* "Make main" moves the photo to the front and grows it; the ring on the main one, in the screen's hue, is the third signal, after size and the label. */}
       <Pressable
         onPress={onMakeMain}
         disabled={primary || !ready}
@@ -119,7 +120,7 @@ export function PhotoTile({
 const styles = StyleSheet.create({
   tile: { borderRadius: RADIUS.mediaInCard, backgroundColor: COLOR.surface, overflow: 'hidden' },
   main: { width: '100%' },
-  chosen: { borderWidth: SPACE.xxs, borderColor: COLOR.selectionFill },
+  chosen: { borderWidth: SPACE.xxs },
   photo: { width: '100%', height: '100%' },
   photoDim: { opacity: IN_FLIGHT_OPACITY },
   percent: { position: 'absolute', left: 0, right: 0, top: '50%', marginTop: SIZE.circleButton / 2 + SPACE.sm, alignItems: 'center' },

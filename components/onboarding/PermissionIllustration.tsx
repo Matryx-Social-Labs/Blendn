@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native'
 import { Avatar } from '../ds/Avatar'
 import { DiscMark } from '../ds/DiscMark'
 import { Orbs } from '../ds/Orbs'
-import { font, useBoldText } from '../ds/shared'
+import { font, useBoldText, useSelection } from '../ds/shared'
 import { monoCaption } from '../ds/MonoFamily'
 import { Icon } from '../ui/Icon'
 import FadeInUp from '../motion/FadeInUp'
@@ -84,6 +84,7 @@ const STREET_TILT = { vertical: '8deg', horizontal: '-6deg' } as const
  */
 export function LocationIllustration({ city, notice = false }: { city?: string | null; notice?: boolean }) {
   const bold = useBoldText()
+  const sel = useSelection()
   const height = notice ? MAP_HEIGHT_WITH_NOTICE : MAP_HEIGHT
   return (
     <View
@@ -110,7 +111,8 @@ export function LocationIllustration({ city, notice = false }: { city?: string |
         </View>
       ))}
       <View style={styles.you}>
-        <View style={styles.youRing}>
+        {/* You are the screen's hue (violet in onboarding), never white. */}
+        <View testID="you-ring" style={[styles.youRing, { backgroundColor: sel.edge }]}>
           <Avatar kind="creature" pseudonym="You" size={YOU_SIZE - SPACE.sm} />
         </View>
         <Text style={[font('caption', bold), styles.youTag]}>You</Text>
@@ -154,7 +156,7 @@ const styles = StyleSheet.create({
   streetH: { position: 'absolute', left: 0, right: 0, height: StyleSheet.hairlineWidth, backgroundColor: COLOR.hairline },
   ring: { position: 'absolute', left: '50%', top: '50%', borderWidth: 1, borderColor: COLOR.hairlineStrong },
   you: { position: 'absolute', left: '50%', top: '50%', marginLeft: -YOU_SIZE / 2, marginTop: -YOU_SIZE / 2, width: YOU_SIZE, alignItems: 'center', gap: SPACE.xs },
-  youRing: { width: YOU_SIZE, height: YOU_SIZE, borderRadius: RADIUS.capsule, backgroundColor: COLOR.selectionFill, alignItems: 'center', justifyContent: 'center' },
+  youRing: { width: YOU_SIZE, height: YOU_SIZE, borderRadius: RADIUS.capsule, alignItems: 'center', justifyContent: 'center' },
   youTag: { color: COLOR.textPrimary, backgroundColor: COLOR.ink, paddingHorizontal: SPACE.sm, borderRadius: RADIUS.capsule, overflow: 'hidden' },
   footer: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingTop: SPACE.xxxl, paddingHorizontal: SPACE.lg, paddingBottom: SPACE.lg, gap: SPACE.xs, experimental_backgroundImage: SCRIM_FOOT },
   footerRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },

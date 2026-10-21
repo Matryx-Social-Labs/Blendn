@@ -4,7 +4,7 @@ import { StyleSheet, Text, View } from 'react-native'
 
 import { InterestChip } from '../../components/ds/Chip'
 import { MomentReady } from '../../components/ds/MomentReady'
-import { font, useBoldText } from '../../components/ds/shared'
+import { font, useBoldText, useSelection } from '../../components/ds/shared'
 import { OptimizedImage } from '../../components/OptimizedImage'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import { Icon, type IconName } from '../../components/ui/Icon'
@@ -45,6 +45,7 @@ export default function ReadyScreen() {
   const name = draft.name?.trim()
   const primaryPhoto = draft.photos?.[0]
   const bold = useBoldText()
+  const sel = useSelection()
 
   return (
     <>
@@ -70,12 +71,12 @@ export default function ReadyScreen() {
           </View>
 
           {/*
-           * The payoff: a white ring around the avatar (selected = white), a 4 pt surface gap; the gradient stays on the mark
+           * The payoff: a ring around the avatar in the screen's hue (violet: you), a 4 pt surface gap; the gradient stays on the mark
            * and the primary. `OptimizedImage`, not React Native's `<Image>`: this is a 128 pt avatar drawing whatever the person
            * uploaded, which `blendn-admin/docs/MEDIA.md` asks to be 2048 square. `width`/`height` are the decode hint, so the
            * bitmap is the size of the thing on screen.
            */}
-          <View style={[styles.avatarRing, !primaryPhoto && styles.avatarRingEmpty]}>
+          <View style={[styles.avatarRing, { backgroundColor: sel.edge }, !primaryPhoto && styles.avatarRingEmpty]}>
             <View style={styles.avatarGap}>
               {primaryPhoto ? (
                 <OptimizedImage source={primaryPhoto} style={styles.avatar} width={AVATAR} height={AVATAR} contentFit="cover" />
@@ -160,7 +161,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarRing: { width: RING, height: RING, borderRadius: RADIUS.capsule, backgroundColor: COLOR.selectionFill, alignItems: 'center', justifyContent: 'center', marginBottom: SPACE.sm },
+  avatarRing: { width: RING, height: RING, borderRadius: RADIUS.capsule, alignItems: 'center', justifyContent: 'center', marginBottom: SPACE.sm },
   avatarRingEmpty: { backgroundColor: COLOR.textTertiary },
   avatarGap: { width: GAP, height: GAP, borderRadius: RADIUS.capsule, backgroundColor: COLOR.surface, alignItems: 'center', justifyContent: 'center' },
   avatar: { width: AVATAR, height: AVATAR, borderRadius: RADIUS.capsule, overflow: 'hidden' },
