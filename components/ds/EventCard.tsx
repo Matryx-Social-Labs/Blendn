@@ -11,7 +11,7 @@ import { PhotoScrim } from '../ui/GradientFill'
 import { COLOR, FONT_FAMILY, ICON, PRESS, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { Icon } from '../ui/Icon'
 import { PROMOTED_LABEL } from '../../lib/pulseSections'
-import { ScrimPill, TimeBadge } from './MonoFamily'
+import { MonoRun, ScrimPill, TimeBadge } from './MonoFamily'
 import { CONTROL_FONT_CAP, focusRing, font, IC_HAIRLINE, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
 
 export type EventCardKind = 'hero' | 'compact' | 'row'
@@ -162,7 +162,7 @@ export function EventCard(props: EventCardProps) {
                 {[venue, leading ? undefined : distance].filter(Boolean).join(' · ')} ·
               </Text>
               <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary, styles.tabular]}>
-                {time}
+                <MonoRun text={time} />
               </Text>
             </View>
           </View>

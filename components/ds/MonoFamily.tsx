@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { Fragment, type ReactNode } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import Animated from 'react-native-reanimated'
 
@@ -18,6 +18,24 @@ import { CONTROL_FONT_CAP, font, useBoldText, useIncreaseContrast } from './shar
 
 /** Geist Mono 500 at 12/16, tabular: a count or a time on the floor. TextField's counter uses it too. */
 export const monoCaption = (bold: boolean) => ({ ...font('caption', bold, FONT_FAMILY.mono[500]), fontVariant: ['tabular-nums' as const] })
+
+/**
+ * Mono runs divided by " · " ("Sun · 3:30 PM"): the middot and its two spaces are set in the brand face, as the frames draw
+ * them, so punctuation does not take a full mono cell each and read as "Sun  ·  3:30 PM". Inside a mono `Text`; the digits stay mono.
+ */
+export function MonoRun({ text }: { text: string }) {
+  return (
+    <>
+      {text.split(DIVIDER).map((part, i) => (
+        <Fragment key={i}>
+          {i > 0 ? <Text style={styles.divider}>{DIVIDER}</Text> : null}
+          {part}
+        </Fragment>
+      ))}
+    </>
+  )
+}
+const DIVIDER = ' · '
 
 /** A count's horizontal padding: 5 in the 18 pt pill, 8 in the 22. */
 const BADGE_PAD = { 18: SPACE.xs, 22: SPACE.sm } as const
@@ -144,7 +162,7 @@ export function TimeBadge({ when, testID }: { when: string; testID?: string }) {
     <ScrimPill testID={testID}>
       {live ? <PresenceDot kind="live" testID={testID && `${testID}-dot`} /> : null}
       <Text style={[live ? font('caption', bold) : monoCaption(bold), styles.ink]} maxFontSizeMultiplier={CONTROL_FONT_CAP}>
-        {when}
+        {live ? when : <MonoRun text={when} />}
       </Text>
     </ScrimPill>
   )
@@ -191,6 +209,7 @@ export function Price({
 }
 
 const styles = StyleSheet.create({
+  divider: { fontFamily: FONT_FAMILY.brand[500] },
   ring: { padding: SPACE.badgeRing, borderRadius: RADIUS.capsule },
   badge: { borderRadius: RADIUS.capsule, backgroundColor: COLOR.textPrimary, alignItems: 'center', justifyContent: 'center' },
   badgeText: { color: COLOR.ink, fontVariant: ['tabular-nums'] },

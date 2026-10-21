@@ -6,10 +6,10 @@
  */
 import { act, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { AccessibilityInfo, StyleSheet } from 'react-native'
+import { AccessibilityInfo, StyleSheet, Text } from 'react-native'
 
 import { badgeFadeIn, badgeIn } from '../components/motion/presence'
-import { Badge, LivePill, PresenceDot, Price, TimeBadge } from '../components/ds/MonoFamily'
+import { Badge, LivePill, MonoRun, PresenceDot, Price, TimeBadge } from '../components/ds/MonoFamily'
 import { COLOR, FONT_FAMILY, MATERIAL, TYPE } from '../lib/design/tokens'
 
 const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id, { includeHiddenElements: true }).props.style)
@@ -144,5 +144,21 @@ describe('<Price>', () => {
   it('scales freely: no cap', async () => {
     await render(<Price amount="₹49" per="tonight" size="lg" />)
     expect(text('₹49').props.maxFontSizeMultiplier).toBeUndefined()
+  })
+})
+
+describe('a mono run divided by middots', () => {
+  it('sets the middot and its spaces in the brand face, the day and the clock in mono', async () => {
+    await render(
+      <Text testID="run" style={{ fontFamily: FONT_FAMILY.mono[500] }}>
+        <MonoRun text="Sun · 3:30 PM" />
+      </Text>,
+    )
+    const run = screen.getByTestId('run')
+    const divider = run.children.find((c) => typeof c === 'object' && 'props' in c && (c.props as { children?: unknown }).children === ' · ') as { props: { style: object } }
+    expect(StyleSheet.flatten(divider.props.style).fontFamily).toBe(FONT_FAMILY.brand[500])
+    expect(screen.getByText('Sun · 3:30 PM')).toBeTruthy()
+    await render(<TimeBadge when="Live" testID="tb" />)
+    expect(screen.getByText('Live')).toBeTruthy()
   })
 })
