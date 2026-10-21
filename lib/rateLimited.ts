@@ -1,0 +1,23 @@
+/**
+ * "Slow down — try again in a minute" (Flow 15 #15): a read the server refused with a 429. The wait is the server's
+ * (`retryAfter`, seconds); it is never "check your connection", because the connection is fine.
+ */
+export const RATE_LIMITED_CODE = 'RATE_LIMITED'
+/** When the server names no wait: the minute the sentence promises. */
+export const DEFAULT_WAIT_S = 60
+export const RATE_LIMITED_TEXT = 'Slow down — try again in a minute'
+
+export const isRateLimited = (result: { errorCode?: string } | null | undefined): boolean => result?.errorCode === RATE_LIMITED_CODE
+
+/** The longest wait among refused reads, in whole seconds; null when none was refused. */
+export function rateLimitWait(results: ({ errorCode?: string; retryAfter?: number } | null | undefined)[]): number | null {
+  const refused = results.filter(isRateLimited) as { retryAfter?: number }[]
+  if (refused.length === 0) return null
+  return Math.max(...refused.map((r) => (typeof r.retryAfter === 'number' && r.retryAfter > 0 ? Math.ceil(r.retryAfter) : DEFAULT_WAIT_S)))
+}
+
+/** "0:52", "1:05": minutes and seconds, in the Geist Mono the count is drawn in. */
+export function formatCountdown(seconds: number): string {
+  const s = Math.max(0, Math.ceil(seconds))
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+}

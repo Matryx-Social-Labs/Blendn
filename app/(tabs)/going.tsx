@@ -6,6 +6,8 @@ import Animated, { Easing, FadeIn, FadeOut, LinearTransition, useReducedMotion }
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { EventCover } from '../../components/EventCover'
 import { OfflineBanner } from '../../components/OfflineBanner'
+import { RateLimitedBanner } from '../../components/system/RateLimitedBanner'
+import { rateLimitWait } from '../../lib/rateLimited'
 import { SkeletonBlock } from '../../components/Skeleton'
 import FadeInUp from '../../components/motion/FadeInUp'
 import ScalePress from '../../components/motion/ScalePress'
@@ -72,6 +74,8 @@ function GoingScreenInner() {
   const [lockedCount, setLockedCount] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
   const [loadFailed, setLoadFailed] = useState(false)
+  /** Seconds the server asked us to wait, when it refused a read for asking too fast (Flow 15 #15). */
+  const [rateLimit, setRateLimit] = useState<number | null>(null)
   /*
    * The design's Toast (components/ds/Toast): iOS a capsule at the top, Android
    * a snackbar at the bottom above the tab bar (drive 2: it covered "Going").
@@ -166,6 +170,7 @@ function GoingScreenInner() {
 
       const allFailed = !saved.success && !rsvps.success && !past.success
       setLoadFailed(allFailed)
+      setRateLimit(rateLimitWait([saved, rsvps, past]))
 
       /*
        * A section whose request failed keeps its last good rows, which also
@@ -520,6 +525,11 @@ function GoingScreenInner() {
       {/* Flow 15 #16: reads stay, and the screen says what it is showing. */}
       <View style={styles.inset}>
         <OfflineBanner text="Offline. Showing what you had." testID="going-offline" />
+        {rateLimit !== null ? <RateLimitedBanner seconds={rateLimit} onDone={() => {
+            // The wait is over: read again, rather than leave the list as it was.
+            setRateLimit(null)
+            void loadInterestedEvents()
+          }} testID="going-rate-limited" /> : null}
       </View>
       {loading ? (
         // The shapes the list fades into: the next-up card, then two rows.
@@ -529,6 +539,9 @@ function GoingScreenInner() {
             <SkeletonBlock key={i} width="100%" height={SKELETON_ROW} borderRadius={RADIUS.rowInCard} style={i ? styles.skeletonRow : styles.skeletonFirstRow} />
           ))}
         </View>
+      ) : items.length === 0 && rateLimit !== null ? (
+        // The banner above is the state: not "couldn't load", not "nothing here yet".
+        <View />
       ) : items.length === 0 && loadFailed ? (
         <StateScreen
           icon="cloud-off"

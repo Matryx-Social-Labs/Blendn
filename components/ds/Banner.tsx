@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 
 import { Icon, type IconName } from '../ui/Icon'
@@ -48,9 +48,14 @@ export function Banner({ kind, text, mono, icon, action, busy = false, testID }:
   const announced = kind !== 'visibility'
   const wrapped = fontScale > CONTROL_FONT_CAP
 
+  // The mono part is read with the sentence the first time; a count that ticks beneath it (a wait: 0:52) never re-announces.
+  const monoNow = useRef(mono)
   useEffect(() => {
-    if (announced && Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(mono ? `${text} ${mono}` : text)
-  }, [announced, text, mono])
+    monoNow.current = mono
+  })
+  useEffect(() => {
+    if (announced && Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(monoNow.current ? `${text} ${monoNow.current}` : text)
+  }, [announced, text])
 
   return (
     <View

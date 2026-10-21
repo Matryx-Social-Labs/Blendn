@@ -207,3 +207,69 @@ describe('"This isn’t here any more" (#11)', () => {
     for (const copy of Object.values(GONE)) expect(`${copy.title} ${copy.body}`).not.toMatch(/error|failed|404|couldn’t/i)
   })
 })
+
+describe('rate-limited reads (#15)', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const rl = require('../lib/rateLimited') as typeof import('../lib/rateLimited')
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { RateLimitedBanner } = require('../components/system/RateLimitedBanner') as typeof import('../components/system/RateLimitedBanner')
+
+  it('reads the wait from the server, the longest of several refusals, and a minute when it names none', () => {
+    expect(rl.rateLimitWait([{ errorCode: 'RATE_LIMITED', retryAfter: 52 }, { errorCode: 'RATE_LIMITED', retryAfter: 9.2 }, { errorCode: 'NOT_FOUND' }])).toBe(52)
+    expect(rl.rateLimitWait([{ errorCode: 'RATE_LIMITED' }])).toBe(60)
+    expect(rl.rateLimitWait([{ errorCode: 'NOT_FOUND' }, null, undefined])).toBeNull()
+    expect(rl.rateLimitWait([])).toBeNull()
+  })
+
+  it('counts minutes and seconds', () => {
+    expect(rl.formatCountdown(52)).toBe('0:52')
+    expect(rl.formatCountdown(65)).toBe('1:05')
+    expect(rl.formatCountdown(0)).toBe('0:00')
+    expect(rl.formatCountdown(-3)).toBe('0:00')
+  })
+
+  it('counts down once a second in the banner, never says "connection", and reads again at zero', async () => {
+    jest.useFakeTimers()
+    try {
+      const done = jest.fn()
+      await render(<RateLimitedBanner seconds={3} onDone={done} testID="rl" />)
+      expect(screen.getByText(/Slow down — try again in a minute/)).toBeTruthy()
+      expect(screen.getByText(/0:03/)).toBeTruthy()
+      expect(screen.queryByText(/connection/i)).toBeNull()
+      await act(async () => {
+        jest.advanceTimersByTime(1000)
+      })
+      expect(screen.getByText(/0:02/)).toBeTruthy()
+      expect(done).not.toHaveBeenCalled()
+      await act(async () => {
+        jest.advanceTimersByTime(2000)
+      })
+      expect(done).toHaveBeenCalledTimes(1)
+      expect(screen.queryByTestId('rl')).toBeNull()
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+})
+
+describe('where the banners are wired (source shape; Going and the Board have no render harness)', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { readFileSync } = require('fs') as typeof import('fs')
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { join } = require('path') as typeof import('path')
+  const src = (rel: string) => readFileSync(join(__dirname, '..', rel), 'utf8')
+
+  it('Going says what it is showing offline, and says the wait for a refused read instead of "couldn’t load"', () => {
+    const going = src('app/(tabs)/going.tsx')
+    expect(going).toContain('testID="going-offline"')
+    expect(going).toMatch(/rateLimitWait\(\[saved, rsvps, past\]\)/)
+    expect(going).toMatch(/items\.length === 0 && rateLimit !== null/)
+    // The refused-read branch comes before the failed-read one, so a 429 is never worded as a dead connection.
+    expect(going.indexOf('items.length === 0 && rateLimit !== null')).toBeLessThan(going.indexOf('items.length === 0 && loadFailed'))
+  })
+
+  it('the Board, Settings and the Going tab carry the offline banner', () => {
+    expect(src('app/board/[eventId].tsx')).toContain('testID="board-offline"')
+    expect(src('app/settings.tsx')).toContain('testID="settings-offline"')
+  })
+})
