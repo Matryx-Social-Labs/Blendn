@@ -1,7 +1,11 @@
 import type { ReactNode } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
+import Animated from 'react-native-reanimated'
 
 import { COLOR, FONT_FAMILY, MATERIAL, RADIUS, SPACE } from '../../lib/design/tokens'
+import { useReducedMotion } from '../../lib/motion'
+import { badgeFadeIn, badgeIn, badgeOut } from '../motion/presence'
+import { RollingNumber } from './RollingNumber'
 import { CONTROL_FONT_CAP, font, useBoldText, useIncreaseContrast } from './shared'
 
 /*
@@ -36,23 +40,30 @@ function Ring({ color, testID, children }: { color?: string; testID?: string; ch
  */
 export function Badge({ text, size = 18, ring, testID }: { text: string | number; size?: 18 | 22; ring?: string; testID?: string }) {
   const bold = useBoldText()
+  const reduceMotion = useReducedMotion()
+  // A count rolls its changing digit (DS #26); "9+", "99+" and "3 new" are words and never roll.
+  const rolls = typeof text === 'number' && Number.isInteger(text) && text >= 0
   return (
-    <Ring color={ring} testID={testID && `${testID}-ring`}>
-      <View
-        testID={testID}
-        accessibilityElementsHidden
-        importantForAccessibility="no-hide-descendants"
-        // `minHeight`: at a large text size the digit's line grows past 18 and the pill grows with it, never clipping it.
-        style={[styles.badge, { minHeight: size, minWidth: size, paddingHorizontal: BADGE_PAD[size] }]}
-      >
-        <Text
-          style={[font('caption', bold, FONT_FAMILY.mono[700]), styles.badgeText]}
-          maxFontSizeMultiplier={CONTROL_FONT_CAP}
+    // DS #28, the badge's own: it arrives (0.8 → 1, fading in) and leaves (a fade) over `quick`, so no caller animates it.
+    <Animated.View entering={reduceMotion ? badgeFadeIn : badgeIn} exiting={badgeOut}>
+      <Ring color={ring} testID={testID && `${testID}-ring`}>
+        <View
+          testID={testID}
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          // `minHeight`: at a large text size the digit's line grows past 18 and the pill grows with it, never clipping it.
+          style={[styles.badge, { minHeight: size, minWidth: size, paddingHorizontal: BADGE_PAD[size] }]}
         >
-          {String(text)}
-        </Text>
-      </View>
-    </Ring>
+          {rolls ? (
+            <RollingNumber value={text} role="badge" color={COLOR.ink} testID={testID && `${testID}-count`} />
+          ) : (
+            <Text style={[font('caption', bold, FONT_FAMILY.mono[700]), styles.badgeText]} maxFontSizeMultiplier={CONTROL_FONT_CAP}>
+              {String(text)}
+            </Text>
+          )}
+        </View>
+      </Ring>
+    </Animated.View>
   )
 }
 

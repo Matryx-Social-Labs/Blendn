@@ -2,7 +2,7 @@ import { Fragment, useEffect, useRef, useState } from 'react'
 import { StyleSheet, View, useWindowDimensions, type TextStyle } from 'react-native'
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated'
 
-import { COLOR, FONT_FAMILY, MAX_FONT_SCALE, SPRING } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, MAX_FONT_SCALE, SPRING, TYPE } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
 import { CONTROL_FONT_CAP, font, useBoldText } from './shared'
 
@@ -11,7 +11,20 @@ import { CONTROL_FONT_CAP, font, useBoldText } from './shared'
  * `title` (the recap tiles; the page's 28 is between roles), `bodyStrong` (17,
  * beside a heading), and `button` (Geist Mono 700 at the button's 16/20, for a count inside a button label).
  */
-export type RollingRole = 'numericDisplay' | 'title' | 'bodyStrong' | 'button'
+export type RollingRole = 'numericDisplay' | 'title' | 'bodyStrong' | 'button' | 'badge' | 'counter'
+
+/**
+ * `badge` is the unread count's Geist Mono 700 at 12/16 (DS #28); `counter` is a set's "3 of 5", the same size at 500. Both
+ * scale with the control's cap, like `button`.
+ */
+const SPEC: Record<RollingRole, { type: keyof typeof TYPE; family: string; cap: number }> = {
+  numericDisplay: { type: 'numericDisplay', family: FONT_FAMILY.mono[700], cap: MAX_FONT_SCALE.numericDisplay },
+  title: { type: 'title', family: FONT_FAMILY.mono[700], cap: MAX_FONT_SCALE.title },
+  bodyStrong: { type: 'bodyStrong', family: FONT_FAMILY.mono[700], cap: MAX_FONT_SCALE.bodyStrong },
+  button: { type: 'button', family: FONT_FAMILY.mono[700], cap: CONTROL_FONT_CAP },
+  badge: { type: 'caption', family: FONT_FAMILY.mono[700], cap: CONTROL_FONT_CAP },
+  counter: { type: 'caption', family: FONT_FAMILY.mono[500], cap: CONTROL_FONT_CAP },
+}
 
 type Roll = { from: string | null; q?: number }
 
@@ -114,8 +127,8 @@ export function RollingNumber({
   const [firstWidth] = useState(digits.length)
   const old = preview ? String(Math.max(0, Math.round(preview.from))).padStart(digits.length, ' ') : null
   // A button's count scales with its label: the control's cap, not the reading text's.
-  const cap = role === 'button' ? CONTROL_FONT_CAP : MAX_FONT_SCALE[role]
-  const base = font(role, bold, FONT_FAMILY.mono[700])
+  const { type, family, cap } = SPEC[role]
+  const base = font(type, bold, family)
   const height = Math.ceil(base.lineHeight * Math.min(fontScale || 1, cap))
   const text: TextStyle[] = [base, styles.digit, { color }]
 

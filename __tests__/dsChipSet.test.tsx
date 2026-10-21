@@ -9,6 +9,7 @@ import * as Reanimated from 'react-native-reanimated'
 
 import * as ChipModule from '../components/ds/Chip'
 import { ChipSet, foldedItems, type ChipItem } from '../components/ds/ChipSet'
+import { SPRING } from '../lib/design/tokens'
 import { OPACITY } from '../lib/theme'
 import { H } from '../lib/haptics'
 
@@ -50,13 +51,13 @@ describe('<ChipSet>', () => {
   it('draws the label and a counter "3 of 5" for a capped multi set', async () => {
     await draw({ selected: ['a', 'b', 'c'], max: 5 })
     expect(screen.getByText('Languages')).toBeTruthy()
-    expect(screen.getByText('3 of 5')).toBeTruthy()
+    expect(screen.getByLabelText('3 of 5')).toBeTruthy()
   })
 
   it('a given counter replaces it ("Any")', async () => {
     await draw({ counter: 'Any', max: 5 })
     expect(screen.getByText('Any')).toBeTruthy()
-    expect(screen.queryByText('0 of 5')).toBeNull()
+    expect(screen.queryByLabelText('0 of 5')).toBeNull()
   })
 
   it('at the cap the unchosen dim and say why; the chosen stay lit and can be undone', async () => {
@@ -168,6 +169,51 @@ describe('the fold glides (review L10)', () => {
     await draw({ foldAfter: 4 })
     expect(layoutOf('s-a')).toBeUndefined()
     expect(layoutOf('s-more')).toBeUndefined()
+  })
+})
+
+describe('the counter rolls and the fold chevron turns (DS #26)', () => {
+  it('“n of max”: n is a RollingNumber, the rest is text, and it reads as one phrase', async () => {
+    await draw({ selected: ['a', 'b', 'c'], max: 5 })
+    expect(screen.getByTestId('s-counter-n', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByLabelText('3 of 5')).toBeTruthy()
+  })
+
+  it('only the digit that changes rolls: choosing one more runs one roll, not the label', async () => {
+    const spring = jest.spyOn(Reanimated, 'withSpring')
+    await draw({ selected: ['a', 'b'], max: 5 })
+    spring.mockClear()
+    await screen.rerender(<ChipSet label="Languages" items={ITEMS} selection="multi" selected={['a', 'b', 'c']} max={5} onToggle={jest.fn()} testID="s" />)
+    // The one digit's column rolls on the snap spring; the chip's check strokes in (a timing), and nothing else springs.
+    expect(spring).toHaveBeenCalledTimes(1)
+    expect(spring).toHaveBeenCalledWith(1, SPRING.snap)
+    spring.mockRestore()
+  })
+
+  it('a caller’s own counter (“Any”) stays a word and never rolls', async () => {
+    await draw({ counter: 'Any', max: 5 })
+    expect(screen.queryByTestId('s-counter-n', { includeHiddenElements: true })).toBeNull()
+  })
+
+  it('the fold chip has one chevron, which turns over on SPRING.snap as it opens', async () => {
+    const spring = jest.spyOn(Reanimated, 'withSpring')
+    await draw({ foldAfter: 2 })
+    expect(screen.getAllByTestId('s-more-chevron', { includeHiddenElements: true })).toHaveLength(1)
+    spring.mockClear()
+    await act(async () => fireEvent.press(screen.getByTestId('s-more')))
+    expect(screen.getAllByTestId('s-more-chevron', { includeHiddenElements: true })).toHaveLength(1)
+    expect(spring).toHaveBeenCalledWith(180, SPRING.snap)
+    spring.mockRestore()
+  })
+
+  it('Reduce Motion: the chevron turns at once, no spring', async () => {
+    reduceMotion.mockReturnValue(true)
+    const spring = jest.spyOn(Reanimated, 'withSpring')
+    await draw({ foldAfter: 2 })
+    spring.mockClear()
+    await act(async () => fireEvent.press(screen.getByTestId('s-more')))
+    expect(spring).not.toHaveBeenCalledWith(180, SPRING.snap)
+    spring.mockRestore()
   })
 })
 

@@ -9,7 +9,6 @@ import {
   Text,
   View,
 } from 'react-native'
-import Animated from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { apiClient } from '../../lib/apiClient'
@@ -23,7 +22,6 @@ import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, TYPE } from
 import { Badge } from '../ds/MonoFamily'
 import { Material } from '../ui/Material'
 import { COLOR, SIZE, SPACE as DS_SPACE } from '../../lib/design/tokens'
-import { popIn, popOut } from '../motion/presence'
 import ScalePress from '../motion/ScalePress'
 import { useToast } from '../Toast'
 import { RisingSheet, SheetFlatList, SheetModal } from '../motion/RisingSheet'
@@ -181,12 +179,13 @@ export function NotificationBell({ glass = false }: { glass?: boolean } = {}) {
           non-zero numbers, so "3 → 4" just changes the digit — a count that
           ticks up is not a new arrival.
         */}
-        {badge ? (
-          <Animated.View style={glass ? styles.badgeOnGlass : styles.badge} pointerEvents="none" entering={popIn} exiting={popOut}>
-            {/* The design system's badge: a mono caption in a pill that grows with the text, ringed in what is under it. */}
+        {/* The wrapper stays, so the badge's own exit (a fade) can play as the count goes. */}
+        <View style={glass ? styles.badgeOnGlass : styles.badge} pointerEvents="none">
+          {badge ? (
+            // The design system's badge: a mono caption in a pill that grows with the text, ringed in what is under it.
             <Badge text={badge} ring={glass ? COLOR.ink : EMBER.bg} testID="bell-badge" />
-          </Animated.View>
-        ) : null}
+          ) : null}
+        </View>
       </ScalePress>
 
       <SheetModal

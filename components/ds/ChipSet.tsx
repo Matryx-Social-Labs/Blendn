@@ -7,7 +7,8 @@ import { COLOR, DURATION, REDUCE_MOTION, SIZE, SPACE, SPRING, STAGGER } from '..
 import { useReducedMotion } from '../../lib/motion'
 import { Chip } from './Chip'
 import { monoCaption } from './MonoFamily'
-import { minTarget, useBoldText, useIncreaseContrast } from './shared'
+import { RollingNumber } from './RollingNumber'
+import { CONTROL_FONT_CAP, minTarget, useBoldText, useIncreaseContrast } from './shared'
 import { FieldLabel, FieldNotes } from './TextField'
 
 export type ChipItem = {
@@ -102,7 +103,9 @@ export function ChipSet({
   const [open, setOpen] = useState(false)
   const multi = selection === 'multi'
   const atCap = multi && max !== undefined && selected.length >= max
-  const text = counter ?? (multi && max !== undefined ? `${selected.length} of ${max}` : undefined)
+  // "n of max": n rolls (DS #26); a caller's own counter ("Any", "2 chosen") is a word and stays one.
+  const rolling = counter === undefined && multi && max !== undefined
+  const text = counter ?? (rolling ? `${selected.length} of ${max}` : undefined)
   const { shown, hidden } = foldAfter === undefined ? { shown: items, hidden: [] } : foldedItems(items, selected, foldAfter)
   const visible = open ? items : shown
   const revealed = open ? hidden : []
@@ -156,7 +159,14 @@ export function ChipSet({
       {label || text ? (
         <View style={styles.header}>
           {label ? <FieldLabel text={label} bold={bold} contrast={contrast} /> : <View />}
-          {text ? (
+          {rolling ? (
+            <View testID={testID && `${testID}-counter`} accessible accessibilityLabel={text} style={styles.counter}>
+              <RollingNumber value={selected.length} role="counter" color={COLOR.textSecondary} testID={testID && `${testID}-counter-n`} />
+              <Text style={[monoCaption(bold), { color: COLOR.textSecondary }]} maxFontSizeMultiplier={CONTROL_FONT_CAP}>
+                {` of ${max}`}
+              </Text>
+            </View>
+          ) : text ? (
             <Text testID={testID && `${testID}-counter`} style={[monoCaption(bold), { color: COLOR.textSecondary }]}>
               {text}
             </Text>
@@ -199,6 +209,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingLeft: SPACE.xs,
   },
+  counter: { flexDirection: 'row', alignItems: 'center' },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
   item: { maxWidth: '100%' },
 })

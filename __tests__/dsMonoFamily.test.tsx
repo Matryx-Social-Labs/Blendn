@@ -8,11 +8,35 @@ import { act, render, screen } from '@testing-library/react-native'
 import React from 'react'
 import { AccessibilityInfo, StyleSheet } from 'react-native'
 
+import { badgeFadeIn, badgeIn } from '../components/motion/presence'
 import { Badge, LivePill, PresenceDot, Price, TimeBadge } from '../components/ds/MonoFamily'
 import { COLOR, FONT_FAMILY, MATERIAL, TYPE } from '../lib/design/tokens'
 
 const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id, { includeHiddenElements: true }).props.style)
 const text = (t: string) => screen.getByText(t, { includeHiddenElements: true })
+
+describe('<Badge> motion (DS #28, #26)', () => {
+  it('a count is a RollingNumber in the badge role: Geist Mono 700 at 12/16, ink', async () => {
+    await render(<Badge text={14} testID="b" />)
+    expect(screen.getByTestId('b-count', { includeHiddenElements: true })).toBeTruthy()
+    const digit = StyleSheet.flatten(screen.getByTestId('b-count-0-in', { includeHiddenElements: true }).props.style)
+    expect(digit).toMatchObject({ color: COLOR.ink, fontFamily: FONT_FAMILY.mono[700], fontSize: TYPE.caption.fontSize, lineHeight: TYPE.caption.lineHeight })
+  })
+
+  it('“9+”, “99+” and “3 new” never roll: they are plain text', async () => {
+    for (const label of ['9+', '99+', '3 new']) {
+      await render(<Badge text={label} testID="w" />)
+      expect(screen.queryByTestId('w-count', { includeHiddenElements: true })).toBeNull()
+      expect(text(label)).toBeTruthy()
+    }
+  })
+
+  it('it arrives from 0.8 and fades in over quick; Reduce Motion is the fade alone', () => {
+    const entering = badgeIn()
+    expect(entering.initialValues).toEqual({ opacity: 0, transform: [{ scale: 0.8 }] })
+    expect(badgeFadeIn).toBeDefined()
+  })
+})
 
 describe('<Badge>', () => {
   it('is an 18 pt white pill with ink digits in Geist Mono 700, capped at 1.3×', async () => {

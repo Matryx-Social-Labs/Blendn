@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Platform, StyleSheet, Text, View, type ViewStyle } from 'react-native'
-import Animated from 'react-native-reanimated'
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated'
 
 import ScalePress from '../motion/ScalePress'
 import { Glyph } from '../ui/Glyph'
 import { Icon, type IconName } from '../ui/Icon'
-import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, MATERIAL, PRESS, RADIUS, REDUCE_MOTION, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, MATERIAL, PRESS, RADIUS, REDUCE_MOTION, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
 import { OPACITY, tint } from '../../lib/theme'
@@ -63,6 +63,24 @@ export const DRAIN_REDUCED = asStyle({ opacity: 0, transition: REDUCED_TRANSITIO
 const SLOT_FADE = {
   transition: `opacity ${DURATION.quick}ms ${CURVE}`,
 } as unknown as ViewStyle
+
+const CHEVRON_OPEN_DEG = 180
+
+/** The fold chip's chevron: one `chevron-down` that turns over on `SPRING.snap` as the fold opens (Reduce Motion: it turns at once). */
+function MoreChevron({ expanded, testID }: { expanded: boolean; testID?: string }) {
+  const reduceMotion = useReducedMotion()
+  const turn = useSharedValue(expanded ? CHEVRON_OPEN_DEG : 0)
+  useEffect(() => {
+    const to = expanded ? CHEVRON_OPEN_DEG : 0
+    turn.set(reduceMotion ? to : withSpring(to, SPRING.snap))
+  }, [expanded, reduceMotion, turn])
+  const style = useAnimatedStyle(() => ({ transform: [{ rotate: `${turn.get()}deg` }] }))
+  return (
+    <Animated.View testID={testID} style={style}>
+      <Icon name="chevron-down" size={ICON.inline} color={COLOR.textSecondary} />
+    </Animated.View>
+  )
+}
 
 export type ChipVariant = 'default' | 'outline'
 /** `single` picks one of a set; `multi` is pick-any and draws the + / ✓ slot. */
@@ -214,7 +232,7 @@ export function Chip({
           {count}
         </Text>
       ) : null}
-      {more ? <Icon name={expanded ? 'chevron-up' : 'chevron-down'} size={ICON.inline} color={COLOR.textSecondary} /> : null}
+      {more ? <MoreChevron expanded={expanded} testID={testID && `${testID}-chevron`} /> : null}
       {onRemove ? <Icon name="x" size={ICON.inline} color={ink} /> : null}
       <Animated.View
         testID={testID && `${testID}-edge`}
