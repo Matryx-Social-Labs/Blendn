@@ -801,7 +801,7 @@ describe('the Modal that has left tells whoever waited to present a native scree
   it('iOS: its onDismiss releases a waiter before the fallback', async () => {
     jest.useFakeTimers()
     try {
-      const { afterSheetDismissed } = jest.requireActual('../lib/sheet')
+      const { afterSheetDismissed } = jest.requireActual('../lib/sheetDismissed')
       await render(signOut())
       let released = false
       void afterSheetDismissed(10_000).then(() => (released = true))

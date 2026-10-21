@@ -52,7 +52,7 @@ export default function AboutScreen() {
       <Backdrop level={ORB_LEVEL.landing} />
       <ScrollView
         {...bar.scrollProps}
-        contentContainerStyle={[styles.content, { paddingTop: bar.contentTop + SPACE.sm }]}
+        contentContainerStyle={[styles.content, { paddingTop: bar.contentTop + SPACE.lg }]}
         scrollIndicatorInsets={{ top: bar.indicatorTop }}
         showsVerticalScrollIndicator={false}
       >

@@ -1,7 +1,7 @@
 import { router } from 'expo-router'
 import { useEffect, useRef, useState } from 'react'
 import { apiClient } from './apiClient'
-import { afterSheetDismissed } from './sheet'
+import { afterSheetDismissed } from './sheetDismissed'
 import { askIntentRoute, revealOffer, submitCheckIn, untilIntentAnswered, type CheckInOutcome } from './checkIn'
 import { isExpectedRefusal, type CheckInRefusal } from './checkInRefusal'
 import { markCheckIn } from './checkInTiming'

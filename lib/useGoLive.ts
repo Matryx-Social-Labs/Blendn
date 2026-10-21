@@ -10,7 +10,7 @@ import { getCurrentLocation, type ShowTray } from './locationFix'
 import { Logger } from './logger'
 import { openInMaps } from './openInMaps'
 import { useAuth } from './useAuth'
-import { afterSheetDismissed } from './sheet'
+import { afterSheetDismissed } from './sheetDismissed'
 import { openPaywall } from './paywall'
 
 /**

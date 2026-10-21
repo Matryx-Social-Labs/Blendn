@@ -32,7 +32,7 @@ jest.mock('../lib/usePresence', () => ({ usePresence: () => ({ finished: false }
 jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { id: 'u1' } }) }))
 jest.mock('../lib/locationFix', () => ({ getCurrentLocation: jest.fn(async () => ({ latitude: 1, longitude: 2, accuracy: 10 })) }))
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShowToast }) }))
-jest.mock('../lib/sheet', () => ({ ...jest.requireActual('../lib/sheet'), afterSheetDismissed: () => Promise.resolve() }))
+jest.mock('../lib/sheetDismissed', () => ({ ...jest.requireActual('../lib/sheetDismissed'), afterSheetDismissed: () => Promise.resolve() }))
 jest.mock('../components/ds/Sheet', () => {
   const R = require('react')
   const { Text, Pressable } = require('react-native')

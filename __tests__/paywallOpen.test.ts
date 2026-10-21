@@ -12,7 +12,7 @@ jest.mock('../lib/apiClient', () => ({ apiClient: { logPaywallEvent: jest.fn(asy
 /* eslint-disable import/first */
 import { router } from 'expo-router'
 import { Platform } from 'react-native'
-import { afterSheetDismissed } from '../lib/sheet'
+import { afterSheetDismissed } from '../lib/sheetDismissed'
 import { notePathname, openPaywall, paywallBlockedAt } from '../lib/paywall'
 /* eslint-enable import/first */
 

@@ -64,6 +64,6 @@ it('says what is kept, and links to the page that lists it', async () => {
   expect(message.props.children).toMatch(/180 days/)
   expect(screen.queryByText(/personal info/)).toBeNull()
 
-  fireEvent.press(screen.getByRole('button', { name: "What's kept" }))
+  fireEvent.press(screen.getByRole('button', { name: 'What’s kept' }))
   expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith('https://www.blendn.app/delete-account', expect.any(Object))
 })

@@ -47,7 +47,7 @@ export default function SupportScreen() {
     <View style={styles.screen}>
       <ScrollView
         {...bar.scrollProps}
-        contentContainerStyle={[styles.content, { paddingTop: bar.contentTop + SPACE.sm }]}
+        contentContainerStyle={[styles.content, { paddingTop: bar.contentTop + SPACE.md }]}
         scrollIndicatorInsets={{ top: bar.indicatorTop }}
         showsVerticalScrollIndicator={false}
       >
