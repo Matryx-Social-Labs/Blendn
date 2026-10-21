@@ -165,6 +165,34 @@ describe('when it plays', () => {
   })
 })
 
+describe('a re-tap mid-flight retargets, and only a settled glyph restarts', () => {
+  it('draw: choosing it again while it is still drawing adds no new delayed restart', async () => {
+    await choose('beer')
+    const first = delay.mock.calls.length
+    expect(first).toBe(GLYPH_LENGTHS.beer.length)
+    await screen.rerender(g('beer', false))
+    await screen.rerender(g('beer', true))
+    // Mid-draw: each stroke carries on from where it is, a plain timing with no stagger.
+    expect(delay.mock.calls.length).toBe(first)
+    expect(timing).toHaveBeenCalledTimes(first * 2)
+  })
+
+  it('pop: a second choose still springs home on SPRING.pop (from wherever the glyph is)', async () => {
+    await choose('sparkles')
+    await screen.rerender(g('sparkles', false))
+    await screen.rerender(g('sparkles', true))
+    expect(spring).toHaveBeenCalledTimes(2)
+    expect(spring).toHaveBeenLastCalledWith(1, SPRING.pop)
+  })
+
+  it('a stroke’s dash is one unit longer than its measured length, so a short measurement leaves no tail', async () => {
+    await render(<DrawnGlyph name="check" play={false} testID="d" />)
+    const paths = JSON.stringify(screen.toJSON())
+    const dash = GLYPH_LENGTHS.check[0] + 1
+    expect(paths).toContain(`"strokeDasharray":[${dash},${dash}]`)
+  })
+})
+
 describe('Reduce Motion', () => {
   it.each(['sparkles', 'wine', 'disc-3', 'tree-palm', 'radio', 'beer', 'check'] as const)('%s runs no verb', async (name) => {
     reduceMotion.mockReturnValue(true)

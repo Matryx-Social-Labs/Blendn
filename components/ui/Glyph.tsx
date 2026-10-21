@@ -69,11 +69,17 @@ export const GLYPH_LENGTHS = {
 type DrawName = keyof typeof GLYPH_LENGTHS
 const isDrawn = (name: IconName): name is DrawName => name in GLYPH_LENGTHS
 
+/** Added to each measured stroke length for the dash and its offset (see `Stroke`). */
+const DASH_SLACK = 1
 const SNAP_OUT = Easing.bezier(...EASING.snapOut)
 const ENTRANCE = Easing.bezier(...EASING.entrance)
 const LINEAR = Easing.linear
 /** The flicker: the opacity each step ends on (1 → .35 → 1 → .6 → 1), the steps being fractions of `DURATION.medium`. */
 const FLICKER_LEVELS = [GLYPH.flickerDips[0], 1, GLYPH.flickerDips[1], 1] as const
+
+/** A value this near its rest has settled: a new verb starts from its start value. Short of it, the verb is mid-flight. */
+const SETTLED = 0.001
+const isSettled = (value: number, rest: number) => Math.abs(value - rest) < SETTLED
 
 /** Runs `run` when `play` goes false → true after mount; a glyph that mounts playing is already there. */
 function useOnRise(play: boolean, run: () => void) {
@@ -94,16 +100,17 @@ export function useGlyphPlay(play: boolean, verb: Exclude<GlyphVerb, 'draw'>) {
   const turn = useSharedValue(0)
   const alpha = useSharedValue(1)
   useOnRise(play, () => {
+    // A re-tap mid-flight retargets from where the glyph is (the spring carries its velocity); only a settled glyph restarts.
     if (verb === 'pop') {
-      scale.set(GLYPH.popFrom)
+      if (isSettled(scale.get(), 1)) scale.set(GLYPH.popFrom)
       scale.set(withSpring(1, SPRING.pop))
     } else if (verb === 'hop') {
       lift.set(withSequence(withTiming(-GLYPH.hop, { duration: DURATION.press, easing: SNAP_OUT }), withSpring(0, SPRING.pop)))
     } else if (verb === 'spin') {
-      turn.set(-GLYPH.spin)
+      if (isSettled(turn.get(), 0)) turn.set(-GLYPH.spin)
       turn.set(withSpring(0, SPRING.snap))
     } else if (verb === 'tilt') {
-      turn.set(-GLYPH.tilt)
+      if (isSettled(turn.get(), 0)) turn.set(-GLYPH.tilt)
       turn.set(withSpring(0, SPRING.pop))
     } else {
       const [first, ...rest] = GLYPH.flickerSteps.map((step, i) =>
@@ -128,11 +135,19 @@ type StrokeProps = { tag: string; attrs: Attrs; length: number; index: number; p
 function Stroke({ tag, attrs, length, index, play }: StrokeProps) {
   const drawn = useSharedValue(1)
   useOnRise(play, () => {
-    drawn.set(0)
-    drawn.set(withDelay(index * STAGGER.tight, withTiming(1, { duration: DURATION.base, easing: ENTRANCE })))
+    const draw = withTiming(1, { duration: DURATION.base, easing: ENTRANCE })
+    if (isSettled(drawn.get(), 1)) {
+      drawn.set(0)
+      drawn.set(withDelay(index * STAGGER.tight, draw))
+    } else {
+      // Mid-draw: carry on from where the stroke is, with no new delay.
+      drawn.set(draw)
+    }
   })
-  const animatedProps = useAnimatedProps(() => ({ strokeDashoffset: length * (1 - drawn.get()) }))
-  const common = { strokeDasharray: length, animatedProps }
+  // One unit longer than the measured length, so a measurement a hair short never leaves a tail undrawn.
+  const dash = length + DASH_SLACK
+  const animatedProps = useAnimatedProps(() => ({ strokeDashoffset: dash * (1 - drawn.get()) }))
+  const common = { strokeDasharray: dash, animatedProps }
   return tag === 'circle' ? (
     <AnimatedCircle cx={attrs.cx} cy={attrs.cy} r={attrs.r} {...common} />
   ) : (
