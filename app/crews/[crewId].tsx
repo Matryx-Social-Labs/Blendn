@@ -14,13 +14,13 @@ import { SectionHeader } from '../../components/ds/SectionHeader'
 import { SettingsRow } from '../../components/ds/SettingsRow'
 import { font, HueProvider, useBoldText } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
+import { GoneCard } from '../../components/system/GoneCard'
 import { TopBar, type TopBarState } from '../../components/ds/TopBar'
 import { useSkeletonCrossfade } from '../../components/motion/useSkeletonCrossfade'
 import { SkeletonBlock } from '../../components/Skeleton'
 import { useToast } from '../../components/Toast'
 import { apiClient } from '../../lib/apiClient'
 import {
-  CREW_GONE_LINE,
   CREW_MAX_MEMBERS,
   CREW_REPORT_REASONS,
   KEEP_ANONYMOUS_LABEL,
@@ -256,12 +256,7 @@ function CrewScreenContent() {
   if (!crew) {
     body =
       load.kind === 'gone' ? (
-        <StateScreen
-          icon="users"
-          title={CREW_GONE_LINE}
-          actions={[{ label: 'Back', kind: 'secondary', onPress: () => router.back() }]}
-          testID="crew-gone"
-        />
+        <GoneCard kind="crew" onBack={() => router.back()} testID="crew-gone" />
       ) : load.kind === 'error' ? (
         <StateScreen
           icon="cloud-off"

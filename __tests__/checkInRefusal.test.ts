@@ -146,3 +146,21 @@ describe('the refusals with a fix (Flow 15 15.22)', () => {
     })
   })
 })
+
+describe('eventLoadFailure (Flow 15 #9, #10)', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { eventLoadFailure } = require('../lib/eventLinkRefusal') as typeof import('../lib/eventLinkRefusal')
+
+  it('tells a gone event, a minor, an unknown age, an unfinished profile, a broken link and a dropped connection apart', () => {
+    expect(eventLoadFailure({ errorCode: 'NOT_FOUND' })).toBe('notFound')
+    expect(eventLoadFailure({ error: 'Event not found' })).toBe('notFound')
+    expect(eventLoadFailure({ errorCode: 'AGE_RESTRICTED', error: 'This event is 21+.' })).toBe('minor')
+    expect(eventLoadFailure({ errorCode: 'AGE_RESTRICTED', error: 'This event is 18+. Add your age to your profile to check in.' })).toBe('age_unknown')
+    expect(eventLoadFailure({ errorCode: 'AGE_UNKNOWN' })).toBe('age_unknown')
+    expect(eventLoadFailure({ errorCode: 'FORBIDDEN' })).toBe('profile')
+    expect(eventLoadFailure({ errorCode: 'PROFILE_INCOMPLETE' })).toBe('profile')
+    expect(eventLoadFailure({ errorCode: 'VALIDATION_FAILED' })).toBe('broken')
+    expect(eventLoadFailure({ error: 'No internet connection.' })).toBe('network')
+    expect(eventLoadFailure({})).toBe('network')
+  })
+})

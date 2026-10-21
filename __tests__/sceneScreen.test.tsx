@@ -94,13 +94,57 @@ const open = async () => {
   await act(async () => {})
 }
 
-it('a missing event is "Event not found" with Go back, and says nothing about the connection', async () => {
+it('a missing event is the calm "No longer available" landing (Flow 15 #10), with no retry and nothing about the connection', async () => {
   api.getEvent.mockResolvedValue({ success: false, error: 'Event not found', errorCode: 'NOT_FOUND' } as never)
   await open()
-  expect(await screen.findByText('Event not found')).toBeTruthy()
+  expect(await screen.findByText('No longer available')).toBeTruthy()
+  expect(screen.getByText('This event was taken down. Anything you saved or said has gone with it, and nothing was shared.')).toBeTruthy()
   expect(screen.queryByText('Couldn’t load this event')).toBeNull()
-  await fireEvent.press(screen.getByRole('button', { name: 'Go back' }))
+  expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull()
+  await fireEvent.press(screen.getByRole('button', { name: 'See what’s on tonight' }))
+  expect(mockRouter.replace).toHaveBeenCalledWith('/(tabs)/events')
+  // The back circle is still the way out.
+  await fireEvent.press(screen.getByTestId('scene-back'))
   expect(mockRouter.back).toHaveBeenCalled()
+})
+
+describe('an event link that cannot open (Flow 15 #9)', () => {
+  const refused = (errorCode: string, error: string) => api.getEvent.mockResolvedValue({ success: false, errorCode, error } as never)
+
+  it('under 18, known: no fix, no way to retry, never "check your connection"', async () => {
+    refused('AGE_RESTRICTED', 'This event is 21+.')
+    await open()
+    expect(await screen.findByText('This event is 18+')).toBeTruthy()
+    expect(screen.getByText('Blend’n events are for adults. This link can’t open for you.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Add your age|Try again/ })).toBeNull()
+    expect(screen.queryByText(/connection/)).toBeNull()
+  })
+
+  it('an age that is not on file: Add your age opens Edit profile, and coming back asks again (the link is held)', async () => {
+    refused('AGE_RESTRICTED', 'This event is 18+. Add your age to your profile to check in.')
+    await open()
+    expect(await screen.findByText('Add your age to open this')).toBeTruthy()
+    await fireEvent.press(screen.getByRole('button', { name: 'Add your age' }))
+    expect(mockRouter.push).toHaveBeenCalledWith('/edit-profile')
+  })
+
+  it('an unfinished profile: Finish my profile, and we hold the link', async () => {
+    refused('FORBIDDEN', 'Finish setting up your profile first.')
+    await open()
+    expect(await screen.findByText('Finish your profile first')).toBeTruthy()
+    expect(screen.getByText('Add a name and a photo, then this link opens. We’ll hold it.')).toBeTruthy()
+    await fireEvent.press(screen.getByRole('button', { name: 'Finish my profile' }))
+    expect(mockRouter.push).toHaveBeenCalledWith('/edit-profile')
+  })
+
+  it('a link missing a part is broken, with one way on and no retry', async () => {
+    refused('VALIDATION_FAILED', 'Invalid event id')
+    await open()
+    expect(await screen.findByText('This link is broken')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull()
+    await fireEvent.press(screen.getByRole('button', { name: 'Go to the Pulse' }))
+    expect(mockRouter.replace).toHaveBeenCalledWith('/(tabs)/events')
+  })
 })
 
 it('a dropped connection is "Couldn’t load this event" with Try again, which asks again', async () => {

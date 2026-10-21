@@ -1,6 +1,7 @@
 import { StyleSheet, useWindowDimensions, View } from 'react-native'
 
 import { StateScreen, type StateAction } from '../ds/StateScreen'
+import { GoneCard } from '../system/GoneCard'
 import { COLOR, RADIUS, SPACE } from '../../lib/design/tokens'
 import type { VenueGate } from '../../lib/venuePage'
 import { VENUE_HERO_HEIGHT } from './VenueHero'
@@ -47,7 +48,7 @@ export function VenueGateScreen({ gate, onRetry, onBack, onFinish }: { gate: Ven
       {gate.kind === 'refused' ? (
         <StateScreen icon={gate.icon} title={gate.title} body={gate.body} actions={[{ label: 'Finish setting up', onPress: onFinish }, back]} />
       ) : gate.kind === 'notFound' ? (
-        <StateScreen icon="map-pin-off" title="This place isn’t on Blend’n yet" actions={[back]} />
+        <GoneCard kind="venue" onBack={onBack} testID="venue-gone" />
       ) : (
         <StateScreen
           icon="map-pin-off"

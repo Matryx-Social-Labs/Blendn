@@ -13,6 +13,9 @@ import { Dock } from '../ds/Dock'
 import { IconButton } from '../ds/IconButton'
 import { SectionHeader } from '../ds/SectionHeader'
 import { StateScreen } from '../ds/StateScreen'
+import { RefusalCard } from '../system/RefusalCard'
+import { linkRefusalCard } from '../../lib/linkRefusalCard'
+import { eventLoadFailure, type EventLoadFailure } from '../../lib/eventLinkRefusal'
 import type { MenuItem } from '../ds/ContextMenu'
 import { OfflineBanner } from '../OfflineBanner'
 import { AnnouncementSheet, EditEventSheet } from '../scene/EventSheets'
@@ -256,7 +259,7 @@ export default function EventDetail() {
    * event are different sentences: "Event not found" for a dropped connection
    * tells somebody the night was cancelled.
    */
-  const [loadFailure, setLoadFailure] = useState<'network' | 'notFound' | null>(null)
+  const [loadFailure, setLoadFailure] = useState<EventLoadFailure | null>(null)
   /** The room's own "here now", while the event is running. */
   const [hereNow, setHereNow] = useState<number | null>(null)
   /** The detail's `stats.hereCount` (inside now), null from an older server: then no here-now line. */
@@ -361,9 +364,9 @@ export default function EventDetail() {
   const applyEventDetails = (result: Awaited<ReturnType<typeof apiClient.getEvent>>) => {
     if (!result.success || !result.data) {
       Logger.error('events', 'detail:fetch:error', { error: result.error })
-      const notFound = result.errorCode === 'NOT_FOUND' || /not found/i.test(result.error ?? '')
-      setLoadFailure(notFound ? 'notFound' : 'network')
-      return notFound ? 'notFound' : 'network'
+      const failure = eventLoadFailure(result)
+      setLoadFailure(failure)
+      return failure
     } else {
       setLoadFailure(null)
       // Map API response (camelCase) to EventDetailData interface (snake_case)
@@ -972,12 +975,7 @@ export default function EventDetail() {
               ]}
             />
           ) : (
-            <StateScreen
-              icon="circle-slash"
-              title="Event not found"
-              body="This event isn’t available any more."
-              actions={[{ label: 'Go back', kind: 'secondary', onPress: goBack }]}
-            />
+            <RefusalCard {...linkRefusalCard(loadFailure, { toPulse: () => router.replace('/(tabs)/events'), toProfile: () => router.push('/edit-profile' as never) })} />
           )}
         </FadeInUp>
       </View>

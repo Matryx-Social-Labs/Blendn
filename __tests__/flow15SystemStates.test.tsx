@@ -183,3 +183,27 @@ describe('the outage lines (15.13)', () => {
     expect(outageNote(2)).toBe('Tried 2× · retries on its own every 30 s')
   })
 })
+
+describe('"This isn’t here any more" (#11)', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { GoneCard } = require('../components/system/GoneCard') as typeof import('../components/system/GoneCard')
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { GONE } = require('../lib/goneCopy') as typeof import('../lib/goneCopy')
+
+  it.each(Object.keys(GONE) as (keyof typeof GONE)[])('%s: the object’s own sentence, one button that goes back, and no haptic', async (kind) => {
+    const back = jest.fn()
+    await render(<GoneCard kind={kind} onBack={back} testID="gone" />)
+    expect(screen.getByText(GONE[kind].title)).toBeTruthy()
+    expect(screen.getByText(GONE[kind].body)).toBeTruthy()
+    const card = screen.getByRole('button', { name: `${GONE[kind].title}. ${GONE[kind].body}` })
+    await act(async () => fireEvent(card, 'pressIn'))
+    await act(async () => fireEvent.press(card))
+    expect(back).toHaveBeenCalledTimes(1)
+    expect(H.primary).not.toHaveBeenCalled()
+    expect(H.error).not.toHaveBeenCalled()
+  })
+
+  it('names no raw error in any of them', () => {
+    for (const copy of Object.values(GONE)) expect(`${copy.title} ${copy.body}`).not.toMatch(/error|failed|404|couldn’t/i)
+  })
+})

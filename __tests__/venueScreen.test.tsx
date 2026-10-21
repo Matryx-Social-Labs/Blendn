@@ -169,7 +169,8 @@ describe('before it is drawn', () => {
 
   it('no such place is its own state', async () => {
     await mount({ success: false, error: 'Venue not found', errorCode: 'NOT_FOUND' })
-    expect(screen.getByText('This place isn’t on Blend’n yet')).toBeTruthy()
+    expect(screen.getByText('This place isn’t on Blend’n any more')).toBeTruthy()
+    expect(screen.getByText('Your nights here stay in your history.')).toBeTruthy()
   })
 
   it('an older read that answers last does not undo a newer one (H2)', async () => {

@@ -151,8 +151,9 @@ describe('when it does not load', () => {
     crews.crew.mockResolvedValue({ success: false, error: 'Crew not found', errorCode: 'NOT_FOUND' })
     await render(<CrewScreen />)
     await waitFor(() => screen.getByText('This crew isn’t here any more'))
-    // The top bar's Back and the card's: both go back.
-    await fireEvent.press(screen.getAllByLabelText('Back')[1])
+    expect(screen.getByText('It dissolved. Nobody is told who left.')).toBeTruthy()
+    // The card (Flow 15 #11) goes back on a tap, as the top bar's Back does.
+    await fireEvent.press(screen.getByTestId('crew-gone'))
     expect(router.back).toHaveBeenCalled()
   })
 
