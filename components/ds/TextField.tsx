@@ -29,9 +29,9 @@ function joinRefs(own: { current: TextInput | null }, theirs?: Ref<TextInput>) {
   }
 }
 
-/** The label above a field: Geist Mono, uppercase, textSecondary (white under Increase Contrast). */
+/** The label above a field: Geist Mono, uppercase, textSecondary (white under Increase Contrast), 4 pt in like the field's text (`inputs.js textField`). Every label has this one inset. */
 export function FieldLabel({ text, bold, contrast }: { text: string; bold: boolean; contrast: boolean }) {
-  return <Text style={[font('label', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{text}</Text>
+  return <Text style={[font('label', bold), styles.label, { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{text}</Text>
 }
 
 /**
@@ -310,7 +310,8 @@ export function TextArea({
 
 const styles = StyleSheet.create({
   field: { gap: SPACE.sm },
-  labelRow: { paddingHorizontal: SPACE.xs },
+  label: { paddingLeft: SPACE.xs },
+  labelRow: { paddingRight: SPACE.xs },
   spread: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
   box: {
     height: SIZE.input,

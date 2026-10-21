@@ -9,7 +9,7 @@ import React from 'react'
 import { AccessibilityInfo, Platform, StyleSheet, TextInput } from 'react-native'
 
 import { TextArea, TextField } from '../components/ds/TextField'
-import { COLOR, FONT_FAMILY, MATERIAL, RADIUS, SIZE } from '../lib/design/tokens'
+import { COLOR, FONT_FAMILY, MATERIAL, RADIUS, SIZE, SPACE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { OPACITY } from '../lib/theme'
 
@@ -185,5 +185,21 @@ describe('the accessibility settings', () => {
     await render(field({ value: 'sam@blendn.app' }))
     await act(async () => {})
     expect(StyleSheet.flatten(input().props.style).fontFamily).toBe(FONT_FAMILY.brand[700])
+  })
+})
+
+describe('one label, one inset', () => {
+  it('a field, an area and a chip set start their labels 4 pt in, at the same edge', async () => {
+    const { ChipSet } = require('../components/ds/ChipSet') as typeof import('../components/ds/ChipSet')
+    await render(
+      <>
+        <TextField label="Email" value="" onChangeText={jest.fn()} />
+        <TextArea label="About me" value="" onChangeText={jest.fn()} />
+        <ChipSet label="THIS OR THAT" items={[{ key: 'a', label: 'A' }]} selection="single" selected={[]} onToggle={jest.fn()} />
+      </>,
+    )
+    for (const text of ['Email', 'About me', 'THIS OR THAT']) {
+      expect(StyleSheet.flatten(screen.getByText(text).props.style).paddingLeft).toBe(SPACE.xs)
+    }
   })
 })

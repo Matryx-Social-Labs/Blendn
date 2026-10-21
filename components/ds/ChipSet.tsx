@@ -207,7 +207,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingLeft: SPACE.xs,
   },
   counter: { flexDirection: 'row', alignItems: 'center' },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },

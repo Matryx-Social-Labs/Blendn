@@ -125,7 +125,8 @@ export function MatchingFields({
 
   return (
     <>
-      <View style={styles.set}>
+      {/* The first set sits straight under the card's own label: the gap (`set`) is between sets, not above the first. */}
+      <View testID="matching-first-set">
         <ChipSet
           label="WHAT ARE YOU OPEN TO?"
           items={offered.map((intent) => ({ key: intent.value, label: `${intent.label}${intent.hint ? ` · ${intent.hint}` : ''}` }))}
