@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons'
 import {
   GeoJSONSource,
   Layer,
@@ -21,7 +20,8 @@ import {
   type OwnBuildingState,
 } from '../../lib/mapStyleEmber'
 import { MAP_THEME } from '../../lib/mapTheme'
-import { EMBER, EMBER_RADIUS, ICON, SPACE } from '../../lib/theme'
+import { COLOR, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
+import { Icon } from '../ui/Icon'
 import { Text } from '../ui/Text'
 import type { Chip, Collection, LitState } from './useMapLighting'
 
@@ -280,13 +280,13 @@ function MapChip({ chip, onOpen }: { chip: Chip; onOpen: (kind: Chip['kind'], id
       onAccessibilityTap={() => onOpen(chip.kind, chip.id)}
     >
       <View style={[styles.chip, { borderColor: look.crown }]}>
-        {chip.kind === 'venue' ? <Ionicons name="storefront-outline" size={ICON.sm} color={look.crown} /> : null}
+        {chip.kind === 'venue' ? <Icon name="map-pin" size={ICON.inline} color={look.crown} /> : null}
         <View style={styles.chipText}>
-          <Text variant="caption" color={EMBER.textPrimary} numberOfLines={1}>
+          <Text variant="caption" color={COLOR.textPrimary} numberOfLines={1}>
             {chip.title}
           </Text>
           {chip.line ? (
-            <Text variant="caption" color={chip.live && chip.kind === 'event' ? look.crown : EMBER.textSecondary} numberOfLines={1}>
+            <Text variant="caption" color={chip.live && chip.kind === 'event' ? look.crown : COLOR.textSecondary} numberOfLines={1}>
               {chip.line}
             </Text>
           ) : null}
@@ -306,9 +306,9 @@ const styles = StyleSheet.create({
     paddingVertical: SPACE.xs,
     paddingHorizontal: SPACE.sm,
     maxWidth: MAP_THEME.chip.maxWidthPx,
-    borderRadius: EMBER_RADIUS.pill,
+    borderRadius: RADIUS.capsule,
     borderWidth: StyleSheet.hairlineWidth * 2,
-    backgroundColor: EMBER.bg,
+    backgroundColor: COLOR.ink,
   },
   // Lets a long name shrink to the chip's width and end in an ellipsis.
   chipText: { flexShrink: 1 },

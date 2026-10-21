@@ -31,6 +31,7 @@ import { useToastDock } from '../toastDock'
 import { amenityTiles, type ServerAmenity } from '../../lib/amenityTile'
 import { eventDetailBlocks, type ServerEventDetails } from '../../lib/eventDetails'
 import { showEventReportOptions } from '../../lib/safetyUtils'
+import { eventShareText } from '../../lib/pulsePeek'
 import { apiClient, type RsvpStatus } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import {
@@ -808,7 +809,7 @@ export default function EventDetail() {
       if (!event) return
       await Share.share({
         title: event.title,
-        message: `${event.title}\n${event.venue_name}\n${event.address}`
+        message: eventShareText(event)
       })
     } catch {}
   }

@@ -1,10 +1,10 @@
 import { StyleSheet } from 'react-native'
 import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated'
 
-import { ICON as GLYPH } from '../../lib/design/tokens'
+import { COLOR, ICON as GLYPH, RADIUS, SPACE } from '../../lib/design/tokens'
 import { locateRide } from '../../lib/homeMap'
 import { MAP_THEME } from '../../lib/mapTheme'
-import { EMBER, EMBER_RADIUS, OPACITY, SPACE } from '../../lib/theme'
+import { OPACITY } from '../../lib/theme'
 import ScalePress from '../motion/ScalePress'
 import { Icon } from '../ui/Icon'
 
@@ -54,7 +54,7 @@ export function LocateButton({
         accessibilityLabel="Show my location"
         accessibilityState={{ selected: following, busy: pending, disabled: pending }}
       >
-        <Icon name="navigation" size={GLYPH.control} color={following ? EMBER.textPrimary : EMBER.textSecondary} active={following} />
+        <Icon name="navigation" size={GLYPH.control} color={following ? COLOR.textPrimary : COLOR.textSecondary} active={following} />
       </ScalePress>
     </Animated.View>
   )
@@ -68,8 +68,8 @@ const styles = StyleSheet.create({
     height: MAP_THEME.locate.sizePx,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.scrim,
+    borderRadius: RADIUS.capsule,
+    backgroundColor: COLOR.scrim,
   },
   pending: { opacity: OPACITY.disabled },
 })
