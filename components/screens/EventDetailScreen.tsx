@@ -69,6 +69,7 @@ import { highlightEntities } from '../../lib/entityHighlight'
 import { doorWords, heroPillLabel, pillWords } from '../../lib/scarcity'
 import { clockTime } from '../../lib/roomMoments'
 import { useAuth } from '../../lib/useAuth'
+import { printable } from '../../lib/pulseSections'
 import { useNow } from '../../lib/useNow'
 import { getEventDetailCache, setEventDetailCache } from '../../lib/eventDetailCache'
 import { claimUrlFrom } from '../../lib/claimLink'
@@ -1100,7 +1101,7 @@ export default function EventDetail() {
     ...(event?.venue_name
       ? [{ label: 'WHERE', value: [event.venue_name, event.city].filter(Boolean).join(', '), onPress: openInMaps, testID: 'scene-tile-where' }]
       : []),
-    ...(crowd.count > 0 ? [{ label: crowd.label, value: String(crowd.count), mono: true, testID: 'scene-tile-crowd' }] : []),
+    ...(printable(crowd.count) !== null ? [{ label: crowd.label, value: String(crowd.count), mono: true, testID: 'scene-tile-crowd' }] : []),
     { label: 'DOOR', value: door, testID: 'scene-tile-door' },
     ...amenities.map((a) => ({ label: a.title.toUpperCase(), value: a.subtitle || 'Included', testID: `scene-tile-${a.id}` })),
   ]

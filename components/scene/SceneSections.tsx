@@ -26,6 +26,7 @@ import { GradientFill } from '../ui/GradientFill'
 import { Icon } from '../ui/Icon'
 import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, MATERIAL, RADIUS, RISE, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { DARK_MAP_STYLE, LOCATION_CARD_DELTA } from '../../lib/mapStyle'
+import { printable } from '../../lib/pulseSections'
 import { avatarStack } from '../../lib/pseudonymAvatar'
 
 /*
@@ -91,7 +92,9 @@ export const MAP_HEIGHT = 256
  */
 export function SceneByline({ host, hereNow }: { host?: string | null; hereNow?: number | null }) {
   const bold = useBoldText()
-  const live = typeof hereNow === 'number' && hereNow > 0
+  // Under five is not printed, the Pulse's rule: "3 here now" names whoever they are.
+  const here = printable(hereNow)
+  const live = here !== null
   if (!host && !live) return null
   return (
     <View style={styles.byline} testID="scene-byline">
@@ -101,9 +104,9 @@ export function SceneByline({ host, hereNow }: { host?: string | null; hereNow?:
         </Text>
       ) : null}
       {live ? (
-        <View style={styles.bylineLive} accessible accessibilityLabel={`${hereNow} ${hereNow === 1 ? 'person' : 'people'} here now`}>
+        <View style={styles.bylineLive} accessible accessibilityLabel={`${here} people here now`}>
           <View style={styles.liveDot} />
-          <Text style={[font('meta', bold), styles.secondary]}>{hereNow} here now</Text>
+          <Text style={[font('meta', bold), styles.secondary]}>{here} here now</Text>
         </View>
       ) : null}
     </View>
@@ -126,12 +129,21 @@ export function SceneByline({ host, hereNow }: { host?: string | null; hereNow?:
  */
 export function SceneAttendees({ count, seed, label = 'Attendees' }: { count: number; seed: string; label?: string }) {
   const bold = useBoldText()
-  const { shown, remainder } = avatarStack(count)
+  // Under five the number is not printed (the Pulse's rule), and neither is a stack that would count it: just the heading.
+  const printed = printable(count)
+  if (printed === null) {
+    return (
+      <View style={styles.attendeesSection} testID="scene-attendees">
+        <SectionHeader title="Attendees" />
+      </View>
+    )
+  }
+  const { shown, remainder } = avatarStack(printed)
   return (
     <View style={styles.attendeesSection} testID="scene-attendees">
-      <View accessible accessibilityRole="header" accessibilityLabel={`${label}, ${count}`} style={styles.attendees}>
+      <View accessible accessibilityRole="header" accessibilityLabel={`${label}, ${printed}`} style={styles.attendees}>
         <SectionHeader title={label} />
-        <RollingNumber value={count} role="numericDisplay" color={COLOR.textSecondary} />
+        <RollingNumber value={printed} role="numericDisplay" color={COLOR.textSecondary} />
       </View>
       {shown > 0 ? (
         <View style={styles.stack} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">

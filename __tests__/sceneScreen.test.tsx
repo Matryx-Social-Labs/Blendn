@@ -236,3 +236,20 @@ describe('the sections kept from before the redesign, on the design system, behi
     expect(openInMaps).toHaveBeenCalled()
   })
 })
+
+describe('no people count under five is printed (the Pulse\'s rule)', () => {
+  it('a small going count: no tile number and the attendees heading has no number or stack', async () => {
+    api.getEvent.mockResolvedValue(detail({ stats: { rsvpCount: 3, favoriteCount: 0, checkInCount: 0 } }) as never)
+    await open()
+    await screen.findByTestId('scene-attendees')
+    expect(screen.queryByTestId('scene-tile-crowd')).toBeNull()
+    expect(within(screen.getByTestId('scene-attendees')).getByRole('header', { name: 'Attendees' })).toBeTruthy()
+    expect(screen.getByTestId('scene-attendees')).not.toHaveTextContent(/\d/)
+  })
+
+  it('five and up is printed', async () => {
+    api.getEvent.mockResolvedValue(detail({ stats: { rsvpCount: 5, favoriteCount: 0, checkInCount: 0 } }) as never)
+    await open()
+    expect((await screen.findByTestId('scene-tile-crowd')).props.accessibilityLabel).toBe('GOING, 5')
+  })
+})
