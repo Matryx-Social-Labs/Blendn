@@ -122,7 +122,7 @@ describe('each tab screen wires its list', () => {
     ['events.tsx', 'listRef', /forwardedRef=\{listRef/],
     ['going.tsx', 'listRef', /<Animated\.FlatList\s+ref=\{listRef\}/],
     ['chat.tsx', 'listRef', /<Reanimated\.FlatList\s+ref=\{listRef\}/],
-    ['profile.tsx', 'scrollRef', /<ScrollView\s+ref=\{scrollRef\}/],
+    ['profile.tsx', 'scrollRef', /<Animated\.ScrollView\s+ref=\{scrollRef\}/],
   ])('%s', (file, ref, attached) => {
     const src = read(file)
     expect(src).toMatch(new RegExp(`useScrollToTop\\(${ref}\\)`))
