@@ -58,7 +58,8 @@ describe('a way out of onboarding', () => {
   it('offers sign-out on the first step and beside the under-18 message', () => {
     const basics = read('app/onboarding/basics.tsx')
     expect(basics).toContain('secondaryLabel="Not you? Sign out"')
-    expect(basics).toMatch(/\{isUnderAccountAge\(dateOfBirth\) \? \(\s*<Pressable\s*onPress=\{\(\) => setConfirmSignOut\(true\)\}/)
+    expect(basics).toMatch(/\{underAge \? \(\s*<Button\s+label="Sign out"[\s\S]*?onPress=\{\(\) => setConfirmSignOut\(true\)\}/)
+    expect(basics).toContain('const underAge = isUnderAccountAge(dateOfBirth)')
     expect(basics).toContain('await signOut()')
   })
 })
@@ -95,6 +96,6 @@ describe('the sign-in screens', () => {
     expect(forgot).toContain("Linking.openURL('message:')")
     expect(forgot).toContain("Linking.openURL('mailto:')")
     // Resend waits out the cooldown, and is busy (so also off) while a request runs.
-    expect(forgot).toMatch(/disabled=\{cooldown > 0\}\s*busy=\{busy\}/)
+    expect(forgot).toMatch(/disabled=\{cooldown > 0\}\s*loading=\{busy\}/)
   })
 })

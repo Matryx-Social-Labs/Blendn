@@ -1,5 +1,4 @@
 import { ScreenProfiler } from '../lib/perf'
-import { AntDesign, Ionicons } from '@expo/vector-icons'
 import {
   GoogleSignin,
   statusCodes
@@ -7,55 +6,38 @@ import {
 import * as AppleAuthentication from 'expo-apple-authentication'
 import { router } from 'expo-router'
 import React, { useEffect, useState } from 'react'
-import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
-import { assetAspect, currentDeviceInfo } from '../components/onboarding/authForm'
-import { EmberButton } from '../components/onboarding/EmberControls'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { Platform, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
+import Animated from 'react-native-reanimated'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { currentDeviceInfo } from '../components/onboarding/authForm'
+import { Backdrop, ORB_LEVEL } from '../components/onboarding/Backdrop'
+import { Dock } from '../components/onboarding/Dock'
+import { GoogleMark } from '../components/onboarding/GoogleMark'
+import { Lockup } from '../components/onboarding/Lockup'
+import { useSettleIn } from '../components/onboarding/useSettleIn'
+import FadeInUp from '../components/motion/FadeInUp'
+import ScalePress from '../components/motion/ScalePress'
+import { DiscMark } from '../components/ds/DiscMark'
+import { Spinner } from '../components/ds/Loader'
+import { StateScreen } from '../components/ds/StateScreen'
+import { font, PRESSED_WASH, useBoldText } from '../components/ds/shared'
+import { Icon } from '../components/ui/Icon'
 import { LegalLine } from '../components/LegalLine'
 import { Logger } from '../lib/logger'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, TYPE } from '../lib/theme'
+import { COLOR, DURATION, FONT_FAMILY, ICON, PRESS, RADIUS, RISE, SIZE, SPACE, STAGGER } from '../lib/design/tokens'
+import { H } from '../lib/haptics'
+import { OPACITY } from '../lib/theme'
 import { SESSION_ENDED_NOTICE, consumeSessionEndedNotice } from '../lib/sessionEvents'
 import { socialSignInMessage } from '../lib/signInRefusal'
 import { retryAuth, signInWithApple, signInWithGoogle, useAuth } from '../lib/useAuth'
 import { PendingInvite } from '../components/friends/PendingInvite'
 
-const monogram = require('../assets/logo/monogram-gradient.png')
-/*
- * The frame the intro animation lands on — gradient mark, white wordmark.
- *
- * Not `monogram-gradient` above `lockup-white`, which is what this was: the
- * lockup *contains* the mark, so that stacked it twice, once alone and once
- * inside the lockup. And not `lockup-white` on its own, which loses the brand
- * gradient entirely. This is generated from the animation's last frame, so the
- * still and the animation agree exactly and the overlay fade is invisible.
- */
-const lockup = require('../assets/logo/lockup-hero.png')
-
-/*
- * Fixed heights, and width derived from the asset's own aspect ratio.
- *
- * This started as `width: '<pct>%'` plus `aspectRatio`, which reads correctly
- * and rendered the lockup several times too large, overflowing the screen on
- * both sides. Percentage widths resolve against a parent whose own width is a
- * percentage inside a flex column, and the result did not match the arithmetic.
- * Driving from a fixed height instead removes the ambiguity entirely: the
- * height is a number, the width follows from the file, and `maxWidth` means
- * even a wrong ratio can only letterbox rather than overflow.
- *
- * The ratio still comes from the bundler rather than a literal, so re-exporting
- * the art cannot silently distort the layout — a hardcoded ratio is a number
- * that is correct exactly once.
- */
-
-const MONOGRAM_ASPECT = assetAspect(monogram, 453 / 534)
-// Fallback only — the real ratio comes from the bundler. Kept close to the
-// generated asset so a failed lookup still lays out sensibly rather than square.
-const LOCKUP_ASPECT = assetAspect(lockup, 674 / 202)
-
-/** The mark alone, used only on the two brief holding states. */
+/** The mark alone, used only on the brief holding state (Flow 1 landing 08). */
 const MONOGRAM_HEIGHT = 96
-/** ~200pt wide at this ratio — the hero of the signed-out screen. */
-const LOCKUP_HEIGHT = 60
+/** The lockup sits at 27% of the screen's height (Flow 1 landing 01). */
+const LOCKUP_TOP = 0.27
+/** The buttons rise 12 pt from 200 ms in, 40 ms apart (motion #1). */
+const ENTRANCE_AT = 200
 
 /*
  * Google's own button chrome — white fill, #1F1F1F ink — from its sign-in
@@ -68,6 +50,10 @@ const GOOGLE_INK = '#1F1F1F'
 
 function IndexInner() {
   const { user, loading, unreachable } = useAuth()
+  const bold = useBoldText()
+  const insets = useSafeAreaInsets()
+  const window = useWindowDimensions()
+  const settle = useSettleIn()
   /*
    * Which provider is in flight, not just whether one is. With one boolean,
    * tapping Apple put Google's button into its spinner — the wrong button
@@ -114,6 +100,12 @@ function IndexInner() {
 
   // Navigation is handled centrally in RootLayout to avoid race conditions/loops
 
+  /** Try again on the unreachable screen: a second failure is answered once (the first was the primary's press-in). */
+  const tryAgain = async () => {
+    const state = await retryAuth()
+    if (state.unreachable) H.error()
+  }
+
   const handleGoogleSignIn = async () => {
     if (signingIn) return
     try {
@@ -138,6 +130,8 @@ function IndexInner() {
           // thrown into the catch below it became the generic line.
           Logger.error('auth', 'Backend auth error', { error: result.error, errorCode: result.errorCode })
           setError(socialSignInMessage('Google', result))
+          // The server said no: answered once, as the refusal lands (not for a cancelled chooser).
+          H.error()
           return
         }
 
@@ -161,8 +155,10 @@ function IndexInner() {
         // Actionable, and nothing we do can fix it — so it gets its own copy
         // rather than the generic message.
         setError('Google Play services needs updating before you can sign in with Google.')
+        H.error()
       } else {
         setError("Couldn't sign in with Google. Try again.")
+        H.error()
       }
     } finally {
       setSigningIn(null)
@@ -200,6 +196,7 @@ function IndexInner() {
       if (!result.success) {
         Logger.error('auth', 'Backend auth error', { error: result.error, errorCode: result.errorCode })
         setError(socialSignInMessage('Apple', result))
+        H.error()
         return
       }
 
@@ -213,6 +210,7 @@ function IndexInner() {
       } else {
         Logger.error('auth', 'Apple Sign In failed', { error: err })
         setError("Couldn't sign in with Apple. Try again.")
+        H.error()
       }
     } finally {
       setSigningIn(null)
@@ -229,73 +227,80 @@ function IndexInner() {
    */
   if (unreachable) {
     return (
-      <SafeAreaView style={styles.unreachable} edges={['top', 'bottom']}>
-        <Ionicons name="cloud-offline-outline" size={ICON.lg} color={EMBER.textSecondary} />
-        <Text style={styles.unreachableTitle} accessibilityRole="header">Can&apos;t reach Blend&apos;n</Text>
-        <Text style={styles.unreachableBody}>
-          You&apos;re still signed in. Check your connection and try again.
-        </Text>
-        {/* The state's one action, so it takes the accent. */}
-        <EmberButton label="Try again" onPress={() => void retryAuth()} busy={loading} style={styles.retryButton} />
-      </SafeAreaView>
+      <View style={styles.root}>
+        <Backdrop level={ORB_LEVEL.landing} />
+        <StateScreen
+          variant="screen"
+          icon="cloud-off"
+          title="Can’t reach Blend’n"
+          body="You’re still signed in. Check your connection and try again."
+          // The state's one action, so it is the gradient primary: its press plays H.primary, a second failure H.error.
+          actions={[{ label: 'Try again', loading, onPress: () => void tryAgain() }]}
+          testID="unreachable"
+        />
+      </View>
     )
   }
 
   /*
-   * Auth is still resolving.
-   *
-   * This used to draw its own `#480D37 -> #000000` gradient, a colour in no
-   * palette and no token file, so the user crossed a white system splash into a
-   * maroon one into a pastel sign-in. It now renders nothing but the root
-   * background, which is the same black the native splash just showed — so the
-   * handoff is invisible rather than a third colour.
-   *
-   * Authenticated is the same frame: held here for the frame or two the root
-   * layout takes to decide where to send them, so nothing flashes on the way out.
+   * Auth is still resolving: the mark alone, for the frame or two the root layout takes to decide where to send
+   * them, on the orbs. Authenticated is the same frame, held so nothing flashes on the way out.
    */
   if (loading || user) {
     return (
-      <View style={styles.splashContainer}>
-        <Image source={monogram} style={styles.splashLogo} resizeMode="contain" />
+      <View style={styles.root}>
+        <Backdrop level={ORB_LEVEL.landing} />
+        <View
+          testID="auth-resolving"
+          accessibilityRole="progressbar"
+          accessibilityLabel="Loading"
+          accessibilityState={{ busy: true }}
+          style={styles.resolving}
+        >
+          <DiscMark height={MONOGRAM_HEIGHT} fill="gradient" />
+        </View>
       </View>
     )
   }
 
   /*
-   * Signed out.
-   *
-   * The previous version was a pastel gradient carrying six absolutely
-   * positioned emoji bubbles and three fixed-diameter rings, at literal pixel
-   * offsets eyeballed against one device. It contradicted every other screen in
-   * the app, which is pure black, and it broke on any other screen size.
-   *
-   * What replaced it is deliberately plain: the mark, the name, and the ways in.
-   * The brand colour arrives through the monogram rather than through a button,
-   * because Google's mark has to sit on Google's chrome and Apple's button is
-   * Apple's — a third brand-orange pill would make this a paint sample.
+   * Signed out: the orbs as the hero, the lockup and its line, the ways in on a glass dock. The brand colour arrives
+   * through the mark and the orbs rather than through a button, because Google's mark has to sit on Google's chrome and
+   * Apple's button is Apple's.
    */
+  const google = signingIn === 'google'
+  const apple = signingIn === 'apple'
+  const dimmed = (own: boolean) => (signingIn && !own ? styles.dim : null)
+  // Each way in rises 12 pt, 40 ms after the one above (motion #1); the message above them is not one of them.
+  const rise = (index: number) => ({ delay: ENTRANCE_AT + index * STAGGER.loose, distance: RISE.message, duration: DURATION.medium })
+
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <View style={styles.brandBlock}>
-        <Image source={lockup} style={styles.lockup} resizeMode="contain" />
-        <Text style={styles.tagline}>Same place. Same vibe. Instant connections.</Text>
+    <View style={styles.root}>
+      <Backdrop level={ORB_LEVEL.landing} enter />
+
+      <Animated.View style={[styles.brand, { paddingTop: Math.max(0, window.height * LOCKUP_TOP - insets.top) }, settle]}>
+        <Lockup size="landing" testID="landing-lockup" />
+        <Text style={[font('body', bold), styles.tagline]}>Same place. Same vibe. Instant connections.</Text>
         {/* Whose invite is waiting, when an invite link brought them here. */}
         <PendingInvite />
-      </View>
+      </Animated.View>
 
-      <View style={styles.actions}>
+      <Dock gap={SPACE.md} testID="landing-dock">
         {/*
           * Announced to screen readers as an alert, so someone mid-gesture is
           * told rather than left waiting. A toast would auto-dismiss and be
           * missed entirely.
           */}
         {error && (
-          <Text style={styles.error} accessibilityRole="alert">
-            {error}
-          </Text>
+          <View style={styles.message}>
+            <Icon name="circle-alert" size={ICON.inline} color={COLOR.destructive} />
+            <Text style={[font('meta', bold), styles.errorText]} accessibilityRole="alert">
+              {error}
+            </Text>
+          </View>
         )}
         {!error && notice && (
-          <Text style={styles.notice} accessibilityRole="alert">
+          <Text style={[font('meta', bold), styles.notice]} accessibilityRole="alert">
             {notice}
           </Text>
         )}
@@ -310,213 +315,146 @@ function IndexInner() {
           * want to use — and once email sign-in exists it is ambiguous between
           * three different flows.
           */}
-        <Pressable
-          onPress={handleGoogleSignIn}
-          disabled={!!signingIn}
-          accessibilityRole="button"
-          accessibilityLabel="Continue with Google"
-          accessibilityState={{ disabled: !!signingIn, busy: signingIn === 'google' }}
-          style={({ pressed }) => [
-            styles.googleButton,
-            pressed && styles.pressed,
-            signingIn === 'apple' && styles.disabled,
-          ]}
-        >
-          {signingIn === 'google' ? (
-            <ActivityIndicator color={GOOGLE_INK} />
-          ) : (
-            <>
-              <AntDesign name="google" size={ICON.md} color={GOOGLE_INK} style={styles.googleMark} />
-              <Text style={styles.googleLabel}>Continue with Google</Text>
-            </>
-          )}
-        </Pressable>
+        <FadeInUp {...rise(0)}>
+          <ScalePress
+            onPress={handleGoogleSignIn}
+            disabled={!!signingIn}
+            pressedScale={Platform.OS === 'android' ? 1 : PRESS.scale}
+            android_ripple={{ color: PRESSED_WASH.android }}
+            accessibilityRole="button"
+            accessibilityLabel="Continue with Google"
+            accessibilityState={{ disabled: !!signingIn, busy: google }}
+            style={[styles.googleButton, dimmed(google)]}
+          >
+            {google ? (
+              <Spinner size={20} dark />
+            ) : (
+              <>
+                <GoogleMark />
+                <Text style={styles.providerLabel} maxFontSizeMultiplier={1.3}>Continue with Google</Text>
+              </>
+            )}
+          </ScalePress>
+        </FadeInUp>
 
         {Platform.OS === 'ios' && appleSignInAvailable && (
           /*
-           * WHITE, not BLACK. The button was BLACK, which was invisible the
-           * moment the background stopped being a pastel gradient — a real bug
-           * the old design was hiding rather than avoiding.
+           * WHITE, not BLACK: the page is ink, and a black button would vanish.
            */
-          <View
-            pointerEvents={signingIn ? 'none' : 'auto'}
-            style={signingIn === 'google' && styles.disabled}
-          >
-            {/* The system draws this button and has no busy state; its spinner sits over it. */}
-            <AppleAuthentication.AppleAuthenticationButton
-              buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
-              buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
-              cornerRadius={CONTROL.lg / 2}
-              style={styles.appleButton}
-              onPress={handleAppleSignIn}
-            />
-            {signingIn === 'apple' ? (
-              <View style={styles.appleBusy} pointerEvents="none">
-                <ActivityIndicator color={GOOGLE_INK} />
-              </View>
-            ) : null}
-          </View>
+          <FadeInUp {...rise(1)}>
+            <View pointerEvents={signingIn ? 'none' : 'auto'} style={dimmed(apple)}>
+              {/* The system draws this button and has no busy state; its spinner sits over it. */}
+              <AppleAuthentication.AppleAuthenticationButton
+                buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
+                cornerRadius={RADIUS.button}
+                style={styles.appleButton}
+                onPress={handleAppleSignIn}
+              />
+              {apple ? (
+                <View style={styles.appleBusy} pointerEvents="none">
+                  <Spinner size={20} dark />
+                </View>
+              ) : null}
+            </View>
+          </FadeInUp>
         )}
 
-        <View style={styles.dividerRow}>
-          <View style={styles.divider} />
-          <Text style={styles.dividerText}>or</Text>
-          <View style={styles.divider} />
-        </View>
+        <FadeInUp {...rise(2)}>
+          <View style={[styles.dividerRow, signingIn ? styles.dim : null]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+            <View style={styles.divider} />
+            <Text style={[font('caption', bold), styles.dividerText]}>or</Text>
+            <View style={styles.divider} />
+          </View>
+        </FadeInUp>
 
-        <Pressable
-          /*
-           * The notice goes with them. Somebody the server signed out who
-           * picks email lands on a form that otherwise says nothing about
-           * why they are there.
-           */
-          onPress={() =>
-            router.push(notice ? { pathname: '/sign-in', params: { notice } } : '/sign-in')
-          }
-          disabled={!!signingIn}
-          accessibilityRole="button"
-          accessibilityState={{ disabled: !!signingIn }}
-          style={({ pressed }) => [styles.emailButton, pressed && styles.pressed, !!signingIn && styles.disabled]}
-        >
-          <Text style={styles.emailLabel}>Continue with email</Text>
-        </Pressable>
+        {/* Outlined rather than filled: email is the third option, and the same weight as the two providers would make the screen three shouts. */}
+        <FadeInUp {...rise(3)}>
+          <ScalePress
+            /*
+             * The notice goes with them. Somebody the server signed out who
+             * picks email lands on a form that otherwise says nothing about
+             * why they are there.
+             */
+            onPress={() =>
+              router.push(notice ? { pathname: '/sign-in', params: { notice } } : '/sign-in')
+            }
+            disabled={!!signingIn}
+            pressedScale={Platform.OS === 'android' ? 1 : PRESS.scale}
+            android_ripple={{ color: PRESSED_WASH.android }}
+            accessibilityRole="button"
+            accessibilityLabel="Continue with email"
+            accessibilityState={{ disabled: !!signingIn }}
+            style={[styles.emailButton, signingIn ? styles.dim : null]}
+          >
+            <Icon name="mail" size={ICON.control} color={COLOR.textPrimary} />
+            <Text style={[styles.providerLabel, styles.emailLabel]} maxFontSizeMultiplier={1.3}>Continue with email</Text>
+          </ScalePress>
+        </FadeInUp>
 
-        <LegalLine lead="By continuing you" style={styles.legal} />
-      </View>
-    </SafeAreaView>
+        <FadeInUp {...rise(4)}>
+          <LegalLine lead="By continuing you" />
+        </FadeInUp>
+      </Dock>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: GUTTER,
-    // Transparent so the root's flat `EMBER.bg` shows through, rather than
-    // this screen owning a background of its own.
-    backgroundColor: 'transparent',
-  },
-  splashContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'transparent',
-  },
-  splashLogo: {
-    height: MONOGRAM_HEIGHT,
-    width: MONOGRAM_HEIGHT * MONOGRAM_ASPECT,
-    maxWidth: '60%',
-  },
+  root: { flex: 1, backgroundColor: COLOR.ink },
+  resolving: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
 
-  brandBlock: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: SPACE.xl,
-    width: '100%',
-  },
-  lockup: {
-    height: LOCKUP_HEIGHT,
-    width: LOCKUP_HEIGHT * LOCKUP_ASPECT,
-    // Belt and braces: with `resizeMode="contain"` a capped width can only
-    // letterbox, never crop or overflow.
-    maxWidth: '86%',
-  },
-  tagline: { ...TYPE.body, color: EMBER.textSecondary, textAlign: 'center' },
+  brand: { flex: 1, alignItems: 'center', gap: SPACE.lg, paddingHorizontal: SPACE.gutter },
+  tagline: { color: COLOR.textSecondary, textAlign: 'center' },
 
-  actions: {
-    width: '100%',
-    gap: SPACE.md,
-    paddingBottom: SPACE.sm,
-  },
-  error: { ...TYPE.meta, color: EMBER.destructive, textAlign: 'center', marginBottom: SPACE.xs },
-  notice: { ...TYPE.meta, textAlign: 'center', marginBottom: SPACE.xs },
+  message: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.sm },
+  errorText: { flex: 1, color: COLOR.destructive },
+  notice: { color: COLOR.textSecondary, textAlign: 'center' },
   googleButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: SPACE.sm,
-    height: CONTROL.lg,
-    borderRadius: EMBER_RADIUS.pill,
+    gap: SPACE.md,
+    height: SIZE.primary,
+    borderRadius: RADIUS.button,
     backgroundColor: GOOGLE_FILL,
-  },
-  googleMark: {
-    marginRight: SPACE.xxs,
+    overflow: 'hidden',
   },
   /*
    * 21, to sit level with the Apple button beside it.
    *
-   * `AppleAuthentication.AppleAuthenticationButton` draws its own label — the
-   * system renders it and there is no prop for the type. Measured on device at
-   * 56pt tall it puts 20pt of glyph on screen; ours at `fontSize: 16` put 15,
-   * a third smaller, side by side, on the first screen anybody sees. Glyphs
-   * render about a point under the font size, so `fontSize: 21` is what draws
-   * the Apple button's 20.
-   *
-   * So the two we control move to meet the one we do not. If the Apple button
-   * ever changes size, this is the number that has to follow it — and the way
-   * to check is to measure a screenshot, not to look at one.
+   * `AppleAuthentication.AppleAuthenticationButton` draws its own label — the system renders it and there is no prop for the
+   * type. Measured on device at 56pt tall it puts 20pt of glyph on screen; ours at 16 put 15, a third smaller, side by side,
+   * on the first screen anybody sees. Glyphs render about a point under the font size, so 21 is what draws the Apple
+   * button's 20. If the Apple button ever changes size, this is the number that has to follow it — and the way to check is
+   * to measure a screenshot, not to look at one.
    */
   // design-exception: sized to the system-drawn Apple button label, which has no size prop
-  googleLabel: { color: GOOGLE_INK, fontSize: 21, fontWeight: '500' },
-  appleButton: {
-    width: '100%',
-    height: CONTROL.lg,
-  },
-  dividerRow: {
+  providerLabel: { fontFamily: FONT_FAMILY.brand[500], fontSize: 21, lineHeight: 24, color: GOOGLE_INK },
+  emailLabel: { color: COLOR.textPrimary },
+  appleButton: { width: '100%', height: SIZE.primary },
+  dividerRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
+  divider: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: COLOR.hairlineStrong },
+  dividerText: { color: COLOR.textTertiary },
+  emailButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACE.md,
-    marginVertical: SPACE.xs,
-  },
-  divider: {
-    flex: 1,
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: EMBER.separator,
-  },
-  dividerText: { ...TYPE.meta, color: EMBER.textTertiary },
-  // Outlined rather than filled: email is the third option, and giving it the
-  // same weight as the two OAuth buttons would make the screen three shouts.
-  emailButton: {
-    height: CONTROL.lg,
-    borderRadius: EMBER_RADIUS.pill,
-    alignItems: 'center',
     justifyContent: 'center',
+    gap: SPACE.md,
+    height: SIZE.primary,
+    borderRadius: RADIUS.button,
     borderWidth: 1,
-    borderColor: EMBER.separator,
+    borderColor: COLOR.hairlineStrong,
+    overflow: 'hidden',
   },
-  // design-exception: level with `googleLabel` and the system-drawn Apple button — see the note there
-  emailLabel: { color: EMBER.textPrimary, fontSize: 21, fontWeight: '500' },
-  pressed: {
-    opacity: OPACITY.pressed,
-  },
-  disabled: {
-    opacity: OPACITY.disabled,
-  },
+  dim: { opacity: OPACITY.disabled },
   // Over the system-drawn Apple button, which has no busy state of its own.
   appleBusy: {
     ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: EMBER_RADIUS.pill,
+    borderRadius: RADIUS.button,
     backgroundColor: GOOGLE_FILL,
-  },
-  legal: { marginTop: SPACE.sm },
-
-  unreachable: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: SPACE.md,
-    paddingHorizontal: GUTTER,
-    backgroundColor: 'transparent',
-  },
-  unreachableTitle: { ...TYPE.title, textAlign: 'center' },
-  unreachableBody: { ...TYPE.body, color: EMBER.textSecondary, textAlign: 'center' },
-  retryButton: {
-    alignSelf: 'stretch',
-    marginTop: SPACE.lg,
   },
 })
 

@@ -6,13 +6,15 @@ import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE, TYPE } from '../../lib/design/
 import { OPACITY } from '../../lib/theme'
 import { CONTROL_FONT_CAP, font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast } from './shared'
 
-export type BannerKind = 'offline' | 'paused' | 'info' | 'visibility'
+export type BannerKind = 'offline' | 'paused' | 'info' | 'visibility' | 'error'
 
 const LOOK: Record<BannerKind, { fill: string; icon: IconName }> = {
   offline: { fill: COLOR.destructiveTint, icon: 'cloud-off' },
   paused: { fill: COLOR.warningTint, icon: 'circle-pause' },
   info: { fill: COLOR.surface, icon: 'info' },
   visibility: { fill: COLOR.surface, icon: 'eye' },
+  // A form the server refused (Flow 1 sign-in 08 · 10 · 12, forgot 06 · 07): the destructive tint, the alert glyph (a clock for a wait).
+  error: { fill: COLOR.destructiveTint, icon: 'circle-alert' },
 }
 
 export type BannerProps = {
@@ -53,10 +55,11 @@ export function Banner({ kind, text, mono, icon, action, busy = false, testID }:
   return (
     <View
       testID={testID}
+      accessibilityRole={kind === 'error' ? 'alert' : undefined}
       style={[styles.banner, { backgroundColor: LOOK[kind].fill }, contrast && IC_HAIRLINE, wrapped && styles.wrapped]}
     >
       <Icon name={icon ?? LOOK[kind].icon} size={ICON.control} />
-      <Text accessibilityLiveRegion={announced ? 'polite' : 'none'} style={[font('meta', bold), styles.text]}>
+      <Text accessibilityLiveRegion={kind === 'error' ? 'assertive' : announced ? 'polite' : 'none'} style={[font('meta', bold), styles.text]}>
         {mono ? (
           <>
             {text}

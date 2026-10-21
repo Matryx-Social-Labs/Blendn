@@ -1,27 +1,27 @@
 import { useCallback, useEffect, useState } from 'react'
-import { StyleSheet, Text, View } from 'react-native'
+import { ScrollView, StyleSheet, Text, View } from 'react-native'
 
+import { Chip } from '../../components/ds/Chip'
 import { ChipSet } from '../../components/ds/ChipSet'
-import { EmberField } from '../../components/onboarding/EmberControls'
+import { monoCaption } from '../../components/ds/MonoFamily'
+import { TextArea } from '../../components/ds/TextField'
+import { font, useBoldText } from '../../components/ds/shared'
+import { MAX_INTERESTS } from '../../components/InterestPicker'
 import { ListLoadState, type ListStatus } from '../../components/onboarding/ListLoadState'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import { apiClient } from '../../lib/apiClient'
 import { toPickerTree, type CategoryGroup, type CategoryNode } from '../../lib/categories'
+import { COLOR, SPACE } from '../../lib/design/tokens'
 import { Logger } from '../../lib/logger'
-import { EMBER, EMBER_RADIUS, SPACE, TYPE } from '../../lib/theme'
+import { bioWithPrompt, promptFits } from '../../lib/onboarding'
 import { useOnboarding } from '../../lib/useOnboarding'
 
 /**
- * Writing prompts, not a feature — they exist to unstick a blank textarea,
- * so tapping one is not wired to anything. The frame's were filler ("I thrive
+ * Writing prompts: they exist to unstick a blank textarea, so a tap puts one in it. The frame's were filler ("I thrive
  * at the intersection of technology and human connection"); these are the
  * kind of line a stranger at an event can actually open with.
  */
-const BIO_PROMPTS = [
-  'A perfect Sunday for me is…',
-  "Lately I've been learning…",
-  'Ask me about…',
-]
+const BIO_PROMPTS = ['A perfect Sunday for me is…', 'Lately I’ve been learning…', 'Ask me about…']
 
 /**
  * Step six — interests, and a few sentences about yourself.
@@ -46,9 +46,11 @@ const BIO_PROMPTS = [
  * number, and the server owns it.
  */
 const BIO_LIMIT = 500
+const bioOverCap = (length: number) => `Keep it under ${BIO_LIMIT} characters · ${length} now.`
 
 export default function DetailsScreen() {
   const { draft, loaded, saving, commit, skip, goBack } = useOnboarding('details')
+  const bold = useBoldText()
 
   const [groups, setGroups] = useState<CategoryGroup[]>([])
   const [groupsStatus, setGroupsStatus] = useState<ListStatus>('loading')
@@ -95,95 +97,122 @@ export default function DetailsScreen() {
     void loadGroups()
   }, [loadGroups])
 
+  /*
+   * The server holds at most ten (`MAX_INTERESTS`): an eleventh was refused after Continue, as "Couldn't save your
+   * interests". So the picker stops at ten, dims the rest and says so, rather than finding out on the way out.
+   */
+  const atCap = interestIds.length >= MAX_INTERESTS
   const toggle = (id: string, name: string) => {
-    setInterests((current) =>
-      current.includes(name) ? current.filter((i) => i !== name) : [...current, name]
-    )
-    setInterestIds((current) =>
-      current.includes(id) ? current.filter((i) => i !== id) : [...current, id]
-    )
+    if (!interestIds.includes(id) && atCap) return
+    setInterests((current) => (current.includes(name) ? current.filter((i) => i !== name) : [...current, name]))
+    setInterestIds((current) => (current.includes(id) ? current.filter((i) => i !== id) : [...current, id]))
   }
+
+  /*
+   * Never cut for the person: a paste past the cap stays on screen, says by how much, and Continue waits. The cap is the
+   * server's (`BIO_LIMIT`); a silent slice used to throw the end of a pasted paragraph away.
+   */
+  const bioLength = bio.length
+  const overCap = bioLength > BIO_LIMIT
 
   return (
     <OnboardingScreen
       step="details"
       title="The finer "
       titleAccent="details"
-      subtitle="A few lines about you and what you're into. It's what people read before they say hello."
+      subtitle="A few lines about you and what you’re into. It’s what people read before they say hello."
       ctaLabel="Continue"
       ctaBusy={saving}
+      ctaDisabled={overCap}
       onContinue={() => void commit({ interests, interestIds, bio: bio.trim() })}
       secondaryLabel="Skip"
       onSecondary={() => void skip()}
       onBack={goBack}
     >
-      {/*
+      {(reveal) => (
+        <>
+          {/*
         Before the interest chips, not after.
-        
+
         The chips are a long, scrolling wall of choices; a text field below them
         is a field most people never reach. This is also the more personal
         question, and asking it first means it gets answered while attention is
         still fresh.
       */}
-      <EmberField
-        label="About me"
-        placeholder="Ask me about… the best coffee in the city, a trip I'm planning, or what I'm reading."
-        helper={`${bio.length}/${BIO_LIMIT}`}
-        value={bio}
-        onChangeText={(text) => setBio(text.slice(0, BIO_LIMIT))}
-        multiline
-        maxLength={BIO_LIMIT}
-        style={styles.bio}
-      />
-
-      <View style={styles.prompts}>
-        {BIO_PROMPTS.map((prompt) => (
-          <View key={prompt} style={styles.promptCard}>
-            <Text style={styles.promptText}>&ldquo;{prompt}&rdquo;</Text>
+          <View style={styles.bio}>
+            <TextArea
+              label="About me"
+              placeholder="Ask me about… the best coffee in the city, a trip I’m planning, or what I’m reading."
+              value={bio}
+              onChangeText={setBio}
+              limit={BIO_LIMIT}
+              // The server's `max(500)` counts UTF-16 units, not what a person sees as characters.
+              measure={(value) => value.length}
+              error={overCap ? bioOverCap(bioLength) : undefined}
+              testID="onboarding-bio"
+              {...reveal}
+            />
+            {/* A tap puts the prompt in the bio (H.select, the chip's). */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={styles.prompts}
+            >
+              {BIO_PROMPTS.map((prompt) => (
+                <Chip
+                  key={prompt}
+                  label={prompt}
+                  icon="plus"
+                  dimmed={!promptFits(bio, prompt, BIO_LIMIT)}
+                  onPress={() => setBio((current) => bioWithPrompt(current, prompt, BIO_LIMIT))}
+                  testID={`onboarding-prompt-${prompt.slice(0, 6)}`}
+                />
+              ))}
+            </ScrollView>
           </View>
-        ))}
-      </View>
 
-      {groupsStatus !== 'ready' ? (
-        <ListLoadState status={groupsStatus} what="interests" onRetry={() => void loadGroups()} />
-      ) : null}
+          <View style={styles.interests}>
+            <View style={styles.interestsHead}>
+              <Text accessibilityRole="header" style={[font('heading', bold), styles.heading]}>
+                Interests
+              </Text>
+              <Text
+                accessibilityLabel={`${interestIds.length} of ${MAX_INTERESTS} chosen`}
+                style={[monoCaption(bold), { color: atCap ? COLOR.warning : COLOR.textSecondary }]}
+              >
+                {`${interestIds.length} of ${MAX_INTERESTS}`}
+              </Text>
+            </View>
 
-      {groups.map((group) => (
-        <ChipSet
-          key={group.id}
-          label={group.name}
-          items={group.items.map((item) => ({ key: item.id, label: item.name }))}
-          selection="multi"
-          selected={group.items.filter((item) => interests.includes(item.name)).map((item) => item.id)}
-          onToggle={(id) => {
-            const item = group.items.find((i) => i.id === id)
-            if (item) toggle(item.id, item.name)
-          }}
-          testID={`onboarding-interests-${group.id}`}
-        />
-      ))}
+            {groupsStatus !== 'ready' ? <ListLoadState status={groupsStatus} what="interests" onRetry={() => void loadGroups()} /> : null}
 
-
+            {groups.map((group) => (
+              <ChipSet
+                key={group.id}
+                label={group.name}
+                items={group.items.map((item) => ({ key: item.id, label: item.name, dimmed: atCap && !interestIds.includes(item.id) }))}
+                selection="multi"
+                selected={group.items.filter((item) => interests.includes(item.name)).map((item) => item.id)}
+                capHint={`Up to ${MAX_INTERESTS}`}
+                onToggle={(id) => {
+                  const item = group.items.find((i) => i.id === id)
+                  if (item) toggle(item.id, item.name)
+                }}
+                testID={`onboarding-interests-${group.id}`}
+              />
+            ))}
+          </View>
+        </>
+      )}
     </OnboardingScreen>
   )
 }
 
 const styles = StyleSheet.create({
-  bio: {
-    height: 160,
-    borderRadius: EMBER_RADIUS.card,
-    paddingTop: SPACE.lg,
-    paddingBottom: SPACE.lg,
-    textAlignVertical: 'top',
-  },
-  prompts: { gap: SPACE.md },
-  promptCard: {
-    backgroundColor: EMBER.surfaceMedia,
-    borderLeftWidth: 4,
-    borderLeftColor: EMBER.textTertiary,
-    borderRadius: EMBER_RADIUS.md,
-    paddingVertical: SPACE.lg,
-    paddingHorizontal: SPACE.xl,
-  },
-  promptText: TYPE.meta,
+  bio: { gap: SPACE.md },
+  prompts: { gap: SPACE.sm },
+  interests: { gap: SPACE.lg },
+  interestsHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
+  heading: { color: COLOR.textPrimary },
 })

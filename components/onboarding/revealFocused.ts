@@ -1,4 +1,4 @@
-import { createContext, useCallback, useRef, type RefObject } from 'react'
+import { useCallback, useRef, type RefObject } from 'react'
 import { ScrollView, TextInput, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native'
 
 /** Room kept above the field for its label, and below it for the hint (two or three lines of small print). */
@@ -17,9 +17,6 @@ export function revealOffset(field: { top: number; bottom: number }, scrollY: nu
   if (top < scrollY) return Math.max(0, top)
   return null
 }
-
-/** What `EmberField` calls when it takes focus: bring me into view. Absent outside an onboarding screen. */
-export const RevealOnFocus = createContext<(() => void) | null>(null)
 
 /**
  * The onboarding page's scroll, taught to follow the focused field.

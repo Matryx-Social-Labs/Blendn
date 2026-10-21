@@ -487,6 +487,13 @@ export interface DmReplyQuote {
   unavailable: boolean
 }
 
+/** `GET /work-fields`: the coarse fields, and what someone does within each (the server's curated list, never free text). */
+export interface WorkFieldsResponse {
+  workFields: { slug: string; label: string }[]
+  expertiseByField?: Record<string, { slug: string; label: string }[]>
+  maxExpertise?: number
+}
+
 export interface ApiResponse<T = unknown> {
   success: boolean
   data?: T
@@ -2132,6 +2139,8 @@ class ApiClientClass {
       interested_in?: ('woman' | 'man' | 'non_binary' | 'prefer_not_to_say')[]
       /** A slug from `getWorkFields()`, never free text. */
       work_field?: string | null
+      /** Up to `maxExpertise` slugs from `getWorkFields().expertiseByField[work_field]`; the server prunes any that leave their field. */
+      expertise?: string[]
       /*
        * The four preference columns, named exactly as the route validates them.
        *
@@ -2689,8 +2698,8 @@ class ApiClientClass {
     )
   }
 
-  async getWorkFields(): Promise<ApiResponse<{ workFields: { slug: string; label: string }[] }>> {
-    return this.cachedRequest<{ workFields: { slug: string; label: string }[] }>(
+  async getWorkFields(): Promise<ApiResponse<WorkFieldsResponse>> {
+    return this.cachedRequest<WorkFieldsResponse>(
       '/api/mobile/work-fields',
       CATEGORIES_SWR_TTL
     )

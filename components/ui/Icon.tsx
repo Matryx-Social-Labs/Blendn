@@ -78,6 +78,7 @@ import FingerprintPattern from 'lucide-react-native/icons/fingerprint-pattern'
 import Flag from 'lucide-react-native/icons/flag'
 import Ghost from 'lucide-react-native/icons/ghost'
 import Gift from 'lucide-react-native/icons/gift'
+import GraduationCap from 'lucide-react-native/icons/graduation-cap'
 import Hand from 'lucide-react-native/icons/hand'
 import HandHeart from 'lucide-react-native/icons/hand-heart'
 import Heart from 'lucide-react-native/icons/heart'
@@ -220,6 +221,7 @@ const ICONS = {
   flag: Flag,
   ghost: Ghost,
   gift: Gift,
+  'graduation-cap': GraduationCap,
   hand: Hand,
   'hand-heart': HandHeart,
   heart: Heart,

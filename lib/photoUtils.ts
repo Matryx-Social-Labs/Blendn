@@ -283,7 +283,8 @@ export const uploadPhoto = async (
   uri: string,
   userId: string,
   fileName?: string,
-  folder: 'profile' | 'chat' | 'events' = 'profile'
+  folder: 'profile' | 'chat' | 'events' = 'profile',
+  onProgress?: (fraction: number) => void
 ): Promise<PhotoUploadResult> => {
   try {
     // Process the image first
@@ -298,7 +299,7 @@ export const uploadPhoto = async (
     const finalFileName = fileName || `${folder}_${timestamp}.${fileExtension}`
 
     // Upload to Tigris via admin backend
-    const result = await uploadToTigris(processedUri, finalFileName, folder)
+    const result = await uploadToTigris(processedUri, finalFileName, folder, onProgress)
 
     if (!result.success) {
       Logger.error('profile', 'Photo upload failed', { error: result.error })
@@ -355,7 +356,8 @@ export const uploadChatPhoto = async (
 const uploadToTigris = async (
   uri: string,
   fileName: string,
-  folder: 'profile' | 'chat' | 'events'
+  folder: 'profile' | 'chat' | 'events',
+  onProgress?: (fraction: number) => void
 ): Promise<PhotoUploadResult> => {
   try {
     // Get presigned URL from admin backend
@@ -371,13 +373,20 @@ const uploadToTigris = async (
     const { uploadUrl, publicUrl } = presignedResult.data
 
     // Upload directly to Tigris using the presigned URL
-    const result = await FileSystem.uploadAsync(uploadUrl, uri, {
-      httpMethod: 'PUT',
+    const options = {
+      httpMethod: 'PUT' as const,
       headers: {
         'Content-Type': 'image/jpeg',
       },
       uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-    })
+    }
+    // With a listener the upload is a task that reports its progress (the onboarding tile's ring); without, as it was.
+    const result = onProgress
+      ? await FileSystem.createUploadTask(uploadUrl, uri, options, ({ totalBytesSent, totalBytesExpectedToSend }) => {
+          if (totalBytesExpectedToSend > 0) onProgress(totalBytesSent / totalBytesExpectedToSend)
+        }).uploadAsync()
+      : await FileSystem.uploadAsync(uploadUrl, uri, options)
+    if (!result) return { success: false, error: 'Upload failed' }
 
     if (result.status < 200 || result.status >= 300) {
       Logger.error('profile', 'Tigris upload error', { status: result.status, body: result.body })
@@ -494,7 +503,7 @@ const cleanupCache = async () => {
     const cacheKeys = keys.filter(key => key.startsWith(CACHE_KEY_PREFIX))
     
     let totalSize = 0
-    const entries: Array<{ key: string; entry: PhotoCacheEntry }> = []
+    const entries: { key: string; entry: PhotoCacheEntry }[] = []
     
     for (const key of cacheKeys) {
       const cached = await AsyncStorage.getItem(key)
@@ -578,7 +587,7 @@ export const verifyPhoto = async (imageUri: string): Promise<PhotoVerificationRe
       quality,
       issues
     }
-  } catch (error) {
+  } catch {
     return {
       isValid: false,
       hasFace: false,
@@ -733,31 +742,35 @@ export const getUserPhotos = async (userId: string): Promise<ProfilePhoto[]> => 
   }
 }
 
+/** What choosing a photo came to: the file to upload, or why there is none (a cancelled picker is not a failure). */
+export type PhotoSelection = { ok: true; uri: string } | { ok: false; cancelled?: boolean; error?: string }
+
 /**
- * Complete photo selection and upload flow
+ * Choose a photo: the source sheet, the picker, the size and type check and the quality check. Nothing is uploaded, so a
+ * caller can show the tile while it does, and keep the file to try again when it fails.
  */
-export const selectAndUploadPhoto = async (userId: string): Promise<PhotoUploadResult> => {
+export const selectPhoto = async (): Promise<PhotoSelection> => {
   try {
     // Show source selection
     const source = await showPhotoSourceActionSheet()
     if (!source) {
-      return { success: false, cancelled: true, error: 'User cancelled' }
+      return { ok: false, cancelled: true, error: 'User cancelled' }
     }
 
     // Pick image
     const imageResult = await pickImage(source)
     if (!imageResult || imageResult.canceled) {
-      return { success: false, cancelled: true, error: 'No image selected' }
+      return { ok: false, cancelled: true, error: 'No image selected' }
     }
 
     const asset = imageResult.assets[0]
-    
+
     // Validate image
     const validation = validatePhoto(asset)
     if (!validation.valid) {
       // Returned, not shown: both callers say why a photo was not added,
       // and an alert here as well made it two messages for one refusal.
-      return { success: false, error: validation.error }
+      return { ok: false, error: validation.error }
     }
 
     // Verify photo quality (optional)
@@ -766,16 +779,30 @@ export const selectAndUploadPhoto = async (userId: string): Promise<PhotoUploadR
       Logger.warn('profile', 'photoUtils: Photo verification issues', { issues: verification.issues })
     }
 
-    // Upload image
-    return await uploadPhoto(asset.uri, userId)
+    return { ok: true, uri: asset.uri }
   } catch (error) {
     Logger.error('profile', 'photoUtils: Photo selection error', { error })
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Unknown error' 
+    return { ok: false, error: error instanceof Error ? error.message : 'Unknown error' }
+  }
+}
+
+/**
+ * Complete photo selection and upload flow
+ */
+export const selectAndUploadPhoto = async (userId: string): Promise<PhotoUploadResult> => {
+  const selection = await selectPhoto()
+  if (!selection.ok) return { success: false, cancelled: selection.cancelled ? true : undefined, error: selection.error }
+  try {
+    // Upload image
+    return await uploadPhoto(selection.uri, userId)
+  } catch (error) {
+    Logger.error('profile', 'photoUtils: Photo selection error', { error })
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
     }
   }
-} 
+}
 
 /**
  * Build an optimised Supabase render URL for a public image URL.

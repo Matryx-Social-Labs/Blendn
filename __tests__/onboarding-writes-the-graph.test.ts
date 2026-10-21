@@ -150,6 +150,16 @@ describe('syncInterests makes the server match the picker', () => {
     expect(mockApi.removeProfileInterests).toHaveBeenCalledWith('u1', ['a'])
   })
 
+  it('removes before it adds, so swapping one at the ten-interest cap is accepted the first time', async () => {
+    const order: string[] = []
+    const ten = Array.from({ length: 10 }, (_, i) => `i${i}`)
+    mockApi.getProfileInterests.mockResolvedValue(held(ten))
+    mockApi.removeProfileInterests.mockImplementation(async () => (order.push('remove'), { success: true }))
+    mockApi.addProfileInterests.mockImplementation(async () => (order.push('add'), { success: true, data: {} }))
+    await expect(syncInterests('u1', [...ten.slice(1), 'new'])).resolves.toBe(true)
+    expect(order).toEqual(['remove', 'add'])
+  })
+
   it('sends nothing when the server already matches', async () => {
     mockApi.getProfileInterests.mockResolvedValue(held(['a', 'b']))
     await expect(syncInterests('u1', ['a', 'b'])).resolves.toBe(true)
