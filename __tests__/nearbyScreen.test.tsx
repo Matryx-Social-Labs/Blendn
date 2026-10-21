@@ -23,7 +23,7 @@ jest.mock('../components/OptimizedImage', () => ({ preloadImages: jest.fn(() => 
 /* eslint-disable import/first */
 import * as Location from 'expo-location'
 import { router } from 'expo-router'
-import { Linking } from 'react-native'
+import { Linking, Platform } from 'react-native'
 import NearbyEventsScreen from '../app/nearby-events'
 import { getEvents } from '../lib/api'
 import { markOffline, markOnline } from '../lib/networkStatus'
@@ -109,4 +109,22 @@ it('says it is offline over the list it still shows', async () => {
   await act(async () => markOffline())
   expect(screen.getByText('Offline. Showing what you had.')).toBeTruthy()
   expect(screen.getByRole('button', { name: /Alpha Night/ })).toBeTruthy()
+})
+
+describe('the header', () => {
+  const on = (os: 'ios' | 'android') => Object.defineProperty(Platform, 'OS', { value: os, configurable: true })
+  afterEach(() => on('ios'))
+
+  it('iOS centres a 17 pt title (the condensed bar); Android keeps it beside Back', async () => {
+    events.mockResolvedValue({ data: [ev('a', 'Alpha Night', 12.98)], error: null })
+    on('ios')
+    const view = await render(<NearbyEventsScreen />)
+    await act(async () => {})
+    expect(screen.getByTestId('nearby-top-condensed')).toBeTruthy()
+    await view.unmount()
+    on('android')
+    await render(<NearbyEventsScreen />)
+    await act(async () => {})
+    expect(screen.queryByTestId('nearby-top-condensed')).toBeNull()
+  })
 })

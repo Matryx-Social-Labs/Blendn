@@ -1,7 +1,7 @@
 import * as Location from 'expo-location'
 import { router } from 'expo-router'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { AppState, FlatList, Linking, RefreshControl, StyleSheet, View } from 'react-native'
+import { AppState, FlatList, Linking, Platform, RefreshControl, StyleSheet, View } from 'react-native'
 
 import { EventCard } from '../components/ds/EventCard'
 import { Orbs } from '../components/ds/Orbs'
@@ -321,7 +321,7 @@ export default function NearbyEventsScreen() {
   return (
     <View style={styles.screen}>
       <Orbs set="feed" />
-      <TopBar title="Nearby" state={bar.state} onBack={() => router.back()} testID="nearby-top" />
+      <TopBar title="Nearby" state={Platform.OS === 'ios' ? 'condensed' : bar.state} onBack={() => router.back()} testID="nearby-top" />
       <View style={styles.banner}>
         <OfflineBanner text="Offline. Showing what you had." testID="nearby-offline" />
       </View>
