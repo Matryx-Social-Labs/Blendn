@@ -1,5 +1,6 @@
 import { router } from 'expo-router'
 import { Linking, Platform, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Button } from '../components/ds/Button'
 import { SettingsGroup, SettingsRow } from '../components/ds/SettingsRow'
@@ -26,6 +27,7 @@ export default function SupportScreen() {
   const { user } = useAuth()
   const { showToast } = useToast()
   const bar = useTopBarOverlay()
+  const insets = useSafeAreaInsets()
   const bold = useBoldText()
 
   const email = () =>
@@ -47,7 +49,7 @@ export default function SupportScreen() {
     <View style={styles.screen}>
       <ScrollView
         {...bar.scrollProps}
-        contentContainerStyle={[styles.content, { paddingTop: bar.contentTop + SPACE.md }]}
+        contentContainerStyle={[styles.content, { paddingTop: bar.contentTop + SPACE.md, paddingBottom: insets.bottom + SPACE.xxl }]}
         scrollIndicatorInsets={{ top: bar.indicatorTop }}
         showsVerticalScrollIndicator={false}
       >
@@ -98,7 +100,7 @@ export default function SupportScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: COLOR.ink },
-  content: { flexGrow: 1, gap: SPACE.lg, paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.xxl },
+  content: { flexGrow: 1, gap: SPACE.lg, paddingHorizontal: SPACE.gutter },
   ink: { color: COLOR.textPrimary },
   details: { borderRadius: RADIUS.sheet, backgroundColor: COLOR.surface, overflow: 'hidden' },
   detail: { flexDirection: 'row', alignItems: 'center', gap: SPACE.lg, paddingHorizontal: SPACE.lg, paddingVertical: SPACE.md, minHeight: SIZE.targetIos },

@@ -1,5 +1,6 @@
 import { router } from 'expo-router'
 import { Linking, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Backdrop, ORB_LEVEL } from '../components/onboarding/Backdrop'
 import { DiscMark } from '../components/ds/DiscMark'
@@ -40,6 +41,7 @@ const MAP_DATA = Object.values(MAP_CREDITS).map((c) => ({
 export default function AboutScreen() {
   const { showToast } = useToast()
   const bar = useTopBarOverlay()
+  const insets = useSafeAreaInsets()
   const bold = useBoldText()
   const version = appVersionLabel()
 
@@ -52,7 +54,7 @@ export default function AboutScreen() {
       <Backdrop level={ORB_LEVEL.landing} />
       <ScrollView
         {...bar.scrollProps}
-        contentContainerStyle={[styles.content, { paddingTop: bar.contentTop + SPACE.lg }]}
+        contentContainerStyle={[styles.content, { paddingTop: bar.contentTop + SPACE.lg, paddingBottom: insets.bottom + SPACE.xxl }]}
         scrollIndicatorInsets={{ top: bar.indicatorTop }}
         showsVerticalScrollIndicator={false}
       >
@@ -124,7 +126,7 @@ const CHIP_HEIGHT = 36
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: COLOR.ink },
-  content: { flexGrow: 1, alignItems: 'center', gap: SPACE.xl, paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.xxl },
+  content: { flexGrow: 1, alignItems: 'center', gap: SPACE.xl, paddingHorizontal: SPACE.gutter },
   disc: {
     width: MARK_DISC,
     height: MARK_DISC,

@@ -4,7 +4,7 @@ import { router, useFocusEffect } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AppState, Linking, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
 import Animated, { LinearTransition, useReducedMotion } from 'react-native-reanimated'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Banner } from '../components/ds/Banner'
 import { SettingsGroup, SettingsRow } from '../components/ds/SettingsRow'
 import { font, HueProvider, useBoldText } from '../components/ds/shared'
@@ -115,6 +115,7 @@ function SettingsScreenContent() {
   /** The delete is in flight: the row says so and nothing can close the sheet (Flow 7 frame 15). */
   const [deleting, setDeleting] = useState(false)
   const bar = useTopBarOverlay()
+  const insets = useSafeAreaInsets()
   const bold = useBoldText()
   const reduceMotion = useReducedMotion()
   const authMethod = useAuthMethod()
@@ -484,9 +485,10 @@ function SettingsScreenContent() {
   const enter = reduceMotion ? bannerFadeIn : bannerIn
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
+    <View style={styles.container}>
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingTop: bar.contentTop }]}
+        // The foot is the content's own padding: a SafeAreaView around the scroll cut it on a line above the home indicator.
+        contentContainerStyle={[styles.content, { paddingTop: bar.contentTop, paddingBottom: insets.bottom + DS_SPACE.xl }]}
         scrollIndicatorInsets={{ top: bar.indicatorTop }}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -600,7 +602,7 @@ function SettingsScreenContent() {
       <View style={bar.barPin} pointerEvents="box-none">
         <TopBar title="Settings" state={bar.state} onBack={() => router.back()} testID="settings-top" />
       </View>
-    </SafeAreaView>
+    </View>
   )
 }
 

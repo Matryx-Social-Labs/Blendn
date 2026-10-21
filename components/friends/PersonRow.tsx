@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from 'react-native'
 
 import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import type { FriendPerson } from '../../lib/friends'
+import { Avatar } from '../ds/Avatar'
 import { CONTROL_FONT_CAP, font, useBoldText } from '../ds/shared'
 import ScalePress from '../motion/ScalePress'
 import { OptimizedImage } from '../OptimizedImage'
@@ -25,6 +26,7 @@ export function PersonRow({
   person,
   detail,
   detailMono,
+  detailTail,
   onPress,
   trailing,
   chevron = false,
@@ -33,13 +35,15 @@ export function PersonRow({
   detail?: string
   /** Drawn in Geist Mono right after `detail` ("Friends since " + "Mar 2026"). */
   detailMono?: string
+  /** After `detailMono`, in the line's own face ("Blocked " + "Sep 12" + " · Harassment"). */
+  detailTail?: string
   onPress?: () => void
   trailing?: ReactNode
   /** The row goes somewhere: a chevron at its right. */
   chevron?: boolean
 }) {
   const bold = useBoldText()
-  const line = [detail, detailMono].filter(Boolean).join('')
+  const line = [detail, detailMono, detailTail].filter(Boolean).join('')
   const body = (
     <>
       <PersonAvatar person={person} />
@@ -51,6 +55,7 @@ export function PersonRow({
           <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.muted]}>
             {detail}
             {detailMono ? <Text style={font('meta', bold, FONT_FAMILY.mono[500])}>{detailMono}</Text> : null}
+            {detailTail}
           </Text>
         ) : null}
       </View>
@@ -75,19 +80,17 @@ export function PersonRow({
   )
 }
 
-/** Photo, or the name's initial. Decorative: the name beside it says who this is. */
+/**
+ * Photo, or the name's creature (the frame's `avatar(r, p, 48)`): a disc of its own on any surface, where the initial on `surface`
+ * vanished into a request card of the same colour. Decorative: the name beside it says who this is.
+ */
 export function PersonAvatar({ person }: { person: FriendPerson }) {
-  const bold = useBoldText()
   return (
     <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
       {person.photo ? (
         <OptimizedImage source={person.photo} style={styles.avatar} width={AVATAR} height={AVATAR} contentFit="cover" />
       ) : (
-        <View style={[styles.avatar, styles.avatarEmpty]}>
-          <Text maxFontSizeMultiplier={1} style={[font('heading', bold), styles.ink]}>
-            {(person.name[0] ?? '?').toUpperCase()}
-          </Text>
-        </View>
+        <Avatar kind="creature" pseudonym={person.name} size={AVATAR} testID="person-creature" />
       )}
     </View>
   )
@@ -115,7 +118,6 @@ const styles = StyleSheet.create({
   skeletonText: { flex: 1, gap: SPACE.sm },
   row: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, minHeight: ROW },
   avatar: { width: AVATAR, height: AVATAR, borderRadius: RADIUS.capsule },
-  avatarEmpty: { backgroundColor: COLOR.surface, alignItems: 'center', justifyContent: 'center' },
   text: { flex: 1, minWidth: 0 },
   // Centred on the row: a small button inside hugs its label, and without this it would sit at the row's top.
   trailing: { alignSelf: 'center' },

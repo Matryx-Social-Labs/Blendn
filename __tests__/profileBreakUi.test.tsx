@@ -68,7 +68,8 @@ it('thirty interests, a 500-character bio and a long education all render', asyn
 it('a friend with a long name and no photo keeps its row to one line', async () => {
   await render(<PersonRow person={{ userId: 'u', name: LONG, photo: null }} detail="Friends since " detailMono="Mar 2026" onPress={jest.fn()} chevron />)
   expect(screen.getByText(LONG).props.numberOfLines).toBe(1)
-  expect(screen.getByText('V', { includeHiddenElements: true })).toBeTruthy()
+  // No photo: the name's creature, a disc of its own (the initial on `surface` vanished into a card of the same colour).
+  expect(screen.getByTestId('person-creature', { includeHiddenElements: true })).toBeTruthy()
 })
 
 it('a small button in a row is centred on it, not pinned to its top', async () => {

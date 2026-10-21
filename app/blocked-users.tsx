@@ -1,7 +1,7 @@
 import { router } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import { FlatList, RefreshControl, StyleSheet, View } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Button } from '../components/ds/Button'
 import { StateScreen } from '../components/ds/StateScreen'
 import { TopBar } from '../components/ds/TopBar'
@@ -9,31 +9,11 @@ import { PersonRow } from '../components/friends/PersonRow'
 import { SkeletonCircle, SkeletonLine } from '../components/Skeleton'
 import { apiClient } from '../lib/apiClient'
 import { Logger } from '../lib/logger'
-import { getReportTypeLabel, unblockUser, type BlockedUser, type ReportType } from '../lib/safetyUtils'
+import { blockedLine } from '../lib/blockedLine'
+import { unblockUser, type BlockedUser } from '../lib/safetyUtils'
 import { showSheet } from '../lib/sheet'
 import { CONTROL, EMBER, GUTTER, SPACE } from '../lib/theme'
 import { useTopBarState } from '../lib/useTopBarState'
-
-/**
- * "Blocked Sep 12 · Harassment".
- *
- * The reason is the report's label, never the raw enum ("Reason:
- * inappropriate_messages"), and is left out when it is not one of them.
- */
-function blockedDetail(user: Pick<BlockedUser, 'blocked_at' | 'reason'>, now = new Date()): string {
-  const at = new Date(user.blocked_at)
-  const when = Number.isNaN(at.getTime())
-    ? null
-    : at.toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: at.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
-      })
-  // A reason `getReportTypeLabel` cannot name is not shown.
-  const label = user.reason ? getReportTypeLabel(user.reason as ReportType) : null
-  const reason = label === 'Unknown' ? null : label
-  return [when ? `Blocked ${when}` : 'Blocked', reason].filter(Boolean).join(' · ')
-}
 
 /**
  * The people you blocked, and a way to undo each.
@@ -49,6 +29,7 @@ export default function BlockedUsers() {
   const [refreshing, setRefreshing] = useState(false)
   const [failed, setFailed] = useState(false)
   const bar = useTopBarState()
+  const insets = useSafeAreaInsets()
 
   /*
    * The API client directly, not `getBlockedUsers` from safetyUtils: that one
@@ -109,10 +90,13 @@ export default function BlockedUsers() {
 
   const renderBlockedUser = ({ item }: { item: BlockedUser }) => {
     const name = item.blocked_user_name || 'Someone'
+    const line = blockedLine(item)
     return (
       <PersonRow
         person={{ userId: item.blocked_id, name, photo: item.blocked_user_photo }}
-        detail={blockedDetail(item)}
+        detail={line.detail}
+        detailMono={line.mono}
+        detailTail={line.tail}
         trailing={
           <Button kind="secondary" size="sm" label="Unblock" accessibilityLabel={`Unblock ${name}`} onPress={() => handleUnblock(item)} style={styles.centred} />
         }
@@ -137,7 +121,7 @@ export default function BlockedUsers() {
     )
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
+    <View style={styles.container}>
       <TopBar title="Blocked users" state={bar.state} onBack={() => router.back()} />
 
       {loading ? (
@@ -157,14 +141,15 @@ export default function BlockedUsers() {
           data={blockedUsers}
           keyExtractor={(item) => item.blocked_id}
           renderItem={renderBlockedUser}
-          contentContainerStyle={blockedUsers.length === 0 ? styles.emptyList : styles.listContent}
+          // The foot is the list's own padding: a wrapper that insets the screen cuts the scroll on a line above the home indicator.
+          contentContainerStyle={[blockedUsers.length === 0 ? styles.emptyList : styles.listContent, { paddingBottom: insets.bottom + SPACE.xl }]}
           ListEmptyComponent={renderEmptyState}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={EMBER.textSecondary} />}
           showsVerticalScrollIndicator={false}
           {...bar.scrollProps}
         />
       )}
-    </SafeAreaView>
+    </View>
   )
 }
 
