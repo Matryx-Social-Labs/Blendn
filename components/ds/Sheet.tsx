@@ -238,6 +238,11 @@ export type SheetProps = {
   /** Between the body and the actions: a reason list, a form. Scroll it yourself if it can outgrow the detent. */
   children?: ReactNode
   /**
+   * `false`: a question that must be answered (Flow 7 "Still at the event?"). No handle, a scrim and a drag that
+   * do nothing, system back ignored; only its actions close it. Default `true`.
+   */
+  dismissible?: boolean
+  /**
    * Once it has left the screen. iOS drops a Modal presented while another is
    * still leaving, so the next sheet (Block / Report, a composer) waits for this.
    */
@@ -258,6 +263,7 @@ function useSheetMotion({
   heights,
   opening,
   busy,
+  dismissible,
   requestClose,
   onGone,
   lift: liftTo,
@@ -278,6 +284,8 @@ function useSheetMotion({
   /** The index it opens at. */
   opening: number
   busy: boolean
+  /** A drag may dismiss it (`Sheet`'s `dismissible`). */
+  dismissible: boolean
   requestClose: () => void
   /** It has unmounted (Android); iOS reports through the Modal's own `onDismiss`. */
   onGone: () => void
@@ -390,7 +398,7 @@ function useSheetMotion({
     }, DRAG_CLOSE_ASK_MS)
   }, [requestClose, levels, offset, height, at, natural, flingV])
   const drag = Gesture.Pan()
-    .enabled(visible && !busy)
+    .enabled(visible && !busy && dismissible)
     .activeOffsetY([-SPACE.sm, SPACE.sm])
     .onUpdate((e) => {
       const stops = levels ?? [natural.get()]
@@ -452,7 +460,7 @@ function useSheetMotion({
  * ponytail: focus is not handed back to the opener on close (the opener
  * knows what it was); the material does not grow more opaque near full height.
  */
-export function Sheet({ visible, onClose, title, headerAction, headerNote, body, icon, actions = [], detents, children, focusRef, onDismissed, testID }: SheetProps) {
+export function Sheet({ visible, onClose, title, headerAction, headerNote, body, icon, actions = [], detents, children, dismissible = true, focusRef, onDismissed, testID }: SheetProps) {
   const android = Platform.OS === 'android'
   const insets = useSafeAreaInsets()
   const window = useWindowDimensions()
@@ -507,8 +515,8 @@ export function Sheet({ visible, onClose, title, headerAction, headerNote, body,
   const busy = actions.some((a) => a.loading)
   const sorted = [...actions].sort((a, b) => ORDER.indexOf(a.kind ?? 'secondary') - ORDER.indexOf(b.kind ?? 'secondary'))
   const requestClose = useCallback(() => {
-    if (!busy) onClose()
-  }, [busy, onClose])
+    if (!busy && dismissible) onClose()
+  }, [busy, dismissible, onClose])
   const stops = [...new Set(detents)].sort((a, b) => DETENT[a] - DETENT[b])
   const heights = stops.map((d) => Math.round(window.height * DETENT[d]))
   const frame = sheetFrame({
@@ -528,6 +536,7 @@ export function Sheet({ visible, onClose, title, headerAction, headerNote, body,
     heights,
     opening,
     busy,
+    dismissible,
     requestClose,
     lift: frame.lift,
     liftMs: keyboard?.duration,
@@ -585,7 +594,7 @@ export function Sheet({ visible, onClose, title, headerAction, headerNote, body,
             testID={testID && `${testID}-scrim`}
             style={[StyleSheet.absoluteFill, { backgroundColor: android ? tint(COLOR.ink, ANDROID_SCRIM) : COLOR.backdrop }, scrimStyle]}
           >
-            <Pressable style={StyleSheet.absoluteFill} accessible={false} onPress={requestClose} />
+            <Pressable style={StyleSheet.absoluteFill} accessible={false} onPress={dismissible ? requestClose : undefined} />
           </Animated.View>
           <Animated.View testID={testID && `${testID}-place`} accessibilityViewIsModal style={placeStyle}>
             <Material
@@ -601,15 +610,17 @@ export function Sheet({ visible, onClose, title, headerAction, headerNote, body,
             >
               <GestureDetector gesture={drag}>
                 <View style={styles.head}>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Dismiss"
-                    onPress={requestClose}
-                    hitSlop={{ bottom: minTarget() - SPACE.xl }}
-                    style={styles.handleHit}
-                  >
-                    <View testID={testID && `${testID}-handle`} style={[styles.handle, handle]} />
-                  </Pressable>
+                  {dismissible ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Dismiss"
+                      onPress={requestClose}
+                      hitSlop={{ bottom: minTarget() - SPACE.xl }}
+                      style={styles.handleHit}
+                    >
+                      <View testID={testID && `${testID}-handle`} style={[styles.handle, handle]} />
+                    </Pressable>
+                  ) : null}
                   {icon ? (
                     <View
                       accessibilityElementsHidden

@@ -2,6 +2,7 @@
  * About: our own documents open in the in-app browser (blendn.app only); the
  * map's credits — OpenStreetMap's ODbL one among them is required — are other
  * sites' and open in the system browser. A refused link was six dead rows.
+ * The version copies on a tap, and the grievance officer is a row that opens the mail app.
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native'
 import * as WebBrowser from 'expo-web-browser'
@@ -15,15 +16,17 @@ jest.mock('react-native-safe-area-context', () => ({
   SafeAreaView: require('react-native').View,
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
 }))
-jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }))
+jest.mock('../components/onboarding/Backdrop', () => ({ Backdrop: () => null, ORB_LEVEL: { landing: 1 } }))
+jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn().mockResolvedValue(true) }))
 jest.mock('../components/ds/TopBar', () => ({ TopBar: () => null }))
 jest.mock('../components/motion/ScalePress', () => ({ __esModule: true, default: require('react-native').Pressable }))
-jest.mock('../components/ui/Text', () => ({ Text: require('react-native').Text }))
 const mockToast = jest.fn()
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockToast }) }))
 
 /* eslint-disable import/first */
+import * as Clipboard from 'expo-clipboard'
 import AboutScreen from '../app/about'
+import { appVersionLabel, GRIEVANCE, grievanceMailto } from '../lib/support'
 import { BLENDN_LINKS } from '../lib/links'
 import { MAP_CREDITS } from '../lib/mapStyleEmber'
 /* eslint-enable import/first */
@@ -52,7 +55,7 @@ it.each([
 ])('%s opens in the in-app browser', async (title, url) => {
   const system = jest.spyOn(Linking, 'openURL').mockResolvedValue(true)
   await render(<AboutScreen />)
-  fireEvent.press(screen.getByLabelText(title))
+  fireEvent.press(screen.getByLabelText(new RegExp(`^${title}`)))
   await waitFor(() => expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(url, expect.any(Object)))
   expect(system).not.toHaveBeenCalled()
   system.mockRestore()
@@ -64,4 +67,35 @@ it('a link that will not open is a toast, not a silent row', async () => {
   fireEvent.press(screen.getByLabelText(/OpenFreeMap/))
   await waitFor(() => expect(mockToast).toHaveBeenCalledWith("That page didn't open. Try again.", 'error'))
   system.mockRestore()
+})
+
+describe('the version', () => {
+  it('copies on a tap and says what it copied, with no haptic of its own', async () => {
+    await render(<AboutScreen />)
+    fireEvent.press(screen.getByLabelText(/^Version /))
+    await waitFor(() => expect(Clipboard.setStringAsync).toHaveBeenCalledWith(appVersionLabel()))
+    await waitFor(() => expect(mockToast).toHaveBeenCalledWith(`Copied ${appVersionLabel()}`, 'success'))
+  })
+
+  it('says so when the clipboard refuses', async () => {
+    ;(Clipboard.setStringAsync as jest.Mock).mockRejectedValueOnce(new Error('no'))
+    await render(<AboutScreen />)
+    fireEvent.press(screen.getByLabelText(/^Version /))
+    await waitFor(() => expect(mockToast).toHaveBeenCalledWith("Couldn't copy that. Try again.", 'error'))
+  })
+})
+
+describe('the grievance officer', () => {
+  it('is named with the legal company and address, and the row opens the mail app', async () => {
+    const system = jest.spyOn(Linking, 'openURL').mockResolvedValue(true)
+    await render(<AboutScreen />)
+    const row = screen.getByTestId('about-grievances')
+    expect(row.props.accessibilityLabel).toContain(GRIEVANCE.officer)
+    expect(row.props.accessibilityLabel).toContain('Matryx Social Labs Private Limited')
+    expect(row.props.accessibilityLabel).toContain('opens your mail app')
+    fireEvent.press(row)
+    await waitFor(() => expect(system).toHaveBeenCalledWith(grievanceMailto()))
+    expect(grievanceMailto()).toContain('grievance@blendn.app')
+    system.mockRestore()
+  })
 })

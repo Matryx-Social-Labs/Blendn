@@ -168,6 +168,10 @@ import MicVocal from 'lucide-react-native/icons/mic-vocal'
 import Mountain, { __iconData as mountainData } from 'lucide-react-native/icons/mountain'
 import Palette from 'lucide-react-native/icons/palette'
 import Trophy from 'lucide-react-native/icons/trophy'
+// Flow 7 / 15 (account row, the Android OS line, a rating that is not open): the design's own glyphs.
+import AtSign from 'lucide-react-native/icons/at-sign'
+import SmartphoneNfc from 'lucide-react-native/icons/smartphone-nfc'
+import StarOff from 'lucide-react-native/icons/star-off'
 import { COLOR, ICON } from '../../lib/design/tokens'
 
 const ICONS = {
@@ -319,6 +323,9 @@ const ICONS = {
   mountain: Mountain,
   palette: Palette,
   trophy: Trophy,
+  'at-sign': AtSign,
+  'smartphone-nfc': SmartphoneNfc,
+  'star-off': StarOff,
 } as const satisfies Record<string, LucideIcon>
 
 export type IconName = keyof typeof ICONS

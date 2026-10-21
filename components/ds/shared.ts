@@ -160,3 +160,14 @@ const HueContext = createContext<Hue>('ember')
 export const HueProvider = HueContext.Provider
 export const useHue = () => useContext(HueContext)
 export const useSelection = (): Selection => SELECTION[useHue()]
+
+/**
+ * Geist Mono at 15/20, tabular: the value the Flow 7 frames draw in a chip or a card (the version, the OS, the account,
+ * the support address). The type scale has mono at 12 and 40 only, so this is the one design exception, named once here.
+ */
+export const monoValue = (bold: boolean) => ({
+  ...font('meta', bold, FONT_FAMILY.mono[500]),
+  // design-exception: Geist Mono at 15, the Flow 7 chip and card values (no mono role between 12 and 40)
+  fontSize: 15,
+  fontVariant: ['tabular-nums' as const],
+})

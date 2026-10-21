@@ -21,10 +21,21 @@ export function appVersionLabel(): string {
   return build ? `${version} (${build})` : version
 }
 
+/** The OS and its version apart ("iOS", "18.2"), for the Support card's own row. */
+export function platformParts(): { name: string; version: string } {
+  const name = Platform.OS === 'ios' ? 'iOS' : Platform.OS === 'android' ? 'Android' : Platform.OS
+  return { name, version: String(Platform.Version) }
+}
+
 /** "iOS 18.2", "Android 35". */
 export function platformLabel(): string {
-  const name = Platform.OS === 'ios' ? 'iOS' : Platform.OS === 'android' ? 'Android' : Platform.OS
-  return `${name} ${Platform.Version}`
+  const { name, version } = platformParts()
+  return `${name} ${version}`
+}
+
+/** An account id short enough to read aloud and to fit a row: "8f3a…c21e". The email carries the whole of it. */
+export function shortAccountId(id: string): string {
+  return id.length > 9 ? `${id.slice(0, 4)}…${id.slice(-4)}` : id
 }
 
 /**
@@ -50,4 +61,27 @@ export function supportMailto({
   ].filter(Boolean)
   const body = `\n\n\n--\n${details.join('\n')}`
   return `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+}
+
+/**
+ * The grievance officer the IT Rules 2021 (r.3(2)) ask every platform to name, with the legal name and the registered
+ * address: shown on About › Grievances, one place so it is corrected once. The legal name only here; everywhere else the
+ * company is Matrix Social Labs.
+ */
+export const GRIEVANCE = {
+  officer: 'Likhith Gowda',
+  email: 'grievance@blendn.app',
+  company: 'Matryx Social Labs Private Limited',
+  address: 'No 12, 11th Cross, near Kittur Rani Chennamma Road, Bendre Nagar, Banashankari 2nd Stage, Bengaluru 560070',
+} as const
+
+/** The row's hint on About: who, and where a notice can be sent. */
+export const GRIEVANCE_LINE = `Grievance officer: ${GRIEVANCE.officer} · ${GRIEVANCE.company}, ${GRIEVANCE.address}`
+
+export const grievanceMailto = () => `mailto:${GRIEVANCE.email}?subject=${encodeURIComponent("Blend'n grievance")}`
+
+/** A copy of someone's data (Flow 7 R4.1 7.2): a prefilled email to support, with the account in it. Nothing is sent until they press Send. */
+export const dataCopyMailto = (userId?: string | null) => {
+  const body = `\n\nPlease send me a copy of the data Blend'n holds about me.\n\n--\nApp: ${appVersionLabel()}${userId ? `\nAccount: ${userId}` : ''}`
+  return `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('A copy of my data')}&body=${encodeURIComponent(body)}`
 }

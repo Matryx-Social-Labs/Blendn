@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { AccessibilityInfo, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -40,6 +40,13 @@ export type StateScreenProps = {
   title: string
   /** One paragraph; the server's sentence verbatim where there is one. */
   body?: string
+  /**
+   * A phrase inside `body` that is a link (Flow 15 #1: the support address in the server's sentence), underlined
+   * and pressable in place. Ignored when `body` does not contain it. Its action is always also an action below.
+   */
+  bodyLink?: { text: string; onPress: () => void }
+  /** In place of the glyph well, a screen's own mark (Flow 15 #12: the disc on a not-found). Decorative. */
+  lead?: ReactNode
   note?: string
   /** Top to bottom in the fixed order. `kind` defaults to `primary`. */
   actions?: StateAction[]
@@ -60,7 +67,7 @@ export type StateScreenProps = {
  * Text scales freely; the well never does. Increase Contrast: the well's
  * hairline, a white glyph, secondary text lifted to white.
  */
-export function StateScreen({ icon, title, body, note, actions = [], busy = false, variant = 'inline', testID }: StateScreenProps) {
+export function StateScreen({ icon, title, body, bodyLink, lead, note, actions = [], busy = false, variant = 'inline', testID }: StateScreenProps) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const insets = useSafeAreaInsets()
@@ -73,11 +80,21 @@ export function StateScreen({ icon, title, body, note, actions = [], busy = fals
 
   const content = (
     <View style={styles.column}>
-      <GlyphWell icon={icon} size={variant} testID={testID && `${testID}-well`} />
+      {lead ? (
+        <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          {lead}
+        </View>
+      ) : (
+        <GlyphWell icon={icon} size={variant} testID={testID && `${testID}-well`} />
+      )}
       <Text accessibilityRole="header" style={[font('title', bold), styles.title]}>
         {title}
       </Text>
-      {body ? <Text style={[font('body', bold), styles.center, { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{body}</Text> : null}
+      {body ? (
+        <Text style={[font('body', bold), styles.center, { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>
+          <BodyWithLink body={body} link={bodyLink} />
+        </Text>
+      ) : null}
       {note ? <Text style={[font('meta', bold), styles.center, { color: contrast ? COLOR.textSecondary : COLOR.textTertiary }]}>{note}</Text> : null}
     </View>
   )
@@ -105,7 +122,23 @@ export function StateScreen({ icon, title, body, note, actions = [], busy = fals
   )
 }
 
+/** The paragraph, with `link.text` drawn as an underlined, pressable span in white (a nested Text, so it wraps with the sentence). */
+function BodyWithLink({ body, link }: { body: string; link?: StateScreenProps['bodyLink'] }) {
+  const at = link ? body.indexOf(link.text) : -1
+  if (!link || at < 0) return <>{body}</>
+  return (
+    <>
+      {body.slice(0, at)}
+      <Text accessibilityRole="link" onPress={link.onPress} style={styles.link}>
+        {link.text}
+      </Text>
+      {body.slice(at + link.text.length)}
+    </>
+  )
+}
+
 const styles = StyleSheet.create({
+  link: { color: COLOR.textPrimary, textDecorationLine: 'underline' },
   well: { borderRadius: RADIUS.capsule, backgroundColor: COLOR.surface, alignItems: 'center', justifyContent: 'center' },
   column: { alignItems: 'center', gap: SPACE.md },
   title: { color: COLOR.textPrimary, textAlign: 'center' },

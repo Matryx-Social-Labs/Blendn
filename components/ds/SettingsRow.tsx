@@ -25,6 +25,8 @@ export type SettingsRowProps = {
   onValueChange?: (next: boolean) => void
   /** A chevron or external row's action. */
   onPress?: () => void
+  /** What an external row does, for a screen reader (", opens in browser" by default; "opens your mail app" for a mailto). */
+  opens?: string
   /** Saving: a spinner beside the switch, which holds still. */
   busy?: boolean
   disabled?: boolean
@@ -64,6 +66,7 @@ export function SettingsRow({
   value = false,
   onValueChange,
   onPress,
+  opens = 'opens in browser',
   busy = false,
   disabled = false,
   error = false,
@@ -86,7 +89,7 @@ export function SettingsRow({
         onValueChange?.(!value)
       }
     : onPress
-  const external = trail === 'external' ? ', opens in browser' : ''
+  const external = trail === 'external' ? `, ${opens}` : ''
 
   return (
     <Pressable
