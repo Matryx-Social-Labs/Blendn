@@ -217,6 +217,7 @@ export default function ForgotPassword() {
                     setError(null)
                   }}
                   testID="forgot-different"
+                  style={styles.centred}
                 />
               </View>
             </Dock>
@@ -268,6 +269,7 @@ export default function ForgotPassword() {
 }
 
 const styles = StyleSheet.create({
+  centred: { alignSelf: 'center' },
   root: { flex: 1, backgroundColor: COLOR.ink },
   flex: { flex: 1 },
   scroll: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.xl, paddingBottom: SPACE.xl, gap: SPACE.lg },

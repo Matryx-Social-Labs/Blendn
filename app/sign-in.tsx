@@ -352,6 +352,8 @@ export default function SignIn() {
                   )
                 }
                 testID="sign-in-forgot"
+                // A small button hugs its label with alignSelf flex-start, which beats the wrapper's centring: centre it here.
+                style={styles.centred}
               />
             </View>
           ) : null}
@@ -365,6 +367,7 @@ export default function SignIn() {
 const MODE_LABELS = ['Sign in', 'Create account'] as const
 
 const styles = StyleSheet.create({
+  centred: { alignSelf: 'center' },
   root: { flex: 1, backgroundColor: COLOR.ink },
   flex: { flex: 1 },
   scroll: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.sm, paddingBottom: SPACE.xl, gap: SPACE.lg },
