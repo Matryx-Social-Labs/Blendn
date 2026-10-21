@@ -18,6 +18,7 @@ import { HERO_STRETCH_MAX, heroHeightFor, stretchScale } from '../components/pro
 import { nextPage } from '../components/profile/ProfileHeroPager'
 import { counterOf, pageAt } from '../components/profile/PhotoViewer'
 import { nightLabel, nightsView } from '../lib/meProfile'
+import { STAT_MAX } from '../components/profile/MeSections'
 import { SIZE, SPACE } from '../lib/design/tokens'
 /* eslint-enable import/first */
 
@@ -145,5 +146,11 @@ describe('the paged viewer', () => {
   it('names where you are for a set, and nothing for one photo', () => {
     expect(counterOf(1, 5)).toEqual({ text: '2 / 5', spoken: 'Photo 2 of 5' })
     expect(counterOf(0, 1)).toBeNull()
+  })
+})
+
+describe('worst-case data (break-ui)', () => {
+  it('never draws a stat past four digits', () => {
+    expect(STAT_MAX).toBe(9999)
   })
 })

@@ -13,6 +13,7 @@ import { font, HueProvider, useBoldText } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { useToast } from '../../components/Toast'
 import { ConnectSheet } from '../../components/grid/ConnectSheet'
+import { MessageRequestPrompt } from '../../components/profile/MessageRequestPrompt'
 import { PhotoViewer } from '../../components/profile/PhotoViewer'
 import { ProfileBar } from '../../components/profile/ProfileBar'
 import { dockClearance, ProfileDock } from '../../components/profile/ProfileDock'
@@ -26,6 +27,7 @@ import { likeRefusal } from '../../lib/likeRefusal'
 import { interestNames } from '../../lib/meProfile'
 import { profileIdentity, withheldUnlessVisible } from '../../lib/profileIdentity'
 import { aboutLine } from '../../lib/aboutYou'
+import { incomingRequestFrom } from '../../lib/friends'
 import { isGone } from '../../lib/loadFailure'
 import { Logger } from '../../lib/logger'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
@@ -69,12 +71,13 @@ interface UserProfileView {
   identityVisible: boolean
 }
 
-type ProfileCtaMode = 'self' | 'connect' | 'requested' | 'message'
+type ProfileCtaMode = 'self' | 'connect' | 'requested' | 'message' | 'declined'
 const CTA_LABEL: Record<ProfileCtaMode, string> = {
   self: 'You',
   requested: 'Requested',
   message: 'Message',
   connect: 'Connect',
+  declined: 'Declined',
 }
 
 /** The line under the action, said the way a person would. */
@@ -82,6 +85,7 @@ const CTA_HINT = {
   connect: 'Connect sends a request and reveals your name and photo.',
   requested: 'Request sent. You can chat once they accept.',
   message: 'You can message each other.',
+  declined: 'You declined this request.',
 } as const
 type ProfileConnection = NonNullable<UserProfileData['connection']>
 
@@ -142,6 +146,9 @@ function UserProfileInner() {
     scrollY.set(e.contentOffset.y)
   })
   const [connectSending, setConnectSending] = useState(false)
+  // A request they sent you, found in your pending ones: their note, and the answer in flight (R4.1 6.2).
+  const [incoming, setIncoming] = useState<{ id: string; note: string | null } | null>(null)
+  const [answering, setAnswering] = useState<'accept' | 'decline' | null>(null)
   // Who this is, as far as the server lets this screen say (`lib/profileIdentity`).
   const identity = profileIdentity(profile, { pseudonym, roomSeed })
 
@@ -180,6 +187,11 @@ function UserProfileInner() {
       } else if (connection.request) {
         setCtaMode('requested')
         setCtaMessage(CTA_HINT.requested)
+        // One they sent you: their note, and the answer, here (R4.1 6.2). Not found (a room handle): it stays "Requested".
+        if (connection.request === 'received') {
+          const pending = await apiClient.getMessageRequests({ status: 'pending' }, { force: true }).catch(() => null)
+          if (pending?.success && pending.data?.requests) setIncoming(incomingRequestFrom(pending.data.requests, targetUserId))
+        }
       } else {
         setCtaMode('connect')
         setCtaMessage(CTA_HINT.connect)
@@ -219,6 +231,7 @@ function UserProfileInner() {
               || (senderId === targetUserId && (!recipientId || recipientId === authUser.id)))
         })
         if (hasPending) {
+          setIncoming(incomingRequestFrom(requests, targetUserId))
           setCtaMode('requested')
           setCtaMessage(CTA_HINT.requested)
           return
@@ -416,13 +429,49 @@ function UserProfileInner() {
     }
   }, [profile, showToast])
 
+  /*
+   * Their request, answered from their profile (R4.1 6.2). Accept is the server's yes and then the chat; Decline tells them nothing
+   * and, since a pair has one request for all time, leaves nothing to offer here. A refusal says so and leaves the prompt as it was.
+   */
+  const answerRequest = async (action: 'accept' | 'decline') => {
+    if (!incoming || answering) return
+    setAnswering(action)
+    try {
+      const result = await apiClient.respondToMessageRequest(incoming.id, action)
+      if (!result.success) {
+        Logger.warn('profile', 'message request answer failed', { error: result.error })
+        showToast(`Couldn't ${action} that request. Try again.`, 'error', { haptic: 'error' })
+        return
+      }
+      setIncoming(null)
+      if (action === 'decline') {
+        setCtaMode('declined')
+        setCtaMessage(CTA_HINT.declined)
+        return
+      }
+      H.success()
+      const next = result.data?.conversationId ?? null
+      setConversationId(next)
+      setCtaMode('message')
+      setCtaMessage(CTA_HINT.message)
+      if (next) {
+        router.push({ pathname: '/private-chat/[conversationId]', params: { conversationId: next, otherUserId: profile?.user_id ?? '' } as any })
+      }
+    } catch (e) {
+      Logger.error('profile', 'message request answer error', { error: e })
+      showToast(`Couldn't ${action} that request. Try again.`, 'error', { haptic: 'error' })
+    } finally {
+      setAnswering(null)
+    }
+  }
+
   const openSafety = () => {
     if (!profile) return
     // Blocked: there is nothing left to look at here.
     showUserSafetyActions(identity.title, profile.user_id, () => router.back())
   }
 
-  const ctaDisabled = ctaMode === 'self' || ctaMode === 'requested'
+  const ctaDisabled = ctaMode === 'self' || ctaMode === 'requested' || ctaMode === 'declined'
 
   const back = () => router.back()
 
@@ -589,29 +638,41 @@ function UserProfileInner() {
 
       {/* The tray stays put while the bio, interests and gallery scroll beneath it: Like and Connect are in the thumb's reach on any phone. */}
       {showDock ? (
-        <ProfileDock testID="profile-dock" note={ctaMessage || null} onHeight={setDockHeight}>
-          {eventId ? (
-            <Button
-              kind={liked ? 'strong' : 'primary'}
-              label={liked ? 'Liked' : 'Like'}
-              accessibilityLabel={liked ? `Liked ${heroTitle}. You liked them` : `Like ${heroTitle}. They are only told if they like you back`}
-              leading={<Glyph name="heart" size={ICON.control} color={liked ? COLOR.ink : COLOR.textOnGradient} active={liked} play={liked} />}
-              pressHaptic={liked ? false : H.like}
-              loading={likeBusy && !liked}
-              onPress={handleLike}
-              style={styles.flex}
-              testID="profile-like"
+        <ProfileDock testID="profile-dock" note={incoming ? null : ctaMessage || null} onHeight={setDockHeight}>
+          {incoming ? (
+            <MessageRequestPrompt
+              name={heroTitle}
+              note={incoming.note}
+              answering={answering}
+              onAccept={() => void answerRequest('accept')}
+              onDecline={() => void answerRequest('decline')}
             />
-          ) : null}
-          <Button
-            kind="secondary"
-            label={CTA_LABEL[ctaMode]}
-            accessibilityLabel={ctaMode === 'connect' ? `Connect with ${heroTitle}. Sends a message and shows them your name and photo` : undefined}
-            disabled={ctaDisabled}
-            onPress={ctaMode === 'connect' ? () => setConnectOpen(true) : handleConnect}
-            style={styles.flex}
-            testID="profile-cta"
-          />
+          ) : (
+            <>
+            {eventId ? (
+              <Button
+                kind={liked ? 'strong' : 'primary'}
+                label={liked ? 'Liked' : 'Like'}
+                accessibilityLabel={liked ? `Liked ${heroTitle}. You liked them` : `Like ${heroTitle}. They are only told if they like you back`}
+                leading={<Glyph name="heart" size={ICON.control} color={liked ? COLOR.ink : COLOR.textOnGradient} active={liked} play={liked} />}
+                pressHaptic={liked ? false : H.like}
+                loading={likeBusy && !liked}
+                onPress={handleLike}
+                style={styles.flex}
+                testID="profile-like"
+              />
+            ) : null}
+            <Button
+              kind="secondary"
+              label={CTA_LABEL[ctaMode]}
+              accessibilityLabel={ctaMode === 'connect' ? `Connect with ${heroTitle}. Sends a message and shows them your name and photo` : undefined}
+              disabled={ctaDisabled}
+              onPress={ctaMode === 'connect' ? () => setConnectOpen(true) : handleConnect}
+              style={styles.flex}
+              testID="profile-cta"
+            />
+            </>
+          )}
         </ProfileDock>
       ) : null}
 

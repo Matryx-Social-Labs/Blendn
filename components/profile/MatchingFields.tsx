@@ -51,6 +51,9 @@ import { SPACE } from '../../lib/design/tokens'
  * impossible to tell from an intentional change.
  */
 
+/** The server's own cap (`maxExpertise`), used until it has answered. */
+const DEFAULT_MAX_EXPERTISE = 3
+
 export type Intent = 'dating' | 'networking' | 'friendship' | 'just_here'
 
 export const INTENTS: { value: Intent; label: string; hint?: string }[] = [
@@ -81,6 +84,15 @@ export interface MatchingFieldsProps {
    */
   afterIntents?: ReactNode
   /**
+   * Step 2 of the field of work (Flow 14 · 14.3, served by `GET /work-fields`): what they do within it, up to `maxExpertise` chips from
+   * their field's list. Offered only by a host that passes the list, so onboarding is unchanged; the host clears them silently when the
+   * field changes. A field with no list (Something else) draws no step.
+   */
+  expertiseOptions?: { slug: string; label: string }[]
+  expertise?: string[]
+  maxExpertise?: number
+  onChangeExpertise?: (next: string[]) => void
+  /**
    * Whether this person may be offered dating (`mayDate`). Required, so every
    * host decides: when false, neither the Dating chip nor the gender and
    * orientation questions it opens are shown (SCRUM-294).
@@ -102,6 +114,10 @@ export function MatchingFields({
   onChangeInterestedIn,
   afterIntents,
   offerDating,
+  expertiseOptions,
+  expertise = [],
+  maxExpertise = DEFAULT_MAX_EXPERTISE,
+  onChangeExpertise,
 }: MatchingFieldsProps) {
   const wantsDating = offerDating && intents.includes('dating')
   const offered = offerDating ? INTENTS : INTENTS.filter((intent) => intent.value !== 'dating')
@@ -183,6 +199,22 @@ export function MatchingFields({
           testID="matching-work-field"
         />
       </View>
+
+      {workField && expertiseOptions?.length && onChangeExpertise ? (
+        <View style={styles.set}>
+          {/* The same rule as interests: the rest dim at the cap and say why, rather than a tap that does nothing. */}
+          <ChipSet
+            label="WHAT KIND?"
+            items={expertiseOptions.map((e) => ({ key: e.slug, label: e.label }))}
+            selection="multi"
+            selected={expertise}
+            max={maxExpertise}
+            capHint={`Up to ${maxExpertise}`}
+            onToggle={(slug) => onChangeExpertise(expertise.includes(slug) ? expertise.filter((x) => x !== slug) : [...expertise, slug])}
+            testID="matching-expertise"
+          />
+        </View>
+      ) : null}
     </>
   )
 }

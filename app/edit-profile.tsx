@@ -71,6 +71,7 @@ function formSnapshot(f: {
   lookingFor: string[]
   intents: string[]
   workField: string | null
+  expertise: string[]
   gender: string | null
   orientations: string[]
   interestedIn: string[]
@@ -116,6 +117,10 @@ function EditProfileContent() {
   const [intents, setIntents] = useState<Intent[]>([])
   const [workField, setWorkField] = useState<string | null>(null)
   const [workFields, setWorkFields] = useState<{ slug: string; label: string }[]>([])
+  // Step 2 of the field of work: what they do within it (14.3, served by `GET /work-fields`).
+  const [expertise, setExpertise] = useState<string[]>([])
+  const [expertiseByField, setExpertiseByField] = useState<Record<string, { slug: string; label: string }[]>>({})
+  const [maxExpertise, setMaxExpertise] = useState(3)
   const [gender, setGender] = useState<Gender | null>(null)
   const [orientations, setOrientations] = useState<Orientation[]>([])
   const [interestedIn, setInterestedIn] = useState<Gender[]>([])
@@ -123,10 +128,11 @@ function EditProfileContent() {
   const [matchingAtLoad, setMatchingAtLoad] = useState<{
     intents: Intent[]
     workField: string | null
+    expertise: string[]
     gender: Gender | null
     orientations: Orientation[]
     interestedIn: Gender[]
-  }>({ intents: [], workField: null, gender: null, orientations: [], interestedIn: [] })
+  }>({ intents: [], workField: null, expertise: [], gender: null, orientations: [], interestedIn: [] })
 
   /*
    * The age dating is offered on: the one being typed in this form when it is a
@@ -160,7 +166,7 @@ function EditProfileContent() {
   const pendingLeave = useRef<NavigationAction | null>(null)
   const currentSnapshot = formSnapshot({
     name, age, location, phone, occupation, education, bio, interestIds, goals, lookingFor,
-    intents, workField, gender, orientations, interestedIn,
+    intents, workField, expertise, gender, orientations, interestedIn,
   })
   const dirty = savedSnapshot !== null && currentSnapshot !== savedSnapshot
 
@@ -271,17 +277,20 @@ function EditProfileContent() {
         const p2 = profileData.profile
         const loadedIntents = normaliseIntents((p2?.intent_default || []) as Intent[])
         const loadedWorkField = p2?.work_field ?? null
+        const loadedExpertise = Array.isArray(p2?.expertise) ? (p2.expertise as string[]) : []
         const loadedGender = (p2?.gender ?? null) as Gender | null
         const loadedOrientations = (p2?.orientations || []) as Orientation[]
         const loadedInterestedIn = (p2?.interested_in || []) as Gender[]
         setIntents(loadedIntents)
         setWorkField(loadedWorkField)
+        setExpertise(loadedExpertise)
         setGender(loadedGender)
         setOrientations(loadedOrientations)
         setInterestedIn(loadedInterestedIn)
         setMatchingAtLoad({
           intents: loadedIntents,
           workField: loadedWorkField,
+          expertise: loadedExpertise,
           gender: loadedGender,
           orientations: loadedOrientations,
           interestedIn: loadedInterestedIn,
@@ -300,13 +309,18 @@ function EditProfileContent() {
           lookingFor: combinedProfile.looking_for || [],
           intents: loadedIntents,
           workField: loadedWorkField,
+          expertise: loadedExpertise,
           gender: loadedGender,
           orientations: loadedOrientations,
           interestedIn: loadedInterestedIn,
         }))
 
         const fields = await apiClient.getWorkFields()
-        if (fields.success && fields.data?.workFields) setWorkFields(fields.data.workFields)
+        if (fields.success && fields.data?.workFields) {
+          setWorkFields(fields.data.workFields)
+          setExpertiseByField(fields.data.expertiseByField ?? {})
+          if (fields.data.maxExpertise) setMaxExpertise(fields.data.maxExpertise)
+        }
 
       } catch (error) {
         Logger.error('profile', 'EditProfile: Load profile error', { error })
@@ -320,6 +334,13 @@ function EditProfileContent() {
       loadProfile()
     }
   }, [authUser, showToast])
+
+  /** A new field clears what they do within the old one, silently: the server prunes the same way, so a stale chip never saves. */
+  const changeWorkField = (slug: string | null) => {
+    setWorkField(slug)
+    const keep = new Set((slug ? expertiseByField[slug] : [])?.map((e) => e.slug))
+    setExpertise((prev) => prev.filter((e) => keep.has(e)))
+  }
 
   const handleSave = async () => {
     if (!authUser) return
@@ -370,6 +391,7 @@ function EditProfileContent() {
       const savedIntents = mayDate(liveAge) ? intents : intents.filter((i) => i !== 'dating')
       if (!same(savedIntents, matchingAtLoad.intents)) updateData.intent_default = savedIntents
       if (workField !== matchingAtLoad.workField) updateData.work_field = workField
+      if (!same(expertise, matchingAtLoad.expertise)) updateData.expertise = expertise
       /*
        * The dating three are sent only while dating is ticked -- untick it and
        * they stop being asked, so continuing to write them would keep
@@ -481,7 +503,11 @@ function EditProfileContent() {
               intents={intents}
               onToggleIntent={onToggleIntent}
               workField={workField}
-              onChangeWorkField={setWorkField}
+              onChangeWorkField={changeWorkField}
+              expertiseOptions={workField ? expertiseByField[workField] : undefined}
+              expertise={expertise}
+              maxExpertise={maxExpertise}
+              onChangeExpertise={setExpertise}
               workFields={workFields}
               gender={gender}
               onChangeGender={setGender}
@@ -680,7 +706,7 @@ const CARD_GAP = 14
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLOR.ink },
   content: { flex: 1 },
-  column: { paddingHorizontal: SPACE.gutter, gap: SPACE.lg },
+  column: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.sm, gap: SPACE.lg },
   card: { backgroundColor: COLOR.surface, borderRadius: RADIUS.card, padding: CARD_PAD, gap: CARD_GAP },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
   cardTitle: { color: COLOR.textSecondary },

@@ -115,3 +115,15 @@ export function friendsSinceLabel(iso: string): string {
   if (Number.isNaN(date.getTime())) return 'Friends'
   return `Friends since ${MONTHS[date.getMonth()]} ${date.getFullYear()}`
 }
+
+/**
+ * The request `senderId` sent you, among your pending ones: its id and the note as they wrote it, or null. Matched on the sender's
+ * real id, so a profile opened by a room handle finds none and stays "Requested" (the server names nobody before a reveal).
+ */
+export function incomingRequestFrom(
+  requests: readonly { id: string; senderId?: string; message?: string | null; status?: string }[],
+  senderId: string
+): { id: string; note: string | null } | null {
+  const found = requests.find((r) => String(r.senderId ?? '').trim() === senderId && String(r.status ?? 'pending').toLowerCase() === 'pending')
+  return found ? { id: found.id, note: found.message?.trim() || null } : null
+}

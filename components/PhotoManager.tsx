@@ -57,6 +57,7 @@ export default function PhotoManager({ userId, maxPhotos = 6 }: PhotoManagerProp
   const [pending, setPending] = useState<Pending | null>(null)
   const [uploading, setUploading] = useState(false)
   const writing = useRef(false)
+  const addedCount = useRef(0)
   const [saving, setSaving] = useState(false)
   const busy = uploading || saving
   const { showToast } = useToast()
@@ -116,7 +117,8 @@ export default function PhotoManager({ userId, maxPhotos = 6 }: PhotoManagerProp
    * returning false, never by throwing; ignoring it logged "Photo added" for a tile that was gone on the next load.
    */
   const putOnProfile = async (url: string, path?: string) => {
-    const newPhoto: ProfilePhoto = { id: `${userId}_${photos.length}`, url, order: photos.length, isPrimary: photos.length === 0 }
+    // A key of its own: an index-built one repeats after a photo is removed or moved, and two tiles would share one.
+    const newPhoto: ProfilePhoto = { id: `${userId}_new_${(addedCount.current += 1)}`, url, order: photos.length, isPrimary: photos.length === 0 }
     setPhotos((prev) => [...prev, newPhoto])
     setPending(null)
     const saved = await reorderPhotos(userId, [...photos.map((p) => p.url), url], photos[0]?.url)

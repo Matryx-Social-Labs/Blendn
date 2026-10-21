@@ -110,3 +110,54 @@ it('holds Save while offline and says so', async () => {
   await fireEvent.press(screen.getByText('Save'))
   expect(api.updateProfile).not.toHaveBeenCalled()
 })
+
+describe('expertise, step 2 of the field of work (14.3)', () => {
+  const WORK = {
+    success: true,
+    data: {
+      workFields: [{ slug: 'design', label: 'Design' }, { slug: 'finance', label: 'Finance' }],
+      expertiseByField: {
+        design: [{ slug: 'design_product', label: 'Product design' }, { slug: 'design_ux', label: 'UX research' }],
+        finance: [{ slug: 'finance_banking', label: 'Banking' }],
+      },
+      maxExpertise: 3,
+    },
+  }
+  const PROFILE = { ...LOADED, data: { ...LOADED.data, profile: { ...LOADED.data.profile, work_field: 'design', expertise: ['design_product'] } } }
+
+  beforeEach(() => {
+    api.getProfile.mockResolvedValue(PROFILE as never)
+    api.getWorkFields.mockResolvedValue(WORK as never)
+  })
+
+  it('offers the chips of the chosen field, with the saved ones on', async () => {
+    await render(<EditProfile />)
+    await screen.findByText('Product design')
+    expect(screen.getByText('UX research')).toBeTruthy()
+    expect(screen.queryByText('Banking')).toBeNull()
+  })
+
+  it('sends the expertise only when it changed', async () => {
+    await render(<EditProfile />)
+    await screen.findByText('UX research')
+    await fireEvent.press(screen.getByText('Save'))
+    await waitFor(() => expect(api.updateProfile).toHaveBeenCalled())
+    expect(api.updateProfile.mock.calls[0][1]).not.toHaveProperty('expertise')
+
+    api.updateProfile.mockClear()
+    await fireEvent.press(screen.getByText('UX research'))
+    await fireEvent.press(screen.getByText('Save'))
+    await waitFor(() => expect(api.updateProfile).toHaveBeenCalled())
+    expect(api.updateProfile.mock.calls[0][1]).toMatchObject({ expertise: ['design_product', 'design_ux'] })
+  })
+
+  it('clears them silently when the field changes, and sends the empty list with the new field', async () => {
+    await render(<EditProfile />)
+    await screen.findByText('UX research')
+    await fireEvent.press(screen.getByText('Finance'))
+    await waitFor(() => expect(screen.queryByText('UX research')).toBeNull())
+    await fireEvent.press(screen.getByText('Save'))
+    await waitFor(() => expect(api.updateProfile).toHaveBeenCalled())
+    expect(api.updateProfile.mock.calls[0][1]).toMatchObject({ work_field: 'finance', expertise: [] })
+  })
+})

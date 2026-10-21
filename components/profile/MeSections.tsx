@@ -13,6 +13,8 @@ import type { Rect } from '../ds/chatShared'
 /** Flow 6 `me`: the header's text column sits 6 pt apart, between the 4 and 8 steps. */
 // design-exception: the frame's name block gap is 6
 const IDENTITY_GAP = 6
+/** A stat never draws past four digits: five would outgrow a column of the card (the spoken label keeps the true number). */
+export const STAT_MAX = 9999
 /** The skeleton's blocks, at the final geometry (Flow 6 `me` 07). */
 const SKELETON = { name: 36, line: 16, button: 44, buttonWidth: 140, stats: 96, nights: 220 } as const
 
@@ -84,7 +86,7 @@ function Stat({ value, label, onPress, hint = 'Opens Going' }: { value: number; 
   const bold = useBoldText()
   const body = (
     <>
-      <RollingNumber value={value} role="title" />
+      <RollingNumber value={Math.min(value, STAT_MAX)} role="title" />
       <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('label', bold), styles.muted]}>
         {label}
       </Text>

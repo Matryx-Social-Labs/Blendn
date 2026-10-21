@@ -29,6 +29,7 @@ jest.mock('../lib/apiClient', () => ({
     getMessageRequests: jest.fn(),
     createMessageRequest: jest.fn(),
     likeAtEvent: jest.fn(),
+    respondToMessageRequest: jest.fn(),
   },
 }))
 jest.mock('../lib/safetyUtils', () => ({ showUserSafetyActions: jest.fn() }))
@@ -379,4 +380,57 @@ it('leaves the profile after blocking from it', async () => {
   const onBlock = (showUserSafetyActions as jest.Mock).mock.calls[0][2]
   onBlock()
   expect(router.back).toHaveBeenCalled()
+})
+
+describe('a request they sent you, opened from their profile (R4.1 6.2)', () => {
+  const RECEIVED = { ...BEN, id: 'u_ben', connection: { conversationId: null, request: 'received' as const } }
+  const pending = [{ id: 'req-1', senderId: 'u_ben', message: 'Saw you at Toit. Coffee?', status: 'pending' }]
+
+  beforeEach(() => {
+    mockParams = { id: 'u_ben' }
+    api.getPublicProfile.mockResolvedValue({ success: true, data: RECEIVED })
+    api.getMessageRequests.mockResolvedValue({ success: true, data: { requests: pending } } as never)
+  })
+
+  it('shows who asked and their note verbatim, with Decline and Accept in the tray', async () => {
+    await render(<UserProfile />)
+    expect(await screen.findByText('Ben wants to message you')).toBeTruthy()
+    expect(screen.getByText('Saw you at Toit. Coffee?')).toBeTruthy()
+    expect(screen.getByLabelText('Accept Ben’s request')).toBeTruthy()
+    expect(screen.getByLabelText('Decline Ben’s request')).toBeTruthy()
+    // The tray is theirs: no Like and no Connect beside it.
+    expect(screen.queryByText('Connect')).toBeNull()
+  })
+
+  it('Accept answers that request, says success once, and opens the chat', async () => {
+    api.respondToMessageRequest.mockResolvedValue({ success: true, data: { success: true, status: 'accepted', conversationId: 'conv-5', sender: { id: 'u_ben', name: 'Ben', avatar: null } } })
+    await render(<UserProfile />)
+    await fireEvent.press(await screen.findByLabelText('Accept Ben’s request'))
+    await waitFor(() => expect(api.respondToMessageRequest).toHaveBeenCalledWith('req-1', 'accept'))
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith(expect.objectContaining({ params: expect.objectContaining({ conversationId: 'conv-5' }) })))
+  })
+
+  it('Decline answers it and leaves nothing to offer, since a pair has one request for all time', async () => {
+    api.respondToMessageRequest.mockResolvedValue({ success: true, data: { success: true, status: 'declined', conversationId: null, sender: { id: 'u_ben', name: 'Ben', avatar: null } } })
+    await render(<UserProfile />)
+    await fireEvent.press(await screen.findByLabelText('Decline Ben’s request'))
+    await waitFor(() => expect(api.respondToMessageRequest).toHaveBeenCalledWith('req-1', 'decline'))
+    expect(await screen.findByText('Declined')).toBeTruthy()
+    expect(screen.queryByText('Ben wants to message you')).toBeNull()
+  })
+
+  it('a refused answer says so and keeps the prompt', async () => {
+    api.respondToMessageRequest.mockResolvedValue({ success: false, error: 'nope' })
+    await render(<UserProfile />)
+    await fireEvent.press(await screen.findByLabelText('Accept Ben’s request'))
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("Couldn't accept that request. Try again.", 'error', { haptic: 'error' }))
+    expect(screen.getByText('Ben wants to message you')).toBeTruthy()
+  })
+
+  it('stays Requested when the request cannot be matched (a room handle)', async () => {
+    api.getMessageRequests.mockResolvedValue({ success: true, data: { requests: [{ ...pending[0], senderId: 'u_other' }] } } as never)
+    await render(<UserProfile />)
+    expect(await screen.findByText('Requested')).toBeTruthy()
+    expect(screen.queryByText('Ben wants to message you')).toBeNull()
+  })
 })
