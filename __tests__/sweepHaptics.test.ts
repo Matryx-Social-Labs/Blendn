@@ -12,11 +12,12 @@ const code = (rel: string) =>
     .replace(/^\s*\/\/.*$/gm, '')
 
 describe('what a save, a refresh and a failure play', () => {
-  it('saving an event plays no Success (a failure plays its error through the tray, once)', () => {
+  it('saving an event plays no Success (a failure plays its error through its toast, once)', () => {
     const src = code('app/(tabs)/events.tsx')
     const toggle = src.slice(src.indexOf('const toggleInterest'), src.indexOf('const handleCheckOut'))
     expect(toggle).not.toMatch(/H\.success/)
-    expect(toggle.match(/H\.error\(\)/g)).toHaveLength(1)
+    expect(toggle).not.toMatch(/H\.error/)
+    expect(toggle.match(/haptic: 'error'/g)).toHaveLength(1)
   })
 
   it('a pull to refresh in Places is silent: H.threshold is "armed", and RefreshControl reports only the start', () => {

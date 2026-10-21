@@ -150,7 +150,7 @@ export function EventCard(props: EventCardProps) {
             </Text>
           ) : null}
           <View testID={testID && `${testID}-thumb`} style={styles.thumb}>
-            {cover ? <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} /> : null}
+            {cover ? <Image source={{ uri: cover }} recyclingKey={cover} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} /> : null}
           </View>
           <View style={styles.rowText}>
             <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold), styles.ink]}>
@@ -193,7 +193,7 @@ export function EventCard(props: EventCardProps) {
         {...a11y}
         style={[styles.card, { borderRadius: radius }]}
       >
-        {cover ? <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} /> : null}
+        {cover ? <Image source={{ uri: cover }} recyclingKey={cover} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} /> : null}
         <PhotoScrim testID={testID && `${testID}-scrim`} contrast={contrast} style={styles.scrim} />
         <View style={styles.pills}>
           <TimeBadge when={time} />
