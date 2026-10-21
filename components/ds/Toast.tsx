@@ -6,7 +6,8 @@ import { useKeyboardContext } from 'react-native-keyboard-controller'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { scheduleOnRN } from 'react-native-worklets'
 
-import { Icon, type IconName } from '../ui/Icon'
+import { Glyph } from '../ui/Glyph'
+import { type IconName } from '../ui/Icon'
 import { Material } from '../ui/Material'
 import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, MATERIAL, RADIUS, SIZE, SPACE, SPRING, TYPE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
@@ -195,9 +196,14 @@ export function Toast({ kind = 'info', text, action, onDismiss, aboveTabBar = fa
   const { leave, swipe, motion, height } = useToastMotion(onDismiss)
   const dwell = useDwell(toastDwell(text, { action: !!action, screenReader }), leave)
 
+  // Success draws its check on the frame the haptic plays: `Glyph` plays on a false → true, so it is lit as the toast mounts.
+  const [lit, setLit] = useState(false)
   useEffect(() => {
     const played = haptic ?? (kind === 'info' ? undefined : kind)
     if (!silent && played) H[played]()
+    // `Glyph` plays on the edge false → true after mount, so a mounted toast is lit once, on the frame the haptic plays.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLit(true)
     if (!android) AccessibilityInfo.announceForAccessibility(action ? `${text.replace(/[.!?]$/, '')}. ${action.label} is available.` : text)
     // Once, as it appears.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -213,7 +219,7 @@ export function Toast({ kind = 'info', text, action, onDismiss, aboveTabBar = fa
   const content = (
     <>
       {look.tint ? <View testID={testID && `${testID}-tint`} style={[StyleSheet.absoluteFill, { backgroundColor: look.tint }]} /> : null}
-      <Icon name={look.icon} size={ICON.control} />
+      <Glyph name={look.icon} size={ICON.control} play={kind === 'success' ? lit : undefined} testID={testID && `${testID}-glyph`} />
       <Text style={[font('meta', bold, android ? undefined : FONT_FAMILY.brand[500]), styles.text]}>{text}</Text>
       {action ? (
         <Pressable

@@ -156,6 +156,16 @@ describe('states', () => {
     expect(onPress).not.toHaveBeenCalled()
   })
 
+  it('enabled ↔ disabled crosses over quick on the gentle curve, so a count arriving or a field becoming valid never snaps', async () => {
+    await draw()
+    expect(flat('b').opacity).toBe(1)
+    const transition = (id: string) => String(StyleSheet.flatten(screen.getByTestId(id).props.jestInlineStyle).transition)
+    expect(transition('b')).toBe('opacity 160ms cubic-bezier(0.33, 1, 0.68, 1)')
+    await screen.rerender(<Button label="I’m going" onPress={jest.fn()} disabled testID="b" />)
+    expect(flat('b').opacity).toBe(OPACITY.disabled)
+    expect(transition('b')).toBe('opacity 160ms cubic-bezier(0.33, 1, 0.68, 1)')
+  })
+
   it('loading: busy at once, the spinner only after 300 ms, the label kept for width and name', async () => {
     jest.useFakeTimers()
     const onPress = jest.fn()
