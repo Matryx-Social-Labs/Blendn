@@ -53,7 +53,6 @@ describe('text in a fixed-height box is capped', () => {
 
 describe('decoration is hidden from the accessibility tree', () => {
   const DECORATIVE: Array<[string, string[]]> = [
-    ['the splash animation', ['components', 'IntroAnimation.tsx']],
     ['the permission illustrations', ['components', 'onboarding', 'PermissionIllustration.tsx']],
     ['the lockup on the entry screens', ['components', 'onboarding', 'Lockup.tsx']],
   ]

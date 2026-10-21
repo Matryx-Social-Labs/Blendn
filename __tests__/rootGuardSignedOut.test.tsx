@@ -63,7 +63,6 @@ jest.mock('../lib/sentry', () => ({
 jest.mock('../lib/onboardingStorage', () => ({ readOnboarding: jest.fn(async () => null) }))
 jest.mock('../lib/pushDecline', () => ({ hasDeclinedPush: jest.fn(async () => false) }))
 jest.mock('../lib/onboardingAssets', () => ({ ONBOARDING_IMAGES: [], prefetchOnboardingImages: jest.fn() }))
-jest.mock('../components/IntroAnimation', () => ({ IntroAnimation: () => null }))
 jest.mock('../components/PresenceMonitor', () => ({ PresenceMonitor: () => null }))
 jest.mock('../components/LiveAtVenue', () => ({ LiveAtVenue: () => null }))
 jest.mock('../components/SheetHost', () => ({ SheetHost: () => null }))
