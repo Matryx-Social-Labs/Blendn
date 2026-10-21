@@ -297,7 +297,7 @@ function ProfileInner() {
   const openFriends = () => router.push('/friends')
   const openWhatsOn = () => router.navigate('/(tabs)/events' as never)
 
-  // The bar's circles start at the inset and end `circle` below it; the page begins 18 pt under them (Flow 6 `me`: circles at 62, the column at 124).
+  // The bar's circles start just under the inset and end `circle` below it; the page begins 18 pt under them (Flow 6 `me`: circles at 62, the column at 124).
   const barBottom = barCircleBottom(insets.top, Platform.OS === 'android')
   const chrome = (
     <ProfileBar

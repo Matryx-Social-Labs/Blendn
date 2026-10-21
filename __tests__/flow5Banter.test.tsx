@@ -320,3 +320,30 @@ describe('the unread dot never grows from nothing (DS #28)', () => {
     expect(require('fs').readFileSync(require.resolve('../components/banter/BanterParts'), 'utf8')).not.toMatch(/ZoomIn/)
   })
 })
+
+describe('the header’s height (Flow 5 Banter: 116 on a 402 pt iPhone)', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const parts = require('../components/banter/BanterParts') as typeof import('../components/banter/BanterParts')
+
+  it('is the bar geometry, per platform, and the same number the list below is laid out from', () => {
+    expect(parts.banterHeaderHeight(59, false)).toBe(59 + 2 + 44 + 10)
+    expect(parts.banterHeaderHeight(24, true)).toBe(24 + 2 + 48 + 10)
+  })
+
+  it('the title cannot outgrow the circle row, so the header never grows with the text size', () => {
+    // Display is a 40 pt line in a 44 pt row (48 on Android): 1.1 and 1.2 at most.
+    expect(parts.titleScaleCap(false) * 40).toBeLessThanOrEqual(44)
+    expect(parts.titleScaleCap(true) * 40).toBeLessThanOrEqual(48)
+  })
+
+  it('draws the header at exactly that height, starting under the inset', async () => {
+    mockAuth.user = { id: 'me' } as never
+    await render(<Banter />)
+    await act(async () => {})
+    const title = screen.getByRole('header', { name: 'Banter' })
+    expect(title.props.maxFontSizeMultiplier).toBe(parts.titleScaleCap(false))
+    const header = require('react-native').StyleSheet.flatten(title.parent!.props.style)
+    expect(header.height).toBe(parts.banterHeaderHeight(0, false))
+    expect(header.paddingTop).toBe(2)
+  })
+})

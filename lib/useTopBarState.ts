@@ -23,8 +23,8 @@ export function useTopBarState(): { state: TopBarState; scrollProps: { onScroll:
 }
 
 /**
- * How tall the pushed screen's `TopBar` is at rest: the top inset, the back circle (44 iOS · 48 Android), and 10 under
- * it (`lib/barGeometry`). Pure, so a screen's layout can be pinned without a device.
+ * How tall the pushed screen's `TopBar` is at rest: the top inset and 2, the back circle (44 iOS · 48 Android), and 10
+ * under it (`lib/barGeometry`). Pure, so a screen's layout can be pinned without a device.
  */
 export function topBarHeight(insetTop: number, android: boolean): number {
   return barHeight(insetTop, android)
@@ -33,7 +33,7 @@ export function topBarHeight(insetTop: number, android: boolean): number {
 /**
  * The bar over its content, as the TopBar page draws it: the content scrolls UNDER the bar, and the glass tier fades
  * in behind the title once it has (`state`). So the bar is pinned over the scroller (`barPin`), and the scroller's
- * first row starts below it (`contentTop`: the bar and 8 more, the frame's 124 pt on a 62 pt inset) with its
+ * first row starts below it (`contentTop`: the bar and 8 more, the frame's 124 pt under a 59 pt status bar) with its
  * indicator clear of it (`indicatorTop`).
  *
  * ```tsx

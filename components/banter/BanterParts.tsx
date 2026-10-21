@@ -1,12 +1,12 @@
-import { BAR_BOTTOM, barHeight, barTop } from '../../lib/barGeometry'
+import { BAR_BOTTOM, barCircle, barHeight, barTop } from '../../lib/barGeometry'
 import { useBanterPress } from './pressGuard'
 import { Image } from 'expo-image'
 import type { ReactNode } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import Animated, { Easing, FadeOut, withTiming } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
 import { OPACITY } from '../../lib/theme'
 import { chatClock } from '../../lib/time'
@@ -55,9 +55,11 @@ export function BanterHeader({
 }) {
   const insets = useSafeAreaInsets()
   const bold = useBoldText()
+  const android = Platform.OS === 'android'
   return (
-    <Material role="bar" style={[styles.header, { paddingTop: barTop(insets.top) }]}>
-      <Text accessibilityRole="header" numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('display', bold), styles.ink, styles.grow]}>
+    // The height is the one the list below is laid out from (`banterHeaderHeight`), so it cannot drift from it.
+    <Material role="bar" style={[styles.header, { paddingTop: barTop(insets.top), height: banterHeaderHeight(insets.top, android) }]}>
+      <Text accessibilityRole="header" numberOfLines={1} maxFontSizeMultiplier={titleScaleCap(android)} style={[font('display', bold), styles.ink, styles.grow]}>
         Banter
       </Text>
       <View style={styles.actions}>
@@ -69,8 +71,11 @@ export function BanterHeader({
   )
 }
 
-/** The header's height under the status bar: the frames' 116 on a 402 pt iPhone. */
-export const banterHeaderHeight = (insetTop: number) => barHeight(insetTop, false)
+/** The header's height under the status bar: the frames' 116 on a 402 pt iPhone, 120 on Android's 48 dp circles. */
+export const banterHeaderHeight = (insetTop: number, android: boolean) => barHeight(insetTop, android)
+
+/** The title grows with the text size only as far as its line still fits the circle row (40 pt in 44, 48 on Android), so the header's height holds. */
+export const titleScaleCap = (android: boolean) => barCircle(android) / TYPE.display.lineHeight
 
 /**
  * The room you're standing in (Flow 5 #03): its cover full-bleed under a
