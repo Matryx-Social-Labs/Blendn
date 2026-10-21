@@ -130,7 +130,7 @@ Message off the first screen (audit U-H3). The name, the line under it and the f
 section are now above the fold.
 
 - **The bar** (`ProfileBar`, DS #30): glass circles at rest (`media` over a hero
-  photo); past 8 pt the bar's glass is *mounted* behind them (glass never fades), and
+  photo); the bar's glass is always mounted behind them and comes up over the first 8 pt, and
   between 24 and 56 pt the page's own heading hands over to a 17 pt centred title.
   It is first in the screen's tree, over the scroll view by `zIndex`, so a screen
   reader starts at Back (U-M15). Me uses the same bar with Add friends and Settings as

@@ -22,7 +22,17 @@ jest.mock('../lib/useAuth', () => {
 const mockShowToast = jest.fn()
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShowToast }) }))
 jest.mock('../lib/sheet', () => ({ showSheet: jest.fn() }))
-jest.mock('../components/PhotoManager', () => ({ __esModule: true, default: () => null }))
+jest.mock('../components/PhotoManager', () => {
+  const React = require('react')
+  const { Pressable } = require('react-native')
+  // A stand-in that can lift and drop a tile, as the real grid tells its host.
+  return {
+    __esModule: true,
+    default: (p: { onDragging?: (d: boolean) => void }) => (
+      <Pressable testID="photo-lift" onPressIn={() => p.onDragging?.(true)} onPressOut={() => p.onDragging?.(false)} />
+    ),
+  }
+})
 jest.mock('../components/InterestPicker', () => ({ InterestPicker: () => null, MAX_INTERESTS: 10 }))
 jest.mock('../lib/apiClient', () => ({
   ProfileCache: { clear: jest.fn() },
@@ -160,4 +170,15 @@ describe('expertise, step 2 of the field of work (14.3)', () => {
     await waitFor(() => expect(api.updateProfile).toHaveBeenCalled())
     expect(api.updateProfile.mock.calls[0][1]).toMatchObject({ work_field: 'finance', expertise: [] })
   })
+})
+
+it('stops the page scrolling while a photo is in the hand', async () => {
+  await render(<EditProfile />)
+  await screen.findByDisplayValue('Sam')
+  const scroll = () => screen.getByTestId('edit-profile-scroll')
+  expect(scroll().props.scrollEnabled).toBe(true)
+  await fireEvent(screen.getByTestId('photo-lift'), 'pressIn')
+  expect(scroll().props.scrollEnabled).toBe(false)
+  await fireEvent(screen.getByTestId('photo-lift'), 'pressOut')
+  expect(scroll().props.scrollEnabled).toBe(true)
 })

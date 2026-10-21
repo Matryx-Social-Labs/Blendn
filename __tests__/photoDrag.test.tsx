@@ -86,3 +86,37 @@ describe('reordering by drag (edit 02)', () => {
   })
 })
 
+
+describe('while a tile is in the hand', () => {
+  it('tells the page, so its scroll stands down, and lets go when the drop lands', async () => {
+    const onDragging = jest.fn()
+    await render(<PhotoManager userId="u" onDragging={onDragging} />)
+    await screen.findByLabelText('Photo 3 of 3')
+    await act(async () => {
+      fireGestureHandler(getByGestureTestId('photo-tile-1-drag'), [
+        { state: State.BEGAN },
+        { state: State.ACTIVE, translationX: 0, translationY: 0 },
+        { state: State.END, translationX: 0, translationY: 0 },
+      ])
+    })
+    expect(onDragging.mock.calls.map((c) => c[0])).toEqual([true, false])
+  })
+
+  it('writes nothing for a drag that ends while another write is open: the tiles go home', async () => {
+    let finish: (v: { success: true; url: string }) => void = () => {}
+    pu.selectAndUploadPhoto.mockImplementation(() => new Promise((resolve) => (finish = resolve as never)))
+    await render(<PhotoManager userId="u" />)
+    await screen.findByLabelText('Photo 3 of 3')
+    await fireEvent.press(screen.getByLabelText('Add photo'))
+    await act(async () => {
+      fireGestureHandler(getByGestureTestId('photo-tile-2-drag'), [
+        { state: State.BEGAN },
+        { state: State.ACTIVE, translationX: 0, translationY: 0 },
+        { translationX: -440, translationY: 0 },
+        { state: State.END, translationX: -440, translationY: 0 },
+      ])
+    })
+    expect(pu.reorderPhotos).not.toHaveBeenCalled()
+    await act(async () => finish({ success: false } as never))
+  })
+})

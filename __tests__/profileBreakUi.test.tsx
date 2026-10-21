@@ -3,6 +3,7 @@
  * thirty interests, a bio at its limit. Each renders, keeps its labels, and truncates where the frame truncates.
  */
 import { render, screen } from '@testing-library/react-native'
+import { StyleSheet, Text } from 'react-native'
 
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 59, bottom: 34, left: 0, right: 0 }) }))
 jest.mock('../components/OptimizedImage', () => ({ OptimizedImage: () => null }))
@@ -68,4 +69,10 @@ it('a friend with a long name and no photo keeps its row to one line', async () 
   await render(<PersonRow person={{ userId: 'u', name: LONG, photo: null }} detail="Friends since " detailMono="Mar 2026" onPress={jest.fn()} chevron />)
   expect(screen.getByText(LONG).props.numberOfLines).toBe(1)
   expect(screen.getByText('V', { includeHiddenElements: true })).toBeTruthy()
+})
+
+it('a small button in a row is centred on it, not pinned to its top', async () => {
+  await render(<PersonRow person={{ userId: 'u', name: 'Ana', photo: null }} detail="Requested" trailing={<Text testID="trail">Withdraw</Text>} />)
+  const holder = screen.getByTestId('trail').parent
+  expect(StyleSheet.flatten(holder?.props.style).alignSelf).toBe('center')
 })

@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Avatar } from '../ds/Avatar'
 import { ScrimPill } from '../ds/MonoFamily'
 import { Orbs } from '../ds/Orbs'
-import { CONTROL_FONT_CAP, font, useBoldText } from '../ds/shared'
+import { CONTROL_FONT_CAP, font, useBoldText, useIncreaseContrast } from '../ds/shared'
 import { PhotoScrim, StatusScrim } from '../ui/GradientFill'
 import { Icon } from '../ui/Icon'
 import { COLOR, FONT_FAMILY, ICON, SIZE, SPACE } from '../../lib/design/tokens'
@@ -69,6 +69,7 @@ export type ProfileHeroStageProps = {
 export function ProfileHeroStage({ width, scrollY, photos, blurredUri, name, age, subtitle, seed, anonymous = false, onPressPhoto, testID }: ProfileHeroStageProps) {
   const insets = useSafeAreaInsets()
   const bold = useBoldText()
+  const contrast = useIncreaseContrast()
   const height = heroHeightFor(width)
   const [page, setPage] = useState(0)
   const circle = Platform.OS === 'android' ? SIZE.circleButtonAndroid : SIZE.circleButton
@@ -123,7 +124,7 @@ export function ProfileHeroStage({ width, scrollY, photos, blurredUri, name, age
       )}
 
       <StatusScrim pointerEvents="none" style={[styles.head, { height: HEAD_FADE }]} />
-      <PhotoScrim pointerEvents="none" style={[styles.foot, { height: FOOT_FADE }]} />
+      <PhotoScrim contrast={contrast} pointerEvents="none" style={[styles.foot, { height: FOOT_FADE }]} />
       <HeroPips count={shown ? photos.length : 0} page={page} top={insets.top + SPACE.sm + circle + PIPS_GAP} />
 
       <View pointerEvents="none" style={styles.nameBlock}>

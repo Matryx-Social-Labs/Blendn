@@ -54,7 +54,7 @@ export function PersonRow({
           </Text>
         ) : null}
       </View>
-      {trailing}
+      {trailing ? <View style={styles.trailing}>{trailing}</View> : null}
       {chevron ? <Icon name="chevron-right" size={ICON.control} color={COLOR.textTertiary} /> : null}
     </>
   )
@@ -117,6 +117,8 @@ const styles = StyleSheet.create({
   avatar: { width: AVATAR, height: AVATAR, borderRadius: RADIUS.capsule },
   avatarEmpty: { backgroundColor: COLOR.surface, alignItems: 'center', justifyContent: 'center' },
   text: { flex: 1, minWidth: 0 },
+  // Centred on the row: a small button inside hugs its label, and without this it would sit at the row's top.
+  trailing: { alignSelf: 'center' },
   ink: { color: COLOR.textPrimary },
   muted: { color: COLOR.textSecondary },
 })

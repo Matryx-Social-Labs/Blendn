@@ -136,7 +136,7 @@ export function PhotoViewer({ photos, initialIndex = 0, visible, onClose, from, 
           <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.ink, inkStyle]} />
 
           {/* The chrome is read before the pictures: Close is first, then where you are. */}
-          <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
+          <View testID={testID && `${testID}-chrome`} pointerEvents="box-none" style={[StyleSheet.absoluteFill, styles.chromeLayer]}>
             <View style={[styles.close, { top, left: SPACE.lg }]}>
               <IconButton icon="x" tier="media" accessibilityLabel="Close" onPress={onClose} testID={testID && `${testID}-close`} />
             </View>
@@ -188,6 +188,8 @@ export function PhotoViewer({ photos, initialIndex = 0, visible, onClose, from, 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   ink: { backgroundColor: COLOR.ink },
+  // First in the tree (reading order) and drawn above the pager that follows it, or the pager takes the Close's taps.
+  chromeLayer: { zIndex: 2, elevation: 2 },
   close: { position: 'absolute', zIndex: 10 },
   counterRow: { position: 'absolute', left: 0, right: 0, alignItems: 'center', justifyContent: 'center' },
   counterText: { color: COLOR.textPrimary },

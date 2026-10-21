@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { COLOR, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { useToastDock } from '../toastDock'
 import { PhotoScrim } from '../ui/GradientFill'
 import { font, useBoldText, useIncreaseContrast } from '../ds/shared'
 
@@ -44,6 +45,8 @@ export function ProfileDock({
     setHeight(e.nativeEvent.layout.height)
     onHeight?.(e.nativeEvent.layout.height)
   }
+  // The Android snackbar stands above the tray (the toast host already clears the navigation bar, so only what is above it counts).
+  useToastDock(Math.max(0, height - insets.bottom))
 
   return (
     <View testID={testID} pointerEvents="box-none" onLayout={onLayout} style={styles.dock}>

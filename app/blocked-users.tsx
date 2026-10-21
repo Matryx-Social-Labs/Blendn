@@ -114,7 +114,7 @@ export default function BlockedUsers() {
         person={{ userId: item.blocked_id, name, photo: item.blocked_user_photo }}
         detail={blockedDetail(item)}
         trailing={
-          <Button kind="secondary" size="sm" label="Unblock" accessibilityLabel={`Unblock ${name}`} onPress={() => handleUnblock(item)} />
+          <Button kind="secondary" size="sm" label="Unblock" accessibilityLabel={`Unblock ${name}`} onPress={() => handleUnblock(item)} style={styles.centred} />
         }
       />
     )
@@ -169,6 +169,7 @@ export default function BlockedUsers() {
 }
 
 const styles = StyleSheet.create({
+  centred: { alignSelf: 'center' },
   container: { flex: 1, backgroundColor: EMBER.bg },
   listContent: { paddingHorizontal: GUTTER, paddingVertical: SPACE.sm },
   emptyList: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: GUTTER },

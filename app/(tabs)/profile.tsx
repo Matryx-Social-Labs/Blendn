@@ -17,7 +17,7 @@ import { OfflineStrip, useOffline } from '../../components/profile/OfflineStrip'
 import { PhotoViewer } from '../../components/profile/PhotoViewer'
 import { ProfileBar } from '../../components/profile/ProfileBar'
 import { RequestsRow } from '../../components/friends/RequestsRow'
-import { ProfileRow } from '../../components/profile/ProfileRow'
+import { SettingsGroup, SettingsRow } from '../../components/ds/SettingsRow'
 import { ProfileBio, ProfileDetail, ProfileInterests, ProfileSection, SECTION_GAP } from '../../components/profile/ProfileSections'
 import { CrewEmblem } from '../../components/ds/CrewEmblem'
 import type { Rect } from '../../components/ds/chatShared'
@@ -334,44 +334,43 @@ function ProfileInner() {
           />
         </FadeInUp>
 
-        {/* Somebody is waiting on an answer: about another person, and the only thing here with a clock on it. */}
-        {requestCount > 0 ? (
-          <FadeInUp delay={next()}>
-            <RequestsRow count={requestCount} />
-          </FadeInUp>
-        ) : null}
-
-        {/* Your crews: made from your friends, so beside the way to add them. The dot is an invite waiting. */}
+        {/*
+          Somebody is waiting on an answer: about another person, and the only thing here with a clock on it. Then your crews: made
+          from your friends, so beside the way to add them; the dot is an invite waiting.
+        */}
         <FadeInUp delay={next()}>
-          <ProfileRow
-            testID="crews-row"
-            icon={crewStack.length ? undefined : 'users'}
-            leading={
-              crewStack.length ? (
-                <View style={styles.emblems}>
-                  {crewStack.map((c, i) => (
-                    <View key={c.crewId} style={i > 0 ? styles.emblemOver : undefined}>
-                      <CrewEmblem seed={c.emblemSeed} size={CREW_EMBLEM} />
-                    </View>
-                  ))}
-                </View>
-              ) : undefined
-            }
-            title="Crews"
-            label={crewsLabel(crews.length, crewInvites)}
-            hint="Opens your crews"
-            trailing={
-              <>
-                {crews.length > 0 ? (
-                  <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, 'GeistMono_500Medium'), styles.count]}>
-                    {crews.length}
-                  </Text>
-                ) : null}
-                {crewInvites > 0 ? <PresenceDot kind="unread" testID="crews-invite-dot" /> : null}
-              </>
-            }
-            onPress={() => router.push('/crews')}
-          />
+          <SettingsGroup>
+            {requestCount > 0 ? <RequestsRow count={requestCount} /> : null}
+            <SettingsRow
+              testID="crews-row"
+              icon={crewStack.length ? undefined : 'users'}
+              leading={
+                crewStack.length ? (
+                  <View style={styles.emblems}>
+                    {crewStack.map((c, i) => (
+                      <View key={c.crewId} style={i > 0 ? styles.emblemOver : undefined}>
+                        <CrewEmblem seed={c.emblemSeed} size={CREW_EMBLEM} />
+                      </View>
+                    ))}
+                  </View>
+                ) : undefined
+              }
+              title="Crews"
+              label={crewsLabel(crews.length, crewInvites)}
+              accessory={
+                <>
+                  {crews.length > 0 ? (
+                    <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, 'GeistMono_500Medium'), styles.count]}>
+                      {crews.length}
+                    </Text>
+                  ) : null}
+                  {crewInvites > 0 ? <PresenceDot kind="unread" testID="crews-invite-dot" /> : null}
+                </>
+              }
+              trail="chevron"
+              onPress={() => router.push('/crews')}
+            />
+          </SettingsGroup>
         </FadeInUp>
 
         {/*
@@ -383,9 +382,13 @@ function ProfileInner() {
           <FadeInUp delay={next()}>
             <ProfileSection title="Finish your profile" testID="finish-profile">
               {photoGap ? <Button kind="primary" icon="camera" label="Add a photo" onPress={openEdit} /> : null}
-              {otherGaps.map((gap) => (
-                <ProfileRow key={gap.key} icon={GAP_ICON[gap.key]} title={gap.label} onPress={openEdit} />
-              ))}
+              {otherGaps.length > 0 ? (
+                <SettingsGroup>
+                  {otherGaps.map((gap) => (
+                    <SettingsRow key={gap.key} icon={GAP_ICON[gap.key]} title={gap.label} trail="chevron" onPress={openEdit} />
+                  ))}
+                </SettingsGroup>
+              ) : null}
             </ProfileSection>
           </FadeInUp>
         ) : null}

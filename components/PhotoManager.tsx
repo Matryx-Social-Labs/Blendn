@@ -23,6 +23,8 @@ const SKELETON_TILES = 3
 interface PhotoManagerProps {
   userId: string
   maxPhotos?: number
+  /** A tile is lifted (true) or let go (false): the host stops its scroll while one is in the hand. */
+  onDragging?: (dragging: boolean) => void
 }
 
 /** A photo on its way up, or one that did not get there: it holds the next slot and its file, so Retry has something to send. */
@@ -50,7 +52,7 @@ const adoptStoredUrls = (list: ProfilePhoto[], stored?: string[]): ProfilePhoto[
  * A photo on its way is a tile with a progress bar; one that did not get there is a tile with Retry (it keeps the file). A photo
  * moderation took down (`pulled`) is a tile that says so; the server sends no such flag yet, so none is drawn today.
  */
-export default function PhotoManager({ userId, maxPhotos = 6 }: PhotoManagerProps) {
+export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: PhotoManagerProps) {
   const [photos, setPhotos] = useState<ProfilePhoto[]>([])
   const [loading, setLoading] = useState(true)
   const [loadFailed, setLoadFailed] = useState(false)
@@ -229,9 +231,15 @@ export default function PhotoManager({ userId, maxPhotos = 6 }: PhotoManagerProp
   const handleDrop = useCallback(
     (slots: number[]) => {
       if (slots.length !== photos.length || !reordered(slots)) return
+      // A write is already in flight (an upload landed under the finger): the drop is not queued behind it, the tiles go home, and
+      // the person drags again once it has settled. Dragging is off while one is open, so this is only a lift that began before it.
+      if (writing.current) {
+        positions.set(photos.map((_, i) => i))
+        return
+      }
       void commitOrder(inSlotOrder(photos, slots))
     },
-    [photos, commitOrder]
+    [photos, commitOrder, positions]
   )
 
   /** The screen reader's way to move a photo, and anyone's way to make one main. */
@@ -382,6 +390,7 @@ export default function PhotoManager({ userId, maxPhotos = 6 }: PhotoManagerProp
               active={active}
               enabled={!busy}
               onDrop={handleDrop}
+              onLift={onDragging}
             >
               {item.pulled ? (
                 <PulledFace onRemove={() => handleRemovePhoto(index)} removeLabel={`Remove photo ${index + 1}`} removeDisabled={busy} />

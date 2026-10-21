@@ -15,6 +15,7 @@ import { fadeOutFast } from '../motion/presence'
 export const LIFT_AFTER_MS = 250
 /** The pickup's haptic, on the JS thread (the gesture runs on the UI one). */
 const pickUp = () => H.drag()
+const noLift = (_lifted: boolean) => {}
 /** The tile's edge at rest (clear) and lifted (the frame's hairline): colours worked out here, not in the worklet. */
 const EDGE = [tint(COLOR.textPrimary, 0), COLOR.hairlineStrong]
 /** Flow 6 edit 02: the lifted tile is 1.06 and turned -2°, on a hairline. */
@@ -37,6 +38,7 @@ export function DraggableTile({
   active,
   enabled,
   onDrop,
+  onLift,
   children,
   testID,
 }: {
@@ -47,6 +49,8 @@ export function DraggableTile({
   active: SharedValue<number>
   enabled: boolean
   onDrop: (positions: number[]) => void
+  /** A tile was lifted (true) or let go (false): the page's scroll stands down while one is in the hand. */
+  onLift?: (lifted: boolean) => void
   children: ReactNode
   testID?: string
 }) {
@@ -77,6 +81,7 @@ export function DraggableTile({
     [grid, reduceMotion]
   )
 
+  const liftChanged = onLift ?? noLift
   const pan = Gesture.Pan()
     .enabled(enabled)
     .activateAfterLongPress(LIFT_AFTER_MS)
@@ -84,8 +89,10 @@ export function DraggableTile({
       active.set(index)
       startX.set(x.get())
       startY.set(y.get())
-      lift.set(withSpring(1, SPRING.pop))
+      // Reduce Motion: the lift is a state, not a spring; the drag itself is direct manipulation and stays.
+      lift.set(reduceMotion ? 1 : withSpring(1, SPRING.pop))
       scheduleOnRN(pickUp)
+      scheduleOnRN(liftChanged, true)
     })
     .onUpdate((e) => {
       x.set(startX.get() + e.translationX)
@@ -99,10 +106,11 @@ export function DraggableTile({
       if (active.get() !== index) return
       const final = positions.get()
       const to = slotXY(final[index], grid)
-      x.set(withSpring(to.x, SPRING.snap))
-      y.set(withSpring(to.y, SPRING.snap))
-      lift.set(withSpring(0, SPRING.snap))
+      x.set(reduceMotion ? to.x : withSpring(to.x, SPRING.snap))
+      y.set(reduceMotion ? to.y : withSpring(to.y, SPRING.snap))
+      lift.set(reduceMotion ? 0 : withSpring(0, SPRING.snap))
       active.set(-1)
+      scheduleOnRN(liftChanged, false)
       scheduleOnRN(onDrop, final)
     })
 

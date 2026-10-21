@@ -2,7 +2,7 @@
  * Flow 6's shared chrome: the bar's thresholds (DS #30), the hero's stretch cap (DS #32), what Nights out draws (Me 04 · 05 · 06),
  * the docked tray's reach on a small phone, and the paged viewer's counter.
  */
-import { fireEvent, render, screen } from '@testing-library/react-native'
+import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import { StyleSheet } from 'react-native'
 
 const mockInsets = { top: 59, bottom: 34, left: 0, right: 0 }
@@ -10,6 +10,7 @@ jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => mo
 jest.mock('../components/OptimizedImage', () => ({ OptimizedImage: () => null }))
 
 /* eslint-disable import/first */
+import { ToastDockContext } from '../components/toastDock'
 import { Banner } from '../components/ds/Banner'
 import { NightsOut, nightsLine, FIRST_NIGHT, NIGHTS_FAILED } from '../components/profile/NightsOut'
 import { BAR_GLASS_AT, BAR_TITLE_SWAP, barStateAt } from '../components/profile/ProfileBar'
@@ -18,15 +19,19 @@ import { HERO_STRETCH_MAX, heroHeightFor, stretchScale } from '../components/pro
 import { nextPage } from '../components/profile/ProfileHeroPager'
 import { counterOf, pageAt } from '../components/profile/PhotoViewer'
 import { nightLabel, nightsView } from '../lib/meProfile'
-import { STAT_MAX } from '../components/profile/MeSections'
+import { compactCount, STAT_MAX } from '../components/profile/MeSections'
 import { SIZE, SPACE } from '../lib/design/tokens'
 /* eslint-enable import/first */
 
 const night = (n: number) => ({ id: `e${n}`, title: `Night ${n}`, start_time: new Date(Date.now() - n * 86_400_000).toISOString(), cover_image_url: null })
 
 describe('the bar (DS #30)', () => {
-  it('mounts glass past 8 pt and not at it', () => {
+  it('brings the glass up over the first 8 pt, and states it past them', () => {
     expect(BAR_GLASS_AT).toBe(8)
+    expect(barStateAt(0).glassOpacity).toBe(0)
+    expect(barStateAt(4).glassOpacity).toBeCloseTo(0.5)
+    expect(barStateAt(8).glassOpacity).toBe(1)
+    expect(barStateAt(80).glassOpacity).toBe(1)
     expect(barStateAt(8).glass).toBe(false)
     expect(barStateAt(9).glass).toBe(true)
   })
@@ -131,6 +136,24 @@ describe('the docked tray reaches the thumb on an iPhone SE', () => {
     // And the primary is on screen at all: its foot is inside the window.
     expect(667 - dockClearance(0) + SIZE.primary).toBeLessThan(667)
   })
+  it('registers its height with the toast, so the Android snackbar stands above the tray', async () => {
+    const unregister = jest.fn()
+    const register = jest.fn(() => unregister)
+    await render(
+      <ToastDockContext.Provider value={register}>
+        <ProfileDock testID="dock">
+          <Banner kind="info" text="child" />
+        </ProfileDock>
+      </ToastDockContext.Provider>
+    )
+    expect(register).not.toHaveBeenCalled()
+    await act(async () => {
+      fireEvent(screen.getByTestId('dock'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 390, height: 160 } } })
+    })
+    // The toast host clears the navigation bar itself, so only what stands above the inset counts: 160 less the 34 pt inset.
+    expect(register).toHaveBeenLastCalledWith(expect.any(String), 126)
+  })
+
   it('clears the Android navigation bar by the inset it is given', () => {
     expect(dockClearance(48) - dockClearance(0)).toBe(48)
   })
@@ -150,7 +173,13 @@ describe('the paged viewer', () => {
 })
 
 describe('worst-case data (break-ui)', () => {
-  it('never draws a stat past four digits', () => {
+  it('never draws a stat past four digits: it goes compact', () => {
     expect(STAT_MAX).toBe(9999)
+    expect(compactCount(9999)).toBe('9999')
+    expect(compactCount(10_000)).toBe('10k')
+    expect(compactCount(12_345)).toBe('12k')
+    expect(compactCount(999_999)).toBe('999k')
+    expect(compactCount(1_234_567)).toBe('1.2M')
+    expect(compactCount(25_000_000)).toBe('25M')
   })
 })

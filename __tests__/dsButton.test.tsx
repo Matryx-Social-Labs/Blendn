@@ -275,3 +275,28 @@ describe('a count in the label ("Show {n} places")', () => {
     expect(screen.queryByTestId('b-count')).toBeNull()
   })
 })
+
+describe('a small button’s placement', () => {
+  const place = async (style?: object) => {
+    await render(<Button size="sm" kind="secondary" label="Withdraw" style={style} testID="b" />)
+  }
+  const wrapperStyle = () => {
+    const wrapper = screen.getByTestId('b').parent
+    return StyleSheet.flatten(wrapper?.props.style)
+  }
+
+  it('hugs its label (flex-start) when the caller says nothing', async () => {
+    await place()
+    expect(wrapperStyle().alignSelf).toBe('flex-start')
+  })
+
+  it('takes the caller’s alignSelf instead, so a row can centre it', async () => {
+    await place({ alignSelf: 'center' })
+    expect(wrapperStyle().alignSelf).toBe('center')
+  })
+
+  it('leaves a large button to its parent', async () => {
+    await render(<Button label="Share" testID="b" />)
+    expect(wrapperStyle().alignSelf).toBeUndefined()
+  })
+})

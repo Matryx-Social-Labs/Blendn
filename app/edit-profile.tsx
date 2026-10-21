@@ -24,7 +24,7 @@ import { useAuth, refreshAuthUser } from '../lib/useAuth'
 import { KEYBOARD_BEHAVIOR } from '../lib/keyboard'
 import { profileFormErrors } from '../lib/onboarding'
 import { normaliseIntents, toggleIntent } from '../lib/intents'
-import { ProfileRow } from '../components/profile/ProfileRow'
+import { SettingsRow } from '../components/ds/SettingsRow'
 
 interface UserProfile {
   id: string
@@ -173,6 +173,8 @@ function EditProfileContent() {
   const bar = useTopBarState()
   const insets = useSafeAreaInsets()
   const offline = useOffline()
+  // A photo is in the hand: the page does not scroll under it.
+  const [dragging, setDragging] = useState(false)
 
   // Discard lifts the guard first, then replays the exit that was stopped.
   const discardChanges = () => setLeaving(pendingLeave.current)
@@ -481,9 +483,11 @@ function EditProfileContent() {
 
         <ScrollView
           ref={scrollRef}
+          testID="edit-profile-scroll"
           style={styles.content}
           // The foot clears the home indicator, or Android's navigation bar; the keyboard is the KeyboardAvoidingView's.
           contentContainerStyle={[styles.column, { paddingBottom: insets.bottom + SPACE.xxl }]}
+          scrollEnabled={!dragging}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           {...bar.scrollProps}
@@ -491,7 +495,7 @@ function EditProfileContent() {
           <OfflineStrip offline={offline} />
 
           {/* Photos: the card heads itself (its count is the grid's). */}
-          <EditCard>{authUser ? <PhotoManager userId={authUser.id} maxPhotos={6} /> : null}</EditCard>
+          <EditCard>{authUser ? <PhotoManager userId={authUser.id} maxPhotos={6} onDragging={setDragging} /> : null}</EditCard>
 
           {/*
             You and matching, between Photos and Basics (R4.1 14.2). Its own card and not folded into ABOUT YOU, because these are
@@ -521,10 +525,11 @@ function EditProfileContent() {
               Languages, home state, sign and this-or-that: display only, saved on their own screen so this form's save stays what
               it was.
             */}
-            <ProfileRow
+            <SettingsRow
+              icon="sparkles"
               title="Languages, home, sign & this-or-that"
-              label="Languages, home state, sign and this or that"
-              hint="Shown on cards when you share one with someone. Never used to rank."
+              label="Languages, home state, sign and this or that. Shown on cards when you share one with someone. Never used to rank."
+              trail="chevron"
               onPress={() => router.push('/edit-about-you')}
             />
           </EditCard>

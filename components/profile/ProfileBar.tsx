@@ -36,13 +36,18 @@ export type ProfileBarProps = {
 
 /** Where the bar starts to paint, as a pure function so the thresholds are testable without a scroll view. */
 export function barStateAt(y: number) {
-  return { glass: y > BAR_GLASS_AT, titleOpacity: interpolate(y, [BAR_TITLE_FROM, BAR_TITLE_TO], [0, 1], Extrapolation.CLAMP) }
+  return {
+    glass: y > BAR_GLASS_AT,
+    // The glass is always mounted and comes up over the first 8 pt (as the Scene's bar does): mounting it popped.
+    glassOpacity: interpolate(y, [0, BAR_GLASS_AT], [0, 1], Extrapolation.CLAMP),
+    titleOpacity: interpolate(y, [BAR_TITLE_FROM, BAR_TITLE_TO], [0, 1], Extrapolation.CLAMP),
+  }
 }
 
 /**
  * The bar a profile-shaped screen wears (Flow 6 `me`, `user`, `friend`; DS #30, scroll-edge chrome): at rest only glass circles
- * (`media` over a hero photo, `control` otherwise), straight on the page. Past 8 pt the bar's glass is mounted behind them (never
- * faded: glass fades wrong), and between 24 and 56 pt the page's own heading hands over to a 17 pt centred title. Reduce Motion:
+ * (`media` over a hero photo, `control` otherwise), straight on the page. The bar's glass is always mounted behind them and comes up over
+ * the first 8 pt (as the Scene's bar does), and between 24 and 56 pt the page's own heading hands over to a 17 pt centred title. Reduce Motion:
  * the title swaps at 40 pt.
  *
  * First in the screen's tree, over the scroll view by `zIndex`, so a screen reader starts here (WCAG 2.4.3). The small title is
@@ -63,6 +68,7 @@ export function ProfileBar({ scrollY, title, onBack, actions = [], overPhoto = f
     },
     []
   )
+  const glassStyle = useAnimatedStyle(() => ({ opacity: barStateAt(scrollY.get()).glassOpacity }))
   const titleStyle = useAnimatedStyle(() => {
     const y = scrollY.get()
     return { opacity: reduceMotion ? (y >= BAR_TITLE_SWAP ? 1 : 0) : barStateAt(y).titleOpacity }
@@ -74,11 +80,9 @@ export function ProfileBar({ scrollY, title, onBack, actions = [], overPhoto = f
 
   return (
     <View testID={testID} pointerEvents="box-none" style={[styles.bar, { paddingTop: insets.top + SPACE.sm }]}>
-      {glass ? (
-        <View testID={testID && `${testID}-glass`} pointerEvents="none" style={StyleSheet.absoluteFill}>
-          <Material role="bar" style={StyleSheet.absoluteFill} />
-        </View>
-      ) : null}
+      <Animated.View testID={testID && `${testID}-glass`} pointerEvents="none" style={[StyleSheet.absoluteFill, glassStyle]}>
+        <Material role="bar" style={StyleSheet.absoluteFill} />
+      </Animated.View>
       <View pointerEvents="box-none" style={[styles.row, { minHeight: circle }]}>
         {onBack ? <IconButton icon={android ? 'arrow-left' : 'chevron-left'} tier={tier} accessibilityLabel="Back" onPress={onBack} testID={testID && `${testID}-back`} /> : null}
         <View pointerEvents="none" style={styles.fill} />

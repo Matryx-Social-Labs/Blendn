@@ -133,6 +133,7 @@ function AddFriendsScreenContent() {
                     accessibilityLabel={`Withdraw request to ${request.person.name}`}
                     onPress={() => void withdraw(request)}
                     disabled={busy.has(request.id)}
+                    style={styles.centred}
                   />
                 }
               />
@@ -155,6 +156,7 @@ const styles = StyleSheet.create({
   reset: { alignSelf: 'stretch' },
   section: { gap: SPACE.md },
   sent: { gap: SPACE.xs },
+  centred: { alignSelf: 'center' },
 })
 
 /** Rose world: one hue on this screen (`HueProvider`). */

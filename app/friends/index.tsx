@@ -7,6 +7,7 @@ import { StateScreen } from '../../components/ds/StateScreen'
 import { TopBar } from '../../components/ds/TopBar'
 import { OfflineStrip, useOffline } from '../../components/profile/OfflineStrip'
 import { PersonRow, PersonRowSkeleton } from '../../components/friends/PersonRow'
+import { SettingsGroup } from '../../components/ds/SettingsRow'
 import { RequestsRow } from '../../components/friends/RequestsRow'
 import { apiClient } from '../../lib/apiClient'
 import { friendsSinceParts, type Friend } from '../../lib/friends'
@@ -86,7 +87,9 @@ function FriendsScreenContent() {
       ) : null}
       {requests.incoming.length > 0 ? (
         <View style={styles.requests}>
-          <RequestsRow count={requests.incoming.length} />
+          <SettingsGroup>
+            <RequestsRow count={requests.incoming.length} />
+          </SettingsGroup>
         </View>
       ) : null}
       {friends === null && !failed ? (

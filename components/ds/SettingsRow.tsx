@@ -15,10 +15,17 @@ const ROW_MIN_HEIGHT = SIZE.primary
 const ROLE = { switch: 'switch', chevron: 'button', external: 'link', none: undefined } as const
 
 export type SettingsRowProps = {
-  icon: IconName
+  /** The 20 pt glyph. Omit when `leading` stands in its place. */
+  icon?: IconName
+  /** In place of the glyph: a crew's emblems, say. Decorative; the title is what is read. */
+  leading?: ReactNode
   title: string
   /** A line under the title; on a rollback, the sentence that names it. */
   hint?: string
+  /** What a screen reader says in place of "{title}, {hint}": the whole sentence, when a count is part of it ("3 friend requests"). */
+  label?: string
+  /** What the row reports before its chevron: a count (the DS `Badge`, Geist Mono), a dot. Decorative; `label` carries it for a screen reader. */
+  accessory?: ReactNode
   trail?: SettingsTrail
   /** The switch's value (`trail="switch"`). */
   value?: boolean
@@ -58,8 +65,11 @@ function useRollbackHaptic(error: boolean) {
  */
 export function SettingsRow({
   icon,
+  leading,
   title,
   hint,
+  label,
+  accessory,
   trail = 'none',
   value = false,
   onValueChange,
@@ -100,7 +110,7 @@ export function SettingsRow({
       onBlur={() => setFocused(false)}
       android_ripple={{ color: PRESSED_WASH.android }}
       accessibilityRole={ROLE[trail]}
-      accessibilityLabel={`${title}${hint ? `, ${hint}` : ''}${external}`}
+      accessibilityLabel={label ?? `${title}${hint ? `, ${hint}` : ''}${external}`}
       accessibilityState={{ disabled, busy, checked: isSwitch ? value : undefined }}
       style={({ pressed }) => [
         styles.row,
@@ -111,11 +121,16 @@ export function SettingsRow({
         disabled && { opacity: OPACITY.disabled },
       ]}
     >
-      <Icon name={icon} size={ICON.control} color={ink} />
+      {leading ?? (icon ? <Icon name={icon} size={ICON.control} color={ink} /> : null)}
       <View style={styles.text}>
         <Text style={[font('bodyStrong', bold), { color: ink }]}>{title}</Text>
         {hint ? <Text style={[font('meta', bold), { color: error ? COLOR.destructive : COLOR.textSecondary }]}>{hint}</Text> : null}
       </View>
+      {accessory ? (
+        <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.accessory}>
+          {accessory}
+        </View>
+      ) : null}
       {busy ? <Spinner testID={testID && `${testID}-spinner`} size={18} /> : null}
       {isSwitch ? (
         <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
@@ -173,6 +188,7 @@ const styles = StyleSheet.create({
     minHeight: ROW_MIN_HEIGHT,
   },
   text: { flex: 1, minWidth: 0, gap: SPACE.xxs },
+  accessory: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   focus: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, borderRadius: RADIUS.rowInCard, borderWidth: SPACE.xxs, borderColor: COLOR.focusRing },
   group: { gap: SPACE.sm },
   label: { color: COLOR.textSecondary, paddingLeft: SPACE.lg },

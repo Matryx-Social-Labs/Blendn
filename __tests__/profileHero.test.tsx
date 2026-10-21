@@ -82,14 +82,11 @@ describe('the bar', () => {
     expect(labels).toEqual(['Back', 'Report or block'])
   })
 
-  it('has no glass at rest and mounts it past 8 pt, never fading it', async () => {
-    const scrollY = await bar(0)
-    expect(screen.queryByTestId('bar-glass')).toBeNull()
-    await act(async () => {
-      scrollY.set(20)
-      await new Promise((resolve) => setTimeout(resolve, 100))
-    })
-    expect(screen.getByTestId('bar-glass')).toBeTruthy()
+  it('keeps the glass mounted and starts it clear, so scrolling brings it up instead of popping it in', async () => {
+    await bar(0)
+    const glass = screen.getByTestId('bar-glass')
+    expect(glass).toBeTruthy()
+    expect(StyleSheet.flatten(glass.props.style).opacity).toBe(0)
   })
 
   it('keeps the small title out of the reading order', async () => {
@@ -133,6 +130,16 @@ describe('the paged viewer', () => {
     await view.unmount()
     await render(<PhotoViewer photos={['a']} visible onClose={jest.fn()} testID="v" />)
     expect(screen.queryByTestId('v-counter')).toBeNull()
+  })
+
+  it('draws its chrome above the pager, first in the tree, so the pager cannot take Close’s taps', async () => {
+    await render(<PhotoViewer photos={photos} visible onClose={jest.fn()} testID="v" />)
+    // fireEvent ignores stacking, so the layer's own z-order is what is asserted.
+    const chrome = StyleSheet.flatten(screen.getByTestId('v-chrome').props.style)
+    expect(chrome.zIndex).toBe(2)
+    expect(chrome.elevation).toBe(2)
+    const root = screen.getByTestId('v-chrome').parent
+    expect(root?.children[1]).toBe(screen.getByTestId('v-chrome'))
   })
 
   it('draws nothing when it is closed', async () => {
