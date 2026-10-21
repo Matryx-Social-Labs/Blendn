@@ -10,29 +10,13 @@ import { COLOR, FONT_FAMILY, SPACE } from '../../lib/design/tokens'
 import { HOW_FAR, PLACE_TYPES, WHATS_ON, type PlaceFilters } from '../../lib/placesPane'
 
 /**
- * The top of Places (BUILD-SPEC B1), in two rows of the list: the title (headline, city control, stat line;
- * scrolls away) and the search (sticky under it; see `PlacesSearch`).
+ * The top of Places (BUILD-SPEC B1), in two rows of the list: the stat line (scrolls away) and the search (sticky under
+ * it; see `PlacesSearch`). The title and the city are the drawer's title tabs now: the chosen word names the pane.
  */
-export const PlacesTitle = memo(function PlacesTitle({
-  city,
-  onPressCity,
-  stat,
-}: {
-  city: string | null
-  onPressCity: () => void
-  stat: { text: string; spoken: string } | null
-}) {
+export const PlacesTitle = memo(function PlacesTitle({ stat }: { stat: { text: string; spoken: string } | null }) {
   const bold = useBoldText()
   return (
     <View style={styles.titleWrap} testID="places-header">
-      <View style={styles.titleRow}>
-        <Text accessibilityRole="header" style={[font('display', bold), styles.ink, styles.title]} numberOfLines={1}>
-          Places
-        </Text>
-        <View style={styles.city}>
-          <Chip label={city ?? 'Choose city'} icon="map-pin" onPress={onPressCity} testID="places-city" />
-        </View>
-      </View>
       {stat ? (
         <Text accessibilityLabel={stat.spoken} style={[font('label', bold, FONT_FAMILY.mono[500]), styles.secondary]} numberOfLines={1} testID="places-stat">
           {stat.text.toUpperCase()}
@@ -109,15 +93,11 @@ export const PlacesSearch = memo(function PlacesSearch({
 
 const styles = StyleSheet.create({
   titleWrap: { paddingHorizontal: SPACE.gutter, gap: SPACE.md, paddingBottom: SPACE.md },
-  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.md },
-  title: { flexShrink: 1 },
-  city: { flexShrink: 1, maxWidth: '50%' },
   searchWrap: { paddingHorizontal: SPACE.gutter, gap: SPACE.md },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   search: { flex: 1 },
   badge: { position: 'absolute', top: -SPACE.xs, right: -SPACE.xs },
   applied: { marginHorizontal: -SPACE.gutter },
   appliedRow: { paddingHorizontal: SPACE.gutter, gap: SPACE.sm },
-  ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
 })

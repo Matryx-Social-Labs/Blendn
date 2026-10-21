@@ -92,7 +92,7 @@ function SegmentLabel({ item, badge, ink, pair, bold, android }: { item: string;
 const FADE_CURVE = Easing.bezier(...EASING.snapOut)
 const DIVIDER_FADE = `opacity ${DURATION.quick}ms cubic-bezier(${EASING.gentle.join(',')})`
 
-const spoken = (item: string, badge: SegmentBadge) =>
+export const spoken = (item: string, badge: SegmentBadge) =>
   badge === 'dot' ? `${item}, someone’s live` : typeof badge === 'number' ? `${item}, ${badge}` : item
 
 /**

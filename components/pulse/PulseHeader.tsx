@@ -47,8 +47,11 @@ import { keyboardLeft } from '../../lib/home'
  */
 const EASE_OUT = 'cubic-bezier(0.23, 1, 0.32, 1)'
 
-/** The block's height: the headline row, the gap, and the search row. */
-export const PULSE_HEADER_HEIGHT = TYPE.display.lineHeight + SPACE.lg + CONTROL.md
+/**
+ * The Pulse's header on home: the search row alone. The title and the city are the drawer's title tabs (`TitleTabs`);
+ * `PulseTitle` below is only the preview's.
+ */
+export const PULSE_HEADER_HEIGHT = CONTROL.md
 
 interface Props {
   /** Second half of the headline, in the accent colour. */
