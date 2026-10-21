@@ -30,9 +30,9 @@ const VIEWABILITY_CONFIG = { viewAreaCoveragePercentThreshold: 50 }
  * Full-screen viewer for an event's media — the place a photograph is actually
  * looked at.
  *
- * ## Why this exists beside `PhotoLightbox`
+ * ## Why this exists beside `PhotoViewer`
  *
- * `PhotoLightbox` takes `string[]` and renders images. Handing it a clip's URL
+ * `PhotoViewer` takes `string[]` and renders images. Handing it a clip's URL
  * would draw a still frame at best and a broken image at worst, and widening
  * it would change a component three other screens depend on. This takes the
  * same `FeedMediaItem[]` the hero and the feed already use, so a clip that

@@ -138,10 +138,12 @@ export type OrbsProps = {
  * Every frame must also work without them. Fills its parent; put `<Grain>`
  * over it.
  *
- * Motion #22: the slow ambient drift, one of the three loops the app allows —
- * transform only, ±24 pt and 0.96–1.04, periods 28 s and 36 s (incommensurate,
- * so the pattern never visibly repeats). Still on Android, under Reduce Motion,
- * in the background and while `paused`. Increase Contrast halves the alpha.
+ * Motion #22: the ambient drift, one of the three loops the app allows —
+ * transform only, ±40 pt and 0.96–1.04, periods 9 s and 11.6 s (incommensurate,
+ * so the pattern never visibly repeats). The owner asked for it livelier and on
+ * Android too (2026-10-21; the spec had ±24 pt, 28 s / 36 s, static on Android).
+ * Still under Reduce Motion, in the background and while `paused`. Increase
+ * Contrast halves the alpha.
  * Motion #53: the time-of-night set swaps at launch or on a foreground that
  * crosses 21:00 or 01:00, crossfading over `long` on iOS (instant on Android
  * and under Reduce Motion); never while the app is in front.
@@ -161,7 +163,7 @@ export function Orbs({ set, time: pinned, paused = false, testID }: OrbsProps) {
 
   const a = useSharedValue(HALF)
   const b = useSharedValue(HALF)
-  const still = android || reduceMotion || paused || !active
+  const still = reduceMotion || paused || !active
   useEffect(() => {
     if (still) return
     drift(a, DURATION.ambientA / 2)

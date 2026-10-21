@@ -448,8 +448,9 @@ const styles = StyleSheet.create({
   brand: { flex: 1, alignItems: 'center', gap: SPACE.lg, paddingHorizontal: SPACE.gutter },
   tagline: { color: COLOR.textSecondary, textAlign: 'center' },
 
-  message: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.sm },
-  errorText: { flex: 1, color: COLOR.destructive },
+  // Centred under the buttons like the notice (owner, 2026-10-21: the frame's left-aligned refusal read as off-centre).
+  message: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center', gap: SPACE.sm },
+  errorText: { flexShrink: 1, textAlign: 'center', color: COLOR.destructive },
   notice: { color: COLOR.textSecondary, textAlign: 'center' },
   googleButton: {
     flexDirection: 'row',

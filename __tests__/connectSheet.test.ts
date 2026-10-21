@@ -76,7 +76,7 @@ describe('the cost is stated before the effort', () => {
      * where it can still change the answer.
      */
     const src = SHEET()
-    expect(src.indexOf('connectDisclosure(')).toBeLessThan(src.indexOf('<TextInput'))
+    expect(src.indexOf('connectDisclosure(')).toBeLessThan(src.indexOf('<TextArea'))
   })
 
   it('says the request is one-shot', () => {

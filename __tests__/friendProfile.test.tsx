@@ -21,17 +21,25 @@ jest.mock('../lib/safetyUtils', () => ({ showUserSafetyActions: jest.fn() }))
 jest.mock('../lib/sheet', () => ({ showSheet: jest.fn() }))
 const mockShowToast = jest.fn()
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShowToast }) }))
-jest.mock('../components/PhotoLightbox', () => () => null)
-jest.mock('../components/profile/ProfileSections', () => {
+jest.mock('../components/profile/PhotoViewer', () => ({ PhotoViewer: () => null }))
+jest.mock('../components/profile/ProfileHeroStage', () => {
   const React = require('react')
   const { Text } = require('react-native')
+  return {
+    heroHeightFor: (w: number) => Math.round(w * 1.3),
+    ProfileHeroStage: (p: { name: string; age?: number | null }) => React.createElement(Text, null, p.age ? `${p.name}, ${p.age}` : p.name),
+  }
+})
+jest.mock('../components/profile/ProfileSections', () => {
+  const React = require('react')
+  const { Text, View } = require('react-native')
   const stub = (label: string) => (p: { title?: string }) => React.createElement(Text, null, p.title ?? label)
   return {
-    ProfileHero: (p: { title: string }) => React.createElement(Text, null, p.title),
+    SECTION_GAP: 28,
+    ProfileSection: (p: { title: string; children: unknown }) => React.createElement(View, null, React.createElement(Text, null, p.title), p.children),
     ProfileBio: stub('bio'),
     ProfileDetail: stub('detail'),
     ProfileGallery: (p: { photos: string[] }) => React.createElement(Text, null, `gallery: ${p.photos.join(',')}`),
-    ProfileHeading: stub('heading'),
     ProfileInterests: stub('interests'),
   }
 })
@@ -92,7 +100,7 @@ it('asks in the app’s sheet, and stays on the profile saying so when removing 
   api.getFriend.mockResolvedValue({ success: true, data: BEN })
   api.removeFriend.mockResolvedValue({ success: false, error: 'nope' })
   await render(<FriendProfileScreen />)
-  fireEvent.press(await screen.findByLabelText('Remove Ben from friends'))
+  fireEvent.press(await screen.findByLabelText('Remove friend Ben'))
   expect(showSheet).toHaveBeenCalledWith(expect.objectContaining({ title: 'Remove Ben?' }))
   // The sheet keeps the refusal and turns the button into Try again.
   await expect(runRemove()).resolves.toEqual({ ok: false, error: "That didn't go through. Try again." })
@@ -104,7 +112,7 @@ it('leaves once the server agreed', async () => {
   api.getFriend.mockResolvedValue({ success: true, data: BEN })
   api.removeFriend.mockResolvedValue({ success: true, data: {} } as never)
   await render(<FriendProfileScreen />)
-  fireEvent.press(await screen.findByLabelText('Remove Ben from friends'))
+  fireEvent.press(await screen.findByLabelText('Remove friend Ben'))
   await expect(runRemove()).resolves.toMatchObject({ ok: true })
   expect(router.back).toHaveBeenCalled()
 })
@@ -119,17 +127,17 @@ it('does not repeat the hero’s first photo in the gallery', async () => {
 it('says plainly when they are no longer a friend', async () => {
   api.getFriend.mockResolvedValue({ success: false, error: 'Not found', errorCode: 'NOT_FOUND' })
   await render(<FriendProfileScreen />)
-  expect(await screen.findByText("You're not friends with this person any more.")).toBeTruthy()
+  expect(await screen.findByText('You’re not friends with this person any more.')).toBeTruthy()
 })
 
 it('does not call a failed load an unfriending, and tries again', async () => {
   // Offline, a timeout, a 5xx: no NOT_FOUND. This used to read as "not friends any more".
   api.getFriend.mockResolvedValueOnce({ success: false, error: 'No internet connection. Check your network and try again.' })
   await render(<FriendProfileScreen />)
-  expect(await screen.findByText("This profile didn't load")).toBeTruthy()
-  expect(screen.queryByText("You're not friends with this person any more.")).toBeNull()
+  expect(await screen.findByText('This profile didn’t load')).toBeTruthy()
+  expect(screen.queryByText('You’re not friends with this person any more.')).toBeNull()
   // And the way out is there, since the hero's top bar never drew.
-  expect(screen.getByLabelText('Go back')).toBeTruthy()
+  expect(screen.getByLabelText('Back')).toBeTruthy()
 
   api.getFriend.mockResolvedValueOnce({ success: true, data: BEN })
   fireEvent.press(screen.getByText('Try again'))

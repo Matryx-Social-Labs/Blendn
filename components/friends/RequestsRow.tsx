@@ -1,50 +1,27 @@
-import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
-import { StyleSheet } from 'react-native'
 
 import { Badge } from '../ds/MonoFamily'
-import ScalePress from '../motion/ScalePress'
-import { Text } from '../ui/Text'
-import { CONTROL, EMBER, EMBER_RADIUS, ICON, SPACE } from '../../lib/theme'
+import { SettingsRow } from '../ds/SettingsRow'
 
 /**
- * "Requests (3)": the way to people waiting on an answer from you.
+ * "Friend requests (3)": the way to people waiting on an answer from you (Flow 6 `me` and `friends`: the user-plus glyph, the title, the
+ * count as the DS badge, a chevron). One `SettingsRow`; the caller puts it in a `SettingsGroup` (alone on Friends, with Crews on Me).
  *
- * On the Me tab and at the top of Friends. Before it, the only place a request
- * showed was Add friends — a screen you open to send your link, not to check
- * for answers — so a request could sit unseen for as long as nobody went there.
- * Drawn only when there is at least one; the count is a badge per the design
- * system (`textPrimary` fill, `bg` text), not the accent.
+ * On the Me tab and at the top of Friends. Before it, the only place a request showed was Add friends — a screen you open to send your
+ * link, not to check for answers — so a request could sit unseen for as long as nobody went there. Drawn only when there is at
+ * least one; the count is a badge per the design system (white, ink digits), not the accent.
  */
 export function RequestsRow({ count }: { count: number }) {
-  const label = `${count} friend request${count === 1 ? '' : 's'}`
   return (
-    <ScalePress
+    <SettingsRow
+      testID="requests-row"
+      icon="user-plus"
+      title="Friend requests"
+      label={`${count} friend request${count === 1 ? '' : 's'}`}
+      hint={undefined}
+      accessory={<Badge text={count > 99 ? '99+' : count} size={22} testID="requests-badge" />}
+      trail="chevron"
       onPress={() => router.push('/friends/requests')}
-      haptic={false}
-      pressedScale={0.98}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityHint="Opens your friend requests"
-      style={styles.row}
-    >
-      <Ionicons name="person-add-outline" size={ICON.md} color={EMBER.textPrimary} />
-      <Text variant="bodyStrong" style={styles.label} maxFontSizeMultiplier={1.4}>Friend requests</Text>
-      <Badge text={count > 99 ? '99+' : count} testID="requests-badge" />
-      <Ionicons name="chevron-forward" size={ICON.sm} color={EMBER.textSecondary} />
-    </ScalePress>
+    />
   )
 }
-
-const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACE.md,
-    paddingHorizontal: SPACE.lg,
-    minHeight: CONTROL.lg,
-    borderRadius: EMBER_RADIUS.md,
-    backgroundColor: EMBER.surfaceSunken,
-  },
-  label: { flex: 1 },
-})

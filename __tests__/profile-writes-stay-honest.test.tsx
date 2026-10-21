@@ -19,7 +19,8 @@ jest.mock('../lib/photoUtils', () => ({
   selectAndUploadPhoto: jest.fn(),
   reorderPhotos: jest.fn(),
   deletePhoto: jest.fn(),
-  getUserPhotos: jest.fn(),
+  loadUserPhotos: jest.fn(),
+  uploadPhoto: jest.fn(),
   cachePhoto: jest.fn().mockResolvedValue(null),
 }))
 jest.mock('../lib/logger', () => ({
@@ -46,7 +47,7 @@ const pu = photoUtils as jest.Mocked<typeof photoUtils>
 
 beforeEach(() => {
   jest.clearAllMocks()
-  pu.getUserPhotos.mockResolvedValue([
+  pu.loadUserPhotos.mockResolvedValue([
     { id: 'u_0', url: 'https://cdn/a.jpg', order: 0, isPrimary: true },
     { id: 'u_1', url: 'https://cdn/b.jpg', order: 1, isPrimary: false },
   ])
@@ -58,8 +59,8 @@ describe('adding a photo', () => {
     pu.reorderPhotos.mockResolvedValue({ ok: false, error: 'That looks like a blank image. Pick a photo of yourself.' })
 
     await render(<PhotoManager userId="u" />)
-    await screen.findByText('Add photo')
-    fireEvent.press(screen.getByText('Add photo'))
+    await screen.findByLabelText('Add photo')
+    await fireEvent.press(screen.getByLabelText('Add photo'))
 
     await waitFor(() => expect(pu.reorderPhotos).toHaveBeenCalledWith('u', ['https://cdn/a.jpg', 'https://cdn/b.jpg', 'https://cdn/c.jpg'], 'https://cdn/a.jpg'))
     // The server's own sentence, not a generic retry.
@@ -73,20 +74,23 @@ describe('adding a photo', () => {
     pu.reorderPhotos.mockResolvedValue({ ok: true })
 
     await render(<PhotoManager userId="u" />)
-    await screen.findByText('Add photo')
-    fireEvent.press(screen.getByText('Add photo'))
+    await screen.findByLabelText('Add photo')
+    await fireEvent.press(screen.getByLabelText('Add photo'))
 
     await waitFor(() => expect(screen.getAllByLabelText(/^Photo \d of 3/)).toHaveLength(3))
     expect(mockShowToast).not.toHaveBeenCalled()
   })
 })
 
+/** A screen reader's Make main photo: the tile's own action, which ends a drag the same way. */
+const makeMain = (label: string) => fireEvent(screen.getByLabelText(label), 'accessibilityAction', { nativeEvent: { actionName: 'makeMain' } })
+
 describe('making a photo the main one', () => {
   it('reorders under the finger and keeps it when the write holds', async () => {
     pu.reorderPhotos.mockResolvedValue({ ok: true })
     await render(<PhotoManager userId="u" />)
     await screen.findByLabelText('Photo 2 of 2')
-    fireEvent.press(screen.getAllByLabelText('Make this my main photo')[0])
+    await makeMain('Photo 2 of 2')
 
     await waitFor(() => expect(pu.reorderPhotos).toHaveBeenCalledWith('u', ['https://cdn/b.jpg', 'https://cdn/a.jpg'], 'https://cdn/a.jpg'))
     // b is now first and carries the main-photo label; nothing was alerted.
@@ -98,7 +102,7 @@ describe('making a photo the main one', () => {
     pu.reorderPhotos.mockResolvedValue({ ok: false, error: 'Could not save your photos' })
     await render(<PhotoManager userId="u" />)
     await screen.findByLabelText('Photo 2 of 2')
-    fireEvent.press(screen.getAllByLabelText('Make this my main photo')[0])
+    await makeMain('Photo 2 of 2')
 
     await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Could not save your photos', 'error', { haptic: 'error' }))
     // The grid is back to what the server holds: a first, b second.
@@ -119,7 +123,7 @@ describe('removing a photo', () => {
     pu.reorderPhotos.mockResolvedValue({ ok: false, error: 'That looks like a blank image. Pick a photo of yourself.' })
     await render(<PhotoManager userId="u" />)
     await screen.findByLabelText('Remove photo 2')
-    fireEvent.press(screen.getByLabelText('Remove photo 2'))
+    await fireEvent.press(screen.getByLabelText('Remove photo 2'))
     confirmRemove()
 
     await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('That looks like a blank image. Pick a photo of yourself.', 'error', { haptic: 'error' }))
@@ -132,7 +136,7 @@ describe('removing a photo', () => {
     pu.deletePhoto.mockResolvedValue(true)
     await render(<PhotoManager userId="u" />)
     await screen.findByLabelText('Remove photo 2')
-    fireEvent.press(screen.getByLabelText('Remove photo 2'))
+    await fireEvent.press(screen.getByLabelText('Remove photo 2'))
     confirmRemove()
 
     await waitFor(() => expect(pu.deletePhoto).toHaveBeenCalledWith('https://cdn/b.jpg'))

@@ -16,7 +16,8 @@ jest.mock('../lib/photoUtils', () => ({
   selectAndUploadPhoto: jest.fn(),
   reorderPhotos: jest.fn(),
   deletePhoto: jest.fn(),
-  getUserPhotos: jest.fn(),
+  loadUserPhotos: jest.fn(),
+  uploadPhoto: jest.fn(),
   cachePhoto: jest.fn().mockResolvedValue(null),
 }))
 jest.mock('../lib/logger', () => ({
@@ -39,13 +40,16 @@ import PhotoManager from '../components/PhotoManager'
 import { showSheet } from '../lib/sheet'
 
 const pu = photoUtils as jest.Mocked<typeof photoUtils>
+
+/** What a screen reader's Make main photo does: the tile's own action, which a drag also ends in. */
+const makeMain = (label: string) => fireEvent(screen.getByLabelText(label), 'accessibilityAction', { nativeEvent: { actionName: 'makeMain' } })
 const A = 'https://cdn/a-sealed'
 const UPLOAD = 'https://cdn/upload-c.jpg'
 const SEALED = 'https://cdn/c-sealed'
 
 beforeEach(() => {
   jest.clearAllMocks()
-  pu.getUserPhotos.mockResolvedValue([{ id: 'u_0', url: A, order: 0, isPrimary: true }])
+  pu.loadUserPhotos.mockResolvedValue([{ id: 'u_0', url: A, order: 0, isPrimary: true }])
   pu.selectAndUploadPhoto.mockResolvedValue({ success: true, url: UPLOAD })
 })
 
@@ -53,12 +57,14 @@ it("makes the new photo main by the URL the server stored, not the upload it del
   pu.reorderPhotos.mockResolvedValueOnce({ ok: true, photos: [A, SEALED] }).mockResolvedValueOnce({ ok: true, photos: [SEALED, A] })
 
   await render(<PhotoManager userId="u" />)
-  await screen.findByText('Add photo')
-  await fireEvent.press(screen.getByText('Add photo'))
+  await screen.findByLabelText('Add photo')
+  await fireEvent.press(screen.getByLabelText('Add photo'))
   await waitFor(() => expect(pu.reorderPhotos).toHaveBeenCalledTimes(1))
-  await screen.findByText('Add photo')
+  await screen.findByLabelText('Photo 2 of 2')
 
-  await fireEvent.press(screen.getByLabelText('Make this my main photo'))
+  await act(async () => {
+    makeMain('Photo 2 of 2')
+  })
 
   await waitFor(() => expect(pu.reorderPhotos).toHaveBeenCalledTimes(2))
   expect(pu.reorderPhotos.mock.calls[1][1]).toEqual([SEALED, A])
@@ -71,45 +77,47 @@ function deferred() {
   return { promise, resolve }
 }
 
-it("refuses Make main while the add's write is open, then makes it main by the stored URL", async () => {
+it("refuses a reorder while the add's write is open, then makes it main by the stored URL", async () => {
   const add = deferred()
   pu.reorderPhotos.mockReturnValueOnce(add.promise).mockResolvedValueOnce({ ok: true, photos: [SEALED, A] })
 
   await render(<PhotoManager userId="u" />)
-  await screen.findByText('Add photo')
+  await screen.findByLabelText('Add photo')
   await act(async () => {
-    fireEvent.press(screen.getByText('Add photo'))
+    fireEvent.press(screen.getByLabelText('Add photo'))
   })
   await screen.findByLabelText('Photo 2 of 2')
 
-  const makeMain = screen.getByLabelText('Make this my main photo')
-  expect(makeMain.props.accessibilityState).toMatchObject({ disabled: true })
-  await fireEvent.press(makeMain)
+  // The tile is draggable only when nothing is being written: its × is the visible sign, and a second write is refused outright.
+  expect(screen.getByLabelText('Remove photo 2').props.accessibilityState).toMatchObject({ disabled: true })
+  await act(async () => {
+    makeMain('Photo 2 of 2')
+  })
   expect(pu.reorderPhotos).toHaveBeenCalledTimes(1)
 
   await act(async () => {
     add.resolve({ ok: true, photos: [A, SEALED] })
   })
-  await waitFor(() =>
-    expect(screen.getByLabelText('Make this my main photo').props.accessibilityState).toMatchObject({ disabled: false })
-  )
-  await fireEvent.press(screen.getByLabelText('Make this my main photo'))
+  await waitFor(() => expect(screen.getByLabelText('Remove photo 2').props.accessibilityState).toMatchObject({ disabled: false }))
+  await act(async () => {
+    makeMain('Photo 2 of 2')
+  })
   await waitFor(() => expect(pu.reorderPhotos).toHaveBeenCalledTimes(2))
   expect(pu.reorderPhotos.mock.calls[1][1]).toEqual([SEALED, A])
 })
 
-it("refuses Remove and Add while Make main's write is open", async () => {
-  pu.getUserPhotos.mockResolvedValue([
+it('refuses Remove and Add while a reorder’s write is open', async () => {
+  pu.loadUserPhotos.mockResolvedValue([
     { id: 'u_0', url: A, order: 0, isPrimary: true },
     { id: 'u_1', url: SEALED, order: 1, isPrimary: false },
   ])
-  const makeMain = deferred()
-  pu.reorderPhotos.mockReturnValueOnce(makeMain.promise)
+  const write = deferred()
+  pu.reorderPhotos.mockReturnValueOnce(write.promise)
 
   await render(<PhotoManager userId="u" />)
   await screen.findByLabelText('Photo 2 of 2')
   await act(async () => {
-    fireEvent.press(screen.getByLabelText('Make this my main photo'))
+    makeMain('Photo 2 of 2')
   })
 
   expect(screen.getByLabelText('Remove photo 2').props.accessibilityState).toMatchObject({ disabled: true })
@@ -119,39 +127,35 @@ it("refuses Remove and Add while Make main's write is open", async () => {
   expect(pu.selectAndUploadPhoto).not.toHaveBeenCalled()
 
   await act(async () => {
-    makeMain.resolve({ ok: true, photos: [SEALED, A] })
+    write.resolve({ ok: true, photos: [SEALED, A] })
   })
-  await waitFor(() =>
-    expect(screen.getByLabelText('Remove photo 2').props.accessibilityState).toMatchObject({ disabled: false })
-  )
+  await waitFor(() => expect(screen.getByLabelText('Remove photo 2').props.accessibilityState).toMatchObject({ disabled: false }))
 })
 
-it('refuses a second Make main inside one frame, before the button can show it is busy', async () => {
-  pu.getUserPhotos.mockResolvedValue([
+it('refuses a second reorder inside one frame, before the tiles can show they are busy', async () => {
+  pu.loadUserPhotos.mockResolvedValue([
     { id: 'u_0', url: A, order: 0, isPrimary: true },
     { id: 'u_1', url: SEALED, order: 1, isPrimary: false },
   ])
-  const makeMain = deferred()
-  pu.reorderPhotos.mockReturnValueOnce(makeMain.promise)
+  const write = deferred()
+  pu.reorderPhotos.mockReturnValueOnce(write.promise)
 
   await render(<PhotoManager userId="u" />)
   await screen.findByLabelText('Photo 2 of 2')
-  const button = screen.getByLabelText('Make this my main photo')
-  // One outer act: React renders once at its end, so the second press meets the
-  // same, still-enabled button — only the ref can refuse it.
+  // One outer act: React renders once at its end, so the second action meets the same, still-enabled tile: only the ref can refuse it.
   await act(async () => {
-    fireEvent.press(button)
-    fireEvent.press(button)
+    makeMain('Photo 2 of 2')
+    makeMain('Photo 2 of 2')
   })
 
   expect(pu.reorderPhotos).toHaveBeenCalledTimes(1)
   await act(async () => {
-    makeMain.resolve({ ok: true, photos: [SEALED, A] })
+    write.resolve({ ok: true, photos: [SEALED, A] })
   })
 })
 
 it('Remove lets go of the grid when its write ends: refused, then held', async () => {
-  pu.getUserPhotos.mockResolvedValue([
+  pu.loadUserPhotos.mockResolvedValue([
     { id: 'u_0', url: A, order: 0, isPrimary: true },
     { id: 'u_1', url: SEALED, order: 1, isPrimary: false },
   ])
@@ -172,7 +176,6 @@ it('Remove lets go of the grid when its write ends: refused, then held', async (
   await removeVia(0)
   await waitFor(() => expect(screen.getAllByLabelText(/^Photo \d of 2/)).toHaveLength(2))
   expect(screen.getByLabelText('Remove photo 2').props.accessibilityState).toMatchObject({ disabled: false })
-  expect(screen.getByLabelText('Make this my main photo').props.accessibilityState).toMatchObject({ disabled: false })
 
   // Held: one photo left, and free again.
   await removeVia(1)

@@ -6,7 +6,7 @@
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { AccessibilityInfo, StyleSheet } from 'react-native'
+import { AccessibilityInfo, StyleSheet, Text } from 'react-native'
 
 import { SettingsGroup, SettingsRow } from '../components/ds/SettingsRow'
 import { PRESSED_WASH } from '../components/ds/shared'
@@ -159,5 +159,19 @@ describe('<SettingsGroup>', () => {
     const line = StyleSheet.flatten(screen.getAllByTestId('g-hairline', { includeHiddenElements: true })[0].props.style)
     expect(line).toMatchObject({ height: 1, backgroundColor: MATERIAL.hairlineIncreaseContrast })
     expect(flat('g-card').borderColor).toBe(MATERIAL.hairlineIncreaseContrast)
+  })
+})
+
+describe('a leading mark and an accessory (Flow 6: Crews, Friend requests)', () => {
+  it('draws the leading mark in place of the glyph, and says the whole sentence', async () => {
+    await render(
+      <SettingsGroup>
+        <SettingsRow leading={<Text testID="emblems">E</Text>} title="Crews" label="Crews, 2, 1 invite waiting" accessory={<Text testID="count">2</Text>} trail="chevron" onPress={() => {}} />
+      </SettingsGroup>
+    )
+    expect(screen.getByTestId('emblems')).toBeTruthy()
+    expect(screen.getByLabelText('Crews, 2, 1 invite waiting').props.accessibilityRole).toBe('button')
+    // The accessory is decorative: the label carries it.
+    expect(screen.getByTestId('count', { includeHiddenElements: true }).parent?.props.accessibilityElementsHidden).toBe(true)
   })
 })

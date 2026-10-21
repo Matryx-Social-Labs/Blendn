@@ -89,12 +89,12 @@ describe('a friend\'s profile', () => {
 })
 
 describe('the Me tab', () => {
-  it('counts friends and opens the list, and has an Add friends pill beside Edit', () => {
+  it('counts friends and opens the list, and has Add friends as a bar circle beside Settings', () => {
     const src = read('app/(tabs)/profile.tsx')
-    expect(src).toContain('<Stat value={friendsCount} label="Friends" onPress={openFriends} hint="Opens your friends" />')
+    expect(read('components/profile/MeSections.tsx')).toContain('<Stat value={friends} label="Friends" onPress={onFriends} hint="Opens your friends" />')
     expect(src).toContain("const openFriends = () => router.push('/friends')")
     expect(src).toContain("router.push('/friends/add')")
-    expect(src).toContain('accessibilityLabel="Add friends"')
+    expect(src).toContain("label: 'Add friends'")
   })
 })
 

@@ -133,7 +133,7 @@ describe('the attendee profile fails closed', () => {
 
   it('titles them by the room’s pseudonym, never the leaked name or "Attendee"', () => {
     const who = profileIdentity({ ...leaked, identityVisible: false }, { pseudonym: 'Cosmic Panda', roomSeed: 'g1:rh_b' })
-    expect(who).toEqual({ revealed: false, title: 'Cosmic Panda', seed: 'Cosmic Panda' })
+    expect(who).toEqual({ revealed: false, title: 'Cosmic Panda', name: 'Cosmic Panda', age: 29, seed: 'Cosmic Panda' })
     const nobody = profileIdentity({ name: 'Attendee', identityVisible: false })
     expect(nobody.title).toBe('Someone')
     expect(nobody.seed).not.toContain('Attendee')

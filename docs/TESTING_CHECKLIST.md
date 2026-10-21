@@ -155,8 +155,9 @@ usable rather than a dead end.
 4. Leave, and confirm the thread is gone from **both** inboxes.
 
 ### C8. Photos
-- **Make main** appears on every non-primary tile; tapping it promotes that
-  photo, and the match card and DM avatar follow.
+- Long-press a photo and drag it to the first slot: it lifts (a tick), the others
+  make room, and on the drop that photo is main; the match card and DM avatar follow.
+  VoiceOver: a photo's actions include Make main photo, Move earlier and Move later.
 - Signing up with Google gives you **no** photo until you choose one. That is
   correct: an avatar is not a choice, and it had never been moderated.
 

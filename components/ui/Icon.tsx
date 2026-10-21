@@ -86,6 +86,7 @@ import HeartOff from 'lucide-react-native/icons/heart-off'
 import Hourglass from 'lucide-react-native/icons/hourglass'
 import IdCard from 'lucide-react-native/icons/id-card'
 import Image from 'lucide-react-native/icons/image'
+import Images from 'lucide-react-native/icons/images'
 import Info from 'lucide-react-native/icons/info'
 import KeyRound from 'lucide-react-native/icons/key-round'
 import Link from 'lucide-react-native/icons/link'
@@ -109,6 +110,7 @@ import Moon from 'lucide-react-native/icons/moon'
 import Music from 'lucide-react-native/icons/music'
 import Music2, { __iconData as music2Data } from 'lucide-react-native/icons/music-2'
 import Navigation from 'lucide-react-native/icons/navigation'
+import PenLine from 'lucide-react-native/icons/pen-line'
 import Pencil from 'lucide-react-native/icons/pencil'
 import Play from 'lucide-react-native/icons/play'
 import Plus from 'lucide-react-native/icons/plus'
@@ -124,6 +126,7 @@ import Scale from 'lucide-react-native/icons/scale'
 import ScanFace from 'lucide-react-native/icons/scan-face'
 import Search from 'lucide-react-native/icons/search'
 import Send from 'lucide-react-native/icons/send'
+import Settings from 'lucide-react-native/icons/settings'
 import Settings2 from 'lucide-react-native/icons/settings-2'
 import Share from 'lucide-react-native/icons/share'
 import Shield from 'lucide-react-native/icons/shield'
@@ -242,6 +245,7 @@ const ICONS = {
   hourglass: Hourglass,
   'id-card': IdCard,
   image: Image,
+  images: Images,
   info: Info,
   'key-round': KeyRound,
   link: Link,
@@ -265,6 +269,7 @@ const ICONS = {
   music: Music,
   'music-2': Music2,
   navigation: Navigation,
+  'pen-line': PenLine,
   pencil: Pencil,
   play: Play,
   plus: Plus,
@@ -279,6 +284,7 @@ const ICONS = {
   'scan-face': ScanFace,
   search: Search,
   send: Send,
+  settings: Settings,
   'settings-2': Settings2,
   share: Share,
   shield: Shield,

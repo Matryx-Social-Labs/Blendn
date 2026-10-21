@@ -2,15 +2,10 @@ import { useState } from 'react'
 import { Dimensions, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import {
-  ProfileActions,
-  ProfileBio,
-  ProfileDetail,
-  ProfileGallery,
-  ProfileHeading,
-  ProfileHero,
-  ProfileInterests,
-} from '../../components/profile/ProfileSections'
+import { Button } from '../../components/ds/Button'
+import { ProfileDock } from '../../components/profile/ProfileDock'
+import { ProfileHeroStage } from '../../components/profile/ProfileHeroStage'
+import { ProfileBio, ProfileDetail, ProfileGallery, ProfileInterests, ProfileSection } from '../../components/profile/ProfileSections'
 import { EMBER, EMBER_RADIUS, GUTTER, SPACE, TYPE } from '../../lib/theme'
 
 /**
@@ -60,27 +55,26 @@ export default function ProfilePreview() {
         contentContainerStyle={{ paddingBottom: insets.bottom + 132 }}
         showsVerticalScrollIndicator={false}
       >
-        <ProfileHero
+        <ProfileHeroStage
           width={W}
-          photos={photos}
-          blurred={!revealed}
-          title={revealed ? 'Julian Ember, 24' : 'Cosmic Panda'}
-          subtitle={revealed ? 'Design • London' : 'Design • London'}
-          pseudonym="Cosmic Panda"
+          photos={revealed ? photos : []}
+          name={revealed ? 'Julian Ember' : 'Cosmic Panda'}
+          age={24}
+          subtitle="Design • London"
+          seed="Cosmic Panda"
+          anonymous={!revealed}
         />
 
         <View style={styles.canvas}>
           {revealed ? (
-            <View style={styles.section}>
-              <ProfileHeading title="Bio" />
+            <ProfileSection title="Bio">
               <ProfileBio text={BIO} />
-            </View>
+            </ProfileSection>
           ) : null}
 
-          <View style={styles.section}>
-            <ProfileHeading title="Interests" />
+          <ProfileSection title="Interests" trailing="2 shared">
             <ProfileInterests interests={INTERESTS} sharedInterests={SHARED} />
-          </View>
+          </ProfileSection>
 
           {revealed ? (
             <View style={styles.details}>
@@ -90,27 +84,20 @@ export default function ProfilePreview() {
           ) : null}
 
           {revealed ? (
-            <View style={styles.section}>
-              <ProfileHeading title="Gallery" trailing={`${PHOTOS.length} photos`} />
+            <ProfileSection title="Photos" trailing={`${PHOTOS.length} photos`}>
               <ProfileGallery photos={PHOTOS.slice(1)} columnWidth={columnWidth} />
-            </View>
+            </ProfileSection>
           ) : (
-            <View style={styles.section}>
-              <ProfileHeading title="Still anonymous" />
+            <ProfileSection title="Still anonymous">
               <ProfileBio text="Cosmic Panda has not revealed who they are yet. Connect, talk, and either of you can reveal when you want to." />
-            </View>
+            </ProfileSection>
           )}
         </View>
-        <View style={styles.action}>
-          <ProfileActions
-            name={revealed ? 'Julian Ember' : 'Cosmic Panda'}
-            label="Connect"
-            onPress={() => {}}
-            hint="Send a request to start chatting."
-            onLike={() => {}}
-          />
-        </View>
       </ScrollView>
+      <ProfileDock note="Connect sends a request and reveals your name and photo.">
+        <Button kind="primary" icon="heart" label="Like" onPress={() => {}} style={styles.flex} />
+        <Button kind="secondary" label="Connect" onPress={() => {}} style={styles.flex} />
+      </ProfileDock>
 
       <Pressable
         onPress={() => setRevealed((r) => !r)}
@@ -129,7 +116,7 @@ const styles = StyleSheet.create({
   canvas: { paddingHorizontal: GUTTER, paddingTop: SPACE.xxl, gap: SPACE.xxl },
   section: { gap: SPACE.lg },
   details: { gap: SPACE.xl },
-  action: { paddingHorizontal: GUTTER, paddingTop: SPACE.xxxl },
+  flex: { flex: 1 },
   toggle: {
     position: 'absolute',
     right: GUTTER,

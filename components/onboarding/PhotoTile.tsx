@@ -91,7 +91,7 @@ export function PhotoTile({
         <View style={styles.failed} accessibilityRole="alert">
           <Icon name="circle-alert" size={ICON.nav} color={COLOR.textPrimary} />
           <Text style={[font('meta', bold), styles.ink]}>Didn’t upload</Text>
-          <Button label="Retry" kind="strong" size="sm" onPress={onRetry} disabled={retryDisabled} testID={`photo-retry-${index}`} />
+          <Button label="Retry" kind="strong" size="sm" onPress={onRetry} disabled={retryDisabled} testID={`photo-retry-${index}`} style={styles.centred} />
         </View>
       ) : null}
 
@@ -118,6 +118,7 @@ export function PhotoTile({
 }
 
 const styles = StyleSheet.create({
+  centred: { alignSelf: 'center' },
   tile: { borderRadius: RADIUS.mediaInCard, backgroundColor: COLOR.surface, overflow: 'hidden' },
   main: { width: '100%' },
   chosen: { borderWidth: SPACE.xxs },

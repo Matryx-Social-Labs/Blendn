@@ -941,6 +941,8 @@ export interface UserProfileData {
      */
     intent_default?: ('dating' | 'networking' | 'friendship' | 'just_here')[]
     work_field?: string | null
+    /** Your own profile only: the slugs you picked within the field (the route sends labels to everyone else). */
+    expertise?: string[]
     gender?: 'woman' | 'man' | 'non_binary' | 'prefer_not_to_say' | null
     orientations?: string[]
     interested_in?: ('woman' | 'man' | 'non_binary' | 'prefer_not_to_say')[]

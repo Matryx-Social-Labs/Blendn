@@ -15,13 +15,14 @@ jest.mock('expo-router', () => ({
 jest.mock('react-native-safe-area-context', () => {
   const React = require('react')
   const { View } = require('react-native')
-  return { SafeAreaView: (p: object) => React.createElement(View, p) }
+  return { SafeAreaView: (p: object) => React.createElement(View, p), useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }
 })
 jest.mock('../lib/apiClient', () => ({
   apiClient: { openFriendInvite: jest.fn(), sendFriendRequest: jest.fn() },
 }))
 const mockShowToast = jest.fn()
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShowToast }) }))
+jest.mock('../components/ds/Orbs', () => ({ Orbs: () => null }))
 jest.mock('../components/OptimizedImage', () => {
   const React = require('react')
   const { View } = require('react-native')
@@ -44,7 +45,7 @@ it('says a dead link does not work, and nothing about why', async () => {
     errorCode: 'NOT_FOUND',
   })
   await render(<InviteScreen />)
-  await screen.findByText("This link doesn't work")
+  await screen.findByText('This link doesn’t work')
   expect(screen.getByText('Ask the person who sent it for a new one.')).toBeTruthy()
   // No action to take on a link that does not work.
   expect(screen.queryByText('Send friend request')).toBeNull()
@@ -53,12 +54,12 @@ it('says a dead link does not work, and nothing about why', async () => {
 it('calls a link that failed to load a failed load, not a dead link, and tries again', async () => {
   api.openFriendInvite.mockResolvedValueOnce({ success: false, error: 'This is taking too long. Check your connection and try again.' })
   await render(<InviteScreen />)
-  await screen.findByText("This link didn't open")
-  expect(screen.queryByText("This link doesn't work")).toBeNull()
+  await screen.findByText('This link didn’t open')
+  expect(screen.queryByText('This link doesn’t work')).toBeNull()
 
   api.openFriendInvite.mockResolvedValueOnce({ success: true, data: { person: ANA, state: 'none' } })
   fireEvent.press(screen.getByText('Try again'))
-  await screen.findByText('Ana')
+  await screen.findByText('Ana wants to blend with you')
   expect(screen.getByText('Send friend request')).toBeTruthy()
 })
 
@@ -67,7 +68,7 @@ it('shows who sent it and asks with the token, then says Requested', async () =>
   api.sendFriendRequest.mockResolvedValue({ success: true, data: { state: 'requested' } })
   await render(<InviteScreen />)
 
-  await screen.findByText('Ana')
+  await screen.findByText('Ana wants to blend with you')
   fireEvent.press(screen.getByText('Send friend request'))
 
   await waitFor(() => expect(api.sendFriendRequest).toHaveBeenCalledWith({ token: 'abcdefghijklmnopqrstuv' }))
@@ -79,7 +80,7 @@ it('stays put and says so when the request fails', async () => {
   api.sendFriendRequest.mockResolvedValue({ success: false, error: 'nope' })
   await render(<InviteScreen />)
 
-  await screen.findByText('Ana')
+  await screen.findByText('Ana wants to blend with you')
   fireEvent.press(screen.getByText('Send friend request'))
 
   await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("That didn't go through. Try again.", 'error', { haptic: 'error' }))
@@ -97,4 +98,29 @@ it('accepting from the link makes you friends at once', async () => {
 
   fireEvent.press(screen.getByText('View profile'))
   expect(router.replace).toHaveBeenCalledWith({ pathname: '/friends/[userId]', params: { userId: 'u_ana' } })
+})
+
+it('is the page’s own shape while it loads, not a bare spinner', async () => {
+  api.openFriendInvite.mockReturnValue(new Promise(() => {}))
+  await render(<InviteScreen />)
+  expect(screen.getByTestId('invite-loading')).toBeTruthy()
+  expect(screen.queryByText('Send friend request')).toBeNull()
+})
+
+it('says your own link is yours, with Share your link', async () => {
+  api.openFriendInvite.mockResolvedValue({ success: true, data: { person: ANA, state: 'self' } })
+  await render(<InviteScreen />)
+  await screen.findByText('Your invite link')
+  fireEvent.press(screen.getByText('Share your link'))
+  expect(router.replace).toHaveBeenCalledWith('/friends/add')
+})
+
+it('keeps Requested as a disabled secondary with the waiting line, and Not now closes', async () => {
+  api.openFriendInvite.mockResolvedValue({ success: true, data: { person: ANA, state: 'requested' } })
+  await render(<InviteScreen />)
+  await screen.findByText('Requested')
+  expect(screen.getByText('Your request is waiting. You’ll hear when they accept.')).toBeTruthy()
+  expect(api.sendFriendRequest).not.toHaveBeenCalled()
+  fireEvent.press(screen.getByText('Not now'))
+  expect(router.back).toHaveBeenCalled()
 })

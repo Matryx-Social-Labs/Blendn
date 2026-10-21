@@ -13,6 +13,7 @@ const stripComments = (src: string) =>
 
 const SCREEN = () => stripComments(read('app/user/[id].tsx'))
 const SECTIONS = () => stripComments(read('components/profile/ProfileSections.tsx'))
+const STAGE = () => stripComments(read('components/profile/ProfileHeroStage.tsx'))
 
 describe('the screen never re-decides the identity gate', () => {
   it("takes the server's identityVisible, and fails closed without it", () => {
@@ -44,24 +45,26 @@ describe('the screen never re-decides the identity gate', () => {
     expect(src).not.toContain('Private')
     // Each section is conditional on its own field.
     expect(src).toContain('{profile?.bio ? (')
-    expect(src).toContain('{profile?.occupation || profile?.education ? (')
+    expect(src).toContain('{profile?.occupation ? <ProfileDetail')
+    expect(src).toContain('{profile?.education ? <ProfileDetail')
   })
 
   it('says out loud that an unrevealed profile is working as intended', () => {
     // Otherwise it reads as half-loaded, and the absence IS the product.
-    expect(SCREEN()).toContain('Still anonymous')
+    expect(SCREEN()).toContain('hasn’t revealed who they are yet')
   })
 })
 
 describe('an unrevealed profile draws only what it was given', () => {
-  it('falls back to the generated mark when there is no photo', () => {
+  it('falls back to the creature when there is no photo', () => {
     /*
      * Which, in the real app, is always: `rankMatches` and
      * `profiles/[userId]` both send an empty `profile_photos` for anyone
-     * unrevealed. The mark is what the screen actually renders today.
+     * unrevealed. The creature (the room's own mark, `<Avatar kind="creature">`)
+     * is what the screen actually renders today.
      */
-    const src = SECTIONS()
-    expect(src).toContain('pseudonymAvatar(pseudonym)')
+    const src = STAGE()
+    expect(src).toContain('<Avatar kind="creature" pseudonym={seed}')
   })
 
   it('blurs the derivative, never the real photos', () => {
@@ -76,11 +79,11 @@ describe('an unrevealed profile draws only what it was given', () => {
      */
     const src = SCREEN()
     expect(src).toContain('const blurHero = !revealed && profile?.blurPhoto ? [profile.blurPhoto] : []')
-    expect(src).toContain('photos={revealed ? photos : blurHero}')
-    expect(src).toContain('blurred={!revealed}')
+    expect(src).toContain('photos={revealed ? photos : []}')
+    expect(src).toContain('blurredUri={blurHero[0] ?? null}')
   })
 
-  it('falls back to the mark when there is no derivative', () => {
+  it('falls back to the creature when there is no derivative', () => {
     // Which is every profile until people re-upload: the column is null for
     // every existing row, and a missing blur must not become a real photograph.
     expect(SCREEN()).toContain('profile?.blurPhoto ? [profile.blurPhoto] : []')
@@ -89,27 +92,27 @@ describe('an unrevealed profile draws only what it was given', () => {
   it('shows one still when blurred, not the pager', () => {
     // Cycling blurred photographs is motion with no information in it: you
     // cannot tell the frames apart, so it reads as a rendering fault.
-    const src = SECTIONS()
-    const branch = src.slice(src.indexOf('{blurred && photos.length > 0 ? ('))
-    expect(branch.slice(0, branch.indexOf(') : playlist'))).not.toContain('SceneHeroMedia')
+    const src = STAGE()
+    const branch = src.slice(src.indexOf('{shown ? ('), src.indexOf('hero-creature'))
+    expect(branch.slice(branch.indexOf(') : blurredUri'))).not.toContain('ProfileHeroPager')
   })
 
   it('seeds the mark on the pseudonym, never a user id', () => {
-    const src = SECTIONS()
-    const hero = src.slice(src.indexOf('export function ProfileHero'), src.indexOf('export function ProfileHeading'))
+    const hero = STAGE()
     expect(hero).not.toContain('userId')
     expect(hero).not.toContain('user_id')
   })
 })
 
-describe('the hero reuses the Scene’s pager rather than a second one', () => {
-  it('is SceneHeroMedia, so auto-advance stops on the first manual swipe', () => {
+describe('the hero pager advances by itself until the first swipe', () => {
+  it('stops for good on the first manual swipe, and never runs under Reduce Motion', () => {
     /*
-     * That rule matters and is already written down there: resuming after a
-     * pause moves the thing you are looking at out from under you. A second
-     * pager would have to re-derive it, and would eventually disagree.
+     * That rule matters: resuming after a pause moves the thing you are looking
+     * at out from under you. The gesture is the signal, not the page landing.
      */
-    expect(SECTIONS()).toContain('<SceneHeroMedia')
+    const src = stripComments(read('components/profile/ProfileHeroPager.tsx'))
+    expect(src).toContain('onScrollBeginDrag={() => setManual(true)}')
+    expect(src).toContain('const auto = !manual && !reduceMotion && count > 1')
   })
 
   it('does not repeat the hero’s first photo in the gallery', () => {
@@ -129,9 +132,8 @@ describe('the profile carries the Grid\'s two actions', () => {
      * This also settles the collision that "Connect" had two meanings on
      * adjacent screens -- the Grid's like and the profile's request.
      */
-    const src = SECTIONS()
-    expect(src).toContain('onLike?: () => void')
-    expect(SCREEN()).toContain('onLike={eventId ? handleLike : undefined}')
+    expect(SCREEN()).toContain('{eventId ? (')
+    expect(SCREEN()).toContain('onPress={handleLike}')
   })
 
   it('hides Like when there is no event to like within', () => {
@@ -149,14 +151,11 @@ describe('the profile carries the Grid\'s two actions', () => {
   })
 
   it('keeps the like prominent here too', () => {
-    // The safe, reversible action is the easy one on every surface. A button
-    // that publishes your identity should not be the prettiest thing twice.
-    const src = SECTIONS()
-    const actions = src.slice(src.indexOf('export function ProfileActions'))
-    expect(actions.indexOf('onPress={onLike}')).toBeLessThan(actions.indexOf('onPress={onPress}'))
-    // The Like is the flat accent fill (no gradient: see tasks/lessons.md).
-    expect(actions.slice(0, actions.indexOf('onPress={onPress}'))).toContain('styles.actionPrimary')
-    expect(src).toContain('actionPrimary: { backgroundColor: EMBER.accent }')
+    // The safe, reversible action is the easy one on every surface: the one
+    // gradient primary, before Connect, which publishes your identity.
+    const src = SCREEN()
+    expect(src.indexOf("kind={liked ? 'strong' : 'primary'}")).toBeGreaterThan(-1)
+    expect(src.indexOf("kind={liked ? 'strong' : 'primary'}")).toBeLessThan(src.indexOf('kind="secondary"'))
   })
 
   it('rolls a failed like back, and never a failed request', () => {
@@ -191,7 +190,7 @@ describe('what the frame draws and the product cannot back', () => {
     const src = SCREEN()
     expect(src).not.toContain('PRO MEMBER')
     expect(src).not.toContain('@blendn')
-    expect(src).toContain("[profile?.workField, profile?.location].filter(Boolean).join(' • ')")
+    expect(src).toContain("[profile?.workField, profile?.location].filter(Boolean).join(' · ')")
   })
 
   it('ships no Appreciate button', () => {
@@ -208,40 +207,28 @@ describe('what the frame draws and the product cannot back', () => {
 describe('the shared interest is the point, not an accent', () => {
   it('highlights the interests you both picked', () => {
     /*
-     * The frame's one gradient chip is decoration on the artboard. Driven by the
-     * server's already-intersected `sharedInterests`, it becomes the most useful
-     * thing on the screen: the reason you might talk to them.
+     * Driven by the server's already-intersected `sharedInterests`, it is the
+     * most useful thing on the screen: the reason you might talk to them.
      */
     const src = SECTIONS()
     expect(src).toContain('const shared = new Set((sharedInterests ?? []).map((s) => s.toLowerCase()))')
     expect(src).toContain('shared.has(interest.toLowerCase())')
   })
 
-  it('wraps rather than copying the frame’s absolute positions', () => {
-    /*
-     * The frame places five chips into a fixed 168pt box. That arrangement only
-     * holds for those five strings; real interests are any number of any length.
-     */
+  it('wraps rather than copying the frame’s fixed five', () => {
     const src = SECTIONS()
-    const wrap = src.slice(src.indexOf('chipWrap: {'))
+    const wrap = src.slice(src.indexOf('chips: {'))
     expect(wrap.slice(0, wrap.indexOf('},'))).toContain("flexWrap: 'wrap'")
   })
 })
 
 describe('measurements that came off the frame', () => {
-  it('keeps the hero aspect', () => {
-    // The gutter and section rhythm now come from the design system
-    // (`GUTTER`, `SPACE.xxl`), not the frame's 12 and 64.
-    expect(SECTIONS()).toContain('PROFILE_HERO_ASPECT = 751 / 390')
+  it('keeps the hero at 1.3 of the width, so the tray and the first section are above the fold', () => {
+    expect(STAGE()).toContain('PROFILE_HERO_ASPECT = 1.3')
   })
 
-  it('sets the bio as body text, leading and all, from the type scale', () => {
-    // The frame's 26pt leading was a one-off; the TYPE role sets line height.
-    const src = SECTIONS()
-    const bio = src.slice(src.indexOf('bio: {'))
-    const rule = bio.slice(0, bio.indexOf('},'))
-    expect(rule).toContain('...TYPE.body')
-    expect(rule).not.toContain('lineHeight')
+  it('sets the bio as body text from the type scale', () => {
+    expect(SECTIONS()).toContain("font('body', bold)")
   })
 
   it('keeps occupation and education asymmetric', () => {
@@ -251,6 +238,6 @@ describe('measurements that came off the frame', () => {
     expect(src).toContain('detailCard: {')
     expect(src).toContain('detailRuled: {')
     const ruled = src.slice(src.indexOf('detailRuled: {'))
-    expect(ruled.slice(0, ruled.indexOf('},'))).toContain('borderLeftWidth: 1')
+    expect(ruled.slice(0, ruled.indexOf('},'))).toContain('borderLeftWidth')
   })
 })

@@ -102,12 +102,12 @@
           "image": "./assets/logo/monogram-gradient.png",
           "imageWidth": 118,
           "resizeMode": "contain",
-          "backgroundColor": "#0F0E0E",
+          "backgroundColor": "#0D0C0C",
           "dark": {
             "image": "./assets/logo/monogram-gradient.png",
             "imageWidth": 118,
             "resizeMode": "contain",
-            "backgroundColor": "#0F0E0E"
+            "backgroundColor": "#0D0C0C"
           }
         }
       ],

@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons'
 import { router, useFocusEffect } from 'expo-router'
 import { useCallback, useState } from 'react'
 import { FlatList, RefreshControl, StyleSheet, View } from 'react-native'
@@ -6,11 +5,13 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { StateScreen } from '../../components/ds/StateScreen'
 import { TopBar } from '../../components/ds/TopBar'
+import { OfflineStrip, useOffline } from '../../components/profile/OfflineStrip'
 import { PersonRow, PersonRowSkeleton } from '../../components/friends/PersonRow'
+import { SettingsGroup } from '../../components/ds/SettingsRow'
 import { RequestsRow } from '../../components/friends/RequestsRow'
 import { apiClient } from '../../lib/apiClient'
-import { friendsSinceLabel, type Friend } from '../../lib/friends'
-import { EMBER, GUTTER, ICON, SPACE } from '../../lib/theme'
+import { friendsSinceParts, type Friend } from '../../lib/friends'
+import { COLOR, SPACE } from '../../lib/design/tokens'
 import { useFriendRequests } from '../../lib/useFriendRequests'
 import { useTopBarState } from '../../lib/useTopBarState'
 import { HueProvider } from '../../components/ds/shared'
@@ -28,6 +29,7 @@ function FriendsScreenContent() {
   const [refreshing, setRefreshing] = useState(false)
   const requests = useFriendRequests()
   const bar = useTopBarState()
+  const offline = useOffline()
 
   const load = useCallback(async () => {
     const result = await apiClient.getFriends()
@@ -78,9 +80,16 @@ function FriendsScreenContent() {
         onBack={() => router.back()}
         actions={[{ icon: 'user-plus', label: 'Add friends', onPress: openAdd }]}
       />
+      {offline ? (
+        <View style={styles.requests}>
+          <OfflineStrip offline />
+        </View>
+      ) : null}
       {requests.incoming.length > 0 ? (
         <View style={styles.requests}>
-          <RequestsRow count={requests.incoming.length} />
+          <SettingsGroup>
+            <RequestsRow count={requests.incoming.length} />
+          </SettingsGroup>
         </View>
       ) : null}
       {friends === null && !failed ? (
@@ -89,18 +98,22 @@ function FriendsScreenContent() {
         <FlatList
           data={friends ?? []}
           keyExtractor={(f) => f.userId}
-          renderItem={({ item }) => (
-            <PersonRow
-              person={item}
-              detail={friendsSinceLabel(item.since)}
-              onPress={() => router.push({ pathname: '/friends/[userId]', params: { userId: item.userId } })}
-              trailing={<Ionicons name="chevron-forward" size={ICON.sm} color={EMBER.textSecondary} />}
-            />
-          )}
+          renderItem={({ item }) => {
+            const since = friendsSinceParts(item.since)
+            return (
+              <PersonRow
+                person={item}
+                detail={since.words}
+                detailMono={since.date ?? undefined}
+                onPress={() => router.push({ pathname: '/friends/[userId]', params: { userId: item.userId } })}
+                chevron
+              />
+            )
+          }}
           contentContainerStyle={friends?.length ? styles.list : styles.emptyList}
           ListEmptyComponent={empty}
           // `textSecondary`, the one pull-to-refresh colour (docs/DESIGN_SYSTEM.md).
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={EMBER.textSecondary} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLOR.textSecondary} />}
           showsVerticalScrollIndicator={false}
           {...bar.scrollProps}
         />
@@ -110,10 +123,10 @@ function FriendsScreenContent() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: EMBER.bg },
-  list: { paddingHorizontal: GUTTER, paddingVertical: SPACE.sm },
-  emptyList: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: GUTTER },
-  requests: { paddingHorizontal: GUTTER, paddingBottom: SPACE.sm },
+  container: { flex: 1, backgroundColor: COLOR.ink },
+  list: { paddingHorizontal: SPACE.gutter, paddingVertical: SPACE.sm },
+  emptyList: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: SPACE.gutter },
+  requests: { paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.sm },
 })
 
 /** Rose world: one hue on this screen (`HueProvider`). */

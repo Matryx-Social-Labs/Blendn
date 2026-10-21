@@ -98,7 +98,11 @@ describe('<Orbs>', () => {
     expect(alpha('orbs-0')).toBe(COLOR.orbOrangeAlpha / 2)
   })
 
-  it('drifts on iOS: two incommensurate periods, 28 s and 36 s, back and forth for ever', async () => {
+  it.each([
+    ['iOS', () => {}],
+    ['Android (owner, 2026-10-21)', () => on('android')],
+  ])('drifts on %s: two incommensurate periods, 9 s and 11.6 s, ±40 pt, back and forth for ever', async (_, arrange) => {
+    arrange()
     await render(<Orbs set="feed" time="night" testID="orbs" />)
     await lay()
     expect(withRepeat).toHaveBeenCalledTimes(2)
@@ -106,12 +110,11 @@ describe('<Orbs>', () => {
       [-1, true],
       [-1, true],
     ])
-    expect(DURATION.ambientA).toBe(28000)
-    expect(ORBS.drift).toBe(24)
+    expect([DURATION.ambientA, DURATION.ambientB]).toEqual([9000, 11600])
+    expect(ORBS.drift).toBe(40)
   })
 
   it.each([
-    ['Android', () => on('android'), {}],
     ['Reduce Motion', () => reduceMotion.mockReturnValue(true), {}],
     ['paused (keyboard, scroll, chat, unfocused)', () => {}, { paused: true }],
   ])('is still on %s', async (_, arrange, props) => {

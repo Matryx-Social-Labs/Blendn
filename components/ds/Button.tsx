@@ -134,7 +134,7 @@ export type ButtonProps = {
   /** The design gallery only: draws a transient state with no finger or keyboard. */
   previewState?: 'pressed' | 'focused'
   testID?: string
-  /** Placement only (`alignSelf`, `flex`); never the look. */
+  /** Placement only (`alignSelf`, `flex`); never the look. A small button hugs its label (`flex-start`) unless this sets an `alignSelf`. */
   style?: StyleProp<ViewStyle>
 }
 
@@ -208,7 +208,7 @@ export function Button({
   const sentence = settled === undefined ? label : label.replace('{n}', settled.toLocaleString('en-US'))
 
   return (
-    <Animated.View style={[sm ? styles.inline : null, pressed && !android ? styles.pressedIos : null, shake, style]}>
+    <Animated.View style={[sm && !StyleSheet.flatten(style)?.alignSelf ? styles.inline : null, pressed && !android ? styles.pressedIos : null, shake, style]}>
       <ScalePress
         testID={testID}
         onPress={onPress}

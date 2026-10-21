@@ -112,9 +112,9 @@ Me tab itself, never on this screen in either mode. See the section above.)
 
 1. **Nothing is gated.** `blurred` is never set and every photo is yours, so
    there is no reveal state to render.
-2. **There is nobody to Connect to.** `ProfileActions` — Connect / Message /
-   Like — is simply omitted in `'self'` mode rather than swapped for a
-   dedicated own-profile CTA component. (An earlier draft of this doc named
+2. **There is nobody to Connect to.** The docked tray (`ProfileDock`: Like /
+   Connect / Message) is simply omitted in `'self'` mode rather than swapped for
+   a dedicated own-profile CTA component. (An earlier draft of this doc named
    that component `ProfileOwnCta`; it was never built — the omission is the
    whole story.) The only reason to look at your own profile from here is to
    change what other people see, and that action — **Edit profile** — lives
@@ -122,21 +122,28 @@ Me tab itself, never on this screen in either mode. See the section above.)
 
 ---
 
-## `bottomInset`, and why the hero needed one
+## The hero, the bar and the tray (Flow 6, on the design system)
 
-The name is anchored to the bottom of the hero. That is right on
-`app/user/[id].tsx`: a full-screen route where the hero *is* the first screen,
-and the name sits on the fold.
+The hero is `width × 1.3` (`ProfileHeroStage`, DS `user` / `friend`), not the old
+`751/390`: on a 390 pt phone the old one was 751 tall and pushed Like / Connect /
+Message off the first screen (audit U-H3). The name, the line under it and the first
+section are now above the fold.
 
-`app/(tabs)/profile.tsx` has a tab bar over that same edge. The second line of
-"Sagar Kishore, 28" rendered underneath it — the hero is `751/390` of the
-screen width, which is taller than the space above an 88pt bar.
-
-`ProfileHero` takes a `bottomInset` rather than looking one up: the component
-has no idea which navigator it is in, and `TAB_BAR_CLEARANCE` is the caller's
-fact. The attendee route passes nothing and is unchanged.
-
----
+- **The bar** (`ProfileBar`, DS #30): glass circles at rest (`media` over a hero
+  photo); the bar's glass is always mounted behind them and comes up over the first 8 pt, and
+  between 24 and 56 pt the page's own heading hands over to a 17 pt centred title.
+  It is first in the screen's tree, over the scroll view by `zIndex`, so a screen
+  reader starts at Back (U-M15). Me uses the same bar with Add friends and Settings as
+  its circles and no Back.
+- **The stretch** (DS #32): pulled past the top on iOS the hero scales from its bottom
+  edge, up to 1.15 (kept under Reduce Motion: it is direct manipulation). Android
+  stretches the whole page with the system overscroll instead.
+- **The tray** (`ProfileDock`): Like and Connect, or Message, docked at
+  `insets.bottom + 16` (on Android the inset is the navigation bar) over an ink fade, and
+  staying put while the page scrolls. A request someone sent you takes the tray's
+  place: who, their note verbatim, Decline and Accept (R4.1 6.2).
+- **The viewer** (`PhotoViewer`): the DS ImageViewer's chrome with paging; it travels
+  from the tapped photo (DS #33) and fades under Reduce Motion.
 
 ## The CTA is black, and that is deliberate
 

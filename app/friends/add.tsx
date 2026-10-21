@@ -1,20 +1,21 @@
 import { router } from 'expo-router'
 import { useState } from 'react'
-import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native'
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { Button } from '../../components/ds/Button'
-import { HueProvider, minTarget } from '../../components/ds/shared'
+import { Grain } from '../../components/ds/Grain'
+import { Orbs } from '../../components/ds/Orbs'
+import { Banner } from '../../components/ds/Banner'
+import { SectionHeader } from '../../components/ds/SectionHeader'
+import { font, HueProvider, useBoldText } from '../../components/ds/shared'
 import { TopBar } from '../../components/ds/TopBar'
 import { IncomingRequestRow } from '../../components/friends/IncomingRequestRow'
 import { InviteLinkCard } from '../../components/friends/InviteLinkCard'
 import { PersonRow } from '../../components/friends/PersonRow'
-import ScalePress from '../../components/motion/ScalePress'
-import { EmberButton } from '../../components/onboarding/EmberControls'
-import { ProfileHeading } from '../../components/profile/ProfileSections'
-import { Text } from '../../components/ui/Text'
+import { COLOR, SPACE } from '../../lib/design/tokens'
 import { showSheet } from '../../lib/sheet'
-import { EMBER, GUTTER, SPACE } from '../../lib/theme'
+import { useAuth } from '../../lib/useAuth'
 import { useFriendInvite } from '../../lib/useFriendInvite'
 import { useFriendRequests } from '../../lib/useFriendRequests'
 import { useTopBarState } from '../../lib/useTopBarState'
@@ -36,6 +37,8 @@ function AddFriendsScreenContent() {
   const [refreshing, setRefreshing] = useState(false)
   const [reloadingLink, setReloadingLink] = useState(false)
   const bar = useTopBarState()
+  const bold = useBoldText()
+  const { user } = useAuth()
 
   const onRefresh = async () => {
     setRefreshing(true)
@@ -69,36 +72,25 @@ function AddFriendsScreenContent() {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
+      <Orbs set="brand" />
+      <Grain />
       <TopBar title="Add friends" state={bar.state} onBack={() => router.back()} />
       <ScrollView
         {...bar.scrollProps}
         contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={EMBER.textSecondary} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLOR.textSecondary} />}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.section}>
-          <Text variant="body" color={EMBER.textSecondary}>
-            Nobody can find you on Blend&apos;n by searching. Share your link, and anyone you send it to can ask to be
-            your friend.
-          </Text>
-          <InviteLinkCard url={invite?.url} failed={failed} />
-          {failed && !invite ? (
-            <EmberButton label="Try again" onPress={() => void retryLink()} busy={reloadingLink} />
-          ) : (
-            <EmberButton label="Share my link" onPress={() => void share()} disabled={!invite} />
-          )}
-          {invite ? (
-            <ScalePress
-              onPress={confirmReset}
-              haptic={false}
-              accessibilityRole="button"
-              accessibilityLabel="Reset link"
-              style={styles.quiet}
-            >
-              <Text variant="bodyStrong" color={EMBER.textSecondary}>Reset link</Text>
-            </ScalePress>
-          ) : null}
-        </View>
+        <Text style={[font('body', bold), styles.intro]}>
+          Nobody can find you on Blend’n by searching. Share your link, and anyone you send it to can ask to be your friend.
+        </Text>
+        <InviteLinkCard url={invite?.url} failed={failed} name={user?.name} photo={user?.image} />
+        {failed && !invite ? (
+          <Button label="Try again" onPress={() => void retryLink()} loading={reloadingLink} />
+        ) : (
+          <Button label="Share my link" icon="share" onPress={() => void share()} disabled={!invite} />
+        )}
+        {invite ? <Button kind="tertiary" label="Reset link" onPress={confirmReset} style={styles.reset} /> : null}
 
         {/*
           Requests that didn't load used to leave this half of the screen
@@ -106,22 +98,14 @@ function AddFriendsScreenContent() {
         */}
         {requests.failed && !requests.loaded ? (
           <View style={styles.section}>
-            <ProfileHeading title="Requests" />
-            <Text variant="body" color={EMBER.textSecondary}>Your requests didn&apos;t load.</Text>
-            <Button
-              kind="secondary"
-              size="sm"
-              label="Try again"
-              accessibilityLabel="Try again, loading requests"
-              onPress={() => void requests.load()}
-              style={styles.start}
-            />
+            <SectionHeader title="Requests" />
+            <Banner kind="info" text="Your requests didn’t load." action={{ label: 'Try again', onPress: () => void requests.load() }} testID="requests-failed" />
           </View>
         ) : null}
 
         {incoming.length > 0 ? (
           <View style={styles.section}>
-            <ProfileHeading title="Requests" />
+            <SectionHeader title="Requests" />
             {incoming.map((request) => (
               <IncomingRequestRow
                 key={request.id}
@@ -134,8 +118,8 @@ function AddFriendsScreenContent() {
         ) : null}
 
         {outgoing.length > 0 ? (
-          <View style={styles.section}>
-            <ProfileHeading title="Sent" />
+          <View style={styles.sent}>
+            <SectionHeader title="Sent" />
             {outgoing.map((request) => (
               <PersonRow
                 key={request.id}
@@ -149,6 +133,7 @@ function AddFriendsScreenContent() {
                     accessibilityLabel={`Withdraw request to ${request.person.name}`}
                     onPress={() => void withdraw(request)}
                     disabled={busy.has(request.id)}
+                    style={styles.centred}
                   />
                 }
               />
@@ -160,13 +145,18 @@ function AddFriendsScreenContent() {
   )
 }
 
+/** Flow 6 `add`: its column sits 20 apart, between the 16 and 24 steps. */
+// design-exception: the frame's column gap is 20
+const COLUMN_GAP = 20
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: EMBER.bg },
-  content: { paddingHorizontal: GUTTER, paddingVertical: SPACE.lg, gap: SPACE.xxl },
+  container: { flex: 1, backgroundColor: COLOR.ink },
+  content: { paddingHorizontal: SPACE.gutter, paddingVertical: SPACE.lg, gap: COLUMN_GAP },
+  intro: { color: COLOR.textSecondary },
+  reset: { alignSelf: 'stretch' },
   section: { gap: SPACE.md },
-  // The 44 / 48 target as a floor: padding alone made it 40.
-  quiet: { alignSelf: 'center', minHeight: minTarget(), justifyContent: 'center' },
-  start: { alignSelf: 'flex-start' },
+  sent: { gap: SPACE.xs },
+  centred: { alignSelf: 'center' },
 })
 
 /** Rose world: one hue on this screen (`HueProvider`). */
