@@ -86,6 +86,23 @@ it('the words on the photo stop at 1.5×, so the foot never runs up under the pi
   expect(screen.getByText('at Toit · 1.2 km', { includeHiddenElements: true }).props.maxFontSizeMultiplier).toBe(1.5)
 })
 
+describe('row · lead="distance"', () => {
+  it('moves the distance into a 64 pt Geist Mono 700 column ahead of the thumb, and out of the meta line', async () => {
+    await render(<EventCard kind="row" lead="distance" {...VINYL} testID="e" />)
+    expect(style('1.2 km')).toMatchObject({ fontFamily: FONT_FAMILY.mono[700], width: 64 })
+    expect(screen.queryByText(/Toit · 1\.2 km/, { includeHiddenElements: true })).toBeNull()
+    expect(screen.getByRole('button').props.accessibilityLabel).toContain('1.2 km')
+  })
+
+  it('draws no column when the row has no distance, and leaves the default row alone', async () => {
+    await render(<EventCard kind="row" lead="distance" {...VINYL} distance={undefined} testID="e" />)
+    expect(screen.queryByTestId('e-lead')).toBeNull()
+    await render(<EventCard kind="row" {...VINYL} testID="e" />)
+    expect(screen.queryByTestId('e-lead')).toBeNull()
+    expect(screen.getByText(/Toit · 1\.2 km/, { includeHiddenElements: true })).toBeTruthy()
+  })
+})
+
 describe('row', () => {
   it('a long venue gives way; the time is never the part cut off', async () => {
     await render(<EventCard kind="row" {...VINYL} venue="Toit Brewpub, 100 Feet Road, Indiranagar" />)

@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { Dimensions, ScrollView, StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import NearbyEventCard from '../../components/NearbyEventCard'
 import { FilterSheet } from '../../components/pulse/FilterControl'
 import {
   FeaturedCard,
@@ -127,27 +126,6 @@ const UPCOMING_DAYS = [
   },
 ]
 
-/*
- * The frame's Nearby section is asymmetric — a `Large Featured Local` 366x782
- * with a 366x342 image over a 440pt body, then a `Small Info Local` 366x343.
- * We draw a uniform stack of `NearbyEventCard`. Rendered here so the difference
- * is visible rather than argued about.
- */
-const NEARBY = [
-  {
-    id: 'n1',
-    title: 'The Umbra Kitchen',
-    address: 'Lavelle Road',
-    cover_image_url: null,
-  },
-  {
-    id: 'n2',
-    title: 'Basement Six Listening Bar',
-    address: 'Church Street',
-    cover_image_url: null,
-  },
-]
-
 export default function PulsePreview() {
   const insets = useSafeAreaInsets()
   const [query, setQuery] = useState('')
@@ -241,20 +219,6 @@ export default function PulsePreview() {
                   />
                 ))}
               </View>
-            ))}
-          </View>
-        </View>
-        <View style={styles.section}>
-          <SectionHeader title="Nearby Experiences" />
-          <View style={styles.stack}>
-            {NEARBY.map((e) => (
-              <NearbyEventCard
-                key={e.id}
-                event={e as never}
-                width={SCREEN_W - MAIN_PADDING_HORIZONTAL * 2}
-                timeLabel="Tonight, 8:00 PM"
-                locationLabel={`${e.address} · 2.1 km`}
-              />
             ))}
           </View>
         </View>
