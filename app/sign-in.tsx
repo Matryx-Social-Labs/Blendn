@@ -156,6 +156,7 @@ export default function SignIn() {
     }
 
     inFlight.current = true
+    let stayBusy = false
     setBusy(true)
     setError(null)
     setWaiting(false)
@@ -200,13 +201,16 @@ export default function SignIn() {
       // Both cases: the root layout's routing effect takes it from here. A new
       // account starts onboarding, a returning one resumes wherever it stopped
       // or goes to the events tab.
+      // The button stays busy until this screen is replaced: freeing it here left an idle form for the frames the next screen
+      // takes to draw (a blank frame on Android).
+      stayBusy = true
     } catch (e) {
       Logger.error('auth', 'Email auth failed', { error: e })
       setError('Something went wrong. Please try again.')
       refuse()
     } finally {
       inFlight.current = false
-      setBusy(false)
+      if (!stayBusy) setBusy(false)
     }
   }
 

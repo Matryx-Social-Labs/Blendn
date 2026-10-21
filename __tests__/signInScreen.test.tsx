@@ -112,6 +112,20 @@ describe('the server answers', () => {
     expect(error).not.toHaveBeenCalled()
   })
 
+  it('stays busy after success, until the root layout replaces the screen (no idle form for the blank frame)', async () => {
+    mockSignIn.mockResolvedValue({ success: true })
+    await fill()
+    await submit()
+    expect(screen.getByTestId('sign-in-primary').props.accessibilityState).toMatchObject({ busy: true })
+  })
+
+  it('is free again after a refusal', async () => {
+    mockSignIn.mockResolvedValue({ success: false, error: 'Invalid email or password' })
+    await fill()
+    await submit()
+    expect(screen.getByTestId('sign-in-primary').props.accessibilityState).toMatchObject({ busy: false })
+  })
+
   it('its sentence is a tinted card, with one H.error (the primary’s refusal)', async () => {
     mockSignIn.mockResolvedValue({ success: false, error: 'Invalid email or password' })
     await fill()
