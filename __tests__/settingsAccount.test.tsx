@@ -112,17 +112,22 @@ describe('Sign out', () => {
   })
 })
 
-it('plays the destructive tick once, on the Sign out confirm and not when the sheet opens', async () => {
+it('plays H.primary once, on the Sign out confirm and not when the sheet opens (frame 11), and never the destructive tick', async () => {
   ;(signOut as jest.Mock).mockResolvedValue({ success: true })
   await render(<Screen />)
   fireEvent.press(await screen.findByRole('button', { name: 'Sign out' }))
   await screen.findByText('Sign out?')
-  expect(H.destructive).not.toHaveBeenCalled()
+  expect(H.primary).not.toHaveBeenCalled()
   const buttons = screen.getAllByText('Sign out')
-  fireEvent.press(buttons[buttons.length - 1])
+  const confirm = buttons[buttons.length - 1]
+  // The cue is on press-in, not on release.
+  await act(async () => fireEvent(confirm, 'pressIn'))
+  expect(H.primary).toHaveBeenCalledTimes(1)
+  fireEvent.press(confirm)
 
   await waitFor(() => expect(signOut).toHaveBeenCalledTimes(1))
-  expect(H.destructive).toHaveBeenCalledTimes(1)
+  expect(H.primary).toHaveBeenCalledTimes(1)
+  expect(H.destructive).not.toHaveBeenCalled()
 })
 
 describe('Push notifications', () => {
@@ -130,7 +135,7 @@ describe('Push notifications', () => {
     permissions.mockResolvedValue({ status: 'denied', canAskAgain: false })
     await render(<Screen />)
 
-    expect(await screen.findByText("Off in your phone's settings.")).toBeTruthy()
+    expect(await screen.findByText('Off in your phone’s settings.')).toBeTruthy()
     const toggle = screen.getByRole('switch', { name: /^Push notifications/ })
     expect(toggle.props.accessibilityState.checked).toBe(false)
   })
@@ -139,7 +144,7 @@ describe('Push notifications', () => {
     permissions.mockResolvedValue({ status: 'denied', canAskAgain: false })
     const openSettings = jest.spyOn(Linking, 'openSettings').mockResolvedValue()
     await render(<Screen />)
-    await screen.findByText("Off in your phone's settings.")
+    await screen.findByText('Off in your phone’s settings.')
 
     fireEvent.press(screen.getByRole('switch', { name: /^Push notifications/ }))
 
@@ -166,10 +171,12 @@ it('offers Try again when the settings did not load, and it works', async () => 
   api.getProfile.mockResolvedValueOnce({ success: false, error: 'No internet connection.' })
   await render(<Screen />)
 
-  expect(await screen.findByText("Your settings didn't load. Pull down or try again.")).toBeTruthy()
+  expect(await screen.findByText("Your settings didn’t load. Pull down or try again.")).toBeTruthy()
+  // The switches hold still until it works (frame 06).
+  expect(screen.getByRole('switch', { name: 'Read receipts' }).props.accessibilityState.disabled).toBe(true)
   fireEvent.press(screen.getByRole('button', { name: 'Try again' }))
 
-  await waitFor(() => expect(screen.queryByText("Your settings didn't load. Pull down or try again.")).toBeNull())
+  await waitFor(() => expect(screen.queryByText("Your settings didn’t load. Pull down or try again.")).toBeNull())
   expect(api.getProfile).toHaveBeenCalledTimes(2)
 })
 
@@ -249,7 +256,7 @@ describe('Blendn+ row (review H2)', () => {
   it('in a launch season says it is free and opens an info tray that sells nothing', async () => {
     api.getMyPlus.mockResolvedValue({ success: true, data: plusStatus({ gated: false }) } as never)
     await render(<Screen />)
-    fireEvent.press(await screen.findByRole('button', { name: 'Blendn+ · free during launch in your city' }))
+    fireEvent.press(await screen.findByRole('button', { name: /^Blend’n\+, Free during launch in your city/ }))
     expect(await screen.findByText('Blendn+ is free here for now')).toBeTruthy()
     expect(router.push).not.toHaveBeenCalled()
   })
@@ -257,7 +264,7 @@ describe('Blendn+ row (review H2)', () => {
   it('where it is sold, opens the paywall', async () => {
     await render(<Screen />)
     await waitFor(() => expect(api.getMyPlus).toHaveBeenCalled())
-    fireEvent.press(await screen.findByRole('button', { name: 'Blendn+' }))
+    fireEvent.press(await screen.findByRole('button', { name: /^Blend’n\+, Not subscribed/ }))
     await waitFor(() => expect(router.push).toHaveBeenCalledWith(expect.objectContaining({ pathname: '/plus' })))
   })
 })
@@ -285,7 +292,7 @@ it('says which setting did not save, as a toast that plays the one error haptic'
 
 it('opens About and Contact support', async () => {
   await render(<Screen />)
-  fireEvent.press(await screen.findByRole('button', { name: "About Blend'n" }))
+  fireEvent.press(await screen.findByRole('button', { name: 'About Blend’n' }))
   expect(router.push).toHaveBeenCalledWith('/about')
   fireEvent.press(screen.getByRole('button', { name: 'Contact support' }))
   expect(router.push).toHaveBeenCalledWith('/support')

@@ -126,10 +126,11 @@ describe('the irreversible row is hard to hit by accident', () => {
      * and reversible; the other destroys the account.
      */
     const src = SETTINGS()
-    expect(src).toContain('<SettingsGroup title="Danger zone">')
-    expect(src.indexOf('title="Delete account"')).toBeGreaterThan(src.indexOf('<SettingsGroup title="Account">'))
+    expect(src).toContain('<SettingsGroup title="Danger zone" danger>')
+    // The row's title is `Deleting account…` while it runs, so it is found by its test id.
+    expect(src.indexOf('testID="settings-delete"')).toBeGreaterThan(src.indexOf('<SettingsGroup title="Account">'))
     // Nothing follows it but the end of the list.
-    expect(src.slice(src.indexOf('title="Delete account"'))).not.toContain('<SettingsGroup')
+    expect(src.slice(src.indexOf('testID="settings-delete"'))).not.toContain('<SettingsGroup')
   })
 
   it('reserves the danger colour for it alone', () => {

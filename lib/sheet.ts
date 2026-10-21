@@ -44,6 +44,12 @@ export type SheetAction = {
   variant?: 'primary' | 'secondary' | 'destructive'
   /** A row's glyph, in a `rows` sheet (the DM's options). */
   icon?: IconName
+  /**
+   * The haptic this action plays on press-in when the frame names one that its kind does not carry: `H.primary` on a
+   * Sign out the sheet draws as the white affirmative, `H.destructive` on a Delete that only leads to its confirm.
+   * Omitted: the kind's own (a destructive button plays `H.destructive`, a step that only leads on plays none).
+   */
+  pressHaptic?: () => void
 } & (
   | { cancel: true }
   /** Another step, drawn in place of this one. */

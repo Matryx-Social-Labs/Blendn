@@ -101,7 +101,7 @@ export function SheetHost() {
       loading: busy === index,
       disabled: busy !== null && busy !== index,
       // The confirm plays H.destructive; a step that only leads to one does not.
-      pressHaptic: !('next' in action),
+      pressHaptic: action.pressHaptic ?? !('next' in action),
       onPress: () => perform(action, index),
     })
     return (

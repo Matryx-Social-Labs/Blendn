@@ -4,7 +4,7 @@ import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Icon, type IconName } from '../ui/Icon'
 import { COLOR, ICON, MATERIAL, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
-import { OPACITY } from '../../lib/theme'
+import { OPACITY, tint } from '../../lib/theme'
 import { Spinner } from './Loader'
 import { font, IC_HAIRLINE, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
 import { Toggle } from './Toggle'
@@ -12,6 +12,8 @@ import { Toggle } from './Toggle'
 export type SettingsTrail = 'switch' | 'chevron' | 'external' | 'none'
 
 const ROW_MIN_HEIGHT = SIZE.primary
+/** The Danger zone's outline (Flow 7 `settings`): the destructive colour at 38%. */
+const DANGER_RING = 0.38
 const ROLE = { switch: 'switch', chevron: 'button', external: 'link', none: undefined } as const
 
 export type SettingsRowProps = {
@@ -144,17 +146,28 @@ export function SettingsRow({
  * hairlines from the text edge. Increase Contrast: the hairlines at 50% and
  * 1 pt, the card outlined, the label white.
  */
-export function SettingsGroup({ title, children, testID }: { title?: string; children: ReactNode; testID?: string }) {
+export function SettingsGroup({
+  title,
+  children,
+  danger = false,
+  testID,
+}: {
+  title?: string
+  children: ReactNode
+  /** The Danger zone (Flow 7): no fill, a 1 pt outline in the destructive colour at 38%, and 24 pt more room above it. */
+  danger?: boolean
+  testID?: string
+}) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   return (
-    <View testID={testID} style={styles.group}>
+    <View testID={testID} style={[styles.group, danger && styles.dangerRoom]}>
       {title ? (
         <Text accessibilityRole="header" style={[font('label', bold), styles.label, contrast && styles.labelContrast]}>
           {title}
         </Text>
       ) : null}
-      <View testID={testID && `${testID}-card`} style={[styles.card, contrast && IC_HAIRLINE]}>
+      <View testID={testID && `${testID}-card`} style={[styles.card, danger && styles.dangerCard, contrast && IC_HAIRLINE]}>
         {Children.toArray(children).map((row, i) => (
           // `toArray` keys each row, so a row's focus and rollback state stay with it when rows come and go.
           <Fragment key={isValidElement(row) ? row.key : i}>
@@ -181,6 +194,8 @@ const styles = StyleSheet.create({
   label: { color: COLOR.textSecondary, paddingLeft: SPACE.lg },
   labelContrast: { color: COLOR.textPrimary },
   card: { borderRadius: RADIUS.sheet, backgroundColor: COLOR.surface, overflow: 'hidden' },
+  dangerCard: { backgroundColor: 'transparent', borderWidth: 1, borderColor: tint(COLOR.destructive, DANGER_RING) },
+  dangerRoom: { marginTop: SPACE.xl },
   hairline: { height: StyleSheet.hairlineWidth, backgroundColor: COLOR.hairline, marginLeft: SPACE.lg + ICON.control + SPACE.lg },
   hairlineContrast: { height: 1, backgroundColor: MATERIAL.hairlineIncreaseContrast },
 })

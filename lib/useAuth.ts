@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AppState } from 'react-native'
 import { apiClient, AuthUser, TokenStorage } from './apiClient'
+import { forgetAuthMethod, rememberAuthMethod } from './authMethod'
 import { Logger } from './logger'
 import { syncPurchasesUser } from './purchases'
 import { clearOutbox } from './chatOutbox'
@@ -262,6 +263,7 @@ const keepStoredSession = async () => {
 // Clear auth state
 const clearAuthState = async () => {
   await TokenStorage.clearAll()
+  void forgetAuthMethod()
   stopSessionRefresh()
   /*
    * The centre button's cache is per-account.
@@ -395,6 +397,7 @@ export const signInWithGoogle = async (
     if (result.success && result.data) {
       const { user, isNewUser } = result.data
       Logger.info('auth', 'Google sign in successful', { userId: user.id, isNewUser })
+      void rememberAuthMethod('google')
 
       updateAuthState({
         session: { user },
@@ -436,6 +439,7 @@ export const signInWithApple = async (
     if (result.success && result.data) {
       const { user, isNewUser } = result.data
       Logger.info('auth', 'Apple sign in successful', { userId: user.id, isNewUser })
+      void rememberAuthMethod('apple')
 
       updateAuthState({
         session: { user },
@@ -477,6 +481,7 @@ export const signInWithEmail = async (
     if (result.success && result.data) {
       const { user } = result.data
       Logger.info('auth', 'Email sign in successful', { userId: user.id })
+      void rememberAuthMethod('password')
 
       updateAuthState({
         session: { user },
@@ -527,6 +532,7 @@ export const signUp = async (
     if (result.success && result.data) {
       const { user } = result.data
       Logger.info('auth', 'Sign up successful', { userId: user.id })
+      void rememberAuthMethod('password')
 
       updateAuthState({
         session: { user },

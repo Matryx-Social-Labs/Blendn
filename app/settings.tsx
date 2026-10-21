@@ -3,29 +3,37 @@ import * as Notifications from 'expo-notifications'
 import { router, useFocusEffect } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AppState, Linking, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
+import Animated, { LinearTransition, useReducedMotion } from 'react-native-reanimated'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { Button } from '../components/ds/Button'
+import { Banner } from '../components/ds/Banner'
 import { SettingsGroup, SettingsRow } from '../components/ds/SettingsRow'
 import { font, HueProvider, useBoldText } from '../components/ds/shared'
 import { TopBar } from '../components/ds/TopBar'
+import { bannerFadeIn, bannerIn, bannerOut } from '../components/motion/presence'
+import { OfflineBanner } from '../components/OfflineBanner'
 import { useToast } from '../components/Toast'
-import { COLOR, SPACE as DS_SPACE } from '../lib/design/tokens'
-import { H } from '../lib/haptics'
+import { COLOR, SPACE as DS_SPACE, SPRING } from '../lib/design/tokens'
 import type { IconName } from '../components/ui/Icon'
+import { H } from '../lib/haptics'
 import { showSheet, type Sheet } from '../lib/sheet'
-import { useTopBarState } from '../lib/useTopBarState'
+import { useTopBarOverlay } from '../lib/useTopBarState'
 import { offersApi } from '../lib/offers'
 import { apiClient } from '../lib/apiClient'
+import { useAuthMethod } from '../lib/authMethod'
 import { BLENDN_LINKS, openInApp } from '../lib/links'
+import { dataCopyMailto, SUPPORT_EMAIL } from '../lib/support'
+import { PUSH_BLOCKED_SHEET, passwordLinkSheet, signOutEverywhereSheet, signOutSheet } from '../lib/settingsSheets'
 import { initializePushNotifications, removePushTokenFromProfile } from '../lib/notifications'
 import { clearPushDeclined } from '../lib/pushDecline'
 import { useLatest } from '../lib/useLatest'
 import { Logger } from '../lib/logger'
-import { EMBER, GUTTER } from '../lib/theme'
 import { useAuth, signOut, deleteAccount } from '../lib/useAuth'
 import { openPaywall } from '../lib/paywall'
-import { usePlusStatus, type PlusStatus } from '../lib/plus'
+import { plusStatusLine, usePlusStatus, type PlusStatus } from '../lib/plus'
 import { manageSubscriptionUrl } from '../lib/purchases'
+
+/** The banner's sentence when the profile could not be read (Flow 7 frame 06). */
+const SETTINGS_NOT_LOADED = 'Your settings didn’t load. Pull down or try again.'
 
 type PreferenceKey = 'pushEnabled' | 'showOnlineStatus' | 'shareReadReceipts' | 'locationSharing' | 'friendsSeeMe'
 
@@ -104,8 +112,12 @@ function SettingsScreenContent() {
   const { status: plus, refresh: refreshPlus } = usePlusStatus()
   useFocusEffect(refreshPlus)
   const [osPush, setOsPush] = useState<OsPush>('askable')
-  const bar = useTopBarState()
+  /** The delete is in flight: the row says so and nothing can close the sheet (Flow 7 frame 15). */
+  const [deleting, setDeleting] = useState(false)
+  const bar = useTopBarOverlay()
   const bold = useBoldText()
+  const reduceMotion = useReducedMotion()
+  const authMethod = useAuthMethod()
 
   /*
    * Read now and on every return to the app: the fix for `blocked` is a trip
@@ -192,7 +204,7 @@ function SettingsScreenContent() {
          * to tell, arriving through a network failure instead.
          */
         Logger.warn('profile', 'Could not load preferences', { error: result.error })
-        setPreferencesError("Your settings didn't load. Pull down or try again.")
+        setPreferencesError(SETTINGS_NOT_LOADED)
       }
       if (result.success && result.data) {
         setPreferencesError(null)
@@ -202,7 +214,7 @@ function SettingsScreenContent() {
       }
     } catch (error) {
       Logger.warn('profile', 'Could not load preferences', { error })
-      setPreferencesError("Your settings didn't load. Pull down or try again.")
+      setPreferencesError(SETTINGS_NOT_LOADED)
     } finally {
       setLoadingPreferences(false)
     }
@@ -311,16 +323,20 @@ function SettingsScreenContent() {
     kind: 'actions',
     icon: 'trash',
     title: 'Delete your account for good?',
-    message: "This can't be undone. You'd need a new account to use Blend'n again.",
+    message: 'This can’t be undone. You’d need a new account to use Blend’n again.',
     actions: [
       {
         label: 'Delete my account',
         variant: 'destructive',
         // On failure the sheet stays, says why, and the button becomes Try again.
         run: async () => {
+          setDeleting(true)
           try {
             const result = await deleteAccount()
-            if (!result.success) return { ok: false, error: result.error || "Your account wasn't deleted. Try again." }
+            if (!result.success) {
+              setDeleting(false)
+              return { ok: false, error: result.error || "Your account wasn't deleted. Try again." }
+            }
             /*
              * The session is already gone and the guard is on its way to sign-in.
              * The toast sits above the navigator, so it lands there too: without it
@@ -328,6 +344,7 @@ function SettingsScreenContent() {
              */
             return { ok: true, toast: 'Your account has been deleted.' }
           } catch {
+            setDeleting(false)
             return { ok: false, error: "Your account wasn't deleted. Check your connection and try again." }
           }
         },
@@ -358,6 +375,8 @@ function SettingsScreenContent() {
           {
             label: 'Delete account',
             variant: 'destructive',
+            // Each destructive press plays the tick (Flow 7 frame 13), the one that only leads to "for good?" included.
+            pressHaptic: () => H.destructive(),
             next: () => {
               deleteExplainOpen.current = false
               return confirmDeleteSheet()
@@ -376,7 +395,7 @@ function SettingsScreenContent() {
               ]
             : []),
           {
-            label: "What's kept",
+            label: 'What’s kept',
             variant: 'secondary',
             then: () => {
               deleteExplainOpen.current = false
@@ -405,41 +424,15 @@ function SettingsScreenContent() {
       .catch(() => {})
   }, [explainDeleteSheet])
 
-  /** Asks first: one stray tap used to end the session on the spot. */
-  const askSignOut = useCallback(
-    () =>
-      showSheet({
-        kind: 'actions',
-        icon: 'log-out',
-        title: 'Sign out?',
-        message: "You'll need to sign in again to see your events, friends and messages.",
-        actions: [
-          {
-            // The design's affirmative is the plain button; the confirm still plays the destructive tick, as Remove friend and Delete do.
-            label: 'Sign out',
-            variant: 'primary',
-            run: async () => {
-              H.destructive()
-              try {
-                const result = await signOut()
-                // Local state is gone either way; this is the honest version of what
-                // the server did, which used to be reported as success regardless. A
-                // toast, because it lands on the sign-in screen the guard moves to.
-                if (!result.success) {
-                  showToast(
-                    "Signed out on this phone. We couldn't reach the server, so you may stay signed in elsewhere for a while.",
-                    'info'
-                  )
-                }
-                return { ok: true }
-              } catch {
-                return { ok: false, error: "Couldn't sign out. Try again." }
-              }
-            },
-          },
-          { label: 'Cancel', cancel: true },
-        ],
-      }),
+  /** Sign out asks first (one stray tap used to end the session on the spot); so does signing out of every device. */
+  const askSignOut = useCallback(() => showSheet(signOutSheet({ signOut, showToast })), [showToast])
+  const askSignOutEverywhere = useCallback(() => showSheet(signOutEverywhereSheet({ signOut, showToast })), [showToast])
+  const openDataCopyMail = useCallback(
+    () => void Linking.openURL(dataCopyMailto(user?.id)).catch(() => showToast(`No email app opened. Write to ${SUPPORT_EMAIL}.`, 'info')),
+    [showToast, user?.id]
+  )
+  const askPasswordLink = useCallback(
+    (email: string) => showSheet(passwordLinkSheet({ email, sendLink: (to) => apiClient.forgotPassword(to), showToast })),
     [showToast]
   )
 
@@ -465,12 +458,13 @@ function SettingsScreenContent() {
         key={key}
         icon={icon}
         title={title}
-        hint={pushBlocked ? "Off in your phone's settings." : hint}
+        hint={pushBlocked ? 'Off in your phone’s settings.' : hint}
         trail="switch"
         value={preferences[key] && !pushBlocked}
         onValueChange={() => onTogglePreference(key)}
         busy={saving[key]}
-        disabled={loadingPreferences}
+        // Loading, or the profile did not come: the switches show what was cached and hold still (frames 05, 06).
+        disabled={loadingPreferences || !!preferencesError}
         testID={`settings-${key}`}
       />
     )
@@ -478,15 +472,26 @@ function SettingsScreenContent() {
 
   // The paywall, asked for: no cooldown (step 11, trigger `profile`). Free during launch where you go out: a row that says so and sells nothing (review H2).
   const plusIsFree = plus && !plus.gated && !plus.active
+  const plusHint = plusIsFree ? 'Free during launch in your city' : (plusStatusLine(plus) ?? 'Not subscribed')
+
+  /** The Account card (R4.1 7.1): who is signed in, how, and the ways out. A Google or Apple account has no password to change. */
+  const email = user?.email
+  const viaProvider = authMethod === 'google' || authMethod === 'apple'
+  const accountRow = viaProvider
+    ? { icon: authMethod === 'apple' ? ('apple' as const) : ('mail' as const), title: `Signed in with ${authMethod === 'apple' ? 'Apple' : 'Google'}` }
+    : { icon: 'at-sign' as const, title: 'Signed in as' }
+  const glide = reduceMotion ? undefined : LinearTransition.springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping).mass(SPRING.settle.mass)
+  const enter = reduceMotion ? bannerFadeIn : bannerIn
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      <TopBar title="Settings" state={bar.state} onBack={() => router.back()} testID="settings-top" />
-
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingTop: bar.contentTop }]}
+        scrollIndicatorInsets={{ top: bar.indicatorTop }}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={EMBER.textSecondary} />}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLOR.textSecondary} progressViewOffset={bar.indicatorTop} />
+        }
         {...bar.scrollProps}
       >
         {/*
@@ -495,21 +500,40 @@ function SettingsScreenContent() {
           settings. Six groups, each under its own label, so Privacy, Safety and
           Account do not read as one block; Delete account is alone at the bottom.
         */}
-        {preferencesError ? (
-          <View style={styles.prefsErrorWrap}>
-            <Text style={[font('meta', bold), styles.prefsError]} accessibilityRole="alert" accessibilityLiveRegion="polite">
-              {preferencesError}
-            </Text>
-            <Button kind="secondary" size="sm" label="Try again" onPress={() => void onRefresh()} disabled={refreshing} />
-          </View>
-        ) : null}
+        <Animated.View layout={glide} style={styles.banners}>
+          {preferencesError ? (
+            <Animated.View entering={enter} exiting={bannerOut}>
+              {/* Frame 06: the destructive-tint banner and its Try again; the switches below hold still until it works. */}
+              <Banner
+                kind="offline"
+                text={preferencesError}
+                action={{ label: 'Try again', onPress: () => void onRefresh() }}
+                busy={refreshing}
+                testID="settings-load-error"
+              />
+            </Animated.View>
+          ) : (
+            // The load error already says the network is gone; offline with the settings cached says what is on screen.
+            <OfflineBanner text="Offline. Showing what you had." testID="settings-offline" />
+          )}
+        </Animated.View>
 
         <SettingsGroup title="Privacy">
           {/* What it does, in the row: the switch was a promise for a year (SCRUM-141). */}
-          {preferenceRow('showOnlineStatus', 'eye', 'Show online status', "Off: you're counted at events but not listed to other people there.")}
+          {preferenceRow('showOnlineStatus', 'eye', 'Show online status', 'Off: you’re counted at events but not listed to other people there.')}
           {preferenceRow('shareReadReceipts', 'check-check', 'Read receipts')}
           {preferenceRow('locationSharing', 'navigation', 'Share location for nearby events')}
           {preferenceRow('friendsSeeMe', 'users', 'Friends can see who I am in rooms', 'Off: at an event, your friends see your pseudonym like everyone else.')}
+          {/* R4.1 7.2: a prefilled email to support; nothing is sent until they press Send in their mail app. */}
+          <SettingsRow
+            icon="download"
+            title="Get a copy of your data"
+            hint="Opens a prefilled email to support"
+            trail="external"
+            opens="opens your mail app"
+            onPress={openDataCopyMail}
+            testID="settings-data-copy"
+          />
         </SettingsGroup>
 
         <SettingsGroup title="Notifications">
@@ -532,40 +556,52 @@ function SettingsScreenContent() {
 
         {/* Terms and Privacy are on About, beside the version: two doors to each page, one screen apart. */}
         <SettingsGroup title="About">
-          <SettingsRow icon="info" title="About Blend'n" trail="chevron" onPress={() => router.push('/about')} />
+          <SettingsRow icon="info" title="About Blend’n" trail="chevron" onPress={() => router.push('/about')} />
+        </SettingsGroup>
+
+        {/* R2-D7: Blend’n+ is its own group above Account, one row that says where you stand. */}
+        <SettingsGroup title="Blend’n+">
+          <SettingsRow
+            icon="sparkles"
+            title="Blend’n+"
+            hint={plusHint}
+            trail="chevron"
+            onPress={plusIsFree ? () => showSheet(PLUS_FREE_SHEET) : () => void openPaywall('profile', { userInitiated: true })}
+            testID="settings-plus"
+          />
         </SettingsGroup>
 
         <SettingsGroup title="Account">
-          {plusIsFree ? (
-            <SettingsRow icon="sparkles" title="Blendn+ · free during launch in your city" trail="chevron" onPress={() => showSheet(PLUS_FREE_SHEET)} />
-          ) : (
-            <SettingsRow icon="sparkles" title="Blendn+" trail="chevron" onPress={() => void openPaywall('profile', { userInitiated: true })} />
-          )}
+          {email ? <SettingsRow icon={accountRow.icon} title={accountRow.title} hint={email} testID="settings-account" /> : null}
+          {email && authMethod === 'password' ? (
+            <SettingsRow icon="key-round" title="Password" trail="chevron" onPress={() => askPasswordLink(email)} testID="settings-password" />
+          ) : null}
           <SettingsRow icon="log-out" title="Sign out" trail="chevron" onPress={askSignOut} />
+          <SettingsRow icon="smartphone" title="Sign out of every device" trail="chevron" onPress={askSignOutEverywhere} testID="settings-sign-out-everywhere" />
         </SettingsGroup>
 
         {/*
-          Alone, at the bottom, under its own label. Sign out is routine and
+          Alone, at the bottom, outlined, under its own label. Sign out is routine and
           reversible and Delete destroys the account: reserving the red for the
           one irreversible row is what makes it mean anything.
         */}
-        <SettingsGroup title="Danger zone">
-          <SettingsRow icon="trash" title="Delete account" trail="chevron" destructive onPress={handleDeleteAccount} />
+        <SettingsGroup title="Danger zone" danger>
+          <SettingsRow
+            icon="trash"
+            title={deleting ? 'Deleting account…' : 'Delete account'}
+            trail={deleting ? 'none' : 'chevron'}
+            busy={deleting}
+            destructive
+            onPress={handleDeleteAccount}
+            testID="settings-delete"
+          />
         </SettingsGroup>
       </ScrollView>
+      <View style={bar.barPin} pointerEvents="box-none">
+        <TopBar title="Settings" state={bar.state} onBack={() => router.back()} testID="settings-top" />
+      </View>
     </SafeAreaView>
   )
-}
-
-const PUSH_BLOCKED_SHEET: Sheet = {
-  kind: 'actions',
-  icon: 'bell-off',
-  title: 'Notifications are off',
-  message: "Your phone is blocking notifications from Blend'n. Turn them on in Settings, then come back.",
-  actions: [
-    { label: 'Open Settings', variant: 'primary', then: () => void Linking.openSettings().catch(() => {}) },
-    { label: 'Not now', cancel: true },
-  ],
 }
 
 const PLUS_FREE_SHEET: Sheet = {
@@ -578,9 +614,9 @@ const PLUS_FREE_SHEET: Sheet = {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent' },
-  content: { paddingHorizontal: GUTTER, paddingVertical: DS_SPACE.lg, gap: DS_SPACE.xl },
-  prefsErrorWrap: { gap: DS_SPACE.sm, alignItems: 'flex-start' },
-  prefsError: { color: COLOR.destructive },
+  content: { paddingHorizontal: DS_SPACE.gutter, paddingBottom: DS_SPACE.xl, gap: DS_SPACE.xl },
+  // The banner and the groups share the column's gap; an empty slot takes none.
+  banners: { gap: DS_SPACE.sm },
 })
 
 /**
