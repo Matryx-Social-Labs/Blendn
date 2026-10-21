@@ -112,9 +112,9 @@ it('at large text the digits stop at their role’s cap, so the column never cli
 })
 
 describe('the button role and grouping (the filter sheet’s "Show 6,422 places")', () => {
-  it('role="button" is Geist Mono 700 at the button’s 16/20, capped with the control', async () => {
+  it('role="button" is the button’s own Satoshi 700 at 16/20, tabular, capped with the control (a mono count sat larger and higher beside the label)', async () => {
     await render(<RollingNumber value={42} role="button" />)
-    expect(StyleSheet.flatten(all('4')[0].props.style)).toMatchObject({ fontFamily: FONT_FAMILY.mono[700], fontSize: 16, lineHeight: 20 })
+    expect(StyleSheet.flatten(all('4')[0].props.style)).toMatchObject({ fontFamily: FONT_FAMILY.brand[700], fontSize: 16, lineHeight: 20, fontVariant: ['tabular-nums'] })
     expect(all('4')[0].props.maxFontSizeMultiplier).toBe(1.3)
   })
 
@@ -123,6 +123,19 @@ describe('the button role and grouping (the filter sheet’s "Show 6,422 places"
     expect(screen.getByTestId('n-comma-3', { includeHiddenElements: true })).toBeTruthy()
     expect(all(',')).toHaveLength(1)
     expect(screen.getByLabelText('6,422')).toBeTruthy()
+  })
+
+  it('the comma comes AFTER the thousands digit, never before the first ("Show 1,533 places", not "Show ,1533")', async () => {
+    const order = async (value: number) => {
+      await render(<RollingNumber value={value} grouping testID="n" />)
+      return screen.getAllByText(/^[0-9,]$/, { includeHiddenElements: true }).map((n) => n.props.children).join('')
+    }
+    expect(await order(1533)).toBe('1,533')
+    expect(await order(6422)).toBe('6,422')
+    expect(await order(12345)).toBe('12,345')
+    expect(await order(123456)).toBe('123,456')
+    expect(await order(1234567)).toBe('1,234,567')
+    expect(await order(999)).toBe('999')
   })
 
   it('grouping adds nothing under four digits, and two commas at seven', async () => {

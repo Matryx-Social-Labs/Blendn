@@ -9,7 +9,7 @@ import { CONTROL_FONT_CAP, font, useBoldText } from './shared'
 /**
  * The three sizes on the type roles: `numericDisplay` (40, the Room's count),
  * `title` (the recap tiles; the page's 28 is between roles), `bodyStrong` (17,
- * beside a heading), and `button` (Geist Mono 700 at the button's 16/20, for a count inside a button label).
+ * beside a heading), and `button` (the button's Satoshi 700 at 16/20, tabular, for a count inside a button label).
  */
 export type RollingRole = 'numericDisplay' | 'title' | 'bodyStrong' | 'button' | 'badge' | 'counter'
 
@@ -21,7 +21,8 @@ const SPEC: Record<RollingRole, { type: keyof typeof TYPE; family: string; cap: 
   numericDisplay: { type: 'numericDisplay', family: FONT_FAMILY.mono[700], cap: MAX_FONT_SCALE.numericDisplay },
   title: { type: 'title', family: FONT_FAMILY.mono[700], cap: MAX_FONT_SCALE.title },
   bodyStrong: { type: 'bodyStrong', family: FONT_FAMILY.mono[700], cap: MAX_FONT_SCALE.bodyStrong },
-  button: { type: 'button', family: FONT_FAMILY.mono[700], cap: CONTROL_FONT_CAP },
+  // The button's own face (Satoshi 700, tabular), not a mono run: beside the Satoshi label a mono count sat larger, higher, and drew a slashed 0.
+  button: { type: 'button', family: FONT_FAMILY.brand[700], cap: CONTROL_FONT_CAP },
   badge: { type: 'caption', family: FONT_FAMILY.mono[700], cap: CONTROL_FONT_CAP },
   counter: { type: 'caption', family: FONT_FAMILY.mono[500], cap: CONTROL_FONT_CAP },
 }
@@ -138,11 +139,12 @@ export function RollingNumber({
         // Keyed from the right, so 9 → 10 keeps the ones column and adds a tens.
         const fromRight = digits.length - 1 - i
         const was = old?.[i]
-        const comma = grouping && fromRight > 0 && fromRight % 3 === 0
+        // Between the thousands and the hundreds: before the column that starts a group of three (2, 5, 8 from the right), when a column precedes it.
+        const comma = grouping && i > 0 && fromRight % 3 === 2
         return (
           <Fragment key={fromRight}>
             {comma ? (
-              <View testID={testID && `${testID}-comma-${fromRight}`} style={[styles.column, { height }]}>
+              <View testID={testID && `${testID}-comma-${fromRight + 1}`} style={[styles.column, { height }]}>
                 <Animated.Text maxFontSizeMultiplier={cap} style={text}>
                   ,
                 </Animated.Text>

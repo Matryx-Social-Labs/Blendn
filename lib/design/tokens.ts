@@ -99,7 +99,7 @@ export const MATERIAL = {
   blurTintBar: 'rgba(13,12,12,0.86)',
   blurTintSheet: 'rgba(13,12,12,0.94)',
   blurRadius: 24,
-  solidBar: 'rgba(26,24,24,0.94)',
+  solidBar: '#1A1818',
   solidControl: '#242121',
   solidSheet: '#242121',
   solidTopHairline: 'rgba(255,255,255,0.10)',

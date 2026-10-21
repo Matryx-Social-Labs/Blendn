@@ -142,3 +142,21 @@ describe('<Material>', () => {
     expect(flat('material').opacity).toBeUndefined()
   })
 })
+
+describe('the solid tier is opaque (visual QA r5: white text ghosted through the Android tab bar, the Scene dock and the Plus dock)', () => {
+  const alpha = (css: string) => {
+    if (/^#[0-9a-f]{6}$/i.test(css)) return 1
+    const m = css.match(/^rgba\([^)]*,\s*([\d.]+)\)$/)
+    return m ? Number(m[1]) : 1
+  }
+
+  it('every solid role is fully opaque: "solid" is the tier’s whole contract', async () => {
+    const { SOLID } = jest.requireActual('../components/ui/Material') as typeof import('../components/ui/Material')
+    for (const [role, css] of Object.entries(SOLID)) expect([role, alpha(css)]).toEqual([role, 1])
+  })
+
+  it('the token itself, in the design source and in the generated file, is #1A1818', () => {
+    expect(MATERIAL.solidBar).toBe('#1A1818')
+    expect(require('fs').readFileSync(require('path').join(__dirname, '..', 'design', 'tokens.json'), 'utf8')).toContain('"solid-bar": "#1A1818"')
+  })
+})
