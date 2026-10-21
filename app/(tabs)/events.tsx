@@ -1,5 +1,4 @@
 import { ScreenProfiler } from '../../lib/perf'
-import { Ionicons } from '@expo/vector-icons'
 import * as Location from 'expo-location'
 import { router, useScrollToTop } from 'expo-router'
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
@@ -7,20 +6,17 @@ import {
   Dimensions,
   AppState,
   Keyboard,
-  type LayoutChangeEvent,
   Linking,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   RefreshControl,
+  Share,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import ActionTray, { type ActionTrayButton, type TraySize } from '../../components/ActionTray'
 import FadeInUp from '../../components/motion/FadeInUp'
-import ScalePress from '../../components/motion/ScalePress'
 import { preloadImages } from '../../components/OptimizedImage'
 import { featuredCardLayout } from '../../components/pulse/FeaturedCard'
 import {
@@ -30,51 +26,49 @@ import {
 } from '../../components/pulse/PulseSections'
 import { SectionReveal } from '../../components/pulse/Rail'
 import { EventCard } from '../../components/ds/EventCard'
-import { PULSE_HEADER_HEIGHT, PulseSearch, PulseTitle } from '../../components/pulse/PulseHeader'
+import { ScrimPill } from '../../components/ds/MonoFamily'
+import { DayHeading } from '../../components/ds/DayHeading'
+import { font } from '../../components/ds/shared'
+import { PULSE_HEADER_HEIGHT, PulseSearch } from '../../components/pulse/PulseHeader'
+import { PulseTitle } from '../../components/pulse/PulseTitle'
+import { PulseBanners } from '../../components/pulse/PulseBanners'
+import { CityPicker } from '../../components/pulse/CityPicker'
+import { PulseEmpty, PulseLoadFailed } from '../../components/pulse/PulseEmpty'
+import { PulsePeek, type Peek } from '../../components/pulse/PulsePeek'
 import { StickyBar, STICKY_BAR_AFTER } from '../../components/pulse/StickyBar'
-import { CityArtBanner, CityArtCard } from '../../components/cityArt/CityArtCard'
-import { drawableCityArt } from '../../components/cityArt/drawable'
 import { TAB_BAR_CLEARANCE, tabBarTop } from './_layout'
 import { FilterSheet, type CategoryOption } from '../../components/pulse/FilterControl'
-import { DayHeading } from '../../components/ui/DayHeading'
 import { HomeShell, type HomeBrowse } from '../../components/home/HomeShell'
 import { DRAWER_HEADER_HEIGHT } from '../../lib/home'
-import { H } from '../../lib/haptics'
-import { UPCOMING_THUMB, UpcomingCard } from '../../components/pulse/UpcomingCard'
-import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
-import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
+import { showSheet } from '../../lib/sheet'
+import { useToast } from '../../components/Toast'
+import { Skeleton } from '../../components/Skeleton'
 import { VirtualizedList } from '../../components/VirtualizedList'
 import { getEvents as fetchEventsApi, type BlendnEvent } from '../../lib/api'
 import {
   activeFilterCount,
+  appliedFilters,
   filtersToQuery,
   hasActiveFilters,
   NO_FILTERS,
+  withoutFilter,
   type EventFilters,
 } from '../../lib/eventFilters'
 import { useLatest } from '../../lib/useLatest'
 import {
-  cityCountLabel,
   awayNotice,
   cityOnResume,
   isBrowsingHere,
   isServedCity,
   resolveBrowseCity,
-  sameCity,
   shouldOfferSwitch,
   type CityOption,
   type StoredCity,
 } from '../../lib/city'
 import { readStoredCity, storeCity } from '../../lib/cityStorage'
-import { formatDistance, getDistanceMetres } from '../../lib/geo'
+import { getDistanceMetres } from '../../lib/geo'
 import { publishRoomSignal } from '../../lib/roomSignal'
-import {
-  homeCardProps,
-  peopleLabel,
-  placeLabel,
-  groupByDay,
-  timeLabel,
-} from '../../lib/pulse'
+import { homeCardProps, groupByDay } from '../../lib/pulse'
 import { liveWindow, sessionOver } from '../../lib/eventSession'
 import {
   categoryChips,
@@ -86,8 +80,9 @@ import {
   type PulseSectionKey,
 } from '../../lib/pulseSections'
 import { useNow } from '../../lib/useNow'
-import { COLOR, FONT_FAMILY, TYPE as DESIGN_TYPE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, RADIUS, SPACE, STAGGER, TYPE as DESIGN_TYPE } from '../../lib/design/tokens'
 import { mergeEventPage, pageHasMore, pulseEmptyCopy, pulseEmptyKind } from '../../lib/pulseFeed'
+import { eventShareText, type PeekAction } from '../../lib/pulsePeek'
 import { checkOutOf } from '../../lib/checkIn'
 import { openBlendn } from '../../lib/blendnOverlay'
 import { apiClient } from '../../lib/apiClient'
@@ -99,11 +94,7 @@ import { useMinimumVisible } from '../../lib/useMinimumVisible'
 import { useAuth } from '../../lib/useAuth'
 import { markCoachUsed, useCoachMark } from '../../lib/coachMarks'
 import { useCoachMarkSpot } from '../../components/ds/CoachMarkHost'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE, tint } from '../../lib/theme'
-import { RisingSheet, SheetFlatList, SheetModal } from '../../components/motion/RisingSheet'
-import { Grabber } from '../../components/ui/Grabber'
-import Animated from 'react-native-reanimated'
-import { fadeInFast, fadeOutFast } from '../../components/motion/presence'
+import { clockTime } from '../../lib/roomMoments'
 
 /*
  * One shared definition, in `lib/api.ts`, derived from the API mapping itself.
@@ -133,20 +124,8 @@ function PulseSlot({ slot }: { slot: 'search' | 'body' }) {
   const { search, body, scrolled } = useContext(PulseSlots)
   if (slot === 'body') return <>{body}</>
   return (
-    <View style={styles.bleed}>
-      <StickyBar scrolled={scrolled}>
-        <View style={styles.stickyInner}>{search}</View>
-      </StickyBar>
-    </View>
+    <StickyBar scrolled={scrolled}>{search}</StickyBar>
   )
-}
-
-type EventsTrayState = {
-  visible: boolean
-  title: string
-  message?: string
-  buttons: ActionTrayButton[]
-  size?: TraySize
 }
 
 /**
@@ -157,7 +136,6 @@ type EventsTrayState = {
  * the render site with the safe-area insets.
  */
 const SCREEN_HEIGHT = Dimensions.get('window').height
-const MAIN_PADDING_HORIZONTAL = GUTTER
 const MAIN_PADDING_BOTTOM = 128
 
 /**
@@ -170,13 +148,13 @@ const PULSE_COACH_TEXT = 'Hold an event to save, share or preview it.'
 
 /** The hole's corner radius: the card the mark names (a hero, a compact card, or a row). */
 const coachRadius = (section: PulseSectionKey | null) =>
-  section === 'featured' ? EMBER_RADIUS.card : section === 'now' || section === 'forYou' || section === 'weekend' ? EMBER_RADIUS.lg : EMBER_RADIUS.md
+  section === 'featured' ? RADIUS.card : section === 'now' || section === 'forYou' || section === 'weekend' ? RADIUS.mediaInCard : RADIUS.rowInCard
 
 /** Started (today's session, `lib/eventSession.ts`) and not over: the card says who is here. */
 const onNow = (event: Event) => Date.parse(liveWindow(event).start_time) <= Date.now() && !sessionOver(event)
 
-const SECTION_MOTION_BASE_DELAY = 34
-const SECTION_MOTION_STAGGER = 44
+/** DS #16: the first load rises `RISE.list` on `DURATION.base`, a `STAGGER.base` apart, capped at `STAGGER.windowMax`. */
+const SECTION_MOTION_BASE_DELAY = 0
 /**
  * Main-list rows that rise in on the first reveal: `initialNumToRender`'s worth,
  * the rows that mount with the content. Later batches mount off-screen, where
@@ -205,39 +183,24 @@ function RevealRow({
   const [animate] = useState(() => pending.current && index < MAIN_REVEAL_ROWS)
   if (!animate) return <>{children}</>
   return (
-    <FadeInUp delay={SECTION_MOTION_BASE_DELAY + SECTION_MOTION_STAGGER * (4 + index)} distance={8}>
-      {children}
-    </FadeInUp>
+    <FadeInUp delay={Math.min(SECTION_MOTION_BASE_DELAY + STAGGER.base * (4 + index), STAGGER.windowMax)}>{children}</FadeInUp>
   )
 }
 
-/** One `UpcomingCard`-shaped placeholder: words left, square photo right. */
-function UpcomingSkeletonRow() {
+/** One `EventCard row`-shaped placeholder: the 56 pt thumb and two lines, static (DS #17). */
+function MoreSkeletonRow() {
   return (
-    <View style={styles.upcomingSkeletonCard}>
-      <View style={{ flex: 1, gap: SPACE.sm }}>
-        <SkeletonLine width={'40%'} />
-        <SkeletonLine width={'85%'} />
-        <SkeletonLine width={'55%'} />
+    <View style={styles.moreSkeleton}>
+      <Skeleton width={SKELETON_THUMB} height={SKELETON_THUMB} borderRadius={RADIUS.thumb} />
+      <View style={styles.fill}>
+        <Skeleton width="70%" height={SKELETON_LINE} borderRadius={RADIUS.capsule} />
+        <Skeleton width="45%" height={SKELETON_LINE} borderRadius={RADIUS.capsule} />
       </View>
-      <SkeletonBlock width={UPCOMING_THUMB} height={UPCOMING_THUMB} borderRadius={EMBER_RADIUS.sm} />
     </View>
   )
 }
-
-const formatCarouselCardDate = (iso: string) => {
-  try {
-    return new Date(iso).toLocaleString(undefined, {
-      weekday: 'short',
-      month: 'long',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    })
-  } catch {
-    return 'Date TBA'
-  }
-}
+const SKELETON_THUMB = 56
+const SKELETON_LINE = 12
 
 /** "12.97" or "12.97, 77.59": a raw coordinate standing in for a place name. */
 const isCoordinateLike = (value?: string | null) =>
@@ -361,7 +324,6 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
    * it reads `.current` as a dependency of every handler.
    */
   const latestCheckinStatusesRef = useLatest(checkinStatuses)
-  const latestProximityDataRef = useLatest(proximityData)
   const latestInterestStatusesRef = useLatest(interestStatuses)
   const latestInterestCountsRef = useLatest(interestCounts)
 
@@ -382,7 +344,6 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       [checkedInEventId]: { ...prev[checkedInEventId], status: 'checked_out' },
     }))
   }
-  const [interestPending, setInterestPending] = useState<Record<string, boolean>>({})
   /*
    * Browse scope, and the two things that are *not* it.
    *
@@ -417,10 +378,6 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   useScrollToTop(listRef)
   /** Height of the banners above the header, so the Featured card still clears the bar. */
   const [bannersHeight, setBannersHeight] = useState(0)
-  const onBannersLayout = useCallback((e: LayoutChangeEvent) => {
-    const h = Math.round(e.nativeEvent.layout.height)
-    setBannersHeight((prev) => (prev === h ? prev : h))
-  }, [])
   const [netError, setNetError] = useState<string | null>(null)
   /**
    * The list at its top, so the first card is on screen when the coach mark
@@ -494,13 +451,9 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     return () => clearTimeout(id)
   }, [searchInput])
 
-  const [trayState, setTrayState] = useState<EventsTrayState>({
-    visible: false,
-    title: '',
-    message: '',
-    buttons: [],
-    size: 'default',
-  })
+  const { showToast } = useToast()
+  /** The long-press peek: which card lifts, where it is, and what kind of card it is. */
+  const [peek, setPeek] = useState<Peek | null>(null)
   // Location permission status: 'checking' | 'granted' | 'denied' | 'undetermined'
   const [locationStatus, setLocationStatus] = useState<'checking' | 'granted' | 'denied' | 'undetermined'>('checking')
   const locationRequestInFlight = useRef(false)
@@ -508,14 +461,6 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   const checkOutInFlightRef = useRef<Set<string>>(new Set())
   const lastFetchLocationRef = useRef<string>('none')
   const initialLoadedRef = useRef(false)
-
-  const closeTray = useCallback(() => {
-    setTrayState((prev) => ({ ...prev, visible: false }))
-  }, [])
-
-  const showTray = useCallback((next: Omit<EventsTrayState, 'visible'>) => {
-    setTrayState({ ...next, visible: true })
-  }, [])
 
   /**
    * The event page's own read, into the client's cache (fire-and-forget): on a
@@ -624,31 +569,27 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     const fail = () => {
       setInterestStatuses(prev => ({ ...prev, [event.id]: prevInterested }))
       setInterestCounts(prev => ({ ...prev, [event.id]: prevCount }))
-      H.error()
-      showTray({
-        title: prevInterested ? "Couldn't remove it" : "Couldn't save",
-        message: prevInterested
-          ? "Couldn't remove this event from Saved. Try again."
-          : "Couldn't save this event. Try again.",
-        buttons: [{ label: 'Done', variant: 'primary', onPress: closeTray }],
-        size: 'compact',
-      })
+      // A refusal says so in a toast, whose haptic is the one `H.error` (frame 24, 25).
+      showToast(
+        prevInterested ? "Couldn't remove this event from Saved. Try again." : "Couldn't save this event. Try again.",
+        'error',
+        { haptic: 'error' }
+      )
     }
     try {
       if (!user) {
-        showTray({
+        showSheet({
+          kind: 'actions',
           title: 'Sign in required',
-          message: 'Please sign in to save events.',
-          buttons: [
-            { label: 'Not now', onPress: closeTray },
-            { label: 'Sign in', variant: 'primary', onPress: () => { closeTray(); router.replace('/' as any) } },
+          message: 'Sign in to save events and check in.',
+          actions: [
+            { label: 'Sign in', variant: 'primary', then: () => router.replace('/' as never) },
+            { label: 'Not now', cancel: true },
           ],
-          size: 'compact',
         })
         return
       }
       interestInFlightRef.current.add(event.id)
-      setInterestPending((prev) => ({ ...prev, [event.id]: true }))
       prevInterested = !!latestInterestStatusesRef.current[event.id]
       prevCount = latestInterestCountsRef.current[event.id] ?? event.favorite_count ?? 0
       const optimisticCount = Math.max(0, prevInterested ? prevCount - 1 : prevCount + 1)
@@ -663,33 +604,25 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       }
       setInterestStatuses(prev => ({ ...prev, [event.id]: result.data!.interested }))
       setInterestCounts(prev => ({ ...prev, [event.id]: result.data!.interestCount }))
-      // Silent: saving is not an outcome that earns a Success (audit U-M17); a failure plays its error through the tray.
+      // Silent: saving is not an outcome that earns a Success (audit U-M17); a failure plays its error through the toast.
       Logger.journey('events', result.data!.interested ? 'interest:mark' : 'interest:unmark', { eventId: event.id })
     } catch {
       fail()
     } finally {
       interestInFlightRef.current.delete(event.id)
-      setInterestPending((prev) => ({ ...prev, [event.id]: false }))
     }
-  }, [user, showTray, closeTray, latestInterestStatusesRef, latestInterestCountsRef])
+  }, [user, showToast, latestInterestStatusesRef, latestInterestCountsRef])
 
   const handleCheckOut = useCallback(async (event: Event) => {
     if (checkOutInFlightRef.current.has(event.id)) return
     checkOutInFlightRef.current.add(event.id)
-    // The confirm's "Check out" was just pressed: `H.destructive` (§10.2). A
-    // refusal answers with `H.error`; a success with the tray alone.
-    H.destructive()
+    // The confirm's destructive button just played `H.destructive` (the Button, §10.2). A refusal answers with the toast's
+    // `H.error`; a success with the server's own words in a toast (frame 26).
 
     const previousStatus = latestCheckinStatusesRef.current[event.id]
     const fail = () => {
       setCheckinStatuses(restoreStatus(event.id, previousStatus))
-      H.error()
-      showTray({
-        title: 'Check-out failed',
-        message: "Couldn't check you out. Try again.",
-        buttons: [{ label: 'Done', variant: 'primary', onPress: closeTray }],
-        size: 'compact',
-      })
+      showToast("Couldn't check you out. Try again.", 'error', { haptic: 'error' })
     }
 
     // Optimistic removal from checked-in state
@@ -698,12 +631,8 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     try {
       const result = await checkOutOf(String(event.id))
       if (result.success) {
-        showTray({
-          title: 'Checked out',
-          message: 'You have been checked out of this event.',
-          buttons: [{ label: 'Done', variant: 'primary', onPress: closeTray }],
-          size: 'compact',
-        })
+        const said = (result.data as { message?: unknown } | undefined)?.message
+        showToast(typeof said === 'string' && said ? said : 'You’ve checked out.', 'success')
         loadCheckedInEvents()
         loadCheckinStatusesBatch()
       } else {
@@ -714,97 +643,38 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     } finally {
       checkOutInFlightRef.current.delete(event.id)
     }
-  }, [showTray, closeTray, latestCheckinStatusesRef, loadCheckedInEvents, loadCheckinStatusesBatch])
+  }, [showToast, latestCheckinStatusesRef, loadCheckedInEvents, loadCheckinStatusesBatch])
 
-  const handleEventPreview = useCallback((event: Event) => {
+  /** A card was held: lift it (its own `H.longPress` has played). The one-off coach mark is answered by the hold. */
+  const openPeek = useCallback((event: Event, anchor: Peek['anchor'], kind: Peek['kind']) => {
     markCoachUsed(PULSE_COACH)
-    const checkinStatus = latestCheckinStatusesRef.current[event.id]
-    const proximity = latestProximityDataRef.current[event.id]
-    const isCheckedIn = checkinStatus?.status === 'checked_in'
-    const canCheckIn = !!proximity?.within_radius && !isCheckedIn
-    const interested = !!latestInterestStatusesRef.current[event.id]
-    const summary = [
-      formatCarouselCardDate(event.start_time),
-      event.venue_name || event.display_city || 'Location TBA',
-      (event.short_description || event.description || '').trim(),
-    ].filter(Boolean).join('\n')
+    setPeek({ event, anchor, kind })
+  }, [])
 
-    const buttons: ActionTrayButton[] = [
-      {
-        label: interested ? 'Remove from saved' : 'Save',
-        onPress: () => {
-          closeTray()
-          toggleInterest(event)
-        },
-      },
-      {
-        label: 'View details',
-        // One primary per tray: Check In takes it when it is on offer.
-        variant: canCheckIn ? 'secondary' : 'primary',
-        onPress: () => {
-          closeTray()
-          handleEventPress(event)
-        },
-      },
-    ]
-
-    if (canCheckIn) {
-      buttons.unshift({
-        // The check-in's name everywhere else in the app (the Scene's CTA).
-        label: 'Blend in',
-        variant: 'primary',
-        // Into the Blend'n pass: a check-in always goes through the hold (docs/redesign/SCREENS.md, Pulse).
-        onPress: () => {
-          closeTray()
-          openBlendn()
-        },
+  /** What each peek item does, once the menu has left. */
+  const onPeekAction = useCallback(
+    (action: PeekAction, event: Event) => {
+      if (action === 'save' || action === 'unsave') return void toggleInterest(event)
+      if (action === 'preview') return handleEventPress(event)
+      if (action === 'share') return void Share.share({ title: event.title, message: eventShareText(event) }).catch(() => {})
+      // Into the Blend'n pass: a check-in always goes through the hold (docs/redesign/SCREENS.md, Pulse).
+      if (action === 'checkIn') return openBlendn()
+      /*
+       * Asks first, with the Room's words. Checking out closes the room and coming back needs a fresh location fix, so a
+       * stray tap in a menu of five should not be able to do it on its own.
+       */
+      showSheet({
+        kind: 'actions',
+        title: `Check out of ${event.title}?`,
+        message: 'You’ll leave the room and its people. To come back in you’ll need to check in again, with your location.',
+        actions: [
+          { label: 'Stay', variant: 'secondary', then: () => {} },
+          { label: 'Check out', variant: 'destructive', then: () => void handleCheckOut(event) },
+        ],
       })
-    }
-
-    /*
-     * The mirror of Check In, and it was missing.
-     *
-     * `isCheckedIn` was computed here only to be negated into `canCheckIn`, so
-     * the tray offered a way in and no way out — the checked-in strip was
-     * carrying that on its own. With the strip gone this is the Pulse's check
-     * out, and `handleCheckOut` below (optimistic, rolled back, deduped) finally
-     * has a second caller.
-     */
-    if (isCheckedIn) {
-      buttons.unshift({
-        label: 'Check out',
-        /*
-         * Asks first, with the Room's words. Checking out closes the room and
-         * coming back needs a fresh location fix, so a stray tap in a tray
-         * of four buttons should not be able to do it on its own.
-         */
-        onPress: () => {
-          showTray({
-            title: `Check out of ${event.title}?`,
-            message: 'You’ll leave the room and its people. To come back in you’ll need to check in again, with your location.',
-            buttons: [
-              { label: 'Stay', onPress: closeTray },
-              {
-                label: 'Check out',
-                variant: 'primary',
-                onPress: () => {
-                  closeTray()
-                  void handleCheckOut(event)
-                },
-              },
-            ],
-          })
-        },
-      })
-    }
-
-    showTray({
-      title: event.title,
-      message: summary,
-      buttons,
-      size: 'expanded',
-    })
-  }, [closeTray, toggleInterest, handleEventPress, handleCheckOut, showTray, latestCheckinStatusesRef, latestProximityDataRef, latestInterestStatusesRef])
+    },
+    [toggleInterest, handleEventPress, handleCheckOut]
+  )
 
   const getCurrentLocationQuietly = useCallback(async () => {
     try {
@@ -814,19 +684,14 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
         setUserLocation(null)
         setLocationStatus(status === 'denied' ? 'denied' : 'undetermined')
         Logger.warn('events', 'permission:notGranted', {})
-        showTray({
-          title: 'Turn on location',
-          message: 'We need your location to show nearby events and to check you in.',
-          buttons: [
-            { label: 'Cancel', onPress: closeTray },
-            {
-              label: 'Open settings',
-              variant: 'primary',
-              onPress: () => {
-                closeTray()
-                try { (Linking as any)?.openSettings?.() } catch {}
-              }
-            },
+        showSheet({
+          kind: 'actions',
+          icon: 'map-pin',
+          title: 'Location needed',
+          message: 'Turn on location so we can check you in.',
+          actions: [
+            { label: 'Open Settings', variant: 'primary', then: () => void Linking.openSettings().catch(() => {}) },
+            { label: 'Cancel', cancel: true },
           ],
         })
         return
@@ -840,7 +705,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       // Keep status as granted if permission was granted but position fetch failed
       Logger.warn('events', 'quietLocation:error', { error: error as any })
     }
-  }, [showTray, closeTray])
+  }, [])
 
   // Settles when the ask does, so the map's "my location" can show it is waiting.
   const requestLocationIfNeeded = useCallback((): Promise<void> => {
@@ -1538,28 +1403,27 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   const firstCardId = isNarrowed ? null : (sections[0]?.events[0]?.id ?? firstRowId)
 
   const cardHandlers = useMemo(
-    () => ({ onPress: handleEventPress, onPressIn: warmEvent, onLongPress: handleEventPreview }),
-    [handleEventPress, warmEvent, handleEventPreview]
+    () => ({ onPress: handleEventPress, onPressIn: warmEvent, onLongPress: openPeek }),
+    [handleEventPress, warmEvent, openPeek]
   )
 
   /*
-   * A row under the sections: a day heading, or an event. Everything else draws
-   * the same `UpcomingCard` as before, grouped by day so a card only needs its
-   * time; a search or a filter draws the result as 64 pt rows (`EventCard row`),
-   * where a promoted result is not lifted or labelled differently.
+   * A row under the sections: a day heading, or an event. Everything else draws the DS `EventCard row`, grouped by day so
+   * a row only needs its clock, with "Checked in" or "Ended" as a pill beside it (R4.1 3-8); a search or a filter draws
+   * the result as the same rows, where a promoted result is not lifted or labelled differently.
    */
   const renderRow = useCallback(({ item, index }: { item: PulseRow; index: number }) => {
     if (item.kind === 'search' || item.kind === 'body') return <PulseSlot slot={item.kind} />
     if (item.kind === 'day') {
       return (
         <View style={styles.dayRow}>
-          <DayHeading title={item.title} detail={item.weekday} />
+          <DayHeading date={item.title} weekday={item.weekday} />
         </View>
       )
     }
     const event = item.event
     if (isNarrowed) {
-      const card = homeCardProps(event, now, browsingHere)
+      const card = homeCardProps(event, now, hasFix)
       return (
         <View style={styles.mainRow}>
           <EventCard
@@ -1571,7 +1435,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
             cover={card.cover}
             onPress={() => handleEventPress(event)}
             onPressIn={() => warmEvent(event)}
-            onLongPress={() => handleEventPreview(event)}
+            onLongPress={(anchor) => openPeek(event, anchor, 'row')}
             testID={`pulse-result-${event.id}`}
           />
         </View>
@@ -1580,30 +1444,35 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     const isCheckedIn = checkinStatuses[event.id]?.status === 'checked_in'
     const live = liveWindow(event)
     const note = isCheckedIn ? 'Checked in' : sessionOver(event) ? 'Ended' : null
+    const card = homeCardProps(event, now, hasFix)
     return (
       <RevealRow index={Math.max(0, index - LEAD_ROWS)} pending={mainRowsRevealPending}>
-        <View style={styles.mainRow} ref={sections.length === 0 && event.id === firstRowId ? coachTarget : undefined} collapsable={false}>
-          <UpcomingCard
-            title={event.title}
-            category={event.category || null}
-            imageUrl={event.cover_image_url}
-            retry={pulls}
-            timeLabel={timeLabel(live.start_time)}
-            placeLabel={placeLabel(event)}
-            peopleLabel={peopleLabel(event, onNow(event))}
-            distanceLabel={browsingHere ? formatDistance(proximityData[event.id]?.distance_km ?? event.distance) : null}
-            note={note}
-            onPress={() => handleEventPress(event)}
-            onPressIn={() => warmEvent(event)}
-            onLongPress={() => handleEventPreview(event)}
-            isFavorited={!!interestStatuses[event.id]}
-            favoriteBusy={!!interestPending[event.id]}
-            onToggleFavorite={() => toggleInterest(event)}
-          />
+        <View style={[styles.mainRow, styles.moreRow]}>
+          {/* The coach mark's hole is the card, not the pill beside it. */}
+          <View style={styles.fill} ref={sections.length === 0 && event.id === firstRowId ? coachTarget : undefined} collapsable={false}>
+            <EventCard
+              kind="row"
+              title={card.title}
+              // Under its day's heading a row needs only its clock; a running event says so.
+              time={onNow(event) ? 'Live' : clockTime(Date.parse(live.start_time))}
+              venue={card.venue}
+              distance={card.distance}
+              cover={card.cover}
+              onPress={() => handleEventPress(event)}
+              onPressIn={() => warmEvent(event)}
+              onLongPress={(anchor) => openPeek(event, anchor, 'row')}
+              testID={`pulse-row-${event.id}`}
+            />
+          </View>
+          {note ? (
+            <ScrimPill testID={`pulse-row-note-${event.id}`}>
+              <Text style={[font('caption', false), styles.ink]}>{note}</Text>
+            </ScrimPill>
+          ) : null}
         </View>
       </RevealRow>
     )
-  }, [isNarrowed, sections.length, firstRowId, now, checkinStatuses, proximityData, interestStatuses, interestPending, browsingHere, handleEventPress, handleEventPreview, warmEvent, toggleInterest, pulls])
+  }, [isNarrowed, sections.length, firstRowId, now, hasFix, checkinStatuses, handleEventPress, openPeek, warmEvent])
   const keyExtractor = useCallback((item: PulseRow) => item.key, [])
 
   const askForLocation = useCallback(() => {
@@ -1641,7 +1510,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       !showLoadingSkeleton &&
       !isNarrowed &&
       firstCardId !== null &&
-      !trayState.visible &&
+      !peek &&
       !filterSheetOpen &&
       !cityPickerOpen,
   })
@@ -1668,131 +1537,44 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     if (!showLoadingSkeleton && (rows.length > 0 || sections.length > 0)) mainRowsRevealPending.current = false
   }, [showLoadingSkeleton, rows.length, sections.length])
 
-  /*
-   * The undesigned rows, rendered into the feed's header rather than above it.
-   *
-   * These five — the checked-in strip, the offline banner, the switch-city
-   * offer, the away notice, the location and network errors — have behaviour
-   * and no frame. They used to be a sibling of the list, statically laid out
-   * at the top of the screen, which the overlay header now covers. They also
-   * cost a 10pt spacer on every render where none of them had anything to say.
-   *
-   * In the header they clear the bar with the same padding everything else
-   * does, and there is one scroll surface instead of a fixed strip above one.
-   * Built once and rendered into both branches, for the same reason
-   * `pulseHeader` is.
-   */
+  // The banners ride in the feed's header, so they clear the bar with everything else and there is one scroll surface.
   const banners = (
-          <View style={styles.filtersBar} onLayout={onBannersLayout}>
-            {/*
-              Offline is worth saying here. A dead socket is not.
-
-              This screen loads over HTTP, so "Realtime disconnected" was showing
-              above a list that had loaded perfectly — a warning about a subsystem
-              the page does not use. Chat, private chat and the room keep both,
-              because there a dead socket means messages you will not see.
-
-              No status dot replaces it either. `profiles.show_online` means
-              "other attendees can see you're in the room" — since SCRUM-141 the
-              roster and the grid honour it — so a green dot on your own avatar
-              reads as exactly that, and wiring it to socket health would show
-              green while `show_online: false` kept you off every list. A lie
-              in both directions, and unexplainable in support.
-            */}
-            <RealtimeStatusBanner
-              status={socketStatus}
-              style={styles.bannerWarn}
-              showSocketIssues={false}
-            />
-            {switchSuggestion && (
-              <Animated.View entering={fadeInFast} exiting={fadeOutFast} style={styles.bannerInfo}>
-                <Text style={styles.bannerText}>
-                  You&apos;re in {switchSuggestion}. Browse events here?
-                </Text>
-                <TouchableOpacity
-                  accessibilityRole="button"
-                  accessibilityLabel={`Switch to ${switchSuggestion}`}
-                  onPress={() => chooseCity(switchSuggestion, true)}
-                  style={[styles.bannerCta, styles.bannerCtaOnInfo]}
-                >
-                  <Text style={styles.bannerCtaText}>Switch</Text>
-                </TouchableOpacity>
-              </Animated.View>
-            )}
-            {/*
-              Where you are, when there is nothing to be done about it.
-
-              Found on a device in Saarbrücken: browsing Bengaluru, the app knew
-              exactly where the user was and never said so. The switch banner
-              above only speaks when the device's city has events — correct, since
-              offering a move to an empty screen is worse than silence — and the
-              consequence was that the people we have not launched near got no
-              acknowledgement at all.
-
-              **Passive on purpose.** There is nothing useful to tap: switching to
-              a city with no events is a dead end, and the picker in the header is
-              already the way to move. A button here would be a call to action
-              leading nowhere.
-
-              Never shown alongside the switch banner — `awayNotice` fires exactly
-              when `shouldOfferSwitch` cannot, and `lib/city.ts` pins that across
-              every combination rather than leaving it to inspection.
-            */}
-            {away && (
-              <Animated.View entering={fadeInFast} exiting={fadeOutFast} style={styles.bannerNeutral}>
-                <Ionicons name="location-outline" size={ICON.sm} color={EMBER.textSecondary} />
-                <Text style={styles.bannerNeutralText}>
-                  You&apos;re in {away.deviceCity} — nothing here yet. Showing {away.selected}.
-                </Text>
-              </Animated.View>
-            )}
-            {/*
-              Not while the Nearby section is showing its own "Open Settings"
-              prompt (unnarrowed, no location): one ask, not two on one screen.
-            */}
-            {locationStatus === 'denied' && (isNarrowed || !!userLocation) && (
-              <Animated.View entering={fadeInFast} exiting={fadeOutFast} style={styles.bannerWarn}>
-                <Text style={styles.bannerText}>
-                  Turn on location to see nearby events and check in.
-                </Text>
-                <TouchableOpacity
-                  accessibilityRole="button"
-                  accessibilityLabel="Open settings to turn on location"
-                  onPress={() => { try { (Linking as any)?.openSettings?.() } catch {} }}
-                  style={styles.bannerCta}
-                >
-                  <Text style={styles.bannerCtaText}>Settings</Text>
-                </TouchableOpacity>
-              </Animated.View>
-            )}
-            {/*
-              Only over a list that is still on screen. With nothing loaded the
-              whole page is the error (`firstLoadFailed` below), and saying it
-              twice, once small and once large, is noise.
-            */}
-            {!!netError && events.length > 0 && (
-              <Animated.View entering={fadeInFast} exiting={fadeOutFast} style={styles.bannerError}>
-                <Text style={styles.bannerText}>Couldn&apos;t refresh events.</Text>
-                <TouchableOpacity
-                  accessibilityRole="button"
-                  accessibilityLabel="Try again"
-                  onPress={() => fetchEvents({ force: true })}
-                  style={styles.bannerCta}
-                >
-                  <Text style={styles.bannerCtaText}>Try again</Text>
-                </TouchableOpacity>
-              </Animated.View>
-            )}
-          </View>
+    <PulseBanners
+      socketStatus={socketStatus}
+      switchTo={switchSuggestion}
+      onSwitch={(city) => chooseCity(city, true)}
+      away={away}
+      // Not while the Nearby section is showing its own "Open Settings" prompt (unnarrowed, no location): one ask, not two.
+      locationDenied={locationStatus === 'denied' && (isNarrowed || !!userLocation)}
+      onOpenSettings={() => void Linking.openSettings().catch(() => {})}
+      // Only over a list that is still on screen: with nothing loaded the whole page is the error (`PulseLoadFailed`).
+      refreshFailed={!!netError && events.length > 0}
+      onRetry={() => fetchEvents({ force: true })}
+      onLayout={setBannersHeight}
+    />
   )
 
-  const pulseTitle = <PulseTitle title="The " titleAccent="Pulse" city={selectedCity} onPressCity={() => setCityPickerOpen(true)} />
+  const applied = useMemo(
+    () =>
+      appliedFilters(filters, categoryOptions).map((a) => ({
+        key: a.field,
+        label: a.label,
+        onRemove: () => {
+          const next = withoutFilter(filters, a.field)
+          setFilters(next)
+          setFilterDraft(next)
+        },
+      })),
+    [filters, categoryOptions]
+  )
+  const pulseTitle = <PulseTitle city={selectedCity} onPressCity={() => setCityPickerOpen(true)} />
   const searchNode = (
     <PulseSearch
       query={searchInput}
       onChangeQuery={changeSearchInput}
       searching={refining}
       activeFilterCount={activeFilterCount(filters)}
+      applied={applied}
       onPressFilter={() => {
         setFilterDraft(filters)
         setFilterSheetOpen(true)
@@ -1815,202 +1597,79 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
    * unmounted with the loaded branch lost its focus and its text).
    */
   const bodyNode = showLoadingSkeleton ? (
-        <View>
-          {/*
-            Shaped like the screen it stands in for, not like a generic
-            loading state.
-
-            This used to be a horizontal row of five 260x120 thumbnails
-            (an "Interested" rail this screen no longer has), then a
-            horizontal Upcoming carousel (Upcoming is a vertical stack —
-            `pulseStack` — and has been since the restyle), then a lone
-            474pt block and six generic cards belonging to sections
-            ("Nightlife", a fancy carousel) that were removed from this
-            screen entirely. None of it echoed what was about to appear,
-            so the swap from skeleton to content was itself a layout
-            jump. `isNarrowed` is checked the same way the loaded branch
-            checks it, so a search or filter loading for the first time
-            does not skeleton three sections it is about to hide.
-          */}
-          {isNarrowed ? (
-            /*
-              The rows a search or filter returns are `UpcomingCard`s
-              (`renderEventItem`), so the placeholder is that row — not
-              the 200pt photo card it used to be, which the results then
-              replaced with something a third of its height.
-            */
-            <View style={styles.narrowedSkeleton}>
-              {[...Array(4)].map((_, i) => (
-                <UpcomingSkeletonRow key={`s-flat-${i}`} />
-              ))}
-            </View>
-          ) : (
-            <PulseSkeleton />
-          )}
-          <View style={{ height: SPACE.sm }} />
+    <View>
+      {/*
+        Shaped like the screen it stands in for, and static: a header bar and two compact cards, a header bar and two hero
+        cards (`PulseSkeleton`); a search or filter loading for the first time shows the rows it will return instead, so
+        the swap is not itself a layout jump.
+      */}
+      {isNarrowed ? (
+        <View style={styles.narrowedSkeleton}>
+          {[...Array(4)].map((_, i) => (
+            <MoreSkeletonRow key={`s-flat-${i}`} />
+          ))}
         </View>
+      ) : (
+        <PulseSkeleton />
+      )}
+      <View style={styles.spacer} />
+    </View>
   ) : (
-        <View>
-          {/*
-            Empty means "this city has nothing on", and says so.
-
-            The old copy was "No events nearby / Try refreshing or explore
-            with location enabled" — which named the cause as the cure.
-            Location *was* enabled; enabling it is what produced the 10km
-            box that emptied the screen. Refresh could not help, because
-            nothing about the query would change.
-
-            The way out is now a real one: browse a different city. The
-            picker is the primary action, and it is reachable even when
-            every other section is empty.
-          */}
-          {/*
-            The first load failed: nothing on screen, and the page says
-            why with one way forward. It used to be a thin red banner
-            above a blank page, which read as a screen that had loaded
-            and was empty.
-          */}
-          {events.length === 0 && !!netError && (
-            <FadeInUp delay={SECTION_MOTION_BASE_DELAY} distance={10}>
-              <View style={styles.emptyState} accessibilityLiveRegion="polite">
-                <View style={styles.emptyGlyph}>
-                  <Ionicons name="cloud-offline-outline" size={36} color={EMBER.textTertiary} />
-                </View>
-                <Text style={styles.emptyTitle}>Couldn&apos;t load events</Text>
-                <Text style={styles.emptySub}>Check your connection and try again.</Text>
-                <ScalePress
-                  style={styles.ctaPrimary}
-                  onPress={() => fetchEvents({ force: true })}
-                  accessibilityRole="button"
-                  accessibilityLabel="Try again"
-                >
-                  <Text style={styles.ctaPrimaryText}>Try again</Text>
-                </ScalePress>
-              </View>
-            </FadeInUp>
-          )}
-          {events.length === 0 && !netError && (
-            <FadeInUp delay={SECTION_MOTION_BASE_DELAY} distance={10}>
-              <View style={styles.emptyState}>
-                {/*
-                  The city itself, when we have drawn it. An empty week in
-                  Bengaluru is still Bengaluru, and the skyline says which
-                  city this is before the copy does. A search or filter
-                  miss keeps the glyph: that empty is about the query,
-                  not the place.
-                */}
-                {emptyKind !== 'search' && emptyKind !== 'filters' && drawableCityArt(selectedCity) ? (
-                  <CityArtBanner art={drawableCityArt(selectedCity)!} height={140} />
-                ) : (
-                  <View style={styles.emptyGlyph}>
-                    <Ionicons
-                      name={
-                        emptyKind === 'notLive'
-                          ? 'rocket-outline'
-                          : emptyKind === 'search' || emptyKind === 'filters'
-                            ? 'search-outline'
-                            : 'calendar-outline'
-                      }
-                      size={36}
-                      color={EMBER.textTertiary}
-                    />
-                  </View>
-                )}
-                {/*
-                  Four different empties, and conflating them is a lie
-                  (`lib/pulseFeed.ts`). A city with nothing this week is
-                  a quiet week; a city not on the list is one we have not
-                  launched in; and a search or a filter that found nothing
-                  is about the query, not the city. "Nothing on in
-                  Bengaluru" over a "this weekend, 2 km" filter told
-                  somebody the city was empty when it was not.
-                */}
-                <Text style={styles.emptyTitle}>{emptyCopy.title}</Text>
-                <Text style={styles.emptySub}>{emptyCopy.message}</Text>
-                {emptyKind === 'search' ? (
-                  <ScalePress
-                    style={styles.ctaGhost}
-                    onPress={() => changeSearchInput('')}
-                    accessibilityRole="button"
-                    accessibilityLabel="Clear search"
-                  >
-                    <Text style={styles.ctaGhostText}>Clear search</Text>
-                  </ScalePress>
-                ) : emptyKind === 'filters' ? (
-                  // One way out: the filters are the reason, so they are the fix.
-                  <ScalePress
-                    style={styles.ctaGhost}
-                    onPress={() => {
-                      setFilters(NO_FILTERS)
-                      setFilterDraft(NO_FILTERS)
-                    }}
-                    accessibilityRole="button"
-                    accessibilityLabel="Clear filters"
-                  >
-                    <Text style={styles.ctaGhostText}>Clear filters</Text>
-                  </ScalePress>
-                ) : (
-                  <>
-                    {cityOptions.length > 0 && (
-                      <ScalePress
-                        style={styles.ctaGhost}
-                        onPress={() => setCityPickerOpen(true)}
-                        accessibilityRole="button"
-                        accessibilityLabel="Choose a different city"
-                      >
-                        <Text style={styles.ctaGhostText}>Change city</Text>
-                      </ScalePress>
-                    )}
-                    <ScalePress
-                      style={styles.ctaGhost}
-                      onPress={() => fetchEvents({ force: true })}
-                      accessibilityRole="button"
-                      accessibilityLabel="Refresh events"
-                    >
-                      <Text style={styles.ctaGhostText}>Refresh</Text>
-                    </ScalePress>
-                  </>
-                )}
-              </View>
-            </FadeInUp>
-          )}
-          {/*
-            Under a search, none of the sections render: somebody who has
-            typed a venue's name knows what they want. The pane is the
-            result, flat, under its count.
-          */}
-          {isNarrowed && events.length > 0 ? (
-            <View style={styles.resultsLabel}>
-              <Text style={styles.resultsLabelText} accessibilityRole="header">
-                <Text style={styles.resultsCount}>{events.length}</Text>
-                {` ${events.length === 1 ? 'event' : 'events'}${selectedCity ? ` · ${selectedCity}` : ''}`}
-              </Text>
-            </View>
-          ) : null}
-          {!isNarrowed ? (
-            <View style={styles.bleed}>
-              <SectionStack
-                sections={sections}
-                now={now}
-                withDistance={hasFix}
-                visible={visible}
-                handlers={cardHandlers}
-                coachRef={coachTarget}
-                pending={mainRowsRevealPending}
-                featuredLayout={(solo) => featuredCardLayout(cardInsets, tabBarTop(SCREEN_HEIGHT, insets.bottom), solo, bannersHeight)}
-                askForLocation={!userLocation && (locationStatus === 'denied' || locationStatus === 'undetermined') ? { denied: locationStatus === 'denied', onAsk: askForLocation } : null}
-              />
-            </View>
-          ) : null}
-          {!isNarrowed && rows.length > 0 ? (
-            <SectionReveal index={sections.length + 1} pending={mainRowsRevealPending}>
-              <View style={styles.bleed}>
-                <EverythingHeader chips={chips} selected={chosen} onSelect={setCategory} />
-              </View>
-            </SectionReveal>
-          ) : null}
-          <View style={{ height: SPACE.sm }} />
+    <View>
+      {events.length === 0 && !!netError ? (
+        <FadeInUp delay={SECTION_MOTION_BASE_DELAY}>
+          <PulseLoadFailed onRetry={() => fetchEvents({ force: true })} />
+        </FadeInUp>
+      ) : null}
+      {events.length === 0 && !netError ? (
+        <FadeInUp delay={SECTION_MOTION_BASE_DELAY}>
+          <PulseEmpty
+            kind={emptyKind}
+            copy={emptyCopy}
+            city={selectedCity}
+            canChangeCity={cityOptions.length > 0}
+            onClearSearch={() => changeSearchInput('')}
+            onClearFilters={() => {
+              setFilters(NO_FILTERS)
+              setFilterDraft(NO_FILTERS)
+            }}
+            onChangeCity={() => setCityPickerOpen(true)}
+            onRefresh={() => fetchEvents({ force: true })}
+          />
+        </FadeInUp>
+      ) : null}
+      {/*
+        Under a search, none of the sections render: somebody who has typed a venue's name knows what they want. The pane
+        is the result, flat, under its count.
+      */}
+      {isNarrowed && events.length > 0 ? (
+        <View style={styles.resultsLabel}>
+          <Text style={styles.resultsLabelText} accessibilityRole="header">
+            <Text style={styles.resultsCount}>{events.length}</Text>
+            {` ${events.length === 1 ? 'event' : 'events'}${selectedCity ? ` · ${selectedCity}` : ''}`}
+          </Text>
         </View>
+      ) : null}
+      {!isNarrowed ? (
+        <SectionStack
+          sections={sections}
+          now={now}
+          withDistance={hasFix}
+          visible={visible}
+          handlers={cardHandlers}
+          coachRef={coachTarget}
+          pending={mainRowsRevealPending}
+          featuredLayout={(solo) => featuredCardLayout(cardInsets, tabBarTop(SCREEN_HEIGHT, insets.bottom), solo, bannersHeight)}
+          askForLocation={!userLocation && (locationStatus === 'denied' || locationStatus === 'undetermined') ? { denied: locationStatus === 'denied', onAsk: askForLocation } : null}
+        />
+      ) : null}
+      {!isNarrowed && rows.length > 0 ? (
+        <SectionReveal index={sections.length + 1} pending={mainRowsRevealPending}>
+          <EverythingHeader chips={chips} selected={chosen} onSelect={setCategory} />
+        </SectionReveal>
+      ) : null}
+      <View style={styles.spacer} />
+    </View>
   )
 
   const listData = useMemo(() => (showLoadingSkeleton ? LEAD : [...LEAD, ...rows]), [showLoadingSkeleton, rows])
@@ -2021,11 +1680,9 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     /*
      * A plain `View`, not a `SafeAreaView`.
      *
-     * `edges={['top','bottom']}` inset the *container*, so the scroll surface
-     * itself ended above the home indicator and the feed stopped dead at the
-     * nav with a visible edge. The insets belong on the scroll content, not on
-     * the thing that scrolls: content then runs edge to edge and simply starts
-     * and ends clear of the hardware.
+     * `edges={['top','bottom']}` inset the *container*, so the scroll surface itself ended above the home indicator and
+     * the feed stopped dead at the nav with a visible edge. The insets belong on the scroll content, not on the thing that
+     * scrolls: content then runs edge to edge and simply starts and ends clear of the hardware.
      */
     <View style={styles.container}>
       <PulseSlots.Provider value={slots}>
@@ -2038,52 +1695,31 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
           onEndReachedThreshold={0.5}
           onEndReached={fetchMore}
           onScroll={onListScroll}
-          refreshControl={
-            <RefreshControl refreshing={refreshing && !isLoading} onRefresh={onRefresh} tintColor={EMBER.textSecondary} />
-          }
+          refreshControl={<RefreshControl refreshing={refreshing && !isLoading} onRefresh={onRefresh} tintColor={COLOR.textSecondary} />}
           contentContainerStyle={[
             styles.listContainer,
             {
-              // The drawer's header above (the top bar and the status bar are
-              // above the drawer); the floating nav plus the home indicator at
-              // the bottom, which the feed still scrolls under.
-              //
-              // Kept in step with `CHROME_ABOVE_CARD`, which sizes the hero card.
+              // The drawer's header above (the top bar and the status bar are above the drawer); the floating nav plus the
+              // home indicator at the bottom, which the feed still scrolls under. The frame's 128 already clears the 88 pt
+              // nav; `Math.max` so it still does if the nav grows.
               paddingTop: SPACE.lg,
-              // The frame's 128 already clears the 88pt nav. `Math.max` so it
-              // still does if the nav grows — the bar's height has changed
-              // twice, and a feed that ends underneath it is not a visible
-              // failure, just a last card nobody can reach.
               paddingBottom: insets.bottom + Math.max(MAIN_PADDING_BOTTOM, TAB_BAR_CLEARANCE + SPACE.xl),
             },
           ]}
           showsVerticalScrollIndicator={false}
           /*
-            The search lives in this list's header. A tap on anything that is
-            not a control closes its keyboard, a control (a card, the search's
-            clear) gets its tap on the first try, and a scroll closes it too.
-            Outside the list, the map and the drawer's chrome close it
-            (`HomeShell`).
+            The search lives in this list's header. A tap on anything that is not a control closes its keyboard, a
+            control (a card, the search's clear) gets its tap on the first try, and a scroll closes it too. Outside the
+            list, the map and the drawer's chrome close it (`HomeShell`).
           */
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           enableVirtualization={!isLoading && rows.length > 20}
           /*
-           * 4, not 10.
-           *
-           * The rows below the header are `UpcomingCard`s, and
-           * only a few are ever visible at once.
-           *
-           * `initialNumToRender` is rendered *synchronously before first
-           * paint*. At 10 that is ~4,700pt of content — five screens — and ten
-           * image decodes, to show two cards. Four covers the fold with one
-           * row of slack either side; `maxToRenderPerBatch` fills the rest
-           * asynchronously, which is what it is for.
-           *
-           * `windowSize` is left at 10. It governs what stays *mounted*, not
-           * what blocks the first frame, and lowering it trades scroll
-           * smoothness for memory — a trade worth making against a measurement
-           * rather than against an estimate.
+           * 4, not 10: `initialNumToRender` is rendered *synchronously before first paint*. At 10 that is ~4,700 pt of
+           * content, five screens, and ten image decodes, to show two cards. Four covers the fold with one row of slack
+           * either side; `maxToRenderPerBatch` fills the rest asynchronously, which is what it is for. `windowSize` is left
+           * at 10: it governs what stays mounted, not what blocks the first frame.
            */
           initialNumToRender={4 + LEAD_ROWS}
           maxToRenderPerBatch={5}
@@ -2098,124 +1734,16 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
         />
       </PulseSlots.Provider>
 
-      {/*
-        The city picker.
-
-        A plain sheet of the server's list, because that list is the whole
-        contract: every entry opens with the number of events it claims. The
-        selection is written to storage on tap, so a restart does not re-ask —
-        a selection that does not survive a restart is not a selection.
-
-        Cities with art (`lib/cityArt.ts`) render as an illustrated card with a
-        living skyline; the rest are plain rows until they are drawn.
-      */}
-      <SheetModal
+      {/* The city picker: a Sheet of the server's list; the choice is written to storage on tap, so a restart does not re-ask. */}
+      <CityPicker
         visible={cityPickerOpen}
-        onRequestClose={() => setCityPickerOpen(false)}
-      >
-        {/*
-          The dismiss target is a sibling behind the sheet, not its parent.
-          Wrapping the sheet made it one accessible element (VoiceOver could
-          not reach a single city) and closed it on any tap on its padding.
-        */}
-        <View style={styles.cityPickerBackdrop}>
-          <TouchableOpacity
-            style={StyleSheet.absoluteFill}
-            activeOpacity={1}
-            onPress={() => setCityPickerOpen(false)}
-            accessibilityRole="button"
-            accessibilityLabel="Close city picker"
-          />
-          <RisingSheet style={styles.cityPickerSheet}>
-            <Grabber style={styles.cityPickerGrabber} />
-            <Text style={styles.cityPickerTitle} accessibilityRole="header">
-              Browse events in
-            </Text>
-
-            {/*
-              Getting back to where you actually are.
-
-              This row is **not** conditional on your city having events, and
-              that is the entire point. The list below only ever contains cities
-              with something on, so without this a user standing somewhere we
-              have not launched yet has no way to say so: absent from the list,
-              absent from the switch banner, and stuck in whichever city the
-              busiest-city fallback picked for them. Found on a device in
-              Germany, sitting in Bengaluru with no route home.
-
-              Choosing an empty city is allowed and useful. It gets an honest
-              "we're not here yet" instead of a blank page, and it is the
-              clearest signal we have about where to launch next.
-            */}
-            {deviceCity && !sameCity(deviceCity, selectedCity) ? (
-              <TouchableOpacity
-                style={[styles.cityPickerRow, styles.cityPickerRowLocate]}
-                onPress={() => chooseCity(deviceCity, true)}
-                accessibilityRole="button"
-                accessibilityLabel={`Use my current location, ${deviceCity}`}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.md }}>
-                  <Ionicons name="navigate-outline" size={ICON.md} color={EMBER.textSecondary} />
-                  <View>
-                    <Text style={styles.cityPickerCity}>Use my current location</Text>
-                    <Text style={styles.cityPickerCount}>{deviceCity}</Text>
-                  </View>
-                </View>
-              </TouchableOpacity>
-            ) : null}
-
-            {cityOptions.length === 0 ? (
-              <Text style={styles.cityPickerEmpty}>
-                {deviceCity
-                  ? 'No cities have published events yet.'
-                  : 'No cities have published events yet. Turn on location to browse where you are.'}
-              </Text>
-            ) : (
-              <SheetFlatList
-                data={cityOptions}
-                keyExtractor={(item) => item.city}
-                renderItem={({ item }) => {
-                  const active = sameCity(item.city, selectedCity)
-                  const here = sameCity(item.city, deviceCity)
-                  // A city we have drawn gets its skyline; the rest stay plain rows.
-                  const art = drawableCityArt(item.city)
-                  if (art) {
-                    return (
-                      <CityArtCard
-                        city={item.city}
-                        art={art}
-                        countLabel={cityCountLabel(item)}
-                        active={active}
-                        here={here}
-                        onPress={() => chooseCity(item.city)}
-                      />
-                    )
-                  }
-                  return (
-                    <TouchableOpacity
-                      style={[styles.cityPickerRow, active && styles.cityPickerRowActive]}
-                      onPress={() => chooseCity(item.city)}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: active }}
-                      accessibilityLabel={
-                        `${item.city}${here ? ', your current location' : ''}, ${cityCountLabel(item)}`
-                      }
-                    >
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.sm }}>
-                        <Text style={[styles.cityPickerCity, active && styles.cityPickerTextActive]}>{item.city}</Text>
-                        {here ? (
-                          <Ionicons name="navigate" size={ICON.sm} color={active ? EMBER.bg : EMBER.textSecondary} />
-                        ) : null}
-                      </View>
-                      <Text style={[styles.cityPickerCount, active && styles.cityPickerTextActive]}>{cityCountLabel(item)}</Text>
-                    </TouchableOpacity>
-                  )
-                }}
-              />
-            )}
-          </RisingSheet>
-        </View>
-      </SheetModal>
+        onClose={() => setCityPickerOpen(false)}
+        cities={cityOptions}
+        selectedCity={selectedCity}
+        deviceCity={deviceCity}
+        onChoose={chooseCity}
+        onLocate={() => void requestLocationIfNeeded()}
+      />
 
       <FilterSheet
         visible={filterSheetOpen}
@@ -2231,340 +1759,48 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
         countFor={countEventsFor}
       />
 
-      <ActionTray
-        visible={trayState.visible}
-        title={trayState.title}
-        message={trayState.message}
-        buttons={trayState.buttons}
-        onClose={closeTray}
-        size={trayState.size}
+      <PulsePeek
+        peek={peek}
+        now={now}
+        withDistance={hasFix}
+        interested={!!(peek && interestStatuses[peek.event.id])}
+        checkedIn={checkinStatuses[peek?.event.id ?? '']?.status === 'checked_in'}
+        withinFence={!!proximityData[peek?.event.id ?? '']?.within_radius}
+        onAction={onPeekAction}
+        onClose={() => setPeek(null)}
       />
     </View>
   )
 }
 
-/**
- * The Pulse, from frame `1141:4643`.
- *
- * ## Why this was rewritten rather than corrected
- *
- * It had **107 keys** and 49 callers. The other 58 belonged to two previous
- * layouts — an invite hero, a glass-panelled Nearby card, a `#007AFF` iOS-blue
- * check-in button, a `#e8f5e8` status badge — and they were not inert: they were
- * what seven restyle PRs kept landing beside and contradicting. Three type
- * systems coexisted (local `TYPE_*` constants, raw numbers, `APP_COLORS`) and
- * there was no spacing scale at all.
- *
- * ## Two rules, and everything here follows from them
- *
- * **1. The frame's numbers, unadjusted.** Values are the 390pt artboard's.
- * Treating them as desktop measurements in need of shrinking is what produced
- * the flat screen. The only additions are the safe-area insets, applied at the
- * render site so that what came from the frame and what came from the hardware
- * never blur together.
- *
- * **2. No `fontWeight`, anywhere.** Weight comes from the family. Custom fonts
- * on Android ignore `fontWeight` outright and silently render regular, so
- * `fontWeight: '700'` on Manrope gave bold on iOS and regular on Android from
- * identical code — which the old sheet did in thirty places, and which no
- * simulator screenshot would ever show. Every text style spreads an
- * `TYPE` role; the sizes are the scale's, not the call site's.
- *
- * `APP_COLORS` is gone from this file entirely. It is the old blue palette, and
- * one import of it is enough to put a blue separator on a warm-black page.
- *
- * ## What is undesigned, and marked as such
- *
- * The banners, the empty states and the city picker have behaviour and no
- * frame. They are on the frame's palette and spacing scale, so they do not look
- * foreign, but nothing here should be read as a design decision — see
- * `docs/PLACEHOLDER_SCREENS.md` and the render sites for each.
- */
 const styles = StyleSheet.create({
-  /* ---- The page --------------------------------------------------------- */
-
+  /** One flat surface: the page's ink edge to edge, no panel, no border, no gradient. */
+  container: { flex: 1, backgroundColor: COLOR.ink },
   /**
-   * One flat surface. `#0F0E0E` edge to edge — no panel, no border, no
-   * gradient. This screen used to stack three of them.
+   * No horizontal padding of its own: every row carries its gutter (the rails and the Set list bleed to the edge), so a
+   * section cannot disagree with the one above it.
    */
-  container: {
-    flex: 1,
-    backgroundColor: EMBER.bg,
-  },
-  /**
-   * `Main`'s horizontal padding, and the only place it is applied.
-   *
-   * Every child used to carry its own 12 or 16 or 23. One gutter on the scroll
-   * content means a section cannot disagree with the section above it, and the
-   * horizontal rows still bleed to exactly where the frame puts them — a card
-   * starting at x=12 is a card starting at the content edge.
-   *
-   * Vertical padding is at the render site: it is the frame's 96 and 128 plus
-   * the insets, and the insets are not the frame's.
-   */
-  listContainer: {
-    paddingHorizontal: MAIN_PADDING_HORIZONTAL,
-  },
+  listContainer: {},
+  fill: { flex: 1, minWidth: 0 },
+  spacer: { height: SPACE.sm },
+  ink: { color: COLOR.textPrimary },
 
-  /* ---- Sections: Featured, Upcoming, Nearby ------------------------------ */
-
-  /** The coach mark, under the card it names: its caret's tip just clear of the card's edge; the design's 300 at most. */
-  /** A row in the list under the sections: the Upcoming stack's spacing. */
-  mainRow: { paddingBottom: SPACE.md },
-  /** The sections run edge to edge (rails and the Set list carry their own gutter); the list's padding is cancelled around them. */
-  bleed: { marginHorizontal: -MAIN_PADDING_HORIZONTAL },
+  /** A row in the list under the sections: the stack's spacing, inside the gutter. */
+  mainRow: { paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.md },
+  /** A row beside its "Checked in" / "Ended" pill. */
+  moreRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
   /** A day's heading over its rows: a section gap above the first, the stack's rhythm below. */
-  dayRow: { paddingTop: SPACE.lg, paddingBottom: SPACE.xs },
-  /** The headline above the sticky search: the gap the search used to sit a gap below. */
-  titleBlock: { paddingBottom: SPACE.sm },
-  stickyInner: { marginHorizontal: MAIN_PADDING_HORIZONTAL },
+  dayRow: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.lg, paddingBottom: SPACE.xs },
+  /** The headline above the sticky search. */
+  titleBlock: { paddingBottom: SPACE.lg },
   /** "6 events · Bengaluru": the flat result's label. */
-  resultsLabel: { paddingTop: SPACE.xl, paddingBottom: SPACE.md },
+  resultsLabel: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.xl, paddingBottom: SPACE.md },
   resultsLabelText: { ...DESIGN_TYPE.label, color: COLOR.textSecondary },
   resultsCount: { fontFamily: FONT_FAMILY.mono[700], color: COLOR.textPrimary },
-  /**
-   * The loading skeleton's Upcoming row — `UpcomingCard`'s own `card` style
-   * (`surfaceSunken`, `EMBER_RADIUS.md`, 16 padding, 16 gap), so the
-   * placeholder is the same box the real card fades into rather than a
-   * differently-shaped one it has to replace.
-   */
-  upcomingSkeletonCard: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: EMBER.surfaceSunken,
-    borderRadius: EMBER_RADIUS.md,
-    padding: SPACE.lg,
-    gap: SPACE.lg,
-  },
-  /** The search/filter skeleton: rows spaced like `mainRow`. */
-  narrowedSkeleton: { marginTop: SPACE.xl, gap: SPACE.md },
-
-  /* ---- Nearby, when there is no location -------------------------------- */
-
-
-  /* ---- The rows with behaviour and no frame ----------------------------- */
-  /*
-   * The offline banner, the switch-city offer, the away notice, and the
-   * location and network errors. One shape, flat fills: info sits on
-   * `surface` with a `separator` hairline, warnings and errors on a faint
-   * tint of `warning` / `destructive` with a stronger tint for the border.
-   * The copy stays `textPrimary` so it reads on every fill.
-   */
-
-  filtersBar: {
-    paddingBottom: SPACE.sm,
-    gap: SPACE.sm,
-  },
-  bannerInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACE.lg,
-    paddingVertical: SPACE.md,
-    borderRadius: EMBER_RADIUS.md,
-    backgroundColor: EMBER.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: EMBER.separator,
-  },
-  bannerWarn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACE.lg,
-    paddingVertical: SPACE.md,
-    borderRadius: EMBER_RADIUS.md,
-    backgroundColor: tint(EMBER.warning, 0.16),
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: tint(EMBER.warning, 0.4),
-  },
-  bannerError: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACE.lg,
-    paddingVertical: SPACE.md,
-    borderRadius: EMBER_RADIUS.md,
-    backgroundColor: tint(EMBER.destructive, 0.16),
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: tint(EMBER.destructive, 0.4),
-  },
-  /*
-   * Neutral, not a warning.
-   *
-   * The other banners carry a border and an action because something is
-   * wrong and an action is owed. This one is a statement of fact — you are
-   * somewhere we do not serve yet — and dressing it as an alert would make an
-   * ordinary situation read as a fault.
-   */
-  bannerNeutral: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACE.sm,
-    paddingVertical: SPACE.sm,
-    paddingHorizontal: SPACE.md,
-    borderRadius: EMBER_RADIUS.md,
-    backgroundColor: EMBER.surfaceSunken,
-  },
-  bannerNeutralText: {
-    ...TYPE.meta,
-    flex: 1,
-  },
-  bannerText: {
-    ...TYPE.body,
-    flex: 1,
-    marginRight: SPACE.md,
-  },
-  bannerCta: {
-    minHeight: CONTROL.md,
-    justifyContent: 'center',
-    backgroundColor: EMBER.surface,
-    paddingHorizontal: SPACE.lg,
-    borderRadius: EMBER_RADIUS.pill,
-  },
-  /*
-   * On an info banner, which is itself `surface`: a `surface` button there was
-   * the banner's own colour and read as plain text. One step down instead —
-   * warnings and errors keep `surface`, which stands clear of their tints.
-   */
-  bannerCtaOnInfo: {
-    backgroundColor: EMBER.surfaceSunken,
-  },
-  bannerCtaText: {
-    ...TYPE.button,
-    color: EMBER.textPrimary,
-  },
-
-  /* ---- Empty states ----------------------------------------------------- */
-  /*
-   * Three of them, and the copy is the design — "Coming soon to {city}",
-   * "Nothing on in {city}" and "No matches" are three different situations that
-   * one empty state used to conflate. See the render site.
-   */
-
-  emptyState: {
-    paddingHorizontal: SPACE.xxl,
-    paddingVertical: SPACE.xxl,
-    alignItems: 'center',
-  },
-  emptyGlyph: {
-    width: 80,
-    height: 80,
-    borderRadius: EMBER_RADIUS.lg,
-    backgroundColor: EMBER.surfaceSunken,
-    borderWidth: 1,
-    borderColor: EMBER.separator,
-    marginBottom: SPACE.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyTitle: {
-    ...TYPE.title,
-    marginBottom: SPACE.sm,
-  },
-  emptySub: {
-    ...TYPE.body,
-    color: EMBER.textSecondary,
-    textAlign: 'center',
-  },
-  ctaGhost: {
-    marginTop: SPACE.md,
-    minHeight: CONTROL.md,
-    justifyContent: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: tint(EMBER.textPrimary, 0.3),
-    borderRadius: EMBER_RADIUS.pill,
-    paddingHorizontal: SPACE.lg,
-    paddingVertical: SPACE.sm,
-  },
-  ctaGhostText: {
-    ...TYPE.button,
-  },
-  // The error state's single action is its primary one (docs/DESIGN_SYSTEM.md).
-  ctaPrimary: {
-    marginTop: SPACE.lg,
-    minHeight: CONTROL.md,
-    justifyContent: 'center',
-    backgroundColor: EMBER.accent,
-    borderRadius: EMBER_RADIUS.pill,
-    paddingHorizontal: SPACE.xl,
-  },
-  ctaPrimaryText: {
-    ...TYPE.button,
-    color: EMBER.onGradient,
-  },
-
-  /* ---- The city picker -------------------------------------------------- */
-  /*
-   * A placeholder sheet, like the interest picker before it — see
-   * `docs/PLACEHOLDER_SCREENS.md`. The server's list is the whole contract:
-   * every entry opens with the number of events it claims.
-   */
-
-  // No fill: `SheetModal` draws the dim and fades it on its own.
-  cityPickerBackdrop: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  // The app's sheet: `surfaceSunken`, with `surface` rows on it (the filter
-  // and notification sheets are the same).
-  cityPickerSheet: {
-    backgroundColor: EMBER.surfaceSunken,
-    borderTopLeftRadius: EMBER_RADIUS.lg,
-    borderTopRightRadius: EMBER_RADIUS.lg,
-    paddingHorizontal: GUTTER,
-    // The grabber's own top inset, as the filter sheet's.
-    paddingTop: SPACE.md,
-    paddingBottom: SPACE.xxl,
-    maxHeight: '70%',
-  },
-  cityPickerGrabber: { marginBottom: SPACE.lg },
-  cityPickerTitle: {
-    ...TYPE.heading,
-    marginBottom: SPACE.lg,
-  },
-  cityPickerEmpty: {
-    ...TYPE.body,
-    color: EMBER.textSecondary,
-    paddingVertical: SPACE.md,
-  },
-  cityPickerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: SPACE.md,
-    paddingHorizontal: SPACE.lg,
-    borderRadius: EMBER_RADIUS.md,
-    marginBottom: SPACE.sm,
-    backgroundColor: EMBER.surface,
-  },
-  /*
-   * Dashed, and above the list rather than in it.
-   *
-   * "Use my current location" is the one row that is not gated on the city
-   * having events — a user standing somewhere we have not launched is absent
-   * from the list below and from the switch banner, and without this has no way
-   * to say where they are. The dash is what marks it as the odd one out.
-   */
-  cityPickerRowLocate: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: tint(EMBER.textPrimary, 0.18),
-    borderStyle: 'dashed',
-    marginBottom: SPACE.lg,
-  },
-  // A selected option: `textPrimary` fill, `bg` text (docs/DESIGN_SYSTEM.md).
-  cityPickerRowActive: {
-    backgroundColor: EMBER.textPrimary,
-  },
-  cityPickerTextActive: { color: EMBER.bg },
-  cityPickerCity: {
-    ...TYPE.bodyStrong,
-  },
-  cityPickerCount: {
-    ...TYPE.meta,
-  },
+  /** The search/filter skeleton: rows spaced like the real ones. */
+  narrowedSkeleton: { paddingHorizontal: SPACE.gutter, marginTop: SPACE.xl, gap: SPACE.md },
+  moreSkeleton: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, height: 64 },
 })
-
 
 /*
  * Wrapped so `lib/perf.tsx` can report what this screen costs to render.

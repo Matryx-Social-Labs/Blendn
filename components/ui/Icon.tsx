@@ -116,6 +116,7 @@ import Radio from 'lucide-react-native/icons/radio'
 import Rainbow from 'lucide-react-native/icons/rainbow'
 import RefreshCw from 'lucide-react-native/icons/refresh-cw'
 import Reply from 'lucide-react-native/icons/reply'
+import Rocket from 'lucide-react-native/icons/rocket'
 import RotateCcw from 'lucide-react-native/icons/rotate-ccw'
 import RotateCcwClock from 'lucide-react-native/icons/rotate-ccw-clock'
 import Scale from 'lucide-react-native/icons/scale'
@@ -259,6 +260,7 @@ const ICONS = {
   rainbow: Rainbow,
   'refresh-cw': RefreshCw,
   reply: Reply,
+  rocket: Rocket,
   'rotate-ccw': RotateCcw,
   scale: Scale,
   'scan-face': ScanFace,

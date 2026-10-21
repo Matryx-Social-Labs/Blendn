@@ -41,14 +41,15 @@ describe('the screen wires the Featured row in', () => {
     expect(SECTIONS()).toContain('soloBleed')
   })
 
-  it('cancels the page margin so the row runs edge to edge', () => {
-    expect(SCREEN()).toContain('marginHorizontal: -MAIN_PADDING_HORIZONTAL')
+  it('puts no margin on the list, so the row runs edge to edge without cancelling one', () => {
+    expect(SCREEN()).not.toContain('marginHorizontal: -')
+    expect(SCREEN()).toContain('listContainer: {}')
   })
 
   it('counts the banners above the header, which the chrome constant cannot know', () => {
     // "You're in San Francisco — nothing here yet" pushed the card's date and
     // venue under the bar: the fit assumed nothing sat above the header.
-    expect(SCREEN()).toContain('onLayout={onBannersLayout}')
+    expect(SCREEN()).toContain('onLayout={setBannersHeight}')
     expect(SCREEN().match(/bannersHeight\s*\)/g)?.length).toBeGreaterThanOrEqual(1)
   })
 

@@ -11,10 +11,9 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React, { useState } from 'react'
 import { Dimensions, Keyboard, Platform, TextInput } from 'react-native'
 
-import { PulseHeader } from '../components/pulse/PulseHeader'
+import { PulseSearch } from '../components/pulse/PulseHeader'
 import { keyboardLeft } from '../lib/home'
 
-jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }))
 
 type HideEvent = { endCoordinates: { screenY: number; height: number } }
 const HEIGHT = Dimensions.get('screen').height
@@ -42,7 +41,7 @@ afterEach(() => {
 
 function Search() {
   const [query, setQuery] = useState('')
-  return <PulseHeader title="The " titleAccent="Pulse" city="Bengaluru" onPressCity={jest.fn()} query={query} onChangeQuery={setQuery} onPressFilter={jest.fn()} />
+  return <PulseSearch query={query} onChangeQuery={setQuery} onPressFilter={jest.fn()} />
 }
 
 async function typeInFocusedSearch(platform: 'ios' | 'android') {

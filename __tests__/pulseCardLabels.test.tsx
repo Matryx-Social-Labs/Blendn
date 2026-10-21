@@ -1,6 +1,6 @@
 /**
  * The Pulse cards read their people line to VoiceOver and TalkBack (drive 6:
- * the label left out "12 here now"), Upcoming and Featured alike.
+ * the label left out "12 here now"), rows and Featured alike.
  */
 import { render, screen } from '@testing-library/react-native'
 import React from 'react'
@@ -10,12 +10,12 @@ jest.mock('../components/pulse/FeedMedia', () => ({ FeedMedia: () => null }))
 
 /* eslint-disable import/first */
 import { FeaturedCard } from '../components/pulse/FeaturedCard'
-import { UpcomingCard } from '../components/pulse/UpcomingCard'
+import { EventCard } from '../components/ds/EventCard'
 /* eslint-enable import/first */
 
-it('Upcoming: title, time, place and "12 here now" in one label', async () => {
-  await render(<UpcomingCard title="Evening Ragas" timeLabel="Happening now" placeLabel="at Chowdiah Memorial Hall" peopleLabel="12 here now" onPress={jest.fn()} />)
-  expect(screen.getByLabelText('Evening Ragas, Happening now, at Chowdiah Memorial Hall, 12 here now')).toBeTruthy()
+it('Row: title, place and "12 here now" in one label, led by Live', async () => {
+  await render(<EventCard kind="row" title="Evening Ragas" time="Live" venue="Chowdiah Memorial Hall" here={12} onPress={jest.fn()} />)
+  expect(screen.getByLabelText('Live. Evening Ragas, at Chowdiah Memorial Hall, 12 here now')).toBeTruthy()
 })
 
 it('Featured: the date, place and "39 going" after the title', async () => {
@@ -24,6 +24,6 @@ it('Featured: the date, place and "39 going" after the title', async () => {
 })
 
 it('no people line, no trailing comma', async () => {
-  await render(<UpcomingCard title="Founders" timeLabel="Tomorrow" onPress={jest.fn()} />)
-  expect(screen.getByLabelText('Founders, Tomorrow')).toBeTruthy()
+  await render(<EventCard kind="row" title="Founders" time="Tomorrow" venue="Toit" onPress={jest.fn()} />)
+  expect(screen.getByLabelText('Founders, Tomorrow, at Toit')).toBeTruthy()
 })

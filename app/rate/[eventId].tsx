@@ -182,7 +182,7 @@ function Scale({
   )
 }
 
-export default function RatePeers() {
+function RatePeersContent() {
   const { eventId } = useLocalSearchParams<{ eventId: string }>()
   const { showToast } = useToast()
   const insets = useSafeAreaInsets()
@@ -528,3 +528,8 @@ const styles = StyleSheet.create({
   secondary: { color: COLOR.textSecondary },
   tertiary: { color: COLOR.textTertiary },
 })
+
+/** The screen's default export is a wrapper, so a hue provider can be added around the content without touching it. */
+export default function RatePeers() {
+  return <RatePeersContent />
+}

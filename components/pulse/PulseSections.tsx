@@ -5,7 +5,8 @@ import { FlatList, StyleSheet, Text, View, type ListRenderItemInfo } from 'react
 import { Skeleton } from '../Skeleton'
 import { Button } from '../ds/Button'
 import { Chip } from '../ds/Chip'
-import { EventCard } from '../ds/EventCard'
+import type { Rect } from '../ds/chatShared'
+import { EventCard, type EventCardKind } from '../ds/EventCard'
 import { ScrimPill } from '../ds/MonoFamily'
 import { SectionHeader } from '../ds/SectionHeader'
 import { Sheet } from '../ds/Sheet'
@@ -31,7 +32,8 @@ import { featuredLabel, isLiveNow, PROMOTED_LABEL, SECTION_ORDER, weekendWindow,
 export type CardHandlers = {
   onPress: (event: BlendnEvent) => void
   onPressIn: (event: BlendnEvent) => void
-  onLongPress: (event: BlendnEvent) => void
+  /** The hold: the event, the card's frame in the window, and which card to lift (a hero, a compact card or a row). */
+  onLongPress: (event: BlendnEvent, anchor: Rect, kind: EventCardKind) => void
 }
 
 /** The compact card's size: a snap interval is the width plus the rail gap. */
@@ -66,7 +68,7 @@ const CompactRail = memo(function CompactRail({ events, now, withDistance, coach
           cover={card.cover}
           onPress={() => onPress(item)}
           onPressIn={() => onPressIn(item)}
-          onLongPress={() => onLongPress(item)}
+          onLongPress={(anchor) => onLongPress(item, anchor, 'compact')}
           testID={`${testID}-${item.id}`}
         />
       )
@@ -153,7 +155,7 @@ export const FeaturedSection = memo(function FeaturedSection({
         promoted: featuredLabel(e) === PROMOTED_LABEL,
         onPress: () => onPress(e),
         onPressIn: () => onPressIn(e),
-        onLongPress: () => onLongPress(e),
+        onLongPress: (anchor: Rect) => onLongPress(e, anchor, 'hero'),
       })),
     [section.events, now, onPress, onPressIn, onLongPress]
   )
@@ -219,7 +221,7 @@ export const TonightSection = memo(function TonightSection({
       <View style={styles.gutter}>
         <SectionHeader title="Tonight" count={section.count} action={{ label: 'See all', onPress: onSeeAll }} testID="pulse-tonight-header" />
       </View>
-      <SetList events={section.events} now={now} withDistance={withDistance} coachRef={coachRef} onPress={onPress} onPressIn={onPressIn} onLongPress={onLongPress} />
+      <SetList events={section.events} now={now} withDistance={withDistance} coachRef={coachRef} onPress={onPress} onPressIn={onPressIn} onLongPress={(event, anchor) => onLongPress(event, anchor, 'row')} />
     </View>
   )
 })
@@ -248,6 +250,7 @@ export const NearbySection = memo(function NearbySection({
           <View key={event.id} ref={i === 0 ? coachRef : undefined} collapsable={false} style={styles.nearRow}>
             <EventCard
               kind="row"
+              lead="distance"
               title={card.title}
               time={card.time}
               venue={card.venue}
@@ -255,7 +258,7 @@ export const NearbySection = memo(function NearbySection({
               cover={card.cover}
               onPress={() => onPress(event)}
               onPressIn={() => onPressIn(event)}
-              onLongPress={() => onLongPress(event)}
+              onLongPress={(anchor) => onLongPress(event, anchor, 'row')}
               testID={`pulse-nearby-${event.id}`}
             />
           </View>

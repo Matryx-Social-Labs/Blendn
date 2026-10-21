@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react'
 import { AccessibilityInfo, Platform, Pressable, StyleSheet, TextInput, type TextInputProps } from 'react-native'
 
 import { Icon } from '../ui/Icon'
@@ -22,6 +22,8 @@ export type SearchFieldProps = Omit<TextInputProps, 'style' | 'editable' | 'plac
   disabled?: boolean
   /** The design gallery only: draws focus with no keyboard. */
   previewState?: 'focused'
+  /** The text input itself, for a screen that must blur it (the Pulse's, when Android's Back closes the keyboard). */
+  inputRef?: Ref<TextInput>
   testID?: string
 }
 
@@ -45,6 +47,7 @@ export function SearchField({
   inSheet = false,
   disabled = false,
   previewState,
+  inputRef,
   testID,
   onFocus,
   onBlur,
@@ -54,6 +57,8 @@ export function SearchField({
   const contrast = useIncreaseContrast()
   const input = useRef<TextInput>(null)
   const [focused, setFocused] = useState(false)
+  // The caller's ref, when it asked for one, is the input itself.
+  useImperativeHandle(inputRef as Ref<TextInput | null>, () => input.current as TextInput)
   const active = focused || previewState === 'focused' || value.length > 0
 
   useEffect(() => {

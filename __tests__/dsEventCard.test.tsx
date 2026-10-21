@@ -16,6 +16,9 @@ import { COLOR, FONT_FAMILY, MATERIAL, RADIUS, TYPE } from '../lib/design/tokens
 import { H } from '../lib/haptics'
 import { tint } from '../lib/theme'
 
+jest.mock('../components/ds/anchor', () => ({
+  measureAnchor: (_node: unknown, then: (r: { x: number; y: number; width: number; height: number }) => void) => then({ x: 24, y: 300, width: 240, height: 170 }),
+}))
 jest.mock('expo-linear-gradient', () => {
   const { View } = jest.requireActual('react-native')
   return { LinearGradient: (props: object) => <View {...props} testID="scrim" /> }
@@ -84,6 +87,34 @@ it('the words on the photo stop at 1.5×, so the foot never runs up under the pi
   await render(<EventCard kind="compact" {...VINYL} />)
   expect(screen.getByText('Vinyl Night', { includeHiddenElements: true }).props.maxFontSizeMultiplier).toBe(1.5)
   expect(screen.getByText('at Toit · 1.2 km', { includeHiddenElements: true }).props.maxFontSizeMultiplier).toBe(1.5)
+})
+
+describe('the peek (onLongPress)', () => {
+  it('a hold plays H.longPress once and hands the screen the card\'s frame; a tap plays none', async () => {
+    const longPress = jest.spyOn(H, 'longPress').mockImplementation(() => {})
+    const onLongPress = jest.fn()
+    const onPress = jest.fn()
+    await render(<EventCard kind="compact" {...VINYL} onPress={onPress} onLongPress={onLongPress} testID="e" />)
+    await fireEvent.press(screen.getByTestId('e'))
+    expect(longPress).not.toHaveBeenCalled()
+    await fireEvent(screen.getByTestId('e'), 'longPress')
+    expect(longPress).toHaveBeenCalledTimes(1)
+    expect(onLongPress).toHaveBeenCalledWith({ x: 24, y: 300, width: 240, height: 170 })
+  })
+
+  it('a screen reader reaches it as "Quick actions", with the same frame and no hold haptic', async () => {
+    const longPress = jest.spyOn(H, 'longPress').mockImplementation(() => {})
+    const onLongPress = jest.fn()
+    await render(<EventCard kind="row" {...VINYL} onLongPress={onLongPress} testID="e" />)
+    await fireEvent(screen.getByTestId('e'), 'accessibilityAction', { nativeEvent: { actionName: 'quickActions' } })
+    expect(onLongPress).toHaveBeenCalledWith({ x: 24, y: 300, width: 240, height: 170 })
+    expect(longPress).not.toHaveBeenCalled()
+  })
+
+  it('a card with no peek has no Quick actions and no hold', async () => {
+    await render(<EventCard kind="row" {...VINYL} testID="e" />)
+    expect(screen.getByTestId('e').props.accessibilityActions).toBeUndefined()
+  })
 })
 
 describe('row · lead="distance"', () => {

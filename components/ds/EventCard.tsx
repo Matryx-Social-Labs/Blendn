@@ -1,6 +1,10 @@
 import { Image } from 'expo-image'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Platform, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
+
+import { H } from '../../lib/haptics'
+import { measureAnchor } from './anchor'
+import type { Rect } from './chatShared'
 
 import ScalePress from '../motion/ScalePress'
 import { PhotoScrim } from '../ui/GradientFill'
@@ -36,8 +40,11 @@ export type EventCardProps = {
   onPress?: () => void
   /** The finger is down: a screen warms what the press opens (~100 ms before it). */
   onPressIn?: () => void
-  /** The quick-actions tray (save, share, preview), also reached by a screen reader's "Quick actions" action. */
-  onLongPress?: () => void
+  /**
+   * The peek (save, share, preview, check in or out), also reached by a screen reader's "Quick actions" action. It plays
+   * `H.longPress` as the hold completes and hands over the card's frame in the window, for the screen to lift (`LongPressMenu`).
+   */
+  onLongPress?: (anchor: Rect) => void
   /** The design gallery only: draws a transient state with no finger or keyboard. */
   previewState?: 'pressed' | 'focused'
   testID?: string
@@ -101,6 +108,13 @@ export function EventCard(props: EventCardProps) {
   const android = Platform.OS === 'android'
   const [focused, setFocused] = useState(false)
   const label = eventLabel(props)
+  const box = useRef<View>(null)
+  const hold = onLongPress
+    ? () => {
+        H.longPress()
+        measureAnchor(box.current, onLongPress)
+      }
+    : undefined
   const ring = focused || previewState === 'focused'
   const a11y = {
     accessibilityRole: 'button' as const,
@@ -109,7 +123,7 @@ export function EventCard(props: EventCardProps) {
       ? {
           accessibilityActions: QUICK_ACTIONS,
           onAccessibilityAction: (e: { nativeEvent: { actionName: string } }) => {
-            if (e.nativeEvent.actionName === 'quickActions') onLongPress()
+            if (e.nativeEvent.actionName === 'quickActions') measureAnchor(box.current, onLongPress)
           },
         }
       : null),
@@ -118,12 +132,12 @@ export function EventCard(props: EventCardProps) {
   if (kind === 'row') {
     const leading = lead === 'distance' && !!distance
     return (
-      <View style={style}>
+      <View ref={box} collapsable={false} style={style}>
         <Pressable
           testID={testID}
           onPress={onPress}
           onPressIn={onPressIn}
-          onLongPress={onLongPress}
+          onLongPress={hold}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           android_ripple={{ color: PRESSED_WASH.android }}
@@ -162,6 +176,8 @@ export function EventCard(props: EventCardProps) {
   const radius = hero ? RADIUS.card : RADIUS.mediaInCard
   return (
     <View
+      ref={box}
+      collapsable={false}
       testID={testID && `${testID}-scale`}
       style={[DEFAULT_SIZE[kind], style, previewState === 'pressed' && !android && styles.pressed]}
     >
@@ -169,7 +185,7 @@ export function EventCard(props: EventCardProps) {
         testID={testID}
         onPress={onPress}
         onPressIn={onPressIn}
-        onLongPress={onLongPress}
+        onLongPress={hold}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         pressedScale={android ? 1 : PRESS.scale}

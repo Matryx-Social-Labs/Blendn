@@ -71,7 +71,7 @@ const INTENTS: { value: Intent; label: string; hint: string }[] = [
 
 const AVATAR = 56
 
-export default function EventPreferences() {
+function EventPreferencesContent() {
   // `revealed` arrives from the status chip, which already knows it. There is
   // no GET for per-event preferences, and adding a round trip to learn
   // something the caller is holding would be the wrong trade.
@@ -344,3 +344,8 @@ const styles = StyleSheet.create({
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
 })
+
+/** The screen's default export is a wrapper, so a hue provider can be added around the content without touching it. */
+export default function EventPreferences() {
+  return <EventPreferencesContent />
+}
