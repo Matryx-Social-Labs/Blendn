@@ -1,11 +1,14 @@
-import { Ionicons } from '@expo/vector-icons'
 import React, { Component, ErrorInfo, ReactNode } from 'react'
-import { Linking, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Linking, StyleSheet, Text, View } from 'react-native'
+import Animated from 'react-native-reanimated'
+import { COLOR, TYPE } from '../lib/design/tokens'
 import { Logger } from '../lib/logger'
 import { SUPPORT_EMAIL, supportMailto } from '../lib/support'
-import { CONTROL, EMBER, GUTTER, MAX_FONT_SCALE, OPACITY, SPACE, TYPE } from '../lib/theme'
-import { EmberButton } from './onboarding/EmberControls'
 import { getCurrentUser } from '../lib/useAuth'
+import { monoCaption } from './ds/MonoFamily'
+import { StateScreen } from './ds/StateScreen'
+import { stateScreenIn } from './motion/presence'
+import { Backdrop, ORB_LEVEL } from './onboarding/Backdrop'
 
 interface Props {
   children: ReactNode
@@ -100,102 +103,59 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   render() {
-    if (this.state.hasError) {
-      return (
-        <View style={styles.container}>
-          <Ionicons name="warning-outline" size={48} color={EMBER.destructive} />
-          <Text style={styles.title} accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.title}>
-            Something went wrong
-          </Text>
-          <Text style={styles.subtitle}>
-            This screen stopped working. Nothing you saved is lost. Try again, and if it keeps
-            happening, tell us.
-          </Text>
-          {/*
-            The raw message is for us, not for the person holding the phone: in
-            a release build it is a stack-trace fragment that explains nothing
-            and can leak internals. Development builds still show it.
-          */}
-          {__DEV__ && this.state.error?.message ? (
-            <Text style={styles.devMessage} selectable>{this.state.error.message}</Text>
-          ) : null}
-
-          {/* Full width, like every other screen's one primary action. */}
-          <View style={styles.actions}>
-            <EmberButton label="Try again" onPress={this.resetErrorBoundary} />
-          </View>
-
-          <Pressable
-            style={({ pressed }) => [styles.detailsButton, pressed && styles.pressed]}
-            onPress={() => void this.contactSupport()}
-            accessibilityRole="button"
-            accessibilityLabel="Contact support"
-            hitSlop={SPACE.sm}
-          >
-            <Text style={styles.detailsButtonText} maxFontSizeMultiplier={MAX_FONT_SCALE.label}>
-              CONTACT SUPPORT
-            </Text>
-          </Pressable>
-          {this.state.showAddress ? (
-            <Text style={styles.address} selectable accessibilityLiveRegion="polite">
-              Write to {SUPPORT_EMAIL} and mention {this.state.errorId ?? 'this error'}.
-            </Text>
-          ) : null}
-          {this.state.errorId ? (
-            <Text style={styles.errorId} selectable>Error {this.state.errorId}</Text>
-          ) : null}
-        </View>
-      )
-    }
-
-    return this.props.children
+    if (!this.state.hasError) return this.props.children
+    const { errorId, showAddress, error } = this.state
+    return (
+      <View style={styles.container}>
+        <Backdrop level={ORB_LEVEL.form} />
+        <Animated.View entering={stateScreenIn} style={styles.fill}>
+          <StateScreen
+            variant="screen"
+            icon="triangle-alert"
+            title="Something went wrong"
+            body="This screen stopped working. Nothing you saved is lost. Try again, and if it keeps happening, tell us."
+            // Try again is the screen's one primary (H.primary); Contact support is a text action that plays nothing.
+            actions={[
+              { label: 'Try again', onPress: this.resetErrorBoundary },
+              { label: 'Contact support', kind: 'tertiary', onPress: () => void this.contactSupport() },
+            ]}
+            foot={
+              <>
+                {/*
+                  The raw message is for us, not for the person holding the phone: in a release build it is a
+                  stack-trace fragment that explains nothing and can leak internals. Development builds still show it.
+                */}
+                {__DEV__ && error?.message ? (
+                  <Text style={styles.devMessage} selectable>
+                    {error.message}
+                  </Text>
+                ) : null}
+                {showAddress ? (
+                  <Text style={styles.line} selectable accessibilityLiveRegion="polite">
+                    Write to {SUPPORT_EMAIL} and mention {errorId ?? 'this error'}.
+                  </Text>
+                ) : null}
+                {errorId ? (
+                  <Text style={styles.errorId} selectable>
+                    Error {errorId}
+                  </Text>
+                ) : null}
+              </>
+            }
+            testID="error-boundary"
+          />
+        </Animated.View>
+      </View>
+    )
   }
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: GUTTER,
-    backgroundColor: EMBER.bg
-  },
-  title: {
-    ...TYPE.title,
-    marginTop: SPACE.lg,
-    marginBottom: SPACE.sm,
-    textAlign: 'center'
-  },
-  subtitle: {
-    ...TYPE.body,
-    color: EMBER.textSecondary,
-    textAlign: 'center',
-    marginBottom: SPACE.xxl
-  },
-  devMessage: {
-    ...TYPE.meta,
-    color: EMBER.destructive,
-    textAlign: 'center',
-    marginBottom: SPACE.xxl
-  },
-  actions: { alignSelf: 'stretch', marginBottom: SPACE.lg },
-  detailsButton: {
-    minHeight: CONTROL.md,
-    justifyContent: 'center',
-    paddingHorizontal: SPACE.lg,
-  },
-  // A text action (docs/DESIGN_SYSTEM.md): `label` in `textPrimary`.
-  detailsButtonText: { ...TYPE.label, color: EMBER.textPrimary },
-  pressed: { opacity: OPACITY.pressed },
-  address: {
-    ...TYPE.body,
-    color: EMBER.textSecondary,
-    textAlign: 'center',
-    marginTop: SPACE.sm,
-  },
-  errorId: {
-    ...TYPE.meta,
-    color: EMBER.textTertiary,
-    marginTop: SPACE.sm
-  }
+  container: { flex: 1, backgroundColor: COLOR.ink },
+  fill: { flex: 1 },
+  devMessage: { ...TYPE.meta, color: COLOR.destructive, textAlign: 'center' },
+  // Where to write when no mail app answered: the address and the id, as text that can be selected and copied.
+  line: { ...TYPE.meta, color: COLOR.textSecondary, textAlign: 'center' },
+  // Geist Mono, selectable, so a message saying "it crashed" can be matched to the report that says why.
+  errorId: { ...monoCaption(false), color: COLOR.textTertiary, textAlign: 'center' },
 })

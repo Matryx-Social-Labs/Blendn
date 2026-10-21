@@ -40,7 +40,7 @@ describe('the crash screen', () => {
   const src = read('components/ErrorBoundary.tsx')
 
   it('shows the raw error in development builds only', () => {
-    expect(src).toContain('{__DEV__ && this.state.error?.message ? (')
+    expect(src).toContain('{__DEV__ && error?.message ? (')
     expect(src).not.toContain("'Error Details'")
   })
 
@@ -51,7 +51,7 @@ describe('the crash screen', () => {
   })
 
   it('keeps Try again', () => {
-    expect(src).toContain('onPress={this.resetErrorBoundary}')
+    expect(src).toContain('onPress: this.resetErrorBoundary')
   })
 })
 

@@ -50,6 +50,8 @@ export type StateScreenProps = {
   note?: string
   /** Top to bottom in the fixed order. `kind` defaults to `primary`. */
   actions?: StateAction[]
+  /** Under the actions, in the dock (`screen` only): the crash screen's error id, the line that says where to write. */
+  foot?: ReactNode
   /** The primary action is in flight. */
   busy?: boolean
   /** `inline` in a list or card; `screen` fills it, with the actions docked at the bottom. */
@@ -67,7 +69,7 @@ export type StateScreenProps = {
  * Text scales freely; the well never does. Increase Contrast: the well's
  * hairline, a white glyph, secondary text lifted to white.
  */
-export function StateScreen({ icon, title, body, bodyLink, lead, note, actions = [], busy = false, variant = 'inline', testID }: StateScreenProps) {
+export function StateScreen({ icon, title, body, bodyLink, lead, note, actions = [], foot, busy = false, variant = 'inline', testID }: StateScreenProps) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const insets = useSafeAreaInsets()
@@ -113,9 +115,10 @@ export function StateScreen({ icon, title, body, bodyLink, lead, note, actions =
   return (
     <View testID={testID} style={styles.fill}>
       <ScrollView contentContainerStyle={[styles.screen, { paddingTop: Math.round(height * WELL_TOP) }]}>{content}</ScrollView>
-      {buttons.length ? (
+      {buttons.length || foot ? (
         <View testID={testID && `${testID}-dock`} style={[styles.dock, { paddingBottom: insets.bottom + SPACE.lg }]}>
           {buttons}
+          {foot ? <View style={styles.foot}>{foot}</View> : null}
         </View>
       ) : null}
     </View>
@@ -145,6 +148,7 @@ const styles = StyleSheet.create({
   center: { textAlign: 'center' },
   actions: { alignSelf: 'stretch', gap: SPACE.sm, marginTop: SPACE.md },
   fill: { flex: 1 },
+  foot: { alignItems: 'center', gap: SPACE.sm },
   screen: { paddingHorizontal: SPACE.gutter },
   dock: { gap: SPACE.md, paddingTop: SPACE.lg, paddingHorizontal: SPACE.gutter },
 })

@@ -101,3 +101,9 @@ export const bannerIn = () => {
 }
 export const bannerFadeIn = FadeIn.duration(DURATION.base).easing(ENTRANCE).reduceMotion(ReduceMotion.Never)
 export const bannerOut = FadeOut.duration(DURATION.quick).easing(Easing.bezier(...EASING.exit)).reduceMotion(ReduceMotion.Never)
+
+/*
+ * A whole state arriving (Flow 15: "replaces the landing or the current screen · base 220 ms crossfade · no haptic"): the
+ * screen fades in over `base` on the gentle curve; no rise, so there is nothing for Reduce Motion to remove.
+ */
+export const stateScreenIn = FadeIn.duration(DURATION.base).easing(GENTLE).reduceMotion(ReduceMotion.Never)
