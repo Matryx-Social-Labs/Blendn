@@ -241,3 +241,9 @@ describe('measurements that came off the frame', () => {
     expect(ruled.slice(0, ruled.indexOf('},'))).toContain('borderLeftWidth')
   })
 })
+
+describe('the hero ends on the page', () => {
+  it('its foot scrim reaches full ink, so there is no seam above the page', () => {
+    expect(STAGE()).toMatch(/<PhotoScrim contrast=\{contrast\} foot=\{1\}/)
+  })
+})

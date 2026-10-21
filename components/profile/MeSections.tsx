@@ -62,7 +62,12 @@ export function MeIdentity({
           style={[font('display', bold), styles.ink]}
         >
           {name}
-          {age ? <Text style={[font('display', bold, FONT_FAMILY.mono[700]), styles.age]}>{`, ${age}`}</Text> : null}
+          {age ? (
+            <>
+              {', '}
+              <Text style={[font('display', bold, FONT_FAMILY.mono[700]), styles.age]}>{age}</Text>
+            </>
+          ) : null}
         </Text>
         {where || joined ? (
           <Text numberOfLines={2} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.muted]}>
@@ -105,7 +110,7 @@ function Stat({ value, label, onPress, hint = 'Opens Going' }: { value: number; 
       </Text>
     </>
   )
-  // One element, read as "3 Attended" rather than "3" and then "Attended".
+  // One element, read as "3 Nights" rather than "3" and then "Nights".
   return onPress ? (
     <ScalePress onPress={onPress} haptic={false} accessibilityRole="button" accessibilityLabel={`${value} ${label}`} accessibilityHint={hint} style={styles.stat}>
       {body}
@@ -137,7 +142,7 @@ export function StatsCard({
   onFriends: () => void
 }) {
   const columns = [
-    { key: 'attended', node: <Stat value={attended} label="Attended" onPress={onGoing} /> },
+    { key: 'attended', node: <Stat value={attended} label="Nights" onPress={onGoing} /> },
     { key: 'saved', node: <Stat value={saved} label="Saved" onPress={onGoing} /> },
     ...(friends !== null ? [{ key: 'friends', node: <Stat value={friends} label="Friends" onPress={onFriends} hint="Opens your friends" /> }] : []),
     ...(hosted > 0 ? [{ key: 'hosted', node: <Stat value={hosted} label="Hosted" /> }] : []),

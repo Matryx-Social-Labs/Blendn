@@ -47,7 +47,7 @@ it('the viewer counts nine photos', async () => {
 
 it('huge counts stay four digits in the stats card, and say the true number', async () => {
   await render(<StatsCard attended={1234567} saved={0} friends={100000} hosted={0} onGoing={jest.fn()} onFriends={jest.fn()} />)
-  expect(screen.getByLabelText('1234567 Attended')).toBeTruthy()
+  expect(screen.getByLabelText('1234567 Nights')).toBeTruthy()
   expect(screen.getByLabelText('100000 Friends')).toBeTruthy()
   expect(screen.getByLabelText('0 Saved')).toBeTruthy()
 })

@@ -8,12 +8,14 @@ import { makeMutable } from 'react-native-reanimated'
 
 const INSET_TOP = 59
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: INSET_TOP, bottom: 34, left: 0, right: 0 }) }))
+jest.mock('../components/profile/PhotoStack', () => ({ PhotoStack: () => null }))
 jest.mock('../components/ds/Orbs', () => ({ Orbs: () => null }))
 jest.mock('../components/motion/ZoomableImage', () => ({ ZoomableImage: () => null }))
 
 /* eslint-disable import/first */
 import { PhotoViewer } from '../components/profile/PhotoViewer'
 import { ProfileBar } from '../components/profile/ProfileBar'
+import { MeIdentity } from '../components/profile/MeSections'
 import { ProfileHeroStage } from '../components/profile/ProfileHeroStage'
 import { SIZE, SPACE } from '../lib/design/tokens'
 /* eslint-enable import/first */
@@ -51,6 +53,16 @@ describe('the hero stage', () => {
   it('reads the name and age as one heading', async () => {
     await render(stage())
     expect(screen.getByRole('header', { name: 'Priya, 26' })).toBeTruthy()
+  })
+
+  it('sets only the digits of the age in mono; the comma and its space are in the display face', async () => {
+    await render(stage())
+    const age = StyleSheet.flatten(screen.getByText('26').props.style)
+    expect(String(age.fontFamily)).toMatch(/Mono/i)
+    expect(screen.queryByText(', 26')).toBeNull()
+    expect(screen.queryByText(', ')).toBeNull() // the comma is a child of the name's own Text, not a Text of its own
+    const heading = StyleSheet.flatten(screen.getByRole('header', { name: 'Priya, 26' }).props.style)
+    expect(String(heading.fontFamily)).not.toMatch(/Mono/i)
   })
 
   it('draws pips for a set and none for one photo', async () => {
@@ -145,5 +157,14 @@ describe('the paged viewer', () => {
   it('draws nothing when it is closed', async () => {
     await render(<PhotoViewer photos={photos} visible={false} onClose={jest.fn()} testID="v" />)
     expect(screen.queryByLabelText('Close')).toBeNull()
+  })
+})
+
+describe('Me’s name line', () => {
+  it('sets only the digits of the age in mono (the same as the hero)', async () => {
+    await render(<MeIdentity name="Rd Four" age={28} photos={[]} onEdit={jest.fn()} onPhotos={jest.fn()} />)
+    expect(String(StyleSheet.flatten(screen.getByText('28').props.style).fontFamily)).toMatch(/Mono/i)
+    expect(screen.queryByText(', 28')).toBeNull()
+    expect(screen.getByRole('header', { name: 'Rd Four, 28' })).toBeTruthy()
   })
 })

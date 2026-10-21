@@ -3,6 +3,7 @@
  * is the DS list-enter (28 ms apart, capped), not the old 70 ms × 9.
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
+import { StyleSheet } from 'react-native'
 
 const mockPush = jest.fn()
 const mockNavigate = jest.fn()
@@ -35,6 +36,7 @@ jest.mock('../lib/crewsApi', () => ({
 /* eslint-disable import/first */
 import Profile from '../app/(tabs)/profile'
 import { apiClient } from '../lib/apiClient'
+import { SPACE } from '../lib/design/tokens'
 import { queryCache } from '../lib/queryCache'
 /* eslint-enable import/first */
 
@@ -71,7 +73,7 @@ it('draws the frame: name, circles, requests, crews with its count and dot, stat
   await waitFor(() => expect(screen.getByLabelText('2 friend requests')).toBeTruthy())
   await waitFor(() => expect(screen.getByLabelText('Crews, 2, 1 invite waiting')).toBeTruthy())
   expect(screen.getByTestId('crews-invite-dot', { includeHiddenElements: true })).toBeTruthy()
-  expect(screen.getByLabelText('14 Attended')).toBeTruthy()
+  expect(screen.getByLabelText('14 Nights')).toBeTruthy()
   expect(screen.getByLabelText('9 Friends')).toBeTruthy()
   await screen.findByTestId('nights-grid')
   // What you entered stays visible on your own page: occupation under the name, education under About.
@@ -131,4 +133,13 @@ it('Settings and Add friends are the bar circles, and go where they say', async 
   expect(mockPush).toHaveBeenCalledWith('/settings')
   await fireEvent.press(screen.getByLabelText('Add friends'))
   expect(mockPush).toHaveBeenCalledWith('/friends/add')
+})
+
+it('clears the tab bar by the inset, the bar and one gutter, so the last card is never flush against it', async () => {
+  api.getPublicProfile.mockResolvedValue(PROFILE as never)
+  api.getMyAttendance.mockResolvedValue({ success: true, data: { events: [] } } as never)
+  await render(<Profile />)
+  await screen.findByLabelText('Sam, 28')
+  const content = StyleSheet.flatten(screen.getByTestId('me-scroll').props.contentContainerStyle)
+  expect(content.paddingBottom).toBe(34 + 98 + SPACE.xl)
 })

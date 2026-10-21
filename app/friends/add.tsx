@@ -90,7 +90,7 @@ function AddFriendsScreenContent() {
         ) : (
           <Button label="Share my link" icon="share" onPress={() => void share()} disabled={!invite} />
         )}
-        {invite ? <Button kind="tertiary" label="Reset link" onPress={confirmReset} style={styles.reset} /> : null}
+        {invite ? <Button kind="tertiary" muted label="Reset link" onPress={confirmReset} style={styles.reset} /> : null}
 
         {/*
           Requests that didn't load used to leave this half of the screen

@@ -6,6 +6,7 @@
  * structural pin would pass by name alone.
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native'
+import { StyleSheet } from 'react-native'
 
 jest.mock('expo-router', () => ({
   router: { back: jest.fn(), push: jest.fn() },
@@ -46,6 +47,7 @@ jest.mock('../components/profile/ProfileSections', () => {
 
 import { router } from 'expo-router'
 import { apiClient } from '../lib/apiClient'
+import { COLOR } from '../lib/design/tokens'
 import { showSheet } from '../lib/sheet'
 import FriendProfileScreen from '../app/friends/[userId]'
 
@@ -142,4 +144,11 @@ it('does not call a failed load an unfriending, and tries again', async () => {
   api.getFriend.mockResolvedValueOnce({ success: true, data: BEN })
   fireEvent.press(screen.getByText('Try again'))
   expect(await screen.findByText('Ben, 31')).toBeTruthy()
+})
+
+it('sets "Remove friend" in textSecondary, as the frame does, not in the page’s white', async () => {
+  api.getFriend.mockResolvedValue({ success: true, data: BEN })
+  await render(<FriendProfileScreen />)
+  await screen.findByLabelText('Remove friend Ben')
+  expect(StyleSheet.flatten(screen.getByText('Remove friend').props.style).color).toBe(COLOR.textSecondary)
 })

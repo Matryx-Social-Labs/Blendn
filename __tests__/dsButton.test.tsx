@@ -10,7 +10,7 @@ import { AccessibilityInfo, Platform, StyleSheet } from 'react-native'
 import * as Reanimated from 'react-native-reanimated'
 
 import { Button } from '../components/ds/Button'
-import { COLOR, FONT_FAMILY, MATERIAL, RADIUS, SIZE } from '../lib/design/tokens'
+import { COLOR, FONT_FAMILY, MATERIAL, RADIUS, SIZE, SPACE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { OPACITY } from '../lib/theme'
 
@@ -83,6 +83,22 @@ describe('kinds and sizes', () => {
     expect(StyleSheet.flatten(screen.getByText('I’m going').props.style).color).toBe(COLOR.ink)
     await draw({ kind: 'destructive' })
     expect(flat('b').backgroundColor).toBe(COLOR.destructiveFill)
+  })
+
+  it('a small tertiary is the label alone on the gutter: no side padding, the hit area reaches out instead', async () => {
+    await draw({ kind: 'tertiary', size: 'sm' })
+    expect(flat('b').paddingHorizontal).toBe(0)
+    expect(screen.getByTestId('b').props.hitSlop).toMatchObject({ left: SPACE.lg, right: SPACE.lg, top: 4, bottom: 4 })
+    // A filled small button keeps its pad; a large tertiary is untouched.
+    await draw({ kind: 'secondary', size: 'sm' })
+    expect(flat('b').paddingHorizontal).toBe(SPACE.lg)
+  })
+
+  it('muted sets a tertiary label in textSecondary, and only a tertiary', async () => {
+    await draw({ kind: 'tertiary', muted: true })
+    expect(StyleSheet.flatten(screen.getByText('I’m going').props.style).color).toBe(COLOR.textSecondary)
+    await draw({ kind: 'primary', muted: true })
+    expect(StyleSheet.flatten(screen.getByText('I’m going').props.style).color).toBe(COLOR.textOnGradient)
   })
 
   it('a 36 pt row action reaches the target through slop above and below', async () => {

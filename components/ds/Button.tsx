@@ -117,6 +117,8 @@ export type ButtonProps = {
   loading?: boolean
   /** The server said no (#20): a destructive border, the shake and `H.error`, when it turns on. */
   refused?: boolean
+  /** A tertiary that is not the page's own voice (Remove friend, Reset link): its label in `textSecondary`, as the frames draw it. */
+  muted?: boolean
   /** A secondary sitting on glass (a sheet, a dock): 8% white instead of `surface` (no glass on glass). */
   onGlass?: boolean
   /**
@@ -165,6 +167,7 @@ export function Button({
   loading = false,
   refused = false,
   onGlass = false,
+  muted = false,
   pressHaptic = true,
   accessibilityLabel,
   accessibilityHint,
@@ -195,11 +198,13 @@ export function Button({
     if (android) radius.set(withSpring(to, PRESS_SPRING))
   }
 
-  const ink = kind === 'strong' ? COLOR.ink : COLOR.textOnGradient
+  const ink = kind === 'strong' ? COLOR.ink : muted && kind === 'tertiary' ? COLOR.textSecondary : COLOR.textOnGradient
   const sm = size === 'sm'
   /** Small glyphs: the row action and the raised action. */
   const compact = sm || size === 'raised'
   const slop = (minTarget() - height) / 2
+  // A small text button has no fill to pad: its label sits on the gutter, and the hit area reaches out past it instead.
+  const textOnly = sm && kind === 'tertiary'
   const labelFont = sm ? font('meta', bold, FONT_FAMILY.brand[700]) : font('button', bold)
   const outlined = contrast && (kind === 'secondary' || kind === 'tertiary')
   const settled = useSettled(count)
@@ -214,7 +219,7 @@ export function Button({
         onPress={onPress}
         disabled={disabled || loading}
         // Under the 44 / 48 target, slop reaches it, above and below only (pills sit side by side).
-        hitSlop={slop > 0 ? { top: slop, bottom: slop } : undefined}
+        hitSlop={textOnly ? { top: Math.max(slop, 0), bottom: Math.max(slop, 0), left: SPACE.lg, right: SPACE.lg } : slop > 0 ? { top: slop, bottom: slop } : undefined}
         haptic={typeof pressHaptic === 'function' ? pressHaptic : pressHaptic ? PRESS_HAPTIC[kind] : undefined}
         pressedScale={android ? 1 : PRESS.scale}
         onPressIn={squareOff(RADIUS.pressedAndroid)}
@@ -229,7 +234,7 @@ export function Button({
         accessibilityState={{ disabled, busy: loading }}
         style={[
           styles.body,
-          sm ? styles.bodySm : styles.bodyLg,
+          textOnly ? styles.bodyText : sm ? styles.bodySm : styles.bodyLg,
           { height, backgroundColor: fill(kind, size, onGlass) },
           // Enabled ↔ disabled crosses over `quick` (a count arriving, a field becoming valid), never snaps.
           { opacity: disabled ? OPACITY.disabled : 1 },
@@ -301,6 +306,7 @@ const styles = StyleSheet.create({
   body: { overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   bodyLg: { paddingHorizontal: SPACE.lg },
   bodySm: { paddingHorizontal: SPACE.lg, minWidth: ROW_ACTION_MIN_WIDTH },
+  bodyText: { paddingHorizontal: 0 },
   content: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   sentence: { flexDirection: 'row', alignItems: 'center', columnGap: SPACE.xs },
   hidden: { opacity: 0 },

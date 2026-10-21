@@ -456,7 +456,7 @@ function ProfileInner() {
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
         // The tab bar floats over the page's foot: the last section sat under it.
-        contentContainerStyle={[styles.content, { paddingTop: barBottom + SPACE.lg + SPACE.xxs, paddingBottom: TAB_BAR_CLEARANCE }]}
+        contentContainerStyle={[styles.content, { paddingTop: barBottom + SPACE.lg + SPACE.xxs, paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + SPACE.xl }]}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLOR.textSecondary} progressViewOffset={barBottom} />
         }

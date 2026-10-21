@@ -211,7 +211,7 @@ describe('the Me tab is your profile, with no separate preview', () => {
     const src = OWN()
     const me = codeOnly(read('components/profile/MeSections.tsx'))
     expect(me).toContain('hosted > 0')
-    expect(me).toContain('label="Attended" onPress={onGoing}')
+    expect(me).toContain('label="Nights" onPress={onGoing}')
     expect(me).toContain('label="Saved" onPress={onGoing}')
     expect(src).toContain("router.navigate('/going')")
   })

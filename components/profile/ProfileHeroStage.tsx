@@ -128,7 +128,8 @@ export function ProfileHeroStage({ width, scrollY, photos, blurredUri, name, age
       )}
 
       <StatusScrim pointerEvents="none" style={[styles.head, { height: HEAD_FADE }]} />
-      <PhotoScrim contrast={contrast} pointerEvents="none" style={[styles.foot, { height: FOOT_FADE }]} />
+      {/* The hero ends on the page's ink, so its foot reaches it: no seam (the 0.88 default is for a photo that goes on below). */}
+      <PhotoScrim contrast={contrast} foot={1} pointerEvents="none" style={[styles.foot, { height: FOOT_FADE }]} />
       <HeroPips count={shown ? photos.length : 0} page={page} top={barCircleBottom(insets.top, circle > SIZE.circleButton) + PIPS_GAP} />
 
       <View pointerEvents="none" style={styles.nameBlock}>
@@ -142,7 +143,10 @@ export function ProfileHeroStage({ width, scrollY, photos, blurredUri, name, age
         >
           {name}
           {age ? (
-            <Text style={[font('display', bold, FONT_FAMILY.mono[700]), styles.age]}>{`, ${age}`}</Text>
+            <>
+              {', '}
+              <Text style={[font('display', bold, FONT_FAMILY.mono[700]), styles.age]}>{age}</Text>
+            </>
           ) : null}
         </Text>
         {subtitle ? (

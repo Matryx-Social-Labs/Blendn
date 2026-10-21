@@ -244,6 +244,7 @@ function FriendProfileScreenContent() {
 
           <Button
             kind="tertiary"
+            muted
             label="Remove friend"
             accessibilityLabel={`Remove friend ${friend.name}`}
             onPress={confirmUnfriend}
