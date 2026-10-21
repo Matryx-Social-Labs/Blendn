@@ -32,6 +32,7 @@ jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShow
 
 /* eslint-disable import/first */
 import { router } from 'expo-router'
+import { markOffline, markOnline } from '../lib/networkStatus'
 import RatePeers from '../app/rate/[eventId]'
 import { apiClient } from '../lib/apiClient'
 /* eslint-enable import/first */
@@ -50,6 +51,7 @@ function loads({ peers = ['u1', 'u2'], rated = false }: { peers?: string[]; rate
 
 beforeEach(() => {
   jest.clearAllMocks()
+  markOnline()
   api.rateEvent.mockResolvedValue({ success: true } as never)
   api.ratePeer.mockResolvedValue({ success: true } as never)
 })
@@ -153,4 +155,17 @@ it('nobody to rate and nothing to ask is the server’s real answer: "Nothing to
   api.getMyEventRating.mockResolvedValue({ success: true, data: { rating: 3, ratedAt: null } } as never)
   await view()
   expect(await screen.findByText('Nothing to rate')).toBeTruthy()
+})
+
+it('offline: the banner says so, reads stay, and nothing is sent until it is back', async () => {
+  loads({ peers: ['u1'] })
+  await view()
+  await fireEvent.press(await screen.findByRole('button', { name: 'Skip to the people' }))
+  await fireEvent.press(await screen.findByLabelText(/^Meeting Night Cat: 4 out of 5/))
+  await act(async () => markOffline())
+  expect(screen.getByText('Offline. You can rate once you’re back.')).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'Submit' }).props.accessibilityState).toMatchObject({ disabled: true })
+  expect(screen.getByText('Night Cat')).toBeTruthy()
+  await fireEvent.press(screen.getByRole('button', { name: 'Submit' }))
+  expect(api.ratePeer).not.toHaveBeenCalled()
 })

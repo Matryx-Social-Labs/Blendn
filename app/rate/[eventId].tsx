@@ -16,6 +16,7 @@ import { StateScreen } from '../../components/ds/StateScreen'
 import { TextArea } from '../../components/ds/TextField'
 import { font, useBoldText } from '../../components/ds/shared'
 import { fadeInFast } from '../../components/motion/presence'
+import { OfflineBanner, useOffline } from '../../components/OfflineBanner'
 import { SkeletonBlock, SkeletonCircle } from '../../components/Skeleton'
 import { useToast } from '../../components/Toast'
 import { apiClient, type PeerRatingIssue } from '../../lib/apiClient'
@@ -187,6 +188,8 @@ function RatePeersContent() {
   const { showToast } = useToast()
   const insets = useSafeAreaInsets()
   const bold = useBoldText()
+  // An answer cannot be sent offline: the banner says so and the writes wait (reads stay), Flow 15 #16.
+  const offline = useOffline()
 
   const [load, setLoad] = useState<Load>({ kind: 'loading' })
   const [attempt, setAttempt] = useState(0)
@@ -271,7 +274,7 @@ function RatePeersContent() {
   /** One tap and it is sent: the night is a single question. */
   const rateNight = useCallback(
     async (n: number) => {
-      if (submitting) return
+      if (submitting || offline) return
       setEventRating(n)
       setSubmitting(true)
       try {
@@ -293,7 +296,7 @@ function RatePeersContent() {
         setSubmitting(false)
       }
     },
-    [advance, eventId, showToast, submitting]
+    [advance, eventId, offline, showToast, submitting]
   )
 
   const people = load.kind === 'ready' ? load.people : []
@@ -384,6 +387,9 @@ function RatePeersContent() {
     <View style={styles.screen}>
       <KeyboardFrame>
         {topBar}
+        <View style={styles.banner}>
+          <OfflineBanner text="Offline. You can rate once you’re back." testID="rate-offline" />
+        </View>
         <View style={styles.stage}>
           {done ? (
             <Animated.View key="done" style={styles.layer} entering={entering}>
@@ -419,7 +425,7 @@ function RatePeersContent() {
                   onChoose={(n) => void rateNight(n)}
                   low="Not great"
                   high="Loved it"
-                  disabled={submitting}
+                  disabled={submitting || offline}
                   subject="The night"
                 />
                 {/* Skipping is a first-class outcome. No nagging, no guilt copy. */}
@@ -498,7 +504,7 @@ function RatePeersContent() {
           </Dock>
         ) : person ? (
           <Dock onHeight={setDockHeight} testID="rate-dock">
-            <Button label="Submit" kind="primary" onPress={() => void submit()} disabled={rating === null || noteTooLong} loading={submitting} testID="rate-submit" />
+            <Button label="Submit" kind="primary" onPress={() => void submit()} disabled={rating === null || noteTooLong || offline} loading={submitting} testID="rate-submit" />
             {/* Skipping is a first-class outcome. No nagging, no guilt copy. */}
             <Button label="Skip this person" kind="tertiary" size="md" onPress={advance} disabled={submitting} testID="rate-skip-person" />
           </Dock>
@@ -512,6 +518,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: COLOR.ink },
   topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACE.lg, paddingBottom: SPACE.sm },
   // Outgoing and incoming layers overlap here during a swap, so both are absolute.
+  banner: { paddingHorizontal: SPACE.gutter },
   stage: { flex: 1 },
   layer: { ...StyleSheet.absoluteFill },
   scroll: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.lg, gap: SPACE.md },
