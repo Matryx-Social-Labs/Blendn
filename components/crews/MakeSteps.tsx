@@ -1,5 +1,6 @@
 import { useRef } from 'react'
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import Animated from 'react-native-reanimated'
 
 import { COLOR, FONT_FAMILY, ICON, MATERIAL, RADIUS, SPACE } from '../../lib/design/tokens'
 import { CONSENT_LINE, CREW_BIO_MAX, CREW_MAX_MEMBERS, CREW_MAX_TAGS, CREW_NAME_MAX, CREW_TAGS, KEEP_ANONYMOUS_LABEL } from '../../lib/crews'
@@ -10,10 +11,11 @@ import { Avatar } from '../ds/Avatar'
 import { ChipSet } from '../ds/ChipSet'
 import { CrewCard } from '../ds/CrewCard'
 import { CrewEmblem } from '../ds/CrewEmblem'
-import { font, minTarget, useBoldText, useIncreaseContrast } from '../ds/shared'
+import { font, minTarget, quickTransition, useBoldText, useIncreaseContrast, useSelection } from '../ds/shared'
 import { SegmentedControl } from '../ds/SegmentedControl'
 import { FieldLabel, TextArea, TextField } from '../ds/TextField'
 import { Toggle } from '../ds/Toggle'
+import { Glyph } from '../ui/Glyph'
 import { Icon } from '../ui/Icon'
 
 /** flow10.js `make`: the line about the crew is a one-liner's height. */
@@ -23,6 +25,7 @@ const NO_FRIENDS = 'Add friends first — a crew is made from your friends.'
 const FRIEND_FACE = 48
 /** The pick circle: 28, ringed at 35% white when off. */
 const PICK = 28
+const PICK_FILL = quickTransition('background-color', 'border-color')
 const PICK_RING = 0.35
 /** flow10.js `make`: a block inside the sheet is 8% white on iOS glass, sunken on Android's solid sheet. */
 const SHEET_FILL = Platform.OS === 'android' ? COLOR.surfaceSunken : MATERIAL.fillOnGlass
@@ -149,6 +152,7 @@ export function NameStep(p: NameStepProps) {
 /** One friend in the picker: face, name, and a pick circle. A checkbox, the whole row the target. */
 function FriendPick({ friend, picked, capped, onToggle }: { friend: Friend; picked: boolean; capped: boolean; onToggle: () => void }) {
   const bold = useBoldText()
+  const sel = useSelection()
   return (
     <Pressable
       onPress={onToggle}
@@ -165,9 +169,16 @@ function FriendPick({ friend, picked, capped, onToggle }: { friend: Friend; pick
       <Text numberOfLines={1} style={[font('bodyStrong', bold), styles.ink, styles.fill]}>
         {friend.name}
       </Text>
-      <View style={[styles.pick, picked ? styles.pickOn : styles.pickOff]}>
-        {picked ? <Icon name="check" size={ICON.inline} color={COLOR.selectionInk} active /> : null}
-      </View>
+      {/* The pick lights in the screen's hue: the disc fills as the ink check draws itself. */}
+      <Animated.View
+        style={[
+          styles.pick,
+          { backgroundColor: picked ? sel.glyph : 'transparent', borderColor: picked ? sel.glyph : tint(COLOR.textPrimary, PICK_RING) },
+          PICK_FILL,
+        ]}
+      >
+        <Glyph name="check" size={ICON.inline} color={COLOR.selectionInk} active play={picked} />
+      </Animated.View>
     </Pressable>
   )
 }
@@ -308,13 +319,9 @@ const styles = StyleSheet.create({
     width: PICK,
     height: PICK,
     borderRadius: RADIUS.capsule,
+    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  pickOn: { backgroundColor: COLOR.selectionFill },
-  pickOff: {
-    borderWidth: 1.5,
-    borderColor: tint(COLOR.textPrimary, PICK_RING),
   },
   capped: { opacity: OPACITY.disabled },
   note: { flexShrink: 1, textAlign: 'right' },

@@ -5,9 +5,9 @@ import { COLOR, MATERIAL, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { OPACITY, tint } from '../../lib/theme'
 import { Price, spokenPrice } from './MonoFamily'
-import { focusRing, font, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
+import { focusRing, font, PRESSED_WASH, useBoldText, useIncreaseContrast, useSelection } from './shared'
 
-/** The page's 64 pt row and its 22 pt ring: white 6 pt when picked, 35% at 1.5 pt when not. */
+/** The page's 64 pt row and its 22 pt ring: the hue's 6 pt when picked, 35% at 1.5 pt when not. */
 const ROW_MIN_HEIGHT = SIZE.primary + SPACE.sm
 const RING = SPACE.xl - SPACE.xxs
 const RING_ON = SPACE.sm - SPACE.xxs
@@ -93,8 +93,9 @@ export function PlanCard({ name, price, per, sub, selected = false, onPress, dis
 /** The 22 pt radio ring the plan rows and the Go Live dial share: white 6 pt when picked, 35% at 1.5 pt when not. */
 export function RadioRing({ selected, testID }: { selected: boolean; testID?: string }) {
   const contrast = useIncreaseContrast()
+  const sel = useSelection()
   const ring = selected
-    ? { borderWidth: RING_ON, borderColor: COLOR.selectionFill }
+    ? { borderWidth: RING_ON, borderColor: sel.edge }
     : { borderWidth: RING_OFF, borderColor: contrast ? MATERIAL.hairlineIncreaseContrast : tint(COLOR.textPrimary, RING_OFF_ALPHA) }
   return <View testID={testID} style={[styles.ring, ring]} />
 }

@@ -7,7 +7,7 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { AccessibilityInfo, Platform, type AccessibilityChangeEventName, type ViewStyle } from 'react-native'
 
-import { COLOR, FONT_FAMILY, MATERIAL, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, MATERIAL, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { tint } from '../../lib/theme'
 
 /**
@@ -136,6 +136,13 @@ export const useGround = () => useContext(GroundContext)
 export const chipRest = (ground: Ground) => (ground === 'glass' ? COLOR.chipFillOnGlass : ground === 'surface' ? COLOR.surfaceSunken : COLOR.surface)
 /** A SegmentedControl's track: solid even on glass (§12). */
 export const trackFill = (ground: Ground) => (ground === 'surface' ? COLOR.surfaceSunken : COLOR.surface)
+
+/**
+ * A CSS transition over `quick` on the gentle curve for the given properties (Reanimated 4: off the JS thread, interruptible,
+ * and never played on mount). The way a two-state flip crosses without a shared value: a fill, an opacity, a ring.
+ */
+export const quickTransition = (...properties: string[]): ViewStyle =>
+  ({ transition: properties.map((property) => `${property} ${DURATION.quick}ms cubic-bezier(${EASING.gentle.join(', ')})`).join(', ') }) as unknown as ViewStyle
 
 /**
  * The hue of the world a screen is in (foundations, direction C "Lit from behind"): ember out there (Discover, the default),

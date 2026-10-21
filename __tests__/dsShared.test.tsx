@@ -42,6 +42,12 @@ describe('SELECTION', () => {
   })
 })
 
+describe('the check disc (RadioCard, crew picks)', () => {
+  it.each(Object.entries(SELECTION))('%s: the ink ✓ on the glyph-coloured disc is 7:1 or more', (_hue, { glyph }) => {
+    expect(contrast(COLOR.selectionInk, glyph)).toBeGreaterThanOrEqual(7)
+  })
+})
+
 describe('HueProvider', () => {
   const Probe = () => <Text>{useHue()}</Text>
 

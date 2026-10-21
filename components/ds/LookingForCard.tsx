@@ -7,7 +7,7 @@ import { COLOR, MATERIAL, PRESS, RADIUS, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { OPACITY, tint } from '../../lib/theme'
 import { CheckDisc } from './RadioCard'
-import { CONTROL_FONT_CAP, focusRing, font, useBoldText, useIncreaseContrast } from './shared'
+import { CONTROL_FONT_CAP, focusRing, font, useBoldText, useIncreaseContrast, useSelection } from './shared'
 
 /** The tile is fixed at 112 pt (the page); its word caps at 1.3× inside it. */
 const TILE_HEIGHT = 112
@@ -34,8 +34,8 @@ export type LookingForCardProps = {
 /**
  * "What brings you to Blend'n?" as photo tiles
  * (guidelines/components/LookingForCard.html): 112 pt, radius 24, the word
- * bottom-left on an ink scrim. Multi-select: on is the 2 pt white ring
- * outside the tile and the check disc. Under 18 the caller does not draw the
+ * bottom-left on an ink scrim. Multi-select: on is the 2 pt hue ring
+ * outside the tile in the screen's hue, and the check disc. Under 18 the caller does not draw the
  * Dating tile at all (not disabled: a minor never sees it).
  *
  * `H.select` on every change. iOS presses scale 0.97; Android has no ripple
@@ -47,6 +47,7 @@ export function LookingForCard({ label, image, selected = false, onPress, disabl
   const android = Platform.OS === 'android'
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
+  const sel = useSelection()
   const [focused, setFocused] = useState(false)
 
   return (
@@ -72,12 +73,12 @@ export function LookingForCard({ label, image, selected = false, onPress, disabl
           <Text style={[font('button', bold), styles.word]} maxFontSizeMultiplier={CONTROL_FONT_CAP} numberOfLines={1}>
             {label}
           </Text>
-          {selected ? <CheckDisc testID={testID && `${testID}-check`} /> : null}
+          <CheckDisc selected={selected} testID={testID && `${testID}-check`} />
           {contrast && !selected ? (
             <View testID={testID && `${testID}-ring`} pointerEvents="none" style={[StyleSheet.absoluteFill, styles.edge, styles.contrast]} />
           ) : null}
         </View>
-        {selected ? <View testID={testID && `${testID}-ring`} pointerEvents="none" style={styles.selected} /> : null}
+        {selected ? <View testID={testID && `${testID}-ring`} pointerEvents="none" style={[styles.selected, { borderColor: sel.edge }]} /> : null}
       </ScalePress>
       {focused || previewState === 'focused'
         ? focusRing(RADIUS.sheet).map((r, i) => <View key={i} testID={i ? undefined : testID && `${testID}-focus`} pointerEvents="none" style={r} />)
@@ -101,6 +102,5 @@ const styles = StyleSheet.create({
     right: -RING_OUT,
     borderRadius: RADIUS.sheet + RING_OUT,
     borderWidth: RING_OUT,
-    borderColor: COLOR.selectionFill,
   },
 })
