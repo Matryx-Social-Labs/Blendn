@@ -119,6 +119,18 @@ describe('the ways in', () => {
     expect(screen.getByText('Priya invited you')).toBeTruthy()
   })
 
+  it('the legal line never breaks inside "Privacy Policy" or after "Terms"', async () => {
+    await draw()
+    expect(screen.getByText('Privacy\u00A0Policy')).toBeTruthy()
+    expect(screen.getByText(/By continuing you/).props.children).toContain('\u00A0and ')
+  })
+
+  it('the lockup starts at the frame\'s 27% of the window, not 27% less the inset (the root is not inset)', async () => {
+    await draw()
+    const brand = screen.getByTestId('landing-brand')
+    expect(StyleSheet.flatten(brand.props.style).paddingTop).toBeCloseTo(require('react-native').Dimensions.get('window').height * 0.27, 1)
+  })
+
   it('Android has no Apple button', async () => {
     on('android')
     await draw()

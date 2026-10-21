@@ -5,6 +5,9 @@ import { BLENDN_LINKS, openInApp } from '../lib/links'
 import { COLOR } from '../lib/design/tokens'
 import { Logger } from '../lib/logger'
 
+/** The sentence may wrap before "Terms" or before "Privacy Policy", never inside it or after "Terms" (Policy. was left alone on a line). */
+const NBSP = '\u00A0'
+
 /**
  * "By continuing you agree to our Terms and Privacy Policy."
  *
@@ -23,9 +26,9 @@ export function LegalLine({ lead, style }: { lead: string; style?: StyleProp<Tex
       <Text style={styles.link} onPress={() => open(BLENDN_LINKS.terms)} accessibilityRole="link">
         Terms
       </Text>
-      {' and '}
+      {`${NBSP}and `}
       <Text style={styles.link} onPress={() => open(BLENDN_LINKS.privacy)} accessibilityRole="link">
-        Privacy Policy
+        {`Privacy${NBSP}Policy`}
       </Text>
       .
     </Text>

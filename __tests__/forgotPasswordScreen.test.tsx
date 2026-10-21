@@ -109,6 +109,15 @@ describe('Check your inbox', () => {
     expect(screen.getByTestId('forgot-sent-well', { includeHiddenElements: true })).toBeTruthy()
   })
 
+  it('a short address stays in the sentence; a long one gets its own line (no lone "If", no mid-token break)', async () => {
+    await sent()
+    expect(screen.getByTestId('forgot-sent-body').props.children).not.toContain('\n')
+    await screen.unmount()
+    ;(useLocalSearchParams as jest.Mock).mockReturnValue({ email: 'someone.with.a.long.name@subdomain.example.app' })
+    await sent()
+    expect(screen.getByTestId('forgot-sent-body').props.children.filter((c: unknown) => c === '\n')).toHaveLength(2)
+  })
+
   it('Resend counts down from 30 with a draining ring, then is ready', async () => {
     await sent()
     const resend = screen.getByTestId('forgot-resend')

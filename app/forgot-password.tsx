@@ -32,6 +32,8 @@ const RESEND_COOLDOWN_S = 30
 
 /** The envelope settles in from 0.8 (Flow 1 forgot 03). */
 const ENVELOPE_FROM_SCALE = 0.8
+/** Past this many characters an address gets its own line, so "If" is never left alone on the first and the address is never broken mid-token. */
+const LONG_ADDRESS = 24
 
 /**
  * Request a password reset link.
@@ -183,9 +185,11 @@ export default function ForgotPassword() {
                 <Text style={[font('title', bold), styles.title, styles.centre]} accessibilityRole="header">
                   Check your inbox
                 </Text>
-                <Text style={[font('body', bold), styles.body, styles.centre]}>
-                  If <Text style={[font('body', bold, FONT_FAMILY.brand[700]), styles.address]}>{address}</Text> has an account, a reset link is on its way. It
-                  opens in your browser and expires in an hour.
+                <Text style={[font('body', bold), styles.body, styles.centre]} testID="forgot-sent-body">
+                  If{address.length > LONG_ADDRESS ? '\n' : ' '}
+                  <Text style={[font('body', bold, FONT_FAMILY.brand[700]), styles.address]}>{address}</Text>
+                  {address.length > LONG_ADDRESS ? '\n' : ' '}
+                  has an account, a reset link is on its way. It opens in your browser and expires in an hour.
                 </Text>
               </View>
 

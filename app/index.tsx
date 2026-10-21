@@ -325,7 +325,7 @@ function IndexInner() {
         </View>
       ) : null}
 
-      <Animated.View style={[styles.brand, { paddingTop: Math.max(0, window.height * LOCKUP_TOP - insets.top) }, settle]}>
+      <Animated.View style={[styles.brand, { paddingTop: window.height * LOCKUP_TOP }, settle]} testID="landing-brand">
         <Lockup size="landing" testID="landing-lockup" />
         <Text style={[font('body', bold), styles.tagline]}>Same place. Same vibe. Instant connections.</Text>
         {/* Whose invite is waiting, when an invite link brought them here. */}
