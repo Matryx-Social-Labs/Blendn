@@ -36,6 +36,7 @@ export type ProfileBarProps = {
 
 /** Where the bar starts to paint, as a pure function so the thresholds are testable without a scroll view. */
 export function barStateAt(y: number) {
+  'worklet'
   return {
     glass: y > BAR_GLASS_AT,
     // The glass is always mounted and comes up over the first 8 pt (as the Scene's bar does): mounting it popped.

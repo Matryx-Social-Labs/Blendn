@@ -34,7 +34,10 @@ const PIPS_GAP = SPACE.sm - SPACE.xxs
 const RING_ALPHA = 0.16
 
 /** The scale for a pull of `pull` points on a hero `height` tall: 1 at rest, 1.15 at most. Pure, so the cap is testable. */
-export const stretchScale = (pull: number, height: number) => Math.min(HERO_STRETCH_MAX, 1 + Math.max(0, pull) / height)
+export const stretchScale = (pull: number, height: number) => {
+  'worklet'
+  return Math.min(HERO_STRETCH_MAX, 1 + Math.max(0, pull) / height)
+}
 
 export type ProfileHeroStageProps = {
   width: number
