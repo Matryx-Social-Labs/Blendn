@@ -73,7 +73,10 @@ describe('the Pulse', () => {
   const src = read('app', '(tabs)', 'events.tsx')
   it('draws every row through the DS EventCard (its thumb is the quiet square when a cover is missing or fails)', () => {
     expect(src).not.toContain('UpcomingCard')
-    expect((src.match(/<EventCard\b/g) ?? []).length).toBeGreaterThanOrEqual(2)
+    // Search results and Nearby-style rows are the EventCard itself; Everything else is `MoreRow`, which wraps it.
+    expect(src).toMatch(/<EventCard\b/)
+    expect(src).toMatch(/<MoreRow\b/)
+    expect(read('components', 'pulse', 'MoreRow.tsx')).toMatch(/<EventCard\b/)
   })
   it('bumps the pull count on a refresh, which re-asks the sections', () => {
     expect(src).toMatch(/setPulls\(\(n\) => n \+ 1\)/)

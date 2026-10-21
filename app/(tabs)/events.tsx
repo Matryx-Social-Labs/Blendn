@@ -26,10 +26,8 @@ import {
 } from '../../components/pulse/PulseSections'
 import { SectionReveal } from '../../components/pulse/Rail'
 import { EventCard } from '../../components/ds/EventCard'
-import { IconButton } from '../../components/ds/IconButton'
-import { ScrimPill } from '../../components/ds/MonoFamily'
+import { MoreRow } from '../../components/pulse/MoreRow'
 import { DayHeading } from '../../components/ds/DayHeading'
-import { font } from '../../components/ds/shared'
 import { PULSE_HEADER_HEIGHT, PulseSearch } from '../../components/pulse/PulseHeader'
 import { PulseBanners } from '../../components/pulse/PulseBanners'
 import { CityPicker } from '../../components/pulse/CityPicker'
@@ -316,8 +314,6 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
    */
   const [interestStatuses, setInterestStatuses] = useState<{ [eventId: string]: boolean }>({})
   const [interestCounts, setInterestCounts] = useState<Record<string, number>>({})
-  /** A save or an unsave is out: the heart holds still until the server answers. */
-  const [interestPending, setInterestPending] = useState<Record<string, boolean>>({})
 
   /*
    * The four maps every action handler reads, held so they do not force the
@@ -594,7 +590,6 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
         return
       }
       interestInFlightRef.current.add(event.id)
-      setInterestPending((prev) => ({ ...prev, [event.id]: true }))
       prevInterested = !!latestInterestStatusesRef.current[event.id]
       prevCount = latestInterestCountsRef.current[event.id] ?? event.favorite_count ?? 0
       const optimisticCount = Math.max(0, prevInterested ? prevCount - 1 : prevCount + 1)
@@ -615,7 +610,6 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       fail()
     } finally {
       interestInFlightRef.current.delete(event.id)
-      setInterestPending((prev) => ({ ...prev, [event.id]: false }))
     }
   }, [user, showToast, latestInterestStatusesRef, latestInterestCountsRef])
 
@@ -656,6 +650,9 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     markCoachUsed(PULSE_COACH)
     setPeek({ event, anchor, kind })
   }, [])
+
+  /** A row's hold: stable, so the rows can be memoised on their own values. */
+  const peekRow = useCallback((event: Event, anchor: Peek['anchor']) => openPeek(event, anchor, 'row'), [openPeek])
 
   /** What each peek item does, once the menu has left. */
   const onPeekAction = useCallback(
@@ -1455,41 +1452,25 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     const card = homeCardProps(event, now, hasFix)
     return (
       <RevealRow index={Math.max(0, index - LEAD_ROWS)} pending={mainRowsRevealPending}>
-        <View style={[styles.mainRow, styles.moreRow]}>
-          {/* The coach mark's hole is the card, not the pill beside it. */}
-          <View style={styles.fill} ref={sections.length === 0 && event.id === firstRowId ? coachTarget : undefined} collapsable={false}>
-            <EventCard
-              kind="row"
-              title={card.title}
-              // Under its day's heading a row needs only its clock; a running event says so.
-              time={onNow(event) ? 'Live' : clockTime(Date.parse(live.start_time))}
-              venue={card.venue}
-              distance={card.distance}
-              cover={card.cover}
-              onPress={() => handleEventPress(event)}
-              onPressIn={() => warmEvent(event)}
-              onLongPress={(anchor) => openPeek(event, anchor, 'row')}
-              testID={`pulse-row-${event.id}`}
-            />
-          </View>
-          {note ? (
-            <ScrimPill testID={`pulse-row-note-${event.id}`}>
-              <Text style={[font('caption', false), styles.ink]}>{note}</Text>
-            </ScrimPill>
-          ) : null}
-          {/* Saving is the whole of `event_favorites` and what the Going tab's Saved is built from: a silent toggle beside the row. */}
-          <IconButton
-            icon="heart"
-            selected={!!interestStatuses[event.id]}
-            disabled={!!interestPending[event.id]}
-            accessibilityLabel={interestStatuses[event.id] ? `Saved, ${event.title}` : `Save ${event.title}`}
-            onPress={() => void toggleInterest(event)}
-            testID={`pulse-row-save-${event.id}`}
-          />
-        </View>
+        <MoreRow
+          event={event}
+          title={card.title}
+          // Under its day's heading a row needs only its clock; a running event says so.
+          time={onNow(event) ? 'Live' : clockTime(Date.parse(live.start_time))}
+          venue={card.venue}
+          distance={card.distance}
+          cover={card.cover}
+          note={note}
+          saved={!!interestStatuses[event.id]}
+          coachRef={sections.length === 0 && event.id === firstRowId ? coachTarget : undefined}
+          onPress={handleEventPress}
+          onPressIn={warmEvent}
+          onPeek={peekRow}
+          onSave={toggleInterest}
+        />
       </RevealRow>
     )
-  }, [isNarrowed, sections.length, firstRowId, now, hasFix, checkinStatuses, interestStatuses, interestPending, handleEventPress, openPeek, warmEvent, toggleInterest])
+  }, [isNarrowed, sections.length, firstRowId, now, hasFix, checkinStatuses, interestStatuses, handleEventPress, openPeek, peekRow, warmEvent, toggleInterest])
   const keyExtractor = useCallback((item: PulseRow) => item.key, [])
 
   const askForLocation = useCallback(() => {
@@ -1804,12 +1785,9 @@ const styles = StyleSheet.create({
   listContainer: {},
   fill: { flex: 1, minWidth: 0 },
   spacer: { height: SPACE.sm },
-  ink: { color: COLOR.textPrimary },
 
   /** A row in the list under the sections: the stack's spacing, inside the gutter. */
   mainRow: { paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.md },
-  /** A row beside its "Checked in" / "Ended" pill. */
-  moreRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
   /** A day's heading over its rows: a section gap above the first, the stack's rhythm below. */
   dayRow: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.lg, paddingBottom: SPACE.xs },
   /** "6 events · Bengaluru": the flat result's label. */
