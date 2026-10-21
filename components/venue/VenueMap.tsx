@@ -3,7 +3,7 @@ import { InteractionManager, StyleSheet } from 'react-native'
 import MapView from 'react-native-maps'
 import Animated, { FadeIn } from 'react-native-reanimated'
 
-import { DURATION } from '../../lib/design/tokens'
+import { DURATION, SPACE } from '../../lib/design/tokens'
 import { DARK_MAP_STYLE, LOCATION_CARD_DELTA } from '../../lib/mapStyle'
 
 /**
@@ -17,6 +17,14 @@ import { DARK_MAP_STYLE, LOCATION_CARD_DELTA } from '../../lib/mapStyle'
  * Google's maps credit themselves; this draws none of our OSM tiles, so the
  * home map's credit (About › Map data) is not owed here.
  */
+/**
+ * The map's own credit (Google's mark bottom left, Apple's likewise) sits where the card's "Open in Maps" pill is. The map is
+ * padded top and bottom by the pill's reach, so the credit rises clear of it and the visible centre, where the pin is, stays the
+ * card's centre.
+ */
+const CREDIT_CLEAR = SPACE.xxxl
+const MAP_PADDING = { top: CREDIT_CLEAR, bottom: CREDIT_CLEAR, left: 0, right: 0 }
+
 export function VenueMap({ latitude, longitude }: { latitude: number; longitude: number }) {
   const [ready, setReady] = useState(false)
   useEffect(() => {
@@ -35,6 +43,7 @@ export function VenueMap({ latitude, longitude }: { latitude: number; longitude:
         rotateEnabled={false}
         pitchEnabled={false}
         toolbarEnabled={false}
+        mapPadding={MAP_PADDING}
         liteMode
         pointerEvents="none"
         accessible={false}

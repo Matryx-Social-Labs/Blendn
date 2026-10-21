@@ -154,7 +154,9 @@ export function UpcomingList({
           style={styles.upcoming}
           testID={`venue-upcoming-${r.id}`}
         >
-          <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary, styles.tabular, styles.day]}>{r.day}</Text>
+          <Text numberOfLines={1} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary, styles.tabular, styles.day]}>
+            {r.day}
+          </Text>
           <Text numberOfLines={1} style={[font('bodyStrong', bold), styles.ink, styles.upcomingTitle]}>
             {r.title}
           </Text>
@@ -356,7 +358,8 @@ const styles = StyleSheet.create({
   eventOn: { borderRadius: RADIUS.mediaInCard, backgroundColor: COLOR.surface, padding: SPACE.lg, gap: SPACE.sm },
   eventOnHead: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   upcoming: { minHeight: SIZE.primary, flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
-  day: { width: DAY_WIDTH },
+  // A date never wraps ("Sun 25 / Oct"): it is as wide as it needs, no narrower than the column, so titles still line up.
+  day: { minWidth: DAY_WIDTH, flexShrink: 0 },
   upcomingTitle: { flex: 1 },
   note: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.sm },
   noteIcon: { marginTop: SPACE.xxs },

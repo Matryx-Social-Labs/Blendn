@@ -172,7 +172,7 @@ function ChatInfoInner() {
     <View style={styles.screen}>
       {/* First in the tree, so a screen reader reaches Back before the list; zIndex keeps it over the scroll and its shield. */}
       <View style={[styles.back, { top: barTop(insets.top) }]}>
-        <IconButton icon="chevron-left" tier="media" accessibilityLabel="Back" onPress={() => router.back()} testID="info-back" />
+        <IconButton icon={Platform.OS === 'android' ? 'arrow-left' : 'chevron-left'} tier="media" accessibilityLabel="Back" onPress={() => router.back()} testID="info-back" />
       </View>
 
       <Animated.ScrollView

@@ -15,6 +15,7 @@ import { announceOutcome, font, useBoldText } from '../../components/ds/shared'
 import { useToast } from '../../components/Toast'
 import { VenueDock } from '../../components/venue/VenueDock'
 import { PAGE_WASH, PageWash } from '../../components/ui/GradientFill'
+import { Material } from '../../components/ui/Material'
 import { VenueHero, VENUE_HERO_HEIGHT } from '../../components/venue/VenueHero'
 import { VenueRegulars } from '../../components/venue/VenueRegulars'
 import {
@@ -98,6 +99,9 @@ export default function VenueRoute() {
   return <VenueScreen id={id} km={kmParam(params.km)} />
 }
 
+/** The platform's own back glyph, as every bar draws it (Material: the arrow; iOS: the chevron). */
+const backIcon = () => (Platform.OS === 'android' ? 'arrow-left' : 'chevron-left')
+
 const finishSetup = () => router.push('/edit-profile' as never)
 
 function MissingPlace() {
@@ -105,7 +109,7 @@ function MissingPlace() {
   return (
     <View style={styles.screen}>
       <View style={[styles.controls, { top: barTop(insets.top) }]}>
-        <IconButton icon="chevron-left" tier="control" accessibilityLabel="Back" onPress={() => router.back()} testID="venue-back" />
+        <IconButton icon={backIcon()} tier="control" accessibilityLabel="Back" onPress={() => router.back()} testID="venue-back" />
       </View>
       <VenueGateScreen gate={{ kind: 'notFound' }} onRetry={() => {}} onBack={() => router.back()} onFinish={finishSetup} />
     </View>
@@ -172,6 +176,8 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
   const [dockHeight, setDockHeight] = useState(DEFAULT_DOCK)
   // One value for the screen's life; a lazy state, so nothing reads a ref while rendering.
   const [scrollY] = useState(() => new Animated.Value(0))
+  // Whether the rows have reached the status bar: the bar's glass is mounted then, never faded (glass fades wrong, §5.2).
+  const [underBar, setUnderBar] = useState(false)
   /** What waits for the dial to leave: iOS drops a Modal presented while another is still leaving. */
   const afterDial = useRef<(() => void) | null>(null)
   const dialFallback = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -416,7 +422,7 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
   const shieldHeight = barHeight(insets.top, Platform.OS === 'android')
   const controls = (
     <View style={[styles.controls, { top: barTop(insets.top) }]} pointerEvents="box-none">
-      <IconButton icon="chevron-left" tier={detail ? 'media' : 'control'} accessibilityLabel="Back" onPress={() => router.back()} testID="venue-back" />
+      <IconButton icon={backIcon()} tier={detail ? 'media' : 'control'} accessibilityLabel="Back" onPress={() => router.back()} testID="venue-back" />
       {detail ? <IconButton icon="share" tier="media" accessibilityLabel="Share" onPress={share} testID="venue-share" /> : null}
     </View>
   )
@@ -453,8 +459,12 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
     <View style={styles.screen}>
       {controls}
       <Animated.ScrollView
+        testID="venue-scroll"
         contentContainerStyle={{ paddingBottom: dockHeight + SPACE.xl }}
-        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
+        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
+          useNativeDriver: true,
+          listener: (event: { nativeEvent: { contentOffset: { y: number } } }) => setUnderBar(event.nativeEvent.contentOffset.y >= VENUE_HERO_HEIGHT - shieldHeight),
+        })}
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
       >
@@ -498,25 +508,14 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
       </Animated.ScrollView>
 
       {/*
-       * The status bar's and the back button's shield: clear over the hero (the
-       * design draws the cover under the clock, behind its head scrim), solid
-       * ink by the time the rows reach it.
+       * The status bar's and the back button's bar: nothing over the hero (the design draws the cover under the clock, behind its
+       * head scrim), the bar's glass once the rows reach it. Glass is mounted, not faded, and an ink band is not what the frame draws.
        */}
-      <Animated.View
-        pointerEvents="none"
-        testID="venue-status-shield"
-        style={[
-          styles.shield,
-          {
-            height: shieldHeight,
-            opacity: scrollY.interpolate({
-              inputRange: [VENUE_HERO_HEIGHT - 2 * shieldHeight, VENUE_HERO_HEIGHT - shieldHeight],
-              outputRange: [0, 1],
-              extrapolate: 'clamp',
-            }),
-          },
-        ]}
-      />
+      {underBar ? (
+        <View pointerEvents="none" testID="venue-status-shield" style={[styles.shield, { height: shieldHeight }]}>
+          <Material role="bar" testID="venue-status-material" style={StyleSheet.absoluteFill} />
+        </View>
+      ) : null}
 
       <VenueDock
         mode={mode}
@@ -606,6 +605,6 @@ const styles = StyleSheet.create({
   body: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.xl, gap: SPACE.sectionGap },
   controls: { position: 'absolute', left: SPACE.lg, right: SPACE.lg, zIndex: 2, flexDirection: 'row', justifyContent: 'space-between' },
   wash: { position: 'absolute', left: 0, right: 0, top: VENUE_HERO_HEIGHT - 1, height: PAGE_WASH.height },
-  shield: { position: 'absolute', left: 0, right: 0, top: 0, backgroundColor: COLOR.ink },
+  shield: { position: 'absolute', left: 0, right: 0, top: 0 },
   secondary: { color: COLOR.textSecondary },
 })

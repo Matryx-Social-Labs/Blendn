@@ -8,7 +8,7 @@
  */
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native'
 import React from 'react'
-import { AppState, Linking } from 'react-native'
+import { AppState, Linking, StyleSheet } from 'react-native'
 
 const NOW = Date.parse('2026-10-09T20:00:00.000Z')
 const mockOpenURL = jest.fn(() => Promise.resolve())
@@ -262,6 +262,41 @@ describe('the place, not live', () => {
     })
     expect(Clipboard.setStringAsync).toHaveBeenCalledWith('298, 100 Feet Road')
     expect(mockShowToast).toHaveBeenCalledWith('Address copied', 'info')
+  })
+})
+
+describe('the bar under the status bar', () => {
+  const scrollTo = (y: number) => fireEvent.scroll(screen.getByTestId('venue-scroll'), { nativeEvent: { contentOffset: { y }, contentSize: { height: 2000, width: 390 }, layoutMeasurement: { height: 800, width: 390 } } })
+
+  it('is nothing over the hero and the bar’s glass once the rows reach it, never an ink band', async () => {
+    await mount()
+    expect(screen.queryByTestId('venue-status-shield')).toBeNull()
+    await scrollTo(2000)
+    const shield = screen.getByTestId('venue-status-shield')
+    expect(StyleSheet.flatten(shield.props.style).backgroundColor).toBeUndefined()
+    expect(within(shield).getByTestId('venue-status-material')).toBeTruthy()
+    await scrollTo(0)
+    expect(screen.queryByTestId('venue-status-shield')).toBeNull()
+  })
+})
+
+describe('Coming up here', () => {
+  it('sets the date on one line, as wide as it needs and no narrower than the column', async () => {
+    await mount(venue({ venue: { upcoming: [{ id: 'u1', title: 'Night 1', startTime: min(60 * 24), goingCount: 3 }] } }))
+    const row = screen.getByTestId('venue-upcoming-u1')
+    const day = within(row).getAllByText(/\d/)[0]
+    expect(day.props.numberOfLines).toBe(1)
+    const style = StyleSheet.flatten(day.props.style)
+    expect(style.width).toBeUndefined()
+    expect(style).toMatchObject({ minWidth: 84, flexShrink: 0 })
+  })
+})
+
+describe('the Where card’s map', () => {
+  it('pads top and bottom by the pill’s reach, so the map’s credit clears "Open in Maps" and the pin stays centred', () => {
+    const src = require('fs').readFileSync(require('path').join(__dirname, '../components/venue/VenueMap.tsx'), 'utf8') as string
+    expect(src).toContain('mapPadding={MAP_PADDING}')
+    expect(src).toMatch(/MAP_PADDING = \{ top: CREDIT_CLEAR, bottom: CREDIT_CLEAR/)
   })
 })
 
