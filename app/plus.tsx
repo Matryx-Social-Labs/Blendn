@@ -9,6 +9,7 @@ import { NeverForSalePanel } from '../components/ds/NeverForSalePanel'
 import { Orbs } from '../components/ds/Orbs'
 import { Grain } from '../components/ds/Grain'
 import { NightPassRow, PlanCard, PlanList } from '../components/ds/PlanCard'
+import { HueProvider } from '../components/ds/shared'
 import { StateScreen } from '../components/ds/StateScreen'
 import { PlusActions, PlusFooter, PlusHeader, PlusHeading, PlusHero, PlusNote, useHeaderHeight, WhatYouGet } from '../components/plus/PlusSections'
 import { useToast } from '../components/Toast'
@@ -67,7 +68,7 @@ const LAUNCH_LINE = "Blend’n+ is free during launch in your city. Staying live
  * it is up; it draws the outcome — a tray for a store error, a toast for a
  * restore, the dock for the wait.
  */
-export default function PlusScreen() {
+function PlusScreenContent() {
   const params = useLocalSearchParams<{ trigger?: string }>()
   const trigger = isPaywallTrigger(params.trigger) ? params.trigger : 'profile'
   const { user } = useAuth()
@@ -258,6 +259,8 @@ export default function PlusScreen() {
   const pick = offers?.find((o) => o.pkg.identifier === picked) ?? offers?.find((o) => o.pkg.identifier === defaultPick(offers ?? []))
   // A subscriber manages in the store (12.2 #06): the plans stay drawn, but nothing is pickable and no pick plays a haptic.
   const managing = dockMode(status) === 'manage'
+  // No buy dock when the page failed, nor when the store could not be reached for prices: it would offer a button with nothing behind it.
+  const dockShown = !failed && !(forSale && offers === null)
   const locked = !sellable || busy !== null || finished || managing
 
   const plans = (list: PlusOffer[]) => {
@@ -330,7 +333,7 @@ export default function PlusScreen() {
       <PlusHeader done={finished} onClose={close} />
       <ScrollView
         testID="plus-scroll"
-        contentContainerStyle={[styles.content, { paddingTop: headerHeight + SPACE.sm, paddingBottom: dockHeight + SPACE.xl }]}
+        contentContainerStyle={[styles.content, { paddingTop: headerHeight + SPACE.sm, paddingBottom: (dockShown ? dockHeight : 0) + SPACE.xl }]}
         showsVerticalScrollIndicator={false}
       >
         <PlusHero />
@@ -362,7 +365,7 @@ export default function PlusScreen() {
           onManage={() => void manage()}
         />
       </ScrollView>
-      {failed ? null : (
+      {dockShown ? (
         <PlusActions
           onHeight={setDockHeight}
           phase={phase}
@@ -375,8 +378,17 @@ export default function PlusScreen() {
           onBuy={() => pick && void buy(pick)}
           onManage={() => void manage()}
         />
-      )}
+      ) : null}
     </View>
+  )
+}
+
+/** Violet world: Blendn+ is yours, not an outing: one hue on this screen (`HueProvider`), so the plan's radio and the dock agree. */
+export default function PlusScreen() {
+  return (
+    <HueProvider value="violet">
+      <PlusScreenContent />
+    </HueProvider>
   )
 }
 

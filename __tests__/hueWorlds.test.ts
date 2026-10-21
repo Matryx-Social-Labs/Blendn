@@ -1,7 +1,7 @@
 /*
  * One hue per screen (foundations, direction C): rose for people and crews, violet for you, and ember (the default, no
  * provider) for going out. Source-shaped: each listed screen wraps its root in the named hue, no file nests a second
- * provider, and no screen outside this table sets one. Onboarding is violet, set once at its stack's layout (its steps inherit).
+ * provider, and no screen outside this table sets one. Blendn+ (`app/plus.tsx`) is violet: it is yours, not an outing (visual QA R5 M29; the owner may rule otherwise). Onboarding is violet, set once at its stack's layout (its steps inherit).
  */
 import fs from 'fs'
 import path from 'path'
@@ -23,7 +23,7 @@ const ROSE = [
   'app/rate/[eventId].tsx',
   'components/blendn/BlendnScreen.tsx',
 ]
-const VIOLET = ['app/onboarding/_layout.tsx', 'app/edit-about-you.tsx', 'app/edit-profile.tsx', 'app/(tabs)/profile.tsx', 'app/settings.tsx', 'app/event-preferences/[eventId].tsx']
+const VIOLET = ['app/plus.tsx', 'app/onboarding/_layout.tsx', 'app/edit-about-you.tsx', 'app/edit-profile.tsx', 'app/(tabs)/profile.tsx', 'app/settings.tsx', 'app/event-preferences/[eventId].tsx']
 /** Going out: ember is the default, so none of these sets a hue. */
 const EMBER = [
   'app/(tabs)/events.tsx',

@@ -364,8 +364,11 @@ describe('prices and the server, honestly', () => {
     ;(loadPlusOffers as jest.Mock).mockResolvedValueOnce(null).mockResolvedValue([monthly])
     await mount()
     expect(screen.getByText('Couldn’t load prices')).toBeTruthy()
+    // Nothing to buy: no dock offering a disabled button over the page.
+    expect(screen.queryByTestId('plus-dock')).toBeNull()
     await act(async () => { fireEvent.press(button('Try again')) })
     expect(plan('$rc_monthly')).toBeTruthy()
+    expect(screen.getByTestId('plus-dock')).toBeTruthy()
   })
 
   it('"Purchases aren\'t available yet" when the store keys are off: the plans are dimmed and Restore is off', async () => {
