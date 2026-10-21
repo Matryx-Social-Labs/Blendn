@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { KeyboardFrame } from '../../components/chat/KeyboardFrame'
 import { Avatar } from '../../components/ds/Avatar'
 import { Button } from '../../components/ds/Button'
-import { ChipSet } from '../../components/ds/ChipSet'
+import { ScaleSteps } from '../../components/ds/ScaleSteps'
 import { Dock } from '../../components/ds/Dock'
 import { IconButton } from '../../components/ds/IconButton'
 import { RadioCard } from '../../components/ds/RadioCard'
@@ -144,7 +144,7 @@ type Load =
  *
  * Not stars: a five-star row reads as a public review, and that is the one
  * tone this must not have. The words say what the ends mean, so the numbers
- * never have to.
+ * never have to. Drawn by the DS `ScaleSteps` (Flow 3 `scale`).
  */
 function Scale({
   value,
@@ -161,27 +161,7 @@ function Scale({
   disabled?: boolean
   subject: string
 }) {
-  const bold = useBoldText()
-  return (
-    <View style={styles.scale}>
-      <ChipSet
-        items={[1, 2, 3, 4, 5].map((n) => ({
-          key: String(n),
-          label: String(n),
-          dimmed: disabled,
-          accessibilityLabel: `${subject}: ${n} out of 5${n === 1 ? `, ${low}` : n === 5 ? `, ${high}` : ''}`,
-        }))}
-        selection="single"
-        selected={value === null ? [] : [String(value)]}
-        onToggle={(key) => onChoose(Number(key))}
-        testID={`scale-${subject}`}
-      />
-      <View style={styles.scaleEnds} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
-        <Text style={[font('meta', bold), styles.tertiary]}>{low}</Text>
-        <Text style={[font('meta', bold), styles.tertiary]}>{high}</Text>
-      </View>
-    </View>
-  )
+  return <ScaleSteps value={value} onChoose={onChoose} low={low} high={high} disabled={disabled} subject={subject} testID={`scale-${subject}`} />
 }
 
 function RatePeersContent() {
@@ -528,13 +508,10 @@ const styles = StyleSheet.create({
   centred: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: SPACE.gutter, gap: SPACE.md },
   centreText: { textAlign: 'center' },
   who: { alignItems: 'center', gap: SPACE.sm, paddingBottom: SPACE.lg },
-  scale: { gap: SPACE.sm },
-  scaleEnds: { flexDirection: 'row', justifyContent: 'space-between' },
   issues: { gap: SPACE.sm },
   warning: { color: COLOR.destructive },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
-  tertiary: { color: COLOR.textTertiary },
 })
 
 /** Rose world: one hue on this screen (`HueProvider`). */
