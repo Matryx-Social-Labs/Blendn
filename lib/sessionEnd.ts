@@ -59,3 +59,13 @@ export const SESSION_END_NOTICE: Record<'elsewhere' | 'reset' | 'expired', strin
   reset: 'Your password was reset. Sign in with the new one.',
   expired: 'You were signed out. Sign in again to continue.',
 }
+
+/**
+ * The reason the server gave for refusing a socket handshake, from `error.data.code` (Flow 15 #21). Only an account state
+ * counts: a password reset or a sign-out elsewhere is the session's to end through the refresh, not the socket's to name.
+ */
+export function endedByOf(error: Error): SessionEndReason | null {
+  const code = (error as Error & { data?: { code?: unknown } }).data?.code
+  const reason = typeof code === 'string' ? SESSION_END_CODES[code] : undefined
+  return reason === 'suspended' || reason === 'staff' || reason === 'deleted' ? reason : null
+}

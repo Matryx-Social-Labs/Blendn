@@ -273,3 +273,17 @@ describe('where the banners are wired (source shape; Going and the Board have no
     expect(src('app/settings.tsx')).toContain('testID="settings-offline"')
   })
 })
+
+describe('the socket says why the handshake was refused (#21)', () => {
+  it('reads the server’s code from error.data.code, and only an account state counts', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { endedByOf } = require('../lib/sessionEnd') as typeof import('../lib/sessionEnd')
+    const refused = (code: unknown) => Object.assign(new Error('Authentication required'), { data: { code } })
+    expect(endedByOf(refused('ACCOUNT_DELETED'))).toBe('deleted')
+    expect(endedByOf(refused('ACCOUNT_SUSPENDED'))).toBe('suspended')
+    expect(endedByOf(refused('ACCOUNT_STAFF'))).toBe('staff')
+    expect(endedByOf(refused('PASSWORD_RESET'))).toBeNull()
+    expect(endedByOf(refused(undefined))).toBeNull()
+    expect(endedByOf(new Error('Authentication required'))).toBeNull()
+  })
+})

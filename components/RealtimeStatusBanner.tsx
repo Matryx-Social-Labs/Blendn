@@ -67,7 +67,13 @@ export default function RealtimeStatusBanner({
   const isSocketIssue = socketDown && downLong
 
   const reduceMotion = useReducedMotion()
-  const kind = realtimeBannerKind({ offline: isOffline, socketIssue: isSocketIssue, reconnecting: status.state === 'reconnecting' || retrying })
+  const kind = realtimeBannerKind({
+    offline: isOffline,
+    socketIssue: isSocketIssue,
+    reconnecting: status.state === 'reconnecting' || retrying,
+    // Refused at the handshake because the account is gone: no grace, and nothing to retry (Flow 15 #21).
+    deleted: status.endedBy === 'deleted',
+  })
   if (!kind) return null
 
   /*
@@ -92,6 +98,7 @@ export default function RealtimeStatusBanner({
     // DS #44: it slides 16 pt and fades in over `base`, leaves in a quick fade; Reduce Motion: the fade alone.
     <Animated.View entering={reduceMotion ? bannerFadeIn : bannerIn} exiting={bannerOut} style={style}>
       {kind === 'offline' ? <Banner kind="offline" text={OFFLINE} /> : null}
+      {kind === 'deleted' ? <Banner kind="offline" icon="user-x" text={DELETED} testID="realtime-deleted" /> : null}
       {kind === 'reconnecting' ? <Banner kind="paused" text={RECONNECTING} testID="realtime-reconnecting" /> : null}
       {kind === 'paused' ? <Banner kind="paused" text={PAUSED} action={{ label: 'Try again', onPress: handleRetry }} /> : null}
     </Animated.View>
@@ -104,13 +111,27 @@ export const PAUSED = 'Updates paused. Trying to reconnect.'
 /** While a reconnect runs: the warning tint, no action (Flow 7 pieces 03). */
 export const RECONNECTING = 'Reconnecting…'
 
-export type RealtimeBannerKind = 'offline' | 'paused' | 'reconnecting'
+/** Evicted because the account was deleted: the reason, not "paused" (Flow 15 #21); the next request signs out to the landing. */
+export const DELETED = 'Signed out. This account was deleted, so live updates stopped.'
+
+export type RealtimeBannerKind = 'offline' | 'paused' | 'reconnecting' | 'deleted'
 
 /**
  * Which banner, if any. Offline wins (actions will fail, and there is nothing to retry); a socket that has been down past
  * the grace is paused, with Try again, or reconnecting, with nothing to press, while a reconnect is under way.
  */
-export function realtimeBannerKind({ offline, socketIssue, reconnecting }: { offline: boolean; socketIssue: boolean; reconnecting: boolean }): RealtimeBannerKind | null {
+export function realtimeBannerKind({
+  offline,
+  socketIssue,
+  reconnecting,
+  deleted = false,
+}: {
+  offline: boolean
+  socketIssue: boolean
+  reconnecting: boolean
+  deleted?: boolean
+}): RealtimeBannerKind | null {
+  if (deleted) return 'deleted'
   if (offline) return 'offline'
   if (!socketIssue) return null
   return reconnecting ? 'reconnecting' : 'paused'

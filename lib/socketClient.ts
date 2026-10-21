@@ -9,6 +9,7 @@ import { apiClient, TokenStorage } from "./apiClient"
 import { markDomainsDirty } from "./liveSyncState"
 import { Logger } from "./logger"
 import { Sentry } from "./sentry"
+import { endedByOf, type SessionEndReason } from "./sessionEnd"
 import { buildAuthPayload } from "./socketAuth"
 
 // Socket server URL
@@ -197,6 +198,12 @@ interface SocketConnectionStatus {
   reconnectAttempts: number
   lastConnectedAt: number | null
   lastError: string | null
+  /**
+   * The handshake was refused because the account is no longer one (Flow 15 #21): `deleted` says so on the banner,
+   * `suspended` and `staff` are the session's to end (the landing's screens). From the server's `error.data.code`
+   * (`ACCOUNT_DELETED`, `ACCOUNT_SUSPENDED`, `ACCOUNT_STAFF`); null while the server sends none, which is today.
+   */
+  endedBy: SessionEndReason | null
 }
 
 // Subscription callback types
@@ -246,6 +253,7 @@ let connectionStatus: SocketConnectionStatus = {
   reconnectAttempts: 0,
   lastConnectedAt: null,
   lastError: null,
+  endedBy: null,
 }
 const connectionStatusSubscribers = new Set<(status: SocketConnectionStatus) => void>()
 
@@ -469,6 +477,7 @@ export async function connect(opts: { force?: boolean } = {}): Promise<boolean> 
           reconnectAttempts: 0,
           lastConnectedAt: Date.now(),
           lastError: null,
+          endedBy: null,
         })
         resolve(true)
       })
@@ -498,6 +507,7 @@ export async function connect(opts: { force?: boolean } = {}): Promise<boolean> 
           state: "disconnected",
           connected: false,
           lastError: error.message || "Connection error",
+          endedBy: endedByOf(error),
         })
         resolve(false)
       })
