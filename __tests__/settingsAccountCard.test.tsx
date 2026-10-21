@@ -23,7 +23,7 @@ jest.mock('react-native-safe-area-context', () => {
   }
 })
 const mockAuth = { user: { id: 'u_me', email: 'sam@example.com' } }
-jest.mock('../lib/useAuth', () => ({ useAuth: () => mockAuth, signOut: jest.fn(), deleteAccount: jest.fn() }))
+jest.mock('../lib/useAuth', () => ({ useAuth: () => mockAuth, signOut: jest.fn(), signOutEverywhere: jest.fn(), deleteAccount: jest.fn() }))
 const mockMethod = jest.fn()
 jest.mock('../lib/authMethod', () => ({ useAuthMethod: () => mockMethod() }))
 jest.mock('../lib/apiClient', () => ({
@@ -48,7 +48,7 @@ import { SheetHost } from '../components/SheetHost'
 import { apiClient } from '../lib/apiClient'
 import { H } from '../lib/haptics'
 import { closeSheet } from '../lib/sheet'
-import { deleteAccount, signOut } from '../lib/useAuth'
+import { deleteAccount, signOut, signOutEverywhere } from '../lib/useAuth'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
 const Screen = () => (
@@ -130,15 +130,17 @@ describe('Change your password', () => {
 })
 
 describe('Sign out of every device', () => {
-  it('asks first, in the sheet that is never red, and signs out everywhere', async () => {
-    ;(signOut as jest.Mock).mockResolvedValue({ success: true })
+  it('asks first, in the sheet that is never red, and signs out everywhere only once the server confirms', async () => {
+    ;(signOutEverywhere as jest.Mock).mockResolvedValue({ success: true })
     await render(<Screen />)
     fireEvent.press(await screen.findByRole('button', { name: 'Sign out of every device' }))
     expect(await screen.findByText('Sign out everywhere?')).toBeTruthy()
     expect(screen.getByText('Every phone signed in to this account is signed out, this one too. Notifications stop on all of them.')).toBeTruthy()
-    expect(signOut).not.toHaveBeenCalled()
+    expect(signOutEverywhere).not.toHaveBeenCalled()
     fireEvent.press(screen.getByRole('button', { name: 'Sign out everywhere' }))
-    await waitFor(() => expect(signOut).toHaveBeenCalledWith(true))
+    await waitFor(() => expect(signOutEverywhere).toHaveBeenCalledTimes(1))
+    // It is its own call: never the one-device sign-out with a flag.
+    expect(signOut).not.toHaveBeenCalled()
     expect(H.destructive).not.toHaveBeenCalled()
   })
 
@@ -147,16 +149,19 @@ describe('Sign out of every device', () => {
     fireEvent.press(await screen.findByRole('button', { name: 'Sign out of every device' }))
     await screen.findByText('Sign out everywhere?')
     fireEvent.press(screen.getByRole('button', { name: 'Cancel' }))
-    expect(signOut).not.toHaveBeenCalled()
+    expect(signOutEverywhere).not.toHaveBeenCalled()
   })
 
-  it('a server that did not confirm is the landing toast, as for Sign out', async () => {
-    ;(signOut as jest.Mock).mockResolvedValue({ success: false })
+  it('a server that could not be reached keeps the sheet, says nothing was signed out, and offers Try again (no landing toast)', async () => {
+    ;(signOutEverywhere as jest.Mock).mockResolvedValue({ success: false, error: 'No internet connection.' })
     await render(<Screen />)
     fireEvent.press(await screen.findByRole('button', { name: 'Sign out of every device' }))
     await screen.findByText('Sign out everywhere?')
     fireEvent.press(screen.getByRole('button', { name: 'Sign out everywhere' }))
-    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith(expect.stringMatching(/^Signed out on this phone/), 'info'))
+    expect(await screen.findByText('Couldn’t reach Blend’n, so nothing was signed out. Try again.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
+    expect(screen.getByText('Sign out everywhere?')).toBeTruthy()
+    expect(mockShowToast).not.toHaveBeenCalled()
   })
 })
 

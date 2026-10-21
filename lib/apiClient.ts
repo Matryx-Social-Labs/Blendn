@@ -1333,8 +1333,8 @@ class ApiClientClass {
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      // Which build is asking, so the server can refuse one it no longer serves (Flow 15 15.14).
-      'X-App-Version': appVersionNumber(),
+      // Which build is asking, so the server can refuse one it no longer serves (Flow 15 15.14). Not from the web build: a custom header there is a CORS preflight the server does not yet allow, and would block every call.
+      ...(Platform.OS !== 'web' ? { 'X-App-Version': appVersionNumber() } : {}),
       ...(options.headers as Record<string, string>),
     }
 
@@ -1722,6 +1722,24 @@ class ApiClientClass {
    * a re-registration on their other device is cheaper than a stranger reading
    * their DMs.
    */
+  /**
+   * Every session this account has, this one too (`POST /auth/signout` naming no refresh token). Unlike `signOut`, nothing
+   * is cleared until the server has said it ended them: a phone that could not reach the server is still signed in
+   * everywhere, and says so rather than looking signed out.
+   */
+  async signOutEverywhere(): Promise<ApiResponse<void>> {
+    const result = await this.request<void>('/api/mobile/auth/signout', {
+      method: 'POST',
+      body: JSON.stringify({ pushToken: getPushTokenRef() ?? undefined }),
+    })
+    if (!result.success) return result
+    setPushTokenRef(null)
+    await TokenStorage.clearAll()
+    requestQueue.clear()
+    this.clearResponseCache()
+    return result
+  }
+
   async signOut(revokeAll: boolean = false): Promise<ApiResponse<void>> {
     const refreshToken = await TokenStorage.getRefreshToken()
     const result = await this.request<void>('/api/mobile/auth/signout', {

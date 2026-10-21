@@ -265,4 +265,22 @@ describe('every request names the build (Flow 15 15.14), and a refusal to serve 
     expect(gate.isUpdateRefusal(400, 'UPDATE_REQUIRED')).toBe(true)
     expect(gate.isUpdateRefusal(403, 'FORBIDDEN')).toBe(false)
   })
+
+  it('does not send it from the web build (a custom header there is a preflight the server does not allow yet)', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { Platform } = require('react-native') as { Platform: { OS: string } }
+    const was = Platform.OS
+    Platform.OS = 'web'
+    try {
+      let sent: Record<string, string> = {}
+      global.fetch = jest.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+        sent = init?.headers as Record<string, string>
+        return json(200, { success: true, data: {} })
+      }) as typeof fetch
+      await apiClient.getSession()
+      expect(Object.keys(sent)).not.toContain('X-App-Version')
+    } finally {
+      Platform.OS = was
+    }
+  })
 })

@@ -61,10 +61,10 @@ export function signOutSheet({ signOut, showToast }: { signOut: SignOut; showToa
 
 /**
  * "Sign out everywhere?" (R4.1 7.1 frame 05): every session the account has, this one too, and the push tokens with
- * them. The affirmative is the strong white button and never red (R7); no haptic of its own. The server revokes every
- * refresh token when the sign-out names none (`POST /auth/signout` without `refreshToken`).
+ * them. The affirmative is the strong white button and never red (R7); no haptic of its own. The server answers first and
+ * nothing is cleared until it has: a failure keeps the sheet, says nothing was signed out, and Try again is honest.
  */
-export function signOutEverywhereSheet({ signOut, showToast }: { signOut: SignOut; showToast: Toaster }): Sheet {
+export function signOutEverywhereSheet({ signOutEverywhere }: { signOutEverywhere: () => Promise<{ success: boolean; error?: string }> }): Sheet {
   return {
     kind: 'actions',
     icon: 'smartphone',
@@ -76,11 +76,11 @@ export function signOutEverywhereSheet({ signOut, showToast }: { signOut: SignOu
         variant: 'primary',
         run: async () => {
           try {
-            const result = await signOut(true)
-            if (!result.success) showToast(SIGNED_OUT_UNCONFIRMED, 'info')
+            const result = await signOutEverywhere()
+            if (!result.success) return { ok: false, error: NOT_SIGNED_OUT_EVERYWHERE }
             return { ok: true }
           } catch {
-            return { ok: false, error: 'Couldn’t sign you out everywhere. Try again.' }
+            return { ok: false, error: NOT_SIGNED_OUT_EVERYWHERE }
           }
         },
       },
@@ -88,6 +88,9 @@ export function signOutEverywhereSheet({ signOut, showToast }: { signOut: SignOu
     ],
   }
 }
+
+/** What the sheet says when the server could not be reached: this phone is still signed in, and so is every other. */
+export const NOT_SIGNED_OUT_EVERYWHERE = 'Couldn’t reach Blend’n, so nothing was signed out. Try again.'
 
 /**
  * "Change your password?" (R4.1 7.1 frame 03): an email with a link, never a password typed here. Send link has no

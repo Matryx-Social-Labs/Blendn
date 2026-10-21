@@ -602,6 +602,27 @@ export const signOut = async (
 }
 
 /**
+ * Sign out of every device (Flow 7 R4.1 7.1). The server first: on a failure nothing is cleared here and the result says
+ * so, because "signed out everywhere" that reached nobody would leave every other phone signed in under a screen that
+ * claimed otherwise. Local state goes only once the server confirmed.
+ */
+export const signOutEverywhere = async (): Promise<{ success: boolean; error?: string }> => {
+  try {
+    Logger.info('auth', 'Signing out everywhere...')
+    const result = await apiClient.signOutEverywhere()
+    if (!result.success) {
+      Logger.warn('auth', 'Sign out everywhere did not reach the server; nothing was cleared', { error: result.error })
+      return { success: false, error: result.error }
+    }
+    await clearAuthState()
+    return { success: true }
+  } catch (error) {
+    Logger.error('auth', 'Sign out everywhere exception', { error })
+    return { success: false, error: error instanceof Error ? error.message : 'Sign out failed' }
+  }
+}
+
+/**
  * Re-read the session so `user.name` / `user.image` follow a profile edit.
  *
  * `globalAuthState.user` was set once at sign-in and never again; the

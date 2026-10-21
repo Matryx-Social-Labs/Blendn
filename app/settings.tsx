@@ -27,7 +27,7 @@ import { initializePushNotifications, removePushTokenFromProfile } from '../lib/
 import { clearPushDeclined } from '../lib/pushDecline'
 import { useLatest } from '../lib/useLatest'
 import { Logger } from '../lib/logger'
-import { useAuth, signOut, deleteAccount } from '../lib/useAuth'
+import { useAuth, signOut, signOutEverywhere, deleteAccount } from '../lib/useAuth'
 import { openPaywall } from '../lib/paywall'
 import { plusStatusLine, usePlusStatus, type PlusStatus } from '../lib/plus'
 import { manageSubscriptionUrl } from '../lib/purchases'
@@ -426,7 +426,7 @@ function SettingsScreenContent() {
 
   /** Sign out asks first (one stray tap used to end the session on the spot); so does signing out of every device. */
   const askSignOut = useCallback(() => showSheet(signOutSheet({ signOut, showToast })), [showToast])
-  const askSignOutEverywhere = useCallback(() => showSheet(signOutEverywhereSheet({ signOut, showToast })), [showToast])
+  const askSignOutEverywhere = useCallback(() => showSheet(signOutEverywhereSheet({ signOutEverywhere })), [])
   const openDataCopyMail = useCallback(
     () => void Linking.openURL(dataCopyMailto(user?.id)).catch(() => showToast(`No email app opened. Write to ${SUPPORT_EMAIL}.`, 'info')),
     [showToast, user?.id]
