@@ -10,6 +10,7 @@ import { PersonRowSkeleton } from '../../components/friends/PersonRow'
 import { EMBER, GUTTER, SPACE } from '../../lib/theme'
 import { useFriendRequests } from '../../lib/useFriendRequests'
 import { useTopBarState } from '../../lib/useTopBarState'
+import { HueProvider } from '../../components/ds/shared'
 
 /**
  * People asking to be your friend — what "Requests" on the Me tab and at the
@@ -19,7 +20,7 @@ import { useTopBarState } from '../../lib/useTopBarState'
  * where you would go to send one. Accept and Not now behave exactly as they do
  * there (`useFriendRequests`).
  */
-export default function FriendRequestsScreen() {
+function FriendRequestsScreenContent() {
   const { incoming, loaded, failed, load, respond, busy } = useFriendRequests()
   const [refreshing, setRefreshing] = useState(false)
   const bar = useTopBarState()
@@ -78,3 +79,12 @@ const styles = StyleSheet.create({
   list: { paddingHorizontal: GUTTER, paddingVertical: SPACE.sm },
   emptyList: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: GUTTER },
 })
+
+/** Rose world: one hue on this screen (`HueProvider`). */
+export default function FriendRequestsScreen() {
+  return (
+    <HueProvider value="rose">
+      <FriendRequestsScreenContent />
+    </HueProvider>
+  )
+}

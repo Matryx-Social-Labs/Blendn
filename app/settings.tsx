@@ -6,7 +6,7 @@ import { AppState, Linking, RefreshControl, ScrollView, StyleSheet, Text, View }
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Button } from '../components/ds/Button'
 import { SettingsGroup, SettingsRow } from '../components/ds/SettingsRow'
-import { font, useBoldText } from '../components/ds/shared'
+import { font, HueProvider, useBoldText } from '../components/ds/shared'
 import { TopBar } from '../components/ds/TopBar'
 import { useToast } from '../components/Toast'
 import { COLOR, SPACE as DS_SPACE } from '../lib/design/tokens'
@@ -80,7 +80,7 @@ async function readOsPush(): Promise<OsPush> {
   }
 }
 
-export default function SettingsScreen() {
+function SettingsScreenContent() {
   const { user } = useAuth()
   const { showToast } = useToast()
   const [preferences, setPreferences] = useState<PreferencesState>(DEFAULT_PREFERENCES)
@@ -625,5 +625,14 @@ function OffersFromPlacesRow() {
       disabled={enabled === null}
       testID="settings-offers"
     />
+  )
+}
+
+/** Violet world: one hue on this screen (`HueProvider`). */
+export default function SettingsScreen() {
+  return (
+    <HueProvider value="violet">
+      <SettingsScreenContent />
+    </HueProvider>
   )
 }

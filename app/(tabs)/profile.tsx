@@ -33,6 +33,7 @@ import { useAuth } from '../../lib/useAuth'
 import { pseudonymAvatar } from '../../lib/pseudonymAvatar'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
 import { TAB_BAR_CLEARANCE } from './_layout'
+import { HueProvider } from '../../components/ds/shared'
 
 /** The photo pile beside your name, for the skeleton's stand-in. */
 const STACK = { width: 120, height: 120 }
@@ -723,10 +724,19 @@ const styles = StyleSheet.create({
  * Wrapped so `lib/perf.tsx` can report what this screen costs to render.
  * `ScreenProfiler` is the children untouched in production — see its header.
  */
-export default function Profile() {
+function ProfileContent() {
   return (
     <ScreenProfiler id="me">
       <ProfileInner />
     </ScreenProfiler>
+  )
+}
+
+/** Violet world: one hue on this screen (`HueProvider`). */
+export default function Profile() {
+  return (
+    <HueProvider value="violet">
+      <ProfileContent />
+    </HueProvider>
   )
 }
