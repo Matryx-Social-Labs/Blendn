@@ -35,6 +35,7 @@ import { PulseBanners } from '../../components/pulse/PulseBanners'
 import { CityPicker } from '../../components/pulse/CityPicker'
 import { PulseEmpty, PulseLoadFailed } from '../../components/pulse/PulseEmpty'
 import { PulsePeek, type Peek } from '../../components/pulse/PulsePeek'
+import { PullIndicator } from '../../components/pulse/PullIndicator'
 import { StickyBar, STICKY_BAR_AFTER } from '../../components/pulse/StickyBar'
 import { TAB_BAR_CLEARANCE, tabBarTop } from './_layout'
 import { FilterSheet, type CategoryOption } from '../../components/pulse/FilterControl'
@@ -80,6 +81,7 @@ import {
   type PulseSectionKey,
 } from '../../lib/pulseSections'
 import { useNow } from '../../lib/useNow'
+import { usePullToRefresh } from '../../lib/usePullToRefresh'
 import { COLOR, FONT_FAMILY, RADIUS, SPACE, STAGGER, TYPE as DESIGN_TYPE } from '../../lib/design/tokens'
 import { mergeEventPage, pageHasMore, pulseEmptyCopy, pulseEmptyKind } from '../../lib/pulseFeed'
 import { eventShareText, type PeekAction } from '../../lib/pulsePeek'
@@ -922,6 +924,8 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     setRefreshing(false)
   }
 
+  const pull = usePullToRefresh({ refreshing, onRefresh })
+
   /*
    * Which of the four dependencies actually changed, so a search keystroke
    * or a filter change can be told apart from a city switch.
@@ -1694,8 +1698,15 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
           estimatedItemSize={200}
           onEndReachedThreshold={0.5}
           onEndReached={fetchMore}
-          onScroll={onListScroll}
-          refreshControl={<RefreshControl refreshing={refreshing && !isLoading} onRefresh={onRefresh} tintColor={COLOR.textSecondary} />}
+          onScroll={(e) => {
+            onListScroll(e)
+            pull.scrollProps.onScroll(e)
+          }}
+          scrollEventThrottle={16}
+          onScrollEndDrag={pull.scrollProps.onScrollEndDrag}
+          // iOS pulls with the monogram (motion #18) and holds the list down while it loads; Android keeps the platform's control.
+          contentInset={{ top: pull.holdInset }}
+          refreshControl={pull.native ? <RefreshControl refreshing={refreshing && !isLoading} onRefresh={onRefresh} tintColor={COLOR.textSecondary} /> : undefined}
           contentContainerStyle={[
             styles.listContainer,
             {
@@ -1733,6 +1744,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
           }
         />
       </PulseSlots.Provider>
+      {pull.native ? null : <PullIndicator progress={pull.progress} />}
 
       {/* The city picker: a Sheet of the server's list; the choice is written to storage on tap, so a restart does not re-ask. */}
       <CityPicker
