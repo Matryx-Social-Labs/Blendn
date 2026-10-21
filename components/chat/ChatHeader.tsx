@@ -1,3 +1,4 @@
+import { barTop } from '../../lib/barGeometry'
 import type { ReactNode } from 'react'
 import { Platform, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -33,7 +34,7 @@ export const CHAT_CAPSULE = {
 export const chatCapsuleHeight = () => (Platform.OS === 'android' ? CHAT_CAPSULE.heightAndroid : SIZE.input)
 
 /** The capsule's top edge: a step under the status bar (Flow 5 frames: 56 on a 402 pt iPhone, 52 on Android). */
-const capsuleTop = (insetTop: number) => insetTop + SPACE.xs
+const capsuleTop = (insetTop: number) => barTop(insetTop)
 
 /** Where a screen's content starts under the capsule: its bottom edge, then 12 (the frames' 124). */
 export function chatHeaderBottom(insetTop: number) {

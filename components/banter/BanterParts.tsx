@@ -1,3 +1,4 @@
+import { BAR_BOTTOM, barHeight, barTop } from '../../lib/barGeometry'
 import { useBanterPress } from './pressGuard'
 import { Image } from 'expo-image'
 import type { ReactNode } from 'react'
@@ -55,7 +56,7 @@ export function BanterHeader({
   const insets = useSafeAreaInsets()
   const bold = useBoldText()
   return (
-    <Material role="bar" style={[styles.header, { paddingTop: insets.top + SPACE.sm }]}>
+    <Material role="bar" style={[styles.header, { paddingTop: barTop(insets.top) }]}>
       <Text accessibilityRole="header" numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('display', bold), styles.ink, styles.grow]}>
         Banter
       </Text>
@@ -69,7 +70,7 @@ export function BanterHeader({
 }
 
 /** The header's height under the status bar: the frames' 116 on a 402 pt iPhone. */
-export const banterHeaderHeight = (insetTop: number) => insetTop + SPACE.sm + SIZE.circleButton + SPACE.md
+export const banterHeaderHeight = (insetTop: number) => barHeight(insetTop, false)
 
 /**
  * The room you're standing in (Flow 5 #03): its cover full-bleed under a
@@ -528,7 +529,7 @@ const styles = StyleSheet.create({
     gap: SPACE.md,
     paddingLeft: SPACE.gutter,
     paddingRight: SPACE.lg,
-    paddingBottom: SPACE.md,
+    paddingBottom: BAR_BOTTOM,
   },
   actions: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   bell: {

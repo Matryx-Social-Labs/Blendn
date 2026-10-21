@@ -1,3 +1,4 @@
+import { BAR_BOTTOM, barTop } from '../../lib/barGeometry'
 import type { Ref } from 'react'
 import { Platform, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -25,7 +26,7 @@ const STAMP = SIZE.tag
 export function OfferHeader({ onBack, onMore, moreLabel }: { onBack: () => void; onMore?: () => void; moreLabel: string }) {
   const insets = useSafeAreaInsets()
   return (
-    <View testID="offer-header" style={[styles.header, { paddingTop: insets.top + SPACE.sm }]}>
+    <View testID="offer-header" style={[styles.header, { paddingTop: barTop(insets.top) }]}>
       <IconButton icon={Platform.OS === 'android' ? 'arrow-left' : 'chevron-left'} accessibilityLabel="Back" onPress={onBack} />
       {onMore ? <IconButton icon="ellipsis" accessibilityLabel={moreLabel} onPress={onMore} /> : null}
     </View>
@@ -195,7 +196,7 @@ export function RegularOff({ venueName }: { venueName: string }) {
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: SPACE.lg, paddingBottom: SPACE.sm },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: SPACE.lg, paddingBottom: BAR_BOTTOM },
   ticket: { borderRadius: RADIUS.card, backgroundColor: COLOR.surface, overflow: 'hidden' },
   edge: { borderWidth: StyleSheet.hairlineWidth, borderColor: COLOR.hairline },
   top: { gap: SPACE.xxs, paddingHorizontal: SPACE.xl - SPACE.xs, paddingTop: SPACE.xl - SPACE.xs, paddingBottom: SPACE.lg },

@@ -1,3 +1,4 @@
+import { BAR_BOTTOM, barTop } from '../../lib/barGeometry'
 import { useState } from 'react'
 import { Platform, StyleSheet, Text, View } from 'react-native'
 import Animated, { Extrapolation, interpolate, useAnimatedReaction, useAnimatedStyle, type SharedValue } from 'react-native-reanimated'
@@ -80,7 +81,7 @@ export function ProfileBar({ scrollY, title, onBack, actions = [], overPhoto = f
   const tier = overPhoto && !glass ? 'media' : 'control'
 
   return (
-    <View testID={testID} pointerEvents="box-none" style={[styles.bar, { paddingTop: insets.top + SPACE.sm }]}>
+    <View testID={testID} pointerEvents="box-none" style={[styles.bar, { paddingTop: barTop(insets.top) }]}>
       <Animated.View testID={testID && `${testID}-glass`} pointerEvents="none" style={[StyleSheet.absoluteFill, glassStyle]}>
         <Material role="bar" style={StyleSheet.absoluteFill} />
       </Animated.View>
@@ -97,7 +98,7 @@ export function ProfileBar({ scrollY, title, onBack, actions = [], overPhoto = f
           pointerEvents="none"
           accessibilityElementsHidden
           importantForAccessibility="no-hide-descendants"
-          style={[styles.title, { top: insets.top + SPACE.sm, height: circle, left: inset, right: inset }, titleStyle]}
+          style={[styles.title, { top: barTop(insets.top), height: circle, left: inset, right: inset }, titleStyle]}
         >
           <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold, FONT_FAMILY.brand[700]), styles.ink]}>
             {title}
@@ -109,7 +110,7 @@ export function ProfileBar({ scrollY, title, onBack, actions = [], overPhoto = f
 }
 
 const styles = StyleSheet.create({
-  bar: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 2, paddingHorizontal: SPACE.lg, paddingBottom: SPACE.sm },
+  bar: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 2, paddingHorizontal: SPACE.lg, paddingBottom: BAR_BOTTOM },
   row: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   fill: { flex: 1 },
   title: { position: 'absolute', justifyContent: 'center' },

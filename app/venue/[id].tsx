@@ -1,3 +1,4 @@
+import { barHeight, barTop } from '../../lib/barGeometry'
 import * as Clipboard from 'expo-clipboard'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -70,7 +71,6 @@ type SheetKind = 'dial' | 'session' | 'leave' | 'claim'
 type Tray = { visible: boolean; title: string; message: string; buttons: TrayButton[]; extra?: TrayExtra }
 
 /** The shield under the status bar and the back button fades in as the rows reach it. */
-const SHIELD_PAD = SPACE.sm
 const DEFAULT_DOCK = SIZE.primary + SPACE.xxxl
 /** The dial's exit is ~220 ms; if iOS never reports it gone, what waited for it starts anyway. */
 const DIAL_GONE_FALLBACK_MS = 800
@@ -104,7 +104,7 @@ function MissingPlace() {
   const insets = useSafeAreaInsets()
   return (
     <View style={styles.screen}>
-      <View style={[styles.controls, { top: insets.top + SPACE.sm }]}>
+      <View style={[styles.controls, { top: barTop(insets.top) }]}>
         <IconButton icon="chevron-left" tier="control" accessibilityLabel="Back" onPress={() => router.back()} testID="venue-back" />
       </View>
       <VenueGateScreen gate={{ kind: 'notFound' }} onRetry={() => {}} onBack={() => router.back()} onFinish={finishSetup} />
@@ -413,9 +413,9 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
     Linking.openURL(claimUrl).catch(() => showToast("That page didn't open. Try again.", 'error'))
   }
 
-  const shieldHeight = insets.top + SHIELD_PAD + (Platform.OS === 'android' ? SIZE.circleButtonAndroid : SIZE.circleButton) + SHIELD_PAD
+  const shieldHeight = barHeight(insets.top, Platform.OS === 'android')
   const controls = (
-    <View style={[styles.controls, { top: insets.top + SPACE.sm }]} pointerEvents="box-none">
+    <View style={[styles.controls, { top: barTop(insets.top) }]} pointerEvents="box-none">
       <IconButton icon="chevron-left" tier={detail ? 'media' : 'control'} accessibilityLabel="Back" onPress={() => router.back()} testID="venue-back" />
       {detail ? <IconButton icon="share" tier="media" accessibilityLabel="Share" onPress={share} testID="venue-share" /> : null}
     </View>

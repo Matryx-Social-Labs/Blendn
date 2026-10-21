@@ -1,3 +1,4 @@
+import { barTop } from '../../lib/barGeometry'
 import { router } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BackHandler, StyleSheet, Text, View } from 'react-native'
@@ -51,7 +52,7 @@ import { markCoachUsed, useCoachMark } from '../../lib/coachMarks'
 import { useCoachMarkSpot } from '../ds/CoachMarkHost'
 
 /** Under the top bar's 44 pt circles: Flow 4 sets the title 70 below the safe area (124 on a 54 pt status bar). */
-const TOP_CHROME = SPACE.sm + SIZE.circleButton + SPACE.lg + SPACE.xxs
+const TOP_CHROME = SIZE.circleButton + SPACE.lg + SPACE.xxs
 /** #9: the Room's crossfade (D.base) and its sections (+60, 28 apart, D.base each), done: nothing lands on it before. */
 const ROOM_ARRIVAL_MS = DURATION.base + 60 + 2 * 28 + DURATION.base
 
@@ -879,7 +880,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
 
       {/* The bar floats over every mode, so closing is always in the same place (the Recap draws its own). */}
       {mode === 'ended' ? null : (
-        <View style={[styles.topBar, { top: insets.top + SPACE.sm }]} pointerEvents="box-none">
+        <View style={[styles.topBar, { top: barTop(insets.top) }]} pointerEvents="box-none">
           <IconButton icon="chevron-down" accessibilityLabel="Close Blend’n" onPress={onClose} testID="blendn-close" />
           {mode === 'room' && room.event ? (
             <Animated.View entering={reduceMotion ? undefined : glassRise} style={styles.topActions}>

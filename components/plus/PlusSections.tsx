@@ -1,3 +1,4 @@
+import { barHeight, barTop } from '../../lib/barGeometry'
 import { Fragment, useState, type ReactNode } from 'react'
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -26,11 +27,10 @@ const FEATURE_GAP = 14
 /** The footer links are one line of meta text; slop takes each to the 44 / 48 target. */
 const LINK_SLOP = (SIZE.targetAndroid - TYPE.meta.lineHeight) / 2
 
-/** The bar under the header: top inset, the circle, and 8 pt below it. */
+/** The bar under the header: the top inset, the circle, and the 10 pt the glass reaches under it. */
 export function useHeaderHeight() {
   const insets = useSafeAreaInsets()
-  const circle = Platform.OS === 'android' ? SIZE.circleButtonAndroid : SIZE.circleButton
-  return insets.top + SPACE.sm + circle + SPACE.sm
+  return barHeight(insets.top, Platform.OS === 'android')
 }
 
 /**
@@ -47,7 +47,7 @@ export function PlusHeader({ done, onClose }: { done: boolean; onClose: () => vo
   const label = done ? 'Done' : 'Not now'
   const height = useHeaderHeight()
   return (
-    <View testID="plus-header" style={[styles.header, { paddingTop: insets.top + SPACE.sm, height }]}>
+    <View testID="plus-header" style={[styles.header, { paddingTop: barTop(insets.top), height }]}>
       <View pointerEvents="none" style={StyleSheet.absoluteFill}>
         <Material role="bar" style={StyleSheet.absoluteFill} />
         {contrast ? <View style={styles.barContrast} /> : null}

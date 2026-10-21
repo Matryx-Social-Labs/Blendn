@@ -1,3 +1,4 @@
+import { barHeight, barTop } from '../../lib/barGeometry'
 import { Image } from 'expo-image'
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useState } from 'react'
@@ -18,7 +19,7 @@ import { Icon } from '../../components/ui/Icon'
 import { PhotoScrim, StatusScrim } from '../../components/ui/GradientFill'
 import { apiClient } from '../../lib/apiClient'
 import { COMMUNITY_GUIDELINES_URL } from '../../lib/communityGuidelines'
-import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
 import { liveNowWord } from '../../lib/home'
 import { openInApp } from '../../lib/links'
 import { Logger } from '../../lib/logger'
@@ -107,8 +108,8 @@ function ChatInfoInner() {
   const [cardFor, setCardFor] = useState<Sender | null>(null)
   // One value for the screen's life; a lazy state, so nothing reads a ref while rendering.
   const [scrollY] = useState(() => new Animated.Value(0))
-  // The inset, then the back button's row: SPACE.sm above and below it.
-  const shieldHeight = insets.top + SPACE.sm + (Platform.OS === 'android' ? SIZE.circleButtonAndroid : SIZE.circleButton) + SPACE.sm
+  // The inset, then the back button's row, then the 10 pt the glass reaches under it.
+  const shieldHeight = barHeight(insets.top, Platform.OS === 'android')
 
   const loadMembers = useCallback(
     (offset = 0) =>
@@ -170,7 +171,7 @@ function ChatInfoInner() {
   return (
     <View style={styles.screen}>
       {/* First in the tree, so a screen reader reaches Back before the list; zIndex keeps it over the scroll and its shield. */}
-      <View style={[styles.back, { top: insets.top + SPACE.sm }]}>
+      <View style={[styles.back, { top: barTop(insets.top) }]}>
         <IconButton icon="chevron-left" tier="media" accessibilityLabel="Back" onPress={() => router.back()} testID="info-back" />
       </View>
 

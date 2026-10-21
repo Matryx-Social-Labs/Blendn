@@ -313,7 +313,7 @@ function IndexInner() {
 
       {/* A link tapped while signed out is held through sign-in; say so (Flow 15 15.12 02). */}
       {pendingEventLink() ? (
-        <View style={[styles.held, { top: insets.top + SPACE.lg }]}>
+        <View style={[styles.held, { top: insets.top + SPACE.md }]}>
           <HeldLink />
         </View>
       ) : null}

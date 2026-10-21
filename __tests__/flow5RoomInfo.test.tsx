@@ -116,8 +116,8 @@ describe('nothing collides with the clock or the back button (drive 2)', () => {
     const { StyleSheet } = require('react-native')
     const { SIZE, SPACE } = require('../lib/design/tokens')
     const shield = StyleSheet.flatten(screen.getByTestId('info-status-shield').props.style)
-    // The inset (whatever the device's) plus the back button's row.
-    expect(shield.height).toBeGreaterThanOrEqual(SPACE.sm + SIZE.circleButton + SPACE.sm)
+    // The inset (whatever the device's), the back button's row and the 10 pt the glass reaches under it.
+    expect(shield.height).toBeGreaterThanOrEqual(SIZE.circleButton + SPACE.sm + SPACE.xxs)
     expect(screen.getByText('ORGANISER').props.numberOfLines).toBe(1)
   })
 })

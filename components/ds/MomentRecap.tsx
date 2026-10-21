@@ -1,3 +1,4 @@
+import { barTop } from '../../lib/barGeometry'
 import { useEffect, type ReactNode } from 'react'
 import { AccessibilityInfo, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
 import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated'
@@ -83,7 +84,7 @@ export function MomentRecap({ face, title, venue, minutes, matches, rated, onRat
       <Orbs set="brand" paused={paused} />
       <Grain />
       {onClose ? (
-        <View style={[styles.close, { top: insets.top + SPACE.sm }]}>
+        <View style={[styles.close, { top: barTop(insets.top) }]}>
           <IconButton icon="chevron-down" accessibilityLabel="Close" onPress={onClose} testID={testID && `${testID}-close`} />
         </View>
       ) : null}

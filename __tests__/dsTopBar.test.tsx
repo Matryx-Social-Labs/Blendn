@@ -45,6 +45,27 @@ beforeEach(() => {
 const draw = (props: Partial<React.ComponentProps<typeof TopBar>> = {}) =>
   render(<TopBar title="Edit profile" onBack={jest.fn()} testID="top" {...props} />)
 
+describe('<TopBar> row top (every frame: the back circle at the safe-area top, `top: 62` on a 62 pt inset)', () => {
+  const INSET = 62 // the iPhone the frames are drawn on
+  beforeEach(() => {
+    jest.spyOn(jest.requireMock('react-native-safe-area-context'), 'useSafeAreaInsets').mockReturnValue({ top: INSET, bottom: 34, left: 0, right: 0 })
+  })
+  afterEach(() => jest.restoreAllMocks())
+
+  it('the row starts at the inset, with no gap above it, and the glass reaches 10 pt under the circle', async () => {
+    await draw()
+    const header = StyleSheet.flatten(screen.getByTestId('top').props.style)
+    expect(header.paddingTop).toBe(INSET)
+    expect(header.paddingBottom).toBe(10)
+  })
+
+  it('the condensed title is centred on the circle row, which starts at the inset', async () => {
+    await draw({ state: 'condensed' })
+    expect(flat('top-condensed').top).toBe(INSET)
+    expect(flat('top-condensed').height).toBe(44)
+  })
+})
+
 describe('<TopBar>', () => {
   it('at rest: no bar, a back circle and the title as a heading', async () => {
     await draw()

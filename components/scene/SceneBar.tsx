@@ -1,3 +1,4 @@
+import { BAR_BOTTOM, barTop } from '../../lib/barGeometry'
 import { Platform, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
 import Animated, { interpolate, useAnimatedStyle, useReducedMotion, type SharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -28,7 +29,7 @@ export function sceneBarTitleSpan(width: number, side: number) {
 }
 
 /** The bar's height: the status bar, then the circles with 8 pt above and below. */
-export const sceneBarHeight = (top: number) => top + SPACE.sm + circle() + SPACE.sm
+export const sceneBarHeight = (top: number) => barTop(top) + circle() + BAR_BOTTOM
 
 export type SceneBarProps = {
   /** The event's name: it crossfades in as the hero's own title scrolls away. */
@@ -67,7 +68,7 @@ export function SceneBar({ title, saved, onBack, onSave, onShare, onMore, scroll
   const side = circle()
   const span = sceneBarTitleSpan(width, side)
   return (
-    <View testID="scene-bar" pointerEvents="box-none" style={[styles.bar, { height, paddingTop: insets.top + SPACE.sm }]}>
+    <View testID="scene-bar" pointerEvents="box-none" style={[styles.bar, { height, paddingTop: barTop(insets.top) }]}>
       <Animated.View testID="scene-bar-glass" pointerEvents="none" style={[StyleSheet.absoluteFill, glassStyle]}>
         <Material role="bar" style={StyleSheet.absoluteFill} />
       </Animated.View>
@@ -84,7 +85,7 @@ export function SceneBar({ title, saved, onBack, onSave, onShare, onMore, scroll
         pointerEvents="none"
         accessibilityElementsHidden
         importantForAccessibility="no-hide-descendants"
-        style={[styles.title, { top: insets.top + SPACE.sm, height: side, left: span.left, right: span.right }, titleStyle]}
+        style={[styles.title, { top: barTop(insets.top), height: side, left: span.left, right: span.right }, titleStyle]}
       >
         <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={[font('bodyStrong', bold), styles.ink]}>
           {title}

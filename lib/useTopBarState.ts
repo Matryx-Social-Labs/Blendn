@@ -3,7 +3,8 @@ import { Platform, type NativeScrollEvent, type NativeSyntheticEvent } from 'rea
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import type { TopBarState } from '../components/ds/TopBar'
-import { SIZE, SPACE } from './design/tokens'
+import { barHeight } from './barGeometry'
+import { SPACE } from './design/tokens'
 
 /** The bar goes glass once the content has moved past this (components/ds/TopBar: rest → scrolled). */
 export const TOP_BAR_SCROLL_THRESHOLD = SPACE.sm
@@ -22,17 +23,17 @@ export function useTopBarState(): { state: TopBarState; scrollProps: { onScroll:
 }
 
 /**
- * How tall the pushed screen's `TopBar` is at rest: the top inset and 8, the back circle (44 iOS · 48 Android), and 8
- * under it. Pure, so a screen's layout can be pinned without a device.
+ * How tall the pushed screen's `TopBar` is at rest: the top inset, the back circle (44 iOS · 48 Android), and 10 under
+ * it (`lib/barGeometry`). Pure, so a screen's layout can be pinned without a device.
  */
 export function topBarHeight(insetTop: number, android: boolean): number {
-  return insetTop + SPACE.sm + (android ? SIZE.circleButtonAndroid : SIZE.circleButton) + SPACE.sm
+  return barHeight(insetTop, android)
 }
 
 /**
  * The bar over its content, as the TopBar page draws it: the content scrolls UNDER the bar, and the glass tier fades
  * in behind the title once it has (`state`). So the bar is pinned over the scroller (`barPin`), and the scroller's
- * first row starts below it (`contentTop`: the bar and 8 more, the frame's 124 pt on a 59 pt inset) with its
+ * first row starts below it (`contentTop`: the bar and 8 more, the frame's 124 pt on a 62 pt inset) with its
  * indicator clear of it (`indicatorTop`).
  *
  * ```tsx

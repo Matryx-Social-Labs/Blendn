@@ -1,3 +1,4 @@
+import { barCircleBottom } from '../../lib/barGeometry'
 import { Image } from 'expo-image'
 import { useState } from 'react'
 import { Platform, StyleSheet, Text, View } from 'react-native'
@@ -128,7 +129,7 @@ export function ProfileHeroStage({ width, scrollY, photos, blurredUri, name, age
 
       <StatusScrim pointerEvents="none" style={[styles.head, { height: HEAD_FADE }]} />
       <PhotoScrim contrast={contrast} pointerEvents="none" style={[styles.foot, { height: FOOT_FADE }]} />
-      <HeroPips count={shown ? photos.length : 0} page={page} top={insets.top + SPACE.sm + circle + PIPS_GAP} />
+      <HeroPips count={shown ? photos.length : 0} page={page} top={barCircleBottom(insets.top, circle > SIZE.circleButton) + PIPS_GAP} />
 
       <View pointerEvents="none" style={styles.nameBlock}>
         <Text

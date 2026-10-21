@@ -1,3 +1,4 @@
+import { barTop } from '../../lib/barGeometry'
 import { router } from 'expo-router'
 import { Platform, StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -15,7 +16,7 @@ export function FormHeader({ testID }: { testID?: string }) {
   const insets = useSafeAreaInsets()
   const android = Platform.OS === 'android'
   return (
-    <View testID={testID} style={[styles.header, { paddingTop: insets.top + SPACE.sm }]}>
+    <View testID={testID} style={[styles.header, { paddingTop: barTop(insets.top) }]}>
       <View style={[styles.row, { minHeight: android ? SIZE.circleButtonAndroid : SIZE.circleButton }]}>
         <IconButton icon={android ? 'arrow-left' : 'chevron-left'} accessibilityLabel="Back" onPress={() => router.back()} testID={testID && `${testID}-back`} />
         <View pointerEvents="none" style={styles.lockup}>

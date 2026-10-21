@@ -1,6 +1,7 @@
+import { barCircleBottom, barTop } from '../../lib/barGeometry'
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useState } from 'react'
-import { ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native'
 import Animated, { LinearTransition, useReducedMotion } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -296,11 +297,11 @@ function EventPreferencesContent() {
     <View style={styles.screen}>
       <Orbs set="feed" />
       {/* First in the tree: the focus order starts at Close. */}
-      <View style={[styles.close, { top: insets.top + SPACE.sm }]}>
+      <View style={[styles.close, { top: barTop(insets.top) }]}>
         <IconButton icon="x" accessibilityLabel="Close" onPress={() => router.back()} testID="prefs-close" />
       </View>
       <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingTop: insets.top + SPACE.sm + SPACE.xxxl + SPACE.lg, paddingBottom: dockHeight + SPACE.xl }]}
+        contentContainerStyle={[styles.scroll, { paddingTop: barCircleBottom(insets.top, Platform.OS === 'android') + SPACE.xl, paddingBottom: dockHeight + SPACE.xl }]}
         showsVerticalScrollIndicator={false}
       >
         {/*

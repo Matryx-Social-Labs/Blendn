@@ -151,7 +151,8 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', alignItems: 'center', gap: SPACE.lg },
   wordmark: { ...TYPE.button },
   floatingBar: { backgroundColor: 'transparent' },
-  floatingRow: { paddingHorizontal: DS_SPACE.lg },
+  // The capsule and the bell start at the safe-area top (Flow 3 `home`: top 62), not centred in the band under it.
+  floatingRow: { paddingHorizontal: DS_SPACE.lg, alignItems: 'flex-start' },
   capsule: {
     height: Platform.OS === 'android' ? SIZE.circleButtonAndroid : SIZE.circleButton,
     paddingHorizontal: DS_SPACE.lg,

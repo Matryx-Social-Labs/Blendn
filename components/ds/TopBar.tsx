@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { type IconName } from '../ui/Icon'
 import { Material } from '../ui/Material'
+import { BAR_BOTTOM, barTop } from '../../lib/barGeometry'
 import { COLOR, FONT_FAMILY, MATERIAL, SIZE, SPACE } from '../../lib/design/tokens'
 import { Button } from './Button'
 import { IconButton } from './IconButton'
@@ -49,7 +50,8 @@ export function TopBar({ title, sub, state = 'rest', onBack, actions = [], save,
   const contrast = useIncreaseContrast()
   const circle = android ? SIZE.circleButtonAndroid : SIZE.circleButton
   const condensed = state === 'condensed'
-  const top = insets.top + SPACE.sm
+  // The circle row starts at the safe-area top, as every frame draws it (`lib/barGeometry`).
+  const top = barTop(insets.top)
   // The condensed title is centred, so it keeps clear of the wider side on both: the back circle, or the actions and Save.
   const [rightWidth, setRightWidth] = useState(0)
   const inset = SPACE.lg + Math.max(circle, rightWidth) + SPACE.md
@@ -104,7 +106,7 @@ export function TopBar({ title, sub, state = 'rest', onBack, actions = [], save,
 
 const styles = StyleSheet.create({
   header: { paddingHorizontal: SPACE.lg },
-  roomBelow: { paddingBottom: SPACE.sm },
+  roomBelow: { paddingBottom: BAR_BOTTOM },
   row: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
   titles: { flex: 1, minWidth: 0 },
   ink: { color: COLOR.textPrimary },

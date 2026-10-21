@@ -1,3 +1,4 @@
+import { barTop } from '../../lib/barGeometry'
 import FadeInUp from '../motion/FadeInUp'
 import { H } from '../../lib/haptics'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
@@ -952,7 +953,7 @@ export default function EventDetail() {
     const network = loadFailure === 'network'
     return (
       <View style={styles.container} testID="scene-failed">
-        <View style={[styles.stateBar, { top: insets.top + SPACE.sm }]}>
+        <View style={[styles.stateBar, { top: barTop(insets.top) }]}>
           <IconButton icon={Platform.OS === 'android' ? 'arrow-left' : 'chevron-left'} accessibilityLabel="Back" onPress={goBack} testID="scene-back" />
         </View>
         {/* Arrives like any other content, rather than cutting in after the skeleton. */}

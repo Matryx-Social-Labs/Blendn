@@ -1,3 +1,4 @@
+import { BAR_BOTTOM, barTop } from '../../lib/barGeometry'
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Keyboard, ScrollView, StyleSheet, Text, View } from 'react-native'
@@ -333,7 +334,7 @@ function RatePeersContent() {
 
   // First in the tree, so a screen reader starts at Close; the glass circle and the "n of m" in Geist Mono.
   const topBar = (
-    <View style={[styles.topBar, { paddingTop: insets.top + SPACE.sm }]}>
+    <View style={[styles.topBar, { paddingTop: barTop(insets.top) }]}>
       <IconButton icon="x" accessibilityLabel="Close" onPress={close} testID="rate-close" />
       {load.kind === 'ready' && person ? (
         <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary]} testID="rate-progress">
@@ -516,7 +517,7 @@ function RatePeersContent() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: COLOR.ink },
-  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACE.lg, paddingBottom: SPACE.sm },
+  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACE.lg, paddingBottom: BAR_BOTTOM },
   // Outgoing and incoming layers overlap here during a swap, so both are absolute.
   banner: { paddingHorizontal: SPACE.gutter },
   stage: { flex: 1 },

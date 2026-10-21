@@ -1,3 +1,4 @@
+import { barTop } from '../../lib/barGeometry'
 import { ReactNode } from 'react'
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -93,7 +94,7 @@ export function OnboardingScreen({
       <Backdrop level={ORB_LEVEL.onboarding} paused={keyboardUp} testID="onboarding-backdrop" />
 
       {/* The glass bar is there on every step, the empty one too (Bring your friends, the first step's missing back). */}
-      <Material role="bar" testID="onboarding-header" style={[styles.header, { paddingTop: insets.top + SPACE.sm }, contrast && IC_HAIRLINE]}>
+      <Material role="bar" testID="onboarding-header" style={[styles.header, { paddingTop: barTop(insets.top) }, contrast && IC_HAIRLINE]}>
         <View style={[styles.headerRow, { height: circle }]}>
           {onBack ? (
             <IconButton icon={android ? 'arrow-left' : 'chevron-left'} accessibilityLabel="Back" onPress={onBack} testID="onboarding-back" />
@@ -170,7 +171,8 @@ export function OnboardingScreen({
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLOR.ink },
   flex: { flex: 1 },
-  header: { paddingHorizontal: SPACE.lg, paddingBottom: SPACE.sm },
+  // Flow 2 `frame`: the glass bar is 104 (the circle 56 to 100, 4 under it); the circle starts at the inset here, as every bar does.
+  header: { paddingHorizontal: SPACE.lg, paddingBottom: SPACE.xs },
   headerRow: { flexDirection: 'row', alignItems: 'center' },
   step: { position: 'absolute', left: 0, right: 0, textAlign: 'center', color: COLOR.textSecondary },
   progress: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.sm },

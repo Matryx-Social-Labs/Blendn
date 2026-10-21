@@ -1,3 +1,4 @@
+import { barTop } from '../../lib/barGeometry'
 import { Image } from 'expo-image'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -74,7 +75,7 @@ export function SceneLightbox({
   const [zoomed, setZoomed] = useState(false)
   // The close button and the counter share one top edge: under the status bar,
   // a step below it, the close at the left as the DS viewer draws it.
-  const top = useSafeAreaInsets().top + SPACE.sm
+  const top = barTop(useSafeAreaInsets().top)
   const bold = useBoldText()
   const listRef = useRef<FlatList<FeedMediaItem>>(null)
 

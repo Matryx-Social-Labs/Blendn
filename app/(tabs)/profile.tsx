@@ -1,3 +1,4 @@
+import { barCircleBottom } from '../../lib/barGeometry'
 import { ScreenProfiler } from '../../lib/perf'
 import { router, useFocusEffect, useIsFocused, useScrollToTop } from 'expo-router'
 import React, { useCallback, useMemo, useState } from 'react'
@@ -24,7 +25,7 @@ import type { Rect } from '../../components/ds/chatShared'
 import { apiClient } from '../../lib/apiClient'
 import { crewsApi } from '../../lib/crewsApi'
 import type { Crew } from '../../lib/crews'
-import { COLOR, SIZE, SPACE, STAGGER } from '../../lib/design/tokens'
+import { COLOR, SPACE, STAGGER } from '../../lib/design/tokens'
 import { Logger } from '../../lib/logger'
 import { interestNames, profileGaps, type NightsStatus } from '../../lib/meProfile'
 import { queryCache } from '../../lib/queryCache'
@@ -296,9 +297,8 @@ function ProfileInner() {
   const openFriends = () => router.push('/friends')
   const openWhatsOn = () => router.navigate('/(tabs)/events' as never)
 
-  const circle = Platform.OS === 'android' ? SIZE.circleButtonAndroid : SIZE.circleButton
-  // The bar's circles end at `top + circle`; the page begins a gutter below them (Flow 6 `me`: circles at 62, the column at 124).
-  const barBottom = insets.top + SPACE.sm + circle
+  // The bar's circles start at the inset and end `circle` below it; the page begins 18 pt under them (Flow 6 `me`: circles at 62, the column at 124).
+  const barBottom = barCircleBottom(insets.top, Platform.OS === 'android')
   const chrome = (
     <ProfileBar
       testID="me-bar"
@@ -456,7 +456,7 @@ function ProfileInner() {
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
         // The tab bar floats over the page's foot: the last section sat under it.
-        contentContainerStyle={[styles.content, { paddingTop: barBottom + SPACE.lg, paddingBottom: TAB_BAR_CLEARANCE }]}
+        contentContainerStyle={[styles.content, { paddingTop: barBottom + SPACE.lg + SPACE.xxs, paddingBottom: TAB_BAR_CLEARANCE }]}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLOR.textSecondary} progressViewOffset={barBottom} />
         }

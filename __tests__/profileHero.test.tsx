@@ -95,10 +95,10 @@ describe('the bar', () => {
     expect(title.props.accessibilityElementsHidden).toBe(true)
   })
 
-  it('sits the circles under the safe-area top, a gap down', async () => {
+  it('starts the circle row at the safe-area top, as the frames do', async () => {
     await bar(0)
     const style = StyleSheet.flatten(screen.getByTestId('bar').props.style)
-    expect(style.paddingTop).toBe(INSET_TOP + SPACE.sm)
+    expect(style.paddingTop).toBe(INSET_TOP)
   })
 
   it('has no Back on a tab root', async () => {
@@ -119,7 +119,7 @@ describe('the paged viewer', () => {
     fireEvent.press(buttons[0])
     expect(onClose).toHaveBeenCalledTimes(1)
     const holder = StyleSheet.flatten(buttons[0].parent?.parent?.props.style)
-    expect(holder.top).toBe(INSET_TOP + SPACE.sm)
+    expect(holder.top).toBe(INSET_TOP)
     expect(SIZE.circleButton).toBeGreaterThanOrEqual(44)
   })
 

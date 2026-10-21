@@ -1,3 +1,4 @@
+import { barTop } from '../../lib/barGeometry'
 import { Image } from 'expo-image'
 import { useCallback, useEffect, useState } from 'react'
 import { Modal, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
@@ -206,7 +207,7 @@ export function ImageViewer({ visible, uri, sender, time, onClose, onMore, from,
         <View style={styles.fill} accessibilityViewIsModal onAccessibilityEscape={onClose}>
           <Animated.View style={[StyleSheet.absoluteFill, styles.ink, inkStyle]} />
           {shown ? (
-            <View style={[styles.chrome, { top: insets.top + SPACE.sm, left: SPACE.lg }]}>
+            <View style={[styles.chrome, { top: barTop(insets.top), left: SPACE.lg }]}>
               <IconButton icon="x" tier="media" accessibilityLabel="Close" onPress={onClose} />
             </View>
           ) : null}
@@ -234,7 +235,7 @@ export function ImageViewer({ visible, uri, sender, time, onClose, onMore, from,
           {shown ? (
             <>
               {onMore ? (
-                <View style={[styles.chrome, { top: insets.top + SPACE.sm, right: SPACE.lg }]}>
+                <View style={[styles.chrome, { top: barTop(insets.top), right: SPACE.lg }]}>
                   <IconButton icon="ellipsis" tier="media" accessibilityLabel="More" onPress={onMore} />
                 </View>
               ) : null}

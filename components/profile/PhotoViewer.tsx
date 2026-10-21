@@ -1,3 +1,4 @@
+import { barTop } from '../../lib/barGeometry'
 import { useCallback, useEffect, useState } from 'react'
 import { FlatList, Modal, Platform, StyleSheet, Text, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native'
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler'
@@ -50,7 +51,7 @@ export function PhotoViewer({ photos, initialIndex = 0, visible, onClose, from, 
   const bold = useBoldText()
   const reduceMotion = useReducedMotion()
   const circle = Platform.OS === 'android' ? SIZE.circleButtonAndroid : SIZE.circleButton
-  const top = insets.top + SPACE.sm
+  const top = barTop(insets.top)
   const start = Math.max(0, Math.min(photos.length - 1, initialIndex))
 
   const [index, setIndex] = useState(start)
