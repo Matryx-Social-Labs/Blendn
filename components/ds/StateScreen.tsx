@@ -4,7 +4,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Icon, type IconName } from '../ui/Icon'
 import { COLOR, RADIUS, SPACE } from '../../lib/design/tokens'
-import { Button, type ButtonKind } from './Button'
+import { Button, type ButtonKind, type ButtonProps } from './Button'
+import { monoCaption } from './MonoFamily'
 import { font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from './shared'
 
 /** One component, two well sizes (the R3 ruling): 56 inline (a list, a card), 80 for a whole screen. */
@@ -33,7 +34,17 @@ export function GlyphWell({ icon, size = 'inline', testID }: { icon: IconName; s
   )
 }
 
-export type StateAction = { label: string; onPress: () => void; kind?: ButtonKind; loading?: boolean; disabled?: boolean }
+export type StateAction = {
+  label: string
+  onPress: () => void
+  kind?: ButtonKind
+  loading?: boolean
+  disabled?: boolean
+  /** A leading glyph (Open the dashboard ↗). */
+  icon?: IconName
+  /** The press-in cue where the frame names one its kind does not carry (`H.primary` on a strong action). */
+  pressHaptic?: ButtonProps['pressHaptic']
+}
 
 export type StateScreenProps = {
   icon: IconName
@@ -48,6 +59,8 @@ export type StateScreenProps = {
   /** In place of the glyph well, a screen's own mark (Flow 15 #12: the disc on a not-found). Decorative. */
   lead?: ReactNode
   note?: string
+  /** The note is a path or an address (Flow 15 not found): Geist Mono, truncated in the middle so both ends show. */
+  noteMono?: boolean
   /** Top to bottom in the fixed order. `kind` defaults to `primary`. */
   actions?: StateAction[]
   /** Under the actions, in the dock (`screen` only): the crash screen's error id, the line that says where to write. */
@@ -69,7 +82,7 @@ export type StateScreenProps = {
  * Text scales freely; the well never does. Increase Contrast: the well's
  * hairline, a white glyph, secondary text lifted to white.
  */
-export function StateScreen({ icon, title, body, bodyLink, lead, note, actions = [], foot, busy = false, variant = 'inline', testID }: StateScreenProps) {
+export function StateScreen({ icon, title, body, bodyLink, lead, note, noteMono = false, actions = [], foot, busy = false, variant = 'inline', testID }: StateScreenProps) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const insets = useSafeAreaInsets()
@@ -97,7 +110,15 @@ export function StateScreen({ icon, title, body, bodyLink, lead, note, actions =
           <BodyWithLink body={body} link={bodyLink} />
         </Text>
       ) : null}
-      {note ? <Text style={[font('meta', bold), styles.center, { color: contrast ? COLOR.textSecondary : COLOR.textTertiary }]}>{note}</Text> : null}
+      {note ? (
+        <Text
+          numberOfLines={noteMono ? 2 : undefined}
+          ellipsizeMode={noteMono ? 'middle' : undefined}
+          style={[noteMono ? monoCaption(bold) : font('meta', bold), styles.center, { color: contrast ? COLOR.textSecondary : COLOR.textTertiary }]}
+        >
+          {note}
+        </Text>
+      ) : null}
     </View>
   )
   const buttons = actions.map(({ kind = 'primary', loading, ...action }) => (

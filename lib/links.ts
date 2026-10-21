@@ -44,6 +44,10 @@ export async function openInApp(url: string): Promise<void> {
   })
 }
 
+/** Where organisers, venue owners and sponsors sign in (Flow 15 #2). Not one of our in-app pages: it opens in the browser. */
+export const DASHBOARD_HOST = 'dashboard.blendn.app'
+export const DASHBOARD_URL = `https://${DASHBOARD_HOST}`
+
 const OUR_HOSTS: ReadonlySet<string> = new Set(['blendn.app', 'www.blendn.app'])
 
 export function isOurPage(url: string): boolean {

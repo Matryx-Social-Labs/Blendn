@@ -16,6 +16,8 @@ import { SegmentedControl } from '../components/ds/SegmentedControl'
 import { TextField } from '../components/ds/TextField'
 import { font, useBoldText } from '../components/ds/shared'
 import { COLOR, SPACE } from '../lib/design/tokens'
+import { setAccountState } from '../lib/accountState'
+import { accountRefusalOf } from '../lib/sessionEnd'
 import { signInWithEmail, signUp } from '../lib/useAuth'
 import { KEYBOARD_BEHAVIOR, useKeyboardShown } from '../lib/keyboard'
 import { accountAgeError } from '../lib/onboarding'
@@ -174,6 +176,16 @@ export default function SignIn() {
         : await signInWithEmail(trimmedEmail, password, deviceInfo)
 
       if (!result.success) {
+        /*
+         * A suspended or a staff account is not a form to fix: the landing says so on a screen of its own (Flow 15 #1, #2),
+         * with no way to retry, so the form steps aside for it.
+         */
+        const refusal = isSignup ? null : accountRefusalOf(result)
+        if (refusal === 'suspended' || refusal === 'staff') {
+          setAccountState({ kind: refusal, sentence: result.error })
+          router.back()
+          return
+        }
         /*
          * Surface the server's message rather than a generic one. Signup
          * failures are specific and actionable — "that email is already

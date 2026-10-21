@@ -19,7 +19,6 @@ import FadeInUp from '../components/motion/FadeInUp'
 import ScalePress from '../components/motion/ScalePress'
 import { DiscMark } from '../components/ds/DiscMark'
 import { Spinner } from '../components/ds/Loader'
-import { StateScreen } from '../components/ds/StateScreen'
 import { font, PRESSED_WASH, useBoldText } from '../components/ds/shared'
 import { Icon } from '../components/ui/Icon'
 import { LegalLine } from '../components/LegalLine'
@@ -27,10 +26,17 @@ import { Logger } from '../lib/logger'
 import { COLOR, DURATION, FONT_FAMILY, ICON, PRESS, RADIUS, RISE, SIZE, SPACE, STAGGER } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { OPACITY } from '../lib/theme'
-import { SESSION_ENDED_NOTICE, consumeSessionEndedNotice } from '../lib/sessionEvents'
+import { setAccountState, useAccountState } from '../lib/accountState'
+import { pendingEventLink } from '../lib/pendingRoute'
+import { accountRefusalOf, SESSION_END_NOTICE } from '../lib/sessionEnd'
+import { consumeSessionEnd } from '../lib/sessionEvents'
 import { socialSignInMessage } from '../lib/signInRefusal'
 import { retryAuth, signInWithApple, signInWithGoogle, useAuth } from '../lib/useAuth'
 import { PendingInvite } from '../components/friends/PendingInvite'
+import { AccountStateScreen } from '../components/system/AccountStateScreen'
+import { SystemScreen } from '../components/system/SystemScreen'
+import { AUTO_RETRY_MS, backByLabel, outageNote } from '../lib/outage'
+import { HeldLink } from '../components/system/HeldLink'
 
 /** The mark alone, used only on the brief holding state (Flow 1 landing 08). */
 const MONOGRAM_HEIGHT = 96
@@ -49,7 +55,9 @@ const GOOGLE_FILL = '#FFFFFF'
 const GOOGLE_INK = '#1F1F1F'
 
 function IndexInner() {
-  const { user, loading, unreachable } = useAuth()
+  const { user, loading, unreachable, outage } = useAuth()
+  // An account the server refused: a screen of its own, with no sign-in buttons on it (Flow 15 15.1 to 15.3).
+  const accountState = useAccountState()
   const bold = useBoldText()
   const insets = useSafeAreaInsets()
   const window = useWindowDimensions()
@@ -93,18 +101,34 @@ function IndexInner() {
   const [notice, setNotice] = useState<string | null>(null)
   useEffect(() => {
     if (user || loading || unreachable) return
-    consumeSessionEndedNotice().then((ended) => {
-      if (ended) setNotice(typeof ended === 'string' ? ended : SESSION_ENDED_NOTICE)
+    consumeSessionEnd().then((end) => {
+      if (!end) return
+      const { reason, sentence } = end
+      // Suspended, a staff account, a deleted one: not a notice over the sign-in buttons but a screen (Flow 15 15.1 to 15.3).
+      if (reason === 'suspended' || reason === 'staff' || reason === 'deleted') return setAccountState({ kind: reason, sentence })
+      // Signed out elsewhere, a password reset: the reason, in the dock (15.4). Otherwise the server's sentence, or the generic line.
+      setNotice(reason === 'expired' && sentence ? sentence : SESSION_END_NOTICE[reason])
     })
   }, [user, loading, unreachable])
 
   // Navigation is handled centrally in RootLayout to avoid race conditions/loops
 
+  /** How many times the can't-reach screen has tried, by hand or by itself ("Tried 2×"). */
+  const [tries, setTries] = useState(0)
   /** Try again on the unreachable screen: a second failure is answered once (the first was the primary's press-in). */
   const tryAgain = async () => {
     const state = await retryAuth()
+    setTries((n) => n + 1)
     if (state.unreachable) H.error()
   }
+  // It keeps trying by itself, silently (Flow 15 15.13): no haptic, the button spins as it does for a hand's try.
+  useEffect(() => {
+    if (!unreachable) return
+    const timer = setInterval(() => {
+      void retryAuth().then(() => setTries((n) => n + 1))
+    }, AUTO_RETRY_MS)
+    return () => clearInterval(timer)
+  }, [unreachable])
 
   const handleGoogleSignIn = async () => {
     if (signingIn) return
@@ -129,9 +153,11 @@ function IndexInner() {
           // The server's reason when it refused the account (SCRUM-289);
           // thrown into the catch below it became the generic line.
           Logger.error('auth', 'Backend auth error', { error: result.error, errorCode: result.errorCode })
-          setError(socialSignInMessage('Google', result))
           // The server said no: answered once, as the refusal lands (not for a cancelled chooser).
           H.error()
+          const refusal = accountRefusalOf(result)
+          if (refusal) return setAccountState({ kind: refusal, sentence: result.error })
+          setError(socialSignInMessage('Google', result))
           return
         }
 
@@ -195,8 +221,10 @@ function IndexInner() {
 
       if (!result.success) {
         Logger.error('auth', 'Backend auth error', { error: result.error, errorCode: result.errorCode })
-        setError(socialSignInMessage('Apple', result))
         H.error()
+        const refusal = accountRefusalOf(result)
+        if (refusal) return setAccountState({ kind: refusal, sentence: result.error })
+        setError(socialSignInMessage('Apple', result))
         return
       }
 
@@ -225,20 +253,25 @@ function IndexInner() {
    * that was never undone. Checked before `loading` so Try again keeps this
    * screen, with its button busy, instead of dropping to the splash.
    */
+  if (accountState && !user) return <AccountStateScreen state={accountState} />
+
   if (unreachable) {
+    const maintenance = outage?.kind === 'maintenance'
+    const back = outage?.kind === 'maintenance' ? backByLabel(outage.until) : null
     return (
-      <View style={styles.root}>
-        <Backdrop level={ORB_LEVEL.landing} />
-        <StateScreen
-          variant="screen"
-          icon="cloud-off"
-          title="Can’t reach Blend’n"
-          body="You’re still signed in. Check your connection and try again."
-          // The state's one action, so it is the gradient primary: its press plays H.primary, a second failure H.error.
-          actions={[{ label: 'Try again', loading, onPress: () => void tryAgain() }]}
-          testID="unreachable"
-        />
-      </View>
+      <SystemScreen
+        icon={maintenance ? 'wrench' : 'cloud-off'}
+        title={maintenance ? 'Back in a moment' : 'Can’t reach Blend’n'}
+        body={
+          maintenance
+            ? `Blend’n is being worked on. You’re still signed in.${back ? ` Expected back by ${back}.` : ''}`
+            : 'You’re still signed in. Nothing you saved or said has gone anywhere.'
+        }
+        note={maintenance ? undefined : outageNote(tries)}
+        // The state's one action: the gradient primary when the server is down (H.primary, a second failure H.error); maintenance is the secondary, since pressing it will not bring it back sooner.
+        actions={[{ label: 'Try again', kind: maintenance ? 'secondary' : 'primary', loading, onPress: () => void tryAgain() }]}
+        testID="unreachable"
+      />
     )
   }
 
@@ -277,6 +310,13 @@ function IndexInner() {
   return (
     <View style={styles.root}>
       <Backdrop level={ORB_LEVEL.landing} enter />
+
+      {/* A link tapped while signed out is held through sign-in; say so (Flow 15 15.12 02). */}
+      {pendingEventLink() ? (
+        <View style={[styles.held, { top: insets.top + SPACE.lg }]}>
+          <HeldLink />
+        </View>
+      ) : null}
 
       <Animated.View style={[styles.brand, { paddingTop: Math.max(0, window.height * LOCKUP_TOP - insets.top) }, settle]}>
         <Lockup size="landing" testID="landing-lockup" />
@@ -404,6 +444,7 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLOR.ink },
   resolving: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
 
+  held: { position: 'absolute', left: SPACE.gutter, right: SPACE.gutter, zIndex: 1 },
   brand: { flex: 1, alignItems: 'center', gap: SPACE.lg, paddingHorizontal: SPACE.gutter },
   tagline: { color: COLOR.textSecondary, textAlign: 'center' },
 

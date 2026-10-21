@@ -50,16 +50,32 @@ export function takePendingRoute(): Href | null {
  */
 export function pendingInviteToken(): string | null {
   const target = pending as unknown
-  let path: string | null = null
-  if (typeof target === 'string') {
-    path = target
-  } else if (target && typeof target === 'object') {
+  if (target && typeof target === 'object') {
     const t = target as { pathname?: unknown; params?: { token?: unknown } }
     if (t.pathname === '/f/[token]' && typeof t.params?.token === 'string') return t.params.token || null
-    if (typeof t.pathname === 'string') path = t.pathname
   }
-  const match = path?.match(/^\/f\/([^/?#]+)/)
+  const match = pendingPath()?.match(/^\/f\/([^/?#]+)/)
   return match ? decodeURIComponent(match[1]) : null
+}
+
+/** The held target's path, whichever shape it was held in. */
+function pendingPath(): string | null {
+  const target = pending as unknown
+  if (typeof target === 'string') return target
+  if (target && typeof target === 'object') {
+    const t = target as { pathname?: unknown }
+    if (typeof t.pathname === 'string') return t.pathname
+  }
+  return null
+}
+
+/**
+ * Whether an event's link is waiting for sign-in (Flow 15 15.12 "Sign in to open this"): the landing says a link is held,
+ * so the sign-in does not look like it dropped it. The event's name is not asked for: the public link says nothing to
+ * someone who has not signed in.
+ */
+export function pendingEventLink(): boolean {
+  return /^\/event\//.test(pendingPath() ?? '')
 }
 
 /** Tests only. */

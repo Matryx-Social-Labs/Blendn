@@ -3,6 +3,7 @@ import { AppState } from 'react-native'
 import { apiClient, AuthUser, TokenStorage } from './apiClient'
 import { forgetAuthMethod, rememberAuthMethod } from './authMethod'
 import { Logger } from './logger'
+import { outageFrom, type Outage } from './outage'
 import { syncPurchasesUser } from './purchases'
 import { clearOutbox } from './chatOutbox'
 import { clearRoomSignal } from './roomSignal'
@@ -42,6 +43,8 @@ export interface AuthState {
    * sign-in the person does not need.
    */
   unreachable: boolean
+  /** Why it could not be reached, while `unreachable`: down, or being worked on until a time (`lib/outage.ts`). */
+  outage: Outage | null
 }
 
 /*
@@ -54,6 +57,7 @@ const UNINITIALIZED: AuthState = {
   user: null,
   isNewAccount: false,
   unreachable: false,
+  outage: null,
   loading: true,
   initialized: false,
 }
@@ -68,6 +72,8 @@ let authStateListeners: ((state: AuthState) => void)[] = []
 // one that has run `pod install`. That made the same source typecheck on one
 // machine and fail on another. This form is correct under either resolution.
 let sessionCheckInterval: ReturnType<typeof setInterval> | null = null
+/** How the last session read failed, for the can't-reach screen: the server said it is being worked on, or it said nothing. */
+let lastSessionFailure: { errorCode?: string; retryAfter?: number } | null = null
 let isInitializing = false // Prevent concurrent initialization
 let initializationPromise: Promise<AuthState> | null = null // Promise-based wait instead of polling
 let appStateListenerRegistered = false
@@ -147,6 +153,7 @@ const initializeAuth = async (): Promise<AuthState> => {
         if (result.success && result.data) {
           await signInVerified(result.data, 'Session verified')
         } else {
+          lastSessionFailure = { errorCode: result.errorCode, retryAfter: result.retryAfter }
           /*
            * Signed out only when the server refused the refresh token.
            *
@@ -257,6 +264,7 @@ const keepStoredSession = async () => {
     loading: false,
     initialized: true,
     unreachable: true,
+    outage: outageFrom(lastSessionFailure),
   })
 }
 
@@ -506,7 +514,8 @@ export const signInWithEmail = async (
           errorCode: result.errorCode,
         }
       }
-      return { success: false, error: result.error || 'Sign in failed' }
+      // The code travels so the form can tell a refused account (suspended, staff) from a failed attempt (Flow 15 #1, #2).
+      return { success: false, error: result.error || 'Sign in failed', errorCode: result.errorCode }
     }
   } catch (error) {
     Logger.error('auth', 'Email sign in exception', { error })

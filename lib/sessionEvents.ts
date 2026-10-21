@@ -16,8 +16,12 @@
  * the notice could be tested only by its source text (SCRUM-292).
  */
 
+import { classifySessionEnd, SESSION_END_CODES, type SessionEndReason } from './sessionEnd'
+
 const _listeners = new Set<() => void>()
 const ENDED_KEY = 'blendn.session.endedByServer'
+/** The typed reason beside it (Flow 15 #1 to #4): `suspended`, `staff`, `deleted`, `elsewhere`, `reset`. Absent for the generic end. */
+const REASON_KEY = 'blendn.session.endReason'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const storage = async (): Promise<typeof import('@react-native-async-storage/async-storage').default> =>
   require('@react-native-async-storage/async-storage').default
@@ -39,11 +43,17 @@ let endRecorded = false
  * Android (SCRUM-93): a suspended account was signed out within seconds and
  * told only "You were signed out", which reads as a glitch, not a decision.
  */
-export function markSessionExpired(reason?: string) {
+export function markSessionExpired(reason?: string, errorCode?: string) {
   const sentence = reason?.trim()
-  if (sentence || !endRecorded) {
+  const kind = classifySessionEnd({ error: sentence, errorCode })
+  // A sentence or a code the server chose is more specific than the generic marker, and replaces it; never the reverse.
+  const specific = Boolean(sentence) || Boolean(errorCode && SESSION_END_CODES[errorCode])
+  if (specific || !endRecorded) {
     storage()
-      .then((s) => s.setItem(ENDED_KEY, sentence || '1'))
+      .then(async (s) => {
+        await s.setItem(ENDED_KEY, sentence || '1')
+        if (kind !== 'expired') await s.setItem(REASON_KEY, kind)
+      })
       .catch(() => {})
   }
   endRecorded = true
@@ -60,7 +70,10 @@ export function markSessionExpired(reason?: string) {
 export function markSessionStarted() {
   endRecorded = false
   storage()
-    .then((s) => s.removeItem(ENDED_KEY))
+    .then(async (s) => {
+      await s.removeItem(ENDED_KEY)
+      await s.removeItem(REASON_KEY)
+    })
     .catch(() => {})
 }
 
@@ -79,9 +92,31 @@ export async function consumeSessionEndedNotice(): Promise<string | boolean> {
     const stored = await s.getItem(ENDED_KEY)
     if (stored === null) return false
     await s.removeItem(ENDED_KEY)
+    await s.removeItem(REASON_KEY)
     return stored === '1' ? true : stored
   } catch {
     return false
+  }
+}
+
+/**
+ * Once, with its reason, for the visit that follows a session the server ended: what the landing draws (Flow 15 #1 to
+ * #4). `sentence` is the server's own words when it gave any. Null when no session ended.
+ */
+export async function consumeSessionEnd(): Promise<{ reason: SessionEndReason; sentence?: string } | null> {
+  try {
+    const s = await storage()
+    const stored = await s.getItem(ENDED_KEY)
+    if (stored === null) return null
+    const typed = await s.getItem(REASON_KEY)
+    await s.removeItem(ENDED_KEY)
+    await s.removeItem(REASON_KEY)
+    const sentence = stored === '1' ? undefined : stored
+    // An end recorded before the reason was kept: the sentence still says which it was.
+    const reason = (typed as SessionEndReason | null) ?? classifySessionEnd({ error: sentence })
+    return { reason, sentence }
+  } catch {
+    return null
   }
 }
 

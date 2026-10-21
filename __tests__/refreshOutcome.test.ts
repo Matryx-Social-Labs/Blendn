@@ -42,12 +42,12 @@ describe('a session the server ended is explained on the entry screen (SCRUM-142
     // What is written, and when a later call may not overwrite it, is driven
     // for real in session-end-reason.test.ts (SCRUM-292).
     expect(events).toMatch(/await s\.removeItem\(ENDED_KEY\)/)
-    expect(entry).toContain('consumeSessionEndedNotice().then((ended) => {')
+    expect(entry).toContain('consumeSessionEnd().then((end) => {')
     expect(entry).toMatch(/\{!error && notice && \(\s*<Text style=\{\[[^}]*styles\.notice\]\} accessibilityRole="alert">/)
   })
 
   it('says what happened and what to do', () => {
-    expect(events).toMatch(/SESSION_ENDED_NOTICE = 'You were signed out\. Sign in again/)
+    expect(readFileSync(join(__dirname, '..', 'lib', 'sessionEnd.ts'), 'utf8')).toMatch(/expired: 'You were signed out\. Sign in again/)
   })
 })
 
@@ -76,8 +76,8 @@ describe('the reason travels with the sign-out (SCRUM-93)', () => {
     // told only "You were signed out" — the server had said why at refresh.
     const refresh = src.slice(src.indexOf('private async refreshTokens'))
     expect(refresh).toMatch(/if \(response\.status === 403\) \{[\s\S]*rejectedReason = body\.error/)
-    expect(src).toContain('markSessionExpired(rejectedReason)')
+    expect(src).toContain('markSessionExpired(rejectedReason, rejectedCode)')
     expect(events).toMatch(/return stored === '1' \? true : stored/)
-    expect(entry).toContain("setNotice(typeof ended === 'string' ? ended : SESSION_ENDED_NOTICE)")
+    expect(entry).toContain("setNotice(reason === 'expired' && sentence ? sentence : SESSION_END_NOTICE[reason])")
   })
 })

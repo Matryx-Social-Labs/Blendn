@@ -2,6 +2,8 @@ import * as Application from 'expo-application'
 import Constants from 'expo-constants'
 import { Platform } from 'react-native'
 
+export { appVersionNumber } from './appVersion'
+
 /**
  * Where people reach us, and what we need to know when they do.
  *

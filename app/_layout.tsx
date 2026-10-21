@@ -25,6 +25,8 @@ import { LiveAtVenue } from '../components/LiveAtVenue';
 import { notePathname } from '../lib/paywall';
 import { SheetHost } from '../components/SheetHost';
 import { useAuth } from '../lib/useAuth';
+import { useUpdateRequired } from '../lib/updateRequired';
+import { UpdateRequiredScreen } from '../components/system/UpdateRequiredScreen';
 import { EMBER } from '../lib/theme';
 import { handleAndroidBack } from '../lib/androidBack';
 import { CoachMarkHost } from '../components/ds/CoachMarkHost';
@@ -81,6 +83,8 @@ const INTRO_ASSET = require('../assets/logo/intro.webp');
 
 function RootLayout() {
   const { user, loading, isNewAccount, unreachable } = useAuth();
+  // The server no longer serves this build: one screen over everything, with the store button (Flow 15 15.14).
+  const updateRequired = useUpdateRequired();
   const pathname = usePathname();
   // The paywall never arrives by itself over onboarding, a check-in or a chat (lib/paywall.ts).
   useEffect(() => notePathname(pathname), [pathname]);
@@ -755,6 +759,11 @@ function RootLayout() {
             Gated on a signed-in user: with nobody signed in there is no
             check-in to watch, and the fence lookup would 401 on a timer.
           */}
+          {updateRequired ? (
+            <View style={StyleSheet.absoluteFill}>
+              <UpdateRequiredScreen />
+            </View>
+          ) : null}
           {user ? <PresenceMonitor /> : null}
           {/* Your Go Live at a place: its pings, the expiry prompt, and `live:ended` (step 5). */}
           {user ? <LiveAtVenue /> : null}

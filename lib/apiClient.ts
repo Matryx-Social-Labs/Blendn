@@ -20,6 +20,9 @@ import type { NotificationFeed } from './notificationFormat'
 import type { Friend, FriendInvite, FriendPerson, FriendProfile, FriendRequest, FriendState } from './friends'
 import type { BoardPost, BoardReportReason, BoardRequestStatus, BoardRequests } from './board'
 import type { Badge, Choice, Overlap, ProfileOptions } from './aboutYou'
+import { SESSION_END_CODES } from './sessionEnd'
+import { appVersionNumber } from './appVersion'
+import { isUpdateRefusal, markUpdateRequired } from './updateRequired'
 import { markSessionExpired, markSessionStarted } from './sessionEvents'
 import { noteServerDate } from './serverClock'
 import { getPushTokenRef, setPushTokenRef } from './pushTokenRef'
@@ -1065,6 +1068,8 @@ let refreshRetryAttempt = 0
 let refreshRetryTimer: ReturnType<typeof setTimeout> | null = null
 /** The server's sentence from the last rejected refresh, if it gave one. */
 let rejectedReason: string | undefined
+/** The refresh's `errorCode` when it is one of the reasons the server names (`lib/sessionEnd.ts`), 401 or 403. */
+let rejectedCode: string | undefined
 
 // API Client Class
 class ApiClientClass {
@@ -1266,6 +1271,7 @@ class ApiClientClass {
       if (response.ok) {
         return { success: true } as ApiResponse<T>
       }
+      if (isUpdateRefusal(response.status, undefined)) markUpdateRequired()
       return { success: false, error: this.buildErrorMessage(response, null, endpoint) }
     }
 
@@ -1283,6 +1289,8 @@ class ApiClientClass {
     }
 
     if (!response.ok) {
+      // A build the server no longer serves: the whole app says so (Flow 15 15.14), not this one screen.
+      if (isUpdateRefusal(response.status, parsed.errorCode)) markUpdateRequired()
       return {
         success: false,
         // Carried through so a screen can branch on the reason rather than
@@ -1323,6 +1331,8 @@ class ApiClientClass {
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
+      // Which build is asking, so the server can refuse one it no longer serves (Flow 15 15.14).
+      'X-App-Version': appVersionNumber(),
       ...(options.headers as Record<string, string>),
     }
 
@@ -1372,8 +1382,9 @@ class ApiClientClass {
             return { success: false, error: TIMEOUT_MESSAGE }
           }
           await TokenStorage.clearAll()
-          markSessionExpired(rejectedReason)
+          markSessionExpired(rejectedReason, rejectedCode)
           rejectedReason = undefined
+          rejectedCode = undefined
           return { success: false, error: 'Session expired. Please sign in again.' }
         }
 
@@ -1459,8 +1470,15 @@ class ApiClientClass {
           // in the attendee app. Keep the sentence for the entry screen.
           if (response.status === 403) {
             try {
-              const body = JSON.parse(raw) as { error?: unknown }
+              const body = JSON.parse(raw) as { error?: unknown; errorCode?: unknown }
               if (typeof body?.error === 'string') rejectedReason = body.error
+              if (typeof body?.errorCode === 'string') rejectedCode = body.errorCode
+            } catch {}
+          } else if (response.status === 401) {
+            // A 401's sentence ("Invalid or expired refresh token") is not for a person; only a named reason is kept.
+            try {
+              const body = JSON.parse(raw) as { errorCode?: unknown }
+              if (typeof body?.errorCode === 'string' && body.errorCode in SESSION_END_CODES) rejectedCode = body.errorCode
             } catch {}
           }
           return 'rejected'

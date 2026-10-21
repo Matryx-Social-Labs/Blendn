@@ -39,6 +39,7 @@ jest.mock('../lib/logger', () => ({
 
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import {
+  consumeSessionEnd,
   consumeSessionEndedNotice,
   markSessionExpired,
   markSessionStarted,
@@ -170,5 +171,98 @@ describe('the notice belongs to one session end', () => {
     markSessionExpired()
     unsubscribe()
     expect(heard).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('the reason is typed (Flow 15 15.1 to 15.4)', () => {
+  const STAFF = 'This app is for attendees. Organisers, venue owners and sponsors sign in at the dashboard.'
+
+  it('a suspension through the real refresh path is read once as suspended, with the sentence', async () => {
+    await TokenStorage.setTokens('access-1', 'refresh-1')
+    suspendedServer()
+    await apiClient.getSession()
+    await settle()
+    expect(await consumeSessionEnd()).toEqual({ reason: 'suspended', sentence: SUSPENDED })
+    expect(await consumeSessionEnd()).toBeNull()
+  })
+
+  it('a staff account is told apart from a suspended one by its sentence', async () => {
+    markSessionStarted()
+    markSessionExpired(STAFF, 'FORBIDDEN')
+    await settle()
+    expect(await consumeSessionEnd()).toEqual({ reason: 'staff', sentence: STAFF })
+  })
+
+  it('a code the server names wins over the sentence, and a code alone carries no sentence', async () => {
+    markSessionStarted()
+    markSessionExpired(undefined, 'SESSION_REVOKED_ELSEWHERE')
+    await settle()
+    expect(await consumeSessionEnd()).toEqual({ reason: 'elsewhere', sentence: undefined })
+    markSessionStarted()
+    markSessionExpired(undefined, 'PASSWORD_RESET')
+    await settle()
+    expect(await consumeSessionEnd()).toEqual({ reason: 'reset', sentence: undefined })
+  })
+
+  it('the generic end is expired, and a specific one replaces it but never the reverse', async () => {
+    markSessionStarted()
+    markSessionExpired()
+    await settle()
+    expect(await consumeSessionEnd()).toEqual({ reason: 'expired', sentence: undefined })
+
+    markSessionStarted()
+    markSessionExpired()
+    markSessionExpired(undefined, 'PASSWORD_RESET')
+    markSessionExpired()
+    await settle()
+    expect(await consumeSessionEnd()).toEqual({ reason: 'reset', sentence: undefined })
+  })
+
+  it('a 401 from the refresh keeps only a named reason, never its own sentence', async () => {
+    await TokenStorage.setTokens('access-1', 'refresh-1')
+    global.fetch = jest.fn(async (input: RequestInfo | URL) =>
+      String(input).endsWith('/api/mobile/auth/refresh')
+        ? json(401, { success: false, error: 'Invalid or expired refresh token', errorCode: 'SESSION_REVOKED_ELSEWHERE' })
+        : json(401, { success: false, error: 'Unauthorized' })
+    ) as typeof fetch
+    await apiClient.getSession()
+    await settle()
+    expect(await consumeSessionEnd()).toEqual({ reason: 'elsewhere', sentence: undefined })
+
+    await TokenStorage.setTokens('access-2', 'refresh-2')
+    markSessionStarted()
+    global.fetch = jest.fn(async (input: RequestInfo | URL) =>
+      String(input).endsWith('/api/mobile/auth/refresh')
+        ? json(401, { success: false, error: 'Invalid or expired refresh token', errorCode: 'UNAUTHORIZED' })
+        : json(401, { success: false, error: 'Unauthorized' })
+    ) as typeof fetch
+    await apiClient.getSession()
+    await settle()
+    expect(await consumeSessionEnd()).toEqual({ reason: 'expired', sentence: undefined })
+  })
+
+  it('an end recorded before the reason was kept is classified from its sentence', async () => {
+    await AsyncStorage.setItem('blendn.session.endedByServer', STAFF)
+    expect(await consumeSessionEnd()).toEqual({ reason: 'staff', sentence: STAFF })
+  })
+})
+
+describe('every request names the build (Flow 15 15.14), and a refusal to serve it marks the app', () => {
+  it('sends X-App-Version, and 426 or UPDATE_REQUIRED marks update required', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const gate = require('../lib/updateRequired') as typeof import('../lib/updateRequired')
+    gate.resetUpdateRequired()
+    let sent: Record<string, string> = {}
+    global.fetch = jest.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      sent = init?.headers as Record<string, string>
+      return json(426, { success: false, error: 'Update Blend’n', errorCode: 'UPDATE_REQUIRED' })
+    }) as typeof fetch
+    await apiClient.getSession()
+    expect(sent['X-App-Version']).toBeDefined()
+    expect(sent['X-App-Version']).not.toBe('')
+    expect(gate.isUpdateRequired()).toBe(true)
+    expect(gate.isUpdateRefusal(426, undefined)).toBe(true)
+    expect(gate.isUpdateRefusal(400, 'UPDATE_REQUIRED')).toBe(true)
+    expect(gate.isUpdateRefusal(403, 'FORBIDDEN')).toBe(false)
   })
 })
