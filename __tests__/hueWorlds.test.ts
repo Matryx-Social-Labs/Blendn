@@ -19,6 +19,7 @@ const ROSE = [
   'app/friends/add.tsx',
   'app/friends/requests.tsx',
   'app/friends/[userId].tsx',
+  'app/f/[token].tsx',
   'app/rate/[eventId].tsx',
   'components/blendn/BlendnScreen.tsx',
 ]

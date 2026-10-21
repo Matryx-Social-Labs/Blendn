@@ -80,15 +80,15 @@ export function inviteCta(state: FriendState): { label: string; action: 'ask' | 
 export function inviteLine(state: FriendState): string {
   switch (state) {
     case 'self':
-      return 'This is your own invite link.'
+      return 'This is your own invite link. Share it with the people you want here.'
     case 'friends':
-      return "You're friends."
+      return 'You’re friends.'
     case 'requested':
-      return "Your request is waiting. You'll hear when they accept."
+      return 'Your request is waiting. You’ll hear when they accept.'
     case 'incoming':
       return 'They asked to be your friend.'
     case 'none':
-      return "Wants you as a friend on Blend'n."
+      return 'Wants you as a friend on Blend’n.'
   }
 }
 
@@ -103,6 +103,13 @@ export function inviteMessage(url: string): string {
  * A fixed list rather than `toLocaleDateString`: ICU spells September "Sept"
  * in en-GB on one engine and "Sep" on another, and Hermes carries its own.
  */
+/** "Friends since " and "Mar 2026" apart, for the screens that set the date in Geist Mono; `date` is null when there is none to show. */
+export function friendsSinceParts(iso: string): { words: string; date: string | null } {
+  const label = friendsSinceLabel(iso)
+  const words = 'Friends since '
+  return label.startsWith(words) ? { words, date: label.slice(words.length) } : { words: label, date: null }
+}
+
 export function friendsSinceLabel(iso: string): string {
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return 'Friends'

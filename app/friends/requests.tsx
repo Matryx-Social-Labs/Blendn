@@ -5,9 +5,8 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { StateScreen } from '../../components/ds/StateScreen'
 import { TopBar } from '../../components/ds/TopBar'
-import { IncomingRequestRow } from '../../components/friends/IncomingRequestRow'
-import { PersonRowSkeleton } from '../../components/friends/PersonRow'
-import { EMBER, GUTTER, SPACE } from '../../lib/theme'
+import { IncomingRequestRow, RequestSkeleton } from '../../components/friends/IncomingRequestRow'
+import { COLOR, SPACE } from '../../lib/design/tokens'
 import { useFriendRequests } from '../../lib/useFriendRequests'
 import { useTopBarState } from '../../lib/useTopBarState'
 import { HueProvider } from '../../components/ds/shared'
@@ -50,7 +49,7 @@ function FriendRequestsScreenContent() {
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <TopBar title="Requests" state={bar.state} onBack={() => router.back()} />
       {!loaded && !failed ? (
-        <PersonRowSkeleton />
+        <RequestSkeleton />
       ) : (
         <FlatList
           data={incoming}
@@ -65,7 +64,7 @@ function FriendRequestsScreenContent() {
           contentContainerStyle={incoming.length ? styles.list : styles.emptyList}
           ListEmptyComponent={empty}
           // `textSecondary`, the one pull-to-refresh colour (docs/DESIGN_SYSTEM.md).
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={EMBER.textSecondary} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLOR.textSecondary} />}
           showsVerticalScrollIndicator={false}
           {...bar.scrollProps}
         />
@@ -75,9 +74,9 @@ function FriendRequestsScreenContent() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: EMBER.bg },
-  list: { paddingHorizontal: GUTTER, paddingVertical: SPACE.sm },
-  emptyList: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: GUTTER },
+  container: { flex: 1, backgroundColor: COLOR.ink },
+  list: { paddingHorizontal: SPACE.gutter, paddingVertical: SPACE.sm, gap: SPACE.md },
+  emptyList: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: SPACE.gutter },
 })
 
 /** Rose world: one hue on this screen (`HueProvider`). */

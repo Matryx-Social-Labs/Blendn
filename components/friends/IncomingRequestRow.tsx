@@ -1,24 +1,23 @@
-import { StyleSheet, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 
-import { Button } from '../ds/Button'
-import { Text } from '../ui/Text'
+import { COLOR, FONT_FAMILY, RADIUS, SPACE } from '../../lib/design/tokens'
 import type { FriendRequest } from '../../lib/friends'
-import { SPACE } from '../../lib/theme'
+import { Button } from '../ds/Button'
+import { CONTROL_FONT_CAP, font, useBoldText } from '../ds/shared'
+import { SkeletonBlock } from '../Skeleton'
 import { PersonAvatar } from './PersonRow'
 
+/** What is under the name: they came through your link, and the link is the only way in. */
+export const REQUEST_LINE = 'Opened your link · asks to be your friend'
+
 /**
- * Somebody asking to be your friend: Not now, or Accept.
+ * Somebody asking to be your friend (Flow 6 `requestCard`): a `surface` card at radius 24, the face, the name and the line, and the
+ * two answers side by side under them, Not now beside Accept, 48 pt each (`Button size="md"`, the DS has no 44). Not now is the glass-ground secondary: a `surface` fill on a `surface` card would have no edge.
  *
- * The request layout the Banter used before Flow 5's redesign: face, name, and the two
- * answers as 36 pt row actions (`Button size="sm"`, slop to the 44 / 48 target)
- * *under* the name. They used to sit at the row's right edge, where two pills
- * and a long name shared one line and the name lost.
- *
- * Accept is the strong-neutral button (`textPrimary` fill), not the accent. On
- * Add friends, "Share my link" is the screen's one accent; a column of orange
- * Accepts under it made two. Both answers dim while this row's answer is in
- * flight (`busy`), and only this row's. The haptic is the outcome's, when the
- * server says yes (`useFriendRequests`), never the press.
+ * Accept is the strong-neutral button (white, ink label), not the accent. On Add friends, "Share my link" is the screen's one
+ * accent; a column of orange Accepts under it made two. Both answers dim while this row's answer is in flight (`busy`), and only
+ * this row's, which is also what stops a second tap sending a second answer. The haptic is the outcome's, when the server says yes
+ * (`useFriendRequests`), never the press.
  */
 export function IncomingRequestRow({
   request,
@@ -29,38 +28,65 @@ export function IncomingRequestRow({
   busy: boolean
   onRespond: (action: 'accept' | 'dismiss') => void
 }) {
+  const bold = useBoldText()
   const { person } = request
   return (
-    <View style={styles.row}>
-      {/* `PersonRow`'s avatar, so the two lists line up. */}
-      <PersonAvatar person={person} />
-      <View style={styles.body}>
-        <Text variant="bodyStrong" numberOfLines={1} maxFontSizeMultiplier={1.4}>{person.name}</Text>
-        <View style={styles.actions}>
-          <Button
-            kind="tertiary"
-            size="sm"
-            label="Not now"
-            accessibilityLabel={`Not now, ${person.name}`}
-            onPress={() => onRespond('dismiss')}
-            disabled={busy}
-          />
-          <Button
-            kind="strong"
-            size="sm"
-            label="Accept"
-            accessibilityLabel={`Accept ${person.name}`}
-            onPress={() => onRespond('accept')}
-            disabled={busy}
-          />
+    <View style={styles.card}>
+      <View style={styles.who}>
+        <PersonAvatar person={person} />
+        <View style={styles.text}>
+          <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold, FONT_FAMILY.brand[500]), styles.ink]}>
+            {person.name}
+          </Text>
+          <Text numberOfLines={2} style={[font('meta', bold), styles.muted]}>
+            {REQUEST_LINE}
+          </Text>
         </View>
+      </View>
+      <View style={styles.actions}>
+        <Button
+          kind="secondary"
+          size="md"
+          label="Not now"
+          onGlass
+          accessibilityLabel={`Not now, ${person.name}`}
+          onPress={() => onRespond('dismiss')}
+          disabled={busy}
+          style={styles.action}
+        />
+        <Button
+          kind="strong"
+          size="md"
+          label="Accept"
+          accessibilityLabel={`Accept ${person.name}`}
+          onPress={() => onRespond('accept')}
+          disabled={busy}
+          style={styles.action}
+        />
       </View>
     </View>
   )
 }
 
+/** Requests while they load (Flow 6 requests 14): three cards at the card's own height, so the list does not jump when it lands. */
+const SKELETON_CARD = 140
+export function RequestSkeleton() {
+  return (
+    <View testID="request-skeleton" accessibilityLabel="Loading requests" accessibilityState={{ busy: true }} style={styles.skeleton}>
+      {[0, 1, 2].map((i) => (
+        <SkeletonBlock key={i} height={SKELETON_CARD} borderRadius={RADIUS.mediaInCard} />
+      ))}
+    </View>
+  )
+}
+
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.md, paddingVertical: SPACE.md },
-  body: { flex: 1, gap: SPACE.sm },
-  actions: { flexDirection: 'row', gap: SPACE.md },
+  skeleton: { gap: SPACE.md, paddingHorizontal: SPACE.gutter, paddingVertical: SPACE.sm },
+  card: { gap: SPACE.md, padding: SPACE.lg, borderRadius: RADIUS.mediaInCard, backgroundColor: COLOR.surface },
+  who: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
+  text: { flex: 1, minWidth: 0 },
+  actions: { flexDirection: 'row', gap: SPACE.sm },
+  action: { flex: 1 },
+  ink: { color: COLOR.textPrimary },
+  muted: { color: COLOR.textSecondary },
 })

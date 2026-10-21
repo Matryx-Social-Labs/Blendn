@@ -34,7 +34,7 @@ jest.mock('../lib/apiClient', () => ({
 jest.mock('../lib/safetyUtils', () => ({ showUserSafetyActions: jest.fn() }))
 const mockShowToast = jest.fn()
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShowToast }) }))
-jest.mock('../components/PhotoLightbox', () => () => null)
+jest.mock('../components/profile/PhotoViewer', () => ({ PhotoViewer: () => null }))
 jest.mock('../components/Skeleton', () => ({ SkeletonBlock: () => null, SkeletonLine: () => null }))
 // Open, it is one button that sends "hi" — enough to drive what the screen does with the answer.
 jest.mock('../components/grid/ConnectSheet', () => ({
@@ -53,36 +53,32 @@ jest.mock('../components/ds/MomentMatch', () => ({
     return React.createElement(Pressable, { onPress: p.onSayHi }, React.createElement(Text, null, `You and ${p.name} matched`))
   },
 }))
+jest.mock('../components/profile/ProfileHeroStage', () => {
+  const React = require('react')
+  const { Text } = require('react-native')
+  return {
+    heroHeightFor: (w: number) => Math.round(w * 1.3),
+    ProfileHeroStage: (p: { name: string; age?: number | null }) => React.createElement(Text, null, p.age ? `${p.name}, ${p.age}` : p.name),
+  }
+})
 jest.mock('../components/profile/ProfileSections', () => {
   const React = require('react')
-  const { Pressable, Text, View } = require('react-native')
+  const { Text, View } = require('react-native')
   const stub = (label: string) => (p: { title?: string }) => React.createElement(Text, null, p.title ?? label)
   return {
-    ProfileHero: (p: { title: string }) => React.createElement(Text, null, p.title),
+    SECTION_GAP: 28,
+    ProfileSection: (p: { title: string; children: unknown }) => React.createElement(View, null, React.createElement(Text, null, p.title), p.children),
     ProfileBio: stub('bio'),
     ProfileDetail: stub('detail'),
     ProfileGallery: stub('gallery'),
-    ProfileHeading: stub('heading'),
     ProfileInterests: stub('interests'),
-    ProfileActions: (p: { label: string; hint?: string | null; onPress: () => void; disabled?: boolean; onLike?: () => void }) =>
-      React.createElement(
-        View,
-        null,
-        React.createElement(
-          Pressable,
-          { onPress: p.onPress, disabled: p.disabled },
-          React.createElement(Text, null, p.label)
-        ),
-        p.hint ? React.createElement(Text, null, p.hint) : null,
-        p.onLike ? React.createElement(Pressable, { onPress: p.onLike }, React.createElement(Text, null, 'Like')) : null
-      ),
   }
 })
 
 import { router } from 'expo-router'
 import { apiClient } from '../lib/apiClient'
 import { showUserSafetyActions } from '../lib/safetyUtils'
-import UserProfile from '../app/user/[id]'
+import UserProfile, { stillAnonymous } from '../app/user/[id]'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
 const BEN = { id: 'rh_ben', name: 'Ben', photos: ['https://cdn/ben.jpg'], bio: 'Hi', identityVisible: true }
@@ -122,7 +118,7 @@ describe('with the server’s `connection`', () => {
     await render(<UserProfile />)
 
     expect(await screen.findByText('Requested')).toBeTruthy()
-    expect(screen.getByText('Request sent — you can chat once they accept.')).toBeTruthy()
+    expect(screen.getByText('Request sent. You can chat once they accept.')).toBeTruthy()
     expect(api.getMessageRequests).not.toHaveBeenCalled()
   })
 
@@ -144,7 +140,7 @@ describe('with the server’s `connection`', () => {
     await render(<UserProfile />)
 
     expect(await screen.findByText('Connect')).toBeTruthy()
-    expect(screen.getByText('Send a request to start chatting.')).toBeTruthy()
+    expect(screen.getByText('Connect sends a request and reveals your name and photo.')).toBeTruthy()
     expect(api.getConversations).not.toHaveBeenCalled()
   })
 })
@@ -249,7 +245,7 @@ describe('Connect', () => {
     api.createMessageRequest.mockResolvedValue({ success: false, error: 'exists', errorCode: 'CONFLICT' })
     await render(<UserProfile />)
 
-    expect(await screen.findByText('Slow Kite')).toBeTruthy()
+    expect(await screen.findByText('Slow Kite, 27')).toBeTruthy()
     fireEvent.press(await screen.findByText('Connect'))
     fireEvent.press(await screen.findByText('Send request'))
 
@@ -295,7 +291,7 @@ describe('when the profile does not load', () => {
     api.getProfile.mockResolvedValueOnce({ success: false, error: 'No internet connection.' })
     await render(<UserProfile />)
 
-    expect(await screen.findByText("This profile didn't load")).toBeTruthy()
+    expect(await screen.findByText('This profile didn’t load')).toBeTruthy()
     api.getPublicProfile.mockResolvedValueOnce({ success: true, data: { ...BEN, connection: { conversationId: null, request: null } } })
     fireEvent.press(screen.getByText('Try again'))
     expect(await screen.findByText('Connect')).toBeTruthy()
@@ -306,7 +302,7 @@ describe('when the profile does not load', () => {
     api.getProfile.mockResolvedValue({ success: false, error: 'No internet connection.' })
     await render(<UserProfile />)
 
-    fireEvent.press(await screen.findByLabelText('Go back'))
+    fireEvent.press(await screen.findByLabelText('Back'))
     expect(router.back).toHaveBeenCalled()
   })
 
@@ -315,7 +311,7 @@ describe('when the profile does not load', () => {
     api.getProfile.mockResolvedValue({ success: false, error: 'User not found', errorCode: 'NOT_FOUND' })
     await render(<UserProfile />)
 
-    expect(await screen.findByText("This profile isn't available.")).toBeTruthy()
+    expect(await screen.findByText('This profile isn’t available.')).toBeTruthy()
     expect(screen.queryByText('Try again')).toBeNull()
   })
 })
@@ -333,11 +329,11 @@ describe('identity fails closed (the server’s `identityVisible`, nothing else)
     // Titled by the room's pseudonym, never by the name that leaked through.
     expect(await screen.findByText('Cosmic Panda')).toBeTruthy()
     expect(screen.queryByText('Ben')).toBeNull()
-    // One bio block only: the "Still anonymous" note, not theirs.
-    expect(screen.queryAllByText('bio')).toHaveLength(1)
+    // Nothing of theirs is drawn: the note says why, in the pseudonym's name.
+    expect(screen.queryByText('bio')).toBeNull()
     expect(screen.queryByText('detail')).toBeNull()
     expect(screen.queryByText('gallery')).toBeNull()
-    expect(screen.getByText('Still anonymous')).toBeTruthy()
+    expect(screen.getByText(stillAnonymous('Cosmic Panda'))).toBeTruthy()
   })
 
   it('treats identityVisible: false the same, and never titles anybody "Attendee"', async () => {

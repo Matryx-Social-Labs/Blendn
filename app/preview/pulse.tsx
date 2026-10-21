@@ -12,7 +12,7 @@ import {
 import { NotificationBell } from '../../components/pulse/NotificationBell'
 import { PulseHeader } from '../../components/pulse/PulseHeader'
 import { PulseTopBar, TOP_BAR_HEIGHT } from '../../components/pulse/PulseTopBar'
-import { SectionHeader } from '../../components/pulse/SectionHeader'
+import { SectionHeader } from '../../components/ds/SectionHeader'
 import { UpcomingCard } from '../../components/pulse/UpcomingCard'
 import { activeFilterCount, NO_FILTERS, type EventFilters } from '../../lib/eventFilters'
 import { feedPlaylist } from '../../lib/feedMedia'
@@ -185,7 +185,7 @@ export default function PulsePreview() {
         />
 
         <View style={styles.section}>
-          <SectionHeader title="Featured" actionLabel="VIEW ALL" onAction={() => {}} />
+          <SectionHeader title="Featured" action={{ label: 'View all', onPress: () => {} }} />
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}

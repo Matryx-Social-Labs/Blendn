@@ -1,21 +1,27 @@
-import { Ionicons } from '@expo/vector-icons'
 import { router, useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useState } from 'react'
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
-import { LoadError } from '../../components/LoadError'
-import { OptimizedImage } from '../../components/OptimizedImage'
-import { EmberButton } from '../../components/onboarding/EmberControls'
+import { Avatar } from '../../components/ds/Avatar'
+import { Button } from '../../components/ds/Button'
+import { Grain } from '../../components/ds/Grain'
+import { IconButton } from '../../components/ds/IconButton'
+import { Orbs } from '../../components/ds/Orbs'
+import { CONTROL_FONT_CAP, font, HueProvider, useBoldText } from '../../components/ds/shared'
+import { StateScreen } from '../../components/ds/StateScreen'
+import FadeInUp from '../../components/motion/FadeInUp'
+import { SkeletonBlock, SkeletonCircle } from '../../components/Skeleton'
 import { useToast } from '../../components/Toast'
-import { Text } from '../../components/ui/Text'
 import { apiClient } from '../../lib/apiClient'
+import { COLOR, FONT_FAMILY, SPACE } from '../../lib/design/tokens'
 import { inviteCta, inviteLine, type FriendPerson, type FriendState } from '../../lib/friends'
 import { isGone } from '../../lib/loadFailure'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE } from '../../lib/theme'
 
-/** The photo's box and decode hint. */
-const PHOTO = 160
+/** Flow 6 `invite`: the face is 160. */
+const FACE = 160
+/** The loading shapes: a title block and a line, under the face. */
+const SKELETON = { title: 40, line: 20 } as const
 
 /**
  * Where an invite link lands: `https://www.blendn.app/f/<token>`, or
@@ -36,6 +42,7 @@ const PHOTO = 160
  * sends them off to ask for a new one they don't need.
  */
 export default function InviteScreen() {
+  const bold = useBoldText()
   const { token } = useLocalSearchParams<{ token: string }>()
   const { showToast } = useToast()
   const [person, setPerson] = useState<FriendPerson | null>(null)
@@ -101,76 +108,82 @@ export default function InviteScreen() {
   const cta = state ? inviteCta(state) : null
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <View style={styles.bar}>
-        <Pressable
-          onPress={close}
-          accessibilityRole="button"
-          accessibilityLabel="Close"
-          hitSlop={SPACE.md}
-          style={({ pressed }) => [styles.barButton, pressed && styles.pressed]}
-        >
-          <Ionicons name="close" size={ICON.lg} color={EMBER.textPrimary} />
-        </Pressable>
-      </View>
-
-      <View style={styles.body}>
-        {dead ? (
-          <>
-            <Ionicons name="link-outline" size={ICON.lg} color={EMBER.textTertiary} />
-            <Text variant="title" style={styles.centerText}>This link doesn&apos;t work</Text>
-            <Text variant="body" color={EMBER.textSecondary} style={styles.centerText}>
-              Ask the person who sent it for a new one.
-            </Text>
-          </>
-        ) : failed && !person ? (
-          <LoadError title="This link didn't open" onRetry={() => void retry()} retrying={retrying} />
-        ) : !person || !cta ? (
-          <ActivityIndicator color={EMBER.textSecondary} />
-        ) : (
-          <>
-            {/* Decorative: the name under it says who this is. */}
-            <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-              {person.photo ? (
-                <OptimizedImage source={person.photo} style={styles.photo} width={PHOTO} height={PHOTO} contentFit="cover" />
-              ) : (
-                <View style={[styles.photo, styles.photoEmpty]}>
-                  <Text variant="display">{(person.name[0] ?? '?').toUpperCase()}</Text>
-                </View>
-              )}
-            </View>
-            <Text variant="title" style={styles.centerText} accessibilityRole="header">{person.name}</Text>
-            <Text variant="body" color={EMBER.textSecondary} style={styles.centerText}>
-              {state ? inviteLine(state) : null}
-            </Text>
-          </>
-        )}
-      </View>
-
-      {cta && !dead ? (
-        <View style={styles.footer}>
-          <EmberButton label={cta.label} onPress={() => void act()} busy={asking} disabled={cta.action === null} />
+    <HueProvider value="rose">
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        <Orbs set="moment" />
+        <Grain />
+        {/* First in the tree for the focus order. */}
+        <View style={styles.bar}>
+          <IconButton icon="x" accessibilityLabel="Close" onPress={close} />
         </View>
-      ) : null}
-    </SafeAreaView>
+
+        <View style={styles.body}>
+          {dead ? (
+            <StateScreen icon="link-2-off" title="This link doesn’t work" body="Ask the person who sent it for a new one." testID="invite-dead" />
+          ) : failed && !person ? (
+            <StateScreen
+              icon="cloud-off"
+              title="This link didn’t open"
+              body="Check your connection and try again."
+              actions={[{ label: 'Try again', onPress: () => void retry(), loading: retrying }]}
+              testID="invite-failed"
+            />
+          ) : !person || !cta ? (
+            // The page's own shape while it loads (Flow 6 invite 09), so it does not jump when it lands.
+            <View testID="invite-loading" accessibilityLabel="Loading" accessibilityState={{ busy: true }} style={styles.stage}>
+              <SkeletonCircle width={FACE} />
+              <SkeletonBlock width="70%" height={SKELETON.title} />
+              <SkeletonBlock width="80%" height={SKELETON.line} />
+            </View>
+          ) : (
+            <FadeInUp style={styles.stage}>
+              {/* Decorative: the name under it says who this is. */}
+              <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+                {person.photo ? <Avatar kind="photo" uri={person.photo} size={FACE} /> : <Avatar kind="creature" pseudonym={person.name} size={FACE} />}
+              </View>
+              <View style={styles.words}>
+                <Text accessibilityRole="header" maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('display', bold, FONT_FAMILY.brand[900]), styles.title]}>
+                  {headline(person.name, state)}
+                </Text>
+                <Text style={[font('body', bold), styles.line]}>{state ? inviteLine(state) : null}</Text>
+              </View>
+            </FadeInUp>
+          )}
+        </View>
+
+        {cta && !dead ? (
+          <View style={styles.footer}>
+            <Button
+              kind={cta.action === null ? 'secondary' : 'primary'}
+              label={cta.label}
+              onPress={() => void act()}
+              loading={asking}
+              disabled={cta.action === null}
+              testID="invite-cta"
+            />
+            <Button kind="tertiary" label="Not now" onPress={close} />
+          </View>
+        ) : null}
+      </SafeAreaView>
+    </HueProvider>
   )
 }
 
+/** Flow 6 `invite`: who it is, in one line; your own link has no name in it, and a friend's says so. */
+function headline(name: string, state: FriendState | null) {
+  if (state === 'self') return 'Your invite link'
+  if (state === 'friends') return `You and ${name} are friends`
+  if (state === 'requested') return name
+  return `${name} wants to blend with you`
+}
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: EMBER.bg },
-  bar: { paddingHorizontal: GUTTER, paddingVertical: SPACE.md, flexDirection: 'row' },
-  barButton: {
-    width: CONTROL.md,
-    height: CONTROL.md,
-    borderRadius: EMBER_RADIUS.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: EMBER.surface,
-  },
-  pressed: { opacity: OPACITY.pressed },
-  body: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: SPACE.lg, paddingHorizontal: GUTTER },
-  photo: { width: PHOTO, height: PHOTO, borderRadius: EMBER_RADIUS.pill },
-  photoEmpty: { backgroundColor: EMBER.surface, alignItems: 'center', justifyContent: 'center' },
-  centerText: { textAlign: 'center' },
-  footer: { paddingHorizontal: GUTTER, paddingBottom: SPACE.lg },
+  container: { flex: 1, backgroundColor: COLOR.ink },
+  bar: { paddingHorizontal: SPACE.lg, paddingVertical: SPACE.sm, flexDirection: 'row' },
+  body: { flex: 1, justifyContent: 'center', paddingHorizontal: SPACE.gutter },
+  stage: { alignItems: 'center', gap: SPACE.lg },
+  words: { alignItems: 'center', gap: SPACE.sm },
+  title: { color: COLOR.textPrimary, textAlign: 'center' },
+  line: { color: COLOR.textSecondary, textAlign: 'center' },
+  footer: { paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.lg, gap: SPACE.sm },
 })

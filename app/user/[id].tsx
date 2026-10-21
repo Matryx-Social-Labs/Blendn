@@ -1,26 +1,27 @@
 import { H } from '../../lib/haptics'
 import { ScreenProfiler } from '../../lib/perf'
-import { Ionicons } from '@expo/vector-icons'
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useState } from 'react'
-import { Dimensions, Pressable, ScrollView, StyleSheet, View } from 'react-native'
+import { StyleSheet, Text, useWindowDimensions, View } from 'react-native'
+import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import { MomentMatch } from '../../components/ds/MomentMatch'
-import { LoadError, LoadState } from '../../components/LoadError'
+import { Button } from '../../components/ds/Button'
+import type { Rect } from '../../components/ds/chatShared'
+import { font, HueProvider, useBoldText } from '../../components/ds/shared'
+import { StateScreen } from '../../components/ds/StateScreen'
 import { useToast } from '../../components/Toast'
 import { ConnectSheet } from '../../components/grid/ConnectSheet'
-import {
-  ProfileActions,
-  ProfileBio,
-  ProfileDetail,
-  ProfileGallery,
-  ProfileHeading,
-  ProfileHero,
-  ProfileInterests,
-} from '../../components/profile/ProfileSections'
-import PhotoLightbox from '../../components/PhotoLightbox'
+import { PhotoViewer } from '../../components/profile/PhotoViewer'
+import { ProfileBar } from '../../components/profile/ProfileBar'
+import { dockClearance, ProfileDock } from '../../components/profile/ProfileDock'
+import { heroHeightFor, ProfileHeroStage } from '../../components/profile/ProfileHeroStage'
+import { ProfileBio, ProfileDetail, ProfileGallery, ProfileInterests, ProfileSection, SECTION_GAP } from '../../components/profile/ProfileSections'
+import { Glyph } from '../../components/ui/Glyph'
+import { Icon } from '../../components/ui/Icon'
 import { apiClient, type UserProfileData } from '../../lib/apiClient'
+import { COLOR, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
 import { likeRefusal } from '../../lib/likeRefusal'
 import { interestNames } from '../../lib/meProfile'
 import { profileIdentity, withheldUnlessVisible } from '../../lib/profileIdentity'
@@ -28,10 +29,8 @@ import { aboutLine } from '../../lib/aboutYou'
 import { isGone } from '../../lib/loadFailure'
 import { Logger } from '../../lib/logger'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
-import { HueProvider } from '../../components/ds/shared'
-const { width: WINDOW_WIDTH } = Dimensions.get('window')
+
 
 interface UserProfileView {
   user_id: string
@@ -80,8 +79,8 @@ const CTA_LABEL: Record<ProfileCtaMode, string> = {
 
 /** The line under the action, said the way a person would. */
 const CTA_HINT = {
-  connect: 'Send a request to start chatting.',
-  requested: 'Request sent — you can chat once they accept.',
+  connect: 'Connect sends a request and reveals your name and photo.',
+  requested: 'Request sent. You can chat once they accept.',
   message: 'You can message each other.',
 } as const
 type ProfileConnection = NonNullable<UserProfileData['connection']>
@@ -133,8 +132,15 @@ function UserProfileInner() {
   const [liked, setLiked] = useState(false)
   const [likeBusy, setLikeBusy] = useState(false)
   const [connectOpen, setConnectOpen] = useState(false)
-  const [lightboxIndex, setLightboxIndex] = useState(0)
-  const [lightboxVisible, setLightboxVisible] = useState(false)
+  const [viewer, setViewer] = useState<{ index: number; from: Rect | null } | null>(null)
+  const { width: windowWidth } = useWindowDimensions()
+  const bold = useBoldText()
+  const [dockHeight, setDockHeight] = useState(0)
+  // The page's scroll offset, written on the UI thread: the bar and the hero's stretch read it, React never renders for it.
+  const scrollY = useSharedValue(0)
+  const onScroll = useAnimatedScrollHandler((e) => {
+    scrollY.set(e.contentOffset.y)
+  })
   const [connectSending, setConnectSending] = useState(false)
   // Who this is, as far as the server lets this screen say (`lib/profileIdentity`).
   const identity = profileIdentity(profile, { pseudonym, roomSeed })
@@ -418,34 +424,35 @@ function UserProfileInner() {
 
   const ctaDisabled = ctaMode === 'self' || ctaMode === 'requested'
 
+  const back = () => router.back()
+
   if (!loading && !profile) {
     return (
-      <View style={[styles.center, { paddingTop: insets.top }]}>
-        {loadError === 'gone' ? (
-          /*
-           * One "gone" state, the same shape as every other: deleted, blocked
-           * either way, or never there — the server answers all of them alike
-           * and so does this.
-           */
-          <LoadState
-            icon="person-outline"
-            title="This profile isn't available."
-            message="It may have been removed."
-            action={{ label: 'Go back', onPress: () => router.back() }}
-          />
-        ) : (
-          <LoadError title="This profile didn't load" onRetry={retryLoad} />
-        )}
-        <View style={[styles.topBar, { paddingTop: insets.top + SPACE.md }]} pointerEvents="box-none">
-          <Pressable
-            onPress={() => router.back()}
-            accessibilityRole="button"
-            accessibilityLabel="Go back"
-            hitSlop={12}
-            style={({ pressed }) => [styles.barButton, pressed && styles.pressed]}
-          >
-            <Ionicons name="chevron-back" size={ICON.lg} color={EMBER.textPrimary} />
-          </Pressable>
+      <View style={styles.container}>
+        <ProfileBar testID="profile-bar" scrollY={scrollY} onBack={back} />
+        <View style={[styles.center, { paddingTop: insets.top }]}>
+          {loadError === 'gone' ? (
+            /*
+             * One "gone" state, the same shape as every other: deleted, blocked
+             * either way, or never there — the server answers all of them alike
+             * and so does this.
+             */
+            <StateScreen
+              icon="user"
+              title="This profile isn’t available."
+              body="It may have been removed."
+              actions={[{ label: 'Go back', onPress: back, kind: 'secondary' }]}
+              testID="profile-gone"
+            />
+          ) : (
+            <StateScreen
+              icon="user"
+              title="This profile didn’t load"
+              body="Check your connection and try again."
+              actions={[{ label: 'Try again', onPress: retryLoad }]}
+              testID="profile-failed"
+            />
+          )}
         </View>
       </View>
     )
@@ -465,7 +472,7 @@ function UserProfileInner() {
    *
    * `blurPhoto` arrives instead of `photos`, so this branch has a picture and
    * the revealed branch has the real ones — they are never both present. Falls
-   * through to the generated mark when there is no derivative, which is every
+   * through to the generated creature when there is no derivative, which is every
    * profile until people re-upload.
    */
   const blurHero = !revealed && profile?.blurPhoto ? [profile.blurPhoto] : []
@@ -478,46 +485,71 @@ function UserProfileInner() {
    * real and, in an unrevealed profile, is the whole point of `work_field`
    * living outside the identity gate: an attribute rather than an address.
    */
-  const heroSubtitle = [profile?.workField, profile?.location].filter(Boolean).join(' • ') || null
+  const heroSubtitle = [profile?.workField, profile?.location].filter(Boolean).join(' · ') || null
 
-  const columnWidth = (WINDOW_WIDTH - GUTTER * 2 - SPACE.lg) / 2
+  const columnWidth = Math.floor((windowWidth - SPACE.gutter * 2 - SPACE.sm) / 2)
+  const sharedCount = profile?.sharedInterests?.length ?? 0
+  const showDock = !loading && !!profile && ctaMode !== 'self'
 
   return (
     <View style={styles.container}>
-      <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + SPACE.xxxl }]}
+      {/* First in the tree for the focus order; it draws over the scroll by zIndex. */}
+      <ProfileBar
+        testID="profile-bar"
+        scrollY={scrollY}
+        title={loading ? undefined : identity.name}
+        overPhoto
+        onBack={back}
+        actions={ctaMode !== 'self' && profile ? [{ icon: 'ellipsis', label: 'Report or block', onPress: openSafety }] : []}
+      />
+      <Animated.ScrollView
+        testID="profile-scroll"
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        contentContainerStyle={{ paddingBottom: (dockHeight || dockClearance(insets.bottom)) + SPACE.xl }}
         showsVerticalScrollIndicator={false}
       >
         {loading ? (
-          <ProfileSkeleton width={WINDOW_WIDTH} />
+          <ProfileSkeleton width={windowWidth} />
         ) : (
           <>
-            <ProfileHero
-              width={WINDOW_WIDTH}
-              photos={revealed ? photos : blurHero}
-              blurred={!revealed}
-              title={heroTitle}
+            <ProfileHeroStage
+              testID="profile-hero"
+              width={windowWidth}
+              scrollY={scrollY}
+              photos={revealed ? photos : []}
+              blurredUri={blurHero[0] ?? null}
+              name={identity.name}
+              age={identity.age}
               subtitle={heroSubtitle}
               // The room's seed rule (`markSeed`), never a user id or "Attendee".
-              pseudonym={identity.seed}
+              seed={identity.seed}
+              anonymous={!revealed}
+              onPressPhoto={(i, from) => setViewer({ index: i, from })}
             />
 
             <View style={styles.canvas}>
-              {profile?.bio ? (
-                <View style={styles.section}>
-                  <ProfileHeading title="Bio" />
-                  <ProfileBio text={profile.bio} />
+              {!revealed ? (
+                /*
+                 * Said plainly rather than left as a screen that looks half-loaded. The absence IS the product working, and a
+                 * person who does not know that reads it as a bug.
+                 */
+                <View accessible accessibilityLabel={stillAnonymous(identity.name)} style={styles.note}>
+                  <Icon name="eye-off" size={ICON.control} color={COLOR.textPrimary} />
+                  <Text style={[font('meta', bold), styles.noteText]}>{stillAnonymous(identity.name)}</Text>
                 </View>
               ) : null}
 
+              {profile?.bio ? (
+                <ProfileSection title="About">
+                  <ProfileBio text={profile.bio} />
+                </ProfileSection>
+              ) : null}
+
               {profile?.interests && profile.interests.length > 0 ? (
-                <View style={styles.section}>
-                  <ProfileHeading title="Interests" />
-                  <ProfileInterests
-                    interests={profile.interests}
-                    sharedInterests={profile.sharedInterests}
-                  />
-                </View>
+                <ProfileSection title="Interests" trailing={sharedCount > 0 ? `${sharedCount} shared` : null}>
+                  <ProfileInterests interests={profile.interests} sharedInterests={profile.sharedInterests} />
+                </ProfileSection>
               ) : null}
 
               {/*
@@ -526,22 +558,10 @@ function UserProfileInner() {
                 reading as a table. Either can be absent; both are behind the
                 identity gate.
               */}
-              {profile?.about ? (
-                <View style={styles.details}>
-                  <ProfileDetail label="ABOUT" value={profile.about} variant="ruled" />
-                </View>
-              ) : null}
+              {profile?.about ? <ProfileDetail label="ABOUT" value={profile.about} variant="ruled" /> : null}
 
-              {profile?.occupation || profile?.education ? (
-                <View style={styles.details}>
-                  {profile.occupation ? (
-                    <ProfileDetail label="OCCUPATION" value={profile.occupation} />
-                  ) : null}
-                  {profile.education ? (
-                    <ProfileDetail label="EDUCATION" value={profile.education} variant="ruled" />
-                  ) : null}
-                </View>
-              ) : null}
+              {profile?.occupation ? <ProfileDetail label="OCCUPATION" value={profile.occupation} /> : null}
+              {profile?.education ? <ProfileDetail label="EDUCATION" value={profile.education} variant="ruled" /> : null}
 
               {/*
                 The gallery is the photos beyond the hero's. The hero already
@@ -549,11 +569,7 @@ function UserProfileInner() {
                 same picture twice on one screen.
               */}
               {photos.length > 1 ? (
-                <View style={styles.section}>
-                  <ProfileHeading
-                    title="Gallery"
-                    trailing={`${photos.length} photo${photos.length === 1 ? '' : 's'}`}
-                  />
+                <ProfileSection title="Photos" trailing={`${photos.length} photos`}>
                   <ProfileGallery
                     photos={photos.slice(1)}
                     columnWidth={columnWidth}
@@ -562,45 +578,42 @@ function UserProfileInner() {
                      * already cycles the first one. Without the offset every
                      * tap opened the photo before the one you touched.
                      */
-                    onPressPhoto={(i) => {
-                      setLightboxIndex(i + 1)
-                      setLightboxVisible(true)
-                    }}
+                    onPressPhoto={(i, from) => setViewer({ index: i + 1, from })}
                   />
-                </View>
-              ) : null}
-
-              {!loading && profile && ctaMode !== 'self' ? (
-                <ProfileActions
-                  name={heroTitle}
-                  label={CTA_LABEL[ctaMode]}
-                  onPress={ctaMode === 'connect' ? () => setConnectOpen(true) : handleConnect}
-                  disabled={ctaDisabled}
-                  hint={ctaMessage || null}
-                  liked={liked}
-                  likeBusy={likeBusy}
-                  /* Absent without an event — see the param comment above. */
-                  onLike={eventId ? handleLike : undefined}
-                />
-              ) : null}
-
-              {!revealed ? (
-                <View style={styles.section}>
-                  {/*
-                    Said plainly rather than left as a screen that looks
-                    half-loaded. The absence IS the product working, and a person
-                    who does not know that reads it as a bug.
-                  */}
-                  <ProfileHeading title="Still anonymous" />
-                  <ProfileBio
-                    text={`${heroTitle} has not revealed who they are yet. Connect, talk, and either of you can reveal when you want to.`}
-                  />
-                </View>
+                </ProfileSection>
               ) : null}
             </View>
           </>
         )}
-      </ScrollView>
+      </Animated.ScrollView>
+
+      {/* The tray stays put while the bio, interests and gallery scroll beneath it: Like and Connect are in the thumb's reach on any phone. */}
+      {showDock ? (
+        <ProfileDock testID="profile-dock" note={ctaMessage || null} onHeight={setDockHeight}>
+          {eventId ? (
+            <Button
+              kind={liked ? 'strong' : 'primary'}
+              label={liked ? 'Liked' : 'Like'}
+              accessibilityLabel={liked ? `Liked ${heroTitle}. You liked them` : `Like ${heroTitle}. They are only told if they like you back`}
+              leading={<Glyph name="heart" size={ICON.control} color={liked ? COLOR.ink : COLOR.textOnGradient} active={liked} play={liked} />}
+              pressHaptic={liked ? false : H.like}
+              loading={likeBusy && !liked}
+              onPress={handleLike}
+              style={styles.flex}
+              testID="profile-like"
+            />
+          ) : null}
+          <Button
+            kind="secondary"
+            label={CTA_LABEL[ctaMode]}
+            accessibilityLabel={ctaMode === 'connect' ? `Connect with ${heroTitle}. Sends a message and shows them your name and photo` : undefined}
+            disabled={ctaDisabled}
+            onPress={ctaMode === 'connect' ? () => setConnectOpen(true) : handleConnect}
+            style={styles.flex}
+            testID="profile-cta"
+          />
+        </ProfileDock>
+      ) : null}
 
       {/*
         `displayName` is whatever the screen calls them — the pseudonym until
@@ -617,17 +630,13 @@ function UserProfileInner() {
         onDismiss={() => setConnectOpen(false)}
       />
 
-      {/* Frame `1141:5228`. Back, and the safety menu the frame draws at the right. */}
-      {/*
-        `ProfileGallery` has always wrapped each tile in a `Pressable` and this
-        screen never passed `onPressPhoto`, so every tap on somebody's photos
-        did nothing at all -- a tap target that looks live and is not.
-      */}
-      <PhotoLightbox
+      <PhotoViewer
         photos={photos}
-        initialIndex={lightboxIndex}
-        visible={lightboxVisible}
-        onClose={() => setLightboxVisible(false)}
+        initialIndex={viewer?.index ?? 0}
+        from={viewer?.from}
+        visible={viewer !== null}
+        onClose={() => setViewer(null)}
+        testID="profile-viewer"
       />
 
       {/*
@@ -648,82 +657,38 @@ function UserProfileInner() {
           testID="profile-match"
         />
       ) : null}
-
-      <View style={[styles.topBar, { paddingTop: insets.top + SPACE.md }]} pointerEvents="box-none">
-        <Pressable
-          onPress={() => router.back()}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          hitSlop={12}
-          style={({ pressed }) => [styles.barButton, pressed && styles.pressed]}
-        >
-          <Ionicons name="chevron-back" size={ICON.lg} color={EMBER.textPrimary} />
-        </Pressable>
-        {ctaMode !== 'self' ? (
-          <Pressable
-            onPress={openSafety}
-            accessibilityRole="button"
-            accessibilityLabel="Report or block"
-            hitSlop={12}
-            style={({ pressed }) => [styles.barButton, pressed && styles.pressed]}
-          >
-            <Ionicons name="ellipsis-horizontal" size={ICON.lg} color={EMBER.textPrimary} />
-          </Pressable>
-        ) : null}
-      </View>
     </View>
   )
 }
 
-/** The frame's shape while it loads, so the page does not jump when it lands. */
+/** Flow 6 `user` 01: the note an unrevealed profile carries above its sections. */
+export const stillAnonymous = (name: string) => `${name} hasn’t revealed who they are yet. Connect, talk, and either of you can reveal when you want to.`
+
+/** The frame's shape while it loads (Flow 6 `user` 13), so the page does not jump when it lands: the hero, the name, a line. */
 function ProfileSkeleton({ width }: { width: number }) {
   return (
-    <View>
-      <SkeletonBlock width={width} height={Math.round(width * 1.925)} borderRadius={0} />
-      <View style={styles.canvas}>
-        <View style={styles.section}>
-          <SkeletonLine width="30%" />
-          <SkeletonLine width="90%" />
-          <SkeletonLine width="75%" />
-        </View>
-        <View style={styles.section}>
-          <SkeletonLine width="40%" />
-          <SkeletonLine width="60%" />
-        </View>
+    <View testID="profile-skeleton" accessibilityLabel="Loading profile" accessibilityState={{ busy: true }}>
+      <SkeletonBlock width={width} height={heroHeightFor(width)} borderRadius={0} />
+      <View style={styles.skeletonLines}>
+        <SkeletonBlock width="60%" height={SKELETON_NAME} borderRadius={RADIUS.thumb} />
+        <SkeletonLine width="90%" />
       </View>
     </View>
   )
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: EMBER.bg },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: GUTTER, backgroundColor: EMBER.bg },
-  scroll: { backgroundColor: EMBER.bg },
-  // The screen gutter, 32 clear of the hero and between sections.
-  canvas: { paddingHorizontal: GUTTER, paddingTop: SPACE.xxl, gap: SPACE.xxl },
-  // Heading to its content.
-  section: { gap: SPACE.lg },
-  details: { gap: SPACE.xl },
+/** Flow 6 `user` 13: the name's block is 28 tall. */
+const SKELETON_NAME = 28
 
-  topBar: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    paddingHorizontal: GUTTER,
-    paddingBottom: SPACE.md,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  barButton: {
-    width: CONTROL.md,
-    height: CONTROL.md,
-    borderRadius: EMBER_RADIUS.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: EMBER.scrim,
-  },
-  pressed: { opacity: OPACITY.pressed },
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: COLOR.ink },
+  center: { flex: 1, justifyContent: 'center', paddingHorizontal: SPACE.gutter },
+  // The frame's column starts 8 under the hero and keeps 28 between sections.
+  canvas: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.sm, gap: SECTION_GAP },
+  skeletonLines: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.xl, gap: SPACE.md },
+  note: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, borderRadius: RADIUS.rowInCard, backgroundColor: COLOR.surface, paddingVertical: SPACE.md, paddingHorizontal: SPACE.lg },
+  noteText: { flex: 1, color: COLOR.textPrimary },
+  flex: { flex: 1 },
 })
 
 

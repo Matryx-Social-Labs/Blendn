@@ -35,11 +35,10 @@ jest.mock('../lib/apiClient', () => ({
 }))
 const mockShowToast = jest.fn()
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShowToast }) }))
-// ProfileSections pulls expo-video in through the hero; only the heading is used here.
-jest.mock('../components/profile/ProfileSections', () => {
-  const React = require('react')
-  const { Text } = require('react-native')
-  return { ProfileHeading: (p: { title: string }) => React.createElement(Text, null, p.title) }
+jest.mock('../components/ds/Orbs', () => ({ Orbs: () => null }))
+jest.mock('../lib/useAuth', () => {
+  const auth = { user: { id: 'u_me', name: 'Sam' } }
+  return { useAuth: () => auth }
 })
 jest.mock('../components/OptimizedImage', () => {
   const React = require('react')
