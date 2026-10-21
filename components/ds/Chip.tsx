@@ -4,15 +4,17 @@ import Animated from 'react-native-reanimated'
 
 import ScalePress from '../motion/ScalePress'
 import { Icon, type IconName } from '../ui/Icon'
-import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, MATERIAL, PRESS, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, MATERIAL, PRESS, RADIUS, REDUCE_MOTION, SIZE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
 import { OPACITY, tint } from '../../lib/theme'
 import { monoCaption } from './MonoFamily'
-import { chipRest, CONTROL_FONT_CAP, focusRing, font, minTarget, PRESSED_WASH, useBoldText, useGround, useIncreaseContrast } from './shared'
+import { chipRest, CONTROL_FONT_CAP, focusRing, font, minTarget, PRESSED_WASH, useBoldText, useGround, useIncreaseContrast, useSelection } from './shared'
 
 /** The off chip's edge: a 0.5 pt hairline (1 pt at 50% under Increase Contrast). */
 const HAIRLINE = 0.5
+/** The selected chip's rim in the hue's edge colour: 1 pt, drawn as the hairline fades out. */
+const RIM = 1
 /** `outline`: clear, with a 1 pt edge at 22% white (A31: crew tags, overlap labels). */
 const OUTLINE_EDGE = {
   borderWidth: 1,
@@ -33,6 +35,29 @@ export const FILL = {
 const EDGE_FADE = {
   transition: `opacity ${DURATION.quick}ms ${CURVE}`,
 } as unknown as ViewStyle
+/**
+ * The light (foundations, direction C): on select an absolute layer in the hue's fill slides in from the leading edge, where the
+ * glyph is, and on deselect it drains back. Each state's style carries its own `transition`, so the pour and the drain have
+ * different curves (CSS transitions, Reanimated 4: off the JS thread, retargeted from the presented value on a quick re-tap,
+ * and never played on mount: a chip that mounts selected is already lit). Under Reduce Motion nothing translates: the fill
+ * crossfades over the Reduce Motion `quick`.
+ */
+const bezier = (curve: readonly number[]) => `cubic-bezier(${curve.join(', ')})`
+const asStyle = (style: object) => style as unknown as ViewStyle
+const LIGHT_OFF_X = '-101%'
+export const POUR = asStyle({
+  opacity: 1,
+  transform: [{ translateX: '0%' }],
+  transition: `transform ${DURATION.base}ms ${bezier(EASING.entrance)}, opacity ${DURATION.quick}ms ${CURVE}`,
+})
+export const DRAIN = asStyle({
+  opacity: 0,
+  transform: [{ translateX: LIGHT_OFF_X }],
+  transition: `transform ${DURATION.quick}ms ${bezier(EASING.standard)}, opacity ${DURATION.quick}ms ${CURVE}`,
+})
+const REDUCED_TRANSITION = `opacity ${REDUCE_MOTION.duration.quick}ms ${CURVE}`
+export const POUR_REDUCED = asStyle({ opacity: 1, transition: REDUCED_TRANSITION })
+export const DRAIN_REDUCED = asStyle({ opacity: 0, transition: REDUCED_TRANSITION })
 /** The + → ✓ slot: the plus fades out as the check fades and settles in (scale .85 → 1); the slot never changes width. */
 const SLOT_FADE = {
   transition: `opacity ${DURATION.quick}ms ${CURVE}`,
@@ -48,7 +73,7 @@ export type ChipSelection = 'single' | 'multi'
 
 export type ChipProps = {
   label: string
-  /** On: white with ink type, the one selection colour (§4.7). */
+  /** On: lit in the screen's hue (`HueProvider`), the label unchanged. */
   selected?: boolean
   /** A pick: toggles. `H.select` plays first. */
   onPress?: () => void
@@ -82,8 +107,10 @@ export type ChipProps = {
 
 /**
  * The chip (DESIGN-BRIEF §12, guidelines/components/Chip.html): one 32 pt
- * capsule for every pick-from-a-set. Off is surface with a hairline; on is
- * white with ink type. A cap dims the rest; as a filter it carries ×.
+ * capsule for every pick-from-a-set. Off is surface with a hairline; on is lit
+ * from behind in the screen's hue: the fill pours in from the glyph, a 1 pt rim
+ * fades in, the glyph takes the hue and the label stays white. A cap dims the
+ * rest; as a filter it carries ×.
  *
  * `H.select` on every change of state (on, off, × removed); none on a dimmed
  * chip. iOS presses scale 0.97; Android ripples at 12% white and squares the
@@ -124,7 +151,9 @@ export function Chip({
   const [focused, setFocused] = useState(false)
   const act = onRemove ?? onPress
   const pressed = down || previewState === 'pressed'
-  const ink = selected ? COLOR.selectionInk : COLOR.textPrimary
+  const sel = useSelection()
+  const lit = !more && !shared
+  const ink = COLOR.textPrimary
   const radius = android && pressed ? RADIUS.thumb : RADIUS.capsule
   const slop = (minTarget() - SIZE.tag) / 2
 
@@ -140,6 +169,17 @@ export function Chip({
   const body = (
     <>
       {/* Android's live press is the ripple; the wash stands in for it only in the gallery. */}
+      {lit ? (
+        <Animated.View
+          testID={testID && `${testID}-light`}
+          pointerEvents="none"
+          style={[
+            StyleSheet.absoluteFill,
+            { borderRadius: radius, backgroundColor: sel.fill },
+            selected ? (reduceMotion ? POUR_REDUCED : POUR) : reduceMotion ? DRAIN_REDUCED : DRAIN,
+          ]}
+        />
+      ) : null}
       {previewState === 'pressed' && android ? <View style={[StyleSheet.absoluteFill, styles.wash]} /> : null}
       {multi ? (
         <View testID={testID && `${testID}-slot`} style={styles.slot16}>
@@ -157,11 +197,11 @@ export function Chip({
               reduceMotion ? SLOT_FADE : SLOT_POP,
             ]}
           >
-            <Icon name="check" size={ICON.inline} color={COLOR.selectionInk} />
+            <Icon name="check" size={ICON.inline} color={sel.glyph} />
           </Animated.View>
         </View>
       ) : icon ? (
-        <Icon name={icon} size={ICON.inline} color={ink} />
+        <Icon name={icon} size={ICON.inline} color={selected ? sel.glyph : ink} active={selected} />
       ) : null}
       <Text
         style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.label, { color: ink }]}
@@ -177,7 +217,7 @@ export function Chip({
           style={[
             monoCaption(bold),
             {
-              color: selected ? COLOR.selectionInkSecondary : COLOR.textSecondary,
+              color: COLOR.textSecondary,
             },
           ]}
         >
@@ -191,13 +231,24 @@ export function Chip({
         pointerEvents="none"
         style={[StyleSheet.absoluteFill, edge, { borderRadius: radius, opacity: selected && !shared ? 0 : 1 }, EDGE_FADE]}
       />
+      {lit ? (
+        <Animated.View
+          testID={testID && `${testID}-rim`}
+          pointerEvents="none"
+          style={[
+            StyleSheet.absoluteFill,
+            { borderWidth: RIM, borderColor: sel.edge, borderRadius: radius, opacity: selected ? 1 : 0 },
+            EDGE_FADE,
+          ]}
+        />
+      ) : null}
     </>
   )
   const look = [
     styles.chip,
     {
       borderRadius: radius,
-      backgroundColor: selected ? COLOR.selectionFill : outline ? 'transparent' : chipRest(ground),
+      backgroundColor: outline ? 'transparent' : chipRest(ground),
     },
     (dimmed || disabled) && { opacity: OPACITY.disabled },
   ]

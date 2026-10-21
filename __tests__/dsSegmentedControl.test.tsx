@@ -1,6 +1,6 @@
 /*
  * <SegmentedControl> (guidelines/components/SegmentedControl.html; ROUND3 B10):
- * a 48 pt solid surface capsule, never on glass, with a white thumb that slides
+ * a 48 pt solid surface capsule, never on glass, with a hue thumb that slides
  * on M.snap; H.select when it changes, none on the current segment; 45%
  * disabled.
  */
@@ -11,7 +11,7 @@ import { State } from 'react-native-gesture-handler'
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils'
 import * as Reanimated from 'react-native-reanimated'
 
-import { GroundProvider } from '../components/ds/shared'
+import { GroundProvider, HueProvider } from '../components/ds/shared'
 import { landOn, rubberBand, SegmentedControl } from '../components/ds/SegmentedControl'
 import { COLOR, FONT_FAMILY, MATERIAL, RADIUS, SIZE, SPRING } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
@@ -40,19 +40,30 @@ const draw = (props: Record<string, unknown> = {}) =>
   render(<SegmentedControl {...({ items: ITEMS, selected: 0, onChange: jest.fn(), testID: 's', ...props } as Props)} />)
 
 describe('<SegmentedControl>', () => {
-  it('is a 48 pt surface capsule with a white thumb, never glass', async () => {
+  it('is a 48 pt surface capsule with an ember thumb and a 1 pt rim, never glass', async () => {
     await draw()
     expect(flat('s')).toMatchObject({ height: SIZE.control, borderRadius: RADIUS.capsule, backgroundColor: COLOR.surface })
-    expect(flat('s-thumb').backgroundColor).toBe(COLOR.selectionFill)
+    expect(flat('s-thumb').backgroundColor).toBe(COLOR.selectionEmberFill)
+    expect(flat('s-rim')).toMatchObject({ borderWidth: 1, borderColor: COLOR.brandOrange })
   })
 
-  it('the labels are white at 500 on the track; the ink at 700 is inside the thumb', async () => {
+  it('under a rose hue the thumb and its rim are rose', async () => {
+    await render(
+      <HueProvider value="rose">
+        <SegmentedControl items={['Sign in', 'Create account']} selected={0} onChange={jest.fn()} testID="s" />
+      </HueProvider>
+    )
+    expect(flat('s-thumb').backgroundColor).toBe(COLOR.selectionRoseFill)
+    expect(flat('s-rim').borderColor).toBe(COLOR.brandRose)
+  })
+
+  it('the labels are white at 500 on the track; white at 700 is inside the thumb', async () => {
     await draw()
     expect(text('Sign in')).toMatchObject({ color: COLOR.textPrimary, fontFamily: FONT_FAMILY.brand[500] })
     expect(text('Create account')).toMatchObject({ color: COLOR.textPrimary, fontFamily: FONT_FAMILY.brand[500] })
     const ink = within(screen.getByTestId('s-ink', { includeHiddenElements: true })).getAllByText(/./, { includeHiddenElements: true })
     expect(ink).toHaveLength(2)
-    for (const label of ink) expect(StyleSheet.flatten(label.props.style)).toMatchObject({ color: COLOR.selectionInk, fontFamily: FONT_FAMILY.brand[700] })
+    for (const label of ink) expect(StyleSheet.flatten(label.props.style)).toMatchObject({ color: COLOR.textPrimary, fontFamily: FONT_FAMILY.brand[700] })
   })
 
   it('is a tab-like group: each segment a tab, the current one selected', async () => {
@@ -209,10 +220,10 @@ describe('badges', () => {
     expect(screen.getByRole('tab', { name: 'Crews, someone’s live' })).toBeTruthy()
   })
 
-  it('the count inside the thumb is the secondary ink', async () => {
+  it('the count inside the thumb is secondary white', async () => {
     await draw({ items: ['People', 'Crews'], badges: [14, null] })
     const ink = within(screen.getByTestId('s-ink', { includeHiddenElements: true })).getByText('14', { includeHiddenElements: true })
-    expect(StyleSheet.flatten(ink.props.style).color).toBe(COLOR.selectionInkSecondary)
+    expect(StyleSheet.flatten(ink.props.style).color).toBe(COLOR.textSecondary)
   })
 })
 

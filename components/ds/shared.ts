@@ -136,3 +136,20 @@ export const useGround = () => useContext(GroundContext)
 export const chipRest = (ground: Ground) => (ground === 'glass' ? COLOR.chipFillOnGlass : ground === 'surface' ? COLOR.surfaceSunken : COLOR.surface)
 /** A SegmentedControl's track: solid even on glass (§12). */
 export const trackFill = (ground: Ground) => (ground === 'surface' ? COLOR.surfaceSunken : COLOR.surface)
+
+/**
+ * The hue of the world a screen is in (foundations, direction C "Lit from behind"): ember out there (Discover, the default),
+ * rose together, violet you. One per screen, from `<HueProvider>` at the screen's root, never nested: Chip, SegmentedControl
+ * and (later) RadioCard and ProgressBar light in it. The gradient stays the mark's and the one primary button's.
+ */
+export type Hue = 'ember' | 'rose' | 'violet'
+export type Selection = { fill: string; edge: string; glyph: string }
+export const SELECTION: Record<Hue, Selection> = {
+  ember: { fill: COLOR.selectionEmberFill, edge: COLOR.brandOrange, glyph: COLOR.selectionEmberGlyph },
+  rose: { fill: COLOR.selectionRoseFill, edge: COLOR.brandRose, glyph: COLOR.selectionRoseGlyph },
+  violet: { fill: COLOR.selectionVioletFill, edge: COLOR.brandViolet, glyph: COLOR.selectionVioletGlyph },
+}
+const HueContext = createContext<Hue>('ember')
+export const HueProvider = HueContext.Provider
+export const useHue = () => useContext(HueContext)
+export const useSelection = (): Selection => SELECTION[useHue()]
