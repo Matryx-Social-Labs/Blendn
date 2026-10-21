@@ -5,7 +5,7 @@
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { Platform, StyleSheet } from 'react-native'
+import { AppState, Platform, StyleSheet } from 'react-native'
 
 import { H } from '../lib/haptics'
 
@@ -261,6 +261,9 @@ describe('the account states (Flow 15 15.1 to 15.4)', () => {
 
 describe('can’t reach, retrying, maintenance (Flow 15 15.13)', () => {
   it('counts its tries and keeps going by itself every 30 s, silently', async () => {
+    // Mid-jitter: exactly 30 s (the wait is 24 to 36 s).
+    jest.spyOn(Math, 'random').mockReturnValue(0.5)
+    Object.defineProperty(AppState, 'currentState', { configurable: true, get: () => 'active' })
     mockAuth.mockReturnValue({ ...signedOut, unreachable: true })
     mockRetry.mockResolvedValue({ unreachable: true })
     await draw()
@@ -307,5 +310,28 @@ describe('a link held through sign-in (Flow 15 15.12 02)', () => {
   it('no held link, no pill', async () => {
     await draw()
     expect(screen.queryByTestId('held-link')).toBeNull()
+  })
+})
+
+describe('one try at a time on the can’t-reach screen', () => {
+  it('a press while a try is running (by hand or by itself) is dropped, not stacked', async () => {
+    mockAuth.mockReturnValue({ ...signedOut, unreachable: true })
+    let finish: (v: unknown) => void = () => {}
+    mockRetry.mockReturnValue(new Promise((resolve) => (finish = resolve)))
+    await draw()
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Try again'))
+    })
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Try again'))
+    })
+    expect(mockRetry).toHaveBeenCalledTimes(1)
+    await act(async () => {
+      finish({ unreachable: true })
+    })
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Try again'))
+    })
+    expect(mockRetry).toHaveBeenCalledTimes(2)
   })
 })

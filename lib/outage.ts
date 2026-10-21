@@ -29,3 +29,9 @@ export function backByLabel(until: number | null): string | null {
   if (until === null) return null
   return new Date(until).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 }
+
+/** The wait before the next automatic try: `ms` within ±20%, so phones that lost the server together do not return together. */
+export const AUTO_RETRY_JITTER = 0.2
+export function jittered(ms: number, random: number = Math.random()): number {
+  return Math.round(ms * (1 - AUTO_RETRY_JITTER + 2 * AUTO_RETRY_JITTER * random))
+}

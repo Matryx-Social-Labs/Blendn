@@ -5,7 +5,7 @@ import {
 } from '@react-native-google-signin/google-signin'
 import * as AppleAuthentication from 'expo-apple-authentication'
 import { router } from 'expo-router'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Platform, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
 import Animated from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -35,7 +35,8 @@ import { retryAuth, signInWithApple, signInWithGoogle, useAuth } from '../lib/us
 import { PendingInvite } from '../components/friends/PendingInvite'
 import { AccountStateScreen } from '../components/system/AccountStateScreen'
 import { SystemScreen } from '../components/system/SystemScreen'
-import { AUTO_RETRY_MS, backByLabel, outageNote } from '../lib/outage'
+import { backByLabel, outageNote } from '../lib/outage'
+import { useAutoRetry } from '../lib/useAutoRetry'
 import { HeldLink } from '../components/system/HeldLink'
 
 /** The mark alone, used only on the brief holding state (Flow 1 landing 08). */
@@ -116,19 +117,25 @@ function IndexInner() {
   /** How many times the can't-reach screen has tried, by hand or by itself ("Tried 2×"). */
   const [tries, setTries] = useState(0)
   /** Try again on the unreachable screen: a second failure is answered once (the first was the primary's press-in). */
+  const retrying = useRef(false)
+  /** One try at a time, by hand or by itself: a second while one runs is dropped, not stacked. */
+  const attempt = async () => {
+    if (retrying.current) return null
+    retrying.current = true
+    try {
+      const state = await retryAuth()
+      setTries((n) => n + 1)
+      return state
+    } finally {
+      retrying.current = false
+    }
+  }
   const tryAgain = async () => {
-    const state = await retryAuth()
-    setTries((n) => n + 1)
-    if (state.unreachable) H.error()
+    const state = await attempt()
+    if (state?.unreachable) H.error()
   }
   // It keeps trying by itself, silently (Flow 15 15.13): no haptic, the button spins as it does for a hand's try.
-  useEffect(() => {
-    if (!unreachable) return
-    const timer = setInterval(() => {
-      void retryAuth().then(() => setTries((n) => n + 1))
-    }, AUTO_RETRY_MS)
-    return () => clearInterval(timer)
-  }, [unreachable])
+  useAutoRetry(unreachable, attempt)
 
   const handleGoogleSignIn = async () => {
     if (signingIn) return
