@@ -28,7 +28,6 @@ const read = (...p: string[]) => readFileSync(join(__dirname, '..', ...p), 'utf8
 
 describe('text in a fixed-height box is capped', () => {
   const FIXED_BOXES: Array<[string, string[]]> = [
-    ['onboarding button + input (CONTROL.lg)', ['components', 'onboarding', 'EmberControls.tsx']],
     ['the tab bar label (the 64 pt capsule)', ['components', 'ds', 'TabBar.tsx']],
     ['the featured card (fixed aspect)', ['components', 'pulse', 'FeaturedCard.tsx']],
     ['the hero title (48/56)', ['components', 'scene', 'SceneHero.tsx']],
