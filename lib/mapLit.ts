@@ -192,6 +192,60 @@ export function nearestTo<T extends { at: LngLat }>(items: T[], [lng, lat]: LngL
   return [...items].sort((a, b) => d(a) - d(b)).slice(0, max)
 }
 
+/* -------------------------------------------------------------------------- */
+/* Chips on the screen                                                         */
+/* -------------------------------------------------------------------------- */
+
+/** A box on the map view, in points from its top left. */
+export type Box = { left: number; top: number; right: number; bottom: number }
+
+/** A caption at 12 pt is about this wide per character (Satoshi, average); a name is measured by it, since the chip is laid out natively. */
+const CHIP_CHAR_PX = 7
+/** The chip's own padding and border, the venue glyph and its gap. */
+const CHIP_PAD_PX = 2 * 8 + 2
+const CHIP_GLYPH_PX = 16 + 4
+/** Two caption lines and the 4 pt padding above and below; the stem under it is `STEM_PX`. */
+const CHIP_BODY_PX = 2 * 16 + 2 * 4
+const CHIP_STEM_PX = 12
+/** Air kept between two chips, and between a chip and anything else on the map. */
+export const CHIP_AIR_PX = 6
+
+/** The size a chip will draw at, from its words: the name and the line, the glyph a venue has, never past `maxWidthPx`. */
+export function chipSizePx(chip: { title: string; line: string; kind: string }): { width: number; height: number } {
+  const text = Math.max(chip.title.length, chip.line.length) * CHIP_CHAR_PX
+  const width = Math.min(MAP_THEME.chip.maxWidthPx, text + CHIP_PAD_PX + (chip.kind === 'venue' ? CHIP_GLYPH_PX : 0))
+  return { width: Math.ceil(width), height: CHIP_BODY_PX + CHIP_STEM_PX }
+}
+
+/** Where a chip draws: centred on the roof's point, standing `lift` above it (the marker's bottom anchor and offset). */
+export function chipBox(screen: [number, number], lift: number, size: { width: number; height: number }): Box {
+  const bottom = screen[1] - lift
+  return { left: screen[0] - size.width / 2, right: screen[0] + size.width / 2, top: bottom - size.height, bottom }
+}
+
+export const boxesCollide = (a: Box, b: Box, air = 0): boolean =>
+  a.left < b.right + air && a.right > b.left - air && a.top < b.bottom + air && a.bottom > b.top - air
+
+const inside = (box: Box, zone: Box): boolean => box.left >= zone.left && box.right <= zone.right && box.top >= zone.top && box.bottom <= zone.bottom
+
+/**
+ * The chips that may be drawn, nearest first: each one must lie wholly inside the visible window (below the top chrome,
+ * above the drawer, off the screen edge less the gutter), clear of everything else the map carries (`blocked`: the person's dot) and
+ * of the chips already kept. A name that cannot be placed is dropped, and the next nearest takes its place: two names on one
+ * spot, a name under the capsule or the bell, or half off the screen are worse than one fewer name.
+ */
+export function pickChips<T>(candidates: { item: T; box: Box }[], zone: Box, blocked: Box[], max: number): T[] {
+  const kept: { item: T; box: Box }[] = []
+  for (const c of candidates) {
+    if (kept.length >= max) break
+    if (!inside(c.box, zone)) continue
+    if (blocked.some((b) => boxesCollide(c.box, b, CHIP_AIR_PX))) continue
+    if (kept.some((k) => boxesCollide(c.box, k.box, CHIP_AIR_PX))) continue
+    kept.push(c)
+  }
+  return kept.map((k) => k.item)
+}
+
 /**
  * The lit building a tap landed on. A tap's box holds every building around
  * it, lit or not, in no useful order: the first is usually an unlit

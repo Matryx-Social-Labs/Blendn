@@ -344,6 +344,9 @@ export const HomeMap = memo(function HomeMap({
     size: { width, height },
     featureIds: ownTiles,
     litBy: OWN_BUILDINGS_LIT_BY,
+    // What the person can see: under the capsule and the bell, over the drawer (a name outside it, or on their dot, is not drawn).
+    visible: { top: padding.top, bottom: height - padding.bottom },
+    userAt: center ? [center.longitude, center.latitude] : null,
   })
 
   // The person's position — a cached one, then the live fix — until they move the map themselves.

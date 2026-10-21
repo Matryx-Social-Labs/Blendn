@@ -5,12 +5,15 @@ import { BUILDING_SEARCH_PX, LIGHT_MIN_ZOOM, lightCandidates, lightSignature, li
 import { Logger } from '../../lib/logger'
 import {
   bandsFor,
+  chipBox,
   chipLiftPx,
   chipLine,
   chipSpeech,
   dedupeLit,
   glowFor,
   nearestTo,
+  pickChips,
+  chipSizePx,
   topOfM,
   type BandFeature,
   type GlowFeature,
@@ -20,6 +23,7 @@ import {
 } from '../../lib/mapLit'
 import { BUILDING_LAYER_ID, OWN_BUILDINGS_LAYER_ID } from '../../lib/mapStyleEmber'
 import { MAP_THEME } from '../../lib/mapTheme'
+import { SPACE } from '../../lib/design/tokens'
 
 export type Segment = 'events' | 'places'
 export type Collection<F> = { type: 'FeatureCollection'; features: F[] }
@@ -36,6 +40,11 @@ type Drawn = { id?: string | number; geometry: { type: string; coordinates: unkn
 const collection = <F>(features: F[]): Collection<F> => ({ type: 'FeatureCollection', features })
 /** Buildings remembered, at most: a long pan around a city should not grow without end. */
 const SEEN_MAX = 500
+/** How many more than `chip.max` are projected, so a name that cannot be placed is replaced by the next nearest. */
+const CHIP_POOL = 3
+/** The person's dot, and the ring around it, as a box either side of the fix. */
+const USER_DOT_HALF_PX = 22
+const SIDE_GUTTER = SPACE.lg
 export const NO_LIT: Lit = { bands: collection([]), glow: collection([]), chips: [], states: [] }
 
 /**
@@ -69,6 +78,8 @@ export function useMapLighting({
   size,
   featureIds = false,
   litBy = 'copy',
+  visible,
+  userAt = null,
 }: {
   map: RefObject<MapRef | null>
   view: RefObject<MapView>
@@ -81,6 +92,14 @@ export function useMapLighting({
   featureIds?: boolean
   /** With `featureIds`: light a building through feature-state on itself, or by a GeoJSON copy over it. */
   litBy?: 'feature-state' | 'copy'
+  /**
+   * The part of the map the person can see: below the top chrome (the capsule and the bell), above the drawer. A chip must lie
+   * wholly inside it, off the screen edge and clear of `userAt` and of the other chips, or it is not drawn (visual QA r5: chips
+   * collided with the capsule, the bell, the dot and each other, and clipped at the edge). Absent, the nearest are drawn as before.
+   */
+  visible?: { top: number; bottom: number }
+  /** Where the person is, so no name covers their dot. */
+  userAt?: LngLat | null
 }): { lit: Lit; onFrame: () => void; relight: () => void } {
   const [litFor, setLitFor] = useState<{ segment: Segment; lit: Lit; key: string }>({ segment, lit: NO_LIT, key: '' })
   const needsLight = useRef(false)
@@ -116,7 +135,7 @@ export function useMapLighting({
     const tiles = featureIds ? 'own' : 'openfreemap'
     // The lookup reads the layer the buildings are drawn in: ours has its own id, so OpenFreeMap's merged ids never come back here.
     const layer = featureIds ? OWN_BUILDINGS_LAYER_ID : BUILDING_LAYER_ID
-    const signature = `${tiles}|${lightSignature(candidates, { centre: v.centre, zoom: v.zoom, pitch: v.pitch })}`
+    const signature = `${tiles}|${lightSignature(candidates, { centre: v.centre, zoom: v.zoom, pitch: v.pitch })}|${visible ? `${visible.top}:${visible.bottom}` : ''}|${userAt ? userAt.join(',') : ''}`
     if (signature === lastLit.current) return
     const keyOf = (p: Pin) => `${tiles}:${shown}:${p.id}`
     const known = (p: Pin) => {
@@ -173,22 +192,40 @@ export function useMapLighting({
       places.push({ id: p.id, kind: p.kind, live: p.live, at: [p.longitude, p.latitude], building, pin: p })
     }
     const kept = dedupeLit(places)
+    const chipFor = (p: LitPlace & { pin: Pin }): Chip => ({
+      id: p.id,
+      kind: p.kind,
+      live: p.live,
+      title: p.pin.title,
+      line: chipLine(p.pin),
+      speech: chipSpeech(p.pin),
+      at: p.at,
+      lift: chipLiftPx(topOfM(p), { zoom: v.zoom, pitch: v.pitch, latitude: p.at[1] }),
+    })
+    const nearest = nearestTo(kept, v.centre, MAP_THEME.chip.max * CHIP_POOL).map(chipFor)
+    let chips = nearest.slice(0, MAP_THEME.chip.max)
+    if (visible) {
+      const projected = await Promise.all(nearest.map((c) => m.project(c.at).then((s) => s as [number, number]).catch(() => null)))
+      const dot = userAt ? await m.project(userAt).then((s) => s as [number, number]).catch(() => null) : null
+      if (token !== pass.current) return
+      if (projected.every((s) => s !== null)) {
+        const zone = { left: SIDE_GUTTER, right: size.width - SIDE_GUTTER, top: visible.top, bottom: visible.bottom }
+        const blocked = dot ? [{ left: dot[0] - USER_DOT_HALF_PX, right: dot[0] + USER_DOT_HALF_PX, top: dot[1] - USER_DOT_HALF_PX, bottom: dot[1] + USER_DOT_HALF_PX }] : []
+        chips = pickChips(
+          nearest.map((c, i) => ({ item: c, box: chipBox(projected[i] as [number, number], c.lift, chipSizePx(c)) })),
+          zone,
+          blocked,
+          MAP_THEME.chip.max
+        )
+      } else clean = false
+    }
     const byState = (p: LitPlace) => featureIds && litBy === 'feature-state' && p.building?.featureId != null
     publish(shown, {
       // A building lit through feature-state needs no copy drawn over it.
       bands: collection(kept.flatMap((p) => (byState(p) && p.building ? bandsFor({ ...p, building: { ...p.building, footprint: null } }) : bandsFor(p)))),
       states: kept.filter(byState).map((p) => ({ featureId: p.building?.featureId as number, pinId: p.id, kind: p.kind, live: p.live })),
       glow: collection(kept.map(glowFor)),
-      chips: nearestTo(kept, v.centre, MAP_THEME.chip.max).map((p) => ({
-        id: p.id,
-        kind: p.kind,
-        live: p.live,
-        title: p.pin.title,
-        line: chipLine(p.pin),
-        speech: chipSpeech(p.pin),
-        at: p.at,
-        lift: chipLiftPx(topOfM(p), { zoom: v.zoom, pitch: v.pitch, latitude: p.at[1] }),
-      })),
+      chips,
     })
     // Unclean: not marked done, so the next settle asks again (not the next frame: frames keep coming while a glow fades).
     if (clean) lastLit.current = signature

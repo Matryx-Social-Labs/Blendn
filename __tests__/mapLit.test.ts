@@ -4,6 +4,11 @@ import { join } from 'path'
 import { litPlaceFor, pinsFor, type Pin } from '../lib/homeMap'
 import {
   bandsFor,
+  boxesCollide,
+  chipBox,
+  chipSizePx,
+  pickChips,
+  type Box,
   chipLiftPx,
   chipLine,
   chipSpeech,
@@ -459,5 +464,83 @@ describe("the map theme is the one place for the map's look", () => {
       paint: { 'fill-extrusion-opacity': 1, 'fill-extrusion-color': cityColour(), 'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 0] },
     })
     expect(cityColour()).toEqual(['interpolate', ['linear'], ['coalesce', ['get', 'render_height'], 0], ...MAP_THEME.city.ramp.flat()])
+  })
+})
+
+
+describe('chips on the screen (visual QA r5: they sat under the capsule and the bell, on the dot, on each other, and off the edge)', () => {
+  // A 402 x 874 phone: the top chrome ends at 126, the drawer starts at 560, the side gutter is 16.
+  const ZONE: Box = { left: 16, right: 402 - 16, top: 126, bottom: 560 }
+  const chip = (id: string, x: number, y: number, o: { lift?: number; title?: string; line?: string } = {}) => {
+    const c = { id, title: o.title ?? 'Toit', line: o.line ?? 'Live', kind: 'event' }
+    return { item: id, box: chipBox([x, y], o.lift ?? 20, chipSizePx(c)) }
+  }
+
+  it('a chip stands centred on its roof, raised by its lift, as the marker draws it', () => {
+    expect(chipBox([200, 300], 20, { width: 100, height: 52 })).toEqual({ left: 150, right: 250, top: 228, bottom: 280 })
+  })
+
+  it('sizes a chip from its words, never past the chip’s own maximum, a venue wider by its glyph', () => {
+    const short = chipSizePx({ title: 'Toit', line: 'Live', kind: 'event' })
+    const venue = chipSizePx({ title: 'Toit', line: 'Live', kind: 'venue' })
+    const long = chipSizePx({ title: 'A name that goes on and on and on and on and on and on and on', line: '', kind: 'event' })
+    expect(venue.width).toBeGreaterThan(short.width)
+    expect(long.width).toBe(MAP_THEME.chip.maxWidthPx)
+    expect(short.height).toBeGreaterThanOrEqual(MAP_THEME.chip.minTouchPx)
+  })
+
+  it('keeps the nearest first and up to the maximum', () => {
+    const picked = pickChips([chip('a', 100, 300), chip('b', 300, 300), chip('c', 200, 450), chip('d', 120, 500), chip('e', 300, 500)], ZONE, [], 4)
+    expect(picked).toEqual(['a', 'b', 'c', 'd'])
+  })
+
+  it('drops a chip under the top chrome (the capsule and the bell) and takes the next nearest instead', () => {
+    // 'a' is nearest but its box starts above 126: under the glass capsule. 'b' fits.
+    const picked = pickChips([chip('a', 200, 150), chip('b', 200, 400)], ZONE, [], 4)
+    expect(picked).toEqual(['b'])
+  })
+
+  it('drops a chip half off the screen (Android: "…s Table at Lupa" cut at the left edge) and one over the drawer', () => {
+    expect(pickChips([chip('left', 30, 300, { title: 'Chef’s Table at Lupa', line: 'Today · 3:00' })], ZONE, [], 4)).toEqual([])
+    expect(pickChips([chip('right', 390, 300)], ZONE, [], 4)).toEqual([])
+    expect(pickChips([chip('low', 200, 600)], ZONE, [], 4)).toEqual([])
+  })
+
+  it('drops a chip that lands on another (NYX Lounge Cafe on a ghost capsule), keeping the nearer one', () => {
+    const picked = pickChips([chip('near', 200, 300), chip('on-it', 210, 306), chip('apart', 200, 470)], ZONE, [], 4)
+    expect(picked).toEqual(['near', 'apart'])
+  })
+
+  it('keeps air between two chips: touching is a collision', () => {
+    const a = chip('a', 100, 300)
+    const b = { item: 'b', box: { ...a.box, left: a.box.right + 2, right: a.box.right + 60 } }
+    expect(boxesCollide(a.box, b.box, 6)).toBe(true)
+    expect(boxesCollide(a.box, b.box)).toBe(false)
+    expect(pickChips([a, b], ZONE, [], 4)).toEqual(['a'])
+  })
+
+  it('drops a chip that covers the person’s dot', () => {
+    const dot: Box = { left: 178, right: 222, top: 378, bottom: 422 }
+    expect(pickChips([chip('over', 200, 440, { lift: 40 }), chip('clear', 100, 300)], ZONE, [dot], 4)).toEqual(['clear'])
+  })
+
+  it('no chip box is ever outside the zone or on another, whatever the pins (property over a grid of positions)', () => {
+    const grid = Array.from({ length: 12 }, (_, i) => Array.from({ length: 12 }, (_, j) => chip(`${i}-${j}`, i * 36, 90 + j * 44))).flat()
+    const picked = pickChips(grid, ZONE, [], 4)
+    const boxes = picked.map((id) => grid.find((g) => g.item === id)!.box)
+    for (const b of boxes) expect(b.left >= ZONE.left && b.right <= ZONE.right && b.top >= ZONE.top && b.bottom <= ZONE.bottom).toBe(true)
+    boxes.forEach((a, i) => boxes.slice(i + 1).forEach((b) => expect(boxesCollide(a, b)).toBe(false)))
+    expect(picked.length).toBeLessThanOrEqual(4)
+  })
+})
+
+describe('the home map hands the lighting pass what the person can see', () => {
+  it('passes the visible window (under the chrome, over the drawer) and their fix, and the pass picks chips through pickChips', () => {
+    const map = readFileSync(join(__dirname, '..', 'components', 'home', 'HomeMap.tsx'), 'utf8')
+    expect(map).toMatch(/visible: \{ top: padding\.top, bottom: height - padding\.bottom \}/)
+    expect(map).toMatch(/userAt: center \? \[center\.longitude, center\.latitude\] : null/)
+    const hook = readFileSync(join(__dirname, '..', 'components', 'home', 'useMapLighting.ts'), 'utf8')
+    expect(hook).toContain('pickChips(')
+    expect(hook).toContain('m.project(c.at)')
   })
 })
