@@ -14,8 +14,8 @@ import { useEffect, useState } from 'react'
 export type AuthMethod = 'password' | 'google' | 'apple'
 
 const KEY = 'blendn.auth.method'
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const storage = (): typeof import('@react-native-async-storage/async-storage').default => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const mod = require('@react-native-async-storage/async-storage')
   return mod.default ?? mod
 }

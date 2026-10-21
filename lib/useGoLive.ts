@@ -10,7 +10,7 @@ import { getCurrentLocation, type ShowTray } from './locationFix'
 import { Logger } from './logger'
 import { openInMaps } from './openInMaps'
 import { useAuth } from './useAuth'
-import { afterTrayDismissed } from '../components/ActionTray'
+import { afterSheetDismissed } from './sheet'
 import { openPaywall } from './paywall'
 
 /**
@@ -203,7 +203,7 @@ export function useGoLive({
         // "Stay" is Blendn+'s in this city: the paywall, if its policy lets it come now (step 11) —
         // once the tray has finished leaving (iOS will not present over a dismissing modal).
         closeTray()
-        await afterTrayDismissed()
+        await afterSheetDismissed()
         const opened = await openPaywall('go_live_expiry')
         if (onPlusRequired) {
           onPlusRequired(opened)

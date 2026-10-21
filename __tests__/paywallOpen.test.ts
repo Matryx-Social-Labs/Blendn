@@ -12,7 +12,7 @@ jest.mock('../lib/apiClient', () => ({ apiClient: { logPaywallEvent: jest.fn(asy
 /* eslint-disable import/first */
 import { router } from 'expo-router'
 import { Platform } from 'react-native'
-import { afterTrayDismissed } from '../components/ActionTray'
+import { afterSheetDismissed } from '../lib/sheet'
 import { notePathname, openPaywall, paywallBlockedAt } from '../lib/paywall'
 /* eslint-enable import/first */
 
@@ -31,13 +31,13 @@ it('opens on a tap anywhere else', async () => {
   expect(router.push).toHaveBeenCalledWith({ pathname: '/plus', params: { trigger: 'profile' } })
 })
 
-describe('afterTrayDismissed', () => {
+describe('afterSheetDismissed', () => {
   const os = Platform.OS
   afterEach(() => { Platform.OS = os })
 
   it('on Android, at once', async () => {
     Platform.OS = 'android'
-    await expect(afterTrayDismissed(10_000)).resolves.toBeUndefined()
+    await expect(afterSheetDismissed(10_000)).resolves.toBeUndefined()
   })
 
   it('on iOS, not before the fallback when no tray says it has gone', async () => {
@@ -45,7 +45,7 @@ describe('afterTrayDismissed', () => {
     try {
       Platform.OS = 'ios'
       let done = false
-      void afterTrayDismissed(600).then(() => { done = true })
+      void afterSheetDismissed(600).then(() => { done = true })
       await jest.advanceTimersByTimeAsync(599)
       expect(done).toBe(false)
       await jest.advanceTimersByTimeAsync(1)

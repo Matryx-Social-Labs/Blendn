@@ -12,12 +12,11 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { apiClient } from '../../lib/apiClient'
-import { H } from '../../lib/haptics'
 import { Logger } from '../../lib/logger'
 import { badgeLabel, notificationAge, notificationLabel, type NotificationItem } from '../../lib/notificationFormat'
 import { navigateFromNotificationData } from '../../lib/notifications'
 import { subscribeToBell } from '../../lib/socketClient'
-import ActionTray from '../ActionTray'
+import { Sheet as ConfirmSheet } from '../ds/Sheet'
 import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, TYPE } from '../../lib/theme'
 import { Badge } from '../ds/MonoFamily'
 import { Material } from '../ui/Material'
@@ -293,20 +292,19 @@ export function NotificationBell({ glass = false }: { glass?: boolean } = {}) {
         </RisingSheet>
 
         {/* Inside the sheet's modal, so it presents over the sheet rather than behind it. */}
-        <ActionTray
+        <ConfirmSheet
           visible={confirmClear}
-          title="Clear all notifications?"
-          message="This removes them for good."
-          size="compact"
           onClose={() => setConfirmClear(false)}
-          buttons={[
-            { label: 'Keep', onPress: () => setConfirmClear(false) },
+          title="Clear all notifications?"
+          body="This removes them for good."
+          testID="clear-all-sheet"
+          actions={[
+            { label: 'Keep', kind: 'secondary', onPress: () => setConfirmClear(false) },
             {
+              // The destructive button plays the destructive tick on press-in (§10.2), once.
               label: 'Clear all',
-              variant: 'destructive',
+              kind: 'destructive',
               onPress: () => {
-                // The confirm was just pressed: the destructive tick (§10.2). A failure answers once, from its toast.
-                H.destructive()
                 const before = { items, unread }
                 setConfirmClear(false)
                 setItems([])

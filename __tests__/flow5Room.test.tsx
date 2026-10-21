@@ -69,7 +69,6 @@ jest.mock('../lib/useLiveSync', () => ({ useLiveSync: () => ({ state: 'connected
 jest.mock('../components/RealtimeStatusBanner', () => ({ __esModule: true, default: () => null }))
 jest.mock('../components/chat/RoomGuidelinesBanner', () => ({ RoomGuidelinesBanner: () => null }))
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn() }) }))
-jest.mock('../components/ActionTray', () => ({ __esModule: true, default: () => null }))
 jest.mock('../lib/notifications', () => ({ useActiveThread: jest.fn() }))
 
 /* eslint-disable import/first */

@@ -32,15 +32,15 @@ jest.mock('../lib/usePresence', () => ({ usePresence: () => ({ finished: false }
 jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { id: 'u1' } }) }))
 jest.mock('../lib/locationFix', () => ({ getCurrentLocation: jest.fn(async () => ({ latitude: 1, longitude: 2, accuracy: 10 })) }))
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShowToast }) }))
-jest.mock('../components/ActionTray', () => {
+jest.mock('../lib/sheet', () => ({ ...jest.requireActual('../lib/sheet'), afterSheetDismissed: () => Promise.resolve() }))
+jest.mock('../components/ds/Sheet', () => {
   const R = require('react')
   const { Text, Pressable } = require('react-native')
   return {
     __esModule: true,
-    afterTrayDismissed: () => Promise.resolve(),
-    default: ({ visible, title, message, buttons }: any) =>
-      visible ? R.createElement(R.Fragment, null, R.createElement(Text, null, title), R.createElement(Text, null, message),
-        ...buttons.map((b: any) =>
+    Sheet: ({ visible, title, body, actions }: any) =>
+      visible ? R.createElement(R.Fragment, null, R.createElement(Text, null, title), R.createElement(Text, null, body),
+        ...actions.map((b: any) =>
           R.createElement(Pressable, { key: b.label, testID: b.label, onPress: b.onPress, accessibilityState: { busy: !!b.loading } }, R.createElement(Text, null, b.label)))) : null,
   }
 })

@@ -123,7 +123,7 @@ const ensureCameraPermission = async (): Promise<PermissionOutcome> => {
  * These were `Alert.alert`s: a light system box on a dark app, buttons in a
  * different order on each platform (Android puts index 2 in the bold
  * positive slot and ignores `style: 'cancel'`), and no way to say which option
- * was the one most people want. The `ActionTray` draws every option in the
+ * was the one most people want. The one sheet draws every option in the
  * order given, on both platforms.
  *
  * Waits for the sheet to be off screen before resolving: every choice here

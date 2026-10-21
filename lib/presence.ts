@@ -181,12 +181,12 @@ export function presenceAction(input: {
 export const PRESENCE_COPY = {
   ask: {
     title: 'Still at the event?',
-    body: "It looks like you've moved away. If you've left, we'll check you out so the room stays accurate.",
-    stay: "I'm still here",
+    body: 'It looks like you’ve moved away. If you’ve left, we’ll check you out so the room stays accurate.',
+    stay: 'I’m still here',
     leave: 'Check me out',
   },
   autoCheckedOut: {
     title: 'Checked out',
-    body: "You've been away from the venue for a while, so we checked you out. You can check back in any time you're there.",
+    body: 'You’ve been away from the venue for a while, so we checked you out. You can check back in any time you’re there.',
   },
 } as const

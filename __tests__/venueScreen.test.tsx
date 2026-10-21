@@ -50,7 +50,7 @@ jest.mock('../lib/checkIn', () => ({ checkOutOf: jest.fn(), checkInChanged: jest
 jest.mock('../lib/socketClient', () => ({ subscribeToLiveEnded: (cb: never) => { mockEnded.push(cb); return () => {} } }))
 // The real useGoLive runs: only the phone's position, the network and the paywall are stood in for.
 jest.mock('../lib/locationFix', () => ({ getCurrentLocation: jest.fn(async () => ({ latitude: 12.97, longitude: 77.64, accuracy: 10 })) }))
-jest.mock('../components/ActionTray', () => ({ __esModule: true, default: () => null, afterTrayDismissed: () => Promise.resolve() }))
+jest.mock('../lib/sheet', () => ({ ...jest.requireActual('../lib/sheet'), afterSheetDismissed: () => Promise.resolve() }))
 jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { id: 'u1' } }) }))
 jest.mock('../lib/plus', () => ({ usePlusStatus: () => ({ status: null, refresh: jest.fn() }) }))
 jest.mock('../lib/paywall', () => ({ openPaywall: jest.fn(async () => true) }))

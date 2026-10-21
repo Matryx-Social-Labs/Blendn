@@ -26,7 +26,9 @@ describe('what a save, a refresh and a failure play', () => {
 
   it('Clear all in the notifications sheet ticks H.destructive on the confirm, and a failure restores the rows and answers from its toast', () => {
     const src = code('components/pulse/NotificationBell.tsx')
-    expect(src.match(/H\.destructive\(\)/g)).toHaveLength(1)
+    // The confirm is the DS Sheet's destructive button, which plays the tick on press-in itself: a second call here would play it twice.
+    expect(src).toMatch(/label: 'Clear all',\s*kind: 'destructive'/)
+    expect(src).not.toMatch(/H\.destructive/)
     expect(src).toMatch(/showToast\('Couldn’t clear\. Try again\.', 'error', \{ haptic: 'error' \}\)/)
     expect(src).toMatch(/setItems\(before\.items\)/)
   })

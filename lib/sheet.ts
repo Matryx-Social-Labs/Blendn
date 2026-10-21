@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { useSyncExternalStore } from 'react'
 import { Platform } from 'react-native'
 
+import type { ButtonKind } from '../components/ds/Button'
 import type { IconName } from '../components/ui/Icon'
 
 /**
@@ -13,7 +14,7 @@ import type { IconName } from '../components/ui/Icon'
  * Android draws at most three and drops the rest without a word, so "Block and
  * report", "Hate speech" and "Other" simply did not exist on half the phones —
  * the report reasons most likely to be needed were the ones cut. This is an
- * `ActionTray`, which draws every option on both platforms.
+ * one sheet, which draws every option on both platforms.
  *
  * ## Why a store, not a hook
  *
@@ -136,6 +137,31 @@ export function sheetClosed(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, Platform.OS === 'ios' ? SHEET_FADE_MS : 0))
 }
 
+/*
+ * iOS cannot present a native modal (a router modal: the paywall) while an RN Modal is still leaving: the push silently
+ * does nothing. Whoever closes a sheet and then opens such a screen waits for this first. Android has no such rule, so
+ * there it resolves at once; on iOS it resolves on the leaving Modal's own `onDismiss` (the DS Sheet reports it through
+ * `notifySheetDismissed`), or after `fallbackMs` if no sheet was showing.
+ */
+const dismissWaiters = new Set<() => void>()
+export function afterSheetDismissed(fallbackMs = 600): Promise<void> {
+  if (Platform.OS !== 'ios') return Promise.resolve()
+  return new Promise((resolve) => {
+    const done = () => {
+      dismissWaiters.delete(done)
+      clearTimeout(timer)
+      resolve()
+    }
+    const timer = setTimeout(done, fallbackMs)
+    dismissWaiters.add(done)
+  })
+}
+
+/** A sheet's Modal has finished leaving (iOS): whoever waited on it may present now. */
+export function notifySheetDismissed(): void {
+  for (const done of [...dismissWaiters]) done()
+}
+
 /** The Modal's fade (`animationType="fade"`), with a frame to spare. */
 const SHEET_FADE_MS = 350
 
@@ -152,3 +178,7 @@ const snapshot = () => state
 export function useSheet(): State {
   return useSyncExternalStore(subscribe, snapshot, snapshot)
 }
+
+/** The kind a tray button draws as in the DS Sheet: its own, else the one its variant stands for (nothing named is the secondary). */
+export const trayKind = (b: { kind?: ButtonKind; variant?: 'primary' | 'secondary' | 'destructive' }): ButtonKind =>
+  b.kind ?? (b.variant === 'primary' ? 'primary' : b.variant === 'destructive' ? 'destructive' : 'secondary')

@@ -150,9 +150,9 @@ describe('"stay" refused as Blendn+\'s (PLUS_REQUIRED) — the paywall, through 
   })
 
   it('on iOS, pushes the paywall only once the tray has finished leaving (review MEDIUM)', async () => {
-    const tray = require('../components/ActionTray')
+    const tray = require('../lib/sheet')
     let left: () => void = () => {}
-    const waited = jest.spyOn(tray, 'afterTrayDismissed').mockReturnValue(new Promise<void>((r) => { left = r }))
+    const waited = jest.spyOn(tray, 'afterSheetDismissed').mockReturnValue(new Promise<void>((r) => { left = r }))
     try {
       const { result } = await renderHook(() => useGoLive({ place, showTray: jest.fn(), closeTray: jest.fn() }))
       let pending!: Promise<boolean>

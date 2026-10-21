@@ -1,6 +1,5 @@
 import * as Location from 'expo-location'
 import { Linking, Platform } from 'react-native'
-import type { ActionTrayButton } from '../components/ActionTray'
 import type { ButtonKind } from '../components/ds/Button'
 import type { IconName } from '../components/ui/Icon'
 import { markCheckIn, type FixSource } from './checkInTiming'
@@ -125,16 +124,22 @@ async function freshFix(maxAccuracyM: number): Promise<{ fix: Location.LocationO
 }
 
 /**
- * A tray button. `kind` is the redesign's (`<Sheet>`, Flow 4 Tonight #15–#26:
- * Open Settings is the strong neutral, Not now and Cancel are text); a screen
- * still on `ActionTray` reads `variant` and ignores it.
+ * A tray button. `kind` is the design's (`<Sheet>`, Flow 4 Tonight #15–#26: Open Settings is the strong neutral, Not
+ * now and Cancel are text); a tray that names only a `variant` gets the kind it stands for (`trayKind`).
  */
-export type TrayButton = ActionTrayButton & { kind?: ButtonKind }
+export type TrayButton = {
+  label: string
+  onPress: () => void
+  variant?: 'primary' | 'secondary' | 'destructive'
+  kind?: ButtonKind
+  loading?: boolean
+  disabled?: boolean
+}
 
 /** What a redesigned tray draws besides its words: the glyph well, a Geist Mono path line (R3-D4 4.7). */
 export type TrayExtra = { icon?: IconName; detail?: string }
 
-/** The screen's tray, as `EventDetailScreen` and `ActionTray` define it; the Blend'n overlay draws it as a `<Sheet>`. */
+/** The screen's tray, as `EventDetailScreen` defines it; the Blend'n overlay and Go Live draw it as a `<Sheet>`. */
 export type ShowTray = (title: string, message: string, buttons?: TrayButton[], extra?: TrayExtra) => void
 
 export type CheckInTrays = {

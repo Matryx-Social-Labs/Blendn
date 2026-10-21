@@ -15,6 +15,8 @@ import {
   type LiveSession,
 } from '../lib/goLive'
 import { Logger } from '../lib/logger'
+import type { TrayButton } from '../lib/locationFix'
+import { trayKind } from '../lib/sheet'
 import { subscribePaywallClosed } from '../lib/paywall'
 import { usePlusStatus } from '../lib/plus'
 import { serverNow } from '../lib/serverClock'
@@ -23,14 +25,14 @@ import { useGoLive } from '../lib/useGoLive'
 import { useAuth } from '../lib/useAuth'
 import { useLatest } from '../lib/useLatest'
 import { usePresence } from '../lib/usePresence'
-import ActionTray, { type ActionTrayButton } from './ActionTray'
+import { Sheet } from './ds/Sheet'
 import { useToast } from './Toast'
 
 type ActiveLive = { venueDayId: string; expiresAt: string | null; stay: boolean; venueName: string | null }
 
 type Tray =
   | { kind: 'prompt'; venueDayId: string; expiresAt: string | null; venueName: string; noStay?: boolean }
-  | { kind: 'other'; title: string; message: string; buttons: ActionTrayButton[] }
+  | { kind: 'other'; title: string; message: string; buttons: TrayButton[] }
 
 /** A failed read of `/checkins/active` is tried again this soon — it is not "not live" (H1). */
 export const LIVE_READ_RETRY_MS = 15_000
@@ -66,7 +68,7 @@ export function LiveAtVenue() {
   const [tray, setTray] = useState<Tray | null>(null)
   const closeTray = useCallback(() => setTray(null), [])
   const showTray = useCallback(
-    (title: string, message: string, buttons?: ActionTrayButton[]) =>
+    (title: string, message: string, buttons?: TrayButton[]) =>
       setTray({ kind: 'other', title, message, buttons: buttons?.length ? buttons : [{ label: 'Done', variant: 'primary', onPress: () => setTray(null) }] }),
     []
   )
@@ -201,7 +203,7 @@ export function LiveAtVenue() {
 
   // "· Blendn+" only where it is sold and you don't have it: in a launch season, or to a holder, staying is just staying.
   const stayLabel = plus?.gated && !plus.active ? 'Stay live till I leave · Blendn+' : 'Stay live till I leave'
-  const visible: { title: string; message: string; buttons: ActionTrayButton[] } | null =
+  const visible: { title: string; message: string; buttons: TrayButton[] } | null =
     tray?.kind === 'prompt'
       ? {
           title: `Still at ${tray.venueName}?`,
@@ -220,21 +222,35 @@ export function LiveAtVenue() {
             ...(tray.noStay
               ? []
               : [{ label: stayLabel, onPress: goLiveWith(STAY_CHOICE, 'stay'), loading: busy && pressed === 'stay', disabled: busy }]),
-            { label: 'Let it end', onPress: closeTray, disabled: busy },
+            { label: 'Let it end', kind: 'tertiary', onPress: closeTray, disabled: busy },
           ],
         }
       : tray
 
+  /*
+   * The last sheet stays drawn while it slides out, so closing does not blank its final frames. Held by what it says
+   * (the words and how many buttons), not by identity: `visible` is a new object every render.
+   */
+  const sig = visible ? `${visible.title}|${visible.message}|${visible.buttons.length}` : null
+  const [held, setHeld] = useState<{ sig: string; content: NonNullable<typeof visible> } | null>(null)
+  if (visible && sig && held?.sig !== sig) setHeld({ sig, content: visible })
+  const current = visible ?? held?.content ?? null
+
   return (
-    <ActionTray
+    <Sheet
       visible={visible !== null}
-      title={visible?.title ?? ''}
-      message={visible?.message}
-      buttons={visible?.buttons ?? []}
       onClose={closeTray}
-      layout="stack"
-      // Three actions under a two-line title: room for all of them without scrolling.
-      size="expanded"
+      icon={tray?.kind === 'prompt' ? 'hourglass' : undefined}
+      title={current?.title ?? ''}
+      body={current?.message}
+      testID="live-sheet"
+      actions={(current?.buttons ?? []).map((b) => ({
+        label: b.label,
+        kind: trayKind(b),
+        loading: b.loading,
+        disabled: b.disabled,
+        onPress: b.onPress,
+      }))}
     />
   )
 }

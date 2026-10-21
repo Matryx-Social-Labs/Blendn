@@ -1,7 +1,7 @@
 import { router } from 'expo-router'
 import { useEffect, useRef, useState } from 'react'
 import { apiClient } from './apiClient'
-import { afterTrayDismissed } from '../components/ActionTray'
+import { afterSheetDismissed } from './sheet'
 import { askIntentRoute, revealOffer, submitCheckIn, untilIntentAnswered, type CheckInOutcome } from './checkIn'
 import { isExpectedRefusal, type CheckInRefusal } from './checkInRefusal'
 import { markCheckIn } from './checkInTiming'
@@ -107,7 +107,7 @@ export function useCheckInFlow({
     closeTray()
     releaseHold()
   }
-  /** The tray's own close (its backdrop): the caller's `ActionTray onClose`, so an open offer counts as "no". */
+  /** The tray's own close (its backdrop): the caller's sheet `onClose`, so an open offer counts as "no". */
   const dismissTray = () => {
     revealAnswer.current?.(false)
     revealAnswer.current = null
@@ -282,7 +282,7 @@ export function useCheckInFlow({
         }
         if (askIntent) {
           // iOS drops a push made while a tray is still leaving.
-          if (trayShown) await afterTrayDismissed()
+          if (trayShown) await afterSheetDismissed()
           const answered = untilIntentAnswered()
           router.push(askIntentRoute(eventId))
           await answered

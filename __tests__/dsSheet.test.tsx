@@ -768,3 +768,48 @@ describe('the swipe-to-dismiss hands its velocity on (DS #5: release on M.fling)
     })
   })
 })
+
+describe('dismissible={false}: a question that has to be answered (Flow 7 "Still at the event?")', () => {
+  it('has no handle, ignores the scrim and system back, and keeps its actions working', async () => {
+    const onClose = jest.fn()
+    const onPress = jest.fn()
+    await render(signOut({ onClose, dismissible: false, actions: [{ label: 'I’m still here', kind: 'strong', onPress }] }))
+    expect(screen.queryByRole('button', { name: 'Dismiss' })).toBeNull()
+    expect(screen.queryByTestId('s-handle', { includeHiddenElements: true })).toBeNull()
+    await fireEvent(screen.getByTestId('s-modal'), 'requestClose')
+    await fireEvent.press(screen.getByTestId('s-scrim', { includeHiddenElements: true }).children[0] as never)
+    expect(onClose).not.toHaveBeenCalled()
+    await fireEvent.press(screen.getByRole('button', { name: 'I’m still here' }))
+    expect(onPress).toHaveBeenCalledTimes(1)
+  })
+
+  it('a drag cannot dismiss it', async () => {
+    const onClose = jest.fn()
+    await render(signOut({ onClose, dismissible: false }))
+    const drag = getByGestureTestId('s-drag')
+    expect(drag.config.enabled).toBe(false)
+  })
+
+  it('by default it is dismissible: the handle, the scrim and a drag', async () => {
+    await render(signOut())
+    expect(screen.getByRole('button', { name: 'Dismiss' })).toBeTruthy()
+    expect(getByGestureTestId('s-drag').config.enabled).toBe(true)
+  })
+})
+
+describe('the Modal that has left tells whoever waited to present a native screen (afterSheetDismissed)', () => {
+  it('iOS: its onDismiss releases a waiter before the fallback', async () => {
+    jest.useFakeTimers()
+    try {
+      const { afterSheetDismissed } = jest.requireActual('../lib/sheet')
+      await render(signOut())
+      let released = false
+      void afterSheetDismissed(10_000).then(() => (released = true))
+      await act(async () => screen.getByTestId('s-modal', { includeHiddenElements: true }).props.onDismiss())
+      await act(async () => Promise.resolve())
+      expect(released).toBe(true)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+})

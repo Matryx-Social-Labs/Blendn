@@ -89,7 +89,7 @@ it('with no mail app, the address and the id are written on the screen, as text'
 })
 
 it('shows the raw message in development builds only', async () => {
-  const g = global as { __DEV__: boolean }
+  const g = global as unknown as { __DEV__: boolean }
   g.__DEV__ = true
   const dev = await mount()
   expect(screen.getByText('boom: a stack-trace fragment')).toBeTruthy()

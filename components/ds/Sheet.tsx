@@ -23,6 +23,7 @@ import { Material } from '../ui/Material'
 import { COLOR, DURATION, EASING, FONT_FAMILY, MATERIAL, RADIUS, SIZE, SPACE, SPRING, TYPE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
+import { notifySheetDismissed } from '../../lib/sheet'
 import { OPACITY, tint } from '../../lib/theme'
 import { Button, type ButtonKind, type ButtonProps } from './Button'
 import { font, GroundProvider, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast } from './shared'
@@ -447,7 +448,8 @@ function useSheetMotion({
  * sit lowest, in `destructiveFill`.
  *
  * It opens as a modal with focus on its title; the handle is "Dismiss,
- * button". No haptic on open or dismiss; `H.detent` when a drag settles on
+ * button" (`dismissible={false}`, for a question that has to be answered:
+ * no handle, and the scrim, a drag and system back do nothing). No haptic on open or dismiss; `H.detent` when a drag settles on
  * another detent; each action plays its own. Busy (an action loading): the
  * rest dim and it will not close.
  *
@@ -572,7 +574,14 @@ export function Sheet({ visible, onClose, title, headerAction, headerNote, body,
       navigationBarTranslucent
       onRequestClose={requestClose}
       onShow={focusTitle}
-      onDismiss={ios ? () => dismissed.current?.() : undefined}
+      onDismiss={
+        ios
+          ? () => {
+              dismissed.current?.()
+              notifySheetDismissed()
+            }
+          : undefined
+      }
     >
       {/* A Modal is its own native root: gestures inside it need their own root view. */}
       <GestureHandlerRootView
