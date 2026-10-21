@@ -4,7 +4,7 @@
  * hint), and the footer shrinks to the button so the page has room.
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
-import { Keyboard, StyleSheet } from 'react-native'
+import { Keyboard, ScrollView, StyleSheet, TextInput } from 'react-native'
 
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 34, left: 0, right: 0 }),
@@ -13,7 +13,7 @@ jest.mock('react-native-safe-area-context', () => ({
 /* eslint-disable import/first */
 import { TextField } from '../components/ds/TextField'
 import { OnboardingScreen } from '../components/onboarding/OnboardingScreen'
-import { REVEAL_ABOVE, REVEAL_BELOW, RevealOnFocus, revealOffset, useRevealProps } from '../components/onboarding/revealFocused'
+import { REVEAL_ABOVE, REVEAL_BELOW, revealOffset } from '../components/onboarding/revealFocused'
 /* eslint-enable import/first */
 
 describe('revealOffset', () => {
@@ -74,27 +74,36 @@ describe('the footer with the keyboard up', () => {
   })
 })
 
-/** A design-system field on an onboarding page: it spreads what the page hands it, as the steps do. */
-function PageField({ label, onFocus }: { label: string; onFocus?: () => void }) {
-  const reveal = useRevealProps()
-  return <TextField label={label} value="" onChangeText={() => {}} onFocus={onFocus} {...reveal} />
-}
-
 describe('a field takes the page with it', () => {
-  it('asks the page to reveal it when it takes focus', async () => {
-    const reveal = jest.fn()
-    await render(
-      <RevealOnFocus.Provider value={reveal}>
-        <PageField label="City" />
-      </RevealOnFocus.Provider>
+  /** Three fields on a page whose viewport is 300 tall, the third 500 down: the keyboard has made the page short. */
+  function page() {
+    return render(
+      <OnboardingScreen step="journey" title="Your journey" ctaLabel="Continue" onContinue={jest.fn()}>
+        {(reveal) => (
+          <>
+            <TextField label="City" value="" onChangeText={() => {}} {...reveal} />
+            <TextField label="Job title" value="" onChangeText={() => {}} {...reveal} />
+            <TextField label="School" value="" onChangeText={() => {}} {...reveal} />
+          </>
+        )}
+      </OnboardingScreen>
     )
-    fireEvent(screen.getByLabelText('City'), 'focus')
-    expect(reveal).toHaveBeenCalledTimes(1)
-  })
+  }
 
-  it('works outside an onboarding page too (no page to ask)', async () => {
-    await render(<PageField label="Alone" />)
-    fireEvent(screen.getByLabelText('Alone'), 'focus')
+  afterEach(() => jest.restoreAllMocks())
+
+  it('focusing the third field scrolls the page to it (the screen above the page, not inside it, spreads the focus)', async () => {
+    const scrollTo = jest.fn()
+    jest.spyOn(ScrollView.prototype as unknown as { scrollTo: () => void }, 'scrollTo').mockImplementation(scrollTo)
+    await page()
+    await fireEvent(screen.getByTestId('onboarding-body'), 'layout', { nativeEvent: { layout: { y: 0, x: 0, width: 390, height: 800 } } })
+    jest.spyOn(TextInput.State, 'currentlyFocusedInput').mockReturnValue({
+      measureLayout: (_to: unknown, ok: (x: number, y: number, w: number, h: number) => void) => ok(0, 500, 340, 80),
+    } as never)
+    await fireEvent(screen.getByTestId('onboarding-scroll'), 'layout', { nativeEvent: { layout: { height: 300, y: 0, x: 0, width: 390 } } })
+    scrollTo.mockClear()
+    await fireEvent(screen.getByLabelText('School'), 'focus')
+    expect(scrollTo).toHaveBeenCalledWith({ y: 500 + 80 + REVEAL_BELOW - 300, animated: true })
   })
 })
 
@@ -107,7 +116,7 @@ describe('the page while the keyboard is up', () => {
     }) as never)
     await render(
       <OnboardingScreen step="basics" title="The basics" ctaLabel="Continue" onContinue={jest.fn()}>
-        <PageField label="Name" />
+        {(reveal) => <TextField label="Name" value="" onChangeText={() => {}} {...reveal} />}
       </OnboardingScreen>
     )
     const rest = StyleSheet.flatten(screen.getByTestId('onboarding-dock').props.style)

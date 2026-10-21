@@ -39,9 +39,14 @@ export async function syncInterests(userId: string, wanted: string[]): Promise<b
   const add = [...wantedIds].filter((id) => !heldIds.has(id))
   const remove = [...heldIds].filter((id) => !wantedIds.has(id))
 
+  /*
+   * Remove first. The server holds at most ten (`MAX_INTERESTS`) and checks the add against what is held, so swapping one at
+   * the cap, with the remove still to come, was refused the first time and worked on the second. Both are still attempted if
+   * the first is refused; the answer is whether both held.
+   */
   let ok = true
-  if (add.length) ok = (await apiClient.addProfileInterests(userId, add)).success && ok
   if (remove.length) ok = (await apiClient.removeProfileInterests(userId, remove)).success && ok
+  if (add.length) ok = (await apiClient.addProfileInterests(userId, add)).success && ok
   return ok
 }
 

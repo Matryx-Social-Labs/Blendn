@@ -113,6 +113,16 @@ describe('photos', () => {
     expect(mockCommit).toHaveBeenCalledWith({ photos: ['https://media/one'] })
   })
 
+  it('making another photo the main one ticks the selection once and puts it first', async () => {
+    const select = jest.spyOn(H, 'select').mockImplementation(() => {})
+    mockDraft = { photos: ['https://media/a', 'https://media/b'] }
+    await render(<MediaScreen />)
+    await fireEvent.press(screen.getByLabelText('Make photo 2 your main photo'))
+    expect(select).toHaveBeenCalledTimes(1)
+    await fireEvent.press(screen.getByTestId('onboarding-primary'))
+    expect(mockCommit).toHaveBeenCalledWith({ photos: ['https://media/b', 'https://media/a'] })
+  })
+
   it('a cancelled picker adds no tile', async () => {
     mockSelect.mockResolvedValue({ ok: false, cancelled: true })
     await render(<MediaScreen />)
@@ -146,6 +156,14 @@ describe('Bring your friends', () => {
     expect(await screen.findByLabelText('Start Blend’n')).toBeTruthy()
     expect(screen.getByText('Shared. Anyone with the link can ask to be your friend.')).toBeTruthy()
     expect(screen.getByTestId('onboarding-secondary').props.accessibilityLabel).toBe('Share again')
+  })
+
+  it('keeps the glass bar even with nothing in it, as the frame draws it', async () => {
+    mockInvite.mockReturnValue(invite({}))
+    await render(<FriendsIntroScreen />)
+    expect(screen.getByTestId('onboarding-header')).toBeTruthy()
+    expect(screen.queryByTestId('onboarding-step')).toBeNull()
+    expect(screen.queryByTestId('onboarding-back')).toBeNull()
   })
 
   it('while the link loads the primary is busy and the card says so', async () => {

@@ -1,17 +1,18 @@
 import { ScreenProfiler } from '../../lib/perf'
 import { useState } from 'react'
-import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
-import Animated, { FadeOut, LinearTransition } from 'react-native-reanimated'
+import { Platform, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
+import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated'
 
-import { font, useBoldText } from '../../components/ds/shared'
+import { font, PRESSED_WASH, useBoldText } from '../../components/ds/shared'
 import { useToast } from '../../components/Toast'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import { PhotoTile, MAIN_RATIO } from '../../components/onboarding/PhotoTile'
 import { photoNote, readyPhotos, withMainFirst, type PhotoTile as Tile } from '../../components/onboarding/photoTiles'
 import { Icon } from '../../components/ui/Icon'
-import { COLOR, DURATION, ICON, RADIUS, SPACE, SPRING } from '../../lib/design/tokens'
+import { COLOR, DURATION, ICON, PRESS, RADIUS, SPACE, SPRING } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
-import { useReducedMotion } from '../../lib/motion'
+import { motionTokens, useReducedMotion } from '../../lib/motion'
+import ScalePress from '../../components/motion/ScalePress'
 import { selectPhoto, uploadPhoto } from '../../lib/photoUtils'
 import { useAuth } from '../../lib/useAuth'
 import { useOnboarding } from '../../lib/useOnboarding'
@@ -125,11 +126,17 @@ function MediaScreenInner() {
   const remove = (key: string) => setTiles((current) => current.filter((tile) => tile.key !== key))
 
   /** Move a photo to the front. `photos[0]` is what everyone else sees. */
-  const makePrimary = (key: string) => setTiles((current) => withMainFirst(current, key))
+  const makePrimary = (key: string) => {
+    // A choice between photos changes: the selection tick.
+    H.select()
+    setTiles((current) => withMainFirst(current, key))
+  }
 
   // The tiles glide to their places as one is made main or removed; Reduce Motion lets them land.
   const glide = reduceMotion ? undefined : LinearTransition.springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping)
   const leave = reduceMotion ? undefined : FadeOut.duration(DURATION.quick)
+  // A photo lands with a fade (Reduce Motion: its own shorter one), so adding one is seen, not a tile appearing.
+  const enter = FadeIn.duration(motionTokens(reduceMotion).duration.base)
 
   return (
     <OnboardingScreen
@@ -159,15 +166,17 @@ function MediaScreenInner() {
             onRemove={() => remove(tile.key)}
             onRetry={() => (tile.state === 'failed' ? void upload(tile.key, tile.uri) : undefined)}
             retryDisabled={uploading}
-            animation={{ layout: glide, exiting: leave }}
+            animation={{ layout: glide, exiting: leave, entering: enter }}
           />
         ))}
 
         {tiles.length < SLOTS ? (
           <Animated.View layout={glide} style={[styles.well, tiles.length === 0 ? [styles.wide, { height: Math.round(slot * MAIN_RATIO) }] : { width: slot, height: slot }]}>
-            <Pressable
+            <ScalePress
               onPress={() => void add()}
               disabled={uploading}
+              pressedScale={Platform.OS === 'android' ? 1 : PRESS.scale}
+              android_ripple={{ color: PRESSED_WASH.android }}
               accessibilityRole="button"
               accessibilityLabel={tiles.length === 0 ? 'Add your main photo' : 'Add a photo'}
               accessibilityState={{ disabled: uploading }}
@@ -177,7 +186,7 @@ function MediaScreenInner() {
                 <Icon name="plus" size={ICON.nav} color={COLOR.textPrimary} />
               </View>
               {tiles.length === 0 ? <Text style={[font('meta', bold), styles.muted]}>Add a photo</Text> : null}
-            </Pressable>
+            </ScalePress>
           </Animated.View>
         ) : null}
       </View>

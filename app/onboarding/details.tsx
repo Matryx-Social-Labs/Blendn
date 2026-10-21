@@ -9,12 +9,11 @@ import { font, useBoldText } from '../../components/ds/shared'
 import { MAX_INTERESTS } from '../../components/InterestPicker'
 import { ListLoadState, type ListStatus } from '../../components/onboarding/ListLoadState'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
-import { useRevealProps } from '../../components/onboarding/revealFocused'
 import { apiClient } from '../../lib/apiClient'
 import { toPickerTree, type CategoryGroup, type CategoryNode } from '../../lib/categories'
 import { COLOR, SPACE } from '../../lib/design/tokens'
 import { Logger } from '../../lib/logger'
-import { bioWithPrompt } from '../../lib/onboarding'
+import { bioWithPrompt, promptFits } from '../../lib/onboarding'
 import { useOnboarding } from '../../lib/useOnboarding'
 
 /**
@@ -22,11 +21,7 @@ import { useOnboarding } from '../../lib/useOnboarding'
  * at the intersection of technology and human connection"); these are the
  * kind of line a stranger at an event can actually open with.
  */
-const BIO_PROMPTS = [
-  'A perfect Sunday for me is…',
-  'Lately I’ve been learning…',
-  'Ask me about…',
-]
+const BIO_PROMPTS = ['A perfect Sunday for me is…', 'Lately I’ve been learning…', 'Ask me about…']
 
 /**
  * Step six — interests, and a few sentences about yourself.
@@ -56,7 +51,6 @@ const bioOverCap = (length: number) => `Keep it under ${BIO_LIMIT} characters ·
 export default function DetailsScreen() {
   const { draft, loaded, saving, commit, skip, goBack } = useOnboarding('details')
   const bold = useBoldText()
-  const reveal = useRevealProps()
 
   const [groups, setGroups] = useState<CategoryGroup[]>([])
   const [groupsStatus, setGroupsStatus] = useState<ListStatus>('loading')
@@ -110,12 +104,8 @@ export default function DetailsScreen() {
   const atCap = interestIds.length >= MAX_INTERESTS
   const toggle = (id: string, name: string) => {
     if (!interestIds.includes(id) && atCap) return
-    setInterests((current) =>
-      current.includes(name) ? current.filter((i) => i !== name) : [...current, name]
-    )
-    setInterestIds((current) =>
-      current.includes(id) ? current.filter((i) => i !== id) : [...current, id]
-    )
+    setInterests((current) => (current.includes(name) ? current.filter((i) => i !== name) : [...current, name]))
+    setInterestIds((current) => (current.includes(id) ? current.filter((i) => i !== id) : [...current, id]))
   }
 
   /*
@@ -139,7 +129,9 @@ export default function DetailsScreen() {
       onSecondary={() => void skip()}
       onBack={goBack}
     >
-      {/*
+      {(reveal) => (
+        <>
+          {/*
         Before the interest chips, not after.
 
         The chips are a long, scrolling wall of choices; a text field below them
@@ -147,60 +139,72 @@ export default function DetailsScreen() {
         question, and asking it first means it gets answered while attention is
         still fresh.
       */}
-      <View style={styles.bio}>
-        <TextArea
-          label="About me"
-          placeholder="Ask me about… the best coffee in the city, a trip I’m planning, or what I’m reading."
-          value={bio}
-          onChangeText={setBio}
-          limit={BIO_LIMIT}
-          // The server's `max(500)` counts UTF-16 units, not what a person sees as characters.
-          measure={(value) => value.length}
-          error={overCap ? bioOverCap(bioLength) : undefined}
-          testID="onboarding-bio"
-          {...reveal}
-        />
-        {/* A tap puts the prompt in the bio (H.select, the chip's). */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.prompts}>
-          {BIO_PROMPTS.map((prompt) => (
-            <Chip key={prompt} label={prompt} icon="plus" onPress={() => setBio((current) => bioWithPrompt(current, prompt, BIO_LIMIT))} testID={`onboarding-prompt-${prompt.slice(0, 6)}`} />
-          ))}
-        </ScrollView>
-      </View>
+          <View style={styles.bio}>
+            <TextArea
+              label="About me"
+              placeholder="Ask me about… the best coffee in the city, a trip I’m planning, or what I’m reading."
+              value={bio}
+              onChangeText={setBio}
+              limit={BIO_LIMIT}
+              // The server's `max(500)` counts UTF-16 units, not what a person sees as characters.
+              measure={(value) => value.length}
+              error={overCap ? bioOverCap(bioLength) : undefined}
+              testID="onboarding-bio"
+              {...reveal}
+            />
+            {/* A tap puts the prompt in the bio (H.select, the chip's). */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={styles.prompts}
+            >
+              {BIO_PROMPTS.map((prompt) => (
+                <Chip
+                  key={prompt}
+                  label={prompt}
+                  icon="plus"
+                  dimmed={!promptFits(bio, prompt, BIO_LIMIT)}
+                  onPress={() => setBio((current) => bioWithPrompt(current, prompt, BIO_LIMIT))}
+                  testID={`onboarding-prompt-${prompt.slice(0, 6)}`}
+                />
+              ))}
+            </ScrollView>
+          </View>
 
-      <View style={styles.interests}>
-        <View style={styles.interestsHead}>
-          <Text accessibilityRole="header" style={[font('heading', bold), styles.heading]}>
-            Interests
-          </Text>
-          <Text
-            accessibilityLabel={`${interestIds.length} of ${MAX_INTERESTS} chosen`}
-            style={[monoCaption(bold), { color: atCap ? COLOR.warning : COLOR.textSecondary }]}
-          >
-            {`${interestIds.length} of ${MAX_INTERESTS}`}
-          </Text>
-        </View>
+          <View style={styles.interests}>
+            <View style={styles.interestsHead}>
+              <Text accessibilityRole="header" style={[font('heading', bold), styles.heading]}>
+                Interests
+              </Text>
+              <Text
+                accessibilityLabel={`${interestIds.length} of ${MAX_INTERESTS} chosen`}
+                style={[monoCaption(bold), { color: atCap ? COLOR.warning : COLOR.textSecondary }]}
+              >
+                {`${interestIds.length} of ${MAX_INTERESTS}`}
+              </Text>
+            </View>
 
-        {groupsStatus !== 'ready' ? (
-          <ListLoadState status={groupsStatus} what="interests" onRetry={() => void loadGroups()} />
-        ) : null}
+            {groupsStatus !== 'ready' ? <ListLoadState status={groupsStatus} what="interests" onRetry={() => void loadGroups()} /> : null}
 
-        {groups.map((group) => (
-          <ChipSet
-            key={group.id}
-            label={group.name}
-            items={group.items.map((item) => ({ key: item.id, label: item.name, dimmed: atCap && !interestIds.includes(item.id) }))}
-            selection="multi"
-            selected={group.items.filter((item) => interests.includes(item.name)).map((item) => item.id)}
-            capHint={`Up to ${MAX_INTERESTS}`}
-            onToggle={(id) => {
-              const item = group.items.find((i) => i.id === id)
-              if (item) toggle(item.id, item.name)
-            }}
-            testID={`onboarding-interests-${group.id}`}
-          />
-        ))}
-      </View>
+            {groups.map((group) => (
+              <ChipSet
+                key={group.id}
+                label={group.name}
+                items={group.items.map((item) => ({ key: item.id, label: item.name, dimmed: atCap && !interestIds.includes(item.id) }))}
+                selection="multi"
+                selected={group.items.filter((item) => interests.includes(item.name)).map((item) => item.id)}
+                capHint={`Up to ${MAX_INTERESTS}`}
+                onToggle={(id) => {
+                  const item = group.items.find((i) => i.id === id)
+                  if (item) toggle(item.id, item.name)
+                }}
+                testID={`onboarding-interests-${group.id}`}
+              />
+            ))}
+          </View>
+        </>
+      )}
     </OnboardingScreen>
   )
 }

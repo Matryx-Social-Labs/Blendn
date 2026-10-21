@@ -1,11 +1,13 @@
 import { useState } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { Platform, Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native'
+import Animated, { FadeIn } from 'react-native-reanimated'
 
 import { Avatar } from '../../components/ds/Avatar'
 import { ChipSet } from '../../components/ds/ChipSet'
 import { SectionHeader } from '../../components/ds/SectionHeader'
 import { Toggle } from '../../components/ds/Toggle'
-import { font, minTarget, useBoldText } from '../../components/ds/shared'
+import { font, minTarget, PRESSED_WASH, useBoldText } from '../../components/ds/shared'
+import ScalePress from '../../components/motion/ScalePress'
 import { monoCaption } from '../../components/ds/MonoFamily'
 import { LookingForCards } from '../../components/onboarding/LookingForCards'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
@@ -17,8 +19,9 @@ import {
   withoutDatingChoice,
   type Orientation,
 } from '../../lib/dating'
-import { COLOR, FONT_FAMILY, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, PRESS, RADIUS, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
+import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { anonymousByDefault, isUnder18, orientationConsent } from '../../lib/onboarding'
 import { useOnboarding } from '../../lib/useOnboarding'
 
@@ -107,6 +110,8 @@ const ROW_MIN = 48
 /** The "Show on profile" switch is drawn at 0.8 in its pill, with its 5 pt of slack taken out of the margin (Flow 2 preferences). */
 const PILL_SWITCH_SCALE = 0.8
 const PILL_HEIGHT = 36
+/** The pill comes in as the first orientation is chosen: opacity on `quick`, on the gentle curve (a CSS transition, off the JS thread). */
+const PILL_FADE = { transition: `opacity ${DURATION.quick}ms cubic-bezier(${EASING.gentle.join(', ')})` } as unknown as ViewStyle
 const PILL_SWITCH_SLACK = SPACE.xs + SPACE.xxs / 2
 
 /**
@@ -142,6 +147,7 @@ function ShowOnProfile({ value, onValueChange }: { value: boolean; onValueChange
 export default function PreferencesScreen() {
   const { draft, loaded, saving, commit, skip, goBack } = useOnboarding('preferences')
   const bold = useBoldText()
+  const reduceMotion = useReducedMotion()
 
   const [orientations, setOrientations] = useState<Orientation[]>([])
   const [showOrientation, setShowOrientation] = useState(false)
@@ -232,7 +238,7 @@ export default function PreferencesScreen() {
              */
             right={
               <View
-                style={{ opacity: orientations.length ? 1 : 0 }}
+                style={[{ opacity: orientations.length ? 1 : 0 }, PILL_FADE]}
                 pointerEvents={orientations.length ? 'auto' : 'none'}
                 accessibilityElementsHidden={!orientations.length}
                 importantForAccessibility={orientations.length ? 'auto' : 'no-hide-descendants'}
@@ -266,7 +272,7 @@ export default function PreferencesScreen() {
       <View style={styles.section}>
         <SectionHeader title="Anonymity" caption="You can change this in any room." />
         <View style={styles.card}>
-          <Pressable
+          <ScalePress
             testID="onboarding-anonymous"
             onPress={() => {
               H.toggle(!anonymous)
@@ -276,15 +282,20 @@ export default function PreferencesScreen() {
             accessibilityLabel="Stay anonymous at events"
             accessibilityHint={ANONYMITY_HELP}
             accessibilityState={{ checked: anonymous }}
+            pressedScale={Platform.OS === 'android' ? 1 : PRESS.scale}
+            android_ripple={{ color: PRESSED_WASH.android }}
             style={styles.cardRow}
           >
             <Avatar kind="creature" pseudonym={EXAMPLE_PSEUDONYM} size={48} ring={COLOR.surface} />
             <View style={styles.cardText}>
               <Text style={[font('bodyStrong', bold), styles.ink]}>Stay anonymous at events</Text>
-              <Text style={[monoCaption(bold), styles.tertiary]}>{anonymous ? 'You’d appear under a made-up name' : 'Your name and photo, if you say so'}</Text>
+              {/* The preview line changes with the switch (Flow 2 preferences 04): the new one fades in on `quick`. */}
+              <Animated.Text key={anonymous ? 'anon' : 'named'} entering={FadeIn.duration(motionTokens(reduceMotion).duration.quick)} style={[monoCaption(bold), styles.tertiary]}>
+                {anonymous ? 'You’d appear under a made-up name' : 'Your name and photo, if you say so'}
+              </Animated.Text>
             </View>
             <Toggle value={anonymous} />
-          </Pressable>
+          </ScalePress>
           <Text style={[font('meta', bold), styles.secondary]}>{ANONYMITY_HELP}</Text>
         </View>
       </View>

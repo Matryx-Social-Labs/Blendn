@@ -8,7 +8,6 @@ import { useBoldText, useIncreaseContrast } from '../../components/ds/shared'
 import { CardSection } from '../../components/onboarding/CardSection'
 import { ListLoadState, type ListStatus } from '../../components/onboarding/ListLoadState'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
-import { useRevealProps } from '../../components/onboarding/revealFocused'
 import { COLOR, SPACE } from '../../lib/design/tokens'
 import { apiClient, type WorkFieldsResponse } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
@@ -36,7 +35,6 @@ const TEXT_MAX = 100
 
 export default function JourneyScreen() {
   const { draft, loaded, saving, commit, skip, goBack } = useOnboarding('journey')
-  const reveal = useRevealProps()
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
 
@@ -134,7 +132,9 @@ export default function JourneyScreen() {
       onSecondary={() => void skip()}
       onBack={goBack}
     >
-      {/*
+      {(reveal) => (
+        <>
+          {/*
         Three cards, not seven stacked fields.
 
         The screen asks three unrelated questions — where you are, what you do,
@@ -142,80 +142,82 @@ export default function JourneyScreen() {
         long form. Enclosing each is what makes them three things, which is what
         the frame does and what "just casual boxes" was describing.
       */}
-      <CardSection icon="map-pin" title="Where you live" caption="Used to show you events nearby">
-        <TextField
-          label="City"
-          placeholder="Search city"
-          value={location}
-          onChangeText={(value) => setLocation(value.slice(0, LOCATION_MAX))}
-          autoCapitalize="words"
-          testID="onboarding-city"
-          {...reveal}
-        />
-      </CardSection>
-
-      <CardSection icon="briefcase" title="Occupation" caption="Your job title and where you work">
-        <TextField
-          label="Job title"
-          placeholder="e.g. Product designer"
-          value={occupation}
-          onChangeText={(value) => setOccupation(value.slice(0, TEXT_MAX))}
-          autoCapitalize="sentences"
-          testID="onboarding-job"
-          {...reveal}
-        />
-
-        {/* The chips once the server has answered; until then, or if it did
-            not, the section says so rather than silently missing. */}
-        {fieldsStatus !== 'ready' ? (
-          <View style={styles.fieldBlock}>
-            <FieldLabel text="Field of work" bold={bold} contrast={contrast} />
-            <ListLoadState status={fieldsStatus} what="fields of work" onRetry={() => void loadFields()} />
-          </View>
-        ) : fields.length > 0 ? (
-          <ChipSet
-            label="Field of work"
-            hint="The only part of this shown in a room. Your job title and employer are not."
-            items={fields.map((field) => ({ key: field.slug, label: field.label }))}
-            selection="single"
-            selected={workField ? [workField] : []}
-            onToggle={chooseField}
-            testID="onboarding-field-of-work"
-          />
-        ) : null}
-
-        {/* Step two of the field: what you do within it. Not drawn for a field with none ("Something else"). */}
-        {fieldsStatus === 'ready' && specialisms.length > 0 ? (
-          <View style={styles.expertise}>
-            <ChipSet
-              label={`Expertise · ${fieldLabel ?? ''}`}
-              items={specialisms.map((entry) => ({ key: entry.slug, label: entry.label }))}
-              selection="multi"
-              selected={expertise}
-              max={maxExpertise}
-              capHint={`Up to ${maxExpertise}`}
-              hint="Up to three. If you change the field, these clear."
-              onToggle={(slug) => {
-                setExpertise((current) => toggleExpertise(current, slug, maxExpertise))
-                setExpertiseTouched(true)
-              }}
-              testID="onboarding-expertise"
+          <CardSection icon="map-pin" title="Where you live" caption="Used to show you events nearby">
+            <TextField
+              label="City"
+              placeholder="Search city"
+              value={location}
+              onChangeText={(value) => setLocation(value.slice(0, LOCATION_MAX))}
+              autoCapitalize="words"
+              testID="onboarding-city"
+              {...reveal}
             />
-          </View>
-        ) : null}
-      </CardSection>
+          </CardSection>
 
-      <CardSection icon="graduation-cap" title="Education" caption="Where you studied, if you want to say">
-        <TextField
-          label="School / University"
-          placeholder="Where you studied"
-          value={education}
-          onChangeText={(value) => setEducation(value.slice(0, TEXT_MAX))}
-          autoCapitalize="words"
-          testID="onboarding-school"
-          {...reveal}
-        />
-      </CardSection>
+          <CardSection icon="briefcase" title="Occupation" caption="Your job title and where you work">
+            <TextField
+              label="Job title"
+              placeholder="e.g. Product designer"
+              value={occupation}
+              onChangeText={(value) => setOccupation(value.slice(0, TEXT_MAX))}
+              autoCapitalize="sentences"
+              testID="onboarding-job"
+              {...reveal}
+            />
+
+            {/* The chips once the server has answered; until then, or if it did
+            not, the section says so rather than silently missing. */}
+            {fieldsStatus !== 'ready' ? (
+              <View style={styles.fieldBlock}>
+                <FieldLabel text="Field of work" bold={bold} contrast={contrast} />
+                <ListLoadState status={fieldsStatus} what="fields of work" onRetry={() => void loadFields()} />
+              </View>
+            ) : fields.length > 0 ? (
+              <ChipSet
+                label="Field of work"
+                hint="The only part of this shown in a room. Your job title and employer are not."
+                items={fields.map((field) => ({ key: field.slug, label: field.label }))}
+                selection="single"
+                selected={workField ? [workField] : []}
+                onToggle={chooseField}
+                testID="onboarding-field-of-work"
+              />
+            ) : null}
+
+            {/* Step two of the field: what you do within it. Not drawn for a field with none ("Something else"). */}
+            {fieldsStatus === 'ready' && specialisms.length > 0 ? (
+              <View style={styles.expertise}>
+                <ChipSet
+                  label={`Expertise · ${fieldLabel ?? ''}`}
+                  items={specialisms.map((entry) => ({ key: entry.slug, label: entry.label }))}
+                  selection="multi"
+                  selected={expertise}
+                  max={maxExpertise}
+                  capHint={`Up to ${maxExpertise}`}
+                  hint="Up to three. If you change the field, these clear."
+                  onToggle={(slug) => {
+                    setExpertise((current) => toggleExpertise(current, slug, maxExpertise))
+                    setExpertiseTouched(true)
+                  }}
+                  testID="onboarding-expertise"
+                />
+              </View>
+            ) : null}
+          </CardSection>
+
+          <CardSection icon="graduation-cap" title="Education" caption="Where you studied, if you want to say">
+            <TextField
+              label="School / University"
+              placeholder="Where you studied"
+              value={education}
+              onChangeText={(value) => setEducation(value.slice(0, TEXT_MAX))}
+              autoCapitalize="words"
+              testID="onboarding-school"
+              {...reveal}
+            />
+          </CardSection>
+        </>
+      )}
     </OnboardingScreen>
   )
 }

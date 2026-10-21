@@ -4,6 +4,7 @@
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native'
 import React from 'react'
+import { StyleSheet } from 'react-native'
 
 const mockCommit = jest.fn(async (_patch?: unknown) => true)
 let mockDraft: Record<string, unknown> = {}
@@ -59,6 +60,15 @@ describe('details', () => {
     await render(<DetailsScreen />)
     await fireEvent.press(screen.getByLabelText('Ask me about…'))
     expect(screen.getByTestId('onboarding-bio-input').props.value).toBe('Ask me about… ')
+  })
+
+  it('a prompt with no room left is dimmed and does nothing', async () => {
+    mockCategories.mockResolvedValue(tree(2))
+    await render(<DetailsScreen />)
+    await fireEvent.changeText(screen.getByTestId('onboarding-bio-input'), 'x'.repeat(495))
+    expect(StyleSheet.flatten(screen.getByLabelText('Ask me about…').props.style).opacity).toBe(0.45)
+    await fireEvent.press(screen.getByLabelText('Ask me about…'))
+    expect(screen.getByTestId('onboarding-bio-input').props.value).toBe('x'.repeat(495))
   })
 
   it('stops at ten interests (the server’s cap), dims the rest, and says n of 10', async () => {

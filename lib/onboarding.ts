@@ -611,6 +611,11 @@ export function bioWithPrompt(bio: string, prompt: string, limit: number): strin
   return next.length <= limit ? next : bio
 }
 
+/** Whether the prompt has room in the bio: a chip that would do nothing is dimmed, never hidden. */
+export function promptFits(bio: string, prompt: string, limit: number): boolean {
+  return bioWithPrompt(bio, prompt, limit) !== bio
+}
+
 /** The most specialisms the server takes when it does not say (`MAX_EXPERTISE`). */
 export const DEFAULT_MAX_EXPERTISE = 3
 

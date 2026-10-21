@@ -42,7 +42,7 @@ export function PhotoTile({
   onRemove: () => void
   onRetry: () => void
   retryDisabled?: boolean
-  animation?: Pick<AnimatedProps<object>, 'layout' | 'exiting'>
+  animation?: Pick<AnimatedProps<object>, 'layout' | 'exiting' | 'entering'>
 }) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()

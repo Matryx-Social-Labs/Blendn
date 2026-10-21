@@ -4,15 +4,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Backdrop, ORB_LEVEL } from './Backdrop'
 import { Dock } from './Dock'
-import { RevealOnFocus, useRevealFocused } from './revealFocused'
+import { useRevealFocused } from './revealFocused'
 import { Button } from '../ds/Button'
 import { IconButton } from '../ds/IconButton'
-import { monoCaption } from '../ds/MonoFamily'
 import { ProgressBar } from '../ds/ProgressBar'
 import { font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from '../ds/shared'
 import { Icon } from '../ui/Icon'
 import { Material } from '../ui/Material'
-import { COLOR, ICON, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, SIZE, SPACE } from '../../lib/design/tokens'
 import { KEYBOARD_BEHAVIOR, useKeyboardShown } from '../../lib/keyboard'
 import { ONBOARDING_STEPS, progress, stepIndex, type OnboardingStep } from '../../lib/onboarding'
 
@@ -41,8 +40,12 @@ interface Props {
   /**
    * The form body. Optional because the two permission screens have no form: their content is an illustration, which is
    * still a child. A screen with nothing to scroll does not scroll.
+   *
+   * A function when the body has text fields: it is handed the `onFocus` that makes the page follow the field (spread it on a
+   * `TextField`). A render prop rather than a context, because the page owns the scroll and its fields are drawn by the screen
+   * above it, which a provider inside the page cannot reach.
    */
-  children?: ReactNode
+  children?: ReactNode | ((page: { onFocus: () => void }) => ReactNode)
 
   ctaLabel: string
   onContinue: () => void
@@ -84,29 +87,24 @@ export function OnboardingScreen({
   const { scrollRef, bodyRef, reveal, onScroll, onViewportLayout, onBodyLayout } = useRevealFocused()
   const android = Platform.OS === 'android'
   const circle = android ? SIZE.circleButtonAndroid : SIZE.circleButton
-  const hasHeader = !!step || !!onBack
 
   return (
     <View style={styles.root}>
       <Backdrop level={ORB_LEVEL.onboarding} paused={keyboardUp} testID="onboarding-backdrop" />
 
-      {hasHeader ? (
-        <Material role="bar" testID="onboarding-header" style={[styles.header, { paddingTop: insets.top + SPACE.sm }, contrast && IC_HAIRLINE]}>
-          <View style={[styles.headerRow, { height: circle }]}>
-            {/* The back circle keeps its footprint on the first step, so the step label does not move between steps. */}
-            {onBack ? (
-              <IconButton icon={android ? 'arrow-left' : 'chevron-left'} accessibilityLabel="Back" onPress={onBack} testID="onboarding-back" />
-            ) : null}
-            {step ? (
-              <Text testID="onboarding-step" style={[monoCaption(bold), styles.step]}>
-                {`Step ${stepIndex(step) + 1} of ${ONBOARDING_STEPS.length}`}
-              </Text>
-            ) : null}
-          </View>
-        </Material>
-      ) : (
-        <View style={{ height: insets.top + SPACE.xl }} />
-      )}
+      {/* The glass bar is there on every step, the empty one too (Bring your friends, the first step's missing back). */}
+      <Material role="bar" testID="onboarding-header" style={[styles.header, { paddingTop: insets.top + SPACE.sm }, contrast && IC_HAIRLINE]}>
+        <View style={[styles.headerRow, { height: circle }]}>
+          {onBack ? (
+            <IconButton icon={android ? 'arrow-left' : 'chevron-left'} accessibilityLabel="Back" onPress={onBack} testID="onboarding-back" />
+          ) : null}
+          {step ? (
+            <Text testID="onboarding-step" style={[styles.stepLabel, styles.step]}>
+              {`Step ${stepIndex(step) + 1} of ${ONBOARDING_STEPS.length}`}
+            </Text>
+          ) : null}
+        </View>
+      </Material>
 
       {step ? (
         <View style={styles.progress}>
@@ -121,6 +119,7 @@ export function OnboardingScreen({
       <KeyboardAvoidingView style={styles.flex} behavior={KEYBOARD_BEHAVIOR} keyboardVerticalOffset={0}>
         <ScrollView
           ref={scrollRef}
+          testID="onboarding-scroll"
           onScroll={onScroll}
           scrollEventThrottle={16}
           onLayout={onViewportLayout}
@@ -143,11 +142,9 @@ export function OnboardingScreen({
           </View>
 
           {children ? (
-            <RevealOnFocus.Provider value={reveal}>
-              <View ref={bodyRef} onLayout={onBodyLayout} style={styles.body}>
-                {children}
-              </View>
-            </RevealOnFocus.Provider>
+            <View ref={bodyRef} testID="onboarding-body" onLayout={onBodyLayout} style={styles.body}>
+              {typeof children === 'function' ? children({ onFocus: reveal }) : children}
+            </View>
           ) : null}
         </ScrollView>
 
@@ -159,8 +156,9 @@ export function OnboardingScreen({
           ) : null}
           {footerNote && !keyboardUp ? (
             <View style={styles.note}>
-              <Icon name="lock" size={ICON.inline} color={COLOR.textTertiary} />
-              <Text style={[font('label', bold), styles.noteText]}>{footerNote.toUpperCase()}</Text>
+              {/* design-exception: the frame draws the lock at 14 and the note at 11/16, a step under the scale */}
+              <Icon name="lock" size={14} color={COLOR.textTertiary} />
+              <Text style={[font('label', bold), styles.noteText, styles.noteSize]}>{footerNote.toUpperCase()}</Text>
             </View>
           ) : null}
         </Dock>
@@ -184,4 +182,8 @@ const styles = StyleSheet.create({
   body: { gap: SPACE.xl },
   note: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center', gap: SPACE.xs, paddingHorizontal: SPACE.sm },
   noteText: { color: COLOR.textTertiary, textAlign: 'center', flexShrink: 1 },
+  // design-exception: the frame sets the note at 11/16 and the step label at 13 with 0.3 tracking, off the type scale
+  noteSize: { fontSize: 11, lineHeight: 16 },
+  // design-exception: the frame's step label is Geist Mono 13 with 0.3 tracking
+  stepLabel: { fontFamily: FONT_FAMILY.mono[500], fontSize: 13, lineHeight: 16, letterSpacing: 0.3, fontVariant: ['tabular-nums'] },
 })

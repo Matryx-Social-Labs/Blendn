@@ -8,7 +8,6 @@ import { DateField, type DateParts } from '../../components/ds/DateField'
 import { Sheet } from '../../components/ds/Sheet'
 import { TextField } from '../../components/ds/TextField'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
-import { useRevealProps } from '../../components/onboarding/revealFocused'
 import {
   ADULTS_ONLY,
   canContinue,
@@ -21,7 +20,6 @@ import {
 import { SPACE } from '../../lib/design/tokens'
 import { useOnboarding } from '../../lib/useOnboarding'
 import { signOut, useAuth } from '../../lib/useAuth'
-
 
 /**
  * Step one: a name, a gender, a birth date.
@@ -59,7 +57,6 @@ const NOT_A_DATE = 'That is not a date we recognise.'
 
 function BasicsScreenInner() {
   const { draft, loaded, saving, commit } = useOnboarding('basics')
-  const reveal = useRevealProps()
 
   const [name, setName] = useState('')
   const [gender, setGender] = useState<OnboardingGender | undefined>()
@@ -145,7 +142,9 @@ function BasicsScreenInner() {
       secondaryLabel="Not you? Sign out"
       onSecondary={() => setConfirmSignOut(true)}
     >
-      {/*
+      {(reveal) => (
+        <>
+          {/*
         Full name; a made-up name in rooms until the person shows theirs, and
         then the whole of it (`roomIdentity`, admin lib/identity.ts). The
         helper said "only your first name" and nothing shortens it (SCRUM-493).
@@ -155,61 +154,69 @@ function BasicsScreenInner() {
         regardless — a full name is only ever seen by someone who has matched,
         opened a conversation, or been revealed to.
       */}
-      <TextField
-        label="Your name"
-        placeholder="First and last name"
-        hint={NAME_HINT}
-        value={name}
-        onChangeText={(value) => setName(value.slice(0, NAME_MAX))}
-        autoCapitalize="words"
-        // A name is not a word to correct.
-        autoCorrect={false}
-        autoComplete="name"
-        textContentType="name"
-        // The birth date is three boxes of its own, which the keyboard cannot walk to: done puts it away.
-        returnKeyType="done"
-        testID="onboarding-name"
-        {...reveal}
-      />
+          <TextField
+            label="Your name"
+            placeholder="First and last name"
+            hint={NAME_HINT}
+            value={name}
+            onChangeText={(value) => setName(value.slice(0, NAME_MAX))}
+            autoCapitalize="words"
+            // A name is not a word to correct.
+            autoCorrect={false}
+            autoComplete="name"
+            textContentType="name"
+            // The birth date is three boxes of its own, which the keyboard cannot walk to: done puts it away.
+            returnKeyType="done"
+            testID="onboarding-name"
+            {...reveal}
+          />
 
-      <ChipSet
-        label="Gender identity"
-        items={GENDERS.map((option) => ({ key: option.value, label: option.label }))}
-        selection="single"
-        selected={gender ? [gender] : []}
-        // Tapping the chosen one again clears it. Gender is optional and
-        // there is otherwise no way back to "unanswered" once tapped.
-        onToggle={(value) => setGender(gender === value ? undefined : (value as typeof gender))}
-        testID="onboarding-gender"
-      />
+          <ChipSet
+            label="Gender identity"
+            items={GENDERS.map((option) => ({ key: option.value, label: option.label }))}
+            selection="single"
+            selected={gender ? [gender] : []}
+            // Tapping the chosen one again clears it. Gender is optional and
+            // there is otherwise no way back to "unanswered" once tapped.
+            onToggle={(value) => setGender(gender === value ? undefined : (value as typeof gender))}
+            testID="onboarding-gender"
+          />
 
-      <View style={styles.date}>
-        <DateField
-          label="Date of birth"
-          value={[dob.day, dob.month, dob.year] as DateParts}
-          onChange={([day, month, year]) => setDob({ day, month, year })}
-          error={dateError}
-          hint={dateError ? undefined : DOB_HINT}
-          testID="onboarding-dob"
-        />
-        {/* Under 18 is a dead end on this account, so the exit sits beside the sentence. */}
-        {underAge ? (
-          <Button label="Sign out" kind="tertiary" size="sm" onPress={() => setConfirmSignOut(true)} testID="onboarding-under-age-sign-out" />
-        ) : null}
-      </View>
+          <View style={styles.date}>
+            <DateField
+              label="Date of birth"
+              value={[dob.day, dob.month, dob.year] as DateParts}
+              onChange={([day, month, year]) => setDob({ day, month, year })}
+              error={dateError}
+              hint={dateError ? undefined : DOB_HINT}
+              testID="onboarding-dob"
+            />
+            {/* Under 18 is a dead end on this account, so the exit sits beside the sentence. */}
+            {underAge ? (
+              <Button
+                label="Sign out"
+                kind="tertiary"
+                size="sm"
+                onPress={() => setConfirmSignOut(true)}
+                testID="onboarding-under-age-sign-out"
+              />
+            ) : null}
+          </View>
 
-      <Sheet
-        visible={confirmSignOut}
-        onClose={() => setConfirmSignOut(false)}
-        icon="log-out"
-        title="Sign out?"
-        body="What you’ve filled in stays on this phone, so you can pick up here when you sign back in."
-        actions={[
-          { label: 'Cancel', kind: 'secondary', onPress: () => setConfirmSignOut(false), disabled: signingOut },
-          { label: 'Sign out', kind: 'primary', onPress: () => void leave(), loading: signingOut },
-        ]}
-        testID="sign-out-sheet"
-      />
+          <Sheet
+            visible={confirmSignOut}
+            onClose={() => setConfirmSignOut(false)}
+            icon="log-out"
+            title="Sign out?"
+            body="What you’ve filled in stays on this phone, so you can pick up here when you sign back in."
+            actions={[
+              { label: 'Cancel', kind: 'secondary', onPress: () => setConfirmSignOut(false), disabled: signingOut },
+              { label: 'Sign out', kind: 'primary', onPress: () => void leave(), loading: signingOut },
+            ]}
+            testID="sign-out-sheet"
+          />
+        </>
+      )}
     </OnboardingScreen>
   )
 }
@@ -217,7 +224,6 @@ function BasicsScreenInner() {
 const styles = StyleSheet.create({
   date: { gap: SPACE.sm },
 })
-
 
 /*
  * Wrapped so `lib/perf.tsx` can report what this screen costs to render.

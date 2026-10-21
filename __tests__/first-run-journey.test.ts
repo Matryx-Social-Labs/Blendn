@@ -58,7 +58,7 @@ describe('a way out of onboarding', () => {
   it('offers sign-out on the first step and beside the under-18 message', () => {
     const basics = read('app/onboarding/basics.tsx')
     expect(basics).toContain('secondaryLabel="Not you? Sign out"')
-    expect(basics).toMatch(/\{underAge \? \(\s*<Button label="Sign out"[^>]*onPress=\{\(\) => setConfirmSignOut\(true\)\}/)
+    expect(basics).toMatch(/\{underAge \? \(\s*<Button\s+label="Sign out"[\s\S]*?onPress=\{\(\) => setConfirmSignOut\(true\)\}/)
     expect(basics).toContain('const underAge = isUnderAccountAge(dateOfBirth)')
     expect(basics).toContain('await signOut()')
   })

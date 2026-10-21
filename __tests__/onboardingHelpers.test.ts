@@ -1,6 +1,6 @@
 import { photoNote, readyPhotos, withMainFirst, type PhotoTile } from '../components/onboarding/photoTiles'
 import { isPreciseLocationOff } from '../components/onboarding/preciseLocation'
-import { bioWithPrompt, DEFAULT_MAX_EXPERTISE, keepExpertise, stepPayload, toggleExpertise } from '../lib/onboarding'
+import { bioWithPrompt, DEFAULT_MAX_EXPERTISE, promptFits, keepExpertise, stepPayload, toggleExpertise } from '../lib/onboarding'
 
 describe('bioWithPrompt', () => {
   it('starts an empty bio with the prompt and a space to type after', () => {
@@ -13,6 +13,13 @@ describe('bioWithPrompt', () => {
   it('leaves the bio alone when the whole would not fit', () => {
     const bio = 'x'.repeat(495)
     expect(bioWithPrompt(bio, 'Ask me about…', 500)).toBe(bio)
+  })
+})
+
+describe('promptFits', () => {
+  it('is whether the prompt has room, so a chip that would do nothing can be dimmed', () => {
+    expect(promptFits('', 'Ask me about…', 500)).toBe(true)
+    expect(promptFits('x'.repeat(495), 'Ask me about…', 500)).toBe(false)
   })
 })
 

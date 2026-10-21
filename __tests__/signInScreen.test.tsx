@@ -157,6 +157,15 @@ describe('the server answers', () => {
   })
 })
 
+describe('haptics', () => {
+  it('the press-in is silent: a refusal plays its one H.error, so nothing fires twice', async () => {
+    const primary = jest.spyOn(H, 'primary')
+    await render(<SignIn />)
+    await fireEvent(screen.getByTestId('sign-in-primary'), 'pressIn')
+    expect(primary).not.toHaveBeenCalled()
+  })
+})
+
 describe('the entry screen’s notice', () => {
   it('is shown on the form, and goes when the server refuses something', async () => {
     ;(useLocalSearchParams as jest.Mock).mockReturnValue({ notice: 'You were signed out. Sign in again to continue.' })

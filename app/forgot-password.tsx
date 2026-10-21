@@ -10,10 +10,10 @@ import { forgotPasswordMessage } from '../lib/signInRefusal'
 import { Backdrop, ORB_LEVEL } from '../components/onboarding/Backdrop'
 import { CooldownRing } from '../components/onboarding/CooldownRing'
 import { Dock } from '../components/onboarding/Dock'
-import { FormError } from '../components/onboarding/FormError'
 import { FormHeader } from '../components/onboarding/FormHeader'
 import { useRefusedPulse } from '../components/onboarding/useRefusedPulse'
 import { useSettleIn } from '../components/onboarding/useSettleIn'
+import { Banner } from '../components/ds/Banner'
 import { Button } from '../components/ds/Button'
 import { GlyphWell } from '../components/ds/StateScreen'
 import { TextField } from '../components/ds/TextField'
@@ -189,7 +189,7 @@ export default function ForgotPassword() {
                 </Text>
               </View>
 
-              {error ? <FormError message={error} waiting={waiting} testID="forgot-error" /> : null}
+              {error ? <Banner kind="error" text={error} icon={waiting ? 'clock' : undefined} testID="forgot-error" /> : null}
             </ScrollView>
 
             <Dock glass={false} keyboardUp={false} testID="forgot-dock">
@@ -253,7 +253,7 @@ export default function ForgotPassword() {
                 testID="forgot-email"
               />
 
-              {error ? <FormError message={error} waiting={waiting} testID="forgot-error" /> : null}
+              {error ? <Banner kind="error" text={error} icon={waiting ? 'clock' : undefined} testID="forgot-error" /> : null}
             </ScrollView>
 
             <Dock glass={keyboardUp} keyboardUp={keyboardUp} testID="forgot-dock">

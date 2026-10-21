@@ -7,10 +7,10 @@ import { Logger } from '../lib/logger'
 import { currentDeviceInfo } from '../components/onboarding/authForm'
 import { Backdrop, ORB_LEVEL } from '../components/onboarding/Backdrop'
 import { Dock } from '../components/onboarding/Dock'
-import { FormError } from '../components/onboarding/FormError'
 import { FormHeader } from '../components/onboarding/FormHeader'
 import { useRevealFocused } from '../components/onboarding/revealFocused'
 import { useRefusedPulse } from '../components/onboarding/useRefusedPulse'
+import { Banner } from '../components/ds/Banner'
 import { Button } from '../components/ds/Button'
 import { SegmentedControl } from '../components/ds/SegmentedControl'
 import { TextField } from '../components/ds/TextField'
@@ -323,12 +323,20 @@ export default function SignIn() {
             )}
           </View>
 
-          {error ? <FormError message={error} waiting={waiting} testID="sign-in-error" /> : null}
+          {error ? <Banner kind="error" text={error} icon={waiting ? 'clock' : undefined} testID="sign-in-error" /> : null}
         </ScrollView>
 
         {/* Docked: the primary is one thumb away; over the keyboard it rides on glass, at rest it is only the button on the page. */}
         <Dock glass={keyboardUp} keyboardUp={keyboardUp} testID="sign-in-dock">
-          <Button label={isSignup ? 'Create account' : 'Sign in'} onPress={() => void submit()} loading={busy} refused={refused} testID="sign-in-primary" />
+          {/* A refusal plays its H.error within the press (the button's `refused`), so the press-in is silent: one haptic, not two. */}
+          <Button
+            label={isSignup ? 'Create account' : 'Sign in'}
+            onPress={() => void submit()}
+            loading={busy}
+            refused={refused}
+            pressHaptic={false}
+            testID="sign-in-primary"
+          />
           {!keyboardUp && !isSignup ? (
             <View style={styles.forgot}>
               <Button

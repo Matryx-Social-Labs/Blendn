@@ -12,7 +12,7 @@ import { RADIUS, SPACE } from '../../lib/design/tokens'
  * 32 pt top corner, the primary at 56 and what goes with it under it, 8 pt apart. Above the keyboard it drops the home
  * indicator's room; `glass={false}` is the sign-in form at rest, where the dock is only the primary on the page.
  *
- * The Android snackbar stands above it (its height, less the inset the toast adds itself).
+ * The Android snackbar stands above it (its height, less the inset the toast adds itself when the dock holds that inset).
  */
 export function Dock({
   glass = true,
@@ -31,7 +31,8 @@ export function Dock({
   const insets = useSafeAreaInsets()
   const contrast = useIncreaseContrast()
   const [height, setHeight] = useState(0)
-  useToastDock(Math.max(0, height - insets.bottom))
+  // The toast adds the bottom inset itself, and this dock holds it only at rest: over the keyboard its padding has none to subtract.
+  useToastDock(Math.max(0, height - (keyboardUp ? 0 : insets.bottom)))
   const style = [styles.dock, { gap, paddingBottom: keyboardUp ? SPACE.md : insets.bottom + SPACE.lg }]
   const onLayout = (e: { nativeEvent: { layout: { height: number } } }) => setHeight(e.nativeEvent.layout.height)
 
