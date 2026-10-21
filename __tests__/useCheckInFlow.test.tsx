@@ -233,6 +233,41 @@ describe('the sheets it asks for (Flow 4 Tonight #15–#22)', () => {
     expect(buttons()).toEqual([['Close', 'secondary']])
   })
 
+  describe('the refusals with a fix (Flow 15 15.22)', () => {
+    const outcome = (errorCode: string, message: string): CheckInOutcome =>
+      ({ kind: 'refused', refusal: checkInRefusal(errorCode, message), errorCode, alreadyCheckedIn: false }) as CheckInOutcome
+
+    it.each([
+      ['FORBIDDEN', 'Finish setting up your profile first. Blend\'n is for people 18 and over.', 'Finish your profile first', 'Finish profile', 'user-round-pen'],
+      ['PROFILE_INCOMPLETE', 'whatever the server says', 'Finish your profile first', 'Finish profile', 'user-round-pen'],
+      ['AGE_RESTRICTED', 'This event is 18+. Add your age to your profile to check in.', 'Add your age to check in', 'Add your age', 'calendar'],
+      ['AGE_UNKNOWN', 'whatever the server says', 'Add your age to check in', 'Add your age', 'calendar'],
+    ])('%s: the frame’s sheet with the fix as the primary and Not now beside it, and no haptic of its own', async (code, message, title, fix, icon) => {
+      const { done } = await checkIn(outcome(code, message))
+      expect(await done).toBe('refused')
+      expect(props.showTray).toHaveBeenCalledWith(title, expect.any(String), expect.any(Array), { icon })
+      expect(buttons()).toEqual([['Not now', 'tertiary'], [fix, 'primary']])
+      // "A refusal never carries a haptic; the fix does": no H.error as the sheet opens.
+      expect(error).not.toHaveBeenCalled()
+    })
+
+    it('the fix closes the sheet and opens Edit profile; Not now only closes', async () => {
+      await checkIn(outcome('AGE_UNKNOWN', 'x'))
+      const [notNow, fix] = props.showTray.mock.calls[0][2] as { onPress: () => void }[]
+      notNow.onPress()
+      expect(router.push).not.toHaveBeenCalledWith('/edit-profile')
+      fix.onPress()
+      expect(props.closeTray).toHaveBeenCalled()
+      expect(router.push).toHaveBeenCalledWith('/edit-profile')
+    })
+
+    it('an age the server knows is under the event’s gets no fix: a plain "Not open to you"', async () => {
+      await checkIn(outcome('AGE_RESTRICTED', 'This event is 21+.'))
+      expect(props.showTray).toHaveBeenCalledWith('Not open to you', 'This event is 21+.', expect.any(Array), { icon: 'circle-slash' })
+      expect(buttons()).toEqual([['Close', 'secondary']])
+    })
+  })
+
   it('a failure on our side offers Try again, which runs the check-in again', async () => {
     await checkIn(refused('INTERNAL', 'Check-in failed'))
     expect(props.showTray).toHaveBeenCalledWith('Check-in failed', 'The server’s sentence.', expect.any(Array), { icon: 'cloud-off' })

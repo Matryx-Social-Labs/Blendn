@@ -124,3 +124,25 @@ describe("the screen consults the code, not the sentence", () => {
     expect(read("components/blendn/BlendnScreen.tsx")).toContain("onOpenMaps: () => insideEvent && router.push({ pathname: '/event/[id]'")
   })
 })
+
+describe('the refusals with a fix (Flow 15 15.22)', () => {
+  it('an unfinished profile and an age that is not on file carry a fix; an age that is known and too low does not', () => {
+    expect(checkInRefusal('FORBIDDEN', 'Finish setting up your profile first.').fix).toEqual({ kind: 'finish_profile', label: 'Finish profile' })
+    expect(checkInRefusal('PROFILE_INCOMPLETE', undefined).fix?.kind).toBe('finish_profile')
+    expect(checkInRefusal('AGE_RESTRICTED', 'This event is 18+. Add your age to your profile to check in.').fix).toEqual({ kind: 'add_age', label: 'Add your age' })
+    expect(checkInRefusal('AGE_RESTRICTED', 'Blend’n is for people 18 and over. Add your date of birth to your profile to go live.').fix?.kind).toBe('add_age')
+    expect(checkInRefusal('AGE_UNKNOWN', undefined).fix?.kind).toBe('add_age')
+    expect(checkInRefusal('AGE_RESTRICTED', 'This event is 21+.').fix).toBeUndefined()
+  })
+
+  it('the words are the frame’s, not the server’s: the client owns what is offered', () => {
+    expect(checkInRefusal('FORBIDDEN', 'x')).toMatchObject({
+      title: 'Finish your profile first',
+      message: 'People in the room see your name or a creature. Add a name and a photo, then hold to check in.',
+    })
+    expect(checkInRefusal('AGE_UNKNOWN', 'x')).toMatchObject({
+      title: 'Add your age to check in',
+      message: 'Events on Blend’n are 18+. Add your date of birth once; nobody else ever sees it.',
+    })
+  })
+})

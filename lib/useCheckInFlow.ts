@@ -124,6 +124,21 @@ export function useCheckInFlow({
    */
   const refusalButtons = (refusal: CheckInRefusal, errorCode: string | undefined): TrayButton[] => {
     const close = { label: 'Close', onPress: closeTray }
+    if (refusal.fix) {
+      // Finish profile, Add your age (Flow 15 15.22): the fix is the primary, "Not now" the text beside it. Both are Edit profile.
+      return [
+        { label: 'Not now', onPress: closeTray, kind: 'tertiary' },
+        {
+          label: refusal.fix.label,
+          variant: 'primary',
+          kind: 'primary',
+          onPress: () => {
+            closeTray()
+            router.push('/edit-profile' as never)
+          },
+        },
+      ]
+    }
     if (refusal.offerDirections) {
       return [
         { ...close, kind: 'tertiary' },
@@ -228,7 +243,8 @@ export function useCheckInFlow({
           await onEnterRoom?.()
           return 'checkedIn'
         }
-        H.error({ blocking: true })
+        // A refusal with a fix carries no haptic of its own (Flow 15 15.22: "a refusal never carries a haptic; the fix does").
+        if (!refusal.fix) H.error({ blocking: true })
         showTray(refusal.title, refusal.message, refusalButtons(refusal, outcome.errorCode), { icon: refusal.icon })
         return 'refused'
       } else {

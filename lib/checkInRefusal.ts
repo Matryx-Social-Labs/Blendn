@@ -37,6 +37,11 @@ export const CHECK_IN_CODES = {
   EVENT_NOT_STARTED: "EVENT_NOT_STARTED",
   EVENT_ENDED: "EVENT_ENDED",
   AGE_RESTRICTED: "AGE_RESTRICTED",
+  /** An unfinished profile is a 403 `FORBIDDEN` at the door (`lib/check-in-core.ts`); proposed: `PROFILE_INCOMPLETE`. */
+  FORBIDDEN: "FORBIDDEN",
+  PROFILE_INCOMPLETE: "PROFILE_INCOMPLETE",
+  /** Proposed: an age refusal for an age that is simply not on file, the one the person can fix. Today it is `AGE_RESTRICTED` with its sentence. */
+  AGE_UNKNOWN: "AGE_UNKNOWN",
   ALREADY_CHECKED_IN: "ALREADY_CHECKED_IN",
   EVENT_FULL: "EVENT_FULL",
 } as const
@@ -64,9 +69,33 @@ export type CheckInRefusal = {
    * event that has ended, and offering it there is a button that cannot work.
    */
   offerDirections: boolean
+  /**
+   * The one thing the person can do about it, when there is one (Flow 15 15.22): the tray offers it as the primary beside
+   * "Not now", and the refusal plays no haptic of its own, the fix does.
+   */
+  fix?: { kind: 'finish_profile' | 'add_age'; label: string }
 }
 
+/** The server's sentence for an age that is not on file ("… Add your age to your profile to check in."), until it sends `AGE_UNKNOWN`. */
+const ADD_YOUR_AGE = /add your (age|date of birth)/i
+
 const GENERIC = "We could not verify your check-in. Please try again."
+
+/** The frame's own words (Flow 15 15.22): the client owns what to offer, so the client words it. */
+const PROFILE_FIX: CheckInRefusal = {
+  title: "Finish your profile first",
+  message: "People in the room see your name or a creature. Add a name and a photo, then hold to check in.",
+  offerDirections: false,
+  icon: "user-round-pen",
+  fix: { kind: "finish_profile", label: "Finish profile" },
+}
+const AGE_FIX: CheckInRefusal = {
+  title: "Add your age to check in",
+  message: "Events on Blend’n are 18+. Add your date of birth once; nobody else ever sees it.",
+  offerDirections: false,
+  icon: "calendar",
+  fix: { kind: "add_age", label: "Add your age" },
+}
 
 export function checkInRefusal(
   errorCode: string | undefined,
@@ -87,8 +116,16 @@ export function checkInRefusal(
       return { title: "Doors aren't open", message, offerDirections: false, icon: "door-closed" }
     case CHECK_IN_CODES.EVENT_ENDED:
       return { title: "This one's over", message, offerDirections: false, icon: "moon" }
+    case CHECK_IN_CODES.AGE_UNKNOWN:
+      return AGE_FIX
     case CHECK_IN_CODES.AGE_RESTRICTED:
+      // Only an age that is not on file can be fixed here; a known age under the event's is a no, with no fix (Flow 15 #9).
+      if (ADD_YOUR_AGE.test(message)) return AGE_FIX
       return { title: "Not open to you", message, offerDirections: false, icon: "circle-slash" }
+    case CHECK_IN_CODES.PROFILE_INCOMPLETE:
+      return PROFILE_FIX
+    case CHECK_IN_CODES.FORBIDDEN:
+      return PROFILE_FIX
     case CHECK_IN_CODES.EVENT_FULL:
       // ROUND3 C12 deleted this sheet: the server never sends it. Kept so a stray code still reads right.
       return { title: "At capacity", message, offerDirections: false, icon: "users" }
