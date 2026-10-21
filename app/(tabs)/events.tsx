@@ -1776,8 +1776,11 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
 }
 
 const styles = StyleSheet.create({
-  /** One flat surface: the page's ink edge to edge, no panel, no border, no gradient. */
-  container: { flex: 1, backgroundColor: COLOR.ink },
+  /**
+   * One surface with the title-tabs band above it: the drawer's own (glass at half, its ink wash at full), no panel, no border, no
+   * gradient. An ink of its own here drew a hard edge under the glass band.
+   */
+  container: { flex: 1 },
   /**
    * No horizontal padding of its own: every row carries its gutter (the rails and the Set list bleed to the edge), so a
    * section cannot disagree with the one above it.

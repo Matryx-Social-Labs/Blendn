@@ -84,3 +84,11 @@ describe('The Pulse is one flat surface', () => {
     expect(root).not.toContain('BackgroundGradient')
   })
 })
+
+describe('The Events pane shares the drawer’s surface', () => {
+  it('paints no ink of its own under the list, so the title-tabs band and the list are one surface', () => {
+    const src = read('app/(tabs)/events.tsx')
+    expect(src).toMatch(/container: \{ flex: 1 \},/)
+    expect(src).not.toMatch(/container: \{[^}]*backgroundColor/)
+  })
+})
