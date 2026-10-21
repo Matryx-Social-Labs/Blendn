@@ -1,11 +1,12 @@
 import { router } from 'expo-router'
 import { useState } from 'react'
-import { FlatList, RefreshControl, StyleSheet } from 'react-native'
+import { FlatList, RefreshControl, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { StateScreen } from '../../components/ds/StateScreen'
 import { TopBar } from '../../components/ds/TopBar'
 import { IncomingRequestRow, RequestSkeleton } from '../../components/friends/IncomingRequestRow'
+import { OfflineStrip, useOffline } from '../../components/profile/OfflineStrip'
 import { COLOR, SPACE } from '../../lib/design/tokens'
 import { useFriendRequests } from '../../lib/useFriendRequests'
 import { useTopBarState } from '../../lib/useTopBarState'
@@ -23,6 +24,7 @@ function FriendRequestsScreenContent() {
   const { incoming, loaded, failed, load, respond, busy } = useFriendRequests()
   const [refreshing, setRefreshing] = useState(false)
   const bar = useTopBarState()
+  const offline = useOffline()
 
   const onRefresh = async () => {
     setRefreshing(true)
@@ -48,6 +50,11 @@ function FriendRequestsScreenContent() {
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <TopBar title="Requests" state={bar.state} onBack={() => router.back()} />
+      {offline ? (
+        <View style={styles.offline}>
+          <OfflineStrip offline />
+        </View>
+      ) : null}
       {!loaded && !failed ? (
         <RequestSkeleton />
       ) : (
@@ -74,6 +81,7 @@ function FriendRequestsScreenContent() {
 }
 
 const styles = StyleSheet.create({
+  offline: { paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.sm },
   container: { flex: 1, backgroundColor: COLOR.ink },
   list: { paddingHorizontal: SPACE.gutter, paddingVertical: SPACE.sm, gap: SPACE.md },
   emptyList: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: SPACE.gutter },

@@ -149,7 +149,7 @@ describe('one age rule for every form that takes an age', () => {
     const refused = src.slice(src.indexOf('if (errors.name || errors.age)')).slice(0, 900)
     // To the Basic Information card's own offset, not 0 (the photo grid)...
     expect(refused).toMatch(/scrollRef\.current\?\.scrollTo\(\{ *y: *basicInfoY\.current/)
-    expect(src).toMatch(/onLayout=\{\(e\) => \{ basicInfoY\.current = e\.nativeEvent\.layout\.y \}\}>\s*<Text style=\{styles\.cardTitle\}>BASIC INFORMATION/)
+    expect(src).toContain('<EditCard title="Basic information" onLayout={(y) => (basicInfoY.current = y)}>')
     // ...and focus on the field to fix, not left on Save.
     expect(refused).toContain('(errors.name ? nameInputRef : ageInputRef).current?.focus()')
     expect(src).toMatch(/label="Name"\s*inputRef=\{nameInputRef\}/)

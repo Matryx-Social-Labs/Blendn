@@ -102,7 +102,6 @@ jest.mock('../components/pulse/FilterControl', () => {
       p.visible ? <Pressable testID="close-sheet" onPress={p.onClose} /> : null,
   }
 })
-jest.mock('../components/pulse/SectionHeader', () => ({ SectionHeader: () => null }))
 jest.mock('../components/ui/DayHeading', () => ({ DayHeading: () => null }))
 jest.mock('../components/cityArt/CityArtCard', () => ({ CityArtBanner: () => null, CityArtCard: () => null }))
 jest.mock('../components/cityArt/drawable', () => ({ drawableCityArt: () => null }))

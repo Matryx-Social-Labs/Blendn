@@ -4,7 +4,7 @@ import { StyleSheet, Text, View } from 'react-native'
 import { apiClient } from '../lib/apiClient'
 import { pickableItems, toPickerTree, type CategoryGroup, type CategoryNode } from '../lib/categories'
 import { Logger } from '../lib/logger'
-import { SPACE, TYPE } from '../lib/theme'
+import { COLOR, SPACE, TYPE } from '../lib/design/tokens'
 import { ChipSet } from './ds/ChipSet'
 
 /**
@@ -54,9 +54,12 @@ const INTERESTS_SHOWN = 12
 export function InterestPicker({
   selected,
   onChange,
+  showCount = true,
 }: {
   selected: string[]
   onChange: (next: string[]) => void
+  /** The "Selected: n/10" line; off where the host's card already says it (Edit profile: "5 / 10"). */
+  showCount?: boolean
 }) {
   const [groups, setGroups] = useState<CategoryGroup[]>([])
   const [loading, setLoading] = useState(true)
@@ -97,9 +100,11 @@ export function InterestPicker({
 
   return (
     <View>
-      <Text style={styles.counter}>
-        Selected: {selected.length}/{MAX_INTERESTS}
-      </Text>
+      {showCount ? (
+        <Text style={styles.counter}>
+          Selected: {selected.length}/{MAX_INTERESTS}
+        </Text>
+      ) : null}
 
       {loading ? (
         <Text style={styles.notice}>Loading interests…</Text>
@@ -146,6 +151,6 @@ export function InterestPicker({
 
 const styles = StyleSheet.create({
   group: { marginBottom: SPACE.xl },
-  counter: { ...TYPE.meta, marginBottom: SPACE.md },
-  notice: { ...TYPE.meta, marginBottom: SPACE.md },
+  counter: { ...TYPE.meta, color: COLOR.textSecondary, marginBottom: SPACE.md },
+  notice: { ...TYPE.meta, color: COLOR.textSecondary, marginBottom: SPACE.md },
 })

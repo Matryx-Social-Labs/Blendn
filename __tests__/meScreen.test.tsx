@@ -84,7 +84,7 @@ it('says the first night is not written yet when there is none, never an empty g
   await render(<Profile />)
   await screen.findByTestId('nights-first')
   expect(screen.queryByTestId('nights-grid')).toBeNull()
-  fireEvent.press(screen.getByText('See what’s on tonight'))
+  await fireEvent.press(screen.getByText('See what’s on tonight'))
   expect(mockNavigate).toHaveBeenCalled()
 })
 
@@ -105,7 +105,7 @@ it('a profile that did not load is a state with Try again, not a blank', async (
   await render(<Profile />)
   await screen.findByText('Your profile didn’t load')
   api.getPublicProfile.mockResolvedValue(PROFILE as never)
-  fireEvent.press(screen.getByText('Try again'))
+  await fireEvent.press(screen.getByText('Try again'))
   await screen.findByLabelText('Sam, 28')
 })
 
@@ -114,7 +114,7 @@ it('offers Add a photo as the one primary when there is no photo', async () => {
   api.getMyAttendance.mockResolvedValue({ success: true, data: { events: [] } } as never)
   await render(<Profile />)
   await screen.findByText('Finish your profile')
-  fireEvent.press(screen.getByText('Add a photo'))
+  await fireEvent.press(screen.getByText('Add a photo'))
   expect(mockPush).toHaveBeenCalledWith('/edit-profile')
 })
 
@@ -124,8 +124,8 @@ it('Settings and Add friends are the bar circles, and go where they say', async 
   api.getMyAttendance.mockResolvedValue({ success: true, data: { events: [] } } as never)
   await render(<Profile />)
   await screen.findByLabelText('Sam, 28')
-  fireEvent.press(screen.getByLabelText('Settings'))
+  await fireEvent.press(screen.getByLabelText('Settings'))
   expect(mockPush).toHaveBeenCalledWith('/settings')
-  fireEvent.press(screen.getByLabelText('Add friends'))
+  await fireEvent.press(screen.getByLabelText('Add friends'))
   expect(mockPush).toHaveBeenCalledWith('/friends/add')
 })

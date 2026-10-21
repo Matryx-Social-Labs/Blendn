@@ -51,6 +51,11 @@ export interface ProfilePhoto {
   order: number
   isVerified?: boolean
   isPrimary?: boolean
+  /**
+   * Moderation took this photo down (Flow 6 edit 05). The server sends no such flag on a photo yet, so nothing sets it today; the tile
+   * that says so is built and waits for it (docs: server gap).
+   */
+  pulled?: boolean
 }
 
 export interface PhotoOptions {
@@ -721,13 +726,16 @@ export const reorderPhotos = async (
 /**
  * Get user's profile photos with metadata
  */
-export const getUserPhotos = async (userId: string): Promise<ProfilePhoto[]> => {
+/**
+ * Your photos, or `null` when they could not be read. A failed read is not an empty list: with no photos drawn, "Add photo" would
+ * write a one-photo list over the ones the server still has.
+ */
+export const loadUserPhotos = async (userId: string): Promise<ProfilePhoto[] | null> => {
   try {
     const result = await apiClient.getProfile(userId)
 
-    if (!result.success || !result.data?.profile?.photos) {
-      return []
-    }
+    if (!result.success) return null
+    if (!result.data?.profile?.photos) return []
 
     const photos = result.data.profile.photos as string[]
     return photos.map((url: string, index: number) => ({
@@ -738,9 +746,11 @@ export const getUserPhotos = async (userId: string): Promise<ProfilePhoto[]> => 
     }))
   } catch (error) {
     Logger.error('profile', 'photoUtils: Get photos error', { error, userId })
-    return []
+    return null
   }
 }
+
+export const getUserPhotos = async (userId: string): Promise<ProfilePhoto[]> => (await loadUserPhotos(userId)) ?? []
 
 /** What choosing a photo came to: the file to upload, or why there is none (a cancelled picker is not a failure). */
 export type PhotoSelection = { ok: true; uri: string } | { ok: false; cancelled?: boolean; error?: string }
@@ -789,12 +799,16 @@ export const selectPhoto = async (): Promise<PhotoSelection> => {
 /**
  * Complete photo selection and upload flow
  */
-export const selectAndUploadPhoto = async (userId: string): Promise<PhotoUploadResult> => {
+export const selectAndUploadPhoto = async (
+  userId: string,
+  hooks: { onPicked?: (uri: string) => void; onProgress?: (fraction: number) => void } = {}
+): Promise<PhotoUploadResult & { uri?: string }> => {
   const selection = await selectPhoto()
   if (!selection.ok) return { success: false, cancelled: selection.cancelled ? true : undefined, error: selection.error }
+  hooks.onPicked?.(selection.uri)
   try {
-    // Upload image
-    return await uploadPhoto(selection.uri, userId)
+    // Upload image; the file comes back with the answer, so a failed tile can try it again.
+    return { ...(await uploadPhoto(selection.uri, userId, undefined, 'profile', hooks.onProgress)), uri: selection.uri }
   } catch (error) {
     Logger.error('profile', 'photoUtils: Photo selection error', { error })
     return {

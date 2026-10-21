@@ -19,9 +19,10 @@ jest.mock('../components/OptimizedImage', () => ({ OptimizedImage: () => null })
 jest.mock('../lib/photoUtils', () => ({
   cachePhoto: jest.fn(async () => null),
   deletePhoto: jest.fn(async () => undefined),
-  getUserPhotos: jest.fn(),
+  loadUserPhotos: jest.fn(),
   reorderPhotos: jest.fn(),
   selectAndUploadPhoto: jest.fn(),
+  uploadPhoto: jest.fn(),
 }))
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -32,9 +33,9 @@ const PhotoManager = require('../components/PhotoManager').default
 const photo = (n: number) => ({ id: `p${n}`, url: `https://cdn/p${n}.jpg`, order: n, isPrimary: n === 0 })
 
 async function mount(count: number, maxPhotos?: number) {
-  photoUtils.getUserPhotos.mockResolvedValue(Array.from({ length: count }, (_, i) => photo(i)))
+  photoUtils.loadUserPhotos.mockResolvedValue(Array.from({ length: count }, (_, i) => photo(i)))
   await render(<PhotoManager userId="u1" maxPhotos={maxPhotos} />)
-  await waitFor(() => expect(screen.queryByText('Loading photos...')).toBeNull())
+  await waitFor(() => expect(screen.queryByTestId('photos-loading')).toBeNull())
 }
 
 describe('PhotoManager', () => {

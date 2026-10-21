@@ -13,7 +13,7 @@ import {
   type Orientation,
 } from '../../lib/dating'
 import { ChipSet } from '../ds/ChipSet'
-import { SPACE } from '../../lib/theme'
+import { SPACE } from '../../lib/design/tokens'
 
 /**
  * The five fields matching runs on: intent, work field, and — only when dating

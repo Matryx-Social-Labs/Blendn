@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { StateScreen } from '../../components/ds/StateScreen'
 import { TopBar } from '../../components/ds/TopBar'
+import { OfflineStrip, useOffline } from '../../components/profile/OfflineStrip'
 import { PersonRow, PersonRowSkeleton } from '../../components/friends/PersonRow'
 import { RequestsRow } from '../../components/friends/RequestsRow'
 import { apiClient } from '../../lib/apiClient'
@@ -27,6 +28,7 @@ function FriendsScreenContent() {
   const [refreshing, setRefreshing] = useState(false)
   const requests = useFriendRequests()
   const bar = useTopBarState()
+  const offline = useOffline()
 
   const load = useCallback(async () => {
     const result = await apiClient.getFriends()
@@ -77,6 +79,11 @@ function FriendsScreenContent() {
         onBack={() => router.back()}
         actions={[{ icon: 'user-plus', label: 'Add friends', onPress: openAdd }]}
       />
+      {offline ? (
+        <View style={styles.requests}>
+          <OfflineStrip offline />
+        </View>
+      ) : null}
       {requests.incoming.length > 0 ? (
         <View style={styles.requests}>
           <RequestsRow count={requests.incoming.length} />

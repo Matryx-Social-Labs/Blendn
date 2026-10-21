@@ -25,7 +25,7 @@ describe('there is one profile editor', () => {
   it('edits the matching fields inside edit-profile', () => {
     const src = codeOnly(read('app/edit-profile.tsx'))
     expect(src).toContain('<MatchingFields')
-    expect(src).toContain('YOU AND MATCHING')
+    expect(src).toContain('title="You and matching"')
   })
 
   it('shows what you already chose', () => {

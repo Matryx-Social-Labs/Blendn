@@ -13,6 +13,7 @@ import { StateScreen } from '../../components/ds/StateScreen'
 import FadeInUp from '../../components/motion/FadeInUp'
 import { MeIdentity, MeSkeleton, StatsCard } from '../../components/profile/MeSections'
 import { NightsOut } from '../../components/profile/NightsOut'
+import { OfflineStrip, useOffline } from '../../components/profile/OfflineStrip'
 import { PhotoViewer } from '../../components/profile/PhotoViewer'
 import { ProfileBar } from '../../components/profile/ProfileBar'
 import { RequestsRow } from '../../components/friends/RequestsRow'
@@ -80,6 +81,7 @@ function ProfileInner() {
   const insets = useSafeAreaInsets()
   const bold = useBoldText()
   const focused = useIsFocused()
+  const offline = useOffline()
   const [profile, setProfile] = useState<UserProfileViewModel | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -318,6 +320,7 @@ function ProfileInner() {
 
     return (
       <>
+        <OfflineStrip offline={offline} />
         <FadeInUp delay={next()}>
           <MeIdentity
             name={profile?.name || 'You'}
