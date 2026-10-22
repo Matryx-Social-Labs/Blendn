@@ -1,3 +1,4 @@
+import { router } from 'expo-router'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { COLOR, RADIUS, SPACE } from '../../lib/design/tokens'
@@ -139,13 +140,20 @@ export function CrewsHead({
       ) : !state.data.crewsEnabled ? (
         <Line text="Crews are off at this event." />
       ) : state.data.crews.length === 0 ? (
-        <Line
-          text={
-            solo && !open.value
-              ? 'Turn on “Open to joining a crew tonight” to see crews with room for one more.'
-              : 'No other crews here yet. A crew shows once two of them have checked in.'
-          }
-        />
+        solo && open.value ? (
+          // 10-7 · 16: nobody here to like, and you have no crew of your own: the way to one is your friends (Make a crew).
+          <Pressable onPress={() => router.push('/crews/new')} accessibilityRole="button" testID="room-no-crew">
+            <Line text="No crew yet — make one from your friends." />
+          </Pressable>
+        ) : (
+          <Line
+            text={
+              solo
+                ? 'Turn on “Open to joining a crew tonight” to see crews with room for one more.'
+                : 'No other crews here yet. A crew shows once two of them have checked in.'
+            }
+          />
+        )
       ) : null}
     </View>
   )
