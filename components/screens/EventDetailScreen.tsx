@@ -24,7 +24,7 @@ import { AnnouncementSheet, EditEventSheet } from '../scene/EventSheets'
 import { SceneBar } from '../scene/SceneBar'
 import { SceneChangedLines, SceneDayStrip } from '../scene/SceneChange'
 import { changeLines, parseEventChange, type EventChange } from '../../lib/eventChange'
-import { dayOfWords, parseEventDays, sessionIsToday, type EventDays } from '../../lib/eventDays'
+import { betweenDaysLine, dayOfWords, parseEventDays, runRange, sessionIsToday, type EventDays } from '../../lib/eventDays'
 import { showSheet } from '../../lib/sheet'
 import { useSingleFlight } from '../../lib/useSingleFlight'
 import { SkeletonBlock } from '../Skeleton'
@@ -1112,7 +1112,8 @@ export default function EventDetail() {
    * disagree; read off the live window, not the run: on day 2 of a festival the hero says today's doors.
    */
   const heroStart = live?.start_time ?? null
-  const when = isEnded ? 'Ended' : isLive ? 'Live' : event ? cardTime(event, now) : ''
+  // A run of days says its own dates ("Sat 27 – Mon 29 Sep", Flow 3 · 3.2), not just the next doors; "Live" and "Ended" stay as they were.
+  const when = isEnded ? 'Ended' : isLive ? 'Live' : event?.days ? runRange(event.days, event, event.timezone) : event ? cardTime(event, now) : ''
   const place = event?.venue_name ? `at ${[event.venue_name, event.city].filter(Boolean).join(', ')}` : ''
   const scarcity = heroPillLabel({
     doorPolicy: event?.door_policy as never,
@@ -1141,6 +1142,9 @@ export default function EventDetail() {
   const sessionToday = event?.days ? sessionIsToday(event.days, event.timezone, now) : false
   const dayWords = event?.days && sessionToday ? dayOfWords(event.days) : null
   const doorsLabel = event?.days && event.days.dayNumber && !sessionToday ? 'NEXT DOORS' : 'DOORS'
+  // Between days, to somebody who is going: the next door, said where "You're going" was (frame 06). Nothing else changes.
+  const betweenLine =
+    event?.days && ctaState === 'rsvpd' && !sessionToday && heroStart ? betweenDaysLine(event.days, heroStart, event.timezone) : null
   /*
    * Said to the people who had heard of the night (going, maybe, waitlisted, saved): what moved, and what it was. A cancel is
    * the banner's, so it is no line here.
@@ -1356,6 +1360,7 @@ export default function EventDetail() {
           state={ctaState}
           pending={rsvpPending}
           alone={checkInCount <= 1}
+          note={betweenLine ?? undefined}
           onPress={cancelled ? undefined : primaryActionPress}
           iconKey={ctaIcon ?? undefined}
           icon={ctaIcon ? (color) => <Icon name={ctaIcon} size={SCENE_CTA_ICON} color={color} /> : undefined}

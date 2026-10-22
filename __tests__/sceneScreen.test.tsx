@@ -231,6 +231,31 @@ describe('the days of a run (Flow 3 · 3.2, #724 window)', () => {
     expect(screen.getByTestId('scene-day-2').props.accessibilityLabel).toMatch(/, day 2 of 3, next$/)
   })
 
+  it('the hero says the run\'s own dates in place of the next doors (frame 04)', async () => {
+    api.getEvent.mockResolvedValue(detail(run(true)) as never)
+    await open()
+    await screen.findByTestId('scene-when')
+    // Three days: the first day's date to the last, the month said once.
+    expect(screen.getByLabelText(/^Vinyl Night\. \w{3} \d+ – \w{3} \d+ \w{3}\./)).toBeTruthy()
+  })
+
+  it('between days, to somebody who is going, the pill says when the next day starts and is still the RSVP\'s off-switch (frame 06)', async () => {
+    api.getEvent.mockResolvedValue(detail(run(false), { rsvpStatus: 'going' }) as never)
+    await open()
+    const pill = await screen.findByLabelText(/^Day 2 starts .*\. You’re going$/)
+    expect(pill.props.accessibilityState).toEqual(expect.objectContaining({ disabled: false }))
+    expect(screen.queryByText('You’re going')).toBeNull()
+    await fireEvent.press(pill)
+    expect(showSheet).toHaveBeenCalledWith(expect.objectContaining({ title: 'Cancel your RSVP?' }))
+  })
+
+  it('not going, or on the day itself, the pill is the RSVP\'s own words', async () => {
+    api.getEvent.mockResolvedValue(detail(run(false)) as never)
+    await open()
+    expect(await screen.findByLabelText('I’m going')).toBeTruthy()
+    expect(screen.queryByLabelText(/starts/)).toBeNull()
+  })
+
   it('a one-day event has no strip and keeps its doors', async () => {
     api.getEvent.mockResolvedValue(detail({ timezone: ZONE, days: [day(0)], dayCount: 1, daysFrom: 1, dayNumber: 1 }) as never)
     await open()

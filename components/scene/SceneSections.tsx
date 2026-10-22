@@ -342,6 +342,7 @@ export function SceneCTA({
   iconKey,
   onPress,
   alone = false,
+  note,
   pending = false,
 }: {
   state?: SceneCTAState
@@ -349,6 +350,12 @@ export function SceneCTA({
   pending?: boolean
   /** Nobody but you checked in: `rate` then asks about the night, not people. */
   alone?: boolean
+  /**
+   * Between the days of a run, a line the pill says in place of its label and glyph ("Day 3 starts Tue, Sep 29, 9:00 PM",
+   * Flow 3 · 3.2 frame 06): the next door, in Geist Mono. The press is still the RSVP's own off-switch, so a screen reader is
+   * told both, and nothing about the pill's width or state changes.
+   */
+  note?: string
   /** Drawn in the colour the pill hands it — dark on the accent fill, `textPrimary` on the quiet one. */
   icon?: (color: string) => React.ReactNode
   /** Names which glyph `icon` is drawing; a new key is what pops the new one in. */
@@ -389,7 +396,7 @@ export function SceneCTA({
       disabled={disabled}
       accessibilityRole="button"
       accessibilityState={{ disabled, busy: pending, selected: state === 'going' }}
-      accessibilityLabel={sceneCtaLabel(state, alone)}
+      accessibilityLabel={note ? `${note}. ${sceneCtaLabel(state, alone)}` : sceneCtaLabel(state, alone)}
     >
       {/*
         Full width, the gradient while there is something still to do, 8% white
@@ -406,19 +413,19 @@ export function SceneCTA({
         <LayoutAnimationConfig skipEntering>
           {pending ? (
             <ActivityIndicator testID="scene-cta-pending" color={COLOR.textOnGradient} />
-          ) : icon ? (
+          ) : icon && !note ? (
             <Animated.View key={iconKey} entering={reduceMotion ? changeFade : popIn}>
               {icon(COLOR.textOnGradient)}
             </Animated.View>
           ) : null}
           <Animated.Text
-            key={state}
+            key={note ? `${state}:note` : state}
             entering={reduceMotion ? changeFade : ctaLabelIn}
             exiting={reduceMotion ? ctaFadeOut : ctaLabelOut}
-            style={[styles.ctaLabel, styles.ctaInk]}
-            numberOfLines={1}
+            style={[note ? styles.ctaNote : styles.ctaLabel, styles.ctaInk]}
+            numberOfLines={note ? 2 : 1}
           >
-            {sceneCtaLabel(state, alone)}
+            {note ?? sceneCtaLabel(state, alone)}
           </Animated.Text>
         </LayoutAnimationConfig>
       </View>
@@ -681,5 +688,7 @@ const styles = StyleSheet.create({
   ctaFillQuiet: { backgroundColor: MATERIAL.fillOnGlass, borderColor: 'transparent' },
   // TYPE.button's 24pt line is one of the terms SCENE_CTA_HEIGHT is summed from.
   ctaLabel: { ...TYPE.button },
+  // The between-days line: the meta role in Geist Mono, centred, over as many lines as the reader's type needs (the dock measures the pill).
+  ctaNote: { ...TYPE.meta, fontFamily: FONT_FAMILY.mono[500], textAlign: 'center', flexShrink: 1 },
   ctaInk: { color: COLOR.textOnGradient },
 })
