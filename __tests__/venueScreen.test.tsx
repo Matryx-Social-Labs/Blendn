@@ -53,7 +53,7 @@ jest.mock('../lib/locationFix', () => ({ getCurrentLocation: jest.fn(async () =>
 jest.mock('../lib/sheetDismissed', () => ({ ...jest.requireActual('../lib/sheetDismissed'), afterSheetDismissed: () => Promise.resolve() }))
 jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { id: 'u1' } }) }))
 jest.mock('../lib/plus', () => ({ usePlusStatus: () => ({ status: null, refresh: jest.fn() }) }))
-jest.mock('../lib/paywall', () => ({ openPaywall: jest.fn(async () => true) }))
+jest.mock('../lib/paywall', () => ({ openTonight: jest.fn(async () => true) }))
 const mockOpenShare = jest.fn((_target?: unknown) => Promise.resolve(true))
 jest.mock('../lib/shareTray', () => ({ openShare: (t: unknown) => mockOpenShare(t) }))
 jest.mock('../lib/openInMaps', () => ({ openInMaps: jest.fn(() => Promise.resolve()) }))
@@ -72,7 +72,7 @@ import { openBlendn } from '../lib/blendnOverlay'
 import { checkOutOf } from '../lib/checkIn'
 import { H } from '../lib/haptics'
 import { openInMaps } from '../lib/openInMaps'
-import { openPaywall } from '../lib/paywall'
+import { openTonight } from '../lib/paywall'
 import { clockTime } from '../lib/roomMoments'
 /* eslint-enable import/first */
 
@@ -485,9 +485,9 @@ describe('the dock', () => {
       expect(screen.queryAllByRole('radio').length).toBe(4)
     })
 
-    it('“Staying live is part of Blend’n+” when the paywall may not open: Pick a time goes back to the dial, See Blend’n+ opens the paywall', async () => {
+    it('“Staying live is part of Blend’n+” when the paywall may not open: Pick a time goes back to the dial, See Blend’n+ opens the Tonight sheet', async () => {
       goLiveApi.mockResolvedValue({ success: false, errorCode: 'PLUS_REQUIRED', error: 'Staying live is part of Blendn+.' })
-      ;(openPaywall as jest.Mock).mockResolvedValue(false)
+      ;(openTonight as jest.Mock).mockResolvedValue(false)
       await mount()
       await openDial(3)
       await hold()
@@ -504,7 +504,7 @@ describe('the dock', () => {
         fireEvent.press(screen.getByRole('button', { name: 'See Blend’n+' }))
       })
       await act(async () => { jest.advanceTimersByTime(900) })
-      expect(openPaywall).toHaveBeenLastCalledWith('go_live_expiry', { userInitiated: true })
+      expect(openTonight).toHaveBeenLastCalledWith(expect.objectContaining({ trigger: 'stay', venue: 'The Humming Tree' }), { userInitiated: true })
     })
 
     const openDialAgainStay = async () => {
@@ -524,14 +524,14 @@ describe('the dock', () => {
     })
   })
 
-  it('Stay is Blend’n+’s where the server gates it: the dial shows it locked, and a tap opens the paywall once the dial has left', async () => {
+  it('Stay is Blend’n+’s where the server gates it: the dial shows it locked, and a tap opens the Tonight sheet once the dial has left', async () => {
     const plus = require('../lib/plus')
     jest.spyOn(plus, 'usePlusStatus').mockReturnValue({ status: { active: false, gated: true }, refresh: jest.fn() })
-    ;(openPaywall as jest.Mock).mockResolvedValue(true)
+    ;(openTonight as jest.Mock).mockResolvedValue(true)
     await mount()
     await openDial(3)
     await act(async () => { jest.advanceTimersByTime(900) })
-    expect(openPaywall).toHaveBeenCalledWith('go_live_expiry', { userInitiated: true })
+    expect(openTonight).toHaveBeenCalledWith(expect.objectContaining({ trigger: 'stay', venue: 'The Humming Tree', onFree: expect.any(Function), onUnlocked: expect.any(Function) }), { userInitiated: true })
     expect(goLiveApi).not.toHaveBeenCalled()
   })
 

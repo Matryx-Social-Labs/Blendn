@@ -184,3 +184,39 @@ describe('"stay" refused as Blendn+\'s (PLUS_REQUIRED) — the paywall, through 
     expect(router.push).toHaveBeenCalledWith({ pathname: '/plus', params: { trigger: 'go_live_expiry' } })
   })
 })
+
+describe('"stay" refused as Blendn+\'s with the Tonight sheet drawn — it opens, with the place and both ways on', () => {
+  const { registerTonightHost, resetPaywallSession, notePathname } = require('../lib/paywall')
+  let host: jest.Mock
+  let off: () => void
+  beforeEach(() => {
+    resetPaywallSession()
+    notePathname('/venue/v1')
+    host = jest.fn()
+    off = registerTonightHost(host)
+    ;(apiClient.goLive as jest.Mock).mockResolvedValue({ success: false, errorCode: 'PLUS_REQUIRED', error: 'Staying live is part of Blendn+.' })
+  })
+  afterEach(() => off())
+
+  it('the Stay tap: the free hour goes live for an hour, a bought Stay goes live with Stay', async () => {
+    await run({ stay: true })
+    expect(router.push).not.toHaveBeenCalled()
+    expect(host).toHaveBeenCalledWith(expect.objectContaining({ trigger: 'stay', venue: 'The Humming Tree' }))
+    ;(apiClient.goLive as jest.Mock).mockClear().mockResolvedValue({ success: true, data: live })
+    const { onFree, onUnlocked } = host.mock.calls[0][0]
+    await act(async () => { onFree(); await new Promise((r) => setTimeout(r, 0)) })
+    expect(apiClient.goLive).toHaveBeenLastCalledWith('v1', expect.objectContaining({ minutes: 60 }))
+    await act(async () => { onUnlocked(); await new Promise((r) => setTimeout(r, 0)) })
+    expect(apiClient.goLive).toHaveBeenLastCalledWith('v1', expect.objectContaining({ stay: true }))
+  })
+
+  it('"See Blendn+" on the second refusal opens the same sheet on a tap, whatever the session has shown', async () => {
+    await run({ stay: true })
+    host.mockClear()
+    const again = await run({ stay: true })
+    expect(host).not.toHaveBeenCalled()
+    const buttons = again.showTray.mock.calls[0][2] as { label: string; onPress: () => void }[]
+    await act(async () => { buttons.find((b) => b.label === 'See Blendn+')?.onPress(); await Promise.resolve() })
+    expect(host).toHaveBeenCalledWith(expect.objectContaining({ trigger: 'stay' }))
+  })
+})

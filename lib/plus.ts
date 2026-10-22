@@ -59,9 +59,16 @@ export function plusStatusLine(status: PlusStatus | null | undefined): string | 
   return `${name} until ${until}`
 }
 
+/** Every mounted `usePlusStatus`, told when the server has just granted Blendn+: a sheet that sold it is not a screen's focus. */
+const plusChangedListeners = new Set<() => void>()
+export function notifyPlusChanged(): void {
+  for (const fn of [...plusChangedListeners]) fn()
+}
+
 /**
- * The person's Blendn+, kept fresh: read on mount and when the app comes back
- * to the foreground (a pending payment confirmed while away). A screen also
+ * The person's Blendn+, kept fresh: read on mount, when the app comes back
+ * to the foreground (a pending payment confirmed while away) and when a
+ * purchase or restore has landed (`notifyPlusChanged`). A screen also
  * passes `refresh` to `useFocusEffect`, so coming back to it re-reads. Null
  * until the first answer; after a failed one the last answer stands.
  */
@@ -80,7 +87,11 @@ export function usePlusStatus(): { status: PlusStatus | null; refresh: () => voi
     const app = AppState.addEventListener('change', (state) => {
       if (state === 'active') refresh()
     })
-    return () => app.remove()
+    plusChangedListeners.add(refresh)
+    return () => {
+      app.remove()
+      plusChangedListeners.delete(refresh)
+    }
   }, [refresh])
   return { status, refresh }
 }
@@ -100,7 +111,10 @@ export async function waitForPlus(stopped: () => boolean = () => false, now: () 
   while (!stopped()) {
     // A failed ask (offline, a cleared queue) is "not yet", never the end of the wait.
     const res = await apiClient.getMyPlus().catch(() => null)
-    if (res?.success && res.data?.active) return res.data
+    if (res?.success && res.data?.active) {
+      notifyPlusChanged()
+      return res.data
+    }
     if (now() + PLUS_POLL_EVERY_MS > until) return null
     await new Promise((resolve) => setTimeout(resolve, PLUS_POLL_EVERY_MS))
   }

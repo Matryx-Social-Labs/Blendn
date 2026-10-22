@@ -40,7 +40,7 @@ import { EXTEND_CHOICE, oneTapChoice, readLiveSession, venueAction, type GoLiveC
 import { type ShowTray, type TrayButton, type TrayExtra } from '../../lib/locationFix'
 import { Logger } from '../../lib/logger'
 import { openInMaps } from '../../lib/openInMaps'
-import { openPaywall } from '../../lib/paywall'
+import { openTonight } from '../../lib/paywall'
 import { placeArea } from '../../lib/placesPane'
 import { usePlusStatus } from '../../lib/plus'
 import { idParam } from '../../lib/routeParams'
@@ -352,8 +352,21 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
       router.back()
     }
   }
-  const refusalAlt = () => afterDialLeaves(() => void openPaywall('go_live_expiry', { userInitiated: true }))
-  const stayLocked = () => afterDialLeaves(() => void openPaywall('go_live_expiry', { userInitiated: true }))
+  /** A tap on something that says Blendn+: the Tonight sheet for the Stay tap, once the dial has left. The free hour and a bought Stay both go live here. */
+  const stayLocked = () =>
+    afterDialLeaves(
+      () =>
+        void openTonight(
+          {
+            trigger: 'stay',
+            venue: detail?.venue.name ?? '',
+            onFree: () => void goLive({ minutes: 60 }),
+            onUnlocked: () => void goLive({ stay: true }),
+          },
+          { userInitiated: true }
+        )
+    )
+  const refusalAlt = stayLocked
 
   const extend = async () => {
     setExtending(true)

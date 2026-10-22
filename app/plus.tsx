@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AccessibilityInfo, Linking, Platform, ScrollView, StyleSheet, View } from 'react-native'
+import { AccessibilityInfo, Platform, ScrollView, StyleSheet, View } from 'react-native'
 
 import { Banner } from '../components/ds/Banner'
 import { Spinner } from '../components/ds/Loader'
@@ -11,6 +11,7 @@ import { Grain } from '../components/ds/Grain'
 import { NightPassRow, PlanCard, PlanList } from '../components/ds/PlanCard'
 import { HueProvider } from '../components/ds/shared'
 import { StateScreen } from '../components/ds/StateScreen'
+import { openStoreSubscriptions, showStoreError } from '../components/plus/storeActions'
 import { PlusActions, PlusFooter, PlusHeader, PlusHeading, PlusHero, PlusNote, useHeaderHeight, WhatYouGet } from '../components/plus/PlusSections'
 import { useToast } from '../components/Toast'
 import { apiClient } from '../lib/apiClient'
@@ -31,8 +32,7 @@ import {
   waitForPlus,
   type PlusStatus,
 } from '../lib/plus'
-import { buyPackage, canBuyAs, loadPlusOffers, manageSubscriptionUrl, purchasesAvailable, restore, type PlusOffer, type RestoreOutcome } from '../lib/purchases'
-import { showSheet } from '../lib/sheet'
+import { buyPackage, canBuyAs, loadPlusOffers, purchasesAvailable, restore, type PlusOffer, type RestoreOutcome } from '../lib/purchases'
 import { useAuth } from '../lib/useAuth'
 import { notePaywallClosed, notePaywallEvent } from '../lib/paywall'
 
@@ -164,23 +164,7 @@ function PlusScreenContent() {
   }
 
   const open = (url: string) => openInApp(url).catch(() => showToast("That page didn't open. Try again.", 'error'))
-  const manage = async () => {
-    // A store's page, not ours: the store's own app opens for it.
-    Linking.openURL(await manageSubscriptionUrl()).catch(() => showToast("That page didn't open. Try again.", 'error'))
-  }
-
-  /** A store error in words, as a tray (R4-D12 12-3); "already bought" points at Manage subscription. */
-  const showStoreError = (message: string, manageIt: boolean | undefined) =>
-    showSheet({
-      kind: 'actions',
-      hue: 'violet',
-      icon: 'circle-alert',
-      title: manageIt ? 'Already purchased' : 'The purchase didn’t go through',
-      message,
-      actions: manageIt
-        ? [{ label: 'Manage subscription', then: () => void manage() }, { label: 'Close', cancel: true }]
-        : [{ label: 'Close', cancel: true }],
-    })
+  const manage = () => void openStoreSubscriptions(() => showToast("That page didn't open. Try again.", 'error'))
 
   const buy = async (offer: PlusOffer) => {
     if (working.current || !buyable) return
@@ -193,7 +177,7 @@ function PlusScreenContent() {
       if (!mounted.current) return
       if (result.kind === 'cancelled') return
       if (result.kind === 'failed') {
-        showStoreError(result.message, result.manage)
+        showStoreError(result.message, result.manage, manage)
         say(result.message)
         return
       }
@@ -363,7 +347,7 @@ function PlusScreenContent() {
           onTerms={() => void open(BLENDN_LINKS.terms)}
           onPrivacy={() => void open(BLENDN_LINKS.privacy)}
           onRestore={() => void restoreAll()}
-          onManage={() => void manage()}
+          onManage={() => manage()}
         />
       </ScrollView>
       {dockShown ? (
@@ -377,7 +361,7 @@ function PlusScreenContent() {
           disabled={locked || !pick}
           buying={busy === 'buy'}
           onBuy={() => pick && void buy(pick)}
-          onManage={() => void manage()}
+          onManage={() => manage()}
         />
       ) : null}
     </View>
