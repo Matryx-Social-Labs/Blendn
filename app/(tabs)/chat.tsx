@@ -1,4 +1,4 @@
-import { router, useScrollToTop } from 'expo-router'
+import { router, useFocusEffect, useScrollToTop } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FlatList, Platform, RefreshControl, StyleSheet, Text, View } from 'react-native'
 import Reanimated, { Easing, FadeInUp, FadeOut, LinearTransition, useReducedMotion } from 'react-native-reanimated'
@@ -112,10 +112,25 @@ function ChatInner() {
   const [revealSeen, setRevealSeen] = useState<ReadonlySet<string>>(() => new Set())
   const roomMuted = useCallback((id: string) => isMuted(membership.mutes.get(id)), [membership.mutes])
 
+  /*
+   * #29, unread to read: the dot and the pill leave over `quick` as you come back, where it is seen — cleared as the
+   * room opened, they left behind the screen that covered them. The room is read the moment it opens (the server
+   * marks it so, and no message in it counts here); only the list's drawing of that waits for the return.
+   */
+  const readOnReturn = useRef<ReadonlySet<string>>(new Set())
+  useFocusEffect(
+    useCallback(() => {
+      const opened = readOnReturn.current
+      if (!opened.size) return
+      readOnReturn.current = new Set()
+      setGroupChats((prev) => prev.map((c) => (opened.has(c.chat_room_id) ? { ...c, unread_count: 0 } : c)))
+      setCrewRooms((prev) => prev.map((r) => (opened.has(r.id) ? { ...r, unreadCount: 0 } : r)))
+    }, [setGroupChats, setCrewRooms])
+  )
   const openRoom = useCallback(
     (chat: GroupChat) => {
       inbox.noteOpenRoom(chat.chat_room_id)
-      setGroupChats((prev) => prev.map((c) => (c.chat_room_id === chat.chat_room_id ? { ...c, unread_count: 0 } : c)))
+      readOnReturn.current = new Set(readOnReturn.current).add(chat.chat_room_id)
       router.push({
         pathname: '/chat/[id]',
         params: { id: chat.chat_room_id, roomName: chat.event_title, eventTitle: chat.event_title } as never,
@@ -139,13 +154,13 @@ function ChatInner() {
   )
   const openCrewRoom = useCallback(
     (r: CrewRoomRow) => {
-      setCrewRooms((prev) => prev.map((x) => (x.id === r.id ? { ...x, unreadCount: 0 } : x)))
+      readOnReturn.current = new Set(readOnReturn.current).add(r.id)
       router.push({
         pathname: '/chat/[id]',
         params: { id: r.id, roomName: crewRoomTitle(r), kind: r.kind, ...(r.crewId ? { crewId: r.crewId } : {}), ...(r.blendId ? { blendId: r.blendId } : {}) } as never,
       })
     },
-    [setCrewRooms]
+    []
   )
 
   /* "Mark read" on one DM: the thread's first page is what opens it on the server (no per-thread route exists). */

@@ -51,6 +51,25 @@ beforeEach(() => {
 })
 
 describe('<SwipeRow>', () => {
+  it('a hold opens the same tray with H.longPress, once, and does not open the thread', async () => {
+    const onPress = jest.fn()
+    const onOpenChange = jest.fn()
+    const longPress = jest.spyOn(H, 'longPress').mockImplementation(() => {})
+    await render(row({ onPress, onOpenChange }))
+    const el = screen.getByRole('button', { name: 'Bass Thursday, Brave Turtle: that drop though, Tuesday' })
+    await act(async () => fireEvent(el, 'longPress'))
+    expect(longPress).toHaveBeenCalledTimes(1)
+    expect(onOpenChange).toHaveBeenLastCalledWith(true)
+    expect(onPress).not.toHaveBeenCalled()
+  })
+
+  it('an open row ignores a second hold: no second cue', async () => {
+    const longPress = jest.spyOn(H, 'longPress').mockImplementation(() => {})
+    await render(row({ open: true }))
+    await act(async () => fireEvent(screen.getByRole('button', { name: /Bass Thursday/ }), 'longPress'))
+    expect(longPress).not.toHaveBeenCalled()
+  })
+
   it('one element: the row, with its actions in the rotor', async () => {
     const mute = jest.fn()
     await render(row({ actions: actions(mute) }))

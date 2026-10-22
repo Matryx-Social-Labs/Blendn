@@ -106,6 +106,7 @@ export function LiveHero({
 }) {
   onPress = useBanterPress(onPress)
   const bold = useBoldText()
+  const reduceMotion = useReducedMotion()
   return (
     <Pressable
       testID={testID}
@@ -125,9 +126,9 @@ export function LiveHero({
         ) : null}
       </View>
       {unread ? (
-        <View style={styles.heroBadge}>
+        <Animated.View style={styles.heroBadge} exiting={leaves(reduceMotion)}>
           <Badge text={`${unread} new`} size={22} />
-        </View>
+        </Animated.View>
       ) : null}
       <View style={styles.heroFoot}>
         <View style={styles.grow}>
@@ -169,6 +170,7 @@ export function BlendLiveCard({
 }) {
   onPress = useBanterPress(onPress)
   const bold = useBoldText()
+  const reduceMotion = useReducedMotion()
   const closes = closesAt ? hourLabel(closesAt) : null
   return (
     <Pressable
@@ -190,7 +192,11 @@ export function BlendLiveCard({
           </Text>
         </View>
       </View>
-      {unread ? <Badge text={`${unread} new`} size={22} /> : null}
+      {unread ? (
+        <Animated.View exiting={leaves(reduceMotion)}>
+          <Badge text={`${unread} new`} size={22} />
+        </Animated.View>
+      ) : null}
     </Pressable>
   )
 }
@@ -385,6 +391,9 @@ export function BanterRow({
     </Pressable>
   )
 }
+
+/** #29: the unread pill leaves as a fade over `quick`; Reduce Motion: it is simply gone. */
+const leaves = (reduceMotion: boolean) => (reduceMotion ? undefined : FadeOut.duration(DURATION.quick))
 
 /**
  * DS #28: the unread dot appears 0.8 → 1 with a fade over quick: never from nothing (the stock zoom starts at scale 0). Under Reduce

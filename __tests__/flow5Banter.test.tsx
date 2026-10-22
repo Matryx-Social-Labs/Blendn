@@ -12,13 +12,18 @@ import { StyleSheet } from 'react-native'
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
 )
+// The screen's latest focus effect: a test calls it to come back to the Banter from a room.
+let mockRefocus: (() => void | (() => void)) | null = null
 jest.mock('expo-router', () => {
   const React = require('react')
   return {
     router: { push: jest.fn(), back: jest.fn(), replace: jest.fn() },
     useScrollToTop: () => {},
     // The screen is focused once, on mount.
-    useFocusEffect: (effect: () => void | (() => void)) => React.useEffect(effect, [effect]),
+    useFocusEffect: (effect: () => void | (() => void)) => {
+      mockRefocus = effect
+      React.useEffect(effect, [effect])
+    },
   }
 })
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
@@ -351,5 +356,37 @@ describe('the header’s height (Flow 5 Banter: 116 on a 402 pt iPhone)', () => 
     const header = require('react-native').StyleSheet.flatten(title.parent!.props.style)
     expect(header.height).toBe(parts.banterHeaderHeight(0, false))
     expect(header.paddingTop).toBe(2)
+  })
+})
+
+describe('unread to read (#29): the dot leaves where it is seen, on the way back', () => {
+  const unreadRoom = { ...pastRoom, status: 'open', unreadCount: 2 }
+  const rowLabel = /Jazz Brunch, .*unread/
+
+  it('the room is opened and the row still says unread underneath; coming back clears it', async () => {
+    serve({ rooms: [unreadRoom], dms: [], requests: [] })
+    await open()
+    expect(screen.getByLabelText(rowLabel)).toBeTruthy()
+    await act(async () => fireEvent.press(screen.getByLabelText(rowLabel)))
+    expect(router.push).toHaveBeenCalledWith(expect.objectContaining({ pathname: '/chat/[id]' }))
+    // Behind the room it is not yet redrawn: the cue is for the person who returns.
+    expect(screen.getByLabelText(rowLabel)).toBeTruthy()
+    await act(async () => void mockRefocus?.())
+    expect(screen.queryByLabelText(rowLabel)).toBeNull()
+    expect(screen.getByLabelText(/^Jazz Brunch, .*Tuesday|^Jazz Brunch, /)).toBeTruthy()
+  })
+
+  it('a room you did not open keeps its dot when you come back', async () => {
+    serve({ rooms: [unreadRoom, { ...unreadRoom, id: 'g-two', name: 'Disco Lunch', event: { id: 'e9', title: 'Disco Lunch' } }], dms: [], requests: [] })
+    await open()
+    await act(async () => fireEvent.press(screen.getByLabelText(rowLabel)))
+    await act(async () => void mockRefocus?.())
+    expect(screen.getByLabelText(/Disco Lunch, .*unread/)).toBeTruthy()
+  })
+
+  it('the Live now pill is a view that leaves over quick, and under Reduce Motion simply goes', () => {
+    const src = require('fs').readFileSync(require.resolve('../components/banter/BanterParts'), 'utf8') as string
+    expect(src).toMatch(/exiting=\{leaves\(reduceMotion\)\}/)
+    expect(src).toMatch(/reduceMotion \? undefined : FadeOut\.duration\(DURATION\.quick\)/)
   })
 })
