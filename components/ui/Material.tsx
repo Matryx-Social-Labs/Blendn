@@ -156,7 +156,10 @@ export function Material({ role, style, children, ...rest }: Omit<ViewProps, 'ro
     ) : (
       <LinearGradient colors={MATERIAL.solidInnerHighlight.colors} style={styles.highlight} />
     )
-  const surface = tier === 'blur' ? styles.edge : [styles.solid, { backgroundColor: SOLID[role] }]
+  // A bar or sheet keeps a top hairline; a circle (control, media) takes it all round, or on a ground of its own tone it
+  // reads as a half-moon (r7 L14: Home's filter circle) or not at all (L13: the profile's circles on the creature hero).
+  const round = role === 'control' || role === 'media'
+  const surface = tier === 'blur' ? styles.edge : [round ? styles.solidRim : styles.solid, { backgroundColor: SOLID[role] }]
 
   return (
     <View {...rest} style={[styles.clip, surface, style]}>
@@ -171,6 +174,7 @@ const styles = StyleSheet.create({
   edge: { borderWidth: MATERIAL.glassEdge.width, borderColor: MATERIAL.glassEdge.color },
   /** Tier B (§13): a 1pt top hairline and a 0 → 6% white highlight over the top 12pt. */
   solid: { borderTopWidth: 1, borderTopColor: MATERIAL.solidTopHairline },
+  solidRim: { borderWidth: 1, borderColor: MATERIAL.solidTopHairline },
   highlight: {
     position: 'absolute',
     top: 0,
