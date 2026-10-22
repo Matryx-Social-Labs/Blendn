@@ -98,7 +98,7 @@ describe('openTonight', () => {
     notePathname(path)
     expect(await openTonight(stay)).toBe(false)
     expect(await openTonight(stay, { userInitiated: true })).toBe(false)
-    expect(await openPaywall('recap', { userInitiated: true })).toBe(false)
+    expect(await openTonight({ trigger: 'night', venue: '' }, { userInitiated: true })).toBe(false)
     expect(await openPaywall('second_event', { userInitiated: true })).toBe(false)
     expect(host).not.toHaveBeenCalled()
     expect(router.push).not.toHaveBeenCalled()
@@ -121,9 +121,10 @@ describe('openTonight', () => {
     expect(router.push).toHaveBeenCalledWith({ pathname: '/plus', params: { trigger: 'recap' } })
   })
 
-  it('the earlier nights on Going answer with the sheet’s own "night" trigger', async () => {
-    expect(await openPaywall('recap', { userInitiated: true })).toBe(true)
-    expect(host).toHaveBeenCalledWith({ trigger: 'night', venue: '' })
+  it('the earlier nights on Going ask for the sheet with their own trigger and a way to read the nights again', async () => {
+    const onUnlocked = jest.fn()
+    expect(await openTonight({ trigger: 'night', venue: '', onUnlocked }, { userInitiated: true })).toBe(true)
+    expect(host).toHaveBeenCalledWith({ trigger: 'night', venue: '', onUnlocked })
     expect(router.push).not.toHaveBeenCalled()
   })
 

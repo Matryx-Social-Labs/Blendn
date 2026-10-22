@@ -211,10 +211,11 @@ describe('buying', () => {
 
   it('a lock that is not a go-live is told what was bought, with the success haptic', async () => {
     ;(buyPackage as jest.Mock).mockResolvedValue({ kind: 'purchased' })
-    await openSheet({ trigger: 'night', venue: '' })
+    await openSheet({ trigger: 'night', venue: '', onUnlocked })
     await press('Continue — ₹49')
     expect(mockShowToast).toHaveBeenCalledWith('Blend’n+ · Night Pass · 24 hours', 'success', { haptic: 'success' })
-    expect(onUnlocked).not.toHaveBeenCalled()
+    // The lock is lifted: Going reads the earlier nights again.
+    expect(onUnlocked).toHaveBeenCalledTimes(1)
   })
 
   it('a grant that has not landed says so and unlocks nothing', async () => {

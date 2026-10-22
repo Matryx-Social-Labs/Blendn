@@ -42,7 +42,7 @@ import { useAuth } from '../../lib/useAuth'
 import { DURATION, EASING, SPRING } from '../../lib/motion'
 import { openInMaps } from '../../lib/openInMaps'
 import { addToCalendar } from '../../lib/calendar'
-import { openPaywall } from '../../lib/paywall'
+import { openTonight } from '../../lib/paywall'
 import { shareEvent } from '../../lib/shareRow'
 import { isNightRated, markNightRated, useRatedNights } from '../../lib/ratedNights'
 import { TAB_BAR_CLEARANCE } from './_layout'
@@ -428,14 +428,14 @@ function GoingScreenInner() {
     }
 
     if (item.kind === 'locked') {
-      // A tap on something that says Blendn+: the paywall always opens (trigger `recap`).
+      // A tap on something that says Blendn+: the Tonight sheet for the earlier nights always opens (trigger `recap`); bought, the nights are read again.
       const label = lockedNightsLabel(item.count)
       return (
         <ScalePress
           style={[styles.inset, styles.locked]}
           pressedScale={0.97}
           haptic={false}
-          onPress={() => void openPaywall('recap', { userInitiated: true })}
+          onPress={() => void openTonight({ trigger: 'night', venue: '', onUnlocked: () => reloadRef.current() }, { userInitiated: true })}
           accessibilityRole="button"
           accessibilityLabel={label}
           accessibilityHint="Opens Blendn+"

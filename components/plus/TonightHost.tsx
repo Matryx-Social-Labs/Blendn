@@ -115,8 +115,9 @@ export function TonightHost() {
     // A grant that has not landed is not something done: the expiry prompt may come back for the free way on.
     if (engaged.current) leave(granted ? 'done' : 'dismissed')
     if (!granted) return showToast(SLOW_GRANT_TOAST, 'info')
-    if (goesLiveWhenUnlocked(current.request.trigger)) return current.request.onUnlocked?.()
-    showToast(restored ? 'Restored' : purchasedToast(pick), 'success', { haptic: 'success' })
+    // A Stay goes live by itself and says so; anything else says what was bought, and the lock is lifted.
+    if (!goesLiveWhenUnlocked(current.request.trigger)) showToast(restored ? 'Restored' : purchasedToast(pick), 'success', { haptic: 'success' })
+    current.request.onUnlocked?.()
   }
 
   const buy = async () => {

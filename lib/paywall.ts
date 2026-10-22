@@ -80,8 +80,6 @@ export function paywallBlockedAt(pathname: string | null): boolean {
  * except on top of itself or over onboarding (`paywallBlockedAt`).
  */
 export async function openPaywall(trigger: PaywallTrigger, { userInitiated = false }: { userInitiated?: boolean } = {}): Promise<boolean> {
-  // The earlier nights are met on Going, one row: the contextual sheet answers it, not the whole page.
-  if (trigger === 'recap' && tonightHost) return openTonight({ trigger: 'night', venue: '' }, { userInitiated })
   if (!(await mayShow(trigger, userInitiated))) return false
   // Settings › Blend'n+ is Manage for somebody who has something to manage (Flow 12 · 12.3); the page is for buying.
   if (trigger === 'profile' && hasSomethingToManage(knownPlus())) router.push('/plus-manage' as never)
@@ -112,7 +110,7 @@ export type TonightRequest = {
   venue: string
   /** The free path's button (Extend 45 min, Go live for 1 hour). Omitted: "Not now", which only closes. */
   onFree?: () => void
-  /** Bought: the locked thing simply works (a stay-shaped trigger goes live with Stay). */
+  /** Bought or restored: the locked thing simply works (a stay-shaped trigger goes live with Stay, the earlier nights are read again). */
   onUnlocked?: () => void
 }
 
