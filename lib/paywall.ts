@@ -11,6 +11,8 @@ import {
   type PaywallEvent,
   type PaywallTrigger,
 } from './paywallPolicy'
+import { knownPlus } from './plus'
+import { hasSomethingToManage } from './plusManage'
 import { paywallTriggerFor, type OpenableTrigger } from './tonight'
 
 /**
@@ -80,7 +82,9 @@ export async function openPaywall(trigger: PaywallTrigger, { userInitiated = fal
   // The earlier nights are met on Going, one row: the contextual sheet answers it, not the whole page.
   if (trigger === 'recap' && tonightHost) return openTonight({ trigger: 'night', venue: '' }, { userInitiated })
   if (!(await mayShow(trigger, userInitiated))) return false
-  router.push({ pathname: '/plus', params: { trigger } } as never)
+  // Settings › Blend'n+ is Manage for somebody who has something to manage (Flow 12 · 12.3); the page is for buying.
+  if (trigger === 'profile' && hasSomethingToManage(knownPlus())) router.push('/plus-manage' as never)
+  else router.push({ pathname: '/plus', params: { trigger } } as never)
   return true
 }
 

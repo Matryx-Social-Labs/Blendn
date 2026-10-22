@@ -120,6 +120,22 @@ describe('openTonight', () => {
     expect(router.push).toHaveBeenCalledWith({ pathname: '/plus', params: { trigger: 'profile' } })
   })
 
+  it('Settings › Blend’n+ is Manage for somebody who has something to manage, the page for everybody else', async () => {
+    const plus = require('../lib/plus')
+    const spy = jest.spyOn(plus, 'knownPlus')
+    spy.mockReturnValue({ active: true, gated: true, product: 'plus', source: 'apple', expiresAt: null })
+    expect(await openPaywall('profile', { userInitiated: true })).toBe(true)
+    expect(router.push).toHaveBeenLastCalledWith('/plus-manage')
+    spy.mockReturnValue({ active: false, gated: true, product: null, source: null, expiresAt: null })
+    await openPaywall('profile', { userInitiated: true })
+    expect(router.push).toHaveBeenLastCalledWith({ pathname: '/plus', params: { trigger: 'profile' } })
+    // Only Settings' own tap is Manage: a contextual ask is the page, whatever you hold.
+    spy.mockReturnValue({ active: true, gated: true, product: 'plus', source: 'apple', expiresAt: null })
+    await openPaywall('second_event', { userInitiated: true })
+    expect(router.push).toHaveBeenLastCalledWith({ pathname: '/plus', params: { trigger: 'second_event' } })
+    spy.mockRestore()
+  })
+
   it('hears how the sheet closed: done or dismissed, dismissed by default', () => {
     const heard: string[] = []
     const stop = subscribePaywallClosed((how) => heard.push(how))
