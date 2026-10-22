@@ -32,6 +32,28 @@ export type NotificationKind =
   | 'friend_accepted'
   /** An event you checked in to has ended: rate it. Carries `eventId`. */
   | 'rating_request'
+  /** A friend invited you into a crew. Carries `crewId`. */
+  | 'crew_invite'
+  /** A crewmate tapped "We're here". Carries `crewId` and `chatGroupId`. */
+  | 'crew_here'
+  /** Two crews (or a crew and a person) liked each other. Carries `chatGroupId`. */
+  | 'blend'
+  /** A place sent its regulars an offer. Carries `offerId`. */
+  | 'venue_offer'
+
+/**
+ * What the server may add to a row once it resolves the people and the event
+ * for the person reading (Flow 9 · 9.3: "names are filled in by fetching the
+ * target, only where you may already see it; otherwise the stored title").
+ * Every field is optional and read through `parseDisplay`: an absent or
+ * malformed one means the row draws from the stored title and `kind`.
+ */
+export interface NotificationDisplay {
+  title?: string
+  /** One line: "Vinyl Night · 2 min ago". */
+  context?: string
+  visual?: unknown
+}
 
 export interface NotificationItem {
   id: string
@@ -42,12 +64,18 @@ export interface NotificationItem {
   data: Record<string, string | undefined> | null
   readAt: string | null
   createdAt: string
+  /** Not sent yet: see `NotificationDisplay`. */
+  display?: NotificationDisplay | null
+  /** Not sent yet: a request kind's row says whether it is still the reader's to answer. Absent reads as open. */
+  open?: boolean
 }
 
 export interface NotificationFeed {
   notifications: NotificationItem[]
   unreadCount: number
   pagination: { limit: number; hasMore: boolean; nextCursor?: string }
+  /** Whether `DELETE /notifications` leaves the requests waiting on you in place (Flow 9 · 9.2 frame 11). Not sent yet: absent means it clears them too. */
+  clearKeepsRequests?: boolean
 }
 
 /**
