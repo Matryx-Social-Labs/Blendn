@@ -81,7 +81,7 @@ export function useFriendsHereList(eventId: string | null) {
     try {
       const r = await apiClient.getFriendsHere(eventId, { order: 'name', limit: FRIENDS_PAGE, q: debounced || undefined })
       if (mine !== ask.current) return
-      if (r.success && r.data) {
+      if (r.success && Array.isArray(r.data?.friends)) {
         setFriends(r.data.friends)
         setCursor(r.data.nextCursor)
         if (!debounced) setTotal(r.data.total)
@@ -109,7 +109,7 @@ export function useFriendsHereList(eventId: string | null) {
     try {
       const r = await apiClient.getFriendsHere(eventId, { order: 'name', limit: FRIENDS_PAGE, cursor, q: debounced || undefined })
       if (mine !== ask.current) return
-      if (r.success && r.data) {
+      if (r.success && Array.isArray(r.data?.friends)) {
         const next = r.data
         // A friend can appear on two pages while others arrive; the key is the person.
         setFriends((have) => {

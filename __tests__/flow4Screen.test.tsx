@@ -44,6 +44,9 @@ const mockWaveListeners = new Set<(d: unknown) => void>()
 jest.mock('../lib/socketClient', () => ({
   connect: jest.fn(),
   subscribeToChatMessage: () => () => {},
+  subscribeToLiveEnded: () => () => {},
+  subscribeToRoomFriends: () => () => {},
+  subscribeConnectionStatus: () => () => {},
   subscribeToRoomWave: (fn: (d: unknown) => void) => {
     mockWaveListeners.add(fn)
     return () => mockWaveListeners.delete(fn)

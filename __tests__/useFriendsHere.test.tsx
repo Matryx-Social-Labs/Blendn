@@ -133,3 +133,12 @@ describe('useFriendsHere', () => {
     expect(result.current.total).toBe(2)
   })
 })
+
+describe('a shape that is not the contract', () => {
+  it('draws no section rather than crash (a proxy or an odd server answers a bare list)', async () => {
+    mockGet.mockResolvedValue({ success: true, data: [] })
+    const { result } = await renderHook(() => useFriendsHere('e1', true))
+    await act(async () => {})
+    expect(result.current).toMatchObject({ friends: [], total: 0 })
+  })
+})

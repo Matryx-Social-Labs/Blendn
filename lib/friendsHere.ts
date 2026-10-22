@@ -58,10 +58,11 @@ export function useFriendsHere(eventId: string | null, inRoom: boolean): Friends
     try {
       const r = await apiClient.getFriendsHere(eventId, { order: 'recent', limit: FRIENDS_FIRST_PAGE })
       if (mine !== ask.current) return
-      if (r.success && r.data) {
+      // Never trust the shape: an older or odd answer is "no section", not a crash.
+      if (r.success && Array.isArray(r.data?.friends)) {
         const { friends, total } = r.data
         const late = loadedNow.current && lastTotal.current === 0 && total > 0
-        setPage({ eventId, friends, total })
+        setPage({ eventId, friends, total: Number.isFinite(total) ? total : friends.length })
         if (late) setAppearances((n) => n + 1)
       }
     } catch (e) {
