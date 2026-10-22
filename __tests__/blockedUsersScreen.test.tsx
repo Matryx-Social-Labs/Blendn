@@ -29,7 +29,7 @@ it('nobody blocked says so', async () => {
 it('a failed read says it did not load, never "no blocked users"', async () => {
   mockFetch.mockResolvedValue({ ok: false, error: 'offline' })
   await render(<BlockedUsers />)
-  expect(await screen.findByText("Blocked users didn't load")).toBeTruthy()
+  expect(await screen.findByText("Blocked users didn’t load")).toBeTruthy()
   expect(screen.queryByText('No blocked users')).toBeNull()
 })
 

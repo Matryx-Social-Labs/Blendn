@@ -341,7 +341,7 @@ it('sends ONLY the switch that was changed: the other three are never sent from 
 it('each switch sends its own column, and only that', async () => {
   api.getProfile.mockResolvedValue({ success: true, data: { profile: { push_enabled: true, friends_see_me_in_rooms: false } } } as never)
   await render(<Screen />)
-  const friends = () => screen.getByRole('switch', { name: /^Friends can see I'm here/ })
+  const friends = () => screen.getByRole('switch', { name: /^Friends can see I’m here/ })
   await waitFor(() => expect(friends().props.accessibilityState.disabled).toBe(false))
   fireEvent.press(friends())
   await waitFor(() => expect(api.updateProfile).toHaveBeenCalledWith('u_me', { friends_see_me_in_rooms: true }))

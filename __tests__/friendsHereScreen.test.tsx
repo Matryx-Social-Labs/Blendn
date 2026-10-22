@@ -92,7 +92,7 @@ describe('See all friends here', () => {
     await act(async () => {
       fireEvent.press(screen.getByRole('button', { name: 'Message Asha Menon' }))
     })
-    expect(mockToast).toHaveBeenCalledWith("Couldn't open your chat with Asha. Try again.", 'error')
+    expect(mockToast).toHaveBeenCalledWith("Couldn’t open your chat with Asha. Try again.", 'error')
     expect(mockPush).not.toHaveBeenCalled()
   })
 
@@ -136,7 +136,7 @@ describe('See all friends here', () => {
   it('a failed read offers Try again', async () => {
     mockGet.mockResolvedValueOnce({ success: false })
     await open()
-    expect(screen.getByText('Your friends didn\'t load')).toBeTruthy()
+    expect(screen.getByText('Your friends didn’t load')).toBeTruthy()
     mockGet.mockResolvedValue(page([friend('Asha Menon', 1)], 4))
     await act(async () => {
       fireEvent.press(screen.getByRole('button', { name: 'Try again' }))

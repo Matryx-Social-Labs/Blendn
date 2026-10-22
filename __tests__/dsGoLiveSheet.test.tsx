@@ -1,6 +1,6 @@
 /*
  * <GoLiveSheet> (guidelines/components/GoLiveSheet.html, Flow 11 · 11.2,
- * Delta R2-D7): dial, then hold. 20 / 45 min / 1 hour / Stay while I'm here;
+ * Delta R2-D7): dial, then hold. 20 / 45 min / 1 hour / Stay while I’m here;
  * Stay locked behind Blend'n+ shows the server's sentence and the Plus mark
  * and opens the Tonight sheet; the one hold (900 ms); the five refusals are
  * the server's sentence in the sheet, with no haptic.

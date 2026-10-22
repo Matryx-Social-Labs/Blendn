@@ -80,7 +80,7 @@ function FriendsHereScreenContent() {
     ) : list.status === 'error' ? (
       <StateScreen
         icon="cloud-off"
-        title="Your friends didn't load"
+        title="Your friends didn’t load"
         body="Check your connection and try again."
         actions={[{ label: 'Try again', onPress: list.retry }]}
         gutter

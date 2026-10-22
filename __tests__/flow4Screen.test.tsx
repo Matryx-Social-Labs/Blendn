@@ -437,7 +437,7 @@ describe('Friends here in the Room', () => {
     await act(async () => {
       fireEvent.press(await screen.findByRole('button', { name: 'Message Asha Menon' }))
     })
-    expect(await screen.findByText("Couldn't open your chat with Asha. Try again.")).toBeTruthy()
+    expect(await screen.findByText("Couldn’t open your chat with Asha. Try again.")).toBeTruthy()
     expect(mockFriendsHere).toHaveBeenCalled()
   })
 
