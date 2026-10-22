@@ -9,6 +9,7 @@ import { AccessibilityInfo, Platform, StyleSheet } from 'react-native'
 import * as Reanimated from 'react-native-reanimated'
 
 import { IconButton } from '../components/ds/IconButton'
+import { HueProvider } from '../components/ds/shared'
 import { COLOR, MATERIAL, RADIUS, SIZE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { OPACITY } from '../lib/theme'
@@ -78,8 +79,18 @@ describe('<IconButton>', () => {
     expect(select).toHaveBeenCalledTimes(1)
   })
 
-  it('selected flips polarity: a white disc, the glyph in ink (§4.7)', async () => {
-    await draw({ icon: 'bookmark', accessibilityLabel: 'Saved', selected: true })
+  it('selected lights in the screen’s hue, never white (direction C): the fill, a 1 pt rim, the light glyph', async () => {
+    await render(
+      <HueProvider value="rose">
+        <IconButton icon="search" accessibilityLabel="Search" selected onPress={jest.fn()} testID="i" />
+      </HueProvider>
+    )
+    expect(flat('i-selected')).toMatchObject({ backgroundColor: COLOR.selectionRoseFill, borderWidth: 1, borderColor: COLOR.brandRose })
+    expect(flat('i-selected').backgroundColor).not.toBe(COLOR.selectionFill)
+  })
+
+  it('over a photo (media) the selected disc stays white with an ink glyph (§4.7): a hue on a photo is not legible', async () => {
+    await draw({ icon: 'heart', accessibilityLabel: 'Saved', selected: true, tier: 'media' })
     expect(flat('i-selected').backgroundColor).toBe(COLOR.selectionFill)
   })
 

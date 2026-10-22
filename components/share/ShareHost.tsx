@@ -8,6 +8,7 @@ import { openWhatsApp, whatsAppInstalled } from '../../lib/shareWhatsApp'
 import { openStoryCamera, STORY_LINK_COPIED, sweepStoryCaptures } from '../../lib/storyShare'
 import { afterSheetDismissed } from '../../lib/sheetDismissed'
 import { toast, type ToastVariant } from '../../lib/toast'
+import { HueProvider } from '../ds/shared'
 import { ShareSheet, type ShareTarget } from '../ds/ShareSheet'
 import { StoryOptionsSheet } from './StoryOptionsSheet'
 
@@ -125,8 +126,9 @@ function ShareFlow({ target, shown }: { target: ShareTarget; shown: boolean }) {
     return closeThenSay(STORY_LINK_COPIED, 'success')
   }
 
+  // Mounted once, outside every screen's world: an invite is among people (Add friends, rose), an event or a place is going out (ember).
   return (
-    <>
+    <HueProvider value={target.kind === 'invite' ? 'rose' : 'ember'}>
       <ShareSheet
         visible={shown && stage === 'tray' && whatsApp !== null}
         onClose={finish}
@@ -152,6 +154,6 @@ function ShareFlow({ target, shown }: { target: ShareTarget; shown: boolean }) {
           testID="share-story"
         />
       ) : null}
-    </>
+    </HueProvider>
   )
 }

@@ -18,7 +18,11 @@ const walk = (dir: string): string[] =>
     return /\.tsx?$/.test(entry.name) ? [rel] : []
   })
 
-/** A `'strong'` or `"strong"` literal: a `kind` being set or compared. Prose ("a strong action") is not one. */
+/**
+ * A `'strong'` or `"strong"` literal: a `kind` being set or compared. Prose ("a strong action") is not one. A conditional
+ * (`kind={cond ? 'strong' : 'lit'}`) and an object spread into the props (`{...{ kind: 'strong' }}`) still hold the literal,
+ * so they are counted too; only a kind built at run time from other strings would pass, and nothing here does that.
+ */
 const STRONG = /['"]strong['"]/g
 
 /** File → how many literals it may hold, and why. */
@@ -48,5 +52,31 @@ describe('the white strong button', () => {
 
   it('every allowed file exists, so the table cannot outlive what it excuses', () => {
     for (const file of Object.keys(STRONG_STAYS)) expect(fs.existsSync(path.join(ROOT, file))).toBe(true)
+  })
+})
+
+/*
+ * The white selection drawn by hand: `COLOR.selectionFill` under a selected or positive state, which the `strong` literal
+ * above never sees (a Liked pill, a toggle's disc, a share disc). Direction C has no white selection inside a world; it
+ * stays only over media, or where the owner ruled it. Same contract: a new one is argued for here.
+ */
+const WHITE_FILL = /COLOR\.selectionFill\b/g
+const WHITE_STAYS: Record<string, { count: number; why: string }> = {
+  'components/ds/IconButton.tsx': { count: 1, why: 'the media tier: a selected disc over a photo, where a hue is not legible' },
+  'components/ds/ReactionBar.tsx': { count: 1, why: 'the picked reaction stays white: the owner’s ruling' },
+  'components/ds/StoryCard.tsx': { count: 1, why: 'drawn into an Instagram Story picture, outside the app and any world' },
+  'components/ds/OfferCard.tsx': { count: 1, why: 'the Used stamp on the pass: a printed status, not a selection or an action' },
+  'components/offer/OfferSections.tsx': { count: 1, why: 'the same Used stamp, on the offer page’s pass' },
+}
+
+describe('the white selection fill', () => {
+  const white = Object.fromEntries(
+    [...walk('app'), ...walk('components')]
+      .map((file) => [file, (fs.readFileSync(path.join(ROOT, file), 'utf8').match(WHITE_FILL) ?? []).length] as const)
+      .filter(([, count]) => count > 0)
+  )
+
+  it('is drawn only where the table says, and nowhere else', () => {
+    expect(white).toEqual(Object.fromEntries(Object.entries(WHITE_STAYS).map(([file, { count }]) => [file, count])))
   })
 })

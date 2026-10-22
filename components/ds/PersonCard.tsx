@@ -14,7 +14,7 @@ import { CrewEmblem } from './CrewEmblem'
 import type { Face } from './Facepile'
 import { PresenceDot } from './MonoFamily'
 import { Sheet } from './Sheet'
-import { CONTROL_FONT_CAP, focusRing, font, minTarget, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
+import { CONTROL_FONT_CAP, focusRing, font, minTarget, PRESSED_WASH, useBoldText, useIncreaseContrast, useSelection } from './shared'
 import { StateScreen } from './StateScreen'
 
 /** ROUND3 D · 4.1: here now · was here · pre-event room · matched · friend · unavailable · thin. */
@@ -142,6 +142,9 @@ export function PersonCardContent({
     if (refusalText) AccessibilityInfo.announceForAccessibility(refusalText)
   }, [refusalText])
   const panel = Platform.OS === 'android' ? COLOR.surfaceSunken : MATERIAL.fillOnGlass
+  /** Liked and Waved are lit, never white (direction C: no white selection): the hue's fill, its 1 pt rim, the glyph in its light tone. */
+  const sel = useSelection()
+  const lit = { backgroundColor: sel.fill, borderColor: sel.edge }
   const quiet = contrast ? COLOR.textPrimary : COLOR.textSecondary
   const { name, age } = person
   const id = (part: string) => testID && `${testID}-${part}`
@@ -256,7 +259,7 @@ export function PersonCardContent({
 
       <View testID={id('actions')} style={styles.actions}>
         {variant === 'matched' ? (
-          <Button label="Say hi" onPress={onSayHi} style={styles.grow} testID={id('say-hi')} />
+          <Button label="Say hi" size="md" onPress={onSayHi} style={styles.grow} testID={id('say-hi')} />
         ) : variant === 'here' || variant === 'was' ? (
           isLiked ? (
             <Animated.View
@@ -265,16 +268,17 @@ export function PersonCardContent({
               accessibilityRole="button"
               accessibilityLabel="Liked"
               accessibilityState={{ selected: true }}
-              style={[styles.pill, styles.grow, styles.liked, likedStyle]}
+              style={[styles.pill, styles.grow, styles.lit, lit, likedStyle]}
             >
-              <Icon name="heart" size={ICON.control} color={COLOR.ink} active />
-              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('button', bold), styles.onWhite]}>
+              <Icon name="heart" size={ICON.control} color={sel.glyph} active />
+              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('button', bold), styles.ink]}>
                 Liked
               </Text>
             </Animated.View>
           ) : crewLike ? (
             <Button
               label={`Like for ${crewLike.name}`}
+              size="md"
               leading={crewLike.emblemSeed ? <CrewEmblem seed={crewLike.emblemSeed} size={ICON.nav} /> : undefined}
               icon={crewLike.emblemSeed ? undefined : 'heart'}
               pressHaptic={false}
@@ -289,6 +293,7 @@ export function PersonCardContent({
           ) : (
             <Button
               label="Like"
+              size="md"
               icon="heart"
               pressHaptic={false}
               accessibilityHint="They’re only told if they like you back."
@@ -304,9 +309,9 @@ export function PersonCardContent({
 
         {variant === 'here' ? (
           isWaved ? (
-            <View testID={id('waved')} accessible accessibilityLabel="Waved" style={[styles.pill, styles.liked]}>
-              <Icon name="check" size={ICON.control} color={COLOR.ink} active />
-              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('button', bold), styles.onWhite]}>
+            <View testID={id('waved')} accessible accessibilityLabel="Waved" accessibilityState={{ selected: true }} style={[styles.pill, styles.lit, lit]}>
+              <Icon name="check" size={ICON.control} color={sel.glyph} active />
+              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('button', bold), styles.ink]}>
                 Waved
               </Text>
             </View>
@@ -500,7 +505,6 @@ const styles = StyleSheet.create({
   inline: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
-  onWhite: { color: COLOR.ink },
   tabular: { fontVariant: ['tabular-nums'] },
   shrink: { flexShrink: 1 },
   reasons: { borderRadius: RADIUS.rowInCard, paddingVertical: SPACE.xs },
@@ -509,9 +513,10 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: SPACE.sm, marginTop: SPACE.sm },
   grow: { flexGrow: 1 },
   end: { marginLeft: 'auto' },
-  circle: { width: SIZE.primary, height: SIZE.primary, borderRadius: RADIUS.capsule, alignItems: 'center', justifyContent: 'center' },
+  /** The action row is one height, 48 (`SIZE.control`): the Like and Message buttons at `md`, these pills and circles. */
+  circle: { width: SIZE.control, height: SIZE.control, borderRadius: RADIUS.capsule, alignItems: 'center', justifyContent: 'center' },
   pill: {
-    height: SIZE.primary,
+    height: SIZE.control,
     borderRadius: RADIUS.capsule,
     flexDirection: 'row',
     alignItems: 'center',
@@ -519,7 +524,7 @@ const styles = StyleSheet.create({
     gap: SPACE.sm,
     paddingHorizontal: SPACE.lg,
   },
-  liked: { backgroundColor: COLOR.textPrimary },
+  lit: { borderWidth: 1 },
   refusal: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.md },
   note: { textAlign: 'center' },
   center: { alignItems: 'center' },

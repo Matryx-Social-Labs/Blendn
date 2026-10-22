@@ -31,7 +31,10 @@ const ROSE = [
 ]
 const VIOLET = ['app/plus.tsx', 'app/onboarding/_layout.tsx', 'app/edit-about-you.tsx', 'app/edit-profile.tsx', 'app/(tabs)/profile.tsx', 'app/settings.tsx', 'app/notification-settings.tsx', 'app/event-preferences/[eventId].tsx']
 /** Mounted app-level, outside every screen: they take the hue their caller names (`lib/sheet`'s `hue`), ember when none. */
-const CARRIED = ['components/SheetHost.tsx']
+const CARRIED: Record<string, string> = {
+  'components/SheetHost.tsx': "<HueProvider value={current.hue ?? 'ember'}>",
+  'components/share/ShareHost.tsx': "<HueProvider value={target.kind === 'invite' ? 'rose' : 'ember'}>",
+}
 /** Going out: ember is the default, so none of these sets a hue. */
 const EMBER = [
   'app/(tabs)/events.tsx',
@@ -75,13 +78,13 @@ describe('one hue per screen', () => {
   })
 
   it('no file outside the table sets a hue (components inherit their screen’s)', () => {
-    const allowed = new Set([...ROSE, ...VIOLET, ...CARRIED])
+    const allowed = new Set([...ROSE, ...VIOLET, ...Object.keys(CARRIED)])
     const stray = [...walk('app'), ...walk('components')].filter((file) => !allowed.has(file) && providers(read(file)) > 0)
     expect(stray).toEqual([])
   })
 
-  it.each(CARRIED)('%s takes its caller’s hue, ember by default', (file) => {
-    expect(read(file)).toContain("<HueProvider value={current.hue ?? 'ember'}>")
+  it.each(Object.entries(CARRIED))('%s takes the hue of what it was opened for, ember by default', (file, provider) => {
+    expect(read(file)).toContain(provider)
   })
 
   it('a screen is never both: no file names two different hues', () => {

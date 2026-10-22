@@ -10,7 +10,7 @@ import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { joinParts, LinkPreviewCard, type LinkPreview, type ShareEvent } from './LinkPreviewCard'
 import { monoCaption } from './MonoFamily'
 import { Sheet } from './Sheet'
-import { announceOutcome, CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from './shared'
+import { announceOutcome, CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast, useSelection } from './shared'
 
 export type ShareTarget =
   | { kind: 'event'; event: ShareEvent }
@@ -169,11 +169,13 @@ function ShareAction({
 }) {
   const bold = useBoldText()
   const reduceMotion = useReducedMotion()
+  // The positive one (WhatsApp) and the outcome (Copied) are lit in the share's world, never the white disc (direction C).
+  const sel = useSelection()
   return (
     <ScalePress testID={testID} onPress={onPress} haptic={haptic} accessibilityRole="button" accessibilityLabel={label} style={styles.action}>
-      <View testID={testID && `${testID}-disc`} style={[styles.disc, strong ? styles.strongDisc : styles.plainDisc]}>
+      <View testID={testID && `${testID}-disc`} style={[styles.disc, strong ? [styles.litDisc, { backgroundColor: sel.fill, borderColor: sel.edge }] : styles.plainDisc]}>
         <Animated.View key={icon} entering={reduceMotion ? undefined : FadeIn.duration(motionTokens(reduceMotion).duration.base)}>
-          <Icon name={icon} size={ICON.nav} color={strong ? COLOR.selectionInk : COLOR.textPrimary} />
+          <Icon name={icon} size={ICON.nav} color={strong ? sel.glyph : COLOR.textPrimary} />
         </Animated.View>
       </View>
       <Text
@@ -197,7 +199,7 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', gap: SPACE.sm },
   action: { flex: 1, alignItems: 'center', gap: SPACE.sm },
   disc: { width: DISC, height: DISC, borderRadius: RADIUS.capsule, alignItems: 'center', justifyContent: 'center' },
-  strongDisc: { backgroundColor: COLOR.selectionFill },
+  litDisc: { borderWidth: 1 },
   plainDisc: { backgroundColor: COLOR.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: COLOR.hairline },
   actionLabel: { color: COLOR.textSecondary, textAlign: 'center' },
   message: { borderRadius: RADIUS.thumb, backgroundColor: COLOR.surfaceSunken, padding: SPACE.md, gap: SPACE.xs },

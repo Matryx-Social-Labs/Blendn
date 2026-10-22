@@ -8,7 +8,10 @@ import { Material } from '../ui/Material'
 import { COLOR, PRESS, RADIUS, SIZE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { OPACITY } from '../../lib/theme'
-import { focusRing, IC_HAIRLINE, PRESSED_WASH, useIncreaseContrast } from './shared'
+import { focusRing, IC_HAIRLINE, PRESSED_WASH, useIncreaseContrast, useSelection } from './shared'
+
+/** The lit disc's rim, as the lit button's and the selected chip's. */
+const LIT_RIM = 1
 
 export type IconButtonProps = {
   icon: IconName
@@ -29,8 +32,10 @@ export type IconButtonProps = {
 /**
  * The glass circle (DESIGN-BRIEF §12, guidelines/components/IconButton.html):
  * 44 pt on iOS, 48 dp on Android, a 24 pt outlined glyph. Navigation (back,
- * close, share) is silent; a toggle plays `H.select` and, when selected, flips
- * to a white disc with an ink glyph (§4.7) that plays its verb once (DS #15: Like pops). Never two touching: 8 pt apart.
+ * close, share) is silent; a toggle plays `H.select` and, when selected, lights in its screen's hue (direction C: no white
+ * selection): the hue's fill, a 1 pt rim in its edge, the glyph in its light tone, playing its verb once (DS #15: Like pops).
+ * Over a photo (`media`) the selected disc stays white with an ink glyph: a hue on a photo is not legible (§4.7). Never two
+ * touching: 8 pt apart.
  *
  * Press: iOS scales 0.97; Android ripples and squares to a 12 dp corner.
  * Disabled dims the glyph, not the circle: glass never fades (§5.2 rule 6).
@@ -60,10 +65,14 @@ export function IconButton({
   const round = android ? RADIUS.circleButtonAndroid : RADIUS.circleButton
   const radius = android && pressed ? RADIUS.pressedAndroid : round
   const shape = { width: size, height: size, borderRadius: radius }
+  const sel = useSelection()
+  const white = tier === 'media'
+  const glyphColor = !selected ? COLOR.textPrimary : white ? COLOR.selectionInk : sel.glyph
+  const disc = white ? styles.selected : { backgroundColor: sel.fill, borderWidth: LIT_RIM, borderColor: sel.edge, borderRadius: radius }
 
   const glyph = (
     <View testID={testID && `${testID}-glyph`} style={disabled && { opacity: OPACITY.disabled }}>
-      <Glyph name={icon} color={selected ? COLOR.selectionInk : COLOR.textPrimary} play={selected} />
+      <Glyph name={icon} color={glyphColor} play={selected} />
     </View>
   )
 
@@ -91,7 +100,7 @@ export function IconButton({
         {/* The disc and the glass swap under the glyph, which stays one mounted node: a glyph remounted by the swap could
             never see `selected` rise, and so never pop. */}
         {selected ? (
-          <View testID={testID && `${testID}-selected`} style={[StyleSheet.absoluteFill, styles.selected]} />
+          <View testID={testID && `${testID}-selected`} style={[StyleSheet.absoluteFill, disc]} />
         ) : (
           <Material role={tier} style={[StyleSheet.absoluteFill, { borderRadius: radius }]} />
         )}
