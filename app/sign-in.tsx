@@ -228,6 +228,7 @@ export default function SignIn() {
       <KeyboardAvoidingView style={styles.flex} behavior={KEYBOARD_BEHAVIOR}>
         <ScrollView
           ref={scrollRef}
+          testID="sign-in-scroll"
           onScroll={onScroll}
           scrollEventThrottle={16}
           onLayout={onViewportLayout}
