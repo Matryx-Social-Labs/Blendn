@@ -121,3 +121,28 @@ describe('nothing collides with the clock or the back button (drive 2)', () => {
     expect(screen.getByText('ORGANISER').props.numberOfLines).toBe(1)
   })
 })
+
+describe('the hero with no cover, and the rows’ edge (r7 M6, L1)', () => {
+  const { StyleSheet } = require('react-native')
+  const { COLOR, SPACE } = require('../lib/design/tokens')
+
+  it('a room with no cover draws the brand orbs on ink, never a flat grey band', async () => {
+    api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [{ ...eventRow, event: { ...eventRow.event, coverImageUrl: null } }] } } as never)
+    await open()
+    expect(screen.getByTestId('info-hero-orbs', { includeHiddenElements: true })).toBeTruthy()
+    expect(StyleSheet.flatten(screen.getByTestId('info-hero', { includeHiddenElements: true }).props.style).backgroundColor).toBe(COLOR.ink)
+  })
+
+  it('with a cover, the photograph and no orbs', async () => {
+    await open()
+    expect(imageUris()).toContain(COVER)
+    expect(screen.queryByTestId('info-hero-orbs', { includeHiddenElements: true })).toBeNull()
+  })
+
+  it('Leave room’s words start on the rows’ text edge (SettingsRow’s 16 pt from the glyph)', async () => {
+    await open()
+    let node = screen.getByText('Leave room').parent
+    while (node && StyleSheet.flatten(node.props.style)?.minHeight === undefined) node = node.parent
+    expect(StyleSheet.flatten(node!.props.style).gap).toBe(SPACE.lg)
+  })
+})
