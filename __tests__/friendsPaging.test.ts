@@ -124,3 +124,49 @@ describe('refreshFirstPage (a screen coming back to the list)', () => {
     expect(refreshFirstPage([], page(friends(1), null), key).items).toHaveLength(1)
   })
 })
+
+import { FRIEND_SEARCH_MAX, localSearch, nameMatches, searchTerm } from '../lib/friendsPaging'
+
+describe('the friends search term and the server’s rule', () => {
+  it('is trimmed, lower-cased, at most 40 characters, and blank is no filter', () => {
+    expect(searchTerm('  Pri ')).toBe('pri')
+    expect(searchTerm('   ')).toBeNull()
+    expect(searchTerm('x'.repeat(60))).toHaveLength(FRIEND_SEARCH_MAX)
+  })
+
+  it('a word of the name starts with it, case-insensitively', () => {
+    expect(nameMatches('Priya Menon', 'men')).toBe(true)
+    expect(nameMatches('Priya Menon', 'riya')).toBe(false)
+    expect(nameMatches('PRIYA', 'pri')).toBe(true)
+    // More than one word, as the server reads it.
+    expect(nameMatches('Priya Menon', 'priya m')).toBe(true)
+    expect(nameMatches('Priya Menon', 'menon')).toBe(true)
+  })
+})
+
+describe('an older server that ignores q (localSearch)', () => {
+  const named = (names: string[]) => ({
+    items: names.map((name, i) => ({ userId: `u${i}`, name, photo: null, since: '2026-09-01T00:00:00Z' })),
+    nextCursor: 'more' as string | null,
+    total: 500,
+  })
+
+  it('a filtering server’s page is left as it came, cursor and count too', () => {
+    const page = named(['Priya', 'Pritam'])
+    expect(localSearch(page, 'pri')).toEqual({ page, local: false })
+  })
+
+  it('an unfiltered page is filtered here, with no next page and the count of what is shown', () => {
+    const { page, local } = localSearch(named(['Priya', 'Rohan', 'Pritam']), 'pri')
+    expect(local).toBe(true)
+    expect(page.items.map((f) => f.name)).toEqual(['Priya', 'Pritam'])
+    expect(page.nextCursor).toBeNull()
+    expect(page.total).toBe(2)
+  })
+
+  it('once seen, every page is local, even one that happens to match everywhere', () => {
+    const { page, local } = localSearch(named(['Priya']), 'pri', true)
+    expect(local).toBe(true)
+    expect(page.nextCursor).toBeNull()
+  })
+})

@@ -108,7 +108,7 @@ describe('101 friends', () => {
     expect(screen.getByText('101')).toBeTruthy()
     expect(list().props.data).toHaveLength(100)
     await reachEnd()
-    expect(mockGetFriends).toHaveBeenLastCalledWith('c1')
+    expect(mockGetFriends).toHaveBeenLastCalledWith('c1', null)
     expect(list().props.data).toHaveLength(101)
     await reachEnd()
     expect(mockGetFriends).toHaveBeenCalledTimes(2)
@@ -136,7 +136,7 @@ describe('101 friends', () => {
     await act(async () => {
       fireEvent.press(screen.getByText('Try again'))
     })
-    expect(mockGetFriends).toHaveBeenLastCalledWith('c1')
+    expect(mockGetFriends).toHaveBeenLastCalledWith('c1', null)
     expect(list().props.data).toHaveLength(101)
     expect(screen.queryByText('Couldn’t load more.')).toBeNull()
   })
@@ -149,7 +149,7 @@ describe('1,000 friends', () => {
     expect(screen.getByText('1,000')).toBeTruthy()
     for (let p = 1; p < 10; p++) await reachEnd()
     expect(list().props.data).toHaveLength(1000)
-    expect(mockGetFriends.mock.calls.map((c) => c[0])).toEqual([undefined, 'c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8', 'c9'])
+    expect(mockGetFriends.mock.calls.map((c) => c[0])).toEqual([null, 'c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8', 'c9'])
     expect(list().props.getItemLayout(null, 999)).toEqual({ length: PERSON_ROW_HEIGHT, offset: PERSON_ROW_HEIGHT * 999, index: 999 })
   })
 
@@ -184,12 +184,12 @@ describe('coming back to the list', () => {
     mockGetFriends.mockResolvedValueOnce(page(friends(100), 250, 'c1'))
     await act(async () => mockFocus())
     // The head is read with no cursor.
-    expect(mockGetFriends.mock.calls.at(-1)).toEqual([])
+    expect(mockGetFriends.mock.calls.at(-1)).toEqual([null, null])
     expect(list().props.data).toHaveLength(200)
     // And the next page is still the one after what was read, not the second page over again.
     mockGetFriends.mockResolvedValueOnce(page(friends(50, 200), 250))
     await reachEnd()
-    expect(mockGetFriends).toHaveBeenLastCalledWith('c2')
+    expect(mockGetFriends).toHaveBeenLastCalledWith('c2', null)
     expect(list().props.data).toHaveLength(250)
   })
 
@@ -202,6 +202,111 @@ describe('coming back to the list', () => {
     expect(ids).toHaveLength(199)
     expect(ids).not.toContain('u150')
     expect(screen.getByText('249')).toBeTruthy()
+  })
+})
+
+describe('search (Friends)', () => {
+  const type = async (text: string) => {
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId('friends-search'), text)
+    })
+    await act(async () => {
+      jest.advanceTimersByTime(300)
+    })
+  }
+  beforeEach(() => jest.useFakeTimers())
+  afterEach(() => jest.useRealTimers())
+
+  it('0 friends: no search field, nothing to search', async () => {
+    mockGetFriends.mockResolvedValue(page([], 0))
+    await open()
+    expect(screen.queryByTestId('friends-search')).toBeNull()
+  })
+
+  it('asks the server with q once typing settles, not on every key, and a short list still has the field', async () => {
+    mockGetFriends.mockResolvedValue(page(friends(3), 3))
+    await open()
+    mockGetFriends.mockResolvedValue(page([friend(1)], 1))
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId('friends-search'), 'F')
+      fireEvent.changeText(screen.getByTestId('friends-search'), 'Fr')
+      fireEvent.changeText(screen.getByTestId('friends-search'), 'Friend 1')
+    })
+    expect(mockGetFriends).toHaveBeenCalledTimes(1)
+    await act(async () => {
+      jest.advanceTimersByTime(300)
+    })
+    expect(mockGetFriends).toHaveBeenCalledTimes(2)
+    expect(mockGetFriends).toHaveBeenLastCalledWith(null, 'friend 1')
+    expect(list().props.data).toHaveLength(1)
+  })
+
+  it('narrows to the server’s answer, pages it by cursor with q kept, and the title’s count stays the whole list', async () => {
+    mockGetFriends.mockResolvedValueOnce(page(friends(100), 1000, 'c1'))
+    await open()
+    mockGetFriends.mockResolvedValueOnce(page(friends(100, 0).map((f) => ({ ...f, name: `Pri ${f.userId}` })), 230, 's1'))
+    await type('pri')
+    expect(screen.getByText('1,000')).toBeTruthy()
+    mockGetFriends.mockResolvedValueOnce(page(friends(100, 100).map((f) => ({ ...f, name: `Pri ${f.userId}` })), 230, 's2'))
+    await reachEnd()
+    expect(mockGetFriends).toHaveBeenLastCalledWith('s1', 'pri')
+    expect(list().props.data).toHaveLength(200)
+  })
+
+  it('clearing it brings the whole list back, with its header rows', async () => {
+    mockGetFriends.mockResolvedValueOnce(page(friends(5), 5))
+    await open()
+    mockGetFriends.mockResolvedValueOnce(page([friend(2)], 1))
+    await type('Friend 2')
+    expect(screen.queryByTestId('make-crew-row')).toBeNull()
+    mockGetFriends.mockResolvedValueOnce(page(friends(5), 5))
+    await type('')
+    expect(list().props.data).toHaveLength(5)
+    expect(screen.getByTestId('make-crew-row')).toBeTruthy()
+  })
+
+  it('no match says so; it is not "No friends yet"', async () => {
+    mockGetFriends.mockResolvedValueOnce(page(friends(5), 5))
+    await open()
+    mockGetFriends.mockResolvedValueOnce(page([], 0))
+    await type('zzz')
+    expect(screen.getByText('No friend by that name.')).toBeTruthy()
+    expect(screen.queryByText('No friends yet')).toBeNull()
+    expect(screen.getByTestId('friends-search')).toBeTruthy()
+  })
+
+  it('an older answer never lands on a newer search', async () => {
+    mockGetFriends.mockResolvedValueOnce(page(friends(5), 5))
+    await open()
+    let slow: (v: unknown) => void = () => {}
+    mockGetFriends.mockReturnValueOnce(new Promise((r) => (slow = r)))
+    await type('fri')
+    mockGetFriends.mockResolvedValueOnce(page([friend(4)], 1))
+    await type('Friend 4')
+    await act(async () => slow(page(friends(5), 5)))
+    expect(list().props.data).toHaveLength(1)
+  })
+
+  it('an older server that ignores q: the page is filtered here, with no load more', async () => {
+    mockGetFriends.mockResolvedValueOnce(page([friend(1), { ...friend(2), name: 'Zed' }], 400, 'c1'))
+    await open()
+    // The same unfiltered page comes back for q=zed, still with a cursor and the whole count.
+    mockGetFriends.mockResolvedValueOnce(page([friend(1), { ...friend(2), name: 'Zed' }], 400, 'c1'))
+    await type('zed')
+    expect((list().props.data as { name: string }[]).map((f) => f.name)).toEqual(['Zed'])
+    mockGetFriends.mockClear()
+    await reachEnd()
+    expect(mockGetFriends).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('friends-more')).toBeNull()
+  })
+
+  it('a search that fails keeps the list on screen', async () => {
+    mockGetFriends.mockResolvedValueOnce(page(friends(5), 5))
+    await open()
+    mockGetFriends.mockResolvedValueOnce({ success: false })
+    await type('fri')
+    expect(list().props.data).toHaveLength(5)
+    expect(screen.queryByText('Your friends didn’t load')).toBeNull()
   })
 })
 

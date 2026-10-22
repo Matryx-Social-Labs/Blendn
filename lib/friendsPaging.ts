@@ -64,3 +64,35 @@ export function refreshFirstPage<T>(
   if (joint < 0) return { items: page.items, keptTail: false }
   return { items: [...page.items, ...held.slice(joint + 1)], keptTail: joint + 1 < held.length }
 }
+
+/** The server filters on 1 to 40 characters (`GET /friends?q=`). */
+export const FRIEND_SEARCH_MAX = 40
+/** Typing waits this long before it asks: a search per keystroke is a request per keystroke. */
+export const FRIEND_SEARCH_DEBOUNCE_MS = 250
+
+/** The pickers offer a search once you have more friends than fit on a screen: a short list is seen whole. */
+export const FRIEND_SEARCH_OFFER = 8
+
+/** What is searched for: trimmed, lower-cased, at most 40 characters; null when blank (no filter). */
+export const searchTerm = (raw: string): string | null => raw.trim().toLocaleLowerCase().slice(0, FRIEND_SEARCH_MAX) || null
+
+/**
+ * The server's rule (`friendNameWhere`): the name starts with the term, or a word of it does (the term follows a space),
+ * case-insensitively. So "priya m" finds "Priya Menon", which a word-by-word test would not.
+ */
+export const nameMatches = (name: string, term: string): boolean => {
+  const lower = name.toLocaleLowerCase()
+  return lower.startsWith(term) || lower.includes(` ${term}`)
+}
+
+/**
+ * A page answered for `?q=` by a server that does not know `q` is the unfiltered list: it carries a friend the term does not
+ * match. (A server that filters never does.) Then the page is filtered here, and there is no "load more": the cursor belongs to the
+ * unfiltered list, and a search that walked every page on the phone is exactly what paging is there to avoid.
+ */
+export function localSearch(page: Page<Friend>, term: string, force = false): { page: Page<Friend>; local: boolean } {
+  const local = force || page.items.some((f) => !nameMatches(f.name, term))
+  if (!local) return { page, local: false }
+  const items = page.items.filter((f) => nameMatches(f.name, term))
+  return { page: { items, nextCursor: null, total: items.length }, local: true }
+}

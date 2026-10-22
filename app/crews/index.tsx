@@ -26,7 +26,7 @@ import { useTopBarState } from '../../lib/useTopBarState'
 
 type Load =
   | { kind: 'loading' }
-  | { kind: 'ready'; crews: Crew[]; invites: CrewInvite[] }
+  | { kind: 'ready'; crews: Crew[]; invites: CrewInvite[]; invitesTotal: number; invitesCursor: string | null }
   /** The set-up and age gate (403): the server's sentence, and the way through it. */
   | { kind: 'gate'; line: string }
   | { kind: 'failed' }
@@ -54,6 +54,8 @@ function CrewsScreenContent() {
   const insets = useSafeAreaInsets()
   const [load, setLoad] = useState<Load>({ kind: 'loading' })
   const [refreshing, setRefreshing] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [moreFailed, setMoreFailed] = useState(false)
   // The list fades in over its skeleton only if one was drawn (a wait under 300 ms shows no skeleton).
   const arrive = useSkeletonCrossfade(load.kind === 'loading')
   const reduceMotion = useReducedMotion()
@@ -80,7 +82,11 @@ function CrewsScreenContent() {
 
   const read = useCallback(async () => {
     const result = await crewsApi.myCrews()
-    if (result.success && result.data) setLoad({ kind: 'ready', ...result.data })
+    if (result.success && result.data) {
+      const { crews, invites, invitesPagination } = result.data
+      setLoad({ kind: 'ready', crews, invites, invitesTotal: invitesPagination?.totalCount ?? invites.length, invitesCursor: invitesPagination?.hasMore ? invitesPagination.nextCursor : null })
+      setMoreFailed(false)
+    }
     else if (result.errorCode === 'FORBIDDEN') setLoad({ kind: 'gate', line: result.error ?? '' })
     // A failed refresh keeps the list it had: an empty one would say "no crews" about a network error.
     else setLoad((prev) => (prev.kind === 'ready' ? prev : { kind: 'failed' }))
@@ -97,6 +103,22 @@ function CrewsScreenContent() {
     setRefreshing(true)
     await read()
     setRefreshing(false)
+  }
+
+  /** The next page of invites, onto the ones shown; a failure keeps them and offers the retry. */
+  const moreInvites = async () => {
+    if (load.kind !== 'ready' || !load.invitesCursor || loadingMore) return
+    setLoadingMore(true)
+    setMoreFailed(false)
+    const result = await crewsApi.myCrews(load.invitesCursor)
+    setLoadingMore(false)
+    if (!result.success || !result.data) return setMoreFailed(true)
+    const page = result.data.invitesPagination
+    setLoad((now) => {
+      if (now.kind !== 'ready') return now
+      const seen = new Set(now.invites.map((i) => i.crewId))
+      return { ...now, invites: [...now.invites, ...result.data!.invites.filter((i) => !seen.has(i.crewId))], invitesCursor: page?.hasMore ? page.nextCursor : null, invitesTotal: page?.totalCount ?? now.invitesTotal }
+    })
   }
 
   const openNew = () => router.push('/crews/new')
@@ -143,12 +165,22 @@ function CrewsScreenContent() {
       <Animated.View entering={firstItem ? (reduceMotion ? fadeIn(0) : riseIn(0)) : arrive} style={styles.sections}>
         {rows.length ? (
           <View style={styles.section}>
-            <SectionHeader title="Invites" count={rows.length} />
+            <SectionHeader title="Invites" count={load.invitesTotal} />
             <RowsCard testID="crews-invites">
               {rows.map((row) => (
                 <InviteRow key={row.invite.crewId} row={row} onSee={() => seeInvite(row.invite.crewId)} />
               ))}
             </RowsCard>
+            {load.invitesCursor ? (
+              <Button
+                kind="secondary"
+                size="md"
+                label={moreFailed ? 'Couldn’t load more · Try again' : 'Show more invites'}
+                loading={loadingMore}
+                onPress={() => void moreInvites()}
+                testID="crews-more-invites"
+              />
+            ) : null}
           </View>
         ) : null}
         {load.crews.length ? (

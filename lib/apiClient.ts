@@ -3380,9 +3380,14 @@ class ApiClientClass {
   // No search, by design: see lib/friends.ts. Reads go through `queuedRequest`
   // uncached — these lists change the moment someone taps Accept.
 
-  /** A page of your friends: the first with no cursor, the next with the last page's `pagination.nextCursor`. `count` is the whole list. */
-  async getFriends(cursor?: string | null): Promise<ApiResponse<FriendsPayload>> {
-    return this.queuedRequest(`/api/mobile/friends?limit=${LIST_PAGE.friends}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`)
+  /**
+   * A page of your friends: the first with no cursor, the next with the last page's `pagination.nextCursor`. `count` is the whole
+   * list. `q` (1-40 characters) keeps the friends a word of whose name starts with it, and `count` is then the filtered total; a
+   * server that does not know `q` ignores it (`localSearch`).
+   */
+  async getFriends(cursor?: string | null, q?: string | null): Promise<ApiResponse<FriendsPayload>> {
+    const more = `${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}${q ? `&q=${encodeURIComponent(q)}` : ''}`
+    return this.queuedRequest(`/api/mobile/friends?limit=${LIST_PAGE.friends}${more}`)
   }
 
   async getFriend(userId: string): Promise<ApiResponse<FriendProfile>> {

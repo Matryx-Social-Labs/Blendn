@@ -1,9 +1,9 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { apiClient } from './apiClient'
 import type { Friend } from './friends'
 import { takeFriendsGone } from './friendsGone'
-import { appendUnique, friendsPageFrom, refreshFirstPage } from './friendsPaging'
+import { appendUnique, FRIEND_SEARCH_DEBOUNCE_MS, friendsPageFrom, localSearch, refreshFirstPage, searchTerm } from './friendsPaging'
 import { Logger } from './logger'
 
 export type FriendsListStatus = 'loading' | 'ready' | 'failed'
@@ -35,11 +35,28 @@ export function useFriendsList() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [moreFailed, setMoreFailed] = useState(false)
   const [cursor, setCursor] = useState<string | null>(null)
+  // The search: what is typed, what has been asked (after the debounce), and the whole list's count while a search narrows it.
+  const [query, setQuery] = useState('')
+  const [asked, setAsked] = useState('')
+  const [allTotal, setAllTotal] = useState(0)
+  const [searching, setSearching] = useState(false)
+  const term = useRef<string | null>(null)
+  const lastAsked = useRef('')
+  // A server that ignored `q` was seen: from then on a search filters the first page here and offers no more.
+  const localOnly = useRef(false)
   // What the callbacks read: the latest, not the render they were made in.
   const held = useRef<Friend[]>([])
   const next = useRef<string | null>(null)
   const ask = useRef(0)
   const paging = useRef(false)
+
+  /** A page asked for `term`, narrowed here if the server did not (and then there is no more). */
+  const narrow = (page: NonNullable<ReturnType<typeof friendsPageFrom>>) => {
+    if (!term.current) return page
+    const out = localSearch(page, term.current, localOnly.current)
+    if (out.local) localOnly.current = true
+    return out.page
+  }
 
   const settle = (items: Friend[], at: string | null) => {
     held.current = items
@@ -57,6 +74,10 @@ export function useFriendsList() {
     setLoadingMore(false)
     setMoreFailed(false)
     if (mode === 'reset') {
+      term.current = null
+      lastAsked.current = ''
+      setQuery('')
+      setAsked('')
       held.current = []
       next.current = null
       setFriends([])
@@ -64,10 +85,11 @@ export function useFriendsList() {
       setStatus('loading')
     }
     try {
-      const result = await apiClient.getFriends()
+      const result = await apiClient.getFriends(null, term.current)
       if (mine !== ask.current) return
-      const page = friendsPageFrom(result.data)
-      if (!page) return markFailed()
+      const read = friendsPageFrom(result.data)
+      if (!read) return markFailed()
+      const page = narrow(read)
       const merged = mode === 'merge' ? refreshFirstPage(held.current, page, key) : { items: page.items, keptTail: false }
       // Somebody removed on another screen leaves the pages kept from before as well (the head was just read: it is already right).
       const gone = takeFriendsGone()
@@ -76,6 +98,7 @@ export function useFriendsList() {
       const items = gone.size && mode === 'merge' ? merged.items.filter((f) => head.has(f.userId) || !gone.has(f.userId)) : merged.items
       settle(items, merged.keptTail ? next.current : page.nextCursor)
       setTotal(page.total)
+      if (!term.current) setAllTotal(page.total)
       setStatus('ready')
     } catch (error) {
       Logger.warn('friends', 'friends list failed', { error })
@@ -91,10 +114,11 @@ export function useFriendsList() {
     setLoadingMore(true)
     setMoreFailed(false)
     try {
-      const result = await apiClient.getFriends(from)
+      const result = await apiClient.getFriends(from, term.current)
       if (mine !== ask.current) return
-      const page = friendsPageFrom(result.data)
-      if (!page) return setMoreFailed(true)
+      const read = friendsPageFrom(result.data)
+      if (!read) return setMoreFailed(true)
+      const page = narrow(read)
       settle(appendUnique(held.current, page.items, key), page.nextCursor)
       setTotal(page.total)
     } catch (error) {
@@ -108,6 +132,20 @@ export function useFriendsList() {
     }
   }, [])
 
+  // Typing waits, then asks: a new search replaces the list (the old one stays on screen under the spinner until it lands).
+  useEffect(() => {
+    const timer = setTimeout(() => setAsked(query.trim()), FRIEND_SEARCH_DEBOUNCE_MS)
+    return () => clearTimeout(timer)
+  }, [query])
+  useEffect(() => {
+    if (asked === lastAsked.current) return
+    lastAsked.current = asked
+    term.current = searchTerm(asked)
+    setSearching(true)
+    // The read is async: its setState lands after the effect, as a subscription's answer does.
+    void refresh('replace').finally(() => setSearching(false))
+  }, [asked, refresh])
+
   /** Somebody left the list on this screen (an unfriend): gone from what is held, and from the count. */
   const drop = useCallback((userId: string) => {
     const kept = held.current.filter((f) => f.userId !== userId)
@@ -117,7 +155,24 @@ export function useFriendsList() {
     setTotal((n) => Math.max(0, n - 1))
   }, [])
 
-  return { friends, total, status, loadingMore, moreFailed, hasMore: cursor !== null, refresh, loadMore, drop }
+  return {
+    friends,
+    total,
+    allTotal,
+    status,
+    loadingMore,
+    moreFailed,
+    hasMore: cursor !== null,
+    query,
+    search: setQuery,
+    /** Typing has not been asked yet, or the answer is on its way. */
+    searching: searching || query.trim() !== asked,
+    /** What the list is narrowed to, or null. */
+    searched: searchTerm(asked),
+    refresh,
+    loadMore,
+    drop,
+  }
 }
 
 /** What a picker draws from the list: nothing yet (`null`), the failure (never "no friends"), or the friends. */

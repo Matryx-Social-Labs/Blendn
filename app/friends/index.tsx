@@ -3,6 +3,7 @@ import { useCallback, useState } from 'react'
 import { FlatList, StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
+import { SearchField } from '../../components/ds/SearchField'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { TopBar } from '../../components/ds/TopBar'
 import { OfflineStrip, useOffline } from '../../components/profile/OfflineStrip'
@@ -13,7 +14,7 @@ import { SettingsGroup } from '../../components/ds/SettingsRow'
 import { RequestsRow } from '../../components/friends/RequestsRow'
 import { friendsSinceParts, type Friend } from '../../lib/friends'
 import { groupedCount } from '../../lib/friendsHere'
-import { FRIENDS_PAGE } from '../../lib/friendsPaging'
+import { FRIEND_SEARCH_MAX, FRIENDS_PAGE } from '../../lib/friendsPaging'
 import { COLOR, SPACE } from '../../lib/design/tokens'
 import { useFriendRequests } from '../../lib/useFriendRequests'
 import { useFriendsList } from '../../lib/useFriendsList'
@@ -59,6 +60,7 @@ function FriendsScreenContent() {
   const openAdd = () => router.push('/friends/add')
   const failed = list.status === 'failed'
 
+  const searched = list.searched !== null
   const empty = failed ? (
     <StateScreen
       icon="cloud-off"
@@ -66,6 +68,9 @@ function FriendsScreenContent() {
       body="Check your connection and try again."
       actions={[{ label: 'Try again', onPress: () => void onRefresh(), loading: refreshing }]}
     />
+  ) : searched ? (
+    // Only a search can come up empty with friends behind it: the list is still there, under another word.
+    <StateScreen icon="search" title="No friend by that name." gutter testID="friends-no-match" />
   ) : (
     <StateScreen
       icon="users"
@@ -76,7 +81,7 @@ function FriendsScreenContent() {
   )
 
   const header =
-    requests.incomingTotal > 0 || list.total > 0 ? (
+    !searched && (requests.incomingTotal > 0 || list.total > 0) ? (
       <View style={styles.rows}>
         {requests.incomingTotal > 0 ? (
           <SettingsGroup>
@@ -95,7 +100,8 @@ function FriendsScreenContent() {
     <View style={styles.container}>
       <TopBar
         title="Friends"
-        sub={list.total > FRIENDS_PAGE ? groupedCount(list.total) : undefined}
+        // The whole list's count, drawn once it is more than a page; a search narrows the list, never this number.
+        sub={list.allTotal > FRIENDS_PAGE ? groupedCount(list.allTotal) : undefined}
         state={bar.state}
         onBack={() => router.back()}
         actions={[{ icon: 'user-plus', label: 'Add friends', onPress: openAdd }]}
@@ -103,6 +109,22 @@ function FriendsScreenContent() {
       {offline ? (
         <View style={styles.offline}>
           <OfflineStrip offline />
+        </View>
+      ) : null}
+      {list.allTotal > 0 || list.query ? (
+        <View style={styles.search}>
+          <SearchField
+            value={list.query}
+            onChangeText={list.search}
+            placeholder="Search friends"
+            busy={list.searching}
+            resultsLabel={searched && !list.searching ? `${groupedCount(list.total)} ${list.total === 1 ? 'friend' : 'friends'}` : undefined}
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="search"
+            maxLength={FRIEND_SEARCH_MAX}
+            testID="friends-search"
+          />
         </View>
       ) : null}
       {/* No friends to scroll: the rows that stand above them stand above the empty state too. */}
@@ -126,6 +148,8 @@ function FriendsScreenContent() {
             ListHeaderComponent={list.friends.length ? header : null}
             ListEmptyComponent={empty}
             ListFooterComponent={<PagedFooter loading={list.loadingMore} failed={list.moreFailed} onRetry={() => void list.loadMore()} testID="friends-more" />}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
             showsVerticalScrollIndicator={false}
             {...pull.listProps}
           />
@@ -157,6 +181,7 @@ const styles = StyleSheet.create({
   emptyList: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: SPACE.gutter },
   // The frame's column: the request card and Make a crew stand 8 apart, and the first friend 8 under them.
   rows: { gap: SPACE.sm, paddingBottom: SPACE.sm, paddingHorizontal: 0 },
+  search: { paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.sm },
   offline: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.xs, paddingBottom: SPACE.sm },
 })
 

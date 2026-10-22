@@ -22,6 +22,7 @@ import {
   type MakeStep,
   stepNote,
 } from '../../lib/crewsScreens'
+import { FRIEND_SEARCH_OFFER } from '../../lib/friendsPaging'
 import { pickerView, useFriendsList } from '../../lib/useFriendsList'
 import { SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
@@ -228,6 +229,7 @@ function NewCrewScreenContent() {
                   picked={picked}
                   onToggle={togglePick}
                   onRetry={() => void readFriends('reset')}
+                  search={{ query: friendList.query, onChange: friendList.search, searching: friendList.searching, active: friendList.searched !== null, offered: friendList.allTotal > FRIEND_SEARCH_OFFER }}
                   paging={{ hasMore: friendList.hasMore, loadingMore: friendList.loadingMore, moreFailed: friendList.moreFailed, onMore: () => void friendList.loadMore() }}
                 />
               ) : (

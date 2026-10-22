@@ -8,6 +8,8 @@ import { INTENT_CHOICES, type IntentChoice } from '../../lib/crewsScreens'
 import type { Friend } from '../../lib/friends'
 import { OPACITY, tint } from '../../lib/theme'
 import { PagedFooter } from '../friends/PagedFooter'
+import { SearchField } from '../ds/SearchField'
+import { FRIEND_SEARCH_MAX } from '../../lib/friendsPaging'
 import { Avatar } from '../ds/Avatar'
 import { ChipSet } from '../ds/ChipSet'
 import { CrewCard } from '../ds/CrewCard'
@@ -201,6 +203,12 @@ export type FriendsStepProps = {
   limit?: number
   /** The friends are read a page at a time: asking for the next, and what the foot says while it comes or when it did not. */
   paging?: { hasMore: boolean; loadingMore: boolean; moreFailed: boolean; onMore: () => void }
+  /**
+   * Search over your friends (a word of the name starts with it). Offered when there is more than a screen of them: a short list is
+   * seen whole. `active` is the word the list is narrowed to, so an empty result says "no friend by that name", not "none to ask".
+   * Whoever is picked stays picked through a search: the picks are ids, not rows.
+   */
+  search?: { query: string; onChange: (text: string) => void; searching: boolean; active: boolean; offered: boolean }
 }
 
 /**
@@ -210,7 +218,7 @@ export type FriendsStepProps = {
  * here" is), asking for the next page of friends as the end comes into view: a person with a thousand friends scrolls a
  * windowed list, not a thousand views. A failed page keeps the rows and says so with Try again.
  */
-export function FriendsStep({ friends, picked, onToggle, onRetry, none = NO_FRIENDS, limit = CREW_MAX_MEMBERS - 1, paging }: FriendsStepProps) {
+export function FriendsStep({ friends, picked, onToggle, onRetry, none = NO_FRIENDS, limit = CREW_MAX_MEMBERS - 1, paging, search }: FriendsStepProps) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const secondary = contrast ? COLOR.textPrimary : COLOR.textSecondary
@@ -222,6 +230,20 @@ export function FriendsStep({ friends, picked, onToggle, onRetry, none = NO_FRIE
   return (
     <>
       <Text style={[font('body', bold), { color: secondary }]}>Friends only. The count says how many, never who was skipped.</Text>
+      {search && (search.offered || search.query) ? (
+        <SearchField
+          value={search.query}
+          onChangeText={search.onChange}
+          placeholder="Search friends"
+          busy={search.searching}
+          inSheet
+          autoCapitalize="none"
+          autoCorrect={false}
+          returnKeyType="search"
+          maxLength={FRIEND_SEARCH_MAX}
+          testID="friend-pick-search"
+        />
+      ) : null}
       <View style={styles.list}>
         {friends === null ? (
           line('Loading your friends…')
@@ -230,7 +252,7 @@ export function FriendsStep({ friends, picked, onToggle, onRetry, none = NO_FRIE
             {line('Your friends didn’t load — try again')}
           </Pressable>
         ) : friends.length === 0 ? (
-          line(none)
+          line(search?.active ? 'No friend by that name.' : none)
         ) : (
           <FlatList
             testID="friend-pick-list"
@@ -244,6 +266,7 @@ export function FriendsStep({ friends, picked, onToggle, onRetry, none = NO_FRIE
             windowSize={7}
             removeClippedSubviews
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
             onEndReachedThreshold={1.5}
             onEndReached={() => paging?.hasMore && paging.onMore()}
             ListFooterComponent={

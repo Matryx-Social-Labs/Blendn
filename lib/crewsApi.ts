@@ -25,9 +25,16 @@ export type CrewPatch = Partial<{ name: string; bio: string | null; intent: Crew
 const enc = encodeURIComponent
 const post = (body?: unknown): RequestInit => ({ method: 'POST', body: JSON.stringify(body ?? {}) })
 
+export const INVITES_PAGE = 50
+export type InvitesPagination = { limit: number; hasMore: boolean; nextCursor: string | null; totalCount: number }
+
 export const crewsApi = {
-  myCrews(): Promise<ApiResponse<{ crews: Crew[]; invites: CrewInvite[] }>> {
-    return apiClient.queuedRequest('/api/mobile/crews')
+  /**
+   * My crews, and a page of the invites waiting (`invitesPagination`: `{ limit, hasMore, nextCursor, totalCount }`, newest 200 at
+   * most). With no `cursor` the first page of 50; `crews` is not paged. A server before the paging sends none: all the invites, no more.
+   */
+  myCrews(cursor?: string | null): Promise<ApiResponse<{ crews: Crew[]; invites: CrewInvite[]; invitesPagination?: InvitesPagination }>> {
+    return apiClient.queuedRequest(`/api/mobile/crews?limit=${INVITES_PAGE}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`)
   },
 
   crew(crewId: string): Promise<ApiResponse<Crew>> {

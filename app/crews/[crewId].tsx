@@ -33,6 +33,7 @@ import {
 import { crewsApi, type CrewPatch } from '../../lib/crewsApi'
 import { crewBarState, leaveSheet, removeSheet, textFieldOf } from '../../lib/crewsScreens'
 import { COLOR, RADIUS, SPACE } from '../../lib/design/tokens'
+import { FRIEND_SEARCH_OFFER } from '../../lib/friendsPaging'
 import { pickerView, useFriendsList } from '../../lib/useFriendsList'
 import { isMuted, rememberRoomMute, useRoomMute } from '../../lib/roomMembership'
 import { useRoomRow } from '../../lib/roomRow'
@@ -382,6 +383,7 @@ function CrewScreenContent() {
           <InviteFriendsSheet
             visible={inviting}
             friends={invitable}
+            search={{ query: friendList.query, onChange: friendList.search, searching: friendList.searching, active: friendList.searched !== null, offered: friendList.allTotal > FRIEND_SEARCH_OFFER }}
             paging={{ hasMore: friendList.hasMore, loadingMore: friendList.loadingMore, moreFailed: friendList.moreFailed, onMore: () => void friendList.loadMore() }}
             room={CREW_MAX_MEMBERS - crew.size}
             asking={busy === 'invite'}

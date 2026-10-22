@@ -256,7 +256,8 @@ function ProfileInner() {
     void crewsApi.myCrews().then((result) => {
       if (!result.success || !result.data) return
       setCrews(result.data.crews)
-      setCrewInvites(result.data.invites.length)
+      // The server's count of the invites listed, not the length of the first page of them.
+      setCrewInvites(result.data.invitesPagination?.totalCount ?? result.data.invites.length)
     })
   }, [])
 

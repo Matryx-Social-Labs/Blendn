@@ -261,6 +261,27 @@ describe('inviting', () => {
     await waitFor(() => screen.getByRole('checkbox', { name: 'Ask Kavya' }))
   })
 
+  it('search: more than eight friends offers it, asks the server with q, and a crewmate already in is still left out', async () => {
+    jest.useFakeTimers()
+    crews.crew.mockResolvedValue({ success: true, data: crew('owner') })
+    api.getFriends.mockResolvedValueOnce(friends('Rohan', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9'))
+    await render(<CrewScreen />)
+    await waitFor(() => screen.getByLabelText('Invite friends'))
+    await fireEvent.press(screen.getByLabelText('Invite friends'))
+    await waitFor(() => screen.getByTestId('friend-pick-search'))
+    api.getFriends.mockResolvedValueOnce(friends('Rohan', 'Rohit'))
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId('friend-pick-search'), 'Ro')
+    })
+    await act(async () => {
+      jest.advanceTimersByTime(300)
+    })
+    expect(api.getFriends).toHaveBeenLastCalledWith(null, 'ro')
+    await waitFor(() => screen.getByRole('checkbox', { name: 'Ask Rohit' }))
+    expect(screen.queryByRole('checkbox', { name: 'Ask Rohan' })).toBeNull()
+    jest.useRealTimers()
+  })
+
   it('a refused invite says so and keeps the sheet', async () => {
     crews.crew.mockResolvedValue({ success: true, data: crew('owner') })
     api.getFriends.mockResolvedValue(friends('Kavya'))

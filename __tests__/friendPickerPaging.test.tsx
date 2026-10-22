@@ -65,7 +65,7 @@ it('101 friends: the 101st comes by cursor when the end is reached, and Try agai
   await waitFor(() => screen.getByTestId('friend-pick-list'))
   expect(list().props.data).toHaveLength(100)
   await reachEnd()
-  expect(api.getFriends).toHaveBeenLastCalledWith('c1')
+  expect(api.getFriends).toHaveBeenLastCalledWith('c1', null)
   expect(screen.getByText('Couldn’t load more.')).toBeTruthy()
   expect(list().props.data).toHaveLength(100)
   api.getFriends.mockResolvedValueOnce(page(friends(1, 100), 101))
@@ -95,4 +95,72 @@ it('a failed first read is not "no friends": it offers the retry', async () => {
   api.getFriends.mockResolvedValueOnce(page(friends(1), 1))
   await fireEvent.press(screen.getByLabelText('Your friends didn’t load — try again'))
   await waitFor(() => screen.getByRole('checkbox', { name: 'Ask Friend 0' }))
+})
+
+describe('search in the picker', () => {
+  const type = async (text: string) => {
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId('friend-pick-search'), text)
+    })
+    await act(async () => {
+      jest.advanceTimersByTime(300)
+    })
+  }
+  beforeEach(() => jest.useFakeTimers())
+  afterEach(() => jest.useRealTimers())
+
+  it('a short list (8 or fewer) is seen whole: no field', async () => {
+    api.getFriends.mockResolvedValue(page(friends(8), 8))
+    await toFriends()
+    await waitFor(() => screen.getByTestId('friend-pick-list'))
+    expect(screen.queryByTestId('friend-pick-search')).toBeNull()
+  })
+
+  it('a longer one has it; typing asks the server, and the 101st friend is found without paging to it', async () => {
+    api.getFriends.mockResolvedValueOnce(page(friends(100), 101, 'c1'))
+    await toFriends()
+    await waitFor(() => screen.getByTestId('friend-pick-search'))
+    api.getFriends.mockResolvedValueOnce(page([friend(100)], 1))
+    await type('Friend 100')
+    expect(api.getFriends).toHaveBeenLastCalledWith(null, 'friend 100')
+    expect(list().props.data.map((f: { userId: string }) => f.userId)).toEqual(['u100'])
+  })
+
+  it('whoever was picked stays picked through a search, and is counted', async () => {
+    api.getFriends.mockResolvedValueOnce(page(friends(20), 20))
+    await toFriends()
+    await waitFor(() => screen.getByRole('checkbox', { name: 'Ask Friend 3' }))
+    await fireEvent.press(screen.getByRole('checkbox', { name: 'Ask Friend 3' }))
+    api.getFriends.mockResolvedValueOnce(page([friend(7)], 1))
+    await type('Friend 7')
+    await fireEvent.press(screen.getByRole('checkbox', { name: 'Ask Friend 7' }))
+    expect(screen.getAllByText('2').length).toBeGreaterThan(0)
+    api.getFriends.mockResolvedValueOnce(page(friends(20), 20))
+    await type('')
+    expect(screen.getByRole('checkbox', { name: 'Ask Friend 3' }).props.accessibilityState).toMatchObject({ checked: true })
+  })
+
+  it('no match says so, not "Add friends first"', async () => {
+    api.getFriends.mockResolvedValueOnce(page(friends(20), 20))
+    await toFriends()
+    await waitFor(() => screen.getByTestId('friend-pick-search'))
+    api.getFriends.mockResolvedValueOnce(page([], 0))
+    await type('zzz')
+    expect(screen.getByText('No friend by that name.')).toBeTruthy()
+    expect(screen.queryByText('Add friends first — a crew is made from your friends.')).toBeNull()
+    expect(screen.getByTestId('friend-pick-search')).toBeTruthy()
+  })
+
+  it('an older server that ignores q: filtered here, no load more', async () => {
+    api.getFriends.mockResolvedValueOnce(page(friends(20), 20, 'c1'))
+    await toFriends()
+    await waitFor(() => screen.getByTestId('friend-pick-search'))
+    api.getFriends.mockResolvedValueOnce(page(friends(20), 20, 'c1'))
+    await type('Friend 1')
+    // "Friend 1", "Friend 10" .. "Friend 19" start with the term: eleven.
+    expect(list().props.data).toHaveLength(11)
+    api.getFriends.mockClear()
+    await reachEnd()
+    expect(api.getFriends).not.toHaveBeenCalled()
+  })
 })

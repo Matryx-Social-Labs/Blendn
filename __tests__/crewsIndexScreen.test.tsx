@@ -318,3 +318,41 @@ describe('the bar and the first crew (motion #30, #47)', () => {
     expect(mockMotion.riseIn).toHaveBeenCalledWith(0)
   })
 })
+
+describe('invites, a page at a time (admin invitesPagination)', () => {
+  const many = (n: number, from = 0) => Array.from({ length: n }, (_, i) => invite({ crewId: `c-inv-${from + i}`, name: `Crew ${from + i}` }))
+  const withPage = (invites: CrewInvite[], hasMore: boolean, totalCount: number) => ({
+    success: true as const,
+    data: { crews: [], invites, invitesPagination: { limit: 50, hasMore, nextCursor: hasMore ? 'n1' : null, totalCount } },
+  })
+
+  it('asks for the first 50, says how many there are in all, and Show more invites reads the next page by cursor', async () => {
+    api.myCrews.mockResolvedValueOnce(withPage(many(50), true, 120))
+    await render(<CrewsScreen />)
+    await waitFor(() => screen.getByTestId('crews-more-invites'))
+    expect(api.myCrews).toHaveBeenCalledWith()
+    expect(screen.getByLabelText('Invites, 120')).toBeTruthy()
+    api.myCrews.mockResolvedValueOnce(withPage(many(50, 50), false, 120))
+    await fireEvent.press(screen.getByTestId('crews-more-invites'))
+    await waitFor(() => expect(screen.queryByTestId('crews-more-invites')).toBeNull())
+    expect(api.myCrews).toHaveBeenLastCalledWith('n1')
+    expect(within(screen.getByTestId('crews-invites')).getAllByLabelText(/^See invite/)).toHaveLength(100)
+  })
+
+  it('a page that fails keeps the invites and offers Try again', async () => {
+    api.myCrews.mockResolvedValueOnce(withPage(many(50), true, 60))
+    await render(<CrewsScreen />)
+    await waitFor(() => screen.getByTestId('crews-more-invites'))
+    api.myCrews.mockResolvedValueOnce({ success: false, error: 'x' })
+    await fireEvent.press(screen.getByTestId('crews-more-invites'))
+    await waitFor(() => screen.getByText('Couldn’t load more · Try again'))
+    expect(within(screen.getByTestId('crews-invites')).getAllByLabelText(/^See invite/)).toHaveLength(50)
+  })
+
+  it('a server before the paging sends none: every invite, no button', async () => {
+    api.myCrews.mockResolvedValueOnce({ success: true, data: { crews: [], invites: many(3) } })
+    await render(<CrewsScreen />)
+    await waitFor(() => screen.getByLabelText('Invites, 3'))
+    expect(screen.queryByTestId('crews-more-invites')).toBeNull()
+  })
+})
