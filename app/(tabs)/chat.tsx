@@ -1,4 +1,4 @@
-import { router, useFocusEffect, useScrollToTop } from 'expo-router'
+import { router, useScrollToTop } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FlatList, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import Reanimated, { Easing, FadeInUp, FadeOut, LinearTransition, useReducedMotion } from 'react-native-reanimated'
@@ -20,6 +20,7 @@ import {
 } from '../../components/banter/BanterParts'
 import { useLatest } from '../../lib/useLatest'
 import { usePullToRefresh } from '../../lib/usePullToRefresh'
+import { useReadOnReturn } from '../../lib/useReadOnReturn'
 import { heldList, inboxTimeLabel, previewWithSender } from '../../components/banter/inbox'
 import { holdController } from '../../components/banter/hold'
 import { BanterPressGuard, type PressGuard } from '../../components/banter/pressGuard'
@@ -123,26 +124,24 @@ function ChatInner() {
    * room opened, they left behind the screen that covered them. The room is read the moment it opens (the server
    * marks it so, and no message in it counts here); only the list's drawing of that waits for the return.
    */
-  const readOnReturn = useRef<ReadonlySet<string>>(new Set())
-  useFocusEffect(
-    useCallback(() => {
-      const opened = readOnReturn.current
-      if (!opened.size) return
-      readOnReturn.current = new Set()
+  const clearRead = useCallback(
+    (opened: ReadonlySet<string>) => {
       setGroupChats((prev) => prev.map((c) => (opened.has(c.chat_room_id) ? { ...c, unread_count: 0 } : c)))
       setCrewRooms((prev) => prev.map((r) => (opened.has(r.id) ? { ...r, unreadCount: 0 } : r)))
-    }, [setGroupChats, setCrewRooms])
+    },
+    [setGroupChats, setCrewRooms]
   )
+  const noteOpened = useReadOnReturn(clearRead)
   const openRoom = useCallback(
     (chat: GroupChat) => {
       inbox.noteOpenRoom(chat.chat_room_id)
-      readOnReturn.current = new Set(readOnReturn.current).add(chat.chat_room_id)
+      noteOpened(chat.chat_room_id)
       router.push({
         pathname: '/chat/[id]',
         params: { id: chat.chat_room_id, roomName: chat.event_title, eventTitle: chat.event_title } as never,
       })
     },
-    [inbox, setGroupChats]
+    [inbox, noteOpened]
   )
   const openDm = useCallback(
     (chat: PersonalChat) => {
@@ -160,13 +159,13 @@ function ChatInner() {
   )
   const openCrewRoom = useCallback(
     (r: CrewRoomRow) => {
-      readOnReturn.current = new Set(readOnReturn.current).add(r.id)
+      noteOpened(r.id)
       router.push({
         pathname: '/chat/[id]',
         params: { id: r.id, roomName: crewRoomTitle(r), kind: r.kind, ...(r.crewId ? { crewId: r.crewId } : {}), ...(r.blendId ? { blendId: r.blendId } : {}) } as never,
       })
     },
-    []
+    [noteOpened]
   )
 
   /* "Mark read" on one DM: the thread's first page is what opens it on the server (no per-thread route exists). */

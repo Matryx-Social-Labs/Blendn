@@ -189,7 +189,7 @@ export function BoardScreen() {
       Logger.warn('board', 'load threw', { eventId, error: String(error) })
       return false
     }
-  }, [eventId])
+  }, [eventId, loadRef])
 
   // On focus, so coming back from the Banter shows what was answered there.
   useFocusEffect(

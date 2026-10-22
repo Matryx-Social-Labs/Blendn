@@ -25,9 +25,18 @@ export function RoomPoll({ eventId, pollId, question, testID }: { eventId: strin
     const result = await getPoll(eventId, pollId)
     if (result.success && result.data) setResults(result.data)
   }, [eventId, pollId])
+  // The read lands in a promise callback, never synchronously in the effect.
   useEffect(() => {
-    void read().catch(() => {})
-  }, [read])
+    let live = true
+    getPoll(eventId, pollId)
+      .then((result) => {
+        if (live && result.success && result.data) setResults(result.data)
+      })
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [eventId, pollId])
 
   const vote = async (index: number) => {
     const optionId = results && optionIdAt(results, index)
