@@ -2,7 +2,7 @@ import { router } from 'expo-router'
 import { ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { SettingsGroup, SettingsRow } from '../components/ds/SettingsRow'
+import { SettingsGroup } from '../components/ds/SettingsRow'
 import { font, HueProvider, useBoldText } from '../components/ds/shared'
 import { TopBar } from '../components/ds/TopBar'
 import { COACH_TIPS } from '../lib/coachMarks'
@@ -30,7 +30,11 @@ function TipsContent() {
         <Text style={[font('meta', bold), styles.intro]}>{INTRO}</Text>
         {COACH_TIPS.map((tip) => (
           <SettingsGroup key={tip.id} title={tip.screen} testID={`tip-${tip.id}`}>
-            <SettingsRow icon="info" title={tip.text} hint={tip.when} />
+            {/* Plain text in the card: a tip is read, never pressed, so no glyph and no row to ripple. */}
+            <View style={styles.tip}>
+              <Text style={[font('body', bold), styles.text]}>{tip.text}</Text>
+              <Text style={[font('meta', bold), styles.when]}>{tip.when}</Text>
+            </View>
           </SettingsGroup>
         ))}
       </ScrollView>
@@ -44,7 +48,10 @@ function TipsContent() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent' },
   content: { paddingHorizontal: SPACE.gutter, gap: SPACE.xl },
-  intro: { color: COLOR.textSecondary, paddingHorizontal: SPACE.lg },
+  intro: { color: COLOR.textSecondary },
+  tip: { padding: SPACE.lg, gap: SPACE.xxs },
+  text: { color: COLOR.textPrimary },
+  when: { color: COLOR.textTertiary },
 })
 
 /** Violet world: one hue on this screen (`HueProvider`), as Settings. */
