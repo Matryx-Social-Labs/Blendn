@@ -41,7 +41,8 @@ export default function SupportScreen() {
   const os = platformParts()
   const details: { icon: IconName; name: string; value: string }[] = [
     { icon: 'smartphone', name: 'App', value: appVersionLabel() },
-    { icon: Platform.OS === 'ios' ? 'apple' : 'smartphone-nfc', name: os.name, value: os.version },
+    // The system it runs on; Android's old smartphone-nfc read as a phone set to vibrate (r7 L15).
+    { icon: Platform.OS === 'ios' ? 'apple' : 'cpu', name: os.name, value: os.version },
     ...(user?.id ? [{ icon: 'user' as const, name: 'Account ID', value: shortAccountId(user.id) }] : []),
   ]
 

@@ -77,6 +77,17 @@ describe('the master switch', () => {
     await waitFor(() => expect(api.updateProfile).toHaveBeenCalledWith('u_me', { push_enabled: false }))
   })
 
+  it('dimmed, it says why: checking while it reads, and a row to try again when the read failed (r7 L9)', async () => {
+    let answer: (v: unknown) => void = () => {}
+    api.getProfile.mockReturnValueOnce(new Promise((r) => (answer = r)) as never)
+    await render(<Screen />)
+    expect(screen.getByText('Checking your setting…')).toBeTruthy()
+    await act(async () => answer({ success: false, error: 'offline' }))
+    expect(await screen.findByText('Couldn’t load this setting. Tap to try again.')).toBeTruthy()
+    fireEvent.press(screen.getByTestId('settings-pushEnabled-retry'))
+    await waitFor(() => expect(screen.getByRole('switch', { name: /^Push notifications/ }).props.accessibilityState).toMatchObject({ checked: true, disabled: false }))
+  })
+
   it('rolls back, with a toast naming it, when the save fails', async () => {
     api.updateProfile.mockResolvedValue({ success: false, error: 'no' } as never)
     await render(<Screen />)

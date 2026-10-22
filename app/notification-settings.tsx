@@ -50,17 +50,31 @@ function NotificationSettingsContent() {
         ) : null}
 
         <SettingsGroup testID="notification-settings-master">
-          <SettingsRow
-            icon="bell"
-            title="Push notifications"
-            hint={push.os === 'blocked' && push.enabled ? 'Off in your phone’s settings.' : undefined}
-            trail="switch"
-            value={push.enabled === true && !phoneBlocks}
-            onValueChange={push.toggle}
-            busy={push.saving}
-            disabled={push.enabled === null}
-            testID="settings-pushEnabled"
-          />
+          {/*
+            The switch holds still until the account has said (`enabled` is null), and says why it is dimmed (r7 L9): still
+            reading, or the read failed, in which case the row is the way to try again.
+          */}
+          {push.loadFailed && push.enabled === null ? (
+            <SettingsRow
+              icon="bell"
+              title="Push notifications"
+              hint="Couldn’t load this setting. Tap to try again."
+              onPress={() => void push.load()}
+              testID="settings-pushEnabled-retry"
+            />
+          ) : (
+            <SettingsRow
+              icon="bell"
+              title="Push notifications"
+              hint={push.enabled === null ? 'Checking your setting…' : push.os === 'blocked' && push.enabled ? 'Off in your phone’s settings.' : undefined}
+              trail="switch"
+              value={push.enabled === true && !phoneBlocks}
+              onValueChange={push.toggle}
+              busy={push.saving}
+              disabled={push.enabled === null}
+              testID="settings-pushEnabled"
+            />
+          )}
         </SettingsGroup>
 
         <View style={masterOff ? styles.dim : null} pointerEvents={masterOff ? 'none' : 'auto'} testID="notification-settings-kinds">
