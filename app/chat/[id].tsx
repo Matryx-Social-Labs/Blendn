@@ -4,7 +4,7 @@ import { FlatList, Platform, StyleSheet, useWindowDimensions, View } from 'react
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { useBlendRoom } from '../../components/crews/BlendRoom'
-import { ChatHeader, chatFeedFrame, chatHeaderBottom, SubtitleText } from '../../components/chat/ChatHeader'
+import { ChatHeader, chatFeedFrame, chatHeaderBottom, OpensLine, SubtitleText } from '../../components/chat/ChatHeader'
 import { BrokenLink } from '../../components/chat/BrokenLink'
 import { KeyboardFrame } from '../../components/chat/KeyboardFrame'
 import { CountLine, FeedSkeleton, JustMutedLine, LoadOlder, NewestChip, ReactionFlight, RoomCover, type Flight } from '../../components/chat/ChatParts'
@@ -33,6 +33,8 @@ import { copyText, linkSheet, notSentSheet } from '../../lib/chatSheets'
 import { idParam, nameParam } from '../../lib/routeParams'
 import { subscribeCheckInChanged } from '../../lib/checkIn'
 import { newClientId } from '../../lib/clientId'
+import { opensInSpoken } from '../../lib/preEventRoom'
+import { usePreEventRoom } from '../../lib/usePreEventRoom'
 import { BLEND_CLOSED_LINE, defaultRoomName, roomClosedLine, roomKindParam } from '../../lib/crews'
 import { COLOR, SIZE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
@@ -45,6 +47,7 @@ import { useActiveThread } from '../../lib/notifications'
 import { ScreenProfiler } from '../../lib/perf'
 import { roomRefusalState } from '../../lib/placeRoom'
 import { queryCache } from '../../lib/queryCache'
+import { printable } from '../../lib/pulseSections'
 import { toggleReaction, withMine } from '../../lib/reactions'
 import { isMuted, markRoomJoined, markRoomLeft, roomSubtitle, useRoomMembership, useRoomMute } from '../../lib/roomMembership'
 import { isSpeech, isTemp, roomMessageFromSocket, roomMessagesFrom, type RoomMessage as Message } from '../../lib/roomMessages'
@@ -68,7 +71,7 @@ import {
 import { chatClock } from '../../lib/time'
 import { withDaySeparators } from '../../lib/unreadDivider'
 import { useAuth } from '../../lib/useAuth'
-import { lockFor, useComposerLock } from '../../lib/useComposerLock'
+import { lockFor, useComposerLock, type ComposerLock } from '../../lib/useComposerLock'
 import { scrollListToEnd, useFollowEnd } from '../../lib/useFollowEnd'
 import { useLatest } from '../../lib/useLatest'
 import { useLiveSync } from '../../lib/useLiveSync'
@@ -192,6 +195,8 @@ function GroupChatInner() {
   const [leftSince, setLeftSince] = useState(0)
   const memberCount = roomInfo.memberCount ? Math.max(0, roomInfo.memberCount - leftSince) : null
   const { showToast } = useToast()
+  /* A day before doors the room is served but not open: its header counts down, its composer says so (Flow 15 #8). */
+  const opensIn = usePreEventRoom(eventRoom ? roomInfo.startTime : null)
 
   /* The long-press, a sender's card, your reaction's flight (#36, 5.1, #37). */
   const [menu, setMenu] = useState<{ message: Message; anchor: Rect } | null>(null)
@@ -612,7 +617,7 @@ function GroupChatInner() {
 
   const myId = currentUser?.id
   /* Muted, locked, closed: the server refuses reactions too, so the bar does not offer them. */
-  const refusesWrites = !!composer.lock && composer.lock.state !== 'ratelimited'
+  const refusesWrites = (!!composer.lock && composer.lock.state !== 'ratelimited') || !!opensIn
   /** What a long-press offers for this message (lib/messageMenu.ts, R3-D5 5.2). */
   const planFor = (message: Message): MessageMenu =>
     messageMenu({
@@ -731,10 +736,18 @@ function GroupChatInner() {
 
   const name = roomName || defaultRoomName(roomKind)
   // Most rooms are named for their event: then the line is the live count (dot, Geist Mono), else the event's title.
-  const line = roomSubtitle(name, eventTitle || undefined, memberCount)
-  const subtitle = !line ? null : line === eventTitle ? <SubtitleText>{line}</SubtitleText> : <CountLine count={memberCount ?? 0} />
+  // Five and up, as every people count says it (the owner's floor): under that the line is the event's title, or nothing.
+  const line = roomSubtitle(name, eventTitle || undefined, printable(memberCount))
+  const subtitle = opensIn ? (
+    <OpensLine label={opensIn} spoken={opensInSpoken(opensIn)} count={printable(memberCount)} />
+  ) : !line ? null : line === eventTitle ? (
+    <SubtitleText>{line}</SubtitleText>
+  ) : (
+    <CountLine count={memberCount ?? 0} />
+  )
   const dockBottom = keyboardUp ? SPACE.sm : Math.max(insets.bottom, SPACE.lg)
-  const lock = composer.lock
+  /* Before the room opens the composer says so without a send being refused first; a refusal's own lock wins. */
+  const lock: ComposerLock | null = composer.lock ?? (opensIn ? { state: 'notopen' } : null)
   const menuPlan = menu ? planFor(menu.message) : null
 
   return (

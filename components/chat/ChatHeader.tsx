@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { Platform, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { COLOR, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { CONTROL_FONT_CAP, font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast } from '../ds/shared'
 import ScalePress from '../motion/ScalePress'
 import { Icon } from '../ui/Icon'
@@ -169,8 +169,32 @@ export function SubtitleText({ children }: { children: ReactNode }) {
   )
 }
 
+/**
+ * The pre-event room's line (Flow 15 #8): a clock, "Opens in" and the time in Geist Mono, then the people already in
+ * it when there are five or more. It stands where the live count does, and gives it back when the room opens.
+ */
+export function OpensLine({ label, spoken, count }: { label: string; spoken: string; count: number | null }) {
+  const bold = useBoldText()
+  return (
+    <>
+      <Icon name="clock" size={CHAT_CAPSULE.mutedIcon} color={COLOR.textSecondary} />
+      <Text
+        numberOfLines={1}
+        maxFontSizeMultiplier={CONTROL_FONT_CAP}
+        accessibilityLabel={`Opens in ${spoken}${count ? `, ${count} in the room` : ''}`}
+        style={[font('meta', bold), CHAT_CAPSULE.subtitle, styles.secondary]}
+      >
+        Opens in <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.primary, styles.tabular]}>{label}</Text>
+        {count ? ` · ${count} in the room` : ''}
+      </Text>
+    </>
+  )
+}
+
 const styles = StyleSheet.create({
   place: { position: 'absolute', left: SPACE.lg, right: SPACE.lg },
+  primary: { color: COLOR.textPrimary },
+  tabular: { fontVariant: ['tabular-nums'] },
   capsule: {
     borderRadius: CHAT_CAPSULE.radius,
     flexDirection: 'row',
