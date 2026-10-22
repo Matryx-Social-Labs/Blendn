@@ -91,7 +91,9 @@ describe('gone, or just not loaded', () => {
   it('is how blocked users tells a failure from an empty list', () => {
     // safetyUtils.getBlockedUsers answers a failure with [], which drew "No Blocked Users".
     const src = read('app/blocked-users.tsx')
-    expect(src).toContain('apiClient.getBlockedUsers()')
+    // The page read (lib/blockedUsersPage.ts) keeps a failure a failure; the screen never uses the one that answers [].
+    expect(src).toContain('fetchBlockedPage(')
+    expect(read('lib/blockedUsersPage.ts')).toContain('{ ok: false')
     expect(src).not.toContain('getBlockedUsers,')
   })
 })
