@@ -273,6 +273,8 @@ export function Where({
   const bold = useBoldText()
   const hasCoords = !!venue.latitude && !!venue.longitude
   const distance = distanceText(km)
+  // The city once: an address that already names it ("…, Bengaluru 560001") does not get it again underneath (r7 L4).
+  const city = venue.city && !venue.address?.toLowerCase().includes(venue.city.toLowerCase()) ? venue.city : null
   return (
     <Section>
       <SectionHeader title="Where" />
@@ -282,12 +284,12 @@ export function Where({
           <View style={styles.fill}>
             <Text style={[font('bodyStrong', bold), styles.ink]}>{venue.name}</Text>
             {venue.address ? <Text style={[font('body', bold), styles.secondary]}>{venue.address}</Text> : null}
-            {venue.city || distance ? (
+            {city || distance ? (
               <Text style={[font('meta', bold), styles.secondary]}>
-                {venue.city}
+                {city}
                 {distance ? (
                   <>
-                    {venue.city ? ' · ' : ''}
+                    {city ? ' · ' : ''}
                     <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{distance}</Text>
                   </>
                 ) : null}

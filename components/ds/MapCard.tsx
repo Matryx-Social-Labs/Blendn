@@ -100,8 +100,9 @@ export function MapCard({
             </Text>
           </ScrimPill>
         </View>
+        {/* One line, ended with "…": two lines bottom-anchored were clipped mid-word on Android (r7 L4); the card above has it in full. */}
         {address ? (
-          <Text numberOfLines={2} style={[font('caption', bold), styles.ink, styles.address]}>
+          <Text numberOfLines={1} ellipsizeMode="tail" style={[font('caption', bold), styles.ink, styles.address]}>
             {address}
           </Text>
         ) : null}

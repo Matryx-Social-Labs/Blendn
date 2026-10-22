@@ -47,9 +47,12 @@ export function StatusScrim(props: ViewProps) {
 }
 
 /** The page's wash under the hero (fullpages.js: 300 tall, the hero's warm 50% fading to the page ink). */
-export const PAGE_WASH = { height: 300, alpha: 0.5 } as const
+/** `leadIn`: the share of the wash over which it rises from the hero's ink foot to its 50%. */
+export const PAGE_WASH = { height: 300, alpha: 0.5, leadIn: 0.2 } as const
 export function PageWash({ color, ...rest }: ViewProps & { color: string }) {
-  return <LinearGradient {...rest} colors={[tint(color, PAGE_WASH.alpha), COLOR.ink]} />
+  // It rises out of the ink the hero's foot scrim ends on, rather than starting at full strength on that edge: the venue's
+  // body stepped from 19 to 36 luminance on one hard line under the hero (r7 L2).
+  return <LinearGradient {...rest} colors={[COLOR.ink, tint(color, PAGE_WASH.alpha), COLOR.ink]} locations={[0, PAGE_WASH.leadIn, 1]} />
 }
 
 /**
