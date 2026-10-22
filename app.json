@@ -119,6 +119,16 @@
             "imageWidth": 118,
             "resizeMode": "contain",
             "backgroundColor": "#0D0C0C"
+          },
+          "android": {
+            "image": "./assets/logo/splash-android.png",
+            "imageWidth": 288,
+            "resizeMode": "contain",
+            "backgroundColor": "#0D0C0C",
+            "dark": {
+              "image": "./assets/logo/splash-android.png",
+              "backgroundColor": "#0D0C0C"
+            }
           }
         }
       ],
