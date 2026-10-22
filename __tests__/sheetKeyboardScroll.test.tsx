@@ -82,11 +82,15 @@ describe('the Board composer over the keyboard', () => {
     expect(scroll().props.showsVerticalScrollIndicator).toBe(false)
   })
 
-  it('without a keyboard there is no indicator, whatever the content', async () => {
+  it('without a keyboard too, a sheet with more below says so; one that fits does not (r7 L6)', async () => {
     await render(composer())
     await act(async () => fireEvent(scroll(), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 393, height: 190 } } }))
     await act(async () => fireEvent(scroll(), 'contentSizeChange', 393, 400))
+    expect(scroll().props.showsVerticalScrollIndicator).toBe(true)
+    expect(scroll().props.fadingEdgeLength).toBeGreaterThan(0)
+    await act(async () => fireEvent(scroll(), 'contentSizeChange', 393, 190))
     expect(scroll().props.showsVerticalScrollIndicator).toBe(false)
+    expect(scroll().props.fadingEdgeLength).toBe(0)
   })
 
   describe('the field into view', () => {

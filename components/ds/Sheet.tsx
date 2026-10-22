@@ -494,6 +494,9 @@ export function Sheet({ visible, onClose, title, headerAction, headerNote, body,
   const [overflowing, setOverflowing] = useState(false)
   const measureOverflow = () => setOverflowing(contentSize.current > contentHeight.current + 1)
   useEffect(() => {
+    if (overflowing) content.current?.flashScrollIndicators()
+  }, [overflowing])
+  useEffect(() => {
     // A new keyboard (or none) is a new gesture: the field may be brought into view again.
     handScrolled.current = false
   }, [keyboardUp])
@@ -696,9 +699,12 @@ export function Sheet({ visible, onClose, title, headerAction, headerNote, body,
                   style={styles.content}
                   contentContainerStyle={styles.contentInner}
                   keyboardShouldPersistTaps="handled"
-                  // Capped by the keyboard with more below: say so (the indicator), and let the hand scroll it on both platforms.
-                  showsVerticalScrollIndicator={keyboardUp && overflowing}
-                  persistentScrollbar={keyboardUp && overflowing}
+                  // Capped with more below, by the keyboard or by its own height: say so, and let the hand scroll it on both
+                  // platforms. Make a crew stranded a section label at the fold over the dock with nothing to say it went on
+                  // (r7 L6): Android keeps the bar and fades the edge; iOS flashes its indicator once when it overflows.
+                  showsVerticalScrollIndicator={overflowing}
+                  persistentScrollbar={overflowing}
+                  fadingEdgeLength={overflowing ? SPACE.xxxl : 0}
                   nestedScrollEnabled
                   scrollEnabled
                   bounces={false}
