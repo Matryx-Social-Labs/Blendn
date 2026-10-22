@@ -12,6 +12,7 @@ import { TitleTabs } from '../ds/TitleTabs'
 import { Text } from '../ui/Text'
 import { DRAWER_PEEK_LINE, drawerSnapPoints, keyboardLeft, snapOnKeyboard, type DrawerSnap } from '../../lib/home'
 import { Logger } from '../../lib/logger'
+import { useAfterFirstPaint } from '../../lib/useAfterFirstPaint'
 import type { NearPin } from '../../lib/placesPane'
 import { EMBER } from '../../lib/theme'
 import { HomeDrawer } from './HomeDrawer'
@@ -100,6 +101,8 @@ export function HomeShell({
   // The map's own height: the screen less the tab bar. The map waits for it, so its first frame is centred.
   const [mapHeight, setMapHeight] = useState<number | null>(null)
   const onLayout = (e: LayoutChangeEvent) => setMapHeight(e.nativeEvent.layout.height)
+  // The map's native surface is created one paint after the drawer and its skeleton, so a slow device shows them, not ink.
+  const mapPainted = useAfterFirstPaint()
   const restore = useRef<DrawerSnap | null>(null)
   const [placesOpened, setPlacesOpened] = useState(false)
   /** Places' numbered pins, and the count "Show on map" bumps to make the map fit them. */
@@ -178,7 +181,7 @@ export function HomeShell({
         importantForAccessibility={screenReader ? 'no-hide-descendants' : 'auto'}
         accessibilityElementsHidden={screenReader}
       >
-        {mapHeight !== null ? (
+        {mapHeight !== null && mapPainted ? (
           <HomeMap
             center={browse.location}
             cityCentre={browse.cityCentre}
