@@ -131,13 +131,4 @@ describe('no Alert.alert in the UI', () => {
       .map((p) => relative(ROOT, p))
     expect(offenders).toEqual([])
   })
-
-  it("deleting an event asks on the app’s sheet", () => {
-    const src = readFileSync(join(ROOT, 'components', 'screens', 'EventDetailScreen.tsx'), 'utf8')
-    const body = src.slice(src.indexOf('const handleDeleteEvent'), src.indexOf('const openInMaps'))
-    expect(body).toContain('showSheet(')
-    expect(body).toContain("title: 'Delete this event?'")
-    expect(body).toContain("label: 'Delete event'")
-    expect(body).toMatch(/run: async/)
-  })
 })

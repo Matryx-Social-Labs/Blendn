@@ -286,7 +286,7 @@ describe('where the banners are wired (source shape; Going and the Board have no
   it('Going says what it is showing offline, and says the wait for a refused read instead of "couldn’t load"', () => {
     const going = src('app/(tabs)/going.tsx')
     expect(going).toContain('testID="going-offline"')
-    expect(going).toMatch(/rateLimitWait\(\[saved, rsvps, past\]\)/)
+    expect(going).toMatch(/rateLimitWait\(\[saved, rsvps, past\]\.map/)
     expect(going).toMatch(/items\.length === 0 && rateLimit !== null/)
     // The refused-read branch comes before the failed-read one, so a 429 is never worded as a dead connection.
     expect(going.indexOf('items.length === 0 && rateLimit !== null')).toBeLessThan(going.indexOf('items.length === 0 && loadFailed'))
