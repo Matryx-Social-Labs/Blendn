@@ -73,3 +73,13 @@ describe('watchRoomUnread', () => {
     expect(seen).toEqual([])
   })
 })
+
+describe('the bar wires it (R1)', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const layout = require('fs').readFileSync(require('path').join(__dirname, '../app/(tabs)/_layout.tsx'), 'utf8') as string
+  it('passes the count to the disc and re-reads it as the overlay closes', () => {
+    expect(layout).toMatch(/roomUnread: unread/)
+    expect(layout).toMatch(/watchRoomUnread\(/)
+    expect(layout).toMatch(/if \(!blendnOpen\) rereadUnread\.current\(\)/)
+  })
+})
