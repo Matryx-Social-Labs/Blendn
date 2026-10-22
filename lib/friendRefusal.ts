@@ -1,4 +1,4 @@
-import { RATE_LIMITED_CODE, rateLimitWait, RATE_LIMITED_TEXT } from './rateLimited'
+import { RATE_LIMITED_CODE, rateLimitWait } from './rateLimited'
 
 /**
  * Why a friend link or a friend request was refused, from the answer's `reasonCode ?? errorCode` (admin: friend-request send,
@@ -26,6 +26,9 @@ export function friendRefusal(answer: Answer | null | undefined): FriendRefusal 
   return null
 }
 
+/** The rate limit's heading: it promises no length, the countdown beside it does. */
+export const RATE_LIMITED_TITLE = 'Slow down — try again soon'
+
 /** The frame's sentences (Flow 15 15.19). */
 export const FRIEND_REFUSAL = {
   profile: {
@@ -35,7 +38,8 @@ export const FRIEND_REFUSAL = {
     later: 'Not now',
   },
   ratelimit: {
-    title: RATE_LIMITED_TEXT,
+    // Not "in a minute": the countdown under it says how long, and it is rarely sixty seconds.
+    title: RATE_LIMITED_TITLE,
     body: 'Too many links in a row. This one still works; nothing’s lost.',
     again: 'Try again in',
     back: 'Back',
@@ -44,5 +48,5 @@ export const FRIEND_REFUSAL = {
 
 /** One line for a refusal inside a list (an Accept on Requests): the toast says the reason, never "check your connection". */
 export function friendRefusalLine(refusal: FriendRefusal): string {
-  return refusal.kind === 'profile' ? FRIEND_REFUSAL.profile.title : RATE_LIMITED_TEXT
+  return refusal.kind === 'profile' ? FRIEND_REFUSAL.profile.title : RATE_LIMITED_TITLE
 }

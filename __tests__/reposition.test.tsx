@@ -36,6 +36,12 @@ describe('the step', () => {
     expect(screen.getByText('Choose another')).toBeTruthy()
   })
 
+  it('LOW: the caption is about the main photo only on the main photo', async () => {
+    await render(<Reposition photo={{ ...PHOTO, main: false }} onUse={jest.fn()} onAnother={jest.fn()} />)
+    expect(screen.queryByText(/your main photo/)).toBeNull()
+    expect(screen.getByText('Drag and pinch. This is how this photo is cropped.')).toBeTruthy()
+  })
+
   it('Use is unavailable until the frame is measured: there is nothing to crop to yet', async () => {
     const onUse = jest.fn()
     await render(<Reposition photo={PHOTO} onUse={onUse} onAnother={jest.fn()} />)

@@ -242,7 +242,7 @@ describe('when it does not go through, the row stays and the sheet says why (no 
 
   it('asking too fast says to slow down, not that it failed', async () => {
     await press({ success: false, errorCode: 'RATE_LIMITED', reasonCode: 'RATE_LIMITED', retryAfter: 40, error: 'Slow down' })
-    expect(sheet().getByText('Slow down — try again in a minute')).toBeTruthy()
+    expect(sheet().getByText('Slow down — try again soon')).toBeTruthy()
     expect(sheet().getByLabelText('Add friend')).toBeTruthy()
   })
 

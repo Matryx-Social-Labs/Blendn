@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { AppState } from 'react-native'
 
 import { FRIEND_REFUSAL, type FriendRefusal } from '../../lib/friendRefusal'
 import { formatCountdown } from '../../lib/rateLimited'
@@ -7,19 +8,29 @@ import { StateScreen } from '../ds/StateScreen'
 /** The wait ticks once a second, and the person is not told each tick: a screen reader reads the button's name, not the count. */
 const TICK_MS = 1000
 
-/** Seconds left of a wait, counting down once a second to zero. A new wait restarts it (adjusted during render, so it never paints stale). */
-export function useCountdown(seconds: number): number {
-  const [left, setLeft] = useState(seconds)
+/**
+ * Seconds left of a wait, counting down once a second to zero. It counts to a deadline (`Date.now() + seconds`), not by decrement:
+ * a phone that was in the background, or whose timer was held, shows the wait that is really left when it comes back. A new wait
+ * restarts it (adjusted during render, so it never paints stale).
+ */
+export function useCountdown(seconds: number, now: () => number = Date.now): number {
   const [from, setFrom] = useState(seconds)
+  const [deadline, setDeadline] = useState(() => now() + seconds * 1000)
+  const [, tick] = useState(0)
   if (from !== seconds) {
     setFrom(seconds)
-    setLeft(seconds)
+    setDeadline(now() + seconds * 1000)
   }
   useEffect(() => {
-    const timer = setInterval(() => setLeft((n) => Math.max(0, n - 1)), TICK_MS)
-    return () => clearInterval(timer)
-  }, [seconds])
-  return left
+    const timer = setInterval(() => tick((n) => n + 1), TICK_MS)
+    // Back from the background the interval may not have run: read the clock at once.
+    const app = AppState.addEventListener('change', (state) => state === 'active' && tick((n) => n + 1))
+    return () => {
+      clearInterval(timer)
+      app.remove()
+    }
+  }, [])
+  return Math.max(0, Math.ceil((deadline - now()) / 1000))
 }
 
 /**
@@ -53,7 +64,7 @@ export function FriendRefusalScreen({
         title={copy.title}
         body={copy.body}
         actions={[
-          { label: copy.fix, onPress: onFinishProfile },
+          { label: copy.fix, kind: 'lit', onPress: onFinishProfile },
           { label: copy.later, kind: 'tertiary', onPress: onClose },
         ]}
         gutter
@@ -70,7 +81,7 @@ export function FriendRefusalScreen({
       body={copy.body}
       actions={[
         waiting
-          ? { label: copy.again, kind: 'secondary', onPress: onRetry, disabled: true, price: { amount: formatCountdown(left) }, accessibilityLabel: 'Try again, available when the wait ends' }
+          ? { label: copy.again, kind: 'secondary', onPress: onRetry, disabled: true, price: { amount: formatCountdown(left) }, accessibilityLabel: `Try again in ${left} second${left === 1 ? '' : 's'}` }
           : { label: 'Try again', kind: 'secondary', onPress: onRetry, loading: retrying },
         { label: copy.back, kind: 'tertiary', onPress: onClose },
       ]}

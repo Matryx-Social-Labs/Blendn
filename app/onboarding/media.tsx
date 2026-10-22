@@ -139,7 +139,7 @@ function MediaScreenInner() {
 
   const add = async () => {
     if (!user?.id || uploading || tiles.length >= SLOTS) return
-    const picked = await selectPhoto()
+    const picked = await selectPhoto({ main: tiles.length === 0 })
     // A cancelled picker is not a failure. Anything else says why, in the
     // validator's or the server's words ("Photo must be less than 5MB"); it
     // used to say nothing, and the empty slot looked like a tap that missed.

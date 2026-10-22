@@ -24,7 +24,8 @@ import * as FileSystem from 'expo-file-system/legacy'
 import * as ImageManipulator from 'expo-image-manipulator'
 import * as ImagePicker from 'expo-image-picker'
 import { FIT_LONG_SIDE, fitResize, selectPhoto, validatePhoto } from '../lib/photoUtils'
-import { mountRepositionHost, requestReposition, settleReposition } from '../lib/photoReposition'
+import { renderHook, waitFor } from '@testing-library/react-native'
+import { mountRepositionHost, requestReposition, settleReposition, usePendingReposition } from '../lib/photoReposition'
 import { showSheet, type ActionSheet } from '../lib/sheet'
 
 const picker = ImagePicker as jest.Mocked<typeof ImagePicker>
@@ -126,6 +127,31 @@ describe('the temporary copy (LOW)', () => {
     settleReposition({ kind: 'use', rect: RECT })
     await selecting
     expect(deleted()).toEqual([])
+    unmount()
+  })
+})
+
+describe('which photo is the main one (LOW)', () => {
+  it.each([[true], [false]])('the step is told main=%s by the screen adding the photo', async (main) => {
+    const unmount = mountRepositionHost()
+    const { result } = await renderHook(() => usePendingReposition())
+    const selecting = selectPhoto({ main })
+    await chooseLibrary()
+    await waitFor(() => expect(result.current).not.toBeNull())
+    expect(result.current?.main).toBe(main)
+    settleReposition({ kind: 'cancel' })
+    await selecting
+    unmount()
+  })
+
+  it('a photo added without saying is the main one: the caption claims nothing less', async () => {
+    const unmount = mountRepositionHost()
+    const { result } = await renderHook(() => usePendingReposition())
+    const selecting = selectPhoto()
+    await chooseLibrary()
+    await waitFor(() => expect(result.current?.main).toBe(true))
+    settleReposition({ kind: 'cancel' })
+    await selecting
     unmount()
   })
 })

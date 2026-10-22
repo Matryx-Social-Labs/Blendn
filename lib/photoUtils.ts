@@ -803,13 +803,13 @@ const discard = (uri: string) => {
  * (`hasRepositionHost`) carries on with the photo as picked, and so does a photo that cannot be re-encoded: this step never stops
  * somebody adding a photo. The copy it made is deleted when it is done with it.
  */
-const repositionPhoto = async (picked: { uri: string; width: number; height: number }): Promise<Repositioned> => {
+const repositionPhoto = async (picked: { uri: string; width: number; height: number }, main: boolean): Promise<Repositioned> => {
   const original = picked.uri
   if (!hasRepositionHost()) return { kind: 'ready', uri: original }
-  let fitted: { uri: string; width: number; height: number }
+  let fitted: { uri: string; width: number; height: number; main: boolean }
   try {
     const out = await ImageManipulator.manipulateAsync(original, fitResize(picked.width, picked.height), { compress: 0.92, format: ImageManipulator.SaveFormat.JPEG })
-    fitted = { uri: out.uri, width: out.width, height: out.height }
+    fitted = { uri: out.uri, width: out.width, height: out.height, main }
   } catch (error) {
     Logger.warn('profile', 'photoUtils: Could not prepare the photo to reposition', { error })
     return { kind: 'ready', uri: original }
@@ -838,7 +838,7 @@ const repositionPhoto = async (picked: { uri: string; width: number; height: num
  * Nothing is uploaded, so a caller can show the tile while it does, and keep the file to try again when it fails.
  * "Choose another" on the reposition step is the source sheet again.
  */
-export const selectPhoto = async (): Promise<PhotoSelection> => {
+export const selectPhoto = async ({ main = true }: { main?: boolean } = {}): Promise<PhotoSelection> => {
   try {
     for (;;) {
       // Show source selection
@@ -869,7 +869,7 @@ export const selectPhoto = async (): Promise<PhotoSelection> => {
         Logger.warn('profile', 'photoUtils: Photo verification issues', { issues: verification.issues })
       }
 
-      const repositioned = await repositionPhoto(asset)
+      const repositioned = await repositionPhoto(asset, main)
       if (repositioned.kind === 'again') continue
       if (repositioned.kind === 'cancel') return { ok: false, cancelled: true, error: 'No image selected' }
       return { ok: true, uri: repositioned.uri }
@@ -885,9 +885,9 @@ export const selectPhoto = async (): Promise<PhotoSelection> => {
  */
 export const selectAndUploadPhoto = async (
   userId: string,
-  hooks: { onPicked?: (uri: string) => void; onProgress?: (fraction: number) => void } = {}
+  hooks: { onPicked?: (uri: string) => void; onProgress?: (fraction: number) => void; main?: boolean } = {}
 ): Promise<PhotoUploadResult & { uri?: string }> => {
-  const selection = await selectPhoto()
+  const selection = await selectPhoto({ main: hooks.main })
   if (!selection.ok) return { success: false, cancelled: selection.cancelled ? true : undefined, error: selection.error }
   hooks.onPicked?.(selection.uri)
   try {

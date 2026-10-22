@@ -137,7 +137,7 @@ describe('Requests (incoming)', () => {
     await act(async () => {
       fireEvent.press(screen.getByLabelText('Accept Person 1'))
     })
-    expect(mockToast).toHaveBeenLastCalledWith('Slow down — try again in a minute', 'error', { haptic: 'error' })
+    expect(mockToast).toHaveBeenLastCalledWith('Slow down — try again soon', 'error', { haptic: 'error' })
     mockRespond.mockResolvedValueOnce({ success: false, errorCode: 'SERVER_ERROR' })
     await act(async () => {
       fireEvent.press(screen.getByLabelText('Accept Person 1'))

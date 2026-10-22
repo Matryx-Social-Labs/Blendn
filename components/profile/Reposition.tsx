@@ -300,7 +300,9 @@ export function Reposition({
             </GestureDetector>
           ) : null}
         </View>
-        <Text style={[font('meta', bold), styles.caption]}>Drag and pinch. This is how your main photo is cropped.</Text>
+        <Text style={[font('meta', bold), styles.caption]}>
+          {photo.main === false ? 'Drag and pinch. This is how this photo is cropped.' : 'Drag and pinch. This is how your main photo is cropped.'}
+        </Text>
         <View style={[styles.actions, { paddingBottom: insets.bottom + SPACE.xl }]}>
           <Button kind="lit" label="Use photo" onPress={use} disabled={!frame} testID="reposition-use" />
           <Button kind="tertiary" label="Choose another" onPress={onAnother} testID="reposition-another" />

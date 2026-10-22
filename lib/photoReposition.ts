@@ -8,7 +8,8 @@ import type { CropRect, Size } from './photoCrop'
  * photo (`RepositionHost`) draws it. A request with no host mounted is `skip`: the photo goes on as it was picked, never
  * stuck waiting for a screen that is not there.
  */
-export type RepositionPhoto = Size & { uri: string }
+/** `main`: it is going to be the main photo (the first one), which is the one the frame's caption is about. */
+export type RepositionPhoto = Size & { uri: string; main?: boolean }
 export type RepositionResult =
   /** Use photo: the part of the photo inside the frame. */
   | { kind: 'use'; rect: CropRect }

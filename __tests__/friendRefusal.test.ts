@@ -26,6 +26,6 @@ describe('friendRefusal (Flow 15 15.19)', () => {
 
   it('one line for a list’s toast', () => {
     expect(friendRefusalLine({ kind: 'profile' })).toBe('Finish your profile to add friends')
-    expect(friendRefusalLine({ kind: 'ratelimit', seconds: 5 })).toBe('Slow down — try again in a minute')
+    expect(friendRefusalLine({ kind: 'ratelimit', seconds: 5 })).toBe('Slow down — try again soon')
   })
 })

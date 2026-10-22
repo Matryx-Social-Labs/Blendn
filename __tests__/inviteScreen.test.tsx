@@ -187,10 +187,10 @@ describe('a refusal with a fix (Flow 15 15.19): the link is not "didn’t open"'
       api.openFriendInvite.mockResolvedValueOnce(LIMITED)
       await render(<InviteScreen />)
       await act(async () => {})
-      expect(screen.getByText('Slow down — try again in a minute')).toBeTruthy()
+      expect(screen.getByText('Slow down — try again soon')).toBeTruthy()
       expect(screen.getByText('Too many links in a row. This one still works; nothing’s lost.')).toBeTruthy()
       expect(screen.getByText('0:48')).toBeTruthy()
-      const wait = screen.getByLabelText('Try again, available when the wait ends')
+      const wait = screen.getByLabelText('Try again in 48 seconds')
       expect(wait.props.accessibilityState.disabled).toBe(true)
 
       await act(async () => jest.advanceTimersByTime(47_000))
@@ -204,6 +204,17 @@ describe('a refusal with a fix (Flow 15 15.19): the link is not "didn’t open"'
       expect(screen.getByText('Ana wants to blend with you')).toBeTruthy()
     })
 
+    it('M7: counts to a deadline, so a phone that was away comes back to the wait that is really left', async () => {
+      api.openFriendInvite.mockResolvedValueOnce(LIMITED)
+      await render(<InviteScreen />)
+      await act(async () => {})
+      expect(screen.getByText('0:48')).toBeTruthy()
+      // Thirty seconds pass with the timers held (backgrounded); the next tick reads the clock, not a count of ticks.
+      jest.setSystemTime(Date.now() + 30_000)
+      await act(async () => jest.advanceTimersByTime(1_000))
+      expect(screen.getByText('0:17')).toBeTruthy()
+    })
+
     it('a second refusal with the same wait counts again from the top, it does not carry on from zero', async () => {
       const FIVE = { success: false as const, errorCode: 'RATE_LIMITED', reasonCode: 'RATE_LIMITED', retryAfter: 5 }
       api.openFriendInvite.mockResolvedValueOnce(FIVE)
@@ -215,7 +226,7 @@ describe('a refusal with a fix (Flow 15 15.19): the link is not "didn’t open"'
         fireEvent.press(screen.getByText('Try again'))
       })
       expect(screen.getByText('0:05')).toBeTruthy()
-      expect(screen.getByLabelText('Try again, available when the wait ends').props.accessibilityState.disabled).toBe(true)
+      expect(screen.getByLabelText('Try again in 5 seconds').props.accessibilityState.disabled).toBe(true)
     })
 
     it('with no retryAfter the wait is the minute the sentence promises', async () => {
