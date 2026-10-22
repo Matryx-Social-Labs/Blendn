@@ -2,6 +2,10 @@
  * No white selection left (foundations, direction C): wherever a chip, a segment or a choice card lights, it lights in the
  * screen's hue. White stays on the tab bar, IconButton, Badge and status marks, the focus ring and the strong button. Each
  * remaining user of `COLOR.selectionFill` was decided, and this lists them: a new one fails here, to be decided too.
+ *
+ * Blind spot: a white selection drawn with `backgroundColor: COLOR.textPrimary` (the same #FFF under another name) is not
+ * counted here, and the token is used for many things that are not selections (a thumb, a pip, a badge). Those are read by
+ * review, not by this guard.
  */
 import { render, screen } from '@testing-library/react-native'
 import fs from 'fs'
@@ -22,20 +26,29 @@ const walk = (dir: string): string[] =>
     return entry.isDirectory() ? walk(rel) : /\.tsx?$/.test(entry.name) ? [rel] : []
   })
 
-/** White that stays, and why. */
-const WHITE_STAYS: Record<string, string> = {
-  'components/ds/IconButton.tsx': 'the media tier only: a toggle over a photo, where a hue is not legible (the control tier lights)',
-  'components/ds/StoryCard.tsx': 'a rendered share image, not UI',
-  'components/ds/OfferCard.tsx': 'the “used” status mark',
-  'components/offer/OfferSections.tsx': 'the redeemed stamp, a status mark',
-  'app/(tabs)/going.tsx': 'the saved heart: a status mark on a card',
-  'components/ds/ReactionBar.tsx': 'the reaction you picked, in a popover over glass: a state of the message, not a set',
+/** White that stays: how many uses each file may hold, and why. Counted, so a second white in an allowed file fails too. */
+const WHITE_STAYS: Record<string, { count: number; why: string }> = {
+  'components/ds/IconButton.tsx': { count: 1, why: 'the media tier only: a toggle over a photo, where a hue is not legible (the control tier lights)' },
+  'components/ds/StoryCard.tsx': { count: 1, why: 'a rendered share image, not UI' },
+  'components/ds/OfferCard.tsx': { count: 1, why: 'the “used” status mark' },
+  'components/offer/OfferSections.tsx': { count: 1, why: 'the redeemed stamp, a status mark' },
+  'app/(tabs)/going.tsx': { count: 1, why: 'the saved heart: a status mark on a card' },
+  'components/ds/ReactionBar.tsx': { count: 1, why: 'the reaction you picked, in a popover over glass: a state of the message, not a set' },
 }
+const WHITE = /COLOR\.selectionFill\b/g
 
 describe('the white selection that is left', () => {
-  it('is exactly the list above', () => {
-    const users = [...walk('app'), ...walk('components')].filter((file) => fs.readFileSync(path.join(ROOT, file), 'utf8').includes('COLOR.selectionFill'))
-    expect(users.sort()).toEqual(Object.keys(WHITE_STAYS).sort())
+  it('is exactly the list above, use by use', () => {
+    const found = Object.fromEntries(
+      [...walk('app'), ...walk('components')]
+        .map((file) => [file, (fs.readFileSync(path.join(ROOT, file), 'utf8').match(WHITE) ?? []).length] as const)
+        .filter(([, count]) => count > 0)
+    )
+    expect(found).toEqual(Object.fromEntries(Object.entries(WHITE_STAYS).map(([file, { count }]) => [file, count])))
+  })
+
+  it.each(Object.entries(WHITE_STAYS))('%s says why it may', (_file, { why }) => {
+    expect(why.length).toBeGreaterThan(10)
   })
 
   it.each(['Chip', 'SegmentedControl', 'RadioCard', 'LookingForCard', 'PlanCard', 'ProgressBar', 'MakeSteps', 'TitleTabs', 'Toggle'])(
