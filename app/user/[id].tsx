@@ -27,11 +27,13 @@ import { likeRefusal } from '../../lib/likeRefusal'
 import { interestNames } from '../../lib/meProfile'
 import { profileIdentity, withheldUnlessVisible } from '../../lib/profileIdentity'
 import { aboutLine } from '../../lib/aboutYou'
+import { friendAction, isHandle, type FriendOffer } from '../../lib/friendOffer'
 import { incomingRequestFrom } from '../../lib/friends'
 import { isGone } from '../../lib/loadFailure'
 import { Logger } from '../../lib/logger'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
 import { useAuth } from '../../lib/useAuth'
+import { useFriendAsk } from '../../lib/useFriendAsk'
 import { askPushInContext } from '../../lib/pushAsk'
 
 
@@ -153,6 +155,9 @@ function UserProfileInner() {
   const [answering, setAnswering] = useState<'accept' | 'decline' | null>(null)
   // Who this is, as far as the server lets this screen say (`lib/profileIdentity`).
   const identity = profileIdentity(profile, { pseudonym, roomSeed })
+  // Whether to offer "Add friend" (SCRUM-750): the server's `friend` from `GET /profiles/:id`, for somebody you may see.
+  const [friend, setFriend] = useState<FriendOffer | null>(null)
+  const friendAsk = useFriendAsk(identity.title)
 
   const hydrateCtaState = useCallback(async (targetUserId: string, connection?: ProfileConnection) => {
     if (!authUser) {
@@ -244,6 +249,22 @@ function UserProfileInner() {
     setCtaMessage(CTA_HINT.connect)
   }, [authUser])
 
+  /*
+   * Only for somebody you may see, and never for a room handle: the ask needs their real id, which a handle is not
+   * (`POST /friends/requests` answers one as an id nobody has). A failed read is no offer, said in the log.
+   */
+  const loadFriendOffer = useCallback(
+    (loaded: UserProfileView | null) => {
+      setFriend(null)
+      if (!loaded?.identityVisible || !authUser || authUser.id === loaded.user_id || isHandle(loaded.user_id)) return
+      void Promise.resolve()
+        .then(() => apiClient.getFriendOffer(loaded.user_id))
+        .then(setFriend)
+        .catch((error) => Logger.warn('profile', 'friend offer failed to load', { error }))
+    },
+    [authUser]
+  )
+
   // State is set only in the callbacks, once the requests have settled; the
   // spinner for a reload is switched on in render, below.
   const load = useCallback(() => {
@@ -313,13 +334,14 @@ function UserProfileInner() {
         if (nextProfile?.user_id) {
           await hydrateCtaState(nextProfile.user_id, connection)
         }
+        loadFriendOffer(nextProfile)
       })
       .catch((e) => {
         Logger.error('profile', 'User profile load failed', { error: e })
         setLoadError('failed')
       })
       .finally(() => setLoading(false))
-  }, [id, hydrateCtaState])
+  }, [id, hydrateCtaState, loadFriendOffer])
 
   // A new `load` is a new profile to fetch, and it shows as loading from this
   // render rather than one commit later. The first `load` rides on the
@@ -475,6 +497,12 @@ function UserProfileInner() {
     // Blocked: there is nothing left to look at here.
     showUserSafetyActions(identity.title, profile.user_id, () => router.back())
   }
+
+  const addFriend = async () => {
+    const next = await friendAsk.ask(profile?.user_id)
+    if (next) setFriend(next)
+  }
+  const friendNow = friendAction(friend)
 
   const ctaDisabled = ctaMode === 'self' || ctaMode === 'requested' || ctaMode === 'declined'
   // Connect and Message are the live actions, lit in the screen's rose; Requested and Declined are states and stay quiet.
@@ -645,7 +673,26 @@ function UserProfileInner() {
 
       {/* The tray stays put while the bio, interests and gallery scroll beneath it: Like and Connect are in the thumb's reach on any phone. */}
       {showDock ? (
-        <ProfileDock testID="profile-dock" note={incoming ? null : ctaMessage || null} onHeight={setDockHeight}>
+        <ProfileDock
+          testID="profile-dock"
+          note={incoming ? null : ctaMessage || null}
+          onHeight={setDockHeight}
+          lead={
+            friendNow ? (
+              <Button
+                kind={friendNow.lit ? 'lit' : 'secondary'}
+                size="md"
+                icon={friendNow.icon}
+                label={friendNow.label}
+                accessibilityLabel={friendNow.kind === 'add' ? `Add ${heroTitle} as a friend` : friendNow.kind === 'accept' ? `Accept ${heroTitle}'s friend request` : undefined}
+                disabled={friendNow.disabled}
+                loading={friendAsk.busy}
+                onPress={() => void addFriend()}
+                testID="profile-friend"
+              />
+            ) : null
+          }
+        >
           {incoming ? (
             <MessageRequestPrompt
               name={heroTitle}

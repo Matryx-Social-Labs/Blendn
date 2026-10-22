@@ -7,7 +7,7 @@ import { OPACITY } from '../lib/theme'
 import type { ButtonKind } from './ds/Button'
 import { Spinner } from './ds/Loader'
 import { Sheet as DsSheet, type SheetAction as DsAction } from './ds/Sheet'
-import { font, HueProvider, PRESSED_WASH, useBoldText, useIncreaseContrast } from './ds/shared'
+import { font, HueProvider, PRESSED_WASH, useBoldText, useIncreaseContrast, useSelection } from './ds/shared'
 import { TextArea } from './ds/TextField'
 import { Icon, type IconName } from './ui/Icon'
 import { useToast } from './Toast'
@@ -128,9 +128,10 @@ export function SheetHost() {
                       label: a.label,
                       icon: a.icon,
                       destructive: a.variant === 'destructive',
+                      lit: a.variant === 'primary',
                       chevron: 'next' in a,
                       busy: busy === i,
-                      disabled: busy !== null && busy !== i,
+                      disabled: !!a.disabled || (busy !== null && busy !== i),
                       onPress: () => perform(a, i),
                     },
                   ]
@@ -206,6 +207,8 @@ type OptionRow = {
   label: string
   icon?: IconName
   destructive?: boolean
+  /** The row's glyph and label light in the sheet's world (a positive action, `Button kind="lit"`'s colour). */
+  lit?: boolean
   /** It opens another step. */
   chevron?: boolean
   busy?: boolean
@@ -217,10 +220,11 @@ type OptionRow = {
 export function OptionRows({ rows }: { rows: OptionRow[] }) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
+  const sel = useSelection()
   return (
     <View>
       {rows.map((row, i) => {
-        const color = row.destructive ? COLOR.destructive : COLOR.textPrimary
+        const color = row.destructive ? COLOR.destructive : row.lit ? sel.glyph : COLOR.textPrimary
         return (
           <Pressable
             key={row.key}
@@ -239,7 +243,7 @@ export function OptionRows({ rows }: { rows: OptionRow[] }) {
           >
             {row.icon ? <Icon name={row.icon} size={ICON.inline} color={color} /> : null}
             <Text style={[font('body', bold), styles.label, { color }]}>{row.label}</Text>
-            {row.busy ? <Spinner size={16} /> : row.chevron ? <Icon name="chevron-right" size={ICON.inline} color={COLOR.textSecondary} /> : null}
+            {row.busy ? <Spinner size={16} color={color} /> : row.chevron ? <Icon name="chevron-right" size={ICON.inline} color={COLOR.textSecondary} /> : null}
           </Pressable>
         )
       })}

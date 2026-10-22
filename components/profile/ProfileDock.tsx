@@ -27,11 +27,14 @@ export const dockClearance = (insetBottom: number) => SIZE.primary + SPACE.md * 
  */
 export function ProfileDock({
   children,
+  lead,
   note,
   onHeight,
   testID,
 }: {
   children: ReactNode
+  /** A full-width action above the buttons, inside the same tray (Add friend after a match). Absent: the tray is the one row. */
+  lead?: ReactNode
   note?: string | null
   /** The dock's measured height, for the scroll view's foot. */
   onHeight?: (height: number) => void
@@ -56,8 +59,9 @@ export function ProfileDock({
       <PhotoScrim testID={testID && `${testID}-fade`} foot={1} pointerEvents="none" style={[styles.fade, { bottom: height, height: FADE }]} />
       <View testID={testID && `${testID}-foot`} style={[styles.stack, { paddingTop: SPACE.sm, paddingBottom: insets.bottom + SPACE.lg }]}>
         {note ? <Text style={[font('meta', bold), styles.note]}>{note}</Text> : null}
-        <View testID={testID && `${testID}-tray`} style={styles.tray}>
-          {children}
+        <View testID={testID && `${testID}-tray`} style={[styles.tray, lead ? styles.stacked : null]}>
+          {lead}
+          {lead ? <View style={styles.row}>{children}</View> : children}
         </View>
       </View>
     </View>
@@ -70,4 +74,6 @@ const styles = StyleSheet.create({
   stack: { paddingHorizontal: SPACE.gutter, gap: SPACE.sm, backgroundColor: COLOR.ink },
   note: { color: COLOR.textSecondary, textAlign: 'center' },
   tray: { flexDirection: 'row', gap: SPACE.sm, padding: SPACE.md, borderRadius: RADIUS.card, backgroundColor: COLOR.surfaceSunken },
+  stacked: { flexDirection: 'column' },
+  row: { flexDirection: 'row', gap: SPACE.sm },
 })

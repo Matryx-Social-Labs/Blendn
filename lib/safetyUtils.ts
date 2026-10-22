@@ -1,5 +1,6 @@
 import { leaveConfirmation } from './conversationReveal'
 import { apiClient } from './apiClient'
+import type { FriendAction } from './friendOffer'
 import { Logger } from './logger'
 import { showSheet, type Sheet, type SheetAction, type SheetOutcome } from './sheet'
 
@@ -141,6 +142,14 @@ const failed = (serverSays: string | undefined, fallback: string): SheetOutcome 
   return { ok: false, error: `${said}${/[.!?]$/.test(said) ? '' : '.'} Try again.` }
 }
 
+/** The options' friend row: what to draw, and the ask it runs (the screen's toasts and haptic are in `ask`). */
+export type FriendRow = { action: FriendAction; ask: () => Promise<unknown> }
+
+const friendRow = ({ action, ask }: FriendRow): SheetAction =>
+  action.disabled
+    ? { label: action.label, icon: action.icon, disabled: true, then: () => {} }
+    : { label: action.label, icon: action.icon, variant: 'primary', run: async () => (await ask(), { ok: true }) }
+
 /**
  * A conversation's ⋮ menu: the ordinary things first, leaving one step in.
  *
@@ -155,11 +164,13 @@ export const showConversationOptions = (
   conversationId: string,
   displayName: string,
   theyKnowYou: boolean,
-  opts: { onLeft?: () => void; fromMatch?: boolean; onViewProfile?: () => void } = {}
+  opts: { onLeft?: () => void; fromMatch?: boolean; onViewProfile?: () => void; friend?: FriendRow } = {}
 ): void => {
   const fromMatch = opts.fromMatch ?? true
   const actions: SheetAction[] = []
   if (opts.onViewProfile) actions.push({ label: 'View profile', icon: 'user', then: opts.onViewProfile })
+  // After a match where you both revealed (SCRUM-750): Add friend is lit, Requested a quiet state. Busy, the row spins in place.
+  if (opts.friend) actions.push(friendRow(opts.friend))
   actions.push({
     label: fromMatch ? 'Unmatch…' : 'End conversation…',
     icon: 'heart-off',

@@ -144,6 +144,24 @@ describe('the docked tray reaches the thumb on an iPhone SE', () => {
     expect(fade.props.colors[fade.props.colors.length - 1]).toBe(processColor(tint(COLOR.ink, 1)))
     expect(fade.props.colors[0]).toBe(processColor(tint(COLOR.ink, 0)))
   })
+  it('a lead action stands full width above the buttons, in the same tray; with none, the tray is the one row', async () => {
+    await render(
+      <ProfileDock testID="dock" lead={<Banner kind="info" text="lead" />}>
+        <Banner kind="info" text="child" />
+      </ProfileDock>
+    )
+    const tray = StyleSheet.flatten(screen.getByTestId('dock-tray').props.style)
+    expect(tray.flexDirection).toBe('column')
+    expect(screen.getByText('lead')).toBeTruthy()
+    expect(screen.getByText('child')).toBeTruthy()
+    await screen.unmount()
+    await render(
+      <ProfileDock testID="dock">
+        <Banner kind="info" text="child" />
+      </ProfileDock>
+    )
+    expect(StyleSheet.flatten(screen.getByTestId('dock-tray').props.style).flexDirection).toBe('row')
+  })
   it('keeps the tray clear of the hero: dock top sits below the name on a 667 pt phone', () => {
     // iPhone SE: 375 × 667, no island, a 0 inset. The hero's name sits 44 above its foot.
     const hero = heroHeightFor(375)

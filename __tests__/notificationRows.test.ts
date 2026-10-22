@@ -78,6 +78,37 @@ describe('a row from the stored push, which names nobody', () => {
     expect(row.context).not.toContain('Vinyl')
   })
 
+  // SCRUM-750: a request from a match says so, and only that: the match was made in a room, and the row never says which.
+  describe('a friend request from a match', () => {
+    const viaMatch = (extra: Partial<Parameters<typeof item>[0]> = {}) =>
+      rowFor(item({ id: 'm', kind: 'friend_request', data: { requestId: 'r1', via: 'match' }, ...extra }), NOW)
+
+    it('says "From your match" beside the time', () => {
+      expect(viaMatch().context).toBe('From your match · 5 min ago')
+    })
+
+    it('keeps the Accept and Decline pills', () => {
+      expect(viaMatch().actions.map((x) => x.label)).toEqual(['Accept', 'Decline'])
+    })
+
+    it('never takes an event or room from the server’s context or the body', () => {
+      const row = viaMatch({ body: 'Priya asked at Vinyl Night', display: { context: 'Vinyl Night · 2 min ago' } })
+      expect(row.context).toBe('From your match · 5 min ago')
+      expect(row.context).not.toContain('Vinyl')
+    })
+
+    it('is the time alone for a request through your link, or any other via', () => {
+      const link = rowFor(item({ id: 'l', kind: 'friend_request', data: { requestId: 'r1' } }), NOW)
+      const other = rowFor(item({ id: 'o', kind: 'friend_request', data: { requestId: 'r1', via: 'link' } }), NOW)
+      expect(link.context).toBe('5 min ago')
+      expect(other.context).toBe('5 min ago')
+    })
+
+    it('is said of a request only, not of the accepted notice', () => {
+      expect(rowFor(item({ id: 'a', kind: 'friend_accepted', data: { via: 'match' } }), NOW).context).toBe('5 min ago')
+    })
+  })
+
   it('draws an event tile with the kind’s badge for the event kinds', () => {
     expect(rowFor(item({ id: 'a', kind: 'event_update' }), NOW).visual).toMatchObject({ type: 'event', badge: 'clock', cancelled: false })
     expect(rowFor(item({ id: 'b', kind: 'announcement' }), NOW).visual).toMatchObject({ type: 'event', badge: 'megaphone' })

@@ -44,6 +44,7 @@ import {
   settleDirectMessage,
   type PrivateMessage,
 } from '../../lib/directThread'
+import { friendAction, parseFriendOffer, type FriendOffer } from '../../lib/friendOffer'
 import { H } from '../../lib/haptics'
 import { useKeyboardShown } from '../../lib/keyboard'
 import { markDomainsDirty } from '../../lib/liveSyncState'
@@ -72,6 +73,7 @@ import {
 import { chatClock } from '../../lib/time'
 import { withDaySeparators, withUnreadDivider, type UnreadDivider } from '../../lib/unreadDivider'
 import { useAuth } from '../../lib/useAuth'
+import { useFriendAsk } from '../../lib/useFriendAsk'
 import { useComposerLock } from '../../lib/useComposerLock'
 import { scrollListToEnd, useFollowEnd } from '../../lib/useFollowEnd'
 import { useLatest } from '../../lib/useLatest'
@@ -139,6 +141,8 @@ function PrivateChatInner() {
   const [revealFailed, setRevealFailed] = useState(false)
   const [revealAttempt, setRevealAttempt] = useState(0)
   const [otherId, setOtherId] = useState<string | null>(null)
+  /** The server's offer to add them as a friend (SCRUM-750): `canAdd` only once you have both revealed. */
+  const [friend, setFriend] = useState<FriendOffer | null>(null)
   /** Their photo as the server resolves it: `null` until they reveal. */
   const [otherImage, setOtherImage] = useState<string | null>(null)
   const [loadError, setLoadError] = useState(false)
@@ -160,6 +164,7 @@ function PrivateChatInner() {
       setRevealFailed(false)
       setOtherId(r.data.otherUser?.id || null)
       setOtherImage(r.data.otherUser?.image || null)
+      setFriend(parseFriendOffer(r.data.friend))
       setReveal({
         displayName: r.data.otherUser?.name || 'Someone',
         youRevealed: r.data.youRevealed ?? false,
@@ -197,6 +202,7 @@ function PrivateChatInner() {
       : undefined
   const name = reveal?.displayName || nameParam(otherUserName) || 'Chat'
   const view = reveal ? revealView(reveal, asked) : null
+  const friendAsk = useFriendAsk(name)
   const panelKey = revealPanelKey(view)
   const panelOpen = !ended && panelKey !== null && foldedPanel !== panelKey
   // The thread folds the panel away when a touch or a drag ENDS, never while the finger is down: folding on touch-start moves the
@@ -233,6 +239,8 @@ function PrivateChatInner() {
           H.success()
           setRevealSheet(null)
           setReveal((prev) => (prev ? { ...prev, youRevealed: true } : prev))
+          // Their reveal may already be in: your reveal is what can turn Add friend on, and only the server says so.
+          setRevealAttempt((n) => n + 1)
         } else {
           setRevealSheet({ notYet: userMessage(r, "Couldn't reveal. Try again.") })
         }
@@ -601,6 +609,23 @@ function PrivateChatInner() {
     disconnectedIntervalMs: 15000,
   })
 
+  /*
+   * Add friend sits in the options (SCRUM-750), lit while it is an action and quiet once asked. `otherId` is a handle until
+   * they reveal and `friend.canAdd` is only true once they have, so the ask never carries a handle (useFriendAsk refuses one too).
+   * Already friends: nothing, there is nothing left to do.
+   */
+  const friendNow = friendAction(friend)
+  const friendRow =
+    friendNow && friendNow.kind !== 'friends'
+      ? {
+          action: friendNow,
+          ask: async () => {
+            const next = await friendAsk.ask(otherId)
+            if (next) setFriend(next)
+          },
+        }
+      : undefined
+
   /* The options: the conversation's own sheet (lib/safetyUtils), or why it can't open yet. */
   const openOptions = () => {
     if (reveal) {
@@ -608,6 +633,7 @@ function PrivateChatInner() {
         onLeft: () => router.back(),
         fromMatch: reveal.fromMatch ?? true,
         onViewProfile: openProfile,
+        friend: friendRow,
       })
     }
     showSheet({
