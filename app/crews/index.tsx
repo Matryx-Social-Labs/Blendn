@@ -1,5 +1,5 @@
 import { router, useFocusEffect } from 'expo-router'
-import { useCallback, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
 import Animated from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -12,6 +12,7 @@ import { SectionHeader } from '../../components/ds/SectionHeader'
 import { font, HueProvider, useBoldText } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { TopBar } from '../../components/ds/TopBar'
+import { emptyOut, fadeIn, riseIn } from '../../components/board/boardMotion'
 import { useSkeletonCrossfade } from '../../components/motion/useSkeletonCrossfade'
 import { SkeletonBlock } from '../../components/Skeleton'
 import { useToastDock } from '../../components/toastDock'
@@ -19,7 +20,9 @@ import { type Crew, type CrewInvite } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
 import { crewRowSub, inviteRows } from '../../lib/crewsScreens'
 import { COLOR, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { useReducedMotion } from '../../lib/motion'
 import { ONBOARDING_ROUTES } from '../../lib/onboarding'
+import { useTopBarState } from '../../lib/useTopBarState'
 
 type Load =
   | { kind: 'loading' }
@@ -32,6 +35,8 @@ type Load =
 const SECTION_GAP = SPACE.xl
 /** The docked Make a crew sits this far above the bottom inset (the frame's `bottom + 24`). */
 const DOCK_GAP = SPACE.xl
+/** How long the first item's rise is the arrival: longer than `base` and the exit together. */
+const FIRST_ITEM_MS = 600
 /** Three rows of the card, so the list does not jump when it lands. */
 const SKELETON_ROWS = 3
 const FOOTNOTE = 'Who’s where shows once you’ve checked in at a night. Crews live here and in the Banter.'
@@ -51,6 +56,27 @@ function CrewsScreenContent() {
   const [refreshing, setRefreshing] = useState(false)
   // The list fades in over its skeleton only if one was drawn (a wait under 300 ms shows no skeleton).
   const arrive = useSkeletonCrossfade(load.kind === 'loading')
+  const reduceMotion = useReducedMotion()
+  // The bar's glass and title follow the scroll (DS #30), a render per crossing and never per frame.
+  const bar = useTopBarState()
+  /*
+   * #47, empty to first item: the first crew (or invite) is why the empty state leaves, so it fades over `quick` with an 8 pt
+   * drop as the list rises in (Reduce Motion: a crossfade, no drop). Only that step plays: a first load, a refresh and a list
+   * that stays a list never do. State adjusted in render, so the list that replaces the empty one is the one that rises.
+   */
+  const isEmpty = load.kind === 'ready' && load.crews.length === 0 && load.invites.length === 0
+  const [wasEmpty, setWasEmpty] = useState(false)
+  const [firstItem, setFirstItem] = useState(false)
+  if (isEmpty !== wasEmpty) {
+    setWasEmpty(isEmpty)
+    setFirstItem(wasEmpty && load.kind === 'ready' && !isEmpty)
+  }
+  // The rise belongs to that one arrival: a list that mounts again later (after a failed refresh) does not replay it.
+  useEffect(() => {
+    if (!firstItem) return
+    const timer = setTimeout(() => setFirstItem(false), FIRST_ITEM_MS)
+    return () => clearTimeout(timer)
+  }, [firstItem])
 
   const read = useCallback(async () => {
     const result = await crewsApi.myCrews()
@@ -101,18 +127,20 @@ function CrewsScreenContent() {
     )
   } else if (!load.crews.length && !load.invites.length) {
     body = (
-      <StateScreen
-        icon="users"
-        title="Go out together. Meet other crews."
-        body="Make a crew from your friends. When two of you are at the same night, the Room shows you as one."
-        actions={[{ label: 'Make a crew', onPress: openNew }]}
-        testID="crews-empty"
-      />
+      <Animated.View exiting={emptyOut(reduceMotion)}>
+        <StateScreen
+          icon="users"
+          title="Go out together. Meet other crews."
+          body="Make a crew from your friends. When two of you are at the same night, the Room shows you as one."
+          actions={[{ label: 'Make a crew', onPress: openNew }]}
+          testID="crews-empty"
+        />
+      </Animated.View>
     )
   } else {
     const rows = inviteRows(load.invites)
     body = (
-      <Animated.View entering={arrive} style={styles.sections}>
+      <Animated.View entering={firstItem ? (reduceMotion ? fadeIn(0) : riseIn(0)) : arrive} style={styles.sections}>
         {rows.length ? (
           <View style={styles.section}>
             <SectionHeader title="Invites" count={rows.length} />
@@ -152,9 +180,10 @@ function CrewsScreenContent() {
 
   return (
     <View style={styles.container}>
-      <TopBar title="Crews" onBack={() => router.back()} testID="crews-top" />
+      <TopBar title="Crews" state={bar.state} onBack={() => router.back()} testID="crews-top" />
       <ScrollView
         testID="crews-scroll"
+        {...bar.scrollProps}
         contentContainerStyle={[
           styles.content,
           load.kind === 'ready' ? null : styles.centred,
