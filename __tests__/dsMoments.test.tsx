@@ -18,6 +18,7 @@ import { MomentReady } from '../components/ds/MomentReady'
 import { MomentRecap, type MomentRecapProps } from '../components/ds/MomentRecap'
 import { COLOR, DURATION, MATERIAL, RADIUS, SPACE, SPRING } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
+import { markOffline, markOnline } from '../lib/networkStatus'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('react-native-reanimated', () => {
@@ -509,6 +510,18 @@ describe('<MomentRecap> · That’s a wrap (#43)', () => {
     expect(screen.getByText('You rated this night. Thanks.')).toBeTruthy()
     expect(screen.queryByRole('button', { name: /Rate/ })).toBeNull()
     expect(screen.getByRole('button', { name: 'Back to tonight' })).toBeTruthy()
+  })
+
+  it('R6: offline, the page keeps what it had and says so; online, no banner', async () => {
+    await render(recap().el)
+    expect(screen.queryByTestId('w-offline', HIDDEN)).toBeNull()
+    await act(async () => markOffline())
+    expect(screen.getByText('Offline. Showing what loaded last.')).toBeTruthy()
+    // Reads stay: the night and both actions are still there.
+    expect(screen.getByText('That’s a wrap')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Back to tonight' })).toBeTruthy()
+    await act(async () => markOnline())
+    expect(screen.queryByText('Offline. Showing what loaded last.')).toBeNull()
   })
 
   it('no photo: the creature; no check-in time: no time tile', async () => {

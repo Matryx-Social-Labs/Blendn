@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { COLOR, FONT_FAMILY, MAX_FONT_SCALE, NUMERIC, RADIUS, SIZE, SPACE, STAGGER } from '../../lib/design/tokens'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
+import { OfflineBanner } from '../OfflineBanner'
 import { timeSpentLabel } from '../../lib/roomRecap'
 import { Avatar } from './Avatar'
 import { Button } from './Button'
@@ -58,6 +59,8 @@ export type MomentRecapProps = {
  * on open; Rate is the screen's primary (`H.primary`). Announced once, read
  * face (decorative) → title → tiles → actions.
  *
+ * Offline: the same banner Tonight and the Room use, above the face; the page keeps what it had.
+ *
  * Reduce Motion: fade only.
  */
 export function MomentRecap({ face, title, venue, minutes, matches, rated, onRate, onBack, onClose, paused = false, testID }: MomentRecapProps) {
@@ -89,6 +92,8 @@ export function MomentRecap({ face, title, venue, minutes, matches, rated, onRat
         </View>
       ) : null}
       <View style={[styles.body, { paddingTop: insets.top + SIZE.circleButton + SPACE.xl }]}>
+        {/* Flow 4 R4.1 · Flow 15 #16: the night is read, so it stays; the banner says what it is showing (the frame shifts the page 60 pt). */}
+        <OfflineBanner text="Offline. Showing what loaded last." testID={testID && `${testID}-offline`} />
         <Block {...blocks(0)} style={styles.head}>
           <Avatar {...face} size={FACE} ring={COLOR.ink} testID={testID && `${testID}-face`} />
           <View style={styles.titles}>
