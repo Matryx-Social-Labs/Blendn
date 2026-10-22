@@ -512,6 +512,18 @@ describe('<MomentRecap> · That’s a wrap (#43)', () => {
     expect(screen.getByRole('button', { name: 'Back to tonight' })).toBeTruthy()
   })
 
+  it('R3: People from tonight sits between Rate and Back, and is absent without a deck', async () => {
+    await render(recap().el)
+    expect(screen.queryByRole('button', { name: 'People from tonight' })).toBeNull()
+    const onPeople = jest.fn()
+    await render(recap({ onPeople }).el)
+    await fireEvent.press(screen.getByRole('button', { name: 'People from tonight' }))
+    expect(onPeople).toHaveBeenCalledTimes(1)
+    const order = screen.getAllByRole('button').map((b) => b.props.accessibilityLabel)
+    expect(order.indexOf('People from tonight')).toBeGreaterThan(order.indexOf('Rate who you met'))
+    expect(order.indexOf('People from tonight')).toBeLessThan(order.indexOf('Back to tonight'))
+  })
+
   it('R6: offline, the page keeps what it had and says so; online, no banner', async () => {
     await render(recap().el)
     expect(screen.queryByTestId('w-offline', HIDDEN)).toBeNull()

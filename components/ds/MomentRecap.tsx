@@ -39,6 +39,11 @@ export type MomentRecapProps = {
   rated: boolean
   /** Rate who you met, or the night when you matched with nobody: never a dead end. */
   onRate: () => void
+  /**
+   * "People from tonight" (Flow 4 R4.1 4.5): the read-only deck of who was here, until the room's chat closes. Given
+   * only when there is a deck to open; absent, the row is absent and never explained.
+   */
+  onPeople?: () => void
   /** Back to tonight. */
   onBack: () => void
   /** The overlay's close (chevron down), when the Recap is inside it. */
@@ -63,7 +68,7 @@ export type MomentRecapProps = {
  *
  * Reduce Motion: fade only.
  */
-export function MomentRecap({ face, title, venue, minutes, matches, rated, onRate, onBack, onClose, paused = false, testID }: MomentRecapProps) {
+export function MomentRecap({ face, title, venue, minutes, matches, rated, onRate, onPeople, onBack, onClose, paused = false, testID }: MomentRecapProps) {
   const reduceMotion = useReducedMotion()
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
@@ -131,6 +136,7 @@ export function MomentRecap({ face, title, venue, minutes, matches, rated, onRat
         ) : (
           <Button label={matches > 0 ? 'Rate who you met' : 'Rate the night'} onPress={onRate} testID={testID && `${testID}-rate`} />
         )}
+        {onPeople ? <Button label="People from tonight" kind="secondary" onPress={onPeople} testID={testID && `${testID}-people`} /> : null}
         <Button label="Back to tonight" kind="secondary" onPress={onBack} testID={testID && `${testID}-back`} />
       </Block>
     </View>
