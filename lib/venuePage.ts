@@ -91,11 +91,18 @@ export function timeRange(startIso: string, endIso: string): string {
   return Number.isFinite(end) ? `${clockTime(start)} – ${clockTime(end)}` : clockTime(start)
 }
 
-/** "Coming up here": the first three show, the rest behind See all. */
+/**
+ * "Coming up here": the first three show, the rest behind See all. The server sends its own few (admin
+ * `UPCOMING_LIMIT`, 5) and no total; this is the page's own ceiling on whatever it is sent, so a place with
+ * hundreds of events can never draw hundreds of rows. Past it there is nothing to page through until the server
+ * sends a cursor and a total (see the report); the list says nothing it does not know.
+ */
 export const UPCOMING_SHOWN = 3
+export const UPCOMING_MAX = 20
 export function upcomingRows(upcoming: VenueDetail['venue']['upcoming']) {
   return (upcoming ?? [])
     .filter((e) => e.title && dayLabel(e.startTime))
+    .slice(0, UPCOMING_MAX)
     .map((e) => ({
       id: e.id,
       title: e.title,

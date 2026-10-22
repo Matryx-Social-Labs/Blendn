@@ -16,6 +16,8 @@ import {
   spokenLeft,
   timeRange,
   upcomingRows,
+  UPCOMING_MAX,
+  UPCOMING_SHOWN,
   venueGate,
   venueHero,
   venueTiles,
@@ -115,6 +117,21 @@ describe('good to know, coming up, the board', () => {
   it('upcoming: every event with a title and a day; the page shows three and the rest sit behind See all', () => {
     const e = (n: number) => ({ id: `e${n}`, title: `T${n}`, startTime: new Date(2026, 9, 20 + n, 21).toISOString() })
     expect(upcomingRows([e(1), e(2), e(3), e(4), { ...e(5), title: '' }])).toHaveLength(4)
+  })
+
+  /**
+   * Large data: a place with hundreds of events draws a bounded list, soonest first, the first three shown.
+   * Negative control: removing the slice fails "never more than the ceiling".
+   */
+  it('never more than the ceiling, however many it is sent, soonest first; none and one are fine', () => {
+    const e = (n: number) => ({ id: `e${n}`, title: `T${n}`, startTime: new Date(2026, 9, 20, 21, n).toISOString() })
+    const hundreds = Array.from({ length: 400 }, (_, n) => e(n))
+    const rows = upcomingRows(hundreds)
+    expect(rows).toHaveLength(UPCOMING_MAX)
+    expect(rows.map((r) => r.id).slice(0, 2)).toEqual(['e0', 'e1'])
+    expect(UPCOMING_SHOWN).toBeLessThan(UPCOMING_MAX)
+    expect(upcomingRows([])).toEqual([])
+    expect(upcomingRows([e(1)])).toHaveLength(1)
   })
 })
 

@@ -134,7 +134,7 @@ export function UpcomingList({
   rows,
   onOpen,
 }: {
-  /** Every upcoming event the server sent, soonest first; three show, the rest behind See all. */
+  /** The upcoming events (capped at UPCOMING_MAX), soonest first; three show, the rest behind See all. */
   rows: { id: string; title: string; day: string; going: string | null }[]
   onOpen: (eventId: string) => void
 }) {
