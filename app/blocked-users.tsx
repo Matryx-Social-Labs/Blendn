@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Button } from '../components/ds/Button'
-import { font, useBoldText } from '../components/ds/shared'
+import { font, HueProvider, useBoldText } from '../components/ds/shared'
 import { StateScreen } from '../components/ds/StateScreen'
 import { TopBar } from '../components/ds/TopBar'
 import { PersonRow } from '../components/friends/PersonRow'
@@ -15,6 +15,9 @@ import { fetchBlockedPage } from '../lib/blockedUsersPage'
 import { unblockUser, type BlockedUser } from '../lib/safetyUtils'
 import { showSheet } from '../lib/sheet'
 import { useTopBarState } from '../lib/useTopBarState'
+
+/** Empty pages with a cursor after them, followed on in one go before the foot waits for the next end-reach. */
+const MAX_EMPTY_HOPS = 5
 
 /**
  * The people you blocked, and a way to undo each.
@@ -28,7 +31,7 @@ import { useTopBarState } from '../lib/useTopBarState'
  * long list costs the same as a short one. The next page is asked for as the end comes into view; a server that has no
  * cursors yet answers everyone at once, which is one page with no next.
  */
-export default function BlockedUsers() {
+function BlockedUsersContent() {
   const bold = useBoldText()
   const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([])
   const [loading, setLoading] = useState(true)
@@ -58,6 +61,7 @@ export default function BlockedUsers() {
         if (result.ok) {
           setBlockedUsers(result.page.users)
           setNextCursor(result.page.nextCursor)
+          setLoadingMore(false)
           setMoreFailed(false)
           setFailed(false)
         } else {
@@ -75,14 +79,20 @@ export default function BlockedUsers() {
       })
   }
 
-  /** The next page, once. A failure keeps what is on screen and offers Try again at the foot. */
+  /**
+   * The next page, once. A failure keeps what is on screen and offers Try again at the foot. An empty page with a
+   * cursor after it (a server that filters after it pages) is followed on at once, a few times, so the foot does not
+   * stall on an empty page.
+   */
   const loadMore = useCallback((retry = false) => {
     if (!nextCursor || loadingMore || (moreFailed && !retry)) return
     setMoreFailed(false)
     const mine = read.current
     setLoadingMore(true)
-    fetchBlockedPage(nextCursor)
-      .then((result) => {
+    const run = async () => {
+      let cursor: string | null = nextCursor
+      for (let hops = 0; cursor && hops < MAX_EMPTY_HOPS; hops += 1) {
+        const result = await fetchBlockedPage(cursor)
         if (read.current !== mine) return
         if (!result.ok) return setMoreFailed(true)
         setBlockedUsers((prev) => {
@@ -90,13 +100,16 @@ export default function BlockedUsers() {
           return [...prev, ...result.page.users.filter((u) => !have.has(u.blocked_id))]
         })
         setNextCursor(result.page.nextCursor)
-      })
+        if (result.page.users.length > 0) return
+        cursor = result.page.nextCursor
+      }
+    }
+    // Unconditionally: a refresh that superseded this read must not leave the foot spinning (it also clears it itself).
+    run()
       .catch(() => {
         if (read.current === mine) setMoreFailed(true)
       })
-      .finally(() => {
-        if (read.current === mine) setLoadingMore(false)
-      })
+      .finally(() => setLoadingMore(false))
   }, [nextCursor, loadingMore, moreFailed])
   const onEndReached = useCallback(() => loadMore(), [loadMore])
 
@@ -230,3 +243,12 @@ const styles = StyleSheet.create({
   skeletonRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, paddingVertical: SPACE.md },
   skeletonText: { flex: 1, gap: SPACE.sm },
 })
+
+/** Violet world: one hue on this screen (`HueProvider`), as Settings, which it opens from. */
+export default function BlockedUsers() {
+  return (
+    <HueProvider value="violet">
+      <BlockedUsersContent />
+    </HueProvider>
+  )
+}

@@ -16,7 +16,7 @@ import BlockedUsers from '../app/blocked-users'
 
 const user = (i: number) => ({ blocked_id: `u${i}`, blocked_user_name: `Person ${i}`, blocked_user_photo: null, reason: null, blocked_at: '2026-09-12T10:00:00Z' })
 const users = (from: number, n: number) => Array.from({ length: n }, (_, i) => user(from + i))
-const ok = (list: unknown[], nextCursor: string | null = null) => ({ ok: true, page: { users: list, nextCursor, total: null } })
+const ok = (list: unknown[], nextCursor: string | null = null) => ({ ok: true, page: { users: list, nextCursor } })
 
 beforeEach(() => mockFetch.mockReset())
 
@@ -71,4 +71,34 @@ it('hundreds of people are virtualised, not all mounted', async () => {
   await screen.findByText('Person 0')
   expect(screen.queryByText('Person 499')).toBeNull()
   expect(screen.queryAllByText(/^Person \d+$/).length).toBeLessThan(60)
+})
+
+it('a refresh during a next-page load does not leave the foot spinning, and the late page is dropped', async () => {
+  let release: (v: unknown) => void = () => {}
+  mockFetch
+    .mockResolvedValueOnce(ok(users(0, 3), 'c2'))
+    .mockImplementationOnce(() => new Promise((r) => (release = r)))
+    .mockResolvedValueOnce(ok(users(10, 2)))
+  await render(<BlockedUsers />)
+  await screen.findByText('Person 0')
+  const list = screen.getByTestId('blocked-users-list')
+  await act(async () => fireEvent(list, 'endReached'))
+  expect(screen.getByLabelText('Loading more')).toBeTruthy()
+  // Pull to refresh while the next page is out.
+  const { refreshControl } = list.props
+  await act(async () => refreshControl.props.onRefresh())
+  expect(await screen.findByText('Person 10')).toBeTruthy()
+  expect(screen.queryByLabelText('Loading more')).toBeNull()
+  await act(async () => release(ok(users(50, 2))))
+  expect(screen.queryByText('Person 50')).toBeNull()
+  expect(screen.queryByLabelText('Loading more')).toBeNull()
+})
+
+it('an empty page with a cursor after it is followed on at once', async () => {
+  mockFetch.mockResolvedValueOnce(ok(users(0, 2), 'c2')).mockResolvedValueOnce(ok([], 'c3')).mockResolvedValueOnce(ok([], 'c4')).mockResolvedValueOnce(ok(users(7, 1)))
+  await render(<BlockedUsers />)
+  await screen.findByText('Person 0')
+  await act(async () => fireEvent(screen.getByTestId('blocked-users-list'), 'endReached'))
+  expect(await screen.findByText('Person 7')).toBeTruthy()
+  expect(mockFetch.mock.calls.map((c) => c[0])).toEqual([undefined, 'c2', 'c3', 'c4'])
 })

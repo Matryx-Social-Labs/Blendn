@@ -6,12 +6,12 @@ import { BLOCKED_PAGE_SIZE, blockedPageFrom, fetchBlockedPage } from '../lib/blo
 const user = (id: string) => ({ blocked_id: id, blocked_user_name: id, blocked_user_photo: null, reason: null, blocked_at: '2026-09-12T10:00:00Z' })
 
 describe('blockedPageFrom', () => {
-  it('an old server: everyone in users, no cursor, no total, so one page that is the whole list', () => {
-    expect(blockedPageFrom({ users: [user('a')] })).toEqual({ users: [user('a')], nextCursor: null, total: null })
+  it('an old server: everyone in users, no cursor, so one page that is the whole list', () => {
+    expect(blockedPageFrom({ users: [user('a')] })).toEqual({ users: [user('a')], nextCursor: null })
   })
-  it('a cursor and a total, flat or under pagination', () => {
-    expect(blockedPageFrom({ users: [], nextCursor: 'c2', total: 120 })).toMatchObject({ nextCursor: 'c2', total: 120 })
-    expect(blockedPageFrom({ users: [], pagination: { nextCursor: 'c3', totalCount: 7 } })).toMatchObject({ nextCursor: 'c3', total: 7 })
+  it('a cursor, flat or under pagination', () => {
+    expect(blockedPageFrom({ users: [], nextCursor: 'c2' })).toMatchObject({ nextCursor: 'c2' })
+    expect(blockedPageFrom({ users: [], pagination: { nextCursor: 'c3' } })).toMatchObject({ nextCursor: 'c3' })
   })
   it('the last page says null, or nothing', () => {
     expect(blockedPageFrom({ users: [], nextCursor: null })?.nextCursor).toBeNull()
