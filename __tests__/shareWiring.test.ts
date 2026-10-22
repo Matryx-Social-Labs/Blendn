@@ -42,6 +42,25 @@ describe('one tray for every surface', () => {
   })
 })
 
+describe('the Scene’s seed is the app’s own', () => {
+  it('every in-app push to the Scene that passes a title, cover or description marks itself internal', () => {
+    const seeding = [...walk('app'), ...walk('components'), ...walk('lib')].filter((f) => {
+      const src = read(f)
+      return [...src.matchAll(/pathname: '\/event\/\[id\]'/g)].some((m) => /\b(title|cover|description):/.test(src.slice(m.index, m.index + 400)))
+    })
+    expect(seeding.length).toBeGreaterThan(0)
+    for (const f of seeding) expect(read(f)).toMatch(/internalSeed\(/)
+  })
+
+  it('the host sweeps the last Story picture at launch', () => {
+    expect(read('components/share/ShareHost.tsx')).toMatch(/sweepStoryCaptures\(\)/)
+  })
+
+  it('the Scene reads its seed through trustedParams and nowhere else', () => {
+    expect(read('components/screens/EventDetailScreen.tsx')).toMatch(/trustedParams\(useLocalSearchParams\(\)\)/)
+  })
+})
+
 describe('the app answers to the links it sends', () => {
   it('rewrites /e/ and /v/ before the router sees them', () => {
     expect(read('app/+native-intent.tsx')).toMatch(/redirectSystemPath/)

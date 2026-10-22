@@ -37,6 +37,7 @@ import { useToastDock } from '../toastDock'
 import { amenityTiles, type ServerAmenity } from '../../lib/amenityTile'
 import { eventDetailBlocks, type ServerEventDetails } from '../../lib/eventDetails'
 import { showEventReportOptions } from '../../lib/safetyUtils'
+import { trustedParams } from '../../lib/sceneSeed'
 import { eventTarget, shareText } from '../../lib/shareEvent'
 import { openShare } from '../../lib/shareTray'
 import { openWhatsApp } from '../../lib/shareWhatsApp'
@@ -209,7 +210,8 @@ const SECTION_DELAY = [0, 1, 2, 3].map((i) => Math.min(i * STAGGER.loose, STAGGE
  */
 
 export default function EventDetail() {
-  const { id, title, cover, venue, city, start, end, category, description: descriptionParam, interestCount: interestCountParam } = useLocalSearchParams()
+  // The seed (a card's title, cover, date) is read only when the app itself opened this screen: see `lib/sceneSeed.ts`.
+  const { id, title, cover, venue, city, start, end, category, description: descriptionParam, interestCount: interestCountParam } = trustedParams(useLocalSearchParams())
   const insets = useSafeAreaInsets()
   // The Android snackbar stands above the CTA dock.
   const [ctaDockHeight, setCtaDockHeight] = useState(0)

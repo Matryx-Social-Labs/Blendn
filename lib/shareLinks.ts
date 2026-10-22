@@ -58,14 +58,20 @@ export function parseLink(input: string | null | undefined): LinkTarget | null {
 
 /**
  * The path the router should open for an incoming system URL (`redirectSystemPath`): `/e/<id>` and `/v/<id>`, which
- * have no screen of their own, become the event's and the venue's. Anything else is returned as it came, `/event/<id>`
- * and `/f/<token>` included: it is not ours to rewrite, and a query string stays with the route it belongs to.
+ * have no screen of their own, become the event's and the venue's.
+ *
+ * A link to an event or a venue never keeps its query. The Scene reads title, cover and description from its route to
+ * draw before it has loaded (`lib/sceneSeed.ts`), and a link is anyone's string: `?title=…&cover=https://attacker/x.jpg`
+ * would put their words on our screen and make the phone fetch their image. That holds for `/event/` and `/venue/` as
+ * they arrive, the `blendn://` form, and a path that does not parse as a link but still names one. An invite keeps its
+ * path as it came (its token is the only thing in it), and anything else is not ours to rewrite.
  */
 export function nativeIntentPath(path: string): string {
   const target = parseLink(path)
-  const alias = path.match(/(?:^|\/)(e|v)\/[^/?#]+\/?([?#].*)?$/i)
-  if (!target || !alias || target.kind === 'invite') return path
-  return routeFor(target) + (alias[2] ?? '')
+  if (target && target.kind !== 'invite') return routeFor(target)
+  // Names an event or a venue but is not a clean link (an id that would climb out of its segment): no query, no rewrite.
+  const base = path.split(/[?#]/, 1)[0]
+  return /(?:^|\/)(?:event|venue|e|v)\//i.test(base) ? base : path
 }
 
 /* -------------------------------------------------------------------------- */

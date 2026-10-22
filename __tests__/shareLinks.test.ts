@@ -57,19 +57,38 @@ describe('the native intent: which path the router opens for an incoming link', 
     expect(nativeIntentPath(`https://www.blendn.app/e/${ID}`)).toBe(`/event/${ID}`)
     expect(nativeIntentPath(`blendn://v/${ID}`)).toBe(`/venue/${ID}`)
     expect(nativeIntentPath(`/e/${ID}`)).toBe(`/event/${ID}`)
-    expect(nativeIntentPath(`https://www.blendn.app/e/${ID}?ref=wa`)).toBe(`/event/${ID}?ref=wa`)
   })
 
-  it('leaves every other path as it came: invites, the organiser QR path, notifications, other sites, deeper paths', () => {
-    for (const path of [
-      `https://www.blendn.app/f/${TOKEN}`,
-      `/f/${TOKEN}`,
-      `https://www.blendn.app/event/${ID}`,
-      '/(tabs)/events',
-      '/chat/abc',
-      `https://evil.example/e/${ID}`,
-      `/e/${ID}/chat`,
+  it('leaves the organiser QR path and the invite path as they are', () => {
+    expect(nativeIntentPath(`https://www.blendn.app/event/${ID}`)).toBe(`/event/${ID}`)
+    expect(nativeIntentPath(`/f/${TOKEN}`)).toBe(`/f/${TOKEN}`)
+    expect(nativeIntentPath(`https://www.blendn.app/f/${TOKEN}`)).toBe(`https://www.blendn.app/f/${TOKEN}`)
+  })
+
+  it('never lets a link carry anything into the Scene: no query on an event or a venue, whatever the form', () => {
+    const crafted = 'title=Free%20money&cover=https://attacker.example/x.jpg&description=hi&internal=1&venue=x&interestCount=9'
+    for (const link of [
+      `https://www.blendn.app/e/${ID}?${crafted}`,
+      `https://www.blendn.app/event/${ID}?${crafted}`,
+      `https://www.blendn.app/event/${ID}#${crafted}`,
+      `blendn://event/${ID}?${crafted}`,
+      `blendn://e/${ID}?${crafted}`,
+      `/event/${ID}?${crafted}`,
     ]) {
+      expect(nativeIntentPath(link)).toBe(`/event/${ID}`)
+    }
+    for (const link of [`https://www.blendn.app/v/${ID}?${crafted}`, `https://www.blendn.app/venue/${ID}?km=1&${crafted}`, `blendn://venue/${ID}?${crafted}`]) {
+      expect(nativeIntentPath(link)).toBe(`/venue/${ID}`)
+    }
+  })
+
+  it('strips the query even from a path that names an event but is not a clean link', () => {
+    expect(nativeIntentPath(`/event/a%2Fb?title=x&cover=https://attacker.example/x.jpg`)).toBe('/event/a%2Fb')
+    expect(nativeIntentPath(`/event/${ID}/chat?title=x`)).toBe(`/event/${ID}/chat`)
+  })
+
+  it('leaves every unrelated path, query and all, as it came', () => {
+    for (const path of ['/(tabs)/events', '/chat/abc?x=1', `https://evil.example/terms?x=1`, '/events?x=1']) {
       expect(nativeIntentPath(path)).toBe(path)
     }
   })
