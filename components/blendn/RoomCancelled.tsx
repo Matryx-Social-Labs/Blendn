@@ -57,6 +57,6 @@ export function RoomCancelled({
 }
 
 const styles = StyleSheet.create({
-  page: { ...StyleSheet.absoluteFillObject, backgroundColor: COLOR.ink },
+  page: { ...StyleSheet.absoluteFill, backgroundColor: COLOR.ink },
   card: { marginHorizontal: SPACE.gutter, padding: SPACE.xl, borderRadius: RADIUS.card, backgroundColor: COLOR.surface },
 })

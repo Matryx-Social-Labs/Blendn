@@ -90,7 +90,7 @@ export function useFriendsHereList(eventId: string | null) {
         setStatus('error')
       }
     } catch (e) {
-      Logger.warn('room', 'friends here list failed', { error: e })
+      Logger.warn('friends', 'friends here list failed', { error: e })
       if (mine === ask.current) setStatus('error')
     }
   }, [eventId, debounced])
@@ -119,7 +119,7 @@ export function useFriendsHereList(eventId: string | null) {
         setCursor(next.nextCursor)
       }
     } catch (e) {
-      Logger.warn('room', 'friends here next page failed', { error: e })
+      Logger.warn('friends', 'friends here next page failed', { error: e })
     } finally {
       more.current = false
       if (mine === ask.current) setLoadingMore(false)

@@ -65,7 +65,7 @@ export function useFriendsHere(eventId: string | null, inRoom: boolean): Friends
         if (late) setAppearances((n) => n + 1)
       }
     } catch (e) {
-      Logger.debug('room', 'friends here read failed', { error: e })
+      Logger.debug('friends', 'friends here read failed', { error: e })
     }
     if (mine === ask.current) setLoadedFor(eventId)
   }, [eventId, lastTotal, loadedNow])
@@ -127,7 +127,7 @@ export function useMessageFriend(onFailed: (message: string) => void) {
         if (conversationId) router.push({ pathname: '/private-chat/[conversationId]', params: { conversationId } } as never)
         else failed.current(friendChatFailure(friend.name))
       } catch (e) {
-        Logger.warn('room', 'friend chat did not open', { error: e })
+        Logger.warn('friends', 'friend chat did not open', { error: e })
         failed.current(friendChatFailure(friend.name))
       } finally {
         busy.current = null
