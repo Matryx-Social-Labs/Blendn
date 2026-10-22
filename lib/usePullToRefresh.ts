@@ -36,7 +36,7 @@ export const pullProgress = (offsetY: number) => Math.min(1, Math.max(0, -offset
  * is offset by the same amount.
  *
  * A worklet `onScroll` (`useAnimatedScrollHandler`) cannot be chained: spread `listProps`, set your handler after it, and
- * from the worklet `scheduleOnRN(pull.onOffset, y)` while `y < 0 || pull.progress.get() > 0` (Me does).
+ * from the worklet `if (pull.wantsOffset(y)) scheduleOnRN(pull.onOffset, y)` (Me does).
  */
 export function usePullToRefresh({
   refreshing,
@@ -85,6 +85,11 @@ export function usePullToRefresh({
     [chainedOnScroll, onPullScroll]
   )
   const holdInset = refreshing && !native ? PULL_ARM : 0
+  /** On the UI thread: whether this offset is the pull's (above the top, or the monogram still up). Android: never. */
+  const wantsOffset = (offsetY: number) => {
+    'worklet'
+    return !native && (offsetY < 0 || progress.get() > 0)
+  }
 
   const listProps = useMemo(
     () => ({
@@ -114,9 +119,10 @@ export function usePullToRefresh({
     scrollProps: { onScroll, onScrollEndDrag },
     /**
      * The pull from a bare offset, for a list whose `onScroll` is a worklet (`useAnimatedScrollHandler`): hand it over with
-     * `scheduleOnRN` while the list is above its top or `progress` is still up, and set your handler after `listProps`.
+     * `scheduleOnRN` when `wantsOffset(y)`, and set your handler after `listProps`.
      */
     onOffset,
+    wantsOffset,
     /** Spread onto the list: everything it needs, on either platform. */
     listProps,
     /** The monogram that traces as you pull (iOS); null on Android, where the platform control draws itself. */

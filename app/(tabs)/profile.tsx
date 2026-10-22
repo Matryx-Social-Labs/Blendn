@@ -327,11 +327,11 @@ function ProfileInner() {
   const barBottom = barCircleBottom(insets.top, Platform.OS === 'android')
   // The branded pull (motion #18), its monogram under the floating bar; Android keeps the platform's control, offset the same.
   const pull = usePullToRefresh({ refreshing, onRefresh: () => void onRefresh(), indicatorTop: barBottom })
-  const { native: nativePull, progress: pullShown, onOffset: pullAt } = pull
+  const { onOffset: pullAt, wantsOffset: pullWants } = pull
   const onScroll = useAnimatedScrollHandler((e) => {
     scrollY.set(e.contentOffset.y)
     // Only above the top, or while the monogram is still up: the rest of the scroll never crosses to JS.
-    if (!nativePull && (e.contentOffset.y < 0 || pullShown.get() > 0)) scheduleOnRN(pullAt, e.contentOffset.y)
+    if (pullWants(e.contentOffset.y)) scheduleOnRN(pullAt, e.contentOffset.y)
   })
   const chrome = (
     <ProfileBar

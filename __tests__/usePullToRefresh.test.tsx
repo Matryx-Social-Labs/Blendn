@@ -119,6 +119,18 @@ describe('a worklet scroll handler hands the offset over (Me: useAnimatedScrollH
     expect(result.current.progress.get()).toBe(0)
     threshold.mockRestore()
   })
+
+  it('wantsOffset: above the top, or while the monogram is up; never at rest, never on Android', async () => {
+    on('ios')
+    const { result } = await renderHook(() => usePullToRefresh({ refreshing: false, onRefresh: jest.fn() }))
+    expect(result.current.wantsOffset(-1)).toBe(true)
+    expect(result.current.wantsOffset(40)).toBe(false)
+    await act(async () => result.current.onOffset(-PULL_ARM / 2))
+    expect(result.current.wantsOffset(40)).toBe(true)
+    on('android')
+    const android = await renderHook(() => usePullToRefresh({ refreshing: false, onRefresh: jest.fn() }))
+    expect(android.result.current.wantsOffset(-80)).toBe(false)
+  })
 })
 
 describe('the screens on the branded pull', () => {
