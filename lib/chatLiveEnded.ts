@@ -28,9 +28,12 @@ export type LiveEndedFacts = {
 }
 
 const NOT_LIVE_BODY = 'You’re not live here any more. Go live at the venue to join today’s room.'
-const RESET_BODY = 'Today’s room has closed. Tomorrow’s opens at 6.'
+/** The day's reset is the venue's own (`dayEndsAt`); the app says no hour of its own. */
+const RESET_BODY = 'Today’s room has closed. A new day starts now. Go live to join it.'
 
 const GO_LIVE_AGAIN = { label: 'Go live again', kind: 'goLive' as const }
+/** The plain state: the window ran out, or the read was refused with no reason. One sentence, the server's. */
+const NOT_LIVE: LiveEndedState = { icon: 'hourglass', title: 'Not live here any more', body: NOT_LIVE_BODY, action: GO_LIVE_AGAIN }
 
 export function liveEndedState(reason: string | null | undefined, facts: LiveEndedFacts = {}): LiveEndedState {
   const at = facts.venueName?.trim() || 'this place'
@@ -46,8 +49,8 @@ export function liveEndedState(reason: string | null | undefined, facts: LiveEnd
       }
     case 'expired':
       return dayClosed
-        ? { icon: 'moon', title: 'Today’s room has closed', body: RESET_BODY, action: { label: 'Back to Places', kind: 'back' } }
-        : { icon: 'hourglass', title: 'Not live here any more', body: NOT_LIVE_BODY, action: GO_LIVE_AGAIN }
+        ? { icon: 'moon', title: 'Today’s room has closed', body: RESET_BODY, action: GO_LIVE_AGAIN }
+        : NOT_LIVE
     case 'switched_event':
       return {
         icon: 'shuffle',
@@ -70,6 +73,6 @@ export function liveEndedState(reason: string | null | undefined, facts: LiveEnd
         action: GO_LIVE_AGAIN,
       }
     default:
-      return { icon: 'radio', title: 'You’re not live here any more', body: 'Today’s room is for the people live at this place. Go live there again to rejoin it.', action: GO_LIVE_AGAIN }
+      return NOT_LIVE
   }
 }

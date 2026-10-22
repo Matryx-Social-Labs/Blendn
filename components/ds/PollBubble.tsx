@@ -30,6 +30,11 @@ export type PollBubbleProps = {
   onVote?: (index: number) => void
   /** Who asked, as the label names them. */
   from?: string
+  /**
+   * The server's own words for counts it withheld under the floor ("Results appear once more people vote"). Given, the
+   * options draw no per-option "Fewer than 5" and the foot says this: the number five is the server's to name, not ours.
+   */
+  withheldLine?: string
   /** The design gallery only: draws the option at this index pressed. */
   previewPressed?: number
   testID?: string
@@ -38,11 +43,11 @@ export type PollBubbleProps = {
 /** Every count is known: only then is there a total, and are there bars (never a zero, never a partial 100%). */
 const counted = (options: PollOption[]) => options.every((o) => typeof o.votes === 'number')
 
-function footLine(options: PollOption[], picked: number | undefined, closed: boolean, total: number) {
+function footLine(options: PollOption[], picked: number | undefined, closed: boolean, total: number, withheldLine?: string) {
   if (closed) return counted(options) ? `Closed · ${plural(total, 'vote')}` : 'Closed'
   if (picked === undefined) return 'Tap to vote · you can change it until it closes'
   if (options.every((o) => o.votes === undefined)) return 'Results appear when the poll closes'
-  if (!counted(options)) return 'Counts show once 5 or more people vote'
+  if (!counted(options)) return withheldLine ?? 'Counts show once 5 or more people vote'
   return plural(total, 'vote')
 }
 
@@ -61,7 +66,7 @@ function footLine(options: PollOption[], picked: number | undefined, closed: boo
  * ("One more, 7 votes"), then the foot line. No long-press menu. Increase
  * Contrast: the hairline.
  */
-export function PollBubble({ question, options, picked, closed = false, onVote, from = 'the organiser', previewPressed, testID }: PollBubbleProps) {
+export function PollBubble({ question, options, picked, closed = false, onVote, from = 'the organiser', withheldLine, previewPressed, testID }: PollBubbleProps) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const shown = (picked !== undefined || closed) && options.some((o) => o.votes !== undefined)
@@ -81,7 +86,7 @@ export function PollBubble({ question, options, picked, closed = false, onVote, 
         <Text style={[font('bodyStrong', bold), styles.primary]}>{question}</Text>
       </View>
       {options.map(({ label, votes }, i) => {
-        const count = shown && votes !== undefined ? (votes === null ? 'Fewer than 5' : String(votes)) : null
+        const count = shown && votes !== undefined ? (votes === null ? (withheldLine ? null : 'Fewer than 5') : String(votes)) : null
         return (
           <Option
             key={i}
@@ -104,7 +109,7 @@ export function PollBubble({ question, options, picked, closed = false, onVote, 
           />
         )
       })}
-      <Text style={[font('meta', bold), styles.foot]}>{footLine(options, picked, closed, total)}</Text>
+      <Text style={[font('meta', bold), styles.foot]}>{footLine(options, picked, closed, total, withheldLine)}</Text>
     </View>
   )
 }

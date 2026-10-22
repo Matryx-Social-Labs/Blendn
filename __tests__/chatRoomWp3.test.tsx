@@ -176,7 +176,7 @@ describe('a warning before contact details (C2, 5.10)', () => {
     await render(<GroupChat />)
     await flush()
     await fireEvent.changeText(screen.getByLabelText('Message'), 'add me on insta')
-    expect(screen.getByText(/People in this crew know who you are/)).toBeTruthy()
+    expect(screen.getByText(/A message with contact details is removed before anyone else sees it\./)).toBeTruthy()
   })
 })
 
@@ -286,7 +286,7 @@ describe('every live:ended reason has its own calm state (C6, 11.5)', () => {
     ;(apiClient.getChatMessages as jest.Mock).mockResolvedValue(NOT_LIVE)
     await render(<GroupChat />)
     await flush()
-    expect(screen.getByText('You’re not live here any more')).toBeTruthy()
+    expect(screen.getByText('Not live here any more')).toBeTruthy()
   })
 })
 
@@ -310,5 +310,31 @@ describe('a block made on another screen purges the feed (H2)', () => {
     await flush()
     expect(screen.queryByText('hello from fox')).toBeNull()
     expect(screen.getByText('hello from owl')).toBeTruthy()
+  })
+})
+
+describe('polls in the feed are read only once seen (M6)', () => {
+  it('reads nothing until the row is viewable, then reads once', async () => {
+    ;(apiClient.getChatGroups as jest.Mock).mockResolvedValue({
+      success: true,
+      data: { groups: [eventRow({}, { startTime: new Date(Date.now() + HOUR).toISOString() })] },
+    })
+    ;(apiClient.getChatMessages as jest.Mock).mockResolvedValue({
+      success: true,
+      data: { messages: [{ id: 'poll-1', userId: 'u-org', user: { name: 'Organiser' }, content: 'Which set first?', type: 'poll', pollId: 'p1', createdAt: '2026-10-22T20:00:00.000Z' }], pagination: { hasMore: false, nextCursor: null } },
+    })
+    const queued = (apiClient as unknown as { queuedRequest: jest.Mock }).queuedRequest
+    queued.mockClear()
+    jest.spyOn(Math, 'random').mockReturnValue(0)
+    await render(<GroupChat />)
+    await flush()
+    expect(screen.getByText('Poll: Which set first?')).toBeTruthy()
+    expect(queued).not.toHaveBeenCalledWith('/api/mobile/events/e1/polls/p1')
+    await act(async () =>
+      fireEvent(screen.getByTestId('room-feed'), 'viewableItemsChanged', { viewableItems: [{ item: { kind: 'message', message_type: 'poll', message_id: 'poll-1' }, isViewable: true }], changed: [] })
+    )
+    await flush()
+    expect(queued).toHaveBeenCalledWith('/api/mobile/events/e1/polls/p1')
+    jest.restoreAllMocks()
   })
 })

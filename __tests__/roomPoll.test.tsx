@@ -7,7 +7,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
 
 import { RoomMessageRow, type RowHandlers } from '../components/chat/RoomFeed'
-import { optionIdAt, pollView, type PollResults } from '../lib/chatPoll'
+import { cachedPoll, forgetPolls, optionIdAt, pollRefusal, pollView, type PollResults } from '../lib/chatPoll'
 import { roomMessageFromSocket, roomMessagesFrom, type RoomMessage } from '../lib/roomMessages'
 
 const mockToast = jest.fn()
@@ -22,7 +22,7 @@ import { H } from '../lib/haptics'
 /* eslint-enable import/first */
 
 const queued = apiClient.queuedRequest as jest.Mock
-const handlers: RowHandlers = { menu: jest.fn(), retry: jest.fn(), react: jest.fn(), reply: jest.fn(), sender: jest.fn(), link: jest.fn() }
+const handlers: RowHandlers = { menu: jest.fn(), retry: jest.fn(), react: jest.fn(), reply: jest.fn(), sender: jest.fn(), link: jest.fn(), pollRefusal: jest.fn() }
 
 const O1 = '11111111-1111-4111-8111-111111111111'
 const O2 = '22222222-2222-4222-8222-222222222222'
@@ -49,8 +49,8 @@ const message = (over: Partial<RoomMessage> = {}): RoomMessage => ({
   poll_id: 'p1',
   ...over,
 })
-const row = (item: RoomMessage, eventId: string | null = 'e1') =>
-  render(<RoomMessageRow item={item} roomId="g1" mine={false} first last senderTappable eventId={eventId} handlers={handlers} />)
+const row = (item: RoomMessage, eventId: string | null = 'e1', viewable = true, h: RowHandlers = handlers) =>
+  render(<RoomMessageRow item={item} roomId="g1" mine={false} first last senderTappable eventId={eventId} pollViewable={viewable} handlers={h} />)
 const flush = async () =>
   act(async () => {
     for (let i = 0; i < 6; i++) await Promise.resolve()
@@ -59,7 +59,11 @@ const flush = async () =>
 beforeEach(() => {
   queued.mockReset()
   mockToast.mockReset()
+  forgetPolls()
+  // No random beat before the first read unless a test asks for one.
+  jest.spyOn(Math, 'random').mockReturnValue(0)
 })
+afterEach(() => jest.restoreAllMocks())
 
 describe('the poll message', () => {
   it('names its poll from whichever field the server uses, and only on a poll', () => {
@@ -165,7 +169,7 @@ describe('voting', () => {
     queued.mockResolvedValueOnce({ success: true, data: poll() })
     await row(message())
     await flush()
-    queued.mockResolvedValueOnce({ success: false, errorCode: 'CONFLICT', error: 'You are not in this chatroom' })
+    queued.mockResolvedValueOnce({ success: false, errorCode: 'CONFLICT', reasonCode: 'NOT_AN_OPTION', error: 'That is not an option on this poll' })
     await act(async () => fireEvent.press(screen.getByRole('radio', { name: 'Vinyl' })))
     // The app's own sentence for a refusal the person cannot act on from here (lib/userMessage).
     expect(mockToast).toHaveBeenCalledWith("Couldn't save your vote. Try again.", 'error', expect.anything())
@@ -177,5 +181,111 @@ describe('voting', () => {
     expect(pollView(r).options.map((o) => o.label)).toEqual(['A', 'B'])
     expect(pollView(r).picked).toBe(0)
     expect(optionIdAt(r, 1)).toBe(O2)
+  })
+})
+
+describe('a poll in a room of thousands (M6)', () => {
+  it('is not read until its row has been on screen', async () => {
+    queued.mockResolvedValue({ success: true, data: poll() })
+    const { rerender } = await row(message(), 'e1', false)
+    await flush()
+    expect(queued).not.toHaveBeenCalled()
+    expect(screen.getByText('Poll: Which set first?')).toBeTruthy()
+    await rerender(<RoomMessageRow item={message()} roomId="g1" mine={false} first last senderTappable eventId="e1" pollViewable handlers={handlers} />)
+    await flush()
+    expect(queued).toHaveBeenCalledTimes(1)
+  })
+
+  it('a poll read lately is not asked for again by the next row for it', async () => {
+    queued.mockResolvedValue({ success: true, data: poll({ myVote: O1 }) })
+    const { rerender } = await row(message())
+    await flush()
+    expect(cachedPoll('p1')).not.toBeNull()
+    // A new row for the same poll (a remount, a second reader of it): a different key, so a fresh instance.
+    await rerender(
+      <React.Fragment key="again">
+        <RoomMessageRow item={message({ message_id: 'm2' })} roomId="g1" mine={false} first last senderTappable eventId="e1" pollViewable handlers={handlers} />
+      </React.Fragment>
+    )
+    await flush()
+    expect(queued).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('radio', { name: 'Vinyl', checked: true })).toBeTruthy()
+  })
+
+  it('a vote refreshes what the next row shows', async () => {
+    queued.mockResolvedValueOnce({ success: true, data: poll() })
+    await row(message())
+    await flush()
+    queued.mockResolvedValueOnce({ success: true, data: poll({ myVote: O2 }) })
+    await act(async () => fireEvent.press(screen.getByRole('radio', { name: 'Live band' })))
+    expect(cachedPoll('p1')?.myVote).toBe(O2)
+  })
+})
+
+describe('the server’s reasons (M7)', () => {
+  it('reads a 409 by its reasonCode, or by its sentence on an older server', () => {
+    expect(pollRefusal({ reasonCode: 'POLL_CLOSED' })).toBe('POLL_CLOSED')
+    expect(pollRefusal({ reasonCode: 'NOT_LIVE', error: 'whatever' })).toBe('NOT_LIVE')
+    expect(pollRefusal({ error: 'This poll has closed.' })).toBe('POLL_CLOSED')
+    expect(pollRefusal({ error: 'The chatroom is not open' })).toBe('ROOM_CLOSED')
+    expect(pollRefusal({ error: 'Something else' })).toBeNull()
+  })
+
+  it.each(['ROOM_CLOSED', 'NOT_IN_ROOM', 'NOT_LIVE'])('%s is the room’s refusal: the room locks, no toast', async (reasonCode) => {
+    const h = { ...handlers, pollRefusal: jest.fn() }
+    queued.mockResolvedValueOnce({ success: true, data: poll() })
+    await row(message(), 'e1', true, h)
+    await flush()
+    queued.mockResolvedValueOnce({ success: false, errorCode: 'CONFLICT', reasonCode, error: 'x' })
+    await act(async () => fireEvent.press(screen.getByRole('radio', { name: 'Vinyl' })))
+    expect(h.pollRefusal).toHaveBeenCalledWith(reasonCode)
+    expect(mockToast).not.toHaveBeenCalled()
+  })
+
+  it('POLL_CLOSED by code, with no sentence, is still the closed poll', async () => {
+    queued.mockResolvedValueOnce({ success: true, data: poll() })
+    await row(message())
+    await flush()
+    queued.mockResolvedValueOnce({ success: false, errorCode: 'CONFLICT', reasonCode: 'POLL_CLOSED' })
+    queued.mockResolvedValueOnce({ success: true, data: poll({ closed: true }) })
+    await act(async () => fireEvent.press(screen.getByRole('radio', { name: 'Vinyl' })))
+    await flush()
+    expect(mockToast).toHaveBeenCalledWith('This poll has closed.', 'info')
+  })
+
+  it('counts under the floor follow suppressedReason: the server’s own line, never "Fewer than 5"', async () => {
+    queued.mockResolvedValue({
+      success: true,
+      data: poll({ resultsVisible: true, myVote: O1, suppressedReason: 'few_votes', suppressedLabel: 'Results appear once more people vote' }),
+    })
+    await row(message())
+    await flush()
+    expect(screen.getByText('Results appear once more people vote')).toBeTruthy()
+    expect(screen.queryByText('Fewer than 5')).toBeNull()
+  })
+
+  it('hidden until close follows suppressedReason too, even when the poll says its results are visible', () => {
+    const view = pollView(poll({ resultsVisible: true, suppressedReason: 'hidden_until_close' }))
+    expect(view.options.every((o) => o.votes === undefined)).toBe(true)
+    expect(pollView(poll({ closed: true, suppressedReason: 'few_votes', suppressedLabel: 'L' })).withheldLine).toBe('L')
+    expect(pollView(poll({ suppressedReason: null, resultsVisible: true })).withheldLine).toBeUndefined()
+  })
+})
+
+describe('the random beat (M6)', () => {
+  it('waits a random beat of up to two seconds before the first read', async () => {
+    jest.useFakeTimers()
+    try {
+      ;(Math.random as jest.Mock).mockReturnValue(0.5)
+      queued.mockResolvedValue({ success: true, data: poll() })
+      await row(message())
+      expect(queued).not.toHaveBeenCalled()
+      await act(async () => jest.advanceTimersByTime(999))
+      expect(queued).not.toHaveBeenCalled()
+      await act(async () => jest.advanceTimersByTime(2))
+      expect(queued).toHaveBeenCalledTimes(1)
+    } finally {
+      jest.useRealTimers()
+    }
   })
 })

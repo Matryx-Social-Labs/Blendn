@@ -16,6 +16,7 @@ import type { Rect } from '../ds/chatShared'
 import { StateScreen } from '../ds/StateScreen'
 import { SystemLine, SystemNotice } from '../ds/SystemNotice'
 import { GoneCard } from '../system/GoneCard'
+import type { PollRefusal } from '../../lib/chatPoll'
 import { RoomPoll } from './RoomPoll'
 import { chatHeaderBottom } from './ChatHeader'
 
@@ -26,6 +27,8 @@ export type RowHandlers = {
   reply: (m: RoomMessage) => void
   sender: (m: RoomMessage) => void
   link: (url: string) => void
+  /** A vote the room itself refused (closed, not in it, not live): the room locks. */
+  pollRefusal: (reason: PollRefusal) => void
 }
 
 /**
@@ -58,6 +61,7 @@ export const RoomMessageRow = memo(function RoomMessageRow({
   arriving = false,
   senderTappable,
   eventId,
+  pollViewable = false,
   handlers,
 }: {
   item: RoomMessage
@@ -74,6 +78,8 @@ export const RoomMessageRow = memo(function RoomMessageRow({
   senderTappable: boolean
   /** The event this room belongs to: a poll is read and voted on through it. Null for a crew's or a Blend's. */
   eventId?: string | null
+  /** This poll's row is on screen: it is read only then. */
+  pollViewable?: boolean
   handlers: RowHandlers
 }) {
   if (item.sender_id === 'system') return <SystemLine text={item.message_text} />
@@ -85,7 +91,14 @@ export const RoomMessageRow = memo(function RoomMessageRow({
     return (
       <View style={styles.runStart}>
         {item.poll_id && eventId ? (
-          <RoomPoll eventId={eventId} pollId={item.poll_id} question={item.message_text} testID={`poll-${item.message_id}`} />
+          <RoomPoll
+            eventId={eventId}
+            pollId={item.poll_id}
+            question={item.message_text}
+            viewable={pollViewable}
+            onRoomRefusal={handlers.pollRefusal}
+            testID={`poll-${item.message_id}`}
+          />
         ) : (
           <SystemNotice icon="chart-column" text={`Poll: ${item.message_text}`} testID={`poll-${item.message_id}`} />
         )}

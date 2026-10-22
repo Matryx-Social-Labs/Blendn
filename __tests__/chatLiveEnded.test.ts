@@ -21,14 +21,23 @@ describe('each live:ended reason has its own calm state', () => {
 
   it('an expiry past the venue day’s reset is the day closing; before it, the window running out', () => {
     const dayEndsAt = '2026-10-23T00:30:00.000Z'
-    expect(liveEndedState('expired', { ...venue, dayEndsAt, now: Date.parse(dayEndsAt) + 1 }).title).toBe('Today’s room has closed')
+    const closed = liveEndedState('expired', { ...venue, dayEndsAt, now: Date.parse(dayEndsAt) + 1 })
+    expect(closed.title).toBe('Today’s room has closed')
+    // No hour of the app's own: the reset is the venue's.
+    expect(closed.body).toBe('Today’s room has closed. A new day starts now. Go live to join it.')
+    expect(closed.body).not.toMatch(/\d/)
+    expect(closed.action.kind).toBe('goLive')
     expect(liveEndedState('expired', { ...venue, dayEndsAt, now: Date.parse(dayEndsAt) - 1 }).title).toBe('Not live here any more')
+  })
+
+  it('the plain state and an expiry inside the day are one sentence', () => {
+    expect(liveEndedState(undefined, venue)).toEqual(liveEndedState('expired', venue))
   })
 
   it('an unknown reason, or none, is the plain not-live state with Go live again', () => {
     for (const reason of [undefined, null, 'something_new']) {
       const s = liveEndedState(reason, venue)
-      expect(s.title).toBe('You’re not live here any more')
+      expect(s.title).toBe('Not live here any more')
       expect(s.action.kind).toBe('goLive')
     }
   })

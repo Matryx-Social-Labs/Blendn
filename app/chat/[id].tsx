@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { FlatList, Platform, StyleSheet, useWindowDimensions, View } from 'react-native'
+import { AccessibilityInfo, FlatList, Platform, StyleSheet, useWindowDimensions, View, type ViewToken } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { useBlendRoom } from '../../components/crews/BlendRoom'
@@ -74,6 +74,7 @@ import { withDaySeparators } from '../../lib/unreadDivider'
 import { useAuth } from '../../lib/useAuth'
 import { lockFor, useComposerLock, type ComposerLock } from '../../lib/useComposerLock'
 import { scrollListToEnd, useFollowEnd } from '../../lib/useFollowEnd'
+import type { PollRefusal } from '../../lib/chatPoll'
 import { useLatest } from '../../lib/useLatest'
 import { useOnBlock } from '../../lib/useOnBlock'
 import { useLiveSync } from '../../lib/useLiveSync'
@@ -89,6 +90,8 @@ const AT_END = 80
 /** iOS dismisses the keyboard interactively with the drag; Android on the drag (R3-D5 5.3). */
 const KEYBOARD_DISMISS = Platform.OS === 'ios' ? 'interactive' : 'on-drag'
 const REACTION_INDEX = Object.fromEntries(CHAT_REACTIONS.map((e, i) => [e, i])) as Record<string, number>
+/** A row counts as seen once a fifth of it is on screen. */
+const VIEWABLE = { itemVisiblePercentThreshold: 20 } as const
 const stamp = (m: { created_at: string }) => Date.parse(m.created_at) || 0
 
 /**
@@ -201,6 +204,12 @@ function GroupChatInner() {
   const memberCount = roomInfo.memberCount ? Math.max(0, roomInfo.memberCount - leftSince) : null
   /* A day before doors the room is served but not open: its header counts down, its composer says so (Flow 15 #8). */
   const opensIn = usePreEventRoom(eventRoom ? roomInfo.startTime : null)
+  /* The room opening is said aloud, once, as the countdown ends (iOS: nothing else announces it). */
+  const wasClosed = useRef(false)
+  useEffect(() => {
+    if (wasClosed.current && !opensIn && Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility('The room is open')
+    wasClosed.current = !!opensIn
+  }, [opensIn])
   const { showToast } = useToast()
 
   /* The long-press, a sender's card, your reaction's flight (#36, 5.1, #37). */
@@ -214,6 +223,14 @@ function GroupChatInner() {
   const [dockHeight, setDockHeight] = useState<number>(SIZE.input)
 
   const flatListRef = useRef<FlatList<ChatListItem>>(null)
+  /* Polls whose row has been on screen: a poll is read from the server only once it is seen (a room of thousands). */
+  const [viewablePolls, setViewablePolls] = useState<ReadonlySet<string>>(() => new Set())
+  // One function for the screen's life: FlatList refuses a changing `onViewableItemsChanged`.
+  const [onViewable] = useState(() => ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+    const seen = viewableItems.flatMap((v) => (v.item?.kind === 'message' && v.item.message_type === 'poll' ? [v.item.message_id as string] : []))
+    if (!seen.length) return
+    setViewablePolls((prev) => (seen.every((id) => prev.has(id)) ? prev : new Set([...prev, ...seen])))
+  })
   const isAtBottomRef = useRef(true)
   /* Messages that rise as they mount: a live arrival while you were at the bottom. Cleared after a second. */
   const arrivingRef = useRef(new Set<string>())
@@ -717,7 +734,13 @@ function GroupChatInner() {
   }
 
   /* Stable for the rows' memo: each reads the screen as it is when it fires. */
-  const handlersRef = useLatest({ openMenu, retrySend, react })
+  /* A vote the room itself refused drives the room's state, as any other refusal of it does. */
+  const pollRefusal = (reason: PollRefusal) => {
+    if (reason === 'NOT_LIVE') setNotLive(true)
+    else if (reason === 'NOT_IN_ROOM') setOutOfRoom(true)
+    else composer.setLock({ state: 'closed' })
+  }
+  const handlersRef = useLatest({ openMenu, retrySend, react, pollRefusal })
   const handlers = useMemo<RowHandlers>(
     () => ({
       menu: (m, a) => handlersRef.current.openMenu(m, a),
@@ -726,6 +749,7 @@ function GroupChatInner() {
       reply: (m) => setReplyingTo(m),
       sender: (m) => setCardFor({ id: m.sender_id, name: m.sender_name }),
       link: (url) => showSheet(linkSheet(url, 'room')),
+      pollRefusal: (reason) => handlersRef.current.pollRefusal(reason),
     }),
     [handlersRef]
   )
@@ -744,6 +768,7 @@ function GroupChatInner() {
         arriving={arrivingRef.current.has(item.message_id)}
         senderTappable={eventRoom}
         eventId={eventRoom ? roomInfo.eventId : null}
+        pollViewable={viewablePolls.has(item.message_id)}
         handlers={handlers}
       />
     )
@@ -776,6 +801,8 @@ function GroupChatInner() {
   ) : (
     <CountLine count={memberCount ?? 0} />
   )
+  // Advice before sending, never a gate (5.10): the server decides. A crew's room says its own sentence; the rest are anonymous.
+  const warning = useMemo(() => contactWarning(newMessage, roomKind === 'crew' ? 'crew' : 'anonymous'), [newMessage, roomKind])
   const dockBottom = keyboardUp ? SPACE.sm : Math.max(insets.bottom, SPACE.lg)
   /* Before the room opens the composer says so without a send being refused first; a refusal's own lock wins. */
   const lock: ComposerLock | null = composer.lock ?? (opensIn ? { state: 'notopen' } : null)
@@ -860,6 +887,8 @@ function GroupChatInner() {
                   </View>
                 )
               }
+              onViewableItemsChanged={onViewable}
+              viewabilityConfig={VIEWABLE}
               onContentSizeChange={follow.onContentSizeChange}
               onScrollBeginDrag={follow.onScrollBeginDrag}
               onScroll={(e) => {
@@ -894,8 +923,7 @@ function GroupChatInner() {
                 state={lock?.state ?? 'normal'}
                 reason={lock?.reason}
                 countdown={composer.countdown}
-                // Advice before sending, never a gate (5.10): the server decides; a crew's people already know each other.
-                warning={roomKind === 'blend' ? null : contactWarning(newMessage, eventRoom ? 'anonymous' : 'crew')}
+                warning={warning}
                 action={lock?.state === 'notcheckedin' && roomInfo.eventId ? { label: 'I’m going', onPress: () => void imGoing(), loading: rsvping } : undefined}
                 reply={replyingTo ? { name: replyingTo.sender_name, text: replyingTo.message_text } : null}
                 onCancelReply={() => setReplyingTo(null)}
