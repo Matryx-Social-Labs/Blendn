@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Image } from 'expo-image'
 import MapView, { Marker } from 'react-native-maps'
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { ScrollView, StyleSheet, Text, View } from 'react-native'
 import Animated, {
   Easing,
   FadeIn,
@@ -17,6 +17,7 @@ import Animated, {
 import type { DetailBlock } from '../../lib/eventDetails'
 import type { FeedMediaItem } from '../../lib/feedMedia'
 import { Avatar } from '../ds/Avatar'
+import { Spinner } from '../ds/Loader'
 import { RollingNumber } from '../ds/RollingNumber'
 import { SectionHeader } from '../ds/SectionHeader'
 import { font, useBoldText } from '../ds/shared'
@@ -412,7 +413,7 @@ export function SceneCTA({
         {/* Skips the entrance on first paint; only a *change* of icon or label animates. */}
         <LayoutAnimationConfig skipEntering>
           {pending ? (
-            <ActivityIndicator testID="scene-cta-pending" color={COLOR.textOnGradient} />
+            <Spinner testID="scene-cta-pending" color={COLOR.textOnGradient} />
           ) : icon && !note ? (
             <Animated.View key={iconKey} entering={reduceMotion ? changeFade : popIn}>
               {icon(COLOR.textOnGradient)}

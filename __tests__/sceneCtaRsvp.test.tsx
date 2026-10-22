@@ -34,6 +34,12 @@ describe('the RSVP slot', () => {
     expect(button.props.accessibilityState).toEqual(expect.objectContaining({ disabled: true, busy: true }))
   })
 
+  it('the pending spinner is the design system\'s, not the platform\'s (#24, #48): the last ActivityIndicator in the Scene is gone', () => {
+    const src = readFileSync(join(__dirname, '..', 'components', 'scene', 'SceneSections.tsx'), 'utf8')
+    expect(src).not.toContain('ActivityIndicator')
+    expect(src).toContain("<Spinner testID=\"scene-cta-pending\"")
+  })
+
   it('the screen is not optimistic: it marks the request pending and sets the status only from the answer', () => {
     const src = readFileSync(join(__dirname, '..', 'components', 'screens', 'EventDetailScreen.tsx'), 'utf8')
     const handler = src.slice(src.indexOf('const handleToggleRsvp'), src.indexOf('}, [id, user, event, rsvpStatus'))
