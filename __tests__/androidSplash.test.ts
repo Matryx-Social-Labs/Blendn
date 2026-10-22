@@ -7,7 +7,9 @@
  */
 import fs from 'fs'
 import path from 'path'
-import { PNG } from 'pngjs'
+
+// pngjs ships no types; it is here through Expo's own image tooling (expo-asset → @expo/image-utils).
+const { PNG } = require('pngjs') as { PNG: { sync: { read: (file: Buffer) => { width: number; height: number; data: Buffer } } } }
 
 const ROOT = path.join(__dirname, '..')
 const CANVAS_DP = 288
