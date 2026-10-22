@@ -2225,47 +2225,6 @@ class ApiClientClass {
     return this.queuedRequest<MyEventRating>(`/api/mobile/events/${encodeURIComponent(eventId)}/rating`)
   }
 
-  // === ORGANIZER ENDPOINTS ===
-
-  async updateEvent(
-    eventId: string,
-    data: { title?: string; description?: string; shortDescription?: string; status?: string }
-  ): Promise<ApiResponse<EventApiItem>> {
-    return this.queuedRequest<EventApiItem>(
-      `/api/mobile/events/${eventId}`,
-      {
-        method: 'PATCH',
-        body: JSON.stringify(data),
-      },
-      true,
-      2
-    )
-  }
-
-  async deleteEvent(eventId: string): Promise<ApiResponse<{ success: boolean }>> {
-    return this.queuedRequest<{ success: boolean }>(
-      `/api/mobile/events/${eventId}`,
-      { method: 'DELETE' },
-      true,
-      2
-    )
-  }
-
-  async sendAnnouncement(
-    eventId: string,
-    content: string
-  ): Promise<ApiResponse<{ id: string }>> {
-    return this.queuedRequest<{ id: string }>(
-      `/api/mobile/events/${eventId}/announce`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ content }),
-      },
-      true,
-      2
-    )
-  }
-
   // === PROFILE ENDPOINTS ===
 
   /**
