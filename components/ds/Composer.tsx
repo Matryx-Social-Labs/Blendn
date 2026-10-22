@@ -128,6 +128,7 @@ export function Composer({
 }: ComposerProps) {
   const contrast = useIncreaseContrast()
   useStateChange(state, reason)
+  useAnnounceWarning(warning)
   const gone = state === 'banned' || state === 'left' || state === 'ended'
   // The Android snackbar stands above the composer while it is drawn.
   const [height, setHeight] = useState(0)
@@ -199,6 +200,19 @@ function useStateChange(state: ComposerState, reason?: string) {
     // On a change of state only; the reason is read as it stood then.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state])
+}
+
+/**
+ * The warning appearing is announced (iOS has no live regions; Android reads the row's own): once as it goes from nothing to a
+ * sentence, not on every keystroke while it stays, and again if it goes and returns.
+ */
+function useAnnounceWarning(warning: string | null | undefined) {
+  const had = useRef(false)
+  useEffect(() => {
+    const has = !!warning
+    if (has && !had.current && Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(warning)
+    had.current = has
+  }, [warning])
 }
 
 function Field({

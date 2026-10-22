@@ -137,6 +137,18 @@ it('shows B nothing of A’s unsent DM, and B never sends it', async () => {
   expect(api.sendPrivateMessage).not.toHaveBeenCalled()
 })
 
+describe('a warning before contact details in a DM (5.10)', () => {
+  it('says it will send — a DM is flagged, never removed — and keeps Send enabled', async () => {
+    await open()
+    await act(async () => fireEvent.changeText(screen.getByLabelText('Message'), 'call me on 9876543210'))
+    expect(screen.getByText(/This looks like a phone number\. It will send\./)).toBeTruthy()
+    expect(screen.queryByText(/removed/)).toBeNull()
+    expect(screen.getByRole('button', { name: 'Send' }).props.accessibilityState).toMatchObject({ disabled: false })
+    await act(async () => fireEvent.changeText(screen.getByLabelText('Message'), 'see you there'))
+    expect(screen.queryByText(/This looks like/)).toBeNull()
+  })
+})
+
 describe('the reveal bar', () => {
   it('both anonymous: Show them and Ask them; asking turns it to Asked', async () => {
     api.requestReveal.mockResolvedValue({ success: true } as never)

@@ -89,12 +89,18 @@ export function findContactKinds(content: string): ContactKind[] {
   return kinds
 }
 
-/** Who reads the room: an anonymous room removes the message; a crew's people already know each other. */
-export type WarningAudience = 'anonymous' | 'crew'
+/**
+ * Where it is typed. A room (an event's, a place's or a Blend's, all anonymous) and a crew's room remove the message:
+ * the server hides it on write. A DM does not: blendn-admin lib/dm-moderation.ts flags contact details and lets the
+ * message through ("flagged, never refused"), read by a person only if somebody reports it, so its sentence must not
+ * say "removed".
+ */
+export type WarningAudience = 'anonymous' | 'crew' | 'dm'
 
 const WHAT_HAPPENS: Record<WarningAudience, string> = {
   anonymous: 'This room is anonymous — a message with contact details is removed before anyone sees it.',
-  crew: 'People in this crew know who you are; a message with contact details still goes out to everyone here.',
+  crew: 'A message with contact details is removed before anyone else sees it.',
+  dm: 'It will send. Nobody reads messages here unless somebody reports one.',
 }
 
 /** The sentence above the composer for what is being typed, or null when nothing in it looks like contact details. */

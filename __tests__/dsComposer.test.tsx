@@ -189,3 +189,18 @@ describe('<Composer> contact-details warning (5.10)', () => {
     expect(screen.queryByTestId('c-warning')).toBeNull()
   })
 })
+
+describe('<Composer> announces the warning as it appears (M5)', () => {
+  it('once on iOS as it goes from nothing to a sentence, not on every change of its text, and again after it goes', async () => {
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {})
+    const { rerender } = await render(composer({ value: 'a' }))
+    await rerender(composer({ value: 'call 9876543210', warning: 'This looks like a phone number.' }))
+    expect(announce).toHaveBeenCalledTimes(1)
+    expect(announce).toHaveBeenCalledWith('This looks like a phone number.')
+    await rerender(composer({ value: 'call 98765432101', warning: 'This looks like a phone number. More.' }))
+    expect(announce).toHaveBeenCalledTimes(1)
+    await rerender(composer({ value: 'hi', warning: null }))
+    await rerender(composer({ value: 'call 9876543210', warning: 'This looks like a phone number.' }))
+    expect(announce).toHaveBeenCalledTimes(2)
+  })
+})

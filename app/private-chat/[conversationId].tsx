@@ -13,6 +13,7 @@ import { Avatar } from '../../components/ds/Avatar'
 import { ChatBubble } from '../../components/ds/ChatBubble'
 import type { Rect } from '../../components/ds/chatShared'
 import { Composer } from '../../components/ds/Composer'
+import { contactWarning } from '../../lib/contactWarning'
 import { LongPressMenu, type MenuItem } from '../../components/ds/ContextMenu'
 import type { Face } from '../../components/ds/Facepile'
 import { Grain } from '../../components/ds/Grain'
@@ -766,6 +767,8 @@ function PrivateChatInner() {
                 state={lock?.state ?? 'normal'}
                 reason={lock?.reason}
                 countdown={composer.countdown}
+                // Advice, never a gate: a DM goes through flagged, so its sentence does not say "removed" (lib/contactWarning).
+                warning={contactWarning(newMessage, 'dm')}
                 reply={replyingTo ? { name: replyingTo.senderId === myId ? 'yourself' : name, text: quoteText(quoteFrom(replyingTo)) } : null}
                 onCancelReply={() => setReplyingTo(null)}
                 placeholder={`Message ${name}`}

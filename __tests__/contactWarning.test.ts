@@ -25,8 +25,10 @@ describe('the contact-details warning (a port of the server’s findContactInfo)
     expect(contactWarning('call 9876543210', 'anonymous')).toBe(
       'This looks like a phone number. This room is anonymous — a message with contact details is removed before anyone sees it.'
     )
-    expect(contactWarning('call 9876543210', 'crew')).toBe(
-      'This looks like a phone number. People in this crew know who you are; a message with contact details still goes out to everyone here.'
-    )
+    expect(contactWarning('call 9876543210', 'crew')).toBe('This looks like a phone number. A message with contact details is removed before anyone else sees it.')
+    // A DM is flagged, never removed: its sentence must not say so.
+    const dm = contactWarning('call 9876543210', 'dm')!
+    expect(dm).toBe('This looks like a phone number. It will send. Nobody reads messages here unless somebody reports one.')
+    expect(dm).not.toMatch(/removed/)
   })
 })
