@@ -32,6 +32,9 @@ export function claimBannerHost(host: BannerHost): () => void {
   }
 }
 
+/** Whether the Notifications screen is the one in front. */
+export const isOnNotificationsScreen = (): boolean => currentHost() === 'notifications'
+
 const currentHost = (): BannerHost | null => claims[claims.length - 1]?.host ?? null
 
 const PEOPLE = ['friend_request', 'match', 'reveal_request', 'reveal', 'message_request', 'board_request', 'private_message', 'group_message']

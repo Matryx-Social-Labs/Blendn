@@ -3,10 +3,10 @@ import * as Device from 'expo-device'
 import * as Notifications from 'expo-notifications'
 import { Platform } from 'react-native'
 import { useCallback } from 'react'
-import { useFocusEffect, type Href } from 'expo-router'
+import { router, useFocusEffect, type Href } from 'expo-router'
 import { openWhenReady } from './pendingRoute'
 import { apiClient, TokenStorage } from './apiClient'
-import { bannerPresentation } from './inAppBanners'
+import { bannerPresentation, isOnNotificationsScreen } from './inAppBanners'
 import { Logger } from './logger'
 import { setPushTokenRef, getPushTokenRef } from './pushTokenRef'
 
@@ -505,7 +505,18 @@ export function landingTarget(data: Record<string, any> | undefined): Href | nul
 export function landFromNotificationData(data: Record<string, any> | undefined) {
   try {
     const target = landingTarget(data)
-    if (target) openWhenReady(target)
+    if (!target) return
+    /*
+     * Already on the Notifications screen: a second instance would stack on it. Its params change in place
+     * (the ones the new target does not name are cleared, `at` makes a tap on the same row new), and the
+     * screen lands again on the new row.
+     */
+    if (isOnNotificationsScreen() && typeof target === 'object' && 'pathname' in target && target.pathname === '/notifications') {
+      const params: Record<string, string | undefined> = Object.fromEntries(LANDING_KEYS.map((k) => [k, undefined]))
+      router.setParams({ ...params, ...(target.params as Record<string, string>), at: String(Date.now()) })
+      return
+    }
+    openWhenReady(target)
   } catch (e) {
     Logger.warn('notifications', 'Failed to land from notification', { error: e })
   }

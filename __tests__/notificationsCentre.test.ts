@@ -234,8 +234,14 @@ describe('a tapped push lands where the request is answered (Flow 9, motion #50)
     jest.doMock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn() } }))
     const open = jest.fn()
     jest.doMock('../lib/pendingRoute', () => ({ openWhenReady: open }))
-    jest.doMock('expo-router', () => ({ router: { push: jest.fn() }, useFocusEffect: jest.fn() }))
-    return { lib: require('../lib/notifications') as typeof import('../lib/notifications'), open }
+    const setParams = jest.fn()
+    jest.doMock('expo-router', () => ({ router: { push: jest.fn(), setParams }, useFocusEffect: jest.fn() }))
+    return {
+      lib: require('../lib/notifications') as typeof import('../lib/notifications'),
+      banners: require('../lib/inAppBanners') as typeof import('../lib/inAppBanners'),
+      open,
+      setParams,
+    }
   }
 
   it('sends each request kind to the Notifications screen with the ids that name its row', () => {
@@ -265,6 +271,25 @@ describe('a tapped push lands where the request is answered (Flow 9, motion #50)
     expect(open).toHaveBeenCalledWith({ pathname: '/notifications', params: { type: 'friend_request', requestId: 'r1' } })
     lib.navigateFromNotificationData({ type: 'friend_request', requestId: 'r1' })
     expect(open).toHaveBeenLastCalledWith('/friends/add')
+  })
+
+  it('with the Notifications screen already open, updates its params in place instead of stacking a second one', () => {
+    const { lib, banners, open, setParams } = loadLib()
+    const release = banners.claimBannerHost('notifications')
+    lib.landFromNotificationData({ type: 'crew_invite', crewId: 'c2' })
+    expect(open).not.toHaveBeenCalled()
+    expect(setParams).toHaveBeenCalledTimes(1)
+    // The new target, the old ids cleared, and a stamp so a tap on the same row lands again.
+    expect(setParams.mock.calls[0][0]).toMatchObject({ type: 'crew_invite', crewId: 'c2', requestId: undefined, eventId: undefined, conversationId: undefined })
+    expect(typeof setParams.mock.calls[0][0].at).toBe('string')
+    // A kind that goes elsewhere still goes there, from the screen too.
+    lib.landFromNotificationData({ type: 'match', conversationId: 'v' })
+    expect(open).toHaveBeenCalledTimes(1)
+    release()
+    // Once it is not in front, it opens as before.
+    lib.landFromNotificationData({ type: 'friend_request', requestId: 'r1' })
+    expect(open).toHaveBeenCalledTimes(2)
+    expect(setParams).toHaveBeenCalledTimes(1)
   })
 
   it('the cold start and the warm tap both land, and so does the banner', () => {

@@ -16,7 +16,8 @@ const mockParams: Record<string, string> = {}
 jest.mock('expo-router', () => ({
   router: { back: jest.fn(), push: jest.fn() },
   useFocusEffect: (fn: () => void) => require('react').useEffect(() => fn(), [fn]),
-  useLocalSearchParams: () => mockParams,
+  // A new object per call, as the router hands out when params change.
+  useLocalSearchParams: () => ({ ...mockParams }),
   useIsFocused: () => true,
 }))
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 59, bottom: 34, left: 0, right: 0 }) }))
@@ -409,6 +410,27 @@ describe('landing from a push', () => {
     mockParams.conversationId = 'v9'
     await render(<Screen />)
     await waitFor(() => expect(screen.getByTestId('landing-rv', { includeHiddenElements: true })).toBeTruthy())
+  })
+
+  it('lands again, on the new row, when a push is tapped while the screen is open', async () => {
+    api.getNotifications.mockResolvedValue(
+      feed([friend, item({ id: 'f2', kind: 'friend_request', data: { requestId: 'r2' } }), match]) as never
+    )
+    mockParams.type = 'friend_request'
+    mockParams.requestId = 'r1'
+    const hidden = { includeHiddenElements: true }
+    const view = await render(<Screen />)
+    await waitFor(() => expect(screen.getByTestId('landing-f1', hidden)).toBeTruthy())
+    // The router updates the screen's params in place (`router.setParams`), with a stamp.
+    mockParams.requestId = 'r2'
+    mockParams.at = '1'
+    await view.rerender(<Screen />)
+    await waitFor(() => expect(screen.getByTestId('landing-f2', hidden)).toBeTruthy())
+    expect(screen.queryByTestId('landing-f1', hidden)).toBeNull()
+    // The same row tapped again is a new landing too.
+    mockParams.at = '2'
+    await view.rerender(<Screen />)
+    await waitFor(() => expect(screen.getByTestId('landing-f2', hidden)).toBeTruthy())
   })
 
   it('highlights nothing for a payload it cannot find', async () => {

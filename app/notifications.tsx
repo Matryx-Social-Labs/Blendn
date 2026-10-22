@@ -61,7 +61,7 @@ const EMPTY_OUT_REDUCED = FadeOut.duration(DURATION.quick).easing(Easing.bezier(
 /** A row that lands while the screen is open fades in on `base` (the first page never does). */
 const ARRIVE = FadeIn.duration(DURATION.base).easing(Easing.bezier(...EASING.entrance))
 
-type LandingParams = { type?: string; requestId?: string; crewId?: string; eventId?: string; conversationId?: string }
+type LandingParams = { type?: string; requestId?: string; crewId?: string; eventId?: string; conversationId?: string; at?: string }
 
 function NotificationsScreenContent() {
   const bold = useBoldText()
@@ -74,8 +74,9 @@ function NotificationsScreenContent() {
   const [allWaiting, setAllWaiting] = useState(false)
   const [pill, setPill] = useState(false)
   const scrolledPast = useRef(false)
-  const [landing, setLanding] = useState<string | null>(null)
-  const landed = useRef(false)
+  const [landing, setLanding] = useState<{ id: string; run: string } | null>(null)
+  // Which landing has been done: a push tapped while this screen is open sets new params (`at` makes a repeat tap new).
+  const landed = useRef<string | null>(null)
 
   const feed = useNotificationFeed({
     onArrive: () => {
@@ -106,8 +107,8 @@ function NotificationsScreenContent() {
   )
 
   const volatile = useMemo(
-    () => ({ fresh: feed.fresh, requests: feed.requestState, landing, live: feed.liveIds, bannerShown }),
-    [feed.fresh, feed.requestState, landing, feed.liveIds, bannerShown]
+    () => ({ fresh: feed.fresh, requests: feed.requestState, landing: landing?.run, live: feed.liveIds, bannerShown }),
+    [feed.fresh, feed.requestState, landing?.run, feed.liveIds, bannerShown]
   )
   const entries = useMemo(() => buildEntries(feed.groups, { allWaiting, hasMore: feed.hasMore }), [feed.groups, allWaiting, feed.hasMore])
 
@@ -117,13 +118,14 @@ function NotificationsScreenContent() {
     return findLandingRow(feed.items, { type, requestId, crewId, eventId, conversationId })?.id ?? null
   }, [params, feed.items])
   useEffect(() => {
-    if (feed.load !== 'ready' || !landingId || landed.current) return
+    const run = `${landingId}:${params.at ?? ''}`
+    if (feed.load !== 'ready' || !landingId || landed.current === run) return
     const index = entryIndexOf(entries, landingId)
     if (index < 0) return
     const timer = setTimeout(() => {
       // Once: a re-render before this fires cancels and reschedules it, so it is marked as it runs.
-      landed.current = true
-      setLanding(landingId)
+      landed.current = run
+      setLanding({ id: landingId, run })
       try {
         list.current?.scrollToIndex({ index, viewPosition: LANDING_POSITION, animated: !reduceMotion })
       } catch (error) {
@@ -132,7 +134,7 @@ function NotificationsScreenContent() {
       }
     }, LANDING_SETTLE_MS)
     return () => clearTimeout(timer)
-  }, [feed.load, landingId, entries, reduceMotion])
+  }, [feed.load, landingId, params.at, entries, reduceMotion])
 
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     bar.scrollProps.onScroll(e)
@@ -190,7 +192,7 @@ function NotificationsScreenContent() {
         onPress={() => open(row)}
         ground={ground}
       />
-      <LandingHighlight active={landing === row.id} onDone={() => setLanding(null)} testID={`landing-${row.id}`} />
+      <LandingHighlight key={landing?.id === row.id ? landing.run : 'rest'} active={landing?.id === row.id} onDone={() => setLanding(null)} testID={`landing-${row.id}`} />
     </View>
   )
 
