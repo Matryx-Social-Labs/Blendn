@@ -436,13 +436,29 @@ describe('the ⋯ menu and Clear all', () => {
     expect(api.clearNotifications).not.toHaveBeenCalled()
   })
 
-  it('does not promise the requests stay while the server clears them too', async () => {
+  it('does not promise the requests stay in this list while the server clears them too, and says where they still are', async () => {
     await render(<Screen />)
     await screen.findByText('You have a new match')
     await openMenu()
     fireEvent.press(screen.getByRole('button', { name: 'Clear all' }))
-    expect(await screen.findByText(/the requests waiting on you included/)).toBeTruthy()
-    expect(screen.queryByText(/Requests waiting on you stay/)).toBeNull()
+    expect(await screen.findByText(/Requests waiting on you stay open in Friends and Crews until you answer them/)).toBeTruthy()
+    expect(screen.queryByText(/Everything else leaves this list/)).toBeNull()
+    fireEvent.press(screen.getAllByText('Clear all').slice(-1)[0])
+    // Empty, and true about it: the requests were not answered by clearing.
+    expect(await screen.findByText('Quiet for now')).toBeTruthy()
+    expect(screen.getByText('Requests you haven’t answered are still open in Friends and Crews.')).toBeTruthy()
+  })
+
+  it('a clear the server never answers puts the list back, rather than show it empty over rows the server keeps', async () => {
+    api.clearNotifications.mockReturnValue(new Promise(() => {}) as never)
+    await render(<Screen />)
+    await screen.findByText('You have a new match')
+    await openMenu()
+    fireEvent.press(screen.getByRole('button', { name: 'Clear all' }))
+    await screen.findByText('Clear all notifications?')
+    fireEvent.press(screen.getAllByText('Clear all').slice(-1)[0])
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Couldn’t clear. Try again.', 'error', { haptic: 'error' }), { timeout: ANSWER_DEADLINE_MS * 2 })
+    expect(screen.getByText('You have a new match')).toBeTruthy()
   })
 
   it('promises it once the server says it keeps them, and keeps them on screen', async () => {

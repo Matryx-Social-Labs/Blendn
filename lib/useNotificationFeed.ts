@@ -58,6 +58,7 @@ export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) =
   const [requestState, setRequestState] = useState<Readonly<Record<string, RequestState>>>({})
   const [answered, setAnswered] = useState<ReadonlyMap<string, Outcome>>(new Map())
   const [clearKeepsRequests, setClearKeepsRequests] = useState(false)
+  const [clearedOpenRequests, setClearedOpenRequests] = useState(false)
   /** When the page was read: "2 min ago" is measured from here, so a render never reads the clock. */
   const [readAt, setReadAt] = useState(0)
   /** The rows that landed while the screen was open: they fade in, the first page never does. */
@@ -262,18 +263,25 @@ export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) =
     [touch, showToast, setRequest, remember, dwellThenResolve]
   )
 
-  /** Clears the list; what the server keeps is whatever it says it keeps (`clearKeepsRequests`). Puts it back on failure. */
+  /**
+   * Clears the list; what the server keeps is whatever it says it keeps (`clearKeepsRequests`). Puts it back on failure,
+   * and when the server has not answered inside `ANSWER_DEADLINE_MS` (an empty list over rows the server still has is false).
+   * Today's server deletes every row, requests too, but a request itself is not answered by it: `clearedOpenRequests`
+   * says the list was cleared over some, so the empty state can say where they still are.
+   */
   const clear = useCallback(async () => {
     const before = itemsRef.current
-    const keep = clearKeepsRequests ? before.filter((n) => isRequestKind(n.kind) && n.open !== false) : []
-    setItems(keep)
+    const open = before.filter((n) => isRequestKind(n.kind) && n.open !== false && answered.get(n.id) === undefined)
+    setItems(clearKeepsRequests ? open : [])
     setPaging({ hasMore: false })
+    setClearedOpenRequests(!clearKeepsRequests && open.length > 0)
     const restore = () => {
       setItems(before)
+      setClearedOpenRequests(false)
       showToast('Couldn’t clear. Try again.', 'error', { haptic: 'error' })
     }
     try {
-      const result = await apiClient.clearNotifications()
+      const result = await settleWithin(apiClient.clearNotifications(), ANSWER_DEADLINE_MS, { success: false, error: TOOK_TOO_LONG })
       if (!result.success) {
         Logger.warn('notifications', 'clear:failed', { error: result.error as never })
         restore()
@@ -282,7 +290,7 @@ export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) =
       Logger.warn('notifications', 'clear:failed', { error: error as never })
       restore()
     }
-  }, [clearKeepsRequests, showToast])
+  }, [clearKeepsRequests, answered, showToast])
 
   return {
     load,
@@ -293,6 +301,7 @@ export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) =
     loadingMore,
     refreshing,
     clearKeepsRequests,
+    clearedOpenRequests,
     liveIds,
     items,
     retry,

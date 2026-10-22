@@ -36,6 +36,9 @@ import { useTopBarOverlay } from '../lib/useTopBarState'
 
 /** What the screen says when it has nothing to show, and when it could not read (Flow 9 · 9.2 frames 02, 03). */
 const EMPTY_BODY = 'Friend requests, matches, crew news and event changes land here. Messages are in Banter.'
+/** The server clears every row, requests too, but answers none of them: they stay open where they live. */
+const CLEAR_OVER_REQUESTS = 'This clears every notification here. Requests waiting on you stay open in Friends and Crews until you answer them. Nothing is sent to anyone.'
+const EMPTY_AFTER_CLEAR = 'Requests you haven’t answered are still open in Friends and Crews.'
 const FOOTNOTE = 'That’s everything we keep: read notifications for 30 days, unread for 90.'
 const PUSH_OFF_TEXT = 'Push is off. These still land here, but your phone won’t tell you.'
 const DONE_TEXT: Record<string, string> = { friend_request: 'You’re friends now' }
@@ -167,7 +170,7 @@ function NotificationsScreenContent() {
       message: feed.clearKeepsRequests
         ? 'Requests waiting on you stay. Everything else leaves this list; nothing is sent to anyone.'
         : waiting
-          ? 'This clears every notification here, the requests waiting on you included. Nothing is sent to anyone.'
+          ? CLEAR_OVER_REQUESTS
           : 'This clears the list. Nothing is sent to anyone.',
       actions: [
         { label: 'Clear all', variant: 'destructive', then: () => void feed.clear() },
@@ -277,7 +280,7 @@ function NotificationsScreenContent() {
   } else if (!entries.length) {
     state = (
       <Animated.View exiting={reduceMotion ? EMPTY_OUT_REDUCED : emptyOut}>
-        <StateScreen icon="bell" title="Quiet for now" body={EMPTY_BODY} gutter testID="notifications-empty" />
+        <StateScreen icon="bell" title="Quiet for now" body={feed.clearedOpenRequests ? EMPTY_AFTER_CLEAR : EMPTY_BODY} gutter testID="notifications-empty" />
       </Animated.View>
     )
   }
