@@ -1,12 +1,12 @@
 import { Stack } from 'expo-router'
-import { EMBER } from '../../lib/theme'
+import { COLOR } from '../../lib/design/tokens'
 
 export default function ChatLayout() {
   return (
     <Stack
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: EMBER.bg },
+        contentStyle: { backgroundColor: COLOR.ink },
       }}
     />
   )

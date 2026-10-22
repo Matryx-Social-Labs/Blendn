@@ -15,7 +15,7 @@ import { Text } from '../ui/Text'
 import { BOARD_MAX_POST_LENGTH, boardMarkSeed, spacesLabel } from '../../lib/board'
 import type { BoardPostView } from '../../lib/chatPaging'
 import { COLOR, FONT_FAMILY, ICON as DS_ICON, RADIUS, SPACE } from '../../lib/design/tokens'
-import { EMBER, EMBER_RADIUS, ICON, OPACITY } from '../../lib/theme'
+import { ICON, OPACITY } from '../../lib/theme'
 
 /**
  * The board's pieces (Flow 4 Board, flow4.js `post` and `board`). The rules
@@ -68,12 +68,12 @@ export function BoardEntry({ onPress }: { onPress: () => void }) {
       accessibilityLabel="The Board. Going alone? See who is looking for company, or offer a space."
       style={({ pressed }) => [styles.entry, pressed && styles.pressed]}
     >
-      <Ionicons name="people-outline" size={ICON.lg} color={EMBER.textPrimary} />
+      <Ionicons name="people-outline" size={ICON.lg} color={COLOR.textPrimary} />
       <View style={styles.entryText}>
         <Text variant="bodyStrong">The Board</Text>
         <Text variant="meta">Going alone? See who&apos;s looking for company — or offer a space.</Text>
       </View>
-      <Ionicons name="chevron-forward" size={ICON.md} color={EMBER.textSecondary} />
+      <Ionicons name="chevron-forward" size={ICON.md} color={COLOR.textSecondary} />
     </Pressable>
   )
 }
@@ -388,8 +388,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: SPACE.lg,
     padding: SPACE.lg,
-    borderRadius: EMBER_RADIUS.md,
-    backgroundColor: EMBER.surfaceSunken,
+    borderRadius: RADIUS.rowInCard,
+    backgroundColor: COLOR.surfaceSunken,
   },
   entryText: { flex: 1, gap: SPACE.xxs },
 
