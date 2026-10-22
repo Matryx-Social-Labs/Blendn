@@ -120,7 +120,7 @@ function CrewStripRow({ crew, onTell, testID }: { crew: StripCrew; onTell: (id: 
 function TellButton({ sending, onPress, testID }: { sending: boolean; onPress: () => void; testID?: string }) {
   return (
     <Button
-      kind="secondary"
+      kind="lit"
       size="raised"
       icon="hand"
       label="Tell your crew — We’re here"

@@ -60,7 +60,7 @@ export function ExpiryPrompt({
         icon="moon"
         title="Today’s room has closed"
         body={`${SERVER.reset} Pseudonyms reset with it.`}
-        actions={[{ label: 'Done for now', kind: 'strong', onPress: onDone }]}
+        actions={[{ label: 'Done for now', kind: 'lit', onPress: onDone }]}
       />
     )
   }

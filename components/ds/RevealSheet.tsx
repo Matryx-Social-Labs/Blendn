@@ -176,7 +176,7 @@ export function RevealSide({
             </View>
           ) : mine && onReveal ? (
             <View style={styles.action}>
-              <Button kind="strong" size="sm" label={side.kind === 'crew' ? 'Reveal my crew' : 'Reveal me'} onPress={onReveal} />
+              <Button kind="lit" size="sm" label={side.kind === 'crew' ? 'Reveal my crew' : 'Reveal me'} onPress={onReveal} />
             </View>
           ) : null}
         </View>

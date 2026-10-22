@@ -115,7 +115,7 @@ export function VenueRegulars({ venueId, venueName }: { venueId: string; venueNa
           ))}
           <View style={styles.actions}>
             <Button
-              kind="strong"
+              kind="lit"
               size="md"
               label={`Let ${venueName} know`}
               accessibilityLabel={`Let ${venueName} know I’m a regular`}

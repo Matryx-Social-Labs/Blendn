@@ -44,10 +44,10 @@ type RefusalWords = { venue: string; event: string; hours: string; message?: str
  * (the paywall, on "Staying live is part of Blend'n+"). No haptic, in any.
  */
 function refusalSheet(refusal: GoLiveRefusal, w: RefusalWords, act: () => void, alt: () => void, close: () => void) {
-  const then = (label: string, kind: SheetAction['kind'] = 'strong'): SheetAction[] => [{ label, kind, onPress: act }]
+  const then = (label: string, kind: SheetAction['kind'] = 'lit'): SheetAction[] => [{ label, kind, onPress: act }]
   const tertiary = (label: string): SheetAction => ({ label, kind: 'tertiary', onPress: close })
   /** Nothing to do but read it. */
-  const read: SheetAction[] = [{ label: 'Close', kind: 'strong', onPress: close }]
+  const read: SheetAction[] = [{ label: 'Close', kind: 'secondary', onPress: close }]
   switch (refusal) {
     case 'notHere':
       return { icon: 'map-pin' as const, title: 'Not here yet', body: `${w.message ?? SERVER.notHere(w.venue)} Go live once you’re inside.`, actions: [...then('Open Maps'), tertiary('Close')] }

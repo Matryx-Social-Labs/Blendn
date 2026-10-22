@@ -278,7 +278,7 @@ export function useBlendRoom(blendId: string | null, top: number): BlendRoomChro
           </Text>
           <Text style={[font('body', bold), styles.secondary]}>{blendWelcome(blend.closesAt, venue)}</Text>
           <View style={styles.cardActions}>
-            <Button kind="strong" size="md" label="Got it" pressHaptic={false} onPress={() => markCoachUsed('blend_first_open')} style={styles.flex} />
+            <Button kind="lit" size="md" label="Got it" pressHaptic={false} onPress={() => markCoachUsed('blend_first_open')} style={styles.flex} />
             <Button kind="secondary" size="md" label="Leave" onPress={leave} style={styles.flex} />
           </View>
         </Animated.View>

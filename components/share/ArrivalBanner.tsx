@@ -70,7 +70,7 @@ export function ArrivalBanner({
         ) : null}
       </View>
       <Button
-        kind="strong"
+        kind="lit"
         size="sm"
         label="Open"
         accessibilityLabel={`Open ${title}`}

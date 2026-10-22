@@ -126,8 +126,10 @@ export function StateScreen({ icon, title, body, bodyLink, lead, note, noteMono 
       ) : null}
     </View>
   )
+  // A lit action is never 56 pt (the primary's): a state with one stacks all of its actions at 48.
+  const actionSize = actions.some((a) => a.kind === 'lit') ? 'md' : undefined
   const buttons = actions.map(({ kind = 'primary', loading, ...action }) => (
-    <Button key={action.label} kind={kind} loading={loading || (busy && kind === 'primary')} {...action} />
+    <Button key={action.label} kind={kind} size={actionSize} loading={loading || (busy && kind === 'primary')} {...action} />
   ))
 
   if (!screen) {

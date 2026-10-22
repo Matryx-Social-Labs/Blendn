@@ -50,7 +50,7 @@ export function AnnouncementSheet({
       title="Send announcement"
       body="This message is broadcast to everyone in the event chat."
       actions={[
-        { label: 'Send', kind: 'strong', onPress: onSend, loading: sending, disabled: !text.trim() || over, testID: 'announcement-send' },
+        { label: 'Send', kind: 'primary', onPress: onSend, loading: sending, disabled: !text.trim() || over, testID: 'announcement-send' },
         { label: 'Cancel', kind: 'tertiary', onPress: onClose },
       ]}
       testID="announcement-sheet"
@@ -98,7 +98,7 @@ export function EditEventSheet({
       title="Edit event"
       body="Changes are visible to everyone viewing this event."
       actions={[
-        { label: 'Save', kind: 'strong', onPress: onSave, loading: saving, disabled: !title.trim() || overTitle || overShort || overDescription, testID: 'edit-save' },
+        { label: 'Save', kind: 'primary', onPress: onSave, loading: saving, disabled: !title.trim() || overTitle || overShort || overDescription, testID: 'edit-save' },
         { label: 'Cancel', kind: 'tertiary', onPress: onClose },
       ]}
       testID="edit-sheet"

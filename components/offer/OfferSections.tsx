@@ -160,7 +160,7 @@ export function RegularAsk({
       <FactRow icon="hand-heart" title="Why" text="so the staff can say hi or look after you" />
       <View style={styles.actions}>
         <View style={styles.fill}>
-          <Button kind="strong" size="md" label={`Let ${venueName} know`} loading={saving} onPress={onYes} />
+          <Button kind="lit" size="md" label={`Let ${venueName} know`} loading={saving} onPress={onYes} />
         </View>
         <View style={styles.fill}>
           <Button kind="secondary" size="md" label="Not now" disabled={saving} onPress={onLater} />

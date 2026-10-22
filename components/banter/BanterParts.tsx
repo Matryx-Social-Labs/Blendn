@@ -274,8 +274,9 @@ export function RequestCard({
         />
         {/* Its H.success comes with the server's answer (Flow 5 #05), so no press haptic. */}
         <Button
-          kind="strong"
+          kind="lit"
           size="md"
+          icon={accept === 'Join' ? 'users' : 'user-check'}
           label={accept}
           accessibilityLabel={accept === 'Join' ? `Join ${name}` : `Accept the request from ${name}`}
           loading={pending}

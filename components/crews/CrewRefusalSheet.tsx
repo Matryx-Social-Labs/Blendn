@@ -31,13 +31,13 @@ export function CrewRefusalSheet({ refusal, onClose }: { refusal: CrewRefusal | 
         gate
           ? {
               label: 'Finish setting up',
-              kind: 'strong',
+              kind: 'lit',
               onPress: () => {
                 onClose()
                 router.push(ONBOARDING_ROUTES.basics as never)
               },
             }
-          : { label: 'OK', kind: 'strong', onPress: onClose },
+          : { label: 'OK', kind: 'lit', onPress: onClose },
       ]}
       testID="crew-refusal"
     />

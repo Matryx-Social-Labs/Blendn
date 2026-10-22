@@ -183,10 +183,10 @@ describe('the Me tab is your profile, with no separate preview', () => {
     expect(src).toContain("label: 'Settings'")
   })
 
-  it('puts the header flat on the page: one display line, and Edit profile as the DS secondary button', () => {
+  it('puts the header flat on the page: one display line, and Edit profile as the DS lit button', () => {
     const me = codeOnly(read('components/profile/MeSections.tsx'))
     expect(me.match(/font\('display'/g)).toHaveLength(2)
-    expect(me).toContain('<Button kind="secondary" size="md" icon="pencil" label="Edit profile"')
+    expect(me).toContain('<Button kind="lit" size="md" icon="pencil" label="Edit profile"')
     expect(OWN()).not.toContain('surfaceMedia')
   })
 

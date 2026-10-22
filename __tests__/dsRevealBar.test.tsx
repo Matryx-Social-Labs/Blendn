@@ -10,6 +10,7 @@ import React from 'react'
 import { AccessibilityInfo, StyleSheet } from 'react-native'
 
 import { RevealBar } from '../components/ds/RevealBar'
+import { SELECTION } from '../components/ds/shared'
 import { COLOR, MATERIAL, RADIUS } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 
@@ -30,14 +31,14 @@ it('is a radius 24 panel on the sheet tier', async () => {
   expect(flat('r')).toMatchObject({ borderRadius: RADIUS.sheet })
 })
 
-it('anonymous both ways: both sides read, then Show them (white) and Ask them, silently', async () => {
+it('anonymous both ways: both sides read, then Show them (lit) and Ask them, silently', async () => {
   const onShow = jest.fn()
   const onAsk = jest.fn()
   const haptics = Object.keys(H).map((k) => jest.spyOn(H, k as keyof typeof H).mockImplementation(() => {}))
   await draw({ onShow, onAsk })
   expect(screen.getByLabelText('You, Night Cat, anonymous. Cosmic Panda, anonymous.')).toBeTruthy()
   const show = screen.getByRole('button', { name: 'Show them who you are' })
-  expect(StyleSheet.flatten(show.props.style).backgroundColor).toBe(COLOR.textPrimary)
+  expect(StyleSheet.flatten(show.props.style).backgroundColor).toBe(SELECTION.ember.fill)
   const ask = screen.getByRole('button', { name: 'Ask them' })
   expect(StyleSheet.flatten(ask.props.style).backgroundColor).toBe(MATERIAL.fillOnGlass)
   await fireEvent(show, 'pressIn')

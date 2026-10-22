@@ -576,7 +576,8 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
         actions={[
           {
             label: 'Open blendn.app',
-            kind: 'strong',
+            kind: 'lit',
+            icon: 'external-link',
             onPress: () => {
               setSheet(null)
               openClaim()

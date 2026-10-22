@@ -201,7 +201,7 @@ function MineFooter({ count, onTakeDown }: { count: number; onTakeDown: () => vo
  * Ask, then the answer in place.
  *
  * No confirm dialog: the ask is the moment somebody feels most exposed, and a
- * "Are you sure?" says it is dangerous. A strong neutral (white), not the
+ * "Are you sure?" says it is dangerous. A lit action in the event's hue, not the
  * gradient; no press haptic, `H.success` when the ask is recorded (the
  * screen's). The button holds a spinner while the request is out, then the
  * card says what happened. A refusal is the server's sentence, destructive.
@@ -226,8 +226,9 @@ function AskFooter({ ask, full, author, onAsk }: { ask: AskState; full: boolean;
       ) : null}
       <Button
         label="Ask to join"
-        kind="strong"
+        kind="lit"
         size="md"
+        icon="hand-heart"
         pressHaptic={false}
         loading={ask.kind === 'asking'}
         onPress={onAsk}

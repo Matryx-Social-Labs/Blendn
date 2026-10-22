@@ -19,6 +19,7 @@ import { Grain } from '../../components/ds/Grain'
 import { ImageViewer } from '../../components/ds/ImageViewer'
 import { Orbs } from '../../components/ds/Orbs'
 import { RevealBar } from '../../components/ds/RevealBar'
+import { HueProvider } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { TypingIndicator } from '../../components/ds/TypingIndicator'
 import { DayPill, UnreadDivider as UnreadRule } from '../../components/ds/UnreadDivider'
@@ -895,12 +896,17 @@ const styles = StyleSheet.create({
 /*
  * Wrapped so `lib/perf.tsx` can report what this screen costs to render.
  * `ScreenProfiler` is the children untouched in production — see its header.
+ *
+ * Rose world: a private chat is together, so one hue on this screen (`HueProvider`): Say hi, the reveal bar and the reveal
+ * sheets light in it.
  */
 export default function PrivateChat() {
   if (!idParam(useLocalSearchParams().conversationId)) return <BrokenLink />
   return (
     <ScreenProfiler id="dm">
-      <PrivateChatInner />
+      <HueProvider value="rose">
+        <PrivateChatInner />
+      </HueProvider>
     </ScreenProfiler>
   )
 }

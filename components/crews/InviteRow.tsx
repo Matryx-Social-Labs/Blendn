@@ -36,8 +36,9 @@ export function InviteRow({ row, onSee, now }: { row: InviteRowData; onSee: () =
       </View>
       {lapsed ? null : (
         <Button
-          kind="strong"
+          kind="lit"
           size="sm"
+          icon="users"
           label="See invite"
           pressHaptic={false}
           accessibilityLabel={`See invite, ${invite.name}`}

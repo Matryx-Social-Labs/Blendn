@@ -53,7 +53,7 @@ export function SayHi({ line, onPress }: { line: string | null; onPress: () => v
   return (
     <Animated.View exiting={FadeOut.duration(DURATION.quick)} style={styles.sayHi}>
       {line ? <Text style={[font('meta', bold), styles.secondary]}>{line}</Text> : null}
-      <Button kind="secondary" size="md" label="Say hi" onPress={onPress} accessibilityHint="Sends “Hey 👋”" testID="dm-say-hi" />
+      <Button kind="lit" size="md" icon="hand" label="Say hi" onPress={onPress} accessibilityHint="Sends “Hey 👋”" testID="dm-say-hi" />
     </Animated.View>
   )
 }
@@ -122,7 +122,7 @@ export function NudgeLine({ text }: { text: string }) {
 
 /**
  * Showing them who you are (Flow 5 DM #06–#07): the confirm says it can't be
- * undone before the tap — Show them is the strong white, never the gradient
+ * undone before the tap — Show them is lit in the screen's rose, never the gradient
  * (Send is this screen's primary), and its haptic is the server's H.success.
  * Refused for want of a photo, Not yet says the server's sentence.
  */
@@ -151,7 +151,7 @@ export function RevealSheets({
         title={copy.title}
         body={copy.body}
         actions={[
-          { label: copy.confirm, kind: 'strong', onPress: onShow, loading: busy, pressHaptic: false },
+          { label: copy.confirm, kind: 'lit', onPress: onShow, loading: busy, pressHaptic: false },
           { label: 'Not now', kind: 'tertiary', onPress: onClose },
         ]}
         testID="dm-reveal-sheet"
@@ -163,7 +163,7 @@ export function RevealSheets({
         title="Not yet"
         body={sheet && sheet !== 'confirm' ? sheet.notYet : undefined}
         actions={[
-          { label: 'Add a photo', kind: 'strong', onPress: onAddPhoto },
+          { label: 'Add a photo', kind: 'lit', onPress: onAddPhoto },
           { label: 'Close', kind: 'tertiary', onPress: onClose },
         ]}
         testID="dm-not-yet"

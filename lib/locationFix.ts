@@ -124,7 +124,7 @@ async function freshFix(maxAccuracyM: number): Promise<{ fix: Location.LocationO
 }
 
 /**
- * A tray button. `kind` is the design's (`<Sheet>`, Flow 4 Tonight #15–#26: Open Settings is the strong neutral, Not
+ * A tray button. `kind` is the design's (`<Sheet>`, Flow 4 Tonight #15–#26: Open Settings is lit, Not
  * now and Cancel are text); a tray that names only a `variant` gets the kind it stands for (`trayKind`).
  */
 export type TrayButton = {
@@ -201,7 +201,7 @@ export async function getCurrentLocation({
     {
       label: 'Open Settings',
       variant: 'primary',
-      kind: 'strong',
+      kind: 'lit',
       onPress: () => {
         closeTray()
         Linking.openSettings().catch(() => {})

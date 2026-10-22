@@ -34,7 +34,7 @@ export function LocationAskCard({
         </Text>
       ) : null}
       <Text style={[font('meta', bold), styles.secondary]}>{body}</Text>
-      <Button kind="secondary" size="raised" icon={icon} label={label} onPress={onAsk} style={styles.button} testID={testID && `${testID}-button`} />
+      <Button kind="lit" size="raised" icon={icon} label={label} onPress={onAsk} style={styles.button} testID={testID && `${testID}-button`} />
     </View>
   )
 }

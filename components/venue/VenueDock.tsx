@@ -143,7 +143,7 @@ export function VenueDock({
         <View style={styles.liveRow}>
           <LivePill name={name} live={live} onZero={onZero} onPress={onPill} />
           {live.chatGroupId ? (
-            <Button label="Open the room" kind="secondary" size="md" icon="radio" onGlass onPress={onOpenRoom} style={styles.grow} testID="venue-open-room" />
+            <Button label="Open the room" kind="lit" size="md" icon="radio" onPress={onOpenRoom} style={styles.grow} testID="venue-open-room" />
           ) : (
             <View style={styles.grow} />
           )}

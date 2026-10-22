@@ -37,7 +37,7 @@ export function PresenceSheets({
         body={PRESENCE_COPY.ask.body}
         testID="presence-ask"
         actions={[
-          { label: PRESENCE_COPY.ask.stay, kind: 'strong', pressHaptic: false, onPress: onStay },
+          { label: PRESENCE_COPY.ask.stay, kind: 'lit', pressHaptic: false, onPress: onStay },
           { label: PRESENCE_COPY.ask.leave, kind: 'secondary', pressHaptic: () => H.destructive(), onPress: onLeave },
         ]}
       />
@@ -48,7 +48,7 @@ export function PresenceSheets({
         title={PRESENCE_COPY.autoCheckedOut.title}
         body={PRESENCE_COPY.autoCheckedOut.body}
         testID="presence-notice"
-        actions={[{ label: 'Got it', kind: 'strong', pressHaptic: false, onPress: onNoticeDone }]}
+        actions={[{ label: 'Got it', kind: 'lit', pressHaptic: false, onPress: onNoticeDone }]}
       />
     </>
   )

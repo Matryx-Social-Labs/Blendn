@@ -19,7 +19,7 @@ const SIDE_FACE = 36
  * A DM between two anonymous people opens with this (guidelines/components/RevealBar.html),
  * on the sheet tier: you on the left, them on the right, each a face, a name
  * and an eye that says seen or anonymous. Under it the one action: "Show them
- * who you are" (strong white, irreversible: a sheet confirms it) with "Ask
+ * who you are" (lit, irreversible: a sheet confirms it) with "Ask
  * them" beside it. Once you've shown yourself it says so and waits; once both
  * have, the caller drops the bar. Designed as a moment (§12), not a setting.
  *
@@ -93,7 +93,7 @@ export function RevealBar({
         </View>
       ) : (
         <View testID={testID && `${testID}-actions`} style={styles.actions}>
-          <Button kind="strong" size="md" icon="eye" label="Show them who you are" onPress={onShow} previewState={previewState} style={styles.grow} testID={testID && `${testID}-show`} />
+          <Button kind="lit" size="md" icon="eye" label="Show them who you are" onPress={onShow} previewState={previewState} style={styles.grow} testID={testID && `${testID}-show`} />
           {state === 'none' ? <Button kind="secondary" size="md" onGlass label="Ask them" onPress={onAsk} testID={testID && `${testID}-ask`} /> : null}
         </View>
       )}

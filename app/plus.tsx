@@ -310,7 +310,7 @@ function PlusScreenContent() {
               icon="cloud-off"
               title="Couldn’t load prices"
               body="Check your connection and try again."
-              actions={[{ label: 'Try again', kind: 'secondary', onPress: retryOffers }]}
+              actions={[{ label: 'Try again', kind: 'lit', onPress: retryOffers }]}
               testID="plus-prices-failed"
             />
           </View>

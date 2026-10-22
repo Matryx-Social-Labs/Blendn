@@ -87,7 +87,7 @@ function AddFriendsScreenContent() {
         </Text>
         <InviteLinkCard url={invite?.url} failed={failed} name={user?.name} photo={user?.image} />
         {failed && !invite ? (
-          <Button label="Try again" onPress={() => void retryLink()} loading={reloadingLink} />
+          <Button kind="lit" size="md" icon="rotate-ccw" label="Try again" onPress={() => void retryLink()} loading={reloadingLink} />
         ) : (
           <Button label="Share my link" icon="share" onPress={() => void share()} disabled={!invite} />
         )}

@@ -183,7 +183,7 @@ export function WhosHere({ live, onSeeWho }: { live: VenueDetail['live']; onSeeW
             {liveWord ? `${liveWord} live · ` : ''}
             Pseudonyms only, until someone reveals.
           </Text>
-          <Button kind="secondary" size="md" icon="users" label="See who’s here" onPress={onSeeWho} testID="venue-see-who" />
+          <Button kind="lit" size="md" icon="users" label="See who’s here" onPress={onSeeWho} testID="venue-see-who" />
         </>
       ) : (
         <View style={styles.note}>

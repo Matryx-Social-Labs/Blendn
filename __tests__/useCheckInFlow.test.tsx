@@ -214,11 +214,11 @@ describe('the sheets it asks for (Flow 4 Tonight #15–#22)', () => {
     ({ kind: 'refused', refusal: { ...checkInRefusal(errorCode, 'The server’s sentence.'), title, offerDirections }, errorCode, alreadyCheckedIn: false }) as CheckInOutcome
   const buttons = () => (props.showTray.mock.calls[0][2] as { label: string; kind?: string }[]).map((b) => [b.label, b.kind])
 
-  it('Not quite there yet: the server’s sentence, map-pin, Open Maps (strong) and Close, one H.error', async () => {
+  it('Not quite there yet: the server’s sentence, map-pin, Open Maps (lit) and Close, one H.error', async () => {
     const { done } = await checkIn(refused('OUT_OF_RANGE', 'Not quite there yet', true))
     expect(await done).toBe('refused')
     expect(props.showTray).toHaveBeenCalledWith('Not quite there yet', 'The server’s sentence.', expect.any(Array), { icon: 'map-pin' })
-    expect(buttons()).toEqual([['Close', 'tertiary'], ['Open Maps', 'strong']])
+    expect(buttons()).toEqual([['Close', 'tertiary'], ['Open Maps', 'lit']])
     expect(error).toHaveBeenCalledTimes(1)
     expect(success).not.toHaveBeenCalled()
   })

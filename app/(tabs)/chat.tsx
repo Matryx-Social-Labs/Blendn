@@ -26,7 +26,7 @@ import { BoardRequestsSection } from '../../components/board/BoardRequestsSectio
 import { LeaveRoomSheet, MuteSheet } from '../../components/chat/RoomSheets'
 import { SearchField } from '../../components/ds/SearchField'
 import { SectionHeader } from '../../components/ds/SectionHeader'
-import { font, useBoldText } from '../../components/ds/shared'
+import { font, HueProvider, useBoldText } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { SwipeRow, type SwipeAction } from '../../components/ds/SwipeRow'
 import { NotificationBell } from '../../components/pulse/NotificationBell'
@@ -508,7 +508,7 @@ function ChatInner() {
             <StateScreen
               icon="search"
               title={`No chats match “${query.trim()}”`}
-              actions={[{ label: 'Clear search', kind: 'secondary', onPress: () => setQuery('') }]}
+              actions={[{ label: 'Clear search', kind: 'lit', onPress: () => setQuery('') }]}
               testID="banter-no-match"
             />
           ) : inbox.listFailed ? (
@@ -585,11 +585,16 @@ const styles = StyleSheet.create({
 /*
  * Wrapped so `lib/perf.tsx` can report what this screen costs to render.
  * `ScreenProfiler` is the children untouched in production — see its header.
+ *
+ * Rose world: Banter is together, so one hue on this screen (`HueProvider`): the request rows' Accept and Join, the recovery
+ * actions and the room sheets light in it.
  */
 export default function Chat() {
   return (
     <ScreenProfiler id="banter">
-      <ChatInner />
+      <HueProvider value="rose">
+        <ChatInner />
+      </HueProvider>
     </ScreenProfiler>
   )
 }

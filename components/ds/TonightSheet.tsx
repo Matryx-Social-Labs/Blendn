@@ -33,9 +33,9 @@ export type TonightPick = 'night' | 'monthly'
 function triggerCopy(trigger: TonightTrigger, venue: string, crew: string): { title: string; line: string; free: string; freeKind: ButtonKind } {
   switch (trigger) {
     case 'stay':
-      return { title: 'Stay live while you’re here', line: `Up to 4 hours at ${venue} tonight, carried on while your phone sees you inside.`, free: 'Go live for 1 hour — free', freeKind: 'strong' }
+      return { title: 'Stay live while you’re here', line: `Up to 4 hours at ${venue} tonight, carried on while your phone sees you inside.`, free: 'Go live for 1 hour — free', freeKind: 'lit' }
     case 'expiry':
-      return { title: 'Stay while you’re here', line: `Your free time at ${venue} is up. Stay keeps you live for up to 4 hours.`, free: 'Extend 45 min — free', freeKind: 'strong' }
+      return { title: 'Stay while you’re here', line: `Your free time at ${venue} is up. Stay keeps you live for up to 4 hours.`, free: 'Extend 45 min — free', freeKind: 'lit' }
     case 'perk':
       return { title: 'Tonight’s partner perk', line: `${venue} runs a perk for Blend’n+ people tonight. Show it at the bar.`, free: 'Not now', freeKind: 'secondary' }
     case 'night':
@@ -158,9 +158,10 @@ export function TonightSheet({
         />
         <Button
           kind={copy.freeKind}
+          size={copy.freeKind === 'lit' ? 'md' : undefined}
           onGlass={copy.freeKind === 'secondary' && Platform.OS === 'ios'}
           label={copy.free}
-          pressHaptic={copy.freeKind === 'strong' ? H.primary : false}
+          pressHaptic={copy.freeKind === 'lit' ? H.primary : false}
           onPress={onFree}
         />
       </View>

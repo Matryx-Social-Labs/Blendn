@@ -51,12 +51,13 @@ export function PulseEmpty({
   const art = kind !== 'search' && kind !== 'filters' ? drawableCityArt(city) : null
   const actions =
     kind === 'search'
-      ? [{ label: 'Clear search', kind: 'secondary' as const, onPress: onClearSearch }]
+      ? [{ label: 'Clear search', kind: 'lit' as const, onPress: onClearSearch }]
       : kind === 'filters'
-        ? [{ label: 'Clear filters', kind: 'secondary' as const, onPress: onClearFilters }]
+        ? [{ label: 'Clear filters', kind: 'lit' as const, onPress: onClearFilters }]
         : [
-            ...(canChangeCity ? [{ label: 'Change city', kind: 'secondary' as const, onPress: onChangeCity }] : []),
-            { label: 'Refresh', kind: 'secondary' as const, onPress: onRefresh },
+            ...(canChangeCity ? [{ label: 'Change city', kind: 'lit' as const, onPress: onChangeCity }] : []),
+            // The first recovery is lit; the rest stay quiet.
+            { label: 'Refresh', kind: canChangeCity ? ('secondary' as const) : ('lit' as const), onPress: onRefresh },
           ]
   return (
     <View style={styles.wrap} testID={`pulse-empty-${kind}`}>

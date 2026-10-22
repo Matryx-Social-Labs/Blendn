@@ -86,7 +86,7 @@ export function MeIdentity({
             {occupation}
           </Text>
         ) : null}
-        <Button kind="secondary" size="md" icon="pencil" label="Edit profile" onPress={onEdit} style={styles.edit} />
+        <Button kind="lit" size="md" icon="pencil" label="Edit profile" onPress={onEdit} style={styles.edit} />
       </View>
       <PhotoStack photos={photos} onPress={onPhotos} />
     </View>

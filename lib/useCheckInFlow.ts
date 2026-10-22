@@ -118,7 +118,7 @@ export function useCheckInFlow({
   const getCurrentLocation = () => getLocationFix({ showTray, closeTray: closeTrayAndRelease, onRetry: () => void start() })
 
   /**
-   * A refusal sheet's actions (Flow 4 Tonight #16–#22): Open Maps (strong) and
+   * A refusal sheet's actions (Flow 4 Tonight #16–#22): Open Maps (lit) and
    * Close where a map can fix it; Try again (primary) and Close for a failure
    * on our side; otherwise one Close.
    */
@@ -145,7 +145,7 @@ export function useCheckInFlow({
         {
           label: 'Open Maps',
           variant: 'primary',
-          kind: 'strong',
+          kind: 'lit',
           onPress: () => {
             closeTray()
             onOpenMaps?.()

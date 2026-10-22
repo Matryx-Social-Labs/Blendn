@@ -152,10 +152,10 @@ describe('the profile carries the Grid\'s two actions', () => {
 
   it('keeps the like prominent here too', () => {
     // The safe, reversible action is the easy one on every surface: the one
-    // gradient primary, before Connect, which publishes your identity.
+    // gradient primary, before Connect, which publishes your identity (and is lit, not the gradient).
     const src = SCREEN()
-    expect(src.indexOf("kind={liked ? 'strong' : 'primary'}")).toBeGreaterThan(-1)
-    expect(src.indexOf("kind={liked ? 'strong' : 'primary'}")).toBeLessThan(src.indexOf('kind="secondary"'))
+    expect(src.indexOf("kind={liked ? 'lit' : 'primary'}")).toBeGreaterThan(-1)
+    expect(src.indexOf("kind={liked ? 'lit' : 'primary'}")).toBeLessThan(src.indexOf("kind={ctaLit ? 'lit' : 'secondary'}"))
   })
 
   it('rolls a failed like back, and never a failed request', () => {

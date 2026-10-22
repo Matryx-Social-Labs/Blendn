@@ -79,7 +79,7 @@ export function ManageStatusRow({
         <Text style={[font('body', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{sentence}</Text>
       </View>
       {tone === 'warn' ? (
-        <Button kind="strong" size="md" label={store === 'android' ? 'Fix it in Google Play' : 'Fix it in the App Store'} onPress={onFix} />
+        <Button kind="lit" size="md" label={store === 'android' ? 'Fix it in Google Play' : 'Fix it in the App Store'} onPress={onFix} />
       ) : null}
     </View>
   )

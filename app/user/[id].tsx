@@ -9,7 +9,7 @@ import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import { MomentMatch } from '../../components/ds/MomentMatch'
 import { Button } from '../../components/ds/Button'
 import type { Rect } from '../../components/ds/chatShared'
-import { font, HueProvider, useBoldText } from '../../components/ds/shared'
+import { font, HueProvider, useBoldText, useSelection } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { useToast } from '../../components/Toast'
 import { ConnectSheet } from '../../components/grid/ConnectSheet'
@@ -91,6 +91,7 @@ const CTA_HINT = {
 type ProfileConnection = NonNullable<UserProfileData['connection']>
 
 function UserProfileInner() {
+  const sel = useSelection()
   /*
    * `eventId` arrives from the Grid, and only from there.
    *
@@ -476,6 +477,8 @@ function UserProfileInner() {
   }
 
   const ctaDisabled = ctaMode === 'self' || ctaMode === 'requested' || ctaMode === 'declined'
+  // Connect and Message are the live actions, lit in the screen's rose; Requested and Declined are states and stay quiet.
+  const ctaLit = ctaMode === 'connect' || ctaMode === 'message'
 
   const back = () => router.back()
 
@@ -655,10 +658,12 @@ function UserProfileInner() {
             <>
             {eventId ? (
               <Button
-                kind={liked ? 'strong' : 'primary'}
+                kind={liked ? 'lit' : 'primary'}
+                // Both dock buttons are 48: a lit action is never 56, and the pair stands level.
+                size="md"
                 label={liked ? 'Liked' : 'Like'}
                 accessibilityLabel={liked ? `Liked ${heroTitle}. You liked them` : `Like ${heroTitle}. They are only told if they like you back`}
-                leading={<Glyph name="heart" size={ICON.control} color={liked ? COLOR.ink : COLOR.textOnGradient} active={liked} play={liked} />}
+                leading={<Glyph name="heart" size={ICON.control} color={liked ? sel.glyph : COLOR.textOnGradient} active={liked} play={liked} />}
                 pressHaptic={liked ? false : H.like}
                 loading={likeBusy && !liked}
                 onPress={handleLike}
@@ -667,7 +672,9 @@ function UserProfileInner() {
               />
             ) : null}
             <Button
-              kind="secondary"
+              kind={ctaLit ? 'lit' : 'secondary'}
+              size="md"
+              icon={ctaMode === 'connect' ? 'user-plus' : ctaMode === 'message' ? 'message-circle' : undefined}
               label={CTA_LABEL[ctaMode]}
               accessibilityLabel={ctaMode === 'connect' ? `Connect with ${heroTitle}. Sends a message and shows them your name and photo` : undefined}
               disabled={ctaDisabled}

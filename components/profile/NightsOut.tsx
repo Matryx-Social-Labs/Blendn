@@ -66,7 +66,7 @@ export function NightsOut({
           {FIRST_NIGHT.title}
         </Text>
         <Text style={[font('meta', bold), styles.muted]}>{FIRST_NIGHT.body}</Text>
-        <Button kind="secondary" label={FIRST_NIGHT.action} onPress={onFirstNight} style={styles.firstAction} />
+        <Button kind="lit" size="md" label={FIRST_NIGHT.action} onPress={onFirstNight} style={styles.firstAction} />
       </View>
     )
   }

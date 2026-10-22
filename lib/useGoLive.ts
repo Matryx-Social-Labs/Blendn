@@ -66,7 +66,7 @@ export function showPlusRefusal(showTray: ShowTray, closeTray: () => void, seePl
     [
       { label: 'OK', kind: 'tertiary', onPress: closeTray },
       ...(seePlus
-        ? [{ label: 'See Blendn+', variant: 'primary' as const, kind: 'strong' as const, onPress: () => { closeTray(); seePlus() } }]
+        ? [{ label: 'See Blendn+', variant: 'primary' as const, kind: 'lit' as const, onPress: () => { closeTray(); seePlus() } }]
         : []),
     ]
   )
@@ -100,7 +100,7 @@ export function showGoLiveRefusal(
       {
         label: 'Open Maps',
         variant: 'primary',
-        kind: 'strong',
+        kind: 'lit',
         onPress: () => {
           closeTray()
           openInMaps({ latitude: place.latitude, longitude: place.longitude, address: place.address, venue_name: place.name }).catch(() => {})
@@ -114,7 +114,7 @@ export function showGoLiveRefusal(
       {
         label: 'Try Again',
         variant: 'primary',
-        kind: 'strong',
+        kind: 'lit',
         onPress: () => {
           closeTray()
           retry()
@@ -128,7 +128,7 @@ export function showGoLiveRefusal(
       {
         label: 'Add your age',
         variant: 'primary',
-        kind: 'strong',
+        kind: 'lit',
         onPress: () => {
           closeTray()
           router.push('/edit-profile' as never)

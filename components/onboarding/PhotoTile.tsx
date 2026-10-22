@@ -91,7 +91,7 @@ export function PhotoTile({
         <View style={styles.failed} accessibilityRole="alert">
           <Icon name="circle-alert" size={ICON.nav} color={COLOR.textPrimary} />
           <Text style={[font('meta', bold), styles.ink]}>Didn’t upload</Text>
-          <Button label="Retry" kind="strong" size="sm" onPress={onRetry} disabled={retryDisabled} testID={`photo-retry-${index}`} style={styles.centred} />
+          <Button label="Retry" kind="lit" size="sm" onPress={onRetry} disabled={retryDisabled} testID={`photo-retry-${index}`} style={styles.centred} />
         </View>
       ) : null}
 

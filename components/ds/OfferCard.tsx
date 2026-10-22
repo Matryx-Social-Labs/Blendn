@@ -152,7 +152,7 @@ export function OfferCard({
         </Text>
       </View>
 
-      {live && onUse ? <Button kind="strong" size="md" icon="ticket" label="Use at the door" pressHaptic={H.primary} onPress={onUse} /> : null}
+      {live && onUse ? <Button kind="lit" size="md" icon="ticket" label="Use at the door" pressHaptic={H.primary} onPress={onUse} /> : null}
 
       <Pressable
         onPress={() => setOpen((o) => !o)}

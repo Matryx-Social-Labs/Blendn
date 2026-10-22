@@ -9,7 +9,7 @@ import { font, useBoldText } from '../ds/shared'
 /**
  * "Bring someone?" (guidelines/flow-16 `bringRow`, Flow 16 · 16.1 entry points): the row the Scene shows once you are
  * going, above the dock's button, because that is the moment somebody most wants to send the night on. WhatsApp first, as
- * a white pill; the share circle opens the tray.
+ * a lit pill; the share circle opens the tray.
  *
  * Never after check-in (the Scene does not mount it then). `H.primary` on WhatsApp's press-in, the frame's "on send";
  * `H.select` on the circle, the frame's note for the tray. The row is plain content: the two controls are what a screen
@@ -34,7 +34,7 @@ export function BringSomeoneRow({
         <Text style={[font('meta', bold), styles.quiet]}>You’re going. Send the night on.</Text>
       </View>
       <Button
-        kind="strong"
+        kind="lit"
         size="sm"
         icon="message-circle"
         label="WhatsApp"

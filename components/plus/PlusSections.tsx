@@ -167,7 +167,7 @@ export function PlusActions({
       {phase !== 'idle' ? null : action === 'launch' ? (
         <Button kind="secondary" label="Unlocked during launch · nothing to buy" disabled onGlass={onGlass} />
       ) : action === 'manage' ? (
-        <Button kind="secondary" label="Manage Blend’n+" onGlass={onGlass} onPress={onManage} />
+        <Button kind="lit" size="md" label="Manage Blend’n+" onPress={onManage} />
       ) : action === 'buy' ? (
         <Button label={cta.lead} price={cta.price} accessibilityLabel={cta.spoken} disabled={disabled} loading={buying} onPress={onBuy} />
       ) : null}

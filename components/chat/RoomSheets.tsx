@@ -56,7 +56,7 @@ export function MuteSheet({ chatGroupId, onClose }: { chatGroupId: string | null
           : 'The room stops notifying you. You can still read and post, and nobody’s told.'
       }
       actions={[
-        ...(muted ? [{ label: 'Unmute', kind: 'strong' as const, onPress: () => void unmute(), loading: busy }] : []),
+        ...(muted ? [{ label: 'Unmute', kind: 'lit' as const, onPress: () => void unmute(), loading: busy }] : []),
         { label: 'Cancel', kind: 'tertiary', onPress: onClose },
       ]}
       testID="mute-sheet"

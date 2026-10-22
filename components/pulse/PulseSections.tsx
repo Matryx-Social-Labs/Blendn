@@ -106,7 +106,7 @@ export const WHY_THESE = {
 function WhyThese({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const bold = useBoldText()
   return (
-    <Sheet visible={visible} onClose={onClose} title={WHY_THESE.title} body={WHY_THESE.body} actions={[{ label: 'Got it', kind: 'strong', onPress: onClose }]} testID="why-these">
+    <Sheet visible={visible} onClose={onClose} title={WHY_THESE.title} body={WHY_THESE.body} actions={[{ label: 'Got it', kind: 'lit', onPress: onClose }]} testID="why-these">
       <View style={styles.whyRow}>
         <ScrimPill>
           <Icon name="megaphone" size={ICON.inline} color={COLOR.textSecondary} />

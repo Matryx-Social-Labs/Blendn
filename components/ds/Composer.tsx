@@ -305,7 +305,7 @@ function LockedRow({ state, reason, countdown, action }: { state: Locked } & Pic
         </View>
       </View>
       {state === 'notcheckedin' && action ? (
-        <Button kind="strong" size="sm" label={action.label} loading={action.loading} onPress={action.onPress} />
+        <Button kind="lit" size="sm" label={action.label} loading={action.loading} onPress={action.onPress} />
       ) : null}
     </View>
   )

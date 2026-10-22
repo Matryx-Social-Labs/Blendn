@@ -37,6 +37,7 @@ export function MessageRequestPrompt({
       <View style={styles.actions}>
         <Button
           kind="secondary"
+          size="md"
           onGlass
           label="Decline"
           accessibilityLabel={`Decline ${name}’s request`}
@@ -47,6 +48,9 @@ export function MessageRequestPrompt({
           testID="request-decline"
         />
         <Button
+          kind="lit"
+          size="md"
+          icon="user-check"
           label="Accept"
           accessibilityLabel={`Accept ${name}’s request`}
           onPress={onAccept}

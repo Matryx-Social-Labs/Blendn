@@ -134,7 +134,7 @@ export function SessionSheet({
         : `As long as you’re at ${venue} · up to 4 hours${time.endsBy ? ` · ends ${time.endsBy} at the latest` : ''}`
   const actions: SheetAction[] = [{ label: 'End', kind: 'secondary', onPress: () => setConfirming(true) }]
   if (time?.kind === 'ending')
-    actions.unshift({ label: `Extend · Live until ${time.extendUntil}`, kind: 'strong', onPress: onExtend, loading: extending, pressHaptic: H.primary })
+    actions.unshift({ label: `Extend · Live until ${time.extendUntil}`, kind: 'lit', onPress: onExtend, loading: extending, pressHaptic: H.primary })
 
   return (
     <Sheet visible={visible} onClose={onClose} title={`Live at ${venue}`} actions={actions}>

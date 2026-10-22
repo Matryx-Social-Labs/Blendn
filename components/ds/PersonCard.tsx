@@ -339,8 +339,9 @@ export function PersonCardContent({
         ) : (
           <Button
             label="Message"
-            kind="secondary"
-            onGlass
+            kind="lit"
+            size="md"
+            icon="message-circle"
             accessibilityHint={variant === 'friend' ? undefined : 'Sends a request, which shows them your name and photo.'}
             onPress={onMessage}
             style={styles.grow}
@@ -505,7 +506,7 @@ const styles = StyleSheet.create({
   reasons: { borderRadius: RADIUS.rowInCard, paddingVertical: SPACE.xs },
   reason: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, minHeight: SIZE.targetIos, paddingHorizontal: SPACE.lg },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm, marginTop: SPACE.sm },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: SPACE.sm, marginTop: SPACE.sm },
   grow: { flexGrow: 1 },
   end: { marginLeft: 'auto' },
   circle: { width: SIZE.primary, height: SIZE.primary, borderRadius: RADIUS.capsule, alignItems: 'center', justifyContent: 'center' },

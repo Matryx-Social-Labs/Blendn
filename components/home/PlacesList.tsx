@@ -343,14 +343,14 @@ export function PlacesList({
                   icon="sliders-horizontal"
                   title={whatsOn === 'live' ? 'Nothing is live right now' : whatsOn === 'open' ? 'Nothing is open tonight' : 'No places match these filters'}
                   body="Try widening the filters."
-                  actions={[{ label: 'Clear filters', kind: 'secondary', onPress: () => setFilters(NO_FILTERS) }]}
+                  actions={[{ label: 'Clear filters', kind: 'lit', onPress: () => setFilters(NO_FILTERS) }]}
                 />
               ) : (
                 <StateScreen
                   icon="map-pin"
                   title={item.reason === 'kind' ? `No ${typeLabel.toLowerCase()} in ${city ?? 'your area'} yet` : city ? `No places in ${city} yet` : 'No places near you yet'}
                   body={item.reason === 'kind' ? 'Try another type, or another city.' : 'We list venues as they come on. Try another city.'}
-                  actions={[{ label: 'Change city', kind: 'secondary', onPress: openCityPicker }]}
+                  actions={[{ label: 'Change city', kind: 'lit', onPress: openCityPicker }]}
                 />
               )}
             </View>

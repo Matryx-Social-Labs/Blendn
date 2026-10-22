@@ -14,8 +14,8 @@ export const REQUEST_LINE = 'Opened your link · asks to be your friend'
  * Somebody asking to be your friend (Flow 6 `requestCard`): a `surface` card at radius 24, the face, the name and the line, and the
  * two answers side by side under them, Not now beside Accept, 48 pt each (`Button size="md"`, the DS has no 44). Not now is the glass-ground secondary: a `surface` fill on a `surface` card would have no edge.
  *
- * Accept is the strong-neutral button (white, ink label), not the accent. On Add friends, "Share my link" is the screen's one
- * accent; a column of orange Accepts under it made two. Both answers dim while this row's answer is in flight (`busy`), and only
+ * Accept is the lit button (the screen's rose, the glyph before the label), not the gradient. On Add friends, "Share my link" is the
+ * screen's one primary; a column of gradient Accepts under it made two. Both answers dim while this row's answer is in flight (`busy`), and only
  * this row's, which is also what stops a second tap sending a second answer. The haptic is the outcome's, when the server says yes
  * (`useFriendRequests`), never the press.
  */
@@ -55,8 +55,9 @@ export function IncomingRequestRow({
           style={styles.action}
         />
         <Button
-          kind="strong"
+          kind="lit"
           size="md"
+          icon="user-check"
           label="Accept"
           accessibilityLabel={`Accept ${person.name}`}
           onPress={() => onRespond('accept')}

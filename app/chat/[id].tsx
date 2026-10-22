@@ -809,7 +809,7 @@ function GroupChatInner() {
                       title="Start the room conversation"
                       body="Be the first to post so everyone can join."
                       // Fills the composer for you to send or change: the tap sends nothing.
-                      actions={[{ label: 'Write a starter', kind: 'secondary', onPress: () => setNewMessage('Hey everyone 👋') }]}
+                      actions={[{ label: 'Write a starter', kind: 'lit', onPress: () => setNewMessage('Hey everyone 👋') }]}
                       testID="room-empty"
                     />
                   </View>
