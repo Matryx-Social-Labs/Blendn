@@ -204,6 +204,20 @@ describe('a refusal with a fix (Flow 15 15.19): the link is not "didn’t open"'
       expect(screen.getByText('Ana wants to blend with you')).toBeTruthy()
     })
 
+    it('a second refusal with the same wait counts again from the top, it does not carry on from zero', async () => {
+      const FIVE = { success: false as const, errorCode: 'RATE_LIMITED', reasonCode: 'RATE_LIMITED', retryAfter: 5 }
+      api.openFriendInvite.mockResolvedValueOnce(FIVE)
+      await render(<InviteScreen />)
+      await act(async () => {})
+      await act(async () => jest.advanceTimersByTime(5_000))
+      api.openFriendInvite.mockResolvedValueOnce(FIVE)
+      await act(async () => {
+        fireEvent.press(screen.getByText('Try again'))
+      })
+      expect(screen.getByText('0:05')).toBeTruthy()
+      expect(screen.getByLabelText('Try again, available when the wait ends').props.accessibilityState.disabled).toBe(true)
+    })
+
     it('with no retryAfter the wait is the minute the sentence promises', async () => {
       api.openFriendInvite.mockResolvedValueOnce({ success: false, errorCode: 'RATE_LIMITED' })
       await render(<InviteScreen />)
