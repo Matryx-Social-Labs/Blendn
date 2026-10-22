@@ -1,4 +1,4 @@
-import { savedEventRows, goingItems, rsvpEventRows, withPendingSaves } from '../lib/savedEvents'
+import { savedEventRows, goingItems, rsvpEventRows, withPendingSaves, changedTag, pastEventRows, ratingsToRead, stayLabel } from '../lib/savedEvents'
 
 /**
  * The Going tab read the favourites payload as an array and showed "No saved
@@ -215,6 +215,84 @@ describe('Going: the newest read wins', () => {
   it('drops an answer a later load has overtaken', () => {
     const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'app', '(tabs)', 'going.tsx'), 'utf8') as string
     expect(src).toMatch(/const id = \+\+loadId\.current[\s\S]*?if \(id !== loadId\.current\) return/)
-    expect(src).toContain('withPendingSaves(savedEventRows(saved.data), pendingSaves.current, id)')
+    expect(src).toContain('withPendingSaves(rows, pendingSaves.current, id)')
+  })
+})
+
+describe('a night that moved (Flow 3 · 3.1 frame 03)', () => {
+  const ev = { id: 'e', title: 'T', startTime: '2031-01-01T19:00:00Z', endTime: '2031-01-01T22:00:00Z', status: 'published' as const }
+  const tag = (extra: object, status: 'published' | 'cancelled' = 'published') => changedTag(savedEventRows({ events: [{ ...ev, status, ...extra }] })[0])
+
+  it('is "New time" for a time that moved, and "New venue" when only the place did', () => {
+    expect(tag({ changedFields: ['time'] })).toBe('New time')
+    expect(tag({ changedFields: ['venue'] })).toBe('New venue')
+    expect(tag({ changedFields: ['venue', 'time'] })).toBe('New time')
+  })
+
+  it('is no tag from a server that does not send it (the list routes today), a cancel, or a field this build does not know', () => {
+    expect(tag({})).toBeNull()
+    expect(tag({ changedFields: null })).toBeNull()
+    expect(tag({ changedFields: ['organiser'] })).toBeNull()
+    // A cancel is the row's own "Cancelled".
+    expect(tag({ changedFields: ['cancelled', 'time'] }, 'cancelled')).toBeNull()
+    expect(tag({ changedFields: ['cancelled'] })).toBeNull()
+  })
+})
+
+describe('Past: the places you went live at (Flow 4 · Past venues, frame 01)', () => {
+  const NOW = Date.parse('2026-10-22T12:00:00Z')
+  const row = (over: object) => ({
+    id: 'v1',
+    title: 'Venue day · 2026-09-28 · bookkeeping',
+    cover_image_url: null,
+    start_time: '2026-09-28T00:00:00Z',
+    end_time: '2026-09-28T23:59:00Z',
+    venue_name: 'Toit',
+    city: 'Bengaluru',
+    attendedAt: '2026-09-28T17:00:00Z',
+    ...over,
+  })
+
+  it('names the visit for the place, never for the venue day\'s bookkeeping title', () => {
+    const [visit] = pastEventRows([row({ kind: 'venue_day' })], NOW)
+    expect(visit.title).toBe('Toit')
+    expect(visit.visit).toEqual({ attendedAt: '2026-09-28T17:00:00Z', stayMinutes: null, venueId: null, venueType: null })
+  })
+
+  it('reads how long and which place when the server says (both are absent from the route today)', () => {
+    const [visit] = pastEventRows([row({ kind: 'venue_day', stay_minutes: 100, venue_id: 'v-toit' })], NOW)
+    expect(visit.visit).toEqual({ attendedAt: '2026-09-28T17:00:00Z', stayMinutes: 100, venueId: 'v-toit', venueType: null })
+  })
+
+  it('an event keeps its own title and has no visit', () => {
+    const [event] = pastEventRows([row({ kind: 'event', title: 'Vinyl Night' })], NOW)
+    expect(event.title).toBe('Vinyl Night')
+    expect(event.visit).toBeUndefined()
+    expect(pastEventRows([row({ title: 'Older server' })], NOW)[0].visit).toBeUndefined()
+  })
+
+  it('a visit with no place name keeps its title rather than an empty row', () => {
+    expect(pastEventRows([row({ kind: 'venue_day', venue_name: null, title: 'A place' })], NOW)[0].title).toBe('A place')
+  })
+
+  it('says a stay in the shortest honest words', () => {
+    expect([stayLabel(40), stayLabel(100), stayLabel(120), stayLabel(0), stayLabel(null), stayLabel(NaN)]).toEqual(['40m', '1h 40m', '2h', null, null, null])
+  })
+})
+
+describe('which past nights to ask about', () => {
+  const night = (id: string, extra: object = {}) => ({ id, title: id, cover_image_url: null, start_time: 'a', end_time: 'b', venue_name: null, city: null, attendedAt: 'a', ...extra })
+  const none = new Set<string>()
+
+  it('believes the list when it says (`ratedAt` a time: rated; null: not), and asks nothing about those', () => {
+    const r = ratingsToRead([night('a', { ratedAt: '2026-09-01T00:00:00Z' }), night('b', { ratedAt: null })], 10, () => false, none)
+    expect(r).toEqual({ rated: ['a'], ask: [] })
+  })
+
+  it('asks about the rest, the first few only, never a visit, a night known rated, or one already asked', () => {
+    const nights = [night('v', { kind: 'venue_day' }), night('k'), night('x'), night('y'), night('z')]
+    const r = ratingsToRead(nights, 2, (id) => id === 'k', new Set(['x']))
+    expect(r.ask).toEqual(['y', 'z'])
+    expect(ratingsToRead(nights, 1, () => false, none).ask).toEqual(['k'])
   })
 })

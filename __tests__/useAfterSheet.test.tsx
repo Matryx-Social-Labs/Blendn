@@ -61,21 +61,9 @@ describe('the event screen wires it', () => {
   const src = readFileSync(join(__dirname, '..', 'components', 'screens', 'EventDetailScreen.tsx'), 'utf8')
   const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 
-  it('the two sheets\' results are toasts now, so nothing is opened over a sheet that is still leaving', () => {
-    // A toast is not a modal: it needs no wait for the dismissal (iOS drops a modal presented over one that is leaving).
-    for (const said of ['Announcement sent.', 'Couldn’t send the announcement. Try again.', 'Event updated.', 'Couldn’t save your changes. Try again.']) {
-      expect(code).toContain(`showToast('${said}'`)
-    }
+  it('opens nothing over a sheet that is still leaving: no afterSheet and no tray (an organiser\'s sheets are the dashboard\'s now)', () => {
+    // iOS drops a modal presented over one that is leaving; a toast needs no wait.
     expect(code).not.toContain('afterSheet(')
     expect(code).not.toContain('showTray(')
-  })
-
-  it('the announcement’s text survives a failed send and a reopen: only a send that went through clears it', () => {
-    const open = code.slice(code.indexOf('const openAnnouncementComposer'), code.indexOf('const { run: sendAnnouncement'))
-    expect(open).not.toContain("setAnnouncementText('')")
-    const sender = code.slice(code.indexOf('useSingleFlight(async () => {'), code.indexOf('const openEditComposer'))
-    expect(sender.match(/setAnnouncementText\(''\)/g)).toHaveLength(1)
-    expect(sender.indexOf("setAnnouncementText('')")).toBeLessThan(sender.indexOf('} else {'))
-    expect(code).toMatch(/onClose=\{\(\) => setShowAnnouncementModal\(false\)\}/)
   })
 })

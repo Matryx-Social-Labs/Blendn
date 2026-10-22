@@ -15,7 +15,6 @@ import { HueProvider, SELECTION, type Hue } from '../components/ds/shared'
 import { StateScreen } from '../components/ds/StateScreen'
 import { TopBar } from '../components/ds/TopBar'
 import { IncomingRequestRow } from '../components/friends/IncomingRequestRow'
-import { AnnouncementSheet } from '../components/scene/EventSheets'
 import { COLOR, SIZE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 
@@ -150,13 +149,6 @@ describe('Go live refusals (ember)', () => {
 })
 
 describe('the sheet’s single commit stays the gradient', () => {
-  it('Send is the primary, not lit and not white', async () => {
-    await render(<AnnouncementSheet visible text="Doors at 9" onChangeText={jest.fn()} sending={false} onSend={jest.fn()} onClose={jest.fn()} />)
-    expect(screen.queryByTestId('announcement-send-rim', { includeHiddenElements: true })).toBeNull()
-    expect(flat('announcement-send').backgroundColor).not.toBe(COLOR.textPrimary)
-    expect(screen.getAllByTestId('gradient').length).toBeGreaterThan(0)
-  })
-
   it('Edit profile’s Save stays the screen’s gradient primary', async () => {
     await render(world('violet', <TopBar title="Edit profile" onBack={jest.fn()} save={{ onPress: jest.fn() }} />))
     expect(screen.queryByRole('button', { name: 'Save' })).toBeTruthy()

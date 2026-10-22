@@ -129,15 +129,15 @@ describe('the Going tab after a partial failure', () => {
 
   it('keeps each section’s last good rows and toasts with a Try again', () => {
     // A section only updates when its own request succeeds.
-    expect(GOING).toMatch(/if \(saved\.success && saved\.data\) setEvents/)
-    expect(GOING).toMatch(/if \(rsvps\.success && rsvps\.data\) setGoing/)
-    expect(GOING).toMatch(/if \(past\.success && past\.data\) \{\s*setAttended/)
+    expect(GOING).toContain('if (saved.ok) setSavedPaged(saved.paged)')
+    expect(GOING).toContain('if (rsvps.ok) setGoingPaged(rsvps.paged)')
+    expect(GOING).toMatch(/if \(past\.ok\) \{\s*setPastPaged\(past\.paged\)/)
     expect(GOING).toMatch(/newFailure\(failedRef\.current, failed\)/)
     expect(GOING).toMatch(/say\("Couldn’t load all of your events\.", 'error', \{ label: 'Try again'/)
   })
 
   it('draws the tab from goingSections, so live events never sit under a past day', () => {
-    expect(GOING).toContain('goingSections(going, events, attended)')
+    expect(GOING).toContain('goingSections(going, events, attended, undefined, paging)')
   })
 })
 
@@ -153,5 +153,67 @@ describe('Going’s Undo toast (drive 2: it came ~1 s late and covered the title
 
   it('is the design’s Toast: a snackbar above the tab bar on Android', () => {
     expect(GOING).toMatch(/<Toast key=\{toast\.key\}[^>]*aboveTabBar/)
+  })
+})
+
+describe('goingSections: the lists the server has more of (large data)', () => {
+  const NOW = new Date(2026, 8, 29, 12, 0).getTime()
+  const night = (n: number) => ({
+    id: `p${n}`,
+    title: `Night ${n}`,
+    cover_image_url: null,
+    start_time: local(1, 20),
+    end_time: local(1, 23),
+    venue_name: 'Toit',
+    city: null,
+    attendedAt: local(1, 20),
+  })
+  const nights = Array.from({ length: 10 }, (_, i) => night(i))
+
+  it('says nothing of paging when the server has no more: no count, no row', () => {
+    const items = goingSections([], [], nights, NOW, { past: { total: 10, hasMore: false } })
+    expect(items.find((i) => i.kind === 'more')).toBeUndefined()
+    expect(items.find((i) => i.kind === 'header')).toMatchObject({ title: 'Past' })
+    expect(items.find((i) => i.kind === 'header')).not.toHaveProperty('count')
+  })
+
+  it('ends Past with the true remainder, and the header carries the server\'s total', () => {
+    const items = goingSections([], [], nights, NOW, { past: { total: 312, hasMore: true } })
+    expect(items[0]).toMatchObject({ kind: 'header', title: 'Past', count: 312 })
+    expect(items[items.length - 1]).toMatchObject({ kind: 'more', section: 'past', remaining: 302, busy: false, failed: false })
+  })
+
+  it('carries what the request is doing: working, or failed', () => {
+    expect(goingSections([], [], nights, NOW, { past: { total: 312, hasMore: true, busy: true } }).at(-1)).toMatchObject({ busy: true })
+    expect(goingSections([], [], nights, NOW, { past: { total: 312, hasMore: true, failed: true } }).at(-1)).toMatchObject({ failed: true })
+  })
+
+  it('ends each section where it ends: RSVPs, then Saved, then Past, each with its own row', () => {
+    const a = rsvp('a', local(30, 20), local(30, 23))
+    const b = rsvp('b', local(30, 21), local(30, 23))
+    const saved = [{ ...rsvp('s', local(30, 20), local(30, 23)) } as unknown as SavedEventRow]
+    const items = goingSections([a, b], saved, nights, NOW, {
+      going: { total: 80, hasMore: true },
+      saved: { total: 41, hasMore: true },
+      past: { total: 300, hasMore: true },
+    })
+    const kinds = items.map((i) => (i.kind === 'more' ? `more:${i.section}:${i.remaining}` : i.kind === 'header' ? `h:${i.title}` : i.kind))
+    expect(kinds.filter((k) => k.startsWith('more'))).toEqual(['more:going:78', 'more:saved:40', 'more:past:290'])
+    expect(kinds.indexOf('more:going:78')).toBeLessThan(kinds.indexOf('h:Saved'))
+    expect(kinds.indexOf('more:saved:40')).toBeLessThan(kinds.indexOf('h:Past'))
+  })
+
+  it('a save already under Going is not counted twice in the header', () => {
+    const a = rsvp('a', local(30, 20), local(30, 23))
+    const saved = [{ ...a } as unknown as SavedEventRow, { ...rsvp('s', local(30, 20), local(30, 23)) } as unknown as SavedEventRow]
+    const items = goingSections([a], saved, [], NOW, { saved: { total: 30, hasMore: true } })
+    // 30 on the server, 2 held, one of them already above: 29 rows to be drawn once it is all read.
+    expect(items.find((i) => i.kind === 'header')).toMatchObject({ title: 'Saved', count: 29 })
+  })
+
+  it('a section whose first page was all above still shows its heading and the way to more', () => {
+    const a = rsvp('a', local(30, 20), local(30, 23))
+    const items = goingSections([a], [{ ...a } as unknown as SavedEventRow], [], NOW, { saved: { total: 25, hasMore: true } })
+    expect(items.map((i) => i.key)).toEqual(['n:a', 'h:saved', 'm:saved'])
   })
 })

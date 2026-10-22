@@ -1,5 +1,5 @@
-import { Easing, FadeIn, FadeOut, ReduceMotion, withTiming } from 'react-native-reanimated'
-import { DURATION, EASING, REDUCE_MOTION } from '../../lib/design/tokens'
+import { Easing, FadeIn, FadeOut, ReduceMotion, withDelay, withTiming } from 'react-native-reanimated'
+import { DURATION, EASING, REDUCE_MOTION, RISE } from '../../lib/design/tokens'
 
 /*
  * Entering/exiting presets for small things that appear and disappear —
@@ -107,3 +107,21 @@ export const bannerOut = FadeOut.duration(DURATION.quick).easing(Easing.bezier(.
  * screen fades in over `base` on the gentle curve; no rise, so there is nothing for Reduce Motion to remove.
  */
 export const stateScreenIn = FadeIn.duration(DURATION.base).easing(GENTLE).reduceMotion(ReduceMotion.Never)
+
+/*
+ * A list re-sorted by a filter (#38, `lib/resort.ts`): a row arrives with a fade and a rise of `RISE.list` over `base`, starting
+ * `delay` ms in (the 18 ms stagger); a row that leaves fades over `quick`. Reduce Motion: both are the quick crossfade.
+ */
+export const resortIn = (delay: number) => () => {
+  'worklet'
+  const t = { duration: DURATION.base, easing: ENTRANCE, reduceMotion: ReduceMotion.Never }
+  return {
+    initialValues: { opacity: 0, transform: [{ translateY: RISE.list }] },
+    animations: {
+      opacity: withDelay(delay, withTiming(1, t)),
+      transform: [{ translateY: withDelay(delay, withTiming(0, t)) }],
+    },
+  }
+}
+export const resortFadeIn = FadeIn.duration(REDUCE_MOTION.duration.quick).easing(ENTRANCE).reduceMotion(ReduceMotion.Never)
+export const resortOut = FadeOut.duration(DURATION.quick).easing(Easing.bezier(...EASING.exit)).reduceMotion(ReduceMotion.Never)

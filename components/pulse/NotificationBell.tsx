@@ -28,6 +28,9 @@ import ScalePress from '../motion/ScalePress'
  * 48 dp Android, the DS bell glyph, its badge ringed in ink, so it lines up with the IconButtons beside it (Banter's Search and
  * Mark all) and sits over the map on Home.
  */
+/** The most the server counts (`unreadCount` stops at 1000). */
+const UNREAD_CAP = 1000
+
 export function NotificationBell() {
   const [unread, setUnread] = useState(0)
 
@@ -85,6 +88,8 @@ export function NotificationBell() {
   }, [])
 
   const badge = badgeLabel(unread)
+  // The server stops counting at 1000, so a count at the cap is "more than 999", never a number that looks exact.
+  const capped = unread >= UNREAD_CAP
   const size = Platform.OS === 'android' ? SIZE.circleButtonAndroid : SIZE.circleButton
   const circle = { width: size, height: size, borderRadius: size / 2 }
 
@@ -95,9 +100,9 @@ export function NotificationBell() {
       pressedScale={0.9}
       onPress={open}
       accessibilityRole="button"
-      accessibilityLabel="Notifications"
-      // The true number, even where the badge says "9+" (Flow 9 · 9.1).
-      accessibilityValue={unread > 0 ? { text: `${unread} unseen` } : undefined}
+      accessibilityLabel={capped ? 'Notifications, more than 999 unread' : 'Notifications'}
+      // The true number, even where the badge says "9+" (Flow 9 · 9.1); at the server's cap the label says it instead.
+      accessibilityValue={unread > 0 && !capped ? { text: `${unread} unseen` } : undefined}
       style={[circle, styles.centre]}
       testID="notification-bell"
     >

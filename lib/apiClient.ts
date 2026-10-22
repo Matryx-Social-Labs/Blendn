@@ -69,6 +69,9 @@ const SECURE_OPTIONS: SecureStore.SecureStoreOptions = {
  * Priority values: lower number = higher priority (auth=1, mutations=3, queries=5).
  * Debounce: batch rapid simultaneous enqueues into a single processing tick.
  */
+/** A page by the cursor the page before it handed over (keyset), or by number while the server has none. */
+const pageQuery = (page: number, cursor?: string | null): string => (cursor ? `cursor=${encodeURIComponent(cursor)}` : `page=${page}`)
+
 class RequestQueue {
   private queue: Array<{
     request: () => Promise<unknown>
@@ -2478,8 +2481,8 @@ class ApiClientClass {
    * way `getProfileInterests` is wrapped. This was typed as the array and the
    * Going tab mapped over the envelope (SCRUM-175).
    */
-  async getUserFavorites(userId: string): Promise<ApiResponse<SavedEventsPayload>> {
-    return this.queuedRequest<SavedEventsPayload>(`/api/mobile/users/${userId}/favorites`)
+  async getUserFavorites(userId: string, page = 1, limit = 20, cursor?: string | null): Promise<ApiResponse<SavedEventsPayload>> {
+    return this.queuedRequest<SavedEventsPayload>(`/api/mobile/users/${userId}/favorites?${pageQuery(page, cursor)}&limit=${limit}`)
   }
 
   /**
@@ -2487,13 +2490,13 @@ class ApiClientClass {
    * there is no way to ask for somebody else's. A server older than this route
    * answers 404, which the Going tab reads as "no section", not as a failure.
    */
-  async getMyRsvps(): Promise<ApiResponse<RsvpEventsPayload>> {
-    return this.queuedRequest<RsvpEventsPayload>('/api/mobile/me/rsvps?limit=50')
+  async getMyRsvps(page = 1, cursor?: string | null): Promise<ApiResponse<RsvpEventsPayload>> {
+    return this.queuedRequest<RsvpEventsPayload>(`/api/mobile/me/rsvps?${pageQuery(page, cursor)}&limit=50`)
   }
 
   /** The events you attended, most recent first. `/me`-scoped, like the above. */
-  async getMyAttendance(limit = 10): Promise<ApiResponse<AttendancePayload>> {
-    return this.queuedRequest<AttendancePayload>(`/api/mobile/me/attendance?limit=${limit}`)
+  async getMyAttendance(limit = 10, page = 1, cursor?: string | null): Promise<ApiResponse<AttendancePayload>> {
+    return this.queuedRequest<AttendancePayload>(`/api/mobile/me/attendance?limit=${limit}&${pageQuery(page, cursor)}`)
   }
 
   /** Whether you have Blendn+ — the server's answer, the only one that unlocks anything. Never cached. */

@@ -73,3 +73,42 @@ export function dayLabel(date: string): string {
 
 /** "Day 2 of 3", or null when no day is running (every day cancelled). */
 export const dayOfWords = (e: EventDays): string | null => (e.dayNumber ? `Day ${e.dayNumber} of ${e.dayCount}` : null)
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const monthOf = (date: string) => MONTHS[Number(date.slice(5, 7)) - 1]
+
+/**
+ * The run's own dates, "Sat 27 – Mon 29 Sep" (Flow 3 · 3.2 frame 04): the hero's badge on a run of days. The month is said once
+ * when both ends share it. A run the server listed whole reads its ends from the days; a long one is a window, so its ends are the
+ * run's own start and end read in the event's zone. Calendar dates throughout, so the phone's zone cannot move a day.
+ */
+export function runRange(
+  e: EventDays,
+  run: { start_time: string; end_time: string },
+  timeZone: string | undefined
+): string {
+  const whole = e.daysFrom === 1 && e.days.length === e.dayCount
+  const first = whole ? e.days[0].date : eventToday(timeZone, Date.parse(run.start_time))
+  const last = whole ? e.days[e.days.length - 1].date : eventToday(timeZone, Date.parse(run.end_time))
+  const from = monthOf(first) === monthOf(last) ? dayLabel(first) : `${dayLabel(first)} ${monthOf(first)}`
+  return `${from} – ${dayLabel(last)} ${monthOf(last)}`
+}
+
+const WHEN: Intl.DateTimeFormatOptions = { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }
+
+/**
+ * "Day 3 starts Tue, Sep 29, 9:00 PM" (frame 06): the server's own sentence for a door that is refused between days
+ * (`lib/checkin-messages.ts` in blendn-admin), said on the Scene before anybody asks. `nextStart` is the session's start, the next
+ * day going ahead, so a day called off is already skipped; null when every day is called off or the start is not a time.
+ */
+export function betweenDaysLine(e: EventDays, nextStart: string, timeZone: string | undefined): string | null {
+  const at = Date.parse(nextStart)
+  if (!e.dayNumber || !Number.isFinite(at)) return null
+  let when: string
+  try {
+    when = new Intl.DateTimeFormat('en-US', { ...WHEN, timeZone }).format(at)
+  } catch {
+    when = new Intl.DateTimeFormat('en-US', WHEN).format(at)
+  }
+  return `Day ${e.dayNumber} starts ${when}`
+}

@@ -25,6 +25,11 @@ export type TopBarProps = {
   close?: boolean
   /** Glass circles on the right, named by what they do. */
   actions?: readonly { icon: IconName; label: string; onPress: () => void }[]
+  /**
+   * Where you are in a short run of people ("2 of 5", Rate): Geist Mono in `meta`, `textSecondary`, at the right after the
+   * actions. Read as "Person 2 of 5". It is the type's cap that holds the bar's height, as the title's does.
+   */
+  progress?: string
   /** The Save pill: `H.primary` on press-in; `H.success` is the screen's, when the save lands. */
   save?: { onPress: () => void; saving?: boolean; disabled?: boolean }
   testID?: string
@@ -46,7 +51,7 @@ export type TopBarProps = {
  *
  * Save is the 48 pt `md` button: Button has no 44.
  */
-export function TopBar({ title, sub, state = 'rest', onBack, close = false, actions = [], save, testID }: TopBarProps) {
+export function TopBar({ title, sub, state = 'rest', onBack, close = false, actions = [], progress, save, testID }: TopBarProps) {
   const android = Platform.OS === 'android'
   const insets = useSafeAreaInsets()
   const bold = useBoldText()
@@ -88,6 +93,16 @@ export function TopBar({ title, sub, state = 'rest', onBack, close = false, acti
           {actions.map((a) => (
             <IconButton key={a.label} icon={a.icon} accessibilityLabel={a.label} onPress={a.onPress} />
           ))}
+          {progress ? (
+            <Text
+              testID={testID && `${testID}-progress`}
+              accessibilityLabel={`Person ${progress}`}
+              maxFontSizeMultiplier={CONTROL_FONT_CAP}
+              style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.sub]}
+            >
+              {progress}
+            </Text>
+          ) : null}
           {save ? <Button label="Save" size={android ? "md" : "raised"} onPress={save.onPress} loading={save.saving} disabled={save.disabled} /> : null}
         </View>
       </View>

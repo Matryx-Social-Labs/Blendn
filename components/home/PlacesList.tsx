@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { StyleSheet, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native'
 import Animated, { LinearTransition, useReducedMotion } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -23,6 +23,7 @@ import { getNetworkState, subscribeNetworkState } from '../../lib/networkStatus'
 import { initialPlaces, mayLoadMore, placesKey, placesReducer, readStamp } from '../../lib/places'
 import {
   activeFilterCount,
+  LEAD_ROWS,
   mayReadNext,
   nearPins,
   NEAR_COUNT,
@@ -39,7 +40,11 @@ import {
   type PlaceStrata,
   type WhatsOn,
 } from '../../lib/placesPane'
+import { rateLimitWait } from '../../lib/rateLimited'
+import { RESORT_WINDOW_MS, reflowsOnSpring, resortDelay } from '../../lib/resort'
+import { resortFadeIn, resortIn, resortOut } from '../motion/presence'
 import { clockTime } from '../../lib/roomMoments'
+import { RateLimitedBanner } from '../system/RateLimitedBanner'
 import { useNow } from '../../lib/useNow'
 import { usePullToRefresh } from '../../lib/usePullToRefresh'
 import type { HomeBrowse } from './HomeShell'
@@ -144,7 +149,7 @@ export function PlacesList({
           })
         } else {
           Logger.warn('events', 'Could not load places', { page, error: res.error })
-          dispatch({ type: 'failed', key, page })
+          dispatch({ type: 'failed', key, page, rateLimit: rateLimitWait([res]) ?? undefined })
         }
       } catch (error) {
         Logger.warn('events', 'Places request threw', { page, error: String(error) })
@@ -206,13 +211,20 @@ export function PlacesList({
     }
   }
 
+  // The wait is over: read again, the page it was refused on.
+  const rateLimitPage = state.rateLimit?.page ?? 1
+  const rateLimitDone = useCallback(() => {
+    dispatch({ type: 'rateLimitDone', key })
+    void (rateLimitPage <= 1 ? refresh() : request(rateLimitPage))
+  }, [key, rateLimitPage, refresh, request])
+
   // The drawer keeps this one line at peek, when only its header shows.
   const summary = peekLine(strata, state.hasMore)
   useEffect(() => onSummary?.(summary), [onSummary, summary])
 
   const rows = useMemo(
-    () => placeRows({ status: state.status, strata, more: state.hasMore, quietOpen, near, hasFix, filters, searching }),
-    [state.status, strata, state.hasMore, quietOpen, near, hasFix, filters, searching]
+    () => placeRows({ status: state.status, strata, more: state.hasMore, quietOpen, near, hasFix, filters, searching, rateLimited: state.rateLimit !== null }),
+    [state.status, strata, state.hasMore, quietOpen, near, hasFix, filters, searching, state.rateLimit]
   )
 
   // The map's pins: Near you's rows, while Near you is on screen.
@@ -255,7 +267,7 @@ export function PlacesList({
   const typeLabel = PLACE_TYPES.find((t) => t.venueType === venueType)?.label ?? 'All'
   const offline = network === 'offline' && state.venues.length > 0
 
-  const renderItem = useCallback(
+  const renderRow = useCallback(
     ({ item }: { item: PlaceRow }) => {
       switch (item.kind) {
         case 'title':
@@ -268,6 +280,12 @@ export function PlacesList({
                 </View>
               ) : null}
               {state.refreshFailed && !offline ? <RefreshFailed onRetry={() => void refresh()} /> : null}
+              {/* Asked too fast: the wait, counting down, and then it reads again (Flow 15 #15). */}
+              {state.rateLimit && state.rateLimit.page <= 1 ? (
+                <View style={styles.banner}>
+                  <RateLimitedBanner seconds={state.rateLimit.seconds} onDone={rateLimitDone} testID="places-rate-limited" />
+                </View>
+              ) : null}
             </View>
           )
         case 'search':
@@ -362,20 +380,68 @@ export function PlacesList({
       }
     },
     [
-      city, openCityPicker, stat, searching, state.status, state.readAt, state.refreshFailed, filters, offline, now, search, whatsOn, typeLabel, barOn,
+      city, openCityPicker, stat, searching, state.status, state.readAt, state.refreshFailed, state.rateLimit, rateLimitDone, filters, offline, now, search, whatsOn, typeLabel, barOn,
       chooseKind, refresh, requestLocation, onShowNearOnMap, toggleFold, seeAllLive, seeAllOpen, openFilters, clearFilter,
     ]
+  )
+
+  /*
+   * Filter re-sort (#38, `lib/resort.ts`): choosing a kind or a filter jumps the list to the top; the rows that leave fade over
+   * `quick`, those that arrive rise in with an 18 ms stagger down the first six. `resorting` is true from the render that
+   * carries the new filters until the last of them has arrived, so only rows that mount in that window arrive this way: a row
+   * the list draws as it is scrolled never replays it. The title and the sticky search are not rows that re-sort.
+   */
+  const resortKey = `${venueType ?? '-'}|${whatsOn}|${radiusKm ?? '-'}`
+  const [settledKey, setSettledKey] = useState(resortKey)
+  const resorting = settledKey !== resortKey
+  const listRef = useRef<Animated.FlatList<PlaceRow>>(null)
+  const sorted = useRef(resortKey)
+  useEffect(() => {
+    if (sorted.current === resortKey) return
+    sorted.current = resortKey
+    listRef.current?.scrollToOffset({ offset: 0, animated: false })
+  }, [resortKey])
+  // The window opens when the answer is on screen, not when the chip is tapped: the rows that arrive are the ones that rise, and a
+  // read that takes longer than the window must not lose them.
+  const answered = state.key === key && state.status === 'ready'
+  useEffect(() => {
+    if (!resorting || !answered) return
+    const timer = setTimeout(() => setSettledKey(resortKey), RESORT_WINDOW_MS)
+    return () => clearTimeout(timer)
+  }, [resorting, answered, resortKey])
+
+  const renderItem = useCallback(
+    ({ item, index }: { item: PlaceRow; index: number }) => {
+      const row = renderRow({ item })
+      if (row === null || item.kind === 'title' || item.kind === 'search') return row
+      return (
+        <ResortRow index={index - LEAD_ROWS} resorting={resorting} reduceMotion={reduceMotion}>
+          {row}
+        </ResortRow>
+      )
+    },
+    [renderRow, resorting, reduceMotion]
   )
 
   return (
     <>
       <Animated.FlatList
+        ref={listRef}
         data={rows}
         keyExtractor={keyOf}
         renderItem={renderItem}
-        itemLayoutAnimation={reduceMotion ? undefined : UNFOLD}
+        // Up to twelve rows reflow on M.settle; more crossfade (#38).
+        itemLayoutAnimation={reflowsOnSpring(rows.length, reduceMotion) ? UNFOLD : undefined}
         stickyHeaderIndices={PLACES_STICKY}
-        ListFooterComponent={state.loadingMore ? <View style={styles.more}><Spinner /></View> : null}
+        ListFooterComponent={
+          state.loadingMore ? (
+            <View style={styles.more}><Spinner /></View>
+          ) : state.rateLimit && state.rateLimit.page > 1 ? (
+            <View style={styles.banner}>
+              <RateLimitedBanner seconds={state.rateLimit.seconds} onDone={rateLimitDone} testID="places-more-rate-limited" />
+            </View>
+          ) : null
+        }
         testID="places-list"
         onEndReachedThreshold={0.5}
         onEndReached={() => void loadMore()}
@@ -400,6 +466,18 @@ export function PlacesList({
         countFor={countFor}
       />
     </>
+  )
+}
+
+/**
+ * One row of the list, arriving as a re-sort's (`lib/resort.ts`): a rise and fade in order while `resorting`, else as it always
+ * did. Only the rows that are there when the re-sort begins fade out: a row the list lets go of as it is scrolled leaves quietly.
+ */
+function ResortRow({ index, resorting, reduceMotion, children }: { index: number; resorting: boolean; reduceMotion: boolean; children: ReactNode }) {
+  return (
+    <Animated.View entering={resorting ? (reduceMotion ? resortFadeIn : resortIn(resortDelay(index))) : undefined} exiting={resorting ? resortOut : undefined}>
+      {children}
+    </Animated.View>
   )
 }
 

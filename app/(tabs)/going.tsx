@@ -9,6 +9,7 @@ import { OfflineBanner } from '../../components/OfflineBanner'
 import { RateLimitedBanner } from '../../components/system/RateLimitedBanner'
 import { rateLimitWait } from '../../lib/rateLimited'
 import { SkeletonBlock } from '../../components/Skeleton'
+import { Spinner } from '../../components/ds/Loader'
 import FadeInUp from '../../components/motion/FadeInUp'
 import ScalePress from '../../components/motion/ScalePress'
 import { EventCard } from '../../components/ds/EventCard'
@@ -21,9 +22,24 @@ import { Toast, type ToastKind } from '../../components/ds/Toast'
 import { apiClient } from '../../lib/apiClient'
 import { openBlendn } from '../../lib/blendnOverlay'
 import { Logger } from '../../lib/logger'
-import { failedSections, goingSections, newFailure, type GoingSection } from '../../lib/goingSections'
+import { failedSections, goingSections, newFailure, type GoingPaging, type GoingSection } from '../../lib/goingSections'
 import {
+  emptyPaged,
+  pagedRows,
+  rereadPaged,
+  withNextPage,
+  withoutRow,
+  withRowAt,
+  type PageAsk,
+  type PageMeta,
+  type PageRead,
+  type Paged,
+} from '../../lib/pagedList'
+import {
+  changedTag,
   lockedNightsLabel,
+  ratingsToRead,
+  stayLabel,
   rsvpEventRows,
   savedEventRows,
   withLockedNights,
@@ -44,6 +60,7 @@ import { openInMaps } from '../../lib/openInMaps'
 import { addToCalendar } from '../../lib/calendar'
 import { openTonight } from '../../lib/paywall'
 import { shareEvent } from '../../lib/shareRow'
+import { showSheet } from '../../lib/sheet'
 import { isNightRated, markNightRated, useRatedNights } from '../../lib/ratedNights'
 import { usePullToRefresh } from '../../lib/usePullToRefresh'
 import { TAB_BAR_CLEARANCE } from './_layout'
@@ -68,10 +85,18 @@ import { TAB_BAR_CLEARANCE } from './_layout'
 function GoingScreenInner() {
   const { user: authUser } = useAuth()
   const [loading, setLoading] = useState(true)
-  // `events` is the Saved section — the only one this screen edits in place.
-  const [events, setEvents] = useState<EventRow[]>([])
-  const [going, setGoing] = useState<RsvpEventRow[]>([])
-  const [attended, setAttended] = useState<AttendancePayload['events']>([])
+  /*
+   * Three lists, each read a page at a time (`lib/pagedList.ts`): the server returns the first page and the true total, and the
+   * next page is asked for as the reader reaches the end of one. Saved is the only one this screen edits in place.
+   */
+  const [savedPaged, setSavedPaged] = useState<Paged<EventRow>>(emptyPaged)
+  const [goingPaged, setGoingPaged] = useState<Paged<RsvpEventRow>>(emptyPaged)
+  const [pastPaged, setPastPaged] = useState<Paged<AttendancePayload['events'][number]>>(emptyPaged)
+  const events = useMemo(() => pagedRows(savedPaged), [savedPaged])
+  const going = useMemo(() => pagedRows(goingPaged), [goingPaged])
+  const attended = useMemo(() => pagedRows(pastPaged), [pastPaged])
+  /** Which section is reading its next page, and which one's read failed (the row at its end says so). */
+  const [reading, setReading] = useState<Partial<Record<GoingSection, 'busy' | 'failed'>>>({})
   /** Older nights the server keeps behind Blendn+ (step 11). */
   const [lockedCount, setLockedCount] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
@@ -117,14 +142,68 @@ function GoingScreenInner() {
     else pendingSaves.current.delete(id)
   }, [])
 
+  /*
+   * Which nights were rated, for the Past rows a page puts on screen. The list says so itself (`ratedAt`) once the server sends
+   * it; until then the first few of a page are asked one at a time, a few at once, each night at most once a session.
+   */
+  const askedRatings = useRef(new Set<string>())
+  const readRatings = useCallback((nights: AttendancePayload['events']) => {
+    const { rated, ask } = ratingsToRead(nights, PAST_RATING_READS, isNightRated, askedRatings.current)
+    for (const id of rated) markNightRated(id)
+    for (const id of ask) askedRatings.current.add(id)
+    void (async () => {
+      for (let i = 0; i < ask.length; i += RATING_BATCH) {
+        await Promise.all(
+          ask.slice(i, i + RATING_BATCH).map((id) =>
+            apiClient
+              .getMyEventRating(id)
+              .then((r) => {
+                if (r.success && r.data?.ratedAt) markNightRated(id)
+              })
+              .catch(() => {})
+          )
+        )
+      }
+    })()
+  }, [])
+
+  /*
+   * The latest of each list, for a read that starts from what is held (a refresh, or the next page) without waiting for a
+   * render. The three reads below answer one page by number or by cursor; `lockedRef` is the Blendn+ count the first page of
+   * Past carries.
+   */
+  const latest = useRef({ saved: savedPaged, going: goingPaged, past: pastPaged })
+  useEffect(() => {
+    latest.current = { saved: savedPaged, going: goingPaged, past: pastPaged }
+  }, [savedPaged, goingPaged, pastPaged])
+  const lockedRef = useRef<number | null>(null)
+  const uid = authUser?.id ?? ''
+  const readSaved = useCallback(
+    async (ask: PageAsk): Promise<PageRead<EventRow, ApiResult>> => {
+      const res = await apiClient.getUserFavorites(uid, ask.page, SAVED_PAGE, ask.cursor)
+      return res.success && res.data ? { ok: true, rows: savedEventRows(res.data), meta: pageMeta(res.data.pagination) } : { ok: false, failure: res }
+    },
+    [uid]
+  )
+  const readGoing = useCallback(async (ask: PageAsk): Promise<PageRead<RsvpEventRow, ApiResult>> => {
+    const res = await apiClient.getMyRsvps(ask.page, ask.cursor)
+    return res.success && res.data ? { ok: true, rows: rsvpEventRows(res.data), meta: pageMeta(res.data.pagination) } : { ok: false, failure: res }
+  }, [])
+  const readPast = useCallback(async (ask: PageAsk): Promise<PageRead<AttendancePayload['events'][number], ApiResult>> => {
+    const res = await apiClient.getMyAttendance(PAST_PAGE, ask.page, ask.cursor)
+    if (!res.success || !res.data) return { ok: false, failure: res }
+    if (ask.page === 1) lockedRef.current = res.data.lockedCount ?? 0
+    return { ok: true, rows: res.data.events ?? [], meta: pageMeta(res.data.pagination) }
+  }, [])
+
   const loadInterestedEvents = useCallback(async (): Promise<void> => {
     // No `setLoading(true)` here: `loading` starts true for the first load, and
     // later focus refreshes update the list in place instead of blanking it.
     try {
       if (!authUser) {
-        setEvents([])
-        setGoing([])
-        setAttended([])
+        setSavedPaged(emptyPaged())
+        setGoingPaged(emptyPaged())
+        setPastPaged(emptyPaged())
         setLockedCount(0)
         setLoading(false)
         return
@@ -135,44 +214,36 @@ function GoingScreenInner() {
        * when its own request succeeds, so one slow or refused route does not
        * blank the other two — and a server that predates `/me/rsvps` (404)
        * simply has no Going section. Only all three failing is "couldn't load".
+       * Each read is every page held (`rereadPaged`), so a refresh is true all
+       * the way down: nothing stale is kept, and nothing the reader scrolled to
+       * is thrown away.
        */
       const id = ++loadId.current
+      lockedRef.current = null
       const [saved, rsvps, past] = await Promise.all([
-        apiClient.getUserFavorites(authUser.id),
-        apiClient.getMyRsvps(),
-        apiClient.getMyAttendance(),
+        rereadPaged(latest.current.saved, SAVED_PAGE, readSaved, (rows) => withPendingSaves(rows, pendingSaves.current, id)),
+        rereadPaged(latest.current.going, GOING_PAGE, readGoing),
+        rereadPaged(latest.current.past, PAST_PAGE, readPast),
       ])
       if (id !== loadId.current) return
 
-      // `{ events, pagination }` — see lib/savedEvents.ts for why this is not
-      // mapped inline any more.
-      const rowCount =
-        (saved.data?.events?.length ?? 0) + (rsvps.data?.events?.length ?? 0) + (past.data?.events?.length ?? 0)
+      const held = (r: { ok: true; paged: Paged<{ id: string }> } | { ok: false }) => (r.ok ? pagedRows(r.paged).length : 0)
+      const rowCount = held(saved) + held(rsvps) + held(past)
       if (rowCount > 0) hadRowsRef.current = true
-      if (saved.success && saved.data) setEvents(withPendingSaves(savedEventRows(saved.data), pendingSaves.current, id))
-      else Logger.debug('interested', 'Failed to load favorites', { error: saved.error })
-      if (rsvps.success && rsvps.data) setGoing(rsvpEventRows(rsvps.data))
-      else Logger.debug('interested', 'Failed to load RSVPs', { error: rsvps.error })
-      if (past.success && past.data) {
-        setAttended(past.data.events ?? [])
-        // Nights rated on another launch: the server's own answer, for the few Past rows on screen.
-        for (const e of (past.data.events ?? []).slice(0, PAST_RATING_READS)) {
-          if (isNightRated(e.id)) continue
-          void apiClient
-            .getMyEventRating(e.id)
-            .then((r) => {
-              if (r.success && r.data?.ratedAt) markNightRated(e.id)
-            })
-            .catch(() => {})
-        }
-      }
-      else Logger.debug('interested', 'Failed to load attendance', { error: past.error })
-      // Older nights behind Blendn+ (step 11); kept as last known when the read fails, like the rows.
-      if (past.success && past.data) setLockedCount(past.data.lockedCount ?? 0)
+      if (saved.ok) setSavedPaged(saved.paged)
+      else Logger.debug('interested', 'Failed to load favorites', { error: saved.failure.error })
+      if (rsvps.ok) setGoingPaged(rsvps.paged)
+      else Logger.debug('interested', 'Failed to load RSVPs', { error: rsvps.failure.error })
+      if (past.ok) {
+        setPastPaged(past.paged)
+        readRatings(pagedRows(past.paged))
+        // Older nights behind Blendn+ (step 11); kept as last known when the read fails, like the rows.
+        if (lockedRef.current !== null) setLockedCount(lockedRef.current)
+      } else Logger.debug('interested', 'Failed to load attendance', { error: past.failure.error })
 
-      const allFailed = !saved.success && !rsvps.success && !past.success
+      const allFailed = !saved.ok && !rsvps.ok && !past.ok
       setLoadFailed(allFailed)
-      setRateLimit(rateLimitWait([saved, rsvps, past]))
+      setRateLimit(rateLimitWait([saved, rsvps, past].map((r) => (r.ok ? null : r.failure))))
 
       /*
        * A section whose request failed keeps its last good rows, which also
@@ -180,7 +251,7 @@ function GoingScreenInner() {
        * failure that is new says so, with the retry in the toast — unless the
        * screen is about to show the full error state, which already does.
        */
-      const failed = failedSections({ saved, going: rsvps, past })
+      const failed = failedSections({ saved: { success: saved.ok }, going: { success: rsvps.ok }, past: { success: past.ok } })
       const shown = hadRowsRef.current || !allFailed
       if (shown && newFailure(failedRef.current, failed)) {
         say("Couldn’t load all of your events.", 'error', { label: 'Try again', onPress: () => reloadRef.current() })
@@ -192,7 +263,46 @@ function GoingScreenInner() {
     } finally {
       setLoading(false)
     }
-  }, [authUser, say])
+  }, [authUser, say, readRatings, readSaved, readGoing, readPast])
+
+  /*
+   * The next page of one list, when the reader asks (the row at a section's end) or reaches the end of Past. One read per
+   * section at a time, held by a ref: the row's press and the list's end can both fire in one frame, before any state has
+   * changed. A failed one leaves its row saying so, with the way to ask again, and no toast: the row is where the reader's
+   * eyes are. The page asked for is the one after those held, or the cursor the last page handed over.
+   */
+  const moreInFlight = useRef({ saved: false, going: false, past: false })
+  const loadMore = useCallback(
+    async (section: GoingSection) => {
+      if (!authUser || moreInFlight.current[section]) return
+      moreInFlight.current[section] = true
+      setReading((r) => ({ ...r, [section]: 'busy' }))
+      const askAfter = (held: { pages: number; nextCursor?: string | null }): PageAsk => ({ page: held.pages + 1, cursor: held.nextCursor ?? null })
+      try {
+        if (section === 'saved') {
+          const r = await readSaved(askAfter(latest.current.saved))
+          if (!r.ok) throw new Error(r.failure.error || 'saved page refused')
+          setSavedPaged((p) => withNextPage(p, r.rows, r.meta))
+        } else if (section === 'going') {
+          const r = await readGoing(askAfter(latest.current.going))
+          if (!r.ok) throw new Error(r.failure.error || 'going page refused')
+          setGoingPaged((p) => withNextPage(p, r.rows, r.meta))
+        } else {
+          const r = await readPast(askAfter(latest.current.past))
+          if (!r.ok) throw new Error(r.failure.error || 'past page refused')
+          setPastPaged((p) => withNextPage(p, r.rows, r.meta))
+          readRatings(r.rows)
+        }
+        setReading((r) => ({ ...r, [section]: undefined }))
+      } catch (e) {
+        Logger.warn('interested', 'Failed to load more', { section, error: e })
+        setReading((r) => ({ ...r, [section]: 'failed' }))
+      } finally {
+        moreInFlight.current[section] = false
+      }
+    },
+    [authUser, readSaved, readGoing, readPast, readRatings]
+  )
   useEffect(() => {
     reloadRef.current = () => void loadInterestedEvents()
   }, [loadInterestedEvents])
@@ -239,12 +349,7 @@ function GoingScreenInner() {
   /** Back into the list where it was, rather than at the end. */
   const restoreRow = useCallback((event: EventRow, index: number) => {
     setRestoredId(event.id)
-    setEvents(prev => {
-      if (prev.some(e => e.id === event.id)) return prev
-      const next = [...prev]
-      next.splice(Math.min(index, next.length), 0, event)
-      return next
-    })
+    setSavedPaged((prev) => withRowAt(prev, event, index))
   }, [])
 
   /*
@@ -254,7 +359,7 @@ function GoingScreenInner() {
   const removeSave = useCallback((event: EventRow) => {
     const index = events.findIndex(e => e.id === event.id)
     setRestoredId(null)
-    setEvents(prev => prev.filter(e => e.id !== event.id))
+    setSavedPaged((prev) => withoutRow(prev, event.id))
     markSave(event, false)
     // DELETE, not the POST upsert this used to send — that one never
     // removed anything, and the card came back on the next refresh.
@@ -281,7 +386,7 @@ function GoingScreenInner() {
           })
           .catch(() => {
             settleSave(event.id, false)
-            setEvents(prev => prev.filter(e => e.id !== event.id))
+            setSavedPaged((prev) => withoutRow(prev, event.id))
             say(`Couldn’t save ${event.title} again.`, 'error')
           })
       },
@@ -298,6 +403,30 @@ function GoingScreenInner() {
 
   // The tray (Flow 16 · 16.1). The rows do not say whether an event may be shared, so the tray asks the event itself.
   const shareRow = useCallback((event: EventRow) => void shareEvent(event), [])
+  /*
+   * A row's ⋯ (Flow 4 · Going · share from a row, frame 02): the app's one Sheet with what a night you are going to or saved
+   * can do from the list. No Remove on an RSVP: leaving it is a decision the event's own page explains (the waitlist).
+   */
+  const rowActions = useCallback(
+    (row: EventRow) =>
+      showSheet({
+        kind: 'actions',
+        title: row.title,
+        message: [placeLabel(row), `${featuredDateLabel(liveWindow(row).start_time)} · ${timeLabel(liveWindow(row).start_time)}`].filter(Boolean).join(' · '),
+        actions: [
+          { label: 'Share', variant: 'secondary', then: () => shareRow(row) },
+          // A night called off has nowhere to go and nothing to put in a calendar.
+          ...(row.status === 'cancelled'
+            ? []
+            : [
+                { label: 'Directions', variant: 'secondary' as const, then: () => void openInMaps(row) },
+                { label: 'Add to calendar', variant: 'secondary' as const, then: () => addToCalendar(row) },
+              ]),
+          { label: 'Cancel', cancel: true },
+        ],
+      }),
+    [shareRow]
+  )
 
   const openEvent = useCallback((id: string) => {
     router.push({ pathname: '/event/[id]', params: { id } as any })
@@ -324,6 +453,8 @@ function GoingScreenInner() {
     const place = placeLabel(row)
     const cancelled = row.status === 'cancelled'
     const waitlisted = !cancelled && row.rsvpStatus === 'waitlisted'
+    // "New time" / "New venue": what moved under you (frame 03). Said once, and not over the waitlist or a cancel, which are the news.
+    const moved = changedTag(row)
     return (
       <View style={[styles.inset, styles.next]}>
         <SectionLabel text="Next up" />
@@ -337,7 +468,7 @@ function GoingScreenInner() {
               row.title,
               when,
               place,
-              cancelled ? 'Cancelled by the organiser' : waitlisted ? 'On the waitlist' : null,
+              cancelled ? 'Cancelled by the organiser' : waitlisted ? 'On the waitlist' : moved,
             ].filter(Boolean).join(', ')}
             accessibilityHint="Opens the event"
           >
@@ -362,6 +493,8 @@ function GoingScreenInner() {
                 <StatusTag icon="calendar-x" text="Cancelled" tint={COLOR.destructiveTint} />
               ) : waitlisted ? (
                 <StatusTag icon="clock" text="On the waitlist" tint={COLOR.warningTint} />
+              ) : moved ? (
+                <StatusTag icon="refresh-cw" text={moved} tint={COLOR.surfaceSunken} />
               ) : null}
             </View>
           </ScalePress>
@@ -407,9 +540,13 @@ function GoingScreenInner() {
     if (item.kind === 'header') {
       return (
         <View style={[styles.inset, styles.heading, first && styles.flush]}>
-          <SectionHeader title={item.title} />
+          <SectionHeader title={item.title} count={item.count} />
         </View>
       )
+    }
+
+    if (item.kind === 'more') {
+      return <MoreRow item={item} onPress={() => void loadMore(item.section)} />
     }
 
     if (item.kind === 'going') {
@@ -426,7 +563,13 @@ function GoingScreenInner() {
           time={timeLabel(liveWindow(row).start_time)}
           venue={placeLabel(row)}
           onPress={() => openEvent(row.id)}
-          trailing={cancelled ? <RowNote text="Cancelled" bad /> : row.rsvpStatus === 'waitlisted' ? <RowNote text="Waitlist" /> : null}
+          onLongPress={() => rowActions(row)}
+          trailing={
+            <>
+              {cancelled ? <RowNote text="Cancelled" bad /> : row.rsvpStatus === 'waitlisted' ? <RowNote text="Waitlist" /> : changedTag(row) ? <RowNote text={changedTag(row) as string} /> : null}
+              <RowMore title={row.title} onPress={() => rowActions(row)} />
+            </>
+          }
         />
       )
     }
@@ -448,6 +591,26 @@ function GoingScreenInner() {
           <Text style={[font('bodyStrong', bold), styles.ink, styles.shrink]}>{label}</Text>
           <Icon name="chevron-right" size={ICON.inline} color={COLOR.textSecondary} />
         </ScalePress>
+      )
+    }
+
+    if (item.kind === 'past' && item.row.visit) {
+      // A place you went live at (Flow 4 · Past venues): its name, its type art, "Live here · 28 Sep · 1h 40m" and a "Venue" tag.
+      const { visit } = item.row
+      const stay = stayLabel(visit.stayMinutes)
+      const when = [featuredDateLabel(visit.attendedAt), stay].filter(Boolean).join(' · ')
+      return (
+        <GoingRow
+          title={item.row.title}
+          plate={visit.venueType ?? 'bar'}
+          retry={refreshCount}
+          time={when}
+          venue="Live here"
+          label={`${item.row.title}, live here, ${when}`}
+          inert={!visit.venueId}
+          onPress={visit.venueId ? () => router.push({ pathname: '/venue/[id]', params: { id: visit.venueId } as any }) : undefined}
+          trailing={<VenueTag />}
+        />
       )
     }
 
@@ -493,10 +656,12 @@ function GoingScreenInner() {
           time={`${featuredDateLabel(row.start_time)} · ${timeLabel(row.start_time)}`}
           venue={placeLabel(row)}
           onPress={() => openEvent(row.id)}
+          onLongPress={() => rowActions(row)}
           trailing={
             <>
-              {cancelled ? <RowNote text="Cancelled" bad /> : null}
+              {cancelled ? <RowNote text="Cancelled" bad /> : changedTag(row) ? <RowNote text={changedTag(row) as string} /> : null}
               <SavedHeart title={row.title} onPress={() => void removeSave(row)} />
+              <RowMore title={row.title} onPress={() => rowActions(row)} />
             </>
           }
         />
@@ -504,13 +669,26 @@ function GoingScreenInner() {
     )
     // ratedVersion: a night rated elsewhere redraws its Past row.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bold, openEvent, refreshCount, removeSave, reduceMotion, renderNext, restoredId, ratedVersion])
+  }, [bold, openEvent, refreshCount, removeSave, reduceMotion, renderNext, restoredId, ratedVersion, rowActions, loadMore])
 
   // Live events lead, under "Happening now" — never under the day they started (lib/goingSections.ts).
-  const items = useMemo(
-    () => withLockedNights(goingSections(going, events, attended), lockedCount),
-    [going, events, attended, lockedCount]
+  const paging: GoingPaging = useMemo(
+    () => ({
+      going: { total: goingPaged.total, hasMore: goingPaged.hasMore, busy: reading.going === 'busy', failed: reading.going === 'failed' },
+      saved: { total: savedPaged.total, hasMore: savedPaged.hasMore, busy: reading.saved === 'busy', failed: reading.saved === 'failed' },
+      past: { total: pastPaged.total, hasMore: pastPaged.hasMore, busy: reading.past === 'busy', failed: reading.past === 'failed' },
+    }),
+    [goingPaged, savedPaged, pastPaged, reading]
   )
+  const items = useMemo(
+    () => withLockedNights(goingSections(going, events, attended, undefined, paging), lockedCount),
+    [going, events, attended, lockedCount, paging]
+  )
+  // Past is the list that runs long, and it is the last: its next page is asked for as the reader reaches the end. A failed read
+  // is asked again by the row, never by the scroll, so a refusal cannot turn into a loop.
+  const reachedEnd = useCallback(() => {
+    if (pastPaged.hasMore && !reading.past) void loadMore('past')
+  }, [pastPaged.hasMore, reading.past, loadMore])
 
   const keyExtractor = useCallback((item: GoingItem) => item.key, [])
 
@@ -584,10 +762,17 @@ function GoingScreenInner() {
         <FadeInUp style={styles.list}>
           <Animated.FlatList
             ref={listRef}
+            testID="going-list"
             data={items}
             itemLayoutAnimation={reduceMotion ? undefined : ROW_REFLOW}
             renderItem={renderItem}
             keyExtractor={keyExtractor}
+            // Hundreds of past nights are rows drawn a screen at a time, never the whole list.
+            initialNumToRender={LIST_FIRST}
+            maxToRenderPerBatch={LIST_FIRST}
+            windowSize={LIST_WINDOW}
+            onEndReached={reachedEnd}
+            onEndReachedThreshold={END_THRESHOLD}
             // The container already insets the home indicator; this clears the
             // absolutely positioned tab bar on top of that.
             contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE + SPACE.xl }}
@@ -670,24 +855,34 @@ function HeroAction({ icon, label, accessibilityLabel, onPress }: { icon: IconNa
 function GoingRow({
   title,
   cover,
+  plate,
+  label,
+  inert,
   retry,
   time,
   venue,
   onPress,
+  onLongPress,
   trailing,
 }: {
   title: string
-  cover: string | null | undefined
+  cover?: string | null
+  /** A place's type art in place of a cover (a visit). */
+  plate?: string
+  label?: string
+  inert?: boolean
   retry: number
   time: string
   venue: string | null | undefined
-  onPress: () => void
+  onPress?: () => void
+  /** The row's actions, also the screen reader's "Quick actions" (the EventCard plays `H.longPress` as the hold completes). */
+  onLongPress?: () => void
   trailing?: ReactNode
 }) {
   return (
     <View style={[styles.inset, styles.row]}>
-      <EventCard key={retry} kind="row" title={title} cover={cover} time={time} venue={venue ?? ''} onPress={onPress} style={styles.shrink} />
-      {trailing}
+      <EventCard key={retry} kind="row" title={title} cover={cover} plate={plate} label={label} inert={inert} time={time} venue={venue ?? ''} onPress={onPress} onLongPress={onLongPress ? () => onLongPress() : undefined} style={styles.shrink} />
+      {trailing ? <View style={styles.trailing}>{trailing}</View> : null}
     </View>
   )
 }
@@ -707,6 +902,60 @@ function TextAction({ label, accessibilityLabel, onPress }: { label: string; acc
         {label}
       </Text>
     </Pressable>
+  )
+}
+
+/** A row's ⋯ (frame 02): a 32 pt glyph reached at 44, which opens the row's actions. */
+function RowMore({ title, onPress }: { title: string; onPress: () => void }) {
+  return (
+    <ScalePress
+      onPress={onPress}
+      pressedScale={0.97}
+      haptic={false}
+      hitSlop={(minTarget() - HEART) / 2}
+      accessibilityRole="button"
+      accessibilityLabel={`More about ${title}`}
+      accessibilityHint="Share, directions, add to calendar"
+      style={styles.more}
+    >
+      <Icon name="ellipsis" size={ICON.control} color={COLOR.textPrimary} />
+    </ScalePress>
+  )
+}
+
+/** "Venue": a place you went live at is not a night, and the row says so (frame 01). */
+function VenueTag() {
+  const bold = useBoldText()
+  return (
+    <View style={styles.venueTag}>
+      <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), styles.secondary]}>Venue</Text>
+    </View>
+  )
+}
+
+/**
+ * The end of a section the server has more of: what is left, said as it is ("Show 302 more"), then the read itself, and, when it
+ * was refused, a line that says so with the way to ask again. Past asks on its own as the end nears; this row is where a
+ * reader who wants it now taps, and where a failure shows.
+ */
+function MoreRow({ item, onPress }: { item: Extract<GoingItem, { kind: 'more' }>; onPress: () => void }) {
+  const bold = useBoldText()
+  const text = item.failed ? 'Couldn’t load more. Try again' : item.busy ? 'Loading more' : `Show ${item.remaining.toLocaleString('en-US')} more`
+  return (
+    <ScalePress
+      testID={`going-more-${item.section}`}
+      style={[styles.inset, styles.moreRow]}
+      pressedScale={0.97}
+      haptic={false}
+      disabled={item.busy}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={text}
+      accessibilityState={{ disabled: item.busy, busy: item.busy }}
+    >
+      {item.busy ? <Spinner size={18} /> : null}
+      <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[700]), item.failed ? styles.bad : styles.ink]}>{text}</Text>
+    </ScalePress>
   )
 }
 
@@ -736,6 +985,23 @@ function SavedHeart({ title, onPress }: { title: string; onPress: () => void }) 
 
 /** Past rows whose rating is read from the server on load (the ones a person sees first). */
 const PAST_RATING_READS = 10
+/** How many rows a page of Saved and of Past asks for (the server's cap is 100); RSVPs ask for 50 (`getMyRsvps`). */
+const SAVED_PAGE = 30
+const PAST_PAGE = 30
+const GOING_PAGE = 50
+/** A refused read, as the list routes answer it: what `failedSections`, `rateLimitWait` and the log read of it. */
+type ApiResult = { error?: string; errorCode?: string; retryAfter?: number }
+/** Past nights asked about at once, when the list does not say which were rated. */
+const RATING_BATCH = 3
+
+/** The page meta a list read answers with, when it said one. */
+const pageMeta = (p: { hasMore: boolean; totalCount: number; page?: number; nextCursor?: string | null } | undefined): PageMeta | undefined =>
+  p ? { hasMore: p.hasMore, totalCount: p.totalCount, page: p.page, nextCursor: p.nextCursor } : undefined
+
+/** Rows drawn at first and per batch; about four screens are kept either side of the reader (`windowSize` counts screens). */
+const LIST_FIRST = 10
+const LIST_WINDOW = 9
+const END_THRESHOLD = 1.5
 
 /** The next-up card's photo. */
 const HERO_PHOTO = 180
@@ -820,6 +1086,12 @@ const styles = StyleSheet.create({
     backgroundColor: COLOR.surface,
     borderRadius: RADIUS.rowInCard,
   },
+  // The ⋯ and the "Show more" row: the row's own air, nothing bordered.
+  // Controls beside each other keep their 44 apart (the Android 48 reach is 8 either side of a 32), so no two reaches overlap.
+  trailing: { flexDirection: 'row', alignItems: 'center', gap: minTarget() - HEART },
+  more: { width: HEART, height: HEART, alignItems: 'center', justifyContent: 'center' },
+  moreRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACE.sm, minHeight: minTarget(), marginTop: SPACE.xs },
+  venueTag: { height: SPACE.xl, paddingHorizontal: SPACE.sm, borderRadius: RADIUS.capsule, backgroundColor: COLOR.surface, justifyContent: 'center' },
   heart: {
     width: HEART,
     height: HEART,

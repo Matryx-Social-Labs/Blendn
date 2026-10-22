@@ -89,7 +89,8 @@ it('the night: one tap on a number sends it and moves to the first person', asyn
   await fireEvent.press(await screen.findByLabelText(/^The night: 5 out of 5, Loved it/))
   await waitFor(() => expect(api.rateEvent).toHaveBeenCalledWith('e1', 5))
   expect(await screen.findByText('Night Cat')).toBeTruthy()
-  expect(screen.getByTestId('rate-progress').props.children.join('')).toBe('1 of 2')
+  expect(screen.getByTestId('rate-bar-progress').props.children).toBe('1 of 2')
+  expect(screen.getByLabelText('Person 1 of 2')).toBeTruthy()
 })
 
 it('a person: Submit is docked and disabled until a rating; issues are one radio group; the note is labelled', async () => {
@@ -168,4 +169,77 @@ it('offline: the banner says so, reads stay, and nothing is sent until it is bac
   expect(screen.getByText('Night Cat')).toBeTruthy()
   await fireEvent.press(screen.getByRole('button', { name: 'Submit' }))
   expect(api.ratePeer).not.toHaveBeenCalled()
+})
+
+describe('the night is not open to rate (Flow 15 #11)', () => {
+  it('a night that is gone is the shared card, one that goes back: never "Couldn’t load" with a retry', async () => {
+    api.getRatablePeers.mockResolvedValue({ success: false, error: 'Event not found', errorCode: 'NOT_FOUND' } as never)
+    api.getConversations.mockResolvedValue({ success: true, data: [] } as never)
+    api.getEvent.mockResolvedValue({ success: false } as never)
+    api.getMyEventRating.mockResolvedValue({ success: false } as never)
+    await view()
+    expect(await screen.findByText('Rating isn’t open for this night')).toBeTruthy()
+    expect(screen.getByText('The window closed. Nothing else changes.')).toBeTruthy()
+    expect(screen.queryByText('Couldn’t load who you met')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull()
+    await fireEvent.press(screen.getByTestId('rate-gone'))
+    expect(router.back).toHaveBeenCalled()
+  })
+
+  it('a night rating refused (403) says why and goes on to the people: asking again cannot change it', async () => {
+    loads()
+    api.rateEvent.mockResolvedValue({ success: false, error: 'x', errorCode: 'FORBIDDEN', reasonCode: 'NOT_ENDED' } as never)
+    await view()
+    await fireEvent.press(await screen.findByLabelText(/^The night: 5 out of 5, Loved it/))
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('You can rate this night once it has ended.', 'error', { haptic: 'error' }))
+    expect(screen.queryByText('Rating isn’t open for this night')).toBeNull()
+    expect(await screen.findByText('Night Cat')).toBeTruthy()
+  })
+
+  it('a person refused (403) toasts the server\'s reason and advances to the next person, never the gone card', async () => {
+    loads()
+    api.ratePeer.mockResolvedValue({ success: false, error: 'x', errorCode: 'FORBIDDEN', reasonCode: 'NOT_CONNECTED' } as never)
+    await view()
+    await fireEvent.press(await screen.findByLabelText(/^The night: 5 out of 5, Loved it/))
+    await fireEvent.press(await screen.findByLabelText(/^Meeting Night Cat: 4 out of 5/))
+    await fireEvent.press(screen.getByTestId('rate-submit'))
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('You can only rate people you connected with.', 'error', { haptic: 'error' }))
+    expect(screen.queryByText('Rating isn’t open for this night')).toBeNull()
+    expect(await screen.findByText('Quiet Fox')).toBeTruthy()
+  })
+
+  it('a 403 with no reason named (an older server) still says something, and moves on', async () => {
+    loads()
+    api.ratePeer.mockResolvedValue({ success: false, error: 'x', errorCode: 'FORBIDDEN' } as never)
+    await view()
+    await fireEvent.press(await screen.findByLabelText(/^The night: 5 out of 5, Loved it/))
+    await fireEvent.press(await screen.findByLabelText(/^Meeting Night Cat: 4 out of 5/))
+    await fireEvent.press(screen.getByTestId('rate-submit'))
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('That one can’t be rated.', 'error', { haptic: 'error' }))
+  })
+
+  it('a refusal that is only a failure (500, no code) is still a toast and the form stays', async () => {
+    loads()
+    api.rateEvent.mockResolvedValue({ success: false, error: 'boom' } as never)
+    await view()
+    await fireEvent.press(await screen.findByLabelText(/^The night: 5 out of 5, Loved it/))
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalled())
+    expect(screen.queryByText('Rating isn’t open for this night')).toBeNull()
+  })
+})
+
+describe('the bar over a form that scrolls under it (#30)', () => {
+  it('is at rest on the top of the form, glass once the form has moved, and at rest again for the next person', async () => {
+    loads()
+    await view()
+    await fireEvent.press(await screen.findByLabelText(/^The night: 5 out of 5, Loved it/))
+    const form = await screen.findByTestId('rate-submit')
+    expect(form).toBeTruthy()
+    expect(screen.queryByTestId('rate-bar-bar')).toBeNull()
+    await fireEvent.scroll(screen.getByTestId('rate-form'), { nativeEvent: { contentOffset: { y: 40 } } })
+    expect(screen.getByTestId('rate-bar-bar')).toBeTruthy()
+    // Skip to the next person: a new form, at its top.
+    await fireEvent.press(screen.getByTestId('rate-skip-person'))
+    await waitFor(() => expect(screen.queryByTestId('rate-bar-bar')).toBeNull())
+  })
 })

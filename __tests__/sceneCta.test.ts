@@ -253,7 +253,7 @@ describe('the accessibility gaps docs/SCENE.md recorded', () => {
     // pairs with stops that announce nothing.
     const hero = HERO()
     expect(hero).toContain('accessibilityRole="header"')
-    expect(hero).toContain('[title, when, ...pills.map((p) => p.text), place]')
+    expect(hero).toContain('[title, whenSpoken ?? when, ...pills.map((p) => p.text), place]')
   })
 })
 

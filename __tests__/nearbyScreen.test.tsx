@@ -147,3 +147,72 @@ describe('the header', () => {
     expect(screen.queryByTestId('nearby-top-condensed')).toBeNull()
   })
 })
+
+describe('a city with hundreds of events (large data)', () => {
+  const full = Array.from({ length: 50 }, (_, i) => ev(`a${i}`, `Night ${i}`, 12.9 + i / 1000))
+  const nextPage = [ev('b0', 'Later 0', 13.1), ev('b1', 'Later 1', 13.11), ev('a49', 'Night 49', 12.949)]
+  const atEnd = async () => {
+    await fireEvent(screen.getByTestId('nearby-list'), 'endReached')
+    await act(async () => {})
+  }
+
+  it('reads the first page by size, and the next only when the reader reaches the end, from the same fix and city', async () => {
+    events.mockResolvedValueOnce({ data: full, error: null }).mockResolvedValueOnce({ data: nextPage, error: null })
+    await open()
+    expect(events).toHaveBeenCalledTimes(1)
+    expect(events.mock.calls[0][0]).toMatchObject({ page: 0, limit: 50, sortBy: 'distance', city: 'Bengaluru' })
+    await atEnd()
+    expect(events).toHaveBeenCalledTimes(2)
+    expect(events.mock.calls[1][0]).toMatchObject({ page: 1, limit: 50, sortBy: 'distance', city: 'Bengaluru', lat: 12.97, lon: 77.6 })
+  })
+
+  it('a short page is the last: reaching the end again asks for nothing', async () => {
+    events.mockResolvedValueOnce({ data: full, error: null }).mockResolvedValueOnce({ data: nextPage, error: null })
+    await open()
+    await atEnd()
+    await atEnd()
+    expect(events).toHaveBeenCalledTimes(2)
+  })
+
+  it('a city of fewer than a page never asks for a second', async () => {
+    events.mockResolvedValue({ data: [ev('a', 'A', 12.98), ev('b', 'B', 12.99)], error: null })
+    await open()
+    await atEnd()
+    expect(events).toHaveBeenCalledTimes(1)
+  })
+
+  it('a refused page says so at the foot, keeps the rows, and is asked again only by that foot', async () => {
+    events.mockResolvedValueOnce({ data: full, error: null }).mockResolvedValueOnce({ data: null, error: { message: 'x' } })
+    await open()
+    await atEnd()
+    expect(await screen.findByTestId('nearby-more-failed')).toBeTruthy()
+    expect(screen.getByTestId('nearby-a49')).toBeTruthy()
+    // The scroll does not ask again by itself.
+    await atEnd()
+    expect(events).toHaveBeenCalledTimes(2)
+    events.mockResolvedValueOnce({ data: nextPage, error: null })
+    await fireEvent.press(screen.getByTestId('nearby-more-failed'))
+    await waitFor(() => expect(events).toHaveBeenCalledTimes(3))
+    await waitFor(() => expect(screen.queryByTestId('nearby-more-failed')).toBeNull())
+  })
+})
+
+describe('two triggers in one frame (Nearby)', () => {
+  it('the list\'s end firing twice asks for the next page once, and the page after it is the third', async () => {
+    const full = Array.from({ length: 50 }, (_, i) => ev(`a${i}`, `Night ${i}`, 12.9 + i / 1000))
+    const second = Array.from({ length: 50 }, (_, i) => ev(`b${i}`, `Later ${i}`, 13.1 + i / 1000))
+    events.mockResolvedValueOnce({ data: full, error: null }).mockResolvedValueOnce({ data: second, error: null }).mockResolvedValue({ data: [], error: null })
+    await open()
+    await act(async () => {
+      fireEvent(screen.getByTestId('nearby-list'), 'endReached')
+      fireEvent(screen.getByTestId('nearby-list'), 'endReached')
+    })
+    await act(async () => {})
+    expect(events).toHaveBeenCalledTimes(2)
+    await act(async () => {
+      fireEvent(screen.getByTestId('nearby-list'), 'endReached')
+    })
+    await act(async () => {})
+    expect(events.mock.calls[2][0]).toMatchObject({ page: 2 })
+  })
+})

@@ -3,7 +3,7 @@ import { Platform, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { COLOR, RADIUS, SIZE, SPACE as DS_SPACE, TYPE as DS_TYPE } from '../../lib/design/tokens'
-import { EMBER, GUTTER, SPACE, TYPE } from '../../lib/theme'
+import { GUTTER, SPACE, TYPE } from '../../lib/theme'
 import { Material } from '../ui/Material'
 
 /** Frame `1141:4819`: the bar is 64 tall, below the status bar. */
@@ -14,7 +14,7 @@ export const TOP_BAR_HEIGHT = 64
  *
  * ## An overlay, not a header component
  *
- * It sits at `top: 0` over the feed as an opaque `EMBER.bg` band — no blur —
+ * It sits at `top: 0` over the feed as an opaque `COLOR.ink` band — no blur —
  * and the feed scrolls **under** it. The bar this replaced
  * reserved its own height and sat above a bordered panel, which is half of why
  * the old Pulse read as a page inside a page. Nothing here occupies layout;
@@ -138,7 +138,7 @@ const styles = StyleSheet.create({
     zIndex: 10,
     // The page colour, opaque. The frame's 80% fill under a 12pt blur is
     // glass (tasks/lessons.md); the feed now passes under a flat band.
-    backgroundColor: EMBER.bg,
+    backgroundColor: COLOR.ink,
   },
   row: {
     height: TOP_BAR_HEIGHT,

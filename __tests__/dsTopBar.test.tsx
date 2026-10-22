@@ -157,3 +157,28 @@ describe('the Save pill’s height is the circle’s', () => {
     Object.defineProperty(Platform, 'OS', { value: 'ios', configurable: true })
   })
 })
+
+describe('progress: where you are in a short run of people (Rate)', () => {
+  it('is Geist Mono in meta at textSecondary, read as "Person 2 of 5", with its font growth capped', async () => {
+    await draw({ progress: '2 of 5', testID: 'bar' })
+    const text = screen.getByTestId('bar-progress')
+    expect(text.props.children).toBe('2 of 5')
+    expect(text.props.accessibilityLabel).toBe('Person 2 of 5')
+    expect(text.props.maxFontSizeMultiplier).toBeDefined()
+    const style = StyleSheet.flatten(text.props.style)
+    expect(style).toMatchObject({ fontFamily: FONT_FAMILY.mono[500], fontSize: TYPE.meta.fontSize, color: COLOR.textSecondary })
+  })
+
+  it('is not drawn when there is none', async () => {
+    await draw({ testID: 'bar' })
+    expect(screen.queryByTestId('bar-progress')).toBeNull()
+  })
+
+  it('sits at the right, after the actions', async () => {
+    await draw({ progress: '1 of 3', actions: [{ icon: 'share', label: 'Share', onPress: () => {} }], testID: 'bar' })
+    const right = screen.getByTestId('bar-right')
+    const kinds = right.props.children.flat().filter(Boolean)
+    expect(kinds.length).toBeGreaterThanOrEqual(2)
+    expect(screen.getByTestId('bar-progress')).toBeTruthy()
+  })
+})

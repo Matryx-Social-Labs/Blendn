@@ -10,6 +10,7 @@ import ScalePress from '../motion/ScalePress'
 import { PhotoScrim } from '../ui/GradientFill'
 import { COLOR, FONT_FAMILY, ICON, PRESS, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { Icon } from '../ui/Icon'
+import { VenuePlate } from './VenuePlate'
 import { PROMOTED_LABEL } from '../../lib/pulseSections'
 import { MonoRun, ScrimPill, TimeBadge } from './MonoFamily'
 import { CONTROL_FONT_CAP, focusRing, font, IC_HAIRLINE, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
@@ -35,6 +36,15 @@ export type EventCardProps = {
   /** A paid placement: a "PROMOTED" scrim pill top-right, read first. Editorial picks carry none. */
   promoted?: boolean
   cover?: string | null
+  /**
+   * `row` only: a place's type art (`VenuePlate`) in the thumb where an event would have its cover: a visit to a place, not a
+   * night (Going › Past). A type it has no plate for draws the bar's.
+   */
+  plate?: string
+  /** The card goes nowhere (a visit whose place the server has not named): it is read, not offered as a button. */
+  inert?: boolean
+  /** The one sentence a screen reader hears, when the card's words are not the usual title, time and "at {venue}" (a visit). */
+  label?: string
   /** You're going: the ribbon reads "You're going · {saved}" ("9 PM"). */
   saved?: string
   onPress?: () => void
@@ -102,12 +112,12 @@ export function eventLabel({
  * on the card and the scrim 20% deeper.
  */
 export function EventCard(props: EventCardProps) {
-  const { kind, title, time, venue, distance, lead, going, here, promoted, cover, saved, onPress, onPressIn, onLongPress, previewState, testID, style } = props
+  const { kind, title, time, venue, distance, lead, going, here, promoted, cover, plate, saved, onPress, onPressIn, onLongPress, previewState, testID, style } = props
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const android = Platform.OS === 'android'
   const [focused, setFocused] = useState(false)
-  const label = eventLabel(props)
+  const label = props.label ?? eventLabel(props)
   const box = useRef<View>(null)
   const hold = onLongPress
     ? () => {
@@ -117,7 +127,7 @@ export function EventCard(props: EventCardProps) {
     : undefined
   const ring = focused || previewState === 'focused'
   const a11y = {
-    accessibilityRole: 'button' as const,
+    accessibilityRole: props.inert ? ('text' as const) : ('button' as const),
     accessibilityLabel: label,
     ...(onLongPress
       ? {
@@ -135,6 +145,7 @@ export function EventCard(props: EventCardProps) {
       <View ref={box} collapsable={false} style={style}>
         <Pressable
           testID={testID}
+          disabled={props.inert}
           onPress={onPress}
           onPressIn={onPressIn}
           onLongPress={hold}
@@ -150,7 +161,11 @@ export function EventCard(props: EventCardProps) {
             </Text>
           ) : null}
           <View testID={testID && `${testID}-thumb`} style={styles.thumb}>
-            {cover ? <Image source={{ uri: cover }} recyclingKey={cover} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} /> : null}
+            {cover ? (
+              <Image source={{ uri: cover }} recyclingKey={cover} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} />
+            ) : plate ? (
+              <VenuePlate type={plate} />
+            ) : null}
           </View>
           <View style={styles.rowText}>
             <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold), styles.ink]}>
@@ -187,6 +202,7 @@ export function EventCard(props: EventCardProps) {
     >
       <ScalePress
         testID={testID}
+        disabled={props.inert}
         onPress={onPress}
         onPressIn={onPressIn}
         onLongPress={hold}

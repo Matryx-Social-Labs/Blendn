@@ -14,12 +14,18 @@ export const TOP_BAR_SCROLL_THRESHOLD = SPACE.sm
  * `scrollProps` on the ScrollView or FlatList. Only a crossing re-renders: the
  * boolean bails out of the same value.
  */
-export function useTopBarState(): { state: TopBarState; scrollProps: { onScroll: (e: NativeSyntheticEvent<NativeScrollEvent>) => void; scrollEventThrottle: number } } {
+export function useTopBarState(): {
+  state: TopBarState
+  scrollProps: { onScroll: (e: NativeSyntheticEvent<NativeScrollEvent>) => void; scrollEventThrottle: number }
+  /** Back to the rest state, for a screen that swaps its scroller for a new one at the top (Rate's next person). */
+  reset: () => void
+} {
   const [scrolled, setScrolled] = useState(false)
   const onScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
     setScrolled(e.nativeEvent.contentOffset.y > TOP_BAR_SCROLL_THRESHOLD)
   }, [])
-  return { state: scrolled ? 'scrolled' : 'rest', scrollProps: { onScroll, scrollEventThrottle: 16 } }
+  const reset = useCallback(() => setScrolled(false), [])
+  return { state: scrolled ? 'scrolled' : 'rest', scrollProps: { onScroll, scrollEventThrottle: 16 }, reset }
 }
 
 /**

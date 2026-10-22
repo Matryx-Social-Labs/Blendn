@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Image } from 'expo-image'
 import MapView, { Marker } from 'react-native-maps'
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { ScrollView, StyleSheet, Text, View } from 'react-native'
 import Animated, {
   Easing,
   FadeIn,
@@ -17,9 +17,10 @@ import Animated, {
 import type { DetailBlock } from '../../lib/eventDetails'
 import type { FeedMediaItem } from '../../lib/feedMedia'
 import { Avatar } from '../ds/Avatar'
+import { Spinner } from '../ds/Loader'
 import { RollingNumber } from '../ds/RollingNumber'
 import { SectionHeader } from '../ds/SectionHeader'
-import { font, useBoldText } from '../ds/shared'
+import { CONTROL_FONT_CAP, font, useBoldText } from '../ds/shared'
 import ScalePress from '../motion/ScalePress'
 import { fadeInFast, popIn } from '../motion/presence'
 import { GradientFill } from '../ui/GradientFill'
@@ -342,6 +343,7 @@ export function SceneCTA({
   iconKey,
   onPress,
   alone = false,
+  note,
   pending = false,
 }: {
   state?: SceneCTAState
@@ -349,12 +351,19 @@ export function SceneCTA({
   pending?: boolean
   /** Nobody but you checked in: `rate` then asks about the night, not people. */
   alone?: boolean
+  /**
+   * Between the days of a run, a line the pill says in place of its label and glyph ("Day 3 starts Tue, Sep 29, 9:00 PM",
+   * Flow 3 · 3.2 frame 06): the next door, in Geist Mono, beside the check that says you are going. The press is still the RSVP's
+   * own off-switch, so a screen reader is told both, and nothing about the pill's width or state changes.
+   */
+  note?: string
   /** Drawn in the colour the pill hands it — dark on the accent fill, `textPrimary` on the quiet one. */
   icon?: (color: string) => React.ReactNode
   /** Names which glyph `icon` is drawing; a new key is what pops the new one in. */
   iconKey?: string
   onPress?: () => void
 }) {
+  const bold = useBoldText()
   // Only while a handler is busy; no state is a dead end.
   const disabled = !onPress || pending
   /*
@@ -389,7 +398,8 @@ export function SceneCTA({
       disabled={disabled}
       accessibilityRole="button"
       accessibilityState={{ disabled, busy: pending, selected: state === 'going' }}
-      accessibilityLabel={sceneCtaLabel(state, alone)}
+      accessibilityLabel={note ? `${note}. ${sceneCtaLabel(state, alone)}` : sceneCtaLabel(state, alone)}
+      accessibilityHint={note ? 'Double-tap to cancel your RSVP' : undefined}
     >
       {/*
         Full width, the gradient while there is something still to do, 8% white
@@ -405,20 +415,21 @@ export function SceneCTA({
         {/* Skips the entrance on first paint; only a *change* of icon or label animates. */}
         <LayoutAnimationConfig skipEntering>
           {pending ? (
-            <ActivityIndicator testID="scene-cta-pending" color={COLOR.textOnGradient} />
+            <Spinner testID="scene-cta-pending" color={COLOR.textOnGradient} />
           ) : icon ? (
             <Animated.View key={iconKey} entering={reduceMotion ? changeFade : popIn}>
               {icon(COLOR.textOnGradient)}
             </Animated.View>
           ) : null}
           <Animated.Text
-            key={state}
+            key={note ? `${state}:note` : state}
             entering={reduceMotion ? changeFade : ctaLabelIn}
             exiting={reduceMotion ? ctaFadeOut : ctaLabelOut}
-            style={[styles.ctaLabel, styles.ctaInk]}
-            numberOfLines={1}
+            style={[note ? [font('meta', bold, FONT_FAMILY.mono[500]), styles.ctaNote] : styles.ctaLabel, styles.ctaInk]}
+            maxFontSizeMultiplier={note ? CONTROL_FONT_CAP : undefined}
+            numberOfLines={note ? 2 : 1}
           >
-            {sceneCtaLabel(state, alone)}
+            {note ?? sceneCtaLabel(state, alone)}
           </Animated.Text>
         </LayoutAnimationConfig>
       </View>
@@ -681,5 +692,7 @@ const styles = StyleSheet.create({
   ctaFillQuiet: { backgroundColor: MATERIAL.fillOnGlass, borderColor: 'transparent' },
   // TYPE.button's 24pt line is one of the terms SCENE_CTA_HEIGHT is summed from.
   ctaLabel: { ...TYPE.button },
+  // The between-days line (`font('meta')` in Geist Mono, capped), centred, over as many lines as the reader's type needs (the dock measures the pill).
+  ctaNote: { textAlign: 'center', flexShrink: 1 },
   ctaInk: { color: COLOR.textOnGradient },
 })

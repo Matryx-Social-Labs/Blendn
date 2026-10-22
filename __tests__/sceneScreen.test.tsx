@@ -1,6 +1,6 @@
 /**
  * The Scene screen (Flow 3 `scene`), state by state: the failed and not-found pages, the ⋯ menu (Report for anyone;
- * Edit, Announce and Delete for the organiser, Delete last), the facts as tiles, the banners and the one dock button.
+ * and nothing else: an organiser's tools are the dashboard's), the facts as tiles, the banners and the one dock button.
  * What it does with an RSVP, a save or a check-in is unchanged and pinned by the source tests beside this one.
  */
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native'
@@ -231,6 +231,47 @@ describe('the days of a run (Flow 3 · 3.2, #724 window)', () => {
     expect(screen.getByTestId('scene-day-2').props.accessibilityLabel).toMatch(/, day 2 of 3, next$/)
   })
 
+  it('the hero says the run\'s own dates in place of the next doors (frame 04)', async () => {
+    api.getEvent.mockResolvedValue(detail(run(true)) as never)
+    await open()
+    await screen.findByTestId('scene-when')
+    // Three days: the first day's date to the last, the month said once.
+    expect(screen.getByLabelText(/^Vinyl Night\. \w{3} \d+ to \w{3} \d+ \w{3}\./)).toBeTruthy()
+  })
+
+  it('between days, to somebody who is going, the pill says when the next day starts and is still the RSVP\'s off-switch (frame 06)', async () => {
+    api.getEvent.mockResolvedValue(detail({ ...run(false), startTime: hours(-30), endTime: hours(60), session: { startTime: hours(3), endTime: hours(6) } }, { rsvpStatus: 'going' }) as never)
+    await open()
+    const pill = await screen.findByLabelText(/^Day 2 starts .*\. You’re going$/)
+    expect(pill.props.accessibilityState).toEqual(expect.objectContaining({ disabled: false }))
+    expect(screen.queryByText('You’re going')).toBeNull()
+    await fireEvent.press(pill)
+    expect(showSheet).toHaveBeenCalledWith(expect.objectContaining({ title: 'Cancel your RSVP?' }))
+  })
+
+  it('before the first day there is no "between": the pill is the RSVP\'s own words even when the next day is not today', async () => {
+    // The run has not begun: the session is day 1, and its start is in the future (no day has opened yet).
+    const r = run(false)
+    api.getEvent.mockResolvedValue(detail({ ...r, startTime: hours(30), endTime: hours(60) }, { rsvpStatus: 'going' }) as never)
+    await open()
+    expect(await screen.findByLabelText('You’re going')).toBeTruthy()
+    expect(screen.queryByLabelText(/starts/)).toBeNull()
+  })
+
+  it('between days the pill keeps its check and says how to cancel', async () => {
+    api.getEvent.mockResolvedValue(detail({ ...run(false), startTime: hours(-30), endTime: hours(60), session: { startTime: hours(3), endTime: hours(6) } }, { rsvpStatus: 'going' }) as never)
+    await open()
+    const pill = await screen.findByLabelText(/^Day 2 starts .*\. You’re going$/)
+    expect(pill.props.accessibilityHint).toBe('Double-tap to cancel your RSVP')
+  })
+
+  it('not going, or on the day itself, the pill is the RSVP\'s own words', async () => {
+    api.getEvent.mockResolvedValue(detail(run(false)) as never)
+    await open()
+    expect(await screen.findByLabelText('I’m going')).toBeTruthy()
+    expect(screen.queryByLabelText(/starts/)).toBeNull()
+  })
+
   it('a one-day event has no strip and keeps its doors', async () => {
     api.getEvent.mockResolvedValue(detail({ timezone: ZONE, days: [day(0)], dayCount: 1, daysFrom: 1, dayNumber: 1 }) as never)
     await open()
@@ -336,12 +377,20 @@ describe('the ⋯ menu', () => {
     expect(showEventReportOptions).toHaveBeenCalledWith('Vinyl Night', 'e1')
   })
 
-  it('the organiser also gets Edit and Announce, and Delete last, in red', async () => {
+  it('the organiser gets the same menu: no Edit, Announce or Delete on the Scene (they are the dashboard\'s, owner ruling D3)', async () => {
     api.getEvent.mockResolvedValue(detail({ organizer: { id: 'me', name: 'Me' } }) as never)
     await open()
     await fireEvent.press(await screen.findByRole('button', { name: 'More options' }))
     const names = within(screen.getByTestId('scene-menu')).getAllByRole('button').map((n) => n.props.accessibilityLabel)
-    expect(names).toEqual(['Edit event', 'Send an announcement', 'Report this event', 'Delete event'])
+    expect(names).toEqual(['Report this event'])
+    expect(screen.queryByRole('button', { name: 'Edit event' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Delete event' })).toBeNull()
+  })
+
+  it('the screen carries no organiser sheet, state or handler any more', () => {
+    const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'components', 'screens', 'EventDetailScreen.tsx'), 'utf8') as string
+    expect(src).not.toMatch(/AnnouncementSheet|EditEventSheet|isOrganizer|sendAnnouncement|updateEvent|deleteEvent/)
+    expect(require('fs').existsSync(require('path').join(__dirname, '..', 'components', 'scene', 'EventSheets.tsx'))).toBe(false)
   })
 })
 
