@@ -45,7 +45,7 @@ describe('the crash screen', () => {
   })
 
   it('contacts support for real, with the error id', () => {
-    expect(src).toContain('supportMailto({ subject: "Blend\'n crashed", userId: user?.id, errorId: this.state.errorId })')
+    expect(src).toContain('supportMailto({ subject: "Blend’n crashed", userId: user?.id, errorId: this.state.errorId })')
     // The same id goes to Sentry, so the email and the report can be matched.
     expect(read('app/_layout.tsx')).toContain("tags: { context: 'root-error-boundary', error_id: errorId }")
   })
@@ -70,7 +70,7 @@ describe('the support address', () => {
   })
 
   it('drafts an email carrying the version, the phone, the account and the error', () => {
-    const url = supportMailto({ subject: "Blend'n crashed", userId: 'u_me', errorId: 'E-1' })
+    const url = supportMailto({ subject: "Blend’n crashed", userId: 'u_me', errorId: 'E-1' })
     expect(url.startsWith(`mailto:${SUPPORT_EMAIL}?subject=`)).toBe(true)
     const body = decodeURIComponent(url.split('&body=')[1])
     expect(body).toContain('App: 1.4.0 (118)')

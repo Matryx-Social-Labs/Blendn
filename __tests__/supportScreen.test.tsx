@@ -34,7 +34,7 @@ it('says what the draft includes: the app, the phone and a short account id', as
   await render(<SupportScreen />)
   expect(screen.getByLabelText(/^App, /)).toBeTruthy()
   expect(screen.getByLabelText(/^iOS, /)).toBeTruthy()
-  expect(screen.getByLabelText('Account, 8f3a…21c1')).toBeTruthy()
+  expect(screen.getByLabelText('Account ID, 8f3a…21c1')).toBeTruthy()
 })
 
 it('Email support opens the mail app with the whole account id in the draft', async () => {

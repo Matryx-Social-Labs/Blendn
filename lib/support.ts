@@ -80,10 +80,10 @@ export const GRIEVANCE = {
 /** The row's hint on About: who, and where a notice can be sent. */
 export const GRIEVANCE_LINE = `Grievance officer: ${GRIEVANCE.officer} · ${GRIEVANCE.company}, ${GRIEVANCE.address}`
 
-export const grievanceMailto = () => `mailto:${GRIEVANCE.email}?subject=${encodeURIComponent("Blend'n grievance")}`
+export const grievanceMailto = () => `mailto:${GRIEVANCE.email}?subject=${encodeURIComponent("Blend’n grievance")}`
 
 /** A copy of someone's data (Flow 7 R4.1 7.2): a prefilled email to support, with the account in it. Nothing is sent until they press Send. */
 export const dataCopyMailto = (userId?: string | null) => {
-  const body = `\n\nPlease send me a copy of the data Blend'n holds about me.\n\n--\nApp: ${appVersionLabel()}${userId ? `\nAccount: ${userId}` : ''}`
+  const body = `\n\nPlease send me a copy of the data Blend’n holds about me.\n\n--\nApp: ${appVersionLabel()}${userId ? `\nAccount: ${userId}` : ''}`
   return `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('A copy of my data')}&body=${encodeURIComponent(body)}`
 }

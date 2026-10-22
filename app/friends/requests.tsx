@@ -36,7 +36,7 @@ function FriendRequestsScreenContent() {
   const empty = failed ? (
     <StateScreen
       icon="cloud-off"
-      title="Your requests didn't load"
+      title="Your requests didn’t load"
       body="Check your connection and try again."
       actions={[{ label: 'Try again', onPress: () => void onRefresh(), loading: refreshing }]}
     />
@@ -44,7 +44,7 @@ function FriendRequestsScreenContent() {
     <StateScreen
       icon="user-plus"
       title="No requests"
-      body="When somebody opens your link and asks to be your friend, they'll be here."
+      body="When somebody opens your link and asks to be your friend, they’ll be here."
     />
   )
 

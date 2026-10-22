@@ -19,7 +19,7 @@ export function socialSignInMessage(
 ): string {
   if (result.errorCode === 'FORBIDDEN' && result.error) return result.error
   if (result.errorCode === 'RATE_LIMITED') return rateLimitedMessage('sign-in attempts', result.retryAfter)
-  return `Couldn't sign in with ${provider}. Please try again.`
+  return `Couldn’t sign in with ${provider}. Please try again.`
 }
 
 /**
@@ -42,7 +42,7 @@ export function rateLimitedMessage(
 /** The reset-link screen's sentence for a refused request (SCRUM-487). */
 export function forgotPasswordMessage(result: { error?: string; errorCode?: string; retryAfter?: number }): string {
   if (result.errorCode === 'RATE_LIMITED') return rateLimitedMessage('reset requests', result.retryAfter)
-  return result.error || "Couldn't send the reset link. Try again."
+  return result.error || "Couldn’t send the reset link. Try again."
 }
 
 function waitPhrase(seconds: number | undefined): string {

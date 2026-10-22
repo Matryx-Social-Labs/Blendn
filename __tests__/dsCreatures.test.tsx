@@ -12,6 +12,7 @@ import {
   Creature,
   CREATURE_CAST,
   CREATURE_GLYPHS,
+  CREATURE_MASS_DX,
   CREATURE_NOUNS,
   creatureFor,
   type CreatureGlyph,
@@ -151,9 +152,9 @@ describe('<Creature>', () => {
   it('puts the glyph at 50% of the disc, at any size', async () => {
     await render(<Creature glyph="owl" palette={2} size={112} />)
     const svg = all(tree(), 'RNSVGSvgView')[0]
-    // The glyph's 24 box, centred in a 48 box: half the disc.
+    // The glyph's 24 box, centred in a 48 box: half the disc, moved across by its ink (`CREATURE_MASS_DX`, r7 M1).
     expect(svg.props).toMatchObject({ width: 112, height: 112, vbWidth: 48, vbHeight: 48 })
-    expect(all(tree(), 'RNSVGPath')[1].props.matrix).toEqual([1, 0, 0, 1, 12, 12])
+    expect(all(tree(), 'RNSVGPath')[1].props.matrix).toEqual([1, 0, 0, 1, 12 + CREATURE_MASS_DX.owl, 12])
   })
 
   it('splits the disc at 135°: the second colour is the lower-right half', async () => {

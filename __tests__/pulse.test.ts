@@ -76,9 +76,9 @@ describe('groupByDay', () => {
 })
 
 describe('timeLabel', () => {
-  it('shows the local start time with minutes', () => {
-    expect(timeLabel(new Date(2026, 9, 24, 19, 0).toISOString())).toMatch(/7:00/)
-    expect(timeLabel(new Date(2026, 9, 24, 9, 30).toISOString())).toMatch(/9:30/)
+  it('shows the local start time in the app’s one clock, never the phone’s locale (r7 M7)', () => {
+    expect(timeLabel(new Date(2026, 9, 24, 19, 0).toISOString())).toBe('7 PM')
+    expect(timeLabel(new Date(2026, 9, 24, 9, 30).toISOString())).toBe('9:30 AM')
   })
 
   it('returns empty for a date it cannot read', () => {

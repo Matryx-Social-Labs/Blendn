@@ -328,7 +328,7 @@ export function useRoom(): RoomState & RoomActions {
 
         if (!active.success || !active.data?.checkIns) {
           Logger.error('match', 'Error fetching active check-ins', { error: active.error })
-          if (!eventRef.current) setLoadError(active.error || "Couldn't reach the server.")
+          if (!eventRef.current) setLoadError(active.error || "Couldn’t reach the server.")
           return
         }
 
@@ -433,7 +433,7 @@ export function useRoom(): RoomState & RoomActions {
         Logger.error('match', 'Failed to load the room', { error: e })
         if (superseded()) return
         if (!eventRef.current) {
-          setLoadError(e instanceof Error ? e.message : "Couldn't load the room.")
+          setLoadError(e instanceof Error ? e.message : "Couldn’t load the room.")
         }
       }
     },

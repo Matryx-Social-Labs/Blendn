@@ -129,11 +129,11 @@ export function roomButtonAccessibilityLabel(target: RoomButtonTarget): string {
         ? `Open the room. ${target.badge} unread ${target.badge === 1 ? 'message' : 'messages'}`
         : 'Open the room'
     case 'checkin':
-      return "You're at an event. Check in to see who else is here"
+      return "You’re at an event. Check in to see who else is here"
     case 'today':
-      return "Open tonight's event"
+      return "Open tonight’s event"
     case 'idle':
-      return "See what's on near you"
+      return "See what’s on near you"
   }
 }
 

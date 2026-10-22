@@ -9,6 +9,6 @@ import type { ToastVariant } from './toast'
 export function copyText(text: string, showToast: (message: string, variant?: ToastVariant) => void): void {
   Clipboard.setStringAsync(text).then(
     () => showToast(`Copied ${text}`, 'success'),
-    () => showToast("Couldn't copy that. Try again.", 'error')
+    () => showToast("Couldn’t copy that. Try again.", 'error')
   )
 }

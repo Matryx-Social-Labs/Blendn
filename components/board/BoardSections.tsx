@@ -69,7 +69,7 @@ export function BoardEntry({ onPress }: { onPress: () => void }) {
       <Ionicons name="people-outline" size={ICON.lg} color={EMBER.textPrimary} />
       <View style={styles.entryText}>
         <Text variant="bodyStrong">The Board</Text>
-        <Text variant="meta">Going alone? See who&apos;s looking for company — or offer a space.</Text>
+        <Text variant="meta">Going alone? See who’s looking for company — or offer a space.</Text>
       </View>
       <Ionicons name="chevron-forward" size={ICON.md} color={EMBER.textSecondary} />
     </Pressable>
@@ -134,7 +134,7 @@ export const BoardPostCard = memo(function BoardPostCard({
         <Pressable
           onPress={() => onMore(post)}
           accessibilityRole="button"
-          accessibilityLabel={`More options for ${post.author}'s post`}
+          accessibilityLabel={`More options for ${post.author}’s post`}
           style={({ pressed }) => [styles.more, pressed && styles.pressed]}
         >
           <Icon name="ellipsis" size={DS_ICON.control} color={COLOR.textSecondary} />

@@ -209,7 +209,7 @@ export function useCrewActions(
       if (result.data.blend) {
         if (onBlend) onBlend(result.data.blend, card, asCrewId ?? null)
         else {
-          showToast("It's a Blend", 'success')
+          showToast("It’s a Blend", 'success')
           openBlend(result.data.blend, `Blend with ${card.name}`)
         }
       }

@@ -118,7 +118,7 @@ describe('what the dock draws for each state: one lit action', () => {
 
   it('incoming: a lit "Accept friend request"', async () => {
     await open(OFFER('incoming', true))
-    expect(await screen.findByLabelText('Accept Ben\'s friend request')).toBeTruthy()
+    expect(await screen.findByLabelText('Accept Ben’s friend request')).toBeTruthy()
     expect(screen.getByText('Accept friend request')).toBeTruthy()
     expect(fillOf('profile-cta')).not.toBe(LIT)
   })
@@ -297,7 +297,7 @@ describe('when it does not go through', () => {
     await open(OFFER('none', true))
     await act(async () => fireEvent.press(await screen.findByTestId('profile-friend')))
     await flush()
-    expect(mockShowToast).toHaveBeenCalledWith("That didn't go through. Try again.", 'error', { haptic: 'error' })
+    expect(mockShowToast).toHaveBeenCalledWith("That didn’t go through. Try again.", 'error', { haptic: 'error' })
     expect(screen.getByText('Add friend')).toBeTruthy()
   })
 })

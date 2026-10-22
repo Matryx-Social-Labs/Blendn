@@ -53,7 +53,7 @@ it('a full adult date with a gender makes Continue live, and commits what was ty
 it('under 18 says so under the date and offers Sign out beside it, and Continue stays off', async () => {
   await render(<BasicsScreen />)
   await dob('01', '01', String(year - 15))
-  expect(screen.getByText("Blend'n is for people 18 and over.")).toBeTruthy()
+  expect(screen.getByText("Blend’n is for people 18 and over.")).toBeTruthy()
   expect(screen.getByTestId('onboarding-under-age-sign-out')).toBeTruthy()
   expect(primary().props.accessibilityState).toMatchObject({ disabled: true })
   expect(screen.queryByText('Your age will be private and used only for verification.')).toBeNull()

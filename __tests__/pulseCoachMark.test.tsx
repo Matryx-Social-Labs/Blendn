@@ -380,7 +380,7 @@ describe('the save heart beside each Everything-else row (kept)', () => {
     expect(heart.props.accessibilityState).toMatchObject({ selected: false })
     await act(async () => fireEvent.press(heart))
     await settle()
-    expect(mockShowToast).toHaveBeenCalledWith("Couldn't save this event. Try again.", 'error', { haptic: 'error' })
+    expect(mockShowToast).toHaveBeenCalledWith("Couldn’t save this event. Try again.", 'error', { haptic: 'error' })
     // Rolled back: still offering Save, not "Saved".
     expect(screen.getByRole('button', { name: 'Save Event u2' })).toBeTruthy()
   })

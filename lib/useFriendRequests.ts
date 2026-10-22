@@ -66,7 +66,7 @@ export function useFriendRequests() {
     once(request.id, async () => {
       const result = await apiClient.respondToFriendRequest(request.id, action)
       if (!result.success) {
-        showToast("That didn't go through. Try again.", 'error', { haptic: 'error' })
+        showToast("That didn’t go through. Try again.", 'error', { haptic: 'error' })
         return
       }
       setIncoming((list) => list.filter((r) => r.id !== request.id))
@@ -77,7 +77,7 @@ export function useFriendRequests() {
     once(request.id, async () => {
       const result = await apiClient.withdrawFriendRequest(request.id)
       if (result.success) setOutgoing((list) => list.filter((r) => r.id !== request.id))
-      else showToast("That didn't go through. Try again.", 'error', { haptic: 'error' })
+      else showToast("That didn’t go through. Try again.", 'error', { haptic: 'error' })
     })
 
   return { incoming, outgoing, loaded, failed, load, respond, withdraw, busy }

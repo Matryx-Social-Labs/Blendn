@@ -111,8 +111,8 @@ const GLIDE = LinearTransition.springify().stiffness(SPRING.settle.stiffness).da
 const ISSUES: { value: PeerRatingIssue; label: string }[] = [
   { value: 'none', label: 'Nothing went wrong' },
   { value: 'uncomfortable', label: 'They made me uncomfortable' },
-  { value: 'no_show', label: "They didn't turn up" },
-  { value: 'misrepresented', label: "They weren't who they said" },
+  { value: 'no_show', label: "They didn’t turn up" },
+  { value: 'misrepresented', label: "They weren’t who they said" },
   { value: 'harassment', label: 'They harassed me' },
 ]
 
@@ -124,7 +124,7 @@ const NOTE_LIMIT = 500
 const noteLength = (value: string) => value.length
 
 /** Never the server's sentence: it is written for an API caller. */
-const SAVE_FAILED = "Couldn't save that. Try again."
+const SAVE_FAILED = "Couldn’t save that. Try again."
 
 type Load =
   | { kind: 'loading' }

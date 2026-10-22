@@ -155,7 +155,7 @@ describe('the room you are standing in', () => {
 })
 
 describe('a row is one height, read or unread', () => {
-  it("reserves the unread dot's slot on every row", () => {
+  it("reserves the unread dot’s slot on every row", () => {
     const parts = PARTS()
     expect(parts).toContain('<View style={styles.dotSlot}>')
     expect(parts).toContain('<PresenceDot kind="unread" />')

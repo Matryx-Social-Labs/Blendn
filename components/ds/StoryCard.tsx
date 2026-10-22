@@ -37,7 +37,7 @@ const TWO_UP = '48%'
 export type RecapStat = { value: string; label: string }
 
 export type StoryCardProps = { width: number; testID?: string } & (
-  | { kind: 'story' | 'square'; event: ShareEvent; /** Default off: "Say I'm going". */ going?: boolean }
+  | { kind: 'story' | 'square'; event: ShareEvent; /** Default off: "Say I’m going". */ going?: boolean }
   | { kind: 'recap'; month: string; stats: RecapStat[]; /** Default off: "Show top venue". */ topVenue?: string | null }
 )
 

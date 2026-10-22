@@ -5,33 +5,29 @@
 export const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 export const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
-export const formatTimeRange = (startIso: string, endIso: string, opts?: { includeDate?: boolean; timezone?: string }) => {
-  try {
-    const s = new Date(startIso)
-    const e = new Date(endIso)
-    const tzOptions = opts?.timezone ? { timeZone: opts.timezone } : {}
-    const fmtTime = (d: Date) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', ...tzOptions })
-    const time = `${fmtTime(s)} - ${fmtTime(e)}`
-    if (opts?.includeDate) {
-      // The day it starts. An evening that runs past midnight is that
-      // evening's event: "6:00 PM - 12:00 AM, September 30" on the 29th sent
-      // people to the wrong night.
-      const datePart = s.toLocaleDateString(undefined, { month: 'long', day: 'numeric', ...tzOptions })
-      return `${time}, ${datePart}`
-    }
-    return time
-  } catch {
-    return ''
-  }
-}
-
 /**
- * A chat message's time: "9:38 PM", the one format every chat uses (Flow 5:
- * Geist Mono, never the device locale's). Empty for a time it can't read.
+ * A clock time in the design's one grammar (r7 M7): "9 PM" on the hour, "9:30 PM" otherwise. Every card, chat, pass and
+ * line in the app says the time this way. Built by hand: the device locale said "05:00" on a 24-hour iPhone and "5:00 AM"
+ * on Android, and `Intl` time formats vary by engine. Local time, or the clock in `timeZone` when one is named (the map's
+ * event times, in the city's zone). Empty for a time it can't read.
  */
-export function chatClock(time: string | number | Date): string {
+export function clockTime(time: string | number | Date, timeZone?: string): string {
   const d = new Date(time)
   if (Number.isNaN(d.getTime())) return ''
-  const h = d.getHours()
-  return `${h % 12 || 12}:${String(d.getMinutes()).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`
+  const [h, m] = timeZone ? zonedClock(d, timeZone) : [d.getHours(), d.getMinutes()]
+  return `${h % 12 || 12}${m ? `:${String(m).padStart(2, '0')}` : ''} ${h < 12 ? 'AM' : 'PM'}`
+}
+
+/** The hour (0–23) and minute in a named zone; the phone's own clock if this engine cannot (no ICU). */
+function zonedClock(d: Date, timeZone: string): [number, number] {
+  try {
+    const [h, m] = new Intl.DateTimeFormat('en-GB', { hour: 'numeric', minute: 'numeric', hourCycle: 'h23', timeZone })
+      .format(d)
+      .split(':')
+      .map(Number)
+    if (Number.isFinite(h) && Number.isFinite(m)) return [h, m]
+  } catch {
+    // Falls through to the local clock.
+  }
+  return [d.getHours(), d.getMinutes()]
 }

@@ -203,7 +203,7 @@ export function HomeShell({
           />
         ) : null}
       </View>
-      <PulseTopBar floating actions={<NotificationBell glass />} />
+      <PulseTopBar floating actions={<NotificationBell />} />
       <HomeDrawer
         y={drawerTop}
         points={points}

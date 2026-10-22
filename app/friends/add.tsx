@@ -66,7 +66,7 @@ function AddFriendsScreenContent() {
           label: 'Reset link',
           variant: 'destructive',
           run: async () =>
-            (await reset()) ? { ok: true, toast: 'New link ready' } : { ok: false, error: "Your link wasn't reset. Try again." },
+            (await reset()) ? { ok: true, toast: 'New link ready' } : { ok: false, error: "Your link wasn’t reset. Try again." },
         },
         { label: 'Cancel', cancel: true },
       ],

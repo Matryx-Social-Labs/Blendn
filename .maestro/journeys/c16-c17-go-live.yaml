@@ -73,14 +73,14 @@ tags:
 - takeScreenshot: c16-a-live
 
 # --- "See who's here": the Blend'n room opens on top, not under the place (H3) ---
-- tapOn: "See who's here"
+- tapOn: "See who’s here"
 - extendedWaitUntil:
-    visible: "Close Blend'n"
+    visible: "Close Blend’n"
     timeout: 20000
 - assertNotVisible: ".*Only people live here.*"
 - assertNotVisible: "Today.s room"
 - takeScreenshot: c16-a-blendn-on-top
-- tapOn: "Close Blend'n"
+- tapOn: "Close Blend’n"
 
 # --- The Banter while live: the place's name, no count (H5, D-19) ---
 - tapOn: "Banter"
@@ -120,7 +120,7 @@ tags:
 # Staying would hold the window open (it is c22's, step 11): this run lets it end.
 - tapOn: "Let it end"
 - extendedWaitUntil:
-    visible: "You're not live here any more"
+    visible: "You’re not live here any more"
     timeout: 480000
 - takeScreenshot: c17-a-not-live
 # Opened from the Banter, "Go live again" opens the place from the room's own row (M4).
@@ -140,7 +140,7 @@ tags:
 # --- The second window at A tonight: no second prompt (PL-M02, once a night) ---
 - tapOn: "Open the room"
 - extendedWaitUntil:
-    visible: "You're not live here any more"
+    visible: "You’re not live here any more"
     timeout: 1320000
 - assertNotVisible: "Still at .*"
 - takeScreenshot: c17-a-second-window-ended

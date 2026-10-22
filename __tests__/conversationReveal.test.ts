@@ -110,7 +110,7 @@ describe('leaveConfirmation', () => {
      */
     const c = leaveConfirmation('Priya Raman', true)
     expect(c.body).toContain("already know")
-    expect(c.body.toLowerCase()).toContain("doesn't undo that")
+    expect(c.body.toLowerCase()).toContain("doesn’t undo that")
   })
 
   it('says the softer true thing before a reveal', () => {

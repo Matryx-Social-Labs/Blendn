@@ -104,7 +104,7 @@ it('keeps the row and says so when the answer fails', async () => {
 
   fireEvent.press(await screen.findByLabelText('Accept Ben'))
 
-  await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("That didn't go through. Try again.", 'error', { haptic: 'error' }))
+  await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("That didn’t go through. Try again.", 'error', { haptic: 'error' }))
   expect(screen.getByLabelText('Accept Ben')).toBeTruthy()
 })
 

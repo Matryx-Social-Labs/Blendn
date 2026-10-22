@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons'
 import { router, useFocusEffect } from 'expo-router'
 import { useCallback, useEffect, useState } from 'react'
 import { Platform, StyleSheet, View } from 'react-native'
@@ -7,10 +6,10 @@ import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import { badgeLabel } from '../../lib/notificationFormat'
 import { subscribeToBell } from '../../lib/socketClient'
-import { EMBER, ICON, SPACE } from '../../lib/theme'
 import { Badge } from '../ds/MonoFamily'
+import { Icon } from '../ui/Icon'
 import { Material } from '../ui/Material'
-import { COLOR, SIZE, SPACE as DS_SPACE } from '../../lib/design/tokens'
+import { COLOR, SIZE, SPACE } from '../../lib/design/tokens'
 import ScalePress from '../motion/ScalePress'
 
 /**
@@ -24,10 +23,11 @@ import ScalePress from '../motion/ScalePress'
  * on the tap (optimistic), and the screen marks everything seen on the server. The count is read when the tab
  * comes into view and when a row lands (`subscribeToBell`), never polled: the server's count, not a local +1.
  *
- * `glass`: the home frame's bell (Flow 3 discovery, guidelines/flow-3/flow3.js): a glass control circle over the map,
- * 44 pt iOS · 48 dp Android, its badge ringed in ink. Without it, the bare glyph the Scene's bar still uses.
+ * One control wherever it sits (Flow 3 discovery, guidelines/flow-3/flow3.js; r7 M8): the IconButton's glass circle, 44 pt iOS ·
+ * 48 dp Android, the DS bell glyph, its badge ringed in ink, so it lines up with the IconButtons beside it (Banter's Search and
+ * Mark all) and sits over the map on Home.
  */
-export function NotificationBell({ glass = false }: { glass?: boolean } = {}) {
+export function NotificationBell() {
   const [unread, setUnread] = useState(0)
 
   /** One row is enough: the feed carries the count beside it, and the bell asks for nothing else. */
@@ -68,6 +68,8 @@ export function NotificationBell({ glass = false }: { glass?: boolean } = {}) {
   }, [])
 
   const badge = badgeLabel(unread)
+  const size = Platform.OS === 'android' ? SIZE.circleButtonAndroid : SIZE.circleButton
+  const circle = { width: size, height: size, borderRadius: size / 2 }
 
   return (
     // Scales like the Scene's top-bar icons; no haptic, the screen is the answer.
@@ -79,36 +81,25 @@ export function NotificationBell({ glass = false }: { glass?: boolean } = {}) {
       accessibilityLabel="Notifications"
       // The true number, even where the badge says "9+" (Flow 9 · 9.1).
       accessibilityValue={unread > 0 ? { text: `${unread} unseen` } : undefined}
-      // The box is the glyph, so its right edge lands on the page margin like the city chip below it; `hitSlop` makes the target 48pt.
-      hitSlop={glass ? undefined : 12}
-      style={glass ? glassCircle : styles.bell}
+      style={[circle, styles.centre]}
       testID="notification-bell"
     >
-      {glass ? <Material role="control" style={[StyleSheet.absoluteFill, { borderRadius: glassCircle.borderRadius }]} /> : null}
-      <Ionicons name="notifications-outline" size={ICON.lg} color={EMBER.textPrimary} />
+      <Material role="control" style={[StyleSheet.absoluteFill, { borderRadius: circle.borderRadius }]} />
+      <Icon name="bell" />
       {/*
         The badge fades and scales in when something is new (0 → any) and fades out when it clears (DS #28); the
         digits roll between non-zero counts and "9+" never rolls — all inside the DS badge. The wrapper stays, so
         the badge's own exit can play as the count goes.
       */}
-      <View style={glass ? styles.badgeOnGlass : styles.badge} pointerEvents="none">
-        {badge ? <Badge text={badge} ring={glass ? COLOR.ink : EMBER.bg} arrive testID="bell-badge" /> : null}
+      <View style={styles.badge} pointerEvents="none">
+        {badge ? <Badge text={badge} ring={COLOR.ink} arrive testID="bell-badge" /> : null}
       </View>
     </ScalePress>
   )
 }
 
-const glassSize = Platform.OS === 'android' ? SIZE.circleButtonAndroid : SIZE.circleButton
-const glassCircle = { width: glassSize, height: glassSize, borderRadius: glassSize / 2, alignItems: 'center', justifyContent: 'center' } as const
-
 const styles = StyleSheet.create({
-  bell: {
-    width: ICON.lg,
-    height: ICON.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  badge: { position: 'absolute', top: -SPACE.sm, right: -SPACE.sm },
+  centre: { alignItems: 'center', justifyContent: 'center' },
   // The frame: the badge sits on the circle's corner, 2 pt out.
-  badgeOnGlass: { position: 'absolute', top: -DS_SPACE.xxs, right: -DS_SPACE.xxs },
+  badge: { position: 'absolute', top: -SPACE.xxs, right: -SPACE.xxs },
 })

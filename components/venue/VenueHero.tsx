@@ -52,6 +52,11 @@ function YouAreLivePill({ live, onZero }: { live: VenueDetail['live']; onZero: (
  * the top edge stays on the screen's top and no ink shows above the hero. A
  * direct manipulation (it follows the finger), so Reduce Motion keeps it.
  */
+/** The plate fades over the first quarter of the hero, by when its centred glyph would reach the circles' row. */
+export const PLATE_FADE_BY = VENUE_HERO_HEIGHT / 4
+export const plateFade = (scrollY: Animated.Value) =>
+  scrollY.interpolate({ inputRange: [0, PLATE_FADE_BY], outputRange: [1, 0], extrapolate: 'clamp' })
+
 export const stretchScale = (scrollY: Animated.Value) =>
   scrollY.interpolate({ inputRange: [-VENUE_HERO_HEIGHT, 0], outputRange: [2, 1], extrapolateRight: 'clamp' })
 
@@ -84,7 +89,13 @@ export function VenueHero({
     <View style={styles.hero} testID="venue-hero">
       <Animated.View
         testID="venue-hero-media"
-        style={[StyleSheet.absoluteFill, scrollY && { transform: [{ scale: stretchScale(scrollY) }], transformOrigin: 'bottom' }]}
+        style={[
+          StyleSheet.absoluteFill,
+          scrollY && { transform: [{ scale: stretchScale(scrollY) }], transformOrigin: 'bottom' },
+          // A plate's glyph is gone before it scrolls up into the back and share circles, which have no bar under them
+          // yet (r7 L3: the cutlery read as a third button). A photograph stays.
+          scrollY && hero.kind !== 'cover' && { opacity: plateFade(scrollY) },
+        ]}
       >
         {hero.kind === 'cover' ? (
           <Image source={{ uri: hero.uri }} contentFit="cover" cachePolicy="memory-disk" style={StyleSheet.absoluteFill} accessible={false} />

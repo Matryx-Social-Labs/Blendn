@@ -228,7 +228,7 @@ describe('when it does not go through, the row stays and the sheet says why (no 
     ['a thrown request', new Error('network')],
   ])('%s is the standard error', async (_name, response) => {
     await press(response)
-    expect(sheet().getByText("That didn't go through. Try again.")).toBeTruthy()
+    expect(sheet().getByText("That didn’t go through. Try again.")).toBeTruthy()
     expect(sheet().queryByText('Reveal yourself first')).toBeNull()
     expect(sheet().getByLabelText('Add friend')).toBeTruthy()
     expect(mockShowToast).not.toHaveBeenCalled()
@@ -240,7 +240,7 @@ describe('when it does not go through, the row stays and the sheet says why (no 
     await act(async () => fireEvent.press(sheet().getByLabelText('Add friend')))
     await flush()
     expect(api.sendFriendRequest).not.toHaveBeenCalled()
-    expect(sheet().getByText("That didn't go through. Try again.")).toBeTruthy()
+    expect(sheet().getByText("That didn’t go through. Try again.")).toBeTruthy()
   })
 })
 
@@ -324,7 +324,7 @@ describe('the card in the thread, once you can both see each other', () => {
     await open(withFriend({ state: 'none', canAdd: true }))
     await act(async () => fireEvent.press(screen.getByTestId('dm-reveal-friend')))
     await flush()
-    expect(mockShowToast).toHaveBeenCalledWith("That didn't go through. Try again.", 'error', { haptic: 'error' })
+    expect(mockShowToast).toHaveBeenCalledWith("That didn’t go through. Try again.", 'error', { haptic: 'error' })
     expect(screen.getByTestId('dm-reveal')).toBeTruthy()
   })
 

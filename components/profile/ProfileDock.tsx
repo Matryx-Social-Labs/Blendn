@@ -8,7 +8,7 @@ import { PhotoScrim } from '../ui/GradientFill'
 import { font, useBoldText } from '../ds/shared'
 
 /** The ink fade above the dock: it ends in solid ink exactly where the dock begins, so the note and the tray never sit on a photo. */
-const FADE = SPACE.xxxl
+export const DOCK_FADE = SPACE.xxxl
 
 /**
  * How far the page's last section must clear: the tray (a 56 pt primary in 12 pt of padding), the line above it, the
@@ -56,7 +56,7 @@ export function ProfileDock({
         The foot is SOLID ink (the note and the tray read on it, not on the top of a fade that is still near-clear: the note overprinted
         the interest chips), and the fade is above it, ending at 100% ink where the foot begins.
       */}
-      <PhotoScrim testID={testID && `${testID}-fade`} foot={1} pointerEvents="none" style={[styles.fade, { bottom: height, height: FADE }]} />
+      <PhotoScrim testID={testID && `${testID}-fade`} foot={1} pointerEvents="none" style={[styles.fade, { bottom: height, height: DOCK_FADE }]} />
       <View testID={testID && `${testID}-foot`} style={[styles.stack, { paddingTop: SPACE.sm, paddingBottom: insets.bottom + SPACE.lg }]}>
         {note ? <Text style={[font('meta', bold), styles.note]}>{note}</Text> : null}
         <View testID={testID && `${testID}-tray`} style={[styles.tray, lead ? styles.stacked : null]}>

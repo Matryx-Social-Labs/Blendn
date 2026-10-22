@@ -2,7 +2,8 @@ import { useState, type ReactNode } from 'react'
 import { StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { Material } from '../ui/Material'
+import { SolidBarFade } from '../ui/GradientFill'
+import { Material, SOLID, useMaterialTier } from '../ui/Material'
 import { useToastDock } from '../toastDock'
 import { RADIUS, SPACE } from '../../lib/design/tokens'
 import { useKeyboardShown } from '../../lib/keyboard'
@@ -48,6 +49,7 @@ export function Dock({
   const typing = useKeyboardShown()
   const keyboard = keyboardUp ?? typing
   const [height, setHeight] = useState(0)
+  const solid = useMaterialTier() === 'solid'
   // The toast adds the bottom inset itself, and this dock holds it only at rest: over the keyboard its padding has none to subtract.
   useToastDock(Math.max(0, height - (keyboard ? 0 : insets.bottom)))
   const style = [
@@ -69,7 +71,9 @@ export function Dock({
     )
   }
   return (
-    <Material role="bar" testID={testID} onLayout={onLayout} style={[...style, contrast && IC_HAIRLINE]}>
+    <Material role="bar" testID={testID} onLayout={onLayout} style={[...style, contrast && IC_HAIRLINE, solid && floating && styles.unclipped]}>
+      {/* Pinned over a scroll on the solid tier (Android): the page fades into the bar rather than being cut by it (r7 L7). */}
+      {solid && floating ? <SolidBarFade testID={testID && `${testID}-fade`} color={SOLID.bar} pointerEvents="none" style={styles.fade} /> : null}
       {children}
     </Material>
   )
@@ -78,5 +82,8 @@ export function Dock({
 const styles = StyleSheet.create({
   dock: { paddingTop: SPACE.lg, paddingHorizontal: SPACE.gutter },
   floating: { position: 'absolute', left: 0, right: 0, bottom: 0 },
+  /** The fade sits above the bar's top edge, outside its box. */
+  unclipped: { overflow: 'visible' },
+  fade: { position: 'absolute', left: 0, right: 0, bottom: '100%', height: SPACE.xxxl },
   round: { borderTopLeftRadius: RADIUS.card, borderTopRightRadius: RADIUS.card },
 })

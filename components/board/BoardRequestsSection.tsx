@@ -157,7 +157,7 @@ export function BoardRequestsSection({
     }
     if (action !== 'accept') restore(request, side, at)
     // Withdrawing is yours alone and nothing hangs on it: the row coming back is the answer.
-    if (action !== 'withdraw') showToast(boardMessage(result, `Couldn't ${action} that. Try again.`), 'error', { haptic: 'error' })
+    if (action !== 'withdraw') showToast(boardMessage(result, `Couldn’t ${action} that. Try again.`), 'error', { haptic: 'error' })
   }
 
   /** Report or block the asker, by the ask: the board never names anybody to the client. */

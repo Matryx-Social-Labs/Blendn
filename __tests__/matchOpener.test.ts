@@ -160,7 +160,7 @@ describe('the moment paints without a second request', () => {
   })
 })
 
-describe("the match moment's opener becomes a draft, never a message", () => {
+describe("the match moment’s opener becomes a draft, never a message", () => {
   it('reads the draft param: a string, not blank, not repeated', () => {
     expect(draftParam('What brought you here tonight?')).toBe('What brought you here tonight?')
     expect(draftParam(undefined)).toBe('')

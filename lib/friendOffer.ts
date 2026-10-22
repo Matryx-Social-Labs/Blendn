@@ -82,5 +82,5 @@ export const FRIEND_COPY = {
   /** The dock's note once asked: a state, said in a line rather than as a dead button. */
   requestSentNote: 'Friend request sent',
   revealFirst: 'Reveal yourself first',
-  failed: "That didn't go through. Try again.",
+  failed: "That didn’t go through. Try again.",
 } as const

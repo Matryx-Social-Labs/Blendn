@@ -157,7 +157,14 @@ export function TextField({
   const focus = useFocus({ onFocus, onBlur })
   const input = useRef<TextInput>(null)
   const [revealed, setRevealed] = useState(defaultRevealed)
-  const dots = secure && !revealed && value.length > 0
+  /*
+   * A masked field is Geist Mono whether or not it holds anything, and draws its placeholder itself, in Satoshi (r7 H3).
+   * The native field used to switch family with the value (Mono for dots, Satoshi empty) and draw the placeholder in
+   * whatever font it was left with: after iOS's Strong Password sheet filled it and was dismissed, that was Courier.
+   * Now nothing about the native field changes as the sheet fills and empties it, and it draws no placeholder at all.
+   */
+  const masked = secure && !revealed
+  const ownPlaceholder = secure && !value && rest.placeholder ? rest.placeholder : null
   const eye = minTarget()
 
   return (
@@ -173,6 +180,7 @@ export function TextField({
       >
         <TextInput
           {...rest}
+          placeholder={secure ? undefined : rest.placeholder}
           ref={joinRefs(input, inputRef)}
           testID={testID && `${testID}-input`}
           value={value}
@@ -180,7 +188,7 @@ export function TextField({
           onFocus={focus.onFocus}
           onBlur={focus.onBlur}
           editable={!disabled}
-          secureTextEntry={secure && !revealed}
+          secureTextEntry={masked}
           placeholderTextColor={COLOR.textTertiary}
           selectionColor={COLOR.textPrimary}
           cursorColor={COLOR.textPrimary}
@@ -188,8 +196,21 @@ export function TextField({
           accessibilityLabel={label ?? rest.placeholder}
           accessibilityHint={spokenHint(error, value, limit, hint, measure)}
           accessibilityState={{ disabled }}
-          style={[dots ? font('body', bold, FONT_FAMILY.mono[500]) : font('body', bold), styles.input, styles.line, dots && styles.dots]}
+          style={[masked ? font('body', bold, FONT_FAMILY.mono[500]) : font('body', bold), styles.input, styles.line, masked && styles.dots]}
         />
+        {ownPlaceholder ? (
+          <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.placeholder, { paddingRight: eye + SPACE.sm }]}>
+            <Text
+              accessibilityElementsHidden
+              importantForAccessibility="no"
+              numberOfLines={1}
+              maxFontSizeMultiplier={CONTROL_FONT_CAP}
+              style={[font('body', bold), { color: COLOR.textTertiary }]}
+            >
+              {ownPlaceholder}
+            </Text>
+          </View>
+        ) : null}
         {limit !== undefined ? (
           <Text
             accessibilityElementsHidden
@@ -328,6 +349,8 @@ const styles = StyleSheet.create({
   /** Grows from its content (basis auto) past the minimum; `flex: 1` would pin it at the minimum. */
   grow: { flexGrow: 1 },
   dots: { letterSpacing: SPACE.xxs },
+  /** A masked field's own placeholder, where the native one would sit: the box's left padding, centred in its height. */
+  placeholder: { justifyContent: 'center', paddingLeft: SPACE.xl },
   eye: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
   area: {
     borderRadius: RADIUS.sheet,

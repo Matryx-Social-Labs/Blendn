@@ -124,7 +124,7 @@ describe('the route', () => {
   it('opens the board now that it is on', async () => {
     api.getBoard.mockResolvedValue(board([]))
     await render(<BoardRoute />)
-    expect(await screen.findByText("Nobody's posted yet")).toBeTruthy()
+    expect(await screen.findByText("Nobody’s posted yet")).toBeTruthy()
     expect(mockRedirect).not.toHaveBeenCalled()
   })
 
@@ -147,7 +147,7 @@ describe('the two empty states', () => {
     api.getBoard.mockResolvedValue(board([]))
     await render(<BoardScreen />)
 
-    expect(await screen.findByText("Nobody's posted yet")).toBeTruthy()
+    expect(await screen.findByText("Nobody’s posted yet")).toBeTruthy()
     await fireEvent.press(screen.getByLabelText('Write a post'))
     expect(screen.getByLabelText('Your post')).toBeTruthy()
     expect(screen.getByText('0/500', { includeHiddenElements: true })).toBeTruthy()
@@ -158,7 +158,7 @@ describe('the two empty states', () => {
     api.getBoard.mockResolvedValue(board([OFFER]))
     await render(<BoardScreen />)
 
-    expect(await screen.findByText("The board's closed")).toBeTruthy()
+    expect(await screen.findByText("The board’s closed")).toBeTruthy()
     await fireEvent.press(screen.getByLabelText('Open the room'))
     // To the tabs first: the overlay is under the root stack, so opened from here it was under the board (Flow 4 Board #14).
     const { router } = jest.requireMock('expo-router') as { router: { dismissAll: jest.Mock } }
@@ -214,7 +214,7 @@ describe('BD-CU01 on screen: a refused post names its gate', () => {
     'You have 5 asks waiting for an answer. Give them a moment.',
     'You have sent a lot of requests this week. Try again in a few days.',
     'The board closes when the doors open — the room is open instead',
-    "This looks like a phone number. The board is anonymous, so contact details can't go on it.",
+    "This looks like a phone number. The board is anonymous, so contact details can’t go on it.",
   ])('%s', async (reason) => {
     api.getBoard.mockResolvedValue(board([]))
     api.postToBoard.mockResolvedValue({ success: false, errorCode: reason.includes('phone') ? undefined : 'FORBIDDEN', error: reason })
@@ -403,7 +403,7 @@ describe('asking', () => {
     await render(<BoardScreen />)
 
     await fireEvent.press(await screen.findByLabelText('Ask to join, Velvet Heron'))
-    expect(await screen.findByText("Couldn't send that. Try again.")).toBeTruthy()
+    expect(await screen.findByText("Couldn’t send that. Try again.")).toBeTruthy()
     expect(screen.getByLabelText('Ask to join, Velvet Heron')).toBeTruthy()
   })
 })
@@ -465,7 +465,7 @@ describe('a board you may not read says why', () => {
   it.each([
     ['FORBIDDEN', 'Mark yourself as going to post here', 'Not on this board yet'],
     ['AGE_RESTRICTED', 'This event is 21+.', 'This board has an age limit'],
-    ['NOT_FOUND', 'Event not found', "This board isn't here"],
+    ['NOT_FOUND', 'Event not found', "This board isn’t here"],
   ])('%s', async (errorCode, error, title) => {
     api.getBoard.mockResolvedValue({ success: false, errorCode, error })
     await render(<BoardScreen />)
@@ -484,21 +484,21 @@ describe('a board you may not read says why', () => {
       error: 'The board closes when the doors open — the room is open instead',
     })
     await render(<BoardScreen />)
-    expect(await screen.findByText("The board's closed")).toBeTruthy()
+    expect(await screen.findByText("The board’s closed")).toBeTruthy()
     expect(screen.getByLabelText('Open the room')).toBeTruthy()
   })
 
   it('says the board did not load, rather than that it is empty', async () => {
     api.getBoard.mockResolvedValue({ success: false, errorCode: 'SERVER_ERROR', error: 'Failed to load the board' })
     await render(<BoardScreen />)
-    expect(await screen.findByText("The board didn't load")).toBeTruthy()
-    expect(screen.queryByText("Nobody's posted yet")).toBeNull()
+    expect(await screen.findByText("The board didn’t load")).toBeTruthy()
+    expect(screen.queryByText("Nobody’s posted yet")).toBeNull()
   })
 
   it('and when the request itself never came back', async () => {
     api.getBoard.mockResolvedValue({ success: false, error: 'No internet connection. Check your network and try again.' })
     await render(<BoardScreen />)
-    expect(await screen.findByText("The board didn't load")).toBeTruthy()
+    expect(await screen.findByText("The board didn’t load")).toBeTruthy()
   })
 })
 
@@ -512,11 +512,11 @@ describe('a refresh', () => {
     await screen.findByText(OFFER.body)
 
     await pullToRefresh()
-    expect(await screen.findByText("The board didn't refresh. Pull down to try again.")).toBeTruthy()
+    expect(await screen.findByText("The board didn’t refresh. Pull down to try again.")).toBeTruthy()
     expect(screen.getByText(OFFER.body)).toBeTruthy()
 
     await pullToRefresh()
-    await waitFor(() => expect(screen.queryByText("The board didn't refresh. Pull down to try again.")).toBeNull())
+    await waitFor(() => expect(screen.queryByText("The board didn’t refresh. Pull down to try again.")).toBeNull())
   })
 })
 
@@ -556,7 +556,7 @@ describe('your own post', () => {
     await render(<BoardScreen />)
 
     const run = await takeDownSheet()
-    expect(await run()).toEqual({ ok: false, error: "Couldn't take it down. Try again." })
+    expect(await run()).toEqual({ ok: false, error: "Couldn’t take it down. Try again." })
     expect(screen.getByText(MINE.body)).toBeTruthy()
   })
 })
@@ -564,7 +564,7 @@ describe('your own post', () => {
 describe('report and block, by the post', () => {
   type Steps = { label: string; next?: () => unknown; run?: (...a: string[]) => Promise<unknown> }[]
   const menu = async () => {
-    await fireEvent.press(await screen.findByLabelText("More options for Velvet Heron's post"))
+    await fireEvent.press(await screen.findByLabelText("More options for Velvet Heron’s post"))
     const sheet = (showSheet as jest.Mock).mock.calls.at(-1)[0] as { title: string; actions: Steps }
     const step = (label: string) => sheet.actions.find((a) => a.label === label)!
     return { sheet, step }
@@ -573,8 +573,8 @@ describe('report and block, by the post', () => {
   it('is on anybody’s post but yours', async () => {
     api.getBoard.mockResolvedValue(board([OFFER, { ...SEEKING, id: 'p-mine', author: 'Lunar Fox', mine: true }]))
     await render(<BoardScreen />)
-    expect(await screen.findByLabelText("More options for Velvet Heron's post")).toBeTruthy()
-    expect(screen.queryByLabelText("More options for Lunar Fox's post")).toBeNull()
+    expect(await screen.findByLabelText("More options for Velvet Heron’s post")).toBeTruthy()
+    expect(screen.queryByLabelText("More options for Lunar Fox’s post")).toBeNull()
   })
 
   it('blocks by the post, after asking, and takes it off the board — even past a stale read', async () => {
@@ -613,7 +613,7 @@ describe('report and block, by the post', () => {
 
     const { step } = await menu()
     const reasons = step('Report').next!() as { run: (r: string) => Promise<unknown> }
-    expect(await reasons.run('harassment')).toEqual({ ok: false, error: "You've sent a lot of reports. Try again later." })
+    expect(await reasons.run('harassment')).toEqual({ ok: false, error: "You’ve sent a lot of reports. Try again later." })
     expect(api.reportBoardPost).toHaveBeenCalledWith('e1', 'p-offer', { reason: 'harassment' })
   })
 })

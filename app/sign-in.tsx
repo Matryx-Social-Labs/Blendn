@@ -90,6 +90,8 @@ export default function SignIn() {
   const ageRef = useRef<TextInput>(null)
   const refs: Record<Field, React.RefObject<TextInput | null>> = { name: nameRef, email: emailRef, password: passwordRef, age: ageRef }
   const { refused, refuse } = useRefusedPulse()
+  // The page has moved under the header: it wears the bar (r7 M11).
+  const [scrolled, setScrolled] = useState(false)
   /*
    * A ref as well as `busy`: the keyboard's "go" and the button can land in
    * the same frame, and both read the `busy` of the render before either set
@@ -194,7 +196,7 @@ export default function SignIn() {
          * registered", or the password rule that was broken — and replacing
          * them with "something went wrong" would make the form unusable.
          */
-        setError(result.error || (isSignup ? "Couldn't create your account." : "Couldn't sign you in."))
+        setError(result.error || (isSignup ? "Couldn’t create your account." : "Couldn’t sign you in."))
         setWaiting(result.errorCode === 'RATE_LIMITED')
         refuse()
         return
@@ -256,11 +258,16 @@ export default function SignIn() {
     <View style={styles.root}>
       <Backdrop level={ORB_LEVEL.form} paused={keyboardUp} />
 
-      <FormHeader testID="sign-in-header" />
+      <FormHeader testID="sign-in-header" scrolled={scrolled} />
 
       {/* Four fields and a segmented control do not fit above the keyboard: the page follows the field being typed in. */}
       <KeyboardPage
-        scrollProps={{ testID: 'sign-in-scroll', contentContainerStyle: styles.scroll }}
+        scrollProps={{
+          testID: 'sign-in-scroll',
+          contentContainerStyle: styles.scroll,
+          onScroll: (e) => setScrolled(e.nativeEvent.contentOffset.y > 0),
+          scrollEventThrottle: 16,
+        }}
         dockProps={{ glass: keyboardUp, keyboardUp, testID: 'sign-in-dock' }}
         dock={dock}
       >

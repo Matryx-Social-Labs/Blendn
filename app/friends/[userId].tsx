@@ -93,7 +93,7 @@ function FriendProfileScreenContent() {
     const conversationId = friend.conversationId ?? (await apiClient.openFriendConversation(friend.userId)).data?.conversationId
     setOpening(false)
     if (!conversationId) {
-      showToast("The conversation didn't open. Try again.", 'error', { haptic: 'error' })
+      showToast("The conversation didn’t open. Try again.", 'error', { haptic: 'error' })
       return
     }
     router.push({
@@ -117,14 +117,14 @@ function FriendProfileScreenContent() {
       kind: 'actions',
       hue: 'rose',
       title: `Remove ${friend.name}?`,
-      message: "They won't be told. Your messages stay, and you can add each other again later.",
+      message: "They won’t be told. Your messages stay, and you can add each other again later.",
       actions: [
         {
           label: 'Remove friend',
           variant: 'destructive',
           run: async () => {
             const result = await apiClient.removeFriend(friend.userId)
-            if (!result.success) return { ok: false, error: "That didn't go through. Try again." }
+            if (!result.success) return { ok: false, error: "That didn’t go through. Try again." }
             router.back()
             return { ok: true, toast: `${friend.name} is no longer a friend` }
           },

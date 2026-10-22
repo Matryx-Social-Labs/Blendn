@@ -14,25 +14,21 @@ const read = (...p: string[]) => readFileSync(join(__dirname, '..', ...p), 'utf8
 
 describe('the name a person reads is the brand', () => {
   it('is Blend’n on the home screen, not blendn', () => {
-    expect(JSON.parse(read('app.json')).expo.name).toBe("Blend'n")
+    // The house apostrophe, ’, not the typewriter one (r7 L16).
+    expect(JSON.parse(read('app.json')).expo.name).toBe('Blend’n')
   })
 
   it('is Blend’n on iOS', () => {
-    // Read as a value, not matched as text: `pod install` re-serialises the
-    // plist with tabs and a bare apostrophe, where Xcode wrote spaces and
-    // `&apos;`. Both are the same string.
+    // Read as a value, not matched as text: `pod install` re-serialises the plist's whitespace.
     const name = read('ios/blendn/Info.plist').match(
       /<key>CFBundleDisplayName<\/key>\s*<string>([^<]*)<\/string>/
     )?.[1]
-    expect(name?.replace(/&apos;/g, "'")).toBe("Blend'n")
+    expect(name).toBe('Blend’n')
   })
 
   it('is Blend’n on Android', () => {
-    // Backslash-escaped, because Android string resources treat a bare
-    // apostrophe as a syntax error and fail the build rather than the render.
-    expect(read('android/app/src/main/res/values/strings.xml')).toContain(
-      '<string name="app_name">Blend\\\'n</string>'
-    )
+    // ’ needs no escape; a bare typewriter ' would be a resource syntax error that fails the build.
+    expect(read('android/app/src/main/res/values/strings.xml')).toContain('<string name="app_name">Blend’n</string>')
   })
 })
 

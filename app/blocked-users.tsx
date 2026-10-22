@@ -130,7 +130,7 @@ function BlockedUsersContent() {
           variant: 'destructive',
           run: async () => {
             const result = await unblockUser(user.blocked_id)
-            if (!result.success) return { ok: false, error: "Couldn't unblock them. Try again." }
+            if (!result.success) return { ok: false, error: "Couldn’t unblock them. Try again." }
             setBlockedUsers((prev) => prev.filter((u) => u.blocked_id !== user.blocked_id))
             return { ok: true, toast: user.blocked_user_name ? `${user.blocked_user_name} is unblocked` : 'Unblocked' }
           },
@@ -166,7 +166,7 @@ function BlockedUsersContent() {
     failed ? (
       <StateScreen
         icon="cloud-off"
-        title="Blocked users didn't load"
+        title="Blocked users didn’t load"
         body="Check your connection and try again."
         actions={[{ label: 'Try again', onPress: () => void onRefresh(), loading: refreshing }]}
       />

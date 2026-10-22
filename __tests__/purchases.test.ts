@@ -45,7 +45,7 @@ describe('the key', () => {
     expect(rc.configure).not.toHaveBeenCalled()
     expect(await m.canBuyAs('u1')).toBe(false)
     expect(await m.loadPlusOffers()).toEqual([])
-    expect(await m.restore('u1')).toEqual({ kind: 'failed', message: "Purchases aren't available yet." })
+    expect(await m.restore('u1')).toEqual({ kind: 'failed', message: "Purchases aren’t available yet." })
     expect(await m.manageSubscriptionUrl('ios')).toBe('https://apps.apple.com/account/subscriptions')
     expect(await m.manageSubscriptionUrl('android')).toBe(
       'https://play.google.com/store/account/subscriptions?package=com.matryxsociallabs.blendn'
@@ -185,7 +185,7 @@ describe('buying and restoring say what happened, nothing more', () => {
   it.each([
     ['6', /already have this/, true],
     ['7', /belongs to another Blendn account/, undefined],
-    ['3', /aren't allowed on this device/, undefined],
+    ['3', /aren’t allowed on this device/, undefined],
     ['10', /No connection/, undefined],
   ])('says what code %s means (review MEDIUM)', async (code, words, manage) => {
     const { m, rc } = await asU1()
@@ -263,7 +263,7 @@ describe('buying and restoring say what happened, nothing more', () => {
     rc.restorePurchases.mockRejectedValueOnce({ code: '10' })
     expect(await m.restore('u1')).toMatchObject({ kind: 'failed', message: expect.stringMatching(/connection/i) })
     rc.restorePurchases.mockRejectedValueOnce(new Error('boom'))
-    expect(await m.restore('u1')).toEqual({ kind: 'failed', message: "Couldn't reach the store. Try again." })
+    expect(await m.restore('u1')).toEqual({ kind: 'failed', message: "Couldn’t reach the store. Try again." })
   })
 
   it('Manage: RevenueCat\'s management URL when it is a store\'s own page — anything else is ignored (review LOW)', async () => {

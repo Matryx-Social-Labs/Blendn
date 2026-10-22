@@ -43,11 +43,11 @@ describe('PhotoManager', () => {
     photoUtils.selectAndUploadPhoto.mockResolvedValue({ success: false, error: 'Upload failed with status 502' })
     await mount(1)
     await fireEvent.press(screen.getByLabelText('Add photo'))
-    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("Couldn't upload that photo. Try again.", 'error', { haptic: 'error' }))
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("Couldn’t upload that photo. Try again.", 'error', { haptic: 'error' }))
     expect(mockShowSheet).not.toHaveBeenCalled()
   })
 
-  it("passes the picker's own sentence through, finished", async () => {
+  it("passes the picker’s own sentence through, finished", async () => {
     photoUtils.selectAndUploadPhoto.mockResolvedValue({ success: false, error: 'Photo must be less than 5MB' })
     await mount(1)
     await fireEvent.press(screen.getByLabelText('Add photo'))
@@ -95,13 +95,13 @@ describe('PhotoManager', () => {
   })
 
   it('a failed removal keeps the file and says so', async () => {
-    photoUtils.reorderPhotos.mockResolvedValue({ ok: false, error: "Couldn't save your photos. Try again." })
+    photoUtils.reorderPhotos.mockResolvedValue({ ok: false, error: "Couldn’t save your photos. Try again." })
     await mount(2)
     await fireEvent.press(screen.getByLabelText('Remove photo 1'))
     const remove = (mockShowSheet.mock.calls[0][0] as ActionSheet).actions[0] as unknown as { then: () => Promise<void> }
     await act(() => remove.then())
     expect(photoUtils.deletePhoto).not.toHaveBeenCalled()
-    expect(mockShowToast).toHaveBeenCalledWith("Couldn't save your photos. Try again.", 'error', { haptic: 'error' })
+    expect(mockShowToast).toHaveBeenCalledWith("Couldn’t save your photos. Try again.", 'error', { haptic: 'error' })
   })
 
   it('a full grid is an info toast, not a popup', async () => {
@@ -130,7 +130,7 @@ describe('no Alert.alert in the UI', () => {
     expect(offenders).toEqual([])
   })
 
-  it("deleting an event asks on the app's sheet", () => {
+  it("deleting an event asks on the app’s sheet", () => {
     const src = readFileSync(join(ROOT, 'components', 'screens', 'EventDetailScreen.tsx'), 'utf8')
     const body = src.slice(src.indexOf('const handleDeleteEvent'), src.indexOf('const openInMaps'))
     expect(body).toContain('showSheet(')

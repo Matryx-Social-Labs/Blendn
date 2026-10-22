@@ -151,7 +151,7 @@ it('a purchase is logged, then the SERVER is asked until it says active', async 
   await act(async () => { await Promise.resolve() })
   expect(buyPackage).toHaveBeenCalledWith(monthly.pkg, 'u1')
   expect(logged()).toEqual(['shown', 'purchase_started', 'purchased'])
-  expect(screen.getByText("You're in.")).toBeTruthy()
+  expect(screen.getByText("You’re in.")).toBeTruthy()
   expect(screen.getByText(/^Blend’n\+ until /)).toBeTruthy()
 })
 
@@ -186,11 +186,11 @@ describe('restore always ends in a visible result', () => {
   })
 
   it('failing: an error toast, the reason in the dock, and the error haptic', async () => {
-    ;(restore as jest.Mock).mockResolvedValue({ kind: 'failed', message: "Couldn't reach the store. Try again." })
+    ;(restore as jest.Mock).mockResolvedValue({ kind: 'failed', message: "Couldn’t reach the store. Try again." })
     await mount()
     await act(async () => { fireEvent.press(button('Restore purchases')) })
-    expect(mockToast).toHaveBeenCalledWith("Couldn't reach the store. Try again.", 'error', { haptic: 'error' })
-    expect(within(dock()).getByText("Couldn't reach the store. Try again.")).toBeTruthy()
+    expect(mockToast).toHaveBeenCalledWith("Couldn’t reach the store. Try again.", 'error', { haptic: 'error' })
+    expect(within(dock()).getByText("Couldn’t reach the store. Try again.")).toBeTruthy()
   })
 
   it('restoring: "Restoring…" while it waits, gone when it answers', async () => {
@@ -211,28 +211,28 @@ describe('restore always ends in a visible result', () => {
     await act(async () => { await Promise.resolve() })
     expect(mockToast).toHaveBeenCalledWith('Restored', 'success')
     expect(logged()).toEqual(['shown', 'restored'])
-    expect(within(dock()).getByText("You're in.")).toBeTruthy()
+    expect(within(dock()).getByText("You’re in.")).toBeTruthy()
   })
 
   it('a store answer after "didn\'t answer" replaces that message', async () => {
     let late: (o: unknown) => void = () => {}
     ;(restore as jest.Mock).mockImplementation(async (_u: string, onLate: (o: unknown) => void) => {
       late = onLate
-      return { kind: 'failed', message: "The store didn't answer. Try again." }
+      return { kind: 'failed', message: "The store didn’t answer. Try again." }
     })
     await mount()
     await act(async () => { fireEvent.press(button('Restore purchases')) })
-    expect(within(dock()).getByText("The store didn't answer. Try again.")).toBeTruthy()
+    expect(within(dock()).getByText("The store didn’t answer. Try again.")).toBeTruthy()
     await act(async () => { late({ kind: 'nothing' }) })
     expect(within(dock()).getByText('No purchases to restore')).toBeTruthy()
-    expect(within(dock()).queryByText("The store didn't answer. Try again.")).toBeNull()
+    expect(within(dock()).queryByText("The store didn’t answer. Try again.")).toBeNull()
   })
 
   it('a late find is confirmed with the server like any restore', async () => {
     let late: (o: unknown) => void = () => {}
     ;(restore as jest.Mock).mockImplementation(async (_u: string, onLate: (o: unknown) => void) => {
       late = onLate
-      return { kind: 'failed', message: "The store didn't answer. Try again." }
+      return { kind: 'failed', message: "The store didn’t answer. Try again." }
     })
     ;(apiClient.getMyPlus as jest.Mock).mockResolvedValueOnce(none).mockResolvedValue(granted)
     await mount()
@@ -240,7 +240,7 @@ describe('restore always ends in a visible result', () => {
     await act(async () => { late({ kind: 'restored' }) })
     await act(async () => { await Promise.resolve() })
     expect(mockToast).toHaveBeenCalledWith('Restored', 'success')
-    expect(within(dock()).getByText("You're in.")).toBeTruthy()
+    expect(within(dock()).getByText("You’re in.")).toBeTruthy()
   })
 
   it('starting a purchase clears the last restore result, so it never sits above Buy', async () => {
@@ -461,7 +461,7 @@ describe('the wait and the store', () => {
     await act(async () => { fireEvent.press(button(MONTHLY_CTA)) })
     await act(async () => { await Promise.resolve() })
     expect(say).toHaveBeenCalledWith('Confirming with the store')
-    expect(say).toHaveBeenCalledWith("You're in.")
+    expect(say).toHaveBeenCalledWith("You’re in.")
     say.mockRestore()
   })
 

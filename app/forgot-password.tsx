@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from 'expo-router'
 import React, { useEffect, useRef, useState } from 'react'
-import { KeyboardAvoidingView, Linking, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { KeyboardAvoidingView, Linking, ScrollView, StyleSheet, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native'
 import Animated from 'react-native-reanimated'
 
 import { useToast } from '../components/Toast'
@@ -68,6 +68,10 @@ export default function ForgotPassword() {
   const [email, setEmail] = useState(typeof params.email === 'string' ? params.email : '')
   const [busy, setBusy] = useState(false)
   const [sent, setSent] = useState(false)
+  // The page has moved under the header: it wears the bar (r7 M11). Per page, so the sent page opens with a clear header.
+  const [movedOn, setMovedOn] = useState<{ sent: boolean; y: boolean }>({ sent: false, y: false })
+  const scrolled = movedOn.y && movedOn.sent === sent
+  const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => setMovedOn({ sent, y: e.nativeEvent.contentOffset.y > 0 })
   /** The server's refusal, or ours when it never answered: a card above the primary. */
   const [error, setError] = useState<string | null>(null)
   const [waiting, setWaiting] = useState(false)
@@ -126,7 +130,7 @@ export default function ForgotPassword() {
       return true
     } catch (e) {
       Logger.error('auth', 'Forgot password request failed', { error: e })
-      setError("Couldn't send the reset link. Try again.")
+      setError("Couldn’t send the reset link. Try again.")
       refusedBy()
       return false
     } finally {
@@ -171,12 +175,12 @@ export default function ForgotPassword() {
   return (
     <View style={styles.root}>
       <Backdrop level={ORB_LEVEL.form} paused={keyboardUp} />
-      <FormHeader testID="forgot-header" />
+      <FormHeader testID="forgot-header" scrolled={scrolled} />
 
       <KeyboardAvoidingView style={styles.flex} behavior={KEYBOARD_BEHAVIOR}>
         {sent ? (
           <>
-            <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+            <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} onScroll={onScroll} scrollEventThrottle={16}>
               {/* The envelope settles in once, on M.settle (Reduce Motion: it fades). */}
               <Animated.View style={[styles.well, settle]}>
                 <GlyphWell icon="mail" size="screen" testID="forgot-sent-well" />
@@ -228,7 +232,7 @@ export default function ForgotPassword() {
           </>
         ) : (
           <>
-            <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} onScroll={onScroll} scrollEventThrottle={16}>
               <View style={styles.headline}>
                 <Text style={[font('title', bold), styles.title]} accessibilityRole="header">
                   Forgot your password?

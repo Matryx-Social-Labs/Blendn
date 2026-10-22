@@ -129,11 +129,24 @@ describe('<Material>', () => {
 
   it('is Tier B solid on Android: near-opaque, a top hairline and the inner highlight', async () => {
     on('android')
-    await draw('control')
-    expect(flat('material')).toMatchObject({ backgroundColor: MATERIAL.solidControl, borderTopColor: MATERIAL.solidTopHairline })
+    await draw('sheet')
+    expect(flat('material')).toMatchObject({ backgroundColor: MATERIAL.solidSheet, borderTopColor: MATERIAL.solidTopHairline })
     expect(screen.getByTestId('highlight').props.colors).toEqual(MATERIAL.solidInnerHighlight.colors)
     expect(screen.queryByTestId('glass')).toBeNull()
     expect(screen.queryByTestId('blur')).toBeNull()
+  })
+
+  it.each(['control', 'media'] as const)('a solid %s circle is rimmed all round, not a top arc that reads as a half-moon (r7 L14, L13)', async (role) => {
+    on('android')
+    await draw(role)
+    expect(flat('material')).toMatchObject({ borderWidth: 1, borderColor: MATERIAL.solidTopHairline })
+  })
+
+  it('a solid bar keeps its top hairline only', async () => {
+    on('android')
+    await draw('bar')
+    expect(flat('material').borderWidth).toBeUndefined()
+    expect(flat('material').borderTopWidth).toBe(1)
   })
 
   it.each(['ios', 'android'] as const)('never sets an opacity of its own (%s)', async (os) => {

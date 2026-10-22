@@ -59,13 +59,13 @@ describe('sharing an event from a row', () => {
   it('says so and opens nothing for a private event', async () => {
     mockGetEvent.mockResolvedValue({ success: true, data: { ...ROW, visibility: 'private', status: 'published' } })
     await expect(shareEvent(ROW)).resolves.toBe(false)
-    expect(mockToast).toHaveBeenCalledWith("This one can't be shared.", 'info')
+    expect(mockToast).toHaveBeenCalledWith("This one can’t be shared.", 'info')
   })
 
   it('says so, and opens nothing, when the event cannot be loaded', async () => {
     mockGetEvent.mockResolvedValue({ success: false, error: 'offline' })
     await expect(shareEvent(ROW)).resolves.toBe(false)
-    expect(mockToast).toHaveBeenCalledWith("Couldn't open sharing. Try again.", 'error')
+    expect(mockToast).toHaveBeenCalledWith("Couldn’t open sharing. Try again.", 'error')
     mockGetEvent.mockRejectedValue(new Error('boom'))
     await expect(shareEvent(ROW)).resolves.toBe(false)
   })

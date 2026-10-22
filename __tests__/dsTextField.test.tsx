@@ -103,6 +103,34 @@ describe('<TextField>', () => {
     expect(screen.getByRole('button', { name: 'Hide password' })).toBeTruthy()
   })
 
+  it('secure: the dots keep Geist Mono and the placeholder Satoshi through the Strong Password sheet (r7 H3)', async () => {
+    // iOS's sheet fills the field and, dismissed, empties it again; the placeholder came back in Courier. The native field
+    // changed font with the value then (Mono for dots, Satoshi empty), and drew the placeholder in whatever font it was left.
+    const placeholder = 'At least 12 characters'
+    const props = { label: 'Password', secure: true, placeholder }
+    const family = () => StyleSheet.flatten(input().props.style).fontFamily
+    const shown = () => screen.queryByText(placeholder, { includeHiddenElements: true })
+
+    const view = await render(field({ ...props, value: '' }))
+    expect(family()).toBe(FONT_FAMILY.mono[500])
+    expect(input().props.placeholder).toBeUndefined()
+    expect(StyleSheet.flatten(shown()!.props.style)).toMatchObject({ fontFamily: FONT_FAMILY.brand[400], color: COLOR.textTertiary })
+    expect(input().props.accessibilityLabel).toBe('Password')
+
+    await view.rerender(field({ ...props, value: 'Xa9q-Lm2p-Rt7w' }))
+    expect(family()).toBe(FONT_FAMILY.mono[500])
+    expect(shown()).toBeNull()
+
+    await view.rerender(field({ ...props, value: '' }))
+    expect(family()).toBe(FONT_FAMILY.mono[500])
+    expect(StyleSheet.flatten(shown()!.props.style).fontFamily).toBe(FONT_FAMILY.brand[400])
+  })
+
+  it('a plain field keeps the native placeholder', async () => {
+    await render(field())
+    expect(input().props.placeholder).toBe('you@example.com')
+  })
+
   it('a counter inside the box counts characters, not UTF-16 units, and reads as the hint', async () => {
     await render(field({ label: 'Crew name', value: 'Neb🌌', limit: 32 }))
     expect(screen.getByText('4/32', { includeHiddenElements: true })).toBeTruthy()

@@ -26,7 +26,7 @@ const NOW = Date.parse('2026-10-09T20:00:00.000Z')
 const at = (minutes: number) => new Date(NOW + minutes * 60_000).toISOString()
 
 describe('the countdown reads the server clock (PL-CU02)', () => {
-  it("counts down to the server's expiresAt, whenever it is asked", () => {
+  it("counts down to the server’s expiresAt, whenever it is asked", () => {
     expect(remainingMs(at(20), NOW)).toBe(20 * 60_000)
     // Asked again after the phone slept: the same expiry, less left — not 20 minutes from a tap.
     expect(remainingMs(at(20), NOW + 15 * 60_000)).toBe(5 * 60_000)
@@ -74,7 +74,7 @@ describe('the expiry prompt (PL-M02)', () => {
     expect(await readLiveSession('u1')).toEqual({ ...session, venueDayId: 'day-2', prompted: false })
   })
 
-  it("is one account's: another account on the phone reads nothing, and sign-out clears it (M5)", async () => {
+  it("is one account’s: another account on the phone reads nothing, and sign-out clears it (M5)", async () => {
     await AsyncStorage.clear()
     await rememberLiveSession({ userId: 'u1', venueDayId: 'day-1', venueId: 'v1', venueName: 'X', choice: { minutes: 20 } })
     expect(await readLiveSession('u2')).toBeNull()
@@ -95,7 +95,7 @@ describe('"Go live again" in one tap (PL-M05, M5)', () => {
     expect(oneTapChoice(session, 'v1', NOW)).toEqual({ minutes: 20 })
   })
 
-  it("not at another place, not after the day's reset, not before the day is known, never \"stay\"", () => {
+  it("not at another place, not after the day’s reset, not before the day is known, never \"stay\"", () => {
     const today = { ...base, choice: { minutes: 20 } as const, dayEndsAt: at(600) }
     expect(oneTapChoice(today, 'v2', NOW)).toBeNull()
     expect(oneTapChoice({ ...today, dayEndsAt: at(-1) }, 'v1', NOW)).toBeNull()
@@ -134,18 +134,18 @@ describe("a refused Go Live is read by its code, never its sentence (PL-CU01)", 
     expect(goLiveRefusal('PLUS_REQUIRED', 'Staying live is part of Blendn+.')).toEqual({ kind: 'plus' })
   })
 
-  it("keeps the server's sentence and offers a map only when you are in the wrong place", () => {
-    expect(goLiveRefusal('OUT_OF_RANGE', "You're not at The Humming Tree yet.")).toEqual({
+  it("keeps the server’s sentence and offers a map only when you are in the wrong place", () => {
+    expect(goLiveRefusal('OUT_OF_RANGE', "You’re not at The Humming Tree yet.")).toEqual({
       kind: 'refused',
       reason: 'notHere',
       title: 'Not quite there yet',
-      message: "You're not at The Humming Tree yet.",
+      message: "You’re not at The Humming Tree yet.",
       offerDirections: true,
       action: 'directions',
     })
     expect(goLiveRefusal('AGE_RESTRICTED', 'Blendn is for adults.')).toMatchObject({ title: 'Not open to you', offerDirections: false })
     expect(goLiveRefusal('FORBIDDEN', 'Finish onboarding.')).toMatchObject({ title: 'Finish your profile first', offerDirections: false })
-    expect(goLiveRefusal('NOT_FOUND', 'Venue not found')).toMatchObject({ title: "This place isn't available" })
+    expect(goLiveRefusal('NOT_FOUND', 'Venue not found')).toMatchObject({ title: "This place isn’t available" })
     expect(goLiveRefusal('RATE_LIMITED', 'Slow down.')).toMatchObject({ title: 'Too many tries' })
   })
 
@@ -176,11 +176,11 @@ describe("a refused Go Live is read by its code, never its sentence (PL-CU01)", 
   })
 
   it('no code at all (a timeout, no network) offers a retry', () => {
-    expect(goLiveRefusal(undefined, 'Request timed out')).toMatchObject({ title: "Couldn't go live", action: 'retry' })
+    expect(goLiveRefusal(undefined, 'Request timed out')).toMatchObject({ title: "Couldn’t go live", action: 'retry' })
   })
 
   it('an unknown code still shows the sentence; an event hand-off without its id is not a hand-off', () => {
-    expect(goLiveRefusal('SOMETHING_NEW', 'Something specific')).toMatchObject({ kind: 'refused', title: "Couldn't go live", message: 'Something specific' })
+    expect(goLiveRefusal('SOMETHING_NEW', 'Something specific')).toMatchObject({ kind: 'refused', title: "Couldn’t go live", message: 'Something specific' })
     expect(goLiveRefusal(undefined, undefined)).toMatchObject({ message: expect.stringMatching(/try again/) })
     expect(goLiveRefusal('EVENT_LIVE_HERE', 'On here.', null)).toMatchObject({ kind: 'refused' })
   })
@@ -188,7 +188,7 @@ describe("a refused Go Live is read by its code, never its sentence (PL-CU01)", 
 
 describe('live:ended says what happened, and nothing for an end you made', () => {
   it('names the place', () => {
-    expect(liveEndedMessage('expired', 'Cubbon Park Bandstand')).toBe("You're no longer live at Cubbon Park Bandstand.")
+    expect(liveEndedMessage('expired', 'Cubbon Park Bandstand')).toBe("You’re no longer live at Cubbon Park Bandstand.")
     expect(liveEndedMessage('event_started', null)).toMatch(/^An event just started\./)
     expect(liveEndedMessage('manual', 'X')).toBeNull()
     expect(liveEndedMessage('switched_event', 'X')).toBeNull()

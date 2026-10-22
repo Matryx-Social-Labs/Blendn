@@ -47,7 +47,7 @@ export function connectDisclosure(displayName: string, theyAreRevealed: boolean)
   const them = displayName.trim() || 'They'
   return theyAreRevealed
     ? `${them} will see your name and photo.`
-    : `${them} will see your name and photo. You'll still see them as ${them} until they choose to reveal.`
+    : `${them} will see your name and photo. You’ll still see them as ${them} until they choose to reveal.`
 }
 
 export function ConnectSheet({

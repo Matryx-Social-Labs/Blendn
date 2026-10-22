@@ -125,7 +125,7 @@ it('asks "Why are you here tonight?" when only the reveal was opened', async () 
   expect(screen.queryByText('Why do you go out?')).toBeNull()
 })
 
-it("shows the server's sentence when a save is refused, and stays on the screen", async () => {
+it("shows the server’s sentence when a save is refused, and stays on the screen", async () => {
   // "Dating is for 18+" is something a person can act on; "could not save" is not.
   api.setMatchPreferences.mockResolvedValue({ success: false, error: 'Dating is for 18+' } as never)
   await render(<EventPreferences />)

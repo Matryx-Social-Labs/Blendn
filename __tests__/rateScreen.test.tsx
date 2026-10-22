@@ -136,7 +136,7 @@ it('a refused save toasts the fixed sentence with the error haptic and stays on 
   await fireEvent.press(await screen.findByRole('button', { name: 'Skip to the people' }))
   await fireEvent.press(await screen.findByLabelText(/^Meeting Night Cat: 2 out of 5/))
   await fireEvent.press(screen.getByRole('button', { name: 'Submit' }))
-  await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("Couldn't save that. Try again.", 'error', { haptic: 'error' }))
+  await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("Couldn’t save that. Try again.", 'error', { haptic: 'error' }))
   expect(screen.getByText('Night Cat')).toBeTruthy()
 })
 

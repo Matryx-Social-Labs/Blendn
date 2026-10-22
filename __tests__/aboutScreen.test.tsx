@@ -81,7 +81,7 @@ describe('the version', () => {
     ;(Clipboard.setStringAsync as jest.Mock).mockRejectedValueOnce(new Error('no'))
     await render(<AboutScreen />)
     fireEvent.press(screen.getByLabelText(/^Version /))
-    await waitFor(() => expect(mockToast).toHaveBeenCalledWith("Couldn't copy that. Try again.", 'error'))
+    await waitFor(() => expect(mockToast).toHaveBeenCalledWith("Couldn’t copy that. Try again.", 'error'))
   })
 })
 

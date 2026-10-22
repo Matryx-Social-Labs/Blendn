@@ -71,7 +71,7 @@ import {
   type PrivateReadCallback,
   type PrivateTypingCallback,
 } from '../../lib/socketClient'
-import { chatClock } from '../../lib/time'
+import { clockTime } from '../../lib/time'
 import { withDaySeparators, withUnreadDivider, type UnreadDivider } from '../../lib/unreadDivider'
 import { useAuth } from '../../lib/useAuth'
 import { useFriendAsk } from '../../lib/useFriendAsk'
@@ -210,7 +210,9 @@ function PrivateChatInner() {
     reveal && (reveal.pseudonymous === false || reveal.theyRevealed) && profileId
       ? () => router.push({ pathname: '/user/[id]', params: { id: String(profileId) } } as never)
       : undefined
-  const name = reveal?.displayName || nameParam(otherUserName) || 'Chat'
+  // Nobody is called "Chat" (r7 M10: a failed thread titled itself "Chat" and offered "Message Chat"): with no name yet, the
+  // conversation is the title, as the ended state's is.
+  const name = reveal?.displayName || nameParam(otherUserName) || 'Conversation'
   /*
    * Add friend (SCRUM-750): a lit action while the server offers it (`canAdd`, which is only true once you have both revealed), a
    * quiet "Requested" once asked. `otherId` is a handle until they reveal, so the ask never carries one (`useFriendAsk` refuses one
@@ -243,7 +245,7 @@ function PrivateChatInner() {
       .requestReveal(conversation)
       .then((r) => {
         if (r.success) setAsked(true)
-        else showToast(userMessage(r, "Couldn't ask them. Try again."), 'error', { haptic: 'error' })
+        else showToast(userMessage(r, "Couldn’t ask them. Try again."), 'error', { haptic: 'error' })
       })
       .finally(() => setRevealBusy(false))
   }
@@ -266,7 +268,7 @@ function PrivateChatInner() {
           // Their reveal may already be in: your reveal is what can turn Add friend on, and only the server says so.
           setRevealAttempt((n) => n + 1)
         } else {
-          setRevealSheet({ notYet: userMessage(r, "Couldn't reveal. Try again.") })
+          setRevealSheet({ notYet: userMessage(r, "Couldn’t reveal. Try again.") })
         }
       })
       .finally(() => setRevealBusy(false))
@@ -457,7 +459,7 @@ function PrivateChatInner() {
     } catch (error) {
       Logger.warn('private-chat', 'send failed', { error })
       fail()
-      showToast("Couldn't send. Try again.", 'error')
+      showToast("Couldn’t send. Try again.", 'error')
     }
   }
 
@@ -806,22 +808,25 @@ function PrivateChatInner() {
                 }}
               />
             ) : null}
-            <View style={[styles.dock, { paddingBottom: dockBottom }]} onLayout={(e) => setDockHeight(e.nativeEvent.layout.height - dockBottom)}>
-              <Composer
-                testID="dm-composer"
-                value={newMessage}
-                onChangeText={onChangeText}
-                onSend={sendTyped}
-                state={lock?.state ?? 'normal'}
-                reason={lock?.reason}
-                countdown={composer.countdown}
-                reply={replyingTo ? { name: replyingTo.senderId === myId ? 'yourself' : name, text: quoteText(quoteFrom(replyingTo)) } : null}
-                onCancelReply={() => setReplyingTo(null)}
-                placeholder={`Message ${name}`}
-                onAttach={photosAllowed ? () => void attach() : undefined}
-                onFocus={() => setTimeout(() => scrollToBottom(false), 120)}
-              />
-            </View>
+            {/* A thread that failed to load is the DS failure state alone: no live composer under it (r7 M10). */}
+            {loadError && !messages.length ? null : (
+              <View style={[styles.dock, { paddingBottom: dockBottom }]} onLayout={(e) => setDockHeight(e.nativeEvent.layout.height - dockBottom)}>
+                <Composer
+                  testID="dm-composer"
+                  value={newMessage}
+                  onChangeText={onChangeText}
+                  onSend={sendTyped}
+                  state={lock?.state ?? 'normal'}
+                  reason={lock?.reason}
+                  countdown={composer.countdown}
+                  reply={replyingTo ? { name: replyingTo.senderId === myId ? 'yourself' : name, text: quoteText(quoteFrom(replyingTo)) } : null}
+                  onCancelReply={() => setReplyingTo(null)}
+                  placeholder={`Message ${name}`}
+                  onAttach={photosAllowed ? () => void attach() : undefined}
+                  onFocus={() => setTimeout(() => scrollToBottom(false), 120)}
+                />
+              </View>
+            )}
           </>
         )}
       </KeyboardFrame>
@@ -884,7 +889,7 @@ function PrivateChatInner() {
             mine={menu.message.senderId === myId}
             sender={{ name }}
             text={menu.message.text || (menu.message.mediaUrl ? 'Photo' : '')}
-            time={chatClock(menu.message.createdAt)}
+            time={clockTime(menu.message.createdAt)}
           />
         ) : null}
       </LongPressMenu>
@@ -894,7 +899,7 @@ function PrivateChatInner() {
         visible={!!viewer}
         uri={viewer ? viewer.message.mediaUrl || viewer.message.localUri || '' : ''}
         sender={{ name: viewer && viewer.message.senderId === myId ? 'You' : name }}
-        time={viewer ? chatClock(viewer.message.createdAt) : ''}
+        time={viewer ? clockTime(viewer.message.createdAt) : ''}
         from={viewer?.from}
         onClose={() => setViewer(null)}
         // Theirs can be reported from the viewer (#33); yours has nothing to report.

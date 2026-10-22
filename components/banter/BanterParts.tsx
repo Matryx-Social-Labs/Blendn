@@ -9,11 +9,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
 import { OPACITY } from '../../lib/theme'
-import { chatClock } from '../../lib/time'
+import { clockTime } from '../../lib/time'
 import { Avatar } from '../ds/Avatar'
 import { Button } from '../ds/Button'
 import { CrewEmblem } from '../ds/CrewEmblem'
 import { IconButton } from '../ds/IconButton'
+import { Orbs } from '../ds/Orbs'
 import { Badge, monoCaption, PresenceDot, ScrimPill, TimeBadge } from '../ds/MonoFamily'
 import { RollingNumber } from '../ds/RollingNumber'
 import { CONTROL_FONT_CAP, font, useBoldText } from '../ds/shared'
@@ -63,7 +64,7 @@ export function BanterHeader({
         Banter
       </Text>
       <View style={styles.actions}>
-        <View style={styles.bell}>{bell}</View>
+        {bell}
         <IconButton icon="search" accessibilityLabel="Search conversations" selected={searching} onPress={onSearch} testID="banter-search-toggle" />
         <IconButton icon="check-check" accessibilityLabel="Mark all read" disabled={!canMarkAll} onPress={onMarkAll} testID="banter-mark-all" />
       </View>
@@ -114,7 +115,14 @@ export function LiveHero({
       accessibilityLabel={[title, 'live', here ? 'You’re here' : count ? `${count} in the room` : null, unread ? `${unread} new` : null, line].filter(Boolean).join(', ')}
       style={({ pressed }) => [styles.hero, pressed && styles.pressed]}
     >
-      {coverUrl ? <Image source={{ uri: coverUrl }} recyclingKey={coverUrl} contentFit="cover" style={StyleSheet.absoluteFill} accessible={false} /> : null}
+      {/* No cover is the brand orbs, still, as the Scene and Room info draw it (r7 M6): never a flat grey card. */}
+      {coverUrl ? (
+        <Image source={{ uri: coverUrl }} recyclingKey={coverUrl} contentFit="cover" style={StyleSheet.absoluteFill} accessible={false} />
+      ) : (
+        <View testID={testID && `${testID}-orbs`} style={StyleSheet.absoluteFill}>
+          <Orbs set="brand" paused />
+        </View>
+      )}
       <PhotoScrim style={styles.heroScrim} />
       <View style={styles.heroTop}>
         <TimeBadge when="Live" />
@@ -169,7 +177,8 @@ export function BlendLiveCard({
 }) {
   onPress = useBanterPress(onPress)
   const bold = useBoldText()
-  const closes = closesAt ? hourLabel(closesAt) : null
+  // "4 AM": a Blend's closing hour, the app's one clock.
+  const closes = closesAt ? clockTime(closesAt) : null
   return (
     <Pressable
       onPress={onPress}
@@ -195,8 +204,6 @@ export function BlendLiveCard({
   )
 }
 
-/** "4 AM": a Blend's closing hour, as the frames write it. */
-export const hourLabel = (iso: string) => chatClock(iso).replace(':00 ', ' ')
 
 /**
  * A request that needs an answer (Flow 5 #05, R3-0 C11, R2-D2 #02): a solid
@@ -538,14 +545,6 @@ const styles = StyleSheet.create({
     paddingBottom: BAR_BOTTOM,
   },
   actions: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
-  bell: {
-    width: SIZE.circleButton,
-    height: SIZE.circleButton,
-    borderRadius: RADIUS.capsule,
-    backgroundColor: COLOR.chipFillOnGlass,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   grow: { flex: 1, minWidth: 0 },
   shrink: { flexShrink: 1 },
   ink: { color: COLOR.textPrimary },
@@ -554,7 +553,7 @@ const styles = StyleSheet.create({
   pressed: { opacity: OPACITY.pressed },
   inline: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs },
   centre: { alignItems: 'center', justifyContent: 'center' },
-  hero: { height: HERO_HEIGHT, borderRadius: RADIUS.sheet, overflow: 'hidden', backgroundColor: COLOR.surface },
+  hero: { height: HERO_HEIGHT, borderRadius: RADIUS.sheet, overflow: 'hidden', backgroundColor: COLOR.ink },
   heroScrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '80%' },
   heroTop: { position: 'absolute', left: SPACE.md, top: SPACE.md, flexDirection: 'row', gap: SPACE.xs },
   heroBadge: { position: 'absolute', right: SPACE.lg, top: SPACE.md },

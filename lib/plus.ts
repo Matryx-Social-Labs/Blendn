@@ -5,6 +5,7 @@ import type { PlusStatus as ManageStatus } from '../components/ds/ManageStatusRo
 import type { IconName } from '../components/ui/Icon'
 import { apiClient } from './apiClient'
 import { NIGHT_PASS_ID, type PlusOffer } from './purchases'
+import { clockTime } from './time'
 
 /**
  * Blendn+ as the server says it (`GET /api/mobile/me/plus`). The server is the
@@ -44,7 +45,6 @@ export const PLUS_COMING_SOON: readonly PlusFeature[] = [
 ]
 
 const dateOf = (iso: string) => new Date(iso).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' })
-const timeOf = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 
 /**
  * "Blendn+ until 10 Nov 2026" / "Night Pass until 11 Oct 2026, 4:30 AM" — or
@@ -55,7 +55,7 @@ export function plusStatusLine(status: PlusStatus | null | undefined): string | 
   if (!status?.active) return null
   const name = status.product === 'night_pass' ? 'Night Pass' : 'Blend’n+'
   if (!status.expiresAt) return `You have ${name}`
-  const until = status.product === 'night_pass' ? `${dateOf(status.expiresAt)}, ${timeOf(status.expiresAt)}` : dateOf(status.expiresAt)
+  const until = status.product === 'night_pass' ? `${dateOf(status.expiresAt)}, ${clockTime(status.expiresAt)}` : dateOf(status.expiresAt)
   return `${name} until ${until}`
 }
 

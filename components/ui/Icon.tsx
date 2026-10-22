@@ -173,7 +173,6 @@ import Palette from 'lucide-react-native/icons/palette'
 import Trophy from 'lucide-react-native/icons/trophy'
 // Flow 7 / 15 (account row, the Android OS line, a rating that is not open) and Flow 9 (the "you're in" and rate badges): the design's own glyphs.
 import AtSign from 'lucide-react-native/icons/at-sign'
-import SmartphoneNfc from 'lucide-react-native/icons/smartphone-nfc'
 import Star from 'lucide-react-native/icons/star'
 import StarOff from 'lucide-react-native/icons/star-off'
 import { COLOR, ICON } from '../../lib/design/tokens'
@@ -331,7 +330,6 @@ const ICONS = {
   palette: Palette,
   trophy: Trophy,
   'at-sign': AtSign,
-  'smartphone-nfc': SmartphoneNfc,
   star: Star,
   'star-off': StarOff,
 } as const satisfies Record<string, LucideIcon>

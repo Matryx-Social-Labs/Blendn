@@ -50,6 +50,8 @@ describe('<MapCard>', () => {
       color: COLOR.textPrimary,
     })
     expect(query('m-you')).toBeTruthy()
+    // One line with an ellipsis, never two lines clipped mid-word (r7 L4).
+    expect(screen.getByText('12th Main, Indiranagar', { includeHiddenElements: true }).props.numberOfLines).toBe(1)
   })
 
   it('focused rings it; Increase Contrast adds the 50% hairline', async () => {

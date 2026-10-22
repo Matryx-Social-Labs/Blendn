@@ -74,8 +74,8 @@ describe('the message that goes with the link', () => {
 
   it('shares a venue by name and the front-page link, and an invite as the short ask with no name in it', () => {
     const venue = venueTarget({ id: ID, name: 'Toit', venueTypeLabel: 'Brewery', city: 'Indiranagar' })
-    expect(shareText(venue)).toBe("Toit on Blend'n\nhttps://www.blendn.app")
-    expect(shareText({ kind: 'invite', url: 'https://www.blendn.app/f/abc' })).toBe("Add me on Blend'n: https://www.blendn.app/f/abc")
+    expect(shareText(venue)).toBe('Toit on Blend’n\nhttps://www.blendn.app')
+    expect(shareText({ kind: 'invite', url: 'https://www.blendn.app/f/abc' })).toBe('Add me on Blend’n: https://www.blendn.app/f/abc')
   })
 
   it('copies the link alone', () => {

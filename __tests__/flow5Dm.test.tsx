@@ -360,3 +360,25 @@ describe('a message that arrives rises (#13), only for a reader at the end', () 
     expect(enteringOf('hi m3')).toBeUndefined()
   })
 })
+
+describe('a conversation that fails to load (r7 M10)', () => {
+  it('is the DS failure state: no "Chat" posing as a person, and no composer under it', async () => {
+    api.getConversation.mockResolvedValue({ success: false, error: 'offline' } as never)
+    api.getConversationMessages.mockRejectedValue(new Error('offline'))
+    await open()
+    expect(screen.getByTestId('dm-failed')).toBeTruthy()
+    expect(screen.queryByText('Chat')).toBeNull()
+    expect(screen.getByText('Conversation')).toBeTruthy()
+    expect(screen.queryByTestId('dm-composer')).toBeNull()
+  })
+
+  it('Try again brings the composer back once the thread loads', async () => {
+    api.getConversation.mockResolvedValue({ success: true, data: anonymous } as never)
+    api.getConversationMessages.mockRejectedValueOnce(new Error('offline'))
+    await open()
+    expect(screen.queryByTestId('dm-composer')).toBeNull()
+    await fireEvent.press(screen.getByRole('button', { name: 'Try again' }))
+    await flush()
+    expect(screen.getByTestId('dm-composer')).toBeTruthy()
+  })
+})

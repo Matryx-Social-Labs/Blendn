@@ -35,7 +35,7 @@ describe("the announcement composer", () => {
     expect(sheets).toMatch(/disabled: !text\.trim\(\)/)
   })
 
-  it("stops at the server's limit rather than failing the request", () => {
+  it("stops at the server’s limit rather than failing the request", () => {
     // `announce/route.ts` refuses over 1,000 characters.
     expect(sheets).toContain("ANNOUNCEMENT_LIMIT = 1000")
     expect(sheets).toContain("limit={ANNOUNCEMENT_LIMIT}")

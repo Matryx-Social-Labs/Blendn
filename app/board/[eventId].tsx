@@ -66,7 +66,7 @@ type EventFacts = { title: string; startTime: string | null }
 
 const REFUSED_TITLE: Record<string, string> = {
   AGE_RESTRICTED: 'This board has an age limit',
-  NOT_FOUND: "This board isn't here",
+  NOT_FOUND: "This board isn’t here",
 }
 
 export function BoardScreen() {
@@ -223,10 +223,10 @@ export function BoardScreen() {
           next = { kind: 'settled', line: CLOSED_LINE }
         } else {
           // Which gate, in the server's words; the button stays for another try.
-          next = { kind: 'refused', line: boardMessage(result, "Couldn't send that. Try again.") }
+          next = { kind: 'refused', line: boardMessage(result, "Couldn’t send that. Try again.") }
         }
       } catch {
-        next = { kind: 'refused', line: "Couldn't send that. Try again." }
+        next = { kind: 'refused', line: "Couldn’t send that. Try again." }
       } finally {
         asking.current.delete(post.id)
       }
@@ -251,7 +251,7 @@ export function BoardScreen() {
               const result = await apiClient.withdrawBoardPost(eventId, post.id)
               // Already gone is gone: the outcome they asked for.
               if (!result.success && result.errorCode !== 'NOT_FOUND') {
-                return { ok: false, error: boardMessage(result, "Couldn't take it down. Try again.") }
+                return { ok: false, error: boardMessage(result, "Couldn’t take it down. Try again.") }
               }
               removed.current.add(post.id)
               created.current.delete(post.id)
@@ -278,7 +278,7 @@ export function BoardScreen() {
         const result = await apiClient.postToBoard(eventId, draft)
         if (!result.success || !result.data) {
           // Which gate — going, profile, a cap, the doors, the filter — in the server's words.
-          const line = boardMessage(result, "Couldn't post that. Try again.")
+          const line = boardMessage(result, "Couldn’t post that. Try again.")
           setRefusal(line)
           announce(line)
           return
@@ -292,7 +292,7 @@ export function BoardScreen() {
         announce('Posted')
         void fetchBoard()
       } catch {
-        setRefusal("Couldn't post that. Try again.")
+        setRefusal("Couldn’t post that. Try again.")
       } finally {
         postingRef.current = false
         setPosting(false)
@@ -345,7 +345,7 @@ export function BoardScreen() {
   const header = (
     <View style={styles.header}>
       {refreshFailed && load.kind === 'ready' ? (
-        <Text style={[font('meta', bold), styles.secondary, styles.centre]}>The board didn&apos;t refresh. Pull down to try again.</Text>
+        <Text style={[font('meta', bold), styles.secondary, styles.centre]}>The board didn’t refresh. Pull down to try again.</Text>
       ) : null}
       {load.kind === 'ready' && load.posts.length > 0 && !posts.some((p) => p.mine) ? (
         <Button label="Write a post" onPress={() => setComposing(true)} />
@@ -358,7 +358,7 @@ export function BoardScreen() {
     content = (
       <StateScreen
         icon="lock"
-        title="The board's closed"
+        title="The board’s closed"
         body="The doors are open, so the room is open instead."
         // To the tabs first: the overlay is under the root stack, so opened from here it was under the board (Flow 4 Board #14).
         actions={[{ label: 'Open the room', onPress: openRoomFromBoard }]}
@@ -381,7 +381,7 @@ export function BoardScreen() {
     content = (
       <StateScreen
         icon="cloud-off"
-        title="The board didn't load"
+        title="The board didn’t load"
         body="Check your connection and try again."
         actions={[{ label: 'Try again', onPress: () => void onRefresh(), loading: refreshing }]}
         testID="board-failed"
@@ -400,8 +400,8 @@ export function BoardScreen() {
         ListEmptyComponent={
           <StateScreen
             icon="message-square-dashed"
-            title="Nobody's posted yet"
-            body="Say what you're looking for, and people on their way will see it."
+            title="Nobody’s posted yet"
+            body="Say what you’re looking for, and people on their way will see it."
             actions={[{ label: 'Write a post', onPress: () => setComposing(true) }]}
             testID="board-empty"
           />

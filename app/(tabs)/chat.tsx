@@ -155,7 +155,7 @@ function ChatInner() {
       const result = await apiClient.getConversationMessages(chat.conversation_id, { limit: 1 })
       if (!result.success) {
         setPersonalChats((prev) => prev.map((c) => (c.conversation_id === chat.conversation_id ? { ...c, unread_count: chat.unread_count } : c)))
-        showToast("Couldn't mark it read. Try again.", 'error')
+        showToast("Couldn’t mark it read. Try again.", 'error')
       }
     },
     [setPersonalChats, showToast]

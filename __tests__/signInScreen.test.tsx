@@ -71,7 +71,7 @@ describe('validation, each under its own field (R4.1 sign-in 06)', () => {
     await submit()
     expect(screen.getByText('Enter your name.')).toBeTruthy()
     expect(screen.getByText('Use at least 12 characters. Length beats symbols.')).toBeTruthy()
-    expect(screen.getByText("Blend'n is for people 18 and over.")).toBeTruthy()
+    expect(screen.getByText("Blend’n is for people 18 and over.")).toBeTruthy()
     expect(error).toHaveBeenCalledTimes(1)
     expect(mockSignUp).not.toHaveBeenCalled()
   })

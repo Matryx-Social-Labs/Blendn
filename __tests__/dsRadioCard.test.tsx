@@ -115,6 +115,8 @@ describe('<RadioCard>', () => {
     const onPress = jest.fn()
     await render(card({ disabled: true, hint: 'Add a photo to your profile first.', onPress }))
     expect(flat('r').opacity).toBe(0.6)
+    // One layer, so Android does not fade the well and the card separately into a darker disc (r7 L7).
+    expect(screen.getByTestId('r').props.needsOffscreenAlphaCompositing).toBe(true)
     await fireEvent.press(screen.getByTestId('r'))
     expect(onPress).not.toHaveBeenCalled()
     expect(select).not.toHaveBeenCalled()

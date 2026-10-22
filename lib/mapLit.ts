@@ -23,6 +23,7 @@ import { DURATION, REDUCE_MOTION } from './design/tokens'
 import { liveNowLabel, type LiveNow } from './home'
 import { featureIdOf } from './mapStyleEmber'
 import { MAP_THEME } from './mapTheme'
+import { clockTime } from './time'
 
 export type Ring = number[][]
 export type LngLat = [number, number]
@@ -382,11 +383,11 @@ function startLabel(startsAt: string | null, now: number, forSpeech: boolean): s
   if (!start || Number.isNaN(start.getTime())) return null
   const far = start.getTime() - now > WEEKDAY_ONLY_MS
   const day = start.toLocaleDateString('en-IN', { weekday: 'short', ...(far ? { day: 'numeric', month: 'short' } : {}), timeZone: EVENT_TIME_ZONE })
-  const time = start.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', timeZone: EVENT_TIME_ZONE })
+  const time = clockTime(start, EVENT_TIME_ZONE)
   return forSpeech ? `${day} ${time}` : `${day} · ${time}`
 }
 
-/** The chip's second line: "LIVE ●", the start ("Fri · 8:00 pm", with the date past six days), or a venue's bucket ("10–19 live"; nothing below 5). */
+/** The chip's second line: "LIVE ●", the start ("Fri · 8 PM", with the date past six days), or a venue's bucket ("10–19 live"; nothing below 5). */
 export function chipLine(p: ChipSource, now: number = Date.now()): string {
   if (p.kind === 'venue') return liveNowLabel(p.bucket) ?? ''
   if (p.live) return 'LIVE ●'

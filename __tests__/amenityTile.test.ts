@@ -14,7 +14,7 @@ import { amenityTiles } from "../lib/amenityTile"
 const ok = { id: "1", name: "Open Bar", subtitle: "Premium Spirits", icon: "local_bar" }
 
 describe("amenity tiles", () => {
-  it("converts the server's snake_case to this icon set's kebab-case", () => {
+  it("converts the server’s snake_case to this icon set’s kebab-case", () => {
     /*
      * The one that matters, and the one this suite was written wrong for first.
      *
@@ -61,7 +61,7 @@ describe("amenity tiles", () => {
     expect(amenityTiles([{ id: "1", name: "   ", subtitle: "x" }])).toHaveLength(0)
   })
 
-  it("keeps the server's order, which is the vocabulary's sort_order", () => {
+  it("keeps the server’s order, which is the vocabulary’s sort_order", () => {
     /*
      * Two events with the same amenities must list them the same way. The
      * server orders by `sort_order` and drops the field, so re-sorting here —

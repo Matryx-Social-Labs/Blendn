@@ -430,7 +430,7 @@ function EditAboutYouScreenContent() {
                   <SettingsRow
                     icon="calendar-check"
                     title="Show “Shows up” on my card"
-                    hint="Once you've checked in to 80% of the events you said you'd go to (at least 3)."
+                    hint="Once you’ve checked in to 80% of the events you said you’d go to (at least 3)."
                     trail="switch"
                     value={form.showsUpBadge}
                     onValueChange={(v) => setForm((f) => ({ ...f, showsUpBadge: v }))}

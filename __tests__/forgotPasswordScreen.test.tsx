@@ -96,7 +96,7 @@ describe('the entry', () => {
   it('a thrown request is the design’s sentence', async () => {
     mockForgot.mockRejectedValue(new Error('offline'))
     await sent()
-    expect(screen.getByText("Couldn't send the reset link. Try again.")).toBeTruthy()
+    expect(screen.getByText("Couldn’t send the reset link. Try again.")).toBeTruthy()
   })
 })
 

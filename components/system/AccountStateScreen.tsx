@@ -23,7 +23,7 @@ export function AccountStateScreen({ state }: { state: AccountState }) {
   const actions =
     state.kind === 'suspended'
       ? [
-          { label: 'Email support', kind: 'strong' as const, pressHaptic: () => H.primary(), onPress: mail("Blend'n account suspended") },
+          { label: 'Email support', kind: 'strong' as const, pressHaptic: () => H.primary(), onPress: mail("Blend’n account suspended") },
           { label: 'Back to start', kind: 'tertiary' as const, onPress: dismiss },
         ]
       : state.kind === 'staff'
@@ -38,7 +38,7 @@ export function AccountStateScreen({ state }: { state: AccountState }) {
             { label: 'Use a different account', kind: 'tertiary' as const, onPress: dismiss },
           ]
         : [
-            { label: 'Contact support', kind: 'strong' as const, pressHaptic: () => H.primary(), onPress: mail("Blend'n sign-in") },
+            { label: 'Contact support', kind: 'strong' as const, pressHaptic: () => H.primary(), onPress: mail("Blend’n sign-in") },
             { label: 'Use a different account', kind: 'tertiary' as const, onPress: dismiss },
           ]
 
@@ -47,7 +47,7 @@ export function AccountStateScreen({ state }: { state: AccountState }) {
       icon={copy.icon}
       title={copy.title}
       body={copy.body}
-      bodyLink={copy.link ? { text: SUPPORT_EMAIL, onPress: mail("Blend'n account suspended") } : undefined}
+      bodyLink={copy.link ? { text: SUPPORT_EMAIL, onPress: mail("Blend’n account suspended") } : undefined}
       note={copy.note}
       actions={actions}
       testID={`account-${state.kind}`}

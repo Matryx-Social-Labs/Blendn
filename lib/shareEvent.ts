@@ -77,7 +77,7 @@ const placeText = (e: ShareEvent) => (e.unlisted ? e.area : [e.venue, e.area].fi
 /** The exact words that go with the link (the tray shows them under the actions). */
 export function shareText(target: ShareTarget): string {
   if (target.kind === 'invite') return inviteMessage(target.url)
-  if (target.kind === 'venue') return `${target.name} on Blend'n\n${target.url}`
+  if (target.kind === 'venue') return `${target.name} on Blend’n\n${target.url}`
   const e = target.event
   return [[e.title, e.dateText].filter(Boolean).join(' · '), placeText(e), e.url].filter(Boolean).join('\n')
 }

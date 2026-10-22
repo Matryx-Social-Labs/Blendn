@@ -81,7 +81,7 @@ import GroupChat from '../app/chat/[id]'
 import { apiClient } from '../lib/apiClient'
 /* eslint-enable import/first */
 
-const refused = { success: false, errorCode: 'NOT_LIVE', error: "You’re not live here any more. Go live at the venue to join today's room." }
+const refused = { success: false, errorCode: 'NOT_LIVE', error: "You’re not live here any more. Go live at the venue to join today’s room." }
 const served = { success: true, data: { messages: [], pagination: { hasMore: false, nextCursor: null } } }
 const placeRow = { id: 'g1', name: 'Cubbon Park Bandstand', memberCount: null, event: { id: 'day-1', kind: 'venue_day', venueId: 'v1', title: 'Venue day · Cubbon Park Bandstand · 2026-10-09' } }
 
@@ -118,7 +118,7 @@ it('the window ends: the room becomes "not live", and comes back — socket rejo
   expect(mockRejoin).toHaveBeenCalledWith('g1')
 })
 
-it("another place's window ending leaves this room alone (L2)", async () => {
+it("another place’s window ending leaves this room alone (L2)", async () => {
   ;(apiClient.getChatMessages as jest.Mock).mockResolvedValue(served)
   await render(<GroupChat />)
   await flush()

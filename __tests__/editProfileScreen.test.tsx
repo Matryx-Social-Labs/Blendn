@@ -242,3 +242,13 @@ it('stops the page scrolling while a photo is in the hand', async () => {
   await fireEvent(screen.getByTestId('photo-lift'), 'pressOut')
   expect(scroll().props.scrollEnabled).toBe(true)
 })
+
+it('a card’s label starts on its sets’ labels’ edge, and the about-you row’s title fits one line (r7 L8)', async () => {
+  const { StyleSheet } = require('react-native')
+  const { SPACE } = require('../lib/design/tokens')
+  await render(<EditProfile />)
+  await screen.findByDisplayValue('Sam')
+  // FieldLabel's 4 pt inset, the one every set label inside the card has.
+  expect(StyleSheet.flatten(screen.getByRole('header', { name: 'You and matching' }).props.style).paddingLeft).toBe(SPACE.xs)
+  expect(screen.getByText('Languages, home & more')).toBeTruthy()
+})

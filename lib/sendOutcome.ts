@@ -27,7 +27,7 @@ export function sendOutcome(result: {
   error?: string | null
   errorCode?: string | null
 }): SendOutcome {
-  if (!result.success) return { kind: 'failed', reason: userMessage(result, "Couldn't send. Try again.") }
+  if (!result.success) return { kind: 'failed', reason: userMessage(result, "Couldn’t send. Try again.") }
   const hidden = (result.data as { moderation_hidden?: boolean } | undefined)?.moderation_hidden
   return hidden ? { kind: 'withheld' } : { kind: 'sent' }
 }

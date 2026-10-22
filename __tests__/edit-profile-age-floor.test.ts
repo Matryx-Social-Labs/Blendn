@@ -23,12 +23,12 @@ import {
 describe('the account floor is 18', () => {
   it('is one number and one sentence', () => {
     expect(ACCOUNT_MIN_AGE).toBe(18)
-    expect(ADULTS_ONLY).toBe("Blend'n is for people 18 and over.")
+    expect(ADULTS_ONLY).toBe("Blend’n is for people 18 and over.")
   })
 
   it('sign-up requires an age, and refuses under 18 with the reason', () => {
-    expect(accountAgeError('', { required: true })).toBe("Enter your age. Blend'n is for people 18 and over.")
-    expect(accountAgeError('  ', { required: true })).toBe("Enter your age. Blend'n is for people 18 and over.")
+    expect(accountAgeError('', { required: true })).toBe("Enter your age. Blend’n is for people 18 and over.")
+    expect(accountAgeError('  ', { required: true })).toBe("Enter your age. Blend’n is for people 18 and over.")
     expect(accountAgeError('17', { required: true })).toBe(ADULTS_ONLY)
     expect(accountAgeError('13', { required: true })).toBe(ADULTS_ONLY)
     expect(accountAgeError('18', { required: true })).toBeNull()

@@ -49,7 +49,7 @@ describe('followEnd', () => {
 })
 
 describe('scrollListToEnd', () => {
-  it("asks the ScrollView, not FlatList's estimate", () => {
+  it("asks the ScrollView, not FlatList’s estimate", () => {
     const native = { scrollToEnd: jest.fn() }
     const list = { getScrollResponder: () => native, scrollToEnd: jest.fn() }
     scrollListToEnd(list as never, true)

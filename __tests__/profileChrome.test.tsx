@@ -189,6 +189,11 @@ describe('the docked tray reaches the thumb on an iPhone SE', () => {
     expect(register).toHaveBeenLastCalledWith(expect.any(String), 126)
   })
 
+  it('the page’s last section scrolls clear of the fade above the dock, not into it (r7 M2)', () => {
+    const page = require('fs').readFileSync(require('path').join(__dirname, '../app/user/[id].tsx'), 'utf8')
+    expect(page).toMatch(/paddingBottom: \(dockHeight \|\| dockClearance\(insets\.bottom\)\) \+ DOCK_FADE \+ SPACE\.xl/)
+  })
+
   it('clears the Android navigation bar by the inset it is given', () => {
     expect(dockClearance(48) - dockClearance(0)).toBe(48)
   })

@@ -101,7 +101,7 @@ export default function InviteScreen() {
       setState(result.data.state)
       if (result.data.state === 'friends') showToast(`You and ${person.name} are friends`, 'success', { haptic: 'success' })
     } else {
-      showToast("That didn't go through. Try again.", 'error', { haptic: 'error' })
+      showToast("That didn’t go through. Try again.", 'error', { haptic: 'error' })
     }
   }
 

@@ -182,7 +182,7 @@ function GoingScreenInner() {
       const failed = failedSections({ saved, going: rsvps, past })
       const shown = hadRowsRef.current || !allFailed
       if (shown && newFailure(failedRef.current, failed)) {
-        say("Couldn't load all of your events.", 'error', { label: 'Try again', onPress: () => reloadRef.current() })
+        say("Couldn’t load all of your events.", 'error', { label: 'Try again', onPress: () => reloadRef.current() })
       }
       failedRef.current = failed
     } catch {
@@ -278,7 +278,7 @@ function GoingScreenInner() {
           .catch(() => {
             settleSave(event.id, false)
             setEvents(prev => prev.filter(e => e.id !== event.id))
-            say(`Couldn't save ${event.title} again.`, 'error')
+            say(`Couldn’t save ${event.title} again.`, 'error')
           })
       },
     })
@@ -288,7 +288,7 @@ function GoingScreenInner() {
         settleSave(event.id, false)
         Logger.warn('interested', 'Failed to remove favorite', { error: e })
         restoreRow(event, index)
-        say(`Couldn't remove ${event.title}. Try again.`, 'error')
+        say(`Couldn’t remove ${event.title}. Try again.`, 'error')
       })
   }, [events, restoreRow, say, markSave, settleSave])
 

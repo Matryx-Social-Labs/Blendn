@@ -327,6 +327,13 @@ describe('the page, the design’s details', () => {
     for (const d of distances) expect(JSON.stringify(d.props.style)).toMatch(/Geist/i)
   })
 
+  it('the Where card names the city once: not again under an address that already has it (r7 L4)', async () => {
+    await mount(venue({ venue: { address: 'Level 1, 1 MG Road Mall, MG Road, Bengaluru 560001' } }))
+    expect(screen.queryAllByText(/^Bengaluru/, { includeHiddenElements: true })).toHaveLength(0)
+    await mount()
+    expect(screen.getAllByText(/Bengaluru/, { includeHiddenElements: true }).length).toBeGreaterThan(0)
+  })
+
   it('the dock’s pill in the last five minutes reads Ending, then Extend', async () => {
     await mount(venue({ live: liveOver({ expiresAt: new Date(NOW + 4 * 60_000 + 59_000).toISOString() }) }))
     const chips = screen.getAllByText(/^(Ending|Extend)$/, { includeHiddenElements: true }).map((t) => t.props.children)
@@ -690,7 +697,7 @@ describe('live', () => {
     await act(async () => {
       fireEvent.press(screen.getByRole('button', { name: 'Stop' }))
     })
-    expect(mockShowToast).toHaveBeenCalledWith("Couldn't stop. Try again.", 'error', { haptic: 'error' })
+    expect(mockShowToast).toHaveBeenCalledWith("Couldn’t stop. Try again.", 'error', { haptic: 'error' })
     expect((apiClient.getVenue as jest.Mock).mock.calls.length).toBe(reads + 1)
   })
 

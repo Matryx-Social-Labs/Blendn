@@ -285,13 +285,13 @@ export type SceneCTAState = 'rsvp' | 'rsvpd' | 'waitlisted' | 'join' | 'going' |
  * *inside* something rather than as a travel plan.
  */
 const CTA_LABEL: Record<SceneCTAState, string> = {
-  rsvp: "I'm going",
-  rsvpd: "You're going",
+  rsvp: "I’m going",
+  rsvpd: "You’re going",
   // A waitlist place is not a seat: never "You're going" (A78 review).
   waitlisted: 'On the waitlist',
   join: 'Blend in',
-  going: "You're in",
-  ended: "See what's on tonight",
+  going: "You’re in",
+  ended: "See what’s on tonight",
   rate: 'Rate who you met',
   // The organiser called it off (Flow 15 #10): one neutral line, and nothing to press.
   cancelled: 'Cancelled',
@@ -393,7 +393,7 @@ export function SceneCTA({
     >
       {/*
         Full width, the gradient while there is something still to do, 8% white
-        once it is done (A78, Prompt 10): "I'm going" → "You're going" with the
+        once it is done (A78, Prompt 10): "I’m going" → "You’re going" with the
         check is one sequence, the old label up and out over quick, the new one
         in over base, the fill crossfading under them.
       */}

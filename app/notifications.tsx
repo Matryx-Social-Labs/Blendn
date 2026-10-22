@@ -369,16 +369,16 @@ function NotificationsScreenContent() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLOR.ink },
   content: { flexGrow: 1 },
-  // The frame: rows, headings, the card and the banners sit 16 in from the edge (rows pad themselves).
-  inset: { paddingHorizontal: SPACE.lg },
+  // Rows, headings, the card and the banners sit on the app's one gutter, like every other list (r7 M3: 16 here made it the widest screen).
+  inset: { paddingHorizontal: SPACE.gutter },
   section: { marginTop: SECTION_GAP },
-  banners: { paddingHorizontal: SPACE.lg, gap: SPACE.sm },
-  card: { marginHorizontal: SPACE.lg, marginTop: SPACE.xs, borderRadius: RADIUS.sheet, backgroundColor: COLOR.surface, overflow: 'hidden' },
+  banners: { paddingHorizontal: SPACE.gutter, gap: SPACE.sm },
+  card: { marginHorizontal: SPACE.gutter, marginTop: SPACE.xs, borderRadius: RADIUS.sheet, backgroundColor: COLOR.surface, overflow: 'hidden' },
   separator: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: COLOR.hairline },
   state: { flexGrow: 1, justifyContent: 'center', paddingBottom: SPACE.xxxl },
   headerFill: { flexGrow: 1 },
   more: { alignItems: 'center', paddingTop: SPACE.sm, paddingBottom: SPACE.lg },
-  footnote: { color: COLOR.textTertiary, textAlign: 'center', paddingHorizontal: SPACE.lg, paddingTop: SPACE.sm, paddingBottom: SPACE.xxl },
+  footnote: { color: COLOR.textTertiary, textAlign: 'center', paddingHorizontal: SPACE.gutter, paddingTop: SPACE.sm, paddingBottom: SPACE.xxl },
 })
 
 /** Rose world: mostly people (friend requests, matches, crew invites, reveals), so one hue on this screen (`HueProvider`): the Waiting count, the Accept and Join pills, the glyph tiles, the unread dots and Turn on all light in it. */

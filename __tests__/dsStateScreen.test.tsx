@@ -9,7 +9,7 @@ import React from 'react'
 import { AccessibilityInfo, StyleSheet } from 'react-native'
 
 import { GlyphWell, StateScreen } from '../components/ds/StateScreen'
-import { COLOR, MATERIAL } from '../lib/design/tokens'
+import { COLOR, MATERIAL, TYPE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
@@ -54,6 +54,16 @@ describe('<StateScreen>', () => {
     await fireEvent.press(screen.getByRole('button', { name: 'Try again' }))
     expect(retry).toHaveBeenCalledTimes(1)
     expect(error).not.toHaveBeenCalled()
+  })
+
+  it('inline, its title is quieter than the screen’s and the section’s headings; a whole screen keeps the title face (r7 M5)', async () => {
+    // Room info's "Couldn’t load who’s in this room" sat at 24 pt bold under a 20 pt section heading, louder than the page.
+    await render(<StateScreen icon="cloud-off" title="Couldn’t load who’s in this room" body="Check your connection and try again." />)
+    const inline = text('Couldn’t load who’s in this room')
+    expect(inline).toMatchObject({ fontFamily: TYPE.bodyStrong.fontFamily, fontSize: TYPE.bodyStrong.fontSize })
+    expect(inline.fontSize).toBeLessThan(TYPE.heading.fontSize)
+    await render(<StateScreen variant="screen" icon="cloud-off" title="Blend’n can’t reach the server" />)
+    expect(text('Blend’n can’t reach the server')).toMatchObject({ fontFamily: TYPE.title.fontFamily, fontSize: TYPE.title.fontSize })
   })
 
   it('busy: the primary action shows its busy state', async () => {

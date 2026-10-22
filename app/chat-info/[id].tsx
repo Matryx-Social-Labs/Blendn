@@ -15,6 +15,7 @@ import { SectionHeader } from '../../components/ds/SectionHeader'
 import { SettingsGroup, SettingsRow } from '../../components/ds/SettingsRow'
 import { font, HueProvider, minTarget, useBoldText } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
+import { Orbs } from '../../components/ds/Orbs'
 import { Icon } from '../../components/ui/Icon'
 import { PhotoScrim, StatusScrim } from '../../components/ui/GradientFill'
 import { apiClient } from '../../lib/apiClient'
@@ -185,8 +186,15 @@ function ChatInfoInner() {
         onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
         scrollEventThrottle={16}
       >
-        <View style={styles.hero}>
-          {cover ? <Image source={{ uri: cover }} contentFit="cover" style={StyleSheet.absoluteFill} accessible={false} /> : null}
+        <View testID="info-hero" style={styles.hero}>
+          {/* No cover is the brand orbs on ink, as the Scene draws it (r7 M6): never a flat grey band ending on a hard edge. */}
+          {cover ? (
+            <Image source={{ uri: cover }} contentFit="cover" style={StyleSheet.absoluteFill} accessible={false} />
+          ) : (
+            <View testID="info-hero-orbs" style={StyleSheet.absoluteFill}>
+              <Orbs set="brand" />
+            </View>
+          )}
           <StatusScrim style={styles.headScrim} />
           <PhotoScrim style={styles.scrim} />
           <View style={styles.heroText}>
@@ -364,7 +372,7 @@ function ChatInfoInner() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: COLOR.ink },
-  hero: { height: HERO_HEIGHT, backgroundColor: COLOR.surface, overflow: 'hidden', justifyContent: 'flex-end' },
+  hero: { height: HERO_HEIGHT, backgroundColor: COLOR.ink, overflow: 'hidden', justifyContent: 'flex-end' },
   scrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '66%' },
   heroText: { paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.xl, gap: SPACE.sm },
   badges: { flexDirection: 'row', gap: SPACE.sm },
@@ -394,7 +402,8 @@ const styles = StyleSheet.create({
     minHeight: LEAVE_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACE.md,
+    // SettingsRow's glyph-to-text gap, so "Leave room" starts on the rows' text edge above it (r7 L1).
+    gap: SPACE.lg,
     paddingHorizontal: SPACE.lg,
     borderRadius: RADIUS.rowInCard,
     backgroundColor: COLOR.destructiveTint,

@@ -12,7 +12,7 @@ import { checkInRefusal, CHECK_IN_CODES } from "../lib/checkInRefusal"
  * written against the server's *real* sentence rather than a convenient one.
  */
 const REAL_OUT_OF_RANGE =
-  "You're about 45m outside the check-in area. Move closer to the venue and try again."
+  "You’re about 45m outside the check-in area. Move closer to the venue and try again."
 
 describe("a refused check-in", () => {
   it("offers directions when the person is in the wrong place", () => {
@@ -20,7 +20,7 @@ describe("a refused check-in", () => {
     expect(r.offerDirections).toBe(true)
   })
 
-  it("passes the server's shortfall through instead of recomputing it", () => {
+  it("passes the server’s shortfall through instead of recomputing it", () => {
     /*
      * The dead branch built its own sentence from `distance_meters` and
      * `required_radius`, neither of which the server sends — so it would have
@@ -67,7 +67,7 @@ describe("a refused check-in", () => {
     }
   })
 
-  it("still shows the server's sentence when the code is unknown or absent", () => {
+  it("still shows the server’s sentence when the code is unknown or absent", () => {
     /*
      * One refusal — "Event is at full capacity" — ships with no code at all,
      * and the server's sentence is always more specific than a generic one.
@@ -106,7 +106,7 @@ describe("the screen consults the code, not the sentence", () => {
     expect(helper).toContain("checkInRefusal(reasonOf(result)")
   })
 
-  it("classifies no refusal by matching the server's prose", () => {
+  it("classifies no refusal by matching the server’s prose", () => {
     // The producer, not the consumer: `.includes(` on an error string at all.
     for (const file of ["lib/checkIn.ts", "lib/useCheckInFlow.ts", "components/screens/EventDetailScreen.tsx", "app/(tabs)/events.tsx"]) {
       expect(read(file)).not.toMatch(/result\.error\?\.includes\(/)
