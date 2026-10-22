@@ -51,7 +51,9 @@ tags:
 - tapOn: "you@example.com"
 - inputText: ${NEW_EMAIL}
 - runFlow: ../subflows/field-done.yaml
-- tapOn: "At least 12 characters"
+# The password field draws its own placeholder, hidden from accessibility (r7 H3): tap the input itself.
+- tapOn:
+    id: "sign-in-password-input"
 - inputText: ${NEW_PASSWORD}
 - runFlow: ../subflows/field-done.yaml
 - tapOn: "You must be 18 or over"
