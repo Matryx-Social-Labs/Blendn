@@ -109,7 +109,7 @@ describe('Google, Apple and the reset link get the wait too', () => {
     expect(read('app/forgot-password.tsx')).toContain('setError(forgotPasswordMessage(result))')
     expect(read('app/sign-in.tsx')).toContain('setError(result.error ||')
     const carried =
-      "return { success: false, error: result.error || 'Sign in failed', errorCode: result.errorCode, retryAfter: result.retryAfter }"
+      "return { success: false, error: result.error || 'Sign in failed', errorCode: result.errorCode, reasonCode: result.reasonCode, retryAfter: result.retryAfter }"
     expect(read('lib/useAuth.ts').split(carried).length - 1).toBe(2)
   })
 })

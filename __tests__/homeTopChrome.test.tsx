@@ -18,9 +18,9 @@ describe('PulseTopBar', () => {
     await render(<PulseTopBar floating />)
     const src = require('fs').readFileSync(require('path').join(__dirname, '../components/home/HomeShell.tsx'), 'utf8')
     expect(src).toMatch(/<PulseTopBar floating actions={<NotificationBell glass \/>} \/>/)
-    expect(screen.getByText("Blend'n")).toBeTruthy()
+    expect(screen.getByText("Blend’n")).toBeTruthy()
     const styles = [] as object[]
-    let node = screen.getByText("Blend'n").parent
+    let node = screen.getByText("Blend’n").parent
     while (node) {
       styles.push(StyleSheet.flatten(node.props.style) ?? {})
       node = node.parent
@@ -32,7 +32,7 @@ describe('PulseTopBar', () => {
   it('the Scene keeps its band', async () => {
     await render(<PulseTopBar />)
     const styles = [] as object[]
-    let node = screen.getByText("Blend'n").parent
+    let node = screen.getByText("Blend’n").parent
     while (node) {
       styles.push(StyleSheet.flatten(node.props.style) ?? {})
       node = node.parent

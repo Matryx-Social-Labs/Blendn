@@ -103,7 +103,7 @@ describe("the screen consults the code, not the sentence", () => {
   const helper = read("lib/checkIn.ts")
 
   it("dispatches the refusal on errorCode", () => {
-    expect(helper).toContain("checkInRefusal(result.errorCode")
+    expect(helper).toContain("checkInRefusal(reasonOf(result)")
   })
 
   it("classifies no refusal by matching the server's prose", () => {

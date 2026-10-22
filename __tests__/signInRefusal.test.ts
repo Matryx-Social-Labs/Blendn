@@ -50,7 +50,7 @@ describe('the entry screen says why', () => {
     // Literal, not a regex over an object literal (see eventDetails-wired).
     const auth = read('lib/useAuth.ts')
     const carried =
-      "return { success: false, error: result.error || 'Sign in failed', errorCode: result.errorCode, retryAfter: result.retryAfter }"
+      "return { success: false, error: result.error || 'Sign in failed', errorCode: result.errorCode, reasonCode: result.reasonCode, retryAfter: result.retryAfter }"
     expect(auth.split(carried).length - 1).toBe(2)
   })
 })
