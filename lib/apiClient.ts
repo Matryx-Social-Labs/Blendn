@@ -19,6 +19,7 @@ import type { CityOption } from './city'
 import { Logger } from './logger'
 import { markOffline, markOnline } from './networkStatus'
 import type { NotificationFeed } from './notificationFormat'
+import { noteFriendGone } from './friendsGone'
 import { FRIENDS_PAGE } from './friendsPaging'
 import type { FriendInvite, FriendPerson, FriendProfile, FriendRequestsPayload, FriendsPayload, FriendState } from './friends'
 import type { BoardPost, BoardReportReason, BoardRequestStatus, BoardRequests } from './board'
@@ -3580,7 +3581,7 @@ class ApiClientClass {
   // === SAFETY ENDPOINTS ===
 
   async blockUser(userId: string): Promise<ApiResponse<{ blocked: boolean }>> {
-    return noteBlockedOn(
+    const result = noteBlockedOn(
       await this.queuedRequest<{ blocked: boolean }>(
         `/api/mobile/users/${userId}/block`,
         { method: 'POST' },
@@ -3588,6 +3589,9 @@ class ApiClientClass {
         2
       )
     )
+    // A block severs a friendship: Friends drops them from pages it read earlier, whichever screen the block came from.
+    if (result.success) noteFriendGone(userId)
+    return result
   }
 
   async unblockUser(userId: string): Promise<ApiResponse<{ blocked: boolean }>> {

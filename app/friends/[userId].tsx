@@ -193,11 +193,7 @@ function FriendProfileScreenContent() {
         title={friend.name}
         overPhoto
         onBack={back}
-        actions={[{ icon: 'ellipsis', label: 'Report or block', onPress: () => showUserSafetyActions(friend.name, friend.userId, () => {
-              // A block severs the friendship: the list drops them, whichever page it read them on.
-              noteFriendGone(friend.userId)
-              back()
-            }) }]}
+        actions={[{ icon: 'ellipsis', label: 'Report or block', onPress: () => showUserSafetyActions(friend.name, friend.userId, back) }]}
       />
       <Animated.ScrollView
         testID="friend-scroll"

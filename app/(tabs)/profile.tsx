@@ -487,15 +487,10 @@ function ProfileInner() {
           </FadeInUp>
         ) : null}
 
-        {/* Where you stand with Blend'n+, then your badges, above Nights out (Flow 14 R4.1 · Me 01 to 03). No badges card at all when the server sent none. */}
+        {/* Where you stand with Blend'n+ above Nights out, and your badges under it (Flow 14 R4.1 · Me 01 to 03). No badges card at all when the server sent none. */}
         <FadeInUp {...next()}>
           <MePlusRow />
         </FadeInUp>
-        {badges !== null ? (
-          <FadeInUp {...next()}>
-            <MeBadges badges={badges} showsUp={showsUp === null ? undefined : { value: showsUp, onChange: saveShowsUp }} />
-          </FadeInUp>
-        ) : null}
 
         <FadeInUp {...next()}>
           <NightsOut
@@ -508,6 +503,12 @@ function ProfileInner() {
             onFirstNight={openWhatsOn}
           />
         </FadeInUp>
+
+        {badges !== null ? (
+          <FadeInUp {...next()}>
+            <MeBadges badges={badges} showsUp={showsUp === null ? undefined : { value: showsUp, onChange: saveShowsUp }} />
+          </FadeInUp>
+        ) : null}
 
         {profile?.bio || interests.length > 0 || profile?.education ? (
           <FadeInUp {...next()}>

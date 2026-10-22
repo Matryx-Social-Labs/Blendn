@@ -125,7 +125,8 @@ export function PersonRowSkeleton() {
 const styles = StyleSheet.create({
   skeleton: { paddingHorizontal: SPACE.gutter },
   skeletonText: { flex: 1, gap: SPACE.sm },
-  row: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, minHeight: ROW },
+  // Fixed, not a minimum: the lists that window these rows place any row from its index (`getItemLayout`). The name and the line are capped and one line each.
+  row: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, height: ROW },
   avatar: { width: AVATAR, height: AVATAR, borderRadius: RADIUS.capsule },
   chevron: { marginRight: SPACE.lg },
   text: { flex: 1, minWidth: 0 },

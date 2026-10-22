@@ -51,3 +51,23 @@ describe('the first page of each paged list carries its limit', () => {
     expect(paths(queued)).toEqual(['/api/mobile/conversations?limit=50'])
   })
 })
+
+describe('a block takes the person out of the pages Friends kept (M5)', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { takeFriendsGone } = require('../lib/friendsGone') as typeof import('../lib/friendsGone')
+  afterEach(() => jest.restoreAllMocks())
+
+  it('blockUser notes them once the server says yes, from whichever screen it was called', async () => {
+    takeFriendsGone()
+    jest.spyOn(apiClient, 'queuedRequest').mockResolvedValue({ success: true, data: { blocked: true } } as never)
+    await apiClient.blockUser('u_ana')
+    expect([...takeFriendsGone()]).toEqual(['u_ana'])
+  })
+
+  it('a block the server refused notes nobody', async () => {
+    takeFriendsGone()
+    jest.spyOn(apiClient, 'queuedRequest').mockResolvedValue({ success: false, error: 'no' } as never)
+    await apiClient.blockUser('u_ana')
+    expect(takeFriendsGone().size).toBe(0)
+  })
+})

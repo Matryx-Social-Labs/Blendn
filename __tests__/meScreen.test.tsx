@@ -221,12 +221,12 @@ describe('what GET /profiles/:you adds (blendn-admin #716): badges and photos ta
       expect(mockOpenPaywall).toHaveBeenCalledWith('profile', { userInitiated: true })
     })
 
-    it('sits under the stats and above Nights out, with the badges between them', async () => {
+    it('sits under the stats and above Nights out, with the badges under Nights out', async () => {
       await mount({ success: true, data: { profile: { badges } } })
       await screen.findByTestId('me-badges')
       await screen.findByTestId('nights-first')
-      // In the order they are drawn: the Blend’n+ row, the badges, then Nights out.
-      expect(screen.getAllByTestId(/^(me-plus-row|me-badges|nights-first)$/).map((n) => n.props.testID)).toEqual(['me-plus-row', 'me-badges', 'nights-first'])
+      // In the order they are drawn (R4.1 · Me 01 to 03): the Blend’n+ row, Nights out, then the badges under them.
+      expect(screen.getAllByTestId(/^(me-plus-row|me-badges|nights-first)$/).map((n) => n.props.testID)).toEqual(['me-plus-row', 'nights-first', 'me-badges'])
     })
 
     it('with Plus on, the line is the renewal', async () => {

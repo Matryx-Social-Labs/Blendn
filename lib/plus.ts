@@ -87,7 +87,8 @@ export function notifyPlusChanged(): void {
  * until the first answer; after a failed one the last answer stands.
  */
 export function usePlusStatus(): { status: PlusStatus | null; refresh: () => void } {
-  const [status, setStatus] = useState<PlusStatus | null>(null)
+  // The last answer anyone got: a row that says where you stand draws it at once and is corrected when the server answers.
+  const [status, setStatus] = useState<PlusStatus | null>(lastKnown)
   const refresh = useCallback(() => {
     apiClient
       .getMyPlus()

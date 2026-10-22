@@ -13,7 +13,7 @@ import { TopBar } from '../../components/ds/TopBar'
 import { IncomingRequestRow } from '../../components/friends/IncomingRequestRow'
 import { InviteLinkCard } from '../../components/friends/InviteLinkCard'
 import { PagedFooter } from '../../components/friends/PagedFooter'
-import { PersonRow, PERSON_ROW_HEIGHT } from '../../components/friends/PersonRow'
+import { PersonRow } from '../../components/friends/PersonRow'
 import { RequestsRow } from '../../components/friends/RequestsRow'
 import { SettingsGroup } from '../../components/ds/SettingsRow'
 import { COLOR, SPACE } from '../../lib/design/tokens'
@@ -102,7 +102,6 @@ function AddFriendsScreenContent() {
             }
           />
         )}
-        getItemLayout={(_data, index) => ({ length: PERSON_ROW_HEIGHT, offset: PERSON_ROW_HEIGHT * index, index })}
         onEndReachedThreshold={1.5}
         onEndReached={() => void loadMore('outgoing')}
         initialNumToRender={8}

@@ -183,6 +183,8 @@ describe('Add friends', () => {
     const list = screen.getByTestId('add-friends-list')
     expect(list.props.data).toHaveLength(50)
     expect(list.props.windowSize).toBeLessThanOrEqual(7)
+    // Above the rows stand the link card and the first requests, whose height follows the type: no layout is promised for them (M6).
+    expect(list.props.getItemLayout).toBeUndefined()
     await act(async () => {
       fireEvent(list, 'endReached')
     })
