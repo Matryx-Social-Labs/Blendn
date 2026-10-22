@@ -44,6 +44,9 @@ export type StateAction = {
   icon?: IconName
   /** The press-in cue where the frame names one its kind does not carry (`H.primary` on a strong action). */
   pressHaptic?: ButtonProps['pressHaptic']
+  /** A counting figure after the label, in Geist Mono ("Try again in 0:48"). Give `accessibilityLabel` too: the figure is not part of the label. */
+  price?: ButtonProps['price']
+  accessibilityLabel?: string
 }
 
 export type StateScreenProps = {

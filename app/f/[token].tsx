@@ -1,9 +1,10 @@
-import { router, useLocalSearchParams } from 'expo-router'
-import { useCallback, useEffect, useState } from 'react'
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { Avatar } from '../../components/ds/Avatar'
+import { FriendRefusalScreen } from '../../components/friends/FriendRefusalScreen'
 import { Button } from '../../components/ds/Button'
 import { Grain } from '../../components/ds/Grain'
 import { IconButton } from '../../components/ds/IconButton'
@@ -15,6 +16,7 @@ import { SkeletonBlock, SkeletonCircle } from '../../components/Skeleton'
 import { useToast } from '../../components/Toast'
 import { apiClient } from '../../lib/apiClient'
 import { COLOR, FONT_FAMILY, SPACE } from '../../lib/design/tokens'
+import { friendRefusal, type FriendRefusal } from '../../lib/friendRefusal'
 import { inviteCta, inviteLine, type FriendPerson, type FriendState } from '../../lib/friends'
 import { askFriendsSeeMe, useStillHere } from '../../lib/friendsSeeMeAsk'
 import { isGone } from '../../lib/loadFailure'
@@ -53,18 +55,29 @@ export default function InviteScreen() {
   const [failed, setFailed] = useState(false)
   const [retrying, setRetrying] = useState(false)
   const [asking, setAsking] = useState(false)
+  /** Why the server refused, when the reason has a screen of its own (Flow 15 15.19). */
+  const [refusal, setRefusal] = useState<{ why: FriendRefusal; n: number } | null>(null)
+  /** Each refusal is a new one: a second 60 s wait restarts the count, it does not carry on from the first. */
+  const refusals = useRef(0)
+  const refuse = useCallback((why: FriendRefusal) => setRefusal({ why, n: ++refusals.current }), [])
+  /** Edit profile was opened from the refusal: coming back re-reads the link, which is how "we'll bring you back to it" is kept. */
+  const leftForProfile = useRef(false)
 
   const settle = useCallback((result: Awaited<ReturnType<typeof apiClient.openFriendInvite>>) => {
+    const refused = friendRefusal(result)
     if (result.success && result.data) {
       setPerson(result.data.person)
       setState(result.data.state)
       setFailed(false)
+      setRefusal(null)
+    } else if (refused) {
+      refuse(refused)
     } else if (isGone(result)) {
       setDead(true)
     } else {
       setFailed(true)
     }
-  }, [])
+  }, [refuse])
 
   useEffect(() => {
     let live = true
@@ -81,6 +94,24 @@ export default function InviteScreen() {
     settle(await apiClient.openFriendInvite(String(token)))
     setRetrying(false)
   }
+
+  const finishProfile = () => {
+    leftForProfile.current = true
+    router.push('/edit-profile' as never)
+  }
+
+  // Back from Edit profile: the link is read again, so the person who sent it is there to be answered.
+  useFocusEffect(
+    useCallback(() => {
+      if (!leftForProfile.current) return
+      leftForProfile.current = false
+      setRetrying(true)
+      void apiClient.openFriendInvite(String(token)).then((result) => {
+        settle(result)
+        setRetrying(false)
+      })
+    }, [token, settle])
+  )
 
   const close = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)/events'))
 
@@ -107,7 +138,9 @@ export default function InviteScreen() {
         void askFriendsSeeMe({ stillHere })
       }
     } else {
-      showToast("That didn’t go through. Try again.", 'error', { haptic: 'error' })
+      const refused = friendRefusal(result)
+      if (refused) refuse(refused)
+      else showToast("That didn’t go through. Try again.", 'error', { haptic: 'error' })
     }
   }
 
@@ -126,6 +159,8 @@ export default function InviteScreen() {
         <View style={styles.body}>
           {dead ? (
             <StateScreen icon="link-2-off" title="This link doesn’t work" body="Ask the person who sent it for a new one." testID="invite-dead" />
+          ) : refusal ? (
+            <FriendRefusalScreen key={refusal.n} refusal={refusal.why} onFinishProfile={finishProfile} onRetry={() => void retry()} onClose={close} retrying={retrying} />
           ) : failed && !person ? (
             <StateScreen
               icon="cloud-off"
@@ -157,7 +192,7 @@ export default function InviteScreen() {
           )}
         </View>
 
-        {cta && !dead ? (
+        {cta && !dead && !refusal ? (
           <View style={styles.footer}>
             <Button
               kind={cta.action === null ? 'secondary' : 'primary'}

@@ -6,13 +6,18 @@
  * request" actually sends, and that the screen moves on to "Requested" only
  * when the server agreed.
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
 
 jest.mock('expo-router', () => ({
   router: { back: jest.fn(), replace: jest.fn(), push: jest.fn(), canGoBack: jest.fn(() => true) },
   useLocalSearchParams: () => ({ token: 'abcdefghijklmnopqrstuv' }),
   useIsFocused: () => true,
+  // The screen's own focus effect, run by hand: a test says when Edit profile has handed the screen back.
+  useFocusEffect: (effect: () => void) => {
+    mockFocus = effect
+  },
 }))
+let mockFocus: () => void = () => {}
 const mockAsk = jest.fn()
 jest.mock('../lib/friendsSeeMeAsk', () => ({ askFriendsSeeMe: (...a: unknown[]) => mockAsk(...a), useStillHere: () => () => true }))
 jest.mock('react-native-safe-area-context', () => {
@@ -130,4 +135,94 @@ it('keeps Requested as a disabled secondary with the waiting line, and Not now c
   expect(api.sendFriendRequest).not.toHaveBeenCalled()
   fireEvent.press(screen.getByText('Not now'))
   expect(router.back).toHaveBeenCalled()
+})
+
+
+describe('a refusal with a fix (Flow 15 15.19): the link is not "didn’t open"', () => {
+  const PROFILE = { success: false as const, error: 'Finish your profile', errorCode: 'FORBIDDEN', reasonCode: 'PROFILE_INCOMPLETE' }
+  const LIMITED = { success: false as const, error: 'Too many', errorCode: 'RATE_LIMITED', reasonCode: 'RATE_LIMITED', retryAfter: 48 }
+
+  it('an unfinished profile on opening says to finish it, and Finish my profile opens Edit profile', async () => {
+    api.openFriendInvite.mockResolvedValue(PROFILE)
+    await render(<InviteScreen />)
+    await screen.findByText('Finish your profile to add friends')
+    expect(screen.getByText('Add a photo and your name first. The link stays open; we’ll bring you back to it.')).toBeTruthy()
+    expect(screen.queryByText('This link didn’t open')).toBeNull()
+    fireEvent.press(screen.getByText('Finish my profile'))
+    expect(router.push).toHaveBeenCalledWith('/edit-profile')
+  })
+
+  it('coming back from Edit profile reads the link again and shows who sent it', async () => {
+    api.openFriendInvite.mockResolvedValueOnce(PROFILE)
+    await render(<InviteScreen />)
+    fireEvent.press(await screen.findByText('Finish my profile'))
+    api.openFriendInvite.mockResolvedValueOnce({ success: true, data: { person: ANA, state: 'none' } })
+    mockFocus()
+    await screen.findByText('Ana wants to blend with you')
+    expect(screen.getByText('Send friend request')).toBeTruthy()
+  })
+
+  it('Not now closes without finishing', async () => {
+    api.openFriendInvite.mockResolvedValue(PROFILE)
+    await render(<InviteScreen />)
+    fireEvent.press(await screen.findByText('Not now'))
+    expect(router.back).toHaveBeenCalled()
+    expect(router.push).not.toHaveBeenCalled()
+  })
+
+  it('a send the server refuses for the profile is the same screen, not a toast', async () => {
+    api.openFriendInvite.mockResolvedValue({ success: true, data: { person: ANA, state: 'none' } })
+    api.sendFriendRequest.mockResolvedValue(PROFILE)
+    await render(<InviteScreen />)
+    fireEvent.press(await screen.findByText('Send friend request'))
+    await screen.findByText('Finish your profile to add friends')
+    expect(mockShowToast).not.toHaveBeenCalled()
+  })
+
+  describe('a rate limit', () => {
+    beforeEach(() => jest.useFakeTimers())
+    afterEach(() => jest.useRealTimers())
+
+    it('counts down from the server’s retryAfter, disabled until zero, then Try again reads the link again', async () => {
+      api.openFriendInvite.mockResolvedValueOnce(LIMITED)
+      await render(<InviteScreen />)
+      await act(async () => {})
+      expect(screen.getByText('Slow down — try again in a minute')).toBeTruthy()
+      expect(screen.getByText('Too many links in a row. This one still works; nothing’s lost.')).toBeTruthy()
+      expect(screen.getByText('0:48')).toBeTruthy()
+      const wait = screen.getByLabelText('Try again, available when the wait ends')
+      expect(wait.props.accessibilityState.disabled).toBe(true)
+
+      await act(async () => jest.advanceTimersByTime(47_000))
+      expect(screen.getByText('0:01')).toBeTruthy()
+      await act(async () => jest.advanceTimersByTime(1_000))
+      expect(screen.queryByText('0:00')).toBeNull()
+      api.openFriendInvite.mockResolvedValueOnce({ success: true, data: { person: ANA, state: 'none' } })
+      await act(async () => {
+        fireEvent.press(screen.getByText('Try again'))
+      })
+      expect(screen.getByText('Ana wants to blend with you')).toBeTruthy()
+    })
+
+    it('with no retryAfter the wait is the minute the sentence promises', async () => {
+      api.openFriendInvite.mockResolvedValueOnce({ success: false, errorCode: 'RATE_LIMITED' })
+      await render(<InviteScreen />)
+      await act(async () => {})
+      expect(screen.getByText('1:00')).toBeTruthy()
+    })
+
+    it('Back closes', async () => {
+      api.openFriendInvite.mockResolvedValueOnce(LIMITED)
+      await render(<InviteScreen />)
+      await act(async () => {})
+      fireEvent.press(screen.getByText('Back'))
+      expect(router.back).toHaveBeenCalled()
+    })
+  })
+
+  it('a dead link and a failed load are still what they were', async () => {
+    api.openFriendInvite.mockResolvedValueOnce({ success: false, errorCode: 'NOT_FOUND', error: 'gone' })
+    await render(<InviteScreen />)
+    await screen.findByText('This link doesn’t work')
+  })
 })
