@@ -36,7 +36,7 @@ jest.mock('../lib/crewsApi', () => ({
 /* eslint-disable import/first */
 import Profile from '../app/(tabs)/profile'
 import { apiClient } from '../lib/apiClient'
-import { SPACE } from '../lib/design/tokens'
+import { SIZE, SPACE } from '../lib/design/tokens'
 import { queryCache } from '../lib/queryCache'
 /* eslint-enable import/first */
 
@@ -142,4 +142,10 @@ it('clears the tab bar by the inset, the bar and one gutter, so the last card is
   await screen.findByLabelText('Sam, 28')
   const content = StyleSheet.flatten(screen.getByTestId('me-scroll').props.contentContainerStyle)
   expect(content.paddingBottom).toBe(34 + 98 + SPACE.xl)
+})
+
+it.each([0, 24, 34])('Android, bottom inset %i: the foot of the page is above the bar’s top edge by a gutter', async (inset) => {
+  // The bar floats `inset + 12 + 64` up from the screen's foot (`tabBarTop`); the page reserves `inset + clearance + gutter`.
+  const barHeightFromFoot = inset + SPACE.tabBarBottomGapAndroid + SIZE.tabBar
+  expect(inset + 98 + SPACE.xl - barHeightFromFoot).toBeGreaterThanOrEqual(SPACE.xl)
 })
