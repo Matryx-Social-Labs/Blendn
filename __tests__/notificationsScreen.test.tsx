@@ -313,6 +313,45 @@ describe('answering a request in place', () => {
     expect(screen.queryByRole('button', { name: 'Accept' })).toBeNull()
   })
 
+  it('51 requests waiting: one not on the first page of 50 is still waiting, not answered elsewhere', async () => {
+    const others = Array.from({ length: 50 }, (_, i) => ({ id: `other${i}`, person: { userId: `u_other${i}` } }))
+    api.getFriendRequests.mockResolvedValue({
+      success: true,
+      data: { incoming: others, outgoing: [], pagination: { incoming: { limit: 50, hasMore: true, nextCursor: 'i1', totalCount: 51 } } },
+    } as never)
+    await render(<Screen />)
+    expect(await screen.findByRole('button', { name: 'Accept' })).toBeTruthy()
+    await act(async () => {})
+    expect(screen.getByRole('button', { name: 'Accept' })).toBeTruthy()
+    expect(screen.queryByText('This request is no longer open')).toBeNull()
+  })
+
+  it('a partial list still says who sent the requests on it: a timed-out Accept is checked against friends', async () => {
+    const onPage = ['r1', 'r2', 'ra', 'rb', 'rc'].map((id) => ({ id, person: { userId: `u_${id}` } }))
+    api.getFriendRequests.mockResolvedValue({
+      success: true,
+      data: { incoming: onPage, outgoing: [], pagination: { incoming: { limit: 50, hasMore: true, nextCursor: 'i1', totalCount: 90 } } },
+    } as never)
+    api.respondToFriendRequest.mockReturnValueOnce(new Promise(() => {}) as never).mockResolvedValue({ success: false, errorCode: 'NOT_FOUND' } as never)
+    await render(<Screen />)
+    fireEvent.press(await screen.findByRole('button', { name: 'Accept' }))
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalled(), { timeout: ANSWER_DEADLINE_MS * 2 })
+    api.getFriends.mockResolvedValue({ success: true, data: { friends: [{ userId: 'u_r1', name: 'Priya', photo: null, since: ago(MIN) }], count: 1 } } as never)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Accept' }).props.accessibilityState).toMatchObject({ busy: false }))
+    fireEvent.press(screen.getByRole('button', { name: 'Accept' }))
+    expect(await screen.findByText('You’re friends now')).toBeTruthy()
+  })
+
+  it('the same list when it is the whole list (50 or fewer) does close the one that is not on it', async () => {
+    api.getFriendRequests.mockResolvedValue({
+      success: true,
+      data: { incoming: [{ id: 'other0', person: { userId: 'u_other0' } }], outgoing: [], pagination: { incoming: { limit: 50, hasMore: false, nextCursor: null, totalCount: 1 } } },
+    } as never)
+    await render(<Screen />)
+    await screen.findByText('New friend request')
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Accept' })).toBeNull())
+  })
+
   it('shows the list at once, and reconciles the requests after: a slow requests list holds nothing up', async () => {
     api.getFriendRequests.mockReturnValue(new Promise(() => {}) as never)
     await render(<Screen />)
