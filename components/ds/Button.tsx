@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Platform, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
-import Animated, { ReduceMotion, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated'
+import Animated, { LinearTransition, ReduceMotion, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated'
 
 import ScalePress from '../motion/ScalePress'
 import { GradientFill } from '../ui/GradientFill'
@@ -12,6 +12,7 @@ import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { OPACITY } from '../../lib/theme'
 import { Spinner } from './Loader'
 import { RollingNumber } from './RollingNumber'
+import { useLabelSwap } from './useLabelSwap'
 import {
   CONTROL_FONT_CAP,
   focusRing,
@@ -45,6 +46,8 @@ const HEIGHT: Record<ButtonSize, number> = { lg: SIZE.primary, md: SIZE.control,
 const SHAKE_STEPS = [-1, 1, -0.75, 0.75, -0.375, 0]
 const PRESS_SPRING = { ...SPRING.press, reduceMotion: ReduceMotion.Never }
 const DISABLE_FADE = quickTransition('opacity')
+/** The width follows a label swap on M.settle (#45). */
+const WIDTH_FOLLOWS = LinearTransition.springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping).mass(SPRING.settle.mass)
 /** The lit button's flare: poured in from the leading edge over `press` on `snapOut` (down, or busy), drained over `quick`. */
 const FLARE = pourStyles(DURATION.press, DURATION.press, EASING.snapOut)
 /** The lit button's rim, as the selected chip's: 1 pt in the hue's edge. */
@@ -234,12 +237,13 @@ export function Button({
   const labelFont = sm ? font('meta', bold, FONT_FAMILY.brand[700]) : font('button', bold)
   const outlined = contrast && (kind === 'secondary' || kind === 'tertiary')
   const settled = useSettled(count)
-  const [before, after = ''] = count === undefined ? [label, ''] : label.split('{n}')
+  const swap = useLabelSwap(label, count === undefined)
+  const [before, after = ''] = count === undefined ? [swap.shown, ''] : label.split('{n}')
   // The sentence a screen reader gets: the number formatted in, and only once it has stopped changing.
   const sentence = settled === undefined ? label : label.replace('{n}', settled.toLocaleString('en-US'))
 
   return (
-    <Animated.View style={[sm && !StyleSheet.flatten(style)?.alignSelf ? styles.inline : null, pressed && !android ? styles.pressedIos : null, shake, style]}>
+    <Animated.View layout={swap.swapped ? WIDTH_FOLLOWS : undefined} style={[sm && !StyleSheet.flatten(style)?.alignSelf ? styles.inline : null, pressed && !android ? styles.pressedIos : null, shake, style]}>
       <ScalePress
         testID={testID}
         onPress={onPress}
@@ -301,8 +305,8 @@ export function Button({
               ) : null}
             </View>
           ) : (
-          <Text
-            style={[labelFont, { color: ink }]}
+          <Animated.Text
+            style={[labelFont, { color: ink }, swap.style]}
             maxFontSizeMultiplier={CONTROL_FONT_CAP}
             numberOfLines={android ? 2 : 1}
           >
@@ -314,7 +318,7 @@ export function Button({
                 {price.per ? <Text style={font('meta', bold, FONT_FAMILY.brand[400])}>{` ${price.per}`}</Text> : null}
               </>
             ) : null}
-          </Text>
+          </Animated.Text>
           )}
         </View>
         {spinner ? (
