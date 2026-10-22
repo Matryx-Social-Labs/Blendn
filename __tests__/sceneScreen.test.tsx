@@ -38,7 +38,8 @@ jest.mock('../lib/blendnOverlay', () => ({ openBlendn: jest.fn(), openPass: jest
 jest.mock('../lib/calendar', () => ({ addToCalendar: jest.fn() }))
 jest.mock('../lib/openInMaps', () => ({ openInMaps: jest.fn() }))
 jest.mock('../lib/safetyUtils', () => ({ showEventReportOptions: jest.fn() }))
-jest.mock('../lib/eventDetailCache', () => ({ getEventDetailCache: () => null, setEventDetailCache: jest.fn() }))
+const mockCached = jest.fn((): unknown => null)
+jest.mock('../lib/eventDetailCache', () => ({ getEventDetailCache: () => mockCached(), setEventDetailCache: jest.fn(), forgetEventDetailCache: jest.fn() }))
 jest.mock('react-native-maps', () => {
   const { View } = jest.requireActual('react-native')
   return { __esModule: true, default: (p: object) => <View {...p} testID="map" />, Marker: () => null }
@@ -87,6 +88,7 @@ const detail = (over: Record<string, unknown> = {}, status: Record<string, unkno
 
 beforeEach(() => {
   jest.clearAllMocks()
+  mockCached.mockReturnValue(null)
   markOnline()
 })
 const open = async () => {
@@ -106,6 +108,121 @@ it('a missing event is the calm "No longer available" landing (Flow 15 #10), wit
   // The back circle is still the way out.
   await fireEvent.press(screen.getByTestId('scene-back'))
   expect(mockRouter.back).toHaveBeenCalled()
+})
+
+describe('the organiser was suspended (Flow 15 #10, SCRUM-749)', () => {
+  // blendn-admin #716, event-changed-scene.itest.ts: the 404 keeps `errorCode: NOT_FOUND` and says why in `reasonCode`.
+  const suspended = { success: false, errorCode: 'NOT_FOUND', reasonCode: 'ORGANISER_SUSPENDED', error: 'Event not found' }
+
+  it('is the "No longer available" landing, by the code and not by the sentence', async () => {
+    api.getEvent.mockResolvedValue({ ...suspended, error: 'This event is not available.' } as never)
+    await open()
+    expect(await screen.findByText('No longer available')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull()
+    expect(screen.queryByText('Couldn’t load this event')).toBeNull()
+  })
+
+  it('replaces a copy the page opened on: going to the night, opening it from what you had, and it is gone', async () => {
+    mockCached.mockReturnValue(detail().data)
+    api.getEvent.mockResolvedValue(suspended as never)
+    await open()
+    expect(await screen.findByText('No longer available')).toBeTruthy()
+    expect(screen.queryByText('The experience')).toBeNull()
+  })
+
+  it('a plain network failure over a copy it already has keeps the copy', async () => {
+    mockCached.mockReturnValue(detail().data)
+    api.getEvent.mockResolvedValue({ success: false, error: 'network' } as never)
+    await open()
+    expect(await screen.findByText('The experience')).toBeTruthy()
+    expect(screen.queryByText('No longer available')).toBeNull()
+  })
+})
+
+describe('what changed while you were going (Flow 3 · 3.1)', () => {
+  // event-changed-scene.itest.ts: a time and a venue moved; the live values are in the event, what they were in `changedFrom`.
+  const moved = {
+    startTime: hours(5),
+    venueName: 'The New Room',
+    changedAt: new Date(Date.now() - 2 * 3_600_000).toISOString(),
+    changedFields: ['time', 'venue'],
+    changedFrom: { startTime: hours(3), endTime: hours(6), venueName: 'The Old Room' },
+  }
+
+  it('says what moved, to somebody going: the old struck through and the new beside it', async () => {
+    api.getEvent.mockResolvedValue(detail(moved, { rsvpStatus: 'going' }) as never)
+    await open()
+    const time = await screen.findByTestId('scene-change-time')
+    expect(time.props.accessibilityLabel).toMatch(/^Updated, new start time\. Was .+, now .+\. Changed 2 h ago\.$/)
+    expect(screen.getByTestId('scene-change-venue').props.accessibilityLabel).toMatch(/^Updated, new venue\. Was The Old Room, now The New Room\./)
+  })
+
+  it('says it to somebody who saved the night, not only to those who RSVP', async () => {
+    api.getEvent.mockResolvedValue(detail(moved, { isFavorited: true }) as never)
+    await open()
+    expect(await screen.findByTestId('scene-change-time')).toBeTruthy()
+  })
+
+  it('is not drawn for somebody who has no stake in the night', async () => {
+    api.getEvent.mockResolvedValue(detail(moved) as never)
+    await open()
+    await screen.findByTestId('scene-tiles')
+    expect(screen.queryByTestId('scene-changed')).toBeNull()
+  })
+
+  it('is not drawn for an event that has not changed (null, [] and null), or for an older server', async () => {
+    api.getEvent.mockResolvedValue(detail({ changedAt: null, changedFields: [], changedFrom: null }, { rsvpStatus: 'going' }) as never)
+    await open()
+    await screen.findByTestId('scene-tiles')
+    expect(screen.queryByTestId('scene-changed')).toBeNull()
+  })
+
+  it('leaves a cancel to the cancelled banner: no line', async () => {
+    api.getEvent.mockResolvedValue(
+      detail({ status: 'cancelled', changedAt: new Date().toISOString(), changedFields: ['cancelled'], changedFrom: null }, { rsvpStatus: 'going' }) as never
+    )
+    await open()
+    expect(await screen.findByTestId('scene-cancelled')).toBeTruthy()
+    expect(screen.queryByTestId('scene-changed')).toBeNull()
+  })
+})
+
+describe('the days of a run (Flow 3 · 3.2)', () => {
+  // event-changed-scene.itest.ts "the days of a run": three days, the third called off, today the second.
+  const run = {
+    days: [
+      { date: '2031-01-01', startTime: hours(-20), endTime: hours(-17), cancelled: false },
+      { date: '2031-01-02', startTime: hours(3), endTime: hours(6), cancelled: false },
+      { date: '2031-01-03', startTime: hours(27), endTime: hours(30), cancelled: true },
+    ],
+    dayCount: 3,
+    dayNumber: 2,
+  }
+
+  it('says where today is in the Doors tile and draws the strip, a called-off day struck and labelled', async () => {
+    api.getEvent.mockResolvedValue(detail(run) as never)
+    await open()
+    expect((await screen.findByTestId('scene-tile-doors')).props.accessibilityLabel).toBe('DOORS, Day 2 of 3')
+    expect(screen.getByTestId('scene-day-1').props.accessibilityLabel).toBe('Wed 1, day 1 of 3')
+    expect(screen.getByTestId('scene-day-2').props.accessibilityLabel).toBe('Thu 2, day 2 of 3, today')
+    expect(screen.getByTestId('scene-day-3').props.accessibilityLabel).toBe('Fri 3, cancelled')
+    expect(screen.getByText('Cancelled', { includeHiddenElements: true })).toBeTruthy()
+  })
+
+  it('a one-day event has no strip and keeps its doors', async () => {
+    api.getEvent.mockResolvedValue(detail({ days: [run.days[1]], dayCount: 1, dayNumber: 1 }) as never)
+    await open()
+    expect(await screen.findByTestId('scene-tile-doors')).toBeTruthy()
+    expect(screen.queryByTestId('scene-days')).toBeNull()
+    expect(screen.getByTestId('scene-tile-doors').props.accessibilityLabel).not.toMatch(/Day 1 of/)
+  })
+
+  it('every day called off says no day, and keeps the doors tile as it was', async () => {
+    api.getEvent.mockResolvedValue(detail({ ...run, days: run.days.map((d) => ({ ...d, cancelled: true })), dayNumber: null }) as never)
+    await open()
+    expect(await screen.findByTestId('scene-days')).toBeTruthy()
+    expect(screen.getByTestId('scene-tile-doors').props.accessibilityLabel).not.toMatch(/Day \d of/)
+  })
 })
 
 describe('an event link that cannot open (Flow 15 #9)', () => {

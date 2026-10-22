@@ -31,7 +31,7 @@ jest.mock('../lib/blendnOverlay', () => ({ openBlendn: jest.fn(), openPass: jest
 jest.mock('../lib/calendar', () => ({ addToCalendar: jest.fn() }))
 jest.mock('../lib/openInMaps', () => ({ openInMaps: jest.fn() }))
 jest.mock('../lib/safetyUtils', () => ({ showEventReportOptions: jest.fn() }))
-jest.mock('../lib/eventDetailCache', () => ({ getEventDetailCache: () => null, setEventDetailCache: jest.fn() }))
+jest.mock('../lib/eventDetailCache', () => ({ getEventDetailCache: () => null, setEventDetailCache: jest.fn(), forgetEventDetailCache: jest.fn() }))
 jest.mock('react-native-maps', () => {
   const { View } = jest.requireActual('react-native')
   return { __esModule: true, default: (p: object) => <View {...p} testID="map" />, Marker: () => null }

@@ -22,6 +22,9 @@ import type { MenuItem } from '../ds/ContextMenu'
 import { OfflineBanner } from '../OfflineBanner'
 import { AnnouncementSheet, EditEventSheet } from '../scene/EventSheets'
 import { SceneBar } from '../scene/SceneBar'
+import { SceneChangedLines, SceneDayStrip } from '../scene/SceneChange'
+import { changeLines, parseEventChange, type EventChange } from '../../lib/eventChange'
+import { dayOfWords, parseEventDays, type EventDays } from '../../lib/eventDays'
 import { showSheet } from '../../lib/sheet'
 import { useSingleFlight } from '../../lib/useSingleFlight'
 import { SkeletonBlock } from '../Skeleton'
@@ -81,7 +84,7 @@ import { clockTime } from '../../lib/roomMoments'
 import { useAuth } from '../../lib/useAuth'
 import { printable } from '../../lib/pulseSections'
 import { useNow } from '../../lib/useNow'
-import { getEventDetailCache, setEventDetailCache } from '../../lib/eventDetailCache'
+import { forgetEventDetailCache, getEventDetailCache, setEventDetailCache } from '../../lib/eventDetailCache'
 import { claimUrlFrom } from '../../lib/claimLink'
 
 /*
@@ -133,6 +136,10 @@ interface EventDetailData {
   end_time: string
   /** The day LIVE and check-in are judged by — `lib/eventSession.ts`. */
   session?: EventSession | null
+  /** What moved under the people who had heard of it (`lib/eventChange.ts`); null for an event that has not changed or an older server. */
+  change?: EventChange | null
+  /** The days of a run of more than one (`lib/eventDays.ts`); null for a one-day event or an older server. */
+  days?: EventDays | null
   timezone?: string
   category: string
   max_capacity: number
@@ -324,6 +331,8 @@ export default function EventDetail() {
       start_time: d.startTime || d.start_time || '',
       end_time: d.endTime || d.end_time || '',
       session: sessionFromApi(d.session),
+      change: parseEventChange(d),
+      days: parseEventDays(d),
       timezone: d.timezone,
       category: d.categories?.[0]?.name || '',
       max_capacity: d.maxCapacity || d.max_capacity || 0,
@@ -372,6 +381,14 @@ export default function EventDetail() {
       Logger.error('events', 'detail:fetch:error', { error: result.error })
       const failure = eventLoadFailure(result)
       setLoadFailure(failure)
+      /*
+       * The server says it is gone (the organiser was suspended, or it was taken down): the card or the cached copy this page
+       * opened on is not true any more, so the page is the "No longer available" card (Flow 15 #10), not a stale event.
+       */
+      if (failure === 'notFound') {
+        forgetEventDetailCache(String(id))
+        setEvent(null)
+      }
       return failure
     } else {
       setLoadFailure(null)
@@ -1116,8 +1133,20 @@ export default function EventDetail() {
    * Where are always known; the crowd tile waits for a real number; Door says the age floor and the organiser's door.
    */
   const door = [`${minAge ?? MIN_AGE}+`, doorWords(event?.door_policy)].filter(Boolean).join(' · ')
+  // A run of days says where today is in it where the doors' time was (Flow 3 · 3.2); one day keeps its doors.
+  const dayWords = event?.days ? dayOfWords(event.days) : null
+  /*
+   * Said to the people who had heard of the night (going, maybe, waitlisted, saved): what moved, and what it was. A cancel is
+   * the banner's, so it is no line here.
+   */
+  const heardOfIt = (rsvpStatus !== null && rsvpStatus !== 'not_going') || userInterested
+  const changeRows = event?.change && heardOfIt ? changeLines(event.change, event, now) : []
   const tiles: AmenityTileProps[] = [
-    ...(heroStart ? [{ label: 'DOORS', value: clockTime(new Date(heroStart).getTime()), mono: true, testID: 'scene-tile-doors' }] : []),
+    ...(dayWords
+      ? [{ label: 'DOORS', value: dayWords, mono: true, testID: 'scene-tile-doors' }]
+      : heroStart
+        ? [{ label: 'DOORS', value: clockTime(new Date(heroStart).getTime()), mono: true, testID: 'scene-tile-doors' }]
+        : []),
     ...(event?.venue_name
       ? [{ label: 'WHERE', value: [event.venue_name, event.city].filter(Boolean).join(', '), onPress: openInMaps, testID: 'scene-tile-where' }]
       : []),
@@ -1203,9 +1232,21 @@ export default function EventDetail() {
             </View>
           ) : (
             <>
+              {changeRows.length > 0 ? (
+                <FadeInUp delay={SECTION_DELAY[0]}>
+                  <SceneChangedLines lines={changeRows} changedAt={event?.change?.changedAt} testID="scene-changed" />
+                </FadeInUp>
+              ) : null}
+
               <FadeInUp delay={SECTION_DELAY[0]}>
                 <AmenityGrid tiles={tiles} testID="scene-tiles" />
               </FadeInUp>
+
+              {event?.days ? (
+                <FadeInUp delay={SECTION_DELAY[0]}>
+                  <SceneDayStrip days={event.days} testID="scene-days" />
+                </FadeInUp>
+              ) : null}
 
               {event?.organizer || isLive ? (
                 <FadeInUp delay={SECTION_DELAY[0]}>
