@@ -17,6 +17,8 @@ export type NotificationKind =
   | 'group_message'
   | 'event_checkin'
   | 'event_update'
+  /** Sent to people going when the time, venue or status changed; shown like `event_update`. */
+  | 'event_changed'
   | 'announcement'
   | 'message_request'
   | 'message_request_response'
