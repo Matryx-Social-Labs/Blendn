@@ -5,8 +5,9 @@ import { Share } from 'react-native'
 import { shareText, shareUrl } from '../../lib/shareEvent'
 import { closeShare, useShareRequest } from '../../lib/shareTray'
 import { openWhatsApp, whatsAppInstalled } from '../../lib/shareWhatsApp'
-import { openStoryCamera, STORY_LINK_COPIED } from '../../lib/storyShare'
-import { toast } from '../../lib/toast'
+import { openStoryCamera, STORY_LINK_COPIED, sweepStoryCaptures } from '../../lib/storyShare'
+import { afterSheetDismissed } from '../../lib/sheetDismissed'
+import { toast, type ToastVariant } from '../../lib/toast'
 import { ShareSheet, type ShareTarget } from '../ds/ShareSheet'
 import { StoryOptionsSheet } from './StoryOptionsSheet'
 
@@ -30,6 +31,10 @@ type Stage = 'tray' | 'handoff' | 'story'
  */
 export function ShareHost() {
   const request = useShareRequest()
+  // Once, at launch: the picture a killed share left behind (lib/storyShare.ts).
+  useEffect(() => {
+    void sweepStoryCaptures()
+  }, [])
   /** The last request stays drawn while its sheet leaves: unmounting a Modal would cut the exit short. */
   const [held, setHeld] = useState(request)
   if (request && request.id !== held?.id) setHeld(request)
@@ -64,12 +69,23 @@ function ShareFlow({ target, shown }: { target: ShareTarget; shown: boolean }) {
     return () => clearTimeout(timer)
   }, [stage, openStory])
 
+  /**
+   * Closes the tray, then says `message`. An RN Modal is above the toast on iOS, so a toast raised while the tray is still
+   * up is never seen: it waits for the tray to have left (`lib/sheetDismissed`).
+   */
+  const closeThenSay = async (message: string, variant: ToastVariant) => {
+    const left = afterSheetDismissed()
+    finish()
+    await left
+    toast(message, variant)
+  }
+
   const more = async () => {
     try {
       const result = await Share.share({ message: text })
       if (result.action === Share.sharedAction) went.current = true
     } catch {
-      toast("Couldn't open sharing. Try again.", 'error')
+      return closeThenSay("Couldn't open sharing. Try again.", 'error')
     }
     finish()
   }
@@ -80,7 +96,7 @@ function ShareFlow({ target, shown }: { target: ShareTarget; shown: boolean }) {
       () => {
         went.current = true
       },
-      () => toast("Couldn't copy the link. Try again.", 'error')
+      () => void closeThenSay("Couldn't copy the link. Try again.", 'error')
     )
   }
 
@@ -102,12 +118,11 @@ function ShareFlow({ target, shown }: { target: ShareTarget; shown: boolean }) {
     try {
       if (url) await Clipboard.setStringAsync(url)
       await openStoryCamera()
-      toast(STORY_LINK_COPIED, 'success')
       went.current = true
     } catch {
-      toast("Instagram didn't open. Try again.", 'error')
+      return closeThenSay("Instagram didn't open. Try again.", 'error')
     }
-    finish()
+    return closeThenSay(STORY_LINK_COPIED, 'success')
   }
 
   return (

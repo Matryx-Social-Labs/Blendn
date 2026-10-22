@@ -1,4 +1,6 @@
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as Clipboard from 'expo-clipboard'
+import * as FileSystem from 'expo-file-system/legacy'
 import { Image } from 'expo-image'
 import { Linking, PixelRatio, Platform } from 'react-native'
 import type { RefObject } from 'react'
@@ -40,11 +42,42 @@ export async function coverReady(uri: string | null | undefined): Promise<void> 
   await wait(COVER_PAINT_MS)
 }
 
-/** The view as a PNG in the cache directory, or a rejection (no module in this build, or the capture failed). */
+/**
+ * The picture is a file in the system's temporary directory, 1080 × 1920 and a few hundred KB, and the share sheet may
+ * still be reading it after it has returned (Instagram opens over it), so it cannot be deleted when the share ends.
+ * It is deleted when the next one starts, and a file left by a launch that was killed mid-share is deleted at the next
+ * launch (`sweepStoryCaptures`, called once from the root layout). Only the path of the last one is kept, in memory and
+ * on disk, so nothing guesses at directories or file names the capture library chose.
+ */
+export const STORY_CAPTURE_KEY = 'blendn_story_capture'
+let lastCapture: string | null = null
+
+async function discard(uri: string | null): Promise<void> {
+  if (!uri) return
+  try {
+    await FileSystem.deleteAsync(uri, { idempotent: true })
+  } catch (error) {
+    Logger.debug('general', 'share:story:discard:failed', { error })
+  }
+}
+
+/** Deletes the last Story picture, from this run or the one before. */
+export async function sweepStoryCaptures(): Promise<void> {
+  const previous = lastCapture ?? (await AsyncStorage.getItem(STORY_CAPTURE_KEY).catch(() => null))
+  lastCapture = null
+  await discard(previous)
+  await AsyncStorage.removeItem(STORY_CAPTURE_KEY).catch(() => {})
+}
+
+/** The view as a PNG in the temporary directory, or a rejection (no module in this build, or the capture failed). The previous picture goes first. */
 export async function captureStory(node: RefObject<unknown>): Promise<string> {
+  await sweepStoryCaptures()
   // Required here, not imported above: a build that predates the module throws on this line, inside the caller's try.
   const { captureRef } = require('react-native-view-shot') as typeof import('react-native-view-shot')
-  return captureRef(node as RefObject<never>, { format: 'png', quality: 1, result: 'tmpfile' })
+  const uri = await captureRef(node as RefObject<never>, { format: 'png', quality: 1, result: 'tmpfile' })
+  lastCapture = uri
+  await AsyncStorage.setItem(STORY_CAPTURE_KEY, uri).catch(() => {})
+  return uri
 }
 
 /** The picture in the system share sheet. */

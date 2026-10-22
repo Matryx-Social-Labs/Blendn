@@ -95,6 +95,9 @@ describe('the sheet', () => {
     const onDone = jest.fn()
     await render(sheet({ onDone }))
     await fireEvent.press(screen.getByRole('button', { name: 'Share to Instagram' }))
+    // the sheet goes first: work (and so its toasts) starts once it has left
+    expect(mockShareStory).not.toHaveBeenCalled()
+    await act(async () => { await new Promise((r) => setTimeout(r, 700)) })
     const { url, capture } = mockShareStory.mock.calls[0][0]
     expect(url).toBe('https://www.blendn.app/e/e1')
     await capture()
@@ -131,6 +134,7 @@ describe('the recap', () => {
   it('waits for no cover', async () => {
     await render(sheet({ variant: RECAP, url: undefined }))
     await fireEvent.press(screen.getByRole('button', { name: 'Share to Instagram' }))
+    await act(async () => { await new Promise((r) => setTimeout(r, 700)) })
     await mockShareStory.mock.calls[0][0].capture()
     expect(mockCoverReady).toHaveBeenCalledWith(null)
   })

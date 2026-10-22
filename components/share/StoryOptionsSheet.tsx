@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
 import { COLOR, SPACE } from '../../lib/design/tokens'
@@ -11,6 +11,8 @@ import { StoryCard, type RecapStat } from '../ds/StoryCard'
 
 /** The preview in the sheet: 150 wide, a ninth of the file (the frame's `imageScaled(…, 150)`). */
 const PREVIEW_WIDTH = 150
+/** If the sheet's exit never reports, the share starts after this long. */
+const LEAVE_FALLBACK_MS = 600
 
 export type StoryVariant =
   | { kind: 'story'; event: ShareEvent }
@@ -42,8 +44,8 @@ const COPY = {
  * 1080 device pixels across and photographed when Share is pressed (`lib/storyShare`), so the file is the export size
  * whatever the phone, and the preview can stay small. Both follow the toggle.
  *
- * `H.primary` on Share is the Sheet's own (a primary action); the toggle plays the row's `H.toggle`. While the picture
- * is being made the button is busy; the sheet closes when the share sheet takes over.
+ * `H.primary` on Share is the Sheet's own (a primary action); the toggle plays the row's `H.toggle`. Share closes the
+ * sheet first and does the work once it has left: the "Link copied" toast would otherwise be behind it on iOS.
  */
 export function StoryOptionsSheet({
   visible,
@@ -67,7 +69,9 @@ export function StoryOptionsSheet({
   const bold = useBoldText()
   const copy = COPY[variant.kind]
   const [on, setOn] = useState(false)
-  const [busy, setBusy] = useState(false)
+  /** Share to Instagram was pressed: the sheet is leaving, and the work starts when it has (toasts are hidden behind a Modal on iOS). */
+  const [leaving, setLeaving] = useState(false)
+  const started = useRef(false)
   const photograph = useRef<View>(null)
 
   // A new sheet is a new decision: the toggle starts off every time (adjusted as the sheet closes, not in an effect).
@@ -85,27 +89,43 @@ export function StoryOptionsSheet({
     )
 
   const share = async () => {
-    setBusy(true)
+    if (started.current) return
+    started.current = true
     const capture = async () => {
       await coverReady(variant.kind === 'story' ? variant.event.cover : null)
       return captureStory(photograph)
     }
     const outcome = await shareStory({ url, capture })
-    setBusy(false)
+    started.current = false
+    setLeaving(false)
     onDone(outcome)
   }
+
+  // The sheet's exit reports through `onDismissed`; if it never does, the work starts anyway.
+  const begin = () => {
+    if (leaving) void share()
+  }
+  useEffect(() => {
+    if (!leaving) return
+    const timer = setTimeout(() => void share(), LEAVE_FALLBACK_MS)
+    return () => clearTimeout(timer)
+    // `share` is rebuilt every render and guards itself; the timer is for the one `leaving` turning on.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leaving])
 
   return (
     <>
       <Sheet
-        visible={visible}
+        visible={visible && !leaving}
         onClose={onClose}
-        onDismissed={onDismissed}
+        onDismissed={() => {
+          onDismissed?.()
+          begin()
+        }}
         title={copy.title}
-        dismissible={!busy}
         testID={testID}
         actions={[
-          { label: 'Share to Instagram', kind: 'primary', loading: busy, onPress: () => void share(), testID: testID && `${testID}-share` },
+          { label: 'Share to Instagram', kind: 'primary', onPress: () => setLeaving(true), testID: testID && `${testID}-share` },
           { label: 'Not now', kind: 'tertiary', onPress: onClose, testID: testID && `${testID}-skip` },
         ]}
       >
@@ -118,7 +138,6 @@ export function StoryOptionsSheet({
           hint={copy.hint}
           value={on}
           onValueChange={setOn}
-          disabled={busy}
           testID={testID && `${testID}-toggle`}
         />
         <Text style={[font('caption', bold), styles.note]}>{copy.note}</Text>

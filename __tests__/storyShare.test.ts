@@ -12,12 +12,16 @@ jest.mock('expo-clipboard', () => ({ setStringAsync: (...a: unknown[]) => mockSe
 jest.mock('expo-image', () => ({ Image: { prefetch: jest.fn(async () => true) } }))
 jest.mock('expo-sharing', () => ({ isAvailableAsync: () => mockIsAvailable(), shareAsync: (...a: unknown[]) => mockShareAsync(...a) }))
 jest.mock('react-native-view-shot', () => ({ captureRef: (...a: unknown[]) => mockCaptureRef(...a) }))
+const mockDelete = jest.fn()
+jest.mock('expo-file-system/legacy', () => ({ deleteAsync: (...a: unknown[]) => mockDelete(...a) }))
 jest.mock('../lib/toast', () => ({ toast: (...a: unknown[]) => mockToast(...a) }))
 jest.mock('../lib/logger', () => ({ Logger: { warn: jest.fn(), debug: jest.fn(), error: jest.fn(), info: jest.fn() } }))
 
 import { Linking, PixelRatio, Platform } from 'react-native'
 
-import { coverReady, shareStory, STORY_LINK_COPIED, storyCaptureWidth } from '../lib/storyShare'
+import AsyncStorage from '@react-native-async-storage/async-storage'
+
+import { captureStory, coverReady, shareStory, STORY_CAPTURE_KEY, STORY_LINK_COPIED, storyCaptureWidth, sweepStoryCaptures } from '../lib/storyShare'
 
 const URL = 'https://www.blendn.app/e/abc'
 
@@ -25,6 +29,7 @@ beforeEach(() => {
   jest.restoreAllMocks()
   mockSetString.mockReset().mockResolvedValue(true)
   mockToast.mockReset()
+  mockDelete.mockReset().mockResolvedValue(undefined)
   mockShareAsync.mockReset().mockResolvedValue(undefined)
   mockIsAvailable.mockReset().mockResolvedValue(true)
   mockCaptureRef.mockReset().mockResolvedValue('file:///cache/story.png')
@@ -96,5 +101,46 @@ describe('sharing a Story', () => {
     mockOpenURL.mockRejectedValue(new Error('no instagram'))
     await expect(shareStory({ url: URL, capture: async () => Promise.reject(new Error('x')) })).resolves.toBe('failed')
     expect(mockToast).toHaveBeenLastCalledWith("Instagram didn't open. The link is copied.", 'error')
+  })
+})
+
+describe('the picture file does not pile up', () => {
+  beforeEach(async () => {
+    await sweepStoryCaptures()
+    mockDelete.mockClear()
+  })
+
+  it('keeps the path of the capture it made, on disk too, and deletes nothing the first time', async () => {
+    mockCaptureRef.mockResolvedValueOnce('file:///tmp/ReactNative/a.png')
+    await expect(captureStory({ current: {} })).resolves.toBe('file:///tmp/ReactNative/a.png')
+    expect(mockDelete).not.toHaveBeenCalled()
+    await expect(AsyncStorage.getItem(STORY_CAPTURE_KEY)).resolves.toBe('file:///tmp/ReactNative/a.png')
+  })
+
+  it('deletes the previous picture as the next one starts, before photographing', async () => {
+    mockCaptureRef.mockResolvedValueOnce('file:///tmp/ReactNative/a.png').mockResolvedValueOnce('file:///tmp/ReactNative/b.png')
+    await captureStory({ current: {} })
+    await captureStory({ current: {} })
+    expect(mockDelete).toHaveBeenCalledTimes(1)
+    expect(mockDelete).toHaveBeenCalledWith('file:///tmp/ReactNative/a.png', { idempotent: true })
+    expect(mockDelete.mock.invocationCallOrder[0]).toBeLessThan(mockCaptureRef.mock.invocationCallOrder[1])
+    await expect(AsyncStorage.getItem(STORY_CAPTURE_KEY)).resolves.toBe('file:///tmp/ReactNative/b.png')
+  })
+
+  it('at launch deletes the one a killed share left, once, and forgets it', async () => {
+    await AsyncStorage.setItem(STORY_CAPTURE_KEY, 'file:///tmp/ReactNative/left.png')
+    await sweepStoryCaptures()
+    expect(mockDelete).toHaveBeenCalledWith('file:///tmp/ReactNative/left.png', { idempotent: true })
+    await expect(AsyncStorage.getItem(STORY_CAPTURE_KEY)).resolves.toBeNull()
+    mockDelete.mockClear()
+    await sweepStoryCaptures()
+    expect(mockDelete).not.toHaveBeenCalled()
+  })
+
+  it('a file that will not delete is not an error for the share', async () => {
+    mockDelete.mockRejectedValue(new Error('gone'))
+    mockCaptureRef.mockResolvedValue('file:///tmp/ReactNative/a.png')
+    await captureStory({ current: {} })
+    await expect(captureStory({ current: {} })).resolves.toBe('file:///tmp/ReactNative/a.png')
   })
 })

@@ -9,6 +9,8 @@ const mockInstalled = jest.fn()
 const mockOpenCamera = jest.fn()
 const mockShareStory = jest.fn()
 jest.mock('expo-clipboard', () => ({ setStringAsync: (...a: unknown[]) => mockSetString(...a) }))
+let mockLeft: Promise<void> = Promise.resolve()
+jest.mock('../lib/sheetDismissed', () => ({ ...jest.requireActual('../lib/sheetDismissed'), afterSheetDismissed: () => mockLeft }))
 jest.mock('../lib/toast', () => ({ toast: (...a: unknown[]) => mockToast(...a) }))
 jest.mock('../lib/shareWhatsApp', () => ({ openWhatsApp: (...a: unknown[]) => mockOpenWhatsApp(...a), whatsAppInstalled: () => mockInstalled() }))
 jest.mock('../lib/storyShare', () => ({
@@ -57,6 +59,7 @@ beforeEach(() => {
   resetShareTray()
   mockSetString.mockReset().mockResolvedValue(true)
   mockToast.mockReset()
+  mockLeft = Promise.resolve()
   mockOpenWhatsApp.mockReset().mockResolvedValue(true)
   mockInstalled.mockReset().mockResolvedValue(true)
   mockOpenCamera.mockReset().mockResolvedValue(undefined)
@@ -112,11 +115,16 @@ describe('the tray', () => {
     await expect(went).resolves.toBe(true)
   })
 
-  it('a clipboard that refuses is an error toast, never silence', async () => {
+  it('a clipboard that refuses closes the tray and says so once it has left: a toast under a Modal is never seen on iOS', async () => {
     mockSetString.mockRejectedValue(new Error('no'))
+    let leave!: () => void
+    mockLeft = new Promise<void>((resolve) => { leave = resolve })
     await render(<ShareHost />)
-    await open(EVENT)
+    const { went } = await open(EVENT)
     await press('Copy link')
+    expect(mockToast).not.toHaveBeenCalled()
+    await expect(went).resolves.toBe(false)
+    await act(async () => leave())
     expect(mockToast).toHaveBeenCalledWith("Couldn't copy the link. Try again.", 'error')
   })
 
@@ -157,7 +165,9 @@ describe('Instagram Story', () => {
     expect(screen.getByText('Share to your Story')).toBeTruthy()
     expect(screen.getByRole('switch', { name: /Say I’m going/ }).props.accessibilityState.checked).toBe(false)
     await fireEvent.press(screen.getByRole('button', { name: 'Share to Instagram' }))
-    await settle()
+    // the sheet leaves first; the work starts once it has
+    expect(mockShareStory).not.toHaveBeenCalled()
+    await wait(700)
     expect(mockShareStory).toHaveBeenCalledWith(expect.objectContaining({ url: URL }))
     await expect(went).resolves.toBe(true)
   })
@@ -182,11 +192,24 @@ describe('Instagram Story', () => {
     await expect(went).resolves.toBe(true)
   })
 
+  it('a venue’s “Link copied” toast waits for the tray to leave', async () => {
+    let leave!: () => void
+    mockLeft = new Promise<void>((resolve) => { leave = resolve })
+    await render(<ShareHost />)
+    await open(VENUE)
+    await press('Instagram Story')
+    expect(mockOpenCamera).toHaveBeenCalled()
+    expect(mockToast).not.toHaveBeenCalled()
+    await act(async () => leave())
+    expect(mockToast).toHaveBeenCalledWith('Link copied — add it with the Link sticker', 'success')
+  })
+
   it('says so when Instagram will not open', async () => {
     mockOpenCamera.mockRejectedValue(new Error('no'))
     await render(<ShareHost />)
     const { went } = await open(INVITE)
     await press('Instagram Story')
+    await settle()
     expect(mockToast).toHaveBeenCalledWith("Instagram didn't open. Try again.", 'error')
     await expect(went).resolves.toBe(false)
   })
