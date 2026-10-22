@@ -189,6 +189,7 @@ function CrewScreenContent() {
     const sheet = leaveSheet(crew)
     showSheet({
       kind: 'actions',
+      hue: 'rose',
       icon: 'log-out',
       title: sheet.title,
       message: sheet.message,
@@ -216,6 +217,7 @@ function CrewScreenContent() {
     const sheet = removeSheet(crew, member.name)
     showSheet({
       kind: 'actions',
+      hue: 'rose',
       icon: 'user-minus',
       title: sheet.title,
       message: sheet.message,
@@ -240,6 +242,7 @@ function CrewScreenContent() {
     if (!crew) return
     showSheet({
       kind: 'reasons',
+      hue: 'rose',
       title: `Report ${crew.name}`,
       message: 'Only the crew’s name and bio are reported. Our team is not told who sent it, and the crew isn’t either.',
       reasons: CREW_REPORT_REASONS.map((r) => ({ value: r.value, label: r.label })),

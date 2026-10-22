@@ -184,6 +184,7 @@ function EditProfileContent() {
     // The app's one sheet: Discard is the destructive confirm, so it plays the one destructive tick like every other.
     showSheet({
       kind: 'actions',
+      hue: 'violet',
       icon: 'triangle-alert',
       title: 'Discard changes?',
       message: "You have edits that aren't saved. Leave now and they're gone.",

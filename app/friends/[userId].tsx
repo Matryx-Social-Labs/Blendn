@@ -115,6 +115,7 @@ function FriendProfileScreenContent() {
     if (!friend) return
     showSheet({
       kind: 'actions',
+      hue: 'rose',
       title: `Remove ${friend.name}?`,
       message: "They won't be told. Your messages stay, and you can add each other again later.",
       actions: [

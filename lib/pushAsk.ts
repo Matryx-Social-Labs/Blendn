@@ -6,6 +6,7 @@ import { Logger } from './logger'
 import { initializePushNotifications } from './notifications'
 import { clearPushDeclined, hasDeclinedPush, markPushDeclined } from './pushDecline'
 import { showSheet } from './sheet'
+import type { Hue } from '../components/ds/shared'
 
 /**
  * Asking for push in context (Flow 9 · 9.7): at the two moments a push pays off, the first time only.
@@ -22,6 +23,9 @@ import { showSheet } from './sheet'
  * "Continue" is the one that asks the phone (the OS dialog follows); it is silent until then.
  */
 export type AskMoment = 'rsvp' | 'like'
+
+/** The ask is lit in the world it is asked from: a like is among people (a profile, the Room), an RSVP on an event. */
+const ASK_HUE: Record<AskMoment, Hue> = { like: 'rose', rsvp: 'ember' }
 
 export const ASK_COPY: Record<AskMoment, { title: string; body: string }> = {
   rsvp: {
@@ -57,6 +61,7 @@ export async function askPushInContext(moment: AskMoment): Promise<boolean> {
     const { title, body } = ASK_COPY[moment]
     showSheet({
       kind: 'actions',
+      hue: ASK_HUE[moment],
       icon: 'bell',
       title,
       message: body,

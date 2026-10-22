@@ -94,6 +94,7 @@ function chooseAs(crews: CrewsAtEvent['myCrews'], title: string): Promise<string
   return new Promise((resolve) =>
     showSheet({
       kind: 'actions',
+      hue: 'rose',
       title,
       message: 'Your crew chat says who liked on its behalf.',
       onDismiss: () => resolve(undefined),

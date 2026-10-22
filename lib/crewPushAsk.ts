@@ -26,6 +26,7 @@ export async function askCrewPush(userId: string): Promise<void> {
   if (!(await mayAskForPush())) return
   showSheet({
     kind: 'actions',
+    hue: 'rose',
     icon: 'bell',
     title: CREW_PUSH_TITLE,
     message: CREW_PUSH_BODY,

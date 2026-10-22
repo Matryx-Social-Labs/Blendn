@@ -678,6 +678,7 @@ export function useBanterInbox() {
     const senderId = request.sender_id
     showSheet({
       kind: 'actions',
+      hue: 'rose',
       title: name,
       message: 'Blocking stops them asking again and hides you from each other. A report goes to our team, and they are not told who sent it.',
       actions: [

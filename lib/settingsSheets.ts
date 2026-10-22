@@ -12,6 +12,7 @@ import { forgotPasswordMessage } from './signInRefusal'
 /** "Notifications are off": the phone says no, and only the phone's Settings can undo it. */
 export const PUSH_BLOCKED_SHEET: Sheet = {
   kind: 'actions',
+  hue: 'violet',
   icon: 'bell-off',
   title: 'Notifications are off',
   message: 'Turn them on in your phone’s Settings to get them from Blend’n.',
@@ -36,6 +37,7 @@ export const SIGNED_OUT_UNCONFIRMED =
 export function signOutSheet({ signOut, showToast }: { signOut: SignOut; showToast: Toaster }): Sheet {
   return {
     kind: 'actions',
+    hue: 'violet',
     icon: 'log-out',
     title: 'Sign out?',
     message: 'You’ll need to sign in again to see your events, friends and messages.',
@@ -67,6 +69,7 @@ export function signOutSheet({ signOut, showToast }: { signOut: SignOut; showToa
 export function signOutEverywhereSheet({ signOutEverywhere }: { signOutEverywhere: () => Promise<{ success: boolean; error?: string }> }): Sheet {
   return {
     kind: 'actions',
+    hue: 'violet',
     icon: 'smartphone',
     title: 'Sign out everywhere?',
     message: 'Every phone signed in to this account is signed out, this one too. Notifications stop on all of them.',
@@ -108,6 +111,7 @@ export function passwordLinkSheet({
 }): Sheet {
   return {
     kind: 'actions',
+    hue: 'violet',
     icon: 'key-round',
     title: 'Change your password?',
     message: `We’ll email a link to ${email}. Reset links work once, and for an hour.`,

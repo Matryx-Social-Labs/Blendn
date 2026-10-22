@@ -137,6 +137,7 @@ export function chooseCrew(myCrews: CrewsAtEvent['myCrews'], title: string): Pro
   return new Promise((resolve) =>
     showSheet({
       kind: 'actions',
+      hue: 'rose',
       title,
       message: 'Your crew chat says who liked on its behalf.',
       onDismiss: () => resolve(null),
@@ -220,6 +221,7 @@ export function useCrewActions(
   const report = (card: CrewCard) =>
     showSheet({
       kind: 'reasons',
+      hue: 'rose',
       title: `Report ${card.name}`,
       message: 'What’s wrong with this crew’s name or bio? Nobody in the crew is told who reported it.',
       reasons: CREW_REPORT_REASONS.map((r) => ({ value: r.value, label: r.label })),

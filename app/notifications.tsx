@@ -165,6 +165,7 @@ function NotificationsScreenContent() {
     const waiting = feed.groups.waiting.length > 0
     showSheet({
       kind: 'actions',
+      hue: 'rose',
       icon: 'trash',
       title: 'Clear all notifications?',
       message: feed.clearKeepsRequests

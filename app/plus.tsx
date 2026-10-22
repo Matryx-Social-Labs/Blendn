@@ -173,6 +173,7 @@ function PlusScreenContent() {
   const showStoreError = (message: string, manageIt: boolean | undefined) =>
     showSheet({
       kind: 'actions',
+      hue: 'violet',
       icon: 'circle-alert',
       title: manageIt ? 'Already purchased' : 'The purchase didn’t go through',
       message,

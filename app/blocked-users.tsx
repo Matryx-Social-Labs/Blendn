@@ -64,6 +64,7 @@ export default function BlockedUsers() {
     const name = user.blocked_user_name || 'this person'
     showSheet({
       kind: 'actions',
+      hue: 'violet',
       title: `Unblock ${name}?`,
       message: 'They can see your profile and message you again. They are not told.',
       actions: [

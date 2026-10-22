@@ -58,6 +58,7 @@ function AddFriendsScreenContent() {
   const confirmReset = () =>
     showSheet({
       kind: 'actions',
+      hue: 'rose',
       title: 'Reset your link?',
       message: 'Your old link will stop working. People who are already your friends stay your friends.',
       actions: [

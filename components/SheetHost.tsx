@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { closeSheet, dismissSheet, showSheet, useSheet, type Sheet, type SheetAction, type SheetOutcome } from '../lib/sheet'
@@ -7,7 +7,7 @@ import { OPACITY } from '../lib/theme'
 import type { ButtonKind } from './ds/Button'
 import { Spinner } from './ds/Loader'
 import { Sheet as DsSheet, type SheetAction as DsAction } from './ds/Sheet'
-import { font, PRESSED_WASH, useBoldText, useIncreaseContrast } from './ds/shared'
+import { font, HueProvider, PRESSED_WASH, useBoldText, useIncreaseContrast } from './ds/shared'
 import { TextArea } from './ds/TextField'
 import { Icon, type IconName } from './ui/Icon'
 import { useToast } from './Toast'
@@ -15,9 +15,9 @@ import { useToast } from './Toast'
 /** Long enough for "what happened", short of an essay. The leave route caps at 2000. */
 const NOTE_MAX = 500
 
-/** lib/sheet's variants as the DS Sheet's kinds: an affirmative in a sheet is the strong white, never the gradient. */
+/** lib/sheet's variants as the DS Sheet's kinds: an affirmative in a sheet is lit in the caller's world, never the gradient. */
 const KIND: Record<NonNullable<SheetAction['variant']>, ButtonKind> = {
-  primary: 'strong',
+  primary: 'lit',
   secondary: 'secondary',
   destructive: 'destructive',
 }
@@ -63,6 +63,8 @@ export function SheetHost() {
 
   const current = sheet ?? shown
   if (!current) return null
+  // Outside every screen's world: the caller names its hue (`lib/sheet`). One provider around every step, so a step never remounts the Sheet.
+  const inWorld = (node: ReactNode) => <HueProvider value={current.hue ?? 'ember'}>{node}</HueProvider>
 
   const settle = (index: number, outcome: SheetOutcome) => {
     setBusy(null)
@@ -104,7 +106,7 @@ export function SheetHost() {
       pressHaptic: action.pressHaptic ?? !('next' in action),
       onPress: () => perform(action, index),
     })
-    return (
+    return inWorld(
       <DsSheet
         visible={sheet !== null}
         onClose={dismissSheet}
@@ -147,7 +149,7 @@ export function SheetHost() {
   }
 
   if (noting !== null) {
-    return (
+    return inWorld(
       <DsSheet
         visible={sheet !== null}
         onClose={closeSheet}
@@ -160,7 +162,7 @@ export function SheetHost() {
         actions={[
           {
             label: error ? 'Try again' : 'Send report',
-            kind: 'strong',
+            kind: 'lit',
             loading: busy !== null,
             disabled: !note.trim(),
             onPress: () => send(noting, 0, note),
@@ -175,7 +177,7 @@ export function SheetHost() {
     )
   }
 
-  return (
+  return inWorld(
     <DsSheet
       visible={sheet !== null}
       onClose={closeSheet}

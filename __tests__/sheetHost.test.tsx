@@ -11,7 +11,9 @@ const mockToast = jest.fn()
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockToast }) }))
 
 /* eslint-disable import/first */
+import { StyleSheet } from 'react-native'
 import { SheetHost } from '../components/SheetHost'
+import { COLOR } from '../lib/design/tokens'
 import { closeSheet, showSheet, type SheetOutcome } from '../lib/sheet'
 /* eslint-enable import/first */
 
@@ -43,6 +45,28 @@ it('rows: every action but Cancel is a row; a failed run stays and says why', as
   await settle()
   expect(run).toHaveBeenCalledTimes(1)
   expect(screen.getByText('You can’t block yourself.')).toBeTruthy()
+})
+
+describe('the affirmative is lit in the world the sheet is asked from', () => {
+  const ask = (hue?: 'rose' | 'violet') =>
+    showSheet({ kind: 'actions', hue, title: 'Sign out?', actions: [{ label: 'Sign out', variant: 'primary', then: jest.fn() }, { label: 'Cancel', cancel: true }] })
+  const fill = () => StyleSheet.flatten(screen.getByRole('button', { name: 'Sign out' }).props.style).backgroundColor
+
+  it.each([
+    ['violet', COLOR.selectionVioletFill],
+    ['rose', COLOR.selectionRoseFill],
+  ] as const)('%s: the caller’s hue', async (hue, expected) => {
+    await render(<SheetHost />)
+    await act(async () => ask(hue))
+    expect(fill()).toBe(expected)
+  })
+
+  it('ember when the caller names none; never the white strong', async () => {
+    await render(<SheetHost />)
+    await act(async () => ask())
+    expect(fill()).toBe(COLOR.selectionEmberFill)
+    expect(fill()).not.toBe(COLOR.textPrimary)
+  })
 })
 
 describe('a reason sheet', () => {

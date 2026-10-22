@@ -612,6 +612,7 @@ function PrivateChatInner() {
     }
     showSheet({
       kind: 'actions',
+      hue: 'rose',
       title: revealFailed ? 'Couldn’t load this conversation' : 'Still loading',
       message: revealFailed
         ? 'Its options need the conversation details, which did not load.'

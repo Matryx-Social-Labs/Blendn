@@ -184,6 +184,7 @@ export function useBlendRoom(blendId: string | null, top: number): BlendRoomChro
   const leave = () =>
     showSheet({
       kind: 'actions',
+      hue: 'rose',
       icon: 'log-out',
       title: 'Leave this Blend?',
       message: 'Only you leave — it goes on for everyone else, and it leaves your Banter.',
@@ -213,6 +214,7 @@ export function useBlendRoom(blendId: string | null, top: number): BlendRoomChro
     const who = person.name ?? person.pseudonym
     return {
       kind: 'actions',
+      hue: 'rose',
       icon: 'ban',
       title: `Block ${who}?`,
       message:
@@ -239,6 +241,7 @@ export function useBlendRoom(blendId: string | null, top: number): BlendRoomChro
   const pickToBlock = () =>
     showSheet({
       kind: 'actions',
+      hue: 'rose',
       title: 'Block someone',
       message: 'Pick who. You won’t see each other here or anywhere else on Blend’n, and they aren’t told.',
       layout: 'rows',

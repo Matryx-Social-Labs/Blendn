@@ -259,6 +259,7 @@ function SettingsScreenContent() {
   /** Deleting is two steps in one sheet: what it does, then "for good?". The confirm's own haptic is H.destructive (SheetHost). */
   const confirmDeleteSheet = useCallback((): Sheet => ({
     kind: 'actions',
+    hue: 'violet',
     icon: 'trash',
     title: 'Delete your account for good?',
     message: 'This can’t be undone. You’d need a new account to use Blend’n again.',
@@ -296,6 +297,7 @@ function SettingsScreenContent() {
       const store = storePlus === 'apple' ? 'App Store' : 'Google Play'
       return {
         kind: 'actions',
+        hue: 'violet',
         icon: 'trash',
         title: 'Delete your account?',
         message:
@@ -542,6 +544,7 @@ function SettingsScreenContent() {
 
 const PLUS_FREE_SHEET: Sheet = {
   kind: 'actions',
+  hue: 'violet',
   icon: 'sparkles',
   title: 'Blendn+ is free here for now',
   message: "During launch in your city, staying live while you’re here and your full night history are everyone’s. There’s nothing to buy.",

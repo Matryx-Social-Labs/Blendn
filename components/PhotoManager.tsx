@@ -259,6 +259,7 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
       // The app's one sheet, like every other "are you sure" (lib/sheet.ts).
       showSheet({
         kind: 'actions',
+        hue: 'violet',
         title: 'Remove this photo?',
         message: 'It comes off your profile. You can add it again later.',
         actions: [

@@ -1,6 +1,7 @@
 /*
- * The hosts that draw above every screen (the sheet host, toasts, coach marks) sit outside any screen's `HueProvider`, so they
- * are ember whatever world is open. They must therefore draw no hued part: the same pixels under every hue. Checked two ways:
+ * The hosts that draw above every screen (toasts, coach marks) sit outside any screen's `HueProvider`, so they
+ * are ember whatever world is open. The sheet host is not among them any more: its caller names the hue (`lib/sheet`'s `hue`,
+ * `sheetHost.test.tsx`), so its affirmative lights in the world it was asked from. They must therefore draw no hued part: the same pixels under every hue. Checked two ways:
  * by what they import, and by drawing them under each hue.
  */
 import { render, screen } from '@testing-library/react-native'
@@ -30,7 +31,7 @@ const read = (file: string) => fs.readFileSync(path.join(ROOT, file), 'utf8')
 const HUED = /\b(useSelection|useHue|SELECTION|HueProvider|Chip|ChipSet|SegmentedControl|TitleTabs|RadioCard|LookingForCard|ProgressBar|CheckDisc)\b/
 
 describe('the hosts import nothing that lights in a hue', () => {
-  it.each(['components/SheetHost.tsx', 'components/ds/Sheet.tsx', 'components/ds/Toast.tsx', 'components/Toast.tsx', 'components/ds/CoachMarkHost.tsx', 'components/ds/CoachMark.tsx'])(
+  it.each(['components/ds/Sheet.tsx', 'components/ds/Toast.tsx', 'components/Toast.tsx', 'components/ds/CoachMarkHost.tsx', 'components/ds/CoachMark.tsx'])(
     '%s',
     (file) => {
       const imports = read(file)

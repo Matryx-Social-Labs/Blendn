@@ -18,6 +18,7 @@ export const copyText = (text: string) => {
 export function notSentSheet({ to, text, onRetry, onDelete }: { to: string; text: string; onRetry: () => void; onDelete: () => void }): Sheet {
   return {
     kind: 'actions',
+    hue: 'rose',
     icon: 'circle-alert',
     title: 'Not sent',
     message: `This message didn’t reach ${to}.`,
@@ -42,6 +43,7 @@ export function linkSheet(url: string, surface: 'room' | 'dm'): Sheet {
   if (!host) {
     return {
       kind: 'actions',
+      hue: 'rose',
       icon: 'external-link',
       title: 'This link can’t be opened',
       message: 'Blend’n opens only web links it can name. You can still copy it.',
@@ -53,6 +55,7 @@ export function linkSheet(url: string, surface: 'room' | 'dm'): Sheet {
   }
   return {
     kind: 'actions',
+    hue: 'rose',
     icon: 'external-link',
     title: `Open ${host}?`,
     message:

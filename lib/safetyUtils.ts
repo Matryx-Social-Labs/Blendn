@@ -168,7 +168,7 @@ export const showConversationOptions = (
   })
   actions.push({ label: 'Cancel', cancel: true })
   // The design's options sheet (Flow 5 DM #20): rows, the destructive one in red.
-  showSheet({ kind: 'actions', title: displayName, layout: 'rows', actions })
+  showSheet({ kind: 'actions', hue: 'rose', title: displayName, layout: 'rows', actions })
 }
 
 /**
@@ -227,6 +227,7 @@ export const leaveConversationSheet = (
 
   const reportStep = (action: 'unmatch' | 'block', title: string): Sheet => ({
     kind: 'reasons',
+    hue: 'rose',
     title,
     message: `Why are you reporting ${displayName}?`,
     about: displayName,
@@ -237,6 +238,7 @@ export const leaveConversationSheet = (
 
   return {
     kind: 'actions',
+    hue: 'rose',
     title: copy.title,
     message: copy.body,
     actions: [
@@ -266,6 +268,7 @@ export const showUserSafetyActions = (
 ): void => {
   showSheet({
     kind: 'actions',
+    hue: 'rose',
     title: userName,
     message: 'Blocking hides you from each other. A report goes to our team, and they are not told who sent it.',
     actions: [
@@ -279,6 +282,7 @@ export const showUserSafetyActions = (
 /** Block one person, confirmed: from a profile's sheet, or a chat message's Block… (R3-D5 5.1, 5.2). */
 export const blockStep = (userName: string, userId: string, onComplete?: () => void): Sheet => ({
   kind: 'actions',
+  hue: 'rose',
   title: `Block ${userName}?`,
   message: "They won't be able to see your profile or message you, and you won't see each other in rooms.",
   actions: [
@@ -299,6 +303,7 @@ export const blockStep = (userName: string, userId: string, onComplete?: () => v
 /** A person's report step, for a sheet that is already open (a message request's "More"). */
 export const userReportStep = (userName: string, userId: string, onComplete?: () => void): Sheet => ({
   kind: 'reasons',
+  hue: 'rose',
   title: `Report ${userName}`,
   message: `Why are you reporting ${userName}?`,
   about: userName,
@@ -333,6 +338,7 @@ export const messageReportStep = (
   opts: { about?: string; onComplete?: () => void } = {}
 ): Sheet => ({
   kind: 'reasons',
+  hue: 'rose',
   title: 'Report this message',
   message: `Our team reads every report. ${opts.about ? `${opts.about} isn’t` : 'Nobody is'} told who sent it.`,
   about: opts.about,
@@ -459,6 +465,7 @@ export const ROOM_REPORT_REASONS: { value: RoomReportType; label: string }[] = [
 export const showRoomReportOptions = (chatGroupId: string, onComplete?: () => void): void => {
   showSheet({
     kind: 'reasons',
+    hue: 'rose',
     title: 'Report this room',
     message: 'For what no single message shows. Our team reads every report.',
     reasons: ROOM_REPORT_REASONS,

@@ -1,8 +1,8 @@
 /*
  * Inside a world a positive action is `lit`, never the white `strong` pill (foundations C, part 2). `strong` stays only where
- * there is no world to light in: the system screens and the app-level sheet host, which sit outside every screen's `HueProvider`,
- * and the screen-reader fallback of a control that mirrors another. This pins it by source: a new white action fails here, and has
- * to be argued for in the table below, with its reason, before it can land. The counts are exact, so a second `strong` in a file
+ * there is no world to light in: the system screens, which sit outside every screen's `HueProvider`, and the screen-reader
+ * fallback of a control that mirrors another. The app-level sheet host is not one: its caller names a hue (`lib/sheet`).
+ * This pins it by source: a new white action fails here, and has to be argued for in the table below, with its reason, before it can land. The counts are exact, so a second `strong` in a file
  * that is allowed one fails too.
  *
  * The design gallery (`app/preview`) is not a screen and is not scanned.
@@ -27,7 +27,6 @@ const STRONG_STAYS: Record<string, { count: number; why: string }> = {
   'components/ds/Sheet.tsx': { count: 1, why: 'the fixed order of a sheet’s actions names every kind' },
   'components/system/AccountStateScreen.tsx': { count: 3, why: 'a suspended or signed-out account: a system screen with no world' },
   'app/+not-found.tsx': { count: 1, why: 'a system screen with no world' },
-  'components/SheetHost.tsx': { count: 2, why: 'the app-level sheets sit outside every screen’s hue (hostsOutsideHue): an affirmative there is white' },
   'lib/linkRefusalCard.ts': { count: 2, why: 'the card a refused link lands on, before any screen has a world' },
   'components/ds/HoldToConfirm.tsx': { count: 1, why: 'its screen-reader fallback mirrors the hold’s own white ink' },
 }

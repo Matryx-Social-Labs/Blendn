@@ -3,6 +3,7 @@ import { useSyncExternalStore } from 'react'
 import { Platform } from 'react-native'
 
 import type { ButtonKind } from '../components/ds/Button'
+import type { Hue } from '../components/ds/shared'
 import type { IconName } from '../components/ui/Icon'
 
 /**
@@ -61,7 +62,13 @@ export type SheetAction = {
   | { then: () => void }
 )
 
-export type ActionSheet = {
+/**
+ * The world the sheet is asked from (foundations C): the host is mounted app-level, outside every screen's
+ * `HueProvider`, so a caller names its screen's hue and the sheet's affirmative lights in it. Omitted: ember.
+ */
+type InWorld = { hue?: Hue }
+
+export type ActionSheet = InWorld & {
   kind: 'actions'
   title: string
   message?: string
@@ -84,7 +91,7 @@ export type ActionSheet = {
   onDismiss?: () => void
 }
 
-export type ReasonSheet = {
+export type ReasonSheet = InWorld & {
   kind: 'reasons'
   title: string
   message?: string

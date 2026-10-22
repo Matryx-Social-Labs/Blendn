@@ -150,6 +150,7 @@ function choose<T>(
     }
     showSheet({
       kind: 'actions',
+      hue: 'violet',
       title,
       message,
       onDismiss: () => settle(null),
