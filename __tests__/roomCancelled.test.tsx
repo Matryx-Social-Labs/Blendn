@@ -107,6 +107,12 @@ describe('<RoomCancelled>', () => {
     expect(announce).toHaveBeenCalledTimes(1)
   })
 
+  it('is modal for a screen reader and scrolls, so large type never clips its actions', async () => {
+    await render(<RoomCancelled title="Vinyl Night" onSeeTonight={jest.fn()} onClose={jest.fn()} testID="c" />)
+    expect(screen.getByTestId('c').props.accessibilityViewIsModal).toBe(true)
+    expect(screen.UNSAFE_getByType(require('react-native').ScrollView)).toBeTruthy()
+  })
+
   it('a very long title wraps in the card and never pushes the actions off', async () => {
     await render(<RoomCancelled title="The Extraordinarily Long Named Night of Many Many Words and Sounds" onSeeTonight={jest.fn()} onClose={jest.fn()} />)
     expect(screen.getByRole('button', { name: 'Close' })).toBeTruthy()

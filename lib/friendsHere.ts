@@ -128,7 +128,11 @@ export function useMessageFriend(onFailed: (message: string) => void) {
       try {
         const r = await apiClient.openFriendConversation(friend.userId)
         const conversationId = r.success ? r.data?.conversationId : null
-        if (conversationId) router.push({ pathname: '/private-chat/[conversationId]', params: { conversationId } } as never)
+        if (conversationId) // The thread's header names them before its own read lands, as every other way in does (the friend's page, the Banter).
+          router.push({
+            pathname: '/private-chat/[conversationId]',
+            params: { conversationId, otherUserName: friend.name, otherUserId: friend.userId },
+          } as never)
         else failed.current(friendChatFailure(friend.name))
       } catch (e) {
         Logger.warn('friends', 'friend chat did not open', { error: e })

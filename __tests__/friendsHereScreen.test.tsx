@@ -79,7 +79,10 @@ describe('See all friends here', () => {
       fireEvent.press(screen.getByRole('button', { name: 'Message Asha Menon' }))
     })
     expect(mockOpen).toHaveBeenCalledWith('u7')
-    expect(mockPush).toHaveBeenCalledWith({ pathname: '/private-chat/[conversationId]', params: { conversationId: 'c9' } })
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/private-chat/[conversationId]',
+      params: { conversationId: 'c9', otherUserName: 'Asha Menon', otherUserId: 'u7' },
+    })
   })
 
   it('a chat that will not open says so, with the first name', async () => {

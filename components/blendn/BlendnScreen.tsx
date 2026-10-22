@@ -779,8 +779,8 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
           // Under a Room it is already faded out by `tonightFadeStyle`: an exit would start it again from 1, over the Room.
           exiting={showRoom ? undefined : FadeOut.duration(DURATION.base)}
           pointerEvents={mode === 'room' ? 'none' : 'auto'}
-          accessibilityElementsHidden={mode === 'room'}
-          importantForAccessibility={mode === 'room' ? 'no-hide-descendants' : 'auto'}
+          accessibilityElementsHidden={mode === 'room' || !!cancelled}
+          importantForAccessibility={mode === 'room' || cancelled ? 'no-hide-descendants' : 'auto'}
         >
           <TonightView
             events={tonightEvents}
@@ -824,8 +824,9 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
           entering={pourEntrance ? undefined : reduceMotion ? FadeIn : FadeInUp.duration(DURATION.medium)}
           exiting={FadeOut.duration(DURATION.quick)}
           pointerEvents={mode === 'room' ? 'auto' : 'none'}
-          accessibilityElementsHidden={mode !== 'room'}
-          importantForAccessibility={mode === 'room' ? 'auto' : 'no-hide-descendants'}
+          // Under the cancelled card the Room is not there for a screen reader: a swipe never walks past it.
+          accessibilityElementsHidden={mode !== 'room' || !!cancelled}
+          importantForAccessibility={mode === 'room' && !cancelled ? 'auto' : 'no-hide-descendants'}
         >
           <RoomView
             title={room.event.title}
@@ -860,6 +861,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
             view={gridView}
             onView={setGridView}
             crewStrip={<PeopleCrewStrip myCrews={myCrewsHere} mine={crews.mine} eventTitle={eventTitle} actions={crewActions} />}
+            friendsPresent={friendsHere.total > 0 && friendsHere.friends.length > 0}
             friendsHere={
               <FriendsHere
                 friends={friendsHere.friends}
