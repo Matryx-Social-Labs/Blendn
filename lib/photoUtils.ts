@@ -6,6 +6,8 @@ import * as ImagePicker from 'expo-image-picker'
 import { Linking } from 'react-native'
 import { apiClient } from './apiClient'
 import { Logger } from './logger'
+import { pulledPhotos, type PulledPhoto } from './photoStates'
+import { unseenPulled } from './pulledNotices'
 import { queryCache } from './queryCache'
 import { refreshAuthUser } from './useAuth'
 import { sheetClosed, showSheet } from './sheet'
@@ -51,11 +53,6 @@ export interface ProfilePhoto {
   order: number
   isVerified?: boolean
   isPrimary?: boolean
-  /**
-   * Moderation took this photo down (Flow 6 edit 05). The server sends no such flag on a photo yet, so nothing sets it today; the tile
-   * that says so is built and waits for it (docs: server gap).
-   */
-  pulled?: boolean
 }
 
 export interface PhotoOptions {
@@ -748,6 +745,21 @@ export const loadUserPhotos = async (userId: string): Promise<ProfilePhoto[] | n
   } catch (error) {
     Logger.error('profile', 'photoUtils: Get photos error', { error, userId })
     return null
+  }
+}
+
+/**
+ * The photos moderation took down in the last seven days (`photo_states`, your own profile only), newest first, less the ones already dismissed or replaced (`lib/pulledNotices.ts`). Read after
+ * `loadUserPhotos`, whose request it shares through the profile cache. A failed read or an older server is none: the grid then
+ * draws what it always did.
+ */
+export const loadPulledPhotos = async (userId: string): Promise<PulledPhoto[]> => {
+  try {
+    const result = await apiClient.getProfile(userId)
+    return result.success ? await unseenPulled(userId, pulledPhotos(result.data?.profile?.photo_states)) : []
+  } catch (error) {
+    Logger.warn('profile', 'photoUtils: Get pulled photos error', { error, userId })
+    return []
   }
 }
 

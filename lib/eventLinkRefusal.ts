@@ -1,4 +1,5 @@
 import { CHECK_IN_CODES } from './checkInRefusal'
+import { ORGANISER_SUSPENDED } from './noLongerAvailable'
 import { reasonOf } from './sessionEnd'
 
 /**
@@ -9,6 +10,11 @@ import { reasonOf } from './sessionEnd'
  * fix, and the link is held through the fix; `broken` is a link missing a part (no retry). The server's codes are read
  * first, as `reasonCode ?? errorCode` (`AGE_UNKNOWN`, `PROFILE_INCOMPLETE`, `VALIDATION_FAILED`); an old server sends
  * `AGE_RESTRICTED` saying "Add your age" and a plain 403 `FORBIDDEN`, and those still read the same.
+ *
+ * An event whose organiser was suspended is the server's 404 `NOT_FOUND` with `reasonCode: ORGANISER_SUSPENDED` (blendn-admin
+ * #716, only for somebody going or of the organisation; anybody else gets the plain 404). It reads as `notFound` by its code,
+ * not by the sentence: any other reason the server puts on a `NOT_FOUND` (it has said it will add more) is still a thing that is
+ * gone, and must not fall through to "try again" because `reasonOf` preferred the new code.
  */
 export type EventLoadFailure = 'network' | 'notFound' | 'minor' | 'age_unknown' | 'profile' | 'broken'
 
@@ -27,8 +33,11 @@ export function eventLoadFailure(result: { errorCode?: string; reasonCode?: stri
     case 'BAD_REQUEST':
       return 'broken'
     case 'NOT_FOUND':
+    case ORGANISER_SUSPENDED:
       return 'notFound'
     default:
+      // A reason this build does not know, on the 404 that says the event is gone, is still gone.
+      if (result.errorCode === 'NOT_FOUND') return 'notFound'
       return /not found/i.test(result.error ?? '') ? 'notFound' : 'network'
   }
 }

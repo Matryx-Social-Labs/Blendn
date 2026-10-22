@@ -7,6 +7,7 @@ import { Icon, type IconName } from '../ui/Icon'
 import { COLOR, FONT_FAMILY, ICON, MATERIAL, PRESS, RADIUS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
+import { AchievementBadge, type AchievementKind } from './AchievementBadge'
 import { Avatar } from './Avatar'
 import { Button } from './Button'
 import { InterestChip } from './Chip'
@@ -40,6 +41,8 @@ export type PersonCardPerson = {
    * `line: null` draws no line, and the plain `chips` stay.
    */
   overlap?: { line: string | null; labels: OverlapLabel[] }
+  /** What their check-ins earned, as the server budgeted it for this card (none in a small room). Read-only pills after the chips. */
+  badges?: AchievementKind[]
 }
 
 export type PersonCardContentProps = {
@@ -267,6 +270,14 @@ export function PersonCardContent({
         <View style={styles.chips}>
           {person.chips.map((c) => (
             <InterestChip key={c} label={c} />
+          ))}
+        </View>
+      ) : null}
+
+      {!thin && person.badges?.length ? (
+        <View testID={id('badges')} style={styles.chips}>
+          {person.badges.map((kind) => (
+            <AchievementBadge key={kind} kind={kind} />
           ))}
         </View>
       ) : null}

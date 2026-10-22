@@ -1,5 +1,6 @@
 import type { StateScreenProps } from '../components/ds/StateScreen'
 import type { EventLoadFailure } from './eventLinkRefusal'
+import { NO_LONGER_AVAILABLE } from './noLongerAvailable'
 
 /**
  * The card for an event that could not be opened (Flow 15 #9, #10), in the frames' words. A refusal never carries a
@@ -41,8 +42,8 @@ export function linkRefusalCard(
       // `notFound`: organiser suspended or the event removed, one calm landing (Flow 15 #10).
       return {
         icon: 'calendar-off',
-        title: 'No longer available',
-        body: 'This event was taken down. Anything you saved or said has gone with it, and nothing was shared.',
+        title: NO_LONGER_AVAILABLE.title,
+        body: NO_LONGER_AVAILABLE.body,
         actions: [{ label: 'See what’s on tonight', kind: 'strong', pressHaptic: false, onPress: go.toPulse }],
         testID: 'link-gone',
       }

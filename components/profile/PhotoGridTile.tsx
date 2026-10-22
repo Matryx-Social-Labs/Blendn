@@ -150,16 +150,42 @@ export function FailedFace({ onRetry, disabled }: { onRetry: () => void; disable
   )
 }
 
-/** A photo moderation took down (Flow 6 edit 05): gone, and why. Its × still clears the slot. */
-export function PulledFace({ onRemove, removeLabel, removeDisabled }: { onRemove: () => void; removeLabel: string; removeDisabled: boolean }) {
+/**
+ * A photo moderation took down (Flow 6 edit 05): gone, and why. Its × clears the slot; with `onReplace` the tile itself is the way
+ * to put a different photo in its place. The picture and the × are separate elements, so a screen reader reaches both.
+ */
+export function PulledFace({
+  onRemove,
+  removeLabel,
+  removeDisabled,
+  onReplace,
+}: {
+  onRemove: () => void
+  removeLabel: string
+  removeDisabled: boolean
+  onReplace?: () => void
+}) {
   const bold = useBoldText()
   const slop = Math.max(0, (minTarget() - REMOVE) / 2)
+  const why = 'Removed. This photo didn’t meet the photo rules'
   return (
-    <View testID="tile-pulled" accessible accessibilityLabel="Removed. This photo didn’t meet the photo rules" style={[tile.base, tile.centre, tile.fail]}>
-      <Icon name="shield-alert" size={ICON.control} color={COLOR.destructive} />
-      <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), tile.ink]}>
-        Removed · didn’t meet the photo rules
-      </Text>
+    <View testID="tile-pulled" style={[tile.base, tile.fail]}>
+      <Pressable
+        testID="tile-pulled-replace"
+        onPress={onReplace}
+        disabled={!onReplace || removeDisabled}
+        accessible
+        accessibilityRole={onReplace ? 'button' : undefined}
+        accessibilityLabel={onReplace ? `${why}. Add a different photo` : why}
+        accessibilityState={{ disabled: !!onReplace && removeDisabled }}
+        android_ripple={onReplace ? { color: PRESSED_WASH.android } : undefined}
+        style={[StyleSheet.absoluteFill, tile.centre]}
+      >
+        <Icon name="shield-alert" size={ICON.control} color={COLOR.destructive} />
+        <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), tile.ink]}>
+          Removed · didn’t meet the photo rules
+        </Text>
+      </Pressable>
       <Pressable onPress={onRemove} disabled={removeDisabled} hitSlop={slop} accessibilityRole="button" accessibilityLabel={removeLabel} style={styles.remove}>
         <Icon name="x" size={ICON.inline} color={COLOR.textPrimary} active />
       </Pressable>

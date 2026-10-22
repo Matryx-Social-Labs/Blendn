@@ -18,6 +18,7 @@ import { PhotoViewer } from '../../components/profile/PhotoViewer'
 import { ProfileBar } from '../../components/profile/ProfileBar'
 import { DOCK_FADE, dockClearance, ProfileDock } from '../../components/profile/ProfileDock'
 import { heroHeightFor, ProfileHeroStage } from '../../components/profile/ProfileHeroStage'
+import { BadgeRow } from '../../components/profile/MeBadges'
 import { ProfileBio, ProfileDetail, ProfileGallery, ProfileInterests, ProfileSection, SECTION_GAP } from '../../components/profile/ProfileSections'
 import { Glyph } from '../../components/ui/Glyph'
 import { Icon } from '../../components/ui/Icon'
@@ -27,8 +28,9 @@ import { likeRefusal } from '../../lib/likeRefusal'
 import { heroFoldHeight } from '../../lib/profileFold'
 import { interestNames } from '../../lib/meProfile'
 import { profileIdentity, withheldUnlessVisible } from '../../lib/profileIdentity'
-import { aboutLine } from '../../lib/aboutYou'
+import { aboutLine, type Badge } from '../../lib/aboutYou'
 import { FRIEND_COPY, friendAction, isHandle, parseFriendOffer, type FriendOffer } from '../../lib/friendOffer'
+import { parseBadges } from '../../lib/profileBadges'
 import { incomingRequestFrom } from '../../lib/friends'
 import { isGone } from '../../lib/loadFailure'
 import { Logger } from '../../lib/logger'
@@ -131,6 +133,9 @@ function UserProfileInner() {
   const { user: authUser } = useAuth()
   const { showToast } = useToast()
   const [profile, setProfile] = useState<UserProfileView | null>(null)
+  // Their badges, from `GET /users/:id` (the server gives them to whoever may see who they are); none until it answers.
+  const [badgesOf, setBadgesOf] = useState<{ for: string; list: Badge[] } | null>(null)
+  const badges = badgesOf?.for === id ? badgesOf.list : []
   const [loading, setLoading] = useState(true)
   /*
    * Why there is no profile: `gone` is the server's 404, `failed` is anything
@@ -276,21 +281,14 @@ function UserProfileInner() {
   const load = useCallback((isCurrent: () => boolean = () => true) => {
     if (!id) return
     /*
-     * ponytail: `GET /users/:id` carries `friend` once admin `feat/friend-after-reveal` is on staging; until then this reads
-     * it from `GET /profiles/:id`, asked beside the profile so the dock draws once. Delete `getFriendOffer`, `offerRead`
-     * and the `?? fallbackOffer` below when it is.
+     * ONE request: `GET /users/:id` carries `friend` (the offer, read by `parseFriendOffer`) and `badges` top-level beside the
+     * profile (blendn-admin #716 follow-up), so the dock and the badges draw with the page and nothing else is asked.
      */
-    const offerRead: Promise<FriendOffer | null> = mayOfferFriend(authUser?.id, id)
-      ? Promise.resolve()
-          .then(() => apiClient.getFriendOffer(id))
-          .catch((error) => {
-            Logger.warn('profile', 'friend offer failed to load', { error })
-            return null
-          })
-      : Promise.resolve(null)
-    return Promise.all([apiClient.getPublicProfile(id), offerRead])
-      .then(async ([result, fallbackOffer]) => {
+    return apiClient
+      .getPublicProfile(id)
+      .then(async (result) => {
         let offer: FriendOffer | null = null
+        let badges: Badge[] | null = null
         let nextProfile: UserProfileView | null = null
         let connection: ProfileConnection | undefined
         let gone = isGone(result)
@@ -298,8 +296,8 @@ function UserProfileInner() {
         if (result.success && result.data) {
           const data = result.data
           connection = data.connection
-          // The server's own answer when it sends one; the extra read only for a server that does not.
-          offer = parseFriendOffer(data.friend) ?? fallbackOffer
+          offer = parseFriendOffer(data.friend)
+          badges = parseBadges(data.badges)
           const photos = data.photos || data.profile_photos || []
           const interests = interestNames(data.interests)
           nextProfile = {
@@ -355,6 +353,8 @@ function UserProfileInner() {
         // Only for somebody you may see (`identityVisible`), and with the same render as the profile: the dock never pops in.
         if (isCurrent()) setFriend(nextProfile?.identityVisible && mayOfferFriend(authUser?.id, id) ? offer : null)
         setLoadError(nextProfile ? null : gone ? 'gone' : 'failed')
+        // Badges are an identity field: only for somebody you may see, and none (not drawn) when the server sent none.
+        setBadgesOf({ for: id, list: nextProfile?.identityVisible ? (badges ?? []) : [] })
         if (nextProfile?.user_id) {
           await hydrateCtaState(nextProfile.user_id, connection)
         }
@@ -675,6 +675,14 @@ function UserProfileInner() {
                 <FoldBlock id="bio" onTop={onBlockTop}>
                   <ProfileSection title="About">
                     <ProfileBio text={profile.bio} />
+                  </ProfileSection>
+                </FoldBlock>
+              ) : null}
+
+              {badges.length > 0 ? (
+                <FoldBlock id="badges" onTop={onBlockTop}>
+                  <ProfileSection title="Badges" testID="profile-badges">
+                    <BadgeRow badges={badges} />
                   </ProfileSection>
                 </FoldBlock>
               ) : null}

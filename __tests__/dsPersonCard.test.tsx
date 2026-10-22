@@ -423,3 +423,22 @@ describe('Matching v2 overlap (Flow 14 · 14.1, R7)', () => {
     expect(query('p-overlap')).toBeNull()
   })
 })
+
+describe('badges on the card (Flow 14 · 14.5, the server’s own budget)', () => {
+  // `badges` as a room card's person carries them: `{ kind, label }[]`, none in a small room.
+  it('draws what they earned as read-only DS pills after the chips', async () => {
+    await draw({ person: { ...PRIYA, badges: ['shows_up', 'nights_out'] } })
+    expect(query('p-badges')).toBeTruthy()
+    expect(screen.getByLabelText('Badge: Shows up')).toBeTruthy()
+    expect(screen.getByLabelText('Badge: 5+ nights this month')).toBeTruthy()
+    // Read, not pressed: a pill with no handler is not a button.
+    expect(screen.getByLabelText('Badge: Shows up').props.accessibilityRole).toBeUndefined()
+  })
+
+  it('draws no row for none, and none on the thin card', async () => {
+    await draw({ person: { ...PRIYA, badges: [] } })
+    expect(query('p-badges')).toBeNull()
+    await draw({ person: { ...PRIYA, badges: ['shows_up'] }, variant: 'thin' })
+    expect(query('p-badges')).toBeNull()
+  })
+})

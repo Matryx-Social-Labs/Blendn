@@ -14,6 +14,7 @@ import {
   type CrewsAtEvent,
 } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
+import { isOrganiserSuspended } from '../../lib/noLongerAvailable'
 import { showSheet } from '../../lib/sheet'
 import type { TellState } from '../ds/CrewStrip'
 import { useToast } from '../Toast'
@@ -25,6 +26,7 @@ export type CrewsHere =
   | { status: 'loading' }
   | { status: 'error' }
   | { status: 'not_here' }
+  | { status: 'gone' }
   | { status: 'ready'; data: CrewsAtEvent; offset: number }
 
 /*
@@ -60,7 +62,7 @@ export function useCrewsHere(eventId: string | null) {
     if (crews.success && crews.data) setMine(crews.data.crews)
     else setMine((prev) => prev ?? [])
     if (!page.success || !page.data) {
-      setState({ status: page.errorCode === 'NOT_CHECKED_IN' ? 'not_here' : 'error' })
+      setState({ status: isOrganiserSuspended(page) ? 'gone' : page.errorCode === 'NOT_CHECKED_IN' ? 'not_here' : 'error' })
       return
     }
     const data = page.data

@@ -33,6 +33,7 @@ import { NotificationBell } from '../../components/pulse/NotificationBell'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useToast } from '../../components/Toast'
 import { apiClient } from '../../lib/apiClient'
+import { refreshAppIconBadge } from '../../lib/appBadge'
 import { BOARD_ENABLED } from '../../lib/board'
 import { dmThread, outboxLine, roomThread, useOutbox, type Thread } from '../../lib/chatOutbox'
 import { crewRoomTitle, type CrewRoomRow } from '../../lib/crews'
@@ -156,7 +157,10 @@ function ChatInner() {
       if (!result.success) {
         setPersonalChats((prev) => prev.map((c) => (c.conversation_id === chat.conversation_id ? { ...c, unread_count: chat.unread_count } : c)))
         showToast("Couldn’t mark it read. Try again.", 'error')
+        return
       }
+      // The icon counts conversations with something unread: it just changed.
+      void refreshAppIconBadge()
     },
     [setPersonalChats, showToast]
   )

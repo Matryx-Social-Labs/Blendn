@@ -8,7 +8,7 @@
  * screen takes its word, and still reads the lists when an older server sends
  * none.
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
 
 let mockParams: { id: string; eventId?: string; pseudonym?: string; roomSeed?: string } = { id: 'rh_ben', eventId: 'e1' }
 const mockUser = { id: 'u_me' }
@@ -432,5 +432,58 @@ describe('a request they sent you, opened from their profile (R4.1 6.2)', () => 
     await render(<UserProfile />)
     expect(await screen.findByText('Requested')).toBeTruthy()
     expect(screen.queryByText('Ben wants to message you')).toBeNull()
+  })
+})
+
+describe('their badges', () => {
+  // profile-badges.itest.ts: `{ kind, label }[]`, top-level on `GET /users/:id` beside `friend`, for whoever may see who they are;
+  // the key is absent otherwise. The page reads them from that one answer and asks nothing more.
+  const NIGHTS = [{ kind: 'nights_out', label: '5+ nights this month' }]
+  const connection = { conversationId: null, request: null }
+  const openWith = async (users: Record<string, unknown>) => {
+    api.getPublicProfile.mockResolvedValue({ success: true, data: { ...BEN, connection, ...users } } as never)
+    await render(<UserProfile />)
+    await screen.findByText('Connect')
+  }
+
+  it('reads them from the one answer, and asks nothing more', async () => {
+    await openWith({ friend: { state: 'none', canAdd: true }, badges: NIGHTS })
+    expect(await screen.findByLabelText('Badge: 5+ nights this month')).toBeTruthy()
+    expect(api.getPublicProfile).toHaveBeenCalledTimes(1)
+    expect(api.getProfile).not.toHaveBeenCalled()
+  })
+
+  it('a missing `badges` is none: nothing drawn, and nothing more asked', async () => {
+    await openWith({ friend: { state: 'none', canAdd: true } })
+    expect(screen.queryByLabelText(/^Badge:/)).toBeNull()
+    expect(api.getProfile).not.toHaveBeenCalled()
+  })
+
+  it('draws nothing for none earned, or for a `badges` that is not a list', async () => {
+    await openWith({ badges: [] })
+    expect(screen.queryByLabelText(/^Badge:/)).toBeNull()
+    await screen.unmount()
+    await openWith({ badges: 'nights_out' })
+    expect(screen.queryByLabelText(/^Badge:/)).toBeNull()
+  })
+
+  it('draws none for somebody still anonymous to you, whatever the payload carries', async () => {
+    api.getPublicProfile.mockResolvedValue({ success: true, data: { id: 'rh_ben', name: 'Amber Fox', identityVisible: false, badges: NIGHTS } })
+    await render(<UserProfile />)
+    await screen.findByText('Connect')
+    expect(screen.queryByLabelText(/^Badge:/)).toBeNull()
+    expect(api.getProfile).not.toHaveBeenCalled()
+  })
+
+  it('a late answer for somebody the page has moved on from is not drawn on the next person', async () => {
+    let answerBen: (v: unknown) => void = () => {}
+    api.getPublicProfile.mockImplementation(((id: string) =>
+      id === 'rh_ben' ? new Promise((r) => (answerBen = r)) : Promise.resolve({ success: true, data: { ...BEN, id, name: 'Cleo', connection } })) as never)
+    const view = await render(<UserProfile />)
+    mockParams = { id: 'rh_cleo', eventId: 'e1' }
+    await view.rerender(<UserProfile />)
+    await screen.findByText('Cleo')
+    await act(async () => answerBen({ success: true, data: { ...BEN, connection, badges: NIGHTS } }))
+    expect(screen.queryByLabelText(/^Badge:/)).toBeNull()
   })
 })

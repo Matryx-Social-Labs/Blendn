@@ -56,7 +56,7 @@ jest.mock('../lib/socketClient', () => ({
 }))
 const mockShowToast = jest.fn()
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShowToast }) }))
-jest.mock('expo-notifications', () => ({ getPermissionsAsync: jest.fn() }))
+jest.mock('expo-notifications', () => ({ getPermissionsAsync: jest.fn(), setBadgeCountAsync: jest.fn() }))
 jest.mock('../lib/haptics', () => ({
   H: { destructive: jest.fn(), toggle: jest.fn(), error: jest.fn(), primary: jest.fn(), success: jest.fn(), threshold: jest.fn(), select: jest.fn() },
 }))
@@ -77,6 +77,7 @@ import { ANSWER_DEADLINE_MS, DONE_DWELL_MS } from '../lib/useNotificationFeed'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
 const permissions = Notifications.getPermissionsAsync as jest.Mock
+const setBadge = Notifications.setBadgeCountAsync as jest.Mock
 
 const NOW = Date.now()
 const ago = (ms: number) => new Date(NOW - ms).toISOString()
@@ -625,5 +626,49 @@ describe('landing from a push', () => {
     await render(<Screen />)
     await screen.findByText('New friend request')
     expect(screen.queryByTestId('landing-f1', { includeHiddenElements: true })).toBeNull()
+  })
+})
+
+describe('the app icon (badgeCount, Flow 9 · 9.4)', () => {
+  // notification-feed-details.itest.ts "badgeCount": two unseen rows and a conversation with something unread give 2 and 3.
+  const rows = [friend, match, older]
+
+  it('says the conversations once the bell\'s rows are seen: badgeCount less unreadCount, after the server has them as seen', async () => {
+    api.getNotifications.mockResolvedValue(feed(rows, { unreadCount: 2, badgeCount: 3 }) as never)
+    await render(<Screen />)
+    await waitFor(() => expect(setBadge).toHaveBeenCalledWith(1))
+    expect(api.markNotificationsRead).toHaveBeenCalled()
+  })
+
+  it('does not move the icon when marking seen failed: the server still counts them', async () => {
+    api.getNotifications.mockResolvedValue(feed(rows, { unreadCount: 2, badgeCount: 3 }) as never)
+    api.markNotificationsRead.mockResolvedValue({ success: false } as never)
+    await render(<Screen />)
+    await waitFor(() => expect(api.markNotificationsRead).toHaveBeenCalled())
+    await act(async () => {})
+    expect(setBadge).not.toHaveBeenCalled()
+  })
+
+  it('with nothing unseen, the icon says the whole of badgeCount: the conversations', async () => {
+    api.getNotifications.mockResolvedValue(feed([older], { badgeCount: 2 }) as never)
+    await render(<Screen />)
+    await waitFor(() => expect(setBadge).toHaveBeenCalledWith(2))
+    expect(api.markNotificationsRead).not.toHaveBeenCalled()
+  })
+
+  it('leaves the icon alone for a server that sends no badgeCount', async () => {
+    await render(<Screen />)
+    await waitFor(() => expect(api.markNotificationsRead).toHaveBeenCalled())
+    await act(async () => {})
+    expect(setBadge).not.toHaveBeenCalled()
+  })
+
+  it('sets nothing while the phone has not granted notifications, and never asks', async () => {
+    permissions.mockResolvedValue({ status: 'denied', canAskAgain: false })
+    api.getNotifications.mockResolvedValue(feed(rows, { unreadCount: 2, badgeCount: 3 }) as never)
+    await render(<Screen />)
+    await waitFor(() => expect(api.markNotificationsRead).toHaveBeenCalled())
+    await act(async () => {})
+    expect(setBadge).not.toHaveBeenCalled()
   })
 })

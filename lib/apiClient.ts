@@ -17,7 +17,6 @@ import type { CityOption } from './city'
 import { Logger } from './logger'
 import { markOffline, markOnline } from './networkStatus'
 import type { NotificationFeed } from './notificationFormat'
-import { parseFriendOffer, type FriendOffer } from './friendOffer'
 import type { Friend, FriendInvite, FriendPerson, FriendProfile, FriendRequest, FriendState } from './friends'
 import type { BoardPost, BoardReportReason, BoardRequestStatus, BoardRequests } from './board'
 import type { Badge, Choice, Overlap, ProfileOptions } from './aboutYou'
@@ -645,6 +644,22 @@ export interface EventApiItem {
    * older server; null when every day is cancelled.
    */
   session?: { startTime: string; endTime: string } | null
+  /**
+   * What moved under the people who had heard of the event (blendn-admin #716, `lib/event-change.ts`): when, which, and what
+   * the time and place were before. null, [] and null for an event that has not changed. All absent from an older server
+   * (`parseEventChange`).
+   */
+  changedAt?: string | null
+  changedFields?: Array<'time' | 'venue' | 'cancelled'>
+  changedFrom?: { startTime?: string; endTime?: string; venueName?: string | null; address?: string | null } | null
+  /**
+   * The days of the run and where `session` is in it (`parseEventDays`, blendn-admin #724): `days` is at most 31 of them from
+   * `daysFrom` (1-based), while `dayCount` and `dayNumber` are the whole run. Absent from an older server.
+   */
+  days?: Array<{ date: string; startTime: string; endTime: string; cancelled: boolean; cancelledAt?: string | null }>
+  dayCount?: number
+  daysFrom?: number
+  dayNumber?: number | null
   timezone: string
   status: string
   visibility: string
@@ -979,10 +994,12 @@ export interface UserProfileData {
    */
   connection?: { conversationId: string | null; request: 'sent' | 'received' | null }
   /**
-   * Whether to offer "Add friend" (SCRUM-750): `{ state, canAdd }`, read through `parseFriendOffer`. `GET /users/:id` sends it
-   * once admin `feat/friend-after-reveal` is on staging; `GET /profiles/:id` already does.
+   * Whether to offer "Add friend" (SCRUM-750): `{ state, canAdd }`, read through `parseFriendOffer`. Top-level beside the
+   * profile, as `badges` is: the profile page reads both from this one request.
    */
   friend?: unknown
+  /** Their badges (`{ kind, label }[]`), top-level beside `friend` for whoever may see who they are; read through `parseBadges`. */
+  badges?: unknown
   /** Nested profile object from /api/mobile/profiles/[userId] */
   profile?: {
     /*
@@ -1023,6 +1040,16 @@ export interface UserProfileData {
      * says so (SCRUM-141).
      */
     show_online?: boolean
+    /**
+     * `GET /profiles/:id` (blendn-admin #716): what check-ins earned, for you and for anyone who may see who you are. Absent when
+     * the person turned badges off, for a viewer the profile is anonymous to, and from an older server (`parseBadges`).
+     */
+    badges?: Badge[]
+    /**
+     * Your own profile only: `photos` in order, each `pulled: false`, then the photos moderation took down in the last 7 days,
+     * `pulled: true` with `url: null` (the object is withdrawn) and `was_main`. Absent from an older server (`pulledPhotos`).
+     */
+    photo_states?: Array<{ url: string | null; pulled: boolean; pulled_at: string | null; was_main: boolean }>
     created_at?: string
     updated_at?: string
   }
@@ -1142,6 +1169,13 @@ export const PUSH_CHANNEL_SET = 2
  * ponytail: first pages only. Friends, requests and the blocked set are not paged past these yet; `count` stays the whole list.
  */
 export const LIST_PAGE = { conversations: 50, friends: 100, friendRequests: 50, blocked: 100 } as const
+
+/**
+ * Said on every request, from the one constant the push token posts: a build that knows `event_changed` declares it, and
+ * `GET /notifications` serves a build that does not the old `event_update` row so its tap opens the event (blendn-admin #716,
+ * SCRUM-739). Web sends it too: the server's CORS allow-list names `X-Channel-Set`.
+ */
+export const CHANNEL_SET_HEADER = { 'X-Channel-Set': String(PUSH_CHANNEL_SET) } as const
 
 class ApiClientClass {
   private baseUrl: string
@@ -1412,8 +1446,9 @@ class ApiClientClass {
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      // Which build is asking, so the server can refuse one it no longer serves (Flow 15 15.14). Not from the web build: a custom header there is a CORS preflight the server does not yet allow, and would block every call.
+      // Which build is asking, so the server can refuse one it no longer serves (Flow 15 15.14). Not from the web build, which has no native build number to judge (the server's CORS allow-list names this header and `X-Channel-Set`, so a preflight is no reason).
       ...(Platform.OS !== 'web' ? { 'X-App-Version': appVersionNumber() } : {}),
+      ...CHANNEL_SET_HEADER,
       ...(options.headers as Record<string, string>),
     }
 
@@ -1546,7 +1581,7 @@ class ApiClientClass {
         // whole app until it is killed.
         const { response, body: raw } = await fetchWithTimeout(`${this.baseUrl}/api/mobile/auth/refresh`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...CHANNEL_SET_HEADER },
           body: JSON.stringify({ refreshToken }),
         })
 
@@ -2218,9 +2253,14 @@ class ApiClientClass {
 
   // === PROFILE ENDPOINTS ===
 
-  async getProfile(userId: string): Promise<ApiResponse<UserProfileData>> {
+  /**
+   * `cache: false` reads fresh and leaves the cache alone: the cache holds one profile, and reading somebody else's must not
+   * replace your own.
+   */
+  async getProfile(userId: string, options: { cache?: boolean } = {}): Promise<ApiResponse<UserProfileData>> {
+    const useCache = options.cache !== false
     // Check cache first for instant response
-    const cached = ProfileCache.get(userId)
+    const cached = useCache ? ProfileCache.get(userId) : null
     if (cached) {
       return { success: true, data: cached }
     }
@@ -2228,21 +2268,11 @@ class ApiClientClass {
     const result = await this.queuedRequest<UserProfileData>(`/api/mobile/profiles/${userId}`)
 
     // Cache successful responses
-    if (result.success && result.data) {
+    if (useCache && result.success && result.data) {
       ProfileCache.set(userId, result.data)
     }
 
     return result
-  }
-
-  /**
-   * Whether to offer "Add friend" on somebody's profile (SCRUM-750). `GET /profiles/:id` carries `friend` only for a
-   * person you may see; `GET /users/:id`, which draws the page, does not. Never cached: `getProfile` keeps a profile for
-   * minutes, and a friend state that old offers an ask that was already made.
-   */
-  async getFriendOffer(userId: string): Promise<FriendOffer | null> {
-    const result = await this.queuedRequest<{ friend?: unknown }>(`/api/mobile/profiles/${encodeURIComponent(userId)}`)
-    return result.success ? parseFriendOffer(result.data?.friend) : null
   }
 
   async updateProfile(

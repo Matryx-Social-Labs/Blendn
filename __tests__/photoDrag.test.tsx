@@ -6,10 +6,12 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils'
 import { State } from 'react-native-gesture-handler'
 
+jest.mock('@react-native-async-storage/async-storage', () => require('@react-native-async-storage/async-storage/jest/async-storage-mock'))
 jest.mock('../lib/photoUtils', () => ({
   cachePhoto: jest.fn(async () => null),
   deletePhoto: jest.fn(async () => true),
   loadUserPhotos: jest.fn(),
+  loadPulledPhotos: jest.fn(async () => []),
   reorderPhotos: jest.fn(),
   selectAndUploadPhoto: jest.fn(),
   uploadPhoto: jest.fn(),

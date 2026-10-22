@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { useToast } from '../components/Toast'
 import { apiClient } from './apiClient'
+import { iconBadgeAfterRead, iconBadgeFor, setAppIconBadge } from './appBadge'
 import { askFriendsSeeMe, useStillHere } from './friendsSeeMeAsk'
 import { readAnswered, rememberAnswered, type Outcome } from './answeredRequests'
 import { crewsApi } from './crewsApi'
@@ -87,11 +88,19 @@ export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) =
     }
   }, [])
 
-  /** The server's count is cleared by opening: the screen never shows it, the bell re-reads on return. */
-  const markSeen = useCallback(() => {
-    apiClient.markNotificationsRead().catch((error) => {
-      Logger.warn('notifications', 'markRead:failed', { error: error as never })
-    })
+  /**
+   * The server's count is cleared by opening: the screen never shows it, the bell re-reads on return. The app icon follows
+   * once the server has it (`afterRead`: what is left is the conversations, `lib/appBadge`), never ahead of it.
+   */
+  const markSeen = useCallback((afterRead: number | null) => {
+    apiClient
+      .markNotificationsRead()
+      .then((marked) => {
+        if (marked?.success) void setAppIconBadge(afterRead)
+      })
+      .catch((error) => {
+        Logger.warn('notifications', 'markRead:failed', { error: error as never })
+      })
   }, [])
 
   /** `open`/`pull` replace what is loaded; `live` folds a new page into it. */
@@ -117,7 +126,8 @@ export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) =
           onArriveRef.current?.(arrived.length)
         }
         setLoad('ready')
-        if (arrived.length || page.some((n) => n.readAt === null)) markSeen()
+        if (arrived.length || page.some((n) => n.readAt === null)) markSeen(iconBadgeAfterRead(result.data))
+        else void setAppIconBadge(iconBadgeFor(result.data))
         // The list shows at once; whether its requests were answered elsewhere is reconciled after (a second read).
         void incomingRequests(page).then((incoming) => {
           if (!incoming) return
@@ -354,8 +364,8 @@ function answerRequest(item: NotificationItem, action: 'accept' | 'decline'): Pr
 
 /**
  * The friend requests still waiting on you (their id → who sent it), when the page has one to check; `null` when it has none or the list
- * did not load (then nothing is closed). The server does not say whether a request's row is still open (`open` is not
- * sent), so a request accepted or declined on Friends › Requests would wait here for good without this.
+ * did not load (then nothing is closed). A server that says whether a request's row is still open sends `open` (#716), and an
+ * older one does not, so a request accepted or declined on Friends › Requests would wait here for good without this.
  */
 async function incomingRequests(page: readonly NotificationItem[]): Promise<ReadonlyMap<string, string> | null> {
   if (!page.some((n) => n.kind === 'friend_request' && n.open !== false)) return null

@@ -26,7 +26,6 @@ jest.mock('../lib/apiClient', () => ({
     createMessageRequest: jest.fn(),
     likeAtEvent: jest.fn(),
     respondToMessageRequest: jest.fn(),
-    getFriendOffer: jest.fn(),
     sendFriendRequest: jest.fn(),
   },
 }))
@@ -93,15 +92,15 @@ const BEN = { id: 'u_ben', name: 'Ben', photos: ['https://cdn/ben.jpg'], bio: 'H
 const OFFER = (state: string, canAdd: boolean) => ({ state, canAdd }) as never
 const open = async (offer: unknown = OFFER('none', true), id = 'u_ben', over: Record<string, unknown> = {}) => {
   mockParams = { id }
-  api.getPublicProfile.mockResolvedValue({ success: true, data: { ...BEN, id, ...over } })
-  api.getFriendOffer.mockResolvedValue(offer as never)
+  // `friend` is top-level on `GET /users/:id`, beside the profile: the page's one request.
+  api.getPublicProfile.mockResolvedValue({ success: true, data: { ...BEN, id, ...(offer === null ? {} : { friend: offer }), ...over } })
   await render(<UserProfile />)
   await screen.findByText('Ben')
 }
 const flush = () => act(async () => { for (let i = 0; i < 8; i++) await Promise.resolve() })
 
 beforeEach(() => {
-  api.getFriendOffer.mockReset()
+  api.getProfile.mockReset()
   api.sendFriendRequest.mockReset()
   mockShowToast.mockReset()
 })
@@ -115,7 +114,9 @@ describe('what the dock draws for each state: one lit action', () => {
     expect(await screen.findByTestId('profile-friend')).toBeTruthy()
     expect(screen.getByLabelText('Add Ben as a friend')).toBeTruthy()
     expect(screen.getByText('Add friend')).toBeTruthy()
-    expect(api.getFriendOffer).toHaveBeenCalledWith('u_ben')
+    // One request: the offer came with the profile, and nothing else was asked.
+    expect(api.getPublicProfile).toHaveBeenCalledTimes(1)
+    expect(api.getProfile).not.toHaveBeenCalled()
     expect(fillOf('profile-friend')).toBe(LIT)
     expect(fillOf('profile-cta')).not.toBe(LIT)
   })
@@ -153,12 +154,8 @@ describe('what the dock draws for each state: one lit action', () => {
     expect(fillOf('profile-cta')).toBe(LIT)
   })
 
-  it('a friend read that fails draws nothing and the page still opens', async () => {
-    mockParams = { id: 'u_ben' }
-    api.getPublicProfile.mockResolvedValue({ success: true, data: BEN })
-    api.getFriendOffer.mockRejectedValue(new Error('boom'))
-    await render(<UserProfile />)
-    expect(await screen.findByText('Ben')).toBeTruthy()
+  it('a `friend` that is not one draws nothing, and the page still opens', async () => {
+    await open({ state: 'maybe' })
     await flush()
     expect(screen.queryByTestId('profile-friend')).toBeNull()
     expect(screen.queryByTestId('profile-failed')).toBeNull()
@@ -172,35 +169,24 @@ describe('the dock draws once', () => {
     expect(screen.getByTestId('profile-friend')).toBeTruthy()
   })
 
-  it('a profile that carries `friend` is believed, with no second read needed', async () => {
-    await open(null, 'u_ben', { friend: { state: 'none', canAdd: true } })
-    expect(screen.getByTestId('profile-friend')).toBeTruthy()
-  })
-
-  it('the server’s `friend` on the profile wins over the fallback read', async () => {
-    await open(OFFER('none', true), 'u_ben', { friend: { state: 'requested', canAdd: false } })
+  it('the profile’s own `friend` is believed, with no second read', async () => {
+    await open(OFFER('requested', false))
     expect(screen.queryByTestId('profile-friend')).toBeNull()
     expect(screen.getByText('Friend request sent')).toBeTruthy()
-  })
-
-  it('a `friend` that is not one falls back to the read', async () => {
-    await open(OFFER('none', true), 'u_ben', { friend: { state: 'maybe' } })
-    expect(screen.getByTestId('profile-friend')).toBeTruthy()
+    expect(api.getProfile).not.toHaveBeenCalled()
   })
 
   it('a late answer from an earlier load draws nothing', async () => {
     let late: (v: unknown) => void = () => {}
     api.getPublicProfile.mockReturnValueOnce(new Promise((r) => (late = r)) as never)
-    api.getFriendOffer.mockResolvedValue(OFFER('none', true))
     mockParams = { id: 'u_ben' }
     const view = await render(<UserProfile />)
     // The page is opened for somebody else before the first has answered; nobody is offered there.
     mockParams = { id: 'u_zed' }
     api.getPublicProfile.mockResolvedValue({ success: true, data: { ...BEN, id: 'u_zed', name: 'Zed' } })
-    api.getFriendOffer.mockResolvedValue(null)
     await view.rerender(<UserProfile />)
     await screen.findByText('Zed')
-    await act(async () => late({ success: true, data: BEN }))
+    await act(async () => late({ success: true, data: { ...BEN, friend: OFFER('none', true) } }))
     await flush()
     expect(screen.queryByTestId('profile-friend')).toBeNull()
   })
@@ -209,26 +195,24 @@ describe('the dock draws once', () => {
 describe('who is asked about at all', () => {
   it('not somebody you cannot see yet', async () => {
     mockParams = { id: 'u_ben' }
-    api.getPublicProfile.mockResolvedValue({ success: true, data: { ...BEN, identityVisible: false } })
-    api.getFriendOffer.mockResolvedValue(OFFER('none', true))
+    api.getPublicProfile.mockResolvedValue({ success: true, data: { ...BEN, identityVisible: false, friend: OFFER('none', true) } })
     await render(<UserProfile />)
     await flush()
     expect(api.getPublicProfile).toHaveBeenCalled()
-    // Asked beside the profile (nobody knows yet whether they may be seen), and never drawn for somebody who may not.
+    // Never drawn for somebody who may not be seen, whatever the payload says.
     expect(screen.queryByTestId('profile-friend')).toBeNull()
   })
 
   it('not a room handle: it has no real id to send', async () => {
     await open(OFFER('none', true), 'rh_ben')
     await flush()
-    expect(api.getFriendOffer).not.toHaveBeenCalled()
     expect(screen.queryByTestId('profile-friend')).toBeNull()
   })
 
   it('not yourself', async () => {
     await open(OFFER('none', true), 'u_me')
     await flush()
-    expect(api.getFriendOffer).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('profile-friend')).toBeNull()
   })
 })
 
