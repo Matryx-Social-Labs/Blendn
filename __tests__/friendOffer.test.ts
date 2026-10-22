@@ -99,7 +99,8 @@ it('says who a request went to, and never names a place', () => {
  * offers anything): only the one conversation and the profile read it. A reader of the list's rows would draw a stale
  * or absent offer, so the places that parse one are pinned.
  */
-it('reads the friend offer only from GET /conversations/:id, GET /profiles/:id and GET /users/:id', () => {
+// GET /users/:id carries `friend` top-level, so the profile page reads it there; the separate /profiles/:id read is gone.
+it('reads the friend offer only from GET /conversations/:id and GET /users/:id', () => {
   const fs = require('fs') as typeof import('fs')
   const path = require('path') as typeof import('path')
   const root = path.join(__dirname, '..')
@@ -109,5 +110,5 @@ it('reads the friend offer only from GET /conversations/:id, GET /profiles/:id a
       return e.isDirectory() ? walk(rel) : /\.(ts|tsx)$/.test(e.name) ? [rel] : []
     })
   const readers = ['app', 'components', 'lib'].flatMap(walk).filter((f) => /parseFriendOffer\(/.test(fs.readFileSync(path.join(root, f), 'utf8')))
-  expect(readers.sort()).toEqual(['app/private-chat/[conversationId].tsx', 'app/user/[id].tsx', 'lib/apiClient.ts', 'lib/friendOffer.ts'])
+  expect(readers.sort()).toEqual(['app/private-chat/[conversationId].tsx', 'app/user/[id].tsx', 'lib/friendOffer.ts'])
 })
