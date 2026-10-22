@@ -69,6 +69,25 @@ describe('<Banner>', () => {
     expect(JSON.stringify(screen.toJSON())).toContain(SELECTION[hue].glyph)
   })
 
+  it.each(['offline', 'paused', 'error'] as const)('%s: a problem being reported, so its action is the quiet secondary, never lit', async (kind) => {
+    await render(
+      <HueProvider value="rose">
+        <Banner kind={kind} text="Something is wrong." action={{ label: 'Retry', onPress: jest.fn() }} testID="b" />
+      </HueProvider>
+    )
+    expect(flat('b-action').backgroundColor).toBe(COLOR.surfaceRaised)
+    expect(screen.queryByTestId('b-action-rim', { includeHiddenElements: true })).toBeNull()
+  })
+
+  it.each(['info', 'visibility'] as const)('%s: an offer in the world, so its action is lit', async (kind) => {
+    await render(
+      <HueProvider value="rose">
+        <Banner kind={kind} text="Push is off." action={{ label: 'Turn on', onPress: jest.fn() }} testID="b" />
+      </HueProvider>
+    )
+    expect(flat('b-action').backgroundColor).toBe(COLOR.selectionRoseFill)
+  })
+
   it('a banner without an action draws no button', async () => {
     await render(<Banner kind="offline" text="Offline." testID="b" />)
     expect(screen.queryByRole('button')).toBeNull()

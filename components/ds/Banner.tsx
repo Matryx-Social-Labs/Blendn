@@ -17,6 +17,12 @@ const LOOK: Record<BannerKind, { fill: string; icon: IconName }> = {
   error: { fill: COLOR.destructiveTint, icon: 'circle-alert' },
 }
 
+/**
+ * Whose action is lit: an offer inside the screen's world (Turn on, Show who I am). Offline, paused and error are a problem
+ * being reported on a tinted strip: their action (Retry, Resume) is the quiet `secondary`, so the hue never cheers a failure.
+ */
+const LIT_KINDS: ReadonlySet<BannerKind> = new Set(['info', 'visibility'])
+
 export type BannerProps = {
   kind: BannerKind
   text: string
@@ -24,7 +30,7 @@ export type BannerProps = {
   mono?: string
   /** The kind's own glyph unless given. */
   icon?: IconName
-  /** A lit button in the screen's hue (`icon`: its leading glyph, 16 pt). */
+  /** A 36 pt button (`icon`: its leading glyph, 16 pt): lit in the screen's hue on `info` and `visibility`, `secondary` on the others. */
   action?: { label: string; onPress: () => void; icon?: IconName }
   /** The action is in flight: the button holds its flare and, after 300 ms, shows its spinner. */
   busy?: boolean
@@ -39,7 +45,8 @@ export type BannerProps = {
  *
  * No haptic: a banner arrives unsolicited, and its action's haptic belongs to
  * the action. A system banner is announced politely when it appears; the
- * VisibilityBanner is read in place. The action is a `lit` Button, in the hue of the screen the banner sits in. Text scales freely; past 1.3× the action
+ * VisibilityBanner is read in place. On `info` and `visibility` the action is a `lit` Button in the screen's hue; on offline, paused
+ * and error it is `secondary` (`LIT_KINDS`). Text scales freely; past 1.3× the action
  * wraps under the sentence. Increase Contrast adds the 50% hairline.
  */
 export function Banner({ kind, text, mono, icon, action, busy = false, testID }: BannerProps) {
@@ -77,7 +84,7 @@ export function Banner({ kind, text, mono, icon, action, busy = false, testID }:
       </Text>
       {action ? (
         <View style={wrapped ? styles.under : undefined}>
-          <Button kind="lit" size="sm" icon={action.icon} label={action.label} loading={busy} onPress={action.onPress} testID={testID && `${testID}-action`} />
+          <Button kind={LIT_KINDS.has(kind) ? 'lit' : 'secondary'} size="sm" icon={action.icon} label={action.label} loading={busy} onPress={action.onPress} testID={testID && `${testID}-action`} />
         </View>
       ) : null}
     </View>
