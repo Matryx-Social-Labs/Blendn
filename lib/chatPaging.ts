@@ -17,16 +17,35 @@ export function cursorOf(body: unknown): string | null {
   return typeof meta.nextCursor === 'string' && meta.nextCursor ? meta.nextCursor : null
 }
 
-/** A board post that may carry what the server will say about a post it took down (SV9, not sent yet). */
-export type BoardPostView = BoardPost & {
-  /**
-   * Proposed: the author's own post that moderation took down is listed to them alone with `takenDown: true`, so the
-   * board can say why it went (Flow 4 · 4.10 frame 36). Until then it just vanishes, as it did.
-   */
-  takenDown?: boolean
+/**
+ * A post of yours that moderation took down (SV9), as the server's first page lists it beside `posts`: yours only (another
+ * reader gets none), newest first, at most 20, never your own withdrawals, never on a later page.
+ */
+export type TakenDown = { id: string; kind: BoardPost['kind']; body: string; createdAt: string; takenDownAt: string }
+
+/** A board post as the Board draws it: `takenDown` marks the card that says why the post went. */
+export type BoardPostView = BoardPost & { takenDown?: boolean }
+
+type BoardPage = {
+  posts: BoardPostView[]
+  /** The first page only. */
+  takenDown?: TakenDown[]
+  pagination?: { hasMore?: boolean; nextCursor?: string | null; totalCount?: number }
 }
 
-type BoardPage = { posts: BoardPostView[]; pagination?: { hasMore?: boolean; nextCursor?: string | null } }
+/** The cards for posts taken down: yours, with no spaces and nobody asking, drawn by `takenDown`. */
+export const goneFrom = (taken: readonly TakenDown[] | undefined): BoardPostView[] =>
+  (taken ?? []).map((t) => ({
+    id: t.id,
+    kind: t.kind,
+    body: t.body,
+    spacesLeft: null,
+    createdAt: t.createdAt,
+    author: 'You',
+    mine: true,
+    requestCount: 0,
+    takenDown: true,
+  }))
 
 /** The next page of an event's board, after `cursor`. */
 export function getBoardPage(eventId: string, cursor: string): Promise<ApiResponse<BoardPage>> {
@@ -34,13 +53,15 @@ export function getBoardPage(eventId: string, cursor: string): Promise<ApiRespon
 }
 
 /**
- * A refresh's newest page laid over what the list already holds: the page first, then the older pages loaded earlier
- * (`older` names them), minus anything the page now has. The page's copy wins. A forced refresh does not use this:
- * it starts the list over, which is how a block or a pull drops what was loaded under it.
+ * A refresh's newest page laid over what the list already holds. With no older page loaded (`older` empty) the page is the
+ * list. With some, the page comes first and everything held that is not on it stays: an item that slid off the newest
+ * page (a room that was bumped down, a conversation that went quiet) is still on screen, in the older pages' place,
+ * until a forced load starts the list over (which is also how a block drops people). The page's copy wins.
  */
 export function laidOver<T>(page: readonly T[], held: readonly T[], idOf: (item: T) => string, older: ReadonlySet<string>): T[] {
+  if (older.size === 0) return [...page]
   const onPage = new Set(page.map(idOf))
-  return [...page, ...held.filter((item) => older.has(idOf(item)) && !onPage.has(idOf(item)))]
+  return [...page, ...held.filter((item) => !onPage.has(idOf(item)))]
 }
 
 /** `GET /chat/groups` pages by number; this is the next one, or null on the last (or when it sends no paging). */

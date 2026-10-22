@@ -123,7 +123,7 @@ export const BoardPostCard = memo(function BoardPostCard({
   onWriteNew?: () => void
 }) {
   const bold = useBoldText()
-  // Yours, and moderation took it down (SV9, not sent yet): the card says so and why, in place of the post.
+  // Yours, and moderation took it down (SV9): the card says so and why, in place of the post.
   if (post.mine && post.takenDown) return <TakenDownCard onWriteNew={onWriteNew} />
   const offer = post.kind === 'offer'
   const spaces = offer ? spacesLabel(post.spacesLeft) : null
@@ -171,8 +171,9 @@ export const BoardPostCard = memo(function BoardPostCard({
 
 /**
  * "Your post was taken down." (Flow 4 · 4.10 frame 36): a solid card with the 56 pt well, the reason, and one text
- * action that opens the composer. No haptic, nothing said to anybody who asked: their row just goes. Built behind a
- * field the server does not send yet (`takenDown`, lib/chatPaging.ts), so today it never draws.
+ * action that opens the composer. No haptic, nothing said to anybody who asked: their row just goes. Drawn from the
+ * server's `takenDown` list on the board's first page (lib/chatPaging.ts `goneFrom`): yours alone, so the card never draws for
+ * anybody else's post, and on a server that sends none it never draws.
  */
 function TakenDownCard({ onWriteNew }: { onWriteNew?: () => void }) {
   const bold = useBoldText()

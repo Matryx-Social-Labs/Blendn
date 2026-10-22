@@ -52,6 +52,14 @@ jest.mock('expo-notifications', () => ({
     return { remove: () => mockPushListeners.splice(mockPushListeners.indexOf(fn), 1) }
   },
 }))
+const mockRemoved: Array<(d: { eventId: string; postId: string }) => void> = []
+jest.mock('../lib/socketClient', () => ({
+  ...jest.requireActual('../lib/socketClient'),
+  subscribeToBoardPostRemoved: (cb: never) => {
+    mockRemoved.push(cb)
+    return () => {}
+  },
+}))
 jest.mock('../lib/sheet', () => ({ showSheet: jest.fn() }))
 jest.mock('../lib/logger', () => ({
   Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() },
@@ -689,33 +697,70 @@ describe('H.success on the server’s yes (H1)', () => {
   })
 })
 
-describe('a post taken down (C8, 4.10 frame 36; the field is not sent yet)', () => {
-  const gone = { ...SEEKING, id: 'p-mine', author: 'You', mine: true, takenDown: true }
+describe('a post taken down (C8, SV9: the server’s top-level takenDown on the first page)', () => {
+  const taken = { id: 'p-mine', kind: 'seeking', body: 'Selling a ticket, dm me', createdAt: '2026-10-01T09:00:00Z', takenDownAt: '2026-10-01T09:30:00Z' }
+  const withTaken = (posts: BoardPost[], takenDown: object[]) => ({ success: true, data: { posts, takenDown } })
+
+  beforeEach(() => {
+    mockRemoved.length = 0
+  })
 
   it('says so to its author, and why, in place of the post, with a way to write another', async () => {
-    api.getBoard.mockResolvedValue(board([gone as BoardPost, OFFER]))
+    api.getBoard.mockResolvedValue(withTaken([OFFER], [taken]) as never)
     await render(<BoardScreen />)
     expect(await screen.findByText('Your post was taken down.')).toBeTruthy()
     expect(screen.getByText('It didn’t meet the community guidelines.')).toBeTruthy()
-    expect(screen.queryByText(gone.body)).toBeNull()
-    // No "Take down" on something already down, and nothing to ask of it.
+    // The card, never the words that were taken down; yours first.
+    expect(screen.queryByText(taken.body)).toBeNull()
+    expect(screen.getByText(OFFER.body)).toBeTruthy()
     expect(screen.queryByLabelText('Take down your post')).toBeNull()
     await fireEvent.press(screen.getByLabelText('Write a new post'))
     expect(screen.getByLabelText('Your post')).toBeTruthy()
   })
 
-  it('is not drawn for a post the server does not say was taken down: nothing changes today', async () => {
-    api.getBoard.mockResolvedValue(board([{ ...gone, takenDown: undefined } as BoardPost]))
+  it('every one in the list gets its card', async () => {
+    api.getBoard.mockResolvedValue(withTaken([], [taken, { ...taken, id: 'p-mine-2', takenDownAt: '2026-10-01T09:40:00Z' }]) as never)
     await render(<BoardScreen />)
-    expect(await screen.findByText(gone.body)).toBeTruthy()
+    await screen.findAllByText('Your post was taken down.')
+    expect(screen.getAllByTestId('board-taken-down')).toHaveLength(2)
+  })
+
+  it('a server that sends no list draws no card: your own live post is just your post', async () => {
+    api.getBoard.mockResolvedValue(board([{ ...SEEKING, id: 'p-x', mine: true } as BoardPost]))
+    await render(<BoardScreen />)
+    expect(await screen.findByText(SEEKING.body)).toBeTruthy()
     expect(screen.queryByTestId('board-taken-down')).toBeNull()
   })
 
-  it('is never drawn for somebody else’s post', async () => {
-    api.getBoard.mockResolvedValue(board([{ ...OFFER, takenDown: true } as BoardPost]))
+  it('a post you just wrote that was then taken down is the card, not a post that is still yours', async () => {
+    const mine = { ...SEEKING, id: 'p-mine', body: taken.body, author: 'Lunar Fox', mine: true }
+    api.getBoard.mockResolvedValueOnce(board([OFFER]))
+    api.postToBoard.mockResolvedValue({ success: true, data: { id: 'p-mine', kind: 'seeking', body: taken.body, spacesLeft: null, createdAt: taken.createdAt } } as never)
     await render(<BoardScreen />)
-    expect(await screen.findByText(OFFER.body)).toBeTruthy()
-    expect(screen.queryByTestId('board-taken-down')).toBeNull()
+    await fireEvent.press(await screen.findByLabelText('Write a post'))
+    await fireEvent.press(screen.getByLabelText(/^I’m looking/))
+    await fireEvent.changeText(screen.getByLabelText('Your post'), taken.body)
+    api.getBoard.mockResolvedValue(withTaken([OFFER], [taken]) as never)
+    await fireEvent.press(screen.getByLabelText('Post'))
+    expect(await screen.findByText('Your post was taken down.')).toBeTruthy()
+    expect(screen.queryByText(mine.body)).toBeNull()
+  })
+
+  it('board:postRemoved for this event drops the post at once and re-reads, which brings the card; another event’s is ignored', async () => {
+    const mine = { ...SEEKING, id: 'p-mine', body: taken.body, author: 'Lunar Fox', mine: true }
+    api.getBoard.mockResolvedValue(board([mine, OFFER]))
+    await render(<BoardScreen />)
+    expect(await screen.findByText(taken.body)).toBeTruthy()
+    const reads = api.getBoard.mock.calls.length
+
+    await act(async () => mockRemoved.forEach((f) => f({ eventId: 'other', postId: 'p-mine' })))
+    expect(api.getBoard.mock.calls.length).toBe(reads)
+
+    api.getBoard.mockResolvedValue(withTaken([OFFER], [taken]) as never)
+    await act(async () => mockRemoved.forEach((f) => f({ eventId: 'e1', postId: 'p-mine' })))
+    expect(await screen.findByText('Your post was taken down.')).toBeTruthy()
+    expect(api.getBoard.mock.calls.length).toBe(reads + 1)
+    expect(screen.queryByText(taken.body)).toBeNull()
   })
 })
 

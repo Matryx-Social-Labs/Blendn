@@ -250,3 +250,14 @@ it('a block made anywhere reads the roster again from the start (H2)', async () 
   expect(api.getChatParticipants).toHaveBeenCalledWith('g1', { limit: 100, offset: 0 })
   expect(screen.queryByLabelText('Amber Fox, Organiser')).toBeNull()
 })
+
+it('lists its rows by fixed layout once the header is measured, and not before (getItemLayout)', async () => {
+  await open()
+  expect(screen.getByTestId('info-list').props.getItemLayout).toBeUndefined()
+  await act(async () => fireEvent(screen.getByTestId('info-header'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 400, height: 700 } } }))
+  const layout = screen.getByTestId('info-list').props.getItemLayout as (d: unknown, i: number) => { length: number; offset: number; index: number }
+  const first = layout(null, 0)
+  const third = layout(null, 2)
+  expect(first.offset).toBe(700)
+  expect(third.offset - first.offset).toBe(2 * first.length)
+})

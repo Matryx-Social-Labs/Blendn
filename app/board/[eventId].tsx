@@ -1,11 +1,12 @@
 import * as Notifications from 'expo-notifications'
 import { Redirect, router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native'
+import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native'
 import Animated, { useReducedMotion } from 'react-native-reanimated'
 
+import { PageFooter } from '../../components/chat/PageFooter'
 import { Button } from '../../components/ds/Button'
-import { font, minTarget, useBoldText } from '../../components/ds/shared'
+import { font, HueProvider, useBoldText } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { TopBar } from '../../components/ds/TopBar'
 import {
@@ -35,13 +36,14 @@ import {
 } from '../../lib/board'
 import { openBlendn } from '../../lib/blendnOverlay'
 import { Logger } from '../../lib/logger'
+import { subscribeToBoardPostRemoved } from '../../lib/socketClient'
 import { useLatest } from '../../lib/useLatest'
 import { useLiveSync } from '../../lib/useLiveSync'
 import { useOnBlock } from '../../lib/useOnBlock'
 import { boardSafetySheet } from '../../lib/safetyUtils'
 import { showSheet } from '../../lib/sheet'
-import { cursorOf, getBoardPage, type BoardPostView } from '../../lib/chatPaging'
-import { COLOR, FONT_FAMILY, RADIUS, SPACE, STAGGER } from '../../lib/design/tokens'
+import { cursorOf, getBoardPage, goneFrom, type BoardPostView, type TakenDown } from '../../lib/chatPaging'
+import { COLOR, RADIUS, SPACE, STAGGER } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useTopBarOverlay } from '../../lib/useTopBarState'
 
@@ -58,7 +60,11 @@ import { useTopBarOverlay } from '../../lib/useTopBarState'
  */
 export default function BoardRoute() {
   if (!BOARD_ENABLED) return <Redirect href="/(tabs)/events" />
-  return <BoardScreen />
+  return (
+    <HueProvider value="rose">
+      <BoardScreen />
+    </HueProvider>
+  )
 }
 
 type Load =
@@ -174,6 +180,10 @@ export function BoardScreen() {
       }
       const listed = (board.data.posts as BoardPostView[]).filter((p) => !removed.current.has(p.id))
       for (const p of listed) created.current.delete(p.id)
+      // Yours that moderation took down, from the first page (SV9): the card in place of the post. One you just wrote
+      // and that was taken down is this card now, not a post that is still "yours" locally.
+      const gone = goneFrom((board.data as { takenDown?: TakenDown[] }).takenDown)
+      for (const g of gone) created.current.delete(g.id)
       // The newest page replaces the newest page; the older pages this screen loaded stay under it, and keep their cursor.
       const onPage = new Set(listed.map((p) => p.id))
       older.current = older.current.filter((p) => !onPage.has(p.id) && !removed.current.has(p.id))
@@ -183,7 +193,7 @@ export function BoardScreen() {
       if (was.kind === 'ready' && !was.posts.length && listed.length) {
         rises.current = { ...rises.current, ids: new Set(listed.slice(0, STAGGER.itemsMax).map((p) => p.id)) }
       }
-      setLoad({ kind: 'ready', posts: [...created.current.values(), ...listed, ...older.current] })
+      setLoad({ kind: 'ready', posts: [...gone, ...created.current.values(), ...listed, ...older.current] })
       setRefreshFailed(false)
       return true
     } catch (error) {
@@ -226,6 +236,16 @@ export function BoardScreen() {
     })
     return () => sub.remove()
   }, [fetchBoard])
+  /* Your post was taken down (the socket tells its author alone): it goes at once, and the re-read brings the card. */
+  useEffect(
+    () =>
+      subscribeToBoardPostRemoved((data) => {
+        if (data.eventId !== eventId) return
+        removed.current.add(data.postId)
+        void fetchBoard()
+      }),
+    [eventId, fetchBoard]
+  )
   useLiveSync({
     enabled: !!eventId,
     onSync: async () => {
@@ -405,7 +425,7 @@ export function BoardScreen() {
         })
       )
     },
-    [eventId, fetchBoard]
+    [eventId]
   )
 
   const askFor = useCallback(
@@ -516,22 +536,7 @@ export function BoardScreen() {
           </Animated.View>
         }
         ListFooterComponent={
-          moreState === 'loading' ? (
-            <Text accessibilityRole="progressbar" accessibilityLabel="Loading more posts" style={[font('meta', bold), styles.secondary, styles.centre]}>
-              Loading…
-            </Text>
-          ) : moreState === 'failed' ? (
-            <Pressable
-              testID="board-more-failed"
-              onPress={() => void loadMore()}
-              accessibilityRole="button"
-              accessibilityLabel="Couldn’t load more posts. Try again"
-              hitSlop={(minTarget() - SPACE.xl) / 2}
-              style={styles.moreFailed}
-            >
-              <Text style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>Couldn’t load more · Try again</Text>
-            </Pressable>
-          ) : null
+          <PageFooter loading={moreState === 'loading'} failed={moreState === 'failed'} onRetry={() => void loadMore()} what="posts" testID="board-more-failed" />
         }
         // A page of posts at a time as the end nears; each card is its own height, so the list windows and nothing else is done to it.
         onEndReached={() => {
@@ -601,7 +606,6 @@ const styles = StyleSheet.create({
   secondary: { color: COLOR.textSecondary },
   ink: { color: COLOR.textPrimary },
   centre: { textAlign: 'center' },
-  moreFailed: { alignSelf: 'center', paddingVertical: SPACE.md },
   header: { gap: SPACE.lg, marginBottom: SPACE.lg },
   list: { paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.xxl, gap: SPACE.lg },
   state: { flex: 1, paddingHorizontal: SPACE.gutter, justifyContent: 'center' },

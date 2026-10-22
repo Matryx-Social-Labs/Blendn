@@ -6,6 +6,7 @@ import { Animated, Platform, Pressable, StyleSheet, Text, useWindowDimensions, V
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { BrokenLink } from '../../components/chat/BrokenLink'
+import { PageFooter } from '../../components/chat/PageFooter'
 import { LeaveRoomSheet, leavePlaceLine, MuteSheet } from '../../components/chat/RoomSheets'
 import { SenderCard, type Sender } from '../../components/chat/SenderCard'
 import { Avatar } from '../../components/ds/Avatar'
@@ -13,7 +14,7 @@ import { IconButton } from '../../components/ds/IconButton'
 import { ScrimPill, TimeBadge } from '../../components/ds/MonoFamily'
 import { SectionHeader } from '../../components/ds/SectionHeader'
 import { SettingsGroup, SettingsRow } from '../../components/ds/SettingsRow'
-import { font, HueProvider, minTarget, useBoldText } from '../../components/ds/shared'
+import { font, HueProvider, useBoldText } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { Icon } from '../../components/ui/Icon'
 import { PhotoScrim, StatusScrim } from '../../components/ui/GradientFill'
@@ -205,13 +206,20 @@ function ChatInfoInner() {
   /* One height for every row at every text size: the face, the gap and a name capped at 1.3x on one line. */
   const rowHeight = face + SPACE.sm + Math.ceil(TYPE.caption.lineHeight * NAME_SCALE_CAP)
   const showPeople = !loading && !failed
+  /*
+   * Fixed rows, so the list can place any of them without measuring: a row is its height and the gap under it, and the header (the
+   * hero, the rows, the heading) is measured once. Until it is, the list measures as it always did.
+   */
+  const [headerHeight, setHeaderHeight] = useState(0)
+  const rowStride = rowHeight + SPACE.md
+  const getItemLayout = headerHeight > 0 ? (_: unknown, index: number) => ({ length: rowStride, offset: headerHeight + index * rowStride, index }) : undefined
 
   const renderMember = ({ item: m }: { item: Member }) => (
     <MemberCell member={m} you={m.userId === user?.id} chatGroupId={chatGroupId} cell={cell} face={face} height={rowHeight} onOpen={setCardFor} />
   )
 
   const header = (
-    <View>
+    <View testID="info-header" onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}>
       <View style={styles.hero}>
         {cover ? <Image source={{ uri: cover }} contentFit="cover" style={StyleSheet.absoluteFill} accessible={false} /> : null}
         <StatusScrim style={styles.headScrim} />
@@ -305,26 +313,7 @@ function ChatInfoInner() {
 
   const footer = (
     <View style={styles.body}>
-      {showPeople && loadingMore ? (
-        <Text accessibilityRole="progressbar" accessibilityLabel="Loading more people" style={[font('meta', bold), styles.secondary, styles.more]}>
-          Loading…
-        </Text>
-      ) : null}
-      {showPeople && moreFailed ? (
-        <Pressable
-          testID="info-members-more-failed"
-          onPress={() => {
-            setMoreFailed(false)
-            fetchMore()
-          }}
-          accessibilityRole="button"
-          accessibilityLabel="Couldn’t load more people. Try again"
-          hitSlop={(minTarget() - SPACE.xl) / 2}
-          style={styles.more}
-        >
-          <Text style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>Couldn’t load more · Try again</Text>
-        </Pressable>
-      ) : null}
+      {showPeople ? <PageFooter loading={loadingMore} failed={moreFailed} onRetry={() => { setMoreFailed(false); fetchMore() }} what="people" testID="info-members-more-failed" /> : null}
 
       {/* The danger zone: apart, after a hairline, in the destructive tint. */}
       <View style={styles.hairline} />
@@ -363,6 +352,7 @@ function ChatInfoInner() {
         keyExtractor={(m: Member) => m.userId}
         renderItem={renderMember}
         numColumns={COLUMNS}
+        getItemLayout={getItemLayout}
         columnWrapperStyle={styles.gridRow}
         ListHeaderComponent={header}
         ListFooterComponent={footer}
