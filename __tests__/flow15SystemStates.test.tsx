@@ -145,6 +145,23 @@ describe('Not found (15.12)', () => {
     expect(mockReplace).toHaveBeenCalledWith('/(tabs)/events')
   })
 
+  it('has no native header: the route is registered with headerShown false (the stack titled it "+not-found" in white)', () => {
+    const layout = require('fs').readFileSync(require('path').join(__dirname, '../app/_layout.tsx'), 'utf8') as string
+    expect(layout).toMatch(/<Stack\.Screen name="\+not-found" options=\{\{ headerShown: false \}\} \/>/)
+  })
+
+  it('draws the mark in a box that only centres it: the optical box does the rest, nothing here shifts it again', async () => {
+    const { StyleSheet } = require('react-native') as typeof import('react-native')
+    await render(<NotFoundScreen />)
+    const lead = screen.getByTestId('not-found-lead', { includeHiddenElements: true })
+    const style = StyleSheet.flatten(lead.props.style) ?? {}
+    expect(style.width).toBeUndefined()
+    expect(style.alignSelf).toBeUndefined()
+    expect(style.marginLeft).toBeUndefined()
+    const column = StyleSheet.flatten(lead.parent?.props.style)
+    expect(column.alignItems).toBe('center')
+  })
+
   it('with no path asked for, shows no address line', async () => {
     mockPath = '/'
     await render(<NotFoundScreen />)
