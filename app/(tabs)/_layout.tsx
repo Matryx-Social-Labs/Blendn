@@ -15,6 +15,8 @@ import { COLOR, DURATION, EASING, SIZE, SPACE } from '../../lib/design/tokens'
 import { Logger } from '../../lib/logger'
 import { roomButtonTarget, type RoomButtonTarget } from '../../lib/roomButton'
 import { getRoomSignal, subscribeRoomSignal } from '../../lib/roomSignal'
+import { watchRoomUnread } from '../../lib/roomUnread'
+import { currentUserId } from '../../lib/useAuth'
 import { listenForWaves, useRoomWaves, waveShown } from '../../lib/roomWaves'
 
 /**
@@ -64,6 +66,11 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
   const blendnOpen = useBlendnOpen()
   const checkInVenue = target.state === 'checkin' && venue ? venue : null
   const centreCoach = useCoachMark('centre_button_checkin', { ready: checkInVenue !== null && !blendnOpen })
+  // The unread is re-read as the overlay closes: the chat may have been read from it (T3).
+  const rereadUnread = useRef<() => void>(() => {})
+  useEffect(() => {
+    if (!blendnOpen) rereadUnread.current()
+  }, [blendnOpen])
   // Used: Blend'n opened from (c) (the disc or its label, the first half of "tap, then hold"), or checked in.
   useEffect(() => {
     if (target.state === 'live' || (blendnOpen && target.state === 'checkin')) markCoachUsed('centre_button_checkin')
@@ -132,6 +139,10 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
   useEffect(() => {
     let cancelled = false
     let activeEventId: string | null = null
+    // The live room's unread, for the disc's badge (T3); one watcher per room you are in.
+    let unread = 0
+    let watcher: ReturnType<typeof watchRoomUnread> | null = null
+    let watchedEvent: string | null = null
 
     const recompute = () => {
       const signal = getRoomSignal()
@@ -144,6 +155,7 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
           activeEventId,
           insideEventId: signal.insideEventId,
           todayEventIds: signal.todayEventIds,
+          roomUnread: unread,
         })
       )
     }
@@ -156,12 +168,29 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
         const active = r.data?.checkIns?.[0] ?? null
         activeEventId = active?.eventId ?? null
         setActiveRoomTitle(active?.event?.title ?? null)
+        if (activeEventId !== watchedEvent) {
+          watcher?.stop()
+          unread = 0
+          watchedEvent = activeEventId
+          watcher = activeEventId
+            ? watchRoomUnread({
+                eventId: activeEventId,
+                myId: currentUserId,
+                onChange: (n) => {
+                  unread = n
+                  recompute()
+                },
+              })
+            : null
+        }
         recompute()
+        void watcher?.refresh()
       } catch (e) {
         Logger.debug('navigation', 'room button poll failed', { error: e })
       }
     }
 
+    rereadUnread.current = () => void watcher?.refresh()
     recompute()
     void read()
     const id = setInterval(read, 30_000)
@@ -183,6 +212,7 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
       unsubscribe()
       unsubscribeCheckIn()
       appState.remove()
+      watcher?.stop()
       listenForWaves(null)
     }
   }, [])
