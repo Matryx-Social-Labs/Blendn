@@ -102,7 +102,8 @@ function PlusScreenContent() {
     return () => {
       mounted.current = false
       if (!outcome.current) notePaywallEvent('dismissed', trigger)
-      notePaywallClosed()
+      // Bought or restored here: the people who waited on it (the expiry prompt) hear it was done, not declined.
+      notePaywallClosed(outcome.current ? 'done' : 'dismissed')
     }
   }, [trigger])
 

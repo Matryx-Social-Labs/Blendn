@@ -313,7 +313,7 @@ export function PlusFooter({
   )
 }
 
-const LEGAL = {
+export const LEGAL = {
   ios: 'Payment is charged to your Apple Account at confirmation. Subscriptions renew automatically unless cancelled at least 24 hours before the end of the current period; manage or cancel in Settings › Apple Account › Subscriptions. Night Pass is a one-off. Prices include GST.',
   android:
     'Payment is charged to your Google Play account at confirmation. Subscriptions renew automatically unless cancelled before the end of the current period; cancel anytime in Google Play › Payments & subscriptions. Night Pass is a one-off. Prices include GST.',

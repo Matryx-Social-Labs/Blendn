@@ -489,6 +489,20 @@ describe('the wait and the store', () => {
     const view = await mount()
     await act(async () => { view.unmount() })
     expect(closed).toHaveBeenCalledTimes(1)
+    // Left without doing anything: a decline, so the prompt behind it may come back.
+    expect(closed).toHaveBeenCalledWith('dismissed')
+    off()
+  })
+
+  it('says it was done when something was bought here, so the prompt does not come back', async () => {
+    ;(buyPackage as jest.Mock).mockResolvedValue({ kind: 'pending' })
+    mockTrigger.value = 'profile'
+    const closed = jest.fn()
+    const off = subscribePaywallClosed(closed)
+    const view = await mount()
+    await act(async () => { fireEvent.press(button(MONTHLY_CTA)) })
+    await act(async () => { view.unmount() })
+    expect(closed).toHaveBeenCalledWith('done')
     off()
   })
 })

@@ -34,6 +34,8 @@ const VIOLET = ['app/plus.tsx', 'app/plus-manage.tsx', 'app/onboarding/_layout.t
 const CARRIED: Record<string, string> = {
   'components/SheetHost.tsx': "<HueProvider value={current.hue ?? 'ember'}>",
   'components/share/ShareHost.tsx': "<HueProvider value={target.kind === 'invite' ? 'rose' : 'ember'}>",
+  // Blend'n+ is yours, not an outing, wherever its sheet is raised from (the venue, Going, the expiry prompt).
+  'components/plus/TonightHost.tsx': '<HueProvider value="violet">',
 }
 /** Going out: ember is the default, so none of these sets a hue. */
 const EMBER = [

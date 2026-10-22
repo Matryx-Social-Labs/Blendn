@@ -398,11 +398,14 @@ describe('the Stay row (Flow 11 · R2-D7, 12.1 #05)', () => {
     expect(isUp('Still here?')).toBe(false)
   })
 
-  it('refused as Blendn+’s by a stale status: the Tonight sheet opens for it and the prompt waits for it', async () => {
+  it('refused as Blendn+’s by a stale status: the status is read again, the Tonight sheet opens for it and the prompt waits for it', async () => {
     plus({ gated: false })
     ;(apiClient.goLive as jest.Mock).mockResolvedValue({ success: false, errorCode: 'PLUS_REQUIRED', error: 'Staying live is part of Blendn+.' })
     await ended()
+    ;(apiClient.getMyPlus as jest.Mock).mockClear()
     await press('Stay while you’re here, up to 4 h')
+    // M7: a stale "free" is corrected at once (the dial and the next prompt read it).
+    expect(apiClient.getMyPlus).toHaveBeenCalled()
     expect(mockOpenTonight).toHaveBeenCalledWith(expect.objectContaining({ trigger: 'stay', venue: 'The Humming Tree' }))
     expect(isUp('Still here?')).toBe(false)
     await act(async () => {

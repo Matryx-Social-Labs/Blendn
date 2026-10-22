@@ -21,7 +21,7 @@ import type { TrayButton } from '../lib/locationFix'
 import { trayKind } from '../lib/sheet'
 import { openTonight, subscribePaywallClosed } from '../lib/paywall'
 import { isQuietSurface } from '../lib/paywallPolicy'
-import { usePlusStatus } from '../lib/plus'
+import { notifyPlusChanged, usePlusStatus } from '../lib/plus'
 import { serverNow } from '../lib/serverClock'
 import { afterSheetDismissed } from '../lib/sheetDismissed'
 import { subscribeToLiveEnded } from '../lib/socketClient'
@@ -214,6 +214,8 @@ export function LiveAtVenue() {
   }, [])
   const onPlusRequired = useCallback(
     (paywallOpened: boolean) => {
+      // The server refused what the status said was free: the status is stale, so everything that reads it re-reads now.
+      notifyPlusChanged()
       if (!paywallOpened) return setEnded((e) => (e ? { ...e, visible: true } : e))
       reshowAfterTonight()
     },

@@ -124,7 +124,33 @@ describe('<TonightSheet>', () => {
     await render(sheet({ onSeeAll }))
     await fireEvent.press(screen.getByRole('button', { name: 'See all plans' }))
     expect(onSeeAll).toHaveBeenCalledTimes(1)
+    expect(screen.getByText('Night Pass is a one-off. Prices include GST.')).toBeTruthy()
+  })
+
+  /**
+   * H3 (App Store 3.1.2 / Play): where a subscription is the pick, its renewal and cancellation terms are on the sheet that sells it.
+   * Negative control: always rendering the GST line fails "the monthly pick carries the store's terms".
+   */
+  it('the monthly pick carries the store’s renewal and cancellation terms in place of the GST line; the Night Pass says it is a one-off', async () => {
+    const legal = 'Payment is charged to your Apple Account at confirmation. Subscriptions renew automatically unless cancelled at least 24 hours before the end of the current period. Night Pass is a one-off. Prices include GST.'
+    await render(sheet({ pick: 'monthly', legal }))
+    expect(screen.getByTestId('tonight-legal').props.children).toBe(legal)
+    expect(screen.queryByText('Prices include GST.')).toBeNull()
+    await render(sheet({ pick: 'night', legal }))
+    expect(screen.getByText('Night Pass is a one-off. Prices include GST.')).toBeTruthy()
+  })
+
+  it('without the store’s wording the monthly pick still says prices include GST', async () => {
+    await render(sheet({ pick: 'monthly' }))
     expect(screen.getByText('Prices include GST.')).toBeTruthy()
+  })
+
+  it('Restore purchases says it is restoring, and holds', async () => {
+    const onRestore = jest.fn()
+    await render(sheet({ restoring: true, onRestore }))
+    await fireEvent.press(screen.getByRole('link', { name: 'Restoring…' }))
+    expect(onRestore).not.toHaveBeenCalled()
+    expect(screen.getByRole('link', { name: 'Restoring…' }).props.accessibilityState).toMatchObject({ busy: true })
   })
 
   it('Terms, Privacy and Restore purchases are links', async () => {

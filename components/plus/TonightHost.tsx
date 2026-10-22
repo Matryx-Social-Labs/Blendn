@@ -2,6 +2,7 @@ import { router } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Platform } from 'react-native'
 
+import { HueProvider } from '../ds/shared'
 import { TonightSheet, type TonightPick } from '../ds/TonightSheet'
 import { useToast } from '../Toast'
 import { apiClient } from '../../lib/apiClient'
@@ -13,12 +14,15 @@ import { buyPackage, canBuyAs, loadPlusOffers, restore, type PlusOffer, type Res
 import { afterSheetDismissed } from '../../lib/sheetDismissed'
 import { useAuth } from '../../lib/useAuth'
 import { useLatest } from '../../lib/useLatest'
+import { LEGAL } from './PlusSections'
 import { openStoreSubscriptions, showStoreError } from './storeActions'
 
 /** In a launch season nothing is for sale, so the sheet never opens: this says why, once (Flow 12 · 12.1 #11). */
 export const LAUNCH_TOAST = 'Blend’n+ is free during launch in your city. Nothing to buy.'
 /** The grant took longer than the minute we wait for it: it lands when the store confirms. */
 export const SLOW_GRANT_TOAST = 'Taking longer than usual. It unlocks as soon as the store confirms.'
+
+const STORE: 'ios' | 'android' = Platform.OS === 'android' ? 'android' : 'ios'
 
 type Sale = { request: TonightRequest; prices: { night: PlusOffer; monthly: PlusOffer } }
 type Status = 'idle' | 'pending' | 'cancelled' | 'failed'
@@ -45,6 +49,7 @@ export function TonightHost() {
   const [visible, setVisible] = useState(false)
   const [pick, setPick] = useState<TonightPick>('night')
   const [status, setStatus] = useState<Status>('idle')
+  const [restoring, setRestoring] = useState(false)
   /** One store call at a time; a ref, so a double tap inside one frame is one. */
   const working = useRef(false)
   /** Whether the person bought or restored here, so closing is not logged as a dismissal. */
@@ -101,13 +106,14 @@ export function TonightHost() {
     engaged.current = false
     if (current && !acted.current && how === 'dismissed') notePaywallEvent('dismissed', paywallTriggerFor(current.request.trigger))
     notePaywallClosed(how)
-  }, [])
+  }, [saleRef])
 
   /** The server has (or has not yet) granted what was bought: the locked thing works, or says it is coming. */
   const settled = async (granted: boolean, restored: boolean) => {
     const current = saleRef.current
     if (!mounted.current || !current) return
-    leave('done')
+    // A grant that has not landed is not something done: the expiry prompt may come back for the free way on.
+    if (engaged.current) leave(granted ? 'done' : 'dismissed')
     if (!granted) return showToast(SLOW_GRANT_TOAST, 'info')
     if (goesLiveWhenUnlocked(current.request.trigger)) return current.request.onUnlocked?.()
     showToast(restored ? 'Restored' : purchasedToast(pick), 'success', { haptic: 'success' })
@@ -163,12 +169,14 @@ export function TonightHost() {
   const restoreAll = async () => {
     if (working.current) return
     working.current = true
+    setRestoring(true)
     try {
       // The store answered after we had said it did not: say what it said.
       const result = await restore(userId, (late) => void settleRestore(late))
       await settleRestore(result)
     } finally {
       working.current = false
+      if (mounted.current) setRestoring(false)
     }
   }
 
@@ -179,8 +187,8 @@ export function TonightHost() {
     setVisible(false)
     engaged.current = false
     await afterSheetDismissed()
+    // The page reports how it closed itself when it unmounts (`app/plus.tsx`): this sheet's closing says nothing.
     router.push({ pathname: '/plus', params: { trigger: paywallTriggerFor(current.request.trigger) } } as never)
-    notePaywallClosed('done')
   }
 
   const free = () => {
@@ -195,23 +203,28 @@ export function TonightHost() {
   if (!sale) return null
   const { request, prices } = sale
   return (
-    <TonightSheet
-      visible={visible}
-      // While the store's own sheet is up the person is in the store's hands: ours holds.
-      onClose={() => (working.current && status !== 'pending' ? undefined : leave('dismissed'))}
-      trigger={request.trigger}
-      venue={request.venue}
-      prices={{ night: prices.night.price, monthly: prices.monthly.price }}
-      pick={pick}
-      onPick={setPick}
-      onContinue={() => void buy()}
-      onFree={free}
-      onSeeAll={() => void seeAll()}
-      onTerms={() => void openLink(BLENDN_LINKS.terms)}
-      onPrivacy={() => void openLink(BLENDN_LINKS.privacy)}
-      onRestore={() => void restoreAll()}
-      status={status}
-      store={Platform.OS === 'android' ? 'android' : 'ios'}
-    />
+    <HueProvider value="violet">
+      <TonightSheet
+        visible={visible}
+        // While the store's own sheet is up the person is in the store's hands: ours holds.
+        // Closed with a purchase on its way (pending, or confirming) is not a decline: `acted` says it was bought.
+        onClose={() => (working.current && status !== 'pending' ? undefined : leave(acted.current ? 'done' : 'dismissed'))}
+        trigger={request.trigger}
+        venue={request.venue}
+        prices={{ night: prices.night.price, monthly: prices.monthly.price }}
+        pick={pick}
+        onPick={setPick}
+        onContinue={() => void buy()}
+        onFree={free}
+        onSeeAll={() => void seeAll()}
+        onTerms={() => void openLink(BLENDN_LINKS.terms)}
+        onPrivacy={() => void openLink(BLENDN_LINKS.privacy)}
+        onRestore={() => void restoreAll()}
+        status={status}
+        store={STORE}
+        legal={LEGAL[STORE]}
+        restoring={restoring}
+      />
+    </HueProvider>
   )
 }

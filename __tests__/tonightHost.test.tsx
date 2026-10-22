@@ -159,7 +159,8 @@ describe('the way on that costs nothing', () => {
     await press('See all plans')
     expect(router.push).toHaveBeenCalledWith({ pathname: '/plus', params: { trigger: 'go_live_expiry' } })
     expect(events()).toEqual(['shown'])
-    expect(closed).toEqual(['done'])
+    // The page says how it closed when it unmounts; this sheet's own closing says nothing.
+    expect(closed).toEqual([])
   })
 
   it('Terms opens our own page in the app', async () => {
@@ -168,6 +169,20 @@ describe('the way on that costs nothing', () => {
       fireEvent.press(screen.getByRole('link', { name: 'Terms' }))
     })
     expect(openInApp).toHaveBeenCalledWith('https://blendn.app/terms')
+  })
+})
+
+describe('the store’s terms (App Store 3.1.2 / Play)', () => {
+  it('the monthly pick shows renewal and cancellation on the sheet that sells it; the Night Pass says it is a one-off', async () => {
+    await openSheet()
+    expect(screen.getByTestId('tonight-legal').props.children).toBe('Night Pass is a one-off. Prices include GST.')
+    await act(async () => {
+      fireEvent.press(screen.getAllByRole('radio')[1])
+    })
+    const terms = String(screen.getByTestId('tonight-legal').props.children)
+    expect(terms).toMatch(/renew automatically/)
+    expect(terms).toMatch(/cancel/i)
+    expect(terms).toMatch(/Prices include GST\.$/)
   })
 })
 
@@ -255,6 +270,31 @@ describe('buying', () => {
     expect(events()).toEqual(['shown', 'purchase_started'])
   })
 
+  it('closed while the purchase is confirming is not a decline: the prompt behind it does not come back', async () => {
+    let grant!: (v: unknown) => void
+    ;(waitForPlus as jest.Mock).mockReturnValue(new Promise((resolve) => (grant = resolve)))
+    ;(buyPackage as jest.Mock).mockResolvedValue({ kind: 'purchased' })
+    await openSheet()
+    await press('Continue — ₹49')
+    await act(async () => {
+      fireEvent.press(screen.getByRole('button', { name: 'Dismiss' }))
+    })
+    expect(closed).toEqual(['done'])
+    expect(events()).not.toContain('dismissed')
+    await act(async () => grant({ active: true }))
+    // The grant lands after: the lock still works, and the prompt is not told twice.
+    expect(onUnlocked).toHaveBeenCalledTimes(1)
+    expect(closed).toEqual(['done'])
+  })
+
+  it('a grant that never lands is not "done": the prompt behind it may come back for the free way on', async () => {
+    ;(buyPackage as jest.Mock).mockResolvedValue({ kind: 'purchased' })
+    ;(waitForPlus as jest.Mock).mockResolvedValue(null)
+    await openSheet()
+    await press('Continue — ₹49')
+    expect(closed).toEqual(['dismissed'])
+  })
+
   it('a second tap while the store is up is one purchase', async () => {
     let finish!: (v: unknown) => void
     ;(buyPackage as jest.Mock).mockReturnValue(new Promise((resolve) => (finish = resolve)))
@@ -286,6 +326,18 @@ describe('restoring', () => {
       fireEvent.press(screen.getByRole('link', { name: 'Restore purchases' }))
     })
     expect(mockShowToast).toHaveBeenCalledWith("Couldn't reach the store. Try again.", 'error', { haptic: 'error' })
+  })
+
+  it('while the store is asked, the link says so', async () => {
+    let answer!: (v: unknown) => void
+    ;(restore as jest.Mock).mockReturnValue(new Promise((resolve) => (answer = resolve)))
+    await openSheet()
+    await act(async () => {
+      fireEvent.press(screen.getByRole('link', { name: 'Restore purchases' }))
+    })
+    expect(screen.getByRole('link', { name: 'Restoring…' })).toBeTruthy()
+    await act(async () => answer({ kind: 'nothing' }))
+    expect(screen.getByRole('link', { name: 'Restore purchases' })).toBeTruthy()
   })
 
   it('restored: the server confirms, the lock works, and it is logged', async () => {
