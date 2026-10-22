@@ -175,3 +175,33 @@ describe('the page keeps following a field the system sheet took focus from', ()
     expect(scrollTo).not.toHaveBeenCalled()
   })
 })
+
+describe('the page follows the field once the keyboard has landed, even when the viewport never reports its new height', () => {
+  afterEach(() => {
+    jest.restoreAllMocks()
+    delete (ScrollView.prototype as unknown as { measureInWindow?: unknown }).measureInWindow
+  })
+
+  it('keyboardDidShow measures the viewport again and scrolls the focused field above the dock', async () => {
+    const listeners = keyboardListeners()
+    const scrollTo = jest.fn()
+    jest.spyOn(ScrollView.prototype as unknown as { scrollTo: () => void }, 'scrollTo').mockImplementation(scrollTo)
+    await render(
+      <OnboardingScreen step="journey" title="Your journey" ctaLabel="Continue" onContinue={jest.fn()}>
+        {(reveal) => <TextField label="School" value="" onChangeText={() => {}} {...reveal} />}
+      </OnboardingScreen>
+    )
+    await fireEvent(screen.getByTestId('onboarding-body'), 'layout', { nativeEvent: { layout: { y: 0, x: 0, width: 390, height: 800 } } })
+    jest.spyOn(TextInput.State, 'currentlyFocusedInput').mockReturnValue({
+      measureLayout: (_to: unknown, ok: (x: number, y: number, w: number, h: number) => void) => ok(0, 500, 340, 80),
+    } as never)
+    // At rest the whole field fits: focusing it scrolls nothing.
+    await fireEvent(screen.getByTestId('onboarding-scroll'), 'layout', { nativeEvent: { layout: { height: 700, y: 0, x: 0, width: 390 } } })
+    await fireEvent(screen.getByLabelText('School'), 'focus')
+    scrollTo.mockClear()
+    // The keyboard lands and the viewport is 300 now, but no layout event says so.
+    ;(ScrollView.prototype as unknown as { measureInWindow: unknown }).measureInWindow = (done: (x: number, y: number, w: number, h: number) => void) => done(0, 0, 390, 300)
+    await act(async () => listeners.keyboardDidShow())
+    expect(scrollTo).toHaveBeenCalledWith({ y: 500 + 80 + REVEAL_BELOW - 300, animated: true })
+  })
+})

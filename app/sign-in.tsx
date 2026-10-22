@@ -232,6 +232,7 @@ export default function SignIn() {
           onScroll={onScroll}
           scrollEventThrottle={16}
           onLayout={onViewportLayout}
+          style={styles.flex}
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}

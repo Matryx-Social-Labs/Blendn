@@ -72,6 +72,25 @@ export function useRevealFocused(): {
     )
   }, [])
 
+  /*
+   * Once the keyboard has landed, measure the viewport again and follow the field. The viewport's `onLayout` is the
+   * other trigger, and on iOS it can miss: the avoiding view pads under a LayoutAnimation, and a viewport that never
+   * reported its shorter height left the page where it was, the field under the dock (drive r7, sign-up). Measured here,
+   * the page follows whether or not that layout event came.
+   */
+  useEffect(() => {
+    const remeasure = () => {
+      const scroll = scrollRef.current as unknown as { measureInWindow?: (done: (x: number, y: number, w: number, h: number) => void) => void } | null
+      scroll?.measureInWindow?.((_x, _y, _w, height) => {
+        if (height > 0) viewport.current = height
+        reveal()
+      })
+    }
+    const events = Platform.OS === 'ios' ? (['keyboardDidShow', 'keyboardDidChangeFrame'] as const) : (['keyboardDidShow'] as const)
+    const subs = events.map((event) => Keyboard.addListener(event, remeasure))
+    return () => subs.forEach((sub) => sub.remove())
+  }, [reveal])
+
   return {
     scrollRef,
     bodyRef,
