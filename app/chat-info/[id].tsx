@@ -146,6 +146,12 @@ function ChatInfoInner() {
   )
 
   /* The next page as the end comes into view; one at a time, and not while a page is failing (its retry is the way on). */
+  /* Blocking somebody from their card takes them off the list at once, and the count with them; the server's next pages leave them out too. */
+  const removeMember = (userId: string) => {
+    setMembers((prev) => prev.filter((m) => m.userId !== userId))
+    setTotal((t) => Math.max(0, t - 1))
+  }
+
   const fetchMore = () => {
     if (loading || failed || loadingMore || members.length >= total) return
     setLoadingMore(true)
@@ -382,7 +388,7 @@ function ChatInfoInner() {
       <MuteSheet chatGroupId={sheet === 'mute' ? chatGroupId : null} onClose={() => setSheet(null)} />
       <LeaveRoomSheet chatGroupId={sheet === 'leave' ? chatGroupId : null} place={place} onClose={() => setSheet(null)} onLeft={() => router.dismissTo('/(tabs)/chat')} />
 
-      <SenderCard sender={cardFor} eventId={row?.eventId ?? null} chatGroupId={chatGroupId} onClose={() => setCardFor(null)} onBlocked={() => {}} />
+      <SenderCard sender={cardFor} eventId={row?.eventId ?? null} chatGroupId={chatGroupId} onClose={() => setCardFor(null)} onBlocked={removeMember} />
     </View>
   )
 }

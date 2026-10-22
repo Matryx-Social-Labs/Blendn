@@ -121,6 +121,8 @@ export function BoardScreen() {
   const [moreState, setMoreState] = useState<'idle' | 'loading' | 'failed'>('idle')
   const older = useRef<BoardPostView[]>([])
   const moreBusy = useRef(false)
+  /** Moves when what the older pages hold stops being true (a block): a page still on its way is for the old board. */
+  const pageEpoch = useRef(0)
   /* #16 / #47: the first load rises in, 28 ms apart, and so does what arrives where there was nothing; scroll and page inserts never do. */
   const reduceMotion = useReducedMotion()
   const rises = useRef<{ first: boolean; ids: ReadonlySet<string> }>({ first: true, ids: new Set() })
@@ -239,8 +241,13 @@ export function BoardScreen() {
     if (!eventId || !cursor || moreBusy.current) return
     moreBusy.current = true
     setMoreState('loading')
+    const epoch = pageEpoch.current
     try {
       const result = await getBoardPage(eventId, cursor)
+      if (epoch !== pageEpoch.current) {
+        setMoreState('idle')
+        return
+      }
       if (!result.success || !result.data) {
         setMoreState('failed')
         return
@@ -373,8 +380,17 @@ export function BoardScreen() {
       showSheet(
         boardSafetySheet({ kind: 'post', eventId, postId: post.id }, post.author, () => {
           removed.current.add(post.id)
+          // A block hides the person, not the one post: every page already loaded loses their posts at once (the
+          // handle is the board's one name for them), the older pages are dropped, a page still on its way is
+          // ignored, and the fresh first page and its cursor come back from the server, which now filters them.
+          const blocked = post.author
+          pageEpoch.current += 1
+          older.current = []
+          setCursor(null)
+          setMoreState('idle')
+          for (const [id, p] of created.current) if (!p.mine && p.author === blocked) created.current.delete(id)
           setLoad((prev) =>
-            prev.kind === 'ready' ? { kind: 'ready', posts: prev.posts.filter((p) => p.id !== post.id) } : prev
+            prev.kind === 'ready' ? { kind: 'ready', posts: prev.posts.filter((p) => p.id !== post.id && (p.mine || p.author !== blocked)) } : prev
           )
           void fetchBoard()
         })

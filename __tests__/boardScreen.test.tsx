@@ -770,3 +770,53 @@ describe('a board of thousands: more posts as the end nears (SCRUM-760 c)', () =
     expect(apiClient.queuedRequest).toHaveBeenLastCalledWith('/api/mobile/events/e1/board?cursor=c2')
   })
 })
+
+describe('a block removes a person from every page already loaded (safety)', () => {
+  type Steps = { label: string; next?: () => unknown; run?: () => Promise<unknown> }[]
+  const page = (posts: BoardPost[], nextCursor: string | null) => ({ success: true, data: { posts, pagination: { hasMore: !!nextCursor, nextCursor } } })
+  const otter = { ...SEEKING, id: 'p-old-otter' }
+  const olderHeron = { ...OFFER, id: 'p-old-heron', body: 'Another ride from Velvet Heron' }
+
+  it('drops their posts from the older pages too, forgets those pages, and starts again from the fresh first page’s cursor', async () => {
+    api.getBoard.mockResolvedValueOnce(page([OFFER], 'c1') as never)
+    ;(apiClient.queuedRequest as jest.Mock).mockResolvedValueOnce(page([olderHeron, otter], 'c2'))
+    api.blockBoardPost.mockResolvedValue({ success: true, data: { blocked: true } })
+    await render(<BoardScreen />)
+    await screen.findByText(OFFER.body)
+    await act(async () => fireEvent(screen.getByTestId('board-list'), 'endReached'))
+    await screen.findByText(olderHeron.body)
+
+    // The server now filters them: the fresh first page has somebody else and a new cursor.
+    api.getBoard.mockResolvedValue(page([{ ...SEEKING, id: 'p-new-otter', body: 'Fresh from Quiet Otter' }], 'c9') as never)
+    await fireEvent.press(screen.getAllByLabelText("More options for Velvet Heron's post")[0])
+    const sheet = (showSheet as jest.Mock).mock.calls.at(-1)[0] as { actions: Steps }
+    const confirm = sheet.actions.find((a) => a.label === 'Block')!.next!() as { actions: Steps }
+    await act(async () => void (await confirm.actions.find((a) => a.label === 'Block')!.run!()))
+
+    await waitFor(() => expect(screen.queryByText(OFFER.body)).toBeNull())
+    expect(screen.queryByText(olderHeron.body)).toBeNull()
+    expect(await screen.findByText('Fresh from Quiet Otter')).toBeTruthy()
+    // The old pages are forgotten: the next page is the fresh first page's, not the one the old pages left off at.
+    ;(apiClient.queuedRequest as jest.Mock).mockResolvedValueOnce(page([], null))
+    await act(async () => fireEvent(screen.getByTestId('board-list'), 'endReached'))
+    expect(apiClient.queuedRequest).toHaveBeenLastCalledWith('/api/mobile/events/e1/board?cursor=c9')
+  })
+
+  it('a page that was on its way when they were blocked is not drawn', async () => {
+    let finish: (v: unknown) => void = () => {}
+    api.getBoard.mockResolvedValueOnce(page([OFFER], 'c1') as never)
+    ;(apiClient.queuedRequest as jest.Mock).mockReturnValueOnce(new Promise((r) => (finish = r)))
+    api.blockBoardPost.mockResolvedValue({ success: true, data: { blocked: true } })
+    await render(<BoardScreen />)
+    await screen.findByText(OFFER.body)
+    await act(async () => fireEvent(screen.getByTestId('board-list'), 'endReached'))
+
+    api.getBoard.mockResolvedValue(page([otter], null) as never)
+    await fireEvent.press(screen.getByLabelText("More options for Velvet Heron's post"))
+    const sheet = (showSheet as jest.Mock).mock.calls.at(-1)[0] as { actions: Steps }
+    const confirm = sheet.actions.find((a) => a.label === 'Block')!.next!() as { actions: Steps }
+    await act(async () => void (await confirm.actions.find((a) => a.label === 'Block')!.run!()))
+    await act(async () => finish(page([olderHeron], null)))
+    expect(screen.queryByText(olderHeron.body)).toBeNull()
+  })
+})
