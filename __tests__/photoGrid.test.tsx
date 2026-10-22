@@ -9,6 +9,7 @@ jest.mock('../lib/photoUtils', () => ({
   cachePhoto: jest.fn(async () => null),
   deletePhoto: jest.fn(async () => true),
   loadUserPhotos: jest.fn(),
+  loadPulledPhotos: jest.fn(async () => []),
   reorderPhotos: jest.fn(),
   selectAndUploadPhoto: jest.fn(),
   uploadPhoto: jest.fn(),
@@ -25,6 +26,7 @@ import * as photoUtils from '../lib/photoUtils'
 import { H } from '../lib/haptics'
 import PhotoManager from '../components/PhotoManager'
 import { PulledFace } from '../components/profile/PhotoGridTile'
+import { pulledPhotos } from '../lib/photoStates'
 /* eslint-enable import/first */
 
 const pu = photoUtils as jest.Mocked<typeof photoUtils>
@@ -141,9 +143,88 @@ describe('a photo moderation took down (edit 05)', () => {
     expect(onRemove).toHaveBeenCalled()
   })
 
-  it('is drawn for a photo the server marks pulled', async () => {
-    pu.loadUserPhotos.mockResolvedValue([{ ...list(2)[0] }, { ...list(2)[1], pulled: true }])
+  // `photo_states` as the server sends it for your own profile (blendn-admin __tests__/integration/profile-friends-push-gaps.itest.ts):
+  // the live photo, then the pulled one with no URL.
+  const photoStates = (wasMain: boolean) => [
+    { url: url(0), pulled: false, pulled_at: null, was_main: false },
+    { url: null, pulled: true, pulled_at: '2026-10-21T09:15:00.000Z', was_main: wasMain },
+  ]
+
+  it('is drawn after the photos that are up, and is never part of what is written', async () => {
+    pu.loadUserPhotos.mockResolvedValue(list(2))
+    pu.loadPulledPhotos.mockResolvedValue(pulledPhotos(photoStates(false)))
     await render(<PhotoManager userId="u" />)
     await screen.findByTestId('tile-pulled')
+    // Two photos up and one removed: the count is of the photos on the profile.
+    expect(screen.getByText('2 of 6 · saved as you go')).toBeTruthy()
+    await act(async () => {
+      act1('Photo 2 of 2', 'earlier')
+    })
+    await waitFor(() => expect(pu.reorderPhotos).toHaveBeenCalled())
+    expect(pu.reorderPhotos.mock.calls[0][1]).toEqual([url(1), url(0)])
+  })
+
+  it('draws nothing when the server sends no photo_states (an older server)', async () => {
+    pu.loadPulledPhotos.mockResolvedValue(pulledPhotos(undefined))
+    await render(<PhotoManager userId="u" />)
+    await screen.findByLabelText('Photo 3 of 3')
+    expect(screen.queryByTestId('tile-pulled')).toBeNull()
+    expect(screen.getByText(/Drag to reorder; the first is what people see/)).toBeTruthy()
+  })
+
+  it('lets the person replace it: the tile adds a different photo, and its notice goes once that photo is on the profile', async () => {
+    pu.loadUserPhotos.mockResolvedValue(list(2))
+    pu.loadPulledPhotos.mockResolvedValue(pulledPhotos(photoStates(false)))
+    pu.selectAndUploadPhoto.mockResolvedValue({ success: true, url: url(9) } as never)
+    await render(<PhotoManager userId="u" />)
+    await screen.findByTestId('tile-pulled')
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Removed. This photo didn’t meet the photo rules. Add a different photo'))
+    })
+    await screen.findByLabelText('Photo 3 of 3')
+    expect(pu.selectAndUploadPhoto).toHaveBeenCalled()
+    expect(pu.reorderPhotos.mock.calls[0][1]).toEqual([url(0), url(1), url(9)])
+    expect(screen.queryByTestId('tile-pulled')).toBeNull()
+  })
+
+  it('keeps the notice when the replacement is cancelled, and its × dismisses it', async () => {
+    pu.loadUserPhotos.mockResolvedValue(list(2))
+    pu.loadPulledPhotos.mockResolvedValue(pulledPhotos(photoStates(false)))
+    pu.selectAndUploadPhoto.mockResolvedValue({ success: false, cancelled: true } as never)
+    await render(<PhotoManager userId="u" />)
+    await screen.findByTestId('tile-pulled')
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Removed. This photo didn’t meet the photo rules. Add a different photo'))
+    })
+    expect(screen.getByTestId('tile-pulled')).toBeTruthy()
+    await fireEvent.press(screen.getByLabelText('Dismiss removed photo'))
+    expect(screen.queryByTestId('tile-pulled')).toBeNull()
+  })
+
+  it('gives its slot to a photo when the grid is full: never more than six tiles', async () => {
+    pu.loadUserPhotos.mockResolvedValue(list(6))
+    pu.loadPulledPhotos.mockResolvedValue(pulledPhotos(photoStates(false)))
+    await render(<PhotoManager userId="u" />)
+    await screen.findByLabelText('Photo 6 of 6')
+    expect(screen.queryByTestId('tile-pulled')).toBeNull()
+  })
+
+  it('says what the main photo is now when the main one was taken down, and where to write', async () => {
+    pu.loadUserPhotos.mockResolvedValue(list(2))
+    pu.loadPulledPhotos.mockResolvedValue(pulledPhotos(photoStates(true)))
+    await render(<PhotoManager userId="u" />)
+    await screen.findByTestId('photos-main-pulled')
+    expect(screen.getByText('Your main photo was removed. The next one is your main photo now.')).toBeTruthy()
+    expect(screen.getByText('Think we got it wrong? Write to support@blendn.app.')).toBeTruthy()
+    expect(screen.queryByText(/Drag to reorder/)).toBeNull()
+  })
+
+  it('a removed photo that was not the main one leaves the usual line', async () => {
+    pu.loadUserPhotos.mockResolvedValue(list(2))
+    pu.loadPulledPhotos.mockResolvedValue(pulledPhotos(photoStates(false)))
+    await render(<PhotoManager userId="u" />)
+    await screen.findByTestId('tile-pulled')
+    expect(screen.queryByTestId('photos-main-pulled')).toBeNull()
+    expect(screen.getByText(/Drag to reorder/)).toBeTruthy()
   })
 })

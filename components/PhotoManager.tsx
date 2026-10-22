@@ -12,7 +12,9 @@ import { COLOR, FONT_FAMILY, RADIUS, SPACE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { Logger } from '../lib/logger'
 import { inSlotOrder, moveItem, reordered, type GridSpec } from '../lib/photoOrder'
-import { cachePhoto, deletePhoto, loadUserPhotos, ProfilePhoto, reorderPhotos, selectAndUploadPhoto, uploadPhoto } from '../lib/photoUtils'
+import { cachePhoto, deletePhoto, loadPulledPhotos, loadUserPhotos, ProfilePhoto, reorderPhotos, selectAndUploadPhoto, uploadPhoto } from '../lib/photoUtils'
+import { mainWasPulled, type PulledPhoto } from '../lib/photoStates'
+import { SUPPORT_EMAIL } from '../lib/support'
 import { showSheet } from '../lib/sheet'
 
 const COLUMNS = 3
@@ -50,13 +52,19 @@ const adoptStoredUrls = (list: ProfilePhoto[], stored?: string[]): ProfilePhoto[
  * `busy` is what the tiles show.
  *
  * A photo on its way is a tile with a progress bar; one that did not get there is a tile with Retry (it keeps the file). A photo
- * moderation took down (`pulled`) is a tile that says so; the server sends no such flag yet, so none is drawn today.
+ * moderation took down is a tile that says so (`photo_states`, kept by the server for 7 days): after the photos that are up, never part
+ * of what is written (it has no URL), and tapping it adds a different photo in its place. Taking down the main photo says what the main
+ * photo is now, and where to write if it was a mistake (Flow 6 · 6.3).
  */
 export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: PhotoManagerProps) {
   const [photos, setPhotos] = useState<ProfilePhoto[]>([])
   const [loading, setLoading] = useState(true)
   const [loadFailed, setLoadFailed] = useState(false)
   const [pending, setPending] = useState<Pending | null>(null)
+  // The photos moderation took down: tiles after the live ones, and nothing in any write.
+  const [pulled, setPulled] = useState<PulledPhoto[]>([])
+  // Which pulled tile the Add in flight came from: its notice goes once the replacement is on the profile.
+  const replacing = useRef<number | null>(null)
   const [uploading, setUploading] = useState(false)
   const writing = useRef(false)
   const addedCount = useRef(0)
@@ -91,6 +99,7 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
         setLoadFailed(false)
         setPhotos(userPhotos)
         setLoading(false)
+        void loadPulledPhotos(userId).then(setPulled)
         // Pre-cache photos for better performance
         userPhotos.forEach((photo) => {
           if (photo.url.startsWith('http://') || photo.url.startsWith('https://')) {
@@ -132,6 +141,8 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
     }
     H.success()
     setPhotos((prev) => adoptStoredUrls(prev, saved.photos))
+    const replaced = replacing.current
+    if (replaced !== null) setPulled((prev) => prev.filter((_, i) => i !== replaced))
     AccessibilityInfo.announceForAccessibility('Photo added')
     Logger.info('profile', 'PhotoManager: Photo added', { userId, path: path || url })
   }
@@ -175,6 +186,7 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
       upFailed()
     } finally {
       writing.current = false
+      replacing.current = null
       setUploading(false)
     }
   }
@@ -357,7 +369,10 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
     )
   }
 
-  const emptySlots = Array.from({ length: Math.max(0, maxPhotos - photos.length - (pending ? 1 : 0)) }, (_, k) => photos.length + (pending ? 1 : 0) + k)
+  const taken = photos.length + (pending ? 1 : 0)
+  // The pulled notices fill the slots after the photos, and give way to a photo added: they never push the grid past its six.
+  const pulledShown = pulled.slice(0, Math.max(0, maxPhotos - taken))
+  const emptySlots = Array.from({ length: Math.max(0, maxPhotos - taken - pulledShown.length) }, (_, k) => taken + pulledShown.length + k)
   const slotRect = (slot: number) => ({
     position: 'absolute' as const,
     left: (slot % COLUMNS) * (itemSize + GAP),
@@ -393,20 +408,16 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
               onDrop={handleDrop}
               onLift={onDragging}
             >
-              {item.pulled ? (
-                <PulledFace onRemove={() => handleRemovePhoto(index)} removeLabel={`Remove photo ${index + 1}`} removeDisabled={busy} />
-              ) : (
-                <PhotoFace
-                  uri={uri}
-                  label={`Photo ${index + 1} of ${n}${item.isPrimary ? ', main photo' : ''}`}
-                  main={index === 0}
-                  onRemove={() => handleRemovePhoto(index)}
-                  removeLabel={`Remove photo ${index + 1}`}
-                  removeDisabled={busy}
-                  actions={actions}
-                  onAction={(name) => handleAction(index, name)}
-                />
-              )}
+              <PhotoFace
+                uri={uri}
+                label={`Photo ${index + 1} of ${n}${item.isPrimary ? ', main photo' : ''}`}
+                main={index === 0}
+                onRemove={() => handleRemovePhoto(index)}
+                removeLabel={`Remove photo ${index + 1}`}
+                removeDisabled={busy}
+                actions={actions}
+                onAction={(name) => handleAction(index, name)}
+              />
             </DraggableTile>
           )
         })}
@@ -416,6 +427,21 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
             {pending.state === 'uploading' ? <UploadingFace progress={pending.progress} /> : <FailedFace onRetry={() => void handleRetry()} disabled={busy} />}
           </View>
         ) : null}
+
+        {pulledShown.map((_, k) => (
+          <View key={`pulled-${k}`} style={slotRect(taken + k)}>
+            <PulledFace
+              onReplace={() => {
+                if (writing.current) return
+                replacing.current = k
+                void handleAddPhoto()
+              }}
+              onRemove={() => setPulled((prev) => prev.filter((__, i) => i !== k))}
+              removeLabel="Dismiss removed photo"
+              removeDisabled={busy}
+            />
+          </View>
+        ))}
 
         {emptySlots.map((slot, k) => (
           <View key={slot} style={slotRect(slot)}>
@@ -434,7 +460,16 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
           </View>
         ))}
       </View>
-      <Text style={[font('meta', bold), styles.note]}>Photos save on their own. Drag to reorder; the first is what people see.</Text>
+      {mainWasPulled(pulled) ? (
+        <View testID="photos-main-pulled" style={styles.mainPulled}>
+          <Text style={[font('meta', bold), styles.noteStrong]}>
+            {photos.length > 0 ? 'Your main photo was removed. The next one is your main photo now.' : 'Your main photo was removed.'}
+          </Text>
+          <Text style={[font('meta', bold), styles.note]}>Think we got it wrong? Write to {SUPPORT_EMAIL}.</Text>
+        </View>
+      ) : (
+        <Text style={[font('meta', bold), styles.note]}>Photos save on their own. Drag to reorder; the first is what people see.</Text>
+      )}
     </View>
   )
 }
@@ -446,4 +481,6 @@ const styles = StyleSheet.create({
   sub: { color: COLOR.textTertiary },
   skeleton: { flexDirection: 'row', gap: GAP },
   note: { color: COLOR.textTertiary },
+  noteStrong: { color: COLOR.textPrimary },
+  mainPulled: { gap: SPACE.xs },
 })

@@ -17,6 +17,7 @@ jest.mock('../lib/photoUtils', () => ({
   reorderPhotos: jest.fn(),
   deletePhoto: jest.fn(),
   loadUserPhotos: jest.fn(),
+  loadPulledPhotos: jest.fn(async () => []),
   uploadPhoto: jest.fn(),
   cachePhoto: jest.fn().mockResolvedValue(null),
 }))

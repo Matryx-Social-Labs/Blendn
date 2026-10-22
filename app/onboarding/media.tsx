@@ -56,7 +56,9 @@ import { useOnboarding } from '../../lib/useOnboarding'
  * ## The pulled photo
  *
  * The design draws a fourth tile state, "This photo was removed. Add a different one.", for a photo moderation took down
- * after it was added. The server sends no such flag on a photo yet, so there is nothing to draw it from: it is not shown.
+ * after it was added. The server now says which photos it pulled (`photo_states`, blendn-admin #716), but only on your own
+ * `GET /profiles/:id`, which onboarding's draft does not read: Edit profile draws it (`components/PhotoManager.tsx`). Here a photo
+ * pulled mid-onboarding is simply gone from the next read of the draft.
  */
 
 const SLOTS = 6
