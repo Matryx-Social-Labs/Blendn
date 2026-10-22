@@ -95,6 +95,8 @@ export type RoomViewProps = {
   onView: (view: 'people' | 'crews') => void
   /** Your crews here, in the People view (CrewStrip). */
   crewStrip?: ReactNode
+  /** Friends here (the friends at this event who let friends see them): after the crew strip, above Meet next. Null draws nothing, no gap. */
+  friendsHere?: ReactNode
   /** The Crews view: its head, its cards, its foot. */
   crewsHead?: ReactNode
   crewCards: CrewCard[]
@@ -179,6 +181,8 @@ export function RoomView(props: RoomViewProps) {
       ) : (
         <Animated.View style={[styles.sections, entrance.sections[2]]}>
           {props.crewStrip}
+          {/* A friend is not a stranger card: they are here (plans/friends-in-room.md), even when nobody else is. */}
+          {props.friendsHere}
           {empty ? (
             <View style={styles.empty}>
               <StateScreen icon="users" title="Nobody else is here yet" body="People show up as they check in." testID="room-empty" />

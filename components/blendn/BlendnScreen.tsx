@@ -16,6 +16,8 @@ import { Logger } from '../../lib/logger'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { overlapOf } from '../../lib/overlapLine'
 import { useRoomCancelled } from '../../lib/useRoomCancelled'
+import { useFriendsHere, useMessageFriend } from '../../lib/friendsHere'
+import { useOffline } from '../OfflineBanner'
 import { everyoneHead, meetNext, reasonLine, reasonLines } from '../../lib/roomMoments'
 import { markRoomLeft } from '../../lib/roomMembership'
 import { roomRecap, type RoomRecap as Recap } from '../../lib/roomRecap'
@@ -46,6 +48,7 @@ import { ConnectSheet } from '../grid/ConnectSheet'
 import ScalePress from '../motion/ScalePress'
 import { CrewsFoot, CrewsHead, PeopleCrewStrip, RoomCrewCard } from './RoomCrews'
 import { faceOf, RoomSkeleton, useNow } from './RoomSections'
+import { FriendsHere } from './FriendsHere'
 import { RoomCancelled } from './RoomCancelled'
 import { RoomStage } from './RoomStage'
 import { RoomView } from './RoomView'
@@ -167,6 +170,21 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   // --- a toast of the overlay's own (refusals off the card, crew likes) --------
   const [toast, setToast] = useState<{ key: number; kind: ToastKind; text: string } | null>(null)
   const say = useCallback((text: string, kind: ToastKind = 'info') => setToast({ key: Date.now(), kind, text }), [])
+
+  // Friends here (plans/friends-in-room.md C1): the friends at this event who let friends see them.
+  const offline = useOffline()
+  const friendsHere = useFriendsHere(room.event?.id ?? null, room.status === 'ready')
+  const refreshFriends = friendsHere.refresh
+  const friendChat = useMessageFriend(
+    useCallback(
+      (text: string) => {
+        say(text, 'error')
+        // They may have gone (an unfriend, a block, a check-out): read again.
+        void refreshFriends()
+      },
+      [say, refreshFriends]
+    )
+  )
 
   /*
    * The end of the night. Kept as a snapshot rather than derived: the sweeper
@@ -842,6 +860,17 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
             view={gridView}
             onView={setGridView}
             crewStrip={<PeopleCrewStrip myCrews={myCrewsHere} mine={crews.mine} eventTitle={eventTitle} actions={crewActions} />}
+            friendsHere={
+              <FriendsHere
+                friends={friendsHere.friends}
+                total={friendsHere.total}
+                opening={friendChat.opening}
+                offline={offline}
+                appearances={friendsHere.appearances}
+                onMessage={(f) => void friendChat.message(f)}
+                onSeeAll={() => router.push({ pathname: '/room/friends-here', params: { eventId: eventId ?? '' } } as never)}
+              />
+            }
             crewsHead={
               eventId ? (
                 <CrewsHead

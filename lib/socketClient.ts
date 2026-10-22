@@ -157,6 +157,8 @@ export interface ServerToClientEvents {
   }) => void
   /** Somebody in the room waved at you. `fromName` is how they appear to you. */
   "room:wave": (data: { eventId: string; fromUserId: string; fromName: string }) => void
+  /** Who is here among your friends changed (blendn-admin `notifyFriendsHere`): content-free, so the phone re-reads Friends here. */
+  "room:friends": (data: { eventId: string }) => void
   /** A row landed in your notifications bell (blendn-admin `announceToBell`). The kind only. */
   "notification:new": (data: { kind: string }) => void
   /**
@@ -223,6 +225,7 @@ type PrivateTypingCallback = (data: ServerToClientEvents["private:typing"] exten
 type PrivateReadCallback = (data: ServerToClientEvents["private:read"] extends (data: infer D) => void ? D : never) => void
 type RoomMatchCallback = (data: ServerToClientEvents["room:match"] extends (data: infer D) => void ? D : never) => void
 type RoomWaveCallback = (data: ServerToClientEvents["room:wave"] extends (data: infer D) => void ? D : never) => void
+type RoomFriendsCallback = (data: ServerToClientEvents["room:friends"] extends (data: infer D) => void ? D : never) => void
 type BellCallback = (data: ServerToClientEvents["notification:new"] extends (data: infer D) => void ? D : never) => void
 type LiveEndedCallback = (data: ServerToClientEvents["live:ended"] extends (data: infer D) => void ? D : never) => void
 
@@ -323,6 +326,7 @@ const userSubscriptions = new Map<string, Set<PrivateMessageCallback>>()
  */
 const roomMatchSubscriptions = new Set<RoomMatchCallback>()
 const roomWaveSubscriptions = new Set<RoomWaveCallback>()
+const roomFriendsSubscriptions = new Set<RoomFriendsCallback>()
 const bellSubscriptions = new Set<BellCallback>()
 const liveEndedSubscriptions = new Set<LiveEndedCallback>()
 type DeliveredCallback = (data: { conversationId: string; messageIds: string[] }) => void
@@ -555,6 +559,7 @@ export function disconnect(): void {
   userSubscriptions.clear()
   roomMatchSubscriptions.clear()
   roomWaveSubscriptions.clear()
+  roomFriendsSubscriptions.clear()
 }
 
 /**
@@ -739,6 +744,10 @@ function setupSocketHandlers(sock: TypedSocket): void {
 
   sock.on("room:wave", (data) => {
     roomWaveSubscriptions.forEach((cb) => cb(data))
+  })
+
+  sock.on("room:friends", (data) => {
+    roomFriendsSubscriptions.forEach((cb) => cb(data))
   })
 
   sock.on("notification:new", (data) => {
@@ -1161,6 +1170,15 @@ export function subscribeToRoomWave(callback: RoomWaveCallback): () => void {
   roomWaveSubscriptions.add(callback)
   return () => {
     roomWaveSubscriptions.delete(callback)
+  }
+}
+
+/** Friends here changed in a room you are in. Same delivery as `subscribeToRoomMatch`; the payload names no one. */
+export function subscribeToRoomFriends(callback: RoomFriendsCallback): () => void {
+  if (!socket?.connected) connect()
+  roomFriendsSubscriptions.add(callback)
+  return () => {
+    roomFriendsSubscriptions.delete(callback)
   }
 }
 
