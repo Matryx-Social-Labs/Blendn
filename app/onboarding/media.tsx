@@ -1,12 +1,12 @@
 import { ScreenProfiler } from '../../lib/perf'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Platform, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
 import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated'
 
 import { font, PRESSED_WASH, useBoldText } from '../../components/ds/shared'
 import { useToast } from '../../components/Toast'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
-import { PhotoTile, MAIN_RATIO } from '../../components/onboarding/PhotoTile'
+import { PhotoTile, PulledPhotoTile, MAIN_RATIO } from '../../components/onboarding/PhotoTile'
 import { photoNote, readyPhotos, withMainFirst, type PhotoTile as Tile } from '../../components/onboarding/photoTiles'
 import { Icon } from '../../components/ui/Icon'
 import { COLOR, DURATION, ICON, PRESS, RADIUS, SPACE, SPRING } from '../../lib/design/tokens'
@@ -14,7 +14,10 @@ import { H } from '../../lib/haptics'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import ScalePress from '../../components/motion/ScalePress'
 import { RepositionHost } from '../../components/profile/Reposition'
-import { selectPhoto, uploadPhoto } from '../../lib/photoUtils'
+import { loadPulledPhotos, selectPhoto, uploadPhoto } from '../../lib/photoUtils'
+import { mainWasPulled, type PulledPhoto } from '../../lib/photoStates'
+import { markPulledSeen } from '../../lib/pulledNotices'
+import { SUPPORT_EMAIL } from '../../lib/support'
 import { useAuth } from '../../lib/useAuth'
 import { useOnboarding } from '../../lib/useOnboarding'
 
@@ -79,6 +82,17 @@ function MediaScreenInner() {
   const slot = Math.floor((window.width - SPACE.gutter * 2 - GRID_GAP) / 2)
 
   const [tiles, setTiles] = useState<Tile[]>([])
+  /** The photos moderation took down since they were added (`photo_states`, your own profile): empty tiles with a shield, until dismissed or replaced. */
+  const [pulled, setPulled] = useState<PulledPhoto[]>([])
+  const userId = user?.id
+  useEffect(() => {
+    if (!loaded || !userId) return
+    let live = true
+    void loadPulledPhotos(userId).then((list) => live && setPulled(list))
+    return () => {
+      live = false
+    }
+  }, [loaded, userId])
 
   /*
    * The draft's photos, whenever they change: once it has loaded, and again
@@ -92,6 +106,8 @@ function MediaScreenInner() {
     setTiles((draft.photos ?? []).map((url) => ({ key: url, state: 'ready' as const, url })))
   }
 
+  // The empty tiles never take the well's slot: the last one is always the way to add.
+  const pulledShown = pulled.slice(0, Math.max(0, SLOTS - 1 - tiles.length))
   const uploading = tiles.some((tile) => tile.state === 'uploading')
   const replace = (key: string, next: Tile) => setTiles((current) => current.map((tile) => (tile.key === key ? next : tile)))
 
@@ -120,6 +136,12 @@ function MediaScreenInner() {
     if (!picked.ok) {
       if (!picked.cancelled) showToast(picked.error || "That photo wasn’t added. Try again.", 'error', { haptic: 'error' })
       return
+    }
+    // A different photo stands in for the first removed one: its notice is done.
+    const replaced = pulled[0]
+    if (replaced) {
+      setPulled((current) => current.filter((p) => p !== replaced))
+      void markPulledSeen(user.id, replaced)
     }
     const key = nextKey()
     setTiles((current) => [...current, { key, state: 'uploading', uri: picked.uri, progress: 0 }])
@@ -155,7 +177,16 @@ function MediaScreenInner() {
       onSecondary={() => void skip()}
       onBack={goBack}
     >
-      <Text style={[font('meta', bold), styles.note]}>{photoNote(tiles.length)}</Text>
+      {mainWasPulled(pulled) ? (
+        <View testID="media-main-pulled" style={styles.mainPulled}>
+          <Text style={[font('meta', bold), styles.noteStrong]}>
+            {tiles.length > 0 ? 'Your main photo was removed. The next one is your main photo now.' : 'Your main photo was removed.'}
+          </Text>
+          <Text style={[font('meta', bold), styles.note]}>Think we got it wrong? Write to {SUPPORT_EMAIL}.</Text>
+        </View>
+      ) : (
+        <Text style={[font('meta', bold), styles.note]}>{photoNote(tiles.length)}</Text>
+      )}
       {/* The reposition step a chosen photo goes through (6.3 #08); it draws nothing until one is asked. */}
       <RepositionHost />
 
@@ -172,6 +203,19 @@ function MediaScreenInner() {
             onRetry={() => (tile.state === 'failed' ? void upload(tile.key, tile.uri) : undefined)}
             retryDisabled={uploading}
             animation={{ layout: glide, exiting: leave, entering: enter }}
+          />
+        ))}
+
+        {pulledShown.map((notice, k) => (
+          <PulledPhotoTile
+            key={`pulled-${notice.pulledAt ?? k}`}
+            slot={slot}
+            disabled={uploading}
+            onAdd={() => void add()}
+            onDismiss={() => {
+              setPulled((current) => current.filter((p) => p !== notice))
+              if (userId) void markPulledSeen(userId, notice)
+            }}
           />
         ))}
 
@@ -201,6 +245,8 @@ function MediaScreenInner() {
 
 const styles = StyleSheet.create({
   note: { color: COLOR.textSecondary },
+  noteStrong: { color: COLOR.textPrimary },
+  mainPulled: { gap: SPACE.xs },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GRID_GAP },
   muted: { color: COLOR.textSecondary },
   wide: { width: '100%' },

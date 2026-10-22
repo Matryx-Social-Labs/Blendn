@@ -138,10 +138,11 @@ describe('a photo on its way (edit 03 · 04)', () => {
 })
 
 describe('a photo moderation took down (edit 05)', () => {
-  it('says it is gone, and why, and its × still clears the slot', async () => {
+  it('C13: is an empty tile with the shield glyph and no words on it; a screen reader still hears why, and its × clears the slot', async () => {
     const onRemove = jest.fn()
     await render(<PulledFace onRemove={onRemove} removeLabel="Remove photo 2" removeDisabled={false} />)
-    expect(screen.getByText('Removed · didn’t meet the photo rules')).toBeTruthy()
+    expect(screen.queryByText('Removed · didn’t meet the photo rules')).toBeNull()
+    expect(screen.getByLabelText('Removed. This photo didn’t meet the photo rules')).toBeTruthy()
     fireEvent.press(screen.getByLabelText('Remove photo 2'))
     expect(onRemove).toHaveBeenCalled()
   })

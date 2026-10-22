@@ -14,6 +14,8 @@ const mockPerm = jest.fn()
 const mockSelect = jest.fn()
 const mockUpload = jest.fn()
 const mockInvite = jest.fn()
+const mockPulled = jest.fn(async (..._a: unknown[]) => [] as unknown[])
+const mockSeen = jest.fn()
 jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: jest.fn(), replace: jest.fn() }, useFocusEffect: jest.fn() }))
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('../lib/perf', () => ({ ScreenProfiler: ({ children }: { children: React.ReactNode }) => children }))
@@ -23,7 +25,12 @@ jest.mock('../lib/useOnboarding', () => ({
 jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { id: 'u1' } }) }))
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn() }) }))
 jest.mock('../components/OptimizedImage', () => ({ OptimizedImage: () => null }))
-jest.mock('../lib/photoUtils', () => ({ selectPhoto: () => mockSelect(), uploadPhoto: (...args: unknown[]) => mockUpload(...args) }))
+jest.mock('../lib/photoUtils', () => ({
+  selectPhoto: () => mockSelect(),
+  uploadPhoto: (...args: unknown[]) => mockUpload(...args),
+  loadPulledPhotos: (...args: unknown[]) => mockPulled(...args),
+}))
+jest.mock('../lib/pulledNotices', () => ({ markPulledSeen: (...args: unknown[]) => mockSeen(...args) }))
 jest.mock('../lib/useFriendInvite', () => ({ useFriendInvite: () => mockInvite() }))
 jest.mock('../lib/cityStorage', () => ({ readStoredCity: jest.fn(async () => ({ city: 'Bengaluru', source: 'chosen' })) }))
 jest.mock('expo-location', () => ({
@@ -40,6 +47,7 @@ import PreferencesScreen from '../app/onboarding/preferences'
 beforeEach(() => {
   jest.clearAllMocks()
   mockDraft = {}
+  mockPulled.mockImplementation(async () => [])
 })
 
 describe('location', () => {
@@ -121,6 +129,66 @@ describe('photos', () => {
     expect(select).toHaveBeenCalledTimes(1)
     await fireEvent.press(screen.getByTestId('onboarding-primary'))
     expect(mockCommit).toHaveBeenCalledWith({ photos: ['https://media/b', 'https://media/a'] })
+  })
+
+  describe('a photo moderation took down (2.3 #19, C13)', () => {
+    const PULLED = { pulledAt: '2026-10-20T10:00:00Z', wasMain: false }
+    const REMOVED = 'Removed. This photo didn’t meet the photo rules. Add a different photo'
+
+    it('is an empty tile with the shield glyph, beside the photos, and the add well is still there', async () => {
+      mockDraft = { photos: ['https://media/a', 'https://media/b'] }
+      mockPulled.mockResolvedValue([PULLED])
+      await render(<MediaScreen />)
+      await screen.findByTestId('photo-tile-pulled')
+      expect(screen.getByLabelText(REMOVED)).toBeTruthy()
+      expect(screen.queryByText(/photo rules/)).toBeNull()
+      expect(screen.getByLabelText('Add a photo')).toBeTruthy()
+      expect(mockPulled).toHaveBeenCalledWith('u1')
+    })
+
+    it('× clears it for good, and says so to the phone so it is not drawn again', async () => {
+      mockDraft = { photos: ['https://media/a'] }
+      mockPulled.mockResolvedValue([PULLED])
+      await render(<MediaScreen />)
+      await fireEvent.press(await screen.findByLabelText('Dismiss removed photo'))
+      expect(screen.queryByTestId('photo-tile-pulled')).toBeNull()
+      expect(mockSeen).toHaveBeenCalledWith('u1', PULLED)
+    })
+
+    it('adding a different photo takes its notice away', async () => {
+      mockDraft = { photos: ['https://media/a'] }
+      mockPulled.mockResolvedValue([PULLED])
+      mockSelect.mockResolvedValue(picked)
+      mockUpload.mockResolvedValue({ success: true, url: 'https://media/two' })
+      await render(<MediaScreen />)
+      await fireEvent.press(await screen.findByLabelText(REMOVED))
+      await waitFor(() => expect(screen.queryByTestId('photo-tile-pulled')).toBeNull())
+      expect(mockSeen).toHaveBeenCalledWith('u1', PULLED)
+    })
+
+    it('a removed main photo says the next one is main now, and where to write', async () => {
+      mockDraft = { photos: ['https://media/a'] }
+      mockPulled.mockResolvedValue([{ ...PULLED, wasMain: true }])
+      await render(<MediaScreen />)
+      await screen.findByTestId('media-main-pulled')
+      expect(screen.getByText('Your main photo was removed. The next one is your main photo now.')).toBeTruthy()
+      expect(screen.getByText(/Think we got it wrong\? Write to/)).toBeTruthy()
+    })
+
+    it('with nothing left, it is only "Your main photo was removed."', async () => {
+      mockDraft = {}
+      mockPulled.mockResolvedValue([{ ...PULLED, wasMain: true }])
+      await render(<MediaScreen />)
+      await screen.findByText('Your main photo was removed.')
+    })
+
+    it('five photos leave the sixth place to the well: no empty tile takes it', async () => {
+      mockDraft = { photos: ['a', 'b', 'c', 'd', 'e'].map((k) => `https://media/${k}`) }
+      mockPulled.mockResolvedValue([PULLED])
+      await render(<MediaScreen />)
+      await screen.findByLabelText('Add a photo')
+      expect(screen.queryByTestId('photo-tile-pulled')).toBeNull()
+    })
   })
 
   it('a cancelled picker adds no tile', async () => {
