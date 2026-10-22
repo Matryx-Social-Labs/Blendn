@@ -14,7 +14,7 @@ import { CONTROL_FONT_CAP, font, useBoldText } from '../ds/shared'
 import { PhotoScrim, StatusScrim } from '../ui/GradientFill'
 import { COLOR, RADIUS, SPACE } from '../../lib/design/tokens'
 import type { FeedMediaItem } from '../../lib/feedMedia'
-import { SceneHeroMedia } from './SceneHeroMedia'
+import { HERO_CAPTION_FOOT, SceneHeroMedia } from './SceneHeroMedia'
 
 /**
  * The Scene's hero (Flow 3 `scene`, 420 tall): the cover (or the organiser's clips and stills) full bleed under the
@@ -177,7 +177,7 @@ const styles = StyleSheet.create({
   clip: { ...StyleSheet.absoluteFill, overflow: 'hidden', backgroundColor: COLOR.surface },
   head: { position: 'absolute', top: 0, left: 0, right: 0, height: HEAD_SCRIM },
   foot: { position: 'absolute', bottom: 0, left: 0, right: 0, height: FOOT_SCRIM },
-  info: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.xxl + SPACE.sm, gap: SPACE.sm },
+  info: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: SPACE.gutter, paddingBottom: HERO_CAPTION_FOOT, gap: SPACE.sm },
   pills: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm, marginBottom: SPACE.xs },
   ink: { color: COLOR.textPrimary },
   onWhite: { color: COLOR.ink },

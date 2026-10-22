@@ -229,7 +229,7 @@ export function SceneHeroMedia({
       </ScrollView>
 
       {playlist.length > 1 ? (
-        <View style={styles.dots} pointerEvents="none">
+        <View testID="scene-hero-dots" style={styles.dots} pointerEvents="none">
           {playlist.map((_, i) => (
             <View key={i} style={[styles.dot, i === index && styles.dotActive]} />
           ))}
@@ -239,14 +239,17 @@ export function SceneHeroMedia({
   )
 }
 
+/** The empty band under the hero's caption: the pager dots live in it, so no title length can reach them. */
+export const HERO_CAPTION_FOOT = SPACE.xxl + SPACE.sm
+
 const styles = StyleSheet.create({
   /*
-   * Level with the pills, at the hero's right edge, and clear of the title block and of the circles above.
+   * The image's bottom-right corner, in the band under the caption (`HERO_CAPTION_FOOT`): a fixed height above the
+   * bottom landed on the words whenever the title took two lines or the pills wrapped.
    */
   dots: {
     position: 'absolute',
-    // design-exception: frame 22 (video hero) rides the dots 126 pt up, level with the pills, clear of the circles above
-    bottom: 126,
+    bottom: SPACE.lg,
     right: SPACE.gutter,
     flexDirection: 'row',
     gap: SPACE.sm,

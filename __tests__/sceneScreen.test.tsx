@@ -31,7 +31,7 @@ jest.mock('../lib/socketClient', () => ({
 }))
 jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { id: 'me' } }) }))
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn() }) }))
-jest.mock('../components/scene/SceneHeroMedia', () => ({ SceneHeroMedia: () => null }))
+jest.mock('../components/scene/SceneHeroMedia', () => ({ SceneHeroMedia: () => null, HERO_CAPTION_FOOT: 40 }))
 jest.mock('../components/scene/SceneLightbox', () => ({ SceneLightbox: () => null }))
 jest.mock('../components/board/BoardSections', () => ({ BoardEntry: () => null }))
 jest.mock('../lib/blendnOverlay', () => ({ openBlendn: jest.fn(), openPass: jest.fn() }))

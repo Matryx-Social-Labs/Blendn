@@ -16,7 +16,7 @@ jest.mock('expo-linear-gradient', () => {
   const { View } = jest.requireActual('react-native')
   return { LinearGradient: (props: object) => <View {...props} /> }
 })
-jest.mock('../components/scene/SceneHeroMedia', () => ({ SceneHeroMedia: () => null }))
+jest.mock('../components/scene/SceneHeroMedia', () => ({ SceneHeroMedia: () => null, HERO_CAPTION_FOOT: 40 }))
 
 const on = (os: 'ios' | 'android') => Object.defineProperty(Platform, 'OS', { value: os, configurable: true })
 const bar = (props: Partial<React.ComponentProps<typeof SceneBar>> = {}) => (
