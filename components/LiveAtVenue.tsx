@@ -118,6 +118,27 @@ export function LiveAtVenue() {
     let cancelled = false
     let seq = 0
     let retry: ReturnType<typeof setTimeout> | null = null
+    /** The last window a read showed: if the next read finds nobody live and that one has run out, the end was missed (backgrounded). */
+    let last: ActiveLive | null = null
+    /**
+     * A window ran out at `eventId`: ask "Still here?" (or say the room closed), once. Told by the server's `live:ended`
+     * and, if the socket was away, by the read that finds the window gone. Only a window this phone started has a place
+     * to extend at.
+     */
+    const askEnded = async (eventId: string, reason: string, remembered: LiveSession | null) => {
+      const here = remembered?.venueDayId === eventId ? remembered : null
+      const reset = reason === 'expired' && endedByReset(here, Date.now())
+      // On the room the room says it itself ("Today's room has closed"); the sheet would say it twice.
+      const inRoom = pathRef.current?.startsWith('/chat') === true
+      const askKey = `${reset ? 'reset' : 'ended'}:${eventId}`
+      const ask = reason === 'expired' && here !== null && !askedRef.current.has(askKey) && (reset ? !inRoom : !here.prompted)
+      if (!ask || !here) return { asked: false, reset, inRoom }
+      askedRef.current.add(askKey)
+      const firstGoLive = userId ? !(await hasGoneLiveBefore(userId, eventId)) : true
+      if (!cancelled) setEnded({ kind: reset ? 'reset' : 'ended', venueDayId: eventId, venueId: here.venueId, venueName: here.venueName, visible: true, firstGoLive })
+      if (userId && !reset) void markLivePrompted(userId, eventId)
+      return { asked: true, reset, inRoom }
+    }
     const read = async () => {
       const mine = ++seq
       if (retry) {
@@ -140,6 +161,12 @@ export function LiveAtVenue() {
           : null
         setActive(next)
         setSession(remembered)
+        const before = last
+        last = next
+        // The window ran out while the socket was away: `live:ended` never came, and the read is what finds out.
+        if (!next && before && !before.stay && before.expiresAt && Date.parse(before.expiresAt) <= serverNow()) {
+          void askEnded(before.venueDayId, 'expired', remembered)
+        }
         // Live again (an extension, here or elsewhere): "your live time is up" says something false. A read that
         // still shows the window that just ended (it lands beside the end) is not that.
         const liveAgain = next && (next.stay || !next.expiresAt || Date.parse(next.expiresAt) > serverNow())
@@ -154,21 +181,10 @@ export function LiveAtVenue() {
     const offCheckIn = subscribeCheckInChanged(() => void read())
     const offEnded = subscribeToLiveEnded((data) => {
       void (async () => {
-        const remembered = await readLiveSession(userId)
-        const here = remembered?.venueDayId === data.eventId ? remembered : null
-        const reset = data.reason === 'expired' && endedByReset(here, Date.now())
-        // On the room the room says it itself ("Today's room has closed"); the sheet would say it twice.
-        const inRoom = pathRef.current?.startsWith('/chat') === true
-        const askKey = `${reset ? 'reset' : 'ended'}:${data.eventId}`
-        const ask = data.reason === 'expired' && here && !askedRef.current.has(askKey) && (reset ? !inRoom : !here.prompted)
-        if (ask && here) {
-          askedRef.current.add(askKey)
-          const firstGoLive = userId ? !(await hasGoneLiveBefore(userId, data.eventId)) : true
-          if (!cancelled) setEnded({ kind: reset ? 'reset' : 'ended', venueDayId: data.eventId, venueId: here.venueId, venueName: here.venueName, visible: true, firstGoLive })
-          if (userId && !reset) void markLivePrompted(userId, data.eventId)
-        } else {
+        const asked = await askEnded(data.eventId, data.reason, await readLiveSession(userId))
+        if (!asked.asked) {
           const message = liveEndedMessage(data.reason, nameRef.current)
-          if (message && !(reset && inRoom)) showToast(message, 'info')
+          if (message && !(asked.reset && asked.inRoom)) showToast(message, 'info')
         }
         // The tab bar and every cached "are you in" read; this re-reads too, through the listener.
         checkInChanged(data.eventId)

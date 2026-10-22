@@ -261,6 +261,68 @@ describe('the expiry prompt (Flow 11 · 11.4), as mounted', () => {
   })
 })
 
+/**
+ * M8: the socket was away (the app was backgrounded) when the window ran out, so `live:ended` never came; the read that finds
+ * nobody live, for a window that had run out, asks all the same.
+ * Negative control: removing the `before`/`last` check in `read()` fails "asks from the read".
+ */
+describe('an end the socket missed', () => {
+  const readsAgain = async () => {
+    await act(async () => {
+      mockChanged.forEach((f) => f())
+    })
+    await flush()
+  }
+
+  it('asks from the read that finds the window gone, and a late live:ended does not ask twice', async () => {
+    active(at(5))
+    await mount()
+    jest.setSystemTime(NOW + 6 * 60_000)
+    notLive()
+    await readsAgain()
+    expect(isUp('Still here?')).toBe(true)
+    expect((await readLiveSession('u1'))?.prompted).toBe(true)
+    await press('Done for now')
+    await endWith('expired')
+    expect(isUp('Still here?')).toBe(false)
+  })
+
+  it('not for a window that had not run out (you left, or it was ended early), nor for "stay"', async () => {
+    active(at(30))
+    await mount()
+    notLive()
+    await readsAgain()
+    expect(isUp('Still here?')).toBe(false)
+
+    active(at(5), true)
+    await readsAgain()
+    jest.setSystemTime(NOW + 6 * 60_000)
+    notLive()
+    await readsAgain()
+    expect(isUp('Still here?')).toBe(false)
+  })
+
+  it('not for a window started on another phone, which has no place to extend at', async () => {
+    await require('@react-native-async-storage/async-storage').clear()
+    active(at(5))
+    await mount()
+    jest.setSystemTime(NOW + 6 * 60_000)
+    notLive()
+    await readsAgain()
+    expect(isUp('Still here?')).toBe(false)
+  })
+
+  it('not when it was asked about on a previous run', async () => {
+    await markLivePrompted('u1', 'day-1')
+    active(at(5))
+    await mount()
+    jest.setSystemTime(NOW + 6 * 60_000)
+    notLive()
+    await readsAgain()
+    expect(isUp('Still here?')).toBe(false)
+  })
+})
+
 describe('the 06:00 reset', () => {
   const resetSession = async () => {
     await rememberLiveSession({ userId: 'u1', venueDayId: 'day-1', venueId: 'v1', venueName: 'The Humming Tree', dayEndsAt: new Date(Date.now() - 1000).toISOString() })
