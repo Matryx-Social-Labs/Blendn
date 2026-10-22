@@ -235,7 +235,8 @@ export function NotificationRow({
   const line = stale ? 'This request is no longer open' : context
   const pills = actions?.length && !stale && state !== 'done' ? actions : null
   const detail = contrast ? COLOR.textPrimary : COLOR.textSecondary
-  const slot = pills || done
+  // A request keeps its slot whatever it became (the pills, the outcome, or empty once stale), so the row never jumps.
+  const slot = pills || done || stale
 
   return (
     <View testID={testID}>

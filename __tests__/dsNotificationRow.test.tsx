@@ -293,6 +293,15 @@ describe('foundations C, part 2: the row in its world', () => {
       expect(flat('n-done').position).toBe('absolute')
     })
 
+    it('a request gone stale keeps the slot, empty, so the row does not jump', async () => {
+      const view = await render(row('pending', 'user-plus'))
+      const pending = flat('n-slot')
+      await view.rerender(inWorld('rose', request({ state: 'stale', visual: { type: 'glyph', icon: 'user-plus' } })))
+      expect(flat('n-slot')).toEqual(pending)
+      expect(screen.queryByRole('button', { name: 'Accept' })).toBeNull()
+      expect(screen.queryByTestId('n-done', { includeHiddenElements: true })).toBeNull()
+    })
+
     it('Reduce Motion keeps the crossfade: the pills fade out and the outcome fades in whatever the setting', async () => {
       reduceMotion.mockReturnValue(true)
       const view = await render(row('pending', 'user-plus'))

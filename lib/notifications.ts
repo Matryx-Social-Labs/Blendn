@@ -80,6 +80,9 @@ Notifications.setNotificationHandler({
   },
 })
 
+/** What Android lists for the `default` channel. */
+export const DEFAULT_CHANNEL_NAME = 'Other notifications'
+
 /**
  * The Android channels the server sends on — `deliveryFor` in blendn-admin's
  * `lib/push-notifications.ts` picks one of these for every kind.
@@ -93,9 +96,6 @@ Notifications.setNotificationHandler({
  * first and last word on it — a person changes it in system settings after
  * that. A no-op on iOS.
  */
-/** What Android lists for the `default` channel. */
-export const DEFAULT_CHANNEL_NAME = 'Other notifications'
-
 export async function ensureNotificationChannels(): Promise<void> {
   const base = { vibrationPattern: [0, 250, 250, 250], lightColor: '#FF6B6B' }
   /*
