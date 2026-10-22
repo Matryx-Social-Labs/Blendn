@@ -105,7 +105,7 @@ export function useFriendsHere(eventId: string | null, inRoom: boolean): Friends
 export const firstNameOf = (name: string): string => name.trim().split(/\s+/)[0] || name
 
 /** The DM did not open (the friend left, an unfriend or a block in between, or no network). */
-export const friendChatFailure = (name: string): string => `Couldn’t open your chat with ${firstNameOf(name)}. Try again.`
+export const friendChatFailure = (name: string): string => `Couldn't open your chat with ${firstNameOf(name)}. Try again.`
 
 /**
  * Message: open (or find) the friend chat by real user id, then go there. One at a

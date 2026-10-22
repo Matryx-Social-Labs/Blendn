@@ -38,7 +38,7 @@ const PREFERENCE_TITLES: Record<PreferenceKey, string> = {
   showOnlineStatus: 'Show online status',
   shareReadReceipts: 'Read receipts',
   locationSharing: 'Share location for nearby events',
-  friendsSeeMe: 'Friends can see who I am in rooms',
+  friendsSeeMe: "Friends can see I'm here",
 }
 
 interface PreferencesState {
@@ -462,7 +462,7 @@ function SettingsScreenContent() {
           {preferenceRow('showOnlineStatus', 'eye', 'Show online status', 'Off: you’re counted at events but not listed to other people there.')}
           {preferenceRow('shareReadReceipts', 'check-check', 'Read receipts')}
           {preferenceRow('locationSharing', 'navigation', 'Share location for nearby events')}
-          {preferenceRow('friendsSeeMe', 'users', 'Friends can see who I am in rooms', 'Off: at an event, your friends see your pseudonym like everyone else.')}
+          {preferenceRow('friendsSeeMe', 'users', "Friends can see I'm here", "On: friends at the same event see you under Friends here, with your name and photo, and can message you. Off: you don't show up for friends at events at all.")}
           {/* R4.1 7.2: a prefilled email to support; nothing is sent until they press Send in their mail app. */}
           <SettingsRow
             icon="download"

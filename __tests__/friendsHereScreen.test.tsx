@@ -89,7 +89,7 @@ describe('See all friends here', () => {
     await act(async () => {
       fireEvent.press(screen.getByRole('button', { name: 'Message Asha Menon' }))
     })
-    expect(mockToast).toHaveBeenCalledWith('Couldn’t open your chat with Asha. Try again.', 'error')
+    expect(mockToast).toHaveBeenCalledWith("Couldn't open your chat with Asha. Try again.", 'error')
     expect(mockPush).not.toHaveBeenCalled()
   })
 
