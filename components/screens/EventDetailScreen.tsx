@@ -20,13 +20,11 @@ import { linkRefusalCard } from '../../lib/linkRefusalCard'
 import { eventLoadFailure, type EventLoadFailure } from '../../lib/eventLinkRefusal'
 import type { MenuItem } from '../ds/ContextMenu'
 import { OfflineBanner } from '../OfflineBanner'
-import { AnnouncementSheet, EditEventSheet } from '../scene/EventSheets'
 import { SceneBar } from '../scene/SceneBar'
 import { SceneChangedLines, SceneDayStrip } from '../scene/SceneChange'
 import { changeLines, parseEventChange, type EventChange } from '../../lib/eventChange'
 import { betweenDaysLine, dayOfWords, parseEventDays, runRange, sessionIsToday, type EventDays } from '../../lib/eventDays'
 import { showSheet } from '../../lib/sheet'
-import { useSingleFlight } from '../../lib/useSingleFlight'
 import { SkeletonBlock } from '../Skeleton'
 import { liveWindow, sessionFromApi, type EventSession } from '../../lib/eventSession'
 import { cardTime, peopleLabel } from '../../lib/pulse'
@@ -303,16 +301,8 @@ export default function EventDetail() {
   const [menuOpen, setMenuOpen] = useState(false)
   /** The map mounts once the push has settled, so it does not cost the transition a frame. */
   const [showMap, setShowMap] = useState(false)
-  const [isOrganizer, setIsOrganizer] = useState(false)
-  const [showAnnouncementModal, setShowAnnouncementModal] = useState(false)
   /** Which gallery item the lightbox is on, or null when it is closed. */
   const [lightbox, setLightbox] = useState<number | null>(null)
-  const [announcementText, setAnnouncementText] = useState('')
-  const [showEditModal, setShowEditModal] = useState(false)
-  const [editTitle, setEditTitle] = useState('')
-  const [editDescription, setEditDescription] = useState('')
-  const [editShortDescription, setEditShortDescription] = useState('')
-  const [savingEdit, setSavingEdit] = useState(false)
   /*
    * The detail payload (camelCase, or snake_case from an older cache entry)
    * into the screen's state. One mapper for the fetch and the cache: a field
@@ -369,10 +359,6 @@ export default function EventDetail() {
       setCheckInCount(d.stats.checkInCount || 0)
       setDetailHere(typeof d.stats.hereCount === 'number' ? d.stats.hereCount : null)
       setGoingCount(d.stats.rsvpCount || 0)
-    }
-    // Determine if current user is the organizer
-    if (user && d.organizer?.id) {
-      setIsOrganizer(d.organizer.id === user.id)
     }
   }
 
@@ -722,125 +708,6 @@ export default function EventDetail() {
     }, [id, loading])
   )
 
-  // === ORGANIZER ACTIONS ===
-
-  /*
-   * One composer, both platforms.
-   *
-   * iOS used `Alert.prompt` and Android this modal, for one action — and the
-   * iOS half was the worse of the two in three ways that all point the same
-   * direction: no character limit against the server's 1,000, no pending
-   * state, and **no disable while sending**, so a second tap sent a second
-   * announcement to every attendee in the room. A system dialog also cannot
-   * carry the app's design, which is the whole reason the modal was written.
-   *
-   * `Alert.prompt` is iOS-only, so the modal was already the general answer;
-   * it was simply never used where the shortcut existed.
-   */
-  const openAnnouncementComposer = () => {
-    // The text stays from the last try: it is cleared only by a send that went through.
-    setShowAnnouncementModal(true)
-  }
-
-  // One broadcast per tap, however fast the taps come (`useSingleFlight`).
-  const { run: sendAnnouncement, pending: sendingAnnouncement } = useSingleFlight(async () => {
-    if (!announcementText.trim()) return
-    try {
-      const result = await apiClient.sendAnnouncement(String(id), announcementText.trim())
-      if (result.success) {
-        H.success()
-        showToast('Announcement sent.', 'success')
-        setShowAnnouncementModal(false)
-        setAnnouncementText('')
-      } else {
-        H.error()
-        showToast('Couldn’t send the announcement. Try again.', 'error')
-        setShowAnnouncementModal(false)
-      }
-    } catch {
-      H.error()
-      showToast('Couldn’t send the announcement. Try again.', 'error')
-      setShowAnnouncementModal(false)
-    }
-  })
-
-  const openEditComposer = () => {
-    if (!event) return
-    setEditTitle(event.title)
-    setEditDescription(event.description)
-    setEditShortDescription(event.short_description)
-    setShowEditModal(true)
-  }
-
-  const saveEventEdit = async () => {
-    if (!editTitle.trim()) return
-    setSavingEdit(true)
-    try {
-      const result = await apiClient.updateEvent(String(id), {
-        title: editTitle.trim(),
-        description: editDescription.trim(),
-        shortDescription: editShortDescription.trim(),
-      })
-      if (result.success) {
-        H.success()
-        showToast('Event updated.', 'success')
-        setShowEditModal(false)
-        setEvent((prev) =>
-          prev
-            ? {
-                ...prev,
-                title: editTitle.trim(),
-                description: editDescription.trim(),
-                short_description: editShortDescription.trim(),
-              }
-            : prev
-        )
-      } else {
-        H.error()
-        showToast('Couldn’t save your changes. Try again.', 'error')
-        setShowEditModal(false)
-      }
-    } catch {
-      H.error()
-      showToast('Couldn’t save your changes. Try again.', 'error')
-      setShowEditModal(false)
-    } finally {
-      setSavingEdit(false)
-    }
-  }
-
-  // The app's one sheet, like every other "are you sure" (lib/sheet.ts): a
-  // failed delete stays on the sheet with "Try again" rather than a second popup.
-  const handleDeleteEvent = () => {
-    showSheet({
-      kind: 'actions',
-      title: 'Delete this event?',
-      message: "Everyone going loses it, and it can’t be undone.",
-      actions: [
-        {
-          label: 'Delete event',
-          variant: 'destructive',
-          run: async () => {
-            try {
-              const result = await apiClient.deleteEvent(String(id))
-              if (!result.success) {
-                H.error()
-                return { ok: false, error: "Couldn’t delete the event. Try again." }
-              }
-            } catch {
-              H.error()
-              return { ok: false, error: "Couldn’t delete the event. Try again." }
-            }
-            H.success()
-            router.back()
-            return { ok: true, toast: 'Event deleted' }
-          },
-        },
-        { label: 'Cancel', cancel: true },
-      ],
-    })
-  }
-
   const openInMaps = () => {
     if (event) void openPlaceInMaps(event)
   }
@@ -1167,17 +1034,9 @@ export default function EventDetail() {
     ...amenities.map((a) => ({ label: a.title.toUpperCase(), value: a.subtitle || 'Included', testID: `scene-tile-${a.id}` })),
   ]
 
-  // The ⋯: report for anyone; the organiser's own three, with Delete last and in red (U-L8).
-  const menu: MenuItem[] = [
-    ...(isOrganizer
-      ? [
-          { icon: 'pencil' as const, label: 'Edit event', onPress: openEditComposer },
-          { icon: 'megaphone' as const, label: 'Send an announcement', onPress: openAnnouncementComposer },
-        ]
-      : []),
-    { icon: 'flag', label: 'Report this event', onPress: () => showEventReportOptions(event?.title || 'this event', String(id)) },
-    ...(isOrganizer ? [{ icon: 'trash' as const, label: 'Delete event', onPress: handleDeleteEvent, destructive: true }] : []),
-  ]
+  // The ⋯: report, for anyone. An organiser edits, announces and deletes on the dashboard (Flow 15 #2, owner ruling D3): the Scene is the
+  // attendee's one surface, and shows no staff control to anybody.
+  const menu: MenuItem[] = [{ icon: 'flag', label: 'Report this event', onPress: () => showEventReportOptions(event?.title || 'this event', String(id)) }]
 
   const onFirstLoad = loading && !event
   return (
@@ -1377,30 +1236,8 @@ export default function EventDetail() {
         onClose={() => setLightbox(null)}
       />
 
-      {/* The ⋯: Report for anyone; the organiser's Edit, Announce and Delete (their own sheets below). */}
+      {/* The ⋯: Report. */}
       <OverflowMenu visible={menuOpen} items={menu} onClose={() => setMenuOpen(false)} testID="scene-menu" />
-
-      {/* The announcement composer and the event editor: the app's own Sheet, above the keyboard (components/scene/EventSheets.tsx). */}
-      <AnnouncementSheet
-        visible={showAnnouncementModal}
-        text={announcementText}
-        onChangeText={setAnnouncementText}
-        sending={sendingAnnouncement}
-        onSend={sendAnnouncement}
-        onClose={() => setShowAnnouncementModal(false)}
-      />
-      <EditEventSheet
-        visible={showEditModal}
-        title={editTitle}
-        onChangeTitle={setEditTitle}
-        shortDescription={editShortDescription}
-        onChangeShortDescription={setEditShortDescription}
-        description={editDescription}
-        onChangeDescription={setEditDescription}
-        saving={savingEdit}
-        onSave={saveEventEdit}
-        onClose={() => setShowEditModal(false)}
-      />
     </View>
   )
 }

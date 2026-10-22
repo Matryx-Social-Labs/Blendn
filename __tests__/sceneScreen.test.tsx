@@ -1,6 +1,6 @@
 /**
  * The Scene screen (Flow 3 `scene`), state by state: the failed and not-found pages, the ⋯ menu (Report for anyone;
- * Edit, Announce and Delete for the organiser, Delete last), the facts as tiles, the banners and the one dock button.
+ * and nothing else: an organiser's tools are the dashboard's), the facts as tiles, the banners and the one dock button.
  * What it does with an RSVP, a save or a check-in is unchanged and pinned by the source tests beside this one.
  */
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native'
@@ -377,12 +377,20 @@ describe('the ⋯ menu', () => {
     expect(showEventReportOptions).toHaveBeenCalledWith('Vinyl Night', 'e1')
   })
 
-  it('the organiser also gets Edit and Announce, and Delete last, in red', async () => {
+  it('the organiser gets the same menu: no Edit, Announce or Delete on the Scene (they are the dashboard\'s, owner ruling D3)', async () => {
     api.getEvent.mockResolvedValue(detail({ organizer: { id: 'me', name: 'Me' } }) as never)
     await open()
     await fireEvent.press(await screen.findByRole('button', { name: 'More options' }))
     const names = within(screen.getByTestId('scene-menu')).getAllByRole('button').map((n) => n.props.accessibilityLabel)
-    expect(names).toEqual(['Edit event', 'Send an announcement', 'Report this event', 'Delete event'])
+    expect(names).toEqual(['Report this event'])
+    expect(screen.queryByRole('button', { name: 'Edit event' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Delete event' })).toBeNull()
+  })
+
+  it('the screen carries no organiser sheet, state or handler any more', () => {
+    const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'components', 'screens', 'EventDetailScreen.tsx'), 'utf8') as string
+    expect(src).not.toMatch(/AnnouncementSheet|EditEventSheet|isOrganizer|sendAnnouncement|updateEvent|deleteEvent/)
+    expect(require('fs').existsSync(require('path').join(__dirname, '..', 'components', 'scene', 'EventSheets.tsx'))).toBe(false)
   })
 })
 
