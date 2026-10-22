@@ -64,6 +64,7 @@ import { openBlendn } from '../lib/blendnOverlay'
 import type { BoardPost, BoardRequest } from '../lib/board'
 import { showSheet, type ActionSheet } from '../lib/sheet'
 import { H } from '../lib/haptics'
+import { noteBlocked } from '../lib/blockEpoch'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
 const FUTURE = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString()
@@ -583,7 +584,11 @@ describe('report and block, by the post', () => {
   it('blocks by the post, after asking, and takes it off the board — even past a stale read', async () => {
     // A read already in flight still lists the post; it must not bring it back.
     api.getBoard.mockResolvedValue(board([OFFER]))
-    api.blockBoardPost.mockResolvedValue({ success: true, data: { blocked: true } })
+    api.blockBoardPost.mockImplementation(async () => {
+      // The real client moves the epoch on a yes (lib/apiClient noteBlockedOn).
+      noteBlocked()
+      return { success: true, data: { blocked: true } }
+    })
     await render(<BoardScreen />)
 
     const { sheet, step } = await menu()
@@ -780,7 +785,11 @@ describe('a block removes a person from every page already loaded (safety)', () 
   it('drops their posts from the older pages too, forgets those pages, and starts again from the fresh first page’s cursor', async () => {
     api.getBoard.mockResolvedValueOnce(page([OFFER], 'c1') as never)
     ;(apiClient.queuedRequest as jest.Mock).mockResolvedValueOnce(page([olderHeron, otter], 'c2'))
-    api.blockBoardPost.mockResolvedValue({ success: true, data: { blocked: true } })
+    api.blockBoardPost.mockImplementation(async () => {
+      // The real client moves the epoch on a yes (lib/apiClient noteBlockedOn).
+      noteBlocked()
+      return { success: true, data: { blocked: true } }
+    })
     await render(<BoardScreen />)
     await screen.findByText(OFFER.body)
     await act(async () => fireEvent(screen.getByTestId('board-list'), 'endReached'))
@@ -806,7 +815,11 @@ describe('a block removes a person from every page already loaded (safety)', () 
     let finish: (v: unknown) => void = () => {}
     api.getBoard.mockResolvedValueOnce(page([OFFER], 'c1') as never)
     ;(apiClient.queuedRequest as jest.Mock).mockReturnValueOnce(new Promise((r) => (finish = r)))
-    api.blockBoardPost.mockResolvedValue({ success: true, data: { blocked: true } })
+    api.blockBoardPost.mockImplementation(async () => {
+      // The real client moves the epoch on a yes (lib/apiClient noteBlockedOn).
+      noteBlocked()
+      return { success: true, data: { blocked: true } }
+    })
     await render(<BoardScreen />)
     await screen.findByText(OFFER.body)
     await act(async () => fireEvent(screen.getByTestId('board-list'), 'endReached'))

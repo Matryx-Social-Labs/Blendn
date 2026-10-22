@@ -34,6 +34,7 @@ jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn(
 /* eslint-disable import/first */
 import RoomInfo from '../app/chat-info/[id]'
 import { apiClient } from '../lib/apiClient'
+import { noteBlocked } from '../lib/blockEpoch'
 import { resetRoomMembership } from '../lib/roomMembership'
 /* eslint-enable import/first */
 
@@ -239,4 +240,13 @@ describe('a block takes the person off the list (safety)', () => {
     // 99 held now, and the server's own list no longer has them: the next page starts at 99.
     expect(api.getChatParticipants).toHaveBeenLastCalledWith('g1', { limit: 100, offset: 99 })
   })
+})
+
+it('a block made anywhere reads the roster again from the start (H2)', async () => {
+  await open()
+  api.getChatParticipants.mockClear()
+  api.getChatParticipants.mockResolvedValue({ success: true, data: { participants: [{ userId: 'u-a', name: 'Cosmic Panda', role: 'member' }], totalCount: 1 } } as never)
+  await act(async () => noteBlocked())
+  expect(api.getChatParticipants).toHaveBeenCalledWith('g1', { limit: 100, offset: 0 })
+  expect(screen.queryByLabelText('Amber Fox, Organiser')).toBeNull()
 })

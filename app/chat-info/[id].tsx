@@ -31,6 +31,7 @@ import { idParam, nameParam } from '../../lib/routeParams'
 import { showRoomReportOptions } from '../../lib/safetyUtils'
 import { subscribeToChatMemberLeft } from '../../lib/socketClient'
 import { useAuth } from '../../lib/useAuth'
+import { useOnBlock } from '../../lib/useOnBlock'
 import { OPACITY } from '../../lib/theme'
 
 type Member = { userId: string; name: string | null; role: string }
@@ -164,6 +165,9 @@ function ChatInfoInner() {
   useEffect(() => {
     void loadMembers().finally(() => setLoading(false))
   }, [loadMembers])
+
+  /* A block made anywhere starts the roster over from the server, which now leaves that person out. */
+  useOnBlock(() => void loadMembers(0))
 
   /* Somebody leaving takes their creature off the grid at once, and the count with them. */
   useEffect(

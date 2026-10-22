@@ -81,6 +81,7 @@ jest.mock('../lib/notifications', () => ({ useActiveThread: jest.fn() }))
 
 /* eslint-disable import/first */
 import { router } from 'expo-router'
+import { noteBlocked } from '../lib/blockEpoch'
 import GroupChat from '../app/chat/[id]'
 import { apiClient } from '../lib/apiClient'
 /* eslint-enable import/first */
@@ -286,5 +287,28 @@ describe('every live:ended reason has its own calm state (C6, 11.5)', () => {
     await render(<GroupChat />)
     await flush()
     expect(screen.getByText('You’re not live here any more')).toBeTruthy()
+  })
+})
+
+describe('a block made on another screen purges the feed (H2)', () => {
+  const msg = (id: string, userId: string, name: string, content: string) => ({ id, userId, user: { name }, content, type: 'text', createdAt: '2026-10-22T20:00:00.000Z' })
+  const feed = (...m: object[]) => ({ success: true, data: { messages: m, pagination: { hasMore: false, nextCursor: null } } })
+
+  it('Room info blocks somebody, you come back, and their messages are gone — the loaded pages and all', async () => {
+    ;(apiClient.getChatGroups as jest.Mock).mockResolvedValue({
+      success: true,
+      data: { groups: [eventRow({}, { startTime: new Date(Date.now() + HOUR).toISOString() })] },
+    })
+    ;(apiClient.getChatMessages as jest.Mock).mockResolvedValue(feed(msg('m1', 'u-fox', 'Fox', 'hello from fox'), msg('m2', 'u-owl', 'Owl', 'hello from owl')))
+    await render(<GroupChat />)
+    await flush()
+    expect(screen.getByText('hello from fox')).toBeTruthy()
+
+    // The server now leaves Fox out; the block was made on Room info, so this screen never saw the tap.
+    ;(apiClient.getChatMessages as jest.Mock).mockResolvedValue(feed(msg('m2', 'u-owl', 'Owl', 'hello from owl')))
+    await act(async () => noteBlocked())
+    await flush()
+    expect(screen.queryByText('hello from fox')).toBeNull()
+    expect(screen.getByText('hello from owl')).toBeTruthy()
   })
 })

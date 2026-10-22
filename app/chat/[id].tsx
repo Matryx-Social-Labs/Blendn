@@ -75,6 +75,7 @@ import { useAuth } from '../../lib/useAuth'
 import { lockFor, useComposerLock, type ComposerLock } from '../../lib/useComposerLock'
 import { scrollListToEnd, useFollowEnd } from '../../lib/useFollowEnd'
 import { useLatest } from '../../lib/useLatest'
+import { useOnBlock } from '../../lib/useOnBlock'
 import { useLiveSync } from '../../lib/useLiveSync'
 import { isOffline, useWaitingSends } from '../../lib/useWaitingSends'
 import { userMessage } from '../../lib/userMessage'
@@ -193,6 +194,7 @@ function GroupChatInner() {
               : outOfRoom
                 ? { kind: 'out' }
                 : null
+  const outsideRef = useLatest(outside)
   const muted = isMuted(useRoomMute(chatRoomId ? roomId : null))
   /** From the room list (`memberCount`), less anyone who leaves while you watch (`chat:memberLeft`). */
   const [leftSince, setLeftSince] = useState(0)
@@ -595,6 +597,20 @@ function GroupChatInner() {
 
   /* A Go Live ended: only this room's re-reads, and answers NOT_LIVE (L2). */
   const loadMessagesRef = useLatest(loadMessages)
+  /*
+   * A block made anywhere (Room info's card, a profile) takes that person out of what this feed already holds: the
+   * loaded pages are dropped (only what this phone has not sent yet stays) and the newest page is read again, which
+   * the server now filters. Their cursor starts over with it.
+   */
+  useOnBlock(() => {
+    if (!chatRoomId || outsideRef.current) return
+    messagesRef.current = messagesRef.current.filter(isTemp)
+    setMessages(messagesRef.current)
+    setHasMore(false)
+    setOldestCursor(null)
+    if (messagesCacheKey) queryCache.invalidate(messagesCacheKey)
+    void loadMessagesRef.current(true)
+  })
   const roomEventIdRef = useLatest(roomInfo.eventId ?? null)
   useEffect(
     () =>

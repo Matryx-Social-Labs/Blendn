@@ -37,6 +37,7 @@ import { openBlendn } from '../../lib/blendnOverlay'
 import { Logger } from '../../lib/logger'
 import { useLatest } from '../../lib/useLatest'
 import { useLiveSync } from '../../lib/useLiveSync'
+import { useOnBlock } from '../../lib/useOnBlock'
 import { boardSafetySheet } from '../../lib/safetyUtils'
 import { showSheet } from '../../lib/sheet'
 import { cursorOf, getBoardPage, type BoardPostView } from '../../lib/chatPaging'
@@ -190,6 +191,19 @@ export function BoardScreen() {
       return false
     }
   }, [eventId, loadRef])
+
+  /*
+   * A block from anywhere (a post's card here, a profile, a request in the Banter): the older pages loaded are dropped,
+   * a page still on its way is ignored, the cursor is forgotten and the fresh first page, which the server now
+   * filters, brings the next one.
+   */
+  useOnBlock(() => {
+    pageEpoch.current += 1
+    older.current = []
+    setCursor(null)
+    setMoreState('idle')
+    void fetchBoard()
+  })
 
   // On focus, so coming back from the Banter shows what was answered there.
   useFocusEffect(
@@ -380,19 +394,14 @@ export function BoardScreen() {
       showSheet(
         boardSafetySheet({ kind: 'post', eventId, postId: post.id }, post.author, () => {
           removed.current.add(post.id)
-          // A block hides the person, not the one post: every page already loaded loses their posts at once (the
-          // handle is the board's one name for them), the older pages are dropped, a page still on its way is
-          // ignored, and the fresh first page and its cursor come back from the server, which now filters them.
+          // A block hides the person, not the one post: their posts leave every page already loaded at once (the handle
+          // is the board's one name for them). The older pages, the cursor and the fresh first page follow from the
+          // block epoch (`useOnBlock` above), which every route to a block moves.
           const blocked = post.author
-          pageEpoch.current += 1
-          older.current = []
-          setCursor(null)
-          setMoreState('idle')
           for (const [id, p] of created.current) if (!p.mine && p.author === blocked) created.current.delete(id)
           setLoad((prev) =>
             prev.kind === 'ready' ? { kind: 'ready', posts: prev.posts.filter((p) => p.id !== post.id && (p.mine || p.author !== blocked)) } : prev
           )
-          void fetchBoard()
         })
       )
     },
