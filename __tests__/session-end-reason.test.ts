@@ -302,6 +302,49 @@ describe('every request names the build (Flow 15 15.14), and a refusal to serve 
   })
 })
 
+describe('every request declares its channel set (SCRUM-739)', () => {
+  // Without X-Channel-Set: 2 the server serves an event_changed bell row as event_update (blendn-admin #716 openapi, mobile-misc.ts).
+  it.each(['ios', 'android', 'web'])('%s: a GET, a POST, a request with its own headers, and the token refresh all carry it, from the push token\'s constant', async (os) => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { Platform } = require('react-native') as { Platform: { OS: string } }
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { PUSH_CHANNEL_SET, CHANNEL_SET_HEADER } = require('../lib/apiClient') as typeof import('../lib/apiClient')
+    const was = Platform.OS
+    Platform.OS = os
+    try {
+      const sent: Array<[string, Record<string, string>]> = []
+      global.fetch = jest.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+        sent.push([String(url), init?.headers as Record<string, string>])
+        return String(url).endsWith('/auth/refresh') ? json(200, { success: true, data: { accessToken: 'a2', refreshToken: 'r2' } }) : json(200, { success: true, data: {} })
+      }) as typeof fetch
+      await apiClient.getSession()
+      await apiClient.getNotifications({ limit: 1 })
+      await apiClient.markNotificationsRead()
+      await apiClient.registerPushToken('tok', 'android')
+      expect(sent.length).toBeGreaterThanOrEqual(4)
+      for (const [url, headers] of sent) expect([url, headers['X-Channel-Set']]).toEqual([url, String(PUSH_CHANNEL_SET)])
+      expect(CHANNEL_SET_HEADER).toEqual({ 'X-Channel-Set': '2' })
+    } finally {
+      Platform.OS = was
+    }
+  })
+
+  it('the token refresh declares it too', async () => {
+    const sent: Array<[string, Record<string, string>]> = []
+    let n = 0
+    await TokenStorage.setTokens('access-1', 'refresh-1')
+    global.fetch = jest.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      sent.push([String(url), init?.headers as Record<string, string>])
+      if (String(url).endsWith('/auth/refresh')) return json(200, { success: true, data: { accessToken: 'a2', refreshToken: 'r2' } })
+      return n++ === 0 ? json(401, { success: false, errorCode: 'UNAUTHORIZED' }) : json(200, { success: true, data: {} })
+    }) as typeof fetch
+    await apiClient.getSession()
+    const refresh = sent.find(([u]) => u.endsWith('/auth/refresh'))
+    expect(refresh).toBeDefined()
+    expect(refresh![1]['X-Channel-Set']).toBe('2')
+  })
+})
+
 describe('the refresh names the reason in reasonCode, beside an errorCode that keeps its old value', () => {
   const refreshAnswers = (status: number, body: Record<string, unknown>) => {
     global.fetch = jest.fn(async (input: RequestInfo | URL) =>

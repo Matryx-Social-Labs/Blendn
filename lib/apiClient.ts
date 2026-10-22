@@ -1132,6 +1132,13 @@ let rejectedCode: string | undefined
 /** The Android channel set this build creates (lib/notifications): 2 = the Flow 9 channels. Bump with the set. */
 export const PUSH_CHANNEL_SET = 2
 
+/**
+ * Said on every request, from the one constant the push token posts: a build that knows `event_changed` declares it, and
+ * `GET /notifications` serves a build that does not the old `event_update` row so its tap opens the event (blendn-admin #716,
+ * SCRUM-739). Web sends it too: the server's CORS allow-list names `X-Channel-Set`.
+ */
+export const CHANNEL_SET_HEADER = { 'X-Channel-Set': String(PUSH_CHANNEL_SET) } as const
+
 class ApiClientClass {
   private baseUrl: string
   private inFlight = new Map<string, Promise<ApiResponse<unknown>>>()
@@ -1403,6 +1410,7 @@ class ApiClientClass {
       'Content-Type': 'application/json',
       // Which build is asking, so the server can refuse one it no longer serves (Flow 15 15.14). Not from the web build: a custom header there is a CORS preflight the server does not yet allow, and would block every call.
       ...(Platform.OS !== 'web' ? { 'X-App-Version': appVersionNumber() } : {}),
+      ...CHANNEL_SET_HEADER,
       ...(options.headers as Record<string, string>),
     }
 
@@ -1535,7 +1543,7 @@ class ApiClientClass {
         // whole app until it is killed.
         const { response, body: raw } = await fetchWithTimeout(`${this.baseUrl}/api/mobile/auth/refresh`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...CHANNEL_SET_HEADER },
           body: JSON.stringify({ refreshToken }),
         })
 
