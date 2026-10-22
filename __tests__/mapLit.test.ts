@@ -16,9 +16,8 @@ import {
   colourAt,
   dedupeLit,
   footprintKey,
-  glowBreathes,
   glowFor,
-  glowOpacity,
+  litFade,
   glowRadius,
   litTopM,
   nearestTo,
@@ -259,13 +258,15 @@ describe('a live event wins at its venue', () => {
 })
 
 describe('the ground glow', () => {
-  it('lies under every lit place: breathing for a live event, stronger at a beacon, still at a building', () => {
-    expect(glowFor(place({ live: true })).properties).toMatchObject({ pulse: true, color: MAP_THEME.event.glow })
-    expect(glowFor(place({ live: false })).properties).toMatchObject({ pulse: false, opacity: MAP_THEME.glow.still })
-    expect(glowFor(place({ live: false, building: null })).properties).toMatchObject({ pulse: false, opacity: MAP_THEME.glow.beacon })
+  it('lies under every lit place: stronger at a beacon, still at a building, and never pulsing', () => {
+    expect(glowFor(place({ live: true })).properties).toMatchObject({ beacon: false, color: MAP_THEME.event.glow })
+    expect(glowFor(place({ live: true, building: null })).properties).toMatchObject({ beacon: true })
     expect(MAP_THEME.glow.beacon).toBeGreaterThan(MAP_THEME.glow.still)
-    // A venue never breathes, live or not, and glows rose.
-    expect(glowFor(place({ kind: 'venue', live: true })).properties).toMatchObject({ pulse: false, color: MAP_THEME.venue.glow })
+    // A venue glows rose, live or not.
+    expect(glowFor(place({ kind: 'venue', live: true })).properties).toMatchObject({ beacon: false, color: MAP_THEME.venue.glow })
+    // "No pulse" (motion #42): a live place's glow is the same feature as a quiet one's.
+    expect(glowFor(place({ live: true })).properties).toEqual({ ...glowFor(place({ live: false })).properties })
+    expect(Object.keys(MAP_THEME.glow)).not.toEqual(expect.arrayContaining(['pulseLow', 'pulseHigh', 'periodMs', 'breatheForMs']))
   })
 
   it('sits on the public pin', () => {
@@ -281,18 +282,9 @@ describe('the ground glow', () => {
     expect(MAP_THEME.glow.maxZoom).toBeLessThanOrEqual(18)
   })
 
-  it('breathes 0.15 ↔ 0.35 only in view, with motion allowed and something live, and only for a few seconds', () => {
-    expect(glowBreathes({ visible: true, reduceMotion: false, anyLive: true })).toBe(true)
-    expect(glowBreathes({ visible: true, reduceMotion: true, anyLive: true })).toBe(false)
-    expect(glowBreathes({ visible: false, reduceMotion: false, anyLive: true })).toBe(false)
-    expect(glowBreathes({ visible: true, reduceMotion: false, anyLive: false })).toBe(false)
-    expect([glowOpacity('low'), glowOpacity('high')]).toEqual([0.15, 0.35])
-    expect(MAP_THEME.glow.breatheForMs).toBeLessThanOrEqual(5000)
-  })
-
-  it('holds a steady 0.3 when not breathing (WCAG 2.2.2)', () => {
-    expect(glowOpacity('steady')).toBe(0.3)
-    expect(MAP_THEME.glow.periodMs).toBe(1600)
+  it('the lit layers arrive once over long, and over 200 ms under Reduce Motion', () => {
+    expect(litFade(false)).toEqual({ duration: 520, delay: 0 })
+    expect(litFade(true)).toEqual({ duration: 200, delay: 0 })
   })
 })
 

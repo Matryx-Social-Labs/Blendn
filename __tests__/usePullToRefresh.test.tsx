@@ -63,3 +63,45 @@ it('Android keeps the platform control: no custom hold, no scroll handling', asy
   expect(threshold).not.toHaveBeenCalled()
   expect(onRefresh).not.toHaveBeenCalled()
 })
+
+describe('the wrapper API: listProps + indicator', () => {
+  it('iOS: spreads the scroll handlers and the hold inset, no refreshControl, and an indicator to mount', async () => {
+    on('ios')
+    const onRefresh = jest.fn()
+    const { result, rerender } = await renderHook((p: { refreshing: boolean }) => usePullToRefresh({ refreshing: p.refreshing, onRefresh }), {
+      initialProps: { refreshing: false },
+    })
+    const { listProps } = result.current
+    expect(listProps.refreshControl).toBeUndefined()
+    expect(listProps.scrollEventThrottle).toBe(16)
+    expect(listProps.contentInset).toEqual({ top: 0 })
+    expect(result.current.indicator).not.toBeNull()
+    await act(async () => listProps.onScrollEndDrag(at(-70)))
+    expect(onRefresh).toHaveBeenCalledTimes(1)
+    await rerender({ refreshing: true })
+    expect(result.current.listProps.contentInset).toEqual({ top: PULL_ARM })
+  })
+
+  it("calls the screen's own onScroll first, with the same event, then reads the pull", async () => {
+    on('ios')
+    const order: string[] = []
+    const own = jest.fn(() => order.push('own'))
+    const threshold = jest.spyOn(H, 'threshold').mockImplementation(() => void order.push('pull'))
+    const { result } = await renderHook(() => usePullToRefresh({ refreshing: false, onRefresh: jest.fn(), onScroll: own }))
+    const event = at(-70)
+    await act(async () => result.current.listProps.onScroll(event))
+    expect(own).toHaveBeenCalledWith(event)
+    expect(order).toEqual(['own', 'pull'])
+    threshold.mockRestore()
+  })
+
+  it('Android: hands over the platform control, offset like the monogram would be, and no indicator', async () => {
+    on('android')
+    const onRefresh = jest.fn()
+    const { result } = await renderHook(() => usePullToRefresh({ refreshing: true, onRefresh, indicatorTop: 96 }))
+    expect(result.current.indicator).toBeNull()
+    const control = result.current.listProps.refreshControl
+    expect(control?.props).toMatchObject({ refreshing: true, onRefresh, progressViewOffset: 96 })
+    expect(result.current.listProps.contentInset).toEqual({ top: 0 })
+  })
+})

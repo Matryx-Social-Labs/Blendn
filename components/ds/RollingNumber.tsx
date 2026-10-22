@@ -11,7 +11,7 @@ import { CONTROL_FONT_CAP, font, useBoldText } from './shared'
  * `title` (the recap tiles; the page's 28 is between roles), `bodyStrong` (17,
  * beside a heading), and `button` (the button's Satoshi 700 at 16/20, tabular, for a count inside a button label).
  */
-export type RollingRole = 'numericDisplay' | 'title' | 'bodyStrong' | 'button' | 'badge' | 'counter'
+export type RollingRole = 'numericDisplay' | 'title' | 'bodyStrong' | 'button' | 'badge' | 'counter' | 'stepper'
 
 /**
  * `badge` is the unread count's Geist Mono 700 at 12/16 (DS #28); `counter` is a set's "3 of 5", the same size at 500. Both
@@ -25,6 +25,8 @@ const SPEC: Record<RollingRole, { type: keyof typeof TYPE; family: string; cap: 
   button: { type: 'button', family: FONT_FAMILY.brand[700], cap: CONTROL_FONT_CAP },
   badge: { type: 'caption', family: FONT_FAMILY.mono[700], cap: CONTROL_FONT_CAP },
   counter: { type: 'caption', family: FONT_FAMILY.mono[500], cap: CONTROL_FONT_CAP },
+  // The stepper's number (Geist Mono 700 at the heading's 20/26), capped with its discs' control.
+  stepper: { type: 'heading', family: FONT_FAMILY.mono[700], cap: CONTROL_FONT_CAP },
 }
 
 type Roll = { from: string | null; q?: number }

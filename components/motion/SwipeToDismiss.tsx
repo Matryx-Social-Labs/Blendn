@@ -13,7 +13,7 @@ import Animated, {
 } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
 
-import { EMBER } from '../../lib/theme'
+import { COLOR } from '../../lib/design/tokens'
 
 /** Past this, a slow drag dismisses. */
 const DISMISS_DISTANCE = 120
@@ -147,5 +147,5 @@ export function SwipeToDismiss({
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   // The page colour, opaque: a lightbox is a full-screen dark room, not a dimmed sheet.
-  backdrop: { backgroundColor: EMBER.bg },
+  backdrop: { backgroundColor: COLOR.ink },
 })

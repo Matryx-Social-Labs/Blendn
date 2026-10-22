@@ -1,5 +1,6 @@
 import { useFocusEffect } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useBackFromBackground } from './backFromBackground'
 import { clearDirtyDomains, hasDirtyDomain, LiveSyncDomain, subscribeDirtyDomains } from './liveSyncState'
 import { getConnectionStatus, SocketConnectionStatus, subscribeConnectionStatus } from './socketClient'
 import { useLatest } from './useLatest'
@@ -13,6 +14,8 @@ interface UseLiveSyncOptions {
   maxDisconnectedIntervalMs?: number
   syncOnFocus?: boolean
   syncOnReconnect?: boolean
+  /** After more than a minute in the background, sync once on return so counts roll once to now (motion #49). */
+  syncOnReturn?: boolean
 }
 
 export function useLiveSync(options: UseLiveSyncOptions): SocketConnectionStatus {
@@ -25,6 +28,7 @@ export function useLiveSync(options: UseLiveSyncOptions): SocketConnectionStatus
     maxDisconnectedIntervalMs = 60000,
     syncOnFocus = true,
     syncOnReconnect = true,
+    syncOnReturn = true,
   } = options
 
   const [socketStatus, setSocketStatus] = useState<SocketConnectionStatus>(() => getConnectionStatus())
@@ -132,6 +136,20 @@ export function useLiveSync(options: UseLiveSyncOptions): SocketConnectionStatus
       syncOnFocus,
     ])
   )
+
+  // Only the screen in front catches up on return: the ones behind it do on their own next focus.
+  const focusedRef = useRef(false)
+  useFocusEffect(
+    useCallback(() => {
+      focusedRef.current = true
+      return () => {
+        focusedRef.current = false
+      }
+    }, [])
+  )
+  useBackFromBackground(() => {
+    if (focusedRef.current) void runSync()
+  }, enabled && syncOnReturn)
 
   useEffect(() => {
     const unsub = subscribeConnectionStatus((status) => {
