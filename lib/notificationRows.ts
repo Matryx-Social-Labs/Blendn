@@ -197,10 +197,18 @@ const stillWaiting = (item: NotificationItem, now: number) =>
   isRequestKind(item.kind) && item.open !== false && now - new Date(item.createdAt).getTime() < WAITING_DAYS * DAY_MS
 
 /**
- * A friend request comes only through your invite link (`app/f/[token]`), so these rows are the person and the time:
- * the server's `display.context` is not read for them, whatever it names (an event, a room).
+ * A friend request comes through your invite link (`app/f/[token]`) or, since SCRUM-750, from a match where you both
+ * revealed, so these rows are the person and the time: the server's `display.context` is not read for them, whatever it
+ * names (an event, a room). The one thing a request may add is where it came from, and the server says so with
+ * `data.via === 'match'`: "From your match", never the event or the room the match was made in.
  */
 const PERSON_ONLY: ReadonlySet<string> = new Set(['friend_request', 'friend_accepted'])
+
+const FROM_YOUR_MATCH = 'From your match'
+
+/** The context line of a row that is only the person and the time. */
+const personOnlyContext = (item: NotificationItem, when: string) =>
+  item.kind === 'friend_request' && item.data?.via === 'match' ? joinLine(FROM_YOUR_MATCH, when) : when
 
 /** One notification as a row: the server's `display` where it sent one, else the kind's own. */
 export function rowFor(item: NotificationItem, now: number = Date.now()): FeedRow {
@@ -212,7 +220,7 @@ export function rowFor(item: NotificationItem, now: number = Date.now()): FeedRo
     item,
     visual: parseVisual(item.display?.visual) ?? fallbackVisual(item),
     title: text(item.display?.title) ?? fallback.title,
-    context: (PERSON_ONLY.has(item.kind) ? null : text(item.display?.context)) ?? fallback.context,
+    context: PERSON_ONLY.has(item.kind) ? personOnlyContext(item, when) : (text(item.display?.context) ?? fallback.context),
     actions: waiting ? (REQUEST_ACTIONS[item.kind] ?? []) : [],
     waiting,
   }

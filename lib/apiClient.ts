@@ -17,6 +17,7 @@ import type { CityOption } from './city'
 import { Logger } from './logger'
 import { markOffline, markOnline } from './networkStatus'
 import type { NotificationFeed } from './notificationFormat'
+import { parseFriendOffer, type FriendOffer } from './friendOffer'
 import type { Friend, FriendInvite, FriendPerson, FriendProfile, FriendRequest, FriendState } from './friends'
 import type { BoardPost, BoardReportReason, BoardRequestStatus, BoardRequests } from './board'
 import type { Badge, Choice, Overlap, ProfileOptions } from './aboutYou'
@@ -966,6 +967,11 @@ export interface UserProfileData {
    * otherwise, and from an older server.
    */
   connection?: { conversationId: string | null; request: 'sent' | 'received' | null }
+  /**
+   * Whether to offer "Add friend" (SCRUM-750): `{ state, canAdd }`, read through `parseFriendOffer`. `GET /users/:id` sends it
+   * once admin `feat/friend-after-reveal` is on staging; `GET /profiles/:id` already does.
+   */
+  friend?: unknown
   /** Nested profile object from /api/mobile/profiles/[userId] */
   profile?: {
     /*
@@ -2204,6 +2210,16 @@ class ApiClientClass {
     return result
   }
 
+  /**
+   * Whether to offer "Add friend" on somebody's profile (SCRUM-750). `GET /profiles/:id` carries `friend` only for a
+   * person you may see; `GET /users/:id`, which draws the page, does not. Never cached: `getProfile` keeps a profile for
+   * minutes, and a friend state that old offers an ask that was already made.
+   */
+  async getFriendOffer(userId: string): Promise<FriendOffer | null> {
+    const result = await this.queuedRequest<{ friend?: unknown }>(`/api/mobile/profiles/${encodeURIComponent(userId)}`)
+    return result.success ? parseFriendOffer(result.data?.friend) : null
+  }
+
   async updateProfile(
     userId: string,
     data: {
@@ -2969,6 +2985,11 @@ class ApiClientClass {
     theyRevealed?: boolean
     /** Whether they asked you to. There is no "declined". */
     revealRequested?: boolean
+    /**
+     * Whether to offer "Add friend" (SCRUM-750). Read it through `parseFriendOffer`; absent from a server that does not
+     * send it. `otherUser.id` is a handle until they reveal: only an offer with `canAdd` makes it a real id.
+     */
+    friend?: unknown
     createdAt: string
     lastMessageAt: string | null
   }>> {

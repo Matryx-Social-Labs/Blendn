@@ -1,3 +1,4 @@
+import * as Notifications from 'expo-notifications'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FlatList, Platform, StyleSheet, View } from 'react-native'
@@ -44,6 +45,7 @@ import {
   settleDirectMessage,
   type PrivateMessage,
 } from '../../lib/directThread'
+import { friendAction, parseFriendOffer, type FriendOffer } from '../../lib/friendOffer'
 import { H } from '../../lib/haptics'
 import { useKeyboardShown } from '../../lib/keyboard'
 import { markDomainsDirty } from '../../lib/liveSyncState'
@@ -72,6 +74,7 @@ import {
 import { chatClock } from '../../lib/time'
 import { withDaySeparators, withUnreadDivider, type UnreadDivider } from '../../lib/unreadDivider'
 import { useAuth } from '../../lib/useAuth'
+import { useFriendAsk } from '../../lib/useFriendAsk'
 import { useComposerLock } from '../../lib/useComposerLock'
 import { scrollListToEnd, useFollowEnd } from '../../lib/useFollowEnd'
 import { useLatest } from '../../lib/useLatest'
@@ -139,6 +142,8 @@ function PrivateChatInner() {
   const [revealFailed, setRevealFailed] = useState(false)
   const [revealAttempt, setRevealAttempt] = useState(0)
   const [otherId, setOtherId] = useState<string | null>(null)
+  /** The server's offer to add them as a friend (SCRUM-750): `canAdd` only once you have both revealed. */
+  const [friend, setFriend] = useState<FriendOffer | null>(null)
   /** Their photo as the server resolves it: `null` until they reveal. */
   const [otherImage, setOtherImage] = useState<string | null>(null)
   const [loadError, setLoadError] = useState(false)
@@ -160,6 +165,7 @@ function PrivateChatInner() {
       setRevealFailed(false)
       setOtherId(r.data.otherUser?.id || null)
       setOtherImage(r.data.otherUser?.image || null)
+      setFriend(parseFriendOffer(r.data.friend))
       setReveal({
         displayName: r.data.otherUser?.name || 'Someone',
         youRevealed: r.data.youRevealed ?? false,
@@ -174,6 +180,15 @@ function PrivateChatInner() {
       live = false
     }
   }, [conversationId, conversation, revealAttempt])
+
+  // Their reveal as it lands, so Add friend turns on without leaving the thread. `useLiveSync` below covers pushes that are off.
+  useEffect(() => {
+    const sub = Notifications.addNotificationReceivedListener((n) => {
+      const data = n.request.content.data
+      if (data?.type === 'reveal' && data.conversationId === conversation) setRevealAttempt((x) => x + 1)
+    })
+    return () => sub.remove()
+  }, [conversation])
 
   const flatListRef = useRef<FlatList<ChatListItem>>(null)
   const isAtBottomRef = useRef(true)
@@ -196,7 +211,22 @@ function PrivateChatInner() {
       ? () => router.push({ pathname: '/user/[id]', params: { id: String(profileId) } } as never)
       : undefined
   const name = reveal?.displayName || nameParam(otherUserName) || 'Chat'
-  const view = reveal ? revealView(reveal, asked) : null
+  /*
+   * Add friend (SCRUM-750): a lit action while the server offers it (`canAdd`, which is only true once you have both revealed), a
+   * quiet "Requested" once asked. `otherId` is a handle until they reveal, so the ask never carries one (`useFriendAsk` refuses one
+   * too). Already friends: nothing, there is nothing left to do.
+   */
+  const friendAsk = useFriendAsk(name)
+  const friendNow = friendAction(friend)
+  const friendOffered = friendNow?.lit === true
+  const view = reveal ? revealView(reveal, asked, friendOffered) : null
+  /** `inline`: from the options sheet, which shows a refusal under its row instead of a toast. */
+  const addFriend = async (inline: boolean): Promise<{ ok: true } | { ok: false; error: string }> => {
+    const result = await friendAsk.ask(otherId, { inline })
+    if (!result.ok) return result
+    setFriend(result.offer)
+    return { ok: true }
+  }
   const panelKey = revealPanelKey(view)
   const panelOpen = !ended && panelKey !== null && foldedPanel !== panelKey
   // The thread folds the panel away when a touch or a drag ENDS, never while the finger is down: folding on touch-start moves the
@@ -233,6 +263,8 @@ function PrivateChatInner() {
           H.success()
           setRevealSheet(null)
           setReveal((prev) => (prev ? { ...prev, youRevealed: true } : prev))
+          // Their reveal may already be in: your reveal is what can turn Add friend on, and only the server says so.
+          setRevealAttempt((n) => n + 1)
         } else {
           setRevealSheet({ notYet: userMessage(r, "Couldn't reveal. Try again.") })
         }
@@ -595,11 +627,27 @@ function PrivateChatInner() {
 
   const socketStatus = useLiveSync({
     enabled: !!authUser && !!conversationId && !ended,
-    onSync: () => loadMessages(),
+    onSync: () => {
+      // Their reveal changes the conversation, not its messages: with pushes off this is how it arrives.
+      setRevealAttempt((x) => x + 1)
+      return loadMessages()
+    },
     domains: ['chat'],
     syncOnReconnect: true,
     disconnectedIntervalMs: 15000,
   })
+
+  /* The options keep the way back to Add friend after the card is folded away, and say "Requested" once asked. */
+  const friendRow =
+    friendNow && friendNow.kind !== 'friends'
+      ? {
+          action: friendNow,
+          ask: () => {
+            if (friendNow.kind === 'accept') H.primary()
+            return addFriend(true)
+          },
+        }
+      : undefined
 
   /* The options: the conversation's own sheet (lib/safetyUtils), or why it can't open yet. */
   const openOptions = () => {
@@ -608,6 +656,7 @@ function PrivateChatInner() {
         onLeft: () => router.back(),
         fromMatch: reveal.fromMatch ?? true,
         onViewProfile: openProfile,
+        friend: friendRow,
       })
     }
     showSheet({
@@ -808,6 +857,11 @@ function PrivateChatInner() {
             them={{ face: themFace, name }}
             onShow={() => setRevealSheet('confirm')}
             onAsk={askThem}
+            friend={
+              view.bar === 'both' && friendNow
+                ? { label: friendNow.label, accept: friendNow.kind === 'accept', busy: friendAsk.busy, onPress: () => void addFriend(false) }
+                : undefined
+            }
             testID="dm-reveal"
           />
           {view.nudge ? <NudgeLine text={view.nudge} /> : null}

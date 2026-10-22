@@ -42,11 +42,12 @@ export interface ConversationRevealState {
  *   server keeps no "you asked"), the Asked state; there is no declined state.
  * - They revealed, you haven't: Show them, and their name.
  * - You revealed, they haven't: no button; they decide.
- * - Both revealed: the bar is gone for good and the header becomes a button.
+ * - Both revealed: the bar is gone for good and the header becomes a button, except while the server offers "Add friend":
+ *   the bar stays as `both`, the one action left.
  * - An accepted message request was never pseudonymous: no bar, no line.
  */
 export type RevealView = {
-  bar: 'none' | 'youOnly' | 'theyOnly' | 'asked' | null
+  bar: 'none' | 'youOnly' | 'theyOnly' | 'asked' | 'both' | null
   line: { seen: boolean; text: string } | null
   nudge: string | null
 }
@@ -60,9 +61,13 @@ export function revealPanelKey(view: Pick<RevealView, 'bar' | 'nudge'> | null): 
   return view?.bar ? `${view.bar}:${view.nudge ?? ''}` : null
 }
 
-export function revealView(state: ConversationRevealState, askedHere = false): RevealView {
+export function revealView(state: ConversationRevealState, askedHere = false, friendOffered = false): RevealView {
   if (!state.pseudonymous) return { bar: null, line: null, nudge: null }
-  if (state.youRevealed && state.theyRevealed) return { bar: null, line: { seen: true, text: 'You can both see each other' }, nudge: null }
+  if (state.youRevealed && state.theyRevealed) {
+    // Both can see each other: the bar is gone for good, unless the server offers to add them as a friend (SCRUM-750), which is the one
+    // thing left to say. It goes again once asked.
+    return { bar: friendOffered ? 'both' : null, line: { seen: true, text: 'You can both see each other' }, nudge: null }
+  }
   // Being asked is the only signal the other person can send: surfaced, never a demand, never counted.
   const nudge = !state.youRevealed && state.revealRequested ? `${state.displayName} asked to know who you are` : null
   if (state.youRevealed) return { bar: 'youOnly', line: { seen: false, text: 'They can see your name. You can’t see theirs yet.' }, nudge: null }

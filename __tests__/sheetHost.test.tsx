@@ -47,6 +47,37 @@ it('rows: every action but Cancel is a row; a failed run stays and says why', as
   expect(screen.getByText('You can’t block yourself.')).toBeTruthy()
 })
 
+describe('rows: a positive action is lit in the world, a state is quiet and does nothing', () => {
+  const colour = (label: string) => StyleSheet.flatten(screen.getByText(label).props.style).color
+
+  it('a primary row takes the hue’s glyph colour; a disabled row is dimmed, disabled and never runs', async () => {
+    const run = jest.fn(async (): Promise<SheetOutcome> => ({ ok: true }))
+    const quiet = jest.fn()
+    await render(<SheetHost />)
+    await act(async () =>
+      showSheet({
+        kind: 'actions',
+        hue: 'rose',
+        title: 'Mika',
+        layout: 'rows',
+        actions: [
+          { label: 'Add friend', icon: 'user-plus', variant: 'primary', run },
+          { label: 'Requested', icon: 'clock', disabled: true, then: quiet },
+          { label: 'Cancel', cancel: true },
+        ],
+      })
+    )
+    expect(colour('Add friend')).toBe(COLOR.selectionRoseGlyph)
+    expect(colour('Requested')).toBe(COLOR.textPrimary)
+    expect(screen.getByLabelText('Requested').props.accessibilityState).toMatchObject({ disabled: true })
+    await act(async () => fireEvent.press(screen.getByLabelText('Requested')))
+    expect(quiet).not.toHaveBeenCalled()
+    await act(async () => fireEvent.press(screen.getByLabelText('Add friend')))
+    await settle()
+    expect(run).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('the affirmative is lit in the world the sheet is asked from', () => {
   const ask = (hue?: 'rose' | 'violet') =>
     showSheet({ kind: 'actions', hue, title: 'Sign out?', actions: [{ label: 'Sign out', variant: 'primary', then: jest.fn() }, { label: 'Cancel', cancel: true }] })

@@ -3,13 +3,16 @@ import { StyleSheet, Text, View } from 'react-native'
 import { Icon } from '../ui/Icon'
 import { Material } from '../ui/Material'
 import { COLOR, ICON, MATERIAL, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { H } from '../../lib/haptics'
 import { Avatar } from './Avatar'
 import { Button } from './Button'
 import type { Face } from './Facepile'
 import { CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from './shared'
 
-/** None revealed, you only, they only, or you asked them; at both the bar is gone. */
-export type RevealState = 'none' | 'youOnly' | 'theyOnly' | 'asked'
+/** None revealed, you only, they only, or you asked them; at both the bar is gone, unless there is a friend to add (`both`). */
+export type RevealState = 'none' | 'youOnly' | 'theyOnly' | 'asked' | 'both'
+/** `both`'s one action: Add friend, or Accept friend request when one is waiting. */
+export type RevealFriend = { label: string; accept?: boolean; busy?: boolean; onPress: () => void }
 /** A side as the DM shows it now: the creature and pseudonym until seen, then the photo and name. */
 export type RevealSide = { face: Face; name: string }
 
@@ -34,6 +37,7 @@ export function RevealBar({
   them,
   onShow,
   onAsk,
+  friend,
   previewState,
   testID,
 }: {
@@ -42,14 +46,16 @@ export function RevealBar({
   them: RevealSide
   onShow?: () => void
   onAsk?: () => void
+  /** `both` only: the action that is left. */
+  friend?: RevealFriend
   /** The design gallery only: Show them pressed or focused. */
   previewState?: 'pressed' | 'focused'
   testID?: string
 }) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
-  const youSeen = state === 'youOnly'
-  const themSeen = state === 'theyOnly'
+  const youSeen = state === 'youOnly' || state === 'both'
+  const themSeen = state === 'theyOnly' || state === 'both'
   const quiet = contrast ? COLOR.textPrimary : COLOR.textSecondary
   const seenWord = (seen: boolean) => (seen ? 'seen' : 'anonymous')
 
@@ -84,6 +90,28 @@ export function RevealBar({
       </View>
       {state === 'youOnly' ? (
         <Text style={[font('meta', bold), styles.secondary]}>They can see you. They’ll decide in their own time.</Text>
+      ) : state === 'both' ? (
+        <View testID={testID && `${testID}-both`} style={styles.both}>
+          <View style={styles.bothLine}>
+            <Icon name="eye" size={ICON.inline} color={quiet} />
+            <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary, styles.shrink]}>
+              You can both see each other
+            </Text>
+          </View>
+          {friend ? (
+            <Button
+              kind="lit"
+              size="sm"
+              icon={friend.accept ? 'user-check' : 'user-plus'}
+              label={friend.label}
+              loading={friend.busy}
+              // Accepting answers a person who asked you: the press is felt, as a screen's primary is.
+              pressHaptic={friend.accept ? () => H.primary() : false}
+              onPress={friend.onPress}
+              testID={testID && `${testID}-friend`}
+            />
+          ) : null}
+        </View>
       ) : state === 'asked' ? (
         <View testID={testID && `${testID}-asked`} style={styles.asked}>
           <Icon name="check" size={ICON.inline} color={COLOR.textSecondary} />
@@ -115,6 +143,9 @@ const styles = StyleSheet.create({
   /** Wraps rather than truncating "Show them who you are" on a narrow phone or at large text. */
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
   grow: { flexGrow: 1 },
+  /** The line and the action: side by side, and the action drops under it when the line needs the room. */
+  both: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.sm },
+  bothLine: { flexShrink: 1, flexDirection: 'row', alignItems: 'center', gap: SPACE.xs },
   asked: {
     minHeight: SIZE.control,
     paddingVertical: SPACE.sm,
