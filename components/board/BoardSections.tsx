@@ -4,6 +4,7 @@ import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text as RNText, Vie
 
 import { Avatar } from '../ds/Avatar'
 import { Button } from '../ds/Button'
+import { GlyphWell } from '../ds/StateScreen'
 import { RadioCard } from '../ds/RadioCard'
 import { Sheet } from '../ds/Sheet'
 import { Stepper } from '../ds/Stepper'
@@ -11,7 +12,8 @@ import { TextArea } from '../ds/TextField'
 import { CONTROL_FONT_CAP, font, minTarget, useBoldText } from '../ds/shared'
 import { Icon } from '../ui/Icon'
 import { Text } from '../ui/Text'
-import { BOARD_MAX_POST_LENGTH, boardMarkSeed, spacesLabel, type BoardPost } from '../../lib/board'
+import { BOARD_MAX_POST_LENGTH, boardMarkSeed, spacesLabel } from '../../lib/board'
+import type { BoardPostView } from '../../lib/chatPaging'
 import { COLOR, FONT_FAMILY, ICON as DS_ICON, RADIUS, SPACE } from '../../lib/design/tokens'
 import { EMBER, EMBER_RADIUS, ICON, OPACITY } from '../../lib/theme'
 
@@ -108,16 +110,21 @@ export const BoardPostCard = memo(function BoardPostCard({
   onAsk,
   onTakeDown,
   onMore,
+  onWriteNew,
 }: {
-  post: BoardPost
+  post: BoardPostView
   eventId: string
   ask: AskState
-  onAsk: (post: BoardPost) => void
-  onTakeDown: (post: BoardPost) => void
+  onAsk: (post: BoardPostView) => void
+  onTakeDown: (post: BoardPostView) => void
   /** Report or block the author — anybody's post but yours. */
-  onMore: (post: BoardPost) => void
+  onMore: (post: BoardPostView) => void
+  /** From a post that was taken down: the composer. */
+  onWriteNew?: () => void
 }) {
   const bold = useBoldText()
+  // Yours, and moderation took it down (SV9, not sent yet): the card says so and why, in place of the post.
+  if (post.mine && post.takenDown) return <TakenDownCard onWriteNew={onWriteNew} />
   const offer = post.kind === 'offer'
   const spaces = offer ? spacesLabel(post.spacesLeft) : null
   const kindWord = offer ? 'Offering' : post.kind === 'seeking' ? 'Looking' : 'Saying'
@@ -161,6 +168,38 @@ export const BoardPostCard = memo(function BoardPostCard({
     </View>
   )
 })
+
+/**
+ * "Your post was taken down." (Flow 4 · 4.10 frame 36): a solid card with the 56 pt well, the reason, and one text
+ * action that opens the composer. No haptic, nothing said to anybody who asked: their row just goes. Built behind a
+ * field the server does not send yet (`takenDown`, lib/chatPaging.ts), so today it never draws.
+ */
+function TakenDownCard({ onWriteNew }: { onWriteNew?: () => void }) {
+  const bold = useBoldText()
+  return (
+    <View testID="board-taken-down" accessibilityLiveRegion="polite" style={styles.takenDown}>
+      <GlyphWell icon="shield" />
+      <View style={styles.takenDownText}>
+        <RNText style={[font('bodyStrong', bold), styles.ink]}>Your post was taken down.</RNText>
+        <RNText style={[font('meta', bold), styles.secondary]}>It didn’t meet the community guidelines.</RNText>
+        {onWriteNew ? (
+          <Pressable
+            testID="board-taken-down-write"
+            onPress={onWriteNew}
+            accessibilityRole="button"
+            accessibilityLabel="Write a new post"
+            hitSlop={(minTarget() - SPACE.xl) / 2}
+            style={({ pressed }) => [styles.takenDownAction, pressed && styles.pressed]}
+          >
+            <RNText maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>
+              Write a new post
+            </RNText>
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
+  )
+}
 
 /** "2 spaces left": the count in Geist Mono at the title's size, the words in the title; "Full" in textSecondary. */
 function SpacesLine({ spacesLeft, label, full }: { spacesLeft: number | null; label: string; full: boolean }) {
@@ -358,6 +397,10 @@ const styles = StyleSheet.create({
   offer: { gap: SPACE.sm + SPACE.xxs, padding: SPACE.lg, borderRadius: RADIUS.card, backgroundColor: COLOR.surface },
   // A seeking: no panel, words first.
   seeking: { gap: SPACE.sm + SPACE.xxs, paddingVertical: SPACE.xs, paddingHorizontal: SPACE.sm },
+
+  takenDown: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.lg, padding: SPACE.lg, borderRadius: RADIUS.card, backgroundColor: COLOR.surface },
+  takenDownText: { flex: 1, gap: SPACE.xs },
+  takenDownAction: { alignSelf: 'flex-start', marginTop: SPACE.xs },
 
   byline: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm + SPACE.xxs },
   bylineText: { flex: 1 },

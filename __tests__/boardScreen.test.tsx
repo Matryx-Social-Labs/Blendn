@@ -40,6 +40,8 @@ jest.mock('../lib/apiClient', () => ({
     withdrawBoardPost: jest.fn(),
     reportBoardPost: jest.fn(),
     blockBoardPost: jest.fn(),
+    // The next page of the board (lib/chatPaging) reads through the queue.
+    queuedRequest: jest.fn(),
   },
 }))
 jest.mock('../lib/blendnOverlay', () => ({ openBlendn: jest.fn() }))
@@ -61,6 +63,7 @@ import { apiClient } from '../lib/apiClient'
 import { openBlendn } from '../lib/blendnOverlay'
 import type { BoardPost, BoardRequest } from '../lib/board'
 import { showSheet, type ActionSheet } from '../lib/sheet'
+import { H } from '../lib/haptics'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
 const FUTURE = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString()
@@ -646,5 +649,124 @@ describe('your post, live (PR #401 drive: "1 asked" only after reopening the boa
     const reads = api.getBoard.mock.calls.length
     await act(async () => mockPushListeners.forEach((fn) => fn({ request: { content: { data: { type: 'private_message' } } } })))
     expect(api.getBoard.mock.calls.length).toBe(reads)
+  })
+})
+
+describe('H.success on the server’s yes (H1)', () => {
+  it('plays once as a post is recorded, and not when it is refused', async () => {
+    const success = jest.spyOn(H, 'success').mockImplementation(() => {})
+    api.getBoard.mockResolvedValue(board([OFFER]))
+    api.postToBoard.mockResolvedValueOnce({ success: false, errorCode: 'FORBIDDEN', error: 'Complete your profile first' } as never)
+    await render(<BoardScreen />)
+    await fireEvent.press(await screen.findByLabelText('Write a post'))
+    await fireEvent.press(screen.getByLabelText(/^I’m looking/))
+    await fireEvent.changeText(screen.getByLabelText('Your post'), 'Anyone from HSR?')
+    await fireEvent.press(screen.getByLabelText('Post'))
+    await screen.findByText('Complete your profile first')
+    expect(success).not.toHaveBeenCalled()
+
+    api.postToBoard.mockResolvedValueOnce({ success: true, data: { id: 'p-new', kind: 'seeking', body: 'Anyone from HSR?', spacesLeft: null, createdAt: '2026-10-01T11:00:00Z' } } as never)
+    await fireEvent.press(screen.getByLabelText('Post'))
+    await waitFor(() => expect(success).toHaveBeenCalledTimes(1))
+  })
+
+  it('plays once as an ask is recorded; a 409 that reads as waiting is not a new yes', async () => {
+    const success = jest.spyOn(H, 'success').mockImplementation(() => {})
+    api.getBoard.mockResolvedValue(board([OFFER, { ...SEEKING, id: 'p-two', author: 'Lunar Fox' }]))
+    api.askOnBoard.mockResolvedValueOnce({ success: true, data: { id: 'r1', status: 'pending' } } as never)
+    api.askOnBoard.mockResolvedValueOnce({ success: false, errorCode: 'CONFLICT', error: 'You have already asked — give them a moment' } as never)
+    await render(<BoardScreen />)
+    await fireEvent.press(await screen.findByLabelText('Ask to join, Velvet Heron'))
+    await waitFor(() => expect(success).toHaveBeenCalledTimes(1))
+    await fireEvent.press(await screen.findByLabelText('Ask to join, Lunar Fox'))
+    await screen.findAllByText('Waiting on them')
+    expect(success).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('a post taken down (C8, 4.10 frame 36; the field is not sent yet)', () => {
+  const gone = { ...SEEKING, id: 'p-mine', author: 'You', mine: true, takenDown: true }
+
+  it('says so to its author, and why, in place of the post, with a way to write another', async () => {
+    api.getBoard.mockResolvedValue(board([gone as BoardPost, OFFER]))
+    await render(<BoardScreen />)
+    expect(await screen.findByText('Your post was taken down.')).toBeTruthy()
+    expect(screen.getByText('It didn’t meet the community guidelines.')).toBeTruthy()
+    expect(screen.queryByText(gone.body)).toBeNull()
+    // No "Take down" on something already down, and nothing to ask of it.
+    expect(screen.queryByLabelText('Take down your post')).toBeNull()
+    await fireEvent.press(screen.getByLabelText('Write a new post'))
+    expect(screen.getByLabelText('Your post')).toBeTruthy()
+  })
+
+  it('is not drawn for a post the server does not say was taken down: nothing changes today', async () => {
+    api.getBoard.mockResolvedValue(board([{ ...gone, takenDown: undefined } as BoardPost]))
+    await render(<BoardScreen />)
+    expect(await screen.findByText(gone.body)).toBeTruthy()
+    expect(screen.queryByTestId('board-taken-down')).toBeNull()
+  })
+
+  it('is never drawn for somebody else’s post', async () => {
+    api.getBoard.mockResolvedValue(board([{ ...OFFER, takenDown: true } as BoardPost]))
+    await render(<BoardScreen />)
+    expect(await screen.findByText(OFFER.body)).toBeTruthy()
+    expect(screen.queryByTestId('board-taken-down')).toBeNull()
+  })
+})
+
+describe('a board of thousands: more posts as the end nears (SCRUM-760 c)', () => {
+  const many = (from: number, n: number): BoardPost[] =>
+    Array.from({ length: n }, (_, i) => ({ ...SEEKING, id: `p-${from + i}`, body: `Post number ${from + i}`, author: `Fox ${from + i}`, createdAt: `2026-10-01T${String(10 - (i % 9)).padStart(2, '0')}:00:00Z` }))
+  const page = (posts: BoardPost[], nextCursor: string | null) => ({ success: true, data: { posts, pagination: { hasMore: !!nextCursor, nextCursor } } })
+  const reachEnd = () => act(async () => fireEvent(screen.getByTestId('board-list'), 'endReached'))
+
+  it('asks for the next page by the server’s cursor, appends it once, and stops when it says there is no more', async () => {
+    api.getBoard.mockResolvedValue(page(many(0, 3), 'c1') as never)
+    ;(apiClient.queuedRequest as jest.Mock).mockResolvedValueOnce(page(many(3, 3), null))
+    await render(<BoardScreen />)
+    await screen.findByText('Post number 0')
+    await reachEnd()
+    expect(apiClient.queuedRequest).toHaveBeenCalledWith('/api/mobile/events/e1/board?cursor=c1')
+    expect(await screen.findByText('Post number 5')).toBeTruthy()
+    await reachEnd()
+    expect(apiClient.queuedRequest).toHaveBeenCalledTimes(1)
+  })
+
+  it('an older server with no cursor is one page, and nothing more is asked', async () => {
+    api.getBoard.mockResolvedValue(board(many(0, 3)))
+    await render(<BoardScreen />)
+    await screen.findByText('Post number 0')
+    await reachEnd()
+    expect(apiClient.queuedRequest).not.toHaveBeenCalled()
+  })
+
+  it('a page that fails keeps the board, does not loop, and retries on its own button', async () => {
+    api.getBoard.mockResolvedValue(page(many(0, 3), 'c1') as never)
+    ;(apiClient.queuedRequest as jest.Mock).mockResolvedValueOnce({ success: false, error: 'offline' })
+    await render(<BoardScreen />)
+    await screen.findByText('Post number 0')
+    await reachEnd()
+    expect(await screen.findByTestId('board-more-failed')).toBeTruthy()
+    expect(screen.getByText('Post number 0')).toBeTruthy()
+    await reachEnd()
+    expect(apiClient.queuedRequest).toHaveBeenCalledTimes(1)
+    ;(apiClient.queuedRequest as jest.Mock).mockResolvedValueOnce(page(many(3, 2), null))
+    await fireEvent.press(screen.getByTestId('board-more-failed'))
+    expect(await screen.findByText('Post number 4')).toBeTruthy()
+  })
+
+  it('a refresh re-reads the newest page and keeps the older pages already loaded, under their own cursor', async () => {
+    api.getBoard.mockResolvedValue(page(many(0, 3), 'c1') as never)
+    ;(apiClient.queuedRequest as jest.Mock).mockResolvedValueOnce(page(many(3, 3), 'c2'))
+    await render(<BoardScreen />)
+    await screen.findByText('Post number 0')
+    await reachEnd()
+    await screen.findByText('Post number 5')
+    await pullToRefresh()
+    expect(screen.getByText('Post number 5')).toBeTruthy()
+    ;(apiClient.queuedRequest as jest.Mock).mockResolvedValueOnce(page(many(6, 1), null))
+    await reachEnd()
+    // The cursor is where the older pages left off, not the newest page's.
+    expect(apiClient.queuedRequest).toHaveBeenLastCalledWith('/api/mobile/events/e1/board?cursor=c2')
   })
 })

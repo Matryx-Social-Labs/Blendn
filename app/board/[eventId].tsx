@@ -1,10 +1,11 @@
 import * as Notifications from 'expo-notifications'
 import { Redirect, router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native'
+import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native'
+import Animated, { useReducedMotion } from 'react-native-reanimated'
 
 import { Button } from '../../components/ds/Button'
-import { font, useBoldText } from '../../components/ds/shared'
+import { font, minTarget, useBoldText } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { TopBar } from '../../components/ds/TopBar'
 import {
@@ -15,6 +16,7 @@ import {
   type AskState,
   type BoardDraft,
 } from '../../components/board/BoardSections'
+import { emptyOut, fadeIn, riseDelay, riseIn } from '../../components/board/boardMotion'
 import { OfflineBanner } from '../../components/OfflineBanner'
 import { SkeletonBlock } from '../../components/Skeleton'
 import { apiClient } from '../../lib/apiClient'
@@ -33,10 +35,14 @@ import {
 } from '../../lib/board'
 import { openBlendn } from '../../lib/blendnOverlay'
 import { Logger } from '../../lib/logger'
+import { useLatest } from '../../lib/useLatest'
 import { useLiveSync } from '../../lib/useLiveSync'
 import { boardSafetySheet } from '../../lib/safetyUtils'
 import { showSheet } from '../../lib/sheet'
-import { COLOR, RADIUS, SPACE } from '../../lib/design/tokens'
+import { cursorOf, getBoardPage, type BoardPostView } from '../../lib/chatPaging'
+import { COLOR, FONT_FAMILY, RADIUS, SPACE, STAGGER } from '../../lib/design/tokens'
+import { H } from '../../lib/haptics'
+import { useTopBarOverlay } from '../../lib/useTopBarState'
 
 /**
  * The Board (Flow 4 Board, flow4.js `board`; the rules in docs/PLACEHOLDER_SCREENS.md §6).
@@ -56,7 +62,7 @@ export default function BoardRoute() {
 
 type Load =
   | { kind: 'loading' }
-  | { kind: 'ready'; posts: BoardPost[] }
+  | { kind: 'ready'; posts: BoardPostView[] }
   /** The board answered no: not going, under 18, or no such board. */
   | { kind: 'refused'; code: string | undefined; line: string }
   | { kind: 'failed' }
@@ -73,6 +79,7 @@ export function BoardScreen() {
   const { eventId } = useLocalSearchParams<{ eventId: string }>()
   const bold = useBoldText()
   const [load, setLoad] = useState<Load>({ kind: 'loading' })
+  const loadRef = useLatest(load)
   const [event, setEvent] = useState<EventFacts | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [refreshFailed, setRefreshFailed] = useState(false)
@@ -102,8 +109,22 @@ export function BoardScreen() {
    * until the server lists it, and one taken down here stays gone.
    */
   const readId = useRef(0)
-  const created = useRef(new Map<string, BoardPost>())
+  const created = useRef(new Map<string, BoardPostView>())
   const removed = useRef(new Set<string>())
+
+  /*
+   * Older pages (SCRUM-760): the board lists a page and says where the next starts. What a refresh re-reads is the
+   * newest page, so the older ones already loaded are kept here and laid back under it, and their cursor stays.
+   * Nothing to ask until the server sends a cursor: an older server's board is the one page it always was.
+   */
+  const [cursor, setCursor] = useState<string | null>(null)
+  const [moreState, setMoreState] = useState<'idle' | 'loading' | 'failed'>('idle')
+  const older = useRef<BoardPostView[]>([])
+  const moreBusy = useRef(false)
+  /* #16 / #47: the first load rises in, 28 ms apart, and so does what arrives where there was nothing; scroll and page inserts never do. */
+  const reduceMotion = useReducedMotion()
+  const rises = useRef<{ first: boolean; ids: ReadonlySet<string> }>({ first: true, ids: new Set() })
+  const bar = useTopBarOverlay()
 
   // The doors by the event's own time, or by the board saying so — whichever is known first.
   const [doorsShut, setDoorsShut] = useState(false)
@@ -148,9 +169,18 @@ export function BoardScreen() {
         }
         setListedAsks(next)
       }
-      const listed = board.data.posts.filter((p) => !removed.current.has(p.id))
+      const listed = (board.data.posts as BoardPostView[]).filter((p) => !removed.current.has(p.id))
       for (const p of listed) created.current.delete(p.id)
-      setLoad({ kind: 'ready', posts: [...created.current.values(), ...listed] })
+      // The newest page replaces the newest page; the older pages this screen loaded stay under it, and keep their cursor.
+      const onPage = new Set(listed.map((p) => p.id))
+      older.current = older.current.filter((p) => !onPage.has(p.id) && !removed.current.has(p.id))
+      if (!older.current.length) setCursor(cursorOf(board.data))
+      // Nothing, then something (#47): what arrives rises in once; a poll that finds more does not.
+      const was = loadRef.current
+      if (was.kind === 'ready' && !was.posts.length && listed.length) {
+        rises.current = { ...rises.current, ids: new Set(listed.slice(0, STAGGER.itemsMax).map((p) => p.id)) }
+      }
+      setLoad({ kind: 'ready', posts: [...created.current.values(), ...listed, ...older.current] })
       setRefreshFailed(false)
       return true
     } catch (error) {
@@ -204,6 +234,35 @@ export function BoardScreen() {
 
   const posts = useMemo(() => (load.kind === 'ready' ? sortBoardPosts(load.posts) : []), [load])
 
+  /* The next page as the end comes near: one at a time, appended once, and never after a refusal until it is asked again. */
+  const loadMore = useCallback(async () => {
+    if (!eventId || !cursor || moreBusy.current) return
+    moreBusy.current = true
+    setMoreState('loading')
+    try {
+      const result = await getBoardPage(eventId, cursor)
+      if (!result.success || !result.data) {
+        setMoreState('failed')
+        return
+      }
+      const fresh = result.data.posts.filter((p) => !removed.current.has(p.id))
+      const have = new Set(older.current.map((p) => p.id))
+      older.current = [...older.current, ...fresh.filter((p) => !have.has(p.id))]
+      setCursor(cursorOf(result.data))
+      setMoreState('idle')
+      setLoad((prev) => {
+        if (prev.kind !== 'ready') return prev
+        const shown = new Set(prev.posts.map((p) => p.id))
+        return { kind: 'ready', posts: [...prev.posts, ...fresh.filter((p) => !shown.has(p.id))] }
+      })
+    } catch (error) {
+      Logger.warn('board', 'next page threw', { eventId, error: String(error) })
+      setMoreState('failed')
+    } finally {
+      moreBusy.current = false
+    }
+  }, [eventId, cursor])
+
   const ask = useCallback(
     async (post: BoardPost) => {
       // A ref, not state: a second tap in the same frame sees the first.
@@ -214,6 +273,8 @@ export function BoardScreen() {
       try {
         const result = await apiClient.askOnBoard(eventId, post.id)
         if (result.success) {
+          // The server's yes (Flow 4 Board: no press haptic, H.success when the ask is recorded).
+          H.success()
           next = { kind: 'settled', line: WAITING_LINE }
         } else if (isSettled(result)) {
           // One ask per post, ever: a re-ask reads as waiting. A full offer says full.
@@ -284,8 +345,12 @@ export function BoardScreen() {
           return
         }
         // Yours until the server lists it under your handle at this event.
-        const mine: BoardPost = { ...result.data, author: 'You', mine: true, requestCount: 0 }
+        // Server confirmed: a post is an important-enough outcome for H.success (haptics: check-in, RSVP, post, save profile).
+        H.success()
+        const mine: BoardPostView = { ...result.data, author: 'You', mine: true, requestCount: 0 }
         created.current.set(mine.id, mine)
+        // Your own post rises in whatever the list was (#16); a poll that lists it later does not rise it again.
+        rises.current = { ...rises.current, ids: new Set(rises.current.ids).add(mine.id) }
         setLoad((prev) => (prev.kind === 'ready' ? { kind: 'ready', posts: [mine, ...prev.posts] } : prev))
         setComposing(false)
         setPosted((n) => n + 1)
@@ -329,21 +394,37 @@ export function BoardScreen() {
   )
 
   const renderItem = useCallback(
-    ({ item }: { item: BoardPost }) => (
-      <BoardPostCard
-        post={item}
-        eventId={eventId}
-        ask={askFor(item.id)}
-        onAsk={ask}
-        onTakeDown={takeDown}
-        onMore={more}
-      />
-    ),
-    [eventId, askFor, ask, takeDown, more]
+    ({ item, index }: { item: BoardPostView; index: number }) => {
+      const { first, ids } = rises.current
+      const rises_ = first || ids.has(item.id)
+      const entering = rises_ ? (reduceMotion ? fadeIn : riseIn)(first ? riseDelay(index) : 0) : undefined
+      return (
+        <Animated.View entering={entering}>
+          <BoardPostCard
+            post={item}
+            eventId={eventId}
+            ask={askFor(item.id)}
+            onAsk={ask}
+            onTakeDown={takeDown}
+            onMore={more}
+            onWriteNew={() => setComposing(true)}
+          />
+        </Animated.View>
+      )
+    },
+    [eventId, askFor, ask, takeDown, more, reduceMotion]
   )
+  // What rose has risen: once drawn, the first load is over and nothing is waiting to rise (a row scrolled back in never replays).
+  useEffect(() => {
+    if (load.kind === 'ready') rises.current = { first: false, ids: new Set() }
+  }, [load])
+
+  /* Flow 15 #16: reads stay, and the screen says what it is showing. */
+  const offline = <OfflineBanner text="Offline. Showing what you had." testID="board-offline" />
 
   const header = (
     <View style={styles.header}>
+      {offline}
       {refreshFailed && load.kind === 'ready' ? (
         <Text style={[font('meta', bold), styles.secondary, styles.centre]}>The board didn&apos;t refresh. Pull down to try again.</Text>
       ) : null}
@@ -398,29 +479,65 @@ export function BoardScreen() {
         extraData={askFor}
         ListHeaderComponent={header}
         ListEmptyComponent={
-          <StateScreen
-            icon="message-square-dashed"
-            title="Nobody's posted yet"
-            body="Say what you're looking for, and people on their way will see it."
-            actions={[{ label: 'Write a post', onPress: () => setComposing(true) }]}
-            testID="board-empty"
-          />
+          // #47: the first post is why this leaves: it fades over `quick` with an 8 pt drop as the card rises in.
+          <Animated.View exiting={emptyOut(reduceMotion)}>
+            <StateScreen
+              icon="message-square-dashed"
+              title="Nobody's posted yet"
+              body="Say what you're looking for, and people on their way will see it."
+              actions={[{ label: 'Write a post', onPress: () => setComposing(true) }]}
+              testID="board-empty"
+            />
+          </Animated.View>
         }
-        contentContainerStyle={styles.list}
+        ListFooterComponent={
+          moreState === 'loading' ? (
+            <Text accessibilityRole="progressbar" accessibilityLabel="Loading more posts" style={[font('meta', bold), styles.secondary, styles.centre]}>
+              Loading…
+            </Text>
+          ) : moreState === 'failed' ? (
+            <Pressable
+              testID="board-more-failed"
+              onPress={() => void loadMore()}
+              accessibilityRole="button"
+              accessibilityLabel="Couldn’t load more posts. Try again"
+              hitSlop={(minTarget() - SPACE.xl) / 2}
+              style={styles.moreFailed}
+            >
+              <Text style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>Couldn’t load more · Try again</Text>
+            </Pressable>
+          ) : null
+        }
+        // A page of posts at a time as the end nears; each card is its own height, so the list windows and nothing else is done to it.
+        onEndReached={() => {
+          if (moreState !== 'failed') void loadMore()
+        }}
+        onEndReachedThreshold={1.5}
+        initialNumToRender={8}
+        windowSize={9}
+        contentContainerStyle={[styles.list, { paddingTop: bar.contentTop }]}
+        scrollIndicatorInsets={{ top: bar.indicatorTop }}
+        {...bar.scrollProps}
         keyboardShouldPersistTaps="handled"
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLOR.textSecondary} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLOR.textSecondary} progressViewOffset={bar.indicatorTop} />}
       />
     )
   }
 
   return (
     <View style={styles.container}>
-      <TopBar title="The Board" sub={event?.title} onBack={() => router.back()} testID="board-top" />
-      {/* Flow 15 #16: reads stay, and the screen says what it is showing. */}
-      <View style={styles.banner}>
-        <OfflineBanner text="Offline. Showing what you had." testID="board-offline" />
+      {/* #30: the list scrolls under the bar, and the glass comes in behind the title once it has. */}
+      {load.kind === 'ready' && !closed ? (
+        content
+      ) : (
+        <View style={[styles.fill, { paddingTop: bar.contentTop }]}>
+          <View style={styles.banner}>{offline}</View>
+          <View style={styles.state}>{content}</View>
+        </View>
+      )}
+      <View style={bar.barPin} pointerEvents="box-none">
+        <TopBar title="The Board" sub={event?.title} state={bar.state} onBack={() => router.back()} testID="board-top" />
       </View>
-      {load.kind === 'ready' && !closed ? content : <View style={styles.state}>{content}</View>}
       <BoardComposer
         key={posted}
         visible={composing}
@@ -455,8 +572,11 @@ const SKELETON_CARD = 168
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLOR.ink },
+  fill: { flex: 1 },
   secondary: { color: COLOR.textSecondary },
+  ink: { color: COLOR.textPrimary },
   centre: { textAlign: 'center' },
+  moreFailed: { alignSelf: 'center', paddingVertical: SPACE.md },
   header: { gap: SPACE.lg, marginBottom: SPACE.lg },
   list: { paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.xxl, gap: SPACE.lg },
   state: { flex: 1, paddingHorizontal: SPACE.gutter, justifyContent: 'center' },
