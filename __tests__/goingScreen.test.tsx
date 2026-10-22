@@ -4,6 +4,7 @@
  * for the next page when the reader does (or, for Past, reaches the end). Venue visits, a night that moved, and the row's ⋯.
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
+import { AppState } from 'react-native'
 
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn(), journey: jest.fn() } }))
 jest.mock('expo-router', () => ({
@@ -11,6 +12,10 @@ jest.mock('expo-router', () => ({
   // Once, as a focus is: the real hook runs on the focus, not on every render.
   useFocusEffect: (cb: () => void) => require('react').useEffect(() => cb(), []),
   useScrollToTop: () => {},
+}))
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 47, bottom: 34, left: 0, right: 0 }),
+  SafeAreaView: 'View',
 }))
 jest.mock('../app/(tabs)/_layout', () => ({ TAB_BAR_CLEARANCE: 80 }))
 const mockUser = { id: 'me' }
@@ -93,14 +98,14 @@ describe('hundreds of past nights', () => {
 
   it('reading the first page asks for a page by size, not for everything', async () => {
     await open()
-    expect(api.getMyAttendance).toHaveBeenCalledWith(30)
-    expect(api.getUserFavorites).toHaveBeenCalledWith('me', 1, 30)
+    expect(api.getMyAttendance).toHaveBeenCalledWith(30, 1, null)
+    expect(api.getUserFavorites).toHaveBeenCalledWith('me', 1, 30, null)
   })
 
   it('the next page is asked for by number, and what comes is added after what is held', async () => {
     await open()
     await fireEvent.press(await screen.findByTestId('going-more-past'))
-    await waitFor(() => expect(api.getMyAttendance).toHaveBeenCalledWith(30, 2))
+    await waitFor(() => expect(api.getMyAttendance).toHaveBeenCalledWith(30, 2, null))
     await waitFor(() => expect(screen.getByText('Night 7')).toBeTruthy())
     expect(left()).toBe(304)
     expect(screen.getByText('Night 0')).toBeTruthy()
@@ -201,5 +206,113 @@ describe('a night that moved, and the row\'s ⋯', () => {
     expect(sheet.title).toBe('Event b')
     expect(sheet.actions.map((a: { label: string }) => a.label)).toEqual(['Share', 'Directions', 'Add to calendar', 'Cancel'])
     expect(router.push).not.toHaveBeenCalled()
+  })
+})
+
+describe('refreshing with more than one page held (Going, hundreds of nights)', () => {
+  const pageOf = (n: number, all: string[]) => ({
+    success: true,
+    data: { events: all.slice((n - 1) * 4, n * 4).map((id) => night(Number(id.slice(1)))), pagination: page(n, all.length, n * 4 < all.length), lockedCount: 0 },
+  })
+  const ids = (n: number, from = 0) => Array.from({ length: n }, (_, i) => `p${from + i}`)
+  let foreground: (state: string) => void
+  beforeEach(() => {
+    jest.spyOn(AppState, 'addEventListener').mockImplementation(((_: string, fn: (s: string) => void) => {
+      foreground = fn
+      return { remove: jest.fn() }
+    }) as never)
+  })
+  afterEach(() => jest.restoreAllMocks())
+
+  it('reads every held page again, so a row removed on page 2 is gone and a moved one is where it is now', async () => {
+    let all = ids(10)
+    api.getMyAttendance.mockImplementation((_l?: number, n = 1) => Promise.resolve(pageOf(n, all)) as never)
+    await open()
+    await fireEvent.press(await screen.findByTestId('going-more-past'))
+    await waitFor(() => expect(screen.getByText('Night 7')).toBeTruthy())
+    expect(screen.getByText('Night 5')).toBeTruthy()
+    api.getMyAttendance.mockClear()
+    // Night 5 (held on page 2) is removed elsewhere; night 8 moves up into page 2.
+    all = ids(10).filter((id) => id !== 'p5')
+    await act(async () => foreground('active'))
+    await waitFor(() => expect(screen.queryByText('Night 5')).toBeNull())
+    expect(api.getMyAttendance.mock.calls.map((c) => c[1]).sort()).toEqual([1, 2])
+    expect(screen.getByText('Night 8')).toBeTruthy()
+    expect(screen.getByText('Night 0')).toBeTruthy()
+  })
+
+  it('by cursor it follows the cursors from the head', async () => {
+    const cursorPage = (c: string | null) => {
+      const n = c ? Number(c.slice(1)) : 1
+      const all = ids(10)
+      const hasMore = n * 4 < all.length
+      return { success: true, data: { events: all.slice((n - 1) * 4, n * 4).map((id) => night(Number(id.slice(1)))), pagination: { ...page(n, all.length, hasMore), nextCursor: hasMore ? `c${n + 1}` : null }, lockedCount: 0 } }
+    }
+    api.getMyAttendance.mockImplementation((_l?: number, _n?: number, cursor?: string | null) => Promise.resolve(cursorPage(cursor ?? null)) as never)
+    await open()
+    await fireEvent.press(await screen.findByTestId('going-more-past'))
+    expect(api.getMyAttendance).toHaveBeenLastCalledWith(30, 2, 'c2')
+    await waitFor(() => expect(screen.getByText('Night 7')).toBeTruthy())
+    api.getMyAttendance.mockClear()
+    await act(async () => foreground('active'))
+    await waitFor(() => expect(api.getMyAttendance).toHaveBeenCalledTimes(2))
+    expect(api.getMyAttendance.mock.calls.map((c) => c[2])).toEqual([null, 'c2'])
+  })
+
+  it('a refused page of the refresh keeps what is on screen', async () => {
+    const all = ids(10)
+    api.getMyAttendance.mockImplementation((_l?: number, n = 1) => Promise.resolve(pageOf(n, all)) as never)
+    await open()
+    await fireEvent.press(await screen.findByTestId('going-more-past'))
+    await waitFor(() => expect(screen.getByText('Night 7')).toBeTruthy())
+    api.getMyAttendance.mockImplementation((_l?: number, n = 1) => Promise.resolve(n === 2 ? { success: false, error: 'x' } : pageOf(n, all)) as never)
+    await act(async () => foreground('active'))
+    await act(async () => {})
+    expect(screen.getByText('Night 7')).toBeTruthy()
+  })
+})
+
+describe('two triggers in one frame (the row pressed as the list ends)', () => {
+  it('ask for the next page once, and count it once', async () => {
+    const all = Array.from({ length: 10 }, (_, i) => i)
+    const pageOf = (n: number) => ({ success: true, data: { events: all.slice((n - 1) * 4, n * 4).map((i) => night(i)), pagination: page(n, 312, true), lockedCount: 0 } })
+    api.getMyAttendance.mockImplementation((_l?: number, n = 1) => Promise.resolve(pageOf(n)) as never)
+    await open()
+    const row = await screen.findByTestId('going-more-past')
+    await act(async () => {
+      fireEvent.press(row)
+      fireEvent.press(row)
+      fireEvent(screen.getByTestId('going-list'), 'endReached')
+    })
+    await act(async () => {})
+    expect(api.getMyAttendance.mock.calls.filter((c) => c[1] === 2)).toHaveLength(1)
+    // The next page after that is the third, not the fourth.
+    await fireEvent.press(screen.getByTestId('going-more-past'))
+    expect(api.getMyAttendance).toHaveBeenLastCalledWith(30, 3, null)
+  })
+})
+
+describe('the row\'s ⋯ and the visit\'s art', () => {
+  it('a cancelled night\'s sheet offers Share only: no directions to nowhere, no calendar entry', async () => {
+    api.getMyRsvps.mockResolvedValue({
+      success: true,
+      data: { events: [{ ...upcoming('a'), rsvpStatus: 'going' }, { ...upcoming('c', { status: 'cancelled' }), rsvpStatus: 'going' }], pagination: page(1, 2, false) },
+    } as never)
+    await open()
+    await fireEvent.press((await screen.findAllByLabelText(/^More about Event c/))[0])
+    expect((showSheet as jest.Mock).mock.calls[0][0].actions.map((a: { label: string }) => a.label)).toEqual(['Share', 'Cancel'])
+  })
+
+  it('the controls beside each other keep their reaches apart', () => {
+    const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'app', '(tabs)', 'going.tsx'), 'utf8') as string
+    expect(src).toContain("trailing: { flexDirection: 'row', alignItems: 'center', gap: minTarget() - HEART }")
+  })
+
+  it('a visit\'s thumb is its place\'s type when the server says it', async () => {
+    api.getMyAttendance.mockResolvedValue({ success: true, data: { events: [night(1, { id: 'v1', kind: 'venue_day', venue_type: 'cafe' })], pagination: page(1, 1, false), lockedCount: 0 } } as never)
+    await open()
+    expect(await screen.findByText('Toit')).toBeTruthy()
+    const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'app', '(tabs)', 'going.tsx'), 'utf8') as string
+    expect(src).toContain("plate={visit.venueType ?? 'bar'}")
   })
 })

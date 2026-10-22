@@ -145,6 +145,7 @@ export function EventCard(props: EventCardProps) {
       <View ref={box} collapsable={false} style={style}>
         <Pressable
           testID={testID}
+          disabled={props.inert}
           onPress={onPress}
           onPressIn={onPressIn}
           onLongPress={hold}
@@ -201,6 +202,7 @@ export function EventCard(props: EventCardProps) {
     >
       <ScalePress
         testID={testID}
+        disabled={props.inert}
         onPress={onPress}
         onPressIn={onPressIn}
         onLongPress={hold}

@@ -9,6 +9,13 @@
 export interface PageMeta {
   hasMore: boolean
   totalCount: number
+  /** The page the server says it answered with (1-based), when it says. */
+  page?: number
+  /**
+   * The cursor for the page after this one, once the server pages by keyset (`undefined`: it still pages by number). With
+   * cursors a page number means nothing, and the next page is asked for by this.
+   */
+  nextCursor?: string | null
 }
 
 export interface Paged<T extends { id: string }> {
@@ -19,6 +26,8 @@ export interface Paged<T extends { id: string }> {
   hasMore: boolean
   /** The server's true count, which can exceed what is held; null before the first answer. */
   total: number | null
+  /** The cursor for the next page; `undefined` while the server pages by number (the pager then asks for `pages + 1`). */
+  nextCursor?: string | null
 }
 
 export const emptyPaged = <T extends { id: string }>(): Paged<T> => ({ head: [], tail: [], pages: 1, hasMore: false, total: null })
@@ -39,6 +48,7 @@ export function withFirstPage<T extends { id: string }>(p: Paged<T>, rows: T[], 
     pages: p.pages,
     hasMore: p.pages > 1 ? p.hasMore : (meta?.hasMore ?? false),
     total: meta ? meta.totalCount : p.total,
+    nextCursor: p.pages > 1 || !meta ? p.nextCursor : meta.nextCursor,
   }
 }
 
@@ -48,9 +58,11 @@ export function withNextPage<T extends { id: string }>(p: Paged<T>, rows: T[], m
   return {
     head: p.head,
     tail: [...p.tail, ...without(rows, held)],
-    pages: p.pages + 1,
+    // The page the server answered, never counted twice: a read that lands after another for the same page changes nothing.
+    pages: meta?.page ? Math.max(p.pages, meta.page) : p.pages + 1,
     hasMore: meta?.hasMore ?? false,
     total: meta ? meta.totalCount : p.total,
+    nextCursor: meta ? meta.nextCursor : p.nextCursor,
   }
 }
 
@@ -79,4 +91,57 @@ export function withRowAt<T extends { id: string }>(p: Paged<T>, row: T, index: 
     head: [...p.head.slice(0, at), row, ...p.head.slice(at)],
     total: p.total === null ? null : p.total + 1,
   }
+}
+
+
+/** What one page read is asked for: by number, or by the cursor the page before it handed over. */
+export interface PageAsk {
+  page: number
+  cursor: string | null
+}
+
+export type PageRead<T, F> = { ok: true; rows: T[]; meta?: PageMeta } | { ok: false; failure: F }
+
+/** How many held pages a refresh reads again; rows held beyond them are kept as they were rather than asked for. */
+export const REREAD_MAX_PAGES = 5
+
+/**
+ * The held pages read again (a focus, a pull, the app coming back), so that nothing held is stale: a row that moved down a page
+ * is on the page it is on now, and a row that was removed elsewhere is gone, wherever it was held.
+ *
+ * By number the pages are asked for together (1…n, n the pages held, at most `REREAD_MAX_PAGES`). By cursor each page's cursor
+ * comes from the page before, so the reads follow one another from the head. Either way the result is built with
+ * `withFirstPage` and `withNextPage`, so a row is never listed twice. Rows held beyond the pages read stay as they were, after
+ * the fresh ones. Any page refused fails the whole refresh: what is on screen is kept, and the caller says so.
+ */
+export async function rereadPaged<T extends { id: string }, F>(
+  p: Paged<T>,
+  pageSize: number,
+  read: (ask: PageAsk) => Promise<PageRead<T, F>>,
+  head: (rows: T[]) => T[] = (rows) => rows
+): Promise<{ ok: true; paged: Paged<T> } | { ok: false; failure: F }> {
+  const n = Math.max(1, Math.min(p.pages, REREAD_MAX_PAGES))
+  const reads: PageRead<T, F>[] = []
+  if (p.nextCursor === undefined) {
+    reads.push(...(await Promise.all(Array.from({ length: n }, (_, i) => read({ page: i + 1, cursor: null })))))
+  } else {
+    let cursor: string | null = null
+    for (let page = 1; page <= n; page++) {
+      const r = await read({ page, cursor })
+      reads.push(r)
+      cursor = r.ok ? (r.meta?.nextCursor ?? null) : null
+      if (!r.ok || cursor === null) break
+    }
+  }
+  const refused = reads.find((r): r is { ok: false; failure: F } => !r.ok)
+  if (refused) return refused
+  const ok = reads as { ok: true; rows: T[]; meta?: PageMeta }[]
+  let out = withFirstPage(emptyPaged<T>(), head(ok[0].rows), ok[0].meta)
+  for (let i = 1; i < ok.length; i++) out = withNextPage(out, ok[i].rows, ok[i].meta ?? { hasMore: out.hasMore, totalCount: out.total ?? 0, page: i + 1 })
+  if (p.pages > n) {
+    // Pages beyond the ones read again: what was held is kept, after the fresh rows, and the end is as it was.
+    const kept = without(pagedRows(p).slice(n * pageSize), pagedRows(out))
+    out = { ...out, tail: [...out.tail, ...kept], pages: p.pages, hasMore: p.hasMore, nextCursor: p.nextCursor }
+  }
+  return { ok: true, paged: out }
 }

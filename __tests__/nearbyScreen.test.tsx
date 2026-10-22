@@ -196,3 +196,23 @@ describe('a city with hundreds of events (large data)', () => {
     await waitFor(() => expect(screen.queryByTestId('nearby-more-failed')).toBeNull())
   })
 })
+
+describe('two triggers in one frame (Nearby)', () => {
+  it('the list\'s end firing twice asks for the next page once, and the page after it is the third', async () => {
+    const full = Array.from({ length: 50 }, (_, i) => ev(`a${i}`, `Night ${i}`, 12.9 + i / 1000))
+    const second = Array.from({ length: 50 }, (_, i) => ev(`b${i}`, `Later ${i}`, 13.1 + i / 1000))
+    events.mockResolvedValueOnce({ data: full, error: null }).mockResolvedValueOnce({ data: second, error: null }).mockResolvedValue({ data: [], error: null })
+    await open()
+    await act(async () => {
+      fireEvent(screen.getByTestId('nearby-list'), 'endReached')
+      fireEvent(screen.getByTestId('nearby-list'), 'endReached')
+    })
+    await act(async () => {})
+    expect(events).toHaveBeenCalledTimes(2)
+    await act(async () => {
+      fireEvent(screen.getByTestId('nearby-list'), 'endReached')
+    })
+    await act(async () => {})
+    expect(events.mock.calls[2][0]).toMatchObject({ page: 2 })
+  })
+})

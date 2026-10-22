@@ -93,6 +93,7 @@ export default function NearbyEventsScreen() {
   /** The city the first page was read in: later pages are the same question. */
   const cityRef = useRef<string | undefined>(undefined)
   /** The fix, kept where `loadEvents` can read it without depending on it: a fix arriving is not a reason to read the list again. */
+  const moreInFlight = useRef(false)
   const locationRef = useRef<{ latitude: number; longitude: number } | null>(null)
   const mountedRef = useRef(true)
   // The same floor as the home screen, so a fast load doesn't flash the placeholders.
@@ -222,19 +223,25 @@ export default function NearbyEventsScreen() {
    * that row alone, so a refusal cannot become a loop.
    */
   const loadMore = useCallback(async (retry = false) => {
-    if (!hasMore || !userLocation || (more !== 'idle' && !(retry && more === 'failed'))) return
+    // One read at a time, held by a ref: the end of the list and the retry can both fire before any state has changed.
+    if (moreInFlight.current || !hasMore || !userLocation || (more !== 'idle' && !(retry && more === 'failed'))) return
+    moreInFlight.current = true
+    const asked = page + 1
     setMore('busy')
     try {
-      const result = await fetchEventsApi(nearbyQuery(cityRef.current, userLocation, page + 1))
+      const result = await fetchEventsApi(nearbyQuery(cityRef.current, userLocation, asked))
       if (!mountedRef.current) return
       if (!result.data) return setMore('failed')
       const rows = nearbyRows(result.data, userLocation)
       setEvents((prev) => mergeEventPage(prev, rows))
-      setPage((p) => p + 1)
+      // The page actually asked for, never one more than whatever is held when the answer lands.
+      setPage((p) => Math.max(p, asked))
       setHasMore(pageHasMore(result.data.length, PAGE_SIZE))
       setMore('idle')
     } catch {
       if (mountedRef.current) setMore('failed')
+    } finally {
+      moreInFlight.current = false
     }
   }, [hasMore, more, page, userLocation])
 

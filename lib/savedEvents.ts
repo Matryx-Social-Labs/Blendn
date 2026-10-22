@@ -61,7 +61,7 @@ export interface SavedEventsPayload {
     /** What the detail route sends (`changedFields`); the list routes may carry it beside it. Absent from the server today. */
     changedFields?: ChangedField[] | null
   }[]
-  pagination?: { page: number; totalCount: number; hasMore: boolean }
+  pagination?: { page: number; totalCount: number; hasMore: boolean; nextCursor?: string | null }
 }
 
 export function savedEventRows(data: SavedEventsPayload | undefined | null): SavedEventRow[] {
@@ -103,7 +103,7 @@ export function changedTag(row: Pick<SavedEventRow, 'changed' | 'status'>): 'New
  */
 export interface RsvpEventsPayload {
   events: (SavedEventsPayload['events'][number] & { rsvpStatus: 'going' | 'waitlisted' })[]
-  pagination?: { page: number; totalCount: number; hasMore: boolean }
+  pagination?: { page: number; totalCount: number; hasMore: boolean; nextCursor?: string | null }
 }
 
 export type RsvpEventRow = SavedEventRow & { rsvpStatus: 'going' | 'waitlisted' }
@@ -133,8 +133,12 @@ export interface AttendancePayload {
      */
     stay_minutes?: number | null
     venue_id?: string | null
+    /** `venue_type` (a plate's type, when the server says what kind of place it was). */
+    venue_type?: string | null
+    /** When you rated the night, or null: sent by the list once the server has it (absent today, and then each row is asked). */
+    ratedAt?: string | null
   }[]
-  pagination?: { page: number; totalCount: number; hasMore: boolean }
+  pagination?: { page: number; totalCount: number; hasMore: boolean; nextCursor?: string | null }
   /**
    * Older nights hidden behind Blendn+ (step 11): 0 when the city is not gated
    * or you have Plus. When locked, `events` holds at most the latest 3 nights.
@@ -153,7 +157,7 @@ export interface PastEventRow {
   end_time: string
   cover_image_url: string | null
   /** A visit to a place you went live at, not an event: it reads "Live here · 28 Sep" under the place's name. */
-  visit?: { attendedAt: string; stayMinutes: number | null; venueId: string | null }
+  visit?: { attendedAt: string; stayMinutes: number | null; venueId: string | null; venueType: string | null }
 }
 
 /** "40m", "1h 40m", "2h": how long a visit lasted, or null when the server did not say. */
@@ -186,7 +190,7 @@ export function pastEventRows(
       end_time: e.end_time,
       cover_image_url: e.cover_image_url,
       ...(e.kind === 'venue_day' && {
-        visit: { attendedAt: e.attendedAt || e.start_time, stayMinutes: e.stay_minutes ?? null, venueId: e.venue_id ?? null },
+        visit: { attendedAt: e.attendedAt || e.start_time, stayMinutes: e.stay_minutes ?? null, venueId: e.venue_id ?? null, venueType: e.venue_type ?? null },
       }),
     }))
 }
@@ -286,4 +290,27 @@ export function withPendingSaves(rows: SavedEventRow[], pending: Map<string, Pen
     else if (!op.saved && listed) out = out.filter((r) => r.id !== id)
   }
   return out
+}
+
+/**
+ * Which of a page of past nights say whether they were rated, and which must be asked one by one.
+ *
+ * The list sends `ratedAt` (a time, or null for "not rated") once the server has it: then the page already knows and nothing is
+ * asked. Until then each night is a read of its own, so the ones asked are the first `cap` that are not visits (a visit has
+ * nothing to rate), not already known rated here, and not already asked this session (`asked`).
+ */
+export function ratingsToRead(
+  nights: AttendancePayload['events'],
+  cap: number,
+  isKnownRated: (id: string) => boolean,
+  asked: ReadonlySet<string>
+): { rated: string[]; ask: string[] } {
+  const rated: string[] = []
+  const ask: string[] = []
+  for (const n of nights) {
+    if (n.kind === 'venue_day') continue
+    if (typeof n.ratedAt === 'string') rated.push(n.id)
+    else if (n.ratedAt === undefined && ask.length < cap && !isKnownRated(n.id) && !asked.has(n.id)) ask.push(n.id)
+  }
+  return { rated, ask }
 }

@@ -45,7 +45,8 @@ describe.each(SCREENS)('$file.2', ({ file, counter, bump }) => {
     expect(found.length).toBeGreaterThan(0)
     for (const card of found) {
       // A visit to a place (Going › Past) is the place's type art, not an event's cover.
-      if (!card.includes('plate=')) expect(card).toMatch(/(?:imageUrl|cover)=\{\w+\.cover_image_url\}/)
+      if (card.includes('plate=')) expect(card).not.toMatch(/\bcover=/)
+      else expect(card).toMatch(/(?:imageUrl|cover)=\{\w+\.cover_image_url\}/)
       expect(card).toContain(`retry={${counter}}`)
     }
   })

@@ -165,3 +165,17 @@ it('Increase Contrast: the 50% hairline on the card and the scrim 20% deeper', a
   expect(flat('e-contrast')).toMatchObject({ borderWidth: 1, borderColor: MATERIAL.hairlineIncreaseContrast })
   expect(screen.getByTestId('scrim', { includeHiddenElements: true }).props.colors[1]).toBe(tint(COLOR.ink, 1))
 })
+
+describe('inert: a card with nowhere to go', () => {
+  it('is read and not pressed: text role, disabled, and a press does nothing (row and card)', async () => {
+    const onPress = jest.fn()
+    for (const kind of ['row', 'compact'] as const) {
+      const { unmount } = await render(<EventCard kind={kind} title="Toit" time="28 Sep" venue="Live here" inert onPress={onPress} testID={`inert-${kind}`} />)
+      const card = screen.getByTestId(`inert-${kind}`)
+      expect(card.props.accessibilityRole).toBe('text')
+      await fireEvent.press(card)
+      expect(onPress).not.toHaveBeenCalled()
+      unmount()
+    }
+  })
+})
