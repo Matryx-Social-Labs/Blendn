@@ -17,7 +17,7 @@ describe('PulseTopBar', () => {
   it('floating: transparent, the wordmark on a capsule', async () => {
     await render(<PulseTopBar floating />)
     const src = require('fs').readFileSync(require('path').join(__dirname, '../components/home/HomeShell.tsx'), 'utf8')
-    expect(src).toMatch(/<PulseTopBar floating actions={<NotificationBell glass \/>} \/>/)
+    expect(src).toMatch(/<PulseTopBar floating actions={<NotificationBell \/>} \/>/)
     expect(screen.getByText("Blend’n")).toBeTruthy()
     const styles = [] as object[]
     let node = screen.getByText("Blend’n").parent

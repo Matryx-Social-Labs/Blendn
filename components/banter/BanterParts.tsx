@@ -63,7 +63,7 @@ export function BanterHeader({
         Banter
       </Text>
       <View style={styles.actions}>
-        <View style={styles.bell}>{bell}</View>
+        {bell}
         <IconButton icon="search" accessibilityLabel="Search conversations" selected={searching} onPress={onSearch} testID="banter-search-toggle" />
         <IconButton icon="check-check" accessibilityLabel="Mark all read" disabled={!canMarkAll} onPress={onMarkAll} testID="banter-mark-all" />
       </View>
@@ -537,14 +537,6 @@ const styles = StyleSheet.create({
     paddingBottom: BAR_BOTTOM,
   },
   actions: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
-  bell: {
-    width: SIZE.circleButton,
-    height: SIZE.circleButton,
-    borderRadius: RADIUS.capsule,
-    backgroundColor: COLOR.chipFillOnGlass,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   grow: { flex: 1, minWidth: 0 },
   shrink: { flexShrink: 1 },
   ink: { color: COLOR.textPrimary },
