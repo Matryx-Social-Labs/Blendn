@@ -19,7 +19,8 @@ import type { GoLiveRefusal as SheetKind } from '../components/ds/GoLiveSheet'
 import { countdownLabel, EXTEND_CHOICE, remainingMs, type GoLiveChoice, type GoLiveRefusal, type VenueAction } from './goLive'
 import { liveNowWord } from './home'
 import { VENUE_PLATES } from './design/tokens'
-import { distanceText, hoursLine, plateFor, type PlateKey } from './placesPane'
+import { distanceText, plateFor, type PlateKey } from './placesPane'
+import { venueDayState } from './venueHours'
 
 /** A restaurant reuses the café's pair (owner's ruling on A87), as `VenuePlate` does. */
 const PLATE_PAIRS: Record<PlateKey, readonly [string, string]> = { ...VENUE_PLATES, restaurant: VENUE_PLATES.cafe }
@@ -49,9 +50,11 @@ export type TileSpec = { label: string; value: string; mono: boolean }
 
 const HOUR_MS = 60 * MINUTE_MS
 
+const validReset = (hour: number | null | undefined): number | null => (typeof hour === 'number' && Number.isInteger(hour) && hour >= 0 && hour <= 23 ? hour : null)
+
 /**
  * The opening that answers "tonight": the week's `hours` rows for the weekday of the venue's current day (`day` 0 is
- * Sunday, as `getDay`), shaped for `hoursLine`, the reading the Places card already uses. The venue's day starts at its
+ * Sunday, as `getDay`), shaped for `venueDayState`, the reading the Places card shares. The venue's day starts at its
  * reset hour, not at midnight: at 01:00 on Saturday a venue that resets at 06:00 is still in Friday's, and Friday's row
  * answers (`lib/venue-tonight.ts` on the server). Null when no hours are given or none for that weekday. A split day
  * answers with its latest opening, as the server's card does. Rows that are not the server's shape are dropped.
@@ -60,8 +63,7 @@ const HOUR_MS = 60 * MINUTE_MS
  */
 export function tonightOpening(hours: VenueDetail['venue']['hours'], dayResetHour: number | null | undefined, now: number): { opensAt: string; closesAt: string } | null {
   if (!Array.isArray(hours)) return null
-  const reset = typeof dayResetHour === 'number' && dayResetHour >= 0 && dayResetHour <= 23 ? dayResetHour : 0
-  const weekday = new Date(now - reset * HOUR_MS).getDay()
+  const weekday = new Date(now - (validReset(dayResetHour) ?? 0) * HOUR_MS).getDay()
   const rows = hours.filter((h) => h && h.day === weekday && typeof h.open === 'string' && typeof h.close === 'string')
   if (rows.length === 0) return null
   const latest = rows.reduce((a, b) => (b.open > a.open ? b : a))
@@ -77,9 +79,9 @@ export function venueTiles(detail: Pick<VenueDetail, 'venue' | 'live'>, now: num
   const tiles: TileSpec[] = []
   const hours = detail.venue.hours
   if (Array.isArray(hours) && hours.length > 0) {
-    // Hours are given: a weekday with no row, or a night that is over, is Closed.
-    const line = hoursLine(tonightOpening(hours, detail.venue.dayResetHour, now), now)
-    tiles.push({ label: 'OPEN', value: line ? `${line.lead === 'Opens' ? 'Opens' : 'Till'} ${line.time}` : 'Closed', mono: true })
+    // Hours are given: a weekday with no row, or a night that is over (up to the reset hour), is Closed.
+    const day = venueDayState(tonightOpening(hours, detail.venue.dayResetHour, now), now, validReset(detail.venue.dayResetHour))
+    tiles.push({ label: 'OPEN', value: day?.state === 'opens' ? `Opens ${day.time}` : day?.state === 'open' ? `Till ${day.time}` : 'Closed', mono: true })
   }
   const liveWord = liveNowWord(detail.live.liveNow)
   if (liveWord) tiles.push({ label: 'LIVE', value: `${liveWord} so far`, mono: false })

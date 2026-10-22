@@ -72,9 +72,11 @@ import { openBlendn } from '../lib/blendnOverlay'
 import { checkOutOf } from '../lib/checkIn'
 import { H } from '../lib/haptics'
 import { openInMaps } from '../lib/openInMaps'
+import { clockTime } from '../lib/roomMoments'
 import { openPaywall } from '../lib/paywall'
 /* eslint-enable import/first */
 
+const wall = (ms: number) => `${String(new Date(ms).getHours()).padStart(2, '0')}:${String(new Date(ms).getMinutes()).padStart(2, '0')}`
 const min = (n: number) => new Date(NOW + n * 60_000).toISOString()
 
 type Over = { venue?: Partial<VenueDetail['venue']>; live?: Partial<VenueDetail['live']>; tonight?: VenueDetail['tonight']; claim?: unknown }
@@ -202,8 +204,8 @@ describe('the place, not live', () => {
     expect(screen.getByLabelText('LIVE, 5–9 so far')).toBeTruthy()
     expect(screen.queryByLabelText(/^OPEN/)).toBeNull()
     expect(screen.queryByLabelText(/^SIZE/)).toBeNull()
-    await mount(venue({ venue: { hours: [{ day: new Date(NOW - 6 * 3_600_000).getDay(), open: '00:00', close: '23:59' }], dayResetHour: 6, capacity: 300 } }))
-    expect(screen.getByLabelText("OPEN, Till 11:59 PM")).toBeTruthy()
+    await mount(venue({ venue: { hours: [{ day: new Date(NOW - 6 * 3_600_000).getDay(), open: wall(NOW - 2 * 3_600_000), close: wall(NOW + 4 * 3_600_000) }], dayResetHour: 6, capacity: 300 } }))
+    expect(screen.getByLabelText(`OPEN, Till ${clockTime(NOW + 4 * 3_600_000)}`)).toBeTruthy()
     expect(screen.getByLabelText('RESET, 06:00')).toBeTruthy()
     expect(screen.getByLabelText('SIZE, 300 people')).toBeTruthy()
   })

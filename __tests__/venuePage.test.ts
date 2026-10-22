@@ -94,6 +94,19 @@ describe('the tiles', () => {
     expect(at([{ day: SAT, open: '18:00', close: '02:00' }], 0).value).toBe('Closed')
   })
 
+  it('Open: between the close and the reset hour it is Closed, not Opens (SCRUM-743 review M1)', () => {
+    const at = (day: number, hour: number, hours: { day: number; open: string; close: string }[]) =>
+      venueTiles(detail({ venue: { hours, dayResetHour: 6 }, live: { liveNow: null } }), new Date(2026, 9, day, hour, 0).getTime())[0].value
+    // Sunday 03:00 is still Saturday's day, whose 18:00 to 02:00 night closed an hour ago.
+    expect(at(18, 3, [{ day: SAT, open: '18:00', close: '02:00' }])).toBe('Closed')
+    // Sunday 05:00, Saturday 10:00 to 22:00: long closed, and the day has not turned over yet.
+    expect(at(18, 5, [{ day: SAT, open: '10:00', close: '22:00' }])).toBe('Closed')
+    // After the reset it is Sunday's day, whose own row answers.
+    expect(at(18, 7, [{ day: 0, open: '10:00', close: '22:00' }])).toBe('Opens 10 AM')
+    // Still inside Saturday's night at 01:00.
+    expect(at(18, 1, [{ day: SAT, open: '18:00', close: '02:00' }])).toBe('Till 2 AM')
+  })
+
   it('no hours, an empty list, or rows that are not the server’s shape draw no Open tile', () => {
     const tiles = (hours: unknown) => venueTiles(detail({ venue: { hours: hours as never }, live: { liveNow: null } }), NOW)
     expect(tiles(null)).toEqual([])
