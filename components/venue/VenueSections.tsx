@@ -16,7 +16,7 @@ import { distanceText } from '../../lib/placesPane'
 import { startsLabel } from '../../lib/roomMoments'
 import { useSessionTime } from '../../lib/useSessionTime'
 import { liveNowWord } from '../../lib/home'
-import { ringWords, timeRange, UPCOMING_SHOWN } from '../../lib/venuePage'
+import { hasMoreThanShown, ringWords, timeRange, UPCOMING_SHOWN, type UpcomingRow } from '../../lib/venuePage'
 import { VenueMap } from './VenueMap'
 
 /** The ring around the live card (the design's 88, a 56 face inside). */
@@ -129,22 +129,28 @@ export function TonightHere({
   )
 }
 
-/** Coming up here: the date in Geist Mono, the title, the going count. */
+/**
+ * Coming up here: the date in Geist Mono, the title, the going count. Three show; "See all" opens the sheet that pages
+ * the rest in, and the heading carries how many there are in all.
+ */
 export function UpcomingList({
   rows,
+  total,
   onOpen,
+  onSeeAll,
 }: {
-  /** The upcoming events (capped at UPCOMING_MAX), soonest first; three show, the rest behind See all. */
-  rows: { id: string; title: string; day: string; going: string | null }[]
+  /** The page's first rows, soonest first. */
+  rows: UpcomingRow[]
+  /** How many there are in all (`upcomingCount`). */
+  total: number
   onOpen: (eventId: string) => void
+  onSeeAll: () => void
 }) {
   const bold = useBoldText()
-  const [all, setAll] = useState(false)
-  const shown = all ? rows : rows.slice(0, UPCOMING_SHOWN)
   return (
     <Section>
-      <SectionHeader title="Coming up here" action={rows.length > UPCOMING_SHOWN && !all ? { label: 'See all', onPress: () => setAll(true) } : undefined} />
-      {shown.map((r) => (
+      <SectionHeader title="Coming up here" count={total} action={hasMoreThanShown(total) ? { label: 'See all', onPress: onSeeAll } : undefined} />
+      {rows.slice(0, UPCOMING_SHOWN).map((r) => (
         <Pressable
           key={r.id}
           onPress={() => onOpen(r.id)}

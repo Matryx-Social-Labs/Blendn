@@ -92,23 +92,42 @@ export function timeRange(startIso: string, endIso: string): string {
 }
 
 /**
- * "Coming up here": the first three show, the rest behind See all. The server sends its own few (admin
- * `UPCOMING_LIMIT`, 5) and no total; this is the page's own ceiling on whatever it is sent, so a place with
- * hundreds of events can never draw hundreds of rows. Past it there is nothing to page through until the server
- * sends a cursor and a total (see the report); the list says nothing it does not know.
+ * "Coming up here": the first three show; "See all" is a sheet that pages the rest in (`GET /venues/:id/upcoming`, 20
+ * at a time by cursor). `GET /venues/:id` brings the first few and `upcomingTotal`; a server that sends no total
+ * leaves the list at what it sent, capped here at `UPCOMING_MAX` so nothing it sends can draw hundreds of rows.
  */
 export const UPCOMING_SHOWN = 3
 export const UPCOMING_MAX = 20
-export function upcomingRows(upcoming: VenueDetail['venue']['upcoming']) {
+/** A page of the sheet's list. */
+export const UPCOMING_PAGE = 20
+
+export type UpcomingRow = { id: string; title: string; day: string; going: string | null }
+
+export function upcomingRows(upcoming: VenueDetail['venue']['upcoming'], max: number = UPCOMING_MAX): UpcomingRow[] {
   return (upcoming ?? [])
     .filter((e) => e.title && dayLabel(e.startTime))
-    .slice(0, UPCOMING_MAX)
+    .slice(0, max)
     .map((e) => ({
       id: e.id,
       title: e.title,
       day: dayLabel(e.startTime),
       going: e.goingCount && e.goingCount > 0 ? `${e.goingCount} going` : null,
     }))
+}
+
+/** How many events the page can say there are: the server's total, else what it sent. */
+export function upcomingCount(venue: Pick<VenueDetail['venue'], 'upcoming' | 'upcomingTotal'>, shownRows: number): number {
+  const total = venue.upcomingTotal
+  return typeof total === 'number' && Number.isFinite(total) && total >= shownRows ? total : shownRows
+}
+
+/** "See all" where there is more than the page shows. */
+export const hasMoreThanShown = (count: number): boolean => count > UPCOMING_SHOWN
+
+/** A page appended to what is there, an event never twice (the list can move under a person between pages). */
+export function appendUpcoming(have: readonly UpcomingRow[], page: readonly UpcomingRow[]): UpcomingRow[] {
+  const seen = new Set(have.map((r) => r.id))
+  return [...have, ...page.filter((r) => !seen.has(r.id))]
 }
 
 /**

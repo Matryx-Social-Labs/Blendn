@@ -850,6 +850,12 @@ export interface VenuesListResponse {
   order?: string
 }
 
+/** A page of a venue's coming events — `GET /api/mobile/venues/:venueId/upcoming`. */
+export interface VenueUpcomingPage {
+  events: { id: string; title: string; startTime: string; endTime?: string | null; goingCount?: number | null }[]
+  pagination: { limit: number; hasMore: boolean; nextCursor: string | null; totalCount: number }
+}
+
 /** One venue — `GET /api/mobile/venues/:venueId`, as the place screen reads it. */
 export interface VenueDetail {
   venue: {
@@ -879,8 +885,12 @@ export interface VenueDetail {
     description?: string | null
     /** Good to know: what the owner ticked. */
     amenities?: { id: string; name: string; subtitle?: string | null; icon?: string | null }[] | null
-    /** Upcoming events here, soonest first (the page shows three). */
+    /** Upcoming events here, soonest first: the server's first few (the page shows three); the rest are `getVenueUpcoming`'s. */
     upcoming?: { id: string; title: string; startTime: string; goingCount?: number | null }[] | null
+    /** How many there are in all, whatever `upcoming` holds. Absent from a server that does not send it. */
+    upcomingTotal?: number | null
+    /** Where `getVenueUpcoming` resumes after `upcoming`; null when `upcoming` is all of them. */
+    upcomingNextCursor?: string | null
   }
   live: {
     /** Whether going live here would be accepted now, the fence aside. */
@@ -1924,6 +1934,13 @@ class ApiClientClass {
   /** One venue — `GET /venues/:venueId`. Not cached: it carries the live count. */
   async getVenue(venueId: string): Promise<ApiResponse<VenueDetail>> {
     return this.queuedRequest<VenueDetail>(`/api/mobile/venues/${encodeURIComponent(venueId)}`)
+  }
+
+  /** The rest of a venue's coming events, a page at a time, soonest first: `cursor` is the last page's `nextCursor`. */
+  async getVenueUpcoming(venueId: string, cursor?: string | null, limit = 20): Promise<ApiResponse<VenueUpcomingPage>> {
+    const params = new URLSearchParams({ limit: String(limit) })
+    if (cursor) params.set('cursor', cursor)
+    return this.queuedRequest<VenueUpcomingPage>(`/api/mobile/venues/${encodeURIComponent(venueId)}/upcoming?${params}`)
   }
 
   /**

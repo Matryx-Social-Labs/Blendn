@@ -44,7 +44,7 @@ jest.mock('expo-linear-gradient', () => {
 })
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShowToast }) }))
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn() } }))
-jest.mock('../lib/apiClient', () => ({ apiClient: { getVenue: jest.fn(), goLive: jest.fn(), queuedRequest: jest.fn().mockResolvedValue({ success: false }) } }))
+jest.mock('../lib/apiClient', () => ({ apiClient: { getVenue: jest.fn(), getVenueUpcoming: jest.fn(), goLive: jest.fn(), queuedRequest: jest.fn().mockResolvedValue({ success: false }) } }))
 jest.mock('../lib/blendnOverlay', () => ({ openBlendn: jest.fn() }))
 jest.mock('../lib/checkIn', () => ({ checkOutOf: jest.fn(), checkInChanged: jest.fn(), subscribeCheckInChanged: () => () => {} }))
 jest.mock('../lib/socketClient', () => ({ subscribeToLiveEnded: (cb: never) => { mockEnded.push(cb); return () => {} } }))
@@ -303,19 +303,35 @@ describe('the Where card’s map', () => {
 })
 
 describe('the page, the design’s details', () => {
-  it('Coming up here shows three and the rest behind See all', async () => {
-    const upcoming = [1, 2, 3, 4].map((n) => ({ id: `u${n}`, title: `Night ${n}`, startTime: min(60 * 24 * n) }))
-    await mount(venue({ venue: { upcoming } }))
+  const nights = (n: number, from = 1) => Array.from({ length: n }, (_, i) => ({ id: `u${from + i}`, title: `Night ${from + i}`, startTime: min(60 * 24 * (from + i)) }))
+
+  it('Coming up here shows three of the first few, counts them all in the heading, and opens the rest from See all', async () => {
+    ;(apiClient.getVenueUpcoming as jest.Mock).mockResolvedValue({
+      success: true,
+      data: { events: nights(2, 6), pagination: { limit: 20, hasMore: false, nextCursor: null, totalCount: 7 } },
+    })
+    await mount(venue({ venue: { upcoming: nights(5), upcomingTotal: 7, upcomingNextCursor: 'c1' } }))
     expect(screen.queryByTestId('venue-upcoming-u4')).toBeNull()
+    expect(screen.getByRole('header', { name: 'Coming up here, 7' })).toBeTruthy()
     await act(async () => {
       fireEvent.press(screen.getByRole('button', { name: 'See all' }))
     })
-    expect(screen.getByTestId('venue-upcoming-u4')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'See all' })).toBeNull()
+    await act(async () => { await Promise.resolve() })
+    // The sheet has the page's five and fetches the rest from where the page stopped.
+    expect(apiClient.getVenueUpcoming).toHaveBeenCalledWith('v1', 'c1', 20)
+    expect(screen.getByTestId('venue-upcoming-all-u4')).toBeTruthy()
+    expect(screen.getByTestId('venue-upcoming-all-u7')).toBeTruthy()
+    expect(screen.queryByTestId('venue-upcoming-more')).toBeNull()
+  })
+
+  it('See all when there are more than three, with or without a total', async () => {
+    await mount(venue({ venue: { upcoming: nights(4) } }))
+    expect(screen.getByRole('button', { name: 'See all' })).toBeTruthy()
+    expect(screen.getByRole('header', { name: 'Coming up here, 4' })).toBeTruthy()
   })
 
   it('three or fewer have no See all', async () => {
-    await mount(venue({ venue: { upcoming: [{ id: 'u1', title: 'Night', startTime: min(1440) }] } }))
+    await mount(venue({ venue: { upcoming: nights(1), upcomingTotal: 1, upcomingNextCursor: null } }))
     expect(screen.queryByRole('button', { name: 'See all' })).toBeNull()
   })
 

@@ -13,6 +13,7 @@ import { Sheet, type SheetAction } from '../../components/ds/Sheet'
 import { SessionSheet } from '../../components/ds/SessionSheet'
 import { announceOutcome, font, useBoldText } from '../../components/ds/shared'
 import { useToast } from '../../components/Toast'
+import { UpcomingSheet } from '../../components/venue/UpcomingSheet'
 import { VenueDock } from '../../components/venue/VenueDock'
 import { PAGE_WASH, PageWash } from '../../components/ui/GradientFill'
 import { Material } from '../../components/ui/Material'
@@ -62,6 +63,7 @@ import {
   kmParam,
   sheetRefusal,
   type SheetRefusal,
+  upcomingCount,
   upcomingRows,
   venueGate,
   venueHero,
@@ -70,7 +72,7 @@ import {
   type VenueGate,
 } from '../../lib/venuePage'
 
-type SheetKind = 'dial' | 'session' | 'leave' | 'claim'
+type SheetKind = 'dial' | 'session' | 'leave' | 'claim' | 'upcoming'
 type Tray = { visible: boolean; title: string; message: string; buttons: TrayButton[]; extra?: TrayExtra }
 
 /** The shield under the status bar and the back button fades in as the rows reach it. */
@@ -459,6 +461,7 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
   const tiles = venueTiles(detail, now).map((t) => ({ label: t.label, value: t.value, mono: t.mono }))
   const known = goodToKnow(venue.amenities)
   const upcoming = upcomingRows(venue.upcoming)
+  const upcomingTotal = upcomingCount(venue, upcoming.length)
   const boardId = boardEventId(tonight, now)
 
   const trayActions: SheetAction[] = (tray?.buttons ?? []).map((b) => ({
@@ -503,7 +506,7 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
           ) : null}
 
           {action.kind === 'handoff' ? null : <TonightHere tonight={tonight} venue={venue.name} km={km} now={now} onOpen={openEvent} />}
-          {upcoming.length ? <UpcomingList rows={upcoming} onOpen={openEvent} /> : null}
+          {upcoming.length ? <UpcomingList rows={upcoming} total={upcomingTotal} onOpen={openEvent} onSeeAll={() => setSheet('upcoming')} /> : null}
           <WhosHere live={live} onSeeWho={seeWhoIsHere} />
           {/* Only where somebody runs the place on Blendn: there is nobody to tell at an unclaimed one (step 12). */}
           {venue.claimed ? <VenueRegulars venueId={venue.id} venueName={venue.name} /> : null}
@@ -579,6 +582,15 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
         onExtend={() => void extend()}
         onEnd={() => void stopLive()}
         onZero={load}
+      />
+      <UpcomingSheet
+        visible={sheet === 'upcoming'}
+        onClose={() => setSheet(null)}
+        venueId={venue.id}
+        first={upcoming}
+        firstCursor={venue.upcomingNextCursor ?? null}
+        total={upcomingTotal}
+        onOpen={openEvent}
       />
       <Sheet
         visible={sheet === 'claim'}
