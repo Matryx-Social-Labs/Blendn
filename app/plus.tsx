@@ -35,6 +35,7 @@ import {
 import { buyPackage, canBuyAs, loadPlusOffers, purchasesAvailable, restore, type PlusOffer, type RestoreOutcome } from '../lib/purchases'
 import { useAuth } from '../lib/useAuth'
 import { notePaywallClosed, notePaywallEvent } from '../lib/paywall'
+import { useTopBarState } from '../lib/useTopBarState'
 
 type Phase = 'idle' | 'confirming' | 'pending' | 'slow' | 'done'
 
@@ -75,6 +76,7 @@ function PlusScreenContent() {
   const userId = user?.id ?? null
   const { showToast } = useToast()
   const headerHeight = useHeaderHeight()
+  const bar = useTopBarState()
 
   const [status, setStatus] = useState<PlusStatus | null>(null)
   const [statusLoad, setStatusLoad] = useState<StatusLoad>('loading')
@@ -315,11 +317,12 @@ function PlusScreenContent() {
       <Orbs set="brand" />
       <Grain />
       {/* First in the tree for the focus order (it draws over the scroll by zIndex). */}
-      <PlusHeader done={finished} onClose={close} />
+      <PlusHeader done={finished} onClose={close} state={bar.state === 'rest' ? 'rest' : 'scrolled'} />
       <ScrollView
         testID="plus-scroll"
         contentContainerStyle={[styles.content, { paddingTop: headerHeight + SPACE.sm, paddingBottom: (dockShown ? dockHeight : 0) + SPACE.xl }]}
         showsVerticalScrollIndicator={false}
+        {...bar.scrollProps}
       >
         <PlusHero />
         {failed ? (

@@ -505,3 +505,29 @@ describe('Terms and Privacy open in the app', () => {
     linking.mockRestore()
   })
 })
+
+/**
+ * Scroll-edge chrome (motion #30): at rest the circle and "Not now" sit straight on the page; the
+ * bar's glass is mounted once the content has moved under it, and goes when it is back at the top.
+ *
+ * Negative control: mounting the bar unconditionally (the old header) fails "no bar at rest".
+ */
+describe('the bar at the scroll edge', () => {
+  const scrollTo = async (y: number) => {
+    await act(async () => {
+      fireEvent.scroll(screen.getByTestId('plus-scroll'), { nativeEvent: { contentOffset: { y } } })
+    })
+  }
+
+  it('no bar at rest; its glass is mounted once the page has scrolled under it, and gone at the top again', async () => {
+    await mount()
+    expect(screen.queryByTestId('plus-header-bar')).toBeNull()
+    await scrollTo(40)
+    expect(screen.getByTestId('plus-header-bar')).toBeTruthy()
+    await scrollTo(0)
+    expect(screen.queryByTestId('plus-header-bar')).toBeNull()
+    // Both ways out are there throughout.
+    expect(screen.getByRole('button', { name: 'Back' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Not now' })).toBeTruthy()
+  })
+})
