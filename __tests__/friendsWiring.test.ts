@@ -114,17 +114,21 @@ describe('the links open the app', () => {
     expect(JSON.parse(read('app.json')).expo.ios.associatedDomains).toEqual(['applinks:www.blendn.app'])
   })
 
+  it('on iOS, may ask whether WhatsApp is installed, from the committed Info.plist as well as app.json', () => {
+    expect(read('ios/blendn/Info.plist')).toMatch(/<key>LSApplicationQueriesSchemes<\/key>\s*<array>\s*<string>whatsapp<\/string>/)
+  })
+
   it('on iOS, from the web page\'s "Open in Blend\'n" button', () => {
     // `blendn://` was in app.json and never reached the committed Info.plist.
     expect(read('ios/blendn/Info.plist')).toMatch(/<key>CFBundleURLSchemes<\/key>\s*<array>\s*<string>blendn<\/string>/)
   })
 
-  it('on Android, verified, for /f/ and /event/ only, the same in app.json and the committed manifest', () => {
+  it('on Android, verified, for /f/, /event/ (the organiser’s QR code), /e/ and /v/ only, the same in app.json and the committed manifest', () => {
     const manifest = read('android/app/src/main/AndroidManifest.xml')
     const verified = manifest.match(/<intent-filter android:autoVerify="true">([\s\S]*?)<\/intent-filter>/g) ?? []
     expect(verified).toHaveLength(1)
     const manifestPaths = [...(verified[0] ?? '').matchAll(/<data android:scheme="https" android:host="www.blendn.app" android:pathPrefix="([^"]+)"\/>/g)].map((m) => m[1])
-    expect(manifestPaths).toEqual(['/f/', '/event/'])
+    expect(manifestPaths).toEqual(['/f/', '/event/', '/e/', '/v/'])
     const filters = JSON.parse(read('app.json')).expo.android.intentFilters
     expect(filters).toContainEqual(
       expect.objectContaining({
@@ -132,6 +136,8 @@ describe('the links open the app', () => {
         data: [
           { scheme: 'https', host: 'www.blendn.app', pathPrefix: '/f/' },
           { scheme: 'https', host: 'www.blendn.app', pathPrefix: '/event/' },
+          { scheme: 'https', host: 'www.blendn.app', pathPrefix: '/e/' },
+          { scheme: 'https', host: 'www.blendn.app', pathPrefix: '/v/' },
         ],
       })
     )

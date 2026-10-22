@@ -15,6 +15,7 @@
       "associatedDomains": ["applinks:www.blendn.app"],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
+        "LSApplicationQueriesSchemes": ["whatsapp"],
         "CADisableMinimumFrameDurationOnPhone": true,
         "GIDClientID": "689347751270-9fn9ofnpd5kedobrqtorafvlgg2mhnd6.apps.googleusercontent.com",
         "NSLocationWhenInUseUsageDescription": "Blend'n uses your location to show nearby events and validate on-site check-ins.",
@@ -66,6 +67,16 @@
               "scheme": "https",
               "host": "www.blendn.app",
               "pathPrefix": "/event/"
+            },
+            {
+              "scheme": "https",
+              "host": "www.blendn.app",
+              "pathPrefix": "/e/"
+            },
+            {
+              "scheme": "https",
+              "host": "www.blendn.app",
+              "pathPrefix": "/v/"
             }
           ],
           "category": [
