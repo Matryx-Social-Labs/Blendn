@@ -123,3 +123,9 @@ describe('Flow 4 Room: the double tap likes; arrivals and waves show on the face
     expect(query('g-wave-ring')).toBeTruthy()
   })
 })
+
+it('keeps its short reason and gives a screen reader the overlap sentence as the hint (R7)', async () => {
+  await render(<GridFace {...PRIYA} overlap="Both CSK, in RCB country" testID="g" />)
+  expect(screen.getByText('Both into vinyl', { includeHiddenElements: true })).toBeTruthy()
+  expect(screen.getByTestId('g', { includeHiddenElements: true }).props.accessibilityHint).toBe('Both CSK, in RCB country')
+})

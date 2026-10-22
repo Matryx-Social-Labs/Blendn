@@ -23,6 +23,7 @@ export function MeetNextCard({
   face,
   name,
   reason,
+  overlap,
   width,
   liked = false,
   onPress,
@@ -32,6 +33,11 @@ export function MeetNextCard({
   face: Face
   name: string
   reason: string
+  /**
+   * Matching v2's one sentence (Flow 14 · 14.1): when the server sent one it is the reason, in the
+   * two lines the card has. Never a score; nothing when there is none.
+   */
+  overlap?: string | null
   /** 110 three across at 402, 96 at 360. */
   width: number
   liked?: boolean
@@ -44,6 +50,7 @@ export function MeetNextCard({
   const contrast = useIncreaseContrast()
   const android = Platform.OS === 'android'
   const [focused, setFocused] = useState(false)
+  const said = overlap || reason
 
   return (
     <View testID={testID && `${testID}-scale`} style={[{ width }, previewState === 'pressed' && styles.pressed]}>
@@ -55,7 +62,7 @@ export function MeetNextCard({
         pressedScale={android ? 1 : PRESS.scale}
         android_ripple={{ color: PRESSED_WASH.android, foreground: true }}
         accessibilityRole="button"
-        accessibilityLabel={liked ? `${name}, ${reason}, liked` : `${name}, ${reason}`}
+        accessibilityLabel={liked ? `${name}, ${said}, liked` : `${name}, ${said}`}
         style={[styles.card, { width }, contrast && IC_HAIRLINE]}
       >
         <Avatar size={width - SPACE.xxl} testID={testID && `${testID}-face`} {...face} />
@@ -67,7 +74,7 @@ export function MeetNextCard({
           maxFontSizeMultiplier={CONTROL_FONT_CAP}
           style={[font('caption', bold), styles.center, { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}
         >
-          {reason}
+          {said}
         </Text>
         {liked ? (
           <View style={styles.mark}>

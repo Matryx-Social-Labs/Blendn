@@ -14,6 +14,7 @@ import { COLOR, DURATION, EASING, FONT_FAMILY, PRESS, RADIUS, SIZE, SPACE } from
 import type { TrayButton, TrayExtra } from '../../lib/locationFix'
 import { Logger } from '../../lib/logger'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
+import { overlapOf } from '../../lib/overlapLine'
 import { everyoneHead, meetNext, reasonLine, reasonLines } from '../../lib/roomMoments'
 import { markRoomLeft } from '../../lib/roomMembership'
 import { roomRecap, type RoomRecap as Recap } from '../../lib/roomRecap'
@@ -719,6 +720,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   const visibility: Visibility = bannerState(controls.revealed, controls.listed, controls.readiness.ok)
 
   // --- the card's variant and state ------------------------------------------------
+  const cardOverlap = cardPerson ? overlapOf(cardPerson) : null
   const cardVariant: PersonVariant = !cardPerson ? 'thin' : cardPerson.matched ? 'matched' : cardPerson.insideNow ? 'here' : 'was'
   const refusal = card ? refusals[card.id] : undefined
   /** The chip shows a definite answer only: hidden while there is nothing to choose between (solo), or a like would still ask. */
@@ -937,7 +939,9 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
           name: cardPerson?.name ?? card?.name ?? '',
           age: cardPerson?.age,
           reason: cardPerson ? (cardPerson.matched ? 'You matched' : reasonLine(cardPerson)) : undefined,
-          reasons: cardPerson ? reasonLines(cardPerson) : undefined,
+          // The line says overlaps[0]; the panel keeps the rest, never the same sentence twice.
+          reasons: cardPerson ? reasonLines(cardPerson).filter((r) => r !== cardOverlap?.line) : undefined,
+          overlap: cardOverlap ?? undefined,
           chips: cardPerson ? [...cardPerson.interests.slice(0, 8), ...(cardPerson.sign ? [cardPerson.sign] : [])] : undefined,
         }}
         liked={!!cardPerson && (cardPerson.liked || cardPerson.pending) && !cardPerson.matched}

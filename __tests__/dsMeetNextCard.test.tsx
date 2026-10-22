@@ -53,3 +53,10 @@ it('Increase Contrast: the 50% hairline and the reason in white', async () => {
   expect(flat('m')).toMatchObject({ borderWidth: 1, borderColor: MATERIAL.hairlineIncreaseContrast })
   expect(StyleSheet.flatten(screen.getByText('Both open to dating', { includeHiddenElements: true }).props.style).color).toBe(COLOR.textPrimary)
 })
+
+it('says Matching v2’s sentence as the reason when the server sent one (R7)', async () => {
+  await render(<MeetNextCard {...PRIYA} overlap="Both CSK, in RCB country" />)
+  expect(screen.getByText('Both CSK, in RCB country', { includeHiddenElements: true }).props.numberOfLines).toBe(2)
+  expect(screen.queryByText('Both open to dating', { includeHiddenElements: true })).toBeNull()
+  expect(screen.getByRole('button', { name: 'Priya, Both CSK, in RCB country' })).toBeTruthy()
+})

@@ -388,3 +388,38 @@ describe('the action row is one height (M4)', () => {
     expect(flat('p-liked').backgroundColor).toBe(COLOR.selectionRoseFill)
   })
 })
+
+describe('Matching v2 overlap (Flow 14 · 14.1, R7)', () => {
+  const LABELS = [
+    { text: 'Friendship', shared: true },
+    { text: 'CSK', shared: true },
+    { text: 'Filter coffee', shared: true },
+    { text: 'Leo', shared: false },
+  ]
+  const overlap = { line: 'Both CSK, in RCB country', labels: LABELS }
+
+  it('draws the server’s line and two labels before a reveal; the plain chips give way', async () => {
+    await draw({ person: { ...PRIYA, overlap } })
+    expect(text('Both CSK, in RCB country')).toBeTruthy()
+    expect(text('Friendship')).toBeTruthy()
+    expect(text('CSK')).toBeTruthy()
+    expect(text('Filter coffee')).toBeNull()
+    expect(text('Vinyl')).toBeNull()
+  })
+
+  it('four labels after a reveal (matched)', async () => {
+    await draw({ person: { ...PRIYA, overlap }, variant: 'matched' })
+    expect(text('Leo')).toBeTruthy()
+  })
+
+  it('no line: nothing new, and the plain chips stay', async () => {
+    await draw({ person: { ...PRIYA, overlap: { line: null, labels: [] } } })
+    expect(query('p-overlap')).toBeNull()
+    expect(text('Vinyl')).toBeTruthy()
+  })
+
+  it('the thin card never says what you share', async () => {
+    await draw({ person: { ...PRIYA, overlap }, variant: 'thin' })
+    expect(query('p-overlap')).toBeNull()
+  })
+})

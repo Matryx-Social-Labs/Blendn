@@ -13,6 +13,7 @@ import { InterestChip } from './Chip'
 import { CrewEmblem } from './CrewEmblem'
 import type { Face } from './Facepile'
 import { PresenceDot } from './MonoFamily'
+import { OverlapLine, type OverlapLabel } from './OverlapLine'
 import { Sheet } from './Sheet'
 import { CONTROL_FONT_CAP, focusRing, font, minTarget, PRESSED_WASH, useBoldText, useIncreaseContrast, useSelection } from './shared'
 import { StateScreen } from './StateScreen'
@@ -33,6 +34,12 @@ export type PersonCardPerson = {
   /** Every reason, in the server's order: the panel. */
   reasons?: string[]
   chips?: string[]
+  /**
+   * Matching v2 (Flow 14 · 14.1): the server's strongest overlap as one line,
+   * and the shared labels under it (2 before a reveal, 4 after). Absent or
+   * `line: null` draws no line, and the plain `chips` stay.
+   */
+  overlap?: { line: string | null; labels: OverlapLabel[] }
 }
 
 export type PersonCardContentProps = {
@@ -249,7 +256,14 @@ export function PersonCardContent({
         </View>
       ) : null}
 
-      {!thin && person.chips?.length ? (
+      {!thin && person.overlap?.line ? (
+        <OverlapLine
+          line={person.overlap.line}
+          labels={person.overlap.labels}
+          revealed={variant === 'matched' || variant === 'friend'}
+          testID={id('overlap')}
+        />
+      ) : !thin && person.chips?.length ? (
         <View style={styles.chips}>
           {person.chips.map((c) => (
             <InterestChip key={c} label={c} />

@@ -31,6 +31,8 @@ export type GridFaceProps = {
   name: string
   /** One reason ("Both into vinyl"); "Was here" replaces it when they've left. */
   reason: string
+  /** Matching v2's sentence (Flow 14 · 14.1): too long for the cell, so it is what a screen reader hears as the hint. */
+  overlap?: string | null
   /** The column's width; the face is 16 less. */
   width: number
   here?: boolean
@@ -70,6 +72,7 @@ export function GridFace({
   face,
   name,
   reason,
+  overlap,
   width,
   here = true,
   liked = false,
@@ -108,6 +111,7 @@ export function GridFace({
           android_ripple={{ color: PRESSED_WASH.android, foreground: true }}
           accessibilityRole="button"
           accessibilityLabel={label}
+          accessibilityHint={overlap || undefined}
           style={styles.cell}
         >
           <View style={{ width: size, height: size }}>
