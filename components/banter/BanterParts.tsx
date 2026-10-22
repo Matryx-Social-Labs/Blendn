@@ -14,6 +14,7 @@ import { Avatar } from '../ds/Avatar'
 import { Button } from '../ds/Button'
 import { CrewEmblem } from '../ds/CrewEmblem'
 import { IconButton } from '../ds/IconButton'
+import { Orbs } from '../ds/Orbs'
 import { Badge, monoCaption, PresenceDot, ScrimPill, TimeBadge } from '../ds/MonoFamily'
 import { RollingNumber } from '../ds/RollingNumber'
 import { CONTROL_FONT_CAP, font, useBoldText } from '../ds/shared'
@@ -114,7 +115,14 @@ export function LiveHero({
       accessibilityLabel={[title, 'live', here ? 'You’re here' : count ? `${count} in the room` : null, unread ? `${unread} new` : null, line].filter(Boolean).join(', ')}
       style={({ pressed }) => [styles.hero, pressed && styles.pressed]}
     >
-      {coverUrl ? <Image source={{ uri: coverUrl }} recyclingKey={coverUrl} contentFit="cover" style={StyleSheet.absoluteFill} accessible={false} /> : null}
+      {/* No cover is the brand orbs, still, as the Scene and Room info draw it (r7 M6): never a flat grey card. */}
+      {coverUrl ? (
+        <Image source={{ uri: coverUrl }} recyclingKey={coverUrl} contentFit="cover" style={StyleSheet.absoluteFill} accessible={false} />
+      ) : (
+        <View testID={testID && `${testID}-orbs`} style={StyleSheet.absoluteFill}>
+          <Orbs set="brand" paused />
+        </View>
+      )}
       <PhotoScrim style={styles.heroScrim} />
       <View style={styles.heroTop}>
         <TimeBadge when="Live" />
@@ -545,7 +553,7 @@ const styles = StyleSheet.create({
   pressed: { opacity: OPACITY.pressed },
   inline: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs },
   centre: { alignItems: 'center', justifyContent: 'center' },
-  hero: { height: HERO_HEIGHT, borderRadius: RADIUS.sheet, overflow: 'hidden', backgroundColor: COLOR.surface },
+  hero: { height: HERO_HEIGHT, borderRadius: RADIUS.sheet, overflow: 'hidden', backgroundColor: COLOR.ink },
   heroScrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '80%' },
   heroTop: { position: 'absolute', left: SPACE.md, top: SPACE.md, flexDirection: 'row', gap: SPACE.xs },
   heroBadge: { position: 'absolute', right: SPACE.lg, top: SPACE.md },
