@@ -79,3 +79,19 @@ it('when the app comes back to the front it reads the counts again, so the icon 
   await waitFor(() => expect(setBadge).toHaveBeenCalledWith(4))
   spy.mockRestore()
 })
+
+it('at the server\'s cap the bell says "more than 999 unread", not a number that looks exact; the badge stays "9+"', async () => {
+  jest.spyOn(AppState, 'addEventListener').mockImplementation((() => ({ remove: jest.fn() })) as never)
+  api.getNotifications.mockResolvedValue(feed({ unreadCount: 1000 }))
+  await render(<NotificationBell />)
+  const bell = await screen.findByLabelText('Notifications, more than 999 unread')
+  expect(bell.props.accessibilityValue?.text).toBeUndefined()
+  expect(screen.getByText('9+', { includeHiddenElements: true })).toBeTruthy()
+})
+
+it('just under the cap it is still the true number', async () => {
+  jest.spyOn(AppState, 'addEventListener').mockImplementation((() => ({ remove: jest.fn() })) as never)
+  api.getNotifications.mockResolvedValue(feed({ unreadCount: 999 }))
+  await render(<NotificationBell />)
+  await waitFor(() => expect(screen.getByLabelText('Notifications').props.accessibilityValue).toEqual({ text: '999 unseen' }))
+})
