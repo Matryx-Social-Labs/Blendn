@@ -16,7 +16,7 @@ import { ConnectSheet } from '../../components/grid/ConnectSheet'
 import { MessageRequestPrompt } from '../../components/profile/MessageRequestPrompt'
 import { PhotoViewer } from '../../components/profile/PhotoViewer'
 import { ProfileBar } from '../../components/profile/ProfileBar'
-import { dockClearance, ProfileDock } from '../../components/profile/ProfileDock'
+import { DOCK_FADE, dockClearance, ProfileDock } from '../../components/profile/ProfileDock'
 import { heroHeightFor, ProfileHeroStage } from '../../components/profile/ProfileHeroStage'
 import { ProfileBio, ProfileDetail, ProfileGallery, ProfileInterests, ProfileSection, SECTION_GAP } from '../../components/profile/ProfileSections'
 import { Glyph } from '../../components/ui/Glyph'
@@ -562,7 +562,8 @@ function UserProfileInner() {
         testID="profile-scroll"
         onScroll={onScroll}
         scrollEventThrottle={16}
-        contentContainerStyle={{ paddingBottom: (dockHeight || dockClearance(insets.bottom)) + SPACE.xl }}
+        // The fade above the dock is drawn over the page, so the last section clears it too, not only the dock (r7 M2).
+        contentContainerStyle={{ paddingBottom: (dockHeight || dockClearance(insets.bottom)) + DOCK_FADE + SPACE.xl }}
         showsVerticalScrollIndicator={false}
       >
         {loading ? (
