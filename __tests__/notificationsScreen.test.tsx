@@ -33,6 +33,8 @@ jest.mock('../lib/apiClient', () => ({
     updateProfile: jest.fn(),
   },
 }))
+// The fetch deadline at 100 ms, so the answer's (three of them) passes in a test's time.
+jest.mock('../lib/fetchTimeout', () => ({ ...jest.requireActual('../lib/fetchTimeout'), REQUEST_TIMEOUT_MS: 100 }))
 jest.mock('../lib/crewsApi', () => ({ crewsApi: { decline: jest.fn() } }))
 jest.mock('../lib/notifications', () => ({
   navigateFromNotificationData: jest.fn(),
@@ -66,6 +68,7 @@ import { crewsApi } from '../lib/crewsApi'
 import type { NotificationItem } from '../lib/notificationFormat'
 import { navigateFromNotificationData } from '../lib/notifications'
 import { closeSheet } from '../lib/sheet'
+import { ANSWER_DEADLINE_MS, DONE_DWELL_MS } from '../lib/useNotificationFeed'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
 const permissions = Notifications.getPermissionsAsync as jest.Mock
@@ -246,6 +249,30 @@ describe('answering a request in place', () => {
     fireEvent.press(await screen.findByRole('button', { name: 'Accept' }))
     await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('That didn’t go through. Try again.', 'error', { haptic: 'error' }))
     expect(screen.getByRole('button', { name: 'Accept' })).toBeTruthy()
+  })
+
+  // SCRUM-754: iOS Accept spun for 2+ minutes. The awaited call had no deadline of its own and `answer()` no catch,
+  // so a call that never settled (or threw) held the row on its spinner for good.
+  it('an answer that never settles gives the pills back after the deadline, with the toast', async () => {
+    api.respondToFriendRequest.mockReturnValue(new Promise(() => {}) as never)
+    await render(<Screen />)
+    fireEvent.press(await screen.findByRole('button', { name: 'Accept' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Accept' }).props.accessibilityState).toMatchObject({ busy: true }))
+    expect(mockShowToast).not.toHaveBeenCalled()
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('That didn’t go through. Try again.', 'error', { haptic: 'error' }), {
+      timeout: ANSWER_DEADLINE_MS * 2,
+    })
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Accept' }).props.accessibilityState).toMatchObject({ busy: false }))
+  })
+
+  it('an answer that throws gives the pills back, and a second tap is sent', async () => {
+    api.respondToFriendRequest.mockRejectedValueOnce(new Error('Request queue cleared')).mockResolvedValue({ success: true } as never)
+    await render(<Screen />)
+    fireEvent.press(await screen.findByRole('button', { name: 'Decline' }))
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('That didn’t go through. Try again.', 'error', { haptic: 'error' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Decline' }).props.accessibilityState).toMatchObject({ busy: false }))
+    fireEvent.press(screen.getByRole('button', { name: 'Decline' }))
+    await waitFor(() => expect(api.respondToFriendRequest).toHaveBeenCalledTimes(2))
   })
 
   it('declining a crew invite asks the crew, not the friends route', async () => {

@@ -4,6 +4,7 @@ import { useToast } from '../components/Toast'
 import { apiClient } from './apiClient'
 import { readAnswered, rememberAnswered, type Outcome } from './answeredRequests'
 import { crewsApi } from './crewsApi'
+import { REQUEST_TIMEOUT_MS, settleWithin } from './fetchTimeout'
 import { Logger } from './logger'
 import type { NotificationItem } from './notificationFormat'
 import { arrivedUnread, groupFeed, isRequestKind, mergeFeed, type FeedGroups, type FeedRow, type RowAction } from './notificationRows'
@@ -14,11 +15,19 @@ import { subscribeToBell } from './socketClient'
 export const FEED_PAGE = 30
 /** "You're friends now" stays inline this long, then the row leaves (the prototype: 2 s). */
 export const DONE_DWELL_MS = 2000
+/**
+ * The longest an answer may take before the row gives its pills back (SCRUM-754): the call, a token refresh, the
+ * call again, each on the fetch deadline. Past it the server may still record the answer; a second tap then reads
+ * "no longer open", which is true.
+ */
+export const ANSWER_DEADLINE_MS = 3 * REQUEST_TIMEOUT_MS
 
 export type FeedLoad = 'loading' | 'ready' | 'failed'
 export type RequestState = 'pending' | 'done' | 'stale'
 
 const SAID_NO_LONGER_THERE = 'NOT_FOUND'
+/** Ours, never the server's: the answer did not settle inside `ANSWER_DEADLINE_MS`. */
+const TOOK_TOO_LONG = 'CLIENT_DEADLINE'
 
 /**
  * The Notifications screen's data: the feed, its pages, what is new, what the person is answering.
@@ -189,7 +198,13 @@ export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) =
       setRequest(item.id, 'pending')
       try {
         const outcome: Outcome = action === 'accept' ? 'accepted' : 'declined'
-        const result = await answerRequest(item, action)
+        const result = await settleWithin(answerRequest(item, action), ANSWER_DEADLINE_MS, { success: false, errorCode: TOOK_TOO_LONG }).catch(
+          (error: unknown) => {
+            Logger.warn('notifications', 'answer:threw', { error: error as never })
+            return { success: false, errorCode: undefined }
+          }
+        )
+        if (result.errorCode === TOOK_TOO_LONG) Logger.warn('notifications', 'answer:timed out', { kind: item.kind })
         if (!result.success) {
           if (result.errorCode === SAID_NO_LONGER_THERE) {
             setRequest(item.id, 'stale')

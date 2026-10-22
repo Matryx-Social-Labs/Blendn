@@ -2,6 +2,7 @@ import {
   REQUEST_TIMEOUT_MS,
   fetchWithTimeout,
   isTimeoutError,
+  settleWithin,
 } from '../lib/fetchTimeout'
 
 /**
@@ -157,5 +158,21 @@ describe('isTimeoutError', () => {
     for (const value of [null, undefined, 'AbortError', 0, {}, []]) {
       expect(isTimeoutError(value)).toBe(false)
     }
+  })
+})
+
+describe('settleWithin', () => {
+  beforeEach(() => jest.useFakeTimers())
+  afterEach(() => jest.useRealTimers())
+
+  it('gives the fallback when the work never settles', async () => {
+    const result = settleWithin(new Promise<string>(() => {}), 1000, 'late')
+    jest.advanceTimersByTime(1000)
+    await expect(result).resolves.toBe('late')
+  })
+
+  it('gives the work when it settles first, and a rejection still rejects', async () => {
+    await expect(settleWithin(Promise.resolve('done'), 1000, 'late')).resolves.toBe('done')
+    await expect(settleWithin(Promise.reject(new Error('no')), 1000, 'late')).rejects.toThrow('no')
   })
 })
