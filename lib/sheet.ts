@@ -112,6 +112,9 @@ const listeners = new Set<() => void>()
 
 const emit = () => listeners.forEach((listener) => listener())
 
+/** Whether a sheet is on screen: a caller that would replace it (an unprompted ask) must not. */
+export const isSheetOpen = (): boolean => state.sheet !== null
+
 /** Open a sheet, or replace the one that is open. */
 export function showSheet(sheet: Sheet): void {
   state = { sheet, key: state.key + 1 }

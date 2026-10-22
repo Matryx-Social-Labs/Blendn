@@ -1,9 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { useIsFocused } from 'expo-router'
+import { useCallback } from 'react'
 
 import { apiClient } from './apiClient'
+import { isBlendnOpen } from './blendnOverlay'
 import { Logger } from './logger'
-import { showSheet } from './sheet'
+import { isSheetOpen, showSheet } from './sheet'
 import { currentUserId } from './useAuth'
+import { useLatest } from './useLatest'
 
 /**
  * The one-time ask after a person's first friendship (plans/friends-in-room.md, decision on Q1):
@@ -39,8 +43,19 @@ function switchOf(data: unknown): boolean | null {
   return typeof value === 'boolean' ? value : null
 }
 
-/** Called by the friend routes after a friendship is made (sent by link, or accepted). */
-export async function askFriendsSeeMe(): Promise<void> {
+/** Whether the screen that made the friendship is still the one in front: read when the ask is about to show. */
+export function useStillHere(): () => boolean {
+  const focused = useLatest(useIsFocused())
+  return useCallback(() => focused.current, [focused])
+}
+
+/**
+ * Called by the screens that make a friendship (the invite link on `friends`, Accept in Requests and in
+ * Notifications), never by the API client. The ask is a sheet over whatever is on screen, so it waits out
+ * the toast and then asks nothing of a person who has moved on: off the screen, the Room open, or another
+ * sheet up (it never replaces one). Then nothing is written, so it is asked at the next friendship.
+ */
+export async function askFriendsSeeMe({ stillHere }: { stillHere: () => boolean }): Promise<void> {
   const userId = currentUserId()
   if (!userId || asking.has(userId)) return
   asking.add(userId)
@@ -49,6 +64,7 @@ export async function askFriendsSeeMe(): Promise<void> {
     const profile = await apiClient.getProfile(userId)
     if (!profile.success || switchOf(profile.data) !== false) return
     await new Promise((resolve) => setTimeout(resolve, ASK_AFTER_MS))
+    if (!stillHere() || isBlendnOpen() || isSheetOpen()) return
     await AsyncStorage.setItem(storageKey(userId), '1')
     showSheet({
       kind: 'actions',

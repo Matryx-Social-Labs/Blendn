@@ -4,13 +4,19 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
-import { ASK_AFTER_MS, askFriendsSeeMe, FRIENDS_SEE_ME_TITLE } from '../lib/friendsSeeMeAsk'
+import { ASK_AFTER_MS, askFriendsSeeMe as askWith, FRIENDS_SEE_ME_TITLE } from '../lib/friendsSeeMeAsk'
 
 const mockProfile = jest.fn()
 const mockUpdate = jest.fn()
 const mockShow = jest.fn()
 jest.mock('../lib/apiClient', () => ({ apiClient: { getProfile: (...a: unknown[]) => mockProfile(...a), updateProfile: (...a: unknown[]) => mockUpdate(...a) } }))
-jest.mock('../lib/sheet', () => ({ showSheet: (...a: unknown[]) => mockShow(...a) }))
+const mockSheetOpen = jest.fn(() => false)
+const mockBlendnOpen = jest.fn(() => false)
+jest.mock('../lib/sheet', () => ({ showSheet: (...a: unknown[]) => mockShow(...a), isSheetOpen: () => mockSheetOpen() }))
+jest.mock('../lib/blendnOverlay', () => ({ isBlendnOpen: () => mockBlendnOpen() }))
+jest.mock('expo-router', () => ({ useIsFocused: () => true }))
+let here = true
+const askFriendsSeeMe = () => askWith({ stillHere: () => here })
 jest.mock('../lib/useAuth', () => ({ currentUserId: () => 'me' }))
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn() } }))
 jest.mock('@react-native-async-storage/async-storage', () => {
@@ -32,6 +38,9 @@ const ask = async () => {
 }
 
 beforeEach(async () => {
+  here = true
+  mockSheetOpen.mockReturnValue(false)
+  mockBlendnOpen.mockReturnValue(false)
   jest.useFakeTimers()
   mockProfile.mockReset().mockResolvedValue({ success: true, data: { profile: { friends_see_me_in_rooms: false } } })
   mockUpdate.mockReset().mockResolvedValue({ success: true })
@@ -92,5 +101,46 @@ describe('askFriendsSeeMe', () => {
     await jest.advanceTimersByTimeAsync(ASK_AFTER_MS + 10)
     await Promise.all([a, b])
     expect(mockShow).toHaveBeenCalledTimes(1)
+  })
+
+  describe('it asks nothing of someone who has moved on', () => {
+    const spent = async () => expect(await AsyncStorage.getItem('friends_see_me_ask_seen_me')).toBeNull()
+
+    it('never replaces a sheet that is open, and does not spend the once-flag', async () => {
+      mockSheetOpen.mockReturnValue(true)
+      await ask()
+      expect(mockShow).not.toHaveBeenCalled()
+      await spent()
+    })
+
+    it('never fires off the screen the friendship was made on', async () => {
+      here = false
+      await ask()
+      expect(mockShow).not.toHaveBeenCalled()
+      await spent()
+    })
+
+    it('never fires over the Room', async () => {
+      mockBlendnOpen.mockReturnValue(true)
+      await ask()
+      expect(mockShow).not.toHaveBeenCalled()
+      await spent()
+    })
+
+    it('is read when it is about to show, not when it was called', async () => {
+      const p = askWith({ stillHere: () => here })
+      here = false
+      await jest.advanceTimersByTimeAsync(ASK_AFTER_MS + 10)
+      await p
+      expect(mockShow).not.toHaveBeenCalled()
+    })
+
+    it('then it is asked at the next friendship', async () => {
+      mockSheetOpen.mockReturnValue(true)
+      await ask()
+      mockSheetOpen.mockReturnValue(false)
+      await ask()
+      expect(mockShow).toHaveBeenCalledTimes(1)
+    })
   })
 })

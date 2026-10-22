@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { useToast } from '../components/Toast'
 import { apiClient } from './apiClient'
+import { askFriendsSeeMe, useStillHere } from './friendsSeeMeAsk'
 import { readAnswered, rememberAnswered, type Outcome } from './answeredRequests'
 import { crewsApi } from './crewsApi'
 import { REQUEST_TIMEOUT_MS, settleWithin } from './fetchTimeout'
@@ -47,6 +48,7 @@ const TOOK_TOO_LONG = 'CLIENT_DEADLINE'
  */
 export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) => void } = {}) {
   const { showToast } = useToast()
+  const stillHere = useStillHere()
   const [load, setLoad] = useState<FeedLoad>('loading')
   const [items, setItems] = useState<NotificationItem[]>([])
   const [paging, setPaging] = useState<{ hasMore: boolean; cursor?: string }>({ hasMore: false })
@@ -274,11 +276,12 @@ export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) =
         }
         setRequest(item.id, 'done')
         dwellThenResolve(item.id)
+        if (item.kind === 'friend_request') void askFriendsSeeMe({ stillHere })
       } finally {
         inFlight.current.delete(item.id)
       }
     },
-    [touch, showToast, setRequest, remember, dwellThenResolve]
+    [touch, showToast, setRequest, remember, dwellThenResolve, stillHere]
   )
 
   /**

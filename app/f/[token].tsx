@@ -16,6 +16,7 @@ import { useToast } from '../../components/Toast'
 import { apiClient } from '../../lib/apiClient'
 import { COLOR, FONT_FAMILY, SPACE } from '../../lib/design/tokens'
 import { inviteCta, inviteLine, type FriendPerson, type FriendState } from '../../lib/friends'
+import { askFriendsSeeMe, useStillHere } from '../../lib/friendsSeeMeAsk'
 import { isGone } from '../../lib/loadFailure'
 
 /** Flow 6 `invite`: the face is 160. */
@@ -45,6 +46,7 @@ export default function InviteScreen() {
   const bold = useBoldText()
   const { token } = useLocalSearchParams<{ token: string }>()
   const { showToast } = useToast()
+  const stillHere = useStillHere()
   const [person, setPerson] = useState<FriendPerson | null>(null)
   const [state, setState] = useState<FriendState | null>(null)
   const [dead, setDead] = useState(false)
@@ -99,7 +101,11 @@ export default function InviteScreen() {
     setAsking(false)
     if (result.success && result.data) {
       setState(result.data.state)
-      if (result.data.state === 'friends') showToast(`You and ${person.name} are friends`, 'success', { haptic: 'success' })
+      if (result.data.state === 'friends') {
+        showToast(`You and ${person.name} are friends`, 'success', { haptic: 'success' })
+        // A request that is only sent is no friendship yet: nothing to ask about.
+        void askFriendsSeeMe({ stillHere })
+      }
     } else {
       showToast("That didn't go through. Try again.", 'error', { haptic: 'error' })
     }

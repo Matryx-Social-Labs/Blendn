@@ -522,11 +522,6 @@ export interface WorkFieldsResponse {
   maxExpertise?: number
 }
 
-/** After a friendship is made: the one-time ask (lib/friendsSeeMeAsk). Imported late: that module imports this one. */
-function askAboutFriendsSeeMe(): void {
-  void import('./friendsSeeMeAsk').then((m) => m.askFriendsSeeMe()).catch(() => {})
-}
-
 export interface ApiResponse<T = unknown> {
   success: boolean
   data?: T
@@ -3331,29 +3326,24 @@ class ApiClientClass {
   async sendFriendRequest(
     to: { token: string } | { userId: string }
   ): Promise<ApiResponse<{ state: 'requested' | 'friends' }>> {
-    const result = await this.queuedRequest<{ state: 'requested' | 'friends' }>(
+    return this.queuedRequest(
       '/api/mobile/friends/requests',
       { method: 'POST', body: JSON.stringify(to) },
       true,
       2
     )
-    // A friendship made now is the moment to ask, once, whether friends may see you at events.
-    if (result.success) askAboutFriendsSeeMe()
-    return result
   }
 
   async respondToFriendRequest(
     requestId: string,
     action: 'accept' | 'dismiss'
   ): Promise<ApiResponse<{ state?: 'friends'; dismissed?: boolean }>> {
-    const result = await this.queuedRequest<{ state?: 'friends'; dismissed?: boolean }>(
+    return this.queuedRequest(
       `/api/mobile/friends/requests/${encodeURIComponent(requestId)}`,
       { method: 'POST', body: JSON.stringify({ action }) },
       true,
       2
     )
-    if (result.success && action === 'accept') askAboutFriendsSeeMe()
-    return result
   }
 
   async withdrawFriendRequest(requestId: string): Promise<ApiResponse<{ withdrawn: boolean }>> {

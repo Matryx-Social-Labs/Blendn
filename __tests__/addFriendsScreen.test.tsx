@@ -9,6 +9,8 @@
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
 
+const mockAsk = jest.fn()
+jest.mock('../lib/friendsSeeMeAsk', () => ({ askFriendsSeeMe: (...a: unknown[]) => mockAsk(...a), useStillHere: () => () => true }))
 jest.mock('expo-router', () => ({
   router: { back: jest.fn(), push: jest.fn() },
   useFocusEffect: (effect: () => void) => {
