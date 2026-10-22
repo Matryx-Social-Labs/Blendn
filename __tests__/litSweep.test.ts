@@ -2,6 +2,7 @@
  * Inside a world a positive action is `lit`, never the white `strong` pill (foundations C, part 2). `strong` stays only where
  * there is no world to light in: the system screens, which sit outside every screen's `HueProvider`, and the screen-reader
  * fallback of a control that mirrors another. The app-level sheet host is not one: its caller names a hue (`lib/sheet`).
+ * A white selection drawn by hand (`COLOR.selectionFill`) is pinned by `selectionColour.test.tsx`.
  * This pins it by source: a new white action fails here, and has to be argued for in the table below, with its reason, before it can land. The counts are exact, so a second `strong` in a file
  * that is allowed one fails too.
  *
@@ -55,28 +56,3 @@ describe('the white strong button', () => {
   })
 })
 
-/*
- * The white selection drawn by hand: `COLOR.selectionFill` under a selected or positive state, which the `strong` literal
- * above never sees (a Liked pill, a toggle's disc, a share disc). Direction C has no white selection inside a world; it
- * stays only over media, or where the owner ruled it. Same contract: a new one is argued for here.
- */
-const WHITE_FILL = /COLOR\.selectionFill\b/g
-const WHITE_STAYS: Record<string, { count: number; why: string }> = {
-  'components/ds/IconButton.tsx': { count: 1, why: 'the media tier: a selected disc over a photo, where a hue is not legible' },
-  'components/ds/ReactionBar.tsx': { count: 1, why: 'the picked reaction stays white: the owner’s ruling' },
-  'components/ds/StoryCard.tsx': { count: 1, why: 'drawn into an Instagram Story picture, outside the app and any world' },
-  'components/ds/OfferCard.tsx': { count: 1, why: 'the Used stamp on the pass: a printed status, not a selection or an action' },
-  'components/offer/OfferSections.tsx': { count: 1, why: 'the same Used stamp, on the offer page’s pass' },
-}
-
-describe('the white selection fill', () => {
-  const white = Object.fromEntries(
-    [...walk('app'), ...walk('components')]
-      .map((file) => [file, (fs.readFileSync(path.join(ROOT, file), 'utf8').match(WHITE_FILL) ?? []).length] as const)
-      .filter(([, count]) => count > 0)
-  )
-
-  it('is drawn only where the table says, and nowhere else', () => {
-    expect(white).toEqual(Object.fromEntries(Object.entries(WHITE_STAYS).map(([file, { count }]) => [file, count])))
-  })
-})

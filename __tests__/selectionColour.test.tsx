@@ -24,8 +24,7 @@ const walk = (dir: string): string[] =>
 
 /** White that stays, and why. */
 const WHITE_STAYS: Record<string, string> = {
-  'components/ds/IconButton.tsx': 'a toggle over glass or a photo: the disc is the control, not a set',
-  'components/ds/ShareSheet.tsx': 'the strong action’s disc: the strong button is white',
+  'components/ds/IconButton.tsx': 'the media tier only: a toggle over a photo, where a hue is not legible (the control tier lights)',
   'components/ds/StoryCard.tsx': 'a rendered share image, not UI',
   'components/ds/OfferCard.tsx': 'the “used” status mark',
   'components/offer/OfferSections.tsx': 'the redeemed stamp, a status mark',

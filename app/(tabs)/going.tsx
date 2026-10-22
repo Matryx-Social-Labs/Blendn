@@ -15,7 +15,7 @@ import { EventCard } from '../../components/ds/EventCard'
 import { PresenceDot, TimeBadge } from '../../components/ds/MonoFamily'
 import { SectionHeader } from '../../components/ds/SectionHeader'
 import { StateScreen } from '../../components/ds/StateScreen'
-import { CONTROL_FONT_CAP, font, minTarget, useBoldText, useSelection } from '../../components/ds/shared'
+import { CONTROL_FONT_CAP, font, minTarget, useBoldText } from '../../components/ds/shared'
 import { Icon, type IconName } from '../../components/ui/Icon'
 import { Toast, type ToastKind } from '../../components/ds/Toast'
 import { apiClient } from '../../lib/apiClient'
@@ -712,9 +712,8 @@ function RowNote({ text, bad = false }: { text: string; bad?: boolean }) {
   return <Text style={[font('meta', bold), bad ? styles.bad : styles.secondary]}>{text}</Text>
 }
 
-/** Saved: a 32 pt disc lit in the tab's hue with the heart in its light tone (direction C: no white selection); the tap removes the save (with Undo). */
+/** Saved: a 32 pt white disc with the ink heart; the tap removes the save (with Undo). */
 function SavedHeart({ title, onPress }: { title: string; onPress: () => void }) {
-  const sel = useSelection()
   return (
     <ScalePress
       onPress={onPress}
@@ -724,9 +723,9 @@ function SavedHeart({ title, onPress }: { title: string; onPress: () => void }) 
       accessibilityRole="button"
       accessibilityLabel={`Saved, ${title}`}
       accessibilityHint="Removes it from saved"
-      style={[styles.heart, { backgroundColor: sel.fill, borderColor: sel.edge }]}
+      style={styles.heart}
     >
-      <Icon name="heart" size={ICON.inline} color={sel.glyph} active />
+      <Icon name="heart" size={ICON.inline} color={COLOR.selectionInk} active />
     </ScalePress>
   )
 }
@@ -821,7 +820,7 @@ const styles = StyleSheet.create({
     width: HEART,
     height: HEART,
     borderRadius: RADIUS.capsule,
-    borderWidth: 1,
+    backgroundColor: COLOR.selectionFill,
     alignItems: 'center',
     justifyContent: 'center',
   },
