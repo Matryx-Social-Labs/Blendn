@@ -195,7 +195,9 @@ function PrivateChatInner() {
     reveal && (reveal.pseudonymous === false || reveal.theyRevealed) && profileId
       ? () => router.push({ pathname: '/user/[id]', params: { id: String(profileId) } } as never)
       : undefined
-  const name = reveal?.displayName || nameParam(otherUserName) || 'Chat'
+  // Nobody is called "Chat" (r7 M10: a failed thread titled itself "Chat" and offered "Message Chat"): with no name yet, the
+  // conversation is the title, as the ended state's is.
+  const name = reveal?.displayName || nameParam(otherUserName) || 'Conversation'
   const view = reveal ? revealView(reveal, asked) : null
   const panelKey = revealPanelKey(view)
   const panelOpen = !ended && panelKey !== null && foldedPanel !== panelKey
@@ -757,22 +759,25 @@ function PrivateChatInner() {
                 }}
               />
             ) : null}
-            <View style={[styles.dock, { paddingBottom: dockBottom }]} onLayout={(e) => setDockHeight(e.nativeEvent.layout.height - dockBottom)}>
-              <Composer
-                testID="dm-composer"
-                value={newMessage}
-                onChangeText={onChangeText}
-                onSend={sendTyped}
-                state={lock?.state ?? 'normal'}
-                reason={lock?.reason}
-                countdown={composer.countdown}
-                reply={replyingTo ? { name: replyingTo.senderId === myId ? 'yourself' : name, text: quoteText(quoteFrom(replyingTo)) } : null}
-                onCancelReply={() => setReplyingTo(null)}
-                placeholder={`Message ${name}`}
-                onAttach={photosAllowed ? () => void attach() : undefined}
-                onFocus={() => setTimeout(() => scrollToBottom(false), 120)}
-              />
-            </View>
+            {/* A thread that failed to load is the DS failure state alone: no live composer under it (r7 M10). */}
+            {loadError && !messages.length ? null : (
+              <View style={[styles.dock, { paddingBottom: dockBottom }]} onLayout={(e) => setDockHeight(e.nativeEvent.layout.height - dockBottom)}>
+                <Composer
+                  testID="dm-composer"
+                  value={newMessage}
+                  onChangeText={onChangeText}
+                  onSend={sendTyped}
+                  state={lock?.state ?? 'normal'}
+                  reason={lock?.reason}
+                  countdown={composer.countdown}
+                  reply={replyingTo ? { name: replyingTo.senderId === myId ? 'yourself' : name, text: quoteText(quoteFrom(replyingTo)) } : null}
+                  onCancelReply={() => setReplyingTo(null)}
+                  placeholder={`Message ${name}`}
+                  onAttach={photosAllowed ? () => void attach() : undefined}
+                  onFocus={() => setTimeout(() => scrollToBottom(false), 120)}
+                />
+              </View>
+            )}
           </>
         )}
       </KeyboardFrame>
