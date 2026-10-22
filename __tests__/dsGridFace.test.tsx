@@ -109,8 +109,8 @@ describe('Flow 4 Room: the double tap likes; arrivals and waves show on the face
     const onLike = jest.fn()
     await render(<GridFace {...PRIYA} onPress={onPress} onLike={onLike} />)
     const face = screen.getByRole('button')
-    expect(face.props.accessibilityActions).toEqual([{ name: 'activate' }, { name: 'longpress', label: 'Like' }])
-    await fireEvent(face, 'accessibilityAction', { nativeEvent: { actionName: 'longpress' } })
+    expect(face.props.accessibilityActions).toEqual([{ name: 'activate' }, { name: 'like', label: 'Like' }])
+    await fireEvent(face, 'accessibilityAction', { nativeEvent: { actionName: 'like' } })
     expect(onLike).toHaveBeenCalledTimes(1)
     await fireEvent(face, 'accessibilityAction', { nativeEvent: { actionName: 'activate' } })
     expect(onPress).toHaveBeenCalledTimes(1)
@@ -124,10 +124,18 @@ describe('Flow 4 Room: the double tap likes; arrivals and waves show on the face
   })
 })
 
-it('keeps its short reason and gives a screen reader the overlap sentence as the hint (R7)', async () => {
+it('says Matching v2’s sentence as the visible reason, in two lines, when the server sent one (R7)', async () => {
   await render(<GridFace {...PRIYA} overlap="Both CSK, in RCB country" testID="g" />)
-  expect(screen.getByText('Both into vinyl', { includeHiddenElements: true })).toBeTruthy()
-  expect(screen.getByTestId('g', { includeHiddenElements: true }).props.accessibilityHint).toBe('Both CSK, in RCB country')
+  const line = screen.getByText('Both CSK, in RCB country', { includeHiddenElements: true })
+  expect(line.props.numberOfLines).toBe(2)
+  expect(screen.queryByText('Both into vinyl', { includeHiddenElements: true })).toBeNull()
+  expect(screen.getByRole('button', { name: 'Cosmic Panda, Both CSK, in RCB country, here now' })).toBeTruthy()
+})
+
+it('a face that has gone says Was here, never the overlap', async () => {
+  await render(<GridFace {...PRIYA} here={false} overlap="Both CSK, in RCB country" testID="g" />)
+  expect(screen.getByText('Was here', { includeHiddenElements: true })).toBeTruthy()
+  expect(screen.queryByText('Both CSK, in RCB country', { includeHiddenElements: true })).toBeNull()
 })
 
 it('a hold opens the card at once with H.longPress, and a tap stays silent (H1)', async () => {
@@ -140,4 +148,16 @@ it('a hold opens the card at once with H.longPress, and a tap stays silent (H1)'
   spy.mockClear()
   await fireEvent.press(screen.getByTestId('g'))
   expect(spy).not.toHaveBeenCalled()
+})
+
+it('a hold after a first tap opens once, not twice (the tap’s pending open is cancelled)', async () => {
+  jest.useFakeTimers()
+  const onPress = jest.fn()
+  jest.spyOn(H, 'longPress').mockImplementation(() => {})
+  await render(<GridFace {...PRIYA} onPress={onPress} onLike={jest.fn()} testID="g" />)
+  await fireEvent.press(screen.getByTestId('g'))
+  await fireEvent(screen.getByTestId('g'), 'longPress')
+  await act(async () => jest.advanceTimersByTime(DOUBLE_TAP_MS * 2))
+  expect(onPress).toHaveBeenCalledTimes(1)
+  jest.useRealTimers()
 })

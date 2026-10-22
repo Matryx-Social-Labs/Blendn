@@ -1,5 +1,6 @@
 import { router } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { AccessibilityInfo } from 'react-native'
 
 import { apiClient } from './apiClient'
 import { Logger } from './logger'
@@ -33,8 +34,6 @@ export interface FriendsHereState {
   total: number
   /** The first read has answered (or failed). */
   loaded: boolean
-  /** The section appeared after the first read, not with it: say so once. Counts appearances. */
-  appearances: number
   refresh: () => Promise<void>
 }
 
@@ -47,7 +46,8 @@ export interface FriendsHereState {
 export function useFriendsHere(eventId: string | null, inRoom: boolean): FriendsHereState {
   const [page, setPage] = useState<{ eventId: string; friends: FriendHere[]; total: number } | null>(null)
   const [loadedFor, setLoadedFor] = useState<string | null>(null)
-  const [appearances, setAppearances] = useState(0)
+  // Said once per room session: the section arriving after the first read, never a departure.
+  const told = useRef<string | null>(null)
   const ask = useRef(0)
   const lastTotal = useLatest(page?.eventId === eventId ? (page?.total ?? 0) : 0)
   const loadedNow = useLatest(loadedFor === eventId)
@@ -63,7 +63,10 @@ export function useFriendsHere(eventId: string | null, inRoom: boolean): Friends
         const { friends, total } = r.data
         const late = loadedNow.current && lastTotal.current === 0 && total > 0
         setPage({ eventId, friends, total: Number.isFinite(total) ? total : friends.length })
-        if (late) setAppearances((n) => n + 1)
+        if (late && told.current !== eventId) {
+          told.current = eventId
+          AccessibilityInfo.announceForAccessibilityWithOptions('A friend is here', { queue: true })
+        }
       }
     } catch (e) {
       Logger.debug('friends', 'friends here read failed', { error: e })
@@ -99,7 +102,7 @@ export function useFriendsHere(eventId: string | null, inRoom: boolean): Friends
 
   // Another room's friends are never this room's.
   const here = page && page.eventId === eventId ? page : null
-  return { friends: here?.friends ?? [], total: here?.total ?? 0, loaded: loadedFor === eventId, appearances, refresh: read }
+  return { friends: here?.friends ?? [], total: here?.total ?? 0, loaded: loadedFor === eventId, refresh: read }
 }
 
 /** 1204 reads "1,204": a long count stays a glance and never breaks a header or a row. */

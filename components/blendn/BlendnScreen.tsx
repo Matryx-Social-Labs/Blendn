@@ -868,7 +868,6 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
                 total={friendsHere.total}
                 opening={friendChat.opening}
                 offline={offline}
-                appearances={friendsHere.appearances}
                 onMessage={(f) => void friendChat.message(f)}
                 onSeeAll={() => router.push({ pathname: '/room/friends-here', params: { eventId: eventId ?? '' } } as never)}
               />

@@ -31,7 +31,7 @@ export type GridFaceProps = {
   name: string
   /** One reason ("Both into vinyl"); "Was here" replaces it when they've left. */
   reason: string
-  /** Matching v2's sentence (Flow 14 · 14.1): too long for the cell, so it is what a screen reader hears as the hint. */
+  /** Matching v2's sentence (Flow 14 · 14.1), in place of the reason: two lines under the name. Absent: the one-line reason. */
   overlap?: string | null
   /** The column's width; the face is 16 less. */
   width: number
@@ -90,8 +90,10 @@ export function GridFace({
   const [focused, setFocused] = useState(false)
   const size = width - SPACE.lg
   const mark = matched ? 'matched' : liked ? 'liked' : null
-  const label = [name, here ? reason : null, here ? 'here now' : 'was here', mark].filter(Boolean).join(', ')
-  const { press, like, pop } = useDoubleTap(onPress, onLike)
+  // Matching v2's sentence is the reason when the server sent one (R7): two lines, in the text, as Meet next says it.
+  const said = overlap || reason
+  const label = [name, here ? said : null, here ? 'here now' : 'was here', mark].filter(Boolean).join(', ')
+  const { press, like, hold, pop } = useDoubleTap(onPress, onLike)
   const enter = useArrival(arriving)
 
   return (
@@ -101,14 +103,12 @@ export function GridFace({
           testID={testID}
           onPress={press}
           // A hold opens the card at once, without the double tap's wait, and says so: `H.longPress` (the peek).
-          onLongPress={() => {
-            H.longPress()
-            onPress?.()
-          }}
-          accessibilityActions={onLike ? [{ name: 'activate' }, { name: 'longpress', label: 'Like' }] : undefined}
+          onLongPress={hold}
+          // The like is its own named action: `longpress` is the platform's name for a hold (TalkBack's), and means "open" here.
+          accessibilityActions={onLike ? [{ name: 'activate' }, { name: 'like', label: 'Like' }] : undefined}
           onAccessibilityAction={(e) => {
             if (e.nativeEvent.actionName === 'activate') onPress?.()
-            else if (e.nativeEvent.actionName === 'longpress') like()
+            else if (e.nativeEvent.actionName === 'like') like()
           }}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
@@ -116,7 +116,6 @@ export function GridFace({
           android_ripple={{ color: PRESSED_WASH.android, foreground: true }}
           accessibilityRole="button"
           accessibilityLabel={label}
-          accessibilityHint={overlap || undefined}
           style={styles.cell}
         >
           <View style={{ width: size, height: size }}>
@@ -140,11 +139,11 @@ export function GridFace({
             {name}
           </Text>
           <Text
-            numberOfLines={1}
+            numberOfLines={here && overlap ? 2 : 1}
             maxFontSizeMultiplier={CONTROL_FONT_CAP}
             style={[font('caption', bold), styles.center, { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}
           >
-            {here ? reason : 'Was here'}
+            {here ? said : 'Was here'}
           </Text>
           {mark ? (
             <View style={styles.mark}>
@@ -191,7 +190,16 @@ function useDoubleTap(onPress?: () => void, onLike?: () => void) {
       onPress?.()
     }, DOUBLE_TAP_MS)
   }
-  return { press, like, pop }
+  /** A hold: opens at once, and never twice (a tap's pending open, waiting for a second tap, is cancelled). */
+  const hold = () => {
+    if (pending.current) {
+      clearTimeout(pending.current)
+      pending.current = null
+    }
+    H.longPress()
+    onPress?.()
+  }
+  return { press, like, hold, pop }
 }
 
 /** #25: 0.8 → 1 on `M.snap` and opacity over `base`, once, as the face mounts arriving. Reduce Motion: a 200 ms fade. */

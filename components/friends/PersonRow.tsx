@@ -19,8 +19,9 @@ const ROW = SIZE.primary + SPACE.sm
  * One person on a friend surface (Flow 6 `personRow`): a 48 pt photo, the name in 500 17/24, a line under it, and whatever the screen
  * needs on the right (a chevron, Withdraw). A date in the line is `detailMono`, drawn in Geist Mono right after `detail`.
  *
- * Real name and photo, because every place this is drawn is one both people agreed to — the friends list, requests, a link someone
- * handed out. Never used in a room, where the same person is a pseudonym.
+ * Real name and photo, because every place this is drawn is one both people agreed to: the friends list, requests, a link someone
+ * handed out, and Friends here in a Room (a friend who turned on "Friends can see I'm here", which is their consent to be named
+ * there). A friend never carries the event or the room in the row, and a stranger in a room is still a pseudonym, never a PersonRow.
  */
 export function PersonRow({
   person,

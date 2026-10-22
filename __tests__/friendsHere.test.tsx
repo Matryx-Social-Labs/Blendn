@@ -4,9 +4,8 @@
  * up to three; "N more here" and See all past that; offline dims Message; the
  * count tells the truth at 60 and 5,000.
  */
-import { act, fireEvent, render, screen } from '@testing-library/react-native'
+import { fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { AccessibilityInfo } from 'react-native'
 import * as Reanimated from 'react-native-reanimated'
 
 import { FriendsHere } from '../components/blendn/FriendsHere'
@@ -32,7 +31,7 @@ const people = (n: number): FriendHere[] =>
 const draw = (props: Partial<React.ComponentProps<typeof FriendsHere>> = {}) =>
   render(
     <HueProvider value="rose">
-      <FriendsHere friends={people(4)} total={4} opening={null} offline={false} appearances={0} onMessage={jest.fn()} onSeeAll={jest.fn()} {...props} />
+      <FriendsHere friends={people(4)} total={4} opening={null} offline={false} onMessage={jest.fn()} onSeeAll={jest.fn()} {...props} />
     </HueProvider>
   )
 const HIDDEN = { includeHiddenElements: true }
@@ -120,20 +119,6 @@ describe('<FriendsHere>', () => {
     await draw({ friends: [long], total: 1 })
     expect(screen.getByText(long.name).props.numberOfLines).toBe(1)
     expect(screen.getByRole('button', { name: `Message ${long.name}` })).toBeTruthy()
-  })
-
-  it('announces "A friend is here" once, only for an arrival after first paint', async () => {
-    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibilityWithOptions').mockImplementation(() => {})
-    const { rerender } = await draw({ appearances: 0 })
-    expect(announce).not.toHaveBeenCalled()
-    await rerender(
-      <HueProvider value="rose">
-        <FriendsHere friends={people(4)} total={4} opening={null} offline={false} appearances={1} onMessage={jest.fn()} onSeeAll={jest.fn()} />
-      </HueProvider>
-    )
-    await act(async () => {})
-    expect(announce).toHaveBeenCalledWith('A friend is here', { queue: true })
-    expect(announce).toHaveBeenCalledTimes(1)
   })
 
   it('Reduce Motion: the section fades in place, with no rise', async () => {

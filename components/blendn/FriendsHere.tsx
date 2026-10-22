@@ -1,5 +1,4 @@
-import { useEffect, useRef } from 'react'
-import { AccessibilityInfo, StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 import Animated, { Easing, FadeIn, FadeOut, withTiming } from 'react-native-reanimated'
 
 import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, RADIUS, RISE, SIZE, SPACE } from '../../lib/design/tokens'
@@ -49,7 +48,6 @@ export function FriendsHere({
   total,
   opening,
   offline,
-  appearances,
   onMessage,
   onSeeAll,
   testID = 'friends-here',
@@ -60,22 +58,12 @@ export function FriendsHere({
   /** The friend whose chat is being opened. */
   opening: string | null
   offline: boolean
-  /** Bumps when the section arrives after the Room's first paint: say so, once. */
-  appearances: number
   onMessage: (friend: FriendHere) => void
   onSeeAll: () => void
   testID?: string
 }) {
   const bold = useBoldText()
   const reduceMotion = useReducedMotion()
-  const told = useRef(0)
-  useEffect(() => {
-    // Once per Room session, only for an arrival after first paint; departures say nothing.
-    if (appearances === 0 || told.current > 0) return
-    told.current = appearances
-    AccessibilityInfo.announceForAccessibilityWithOptions('A friend is here', { queue: true })
-  }, [appearances])
-
   if (total <= 0 || friends.length === 0) return null
   const rows = friends.slice(0, FRIEND_ROWS)
   const more = total - rows.length

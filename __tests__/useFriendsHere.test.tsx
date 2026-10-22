@@ -1,4 +1,5 @@
 import { act, renderHook } from '@testing-library/react-native'
+import { AccessibilityInfo } from 'react-native'
 
 import { FRIENDS_FIRST_PAGE, FRIENDS_REFETCH_MS, useFriendsHere } from '../lib/friendsHere'
 
@@ -36,7 +37,7 @@ describe('useFriendsHere', () => {
     const { result } = await renderHook(() => useFriendsHere('e1', true))
     await settle()
     expect(mockGet).toHaveBeenCalledWith('e1', { order: 'recent', limit: FRIENDS_FIRST_PAGE })
-    expect(result.current).toMatchObject({ friends: [asha], total: 1, loaded: true, appearances: 0 })
+    expect(result.current).toMatchObject({ friends: [asha], total: 1, loaded: true })
   })
 
   it('reads nothing outside a room', async () => {
@@ -96,20 +97,29 @@ describe('useFriendsHere', () => {
     expect(mockGet).toHaveBeenCalledTimes(1)
   })
 
-  it('the section appearing after the first read is counted once; arriving with it is not', async () => {
+  it('says "A friend is here" once, only when the section arrives after the first read', async () => {
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibilityWithOptions').mockImplementation(() => {})
     mockGet.mockResolvedValueOnce(ok([], 0))
     const { result } = await renderHook(() => useFriendsHere('e1', true))
     await settle()
-    expect(result.current.appearances).toBe(0)
+    expect(announce).not.toHaveBeenCalled()
     mockGet.mockResolvedValue(ok([asha], 1))
     await act(async () => {
       await result.current.refresh()
     })
-    expect(result.current.appearances).toBe(1)
+    expect(announce).toHaveBeenCalledWith('A friend is here', { queue: true })
     await act(async () => {
       await result.current.refresh()
     })
-    expect(result.current.appearances).toBe(1)
+    expect(announce).toHaveBeenCalledTimes(1)
+  })
+
+  it('arriving with the first read says nothing', async () => {
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibilityWithOptions').mockImplementation(() => {})
+    mockGet.mockResolvedValue(ok([asha], 1))
+    await renderHook(() => useFriendsHere('e1', true))
+    await settle()
+    expect(announce).not.toHaveBeenCalled()
   })
 
   it('another room never shows this room’s friends', async () => {

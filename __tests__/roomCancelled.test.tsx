@@ -1,6 +1,6 @@
 /*
  * Flow 4 R4.1 4.6 (#25): the event was cancelled while you are inside. The
- * server sends `live:ended { reason: 'cancelled' }`; the Room becomes a calm
+ * server sends `event:cancelled { eventId }`; the Room becomes a calm
  * card that says you are checked out. An older server sends nothing, and
  * nothing happens.
  */
@@ -11,8 +11,6 @@ import { AccessibilityInfo } from 'react-native'
 import { RoomCancelled } from '../components/blendn/RoomCancelled'
 import { useRoomCancelled } from '../lib/useRoomCancelled'
 
-type Ended = (d: { eventId: string; reason: string }) => void
-let push: Ended = () => {}
 let pushCancelled: (d: { eventId: string }) => void = () => {}
 const mockSubscribedTo = jest.fn()
 const mockChanged = jest.fn()
@@ -20,10 +18,6 @@ jest.mock('../lib/socketClient', () => ({
   subscribeToEventCancelled: (id: string, cb: typeof pushCancelled) => {
     mockSubscribedTo(id)
     pushCancelled = cb
-    return () => {}
-  },
-  subscribeToLiveEnded: (cb: Ended) => {
-    push = cb
     return () => {}
   },
 }))
@@ -57,17 +51,16 @@ describe('useRoomCancelled · event:cancelled', () => {
 })
 
 describe('useRoomCancelled', () => {
-  it('is nothing until the server says cancelled for this event', async () => {
+  it('is nothing until the server says this event was cancelled', async () => {
     const { result } = await renderHook(() => useRoomCancelled(EVENT))
     expect(result.current.cancelled).toBeNull()
-    await act(async () => push({ eventId: 'e1', reason: 'expired' }))
-    await act(async () => push({ eventId: 'other', reason: 'cancelled' }))
+    await act(async () => pushCancelled({ eventId: 'other' }))
     expect(result.current.cancelled).toBeNull()
   })
 
   it('keeps the title after the room has gone, and drains the disc now', async () => {
     const { result, rerender } = await renderHook(({ e }: { e: typeof EVENT | null }) => useRoomCancelled(e), { initialProps: { e: EVENT as typeof EVENT | null } })
-    await act(async () => push({ eventId: 'e1', reason: 'cancelled' }))
+    await act(async () => pushCancelled({ eventId: 'e1' }))
     expect(result.current.cancelled).toEqual({ title: 'Vinyl Night' })
     expect(mockChanged).toHaveBeenCalledWith('e1')
     await rerender({ e: null })
@@ -76,19 +69,19 @@ describe('useRoomCancelled', () => {
 
   it('dismisses, and a different room is a clean slate', async () => {
     const { result, rerender } = await renderHook(({ e }: { e: typeof EVENT }) => useRoomCancelled(e), { initialProps: { e: EVENT } })
-    await act(async () => push({ eventId: 'e1', reason: 'cancelled' }))
+    await act(async () => pushCancelled({ eventId: 'e1' }))
     await rerender({ e: { id: 'e2', title: 'Techno' } })
     expect(result.current.cancelled).toBeNull()
-    await act(async () => push({ eventId: 'e2', reason: 'cancelled' }))
+    await act(async () => pushCancelled({ eventId: 'e2' }))
     expect(result.current.cancelled).not.toBeNull()
     await act(async () => result.current.dismiss())
     expect(result.current.cancelled).toBeNull()
   })
 
-  it('does nothing outside a room', async () => {
-    const { result } = await renderHook(() => useRoomCancelled(null))
-    await act(async () => push({ eventId: 'e1', reason: 'cancelled' }))
-    expect(result.current.cancelled).toBeNull()
+  it('has no live:ended fallback: that is a Go Live’s end, and the server never says cancelled on it', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const src = require('fs').readFileSync(require('path').join(__dirname, '../lib/useRoomCancelled.ts'), 'utf8') as string
+    expect(src).not.toMatch(/subscribeToLiveEnded/)
   })
 })
 
