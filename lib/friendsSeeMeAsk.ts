@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useIsFocused } from 'expo-router'
-import { useCallback } from 'react'
+import { useState } from 'react'
 
 import { apiClient } from './apiClient'
 import { isBlendnOpen } from './blendnOverlay'
@@ -33,6 +33,23 @@ export const FRIENDS_SEE_ME_BODY =
   "On: friends at the same event see you under Friends here, with your name and photo, and can message you. Off: you don't show up for friends at events at all."
 
 const storageKey = (userId: string) => `${FRIENDS_SEE_ME_ASK_ID}_seen_${userId}`
+
+/** Settings' own cache of the switches (`app/settings.tsx`). */
+const settingsCacheKey = (userId: string) => `settings_preferences_${userId}`
+
+/**
+ * Turn on is a change to the setting, so what Settings reads is changed too: opened offline it shows the
+ * switch on, not the false it cached before.
+ */
+async function rememberOn(userId: string): Promise<void> {
+  try {
+    const raw = await AsyncStorage.getItem(settingsCacheKey(userId))
+    if (!raw) return
+    await AsyncStorage.setItem(settingsCacheKey(userId), JSON.stringify({ ...JSON.parse(raw), friendsSeeMe: true }))
+  } catch (e) {
+    Logger.debug('friends', 'could not update the settings cache', { error: e })
+  }
+}
 /** This launch's asks, so two friendships in a second are one ask. */
 const asking = new Set<string>()
 
@@ -46,7 +63,9 @@ function switchOf(data: unknown): boolean | null {
 /** Whether the screen that made the friendship is still the one in front: read when the ask is about to show. */
 export function useStillHere(): () => boolean {
   const focused = useLatest(useIsFocused())
-  return useCallback(() => focused.current, [focused])
+  // One function for the life of the screen: callers list it in their dependencies.
+  const [stillHere] = useState(() => () => focused.current)
+  return stillHere
 }
 
 /**
@@ -78,6 +97,7 @@ export async function askFriendsSeeMe({ stillHere }: { stillHere: () => boolean 
           variant: 'primary',
           run: async () => {
             const saved = await apiClient.updateProfile(userId, { friends_see_me_in_rooms: true })
+            if (saved.success) await rememberOn(userId)
             return saved.success ? { ok: true } : { ok: false, error: "Couldn't save “Friends can see I'm here”. Try again." }
           },
         },

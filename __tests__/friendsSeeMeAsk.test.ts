@@ -75,6 +75,21 @@ describe('askFriendsSeeMe', () => {
     expect(await turnOn()).toEqual({ ok: false, error: expect.stringContaining('Try again') })
   })
 
+  it('Turn on also updates the cache Settings reads, so it opens showing the switch on', async () => {
+    await AsyncStorage.setItem('settings_preferences_me', JSON.stringify({ showOnlineStatus: true, friendsSeeMe: false }))
+    await ask()
+    await mockShow.mock.calls[0][0].actions[0].run()
+    expect(JSON.parse((await AsyncStorage.getItem('settings_preferences_me')) as string)).toEqual({ showOnlineStatus: true, friendsSeeMe: true })
+  })
+
+  it('a failed Turn on leaves the cache alone', async () => {
+    await AsyncStorage.setItem('settings_preferences_me', JSON.stringify({ friendsSeeMe: false }))
+    mockUpdate.mockResolvedValue({ success: false })
+    await ask()
+    await mockShow.mock.calls[0][0].actions[0].run()
+    expect(JSON.parse((await AsyncStorage.getItem('settings_preferences_me')) as string)).toEqual({ friendsSeeMe: false })
+  })
+
   it('Not now changes nothing', async () => {
     await ask()
     expect(mockUpdate).not.toHaveBeenCalled()
