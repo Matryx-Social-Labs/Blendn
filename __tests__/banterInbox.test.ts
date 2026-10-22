@@ -17,6 +17,8 @@ const read = (p: string) => readFileSync(join(__dirname, '..', p), 'utf8')
  */
 const stripComments = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 
+/** The request card moved to one row both the strip and the See all screen draw. */
+const REQUEST_ROW = () => stripComments(read('components/banter/RequestRow.tsx'))
 const SCREEN = () => stripComments(read('app/(tabs)/chat.tsx'))
 const PARTS = () => stripComments(read('components/banter/BanterParts.tsx'))
 const INBOX = () => stripComments(read('lib/useBanterInbox.ts'))
@@ -70,12 +72,13 @@ describe('one inbox, not two tabs', () => {
 describe('message requests', () => {
   it('still load, and are still answerable', () => {
     expect(INBOX()).toContain('loadMessageRequests')
-    expect(SCREEN()).toContain("inbox.respondToRequest(r, 'accept')")
-    expect(SCREEN()).toContain("inbox.respondToRequest(r, 'decline')")
+    expect(REQUEST_ROW()).toContain("inbox.respondToRequest(r, 'accept')")
+    expect(REQUEST_ROW()).toContain("inbox.respondToRequest(r, 'decline')")
+    expect(SCREEN()).toContain('<RequestRow')
   })
 
   it('show the note verbatim, in two lines (ROUND3 C11)', () => {
-    expect(SCREEN()).toContain('note={r.initial_message?.trim() ||')
+    expect(REQUEST_ROW()).toContain('note={r.initial_message?.trim() ||')
     expect(PARTS()).toMatch(/numberOfLines=\{2\}[^>]*>\s*\{note\}/)
   })
 
