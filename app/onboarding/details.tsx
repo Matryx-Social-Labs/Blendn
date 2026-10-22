@@ -15,7 +15,7 @@ import { COLOR, SPACE } from '../../lib/design/tokens'
 import { Logger } from '../../lib/logger'
 import { bioWithPrompt, promptFits } from '../../lib/onboarding'
 import { useOnboarding } from '../../lib/useOnboarding'
-import { overCapMessage, PROFILE_LIMITS } from '../../lib/profileLimits'
+import { overCapMessage, PROFILE_LIMITS, serverLength } from '../../lib/profileLimits'
 
 /**
  * Writing prompts: they exist to unstick a blank textarea, so a tap puts one in it. The frame's were filler ("I thrive
@@ -47,7 +47,7 @@ const BIO_PROMPTS = ['A perfect Sunday for me is…', 'Lately I’ve been learni
  * number, and the server owns it.
  */
 const BIO_LIMIT = PROFILE_LIMITS.bio
-const bioOverCap = (length: number) => overCapMessage(BIO_LIMIT, length)
+const bioOverCap = overCapMessage(BIO_LIMIT)
 
 export default function DetailsScreen() {
   const { draft, loaded, saving, commit, skip, goBack } = useOnboarding('details')
@@ -113,8 +113,7 @@ export default function DetailsScreen() {
    * Never cut for the person: a paste past the cap stays on screen, says by how much, and Continue waits. The cap is the
    * server's (`BIO_LIMIT`); a silent slice used to throw the end of a pasted paragraph away.
    */
-  const bioLength = bio.length
-  const overCap = bioLength > BIO_LIMIT
+  const overCap = serverLength(bio) > BIO_LIMIT
 
   return (
     <OnboardingScreen
@@ -147,9 +146,9 @@ export default function DetailsScreen() {
               value={bio}
               onChangeText={setBio}
               limit={BIO_LIMIT}
-              // The server's `max(500)` counts UTF-16 units, not what a person sees as characters.
-              measure={(value) => value.length}
-              error={overCap ? bioOverCap(bioLength) : undefined}
+              // The server's `max(500)` counts UTF-16 units of the trimmed text, not what a person sees as characters.
+              measure={serverLength}
+              error={overCap ? bioOverCap : undefined}
               testID="onboarding-bio"
               {...reveal}
             />

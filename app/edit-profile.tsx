@@ -619,7 +619,7 @@ function EditProfileContent() {
             )}
           </EditCard>
 
-          <EditCard title="About you" sub={isLoading ? undefined : `${serverLength(bio)} / ${PROFILE_LIMITS.bio}`}>
+          <EditCard title="About you">
             {isLoading ? (
               <SkeletonBlock width="100%" height={ABOUT_SKELETON} borderRadius={RADIUS.mediaInCard} />
             ) : (

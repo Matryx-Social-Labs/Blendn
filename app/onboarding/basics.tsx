@@ -52,7 +52,6 @@ const GENDERS: { label: string; value: OnboardingGender }[] = [
 const DOB_HINT = 'Your age will be private and used only for verification.'
 /** Under the name: what rooms show of it (SCRUM-493). */
 const NAME_HINT = 'In event rooms you go by a made-up name. If you choose to show yours, people there see your full name.'
-/** The server's cap on a name; typing stops there, as a `maxLength` did. */
 const NOT_A_DATE = 'That is not a date we recognise.'
 
 function BasicsScreenInner() {
@@ -162,7 +161,7 @@ function BasicsScreenInner() {
             hint={NAME_HINT}
             value={name}
             onChangeText={setName}
-            error={nameOverCap ? overCapMessage(PROFILE_LIMITS.name, serverLength(name)) : undefined}
+            error={nameOverCap ? overCapMessage(PROFILE_LIMITS.name) : undefined}
             limit={counterLimit(name, PROFILE_LIMITS.name)}
             measure={serverLength}
             autoCapitalize="words"

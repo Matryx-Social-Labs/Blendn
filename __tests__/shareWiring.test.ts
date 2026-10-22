@@ -35,7 +35,7 @@ describe('one tray for every surface', () => {
   })
 
   it('links are built in `lib/shareLinks.ts` alone: no other code writes the host in front of an id', () => {
-    const building = /blendn\.app\/(e|v|f)\/\$\{/
+    const building = /blendn\.app\/(e|v|f|event|venue)\/\$\{/
     const builders = [...walk('app'), ...walk('components'), ...walk('lib')].filter((f) => building.test(read(f)))
     expect(builders).toEqual([])
     expect(read('lib/shareLinks.ts')).toMatch(/WEB_PAGES_LIVE \? 'e' : 'event'/)

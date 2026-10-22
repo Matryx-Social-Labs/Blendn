@@ -148,6 +148,13 @@ describe('<TextArea>', () => {
     expect(StyleSheet.flatten(screen.getByText('472/500', { includeHiddenElements: true }).props.style).color).toBe(COLOR.warning)
   })
 
+  it('the counter turns red over the cap, and is still amber at it', async () => {
+    await render(area({ value: 'x'.repeat(500) }))
+    expect(StyleSheet.flatten(screen.getByText('500/500', { includeHiddenElements: true }).props.style).color).toBe(COLOR.warning)
+    await render(area({ value: 'x'.repeat(501) }))
+    expect(StyleSheet.flatten(screen.getByText('501/500', { includeHiddenElements: true }).props.style).color).toBe(COLOR.destructive)
+  })
+
   it('never truncates at the cap: the Save button refuses instead', async () => {
     await render(area())
     expect(input().props.maxLength).toBeUndefined()

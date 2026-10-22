@@ -77,10 +77,11 @@ it('is the six fields’ shape while it loads, then the fields', async () => {
   expect(screen.queryByTestId('edit-profile-name')).toBeNull()
 })
 
-it('counts the bio against its limit in the card’s header', async () => {
+it('counts the bio against its limit once, in the field’s own counter (not also in the card’s header)', async () => {
   await render(<EditProfile />)
   await screen.findByDisplayValue('Sam')
-  expect(screen.getByText('8 / 500')).toBeTruthy()
+  expect(screen.getAllByText('8/500', { includeHiddenElements: true })).toHaveLength(1)
+  expect(screen.queryByText('8 / 500')).toBeNull()
 })
 
 describe('no silent truncation: the server’s caps, with the count shown (SCRUM-745)', () => {
@@ -120,12 +121,12 @@ describe('no silent truncation: the server’s caps, with the count shown (SCRUM
     const tooLong = 'L'.repeat(205)
     await fireEvent.changeText(screen.getByTestId('edit-profile-location'), tooLong)
     expect(screen.getByDisplayValue(tooLong)).toBeTruthy()
-    expect(screen.getByText('Keep it under 200 characters · 205 now.')).toBeTruthy()
+    expect(screen.getByText('200 characters at most.')).toBeTruthy()
     await fireEvent.press(screen.getByText('Save'))
     expect(api.updateProfile).not.toHaveBeenCalled()
     // Back inside the cap, Save goes through again.
     await fireEvent.changeText(screen.getByTestId('edit-profile-location'), 'L'.repeat(200))
-    expect(screen.queryByText(/Keep it under 200/)).toBeNull()
+    expect(screen.queryByText(/characters at most/)).toBeNull()
     await fireEvent.press(screen.getByText('Save'))
     await waitFor(() => expect(api.updateProfile).toHaveBeenCalled())
   })
@@ -136,9 +137,9 @@ describe('no silent truncation: the server’s caps, with the count shown (SCRUM
     const name = 'N'.repeat(100)
     await fireEvent.changeText(screen.getByTestId('edit-profile-name'), name)
     expect(screen.getByDisplayValue(name)).toBeTruthy()
-    expect(screen.queryByText(/Keep it under/)).toBeNull()
+    expect(screen.queryByText(/characters at most/)).toBeNull()
     await fireEvent.changeText(screen.getByTestId('edit-profile-name'), `${name}!`)
-    expect(screen.getByText('Keep it under 100 characters · 101 now.')).toBeTruthy()
+    expect(screen.getByText('100 characters at most.')).toBeTruthy()
   })
 })
 
