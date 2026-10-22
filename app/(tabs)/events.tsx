@@ -82,7 +82,7 @@ import { usePullToRefresh } from '../../lib/usePullToRefresh'
 import { COLOR, FONT_FAMILY, RADIUS, SPACE, STAGGER, TYPE as DESIGN_TYPE } from '../../lib/design/tokens'
 import { mergeEventPage, pageHasMore, pulseEmptyCopy, pulseEmptyKind } from '../../lib/pulseFeed'
 import { type PeekAction } from '../../lib/pulsePeek'
-import { internalSeed } from '../../lib/sceneSeed'
+import { putSceneSeed } from '../../lib/sceneSeed'
 import { shareEvent } from '../../lib/shareRow'
 import { PulseArrival } from '../../components/share/PulseArrival'
 import { checkOutOf } from '../../lib/checkIn'
@@ -497,21 +497,20 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       }
     }
 
-    router.push({
-      pathname: '/event/[id]',
-      params: internalSeed({
-        id: event.id,
-        title: event.title,
-        cover: event.cover_image_url || '',
-        venue: event.venue_name,
-        city: event.display_city || event.city || '',
-        start: event.start_time,
-        end: event.end_time,
-        category: event.category || '',
-        description: event.description || '',
-        interestCount: String(latestInterestCountsRef.current[event.id] ?? event.favorite_count ?? 0),
-      }) as any,
+    // The card's words travel in memory, not in the route: a link's query is never a seed (lib/sceneSeed.ts).
+    const seed = putSceneSeed({
+      eventId: event.id,
+      title: event.title,
+      cover: event.cover_image_url || '',
+      venue: event.venue_name,
+      city: event.display_city || event.city || '',
+      start: event.start_time,
+      end: event.end_time,
+      category: event.category || '',
+      description: event.description || '',
+      interestCount: latestInterestCountsRef.current[event.id] ?? event.favorite_count ?? 0,
     })
+    router.push({ pathname: '/event/[id]', params: { id: event.id, seed } as any })
   }, [latestInterestCountsRef, warmEvent])
 
   /*

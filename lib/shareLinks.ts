@@ -35,43 +35,72 @@ export function routeFor({ kind, id }: LinkTarget): string {
 const KIND_OF_PREFIX: Record<string, LinkKind> = { e: 'event', event: 'event', v: 'venue', venue: 'venue', f: 'invite' }
 
 /**
- * What a link or path points at, or null for anything else. Takes `https://www.blendn.app/e/<id>`, `blendn://e/<id>`
- * and a bare `/e/<id>`; an `https` link on another host is not ours and is refused.
+ * Reduces a URL or path to what could name a route, and does it in ONE place: both `parseLink` (what is this link?) and
+ * `nativeIntentPath` (what does the router get?) read this, so they cannot disagree about a form one of them did not
+ * think of. Control characters are dropped and backslashes become slashes (as a browser reads them); the query and the
+ * fragment go; the scheme goes, and for https the host is kept apart; slashes collapse. The segments are returned as they
+ * came, still encoded: they are decoded once, for the decision, and never echoed back decoded.
  */
-export function parseLink(input: string | null | undefined): LinkTarget | null {
-  if (!input) return null
-  const web = input.match(/^https?:\/\/([^/?#]+)(\/[^?#]*)?/i)
-  if (web && !OUR_HOSTS.has(web[1].toLowerCase())) return null
-  const path = web ? (web[2] ?? '') : input.replace(/^[a-z][a-z0-9+.-]*:\/{0,2}/i, '/').replace(/^\/{2,}/, '/')
-  // The id is the last segment: `/e/<id>/anything` is not a link to the event.
-  const match = path.match(/^\/?([a-z]+)\/([^/?#]*)\/?(?:[?#].*)?$/i)
-  if (!match) return null
-  const kind = KIND_OF_PREFIX[match[1].toLowerCase()]
+function normalise(input: string): { host: string | null; segments: string[] } {
+  let rest = input.replace(/[\t\n\r]/g, '').replace(/\\/g, '/').trim().split(/[?#]/, 1)[0]
+  let host: string | null = null
+  const scheme = rest.match(/^([a-z][a-z0-9+.-]*):/i)
+  if (scheme) {
+    rest = rest.slice(scheme[0].length)
+    if (/^https?$/i.test(scheme[1])) {
+      const authority = rest.match(/^\/*([^/]*)(.*)$/s)
+      host = (authority?.[1] ?? '').toLowerCase()
+      rest = authority?.[2] ?? ''
+    }
+  }
+  return { host, segments: rest.split('/').filter(Boolean) }
+}
+
+/** The one place a normalised path becomes a target: the route word case-folded, each segment decoded once. */
+function targetOf({ host, segments }: ReturnType<typeof normalise>): LinkTarget | null {
+  if (host !== null && !OUR_HOSTS.has(host)) return null
+  if (segments.length !== 2) return null
+  let route: string
   let id: string
   try {
-    id = decodeURIComponent(match[2])
+    route = decodeURIComponent(segments[0]).toLowerCase()
+    id = decodeURIComponent(segments[1])
   } catch {
     return null
   }
+  const kind = KIND_OF_PREFIX[route]
   return kind && SEGMENT.test(id) ? { kind, id } : null
 }
 
 /**
- * The path the router should open for an incoming system URL (`redirectSystemPath`): `/e/<id>` and `/v/<id>`, which
- * have no screen of their own, become the event's and the venue's.
- *
- * A link to an event or a venue never keeps its query. The Scene reads title, cover and description from its route to
- * draw before it has loaded (`lib/sceneSeed.ts`), and a link is anyone's string: `?title=…&cover=https://attacker/x.jpg`
- * would put their words on our screen and make the phone fetch their image. That holds for `/event/` and `/venue/` as
- * they arrive, the `blendn://` form, and a path that does not parse as a link but still names one. An invite keeps its
- * path as it came (its token is the only thing in it), and anything else is not ours to rewrite.
+ * What a link or path points at, or null for anything else. Takes `https://www.blendn.app/e/<id>`, `blendn://e/<id>`
+ * and a bare `/e/<id>`, in any case, encoding, slash count or scheme form `normalise` understands; an `https` link on
+ * another host is not ours and is refused.
+ */
+export function parseLink(input: string | null | undefined): LinkTarget | null {
+  return input ? targetOf(normalise(input)) : null
+}
+
+/**
+ * The URLs that are not routes and keep what they carry: the dev client's launch link, which is only the dev client's
+ * root and its `url` query. Nothing else that arrives from outside needs a query: invites carry their token in the path,
+ * notification taps navigate in JS, and sign-in with Google or Apple is native.
+ */
+const KEEPS_ITS_QUERY: readonly RegExp[] = [/^exp\+blendn:\/\/expo-development-client\/?(?:[?#]|$)/i]
+
+/**
+ * The path the router gets for an incoming system URL (`redirectSystemPath`). Fail closed: every external URL loses its
+ * query and fragment, so no screen can be handed a param by a link (a DM's `draft` and `otherUserName`, sign-in's
+ * `notice`, forgot-password's `email`, the Scene's title and cover). A link to an event, a venue or an invite is rebuilt
+ * from its validated id (`/e/` and `/v/` have no screen of their own and become the event's and the venue's); an https
+ * link on another host goes to the root; any other path keeps only its own segments.
  */
 export function nativeIntentPath(path: string): string {
-  const target = parseLink(path)
-  if (target && target.kind !== 'invite') return routeFor(target)
-  // Names an event or a venue but is not a clean link (an id that would climb out of its segment): no query, no rewrite.
-  const base = path.split(/[?#]/, 1)[0]
-  return /(?:^|\/)(?:event|venue|e|v)\//i.test(base) ? base : path
+  if (KEEPS_ITS_QUERY.some((re) => re.test(path))) return path
+  const n = normalise(path)
+  if (n.host !== null && !OUR_HOSTS.has(n.host)) return '/'
+  const target = targetOf(n)
+  return target ? routeFor(target) : `/${n.segments.join('/')}`
 }
 
 /* -------------------------------------------------------------------------- */

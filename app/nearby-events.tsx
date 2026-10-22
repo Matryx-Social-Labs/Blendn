@@ -21,7 +21,7 @@ import { getOptimizedImageUrl } from '../lib/photoUtils'
 import { homeCardProps } from '../lib/pulse'
 import { useMinimumVisible } from '../lib/useMinimumVisible'
 import { useNow } from '../lib/useNow'
-import { internalSeed } from '../lib/sceneSeed'
+import { putSceneSeed } from '../lib/sceneSeed'
 import { useTopBarState } from '../lib/useTopBarState'
 
 /*
@@ -252,20 +252,20 @@ export default function NearbyEventsScreen() {
         if (hero) preloadImages([hero], 'high').catch(() => {})
       }
 
-      router.push({
-        pathname: '/event/[id]',
-        params: internalSeed({
-          id: event.id,
-          title: event.title,
-          cover: event.cover_image_url || '',
-          venue: event.venue_name,
-          city: event.display_city || event.city || '',
-          start: event.start_time,
-          end: event.end_time,
-          category: event.category || '',
-          description: event.description || '',
-        }) as never,
+      // The card's words travel in memory, not in the route: a link's query is never a seed (lib/sceneSeed.ts).
+      const seed = putSceneSeed({
+        eventId: event.id,
+        title: event.title,
+        cover: event.cover_image_url || '',
+        venue: event.venue_name,
+        city: event.display_city || event.city || '',
+        start: event.start_time,
+        end: event.end_time,
+        category: event.category || '',
+        description: event.description || '',
+        interestCount: 0,
       })
+      router.push({ pathname: '/event/[id]', params: { id: event.id, seed } as never })
     },
     [userLocation]
   )

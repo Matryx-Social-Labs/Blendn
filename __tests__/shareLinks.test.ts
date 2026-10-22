@@ -2,6 +2,7 @@
  * The links Blend'n sends and opens (Flow 16): built in one place, read back by the same place, and the privacy rule
  * for what may be linked at all.
  */
+import { redirectSystemPath } from '../app/+native-intent'
 import { eventLink, inviteLink, nativeIntentPath, parseLink, routeFor, shareability, venueLink } from '../lib/shareLinks'
 
 const ID = '7f3a2c4e-91d0-4b8a-a1c2-0d5e6f7a8b9c'
@@ -52,45 +53,86 @@ describe('reading a link', () => {
   })
 })
 
-describe('the native intent: which path the router opens for an incoming link', () => {
-  it('rewrites /e/ and /v/, which have no screen, to the event and the venue', () => {
+describe('reading a link, in any form', () => {
+  it('decides on the normalised path: scheme, case, encoding, slashes and whitespace do not change what it is', () => {
+    const event = { kind: 'event', id: ID }
+    for (const form of [
+      `https://WWW.Blendn.App/E/${ID}`,
+      `https://www.blendn.app//e//${ID}//`,
+      `https://www.blendn.app/%65vent/${ID}`,
+      `https://www.blendn.app/%45VENT/${ID}`,
+      `blendn:event/${ID}`,
+      `blendn:/event/${ID}`,
+      `blendn://EVENT/${ID}`,
+      `BLENDN:///event///${ID}`,
+      `https:\\\\www.blendn.app\\e\\${ID}`,
+      ` /ev\tent/${ID}\n`,
+    ]) {
+      expect({ form, got: parseLink(form) }).toEqual({ form, got: event })
+    }
+  })
+
+  it('refuses a host that is only dressed as ours', () => {
+    for (const form of [`https://www.blendn.app@evil.example/e/${ID}`, `https://www.blendn.app:8443/e/${ID}`, `https://www.blendn.app.evil.example/e/${ID}`, `https://evil.example/www.blendn.app/e/${ID}`]) {
+      expect(parseLink(form)).toBeNull()
+    }
+  })
+})
+
+describe('the native intent: what the router gets for an incoming link', () => {
+  const CRAFTED = 'title=Free%20money&cover=https://attacker.example/x.jpg&description=hi&internal=1&seed=1&draft=pay%20me&otherUserName=Mum&notice=Verify%20here&email=a@b.c&km=1'
+
+  it('rewrites /e/ and /v/, which have no screen, to the event and the venue; an invite keeps its path', () => {
     expect(nativeIntentPath(`https://www.blendn.app/e/${ID}`)).toBe(`/event/${ID}`)
     expect(nativeIntentPath(`blendn://v/${ID}`)).toBe(`/venue/${ID}`)
     expect(nativeIntentPath(`/e/${ID}`)).toBe(`/event/${ID}`)
+    expect(nativeIntentPath(`https://www.blendn.app/f/${TOKEN}`)).toBe(`/f/${TOKEN}`)
+    expect(nativeIntentPath(`/event/${ID}`)).toBe(`/event/${ID}`)
   })
 
-  it('leaves the organiser QR path and the invite path as they are', () => {
-    expect(nativeIntentPath(`https://www.blendn.app/event/${ID}`)).toBe(`/event/${ID}`)
-    expect(nativeIntentPath(`/f/${TOKEN}`)).toBe(`/f/${TOKEN}`)
-    expect(nativeIntentPath(`https://www.blendn.app/f/${TOKEN}`)).toBe(`https://www.blendn.app/f/${TOKEN}`)
-  })
-
-  it('never lets a link carry anything into the Scene: no query on an event or a venue, whatever the form', () => {
-    const crafted = 'title=Free%20money&cover=https://attacker.example/x.jpg&description=hi&internal=1&venue=x&interestCount=9'
-    for (const link of [
-      `https://www.blendn.app/e/${ID}?${crafted}`,
-      `https://www.blendn.app/event/${ID}?${crafted}`,
-      `https://www.blendn.app/event/${ID}#${crafted}`,
-      `blendn://event/${ID}?${crafted}`,
-      `blendn://e/${ID}?${crafted}`,
-      `/event/${ID}?${crafted}`,
-    ]) {
-      expect(nativeIntentPath(link)).toBe(`/event/${ID}`)
+  it.each([
+    ['https event', `https://www.blendn.app/event/${ID}`, `/event/${ID}`],
+    ['https short event', `https://www.blendn.app/e/${ID}`, `/event/${ID}`],
+    ['mixed case', `https://www.blendn.app/EvEnT/${ID}`, `/event/${ID}`],
+    ['encoded route word', `https://www.blendn.app/%65vent/${ID}`, `/event/${ID}`],
+    ['no slashes after the scheme', `blendn:event/${ID}`, `/event/${ID}`],
+    ['double slashes', `blendn://event//${ID}`, `/event/${ID}`],
+    ['backslashes', `https:\\\\www.blendn.app\\event\\${ID}`, `/event/${ID}`],
+    ['venue', `https://www.blendn.app/venue/${ID}`, `/venue/${ID}`],
+    ['venue, custom scheme', `blendn://v/${ID}`, `/venue/${ID}`],
+    ['invite', `https://www.blendn.app/f/${TOKEN}`, `/f/${TOKEN}`],
+    ['a DM (draft, otherUserName)', `blendn://private-chat/abc`, '/private-chat/abc'],
+    ['sign-in (notice)', 'blendn://sign-in', '/sign-in'],
+    ['forgot-password (email)', 'blendn://forgot-password', '/forgot-password'],
+    ['a chat room', 'blendn://chat/abc', '/chat/abc'],
+    ['a profile', 'blendn://user/abc', '/user/abc'],
+    ['the encoded form of a screen', 'blendn://%70rivate-chat/abc', '/%70rivate-chat/abc'],
+  ])('%s: whatever it carries, the router gets the path alone', (_name, link, route) => {
+    for (const tail of [`?${CRAFTED}`, `#${CRAFTED}`, `/?${CRAFTED}`, `?${CRAFTED}#x`, `?`, `??internal=1`]) {
+      expect(nativeIntentPath(link + tail)).toBe(route)
     }
-    for (const link of [`https://www.blendn.app/v/${ID}?${crafted}`, `https://www.blendn.app/venue/${ID}?km=1&${crafted}`, `blendn://venue/${ID}?${crafted}`]) {
-      expect(nativeIntentPath(link)).toBe(`/venue/${ID}`)
-    }
+    expect(nativeIntentPath(link)).toBe(route)
   })
 
-  it('strips the query even from a path that names an event but is not a clean link', () => {
-    expect(nativeIntentPath(`/event/a%2Fb?title=x&cover=https://attacker.example/x.jpg`)).toBe('/event/a%2Fb')
-    expect(nativeIntentPath(`/event/${ID}/chat?title=x`)).toBe(`/event/${ID}/chat`)
+  it('drops the query even when the path is not a clean link: a bad id, an extra segment, another host', () => {
+    expect(nativeIntentPath(`/event/a%2Fb?${CRAFTED}`)).toBe('/event/a%2Fb')
+    expect(nativeIntentPath(`/event/${ID}/chat?${CRAFTED}`)).toBe(`/event/${ID}/chat`)
+    expect(nativeIntentPath(`https://evil.example/event/${ID}?${CRAFTED}`)).toBe('/')
+    expect(nativeIntentPath(`https://www.blendn.app@evil.example/e/${ID}?${CRAFTED}`)).toBe('/')
+    expect(nativeIntentPath(`?${CRAFTED}`)).toBe('/')
   })
 
-  it('leaves every unrelated path, query and all, as it came', () => {
-    for (const path of ['/(tabs)/events', '/chat/abc?x=1', `https://evil.example/terms?x=1`, '/events?x=1']) {
-      expect(nativeIntentPath(path)).toBe(path)
-    }
+  it('never hands the router a decoded "?" or "#": a smuggled one stays encoded', () => {
+    expect(nativeIntentPath('blendn://private-chat%3Fdraft=pay')).toBe('/private-chat%3Fdraft=pay')
+    expect(nativeIntentPath('blendn://private-chat%23x')).toBe('/private-chat%23x')
+  })
+
+  it('keeps the dev client’s launch link as it is, and nothing that merely starts like it', () => {
+    const launch = 'exp+blendn://expo-development-client/?url=http%3A%2F%2F192.168.1.2%3A8081'
+    expect(nativeIntentPath(launch)).toBe(launch)
+    expect(nativeIntentPath('exp+blendn://expo-development-client?url=x')).toBe('exp+blendn://expo-development-client?url=x')
+    expect(nativeIntentPath('exp+blendn://expo-development-client/private-chat/abc?draft=x')).toBe('/expo-development-client/private-chat/abc')
+    expect(nativeIntentPath('exp+blendn://private-chat/abc?draft=x')).toBe('/private-chat/abc')
   })
 })
 
@@ -107,5 +149,20 @@ describe('what may be put in a link', () => {
     expect(shareability({ visibility: 'public', status: 'cancelled' })).toBe('public')
     expect(shareability({ status: 'published' })).toBe('unknown')
     expect(shareability({ visibility: null })).toBe('unknown')
+  })
+})
+
+describe('what the router is handed for each screen a link could name', () => {
+  const via = (path: string, initial = false) => redirectSystemPath({ path, initial })
+
+  it.each([
+    ['a DM: draft and otherUserName', 'blendn://private-chat/c1?draft=Send%20money&otherUserName=Mum&otherUserId=u9', '/private-chat/c1'],
+    ['sign-in: notice', 'blendn://sign-in?notice=Your%20account%20is%20locked.%20Verify%20at%20x.example', '/sign-in'],
+    ['forgot-password: email', 'blendn://forgot-password?email=victim@example.com', '/forgot-password'],
+    ['the Scene: title, cover, description', `https://www.blendn.app/event/${ID}?title=Free&cover=https://attacker.example/x.jpg&description=hi`, `/event/${ID}`],
+    ['the venue page: km', `https://www.blendn.app/v/${ID}?km=0.1`, `/venue/${ID}`],
+  ])('%s', (_name, link, route) => {
+    expect(via(link)).toBe(route)
+    expect(via(link, true)).toBe(route)
   })
 })

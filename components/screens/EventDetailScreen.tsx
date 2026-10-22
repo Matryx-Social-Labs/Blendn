@@ -37,7 +37,7 @@ import { useToastDock } from '../toastDock'
 import { amenityTiles, type ServerAmenity } from '../../lib/amenityTile'
 import { eventDetailBlocks, type ServerEventDetails } from '../../lib/eventDetails'
 import { showEventReportOptions } from '../../lib/safetyUtils'
-import { trustedParams } from '../../lib/sceneSeed'
+import { takeSceneSeed } from '../../lib/sceneSeed'
 import { eventTarget, shareText } from '../../lib/shareEvent'
 import { openShare } from '../../lib/shareTray'
 import { openWhatsApp } from '../../lib/shareWhatsApp'
@@ -210,8 +210,9 @@ const SECTION_DELAY = [0, 1, 2, 3].map((i) => Math.min(i * STAGGER.loose, STAGGE
  */
 
 export default function EventDetail() {
-  // The seed (a card's title, cover, date) is read only when the app itself opened this screen: see `lib/sceneSeed.ts`.
-  const { id, title, cover, venue, city, start, end, category, description: descriptionParam, interestCount: interestCountParam } = trustedParams(useLocalSearchParams())
+  // The route gives the id and a one-time seed token, nothing else: every other param is ignored (see `lib/sceneSeed.ts`).
+  const { id, seed: seedToken } = useLocalSearchParams<{ id?: string; seed?: string }>()
+  const [seed] = useState(() => takeSceneSeed(seedToken, id))
   const insets = useSafeAreaInsets()
   // The Android snackbar stands above the CTA dock.
   const [ctaDockHeight, setCtaDockHeight] = useState(0)
@@ -237,20 +238,20 @@ export default function EventDetail() {
     Linking.openURL(url).catch(() => showToast("That page didn't open. Try again.", 'error'))
   }
 
-  // Initialize event from params if available for instant display
-  const hasParams = !!(title || cover || venue)
+  // Draw at once from the card that opened this screen, if the app did.
+  const hasParams = !!(seed && (seed.title || seed.cover || seed.venue))
   const [event, setEvent] = useState<EventDetailData | null>(() => {
-    if (hasParams) {
+    if (seed && hasParams) {
       return {
         id: String(id || ''),
-        title: String(title || ''),
-        venue_name: String(venue || ''),
-        cover_image_url: String(cover || ''),
-        city: String(city || ''),
-        start_time: String(start || new Date().toISOString()),
-        end_time: String(end || new Date().toISOString()),
-        category: String(category || ''),
-        description: String(descriptionParam || ''),
+        title: seed.title,
+        venue_name: seed.venue,
+        cover_image_url: seed.cover,
+        city: seed.city,
+        start_time: seed.start || new Date().toISOString(),
+        end_time: seed.end || new Date().toISOString(),
+        category: seed.category,
+        description: seed.description,
         short_description: '',
         address: '',
         max_capacity: 0,
@@ -279,13 +280,7 @@ export default function EventDetail() {
   // Initialize from params for instant display
   const [checkInCount, setCheckInCount] = useState(0)
   const [goingCount, setGoingCount] = useState(0)
-  const [interestCount, setInterestCount] = useState<number>(() => {
-    if (interestCountParam && typeof interestCountParam === 'string') {
-      const parsed = parseInt(interestCountParam, 10)
-      return Number.isNaN(parsed) ? 0 : parsed
-    }
-    return 0
-  })
+  const [interestCount, setInterestCount] = useState<number>(() => seed?.interestCount ?? 0)
   const [userInterested, setUserInterested] = useState<boolean>(false)
   /*
    * `waitlisted` is included because the server can return it.

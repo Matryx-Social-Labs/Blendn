@@ -42,22 +42,50 @@ describe('one tray for every surface', () => {
   })
 })
 
-describe('the Scene’s seed is the app’s own', () => {
-  it('every in-app push to the Scene that passes a title, cover or description marks itself internal', () => {
-    const seeding = [...walk('app'), ...walk('components'), ...walk('lib')].filter((f) => {
-      const src = read(f)
-      return [...src.matchAll(/pathname: '\/event\/\[id\]'/g)].some((m) => /\b(title|cover|description):/.test(src.slice(m.index, m.index + 400)))
-    })
-    expect(seeding.length).toBeGreaterThan(0)
-    for (const f of seeding) expect(read(f)).toMatch(/internalSeed\(/)
+describe('no route param seeds the Scene', () => {
+  const sources = () => [...walk('app'), ...walk('components'), ...walk('lib')]
+
+  it('the Scene takes an id and a one-time token from its route, and nothing else', () => {
+    const scene = read('components/screens/EventDetailScreen.tsx')
+    expect(scene).toMatch(/useLocalSearchParams<\{ id\?: string; seed\?: string \}>\(\)/)
+    expect(scene).toMatch(/takeSceneSeed\(seedToken, id\)/)
+    // The words come from the seed, not from anything the route said.
+    expect(scene).not.toMatch(/descriptionParam|interestCountParam|trustedParams|internalSeed/)
+  })
+
+  it('no flag in a URL is a trust signal: nothing in the app reads or writes an `internal` param', () => {
+    const offenders = sources().filter((f) => /internalSeed|trustedParams|INTERNAL_PARAM|params\??\.internal|\binternal: '1'/.test(read(f)))
+    expect(offenders).toEqual([])
+  })
+
+  it('an in-app push to the Scene carries an id and a token, and the words go through the store', () => {
+    const pushes = sources().flatMap((f) => [...read(f).matchAll(/pathname: '\/event\/\[id\]'/g)].map((m) => ({ f, near: read(f).slice(m.index, m.index! + 300) })))
+    expect(pushes.length).toBeGreaterThan(0)
+    for (const { near } of pushes) expect(near).not.toMatch(/\b(title|cover|description|venue):/)
+    for (const f of ['app/(tabs)/events.tsx', 'app/nearby-events.tsx']) {
+      expect(read(f)).toMatch(/putSceneSeed\(\{/)
+      expect(read(f)).toMatch(/params: \{ id: event\.id, seed \}/)
+    }
   })
 
   it('the host sweeps the last Story picture at launch', () => {
     expect(read('components/share/ShareHost.tsx')).toMatch(/sweepStoryCaptures\(\)/)
   })
+})
 
-  it('the Scene reads its seed through trustedParams and nowhere else', () => {
-    expect(read('components/screens/EventDetailScreen.tsx')).toMatch(/trustedParams\(useLocalSearchParams\(\)\)/)
+describe('only links lose their query; the app’s own navigation keeps its params', () => {
+  it('nativeIntentPath is called for system URLs by +native-intent alone, never by an in-app push', () => {
+    const callers = [...walk('app'), ...walk('components'), ...walk('lib')].filter((f) => /nativeIntentPath\(/.test(read(f)) && f !== 'lib/shareLinks.ts')
+    expect(callers).toEqual(['app/+native-intent.tsx'])
+  })
+
+  it.each([
+    ['a DM from a friend’s profile keeps otherUserName', 'app/friends/[userId].tsx', /otherUserName: friend\.name/],
+    ['a DM from a room keeps otherUserName and the draft', 'components/blendn/BlendnScreen.tsx', /otherUserName: p\.name[^}]*draft/],
+    ['sign-in keeps the notice it is sent with', 'app/index.tsx', /pathname: '\/sign-in', params: \{ notice \}/],
+    ['forgot-password keeps the email it is sent with', 'app/sign-in.tsx', /pathname: '\/forgot-password', params: \{ email: trimmedEmail \}/],
+  ])('%s', (_name, file, shape) => {
+    expect(read(file)).toMatch(shape)
   })
 })
 
