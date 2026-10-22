@@ -147,3 +147,13 @@ describe('<TopBar>', () => {
     expect(flat('top-bar-contrast')).toMatchObject({ backgroundColor: MATERIAL.hairlineIncreaseContrast })
   })
 })
+
+describe('the Save pill’s height is the circle’s', () => {
+  it.each([['ios', 44], ['android', 48]] as const)('%s: %i pt, level with the circle beside it', async (os, height) => {
+    Object.defineProperty(Platform, 'OS', { value: os, configurable: true })
+    await draw({ save: { onPress: jest.fn() }, testID: 'bar' })
+    const style = StyleSheet.flatten(screen.getByRole('button', { name: 'Save' }).props.style)
+    expect(style.height).toBe(height)
+    Object.defineProperty(Platform, 'OS', { value: 'ios', configurable: true })
+  })
+})

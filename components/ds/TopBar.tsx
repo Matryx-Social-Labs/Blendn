@@ -88,7 +88,7 @@ export function TopBar({ title, sub, state = 'rest', onBack, close = false, acti
           {actions.map((a) => (
             <IconButton key={a.label} icon={a.icon} accessibilityLabel={a.label} onPress={a.onPress} />
           ))}
-          {save ? <Button label="Save" size="md" onPress={save.onPress} loading={save.saving} disabled={save.disabled} /> : null}
+          {save ? <Button label="Save" size={android ? "md" : "raised"} onPress={save.onPress} loading={save.saving} disabled={save.disabled} /> : null}
         </View>
       </View>
       {condensed && title ? (
