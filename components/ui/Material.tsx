@@ -123,9 +123,14 @@ const BLUR_INTENSITY = Math.min(EXPO_BLUR_MAX, MATERIAL.blurRadius / EXPO_BLUR_P
  * ponytail: no Increase Contrast hairline and no Tier B noise tile yet; they
  * come with the first screen that adopts this.
  */
-export function Material({ role, style, children, ...rest }: Omit<ViewProps, 'role'> & { role: MaterialRole }) {
+/** The tier this phone draws now: what `<Material>` will be, for a neighbour that has to match it (a dock's fade). */
+export function useMaterialTier(): MaterialTier {
   const reduceTransparency = useReduceTransparency()
-  const tier = materialTier({ os: Platform.OS, liquidGlass: liquidGlassAvailable(), reduceTransparency })
+  return materialTier({ os: Platform.OS, liquidGlass: liquidGlassAvailable(), reduceTransparency })
+}
+
+export function Material({ role, style, children, ...rest }: Omit<ViewProps, 'role'> & { role: MaterialRole }) {
+  const tier = useMaterialTier()
 
   if (tier === 'glass') {
     return (

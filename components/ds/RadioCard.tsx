@@ -94,6 +94,9 @@ export function RadioCard({ title, hint, icon, avatar, selected = false, onPress
           onPress?.()
         }}
         disabled={disabled}
+        // Dimmed as one layer: Android otherwise fades each child on its own, and the surface well on the surface card
+        // showed as a darker disc that iOS and the design do not draw (r7 L7).
+        needsOffscreenAlphaCompositing={disabled}
         pressedScale={android ? 1 : PRESS.scale}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}

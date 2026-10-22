@@ -51,3 +51,11 @@ export const PAGE_WASH = { height: 300, alpha: 0.5 } as const
 export function PageWash({ color, ...rest }: ViewProps & { color: string }) {
   return <LinearGradient {...rest} colors={[tint(color, PAGE_WASH.alpha), COLOR.ink]} />
 }
+
+/**
+ * The fade above an opaque bar (r7 L7): the page's content dissolves into the bar's own colour over `height` instead of
+ * meeting it on a hard edge. Only where the bar is solid; glass shows what is under it and needs none.
+ */
+export function SolidBarFade({ color, ...rest }: ViewProps & { color: string }) {
+  return <LinearGradient {...rest} colors={[tint(color, 0), color]} />
+}
