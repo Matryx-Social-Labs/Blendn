@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native'
 
 import { COLOR, SPACE } from '../../lib/design/tokens'
+import { H } from '../../lib/haptics'
 import { Button } from '../ds/Button'
 import { font, useBoldText } from '../ds/shared'
 
@@ -9,7 +10,7 @@ export const requestHeadline = (name: string) => `${name} wants to message you`
 
 /**
  * A message request, opened from their profile (Flow 6 R4.1 6.2 · 03 · 04): who asked, what they wrote verbatim, and the two answers,
- * Decline beside Accept, in the tray where Like and Connect would be. Accept is the page's one primary; its spinner is the "Accepting"
+ * Decline beside Accept, in the tray where Like and Connect would be. Accept is lit in the profile's rose, with H.primary on press-in; its spinner is the "Accepting"
  * frame (04). The outcome's haptic and the move to the chat belong to the screen, on the server's answer.
  */
 export function MessageRequestPrompt({
@@ -53,6 +54,8 @@ export function MessageRequestPrompt({
           icon="user-check"
           label="Accept"
           accessibilityLabel={`Accept ${name}’s request`}
+          // Accept plays H.primary on press-in, as every Accept does (lit is silent unless named); Decline plays nothing.
+          pressHaptic={H.primary}
           onPress={onAccept}
           loading={answering === 'accept'}
           disabled={busy && answering !== 'accept'}

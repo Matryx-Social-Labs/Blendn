@@ -5,7 +5,7 @@
  * the page it comes from, rather than as a literal in a component).
  */
 import { createContext, useContext, useEffect, useState } from 'react'
-import { AccessibilityInfo, Platform, type AccessibilityChangeEventName, type ViewStyle } from 'react-native'
+import { AccessibilityInfo, I18nManager, Platform, type AccessibilityChangeEventName, type ViewStyle } from 'react-native'
 
 import { COLOR, DURATION, EASING, FONT_FAMILY, MATERIAL, REDUCE_MOTION, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { tint } from '../../lib/theme'
@@ -184,14 +184,18 @@ export const monoValue = (bold: boolean) => ({
 const bezier = (curve: readonly number[]) => `cubic-bezier(${curve.join(', ')})`
 const asStyle = (style: object) => style as unknown as ViewStyle
 const GENTLE = bezier(EASING.gentle)
-const LIGHT_OFF_X = '-101%'
+/**
+ * Off the leading edge: the left in a left-to-right layout, the right under RTL (`I18nManager.isRTL` is fixed for the app's life;
+ * a change of direction reloads it, so reading it when the styles are made is enough).
+ */
+const lightOffX = () => (I18nManager.isRTL ? '101%' : '-101%')
 export function pourStyles(slideMs: number, fadeMs: number, curve: readonly number[]) {
   const reduced = `opacity ${REDUCE_MOTION.duration.quick}ms ${GENTLE}`
   return {
     pour: asStyle({ opacity: 1, transform: [{ translateX: '0%' }], transition: `transform ${slideMs}ms ${bezier(curve)}, opacity ${fadeMs}ms ${GENTLE}` }),
     drain: asStyle({
       opacity: 0,
-      transform: [{ translateX: LIGHT_OFF_X }],
+      transform: [{ translateX: lightOffX() }],
       transition: `transform ${DURATION.quick}ms ${bezier(EASING.standard)}, opacity ${DURATION.quick}ms ${GENTLE}`,
     }),
     pourReduced: asStyle({ opacity: 1, transition: reduced }),

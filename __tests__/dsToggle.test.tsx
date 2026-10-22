@@ -169,4 +169,15 @@ describe('<Toggle>', () => {
     await act(async () => {})
     expect(flat('t-track')).toMatchObject({ borderWidth: 1, borderColor: MATERIAL.hairlineIncreaseContrast })
   })
+
+  it('Increase Contrast outlines the hued on track too, and only then', async () => {
+    jest.spyOn(AccessibilityInfo, 'isDarkerSystemColorsEnabled').mockResolvedValue(false)
+    await draw({ value: true })
+    await act(async () => {})
+    expect(flat('t-on').borderWidth).toBeUndefined()
+    jest.spyOn(AccessibilityInfo, 'isDarkerSystemColorsEnabled').mockResolvedValue(true)
+    await draw({ value: true })
+    await act(async () => {})
+    expect(flat('t-on')).toMatchObject({ borderWidth: 1, borderColor: MATERIAL.hairlineIncreaseContrast })
+  })
 })

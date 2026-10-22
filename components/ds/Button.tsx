@@ -248,12 +248,13 @@ export function Button({
         hitSlop={textOnly ? { top: Math.max(slop, 0), bottom: Math.max(slop, 0), left: SPACE.lg, right: SPACE.lg } : slop > 0 ? { top: slop, bottom: slop } : undefined}
         haptic={typeof pressHaptic === 'function' ? pressHaptic : pressHaptic ? PRESS_HAPTIC[kind] : undefined}
         pressedScale={android ? 1 : PRESS.scale}
+        // `down` drives the lit flare only: another kind's press costs no re-render.
         onPressIn={() => {
-          setDown(true)
+          if (lit) setDown(true)
           squareOff(RADIUS.pressedAndroid)()
         }}
         onPressOut={() => {
-          setDown(false)
+          if (lit) setDown(false)
           squareOff(rest)()
         }}
         onFocus={() => setFocused(true)}

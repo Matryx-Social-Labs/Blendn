@@ -123,14 +123,17 @@ const styles = StyleSheet.create({
   title: { color: COLOR.textPrimary, flexShrink: 0 },
   muted: { color: COLOR.textSecondary },
   tabular: { fontVariant: ['tabular-nums'] },
-  /** `Badge`'s 22: a pill that grows with a large count, a 1 pt edge inside it. */
+  /**
+   * `Badge`'s 22: a pill that grows with a large count, a 1 pt edge inside it. 6 a side, so one digit (Geist Mono 12, ~7.5 wide)
+   * plus the padding and the edge stays inside the 22 and draws a circle; at 8 a side a single digit made a lozenge.
+   */
   capsule: {
     alignSelf: 'center',
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: CAPSULE,
     minWidth: CAPSULE,
-    paddingHorizontal: SPACE.sm,
+    paddingHorizontal: SPACE.xs + SPACE.xxs,
     borderRadius: RADIUS.capsule,
     borderWidth: 1,
   },

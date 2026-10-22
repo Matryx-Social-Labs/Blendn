@@ -69,6 +69,14 @@ describe('countStyle="lit"', () => {
     expect(screen.getByRole('header', { name: 'Waiting on you, 3' })).toBeTruthy()
   })
 
+  it('one digit fits the 22 as a circle: 6 a side, the edge and a ~7.5 pt mono digit stay inside it', async () => {
+    await lit(3)
+    const capsule = StyleSheet.flatten(screen.getByTestId('h-count').props.style)
+    expect(capsule.paddingHorizontal).toBe(6)
+    const DIGIT = 7.5
+    expect(2 * capsule.paddingHorizontal + 2 * capsule.borderWidth + DIGIT).toBeLessThanOrEqual(capsule.minWidth)
+  })
+
   it('a three-digit count grows the capsule rather than clipping it', async () => {
     await lit(128)
     expect(StyleSheet.flatten(screen.getByTestId('h-count').props.style).minWidth).toBe(22)

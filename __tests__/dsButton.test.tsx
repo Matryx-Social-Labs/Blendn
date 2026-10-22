@@ -5,7 +5,7 @@
  * accessibility matrix.
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
-import React from 'react'
+import React, { Profiler } from 'react'
 import { AccessibilityInfo, Platform, StyleSheet } from 'react-native'
 import * as Reanimated from 'react-native-reanimated'
 
@@ -404,5 +404,28 @@ describe('a small button’s placement', () => {
   it('leaves a large button to its parent', async () => {
     await render(<Button label="Share" testID="b" />)
     expect(wrapperStyle().alignSelf).toBeUndefined()
+  })
+})
+
+describe('the press state is the lit flare’s alone (L3)', () => {
+  const commits = async (kind: 'primary' | 'secondary' | 'lit') => {
+    let count = 0
+    await render(
+      <Profiler id="b" onRender={() => (count += 1)}>
+        <Button kind={kind} size="sm" label="Go" onPress={jest.fn()} testID="b" />
+      </Profiler>
+    )
+    const before = count
+    await fireEvent(screen.getByTestId('b'), 'pressIn')
+    await fireEvent(screen.getByTestId('b'), 'pressOut')
+    return count - before
+  }
+
+  it.each(['primary', 'secondary'] as const)('a %s press re-renders nothing', async (kind) => {
+    expect(await commits(kind)).toBe(0)
+  })
+
+  it('a lit press does: its flare pours and drains', async () => {
+    expect(await commits('lit')).toBeGreaterThan(0)
   })
 })

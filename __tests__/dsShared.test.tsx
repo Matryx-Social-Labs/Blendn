@@ -4,9 +4,9 @@
  */
 import { render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { Text } from 'react-native'
+import { I18nManager, StyleSheet, Text } from 'react-native'
 
-import { HueProvider, SELECTION, useHue } from '../components/ds/shared'
+import { HueProvider, pourStyles, SELECTION, useHue } from '../components/ds/shared'
 import { COLOR } from '../lib/design/tokens'
 
 // The plan's table says 4.4:1 for violet; the WCAG formula gives 4.37. Either clears the 3:1 an icon needs (1.4.11).
@@ -75,5 +75,21 @@ describe('HueProvider', () => {
       </HueProvider>
     )
     expect(screen.getByText('violet')).toBeTruthy()
+  })
+})
+
+describe('the light pours from the leading edge', () => {
+  const offX = () => (StyleSheet.flatten(pourStyles(100, 100, [0, 0, 1, 1]).drain).transform as { translateX: string }[])[0].translateX
+  const rtl = I18nManager.isRTL
+  afterEach(() => Object.defineProperty(I18nManager, 'isRTL', { value: rtl, configurable: true }))
+
+  it('the left in a left-to-right layout', () => {
+    Object.defineProperty(I18nManager, 'isRTL', { value: false, configurable: true })
+    expect(offX()).toBe('-101%')
+  })
+
+  it('the right under RTL (Button’s flare and Chip’s light both)', () => {
+    Object.defineProperty(I18nManager, 'isRTL', { value: true, configurable: true })
+    expect(offX()).toBe('101%')
   })
 })

@@ -15,8 +15,8 @@ const COVER = 48
 
 /**
  * "You were sent Neon Nights" (guidelines/flow-16 `arrival`, Flow 16 · 16.7): the one-time banner on the Pulse for a
- * person who arrived from a shared link. A solid card, not glass: a cover thumbnail, two single lines, a white "Open"
- * pill, and a quiet ×.
+ * person who arrived from a shared link. A solid card, not glass: a cover thumbnail, two single lines, a lit "Open"
+ * pill in the Pulse's ember, and a quiet ×.
  *
  * Slides 16 pt and fades in over `base` once (#44's banner entrance, a fade alone under Reduce Motion), leaves in a
  * quick fade. Announced once, politely, as it lands. `H.primary` on Open's press-in; × is silent and ends it for good.

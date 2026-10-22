@@ -6,7 +6,7 @@ import { COLOR, EASING, MATERIAL, SPRING } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { OPACITY } from '../../lib/theme'
-import { focusRing, minTarget, useIncreaseContrast, useSelection } from './shared'
+import { focusRing, IC_HAIRLINE, minTarget, useIncreaseContrast, useSelection } from './shared'
 
 /*
  * The two switch shapes (the Toggle page; §13). iOS: the 51 × 31 UISwitch,
@@ -56,8 +56,9 @@ export type ToggleProps = {
  * The thumb travels on `M.snap` and the colours cross-fade; Reduce Motion
  * jumps the thumb and keeps the cross-fade. `H.toggle` as it changes (§10.2,
  * a custom switch). Fixed-size: text never scales it. Increase Contrast
- * outlines the iOS off track at 50%; the on track (3.3:1 against its card, 4.8:1
- * under the thumb in violet) and Android's outline already pass.
+ * outlines the iOS off track at 50%, and the hued on track too: it passes
+ * (3.3:1 against its card, 4.8:1 under the thumb in violet), but only just, and
+ * the hairline is the same path every control takes (`IC_HAIRLINE`).
  *
  * It lives in a `SettingsRow`, which is the one element a screen reader
  * hears; on its own it is a switch named by `accessibilityLabel`.
@@ -122,7 +123,7 @@ export function Toggle({ value, onValueChange, accessibilityLabel, disabled = fa
         <View testID={testID && `${testID}-track`} style={[{ width, height, borderRadius: round }, off]} />
         <Animated.View
           testID={testID && `${testID}-on`}
-          style={[StyleSheet.absoluteFill, { borderRadius: round, backgroundColor: sel.edge }, toneStyle]}
+          style={[StyleSheet.absoluteFill, { borderRadius: round, backgroundColor: sel.edge }, contrast && IC_HAIRLINE, toneStyle]}
         />
         <Animated.View
           testID={testID && `${testID}-thumb`}
