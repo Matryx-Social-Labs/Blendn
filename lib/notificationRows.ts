@@ -196,6 +196,12 @@ function fallbackCopy(item: NotificationItem, when: string): { title: string; co
 const stillWaiting = (item: NotificationItem, now: number) =>
   isRequestKind(item.kind) && item.open !== false && now - new Date(item.createdAt).getTime() < WAITING_DAYS * DAY_MS
 
+/**
+ * A friend request comes only through your invite link (`app/f/[token]`), so these rows are the person and the time:
+ * the server's `display.context` is not read for them, whatever it names (an event, a room).
+ */
+const PERSON_ONLY: ReadonlySet<string> = new Set(['friend_request', 'friend_accepted'])
+
 /** One notification as a row: the server's `display` where it sent one, else the kind's own. */
 export function rowFor(item: NotificationItem, now: number = Date.now()): FeedRow {
   const when = notificationWhen(item.createdAt, now)
@@ -206,7 +212,7 @@ export function rowFor(item: NotificationItem, now: number = Date.now()): FeedRo
     item,
     visual: parseVisual(item.display?.visual) ?? fallbackVisual(item),
     title: text(item.display?.title) ?? fallback.title,
-    context: text(item.display?.context) ?? fallback.context,
+    context: (PERSON_ONLY.has(item.kind) ? null : text(item.display?.context)) ?? fallback.context,
     actions: waiting ? (REQUEST_ACTIONS[item.kind] ?? []) : [],
     waiting,
   }

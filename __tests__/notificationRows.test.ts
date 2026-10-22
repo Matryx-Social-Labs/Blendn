@@ -1,6 +1,7 @@
 import type { NotificationItem } from '../lib/notificationFormat'
 import {
   arrivedUnread,
+  closeAnsweredElsewhere,
   findLandingRow,
   groupFeed,
   isRequestKind,
@@ -114,12 +115,25 @@ describe('a row with what the server resolved for the reader', () => {
     const row = rowFor(
       item({
         id: 'a',
-        kind: 'friend_request',
-        display: { title: 'Priya wants to be friends', context: 'Wants to be friends · 2 min ago', visual: { type: 'photo', uri: 'https://x/p.jpg' } },
+        kind: 'match',
+        display: { title: 'You and Priya matched', context: 'Vinyl Night · 2 min ago', visual: { type: 'photo', uri: 'https://x/p.jpg' } },
       }),
       NOW
     )
-    expect(row).toMatchObject({ title: 'Priya wants to be friends', context: 'Wants to be friends · 2 min ago', visual: { type: 'photo', uri: 'https://x/p.jpg' } })
+    expect(row).toMatchObject({ title: 'You and Priya matched', context: 'Vinyl Night · 2 min ago', visual: { type: 'photo', uri: 'https://x/p.jpg' } })
+  })
+
+  // A friend request comes only through your invite link: whatever context the server sends, the row is the person and the time.
+  it.each(['friend_request', 'friend_accepted'] as const)('%s takes the server’s title and face, never its context', (kind) => {
+    const row = rowFor(
+      item({
+        id: 'a',
+        kind,
+        display: { title: 'Priya wants to be friends', context: 'Vinyl Night · 2 min ago', visual: { type: 'photo', uri: 'https://x/p.jpg' } },
+      }),
+      NOW
+    )
+    expect(row).toMatchObject({ title: 'Priya wants to be friends', context: '5 min ago', visual: { type: 'photo', uri: 'https://x/p.jpg' } })
   })
 
   it('falls back field by field when a part is missing or malformed', () => {
@@ -231,5 +245,18 @@ describe('findLandingRow', () => {
     expect(findLandingRow(requests, { type: 'match', requestId: 'r1' })).toBeNull()
     expect(findLandingRow(requests, { type: 'friend_request', requestId: 'zzz' })).toBeNull()
     expect(findLandingRow(requests, undefined)).toBeNull()
+  })
+})
+
+describe('closeAnsweredElsewhere', () => {
+  const req = (id: string, requestId: string) => item({ id, kind: 'friend_request', data: { requestId } })
+
+  it('closes a friend request no longer among the incoming ones, and leaves the rest', () => {
+    const rows = closeAnsweredElsewhere([req('a', 'r1'), req('b', 'r2'), item({ id: 'c', kind: 'crew_invite', data: { crewId: 'x' } })], new Set(['r2']))
+    expect(rows.map((n) => n.open)).toEqual([false, undefined, undefined])
+  })
+
+  it('closes nothing when the list did not load', () => {
+    expect(closeAnsweredElsewhere([req('a', 'r1')], null)[0].open).toBeUndefined()
   })
 })
