@@ -21,3 +21,6 @@ export function formatCountdown(seconds: number): string {
   const s = Math.max(0, Math.ceil(seconds))
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
+
+/** The wait for one refused read (`rateLimitWait` of a single result), or null when it was not a refusal for asking too fast. */
+export const rateLimitWaitOf = (result: { errorCode?: string; retryAfter?: number } | null | undefined): number | null => rateLimitWait([result])

@@ -11,10 +11,10 @@ import { Chip } from '../ds/Chip'
 import { TitleTabs } from '../ds/TitleTabs'
 import { Text } from '../ui/Text'
 import { DRAWER_PEEK_LINE, drawerSnapPoints, keyboardLeft, snapOnKeyboard, type DrawerSnap } from '../../lib/home'
+import { COLOR } from '../../lib/design/tokens'
 import { Logger } from '../../lib/logger'
 import { useAfterFirstPaint } from '../../lib/useAfterFirstPaint'
 import type { NearPin } from '../../lib/placesPane'
-import { EMBER } from '../../lib/theme'
 import { HomeDrawer } from './HomeDrawer'
 import { HomeMap } from './HomeMap'
 import { PlacesList } from './PlacesList'
@@ -212,7 +212,7 @@ export function HomeShell({
         onChromeTouch={dismissKeyboard}
         peek={
           peekExtra ? (
-            <Text variant="meta" color={EMBER.textPrimary} numberOfLines={1} testID="home-peek-line">
+            <Text variant="meta" color={COLOR.textPrimary} numberOfLines={1} testID="home-peek-line">
               {peekText}
             </Text>
           ) : null
@@ -243,7 +243,7 @@ export function HomeShell({
 const SEGMENT_LABELS = ['Events', 'Places'] as const
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: EMBER.bg },
+  root: { flex: 1, backgroundColor: COLOR.ink },
   pane: { flex: 1 },
   hidden: { display: 'none' },
 })

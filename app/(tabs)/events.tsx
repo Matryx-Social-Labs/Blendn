@@ -42,7 +42,7 @@ import { showSheet } from '../../lib/sheet'
 import { useToast } from '../../components/Toast'
 import { Skeleton } from '../../components/Skeleton'
 import { VirtualizedList } from '../../components/VirtualizedList'
-import { rateLimitWait } from '../../lib/rateLimited'
+import { rateLimitWaitOf } from '../../lib/rateLimited'
 import { getEvents as fetchEventsApi, type BlendnEvent } from '../../lib/api'
 import {
   activeFilterCount,
@@ -859,7 +859,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       if (error) {
         Logger.error('events', 'Error fetching events', { error })
         // Asked too fast: the banner says the wait and reads again, and the page is not "couldn't load" (Flow 15 #15).
-        const wait = rateLimitWait([error])
+        const wait = rateLimitWaitOf(error)
         if (wait !== null) {
           setRateLimit(wait)
           return
@@ -1288,7 +1288,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       if (generation !== feedGenerationRef.current) return
       if (error) {
         // A refused page says so and waits; no other failure here is loud (the next scroll asks again).
-        const wait = rateLimitWait([error])
+        const wait = rateLimitWaitOf(error)
         if (wait !== null) setRateLimit(wait)
         return
       }

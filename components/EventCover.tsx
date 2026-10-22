@@ -3,7 +3,7 @@ import { Image as ExpoImage } from 'expo-image'
 import { Image, StyleSheet, View } from 'react-native'
 
 import { Logger } from '../lib/logger'
-import { EMBER, EMBER_RADIUS } from '../lib/theme'
+import { COLOR, RADIUS } from '../lib/design/tokens'
 
 // Optically centred (the ink's centroid at the canvas centre): a box-centred monogram reads left.
 const monogram = require('../assets/logo/monogram-gradient-centred.png')
@@ -33,7 +33,7 @@ interface EventCoverProps {
  * Nothing is drawn on the picture any more — the words sit under it — so there
  * is no darkening layer either.
  */
-export function EventCover({ uri, height, radius = EMBER_RADIUS.md, retry = 0 }: EventCoverProps) {
+export function EventCover({ uri, height, radius = RADIUS.rowInCard, retry = 0 }: EventCoverProps) {
   const attempt = `${uri}#${retry}`
   const [failedAttempt, setFailedAttempt] = useState<string | null>(null)
 
@@ -91,10 +91,10 @@ const MARK_OPACITY = 0.35
 const markSize = (height: number) => Math.min(72, Math.round(height * 0.4))
 
 const styles = StyleSheet.create({
-  frame: { width: '100%', backgroundColor: EMBER.surface, overflow: 'hidden' },
+  frame: { width: '100%', backgroundColor: COLOR.surface, overflow: 'hidden' },
   placeholder: {
     width: '100%',
-    backgroundColor: EMBER.surface,
+    backgroundColor: COLOR.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },

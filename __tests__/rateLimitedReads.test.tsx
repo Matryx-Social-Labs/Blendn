@@ -62,7 +62,7 @@ describe('the Pulse', () => {
 
   it('the screen reads again when the wait is over, and shows neither the failed page nor the empty one meanwhile', () => {
     const events = src('app/(tabs)/events.tsx')
-    expect(events).toMatch(/rateLimitWait\(\[error\]\)/)
+    expect(events).toMatch(/rateLimitWaitOf\(error\)/)
     expect(events).toContain('rateLimit={rateLimit}')
     expect(events).toMatch(/events\.length === 0 && !!netError && rateLimit === null/)
     expect(events).toMatch(/events\.length === 0 && !netError && rateLimit === null/)
