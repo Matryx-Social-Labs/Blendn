@@ -70,6 +70,26 @@ describe('Requests (incoming)', () => {
     expect(screen.getByText('No requests')).toBeTruthy()
   })
 
+  it('1 waiting: one card, no foot, and a second look at the end asks for nothing', async () => {
+    mockGet.mockResolvedValue({ success: true, data: { incoming: reqs(1), outgoing: [], pagination: { incoming: meta(1, null), outgoing: meta(0, null) } } })
+    await open()
+    expect(list().props.data).toHaveLength(1)
+    await reachEnd()
+    expect(mockGet).toHaveBeenCalledTimes(1)
+    expect(screen.queryByTestId('requests-more')).toBeNull()
+  })
+
+  it('100 waiting: two pages of 50, and after the second the end asks for nothing more', async () => {
+    mockGet
+      .mockResolvedValueOnce({ success: true, data: { incoming: reqs(50), outgoing: [], pagination: { incoming: meta(100, 'i1'), outgoing: meta(0, null) } } })
+      .mockResolvedValueOnce({ success: true, data: { incoming: reqs(50, 50), pagination: { incoming: meta(100, null) } } })
+    await open()
+    await reachEnd()
+    expect(list().props.data).toHaveLength(100)
+    await reachEnd()
+    expect(mockGet).toHaveBeenCalledTimes(2)
+  })
+
   it('51 waiting: the first 50, then the 51st by `?list=incoming&cursor=`', async () => {
     mockGet
       .mockResolvedValueOnce({ success: true, data: { incoming: reqs(50), outgoing: [], pagination: { incoming: meta(51, 'i1'), outgoing: meta(0, null) } } })
