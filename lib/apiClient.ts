@@ -10,6 +10,7 @@ import type { AttendancePayload, RsvpEventsPayload, SavedEventsPayload } from '.
 import type { PaywallEvent, PaywallTrigger } from './paywallPolicy'
 import type { PlusStatus } from './plus'
 import { noteBlocked } from './blockEpoch'
+import { CONVERSATIONS_PAGE } from './conversationsPage'
 import { namedList, type NamedList } from './namedList'
 import * as SecureStore from 'expo-secure-store'
 import { AppState, Platform } from 'react-native'
@@ -2933,7 +2934,8 @@ class ApiClientClass {
   // === PRIVATE CONVERSATIONS ===
 
   async getConversations(options?: { force?: boolean }): Promise<ApiResponse<Array<Record<string, unknown>>>> {
-    const endpoint = '/api/mobile/conversations'
+    // The server answers up to 200 to a read with no limit (for installed builds); this build asks for a page.
+    const endpoint = `/api/mobile/conversations?limit=${CONVERSATIONS_PAGE}`
     if (options?.force) {
       return namedList(await this.queuedRequest<NamedList<'conversations'>>(endpoint), 'conversations')
     }

@@ -424,16 +424,28 @@ describe('a Banter of thousands (SCRUM-760 b)', () => {
     expect(queued).toHaveBeenCalledTimes(1)
   })
 
-  it('loads the next page of conversations by the server’s cursor', async () => {
+  it('conversations load by the server’s cursor only when People is asked ("Show more people"), never arriving under a reader', async () => {
     api.getConversations.mockResolvedValue(conversations([conv(1)], 'k1'))
     queued.mockResolvedValueOnce({ success: true, data: { conversations: [conv(2)] } })
     await open()
     expect(screen.getAllByText('Fox 1').length).toBeGreaterThan(0)
+    // The end of the list does not fetch them: a page in the middle would push the rooms below it away.
     await reachEnd()
-    expect(queued).toHaveBeenCalledWith('/api/mobile/conversations?cursor=k1')
+    expect(queued).not.toHaveBeenCalled()
+    await act(async () => fireEvent.press(screen.getByTestId('banter-people-more')))
+    expect(queued).toHaveBeenCalledWith('/api/mobile/conversations?limit=50&cursor=k1')
     expect((await screen.findAllByText('Fox 2')).length).toBeGreaterThan(0)
+    // The last page said so: the button goes.
+    expect(screen.queryByTestId('banter-people-more')).toBeNull()
+  })
+
+  it('no layout glide on a page append: the list’s reorder animation is off for a beat after one lands', async () => {
+    api.getChatGroups.mockResolvedValue(groups(1, true) as never)
+    queued.mockResolvedValueOnce(groups(2, false, 2))
+    await open()
     await reachEnd()
-    expect(queued).toHaveBeenCalledTimes(1)
+    await screen.findAllByText('Room 2')
+    expect(screen.getByTestId('banter-list').props.itemLayoutAnimation).toBeUndefined()
   })
 
   it('a server that sends no paging is one page, and nothing more is asked', async () => {
@@ -470,11 +482,27 @@ describe('a Banter of thousands (SCRUM-760 b)', () => {
     expect(screen.getAllByText('Room 1').length).toBeGreaterThan(0)
   })
 
+  it('a room bumped off the newest page by a busier one stays on screen once older pages are loaded (demotion)', async () => {
+    api.getChatGroups.mockResolvedValue(groups(1, true) as never)
+    queued.mockResolvedValueOnce(groups(2, false, 2))
+    await open()
+    await reachEnd()
+    await screen.findAllByText('Room 2')
+    // Room 3 is now the newest and Room 1 has slid off page one: it is not on the new page, and still on screen.
+    api.getChatGroups.mockResolvedValue(groups(3, true) as never)
+    markDomainsDirty(['chat'])
+    await act(async () => void (await mockSync.onSync?.()))
+    await flush()
+    expect(screen.getAllByText('Room 3').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Room 1').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Room 2').length).toBeGreaterThan(0)
+  })
+
   it('a block anywhere starts the lists over: the blocked person’s conversation on an older page is gone', async () => {
     api.getConversations.mockResolvedValue(conversations([conv(1)], 'k1'))
     queued.mockResolvedValueOnce({ success: true, data: { conversations: [conv(9)] } })
     await open()
-    await reachEnd()
+    await act(async () => fireEvent.press(screen.getByTestId('banter-people-more')))
     expect((await screen.findAllByText('Fox 9')).length).toBeGreaterThan(0)
 
     // The server now leaves them out of the first page too.
@@ -485,20 +513,15 @@ describe('a Banter of thousands (SCRUM-760 b)', () => {
     expect(screen.getAllByText('Fox 1').length).toBeGreaterThan(0)
   })
 
-  it('the Requests section is a strip of three with the server’s true count and a way to all of them', async () => {
+  it('the Requests section is a strip of three with the server’s true count and a "See all" to the screen of them', async () => {
     const rs = (from: number, n: number) => Array.from({ length: n }, (_, i) => ({ id: `r${from + i}`, senderId: `s${from + i}`, sender: { id: `s${from + i}`, name: `Asker ${from + i}` }, message: `hello ${from + i}`, createdAt: at }))
     api.getMessageRequests.mockResolvedValue({ success: true, data: { requests: rs(0, 20), totalCount: 140 } } as never)
     await open()
     expect(screen.getByLabelText('Requests, 140')).toBeTruthy()
     expect(screen.getAllByLabelText(/^Accept the request from/)).toHaveLength(3)
-    await act(async () => fireEvent.press(screen.getByLabelText('Show all 140')))
-    expect(screen.getAllByLabelText(/^Accept the request from/)).toHaveLength(20)
-    api.getMessageRequests.mockResolvedValue({ success: true, data: { requests: rs(20, 20), totalCount: 140 } } as never)
-    await act(async () => fireEvent.press(screen.getByLabelText('Show more requests')))
-    await flush()
-    expect(api.getMessageRequests).toHaveBeenLastCalledWith({ status: 'pending', offset: 20 }, { force: true })
-    expect(screen.getAllByLabelText(/^Accept the request from/)).toHaveLength(40)
-    await act(async () => fireEvent.press(screen.getByLabelText('Show fewer')))
+    await act(async () => fireEvent.press(screen.getByLabelText('See all 140')))
+    expect(router.push).toHaveBeenCalledWith('/message-requests')
+    // The strip stays a strip: nothing expands in place.
     expect(screen.getAllByLabelText(/^Accept the request from/)).toHaveLength(3)
   })
 

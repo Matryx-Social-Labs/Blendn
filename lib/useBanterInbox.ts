@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from '
 import { preloadImages } from '../components/OptimizedImage'
 import { useToast } from '../components/Toast'
 import { apiClient } from './apiClient'
+import { CONVERSATIONS_PAGE } from './conversationsPage'
 import { blockEpoch, subscribeBlocks } from './blockEpoch'
 import { laidOver, nextGroupsPage } from './chatPaging'
 import { subscribeChatListUpdates } from './chatListUpdates'
@@ -207,12 +208,18 @@ const requestFrom = (r: any): MessageRequest => ({
   created_at: r.createdAt || null,
 })
 
+/** After a page is appended the list's reorder glide stays off this long. */
+const APPEND_QUIET_MS = 500
 const GROUP_CHAT_CACHE_TTL = 60 * 1000
 const PERSONAL_CHAT_CACHE_TTL = 60 * 1000
 const MESSAGE_REQUESTS_CACHE_TTL = 60 * 1000
 const CHAT_BACKGROUND_REFRESH_THROTTLE_MS = 15 * 1000
 
-export function useBanterInbox() {
+/**
+ * `requestsOnly`: the "See all" requests screen reads and answers the same requests through this hook and nothing else:
+ * no rooms, no conversations, no sockets for them.
+ */
+export function useBanterInbox({ requestsOnly = false }: { requestsOnly?: boolean } = {}) {
   const { user, loading: authLoading } = useAuth()
   const { showToast } = useToast()
   const [incomingRequests, setIncomingRequests] = useState<MessageRequest[]>([])
@@ -248,8 +255,13 @@ export function useBanterInbox() {
   const moreEpoch = useRef(0)
   const moreBusyRef = useRef(false)
   const [hasMore, setHasMore] = useState(false)
+  /** More conversations on the server: People's own "Show more people". */
+  const [hasMorePeople, setHasMorePeople] = useState(false)
+  /** A page was just appended: the list does not glide for a moment. */
+  const [appending, setAppending] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
-  const [moreFailed, setMoreFailed] = useState(false)
+  /** Which page did not come: its retry asks for that one. */
+  const [moreFailed, setMoreFailed] = useState<'rooms' | 'people' | null>(null)
   /** Pending message requests on the server, when it says: the count is this, not the page held. */
   const [requestsTotal, setRequestsTotal] = useState<number | null>(null)
   const [requestsLoadingMore, setRequestsLoadingMore] = useState(false)
@@ -371,7 +383,8 @@ export function useBanterInbox() {
         } else {
           setGroupChats((prev) => laidOver(groupChatData, prev, (c) => c.chat_room_id, olderGroupIds.current))
         }
-        setHasMore(groupsNextRef.current !== null || conversationsNextRef.current !== null)
+        setHasMore(groupsNextRef.current !== null)
+        setHasMorePeople(conversationsNextRef.current !== null)
         setCrewRooms(others)
       }
       if (cacheKey) {
@@ -405,7 +418,8 @@ export function useBanterInbox() {
         } else {
           setPersonalChats((prev) => laidOver(personalChatData, prev, (c) => c.conversation_id, olderPersonalIds.current))
         }
-        setHasMore(groupsNextRef.current !== null || conversationsNextRef.current !== null)
+        setHasMore(groupsNextRef.current !== null)
+        setHasMorePeople(conversationsNextRef.current !== null)
         if (cacheKey) queryCache.set(cacheKey, personalChatData, PERSONAL_CHAT_CACHE_TTL)
         try {
           const firstScreenUrls = personalChatData
@@ -472,10 +486,10 @@ export function useBanterInbox() {
     const now = Date.now()
     // Bypass throttle when the chat domain is dirty (e.g. user just sent a message
     // and navigated back) so stale data is never shown after a known change.
-    const shouldFetchList = force
+    const shouldFetchList = !requestsOnly && (force
       || !hasCachedList
       || chatDirty
-      || (refreshEvenIfCached && now - lastFetchRef.current.list > CHAT_BACKGROUND_REFRESH_THROTTLE_MS)
+      || (refreshEvenIfCached && now - lastFetchRef.current.list > CHAT_BACKGROUND_REFRESH_THROTTLE_MS))
     const shouldFetchRequests = force
       || !hasCachedRequests
       || (refreshEvenIfCached && now - lastFetchRef.current.requests > CHAT_BACKGROUND_REFRESH_THROTTLE_MS)
@@ -523,60 +537,66 @@ export function useBanterInbox() {
   }
 
   /*
-   * The next older page of rooms and of conversations, as the list's end comes near (`onEndReached`): one request each
-   * for whichever has more, together, once at a time. A refusal keeps what is drawn and offers its own retry.
+   * The next older page. Rooms land at the end of the list (Past rooms is last), so they load as the end comes near
+   * (`onEndReached`). Conversations land in the middle (People sits above Past rooms), and a page arriving there while
+   * you read below it would push everything down, so they load only when asked ("Show more people"). Either: one request
+   * at a time, appended and deduped under what is held; a refusal keeps what is drawn and offers its own retry.
    */
-  const loadMore = useCallback(async () => {
-    if (!user || moreBusyRef.current) return
-    const groupsPage = groupsNextRef.current
-    const cursor = conversationsNextRef.current
-    if (groupsPage === null && cursor === null) return
-    moreBusyRef.current = true
-    setLoadingMore(true)
-    setMoreFailed(false)
-    const epoch = moreEpoch.current
-    const settle = <T,>(call: Promise<T>) => call.then((value) => ({ value }), () => ({ value: null as T | null }))
-    try {
-      const [groups, chats] = await Promise.all([
-        groupsPage === null ? null : settle(apiClient.queuedRequest<unknown>(`/api/mobile/chat/groups?page=${groupsPage}`)),
-        cursor === null ? null : settle(apiClient.queuedRequest<NamedList<'conversations'>>(`/api/mobile/conversations?cursor=${encodeURIComponent(cursor)}`)),
-      ])
-      // The lists started over while this was on its way: it belongs to the old ones.
-      if (epoch !== moreEpoch.current) return
+  const loadMore = useCallback(
+    async (which: 'rooms' | 'people' = 'rooms') => {
+      if (!user || moreBusyRef.current) return
+      const groupsPage = which === 'rooms' ? groupsNextRef.current : null
+      const cursor = which === 'people' ? conversationsNextRef.current : null
+      if (groupsPage === null && cursor === null) return
+      moreBusyRef.current = true
+      setLoadingMore(true)
+      setMoreFailed(null)
+      const epoch = moreEpoch.current
       let failed = false
-      if (groups) {
-        const result = groups.value
-        if (result?.success && result.data) {
-          const rooms = roomsFrom(result.data)
-          const mapped = (Array.isArray(rooms) ? rooms : []).map((room: any) => groupChatFrom(room, user.id)).filter((c) => c.chat_room_id)
-          for (const room of Array.isArray(rooms) ? rooms : []) rememberRoomMute(String(room.id || room.chat_room_id || room.chatRoomId || ''), room.mute)
-          for (const c of mapped) olderGroupIds.current.add(c.chat_room_id)
-          setGroupChats((prev) => {
-            const have = new Set(prev.map((c) => c.chat_room_id))
-            return [...prev, ...mapped.filter((c) => !have.has(c.chat_room_id))]
-          })
-          groupsNextRef.current = nextGroupsPage(result.data)
-        } else failed = true
+      try {
+        if (groupsPage !== null) {
+          const result = await apiClient.queuedRequest<unknown>(`/api/mobile/chat/groups?page=${groupsPage}`).catch(() => null)
+          if (epoch !== moreEpoch.current) return
+          if (result?.success && result.data) {
+            const rooms = roomsFrom(result.data)
+            const list: unknown[] = Array.isArray(rooms) ? rooms : []
+            const mapped = list.map((room: any) => groupChatFrom(room, user.id)).filter((c) => c.chat_room_id)
+            for (const room of list as any[]) rememberRoomMute(String(room.id || room.chat_room_id || room.chatRoomId || ''), room.mute)
+            for (const c of mapped) olderGroupIds.current.add(c.chat_room_id)
+            setGroupChats((prev) => {
+              const have = new Set(prev.map((c) => c.chat_room_id))
+              return [...prev, ...mapped.filter((c) => !have.has(c.chat_room_id))]
+            })
+            groupsNextRef.current = nextGroupsPage(result.data)
+          } else failed = true
+        }
+        if (cursor !== null) {
+          const raw = await apiClient.queuedRequest<NamedList<'conversations'>>(`/api/mobile/conversations?limit=${CONVERSATIONS_PAGE}&cursor=${encodeURIComponent(cursor)}`).catch(() => null)
+          if (epoch !== moreEpoch.current) return
+          const result = raw ? namedList(raw, 'conversations') : null
+          if (result?.success && result.data) {
+            const mapped = result.data.map((conv: any) => personalChatFrom(conv, user.id)).filter((c) => !!c.conversation_id)
+            for (const c of mapped) olderPersonalIds.current.add(c.conversation_id)
+            setPersonalChats((prev) => {
+              const have = new Set(prev.map((c) => c.conversation_id))
+              return [...prev, ...mapped.filter((c) => !have.has(c.conversation_id))]
+            })
+            conversationsNextRef.current = conversationsCursor(result.data)
+          } else failed = true
+        }
+        setMoreFailed(failed ? which : null)
+        setHasMore(groupsNextRef.current !== null)
+        setHasMorePeople(conversationsNextRef.current !== null)
+        // The rows just appended settle where they are: the list's layout glide stays off for a beat (no animated page insert).
+        setAppending(true)
+        setTimeout(() => setAppending(false), APPEND_QUIET_MS)
+      } finally {
+        moreBusyRef.current = false
+        setLoadingMore(false)
       }
-      if (chats) {
-        const result = chats.value ? namedList(chats.value, 'conversations') : null
-        if (result?.success && result.data) {
-          const mapped = result.data.map((conv: any) => personalChatFrom(conv, user.id)).filter((c) => !!c.conversation_id)
-          for (const c of mapped) olderPersonalIds.current.add(c.conversation_id)
-          setPersonalChats((prev) => {
-            const have = new Set(prev.map((c) => c.conversation_id))
-            return [...prev, ...mapped.filter((c) => !have.has(c.conversation_id))]
-          })
-          conversationsNextRef.current = conversationsCursor(result.data)
-        } else failed = true
-      }
-      setMoreFailed(failed)
-      setHasMore(groupsNextRef.current !== null || conversationsNextRef.current !== null)
-    } finally {
-      moreBusyRef.current = false
-      setLoadingMore(false)
-    }
-  }, [user])
+    },
+    [user]
+  )
 
   /* Message requests are the second screenful of the Requests section: the next page by offset, appended. */
   const loadMoreRequests = useCallback(async () => {
@@ -622,7 +642,7 @@ export function useBanterInbox() {
 
   // Real-time private message updates via Socket.io
   useEffect(() => {
-    if (!user) return
+    if (!user || requestsOnly) return
 
     Logger.info('chat', 'Setting up real-time message subscription')
 
@@ -664,7 +684,7 @@ export function useBanterInbox() {
   // Real-time group chat updates — subscribe to loaded group chat rooms.
   // Uses incremental delta-subscription to avoid a teardown gap when the list changes.
   useEffect(() => {
-    if (!user) return
+    if (!user || requestsOnly) return
 
     const handleGroupMessage: ChatMessageCallback = (data) => {
       Logger.debug('chat', 'Group message received on chat tab', { chatGroupId: data.chatGroupId })
@@ -890,6 +910,8 @@ export function useBanterInbox() {
     noteOpenRoom,
     loadMore,
     hasMore,
+    hasMorePeople,
+    appending,
     loadingMore,
     moreFailed,
     requestsTotal,

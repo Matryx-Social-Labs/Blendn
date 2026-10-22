@@ -1,6 +1,6 @@
 import { router, useScrollToTop } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { FlatList, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
+import { FlatList, Platform, StyleSheet, Text, View } from 'react-native'
 import Reanimated, { Easing, FadeInUp, FadeOut, LinearTransition, useReducedMotion } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -29,7 +29,9 @@ import { LeaveRoomSheet, MuteSheet } from '../../components/chat/RoomSheets'
 import { SearchField } from '../../components/ds/SearchField'
 import { SectionHeader } from '../../components/ds/SectionHeader'
 import { Button } from '../../components/ds/Button'
-import { font, HueProvider, minTarget, useBoldText } from '../../components/ds/shared'
+import { RequestRow } from '../../components/banter/RequestRow'
+import { PageFooter } from '../../components/chat/PageFooter'
+import { font, HueProvider, useBoldText } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { SwipeRow, type SwipeAction } from '../../components/ds/SwipeRow'
 import { NotificationBell } from '../../components/pulse/NotificationBell'
@@ -39,7 +41,7 @@ import { apiClient } from '../../lib/apiClient'
 import { BOARD_ENABLED } from '../../lib/board'
 import { dmThread, outboxLine, roomThread, useOutbox, type Thread } from '../../lib/chatOutbox'
 import { crewRoomTitle, type CrewRoomRow } from '../../lib/crews'
-import { COLOR, DURATION, EASING, FONT_FAMILY, SPACE, SPRING, STAGGER } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, SPACE, SPRING, STAGGER } from '../../lib/design/tokens'
 import { matchRowPreview } from '../../lib/matchOpener'
 import { ScreenProfiler } from '../../lib/perf'
 import { printable } from '../../lib/pulseSections'
@@ -64,7 +66,11 @@ type Row = {
   swipe: SwipeAction[]
 }
 
-type Item = { type: 'heading'; key: string; title: string; markAll?: boolean } | { type: 'row'; key: string; row: Row; index: number }
+type Item =
+  | { type: 'heading'; key: string; title: string; markAll?: boolean }
+  | { type: 'row'; key: string; row: Row; index: number }
+  /** People's own "Show more people": a page of conversations lands mid-list, so it is asked for, never arriving under a reader. */
+  | { type: 'more'; key: string }
 
 /** #27: a moved row travels to its new place on M.settle, 300 ms after its preview changed. */
 /** A release slower than this (pt/ms) does not coast. */
@@ -104,7 +110,6 @@ function ChatInner() {
   const outbox = useOutbox()
   const membership = useRoomMembership()
   const [boardCount, setBoardCount] = useState(0)
-  const [requestsOpen, setRequestsOpen] = useState(false)
   const [searching, setSearching] = useState(false)
   const [query, setQuery] = useState('')
   const [muteFor, setMuteFor] = useState<string | null>(null)
@@ -282,6 +287,8 @@ function ChatInner() {
    * on lift the rows settle and the pill goes (C12, `heldList`).
    */
   const [heldOrder, setHeldOrder] = useState<string[] | null>(null)
+  // Only for the whole list: a search narrows what is loaded, and says so, not what the server has.
+  const morePeople = inbox.hasMorePeople && !trimmed
   const items = useMemo<Item[]>(() => {
     const sections: [string, Row[], boolean][] = [
       ['Crews', match(crewRows), false],
@@ -294,9 +301,10 @@ function ChatInner() {
       if (!rows.length) continue
       out.push({ type: 'heading', key: `h:${title}`, title, markAll })
       for (const row of rows) out.push({ type: 'row', key: row.key, row, index: index++ })
+      if (title === 'People' && morePeople) out.push({ type: 'more', key: 'more:people' })
     }
     return out
-  }, [crewRows, peopleRows, pastRows, match])
+  }, [crewRows, peopleRows, pastRows, match, morePeople])
   const liveOrder = useLatest(() => items.map((i) => i.key))
   // The touch's state and its timers (`holdController`): driven only by the list's event handlers.
   const [hold] = useState(() => holdController((held) => setHeldOrder(held ? liveOrder.current() : null)))
@@ -337,6 +345,13 @@ function ChatInner() {
             action={item.markAll && hasUnread ? { label: 'Mark all read', onPress: pressGuard(() => void inbox.handleMarkAllRead()) } : undefined}
             testID={`banter-${item.title.toLowerCase().replace(' ', '-')}`}
           />
+        </View>
+      )
+    }
+    if (item.type === 'more') {
+      return (
+        <View style={styles.more}>
+          <Button kind="tertiary" size="sm" label="Show more people" loading={inbox.loadingMore} onPress={pressGuard(() => void inbox.loadMore('people'))} testID="banter-people-more" />
         </View>
       )
     }
@@ -382,7 +397,7 @@ function ChatInner() {
   const pull = usePullToRefresh({ refreshing: inbox.refreshing, onRefresh: () => void inbox.onRefresh(), indicatorTop: listTop })
   const invites = crews.invites
   const requestsTotal = Math.max(inbox.requestsTotal ?? 0, incomingRequests.length)
-  const shownRequests = requestsOpen ? incomingRequests : incomingRequests.slice(0, REQUESTS_PREVIEW)
+  const shownRequests = incomingRequests.slice(0, REQUESTS_PREVIEW)
   const hasHeaderContent = liveRooms.length + blendRooms.length + incomingRequests.length + invites.length + boardCount > 0
 
   const header = (
@@ -434,7 +449,7 @@ function ChatInner() {
           <SectionHeader
             title="Requests"
             count={requestsTotal + invites.length}
-            action={requestsTotal > REQUESTS_PREVIEW ? { label: requestsOpen ? 'Show fewer' : `Show all ${requestsTotal}`, onPress: pressGuard(() => setRequestsOpen((o) => !o)) } : undefined}
+            action={requestsTotal > REQUESTS_PREVIEW ? { label: `See all ${requestsTotal}`, onPress: pressGuard(() => router.push('/message-requests')) } : undefined}
             testID="banter-requests"
           />
           {invites.map((invite) => (
@@ -453,32 +468,8 @@ function ChatInner() {
             </Reanimated.View>
           ))}
           {shownRequests.map((r: MessageRequest) => (
-            <Reanimated.View key={r.request_id} exiting={reduceMotion ? undefined : FadeOut.duration(DURATION.quick)} layout={reduceMotion ? undefined : REQUEST_REFLOW}>
-              <RequestCard
-                testID={`banter-request-${r.request_id}`}
-                face={<RequestFace photo={r.sender_avatar} pseudonym={r.sender_name ?? undefined} />}
-                name={r.sender_name || 'Someone'}
-                // The request's note, verbatim (ROUND3 C11).
-                note={r.initial_message?.trim() || 'Wants to message you'}
-                time={inboxTimeLabel(r.created_at)}
-                pending={inbox.requestPending[r.request_id]}
-                onAccept={() => void inbox.respondToRequest(r, 'accept')}
-                onDecline={() => void inbox.respondToRequest(r, 'decline')}
-                onMore={() => inbox.openRequestMore(r)}
-                onOpen={r.sender_id ? () => router.push({ pathname: '/user/[id]', params: { id: String(r.sender_id) } } as never) : undefined}
-              />
-            </Reanimated.View>
+            <RequestRow key={r.request_id} request={r} inbox={inbox} />
           ))}
-          {requestsOpen && incomingRequests.length < requestsTotal ? (
-            <Button
-              kind="tertiary"
-              size="sm"
-              label="Show more requests"
-              loading={inbox.requestsLoadingMore}
-              onPress={pressGuard(() => void inbox.loadMoreRequests())}
-              testID="banter-requests-more"
-            />
-          ) : null}
         </View>
       ) : null}
 
@@ -511,7 +502,7 @@ function ChatInner() {
         ref={listRef}
         testID="banter-list"
         // A thread that moves up when a message lands glides there after a beat; never while the list is under a finger or coasting.
-        itemLayoutAnimation={reduceMotion || scrolling ? undefined : REORDER}
+        itemLayoutAnimation={reduceMotion || scrolling || inbox.appending ? undefined : REORDER}
         data={inbox.loading && !items.length ? [] : shown}
         keyExtractor={(item) => item.key}
         renderItem={renderItem}
@@ -578,28 +569,13 @@ function ChatInner() {
         }
         // Older pages as the end comes near (SCRUM-760): rooms by page, conversations by cursor; a refusal has its own retry.
         onEndReached={() => {
-          if (!inbox.moreFailed) void inbox.loadMore()
+          if (!inbox.moreFailed && inbox.hasMore) void inbox.loadMore('rooms')
         }}
         onEndReachedThreshold={1.5}
         initialNumToRender={12}
         windowSize={9}
         ListFooterComponent={
-          inbox.loadingMore ? (
-            <Text accessibilityRole="progressbar" accessibilityLabel="Loading more chats" style={[font('meta', bold), styles.secondary, styles.footer]}>
-              Loading…
-            </Text>
-          ) : inbox.moreFailed ? (
-            <Pressable
-              testID="banter-more-failed"
-              onPress={() => void inbox.loadMore()}
-              accessibilityRole="button"
-              accessibilityLabel="Couldn’t load more chats. Try again"
-              hitSlop={(minTarget() - SPACE.xl) / 2}
-              style={styles.footer}
-            >
-              <Text style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>Couldn’t load more · Try again</Text>
-            </Pressable>
-          ) : null
+          <PageFooter loading={inbox.loadingMore} failed={!!inbox.moreFailed} onRetry={() => void inbox.loadMore(inbox.moreFailed ?? 'rooms')} what="chats" testID="banter-more-failed" />
         }
         contentContainerStyle={[styles.content, { paddingTop: listTop, paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + SPACE.xl }]}
         showsVerticalScrollIndicator={false}
@@ -639,8 +615,8 @@ const styles = StyleSheet.create({
   search: { position: 'absolute', left: SPACE.lg, right: SPACE.lg, zIndex: 2 },
   banner: { position: 'absolute', left: SPACE.gutter, right: SPACE.gutter, zIndex: 2 },
   secondary: { color: COLOR.textSecondary },
+  more: { alignItems: 'flex-start', paddingVertical: SPACE.sm },
   ink: { color: COLOR.textPrimary },
-  footer: { alignSelf: 'center', textAlign: 'center', paddingVertical: SPACE.lg },
 })
 
 /*
