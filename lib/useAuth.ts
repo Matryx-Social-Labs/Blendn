@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { AppState } from 'react-native'
 import { apiClient, AuthUser, TokenStorage } from './apiClient'
 import { forgetAuthMethod, rememberAuthMethod } from './authMethod'
+import { REQUEST_TIMEOUT_MS, settleWithin } from './fetchTimeout'
 import { Logger } from './logger'
 import { outageFrom, type Outage } from './outage'
 import { syncPurchasesUser } from './purchases'
@@ -269,8 +270,10 @@ const keepStoredSession = async () => {
 }
 
 // Clear auth state
+// The token clear is bounded (SCRUM-733): a keychain that does not answer must not keep somebody in a session they asked
+// to leave. The removal still lands when it frees; the app's own state is cleared now.
 const clearAuthState = async () => {
-  await TokenStorage.clearAll()
+  await settleWithin(TokenStorage.clearAll(), REQUEST_TIMEOUT_MS, undefined)
   void forgetAuthMethod()
   stopSessionRefresh()
   /*

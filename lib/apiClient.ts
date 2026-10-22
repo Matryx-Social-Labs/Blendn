@@ -12,7 +12,7 @@ import type { PlusStatus } from './plus'
 import { namedList, type NamedList } from './namedList'
 import * as SecureStore from 'expo-secure-store'
 import { AppState, Platform } from 'react-native'
-import { type ResponseHead, TIMEOUT_MESSAGE, fetchWithTimeout, isTimeoutError } from './fetchTimeout'
+import { type ResponseHead, REQUEST_TIMEOUT_MS, TIMEOUT_MESSAGE, fetchWithTimeout, isTimeoutError, settleWithin } from './fetchTimeout'
 import type { CityOption } from './city'
 import { Logger } from './logger'
 import { markOffline, markOnline } from './networkStatus'
@@ -226,6 +226,25 @@ function warnUnencryptedWebStorage(): void {
   Logger.warn('auth', 'Storing auth tokens in unencrypted AsyncStorage on web — expo-secure-store is unsupported on this platform')
 }
 
+/** A keychain call slower than this is logged (`keychain:slow`): the drive reads it from `log stream`. */
+export const KEYCHAIN_SLOW_MS = 2000
+/** A token refresh slower than this is logged (`refresh:slow`). */
+export const REFRESH_SLOW_MS = 5000
+
+function noteKeychain(op: 'get' | 'set', key: string, started: number): void {
+  const ms = Date.now() - started
+  if (ms > KEYCHAIN_SLOW_MS) Logger.warn('auth', 'keychain:slow', { op, key, ms })
+}
+
+/** What a bounded keychain read or refresh gives when it does not finish in time: never `null`, which reads as "signed out". */
+export const TIMED_OUT = Symbol('timed out')
+/**
+ * A token read, on the fetch's own deadline. SecureStore runs on a native queue other modules share (SCRUM-754, SCRUM-733),
+ * and a read stuck behind them held a request (and its queue slot) for good. Timed out is not `null`: a caller that treated it
+ * as "no token" would clear the session and sign the person out over a slow keychain.
+ */
+const withinDeadline = <T,>(work: Promise<T>): Promise<T | typeof TIMED_OUT> => settleWithin<T | typeof TIMED_OUT>(work, REQUEST_TIMEOUT_MS, TIMED_OUT)
+
 // Token Storage
 class TokenStorage {
   private static async secureGet(key: string): Promise<string | null> {
@@ -237,6 +256,7 @@ class TokenStorage {
         return null
       }
     }
+    const started = Date.now()
     try {
       return await SecureStore.getItemAsync(key, SECURE_OPTIONS)
     } catch (error) {
@@ -248,6 +268,8 @@ class TokenStorage {
       } catch {
         return null
       }
+    } finally {
+      noteKeychain('get', key, started)
     }
   }
 
@@ -257,6 +279,7 @@ class TokenStorage {
       await AsyncStorage.setItem(key, value)
       return
     }
+    const started = Date.now()
     try {
       await SecureStore.setItemAsync(key, value, SECURE_OPTIONS)
       // Clear from AsyncStorage if it was there
@@ -266,6 +289,8 @@ class TokenStorage {
     } catch (error) {
       Logger.warn('auth', 'SecureStore write failed, falling back to AsyncStorage', { key, error })
       await AsyncStorage.setItem(key, value)
+    } finally {
+      noteKeychain('set', key, started)
     }
   }
 
@@ -1072,6 +1097,8 @@ export type RefreshOutcome = 'ok' | 'rejected' | 'failed'
 const GENERIC_FAILURE_MESSAGE = 'Something went wrong. Try again.'
 
 export const REFRESH_RETRY_DELAYS_MS = [2000, 5000, 10000] as const
+/** The whole refresh: the keychain read and the fetch, each on the fetch deadline. */
+export const REFRESH_DEADLINE_MS = 2 * REQUEST_TIMEOUT_MS
 let refreshRetryAttempt = 0
 let refreshRetryTimer: ReturnType<typeof setTimeout> | null = null
 /** The server's sentence from the last rejected refresh, if it gave one. */
@@ -1358,7 +1385,9 @@ class ApiClientClass {
     }
 
     if (requireAuth) {
-      const accessToken = await TokenStorage.getAccessToken()
+      const accessToken = await withinDeadline(TokenStorage.getAccessToken())
+      // The keychain did not answer: a transport-shaped failure, tried again on the next call. Never sent unauthenticated.
+      if (accessToken === TIMED_OUT) return { success: false, error: TIMEOUT_MESSAGE }
       if (accessToken) {
         headers['Authorization'] = `Bearer ${accessToken}`
       }
@@ -1390,7 +1419,8 @@ class ApiClientClass {
         if (response.status === 401 && requireAuth) {
           const refreshed = await this.refreshTokens()
           if (refreshed === 'ok') {
-            const newAccessToken = await TokenStorage.getAccessToken()
+            const newAccessToken = await withinDeadline(TokenStorage.getAccessToken())
+            if (newAccessToken === TIMED_OUT) return { success: false, error: TIMEOUT_MESSAGE }
             if (newAccessToken) {
               headers['Authorization'] = `Bearer ${newAccessToken}`
             }
@@ -1467,9 +1497,12 @@ class ApiClientClass {
     }
 
     // Store promise BEFORE any await so concurrent callers see it immediately.
-    const p: Promise<RefreshOutcome> = (async () => {
+    const started = Date.now()
+    const work: Promise<RefreshOutcome> = (async () => {
       try {
-        const refreshToken = await TokenStorage.getRefreshToken()
+        const refreshToken = await withinDeadline(TokenStorage.getRefreshToken())
+        // A keychain that did not answer is not a missing token: 'failed', tried again, never the sign-out a 'rejected' is.
+        if (refreshToken === TIMED_OUT) return 'failed'
         if (!refreshToken) {
           return 'rejected'
         }
@@ -1526,12 +1559,22 @@ class ApiClientClass {
         return 'failed'
       }
     })()
+    /*
+     * Bounded as a whole: the token read, the fetch and the write each on its deadline, and the lot within REFRESH_DEADLINE_MS.
+     * A refresh that hung kept `refreshPromise` set, and every later 401 joined the dead promise for good. Timed out it is
+     * 'failed' and the promise is released (below); the work, if it ever lands, still stores what the server sent.
+     */
+    const p: Promise<RefreshOutcome> = settleWithin(work, REFRESH_DEADLINE_MS, 'failed')
 
     refreshPromise = p
 
     // Reset flags after all awaiting callers have received the result (next microtask).
     p.finally(() => {
       refreshPromise = null
+    })
+    p.then((outcome) => {
+      const ms = Date.now() - started
+      if (ms > REFRESH_SLOW_MS) Logger.warn('api', 'refresh:slow', { ms, outcome })
     })
 
     p.then((outcome) => {
@@ -1767,18 +1810,27 @@ class ApiClientClass {
     return result
   }
 
+  /**
+   * Sign out: always finishes, and always clears this phone (SCRUM-733: a restored session spun for minutes on a keychain
+   * read before the POST, and the sheet could not be left). The refresh-token read is bounded; when the keychain does not
+   * answer, the server is not asked (without the token, the POST would end every session, not this one) and the result says
+   * the server did not confirm. The clear is bounded too: a keychain that is stuck clears when it frees, the app moves on.
+   */
   async signOut(revokeAll: boolean = false): Promise<ApiResponse<void>> {
-    const refreshToken = await TokenStorage.getRefreshToken()
-    const result = await this.request<void>('/api/mobile/auth/signout', {
-      method: 'POST',
-      body: JSON.stringify({
-        refreshToken: revokeAll ? undefined : refreshToken,
-        pushToken: getPushTokenRef() ?? undefined,
-      }),
-    })
+    const refreshToken = await withinDeadline(TokenStorage.getRefreshToken())
+    const result: ApiResponse<void> =
+      refreshToken === TIMED_OUT && !revokeAll
+        ? { success: false, error: TIMEOUT_MESSAGE }
+        : await this.request<void>('/api/mobile/auth/signout', {
+            method: 'POST',
+            body: JSON.stringify({
+              refreshToken: revokeAll || refreshToken === TIMED_OUT ? undefined : refreshToken,
+              pushToken: getPushTokenRef() ?? undefined,
+            }),
+          })
 
     setPushTokenRef(null)
-    await TokenStorage.clearAll()
+    await withinDeadline(TokenStorage.clearAll())
     requestQueue.clear()
     /*
      * Drop the cached responses too.
