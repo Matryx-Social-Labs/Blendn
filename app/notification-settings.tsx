@@ -98,7 +98,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent' },
   content: { paddingHorizontal: SPACE.gutter, gap: SPACE.xl },
   dim: { opacity: OPACITY.disabled },
-  foot: { color: COLOR.textTertiary, paddingHorizontal: SPACE.md },
+  // On the section labels' inset (SettingsGroup's 16), not a third edge of its own (r7 L9).
+  foot: { color: COLOR.textTertiary, paddingHorizontal: SPACE.lg },
 })
 
 /** Violet world: one hue on this screen (`HueProvider`), as Settings. */

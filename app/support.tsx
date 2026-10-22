@@ -42,7 +42,7 @@ export default function SupportScreen() {
   const details: { icon: IconName; name: string; value: string }[] = [
     { icon: 'smartphone', name: 'App', value: appVersionLabel() },
     { icon: Platform.OS === 'ios' ? 'apple' : 'smartphone-nfc', name: os.name, value: os.version },
-    ...(user?.id ? [{ icon: 'user' as const, name: 'Account', value: shortAccountId(user.id) }] : []),
+    ...(user?.id ? [{ icon: 'user' as const, name: 'Account ID', value: shortAccountId(user.id) }] : []),
   ]
 
   return (

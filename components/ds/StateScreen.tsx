@@ -108,7 +108,7 @@ export function StateScreen({ icon, title, body, bodyLink, lead, note, noteMono 
         <GlyphWell icon={icon} size={variant} testID={testID && `${testID}-well`} />
       )}
       {/* Inline, the state sits in a list or under a section heading, so its title is a step below both (r7 M5: 24 pt bold read louder than the page). */}
-      <Text accessibilityRole="header" textBreakStrategy="balanced" style={[font(screen ? 'title' : 'bodyStrong', bold), styles.title]}>
+      <Text accessibilityRole="header" textBreakStrategy="balanced" lineBreakStrategyIOS="standard" style={[font(screen ? 'title' : 'bodyStrong', bold), styles.title]}>
         {title}
       </Text>
       {body ? (

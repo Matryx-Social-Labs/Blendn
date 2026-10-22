@@ -251,7 +251,7 @@ export function OptionRows({ rows }: { rows: OptionRow[] }) {
 function ErrorLine({ text }: { text: string }) {
   const bold = useBoldText()
   return (
-    <Text accessibilityLiveRegion="polite" style={[font('meta', bold), styles.error]}>
+    <Text accessibilityLiveRegion="polite" textBreakStrategy="balanced" lineBreakStrategyIOS="standard" style={[font('meta', bold), styles.error]}>
       {text}
     </Text>
   )
