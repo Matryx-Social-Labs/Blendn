@@ -3,7 +3,9 @@ import { router } from 'expo-router'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { AppState, FlatList, Linking, Platform, RefreshControl, StyleSheet, View } from 'react-native'
 
+import { Button } from '../components/ds/Button'
 import { EventCard } from '../components/ds/EventCard'
+import { Spinner } from '../components/ds/Loader'
 import { Orbs } from '../components/ds/Orbs'
 import { StateScreen } from '../components/ds/StateScreen'
 import { TopBar } from '../components/ds/TopBar'
@@ -17,6 +19,7 @@ import { readStoredCity } from '../lib/cityStorage'
 import { COLOR, RADIUS, SPACE, STAGGER } from '../lib/design/tokens'
 import { getDistanceKm } from '../lib/geo'
 import { LOCATION_FIX_TIMEOUT_MS } from '../lib/locationFix'
+import { mergeEventPage, pageHasMore } from '../lib/pulseFeed'
 import { getOptimizedImageUrl } from '../lib/photoUtils'
 import { homeCardProps } from '../lib/pulse'
 import { useMinimumVisible } from '../lib/useMinimumVisible'
@@ -32,6 +35,8 @@ const STAGGER_ROWS = 6
 /** The frame's 72 pt row rhythm. */
 const ROW_HEIGHT = 72
 const SKELETON_ROWS = 6
+/** A page of the list: the server's nearest first, asked for again as the reader reaches the end (a city can hold hundreds). */
+const PAGE_SIZE = 50
 const MINUTE_MS = 60_000
 
 type Row = BlendnEvent & { _distance: number }
@@ -81,6 +86,14 @@ export default function NearbyEventsScreen() {
   // Permission granted, but no fix: GPS off, indoors, timed out. Not "no events".
   const [locationFailed, setLocationFailed] = useState(false)
   const [loadFailed, setLoadFailed] = useState(false)
+  /** The last page held (0-based, `fetchEventsApi`'s own), whether the server may have more, and what the next read is doing. */
+  const [page, setPage] = useState(0)
+  const [hasMore, setHasMore] = useState(false)
+  const [more, setMore] = useState<'idle' | 'busy' | 'failed'>('idle')
+  /** The city the first page was read in: later pages are the same question. */
+  const cityRef = useRef<string | undefined>(undefined)
+  /** The fix, kept where `loadEvents` can read it without depending on it: a fix arriving is not a reason to read the list again. */
+  const locationRef = useRef<{ latitude: number; longitude: number } | null>(null)
   const mountedRef = useRef(true)
   // The same floor as the home screen, so a fast load doesn't flash the placeholders.
   const showSkeleton = useMinimumVisible(loading, 720)
@@ -113,6 +126,7 @@ export default function NearbyEventsScreen() {
             const position = await withDeadline(Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }), LOCATION_FIX_TIMEOUT_MS)
             const coords = { latitude: position.coords.latitude, longitude: position.coords.longitude }
             setUserLocation(coords)
+            locationRef.current = coords
             setLocationFailed(false)
             return coords
           } catch {
@@ -129,7 +143,7 @@ export default function NearbyEventsScreen() {
 
   const loadEvents = useCallback(
     (force = false) =>
-      Promise.resolve(userLocation || getLocation())
+      Promise.resolve(locationRef.current || getLocation())
         .then(async (coords) => {
           if (!coords) {
             setEvents([])
@@ -149,29 +163,17 @@ export default function NearbyEventsScreen() {
            * "View all" cannot silently show a different city than the one you were
            * just looking at.
            */
-          const result = await fetchEventsApi(
-            {
-              city: (await readStoredCity())?.city,
-              lat: coords.latitude,
-              lon: coords.longitude,
-              limit: 50,
-              sortBy: 'distance',
-              sortOrder: 'asc',
-              status: 'published',
-            },
-            { force }
-          )
+          cityRef.current = (await readStoredCity())?.city
+          const result = await fetchEventsApi(nearbyQuery(cityRef.current, coords, 0), { force })
 
           if (!mountedRef.current) return
 
           if (result.data) {
             // Filter to events that have coordinates, then sort by distance
-            const withDistance: Row[] = result.data
-              .filter((e): e is BlendnEvent & { latitude: number; longitude: number } => Number.isFinite(e.latitude) && Number.isFinite(e.longitude))
-              .map((e) => ({ ...e, _distance: getDistanceKm(coords.latitude, coords.longitude, e.latitude, e.longitude) }))
-              .sort((a, b) => a._distance - b._distance)
-
-            setEvents(withDistance)
+            setEvents(nearbyRows(result.data, coords))
+            setPage(0)
+            setHasMore(pageHasMore(result.data.length, PAGE_SIZE))
+            setMore('idle')
             setLoadFailed(false)
           } else {
             setLoadFailed(true)
@@ -184,7 +186,7 @@ export default function NearbyEventsScreen() {
         .finally(() => {
           if (mountedRef.current) setLoading(false)
         }),
-    [userLocation, getLocation]
+    [getLocation]
   )
 
   useEffect(() => {
@@ -213,6 +215,28 @@ export default function NearbyEventsScreen() {
     })
     return () => sub.remove()
   }, [locationDenied, loadEvents])
+
+  /*
+   * The next page, when the reader reaches the end: the same city and fix as the first, one read at a time, appended after what is
+   * held (never re-sorted above the reader) and never twice. A refused page leaves its row saying so, and it is asked again by
+   * that row alone, so a refusal cannot become a loop.
+   */
+  const loadMore = useCallback(async () => {
+    if (!hasMore || more !== 'idle' || !userLocation) return
+    setMore('busy')
+    try {
+      const result = await fetchEventsApi(nearbyQuery(cityRef.current, userLocation, page + 1))
+      if (!mountedRef.current) return
+      if (!result.data) return setMore('failed')
+      const rows = nearbyRows(result.data, userLocation)
+      setEvents((prev) => mergeEventPage(prev, rows))
+      setPage((p) => p + 1)
+      setHasMore(pageHasMore(result.data.length, PAGE_SIZE))
+      setMore('idle')
+    } catch {
+      if (mountedRef.current) setMore('failed')
+    }
+  }, [hasMore, more, page, userLocation])
 
   const retryLocation = useCallback(() => {
     setLoading(true)
@@ -351,12 +375,27 @@ export default function NearbyEventsScreen() {
         <FadeInUp style={styles.state}>{state}</FadeInUp>
       ) : (
         <FlatList
+          testID="nearby-list"
           data={events}
           renderItem={renderItem}
           keyExtractor={keyExtractor}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLOR.textSecondary} />}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
+          // Hundreds of events are rows drawn a screen at a time, and the next page is asked for at the end.
+          initialNumToRender={10}
+          windowSize={9}
+          onEndReachedThreshold={1.5}
+          onEndReached={() => void loadMore()}
+          ListFooterComponent={
+            more === 'busy' ? (
+              <View style={styles.foot}><Spinner /></View>
+            ) : more === 'failed' ? (
+              <View style={styles.foot}>
+                <Button kind="tertiary" size="md" label="Couldn’t load more. Try again" onPress={() => { setMore('idle'); void loadMore() }} testID="nearby-more-failed" />
+              </View>
+            ) : null
+          }
           {...bar.scrollProps}
         />
       )}
@@ -364,7 +403,27 @@ export default function NearbyEventsScreen() {
   )
 }
 
+/** The query for one page of Nearby: the city's events, nearest first, from this fix. */
+const nearbyQuery = (city: string | undefined, coords: { latitude: number; longitude: number }, page: number) => ({
+  page,
+  city,
+  lat: coords.latitude,
+  lon: coords.longitude,
+  limit: PAGE_SIZE,
+  sortBy: 'distance' as const,
+  sortOrder: 'asc' as const,
+  status: 'published' as const,
+})
+
+/** A page's events that have a place, each with its distance from the fix, nearest first within the page. */
+const nearbyRows = (events: BlendnEvent[], coords: { latitude: number; longitude: number }): Row[] =>
+  events
+    .filter((e): e is BlendnEvent & { latitude: number; longitude: number } => Number.isFinite(e.latitude) && Number.isFinite(e.longitude))
+    .map((e) => ({ ...e, _distance: getDistanceKm(coords.latitude, coords.longitude, e.latitude, e.longitude) }))
+    .sort((a, b) => a._distance - b._distance)
+
 const styles = StyleSheet.create({
+  foot: { alignItems: 'center', paddingVertical: SPACE.lg },
   screen: { flex: 1, backgroundColor: COLOR.ink },
   banner: { paddingHorizontal: SPACE.gutter },
   state: { flex: 1, paddingHorizontal: SPACE.gutter, paddingTop: SPACE.xxxl * 2 },
