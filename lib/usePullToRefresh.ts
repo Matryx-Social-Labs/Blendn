@@ -34,6 +34,9 @@ export const pullProgress = (offsetY: number) => Math.min(1, Math.max(0, -offset
  * `onScroll` here and is called first with every event; spreading `listProps` and then setting `onScroll` replaces the pull.
  * A list under a floating bar passes `indicatorTop` (the bar's bottom edge, where the monogram sits); the Android control
  * is offset by the same amount.
+ *
+ * A worklet `onScroll` (`useAnimatedScrollHandler`) cannot be chained: spread `listProps`, set your handler after it, and
+ * from the worklet `scheduleOnRN(pull.onOffset, y)` while `y < 0 || pull.progress.get() > 0` (Me does).
  */
 export function usePullToRefresh({
   refreshing,
@@ -52,10 +55,10 @@ export function usePullToRefresh({
   const armed = useRef(false)
   const native = Platform.OS !== 'ios'
 
-  const onPullScroll = useCallback(
-    (e: ScrollEvent) => {
+  const onOffset = useCallback(
+    (offsetY: number) => {
       if (native) return
-      const p = pullProgress(e.nativeEvent.contentOffset.y)
+      const p = pullProgress(offsetY)
       progress.set(refreshing ? 1 : p)
       if (p >= 1 && !armed.current) {
         armed.current = true
@@ -65,6 +68,7 @@ export function usePullToRefresh({
     },
     [native, progress, refreshing]
   )
+  const onPullScroll = useCallback((e: ScrollEvent) => onOffset(e.nativeEvent.contentOffset.y), [onOffset])
   const onScrollEndDrag = useCallback(
     (e: ScrollEvent) => {
       if (native || refreshing) return
@@ -108,6 +112,11 @@ export function usePullToRefresh({
     /** Hold the list down while it loads (iOS `contentInset`). */
     holdInset,
     scrollProps: { onScroll, onScrollEndDrag },
+    /**
+     * The pull from a bare offset, for a list whose `onScroll` is a worklet (`useAnimatedScrollHandler`): hand it over with
+     * `scheduleOnRN` while the list is above its top or `progress` is still up, and set your handler after `listProps`.
+     */
+    onOffset,
     /** Spread onto the list: everything it needs, on either platform. */
     listProps,
     /** The monogram that traces as you pull (iOS); null on Android, where the platform control draws itself. */

@@ -2,9 +2,10 @@ import { barCircleBottom } from '../../lib/barGeometry'
 import { ScreenProfiler } from '../../lib/perf'
 import { router, useFocusEffect, useIsFocused, useScrollToTop } from 'expo-router'
 import React, { useCallback, useMemo, useState } from 'react'
-import { Platform, RefreshControl, StyleSheet, Text, View } from 'react-native'
+import { Platform, StyleSheet, Text, View } from 'react-native'
 import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { scheduleOnRN } from 'react-native-worklets'
 import { Button } from '../../components/ds/Button'
 import { Grain } from '../../components/ds/Grain'
 import { Orbs } from '../../components/ds/Orbs'
@@ -31,6 +32,7 @@ import { interestNames, profileGaps, type NightsStatus } from '../../lib/meProfi
 import { queryCache } from '../../lib/queryCache'
 import { pastEventRows, type PastEventRow } from '../../lib/savedEvents'
 import { useAuth } from '../../lib/useAuth'
+import { usePullToRefresh } from '../../lib/usePullToRefresh'
 import { TAB_BAR_CLEARANCE } from './_layout'
 
 /**
@@ -106,9 +108,6 @@ function ProfileInner() {
 
   // The page's scroll offset, written on the UI thread: the bar's glass and small title (DS #30) read it, React never renders for it.
   const scrollY = useSharedValue(0)
-  const onScroll = useAnimatedScrollHandler((e) => {
-    scrollY.set(e.contentOffset.y)
-  })
 
   const photoList = useMemo(() => {
     const raw = profile?.photos || []
@@ -299,6 +298,14 @@ function ProfileInner() {
 
   // The bar's circles start just under the inset and end `circle` below it; the page begins 18 pt under them (Flow 6 `me`: circles at 62, the column at 124).
   const barBottom = barCircleBottom(insets.top, Platform.OS === 'android')
+  // The branded pull (motion #18), its monogram under the floating bar; Android keeps the platform's control, offset the same.
+  const pull = usePullToRefresh({ refreshing, onRefresh: () => void onRefresh(), indicatorTop: barBottom })
+  const { native: nativePull, progress: pullShown, onOffset: pullAt } = pull
+  const onScroll = useAnimatedScrollHandler((e) => {
+    scrollY.set(e.contentOffset.y)
+    // Only above the top, or while the monogram is still up: the rest of the scroll never crosses to JS.
+    if (!nativePull && (e.contentOffset.y < 0 || pullShown.get() > 0)) scheduleOnRN(pullAt, e.contentOffset.y)
+  })
   const chrome = (
     <ProfileBar
       testID="me-bar"
@@ -452,14 +459,12 @@ function ProfileInner() {
       <Animated.ScrollView
         ref={scrollRef}
         testID="me-scroll"
+        {...pull.listProps}
+        // After the spread: the page's own worklet handler, which hands the pull its offset (`onOffset`).
         onScroll={onScroll}
-        scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
         // The tab bar floats over the page's foot: the last section sat under it.
         contentContainerStyle={[styles.content, { paddingTop: barBottom + SPACE.lg + SPACE.xxs, paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + SPACE.xl }]}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLOR.textSecondary} progressViewOffset={barBottom} />
-        }
       >
         {waiting ? (
           <MeSkeleton />
@@ -475,6 +480,7 @@ function ProfileInner() {
           content()
         )}
       </Animated.ScrollView>
+      {pull.indicator}
       <PhotoViewer
         photos={photoList}
         initialIndex={viewer?.index ?? 0}

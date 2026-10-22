@@ -105,3 +105,33 @@ describe('the wrapper API: listProps + indicator', () => {
     expect(result.current.listProps.contentInset).toEqual({ top: 0 })
   })
 })
+
+describe('a worklet scroll handler hands the offset over (Me: useAnimatedScrollHandler)', () => {
+  it('onOffset(y) traces and arms exactly as onScroll does', async () => {
+    on('ios')
+    const threshold = jest.spyOn(H, 'threshold').mockImplementation(() => {})
+    const { result } = await renderHook(() => usePullToRefresh({ refreshing: false, onRefresh: jest.fn() }))
+    await act(async () => result.current.onOffset(-PULL_ARM / 2))
+    expect(result.current.progress.get()).toBe(0.5)
+    await act(async () => result.current.onOffset(-PULL_ARM))
+    expect(threshold).toHaveBeenCalledTimes(1)
+    await act(async () => result.current.onOffset(0))
+    expect(result.current.progress.get()).toBe(0)
+    threshold.mockRestore()
+  })
+})
+
+describe('the screens on the branded pull', () => {
+  const src = (rel: string) => require('fs').readFileSync(require('path').join(__dirname, '..', rel), 'utf8') as string
+  it.each(['components/home/PlacesList.tsx', 'app/(tabs)/going.tsx', 'app/(tabs)/profile.tsx', 'app/friends/index.tsx'])(
+    '%s pulls through usePullToRefresh, mounts its indicator, and has no stock RefreshControl or refreshing prop',
+    (rel) => {
+      const code = src(rel)
+      expect(code).toMatch(/usePullToRefresh\(/)
+      expect(code).toMatch(/\{\.\.\.pull\.listProps\}/)
+      expect(code).toMatch(/\{pull\.indicator\}/)
+      expect(code).not.toMatch(/RefreshControl/)
+      expect(code).not.toMatch(/^\s+refreshing=\{/m)
+    }
+  )
+})

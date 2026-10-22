@@ -45,6 +45,7 @@ import { addToCalendar } from '../../lib/calendar'
 import { openPaywall } from '../../lib/paywall'
 import { shareEvent } from '../../lib/shareRow'
 import { isNightRated, markNightRated, useRatedNights } from '../../lib/ratedNights'
+import { usePullToRefresh } from '../../lib/usePullToRefresh'
 import { TAB_BAR_CLEARANCE } from './_layout'
 
 /**
@@ -231,6 +232,9 @@ function GoingScreenInner() {
     await loadInterestedEvents()
     setRefreshing(false)
   }, [loadInterestedEvents])
+  // The branded pull (motion #18); Android keeps the platform's control.
+  const pullRefresh = useCallback(() => void onRefresh(), [onRefresh])
+  const pull = usePullToRefresh({ refreshing, onRefresh: pullRefresh })
 
   /** Back into the list where it was, rather than at the end. */
   const restoreRow = useCallback((event: EventRow, index: number) => {
@@ -584,12 +588,12 @@ function GoingScreenInner() {
             itemLayoutAnimation={reduceMotion ? undefined : ROW_REFLOW}
             renderItem={renderItem}
             keyExtractor={keyExtractor}
-            refreshing={refreshing}
-            onRefresh={onRefresh}
             // The container already insets the home indicator; this clears the
             // absolutely positioned tab bar on top of that.
             contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE + SPACE.xl }}
+            {...pull.listProps}
           />
+          {pull.indicator}
         </FadeInUp>
       )}
       {toast ? (

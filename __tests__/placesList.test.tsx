@@ -8,6 +8,7 @@
  */
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native'
 import React from 'react'
+import { Platform } from 'react-native'
 
 import type { VenueListItem } from '../lib/apiClient'
 
@@ -29,6 +30,7 @@ import type { HomeBrowse } from '../components/home/HomeShell'
 import { apiClient } from '../lib/apiClient'
 import { offersApi } from '../lib/offers'
 import { H } from '../lib/haptics'
+import { PULL_ARM } from '../lib/usePullToRefresh'
 import { markOffline, markOnline } from '../lib/networkStatus'
 /* eslint-enable import/first */
 
@@ -602,7 +604,34 @@ describe('loading, failing, empty', () => {
 })
 
 describe('pull to refresh', () => {
-  it('re-reads the list and Near you, and plays no haptic on iOS (UIRefreshControl ticks by itself)', async () => {
+  /*
+   * WP7's branded pull (motion #18): on iOS the list's own bounce is the pull, no UIRefreshControl, so the arm tick is the
+   * app's H.threshold, once, and the refresh starts on release past the point. Android keeps the platform control.
+   */
+  const at = (y: number) => ({ nativeEvent: { contentOffset: { x: 0, y }, contentSize: { width: 0, height: 0 }, layoutMeasurement: { width: 0, height: 0 } } })
+  const setOS = (os: 'ios' | 'android') => Object.defineProperty(Platform, 'OS', { value: os, configurable: true })
+  afterEach(() => setOS('ios'))
+
+  it('iOS: arms once with H.threshold, and a release past the point re-reads the list and Near you', async () => {
+    setOS('ios')
+    serve([venue('a', { liveNow: '5-9' })], [venue('n1')])
+    await mount()
+    getVenues.mockClear()
+    const list = screen.getByTestId('places-list')
+    expect(list.props.refreshControl).toBeUndefined()
+    await act(async () => {
+      fireEvent.scroll(list, at(-PULL_ARM - 6))
+    })
+    expect(H.threshold).toHaveBeenCalledTimes(1)
+    await act(async () => {
+      fireEvent(list, 'scrollEndDrag', at(-PULL_ARM - 6))
+    })
+    expect(listCalls()).toHaveLength(1)
+    expect(getVenues.mock.calls.filter(([q]) => q.limit === 5)).toHaveLength(1)
+  })
+
+  it('Android: the platform control re-reads the list and Near you, with no haptic of ours', async () => {
+    setOS('android')
     serve([venue('a', { liveNow: '5-9' })], [venue('n1')])
     await mount()
     getVenues.mockClear()

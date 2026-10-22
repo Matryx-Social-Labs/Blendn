@@ -1,6 +1,6 @@
 import { router, useFocusEffect } from 'expo-router'
 import { useCallback, useState } from 'react'
-import { FlatList, RefreshControl, StyleSheet, View } from 'react-native'
+import { FlatList, StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { StateScreen } from '../../components/ds/StateScreen'
@@ -13,6 +13,7 @@ import { apiClient } from '../../lib/apiClient'
 import { friendsSinceParts, type Friend } from '../../lib/friends'
 import { COLOR, SPACE } from '../../lib/design/tokens'
 import { useFriendRequests } from '../../lib/useFriendRequests'
+import { usePullToRefresh } from '../../lib/usePullToRefresh'
 import { useTopBarState } from '../../lib/useTopBarState'
 import { HueProvider } from '../../components/ds/shared'
 
@@ -54,6 +55,8 @@ function FriendsScreenContent() {
     await Promise.all([load(), requests.load()])
     setRefreshing(false)
   }
+  // The branded pull (motion #18); the bar's own scroll handler rides inside it.
+  const pull = usePullToRefresh({ refreshing, onRefresh: () => void onRefresh(), onScroll: bar.scrollProps.onScroll })
 
   const openAdd = () => router.push('/friends/add')
 
@@ -96,28 +99,29 @@ function FriendsScreenContent() {
       {friends === null && !failed ? (
         <PersonRowSkeleton />
       ) : (
-        <FlatList
-          data={friends ?? []}
-          keyExtractor={(f) => f.userId}
-          renderItem={({ item }) => {
-            const since = friendsSinceParts(item.since)
-            return (
-              <PersonRow
-                person={item}
-                detail={since.words}
-                detailMono={since.date ?? undefined}
-                onPress={() => router.push({ pathname: '/friends/[userId]', params: { userId: item.userId } })}
-                chevron
-              />
-            )
-          }}
-          contentContainerStyle={[friends?.length ? styles.list : styles.emptyList, { paddingBottom: insets.bottom + SPACE.xl }]}
-          ListEmptyComponent={empty}
-          // `textSecondary`, the one pull-to-refresh colour (docs/DESIGN_SYSTEM.md).
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLOR.textSecondary} />}
-          showsVerticalScrollIndicator={false}
-          {...bar.scrollProps}
-        />
+        <View style={styles.flex}>
+          <FlatList
+            data={friends ?? []}
+            keyExtractor={(f) => f.userId}
+            renderItem={({ item }) => {
+              const since = friendsSinceParts(item.since)
+              return (
+                <PersonRow
+                  person={item}
+                  detail={since.words}
+                  detailMono={since.date ?? undefined}
+                  onPress={() => router.push({ pathname: '/friends/[userId]', params: { userId: item.userId } })}
+                  chevron
+                />
+              )
+            }}
+            contentContainerStyle={[friends?.length ? styles.list : styles.emptyList, { paddingBottom: insets.bottom + SPACE.xl }]}
+            ListEmptyComponent={empty}
+            showsVerticalScrollIndicator={false}
+            {...pull.listProps}
+          />
+          {pull.indicator}
+        </View>
       )}
     </View>
   )
@@ -125,6 +129,7 @@ function FriendsScreenContent() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLOR.ink },
+  flex: { flex: 1 },
   list: { paddingHorizontal: SPACE.gutter, paddingVertical: SPACE.sm },
   emptyList: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: SPACE.gutter },
   requests: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.xs, paddingBottom: SPACE.sm },

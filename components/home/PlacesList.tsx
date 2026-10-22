@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from 'react'
-import { RefreshControl, StyleSheet, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native'
+import { StyleSheet, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native'
 import Animated, { LinearTransition, useReducedMotion } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -16,7 +16,7 @@ import { QuietFold, QuietRow, RefreshFailed } from '../places/PlaceParts'
 import { PlacesSkeleton } from '../places/PlacesSkeleton'
 import { SectionHeader } from '../ds/SectionHeader'
 import { apiClient, type VenueListItem } from '../../lib/apiClient'
-import { COLOR, SPACE, SPRING } from '../../lib/design/tokens'
+import { SPACE, SPRING } from '../../lib/design/tokens'
 import { roundCoordinate } from '../../lib/coordinates'
 import { Logger } from '../../lib/logger'
 import { getNetworkState, subscribeNetworkState } from '../../lib/networkStatus'
@@ -41,6 +41,7 @@ import {
 } from '../../lib/placesPane'
 import { clockTime } from '../../lib/roomMoments'
 import { useNow } from '../../lib/useNow'
+import { usePullToRefresh } from '../../lib/usePullToRefresh'
 import type { HomeBrowse } from './HomeShell'
 
 const PAGE = 30
@@ -235,6 +236,9 @@ export function PlacesList({
   // The list has scrolled past its title: the sticky search takes its bar.
   const [barOn, setBarOn] = useState(false)
   const onScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => setBarOn(e.nativeEvent.contentOffset.y > STICKY_BAR_AFTER), [])
+  // The branded pull (motion #18): the monogram traces as you pull and H.threshold plays once when it arms; Android keeps the platform's.
+  const pullRefresh = useCallback(() => void refresh(), [refresh])
+  const pull = usePullToRefresh({ refreshing, onRefresh: pullRefresh, onScroll })
 
   const countFor = useCallback(
     async (draft: PlaceFilters) => {
@@ -371,27 +375,19 @@ export function PlacesList({
         renderItem={renderItem}
         itemLayoutAnimation={reduceMotion ? undefined : UNFOLD}
         stickyHeaderIndices={PLACES_STICKY}
-        onScroll={onScroll}
-        scrollEventThrottle={16}
         ListFooterComponent={state.loadingMore ? <View style={styles.more}><Spinner /></View> : null}
         testID="places-list"
         onEndReachedThreshold={0.5}
         onEndReached={() => void loadMore()}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            // A refresh is silent everywhere: RefreshControl reports only the start, and H.threshold is "armed" (audit U-L9).
-            onRefresh={() => void refresh()}
-            tintColor={COLOR.textSecondary}
-          />
-        }
         contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + SPACE.xl }]}
         initialNumToRender={10}
         windowSize={7}
         showsVerticalScrollIndicator={false}
         // A tap on a row, a plate or a chip lands first time with the keyboard up from the search.
         keyboardShouldPersistTaps="handled"
+        {...pull.listProps}
       />
+      {pull.indicator}
       <PlacesFilterSheet
         visible={filtersOpen}
         onClose={() => setFiltersOpen(false)}
