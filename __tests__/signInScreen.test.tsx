@@ -4,7 +4,7 @@
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { Keyboard } from 'react-native'
+import { KeyboardEvents } from 'react-native-keyboard-controller'
 
 import { H } from '../lib/haptics'
 
@@ -231,7 +231,7 @@ describe('forgot and the keyboard', () => {
 
   it('with the keyboard up the dock is the primary alone, on glass', async () => {
     const listeners: Record<string, () => void> = {}
-    jest.spyOn(Keyboard, 'addListener').mockImplementation(((event: string, cb: () => void) => {
+    ;(KeyboardEvents.addListener as jest.Mock).mockImplementation(((event: string, cb: () => void) => {
       listeners[event] = cb
       return { remove: jest.fn() }
     }) as never)

@@ -6,7 +6,8 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import { Keyboard, StyleSheet } from 'react-native'
+import { ScrollView, StyleSheet } from 'react-native'
+import { KeyboardEvents } from 'react-native-keyboard-controller'
 
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 34, left: 0, right: 0 }),
@@ -15,13 +16,13 @@ jest.mock('react-native-safe-area-context', () => ({
 /* eslint-disable import/first */
 import { TextField } from '../components/ds/TextField'
 import { OnboardingScreen } from '../components/onboarding/OnboardingScreen'
-import { HINT_ROOM } from '../components/onboarding/KeyboardPage'
+import { bottomOffsetFor, HINT_ROOM, MIN_FIELD } from '../components/onboarding/KeyboardPage'
 /* eslint-enable import/first */
 
-/** Every Keyboard listener, by event: more than one hook listens for the same one. */
+/** Every keyboard-controller listener, by event: more than one hook listens for the same one. */
 function keyboardListeners() {
   const byEvent: Record<string, (() => void)[]> = {}
-  jest.spyOn(Keyboard, 'addListener').mockImplementation(((event: string, cb: () => void) => {
+  ;(KeyboardEvents.addListener as jest.Mock).mockImplementation(((event: string, cb: () => void) => {
     ;(byEvent[event] ??= []).push(cb)
     return { remove: jest.fn() }
   }) as never)
@@ -112,6 +113,60 @@ describe('the page follows the keyboard through react-native-keyboard-controller
       expect(src).not.toMatch(/KeyboardAvoidingView/)
       expect(src).toContain('KeyboardPage')
     }
-    expect(read('components/onboarding/KeyboardPage.tsx')).toMatch(/KeyboardAwareScrollView, KeyboardStickyView \} from 'react-native-keyboard-controller'/)
+    expect(read('components/onboarding/KeyboardPage.tsx')).toMatch(/KeyboardAwareScrollView, KeyboardEvents, KeyboardStickyView.* \} from 'react-native-keyboard-controller'/)
+  })
+})
+
+describe('the keyboard events the page listens to', () => {
+  it('the dock reads the keyboard from keyboard-controller on both platforms, so Android does not snap at the end', () => {
+    const src = readFileSync(join(__dirname, '..', 'lib/keyboard.ts'), 'utf8')
+    expect(src).toMatch(/KeyboardEvents\.addListener\('keyboardWillShow'/)
+    expect(src).toMatch(/KeyboardEvents\.addListener\('keyboardWillHide'/)
+    // The code, not the comment that says why: no per-platform event name in an addListener.
+    expect(src).not.toMatch(/addListener\([^)]*(keyboardDidShow|keyboardDidHide)/)
+    expect(src).not.toMatch(/addListener\([^)]*Platform\.OS/)
+  })
+
+  it('Strong Password belt and braces: once the keyboard has landed the scroll is asked to look for the focused input again', async () => {
+    const listeners = keyboardListeners()
+    const assure = jest.fn()
+    // The test double is a plain ScrollView: give it the method the library's ref carries.
+    ;(ScrollView.prototype as unknown as { assureFocusedInputVisible: () => void }).assureFocusedInputVisible = assure
+    await render(
+      <OnboardingScreen step="basics" title="The basics" ctaLabel="Continue" onContinue={jest.fn()}>
+        <TextField label="Name" value="" onChangeText={() => {}} />
+      </OnboardingScreen>
+    )
+    expect(assure).not.toHaveBeenCalled()
+    await act(async () => listeners.keyboardDidShow())
+    expect(assure).toHaveBeenCalledTimes(1)
+    delete (ScrollView.prototype as unknown as { assureFocusedInputVisible?: unknown }).assureFocusedInputVisible
+  })
+})
+
+describe('bottomOffset at large type', () => {
+  it('is the dock and the hint’s room while the field still has room', () => {
+    expect(bottomOffsetFor(120, 700)).toBe(120 + HINT_ROOM)
+  })
+  it('is held back so a field of MIN_FIELD is left when the dock and the hint would outgrow the page', () => {
+    // 200% type: a 520 dock on a 640 page.
+    expect(bottomOffsetFor(520, 640)).toBe(640 - MIN_FIELD)
+    expect(bottomOffsetFor(900, 640)).toBe(640 - MIN_FIELD)
+  })
+  it('never goes below zero, and does not clamp what is not measured yet', () => {
+    expect(bottomOffsetFor(50, 20)).toBe(0)
+    expect(bottomOffsetFor(120, 0)).toBe(120 + HINT_ROOM)
+  })
+  it('the page applies it from the scroll’s and the dock’s own layout', async () => {
+    await render(
+      <OnboardingScreen step="basics" title="The basics" ctaLabel="Continue" onContinue={jest.fn()}>
+        <TextField label="Name" value="" onChangeText={() => {}} />
+      </OnboardingScreen>
+    )
+    await act(async () => {
+      fireEvent(screen.getByTestId('onboarding-dock'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 390, height: 520 } } })
+      fireEvent(screen.getByTestId('onboarding-scroll'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 390, height: 640 } } })
+    })
+    expect(screen.getByTestId('onboarding-scroll').props.bottomOffset).toBe(640 - MIN_FIELD)
   })
 })
