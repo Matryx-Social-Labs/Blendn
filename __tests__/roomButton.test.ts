@@ -1,4 +1,6 @@
 import { DISC_FRAMES, discLook } from '../components/ds/discMotion'
+import { roundCoordinate } from '../lib/coordinates'
+import { getDistanceMetres } from '../lib/geo'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 
@@ -226,6 +228,48 @@ describe('pickInsideEvent', () => {
     expect(pickInsideEvent([running({ distance: 0.09 })], now)).toBe('e')
   })
 
+  describe('the precise fix, not the rounded one (SCRUM-744)', () => {
+    /*
+     * The server measures `distance` from the lat/lon in the URL, which the phone rounds to three decimals (~110 m,
+     * `lib/coordinates.ts`). Against a 100 m fence that is a missed offer for somebody 78 m inside and a false one for
+     * somebody 155 m out. `serverKm` below is exactly what the server would compute from the rounded position.
+     */
+    const serverKm = (fix: { latitude: number; longitude: number }, at: { latitude: number; longitude: number }) =>
+      getDistanceMetres(roundCoordinate(fix.latitude), roundCoordinate(fix.longitude), at.latitude, at.longitude) / 1000
+
+    const door = { latitude: 12.97, longitude: 77.59 }
+    const inside = { latitude: 12.9693, longitude: 77.59 } // 78 m south of the door; rounds to 111 m
+    const outside = { latitude: 12.9745, longitude: 77.5945 } // 155 m from the other event; rounds to 78 m
+    const farDoor = { latitude: 12.9755, longitude: 77.5955 }
+
+    it('offers check-in to somebody 78 m inside whom the rounded distance puts outside', () => {
+      const e = running({ ...door, distance: serverKm(inside, door) })
+      expect(e.distance! * 1000).toBeGreaterThan(100)
+      expect(pickInsideEvent([e], now)).toBeNull() // no fix handed over: the server's number, as before
+      expect(pickInsideEvent([e], now, inside)).toBe('e')
+    })
+
+    it('does not offer it to somebody 155 m out whom the rounded distance puts inside', () => {
+      const e = running({ ...farDoor, distance: serverKm(outside, farDoor) })
+      expect(e.distance! * 1000).toBeLessThan(100)
+      expect(pickInsideEvent([e], now)).toBe('e')
+      expect(pickInsideEvent([e], now, outside)).toBeNull()
+    })
+
+    it('uses the server’s distance for an event with no real coordinates, and for no fix', () => {
+      expect(pickInsideEvent([running({ distance: 0.05 })], now, outside)).toBe('e')
+      expect(pickInsideEvent([running({ latitude: 0, longitude: 0, distance: 0.05 })], now, outside)).toBe('e')
+      expect(pickInsideEvent([running({ ...farDoor, distance: 0.05 })], now, null)).toBe('e')
+      expect(pickInsideEvent([running({ ...farDoor, distance: null })], now, null)).toBeNull()
+    })
+
+    it('the nearer centre still wins when two fences overlap', () => {
+      const near = running({ id: 'near', latitude: 12.97, longitude: 77.59, check_in_radius: 200 })
+      const far = running({ id: 'far', latitude: 12.9702, longitude: 77.59, check_in_radius: 200 })
+      expect(pickInsideEvent([far, near], now, { latitude: 12.97, longitude: 77.5899 })).toBe('near')
+    })
+  })
+
   it('ignores an event that has not started', () => {
     // Standing outside a venue at noon for a thing at nine is not a check-in
     // opportunity, and offering one would put somebody on a roster hours early.
@@ -307,5 +351,36 @@ describe('pickTodayEvents', () => {
 
   it('ignores unreadable dates rather than throwing', () => {
     expect(pickTodayEvents([{ id: 'bad', start_time: 'nope', is_favorited: true }], now)).toEqual([])
+  })
+})
+
+describe('the callers hand the centre button the precise fix (SCRUM-744)', () => {
+  const read = (file: string) => readFileSync(join(__dirname, '..', file), 'utf8')
+
+  it('the Pulse (both pages) and Tonight publish with the phone’s own position', () => {
+    const pulse = read('app/(tabs)/events.tsx')
+    expect(pulse).toMatch(/publishRoomSignal\(normalized, Date\.now\(\), userLocation\)/)
+    expect(pulse).toMatch(/publishRoomSignal\(merged, Date\.now\(\), userLocation\)/)
+    expect(read('lib/useTonight.ts')).toMatch(/publishRoomSignal\(result\.data, Date\.now\(\), coords\)/)
+  })
+
+  it('publishRoomSignal judges inside from the fix it is given', () => {
+    const { publishRoomSignal, getRoomSignal, clearRoomSignal } = require('../lib/roomSignal') as typeof import('../lib/roomSignal')
+    const now = new Date(2026, 9, 24, 15, 0, 0).getTime()
+    const event = {
+      id: 'door',
+      start_time: iso(now - HOUR),
+      end_time: iso(now + HOUR),
+      latitude: 12.97,
+      longitude: 77.59,
+      check_in_radius: 100,
+      distance: 0.111, // what a position rounded to 12.969 measures
+    }
+    clearRoomSignal()
+    publishRoomSignal([event], now)
+    expect(getRoomSignal().insideEventId).toBeNull()
+    publishRoomSignal([event], now, { latitude: 12.9693, longitude: 77.59 })
+    expect(getRoomSignal().insideEventId).toBe('door')
+    clearRoomSignal()
   })
 })

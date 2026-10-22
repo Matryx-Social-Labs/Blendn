@@ -1,4 +1,5 @@
 import { liveWindow, type EventSession } from './eventSession'
+import { getDistanceMetres } from './geo'
 
 /**
  * What the Blend'n button in the middle of the bar is currently offering.
@@ -147,12 +148,34 @@ export interface RoomButtonEvent {
   end_time?: string | null
   /** The day "running" means on a multi-day event — `lib/eventSession.ts`. */
   session?: EventSession | null
-  /** Kilometres, from the server, present only when a fix was sent. */
+  /**
+   * Kilometres, from the server, present only when a fix was sent. Measured from the position the phone put in the
+   * URL, which it rounds to ~110 m (`lib/coordinates.ts`): good for a label, not for a 100 m fence. `pickInsideEvent`
+   * measures from the precise fix instead whenever it has one and this event's coordinates.
+   */
   distance?: number | null
+  latitude?: number | null
+  longitude?: number | null
   check_in_radius?: number | null
   is_favorited?: boolean
   /** The venue, for the disc's (c) label "Check in · {venue}" and its coach mark. */
   venue_name?: string | null
+}
+
+/** The phone's own fix, never rounded: it stays on the phone. */
+export type PreciseFix = { latitude: number; longitude: number }
+
+/**
+ * How far the event's centre is, in metres: from the precise fix when there is one and the event has real coordinates,
+ * else the server's `distance` (which was measured from a position rounded to ~110 m, so it can be ~77 m out against a
+ * 100 m fence: SCRUM-744). Null when neither is known. (0, 0) is what a row with no coordinates was once written as.
+ */
+function distanceMetresTo(e: RoomButtonEvent, at?: PreciseFix | null): number | null {
+  const { latitude, longitude } = e
+  if (at && typeof latitude === 'number' && typeof longitude === 'number' && Number.isFinite(latitude) && Number.isFinite(longitude) && !(latitude === 0 && longitude === 0)) {
+    return getDistanceMetres(at.latitude, at.longitude, latitude, longitude)
+  }
+  return typeof e.distance === 'number' && Number.isFinite(e.distance) ? e.distance * 1000 : null
 }
 
 /**
@@ -173,14 +196,15 @@ export interface RoomButtonEvent {
  */
 export function pickInsideEvent(
   events: readonly RoomButtonEvent[],
-  now: number = Date.now()
+  now: number = Date.now(),
+  at?: PreciseFix | null
 ): string | null {
   let best: { id: string; distanceM: number } | null = null
 
   for (const e of events) {
-    if (typeof e.distance !== 'number' || !Number.isFinite(e.distance)) continue
+    const distanceM = distanceMetresTo(e, at)
+    if (distanceM === null) continue
     const radiusM = typeof e.check_in_radius === 'number' ? e.check_in_radius : 100
-    const distanceM = e.distance * 1000
     if (distanceM > radiusM) continue
 
     const live = liveWindow(e)

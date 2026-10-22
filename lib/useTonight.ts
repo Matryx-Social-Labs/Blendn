@@ -163,7 +163,7 @@ export function useTonight(): TonightState {
      * city feed has no distances, and publishing from it would clear an
      * "inside" the Pulse had correctly worked out.
      */
-    if (coords) publishRoomSignal(result.data)
+    if (coords) publishRoomSignal(result.data, Date.now(), coords)
 
     const goingIds = new Set<string>(
       (rsvps?.data?.events ?? []).filter((e) => e.rsvpStatus === 'going').map((e) => e.id)

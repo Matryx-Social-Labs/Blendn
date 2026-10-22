@@ -860,7 +860,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
        * going to tonight — and re-deriving them there would mean a second
        * location permission dance and a second copy of this list on a timer.
        */
-      publishRoomSignal(normalized)
+      publishRoomSignal(normalized, Date.now(), userLocation)
       setPage(0)
       setHasMore(pageHasMore(normalized.length, PAGE_SIZE))
       lastFetchLocationRef.current = lat && lon ? `${lat},${lon}` : 'none'
@@ -1269,7 +1269,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       if (received.length === 0) return
       setEvents(prev => {
         const merged = mergeEventPage(prev, received.map(normalizeEvent))
-        publishRoomSignal(merged)
+        publishRoomSignal(merged, Date.now(), userLocation)
         return merged
       })
       setPage(prev => prev + 1)
