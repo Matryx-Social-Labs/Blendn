@@ -39,6 +39,14 @@ describe('Places wires them', () => {
     expect(list).toContain('scrollToOffset({ offset: 0, animated: false })')
   })
 
+  it('the window opens when the answer is on screen, and only the rows there at the re-sort fade out', () => {
+    expect(list).toContain("const answered = state.key === key && state.status === 'ready'")
+    expect(list).toMatch(/if \(!resorting \|\| !answered\) return\s*const timer = setTimeout\(\(\) => setSettledKey\(resortKey\), RESORT_WINDOW_MS\)/)
+    // Not on the tap: a read slower than the window would lose the rows that arrive.
+    expect(list).not.toMatch(/scrollToOffset[^}]*setTimeout/)
+    expect(list).toContain('exiting={resorting ? resortOut : undefined}')
+  })
+
   it('rows arrive as a re-sort only while it is under way, so scrolling never replays it', () => {
     expect(list).toContain('entering={resorting ?')
     expect(list).toContain('const resorting = settledKey !== resortKey')

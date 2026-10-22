@@ -400,9 +400,15 @@ export function PlacesList({
     if (sorted.current === resortKey) return
     sorted.current = resortKey
     listRef.current?.scrollToOffset({ offset: 0, animated: false })
+  }, [resortKey])
+  // The window opens when the answer is on screen, not when the chip is tapped: the rows that arrive are the ones that rise, and a
+  // read that takes longer than the window must not lose them.
+  const answered = state.key === key && state.status === 'ready'
+  useEffect(() => {
+    if (!resorting || !answered) return
     const timer = setTimeout(() => setSettledKey(resortKey), RESORT_WINDOW_MS)
     return () => clearTimeout(timer)
-  }, [resortKey])
+  }, [resorting, answered, resortKey])
 
   const renderItem = useCallback(
     ({ item, index }: { item: PlaceRow; index: number }) => {
@@ -463,10 +469,13 @@ export function PlacesList({
   )
 }
 
-/** One row of the list, arriving as a re-sort's (`lib/resort.ts`): a rise and fade in order while `resorting`, else as it always did. */
+/**
+ * One row of the list, arriving as a re-sort's (`lib/resort.ts`): a rise and fade in order while `resorting`, else as it always
+ * did. Only the rows that are there when the re-sort begins fade out: a row the list lets go of as it is scrolled leaves quietly.
+ */
 function ResortRow({ index, resorting, reduceMotion, children }: { index: number; resorting: boolean; reduceMotion: boolean; children: ReactNode }) {
   return (
-    <Animated.View entering={resorting ? (reduceMotion ? resortFadeIn : resortIn(resortDelay(index))) : undefined} exiting={resortOut}>
+    <Animated.View entering={resorting ? (reduceMotion ? resortFadeIn : resortIn(resortDelay(index))) : undefined} exiting={resorting ? resortOut : undefined}>
       {children}
     </Animated.View>
   )
