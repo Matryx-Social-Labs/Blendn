@@ -49,6 +49,7 @@ import { RoomView } from './RoomView'
 import { TonightView } from './TonightView'
 import { WaveToast } from './WaveToast'
 import { markCoachUsed, useCoachMark } from '../../lib/coachMarks'
+import { parseBadges } from '../../lib/profileBadges'
 import { useCoachMarkSpot } from '../ds/CoachMarkHost'
 
 /** Under the top bar's 44 pt circles: Flow 4 sets the title 70 below the safe area (124 on a 54 pt status bar). */
@@ -939,6 +940,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
           reason: cardPerson ? (cardPerson.matched ? 'You matched' : reasonLine(cardPerson)) : undefined,
           reasons: cardPerson ? reasonLines(cardPerson) : undefined,
           chips: cardPerson ? [...cardPerson.interests.slice(0, 8), ...(cardPerson.sign ? [cardPerson.sign] : [])] : undefined,
+          badges: parseBadges(cardPerson?.badges)?.map((b) => b.kind),
         }}
         liked={!!cardPerson && (cardPerson.liked || cardPerson.pending) && !cardPerson.matched}
         requested={!!cardPerson?.requested}

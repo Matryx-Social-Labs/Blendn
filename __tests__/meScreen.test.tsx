@@ -24,6 +24,7 @@ jest.mock('../lib/useAuth', () => {
 jest.mock('../lib/apiClient', () => ({
   apiClient: {
     getPublicProfile: jest.fn(),
+    getProfile: jest.fn(),
     getMyAttendance: jest.fn(),
     getFriends: jest.fn(async () => ({ success: true, data: { count: 9, friends: [] } })),
     getFriendRequests: jest.fn(async () => ({ success: true, data: { incoming: [{ id: 'r1' }, { id: 'r2' }] } })),
@@ -148,4 +149,68 @@ it.each([0, 24, 34])('Android, bottom inset %i: the foot of the page is above th
   // The bar floats `inset + 12 + 64` up from the screen's foot (`tabBarTop`); the page reserves `inset + clearance + gutter`.
   const barHeightFromFoot = inset + SPACE.tabBarBottomGapAndroid + SIZE.tabBar
   expect(inset + 98 + SPACE.xl - barHeightFromFoot).toBeGreaterThanOrEqual(SPACE.xl)
+})
+
+describe('what GET /profiles/:you adds (blendn-admin #716): badges and photos taken down', () => {
+  const mount = async (own: unknown) => {
+    api.getPublicProfile.mockResolvedValue(PROFILE as never)
+    api.getMyAttendance.mockResolvedValue({ success: true, data: { events: [] } } as never)
+    api.getProfile.mockResolvedValue(own as never)
+    await render(<Profile />)
+    await screen.findByLabelText('Sam, 28')
+  }
+  // profile-badges.itest.ts and profile-friends-push-gaps.itest.ts: `{ kind, label }`, and `photo_states` with the pulled one's URL null.
+  const badges = [{ kind: 'shows_up', label: 'Shows up' }, { kind: 'nights_out', label: '5+ nights this month' }]
+  const states = (wasMain: boolean) => [
+    { url: 'https://cdn.test/profile/p1/live.jpg', pulled: false, pulled_at: null, was_main: false },
+    { url: null, pulled: true, pulled_at: '2026-10-21T09:15:00.000Z', was_main: wasMain },
+  ]
+
+  it('draws the earned badges as DS pills in a Badges card under who you are, and a tap says what one means', async () => {
+    await mount({ success: true, data: { profile: { badges } } })
+    expect(await screen.findByTestId('me-badges')).toBeTruthy()
+    expect(screen.getByLabelText('Badge: Shows up')).toBeTruthy()
+    expect(screen.getByLabelText('Badge: 5+ nights this month')).toBeTruthy()
+    expect(screen.getByText('From your check-ins. They can’t be bought, and they come and go on their own.')).toBeTruthy()
+    await fireEvent.press(screen.getByLabelText('Badge: Shows up'))
+    expect(screen.getByText('When 80%+ of your RSVPs turn into nights, 3 or more')).toBeTruthy()
+  })
+
+  it('none earned yet is a sentence and no pills, and nothing to unlock', async () => {
+    await mount({ success: true, data: { profile: { badges: [] } } })
+    expect(await screen.findByText(/Badges come from your check-ins/)).toBeTruthy()
+    expect(screen.queryByLabelText(/^Badge:/)).toBeNull()
+  })
+
+  it('draws no Badges card when the server sent none (badges off, or an older server)', async () => {
+    await mount({ success: true, data: { profile: { name: 'Sam' } } })
+    await waitFor(() => expect(api.getProfile).toHaveBeenCalled())
+    expect(screen.queryByTestId('me-badges')).toBeNull()
+  })
+
+  it('says a photo was taken down, once, with the way to add a different one', async () => {
+    await mount({ success: true, data: { profile: { photo_states: states(false) } } })
+    expect(await screen.findByText('A photo of yours was removed. It didn’t meet the photo rules.')).toBeTruthy()
+    await fireEvent.press(screen.getByText('Add a different photo'))
+    expect(mockPush).toHaveBeenCalledWith('/edit-profile')
+  })
+
+  it('says what the main photo is now when the main one was taken down', async () => {
+    await mount({ success: true, data: { profile: { photo_states: states(true) } } })
+    expect(await screen.findByText('Your main photo was removed. The next one is your main photo now.')).toBeTruthy()
+  })
+
+  it('says nothing about photos when none was pulled: a live photo is not a notice', async () => {
+    await mount({ success: true, data: { profile: { photo_states: [states(false)[0]] } } })
+    await waitFor(() => expect(api.getProfile).toHaveBeenCalled())
+    expect(screen.queryByTestId('me-photo-pulled')).toBeNull()
+  })
+
+  it('a failed read of the profile leaves both out and the page standing', async () => {
+    await mount({ success: false, error: 'x' })
+    await waitFor(() => expect(api.getProfile).toHaveBeenCalled())
+    expect(screen.queryByTestId('me-badges')).toBeNull()
+    expect(screen.queryByTestId('me-photo-pulled')).toBeNull()
+    expect(screen.getByLabelText('Sam, 28')).toBeTruthy()
+  })
 })

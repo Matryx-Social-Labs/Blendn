@@ -18,6 +18,7 @@ import { PhotoViewer } from '../../components/profile/PhotoViewer'
 import { ProfileBar } from '../../components/profile/ProfileBar'
 import { dockClearance, ProfileDock } from '../../components/profile/ProfileDock'
 import { heroHeightFor, ProfileHeroStage } from '../../components/profile/ProfileHeroStage'
+import { BadgeRow } from '../../components/profile/MeBadges'
 import { ProfileBio, ProfileDetail, ProfileGallery, ProfileInterests, ProfileSection, SECTION_GAP } from '../../components/profile/ProfileSections'
 import { Glyph } from '../../components/ui/Glyph'
 import { Icon } from '../../components/ui/Icon'
@@ -26,7 +27,8 @@ import { COLOR, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
 import { likeRefusal } from '../../lib/likeRefusal'
 import { interestNames } from '../../lib/meProfile'
 import { profileIdentity, withheldUnlessVisible } from '../../lib/profileIdentity'
-import { aboutLine } from '../../lib/aboutYou'
+import { aboutLine, type Badge } from '../../lib/aboutYou'
+import { parseBadges } from '../../lib/profileBadges'
 import { incomingRequestFrom } from '../../lib/friends'
 import { isGone } from '../../lib/loadFailure'
 import { Logger } from '../../lib/logger'
@@ -122,6 +124,8 @@ function UserProfileInner() {
   const { user: authUser } = useAuth()
   const { showToast } = useToast()
   const [profile, setProfile] = useState<UserProfileView | null>(null)
+  // Their badges, from `GET /profiles/:id` (the server gives them to whoever may see who they are); none until it answers.
+  const [badges, setBadges] = useState<Badge[]>([])
   const [loading, setLoading] = useState(true)
   /*
    * Why there is no profile: `gone` is the server's 404, `failed` is anything
@@ -244,6 +248,15 @@ function UserProfileInner() {
     setCtaMessage(CTA_HINT.connect)
   }, [authUser])
 
+  const loadBadges = useCallback(async (userId: string) => {
+    try {
+      const result = await apiClient.getProfile(userId)
+      setBadges(result.success ? (parseBadges(result.data?.profile?.badges) ?? []) : [])
+    } catch (error) {
+      Logger.debug('profile', 'Failed to load badges', { error })
+    }
+  }, [])
+
   // State is set only in the callbacks, once the requests have settled; the
   // spinner for a reload is switched on in render, below.
   const load = useCallback(() => {
@@ -310,6 +323,9 @@ function UserProfileInner() {
         // Fail closed: no identity field survives unless the server said you may see it.
         setProfile(nextProfile ? withheldUnlessVisible(nextProfile) : null)
         setLoadError(nextProfile ? null : gone ? 'gone' : 'failed')
+        // Only `/profiles/:id` carries badges, and only for someone you may see: its own request, and never a reason to fail.
+        setBadges([])
+        if (nextProfile?.identityVisible) void loadBadges(id)
         if (nextProfile?.user_id) {
           await hydrateCtaState(nextProfile.user_id, connection)
         }
@@ -319,7 +335,7 @@ function UserProfileInner() {
         setLoadError('failed')
       })
       .finally(() => setLoading(false))
-  }, [id, hydrateCtaState])
+  }, [id, hydrateCtaState, loadBadges])
 
   // A new `load` is a new profile to fetch, and it shows as loading from this
   // render rather than one commit later. The first `load` rides on the
@@ -599,6 +615,12 @@ function UserProfileInner() {
               {profile?.bio ? (
                 <ProfileSection title="About">
                   <ProfileBio text={profile.bio} />
+                </ProfileSection>
+              ) : null}
+
+              {badges.length > 0 ? (
+                <ProfileSection title="Badges" testID="profile-badges">
+                  <BadgeRow badges={badges} />
                 </ProfileSection>
               ) : null}
 

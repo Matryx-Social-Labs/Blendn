@@ -12,6 +12,8 @@ import { PresenceDot } from '../../components/ds/MonoFamily'
 import { CONTROL_FONT_CAP, font, HueProvider, useBoldText } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
 import FadeInUp from '../../components/motion/FadeInUp'
+import { Banner } from '../../components/ds/Banner'
+import { MeBadges } from '../../components/profile/MeBadges'
 import { MeIdentity, MeSkeleton, StatsCard } from '../../components/profile/MeSections'
 import { NightsOut } from '../../components/profile/NightsOut'
 import { OfflineStrip, useOffline } from '../../components/profile/OfflineStrip'
@@ -26,8 +28,11 @@ import { apiClient } from '../../lib/apiClient'
 import { crewsApi } from '../../lib/crewsApi'
 import type { Crew } from '../../lib/crews'
 import { COLOR, SPACE, STAGGER } from '../../lib/design/tokens'
+import type { Badge } from '../../lib/aboutYou'
 import { Logger } from '../../lib/logger'
 import { interestNames, profileGaps, type NightsStatus } from '../../lib/meProfile'
+import { mainWasPulled, pulledPhotos, type PulledPhoto } from '../../lib/photoStates'
+import { parseBadges } from '../../lib/profileBadges'
 import { queryCache } from '../../lib/queryCache'
 import { pastEventRows, type PastEventRow } from '../../lib/savedEvents'
 import { useAuth } from '../../lib/useAuth'
@@ -99,6 +104,9 @@ function ProfileInner() {
   const [crews, setCrews] = useState<Crew[]>([])
   const [crewInvites, setCrewInvites] = useState(0)
   const [viewer, setViewer] = useState<{ index: number; from: Rect | null } | null>(null)
+  // What `GET /profiles/:you` adds (blendn-admin #716): your badges (null: none sent) and the photos moderation took down. Empty until it loads.
+  const [badges, setBadges] = useState<Badge[] | null>(null)
+  const [pulled, setPulled] = useState<PulledPhoto[]>([])
   const lastBackgroundRefreshRef = React.useRef(0)
   // Tapping Me while already on it goes back to the top (the bar emits `tabPress`).
   const scrollRef = React.useRef<Animated.ScrollView>(null)
@@ -246,6 +254,22 @@ function ProfileInner() {
   }, [])
 
   /*
+   * Your badges and the photos moderation pulled: only `/profiles/:id` carries them, so its own request, never awaited by the
+   * profile and never a reason for the page to fail. Nothing sent (an older server, a failed read) is no card and no notice.
+   */
+  const loadOwnStates = useCallback(async () => {
+    if (!user) return
+    try {
+      const result = await apiClient.getProfile(user.id)
+      const own = result.success ? result.data?.profile : undefined
+      setBadges(parseBadges(own?.badges))
+      setPulled(pulledPhotos(own?.photo_states))
+    } catch (error) {
+      Logger.debug('profile', 'Failed to load badges and photo states', { error })
+    }
+  }, [user])
+
+  /*
    * On FOCUS, not on mount. A tab stays mounted, so a mount-only effect ran
    * once per session: change the primary photo in Edit profile, come back,
    * and this screen still showed the old one — the report that found it.
@@ -259,8 +283,9 @@ function ProfileInner() {
         getUserAndProfile()
         loadRecent()
         loadFriendsCount()
+        void loadOwnStates()
       }
-    }, [user, authLoading, getUserAndProfile, loadRecent, loadFriendsCount])
+    }, [user, authLoading, getUserAndProfile, loadRecent, loadFriendsCount, loadOwnStates])
   )
 
   const stats = profile?.stats
@@ -321,6 +346,22 @@ function ProfileInner() {
     return (
       <>
         <OfflineStrip offline={offline} />
+        {/* A photo moderation took down (blendn-admin `photo_states`, kept 7 days): said once, with the way to replace it. */}
+        {pulled.length > 0 ? (
+          <FadeInUp delay={next()}>
+            <Banner
+              kind="info"
+              icon="shield-alert"
+              text={
+                mainWasPulled(pulled)
+                  ? 'Your main photo was removed. The next one is your main photo now.'
+                  : 'A photo of yours was removed. It didn’t meet the photo rules.'
+              }
+              action={{ label: 'Add a different photo', onPress: openEdit, icon: 'camera' }}
+              testID="me-photo-pulled"
+            />
+          </FadeInUp>
+        ) : null}
         <FadeInUp delay={next()}>
           <MeIdentity
             name={profile?.name || 'You'}
@@ -333,6 +374,13 @@ function ProfileInner() {
             onPhotos={openPhoto}
           />
         </FadeInUp>
+
+        {/* Right under who you are (Flow 14 · 14.5); no card at all when the server sent none. */}
+        {badges !== null ? (
+          <FadeInUp delay={next()}>
+            <MeBadges badges={badges} />
+          </FadeInUp>
+        ) : null}
 
         {/*
           Somebody is waiting on an answer: about another person, and the only thing here with a clock on it. Then your crews: made

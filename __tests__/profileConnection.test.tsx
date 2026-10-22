@@ -434,3 +434,40 @@ describe('a request they sent you, opened from their profile (R4.1 6.2)', () => 
     expect(screen.queryByText('Ben wants to message you')).toBeNull()
   })
 })
+
+describe('their badges (GET /profiles/:id, blendn-admin #716)', () => {
+  // profile-badges.itest.ts: given to whoever may see who they are; the key is absent otherwise.
+  const open = async (profile: unknown) => {
+    api.getPublicProfile.mockResolvedValue({ success: true, data: { ...BEN, connection: { conversationId: null, request: null } } })
+    api.getProfile.mockResolvedValue(profile as never)
+    await render(<UserProfile />)
+    await screen.findByText('Connect')
+  }
+
+  it('draws what they earned as DS pills, when you may see who they are', async () => {
+    await open({ success: true, data: { profile: { badges: [{ kind: 'nights_out', label: '5+ nights this month' }] } } })
+    expect(await screen.findByLabelText('Badge: 5+ nights this month')).toBeTruthy()
+    expect(api.getProfile).toHaveBeenCalledWith('rh_ben')
+  })
+
+  it('draws nothing for none earned', async () => {
+    await open({ success: true, data: { profile: { badges: [] } } })
+    await waitFor(() => expect(api.getProfile).toHaveBeenCalled())
+    expect(screen.queryByTestId('profile-badges')).toBeNull()
+  })
+
+  it('does not ask at all for somebody still anonymous to you', async () => {
+    api.getPublicProfile.mockResolvedValue({ success: true, data: { id: 'rh_ben', name: 'Amber Fox', identityVisible: false } })
+    await render(<UserProfile />)
+    await screen.findByText('Connect')
+    expect(api.getProfile).not.toHaveBeenCalled()
+  })
+
+  it('a badges read that throws costs only the badges', async () => {
+    api.getPublicProfile.mockResolvedValue({ success: true, data: { ...BEN, connection: { conversationId: null, request: null } } })
+    api.getProfile.mockRejectedValue(new Error('network'))
+    await render(<UserProfile />)
+    expect(await screen.findByText('Connect')).toBeTruthy()
+    expect(screen.queryByTestId('profile-badges')).toBeNull()
+  })
+})
