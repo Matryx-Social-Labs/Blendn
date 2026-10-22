@@ -1,5 +1,6 @@
 import type { PlusStatus as ManageStatus } from '../components/ds/ManageStatusRow'
 import type { PlusStatus } from './plus'
+import { clockTime, MONTHS } from './time'
 
 /**
  * Manage (Settings › Blend'n+, Flow 12 · 12.3): what is true about the person's
@@ -29,16 +30,17 @@ export function shortDate(iso: string | null | undefined, now: number = Date.now
   const at = new Date(iso)
   if (Number.isNaN(at.getTime())) return null
   const sameYear = at.getFullYear() === new Date(now).getFullYear()
-  return at.toLocaleDateString([], { day: 'numeric', month: 'short', ...(sameYear ? {} : { year: 'numeric' }) })
+  // Fixed English month names, never the device locale's ("Sept" on one engine, "Sep" on another).
+  return `${at.getDate()} ${MONTHS[at.getMonth()]}${sameYear ? '' : ` ${at.getFullYear()}`}`
 }
 
 const through = (date: string | null, otherwise: string) => (date ? `until ${date}` : otherwise)
 
-/** "9:42 pm tomorrow", "9:42 pm today", or "25 Oct, 9:42 pm": a pass stacks, so the day matters (Flow 12 `night`). */
+/** "9:42 PM tomorrow", "9:42 PM today", or "25 Oct, 9:42 PM": a pass stacks, so the day matters (Flow 12 `night`). The app's one clock (r7 M7). */
 function passEnd(iso: string, now: number): string | null {
   const at = new Date(iso)
   if (Number.isNaN(at.getTime())) return null
-  const time = at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).toLowerCase()
+  const time = clockTime(at)
   const midnight = (ms: number) => new Date(new Date(ms).getFullYear(), new Date(ms).getMonth(), new Date(ms).getDate()).getTime()
   const days = Math.round((midnight(at.getTime()) - midnight(now)) / 86_400_000)
   if (days === 0) return `${time} today`

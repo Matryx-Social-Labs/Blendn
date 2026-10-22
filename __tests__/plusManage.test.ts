@@ -38,7 +38,7 @@ describe('what the server says today', () => {
   it('a Night Pass says until when, that it doesn’t renew, and that another adds 24 hours', () => {
     const c = card({ product: 'night_pass', source: 'google', expiresAt: '2026-10-23T21:42:00' })
     expect(c?.status).toBe('night')
-    expect(c?.sentence).toBe('Until 9:42 pm tomorrow. It doesn’t renew; another one adds 24 hours.')
+    expect(c?.sentence).toBe('Until 9:42 PM tomorrow. It doesn’t renew; another one adds 24 hours.')
   })
 
   it('a gift we cannot tell apart is not called a trial: until its date, nothing renews', () => {
@@ -118,9 +118,9 @@ describe('what it will say when the server sends `state` and `grant`', () => {
 
 describe('a Night Pass names the day, as the frame does', () => {
   const pass = (expiresAt: string) => manageCard({ ...base, product: 'night_pass', expiresAt }, 'ios', NOW)?.sentence
-  it('"Until 9:42 pm tomorrow." / today / a date', () => {
-    expect(pass('2026-10-23T21:42:00')).toMatch(/^Until 9:42 pm tomorrow\. It doesn’t renew; another one adds 24 hours\.$/)
-    expect(pass('2026-10-22T23:30:00')).toMatch(/^Until 11:30 pm today\./)
-    expect(pass('2026-10-25T21:42:00')).toMatch(/^Until .*25.*, 9:42 pm\./)
+  it('"Until 9:42 PM tomorrow." / today / a date', () => {
+    expect(pass('2026-10-23T21:42:00')).toMatch(/^Until 9:42 PM tomorrow\. It doesn’t renew; another one adds 24 hours\.$/)
+    expect(pass('2026-10-22T23:30:00')).toMatch(/^Until 11:30 PM today\./)
+    expect(pass('2026-10-25T21:42:00')).toMatch(/^Until .*25.*, 9:42 PM\./)
   })
 })
