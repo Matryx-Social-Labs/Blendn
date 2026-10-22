@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react'
 
 import type { RoomMute } from './apiClient'
+import { clockTime } from './time'
 
 /**
  * Your own standing in a room: whether you muted it, and whether you left it.
@@ -88,7 +89,7 @@ export function muteLabel(mute: RoomMute | null | undefined, now: Date = new Dat
   if (!isMuted(mute, now)) return null
   if (!mute?.until) return 'Muted until you turn it back on'
   const at = new Date(mute.until)
-  const time = at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  const time = clockTime(at)
   if (sameDay(at, now)) return `Muted until ${time}`
   const tomorrow = new Date(now)
   tomorrow.setDate(tomorrow.getDate() + 1)

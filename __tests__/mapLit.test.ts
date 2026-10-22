@@ -315,8 +315,8 @@ describe('chips above the roofs', () => {
   it("say LIVE for a live event, its start in India's time otherwise, and a venue's bucket, never a number", () => {
     const now = Date.UTC(2026, 9, 9, 6, 0) // Fri 9 Oct, 11:30 IST
     expect(chipLine({ kind: 'event', live: true, startsAt: null, bucket: null }, now)).toBe('LIVE ●')
-    // Fri 9 Oct 14:30Z is 8:00 pm in India, whatever the phone's zone.
-    expect(chipLine({ kind: 'event', live: false, startsAt: '2026-10-09T14:30:00Z', bucket: null }, now)).toMatch(/^Fri · 8:00\s?pm$/i)
+    // Fri 9 Oct 14:30Z is 8 PM in India, whatever the phone's zone.
+    expect(chipLine({ kind: 'event', live: false, startsAt: '2026-10-09T14:30:00Z', bucket: null }, now)).toBe('Fri · 8 PM')
     expect(chipLine({ kind: 'event', live: false, startsAt: 'garbage', bucket: null }, now)).toBe('')
     expect(chipLine({ kind: 'venue', live: true, startsAt: null, bucket: '10-19' }, now)).toBe('10–19 live')
     expect(chipLine({ kind: 'venue', live: false, startsAt: null, bucket: 'quiet' }, now)).toBe('')
@@ -324,8 +324,8 @@ describe('chips above the roofs', () => {
 
   it("put a late-night start on India's day, not UTC's", () => {
     const now = Date.UTC(2026, 9, 9, 6, 0)
-    // Fri 9 Oct 20:00Z is Sat 10 Oct, 1:30 am in India.
-    expect(chipLine({ kind: 'event', live: false, startsAt: '2026-10-09T20:00:00Z', bucket: null }, now)).toMatch(/^Sat · 1:30\s?am$/i)
+    // Fri 9 Oct 20:00Z is Sat 10 Oct, 1:30 AM in India.
+    expect(chipLine({ kind: 'event', live: false, startsAt: '2026-10-09T20:00:00Z', bucket: null }, now)).toBe('Sat · 1:30 AM')
   })
 
   it('name the date for a start more than six days off, so "Fri" is never the wrong Friday', () => {
@@ -338,7 +338,7 @@ describe('chips above the roofs', () => {
     const now = Date.UTC(2026, 9, 9, 6, 0)
     expect(chipSpeech({ title: 'Design Week', kind: 'event', live: true, startsAt: null, bucket: null }, now)).toBe('Design Week, live now')
     expect(chipSpeech({ title: 'Lupa', kind: 'venue', live: false, startsAt: null, bucket: 'quiet' }, now)).toBe('Lupa')
-    expect(chipSpeech({ title: 'Jazz', kind: 'event', live: false, startsAt: '2026-10-09T14:30:00Z', bucket: null }, now)).toMatch(/^Jazz, starts Fri 8:00\s?pm$/i)
+    expect(chipSpeech({ title: 'Jazz', kind: 'event', live: false, startsAt: '2026-10-09T14:30:00Z', bucket: null }, now)).toBe('Jazz, starts Fri 8 PM')
     expect(chipSpeech({ title: 'Jazz', kind: 'event', live: true, startsAt: null, bucket: null }, now)).not.toMatch(/●/)
   })
 })

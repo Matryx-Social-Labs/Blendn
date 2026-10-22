@@ -65,7 +65,7 @@ import {
   subscribeToChatTyping,
   subscribeToLiveEnded,
 } from '../../lib/socketClient'
-import { chatClock } from '../../lib/time'
+import { clockTime } from '../../lib/time'
 import { withDaySeparators } from '../../lib/unreadDivider'
 import { useAuth } from '../../lib/useAuth'
 import { lockFor, useComposerLock } from '../../lib/useComposerLock'
@@ -910,7 +910,7 @@ function GroupChatInner() {
             sender={senderOf(menu.message, roomId)}
             text={menu.message.message_text}
             replyTo={menu.message.replyTo ? { name: menu.message.replyTo.sender_name, text: menu.message.replyTo.message_text } : undefined}
-            time={chatClock(menu.message.created_at)}
+            time={clockTime(menu.message.created_at)}
           />
         ) : null}
       </LongPressMenu>

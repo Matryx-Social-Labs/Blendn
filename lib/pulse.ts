@@ -65,21 +65,11 @@ export function groupByDay<T extends { start_time: string }>(
 }
 
 /**
- * The time on an upcoming card: "7:00 PM", in the phone's own format.
+ * The time on an upcoming card: "7 PM", "7:30 PM" — the app's one clock (`clockTime`, r7 M7), never the phone's locale.
  *
  * Local time, like the day headings — the question is when to leave the house.
  */
-export function timeLabel(startTime: string): string {
-  const d = new Date(startTime)
-  if (Number.isNaN(d.getTime())) return ''
-  try {
-    return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
-  } catch {
-    // No ICU (see `shortMonth`).
-    const h = d.getHours() % 12 || 12
-    return `${h}:${String(d.getMinutes()).padStart(2, '0')} ${d.getHours() < 12 ? 'AM' : 'PM'}`
-  }
-}
+export const timeLabel = (startTime: string): string => clockTime(startTime)
 
 /**
  * The date on a featured card.

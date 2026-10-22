@@ -1,4 +1,5 @@
 import { apiClient, type ApiResponse } from './apiClient'
+import { clockTime } from './time'
 
 /*
  * Offers from the places you keep going back to, and the door pass (step 12;
@@ -160,15 +161,14 @@ export type PassView = {
   level: number
   /** A spent pass is still: no wave, no bubbles, dimmed. */
   spent: boolean
-  /** "Redeemed 21:43" over the disc, once there is something to stamp. */
+  /** "Redeemed 9:43 PM" over the disc, once there is something to stamp. */
   stamp: string | null
-  /** When staff redeemed it, "21:43", if the server said. */
+  /** When staff redeemed it, "9:43 PM" (the one clock), if the server said. */
   redeemedClock: string | undefined
   /** The sentence under the ticket. */
   foot: string
 }
 
-const timeOf = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 
 /**
  * What the pass shows, from what the server last said and the clock now. A
@@ -194,7 +194,7 @@ export function passView(
       }
     }
     case 'redeemed': {
-      const clock = offer.redeemedAt ? timeOf(offer.redeemedAt) : undefined
+      const clock = offer.redeemedAt ? clockTime(offer.redeemedAt) : undefined
       return {
         door: 'redeemed',
         level: 1,

@@ -1,4 +1,5 @@
 import { reasonOf } from './sessionEnd'
+import { clockTime } from './time'
 
 /**
  * Why the server could not be reached, as the "Can't reach Blend'n" screen needs it (Flow 15 15.13).
@@ -33,7 +34,7 @@ export function outageNote(tries: number): string {
 /** "2:30 AM" for the time the server named, in the phone's own clock; null when it named none. */
 export function backByLabel(until: number | null): string | null {
   if (until === null) return null
-  return new Date(until).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  return clockTime(until)
 }
 
 /** The wait before the next automatic try: `ms` within ±20%, so phones that lost the server together do not return together. */

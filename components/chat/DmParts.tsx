@@ -6,7 +6,7 @@ import Animated, { FadeOut } from 'react-native-reanimated'
 import { revealConfirmation } from '../../lib/conversationReveal'
 import { COLOR, DURATION, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
 import type { PrivateMessage } from '../../lib/directThread'
-import { chatClock } from '../../lib/time'
+import { clockTime } from '../../lib/time'
 import { Avatar } from '../ds/Avatar'
 import { Button } from '../ds/Button'
 import { ChatBubble } from '../ds/ChatBubble'
@@ -212,7 +212,7 @@ export const DmMessageRow = memo(function DmMessageRow({
     surface: 'dm' as const,
     mine,
     sender: { name: mine ? 'You' : name },
-    time: chatClock(item.createdAt),
+    time: clockTime(item.createdAt),
     removed: item.removed,
     failed: item.failed ? item.failedLine || true : false,
     onRetry: () => handlers.retry(item),

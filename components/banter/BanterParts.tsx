@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
 import { OPACITY } from '../../lib/theme'
-import { chatClock } from '../../lib/time'
+import { clockTime } from '../../lib/time'
 import { Avatar } from '../ds/Avatar'
 import { Button } from '../ds/Button'
 import { CrewEmblem } from '../ds/CrewEmblem'
@@ -169,7 +169,8 @@ export function BlendLiveCard({
 }) {
   onPress = useBanterPress(onPress)
   const bold = useBoldText()
-  const closes = closesAt ? hourLabel(closesAt) : null
+  // "4 AM": a Blend's closing hour, the app's one clock.
+  const closes = closesAt ? clockTime(closesAt) : null
   return (
     <Pressable
       onPress={onPress}
@@ -195,8 +196,6 @@ export function BlendLiveCard({
   )
 }
 
-/** "4 AM": a Blend's closing hour, as the frames write it. */
-export const hourLabel = (iso: string) => chatClock(iso).replace(':00 ', ' ')
 
 /**
  * A request that needs an answer (Flow 5 #05, R3-0 C11, R2-D2 #02): a solid

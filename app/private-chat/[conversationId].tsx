@@ -69,7 +69,7 @@ import {
   type PrivateReadCallback,
   type PrivateTypingCallback,
 } from '../../lib/socketClient'
-import { chatClock } from '../../lib/time'
+import { clockTime } from '../../lib/time'
 import { withDaySeparators, withUnreadDivider, type UnreadDivider } from '../../lib/unreadDivider'
 import { useAuth } from '../../lib/useAuth'
 import { useComposerLock } from '../../lib/useComposerLock'
@@ -830,7 +830,7 @@ function PrivateChatInner() {
             mine={menu.message.senderId === myId}
             sender={{ name }}
             text={menu.message.text || (menu.message.mediaUrl ? 'Photo' : '')}
-            time={chatClock(menu.message.createdAt)}
+            time={clockTime(menu.message.createdAt)}
           />
         ) : null}
       </LongPressMenu>
@@ -840,7 +840,7 @@ function PrivateChatInner() {
         visible={!!viewer}
         uri={viewer ? viewer.message.mediaUrl || viewer.message.localUri || '' : ''}
         sender={{ name: viewer && viewer.message.senderId === myId ? 'You' : name }}
-        time={viewer ? chatClock(viewer.message.createdAt) : ''}
+        time={viewer ? clockTime(viewer.message.createdAt) : ''}
         from={viewer?.from}
         onClose={() => setViewer(null)}
         // Theirs can be reported from the viewer (#33); yours has nothing to report.

@@ -27,6 +27,7 @@ import { useLatest } from '../lib/useLatest'
 import { usePresence } from '../lib/usePresence'
 import { Sheet } from './ds/Sheet'
 import { useToast } from './Toast'
+import { clockTime } from '../lib/time'
 
 type ActiveLive = { venueDayId: string; expiresAt: string | null; stay: boolean; venueName: string | null }
 
@@ -37,8 +38,7 @@ type Tray =
 /** A failed read of `/checkins/active` is tried again this soon — it is not "not live" (H1). */
 export const LIVE_READ_RETRY_MS = 15_000
 
-const timeOf = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : 'soon'
+const timeOf = (iso: string | null) => (iso ? clockTime(iso) || 'soon' : 'soon')
 
 /**
  * Your Go Live, wherever you are in the app (plan v2 step 5). Mounted at the

@@ -6,7 +6,7 @@ import { broadcastParts } from '../../lib/chatFeed'
 import { markSeed } from '../../lib/pseudonymAvatar'
 import { DURATION, SPACE } from '../../lib/design/tokens'
 import { isTemp, type RoomMessage } from '../../lib/roomMessages'
-import { chatClock } from '../../lib/time'
+import { clockTime } from '../../lib/time'
 import { BroadcastNotice } from '../ds/BroadcastNotice'
 import { ChatBubble, type BubbleReaction } from '../ds/ChatBubble'
 import type { Rect } from '../ds/chatShared'
@@ -86,7 +86,7 @@ export const RoomMessageRow = memo(function RoomMessageRow({
     // Full width, no tail, no menu: not somebody talking to you.
     return (
       <View style={styles.runStart}>
-        <BroadcastNotice kind={item.message_type} from={from} text={text} time={chatClock(item.created_at)} media={item.media} testID={`broadcast-${item.message_id}`} />
+        <BroadcastNotice kind={item.message_type} from={from} text={text} time={clockTime(item.created_at)} media={item.media} testID={`broadcast-${item.message_id}`} />
       </View>
     )
   }
@@ -105,7 +105,7 @@ export const RoomMessageRow = memo(function RoomMessageRow({
         reactions={bubbleReactions(item.reactions)}
         onReactionPress={item.removed || sending ? undefined : (emoji) => handlers.react(item, emoji)}
         landed={landed}
-        time={chatClock(item.created_at)}
+        time={clockTime(item.created_at)}
         waiting={item.waiting}
         failed={item.failed ? item.failedLine || true : false}
         onRetry={() => handlers.retry(item)}

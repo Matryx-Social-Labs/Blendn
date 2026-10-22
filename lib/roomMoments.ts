@@ -11,6 +11,7 @@
  */
 
 import { fnv1a } from './pseudonymAvatar'
+import { clockTime } from './time'
 
 /** A reason line has to fit under a face in a three-column grid. */
 export const REASON_MAX = 24
@@ -253,14 +254,8 @@ export type StartsKind = 'live' | 'soon' | 'later' | 'ended'
 /** Under this, "In 25 min"; from here on, the clock time. */
 const SOON_MS = 60 * 60_000
 
-/** "8:30 PM", or "9 PM" on the hour, in local time. Built by hand: `Intl` time formats vary by engine. */
-export function clockTime(ms: number): string {
-  const d = new Date(ms)
-  const h24 = d.getHours()
-  const h12 = h24 % 12 === 0 ? 12 : h24 % 12
-  const m = d.getMinutes()
-  return `${h12}${m ? `:${String(m).padStart(2, '0')}` : ''} ${h24 < 12 ? 'AM' : 'PM'}`
-}
+/** The app's one clock, "8:30 PM" / "9 PM" (`lib/time`), re-exported for the date grammar's callers here. */
+export { clockTime }
 
 /**
  * The time badge on a Tonight card, in the design's one date grammar
