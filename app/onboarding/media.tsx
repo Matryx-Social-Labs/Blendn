@@ -13,6 +13,7 @@ import { COLOR, DURATION, ICON, PRESS, RADIUS, SPACE, SPRING } from '../../lib/d
 import { H } from '../../lib/haptics'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import ScalePress from '../../components/motion/ScalePress'
+import { RepositionHost } from '../../components/profile/Reposition'
 import { selectPhoto, uploadPhoto } from '../../lib/photoUtils'
 import { useAuth } from '../../lib/useAuth'
 import { useOnboarding } from '../../lib/useOnboarding'
@@ -155,6 +156,8 @@ function MediaScreenInner() {
       onBack={goBack}
     >
       <Text style={[font('meta', bold), styles.note]}>{photoNote(tiles.length)}</Text>
+      {/* The reposition step a chosen photo goes through (6.3 #08); it draws nothing until one is asked. */}
+      <RepositionHost />
 
       {/* Every photo so far, plus one well to add the next. Six empty squares made the screen twice as tall as it needed to be. */}
       <View style={styles.grid}>

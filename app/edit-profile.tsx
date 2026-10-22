@@ -8,6 +8,7 @@ import { TextArea, TextField } from '../components/ds/TextField'
 import { TopBar } from '../components/ds/TopBar'
 import PhotoManager from '../components/PhotoManager'
 import { MatchingFields, type Intent } from '../components/profile/MatchingFields'
+import { RepositionHost } from '../components/profile/Reposition'
 import { OfflineStrip, useOffline } from '../components/profile/OfflineStrip'
 import { TagsField } from '../components/profile/TagsField'
 import { mayDate, type Gender, type Orientation } from '../lib/dating'
@@ -476,6 +477,8 @@ function EditProfileContent() {
 
   return (
     <View style={styles.container}>
+      {/* The reposition step a chosen photo goes through (6.3 #08); it draws nothing until one is asked. */}
+      <RepositionHost />
       <KeyboardAvoidingView
         style={styles.container}
         // 'padding' on both platforms (lib/keyboard.ts): an edge-to-edge Android window ignores adjustResize, so the

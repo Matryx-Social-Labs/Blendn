@@ -6,6 +6,7 @@ import * as ImagePicker from 'expo-image-picker'
 import { Linking } from 'react-native'
 import { apiClient } from './apiClient'
 import { Logger } from './logger'
+import { hasRepositionHost, requestReposition } from './photoReposition'
 import { pulledPhotos, type PulledPhoto } from './photoStates'
 import { unseenPulled } from './pulledNotices'
 import { queryCache } from './queryCache'
@@ -768,41 +769,80 @@ export const getUserPhotos = async (userId: string): Promise<ProfilePhoto[]> => 
 /** What choosing a photo came to: the file to upload, or why there is none (a cancelled picker is not a failure). */
 export type PhotoSelection = { ok: true; uri: string } | { ok: false; cancelled?: boolean; error?: string }
 
+/** What the reposition step came to: the file to go on with, back to the source sheet, or the person stopped. */
+type Repositioned = { kind: 'ready'; uri: string } | { kind: 'again' } | { kind: 'cancel' }
+
 /**
- * Choose a photo: the source sheet, the picker, the size and type check and the quality check. Nothing is uploaded, so a
- * caller can show the tile while it does, and keep the file to try again when it fails.
+ * The reposition step (Flow 6 · 6.3 #08): drag and pinch the photo in the frame it is cropped to, Use photo or Choose another.
+ *
+ * The file is re-encoded once first and the step shows, and crops, that file: what the manipulator decoded is the pixels the
+ * frame is laid over, so a photo carrying an EXIF turn is not cropped at the wrong place on a phone that reads it differently
+ * from the picker. A screen with nowhere to ask (`hasRepositionHost`) carries on with the photo as picked, and so does a
+ * photo that cannot be re-encoded: this step never stops somebody adding a photo.
+ */
+const repositionPhoto = async (original: string): Promise<Repositioned> => {
+  if (!hasRepositionHost()) return { kind: 'ready', uri: original }
+  let fitted: { uri: string; width: number; height: number }
+  try {
+    const out = await ImageManipulator.manipulateAsync(original, [], { compress: 0.92, format: ImageManipulator.SaveFormat.JPEG })
+    fitted = { uri: out.uri, width: out.width, height: out.height }
+  } catch (error) {
+    Logger.warn('profile', 'photoUtils: Could not prepare the photo to reposition', { error })
+    return { kind: 'ready', uri: original }
+  }
+  const answer = await requestReposition(fitted)
+  if (answer.kind === 'again' || answer.kind === 'cancel') return { kind: answer.kind }
+  if (answer.kind === 'skip') return { kind: 'ready', uri: original }
+  try {
+    const cropped = await ImageManipulator.manipulateAsync(fitted.uri, [{ crop: answer.rect }], { compress: 0.92, format: ImageManipulator.SaveFormat.JPEG })
+    return { kind: 'ready', uri: cropped.uri }
+  } catch (error) {
+    Logger.warn('profile', 'photoUtils: Could not crop the photo', { error })
+    return { kind: 'ready', uri: fitted.uri }
+  }
+}
+
+/**
+ * Choose a photo: the source sheet, the picker, the size and type check, the quality check, and the reposition step.
+ * Nothing is uploaded, so a caller can show the tile while it does, and keep the file to try again when it fails.
+ * "Choose another" on the reposition step is the source sheet again.
  */
 export const selectPhoto = async (): Promise<PhotoSelection> => {
   try {
-    // Show source selection
-    const source = await showPhotoSourceActionSheet()
-    if (!source) {
-      return { ok: false, cancelled: true, error: 'User cancelled' }
+    for (;;) {
+      // Show source selection
+      const source = await showPhotoSourceActionSheet()
+      if (!source) {
+        return { ok: false, cancelled: true, error: 'User cancelled' }
+      }
+
+      // Pick image
+      const imageResult = await pickImage(source)
+      if (!imageResult || imageResult.canceled) {
+        return { ok: false, cancelled: true, error: 'No image selected' }
+      }
+
+      const asset = imageResult.assets[0]
+
+      // Validate image
+      const validation = validatePhoto(asset)
+      if (!validation.valid) {
+        // Returned, not shown: both callers say why a photo was not added,
+        // and an alert here as well made it two messages for one refusal.
+        return { ok: false, error: validation.error }
+      }
+
+      // Verify photo quality (optional)
+      const verification = await verifyPhoto(asset.uri)
+      if (!verification.isValid && verification.issues.length > 0) {
+        Logger.warn('profile', 'photoUtils: Photo verification issues', { issues: verification.issues })
+      }
+
+      const repositioned = await repositionPhoto(asset.uri)
+      if (repositioned.kind === 'again') continue
+      if (repositioned.kind === 'cancel') return { ok: false, cancelled: true, error: 'No image selected' }
+      return { ok: true, uri: repositioned.uri }
     }
-
-    // Pick image
-    const imageResult = await pickImage(source)
-    if (!imageResult || imageResult.canceled) {
-      return { ok: false, cancelled: true, error: 'No image selected' }
-    }
-
-    const asset = imageResult.assets[0]
-
-    // Validate image
-    const validation = validatePhoto(asset)
-    if (!validation.valid) {
-      // Returned, not shown: both callers say why a photo was not added,
-      // and an alert here as well made it two messages for one refusal.
-      return { ok: false, error: validation.error }
-    }
-
-    // Verify photo quality (optional)
-    const verification = await verifyPhoto(asset.uri)
-    if (!verification.isValid && verification.issues.length > 0) {
-      Logger.warn('profile', 'photoUtils: Photo verification issues', { issues: verification.issues })
-    }
-
-    return { ok: true, uri: asset.uri }
   } catch (error) {
     Logger.error('profile', 'photoUtils: Photo selection error', { error })
     return { ok: false, error: error instanceof Error ? error.message : 'Unknown error' }
