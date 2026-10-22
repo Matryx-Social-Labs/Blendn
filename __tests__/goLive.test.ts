@@ -10,6 +10,8 @@ import {
   noteGoLiveDay,
   noteLiveDayEnd,
   oneTapChoice,
+  opensAtWords,
+  resetHourOf,
   readLiveSession,
   rememberLiveSession,
   remainingMs,
@@ -211,5 +213,20 @@ describe('live:ended says what happened, and nothing for an end you made', () =>
     expect(liveEndedMessage('event_started', null)).toMatch(/^An event just started\./)
     expect(liveEndedMessage('manual', 'X')).toBeNull()
     expect(liveEndedMessage('switched_event', 'X')).toBeNull()
+  })
+})
+
+describe('the reset hour is the venue day’s own (not a fixed 6)', () => {
+  it('is the local hour of the day’s end', () => {
+    expect(resetHourOf({ dayEndsAt: new Date(2026, 9, 23, 5, 0).toISOString() })).toBe(5)
+    expect(resetHourOf({ dayEndsAt: new Date(2026, 9, 23, 6, 0).toISOString() })).toBe(6)
+    expect(resetHourOf({ dayEndsAt: undefined })).toBeNull()
+    expect(resetHourOf({ dayEndsAt: 'nope' })).toBeNull()
+    expect(resetHourOf(null)).toBeNull()
+  })
+
+  it('and is said the way the room says it', () => {
+    expect([5, 6, 11].map(opensAtWords)).toEqual(['5', '6', '11'])
+    expect([0, 12, 13, 23].map(opensAtWords)).toEqual(['midnight', 'noon', '1 pm', '11 pm'])
   })
 })

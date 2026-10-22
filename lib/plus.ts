@@ -68,6 +68,10 @@ export function plusStatusLine(status: PlusStatus | null | undefined): string | 
 /** The last answer anyone got, so a tap on Settings › Blend'n+ can tell Manage from the page without asking first. */
 let lastKnown: PlusStatus | null = null
 export const knownPlus = (): PlusStatus | null => lastKnown
+/** At sign-out, or another account: the last answer was somebody else's. */
+export function clearKnownPlus(): void {
+  lastKnown = null
+}
 
 /** Every mounted `usePlusStatus`, told when the server has just granted Blendn+: a sheet that sold it is not a screen's focus. */
 const plusChangedListeners = new Set<() => void>()

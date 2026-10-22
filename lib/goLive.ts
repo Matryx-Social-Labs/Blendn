@@ -272,6 +272,29 @@ export async function noteLiveDayEnd(userId: string, venueDayId: string, dayEnds
   if (current?.venueDayId === venueDayId && current.dayEndsAt !== dayEndsAt) await writeLiveSession({ ...current, dayEndsAt })
 }
 
+/*
+ * When this phone last went live itself, wherever the button was (the place page, the expiry prompt): a "stay" that is
+ * not one any more right after is our own doing, not Blend'n+ lapsing (`ownGoLiveWithin`).
+ */
+let lastOwnGoLiveAt = 0
+export function noteOwnGoLive(at: number = Date.now()): void {
+  lastOwnGoLiveAt = at
+}
+export const ownGoLiveWithin = (ms: number): boolean => Date.now() - lastOwnGoLiveAt <= ms
+
+/** The local hour a venue day resets at, from the day's own end (`dayEndsAt`); null until the active check-in has said it. */
+export function resetHourOf(session: Pick<LiveSession, 'dayEndsAt'> | null | undefined): number | null {
+  const at = session?.dayEndsAt ? new Date(session.dayEndsAt) : null
+  return at && !Number.isNaN(at.getTime()) ? at.getHours() : null
+}
+
+/** "6", "noon", "1 pm": when tomorrow's room opens, as the room's own sentence says it ("Tomorrow's opens at 6."). */
+export function opensAtWords(hour: number): string {
+  if (hour === 0) return 'midnight'
+  if (hour === 12) return 'noon'
+  return hour < 12 ? String(hour) : `${hour - 12} pm`
+}
+
 /** At sign-out: the next account on this phone starts with nothing. */
 export async function clearLiveSession(): Promise<void> {
   try {

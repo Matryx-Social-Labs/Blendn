@@ -8,10 +8,13 @@ import { checkInChanged, subscribeCheckInChanged } from '../lib/checkIn'
 import {
   EXTEND_CHOICE,
   hasGoneLiveBefore,
+  opensAtWords,
+  resetHourOf,
   liveEndedMessage,
   STAY_CHOICE,
   markLivePrompted,
   noteLiveDayEnd,
+  ownGoLiveWithin,
   readLiveSession,
   type GoLiveChoice,
   type LiveSession,
@@ -21,7 +24,7 @@ import type { TrayButton } from '../lib/locationFix'
 import { trayKind } from '../lib/sheet'
 import { openTonight, subscribePaywallClosed } from '../lib/paywall'
 import { isQuietSurface } from '../lib/paywallPolicy'
-import { notifyPlusChanged, usePlusStatus } from '../lib/plus'
+import { clearKnownPlus, notifyPlusChanged, usePlusStatus } from '../lib/plus'
 import { serverNow } from '../lib/serverClock'
 import { afterSheetDismissed } from '../lib/sheetDismissed'
 import { subscribeToLiveEnded } from '../lib/socketClient'
@@ -39,12 +42,15 @@ import { useToast } from './Toast'
 type ActiveLive = { venueDayId: string; expiresAt: string | null; stay: boolean; venueName: string | null }
 
 /** A window that ended: the sheet that asks "Still here?" (or says the room closed) and the place it is about. */
-type Ended = { kind: 'ended' | 'reset'; venueDayId: string; venueId: string; venueName: string; visible: boolean; firstGoLive: boolean }
+type Ended = { kind: 'ended' | 'reset'; venueDayId: string; venueId: string; venueName: string; visible: boolean; firstGoLive: boolean; opensAt?: string }
 
 type Tray = { title: string; message: string; buttons: TrayButton[] }
 
 /** A failed read of `/checkins/active` is tried again this soon — it is not "not live" (H1). */
 export const LIVE_READ_RETRY_MS = 15_000
+
+/** A window that stopped being a "stay" this soon after a Go Live of ours was our own doing. */
+const OWN_GO_LIVE_MS = 15_000
 
 /** "Reset" is told by the venue day's own end: the window ran out within this long of it. */
 const RESET_SLACK_MS = 60_000
@@ -113,6 +119,8 @@ export function LiveAtVenue() {
   const [pressed, setPressed] = useState<'extend' | 'stay' | null>(null)
   /** Asked on this run — before the asking is on disk. */
   const askedRef = useRef(new Set<string>())
+  // The last answer about Blend'n+ was this account's: another account (or none) on this phone starts with nothing.
+  useEffect(() => () => clearKnownPlus(), [userId])
 
   useEffect(() => {
     let cancelled = false
@@ -135,7 +143,8 @@ export function LiveAtVenue() {
       if (!ask || !here) return { asked: false, reset, inRoom }
       askedRef.current.add(askKey)
       const firstGoLive = userId ? !(await hasGoneLiveBefore(userId, eventId)) : true
-      if (!cancelled) setEnded({ kind: reset ? 'reset' : 'ended', venueDayId: eventId, venueId: here.venueId, venueName: here.venueName, visible: true, firstGoLive })
+      const resetHour = resetHourOf(here)
+      if (!cancelled) setEnded({ kind: reset ? 'reset' : 'ended', venueDayId: eventId, venueId: here.venueId, venueName: here.venueName, visible: true, firstGoLive, opensAt: reset && resetHour !== null ? opensAtWords(resetHour) : undefined })
       if (userId && !reset) void markLivePrompted(userId, eventId)
       return { asked: true, reset, inRoom }
     }
@@ -163,6 +172,12 @@ export function LiveAtVenue() {
         setSession(remembered)
         const before = last
         last = next
+        // Blend'n+ lapsed during a Stay (D-11): the window goes back to minutes, said once, inline, never a paywall (Flow 12 · 12.4).
+        const lapsed = before?.stay && next && !next.stay && next.venueDayId === before.venueDayId && !ownGoLiveWithin(OWN_GO_LIVE_MS)
+        if (lapsed && next.expiresAt) {
+          const left = Math.round((Date.parse(next.expiresAt) - serverNow()) / 60_000)
+          if (left > 0) showToast(`Your Blend’n+ ended, so you’re live for ${left} more minute${left === 1 ? '' : 's'}.`, 'info')
+        }
         // The window ran out while the socket was away: `live:ended` never came, and the read is what finds out.
         if (!next && before && !before.stay && before.expiresAt && Date.parse(before.expiresAt) <= serverNow()) {
           void askEnded(before.venueDayId, 'expired', remembered)
@@ -245,8 +260,9 @@ export function LiveAtVenue() {
       hideEnded()
     },
     onPlusRequired,
-    onLive: (result) =>
-      showToast(result.stay ? "You're live for as long as you're here" : `You're live until ${timeOf(result.expiresAt)}`, 'success'),
+    onLive: (result) => {
+      showToast(result.stay ? "You're live for as long as you're here" : `You're live until ${timeOf(result.expiresAt)}`, 'success')
+    },
   })
 
   const goLiveWith = (choice: GoLiveChoice, which: 'extend' | 'stay') => () => {
@@ -316,6 +332,7 @@ export function LiveAtVenue() {
         onExtend={goLiveWith(EXTEND_CHOICE, 'extend')}
         plus={stayRow}
         firstGoLiveTonight={ended?.firstGoLive ?? true}
+        opensAt={ended?.opensAt}
         extending={busy && pressed === 'extend'}
         staying={busy && pressed === 'stay'}
         onDone={hideEnded}

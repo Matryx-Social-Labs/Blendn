@@ -70,6 +70,7 @@ async function openSheet(req: Parameters<typeof openTonight>[0] = request) {
     await openTonight(req, { userInitiated: true })
   })
 }
+const flush = async () => act(async () => { for (let i = 0; i < 6; i++) await Promise.resolve() })
 const press = async (name: string) => {
   await act(async () => {
     fireEvent.press(screen.getByRole('button', { name }))
@@ -92,6 +93,22 @@ beforeAll(() => {
 })
 
 const events = () => (apiClient.logPaywallEvent as jest.Mock).mock.calls.map((c) => c[0])
+
+describe('before anybody asks', () => {
+  it('the prices are warmed for the signed-in account, once the store knows it', async () => {
+    await render(<TonightHost />)
+    await flush()
+    expect(canBuyAs).toHaveBeenCalledWith('u1')
+    expect(loadPlusOffers).toHaveBeenCalledTimes(1)
+  })
+
+  it('a store that does not know this account is not asked for prices', async () => {
+    ;(canBuyAs as jest.Mock).mockResolvedValue(false)
+    await render(<TonightHost />)
+    await flush()
+    expect(loadPlusOffers).not.toHaveBeenCalled()
+  })
+})
 
 describe('opening it', () => {
   it('draws the Stay tap with the store’s two prices, the Night Pass first and picked, and logs it shown', async () => {

@@ -55,6 +55,7 @@ jest.mock('../components/ds/ExpiryPrompt', () => {
         <View>
           <Text accessibilityRole="header">{p.kind === 'reset' ? 'Today’s room has closed' : `Your live time at ${p.venue} is up`}</Text>
           {p.kind === 'ended' ? <Text>Still here?</Text> : null}
+          {p.opensAt ? <Text>{`opens at ${p.opensAt}`}</Text> : null}
           {p.firstGoLiveTonight ? <Text>first Go Live</Text> : null}
           {p.kind === 'ended' ? <Pressable accessibilityRole="button" accessibilityLabel="Extend 45 min — free" accessibilityState={{ busy: p.extending }} onPress={p.onExtend} /> : null}
           {p.plus ? (
@@ -95,7 +96,7 @@ jest.mock('../lib/sheetDismissed', () => ({ ...jest.requireActual('../lib/sheetD
 import { LiveAtVenue, endedByReset } from '../components/LiveAtVenue'
 import { apiClient } from '../lib/apiClient'
 import { checkInChanged } from '../lib/checkIn'
-import { markLivePrompted, noteGoLiveDay, readLiveSession, rememberLiveSession } from '../lib/goLive'
+import { markLivePrompted, noteGoLiveDay, noteOwnGoLive, readLiveSession, rememberLiveSession } from '../lib/goLive'
 import { getCurrentLocation } from '../lib/locationFix'
 import { loadPlusOffers } from '../lib/purchases'
 /* eslint-enable import/first */
@@ -144,6 +145,7 @@ beforeEach(async () => {
     now: NOW,
     doNotFake: ['hrtime', 'nextTick', 'performance', 'queueMicrotask', 'requestAnimationFrame', 'cancelAnimationFrame', 'requestIdleCallback', 'cancelIdleCallback', 'setImmediate', 'clearImmediate', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'],
   })
+  noteOwnGoLive(0)
   mockEnded.length = 0
   mockChanged.clear()
   mockPaywallClosed.clear()
@@ -348,6 +350,15 @@ describe('the 06:00 reset', () => {
     expect(mockShowToast).not.toHaveBeenCalled()
   })
 
+  it('says the venue’s own hour for tomorrow’s room, from the day’s end', async () => {
+    await rememberLiveSession({ userId: 'u1', venueDayId: 'day-1', venueId: 'v1', venueName: 'The Humming Tree', dayEndsAt: new Date(Date.now() - 1000).toISOString() })
+    const hour = new Date(Date.now() - 1000).getHours()
+    active(at(20))
+    await mount()
+    await endWith('expired')
+    expect(screen.getByText(`opens at ${hour === 12 ? 'noon' : hour === 0 ? 'midnight' : hour < 12 ? hour : `${hour - 12} pm`}`)).toBeTruthy()
+  })
+
   it('what counts as the reset: the window ended within a minute of the venue day’s end, or after it', () => {
     const now = Date.parse('2026-10-10T00:30:00.000Z')
     expect(endedByReset({ dayEndsAt: '2026-10-10T00:30:00.000Z' }, now)).toBe(true)
@@ -486,5 +497,69 @@ describe('the Stay row (Flow 11 · R2-D7, 12.1 #05)', () => {
     expect(screen.getByRole('button', { name: 'Extend 45 min — free' }).props.accessibilityState).toMatchObject({ busy: true })
     await act(async () => land({ success: true, data: { venueDayId: 'day-1', expiresAt: at(65) } }))
     ;(getCurrentLocation as jest.Mock).mockClear()
+  })
+})
+
+/**
+ * Flow 12 · 12.4 "Plus lapses during Stay": inline, once, never a paywall and no haptic.
+ * Negative control: dropping the `ownGoLiveAt` guard fails "our own Go Live is not a lapse".
+ */
+describe('Blendn+ lapsing during a Stay', () => {
+  const readsAgain = async () => {
+    await act(async () => {
+      mockChanged.forEach((f) => f())
+    })
+    await flush()
+  }
+
+  it('says the window is back to minutes, once', async () => {
+    active(at(60), true)
+    await mount()
+    active(at(20))
+    await readsAgain()
+    expect(mockShowToast).toHaveBeenCalledWith('Your Blend’n+ ended, so you’re live for 20 more minutes.', 'info')
+    expect(mockOpenTonight).not.toHaveBeenCalled()
+    mockShowToast.mockClear()
+    await readsAgain()
+    expect(mockShowToast).not.toHaveBeenCalled()
+  })
+
+  it('says nothing when the window was never a stay, or is a different night', async () => {
+    active(at(60))
+    await mount()
+    active(at(20))
+    await readsAgain()
+    expect(mockShowToast).not.toHaveBeenCalled()
+  })
+
+  it('our own Go Live, here or on the place page, is not a lapse', async () => {
+    active(at(60), true)
+    await mount()
+    noteOwnGoLive()
+    active(at(45))
+    await readsAgain()
+    expect(mockShowToast).not.toHaveBeenCalled()
+  })
+
+  it('but a Go Live long ago is not an excuse', async () => {
+    active(at(60), true)
+    await mount()
+    noteOwnGoLive()
+    jest.setSystemTime(NOW + 60_000)
+    active(at(45))
+    await readsAgain()
+    expect(mockShowToast).toHaveBeenCalledWith(expect.stringContaining('Your Blend’n+ ended'), 'info')
+  })
+})
+
+describe('the last answer about Blendn+ is one account’s', () => {
+  it('is cleared when the account goes (sign-out, or another one)', async () => {
+    const plusLib = require('../lib/plus')
+    const view = await render(<LiveAtVenue />)
+    await flush()
+    const spy = jest.spyOn(plusLib, 'clearKnownPlus')
+    await view.unmount()
+    expect(spy).toHaveBeenCalled()
+    spy.mockRestore()
   })
 })

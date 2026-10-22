@@ -5,7 +5,7 @@ import { Platform } from 'react-native'
 import { apiClient, type GoLiveResult } from './apiClient'
 import { checkInChanged } from './checkIn'
 import { reasonOf } from './sessionEnd'
-import { goLiveRefusal, rememberLiveSession, type GoLiveChoice, type GoLiveRefusal } from './goLive'
+import { goLiveRefusal, noteOwnGoLive, rememberLiveSession, type GoLiveChoice, type GoLiveRefusal } from './goLive'
 import { H } from './haptics'
 import { getCurrentLocation, type ShowTray } from './locationFix'
 import { Logger } from './logger'
@@ -187,6 +187,7 @@ export function useGoLive({
       if (result.success && result.data) {
         // Go Live is the check-in's twin (§21.5): the same important success.
         H.success({ important: true })
+        noteOwnGoLive()
         if (userId) {
           await rememberLiveSession({ userId, venueDayId: result.data.venueDayId, venueId: place.id, venueName: place.name, choice })
         }

@@ -104,6 +104,14 @@ describe('<ExpiryPrompt>', () => {
     expect(screen.getByRole('button', { name: /Stay while you’re here/ }).props.accessibilityState).toMatchObject({ disabled: true })
   })
 
+  it('reset at the venue’s own hour: tomorrow’s opens when the venue’s day does', async () => {
+    await render(<ExpiryPrompt kind="reset" visible venue="Toit" opensAt="5" onDone={jest.fn()} />)
+    expect(screen.getByText(/Tomorrow’s opens at 5\./)).toBeTruthy()
+    expect(screen.queryByText(/opens at 6/)).toBeNull()
+    await render(<ExpiryPrompt kind="reset" visible venue="Toit" opensAt="noon" onDone={jest.fn()} />)
+    expect(screen.getByText(/Tomorrow’s opens at noon\./)).toBeTruthy()
+  })
+
   it('reset at 06:00: the server’s sentence, one action', async () => {
     const onDone = jest.fn()
     await render(<ExpiryPrompt kind="reset" visible venue="Toit" onDone={onDone} />)

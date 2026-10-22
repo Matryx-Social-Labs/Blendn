@@ -15,7 +15,7 @@ jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { id: 'u1' } }) }))
 import { router } from 'expo-router'
 import { apiClient } from '../lib/apiClient'
 import { checkInChanged } from '../lib/checkIn'
-import { readLiveSession } from '../lib/goLive'
+import { ownGoLiveWithin, readLiveSession } from '../lib/goLive'
 import { getCurrentLocation } from '../lib/locationFix'
 import { openInMaps } from '../lib/openInMaps'
 import { useGoLive } from '../lib/useGoLive'
@@ -50,6 +50,20 @@ describe('useGoLive', () => {
       deviceInfo: { platform: expect.any(String), gpsAccuracy: 14 },
       minutes: 45,
     })
+  })
+
+  it('a Go Live that lands is noted as our own, a refusal is not (a "stay" that ends right after is not Blendn+ lapsing)', async () => {
+    ;(apiClient.goLive as jest.Mock).mockResolvedValue({ success: false, errorCode: 'OUT_OF_RANGE', error: 'x' })
+    jest.useFakeTimers({ now: Date.now() + 3_600_000 })
+    try {
+      await run({ minutes: 20 })
+      expect(ownGoLiveWithin(15_000)).toBe(false)
+      ;(apiClient.goLive as jest.Mock).mockResolvedValue({ success: true, data: live })
+      await run({ minutes: 20 })
+      expect(ownGoLiveWithin(15_000)).toBe(true)
+    } finally {
+      jest.useRealTimers()
+    }
   })
 
   it('on success remembers the session (venue + window), tells the tab bar, and calls onLive', async () => {

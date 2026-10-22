@@ -15,6 +15,8 @@ const SERVER = {
   notLive: 'You’re not live here any more. Go live at the venue to join today’s room.',
   reset: 'Today’s room has closed. Tomorrow’s opens at 6.',
 }
+/** The reset sentence at the venue's own hour; the server's "6" when the hour is not known (`resetHour`). */
+const resetLine = (opensAt?: string) => (opensAt ? SERVER.reset.replace('at 6', `at ${opensAt}`) : SERVER.reset)
 /** ROUND3 G1: the built free extend (client `lib/goLive.ts`, `EXTEND_CHOICE`). */
 const FREE_EXTEND = 'Extend 45 min — free'
 const noop = () => {}
@@ -45,6 +47,7 @@ export function ExpiryPrompt({
   firstGoLiveTonight = false,
   extending = false,
   staying = false,
+  opensAt,
   onDone,
 }: {
   kind: 'ended' | 'reset'
@@ -61,6 +64,8 @@ export function ExpiryPrompt({
   extending?: boolean
   /** A Stay is on its way: everything holds, as for Extend, but Extend shows no spinner. */
   staying?: boolean
+  /** `reset`: when tomorrow's room opens ("6", "noon"), from the venue's own reset hour. */
+  opensAt?: string
   onDone: () => void
 }) {
   const held = extending || staying
@@ -71,7 +76,7 @@ export function ExpiryPrompt({
         onClose={onDone}
         icon="moon"
         title="Today’s room has closed"
-        body={`${SERVER.reset} Pseudonyms reset with it.`}
+        body={`${resetLine(opensAt)} Pseudonyms reset with it.`}
         actions={[{ label: 'Done for now', kind: 'lit', onPress: onDone }]}
       />
     )

@@ -99,6 +99,15 @@ export function TonightHost() {
   )
   useEffect(() => registerTonightHost((request) => void open(request)), [open])
 
+  // The store's prices, warm before anybody asks: the sheet opens on a tap with nothing to show for it while the store answers.
+  // `canBuyAs` waits for the store to know this account, and the SDK keeps the offering it fetched.
+  useEffect(() => {
+    if (!userId) return
+    void canBuyAs(userId)
+      .then((ok) => (ok ? loadPlusOffers() : null))
+      .catch(() => {})
+  }, [userId])
+
   /** Away: the sheet leaves, and what waited for it (the expiry prompt) hears how it went. */
   const leave = useCallback((how: 'done' | 'dismissed') => {
     const current = saleRef.current
