@@ -1125,6 +1125,13 @@ let rejectedCode: string | undefined
 /** The Android channel set this build creates (lib/notifications): 2 = the Flow 9 channels. Bump with the set. */
 export const PUSH_CHANNEL_SET = 2
 
+/**
+ * The first page each paged list asks for (admin #724: `?limit=` 1-100, `pagination.nextCursor` for the next). With no
+ * `limit` and no `cursor` the server answers in its legacy mode for installed builds; new code always says how many.
+ * ponytail: first pages only. Friends, requests and the blocked set are not paged past these yet; `count` stays the whole list.
+ */
+export const LIST_PAGE = { conversations: 50, friends: 100, friendRequests: 50, blocked: 100 } as const
+
 class ApiClientClass {
   private baseUrl: string
   private inFlight = new Map<string, Promise<ApiResponse<unknown>>>()
@@ -2965,7 +2972,7 @@ class ApiClientClass {
   // === PRIVATE CONVERSATIONS ===
 
   async getConversations(options?: { force?: boolean }): Promise<ApiResponse<Array<Record<string, unknown>>>> {
-    const endpoint = '/api/mobile/conversations'
+    const endpoint = `/api/mobile/conversations?limit=${LIST_PAGE.conversations}`
     if (options?.force) {
       return namedList(await this.queuedRequest<NamedList<'conversations'>>(endpoint), 'conversations')
     }
@@ -3303,7 +3310,7 @@ class ApiClientClass {
   // uncached — these lists change the moment someone taps Accept.
 
   async getFriends(): Promise<ApiResponse<{ friends: Friend[]; count: number }>> {
-    return this.queuedRequest('/api/mobile/friends')
+    return this.queuedRequest(`/api/mobile/friends?limit=${LIST_PAGE.friends}`)
   }
 
   async getFriend(userId: string): Promise<ApiResponse<FriendProfile>> {
@@ -3350,7 +3357,7 @@ class ApiClientClass {
   }
 
   async getFriendRequests(): Promise<ApiResponse<{ incoming: FriendRequest[]; outgoing: FriendRequest[] }>> {
-    return this.queuedRequest('/api/mobile/friends/requests')
+    return this.queuedRequest(`/api/mobile/friends/requests?limit=${LIST_PAGE.friendRequests}`)
   }
 
   async sendFriendRequest(
@@ -3519,7 +3526,7 @@ class ApiClientClass {
       blocked_at: string
     }>
   }>> {
-    return this.queuedRequest('/api/mobile/users/blocked', undefined, true, 4)
+    return this.queuedRequest(`/api/mobile/users/blocked?limit=${LIST_PAGE.blocked}`, undefined, true, 4)
   }
 
   async reportUser(
