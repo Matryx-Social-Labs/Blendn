@@ -20,7 +20,7 @@ import { setAccountState } from '../lib/accountState'
 import { accountRefusalOf } from '../lib/sessionEnd'
 import { signInWithEmail, signUp } from '../lib/useAuth'
 import { KEYBOARD_BEHAVIOR, useKeyboardShown } from '../lib/keyboard'
-import { accountAgeError } from '../lib/onboarding'
+import { accountAgeError, NAME_LENGTH_SENTENCE, nameTooShort } from '../lib/onboarding'
 import { PendingInvite } from '../components/friends/PendingInvite'
 
 
@@ -135,6 +135,7 @@ export default function SignIn() {
     const problems: FieldErrors = {}
     if (!trimmedEmail.includes('@')) problems.email = 'Enter a valid email address.'
     if (isSignup && !name.trim()) problems.name = 'Enter your name.'
+    else if (isSignup && nameTooShort(name)) problems.name = NAME_LENGTH_SENTENCE
     if (isSignup) {
       const ageProblem = accountAgeError(age, { required: true })
       if (ageProblem) problems.age = ageProblem

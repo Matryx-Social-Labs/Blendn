@@ -17,6 +17,8 @@
  * knowing about every other one.
  */
 
+import { PROFILE_LIMITS } from './profileLimits'
+
 /** One step, in order. The key is what gets stored, so it outlives a reorder. */
 export const ONBOARDING_STEPS = [
   'basics',
@@ -341,8 +343,26 @@ export function orientationConsent(
  */
 export function canContinue(step: OnboardingStep, draft: OnboardingDraft): boolean {
   if (step !== 'basics') return true
-  return !!draft.name?.trim() && isCompleteDateOfBirth(draft.dateOfBirth)
+  return !!draft.name?.trim() && !nameTooShort(draft.name) && isCompleteDateOfBirth(draft.dateOfBirth)
 }
+
+/** The shortest name the forms take: a single letter is not one (Flow 1 R4.1 sign-in 06 and Flow 2 basics 07 draw it refused). */
+export const NAME_MIN_LENGTH = 2
+
+/**
+ * A name that was started and is too short to be one. Blank is not this: an empty field is "Enter your name.", not a
+ * sentence about length. Counted in characters a person sees, so one emoji is one.
+ */
+export function nameTooShort(name: string | undefined): boolean {
+  const length = Array.from((name ?? '').trim()).length
+  return length > 0 && length < NAME_MIN_LENGTH
+}
+
+/**
+ * "Use 2 to 100 letters." The ceiling is the server's own (`PROFILE_LIMITS.name`), not the 30 the frame draws: the
+ * server takes up to 100 and a full name ("First and last name", the field's own placeholder) runs past 30 (SCRUM-745).
+ */
+export const NAME_LENGTH_SENTENCE = `Use ${NAME_MIN_LENGTH} to ${PROFILE_LIMITS.name} letters.`
 
 /**
  * The ages the product admits: the API's own rule, `age.min(18).max(120)`.

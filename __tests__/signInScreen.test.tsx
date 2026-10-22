@@ -76,6 +76,19 @@ describe('validation, each under its own field (R4.1 sign-in 06)', () => {
     expect(mockSignUp).not.toHaveBeenCalled()
   })
 
+  it('a one-letter name gets the length sentence under it, a blank one still "Enter your name."', async () => {
+    await render(<SignIn />)
+    await createAccount()
+    await type('sign-in-name', 'S')
+    await type('sign-in-email', 'sam@example.com')
+    await type('sign-in-password', 'a-long-enough-pass')
+    await type('sign-in-age', '30')
+    await submit()
+    expect(screen.getByText('Use 2 to 100 letters.')).toBeTruthy()
+    expect(screen.queryByText('Enter your name.')).toBeNull()
+    expect(mockSignUp).not.toHaveBeenCalled()
+  })
+
   it('a bad email says so under the email, not at the foot', async () => {
     await render(<SignIn />)
     await type('sign-in-email', 'nobody')

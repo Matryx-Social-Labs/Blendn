@@ -14,6 +14,8 @@ import {
   isCompleteDateOfBirth,
   isUnderAccountAge,
   joinDateOfBirth,
+  NAME_LENGTH_SENTENCE,
+  nameTooShort,
   splitDateOfBirth,
   type OnboardingGender,
 } from '../../lib/onboarding'
@@ -59,6 +61,8 @@ function BasicsScreenInner() {
   const { draft, loaded, saving, commit } = useOnboarding('basics')
 
   const [name, setName] = useState('')
+  // The length sentence waits for the person to leave the field: one letter typed is not yet a mistake.
+  const [nameLeft, setNameLeft] = useState(false)
   const [gender, setGender] = useState<OnboardingGender | undefined>()
   const [dob, setDob] = useState({ day: '', month: '', year: '' })
 
@@ -162,7 +166,8 @@ function BasicsScreenInner() {
             hint={NAME_HINT}
             value={name}
             onChangeText={setName}
-            error={nameOverCap ? overCapMessage(PROFILE_LIMITS.name, serverLength(name)) : undefined}
+            error={nameOverCap ? overCapMessage(PROFILE_LIMITS.name, serverLength(name)) : nameLeft && nameTooShort(name) ? NAME_LENGTH_SENTENCE : undefined}
+            onBlur={() => setNameLeft(true)}
             limit={counterLimit(name, PROFILE_LIMITS.name)}
             measure={serverLength}
             autoCapitalize="words"
