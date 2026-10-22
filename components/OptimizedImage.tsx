@@ -202,7 +202,7 @@ export const OptimizedImage = memo<OptimizedImageProps>(({
         {hasSource && !loadingState.highQualityLoaded && !loadingState.hasError && (
           // A still shape, like every skeleton (DS #17): nothing turns, nothing is drawn for a load under 300 ms, so
           // there is nothing to loop past 5 s (#48). The picture replaces it when it lands.
-          <Reanimated.View entering={SKELETON_APPEAR} style={styles.placeholder} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" />
+          <Reanimated.View testID="image-placeholder" entering={SKELETON_APPEAR} style={styles.placeholder} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" />
         )}
       </>
     )
