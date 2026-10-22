@@ -18,6 +18,7 @@ import { useToast } from '../../components/Toast'
 import { apiClient } from '../../lib/apiClient'
 import { COLOR, FONT_FAMILY, SPACE } from '../../lib/design/tokens'
 import { friendsSinceParts, type FriendProfile } from '../../lib/friends'
+import { noteFriendGone } from '../../lib/friendsGone'
 import { isGone } from '../../lib/loadFailure'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
 import { showSheet } from '../../lib/sheet'
@@ -64,11 +65,12 @@ function FriendProfileScreenContent() {
       setFriend(result.data)
       setFailed(false)
     } else if (isGone(result)) {
+      noteFriendGone(String(userId))
       setGone(true)
     } else {
       setFailed(true)
     }
-  }, [])
+  }, [userId])
 
   // State is set only once the request has settled, and not after leaving.
   useEffect(() => {
@@ -125,6 +127,7 @@ function FriendProfileScreenContent() {
           run: async () => {
             const result = await apiClient.removeFriend(friend.userId)
             if (!result.success) return { ok: false, error: "That didn’t go through. Try again." }
+            noteFriendGone(friend.userId)
             router.back()
             return { ok: true, toast: `${friend.name} is no longer a friend` }
           },
@@ -190,7 +193,11 @@ function FriendProfileScreenContent() {
         title={friend.name}
         overPhoto
         onBack={back}
-        actions={[{ icon: 'ellipsis', label: 'Report or block', onPress: () => showUserSafetyActions(friend.name, friend.userId, back) }]}
+        actions={[{ icon: 'ellipsis', label: 'Report or block', onPress: () => showUserSafetyActions(friend.name, friend.userId, () => {
+              // A block severs the friendship: the list drops them, whichever page it read them on.
+              noteFriendGone(friend.userId)
+              back()
+            }) }]}
       />
       <Animated.ScrollView
         testID="friend-scroll"

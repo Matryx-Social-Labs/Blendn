@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react'
 
 import { apiClient } from './apiClient'
 import type { Friend } from './friends'
+import { takeFriendsGone } from './friendsGone'
 import { appendUnique, friendsPageFrom, refreshFirstPage } from './friendsPaging'
 import { Logger } from './logger'
 
@@ -68,7 +69,12 @@ export function useFriendsList() {
       const page = friendsPageFrom(result.data)
       if (!page) return markFailed()
       const merged = mode === 'merge' ? refreshFirstPage(held.current, page, key) : { items: page.items, keptTail: false }
-      settle(merged.items, merged.keptTail ? next.current : page.nextCursor)
+      // Somebody removed on another screen leaves the pages kept from before as well (the head was just read: it is already right).
+      const gone = takeFriendsGone()
+      // Only from what was kept: the head was just read, and somebody added again since is on it.
+      const head = new Set(page.items.map(key))
+      const items = gone.size && mode === 'merge' ? merged.items.filter((f) => head.has(f.userId) || !gone.has(f.userId)) : merged.items
+      settle(items, merged.keptTail ? next.current : page.nextCursor)
       setTotal(page.total)
       setStatus('ready')
     } catch (error) {

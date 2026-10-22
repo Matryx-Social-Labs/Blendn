@@ -8,6 +8,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 
 import FriendsScreen from '../app/friends'
+import { noteFriendGone, takeFriendsGone } from '../lib/friendsGone'
 import { PERSON_ROW_HEIGHT } from '../components/friends/PersonRow'
 
 const mockPush = jest.fn()
@@ -18,10 +19,13 @@ jest.mock('../lib/apiClient', () => ({
 }))
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn() } }))
 jest.mock('../lib/friendsSeeMeAsk', () => ({ askFriendsSeeMe: jest.fn(), useStillHere: () => () => true }))
+// The screen's own focus effect: it runs on mount, and a test hands the screen back to itself (a return from a profile) by calling it.
+let mockFocus: () => void = () => {}
 jest.mock('expo-router', () => ({
   router: { back: jest.fn(), push: (...a: unknown[]) => mockPush(...a) },
   useFocusEffect: (effect: () => void) => {
     const { useEffect } = require('react')
+    mockFocus = effect
     useEffect(effect, [effect])
   },
 }))
@@ -163,6 +167,41 @@ describe('1,000 friends', () => {
     await open()
     await reachEnd()
     expect(list().props.data).toHaveLength(199)
+  })
+})
+
+describe('coming back to the list', () => {
+  const twoPages = async () => {
+    mockGetFriends.mockResolvedValueOnce(page(friends(100), 250, 'c1')).mockResolvedValueOnce(page(friends(100, 100), 250, 'c2'))
+    await open()
+    await reachEnd()
+    expect(list().props.data).toHaveLength(200)
+  }
+  beforeEach(() => void takeFriendsGone())
+
+  it('reads the head again and keeps the pages read further down: the list does not jump to the top', async () => {
+    await twoPages()
+    mockGetFriends.mockResolvedValueOnce(page(friends(100), 250, 'c1'))
+    await act(async () => mockFocus())
+    // The head is read with no cursor.
+    expect(mockGetFriends.mock.calls.at(-1)).toEqual([])
+    expect(list().props.data).toHaveLength(200)
+    // And the next page is still the one after what was read, not the second page over again.
+    mockGetFriends.mockResolvedValueOnce(page(friends(50, 200), 250))
+    await reachEnd()
+    expect(mockGetFriends).toHaveBeenLastCalledWith('c2')
+    expect(list().props.data).toHaveLength(250)
+  })
+
+  it('somebody removed on their profile leaves with it, from a page read earlier', async () => {
+    await twoPages()
+    noteFriendGone('u150')
+    mockGetFriends.mockResolvedValueOnce(page(friends(100), 249, 'c1'))
+    await act(async () => mockFocus())
+    const ids = (list().props.data as { userId: string }[]).map((f) => f.userId)
+    expect(ids).toHaveLength(199)
+    expect(ids).not.toContain('u150')
+    expect(screen.getByText('249')).toBeTruthy()
   })
 })
 
