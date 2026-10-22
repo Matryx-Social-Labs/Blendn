@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { StyleSheet, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native'
 import Animated, { LinearTransition, useReducedMotion } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -23,6 +23,7 @@ import { getNetworkState, subscribeNetworkState } from '../../lib/networkStatus'
 import { initialPlaces, mayLoadMore, placesKey, placesReducer, readStamp } from '../../lib/places'
 import {
   activeFilterCount,
+  LEAD_ROWS,
   mayReadNext,
   nearPins,
   NEAR_COUNT,
@@ -40,6 +41,8 @@ import {
   type WhatsOn,
 } from '../../lib/placesPane'
 import { rateLimitWait } from '../../lib/rateLimited'
+import { RESORT_WINDOW_MS, reflowsOnSpring, resortDelay } from '../../lib/resort'
+import { resortFadeIn, resortIn, resortOut } from '../motion/presence'
 import { clockTime } from '../../lib/roomMoments'
 import { RateLimitedBanner } from '../system/RateLimitedBanner'
 import { useNow } from '../../lib/useNow'
@@ -264,7 +267,7 @@ export function PlacesList({
   const typeLabel = PLACE_TYPES.find((t) => t.venueType === venueType)?.label ?? 'All'
   const offline = network === 'offline' && state.venues.length > 0
 
-  const renderItem = useCallback(
+  const renderRow = useCallback(
     ({ item }: { item: PlaceRow }) => {
       switch (item.kind) {
         case 'title':
@@ -382,13 +385,47 @@ export function PlacesList({
     ]
   )
 
+  /*
+   * Filter re-sort (#38, `lib/resort.ts`): choosing a kind or a filter jumps the list to the top; the rows that leave fade over
+   * `quick`, those that arrive rise in with an 18 ms stagger down the first six. `resorting` is true from the render that
+   * carries the new filters until the last of them has arrived, so only rows that mount in that window arrive this way: a row
+   * the list draws as it is scrolled never replays it. The title and the sticky search are not rows that re-sort.
+   */
+  const resortKey = `${venueType ?? '-'}|${whatsOn}|${radiusKm ?? '-'}`
+  const [settledKey, setSettledKey] = useState(resortKey)
+  const resorting = settledKey !== resortKey
+  const listRef = useRef<Animated.FlatList<PlaceRow>>(null)
+  const sorted = useRef(resortKey)
+  useEffect(() => {
+    if (sorted.current === resortKey) return
+    sorted.current = resortKey
+    listRef.current?.scrollToOffset({ offset: 0, animated: false })
+    const timer = setTimeout(() => setSettledKey(resortKey), RESORT_WINDOW_MS)
+    return () => clearTimeout(timer)
+  }, [resortKey])
+
+  const renderItem = useCallback(
+    ({ item, index }: { item: PlaceRow; index: number }) => {
+      const row = renderRow({ item })
+      if (row === null || item.kind === 'title' || item.kind === 'search') return row
+      return (
+        <ResortRow index={index - LEAD_ROWS} resorting={resorting} reduceMotion={reduceMotion}>
+          {row}
+        </ResortRow>
+      )
+    },
+    [renderRow, resorting, reduceMotion]
+  )
+
   return (
     <>
       <Animated.FlatList
+        ref={listRef}
         data={rows}
         keyExtractor={keyOf}
         renderItem={renderItem}
-        itemLayoutAnimation={reduceMotion ? undefined : UNFOLD}
+        // Up to twelve rows reflow on M.settle; more crossfade (#38).
+        itemLayoutAnimation={reflowsOnSpring(rows.length, reduceMotion) ? UNFOLD : undefined}
         stickyHeaderIndices={PLACES_STICKY}
         ListFooterComponent={
           state.loadingMore ? (
@@ -423,6 +460,15 @@ export function PlacesList({
         countFor={countFor}
       />
     </>
+  )
+}
+
+/** One row of the list, arriving as a re-sort's (`lib/resort.ts`): a rise and fade in order while `resorting`, else as it always did. */
+function ResortRow({ index, resorting, reduceMotion, children }: { index: number; resorting: boolean; reduceMotion: boolean; children: ReactNode }) {
+  return (
+    <Animated.View entering={resorting ? (reduceMotion ? resortFadeIn : resortIn(resortDelay(index))) : undefined} exiting={resortOut}>
+      {children}
+    </Animated.View>
   )
 }
 

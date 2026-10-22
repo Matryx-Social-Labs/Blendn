@@ -303,7 +303,7 @@ export function emptyReason(view: Pick<PlaceView, 'searching' | 'filters'>): Emp
 }
 
 /** The title and the search lead the list. */
-const LEAD_ROWS = 2
+export const LEAD_ROWS = 2
 /** `stickyHeaderIndices` for the list: the search row (there is no ListHeaderComponent to offset it). */
 export const PLACES_STICKY = [1]
 
