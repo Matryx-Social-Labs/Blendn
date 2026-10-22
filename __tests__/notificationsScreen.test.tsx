@@ -29,6 +29,7 @@ jest.mock('../lib/apiClient', () => ({
     markNotificationsRead: jest.fn(),
     clearNotifications: jest.fn(),
     respondToFriendRequest: jest.fn(),
+    getFriendRequests: jest.fn(),
     getProfile: jest.fn(),
     updateProfile: jest.fn(),
   },
@@ -67,6 +68,7 @@ import { apiClient } from '../lib/apiClient'
 import { crewsApi } from '../lib/crewsApi'
 import type { NotificationItem } from '../lib/notificationFormat'
 import { navigateFromNotificationData } from '../lib/notifications'
+import { H } from '../lib/haptics'
 import { closeSheet } from '../lib/sheet'
 import { ANSWER_DEADLINE_MS, DONE_DWELL_MS } from '../lib/useNotificationFeed'
 
@@ -117,6 +119,10 @@ beforeEach(async () => {
   api.getNotifications.mockResolvedValue(feed([friend, match, older]) as never)
   api.markNotificationsRead.mockResolvedValue({ success: true } as never)
   api.clearNotifications.mockResolvedValue({ success: true } as never)
+  // Every request the fixtures name is still waiting, unless a test says one was answered elsewhere.
+  api.getFriendRequests.mockImplementation(
+    async () => ({ success: true, data: { incoming: ['r1', 'r2', 'ra', 'rb', 'rc', 'rd', 're'].map((id) => ({ id })), outgoing: [] } }) as never
+  )
   api.getProfile.mockResolvedValue({ success: true, data: { profile: { push_enabled: true } } } as never)
   permissions.mockResolvedValue({ status: 'granted', canAskAgain: true })
 })
@@ -219,10 +225,15 @@ describe('answering a request in place', () => {
     await act(async () => finish({ success: true }))
     expect(await screen.findByText('You’re friends now')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Accept' })).toBeNull()
+    // The moment plays where it was answered: the row has not left Waiting (a remount there arrives done, and plays nothing).
+    expect(screen.getByRole('header', { name: /Waiting on you/ })).toBeTruthy()
+    await waitFor(() => expect(H.success).toHaveBeenCalledTimes(1))
 
     // It stays inline for 2 s (the prototype's dwell), then the row leaves.
-    await waitFor(() => expect(screen.queryByText('You’re friends now')).toBeNull(), { timeout: 3000 })
+    await waitFor(() => expect(screen.queryByText('You’re friends now')).toBeNull(), { timeout: DONE_DWELL_MS + 1000 })
     expect(screen.queryByRole('header', { name: /Waiting on you/ })).toBeNull()
+    expect(screen.queryByText('New friend request')).toBeNull()
+    expect(H.success).toHaveBeenCalledTimes(1)
   })
 
   it('Decline collapses the row and says nothing to anybody', async () => {
@@ -273,6 +284,38 @@ describe('answering a request in place', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Decline' }).props.accessibilityState).toMatchObject({ busy: false }))
     fireEvent.press(screen.getByRole('button', { name: 'Decline' }))
     await waitFor(() => expect(api.respondToFriendRequest).toHaveBeenCalledTimes(2))
+  })
+
+  it('a request answered somewhere else is not Waiting on you, on open and on a refresh', async () => {
+    api.getFriendRequests.mockResolvedValue({ success: true, data: { incoming: [], outgoing: [] } } as never)
+    await render(<Screen />)
+    await screen.findByText('New friend request')
+    expect(screen.queryByRole('header', { name: /Waiting on you/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Accept' })).toBeNull()
+  })
+
+  it('a request answered elsewhere while the screen is open leaves Waiting on the next read', async () => {
+    await render(<Screen />)
+    expect(await screen.findByRole('button', { name: 'Accept' })).toBeTruthy()
+    api.getFriendRequests.mockResolvedValue({ success: true, data: { incoming: [], outgoing: [] } } as never)
+    await act(async () => mockBell?.())
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Accept' })).toBeNull())
+    expect(screen.getByText('New friend request')).toBeTruthy()
+  })
+
+  it('keeps Waiting as it was when the requests list does not load', async () => {
+    api.getFriendRequests.mockResolvedValue({ success: false } as never)
+    await render(<Screen />)
+    expect(await screen.findByRole('button', { name: 'Accept' })).toBeTruthy()
+  })
+
+  it('a request no longer open says so, then leaves Waiting after the dwell', async () => {
+    api.respondToFriendRequest.mockResolvedValue({ success: false, errorCode: 'NOT_FOUND' } as never)
+    await render(<Screen />)
+    fireEvent.press(await screen.findByRole('button', { name: 'Accept' }))
+    expect(await screen.findByText('This request is no longer open')).toBeTruthy()
+    await waitFor(() => expect(screen.queryByText('This request is no longer open')).toBeNull(), { timeout: DONE_DWELL_MS + 1000 })
+    expect(screen.queryByRole('header', { name: /Waiting on you/ })).toBeNull()
   })
 
   it('declining a crew invite asks the crew, not the friends route', async () => {

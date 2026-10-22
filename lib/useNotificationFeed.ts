@@ -1,3 +1,4 @@
+import { useFocusEffect } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { useToast } from '../components/Toast'
@@ -7,7 +8,7 @@ import { crewsApi } from './crewsApi'
 import { REQUEST_TIMEOUT_MS, settleWithin } from './fetchTimeout'
 import { Logger } from './logger'
 import type { NotificationItem } from './notificationFormat'
-import { arrivedUnread, groupFeed, isRequestKind, mergeFeed, type FeedGroups, type FeedRow, type RowAction } from './notificationRows'
+import { arrivedUnread, closeAnsweredElsewhere, groupFeed, isRequestKind, mergeFeed, type FeedGroups, type FeedRow, type RowAction } from './notificationRows'
 import { navigateFromNotificationData } from './notifications'
 import { subscribeToBell } from './socketClient'
 
@@ -92,7 +93,8 @@ export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) =
       try {
         const result = await apiClient.getNotifications({ limit: FEED_PAGE })
         if (!result.success || !result.data) throw new Error(result.error ?? 'Notifications did not load')
-        const { notifications: page, pagination, clearKeepsRequests: keeps } = result.data
+        const { pagination, clearKeepsRequests: keeps } = result.data
+        const page = closeAnsweredElsewhere(result.data.notifications, await incomingRequestIds(result.data.notifications))
         const loaded = itemsRef.current
         const arrived = mode === 'open' ? page.filter((n) => n.readAt === null).map((n) => n.id) : arrivedUnread(loaded, page)
         setReadAt(Date.now())
@@ -117,6 +119,15 @@ export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) =
       }
     },
     [markSeen]
+  )
+
+  // Back from somewhere a request may have been answered (Friends › Requests, a profile): read again. Not on the first focus, which `open` reads.
+  const focusedOnce = useRef(false)
+  useFocusEffect(
+    useCallback(() => {
+      if (focusedOnce.current) void read('live')
+      focusedOnce.current = true
+    }, [read])
   )
 
   useEffect(() => {
@@ -162,8 +173,15 @@ export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) =
   const settle = useCallback(() => setSettled((prev) => new Set([...prev, ...freshIds])), [freshIds])
 
   const answeredItems = useMemo(
-    () => items.map((n) => (answered.get(n.id) === 'accepted' ? { ...n, open: false } : n)).filter((n) => answered.get(n.id) !== 'declined'),
-    [items, answered]
+    () =>
+      items.flatMap((n) => {
+        const outcome = answered.get(n.id)
+        if (outcome === 'declined') return []
+        // A row showing its answer stays in Waiting until its dwell ends: moved, it remounts done and the moment never plays.
+        if (requestState[n.id] === 'done') return [n.open === false ? { ...n, open: true } : n]
+        return [outcome === 'accepted' ? { ...n, open: false } : n]
+      }),
+    [items, answered, requestState]
   )
   const fresh = useMemo(() => new Set([...freshIds].filter((id) => !settled.has(id))), [freshIds, settled])
   const groups: FeedGroups = useMemo(
@@ -180,6 +198,18 @@ export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) =
     []
   )
   const resolve = useCallback((id: string) => setResolved((prev) => new Set(prev).add(id)), [])
+  /** The outcome (or "no longer open") shows for `DONE_DWELL_MS`, then the row leaves the list. */
+  const dwellThenResolve = useCallback(
+    (id: string) => {
+      const timer = setTimeout(() => {
+        timers.current.delete(timer)
+        resolve(id)
+        setRequest(id, null)
+      }, DONE_DWELL_MS)
+      timers.current.add(timer)
+    },
+    [resolve, setRequest]
+  )
   const remember = useCallback((id: string, outcome: Outcome) => {
     setAnswered((prev) => new Map(prev).set(id, outcome))
     void rememberAnswered(id, outcome)
@@ -207,7 +237,9 @@ export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) =
         if (result.errorCode === TOOK_TOO_LONG) Logger.warn('notifications', 'answer:timed out', { kind: item.kind })
         if (!result.success) {
           if (result.errorCode === SAID_NO_LONGER_THERE) {
+            // Said for as long as an answer is, then it leaves Waiting: it is nobody's to answer.
             setRequest(item.id, 'stale')
+            dwellThenResolve(item.id)
           } else {
             setRequest(item.id, null)
             showToast('That didn’t go through. Try again.', 'error', { haptic: 'error' })
@@ -222,17 +254,12 @@ export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) =
           return
         }
         setRequest(item.id, 'done')
-        const timer = setTimeout(() => {
-          timers.current.delete(timer)
-          resolve(item.id)
-          setRequest(item.id, null)
-        }, DONE_DWELL_MS)
-        timers.current.add(timer)
+        dwellThenResolve(item.id)
       } finally {
         inFlight.current.delete(item.id)
       }
     },
-    [touch, showToast, setRequest, resolve, remember]
+    [touch, showToast, setRequest, remember, dwellThenResolve]
   )
 
   /** Clears the list; what the server keeps is whatever it says it keeps (`clearKeepsRequests`). Puts it back on failure. */
@@ -288,4 +315,20 @@ function answerRequest(item: NotificationItem, action: 'accept' | 'decline'): Pr
     return apiClient.respondToFriendRequest(item.data.requestId, action === 'accept' ? 'accept' : 'dismiss')
   }
   return Promise.resolve({ success: false, errorCode: SAID_NO_LONGER_THERE })
+}
+
+/**
+ * The friend requests still waiting on you, by id, when the page has one to check; `null` when it has none or the list
+ * did not load (then nothing is closed). The server does not say whether a request's row is still open (`open` is not
+ * sent), so a request accepted or declined on Friends › Requests would wait here for good without this.
+ */
+async function incomingRequestIds(page: readonly NotificationItem[]): Promise<ReadonlySet<string> | null> {
+  if (!page.some((n) => n.kind === 'friend_request' && n.open !== false)) return null
+  try {
+    const result = await apiClient.getFriendRequests()
+    return result.success && result.data ? new Set(result.data.incoming.map((r) => r.id)) : null
+  } catch (error) {
+    Logger.warn('notifications', 'requests:failed', { error: error as never })
+    return null
+  }
 }

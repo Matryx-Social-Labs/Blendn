@@ -36,7 +36,7 @@ export type ButtonSize = 'lg' | 'md' | 'sm' | 'raised'
  * inline row action · 44 `raised`, a secondary on `surfaceRaised` inside a card
  * (A31: the crew strip's action). Under the 44 / 48 target, slop reaches it.
  */
-const ROW_ACTION_HEIGHT = 36
+export const ROW_ACTION_HEIGHT = 36
 const RAISED_HEIGHT = 44
 const ROW_ACTION_MIN_WIDTH = 72
 const HEIGHT: Record<ButtonSize, number> = { lg: SIZE.primary, md: SIZE.control, sm: ROW_ACTION_HEIGHT, raised: RAISED_HEIGHT }

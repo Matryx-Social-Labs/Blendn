@@ -282,12 +282,27 @@ describe('foundations C, part 2: the row in its world', () => {
       expect(screen.getByTestId('n-done', { includeHiddenElements: true }).props.entering).toBeUndefined()
     })
 
-    it('the row’s height settles on a layout transition, and jumps under Reduce Motion', async () => {
-      await render(row('pending', 'user-plus'))
-      expect(screen.getByTestId('n').props.layout).toBeDefined()
+    it('the outcome takes the pills’ slot at their height, so the row never changes height and needs no layout spring', async () => {
+      const view = await render(row('pending', 'user-plus'))
+      expect(screen.getByTestId('n').props.layout).toBeUndefined()
+      const pending = flat('n-slot')
+      await view.rerender(row('done', 'user-check'))
+      expect(flat('n-slot')).toEqual(pending)
+      expect(flat('n-slot').minHeight).toBe(36)
+      // Over the slot, not under it: the line never adds its own height.
+      expect(flat('n-done').position).toBe('absolute')
+    })
+
+    it('Reduce Motion keeps the crossfade: the pills fade out and the outcome fades in whatever the setting', async () => {
       reduceMotion.mockReturnValue(true)
-      await render(row('pending', 'user-plus'))
-      expect(screen.getAllByTestId('n').at(-1)?.props.layout).toBeUndefined()
+      const view = await render(row('pending', 'user-plus'))
+      const exiting = screen.getByTestId('n-pill-0').parent?.parent?.props.exiting
+      await view.rerender(row('done', 'user-check'))
+      const entering = screen.getByTestId('n-done', { includeHiddenElements: true }).props.entering
+      for (const animation of [exiting, entering]) {
+        expect(animation).toBeDefined()
+        expect(animation.reduceMotionV).toBe(Reanimated.ReduceMotion.Never)
+      }
     })
   })
 

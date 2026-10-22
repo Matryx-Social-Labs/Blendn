@@ -1,15 +1,15 @@
 import { Image } from 'expo-image'
 import { useEffect, useRef, useState } from 'react'
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
-import Animated, { Easing, FadeIn, FadeOut, LinearTransition, withTiming } from 'react-native-reanimated'
+import Animated, { Easing, FadeIn, FadeOut, ReduceMotion, withTiming } from 'react-native-reanimated'
 
 import { Glyph } from '../ui/Glyph'
 import { Icon, type IconName } from '../ui/Icon'
-import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, PRESS, RADIUS, SPACE, SPRING } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, PRESS, RADIUS, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
 import { Avatar } from './Avatar'
-import { Button } from './Button'
+import { Button, ROW_ACTION_HEIGHT } from './Button'
 import { Creature, creatureFor } from './Creature'
 import { CrewEmblem } from './CrewEmblem'
 import { Badge, PresenceDot } from './MonoFamily'
@@ -181,8 +181,8 @@ function useRecordedOutcome(state: NotificationRowProps['state'], doneText: stri
   return answered
 }
 
-/** The outcome line: it comes in over `base`, and the ✓ draws itself on the frame it lands (Reduce Motion: drawn at once, `Glyph`). */
-function DoneLine({ text, answered, bold, testID }: { text: string; answered: boolean; bold: boolean; testID?: string }) {
+/** The outcome line, in the pills' slot: it comes in over `base` and the ✓ draws itself on the frame it lands (Reduce Motion: the fade alone, the ✓ drawn at once, `Glyph`). */
+function DoneLine({ text, answered, bold, reduceMotion, testID }: { text: string; answered: boolean; bold: boolean; reduceMotion: boolean; testID?: string }) {
   const sel = useSelection()
   // `Glyph` plays on the edge false → true after mount, so an answered row's ✓ draws once; a row that arrives done shows it drawn.
   const [drawn, setDrawn] = useState(false)
@@ -191,7 +191,7 @@ function DoneLine({ text, answered, bold, testID }: { text: string; answered: bo
     if (answered) setDrawn(true)
   }, [answered])
   return (
-    <Animated.View testID={testID} entering={answered ? OUTCOME_IN : undefined} accessibilityLiveRegion="polite" style={styles.done}>
+    <Animated.View testID={testID} entering={answered ? (reduceMotion ? OUTCOME_IN_REDUCED : OUTCOME_IN) : undefined} accessibilityLiveRegion="polite" style={styles.done}>
       <Glyph name="check" size={ICON.inline} color={sel.glyph} active play={drawn} testID={testID && `${testID}-check`} />
       <Text style={[font('meta', bold), styles.ink]}>{text}</Text>
     </Animated.View>
@@ -235,11 +235,10 @@ export function NotificationRow({
   const line = stale ? 'This request is no longer open' : context
   const pills = actions?.length && !stale && state !== 'done' ? actions : null
   const detail = contrast ? COLOR.textPrimary : COLOR.textSecondary
-  // The row's height settles as the pills fold and the outcome line comes in. Reduce Motion: it jumps.
-  const glide = reduceMotion ? undefined : SETTLE
+  const slot = pills || done
 
   return (
-    <Animated.View testID={testID} layout={glide}>
+    <View testID={testID}>
       <Pressable
         onPress={onPress}
         disabled={!onPress}
@@ -260,7 +259,6 @@ export function NotificationRow({
             {title}
           </Text>
           <Text style={[font('meta', bold), { color: stale ? COLOR.textTertiary : detail }]}>{line}</Text>
-          {done ? <DoneLine text={done} answered={answered} bold={bold} testID={testID && `${testID}-done`} /> : null}
         </View>
         {fresh && !pills ? (
           // Motion #29, unread → read: the dot leaves over `quick` as the title's weight swaps (at once, in the font above). Reduce Motion: it goes.
@@ -269,29 +267,35 @@ export function NotificationRow({
           </Animated.View>
         ) : null}
       </Pressable>
-      {pills ? (
-        // The pills fold away over `quick` (scaled to 0.97) as the outcome line comes in; Reduce Motion: a crossfade.
-        <Animated.View exiting={reduceMotion ? PILLS_OUT_REDUCED : pillsOut} style={styles.pills}>
-          {pills.map((a, i) => (
-            <Button
-              key={a.label}
-              testID={testID && `${testID}-pill-${i}`}
-              kind={a.kind}
-              size="sm"
-              icon={a.icon}
-              label={a.label}
-              loading={state === 'pending' && i === tapped}
-              disabled={state === 'pending' && i !== tapped}
-              pressHaptic={a.kind === 'lit' ? H.primary : false}
-              onPress={() => {
-                setTapped(i)
-                a.onPress()
-              }}
-            />
-          ))}
-        </Animated.View>
+      {slot ? (
+        // One slot at the pills' height: the pills fold away over `quick` (scaled to 0.97) as the outcome line comes in over them,
+        // so the row never changes height. Reduce Motion: a crossfade.
+        <View testID={testID && `${testID}-slot`} style={styles.slot}>
+          {done ? <DoneLine text={done} answered={answered} bold={bold} reduceMotion={reduceMotion} testID={testID && `${testID}-done`} /> : null}
+          {pills ? (
+            <Animated.View exiting={reduceMotion ? PILLS_OUT_REDUCED : pillsOut} style={styles.pills}>
+              {pills.map((a, i) => (
+                <Button
+                  key={a.label}
+                  testID={testID && `${testID}-pill-${i}`}
+                  kind={a.kind}
+                  size="sm"
+                  icon={a.icon}
+                  label={a.label}
+                  loading={state === 'pending' && i === tapped}
+                  disabled={state === 'pending' && i !== tapped}
+                  pressHaptic={a.kind === 'lit' ? H.primary : false}
+                  onPress={() => {
+                    setTapped(i)
+                    a.onPress()
+                  }}
+                />
+              ))}
+            </Animated.View>
+          ) : null}
+        </View>
       ) : null}
-    </Animated.View>
+    </View>
   )
 }
 
@@ -304,10 +308,11 @@ const pillsOut = () => {
     animations: { opacity: withTiming(0, t), transform: [{ scale: withTiming(PRESS.scale, t) }] },
   }
 }
-const PILLS_OUT_REDUCED = FadeOut.duration(DURATION.quick).easing(Easing.bezier(...EASING.exit))
-/** The outcome line arrives over `base` on the entrance curve; the row's height settles on `SPRING.settle`. */
+/** Reduce Motion keeps the crossfade (the spec: "crossfade only"): opacity alone, so it plays whatever the setting. */
+const PILLS_OUT_REDUCED = FadeOut.duration(DURATION.quick).easing(Easing.bezier(...EASING.exit)).reduceMotion(ReduceMotion.Never)
+/** The outcome line arrives over `base` on the entrance curve, over the pills it replaces. */
 const OUTCOME_IN = FadeIn.duration(DURATION.base).easing(Easing.bezier(...EASING.entrance))
-const SETTLE = LinearTransition.springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping).mass(SPRING.settle.mass)
+const OUTCOME_IN_REDUCED = OUTCOME_IN.reduceMotion(ReduceMotion.Never)
 
 /** The unread dot's way out (motion #29). */
 const DOT_EXIT = FadeOut.duration(DURATION.quick).easing(Easing.bezier(...EASING.exit))
@@ -338,6 +343,8 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.md, paddingVertical: SPACE.md, paddingHorizontal: SPACE.lg },
   text: { flex: 1, gap: SPACE.xxs },
   ink: { color: COLOR.textPrimary },
-  done: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, marginTop: SPACE.xs },
-  pills: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm, paddingLeft: TEXT_INSET, paddingRight: SPACE.lg, paddingBottom: SPACE.md, marginTop: -SPACE.xs },
+  // The pills' slot: the row's height is the same with the pills and with the outcome line.
+  slot: { minHeight: ROW_ACTION_HEIGHT, marginTop: -SPACE.xs, marginBottom: SPACE.md, marginLeft: TEXT_INSET, marginRight: SPACE.lg },
+  done: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
+  pills: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
 })

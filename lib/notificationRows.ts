@@ -264,3 +264,15 @@ export function arrivedUnread(loaded: readonly NotificationItem[], page: readonl
   const known = new Set(loaded.map((n) => n.id))
   return page.filter((n) => n.readAt === null && !known.has(n.id)).map((n) => n.id)
 }
+
+/**
+ * A friend request whose id is not among the ones still waiting on you (`incoming`) was answered somewhere else: its row
+ * is history, not Waiting on you. `null` (the list did not load) closes nothing.
+ */
+export function closeAnsweredElsewhere(items: readonly NotificationItem[], incoming: ReadonlySet<string> | null): NotificationItem[] {
+  if (!incoming) return [...items]
+  return items.map((n) => {
+    const id = n.data?.requestId
+    return n.kind === 'friend_request' && typeof id === 'string' && !incoming.has(id) ? { ...n, open: false } : n
+  })
+}
