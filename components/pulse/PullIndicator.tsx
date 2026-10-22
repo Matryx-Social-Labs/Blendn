@@ -2,7 +2,7 @@ import { StyleSheet, View } from 'react-native'
 import Animated, { useAnimatedProps, type SharedValue } from 'react-native-reanimated'
 import Svg, { Path } from 'react-native-svg'
 
-import { MONOGRAM_ASPECT, MONOGRAM_BOX, MONOGRAM_PATH } from '../ds/DiscMark'
+import { MONOGRAM_OPTICAL_ASPECT, MONOGRAM_OPTICAL_BOX, MONOGRAM_PATH } from '../ds/DiscMark'
 import { COLOR, SPACE } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
 
@@ -30,10 +30,11 @@ export function PullIndicator({ progress }: { progress: SharedValue<number> }) {
     strokeDashoffset: reduceMotion ? 0 : OUTLINE_LENGTH * (1 - progress.get()),
     opacity: progress.get() > 0 ? 1 : 0,
   }))
-  const { x, y, width, height } = MONOGRAM_BOX
+  // Centred on the optical box, like every other mark (DiscMark).
+  const { x, y, width, height } = MONOGRAM_OPTICAL_BOX
   return (
     <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.slot} testID="pull-indicator">
-      <Svg width={MARK * MONOGRAM_ASPECT} height={MARK} viewBox={`${x} ${y} ${width} ${height}`} fill="none">
+      <Svg width={MARK * MONOGRAM_OPTICAL_ASPECT} height={MARK} viewBox={`${x} ${y} ${width} ${height}`} fill="none">
         <AnimatedPath
           d={MONOGRAM_PATH}
           stroke={COLOR.textPrimary}

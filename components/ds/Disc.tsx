@@ -22,7 +22,7 @@ import { roomButtonAccessibilityLabel, type RoomButtonTarget } from '../../lib/r
 import ScalePress from '../motion/ScalePress'
 import { GradientFill } from '../ui/GradientFill'
 import { Material } from '../ui/Material'
-import { BrandGradient, DiscMark, MONOGRAM_ASPECT } from './DiscMark'
+import { BrandGradient, DiscMark, MONOGRAM_OPTICAL_ASPECT } from './DiscMark'
 import { DISC_FRAMES, discLook, discReentry, discTransition, type DiscChannel, type DiscFrame, type DiscStep } from './discMotion'
 
 export type DiscProps = {
@@ -41,8 +41,9 @@ const R = SIZE.disc / 2
 
 /** The mark is half the disc. Its ink sits 10% of its width left of its box's centre and 2.75% below (the B's bowl), so the box is nudged to put the ink on the disc's centre. */
 const MARK_HEIGHT = SIZE.disc / 2
-const MARK_WIDTH = MARK_HEIGHT * MONOGRAM_ASPECT
-const MARK_LEFT = R - MARK_WIDTH / 2 + 0.1 * MARK_WIDTH
+// The optical box already carries the nudge this used to add by hand (+10% of the width): centre it exactly.
+const MARK_WIDTH = MARK_HEIGHT * MONOGRAM_OPTICAL_ASPECT
+const MARK_LEFT = R - MARK_WIDTH / 2
 const MARK_TOP = R - MARK_HEIGHT / 2 - 0.0275 * MARK_HEIGHT
 
 /** (b)'s ring: 1.5pt, 1pt outside the disc, drawn on clockwise from 12 o'clock. Disc and ring fit the 64pt bar. */

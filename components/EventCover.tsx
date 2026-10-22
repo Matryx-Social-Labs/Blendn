@@ -5,7 +5,8 @@ import { Image, StyleSheet, View } from 'react-native'
 import { Logger } from '../lib/logger'
 import { EMBER, EMBER_RADIUS } from '../lib/theme'
 
-const monogram = require('../assets/logo/monogram-gradient.png')
+// Optically centred (the ink's centroid at the canvas centre): a box-centred monogram reads left.
+const monogram = require('../assets/logo/monogram-gradient-centred.png')
 
 interface EventCoverProps {
   /** The poster to draw, or null for the placeholder. */
