@@ -30,6 +30,7 @@ jest.mock('../lib/apiClient', () => ({
     clearNotifications: jest.fn(),
     respondToFriendRequest: jest.fn(),
     getFriendRequests: jest.fn(),
+    getFriends: jest.fn(),
     getProfile: jest.fn(),
     updateProfile: jest.fn(),
   },
@@ -121,8 +122,10 @@ beforeEach(async () => {
   api.clearNotifications.mockResolvedValue({ success: true } as never)
   // Every request the fixtures name is still waiting, unless a test says one was answered elsewhere.
   api.getFriendRequests.mockImplementation(
-    async () => ({ success: true, data: { incoming: ['r1', 'r2', 'ra', 'rb', 'rc', 'rd', 're'].map((id) => ({ id })), outgoing: [] } }) as never
+    async () =>
+      ({ success: true, data: { incoming: ['r1', 'r2', 'ra', 'rb', 'rc', 'rd', 're'].map((id) => ({ id, person: { userId: `u_${id}` } })), outgoing: [] } }) as never
   )
+  api.getFriends.mockResolvedValue({ success: true, data: { friends: [], count: 0 } } as never)
   api.getProfile.mockResolvedValue({ success: true, data: { profile: { push_enabled: true } } } as never)
   permissions.mockResolvedValue({ status: 'granted', canAskAgain: true })
 })
@@ -290,8 +293,35 @@ describe('answering a request in place', () => {
     api.getFriendRequests.mockResolvedValue({ success: true, data: { incoming: [], outgoing: [] } } as never)
     await render(<Screen />)
     await screen.findByText('New friend request')
-    expect(screen.queryByRole('header', { name: /Waiting on you/ })).toBeNull()
+    await waitFor(() => expect(screen.queryByRole('header', { name: /Waiting on you/ })).toBeNull())
     expect(screen.queryByRole('button', { name: 'Accept' })).toBeNull()
+  })
+
+  it('shows the list at once, and reconciles the requests after: a slow requests list holds nothing up', async () => {
+    api.getFriendRequests.mockReturnValue(new Promise(() => {}) as never)
+    await render(<Screen />)
+    expect(await screen.findByRole('button', { name: 'Accept' })).toBeTruthy()
+    expect(screen.getByText('You have a new match')).toBeTruthy()
+  })
+
+  it('an Accept that timed out and then reads “no longer open” is checked: friends now means it landed', async () => {
+    api.respondToFriendRequest.mockReturnValueOnce(new Promise(() => {}) as never).mockResolvedValue({ success: false, errorCode: 'NOT_FOUND' } as never)
+    await render(<Screen />)
+    fireEvent.press(await screen.findByRole('button', { name: 'Accept' }))
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalled(), { timeout: ANSWER_DEADLINE_MS * 2 })
+    api.getFriends.mockResolvedValue({ success: true, data: { friends: [{ userId: 'u_r1', name: 'Priya', photo: null, since: ago(MIN) }], count: 1 } } as never)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Accept' }).props.accessibilityState).toMatchObject({ busy: false }))
+    fireEvent.press(screen.getByRole('button', { name: 'Accept' }))
+    expect(await screen.findByText('You’re friends now')).toBeTruthy()
+    expect(screen.queryByText('This request is no longer open')).toBeNull()
+  })
+
+  it('a “no longer open” with no timed-out Accept before it is still stale, without asking who your friends are', async () => {
+    api.respondToFriendRequest.mockResolvedValue({ success: false, errorCode: 'NOT_FOUND' } as never)
+    await render(<Screen />)
+    fireEvent.press(await screen.findByRole('button', { name: 'Accept' }))
+    expect(await screen.findByText('This request is no longer open')).toBeTruthy()
+    expect(api.getFriends).not.toHaveBeenCalled()
   })
 
   it('a request answered elsewhere while the screen is open leaves Waiting on the next read', async () => {
@@ -447,6 +477,22 @@ describe('the ⋯ menu and Clear all', () => {
     // Empty, and true about it: the requests were not answered by clearing.
     expect(await screen.findByText('Quiet for now')).toBeTruthy()
     expect(screen.getByText('Requests you haven’t answered are still open in Friends and Crews.')).toBeTruthy()
+  })
+
+  it('a clear given up on that lands after all reads the list again, so the screen ends up as the server is', async () => {
+    let land: (v: unknown) => void = () => {}
+    api.clearNotifications.mockReturnValue(new Promise((r) => (land = r)) as never)
+    await render(<Screen />)
+    await screen.findByText('You have a new match')
+    await openMenu()
+    fireEvent.press(screen.getByRole('button', { name: 'Clear all' }))
+    await screen.findByText('Clear all notifications?')
+    fireEvent.press(screen.getAllByText('Clear all').slice(-1)[0])
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Couldn’t clear. Try again.', 'error', { haptic: 'error' }), { timeout: ANSWER_DEADLINE_MS * 2 })
+    expect(screen.getByText('You have a new match')).toBeTruthy()
+    api.getNotifications.mockResolvedValue(feed([]) as never)
+    await act(async () => land({ success: true }))
+    expect(await screen.findByText('Quiet for now')).toBeTruthy()
   })
 
   it('a clear the server never answers puts the list back, rather than show it empty over rows the server keeps', async () => {

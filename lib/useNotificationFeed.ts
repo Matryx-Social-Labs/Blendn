@@ -68,6 +68,10 @@ export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) =
   const itemsRef = useRef(items)
   const pagingRef = useRef(paging)
   const inFlight = useRef(new Set<string>())
+  /** Who sent each request still waiting (request id → their user id), from the last reconcile. */
+  const senders = useRef(new Map<string, string>())
+  /** The rows whose answer outlived `ANSWER_DEADLINE_MS`: it may still have landed. */
+  const timedOut = useRef(new Set<string>())
   const timers = useRef(new Set<ReturnType<typeof setTimeout>>())
   useEffect(() => {
     itemsRef.current = items
@@ -94,8 +98,7 @@ export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) =
       try {
         const result = await apiClient.getNotifications({ limit: FEED_PAGE })
         if (!result.success || !result.data) throw new Error(result.error ?? 'Notifications did not load')
-        const { pagination, clearKeepsRequests: keeps } = result.data
-        const page = closeAnsweredElsewhere(result.data.notifications, await incomingRequestIds(result.data.notifications))
+        const { notifications: page, pagination, clearKeepsRequests: keeps } = result.data
         const loaded = itemsRef.current
         const arrived = mode === 'open' ? page.filter((n) => n.readAt === null).map((n) => n.id) : arrivedUnread(loaded, page)
         setReadAt(Date.now())
@@ -113,6 +116,12 @@ export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) =
         }
         setLoad('ready')
         if (arrived.length || page.some((n) => n.readAt === null)) markSeen()
+        // The list shows at once; whether its requests were answered elsewhere is reconciled after (a second read).
+        void incomingRequests(page).then((incoming) => {
+          if (!incoming) return
+          incoming.forEach((sender, requestId) => senders.current.set(requestId, sender))
+          setItems((prev) => closeAnsweredElsewhere(prev, new Set(incoming.keys())))
+        })
       } catch (error) {
         Logger.warn('notifications', 'load:failed', { error: error as never })
         // A list that loaded once stays through a failed refresh: "Quiet for now" over a failed request would be false.
@@ -235,8 +244,16 @@ export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) =
             return { success: false, errorCode: undefined }
           }
         )
-        if (result.errorCode === TOOK_TOO_LONG) Logger.warn('notifications', 'answer:timed out', { kind: item.kind })
-        if (!result.success) {
+        if (result.errorCode === TOOK_TOO_LONG) {
+          timedOut.current.add(item.id)
+          Logger.warn('notifications', 'answer:timed out', { kind: item.kind })
+        }
+        // An Accept that timed out may have landed after all: the retry then reads "no longer open", which here means friends.
+        const landedEarlier =
+          !result.success && result.errorCode === SAID_NO_LONGER_THERE && action === 'accept' && timedOut.current.has(item.id)
+            ? await becameFriends(senders.current.get(String(item.data?.requestId ?? '')))
+            : false
+        if (!result.success && !landedEarlier) {
           if (result.errorCode === SAID_NO_LONGER_THERE) {
             // Said for as long as an answer is, then it leaves Waiting: it is nobody's to answer.
             setRequest(item.id, 'stale')
@@ -247,6 +264,7 @@ export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) =
           }
           return
         }
+        timedOut.current.delete(item.id)
         remember(item.id, outcome)
         if (action === 'decline') {
           // Told to nobody: the row collapses and nothing is said.
@@ -281,16 +299,21 @@ export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) =
       showToast('Couldn’t clear. Try again.', 'error', { haptic: 'error' })
     }
     try {
-      const result = await settleWithin(apiClient.clearNotifications(), ANSWER_DEADLINE_MS, { success: false, error: TOOK_TOO_LONG })
+      const call = apiClient.clearNotifications()
+      const result = await settleWithin(call, ANSWER_DEADLINE_MS, { success: false, error: TOOK_TOO_LONG })
       if (!result.success) {
         Logger.warn('notifications', 'clear:failed', { error: result.error as never })
         restore()
+      }
+      // Given up on, the call may still land: read the list again when it does, so the screen ends up as the server is.
+      if (result.error === TOOK_TOO_LONG) {
+        void call.then((late) => (late.success ? read('pull') : undefined)).catch(() => {})
       }
     } catch (error) {
       Logger.warn('notifications', 'clear:failed', { error: error as never })
       restore()
     }
-  }, [clearKeepsRequests, answered, showToast])
+  }, [clearKeepsRequests, answered, showToast, read])
 
   return {
     load,
@@ -327,17 +350,28 @@ function answerRequest(item: NotificationItem, action: 'accept' | 'decline'): Pr
 }
 
 /**
- * The friend requests still waiting on you, by id, when the page has one to check; `null` when it has none or the list
+ * The friend requests still waiting on you (their id → who sent it), when the page has one to check; `null` when it has none or the list
  * did not load (then nothing is closed). The server does not say whether a request's row is still open (`open` is not
  * sent), so a request accepted or declined on Friends › Requests would wait here for good without this.
  */
-async function incomingRequestIds(page: readonly NotificationItem[]): Promise<ReadonlySet<string> | null> {
+async function incomingRequests(page: readonly NotificationItem[]): Promise<ReadonlyMap<string, string> | null> {
   if (!page.some((n) => n.kind === 'friend_request' && n.open !== false)) return null
   try {
     const result = await apiClient.getFriendRequests()
-    return result.success && result.data ? new Set(result.data.incoming.map((r) => r.id)) : null
+    return result.success && result.data ? new Map(result.data.incoming.map((r) => [r.id, r.person.userId])) : null
   } catch (error) {
     Logger.warn('notifications', 'requests:failed', { error: error as never })
     return null
+  }
+}
+
+/** Whether the person who sent a request is now a friend: an Accept that timed out landed after all. Unknown reads as no. */
+async function becameFriends(sender: string | undefined): Promise<boolean> {
+  if (!sender) return false
+  try {
+    const result = await settleWithin(apiClient.getFriends(), ANSWER_DEADLINE_MS, { success: false })
+    return !!result.success && !!result.data?.friends.some((f) => f.userId === sender)
+  } catch {
+    return false
   }
 }
