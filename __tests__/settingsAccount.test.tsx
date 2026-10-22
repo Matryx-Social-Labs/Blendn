@@ -156,6 +156,12 @@ describe('Notifications row', () => {
   })
 })
 
+it('Help has Tips, which opens the screen that lists every coach-mark sentence (R4-2)', async () => {
+  await render(<Screen />)
+  fireEvent.press(await screen.findByRole('button', { name: 'Tips' }))
+  expect(router.push).toHaveBeenCalledWith('/tips')
+})
+
 describe('How you match row (Flow 14 · 14.4)', () => {
   it('sits beside Notifications and opens the about-you fields', async () => {
     await render(<Screen />)

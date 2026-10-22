@@ -702,6 +702,7 @@ function RootLayout() {
       {/* Settings' About and Contact support. */}
       <Stack.Screen name="about" options={{ headerShown: false }} />
       <Stack.Screen name="support" options={{ headerShown: false }} />
+      <Stack.Screen name="tips" options={{ headerShown: false }} />
       {/* Friends. Declared so none of them inherits the native header. */}
       <Stack.Screen name="friends/index" options={{ headerShown: false }} />
       <Stack.Screen name="friends/add" options={{ headerShown: false }} />
