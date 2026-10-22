@@ -3,6 +3,7 @@ import { useCallback, useRef, useState } from 'react'
 
 import { useToast } from '../components/Toast'
 import { apiClient } from './apiClient'
+import { askFriendsSeeMe, useStillHere } from './friendsSeeMeAsk'
 import type { FriendRequest } from './friends'
 
 /**
@@ -17,6 +18,7 @@ import type { FriendRequest } from './friends'
  */
 export function useFriendRequests() {
   const { showToast } = useToast()
+  const stillHere = useStillHere()
   const [incoming, setIncoming] = useState<FriendRequest[]>([])
   const [outgoing, setOutgoing] = useState<FriendRequest[]>([])
   const [loaded, setLoaded] = useState(false)
@@ -70,7 +72,10 @@ export function useFriendRequests() {
         return
       }
       setIncoming((list) => list.filter((r) => r.id !== request.id))
-      if (action === 'accept') showToast(`You and ${request.person.name} are friends`, 'success', { haptic: 'success' })
+      if (action === 'accept') {
+        showToast(`You and ${request.person.name} are friends`, 'success', { haptic: 'success' })
+        void askFriendsSeeMe({ stillHere })
+      }
     })
 
   const withdraw = (request: FriendRequest) =>

@@ -150,6 +150,9 @@ export function everyoneHead(
   people: readonly { insideNow?: boolean }[],
   { hasMore, hereCount }: { hasMore: boolean; hereCount: number }
 ): { title: string; count: number } {
+  // ponytail: C3 (plans/friends-in-room.md 9.2), held with the concert work. The server deck is a ranked top 100, so
+  // once the room is bigger than that (`!hasMore`, `people.length` = 100 while 5,000 are here) this count says 100.
+  // The truth for a big room is `hereCount - 1`, the "Picked for you from everyone here" caption and the end note.
   const allHere = people.every((p) => p.insideNow !== false)
   if (!allHere) return { title: 'Everyone who came', count: hasMore ? 0 : people.length }
   return { title: 'Everyone here', count: hasMore ? Math.max(hereCount - 1, people.length) : people.length }

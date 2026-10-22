@@ -16,6 +16,7 @@ const ROSE = [
   'app/crews/invite/[crewId].tsx',
   'app/user/[id].tsx',
   'app/friends/index.tsx',
+  'app/room/friends-here.tsx',
   'app/friends/add.tsx',
   'app/friends/requests.tsx',
   'app/friends/[userId].tsx',

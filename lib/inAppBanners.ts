@@ -41,7 +41,7 @@ const PEOPLE = ['friend_request', 'match', 'reveal_request', 'reveal', 'message_
 const CREW = ['crew_invite', 'crew_here', 'blend']
 const EVENT = ['event_update', 'event_changed']
 /** They land in the bell and nowhere else while the app is open. */
-const SILENT = ['announcement', 'rating_request', 'waitlist_promoted', 'message_request_response', 'board_request_accepted', 'friend_accepted']
+const SILENT = ['event_cancelled', 'announcement', 'rating_request', 'waitlist_promoted', 'message_request_response', 'board_request_accepted', 'friend_accepted']
 
 export type PushContent = { title: string; body: string; data: Record<string, unknown> }
 

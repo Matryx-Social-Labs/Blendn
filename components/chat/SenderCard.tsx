@@ -5,6 +5,7 @@ import { apiClient } from '../../lib/apiClient'
 import type { RoomAttendee } from '../../lib/activeRoom'
 import { Logger } from '../../lib/logger'
 import { likeRefusal } from '../../lib/likeRefusal'
+import { overlapOf } from '../../lib/overlapLine'
 import { reasonLine } from '../../lib/roomMoments'
 import { markSeed } from '../../lib/pseudonymAvatar'
 import { attendeeFromMatch } from '../../lib/roomLive'
@@ -132,6 +133,7 @@ export function SenderCard({
           age: attendee?.age,
           reason: attendee ? reasonLine(attendee) : undefined,
           chips: card?.sharedInterests,
+          overlap: card ? overlapOf({ overlaps: card.overlaps, sharedIntents: card.sharedIntents, interests: card.sharedInterests, sign: card.sign }) : undefined,
         }}
         variant={card ? (card.insideNow === false ? 'was' : 'here') : 'thin'}
         state={state}

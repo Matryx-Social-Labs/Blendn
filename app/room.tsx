@@ -3,7 +3,7 @@ import { useEffect } from 'react'
 import { View } from 'react-native'
 
 import { openBlendn } from '../lib/blendnOverlay'
-import { EMBER } from '../lib/theme'
+import { COLOR } from '../lib/design/tokens'
 
 /**
  * `/room` — kept as an address, not a screen.
@@ -20,5 +20,5 @@ export default function RoomRoute() {
     if (router.canGoBack()) router.back()
     else router.replace('/(tabs)/events')
   }, [])
-  return <View style={{ flex: 1, backgroundColor: EMBER.bg }} />
+  return <View style={{ flex: 1, backgroundColor: COLOR.ink }} />
 }

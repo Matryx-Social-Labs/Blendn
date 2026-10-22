@@ -18,6 +18,7 @@ import { MomentReady } from '../components/ds/MomentReady'
 import { MomentRecap, type MomentRecapProps } from '../components/ds/MomentRecap'
 import { COLOR, DURATION, MATERIAL, RADIUS, SPACE, SPRING } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
+import { markOffline, markOnline } from '../lib/networkStatus'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('react-native-reanimated', () => {
@@ -509,6 +510,30 @@ describe('<MomentRecap> · That’s a wrap (#43)', () => {
     expect(screen.getByText('You rated this night. Thanks.')).toBeTruthy()
     expect(screen.queryByRole('button', { name: /Rate/ })).toBeNull()
     expect(screen.getByRole('button', { name: 'Back to tonight' })).toBeTruthy()
+  })
+
+  it('R3: People from tonight sits between Rate and Back, and is absent without a deck', async () => {
+    await render(recap().el)
+    expect(screen.queryByRole('button', { name: 'People from tonight' })).toBeNull()
+    const onPeople = jest.fn()
+    await render(recap({ onPeople }).el)
+    await fireEvent.press(screen.getByRole('button', { name: 'People from tonight' }))
+    expect(onPeople).toHaveBeenCalledTimes(1)
+    const order = screen.getAllByRole('button').map((b) => b.props.accessibilityLabel)
+    expect(order.indexOf('People from tonight')).toBeGreaterThan(order.indexOf('Rate who you met'))
+    expect(order.indexOf('People from tonight')).toBeLessThan(order.indexOf('Back to tonight'))
+  })
+
+  it('R6: offline, the page keeps what it had and says so; online, no banner', async () => {
+    await render(recap().el)
+    expect(screen.queryByTestId('w-offline', HIDDEN)).toBeNull()
+    await act(async () => markOffline())
+    expect(screen.getByText('Offline. Showing what loaded last.')).toBeTruthy()
+    // Reads stay: the night and both actions are still there.
+    expect(screen.getByText('That’s a wrap')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Back to tonight' })).toBeTruthy()
+    await act(async () => markOnline())
+    expect(screen.queryByText('Offline. Showing what loaded last.')).toBeNull()
   })
 
   it('no photo: the creature; no check-in time: no time tile', async () => {

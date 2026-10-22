@@ -1,3 +1,4 @@
+import { usePathname } from 'expo-router'
 import { Tabs } from 'expo-router/js-tabs'
 import React, { memo, useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { AppState, Easing, Platform, StyleSheet, View } from 'react-native'
@@ -15,6 +16,7 @@ import { COLOR, DURATION, EASING, SIZE, SPACE } from '../../lib/design/tokens'
 import { Logger } from '../../lib/logger'
 import { roomButtonTarget, type RoomButtonTarget } from '../../lib/roomButton'
 import { getRoomSignal, subscribeRoomSignal } from '../../lib/roomSignal'
+import { watchRoomUnread } from '../../lib/roomUnread'
 import { listenForWaves, useRoomWaves, waveShown } from '../../lib/roomWaves'
 
 /**
@@ -64,6 +66,21 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
   const blendnOpen = useBlendnOpen()
   const checkInVenue = target.state === 'checkin' && venue ? venue : null
   const centreCoach = useCoachMark('centre_button_checkin', { ready: checkInVenue !== null && !blendnOpen })
+  /*
+   * The unread (T3) is the server's, read on the 30 s tick from the cached list. It is forced only when it has surely
+   * moved: the overlay closed (the chat may have been read from it), the app came back, or the room chat was left.
+   */
+  const rereadUnread = useRef<(force?: boolean) => void>(() => {})
+  useEffect(() => {
+    if (!blendnOpen) rereadUnread.current(true)
+  }, [blendnOpen])
+  const pathname = usePathname()
+  const lastPath = useRef(pathname)
+  useEffect(() => {
+    const was = lastPath.current
+    lastPath.current = pathname
+    if (was !== pathname && was.startsWith('/chat/') && !pathname.startsWith('/chat/')) rereadUnread.current(true)
+  }, [pathname])
   // Used: Blend'n opened from (c) (the disc or its label, the first half of "tap, then hold"), or checked in.
   useEffect(() => {
     if (target.state === 'live' || (blendnOpen && target.state === 'checkin')) markCoachUsed('centre_button_checkin')
@@ -132,6 +149,10 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
   useEffect(() => {
     let cancelled = false
     let activeEventId: string | null = null
+    // The live room's unread, for the disc's badge (T3); one watcher per room you are in.
+    let unread = 0
+    let watcher: ReturnType<typeof watchRoomUnread> | null = null
+    let watchedEvent: string | null = null
 
     const recompute = () => {
       const signal = getRoomSignal()
@@ -144,6 +165,7 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
           activeEventId,
           insideEventId: signal.insideEventId,
           todayEventIds: signal.todayEventIds,
+          roomUnread: unread,
         })
       )
     }
@@ -156,12 +178,28 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
         const active = r.data?.checkIns?.[0] ?? null
         activeEventId = active?.eventId ?? null
         setActiveRoomTitle(active?.event?.title ?? null)
+        if (activeEventId !== watchedEvent) {
+          watcher?.stop()
+          unread = 0
+          watchedEvent = activeEventId
+          watcher = activeEventId
+            ? watchRoomUnread({
+                eventId: activeEventId,
+                onChange: (n) => {
+                  unread = n
+                  recompute()
+                },
+              })
+            : null
+        }
         recompute()
+        void watcher?.refresh()
       } catch (e) {
         Logger.debug('navigation', 'room button poll failed', { error: e })
       }
     }
 
+    rereadUnread.current = (force) => void watcher?.refresh(force)
     recompute()
     void read()
     const id = setInterval(read, 30_000)
@@ -175,7 +213,10 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
      */
     const unsubscribeCheckIn = subscribeCheckInChanged(() => void read())
     const appState = AppState.addEventListener('change', (state) => {
-      if (state === 'active') void read()
+      if (state === 'active') {
+        void read()
+        rereadUnread.current(true)
+      }
     })
     return () => {
       cancelled = true
@@ -183,6 +224,7 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
       unsubscribe()
       unsubscribeCheckIn()
       appState.remove()
+      watcher?.stop()
       listenForWaves(null)
     }
   }, [])

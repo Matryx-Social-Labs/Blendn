@@ -322,6 +322,31 @@ it('says which setting did not save, as a toast that plays the one error haptic'
   await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("Couldn’t save “Read receipts”. Try again.", 'error', { haptic: 'error' }))
 })
 
+it('sends ONLY the switch that was changed: the other three are never sent from a stale screen (consent)', async () => {
+  // The screen holds friendsSeeMe false (cached, or read before the one-time ask turned it on elsewhere).
+  api.getProfile.mockResolvedValue({
+    success: true,
+    data: { profile: { push_enabled: true, show_online: true, read_receipts: true, share_location: true, friends_see_me_in_rooms: false } },
+  } as never)
+  await render(<Screen />)
+  const toggle = () => screen.getByRole('switch', { name: 'Read receipts' })
+  await waitFor(() => expect(toggle().props.accessibilityState.disabled).toBe(false))
+  fireEvent.press(toggle())
+
+  await waitFor(() => expect(api.updateProfile).toHaveBeenCalledTimes(1))
+  expect(api.updateProfile).toHaveBeenCalledWith('u_me', { read_receipts: false })
+  expect(Object.keys(api.updateProfile.mock.calls[0][1] as object)).toEqual(['read_receipts'])
+})
+
+it('each switch sends its own column, and only that', async () => {
+  api.getProfile.mockResolvedValue({ success: true, data: { profile: { push_enabled: true, friends_see_me_in_rooms: false } } } as never)
+  await render(<Screen />)
+  const friends = () => screen.getByRole('switch', { name: /^Friends can see I'm here/ })
+  await waitFor(() => expect(friends().props.accessibilityState.disabled).toBe(false))
+  fireEvent.press(friends())
+  await waitFor(() => expect(api.updateProfile).toHaveBeenCalledWith('u_me', { friends_see_me_in_rooms: true }))
+})
+
 it('opens About and Contact support', async () => {
   await render(<Screen />)
   fireEvent.press(await screen.findByRole('button', { name: 'About Blend’n' }))

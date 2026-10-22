@@ -13,6 +13,8 @@ jest.mock('@react-native-async-storage/async-storage', () =>
 )
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() } }))
 const mockParams: Record<string, string> = {}
+const mockAsk = jest.fn()
+jest.mock('../lib/friendsSeeMeAsk', () => ({ askFriendsSeeMe: (...a: unknown[]) => mockAsk(...a), useStillHere: () => () => true }))
 jest.mock('expo-router', () => ({
   router: { back: jest.fn(), push: jest.fn() },
   useFocusEffect: (fn: () => void) => require('react').useEffect(() => fn(), [fn]),
@@ -238,6 +240,7 @@ describe('answering a request in place', () => {
 
     await act(async () => finish({ success: true }))
     expect(await screen.findByText('You’re friends now')).toBeTruthy()
+    expect(mockAsk).toHaveBeenCalledWith({ stillHere: expect.any(Function) })
     expect(screen.queryByRole('button', { name: 'Accept' })).toBeNull()
     // The moment plays where it was answered: the row has not left Waiting (a remount there arrives done, and plays nothing).
     expect(screen.getByRole('header', { name: /Waiting on you/ })).toBeTruthy()
@@ -257,6 +260,7 @@ describe('answering a request in place', () => {
     expect(api.respondToFriendRequest).toHaveBeenCalledWith('r1', 'dismiss')
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Decline' })).toBeNull())
     expect(mockShowToast).not.toHaveBeenCalled()
+    expect(mockAsk).not.toHaveBeenCalled()
   })
 
   it('a request that is no longer open says so and keeps no pills', async () => {

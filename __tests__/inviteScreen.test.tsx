@@ -11,7 +11,10 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react-nativ
 jest.mock('expo-router', () => ({
   router: { back: jest.fn(), replace: jest.fn(), push: jest.fn(), canGoBack: jest.fn(() => true) },
   useLocalSearchParams: () => ({ token: 'abcdefghijklmnopqrstuv' }),
+  useIsFocused: () => true,
 }))
+const mockAsk = jest.fn()
+jest.mock('../lib/friendsSeeMeAsk', () => ({ askFriendsSeeMe: (...a: unknown[]) => mockAsk(...a), useStillHere: () => () => true }))
 jest.mock('react-native-safe-area-context', () => {
   const React = require('react')
   const { View } = require('react-native')
@@ -73,6 +76,8 @@ it('shows who sent it and asks with the token, then says Requested', async () =>
 
   await waitFor(() => expect(api.sendFriendRequest).toHaveBeenCalledWith({ token: 'abcdefghijklmnopqrstuv' }))
   await screen.findByText('Requested')
+  // A request that is only sent is no friendship yet: the one-time ask (Q1) waits for one.
+  expect(mockAsk).not.toHaveBeenCalled()
 })
 
 it('stays put and says so when the request fails', async () => {
@@ -95,6 +100,8 @@ it('accepting from the link makes you friends at once', async () => {
   fireEvent.press(await screen.findByText('Accept friend request'))
   await screen.findByText('View profile')
   expect(mockShowToast).toHaveBeenCalledWith('You and Ana are friends', 'success', { haptic: 'success' })
+  expect(mockAsk).toHaveBeenCalledTimes(1)
+  expect(mockAsk).toHaveBeenCalledWith({ stillHere: expect.any(Function) })
 
   fireEvent.press(screen.getByText('View profile'))
   expect(router.replace).toHaveBeenCalledWith({ pathname: '/friends/[userId]', params: { userId: 'u_ana' } })

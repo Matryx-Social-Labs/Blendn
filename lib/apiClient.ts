@@ -2542,6 +2542,24 @@ class ApiClientClass {
   }
 
   /**
+   * Your friends who are here and let friends see them (`GET /events/:id/friends-here`, plans/friends-in-room.md 4.3).
+   * `order=recent` is the Room's first page (last DM, then arrival); `order=name` pages A to Z by `cursor` and filters by `q`.
+   * Real ids and names, never room handles. An older server answers 404: the caller shows no section.
+   */
+  async getFriendsHere(
+    eventId: string,
+    options: { order?: 'recent' | 'name'; limit?: number; cursor?: string | null; q?: string } = {}
+  ): Promise<ApiResponse<{ friends: { userId: string; name: string; photo: string | null }[]; total: number; nextCursor: string | null }>> {
+    const params = new URLSearchParams()
+    if (options.order) params.set('order', options.order)
+    if (options.limit) params.set('limit', String(options.limit))
+    if (options.cursor) params.set('cursor', options.cursor)
+    if (options.q) params.set('q', options.q)
+    const query = params.toString()
+    return this.queuedRequest(`/api/mobile/events/${encodeURIComponent(eventId)}/friends-here${query ? `?${query}` : ''}`)
+  }
+
+  /**
    * Like someone you were in a room with. Mutual opens a conversation.
    *
    * Nothing in the response reveals who liked you first -- that asymmetry is

@@ -35,12 +35,20 @@ const SETTINGS_NOT_LOADED = 'Your settings didn’t load. Pull down or try again
 
 type PreferenceKey = 'showOnlineStatus' | 'shareReadReceipts' | 'locationSharing' | 'friendsSeeMe'
 
+/** The asymmetric column names (see `hydratePreferencesFromProfile`). */
+const PREFERENCE_COLUMN: Record<PreferenceKey, string> = {
+  showOnlineStatus: 'show_online',
+  shareReadReceipts: 'read_receipts',
+  locationSharing: 'share_location',
+  friendsSeeMe: 'friends_see_me_in_rooms',
+}
+
 /** The visible row title per key, so a failure can name the setting it lost. */
 const PREFERENCE_TITLES: Record<PreferenceKey, string> = {
   showOnlineStatus: 'Show online status',
   shareReadReceipts: 'Read receipts',
   locationSharing: 'Share location for nearby events',
-  friendsSeeMe: 'Friends can see who I am in rooms',
+  friendsSeeMe: "Friends can see I'm here",
 }
 
 interface PreferencesState {
@@ -208,12 +216,11 @@ function SettingsScreenContent() {
       // The four keys the route validates, top level, snake_case. There is no
       // `preferences` wrapper and no camelCase alias -- the previous twelve
       // variants matched none of them, so nothing was ever persisted.
-      const payload = {
-        show_online: next.showOnlineStatus,
-        read_receipts: next.shareReadReceipts,
-        share_location: next.locationSharing,
-        friends_see_me_in_rooms: next.friendsSeeMe,
-      }
+      //
+      // ONLY the key that was changed. All four from what the screen holds sent a stale cache's value for the
+      // others: opened offline, with `friendsSeeMe` still false, flipping Read receipts would have turned off a
+      // consent the person gave elsewhere (the one-time ask). A switch the person did not touch is not sent.
+      const payload = { [PREFERENCE_COLUMN[key]]: next[key] }
 
       const result = await apiClient.updateProfile(user.id, payload)
       if (!result.success) {
@@ -471,7 +478,7 @@ function SettingsScreenContent() {
           {preferenceRow('showOnlineStatus', 'eye', 'Show online status', 'Off: you’re counted at events but not listed to other people there.')}
           {preferenceRow('shareReadReceipts', 'check-check', 'Read receipts')}
           {preferenceRow('locationSharing', 'navigation', 'Share location for nearby events')}
-          {preferenceRow('friendsSeeMe', 'users', 'Friends can see who I am in rooms', 'Off: at an event, your friends see your pseudonym like everyone else.')}
+          {preferenceRow('friendsSeeMe', 'users', "Friends can see I'm here", "On: friends at the same event see you under Friends here, with your name and photo, and can message you. Off: you don't show up for friends at events at all.")}
           {/* R4.1 7.2: a prefilled email to support; nothing is sent until they press Send in their mail app. */}
           <SettingsRow
             icon="download"

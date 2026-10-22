@@ -4,6 +4,7 @@ import Animated, { Easing, FadeIn, FadeOut, withDelay, withSpring, withTiming } 
 
 import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE, SPRING, STAGGER } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
+import { overlapOf } from '../../lib/overlapLine'
 import { hereNowStack, reasonLine, shuffleCountdownLabel, timeHereLabel } from '../../lib/roomMoments'
 import type { RoomPerson } from '../../lib/useRoom'
 import { Avatar } from '../ds/Avatar'
@@ -175,6 +176,7 @@ export const MeetNextRow = memo(function MeetNextRow({
               face={faceOf(p)}
               name={p.name}
               reason={p.matched ? 'Matched' : reasonLine(p)}
+              overlap={p.matched ? null : overlapOf(p).line}
               width={width}
               liked={p.liked}
               onPress={() => onOpen(p)}
@@ -211,6 +213,7 @@ export const RoomGridFace = memo(function RoomGridFace({
       face={faceOf(person)}
       name={person.name}
       reason={person.matched ? 'Matched' : reasonLine(person)}
+      overlap={person.matched ? null : overlapOf(person).line}
       width={width}
       here={person.insideNow}
       liked={person.liked}

@@ -19,6 +19,8 @@ export type NotificationKind =
   | 'event_update'
   /** Sent to people going when the time, venue or status changed; shown like `event_update`. */
   | 'event_changed'
+  /** An event you were checked in to was cancelled: you are checked out. Carries `eventId`; opens the event. */
+  | 'event_cancelled'
   | 'announcement'
   | 'message_request'
   | 'message_request_response'

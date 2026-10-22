@@ -14,6 +14,10 @@ import { COLOR, DURATION, EASING, FONT_FAMILY, PRESS, RADIUS, SIZE, SPACE } from
 import type { TrayButton, TrayExtra } from '../../lib/locationFix'
 import { Logger } from '../../lib/logger'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
+import { overlapOf } from '../../lib/overlapLine'
+import { useRoomCancelled } from '../../lib/useRoomCancelled'
+import { useFriendsHere, useMessageFriend } from '../../lib/friendsHere'
+import { useOffline } from '../OfflineBanner'
 import { everyoneHead, meetNext, reasonLine, reasonLines } from '../../lib/roomMoments'
 import { markRoomLeft } from '../../lib/roomMembership'
 import { roomRecap, type RoomRecap as Recap } from '../../lib/roomRecap'
@@ -44,6 +48,8 @@ import { ConnectSheet } from '../grid/ConnectSheet'
 import ScalePress from '../motion/ScalePress'
 import { CrewsFoot, CrewsHead, PeopleCrewStrip, RoomCrewCard } from './RoomCrews'
 import { faceOf, RoomSkeleton, useNow } from './RoomSections'
+import { FriendsHere } from './FriendsHere'
+import { RoomCancelled } from './RoomCancelled'
 import { RoomStage } from './RoomStage'
 import { RoomView } from './RoomView'
 import { TonightView } from './TonightView'
@@ -158,10 +164,27 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   const waves = useRoomWaves()
   const { user } = useAuth()
   const now = useNow(15_000)
+  // R4: the event was cancelled while you were inside; the server has checked you out.
+  const { cancelled, dismiss: dismissCancelled } = useRoomCancelled(room.event)
 
   // --- a toast of the overlay's own (refusals off the card, crew likes) --------
   const [toast, setToast] = useState<{ key: number; kind: ToastKind; text: string } | null>(null)
   const say = useCallback((text: string, kind: ToastKind = 'info') => setToast({ key: Date.now(), kind, text }), [])
+
+  // Friends here (plans/friends-in-room.md C1): the friends at this event who let friends see them.
+  const offline = useOffline()
+  const friendsHere = useFriendsHere(room.event?.id ?? null, room.status === 'ready')
+  const refreshFriends = friendsHere.refresh
+  const friendChat = useMessageFriend(
+    useCallback(
+      (text: string) => {
+        say(text, 'error')
+        // They may have gone (an unfriend, a block, a check-out): read again.
+        void refreshFriends()
+      },
+      [say, refreshFriends]
+    )
+  )
 
   /*
    * The end of the night. Kept as a snapshot rather than derived: the sweeper
@@ -719,6 +742,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   const visibility: Visibility = bannerState(controls.revealed, controls.listed, controls.readiness.ok)
 
   // --- the card's variant and state ------------------------------------------------
+  const cardOverlap = cardPerson ? overlapOf(cardPerson) : null
   const cardVariant: PersonVariant = !cardPerson ? 'thin' : cardPerson.matched ? 'matched' : cardPerson.insideNow ? 'here' : 'was'
   const refusal = card ? refusals[card.id] : undefined
   /** The chip shows a definite answer only: hidden while there is nothing to choose between (solo), or a like would still ask. */
@@ -755,8 +779,8 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
           // Under a Room it is already faded out by `tonightFadeStyle`: an exit would start it again from 1, over the Room.
           exiting={showRoom ? undefined : FadeOut.duration(DURATION.base)}
           pointerEvents={mode === 'room' ? 'none' : 'auto'}
-          accessibilityElementsHidden={mode === 'room'}
-          importantForAccessibility={mode === 'room' ? 'no-hide-descendants' : 'auto'}
+          accessibilityElementsHidden={mode === 'room' || !!cancelled}
+          importantForAccessibility={mode === 'room' || cancelled ? 'no-hide-descendants' : 'auto'}
         >
           <TonightView
             events={tonightEvents}
@@ -800,8 +824,9 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
           entering={pourEntrance ? undefined : reduceMotion ? FadeIn : FadeInUp.duration(DURATION.medium)}
           exiting={FadeOut.duration(DURATION.quick)}
           pointerEvents={mode === 'room' ? 'auto' : 'none'}
-          accessibilityElementsHidden={mode !== 'room'}
-          importantForAccessibility={mode === 'room' ? 'auto' : 'no-hide-descendants'}
+          // Under the cancelled card the Room is not there for a screen reader: a swipe never walks past it.
+          accessibilityElementsHidden={mode !== 'room' || !!cancelled}
+          importantForAccessibility={mode === 'room' && !cancelled ? 'auto' : 'no-hide-descendants'}
         >
           <RoomView
             title={room.event.title}
@@ -836,6 +861,17 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
             view={gridView}
             onView={setGridView}
             crewStrip={<PeopleCrewStrip myCrews={myCrewsHere} mine={crews.mine} eventTitle={eventTitle} actions={crewActions} />}
+            friendsPresent={friendsHere.total > 0 && friendsHere.friends.length > 0}
+            friendsHere={
+              <FriendsHere
+                friends={friendsHere.friends}
+                total={friendsHere.total}
+                opening={friendChat.opening}
+                offline={offline}
+                onMessage={(f) => void friendChat.message(f)}
+                onSeeAll={() => router.push({ pathname: '/room/friends-here', params: { eventId: eventId ?? '' } } as never)}
+              />
+            }
             crewsHead={
               eventId ? (
                 <CrewsHead
@@ -937,7 +973,9 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
           name: cardPerson?.name ?? card?.name ?? '',
           age: cardPerson?.age,
           reason: cardPerson ? (cardPerson.matched ? 'You matched' : reasonLine(cardPerson)) : undefined,
-          reasons: cardPerson ? reasonLines(cardPerson) : undefined,
+          // The line says overlaps[0]; the panel keeps the rest, never the same sentence twice.
+          reasons: cardPerson ? reasonLines(cardPerson).filter((r) => r !== cardOverlap?.line) : undefined,
+          overlap: cardOverlap ?? undefined,
           chips: cardPerson ? [...cardPerson.interests.slice(0, 8), ...(cardPerson.sign ? [cardPerson.sign] : [])] : undefined,
         }}
         liked={!!cardPerson && (cardPerson.liked || cardPerson.pending) && !cardPerson.matched}
@@ -986,6 +1024,22 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
           }
         }}
       />
+
+      {cancelled ? (
+        <RoomCancelled
+          title={cancelled.title}
+          onSeeTonight={() => {
+            dismissCancelled()
+            void room.refresh()
+            void tonight.refresh()
+          }}
+          onClose={() => {
+            dismissCancelled()
+            onClose()
+          }}
+          testID="room-cancelled"
+        />
+      ) : null}
 
       {/*
         Faces only where they have been earned (D · 4.4): theirs is a photo only

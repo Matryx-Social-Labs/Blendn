@@ -157,6 +157,10 @@ export interface ServerToClientEvents {
   }) => void
   /** Somebody in the room waved at you. `fromName` is how they appear to you. */
   "room:wave": (data: { eventId: string; fromUserId: string; fromName: string }) => void
+  /** The event was cancelled: everyone checked in has been checked out (blendn-admin `emitEventCancelled`, to `event:{id}` and `event:room:{id}`). */
+  "event:cancelled": (data: { eventId: string }) => void
+  /** Who is here among your friends changed (blendn-admin `notifyFriendsHere`): content-free, so the phone re-reads Friends here. */
+  "room:friends": (data: { eventId: string }) => void
   /** A row landed in your notifications bell (blendn-admin `announceToBell`). The kind only. */
   "notification:new": (data: { kind: string }) => void
   /**
@@ -223,6 +227,8 @@ type PrivateTypingCallback = (data: ServerToClientEvents["private:typing"] exten
 type PrivateReadCallback = (data: ServerToClientEvents["private:read"] extends (data: infer D) => void ? D : never) => void
 type RoomMatchCallback = (data: ServerToClientEvents["room:match"] extends (data: infer D) => void ? D : never) => void
 type RoomWaveCallback = (data: ServerToClientEvents["room:wave"] extends (data: infer D) => void ? D : never) => void
+type EventCancelledCallback = (data: ServerToClientEvents["event:cancelled"] extends (data: infer D) => void ? D : never) => void
+type RoomFriendsCallback = (data: ServerToClientEvents["room:friends"] extends (data: infer D) => void ? D : never) => void
 type BellCallback = (data: ServerToClientEvents["notification:new"] extends (data: infer D) => void ? D : never) => void
 type LiveEndedCallback = (data: ServerToClientEvents["live:ended"] extends (data: infer D) => void ? D : never) => void
 
@@ -286,6 +292,7 @@ export function subscribeConnectionStatus(
 const eventCheckInSubscriptions = new Map<string, Set<EventCheckInCallback>>()
 const eventRoomCheckInSubscriptions = new Map<string, Set<EventRoomCheckInCallback>>()
 const eventCheckOutSubscriptions = new Map<string, Set<EventCheckOutCallback>>()
+const eventCancelledSubscriptions = new Map<string, Set<EventCancelledCallback>>()
 const eventInterestSubscriptions = new Map<string, Set<EventInterestCallback>>()
 const chatMessageSubscriptions = new Map<string, Set<ChatMessageCallback>>()
 const chatTypingSubscriptions = new Map<string, Set<ChatTypingCallback>>()
@@ -323,6 +330,7 @@ const userSubscriptions = new Map<string, Set<PrivateMessageCallback>>()
  */
 const roomMatchSubscriptions = new Set<RoomMatchCallback>()
 const roomWaveSubscriptions = new Set<RoomWaveCallback>()
+const roomFriendsSubscriptions = new Set<RoomFriendsCallback>()
 const bellSubscriptions = new Set<BellCallback>()
 const liveEndedSubscriptions = new Set<LiveEndedCallback>()
 type DeliveredCallback = (data: { conversationId: string; messageIds: string[] }) => void
@@ -543,6 +551,7 @@ export function disconnect(): void {
   eventCheckInSubscriptions.clear()
   eventRoomCheckInSubscriptions.clear()
   eventCheckOutSubscriptions.clear()
+  eventCancelledSubscriptions.clear()
   eventInterestSubscriptions.clear()
   chatMessageSubscriptions.clear()
   chatTypingSubscriptions.clear()
@@ -555,6 +564,7 @@ export function disconnect(): void {
   userSubscriptions.clear()
   roomMatchSubscriptions.clear()
   roomWaveSubscriptions.clear()
+  roomFriendsSubscriptions.clear()
 }
 
 /**
@@ -567,6 +577,7 @@ function rejoinAllRooms(): void {
   const eventIds = new Set<string>([
     ...eventCheckInSubscriptions.keys(),
     ...eventCheckOutSubscriptions.keys(),
+    ...eventCancelledSubscriptions.keys(),
     ...eventInterestSubscriptions.keys(),
   ])
   eventIds.forEach((id) => socket?.emit("join:event", id))
@@ -673,6 +684,14 @@ function setupSocketHandlers(sock: TypedSocket): void {
     void ifItWasMe(data)
   })
 
+  sock.on("event:cancelled", (data) => {
+    // Everyone inside was checked out: what the app knows of the room and of "am I in" is stale.
+    apiClient.forgetEventMatches(data.eventId)
+    apiClient.forgetActiveCheckins()
+    markDomainsDirty(["events", "match", "chat"])
+    eventCancelledSubscriptions.get(data.eventId)?.forEach((cb) => cb(data))
+  })
+
   sock.on("event:interestUpdate", (data) => {
     markDomainsDirty(["events", "match"])
     const callbacks = eventInterestSubscriptions.get(data.eventId)
@@ -739,6 +758,10 @@ function setupSocketHandlers(sock: TypedSocket): void {
 
   sock.on("room:wave", (data) => {
     roomWaveSubscriptions.forEach((cb) => cb(data))
+  })
+
+  sock.on("room:friends", (data) => {
+    roomFriendsSubscriptions.forEach((cb) => cb(data))
   })
 
   sock.on("notification:new", (data) => {
@@ -825,6 +848,7 @@ function subscribeToEventMap<TCallback>(
         targetMap.delete(eventId)
         const hasAnyEventSubs = eventCheckInSubscriptions.has(eventId)
           || eventCheckOutSubscriptions.has(eventId)
+          || eventCancelledSubscriptions.has(eventId)
           || eventInterestSubscriptions.has(eventId)
         if (!hasAnyEventSubs) {
           socket?.emit("leave:event", eventId)
@@ -881,6 +905,11 @@ export function subscribeToEventRoomCheckIn(
       socket?.emit("leave:event:room", eventId)
     }
   }
+}
+
+/** The event was cancelled while you are in its room. One emit to the room, never one per person. */
+export function subscribeToEventCancelled(eventId: string, callback: EventCancelledCallback): () => void {
+  return subscribeToEventMap(eventId, callback, eventCancelledSubscriptions)
 }
 
 /**
@@ -1161,6 +1190,15 @@ export function subscribeToRoomWave(callback: RoomWaveCallback): () => void {
   roomWaveSubscriptions.add(callback)
   return () => {
     roomWaveSubscriptions.delete(callback)
+  }
+}
+
+/** Friends here changed in a room you are in. Same delivery as `subscribeToRoomMatch`; the payload names no one. */
+export function subscribeToRoomFriends(callback: RoomFriendsCallback): () => void {
+  if (!socket?.connected) connect()
+  roomFriendsSubscriptions.add(callback)
+  return () => {
+    roomFriendsSubscriptions.delete(callback)
   }
 }
 
