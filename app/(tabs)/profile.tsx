@@ -1,3 +1,4 @@
+import { playsArrival } from '../../lib/backFromBackground'
 import { barCircleBottom } from '../../lib/barGeometry'
 import { ScreenProfiler } from '../../lib/perf'
 import { router, useFocusEffect, useIsFocused, useScrollToTop } from 'expo-router'
@@ -318,9 +319,11 @@ function ProfileInner() {
   )
 
   const content = () => {
-    // A section's place in the entrance, counted over what is actually drawn.
+    // A section's place in the entrance, counted over what is actually drawn. In the catch-up after a long absence a section
+    // that arrives is simply there (motion #49: missed arrivals are not replayed).
     let slot = 0
-    const next = () => enterAt(slot++)
+    const arrive = playsArrival()
+    const next = () => (arrive ? { delay: enterAt(slot++) } : { delay: 0, duration: 0 })
     const photoGap = gaps.some((g) => g.key === 'photo')
     const otherGaps = gaps.filter((g) => g.key !== 'photo')
     const crewStack = crews.slice(0, 2)
@@ -328,7 +331,7 @@ function ProfileInner() {
     return (
       <>
         <OfflineStrip offline={offline} />
-        <FadeInUp delay={next()}>
+        <FadeInUp {...next()}>
           <MeIdentity
             name={profile?.name || 'You'}
             age={profile?.age}
@@ -345,7 +348,7 @@ function ProfileInner() {
           Somebody is waiting on an answer: about another person, and the only thing here with a clock on it. Then your crews: made
           from your friends, so beside the way to add them; the dot is an invite waiting.
         */}
-        <FadeInUp delay={next()}>
+        <FadeInUp {...next()}>
           <SettingsGroup>
             {requestCount > 0 ? <RequestsRow count={requestCount} /> : null}
             <SettingsRow
@@ -386,7 +389,7 @@ function ProfileInner() {
           room has nothing to reveal.
         */}
         {gaps.length > 0 ? (
-          <FadeInUp delay={next()}>
+          <FadeInUp {...next()}>
             <ProfileSection title="Finish your profile" testID="finish-profile">
               {photoGap ? <Button kind="primary" icon="camera" label="Add a photo" onPress={openEdit} /> : null}
               {otherGaps.length > 0 ? (
@@ -405,7 +408,7 @@ function ProfileInner() {
           failed to do rather than a role you do not have.
         */}
         {stats ? (
-          <FadeInUp delay={next()}>
+          <FadeInUp {...next()}>
             <StatsCard
               attended={stats.eventsAttended}
               saved={stats.eventsFavorited}
@@ -417,7 +420,7 @@ function ProfileInner() {
           </FadeInUp>
         ) : null}
 
-        <FadeInUp delay={next()}>
+        <FadeInUp {...next()}>
           <NightsOut
             status={nightsStatus}
             events={attended}
@@ -430,7 +433,7 @@ function ProfileInner() {
         </FadeInUp>
 
         {profile?.bio || interests.length > 0 || profile?.education ? (
-          <FadeInUp delay={next()}>
+          <FadeInUp {...next()}>
             <ProfileSection title="About" testID="about">
               {profile?.bio ? <ProfileBio text={profile.bio} /> : null}
               {/* Your own chips, so nothing is "shared" -- plain chips only. */}

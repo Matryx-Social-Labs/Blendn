@@ -38,6 +38,8 @@ import Profile from '../app/(tabs)/profile'
 import { apiClient } from '../lib/apiClient'
 import { SIZE, SPACE } from '../lib/design/tokens'
 import { queryCache } from '../lib/queryCache'
+import * as FadeInUpModule from '../components/motion/FadeInUp'
+import { noteReturn } from '../lib/backFromBackground'
 /* eslint-enable import/first */
 
 const api = apiClient as jest.Mocked<typeof apiClient>
@@ -148,4 +150,30 @@ it.each([0, 24, 34])('Android, bottom inset %i: the foot of the page is above th
   // The bar floats `inset + 12 + 64` up from the screen's foot (`tabBarTop`); the page reserves `inset + clearance + gutter`.
   const barHeightFromFoot = inset + SPACE.tabBarBottomGapAndroid + SIZE.tabBar
   expect(inset + 98 + SPACE.xl - barHeightFromFoot).toBeGreaterThanOrEqual(SPACE.xl)
+})
+
+describe('back from the background (motion #49): what arrives in the catch-up is simply there', () => {
+  const entrances = (spy: jest.SpyInstance) => spy.mock.calls.map(([props]) => ({ delay: props.delay, duration: props.duration }))
+
+  it('in the quiet window every section is drawn at rest; after it, they stagger in as before', async () => {
+    api.getPublicProfile.mockResolvedValue(PROFILE as never)
+    api.getMyAttendance.mockResolvedValue({ success: true, data: { events: [] } } as never)
+    const spy = jest.spyOn(FadeInUpModule, 'default')
+    noteReturn(120_000)
+    await render(<Profile />)
+    await screen.findByLabelText('Sam, 28')
+    expect(spy).toHaveBeenCalled()
+    for (const e of entrances(spy)) expect(e).toEqual({ delay: 0, duration: 0 })
+    await screen.unmount()
+
+    // The window over (a return long ago): the entrance plays, staggered.
+    noteReturn(120_000, 0)
+    spy.mockClear()
+    await render(<Profile />)
+    await screen.findByLabelText('Sam, 28')
+    const played = entrances(spy)
+    expect(played.every((e) => e.duration === undefined)).toBe(true)
+    expect(played.some((e) => (e.delay ?? 0) > 0)).toBe(true)
+    spy.mockRestore()
+  })
 })
