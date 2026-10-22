@@ -129,3 +129,15 @@ it('keeps its short reason and gives a screen reader the overlap sentence as the
   expect(screen.getByText('Both into vinyl', { includeHiddenElements: true })).toBeTruthy()
   expect(screen.getByTestId('g', { includeHiddenElements: true }).props.accessibilityHint).toBe('Both CSK, in RCB country')
 })
+
+it('a hold opens the card at once with H.longPress, and a tap stays silent (H1)', async () => {
+  const onPress = jest.fn()
+  const spy = jest.spyOn(H, 'longPress').mockImplementation(() => {})
+  await render(<GridFace {...PRIYA} onPress={onPress} testID="g" />)
+  await fireEvent(screen.getByTestId('g'), 'longPress')
+  expect(spy).toHaveBeenCalledTimes(1)
+  expect(onPress).toHaveBeenCalledTimes(1)
+  spy.mockClear()
+  await fireEvent.press(screen.getByTestId('g'))
+  expect(spy).not.toHaveBeenCalled()
+})

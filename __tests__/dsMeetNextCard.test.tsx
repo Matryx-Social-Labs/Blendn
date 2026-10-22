@@ -60,3 +60,12 @@ it('says Matching v2’s sentence as the reason when the server sent one (R7)', 
   expect(screen.queryByText('Both open to dating', { includeHiddenElements: true })).toBeNull()
   expect(screen.getByRole('button', { name: 'Priya, Both CSK, in RCB country' })).toBeTruthy()
 })
+
+it('a hold opens the card with H.longPress (H1)', async () => {
+  const onPress = jest.fn()
+  const spy = jest.spyOn(H, 'longPress').mockImplementation(() => {})
+  await render(<MeetNextCard {...PRIYA} onPress={onPress} testID="m" />)
+  await fireEvent(screen.getByTestId('m'), 'longPress')
+  expect(spy).toHaveBeenCalledTimes(1)
+  expect(onPress).toHaveBeenCalledTimes(1)
+})

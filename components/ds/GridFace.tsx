@@ -100,6 +100,11 @@ export function GridFace({
         <ScalePress
           testID={testID}
           onPress={press}
+          // A hold opens the card at once, without the double tap's wait, and says so: `H.longPress` (the peek).
+          onLongPress={() => {
+            H.longPress()
+            onPress?.()
+          }}
           accessibilityActions={onLike ? [{ name: 'activate' }, { name: 'longpress', label: 'Like' }] : undefined}
           onAccessibilityAction={(e) => {
             if (e.nativeEvent.actionName === 'activate') onPress?.()

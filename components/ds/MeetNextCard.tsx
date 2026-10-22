@@ -3,6 +3,7 @@ import { Platform, StyleSheet, Text, View } from 'react-native'
 
 import ScalePress from '../motion/ScalePress'
 import { COLOR, FONT_FAMILY, PRESS, RADIUS, SPACE } from '../../lib/design/tokens'
+import { H } from '../../lib/haptics'
 import { Avatar } from './Avatar'
 import { FaceMark, type Face } from './Facepile'
 import { CONTROL_FONT_CAP, focusRing, font, IC_HAIRLINE, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
@@ -57,6 +58,10 @@ export function MeetNextCard({
       <ScalePress
         testID={testID}
         onPress={onPress}
+        onLongPress={() => {
+          H.longPress()
+          onPress?.()
+        }}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         pressedScale={android ? 1 : PRESS.scale}
