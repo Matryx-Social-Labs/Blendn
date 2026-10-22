@@ -141,7 +141,7 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
   /** The upload failed after the file was chosen: the tile keeps it for Retry, and the toast says it in words. */
   const upFailed = (error?: string) => {
     setPending((prev) => (prev ? { ...prev, state: 'failed' } : null))
-    showToast(error && /^Photo must be /.test(error) ? `${error}.` : "Couldn't upload that photo. Try again.", 'error', { haptic: 'error' })
+    showToast(error && /^Photo must be /.test(error) ? `${error}.` : "Couldn’t upload that photo. Try again.", 'error', { haptic: 'error' })
   }
 
   const handleAddPhoto = async () => {
@@ -291,7 +291,7 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
                 Logger.info('profile', 'PhotoManager: Photo removed', { userId, url: photo.url })
               } catch (error) {
                 Logger.error('profile', 'PhotoManager: Remove photo error', { error, userId })
-                showToast("Couldn't remove that photo. Try again.", 'error', { haptic: 'error' })
+                showToast("Couldn’t remove that photo. Try again.", 'error', { haptic: 'error' })
                 // Reload photos to restore state
                 setLoading(true)
                 void loadPhotos()

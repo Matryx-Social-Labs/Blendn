@@ -54,7 +54,7 @@ describe('a removed message is a placeholder, not a blank', () => {
     expect(readFileSync(join(__dirname, '..', 'lib', 'roomMessages.ts'), 'utf8')).toMatch(/removed: Boolean\(msg\.moderation_hidden\)/)
   })
 
-  it("keeps your own live removal as a placeholder and drops everyone else's", () => {
+  it("keeps your own live removal as a placeholder and drops everyone else’s", () => {
     expect(chatSource).toMatch(/const ownRemoval = data\.moderation && data\.userId && data\.userId === currentUser\?\.id/)
     expect(chatSource).toMatch(/\{ \.\.\.m, removed: true, message_text: '' \}/)
   })

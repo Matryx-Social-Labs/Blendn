@@ -71,7 +71,7 @@ describe('the reason travels with the sign-out (SCRUM-93)', () => {
   const events = readFileSync(join(__dirname, '..', 'lib', 'sessionEvents.ts'), 'utf8')
   const entry = readFileSync(join(__dirname, '..', 'app', 'index.tsx'), 'utf8')
 
-  it("keeps the server's 403 sentence from the refresh and shows it on the entry screen", () => {
+  it("keeps the server’s 403 sentence from the refresh and shows it on the entry screen", () => {
     // Driven on Android: a suspended account was signed out within seconds and
     // told only "You were signed out" — the server had said why at refresh.
     const refresh = src.slice(src.indexOf('private async refreshTokens'))

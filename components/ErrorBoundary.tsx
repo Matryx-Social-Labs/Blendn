@@ -96,7 +96,7 @@ export class ErrorBoundary extends Component<Props, State> {
    */
   contactSupport = async () => {
     const user = await getCurrentUser().catch(() => null)
-    const url = supportMailto({ subject: "Blend'n crashed", userId: user?.id, errorId: this.state.errorId })
+    const url = supportMailto({ subject: "Blend’n crashed", userId: user?.id, errorId: this.state.errorId })
     Linking.openURL(url).catch(() => {
       this.setState({ showAddress: true })
     })

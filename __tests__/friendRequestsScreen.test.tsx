@@ -60,7 +60,7 @@ it('does not call a failed load "No requests"', async () => {
   api.getFriendRequests.mockResolvedValueOnce({ success: false, error: 'No internet connection.' })
   await render(<FriendRequestsScreen />)
 
-  expect(await screen.findByText("Your requests didn't load")).toBeTruthy()
+  expect(await screen.findByText("Your requests didn’t load")).toBeTruthy()
   expect(screen.queryByText('No requests')).toBeNull()
 
   api.getFriendRequests.mockResolvedValueOnce({ success: true, data: { incoming: [BEN], outgoing: [] } })

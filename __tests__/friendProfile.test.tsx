@@ -105,7 +105,7 @@ it('asks in the app’s sheet, and stays on the profile saying so when removing 
   fireEvent.press(await screen.findByLabelText('Remove friend Ben'))
   expect(showSheet).toHaveBeenCalledWith(expect.objectContaining({ title: 'Remove Ben?' }))
   // The sheet keeps the refusal and turns the button into Try again.
-  await expect(runRemove()).resolves.toEqual({ ok: false, error: "That didn't go through. Try again." })
+  await expect(runRemove()).resolves.toEqual({ ok: false, error: "That didn’t go through. Try again." })
   expect(api.removeFriend).toHaveBeenCalledWith('u_ben')
   expect(router.back).not.toHaveBeenCalled()
 })

@@ -77,7 +77,7 @@ function deferred() {
   return { promise, resolve }
 }
 
-it("refuses a reorder while the add's write is open, then makes it main by the stored URL", async () => {
+it("refuses a reorder while the add’s write is open, then makes it main by the stored URL", async () => {
   const add = deferred()
   pu.reorderPhotos.mockReturnValueOnce(add.promise).mockResolvedValueOnce({ ok: true, photos: [SEALED, A] })
 

@@ -150,8 +150,8 @@ describe('the attendee profile fails closed', () => {
 
 describe('userMessage: the server’s words only when they were written for a person', () => {
   it('passes a known code’s sentence through', () => {
-    expect(userMessage({ error: "You're muted in this room.", errorCode: 'USER_MUTED' }, "Couldn't send. Try again.")).toBe(
-      "You're muted in this room."
+    expect(userMessage({ error: "You’re muted in this room.", errorCode: 'USER_MUTED' }, "Couldn’t send. Try again.")).toBe(
+      "You’re muted in this room."
     )
     expect(userMessage({ error: 'Add a photo to your profile first', errorCode: 'reveal_incomplete' }, 'x')).toBe(
       'Add a photo to your profile first'
@@ -159,7 +159,7 @@ describe('userMessage: the server’s words only when they were written for a pe
   })
 
   it('uses the screen’s sentence for anything else', () => {
-    const fallback = "Couldn't send. Try again."
+    const fallback = "Couldn’t send. Try again."
     expect(userMessage({ error: 'Failed to update profile' }, fallback)).toBe(fallback)
     expect(userMessage({ error: 'Invalid input: expected string', errorCode: 'VALIDATION_FAILED' }, fallback)).toBe(fallback)
     expect(userMessage({ error: '', errorCode: 'USER_MUTED' }, fallback)).toBe(fallback)

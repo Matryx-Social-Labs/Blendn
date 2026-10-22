@@ -79,7 +79,7 @@ const glassContentsIn = FadeIn.duration(DURATION.base).easing(gentle)
 /** A first line built from what you share — something to say that isn't "hey". */
 export function openerFor(p: RoomPerson): string {
   const interest = p.interests[0]
-  if (interest) return `You're into ${interest.toLowerCase()} too — how did you get into it?`
+  if (interest) return `You’re into ${interest.toLowerCase()} too — how did you get into it?`
   if (p.sharedPlans > 0) return 'Looks like we’re going to the same things — which one are you most excited about?'
   if (p.sharedWorkField && p.workField) return `Another ${p.workField} person — what are you working on?`
   return 'What brought you here tonight?'

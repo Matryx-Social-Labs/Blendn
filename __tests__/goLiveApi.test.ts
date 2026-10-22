@@ -53,7 +53,7 @@ describe('POST /venues/:id/live as the door reads it', () => {
   })
 
   it('NOT_LIVE: a 403 from the room carries its code (GET /chat/groups/:id/messages)', async () => {
-    server(() => json(403, { success: false, error: "You're not live here any more. Go live at the venue to join today's room.", errorCode: 'NOT_LIVE' }))
+    server(() => json(403, { success: false, error: "You’re not live here any more. Go live at the venue to join today’s room.", errorCode: 'NOT_LIVE' }))
     expect(await apiClient.getChatMessages('g1' as never)).toMatchObject({ success: false, errorCode: 'NOT_LIVE' })
   })
 })

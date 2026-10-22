@@ -112,7 +112,7 @@ export function DockLine({ text, spinning = false, strong = false }: { text: str
 }
 
 const PENDING_LINE =
-  "Your payment is pending. Blend’n+ unlocks once your bank or the store confirms it — that can take a while. You can close this; we'll pick it up when it does."
+  "Your payment is pending. Blend’n+ unlocks once your bank or the store confirms it — that can take a while. You can close this; we’ll pick it up when it does."
 
 export type DockAction = 'buy' | 'manage' | 'launch' | 'none'
 
@@ -153,11 +153,11 @@ export function PlusActions({
   ) : phase === 'confirming' ? (
     <DockLine text="Confirming with the store…" spinning />
   ) : phase === 'slow' ? (
-    <DockLine text="Taking longer than usual — it'll unlock as soon as the store confirms." />
+    <DockLine text="Taking longer than usual — it’ll unlock as soon as the store confirms." />
   ) : phase === 'pending' ? (
     <DockLine text={PENDING_LINE} />
   ) : phase === 'done' ? (
-    <DockLine text="You're in." strong />
+    <DockLine text="You’re in." strong />
   ) : notice ? (
     <DockLine text={notice} strong />
   ) : null

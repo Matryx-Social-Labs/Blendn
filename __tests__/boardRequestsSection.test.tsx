@@ -295,7 +295,7 @@ describe('report and block, by the ask', () => {
 
     const step = await menu()
     const reasons = step('Report').next!() as { title: string; run: (r: string, d?: string) => Promise<unknown> }
-    expect(reasons.title).toBe("Report Arctic Falcon's ask")
+    expect(reasons.title).toBe("Report Arctic Falcon’s ask")
     expect(await reasons.run('harassment')).toEqual({ ok: true, toast: 'Report sent. Our team will review it.' })
     expect(api.reportBoardRequest).toHaveBeenCalledWith('r-in', { reason: 'harassment' })
   })
@@ -307,7 +307,7 @@ describe('report and block, by the ask', () => {
 
     const step = await menu()
     const reasons = step('Report').next!() as { run: (r: string) => Promise<unknown> }
-    expect(await reasons.run('spam')).toEqual({ ok: false, error: "You've sent a lot of reports. Try again later." })
+    expect(await reasons.run('spam')).toEqual({ ok: false, error: "You’ve sent a lot of reports. Try again later." })
   })
 })
 

@@ -120,7 +120,7 @@ describe('a photo on its way (edit 03 · 04)', () => {
     await screen.findByLabelText('Photo 3 of 3')
     await fireEvent.press(screen.getByLabelText('Add photo'))
     await screen.findByLabelText('Didn’t upload. Retry')
-    expect(mockShowToast).toHaveBeenCalledWith("Couldn't upload that photo. Try again.", 'error', { haptic: 'error' })
+    expect(mockShowToast).toHaveBeenCalledWith("Couldn’t upload that photo. Try again.", 'error', { haptic: 'error' })
 
     pu.uploadPhoto.mockResolvedValue({ success: true, url: url(9) })
     await act(async () => {

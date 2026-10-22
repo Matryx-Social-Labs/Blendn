@@ -25,7 +25,7 @@ import { SUPPORT_EMAIL } from '../lib/support'
 import { STORE_UPDATE } from '../lib/updateRequired'
 /* eslint-enable import/first */
 
-const SUSPENDED = "This account has been suspended. Contact support@blendn.app if you think that's a mistake."
+const SUSPENDED = "This account has been suspended. Contact support@blendn.app if you think that’s a mistake."
 const STAFF = 'This app is for attendees. Organisers, venue owners and sponsors sign in at the dashboard.'
 
 beforeEach(() => {
@@ -71,7 +71,7 @@ describe('accountStateCopy', () => {
   it('suspended: the first sentence is the title, the rest the body, word for word', () => {
     const copy = accountStateCopy('suspended', SUSPENDED)
     expect(copy.title).toBe('This account has been suspended.')
-    expect(copy.body).toBe("Contact support@blendn.app if you think that's a mistake.")
+    expect(copy.body).toBe("Contact support@blendn.app if you think that’s a mistake.")
     expect(copy.link).toBe(SUPPORT_EMAIL)
     expect(copy.note).toBe('Replies within two days. Say which account and what happened.')
   })

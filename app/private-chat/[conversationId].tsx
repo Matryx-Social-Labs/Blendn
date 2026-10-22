@@ -215,7 +215,7 @@ function PrivateChatInner() {
       .requestReveal(conversation)
       .then((r) => {
         if (r.success) setAsked(true)
-        else showToast(userMessage(r, "Couldn't ask them. Try again."), 'error', { haptic: 'error' })
+        else showToast(userMessage(r, "Couldn’t ask them. Try again."), 'error', { haptic: 'error' })
       })
       .finally(() => setRevealBusy(false))
   }
@@ -236,7 +236,7 @@ function PrivateChatInner() {
           setRevealSheet(null)
           setReveal((prev) => (prev ? { ...prev, youRevealed: true } : prev))
         } else {
-          setRevealSheet({ notYet: userMessage(r, "Couldn't reveal. Try again.") })
+          setRevealSheet({ notYet: userMessage(r, "Couldn’t reveal. Try again.") })
         }
       })
       .finally(() => setRevealBusy(false))
@@ -427,7 +427,7 @@ function PrivateChatInner() {
     } catch (error) {
       Logger.warn('private-chat', 'send failed', { error })
       fail()
-      showToast("Couldn't send. Try again.", 'error')
+      showToast("Couldn’t send. Try again.", 'error')
     }
   }
 

@@ -94,7 +94,7 @@ export function inviteLine(state: FriendState): string {
 
 /** What goes out with a shared link. Short: it lands in somebody else's chat. */
 export function inviteMessage(url: string): string {
-  return `Add me on Blend'n: ${url}`
+  return `Add me on Blend’n: ${url}`
 }
 
 /**

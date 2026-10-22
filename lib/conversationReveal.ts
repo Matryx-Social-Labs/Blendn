@@ -113,8 +113,8 @@ export function leaveConfirmation(
     // "Unmatch" is the wrong verb for two people who never matched.
     title: fromMatch ? `Unmatch ${displayName}?` : `End the conversation with ${displayName}?`,
     body: theyKnowYou
-      ? `The conversation closes for both of you and you won't see each other in rooms again. They already know your name and photos — ${fromMatch ? 'unmatching' : 'ending it'} doesn't undo that.`
-      : "The conversation closes for both of you and you won't see each other in rooms again. They never saw your name.",
+      ? `The conversation closes for both of you and you won’t see each other in rooms again. They already know your name and photos — ${fromMatch ? 'unmatching' : 'ending it'} doesn’t undo that.`
+      : "The conversation closes for both of you and you won’t see each other in rooms again. They never saw your name.",
   }
 }
 

@@ -370,13 +370,13 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
     try {
       const res = await checkOutOf(venueDayId)
       if (!res.success) {
-        showToast(res.error || "Couldn't stop. Try again.", 'error', { haptic: 'error' })
+        showToast(res.error || "Couldn’t stop. Try again.", 'error', { haptic: 'error' })
       } else {
         closeSession()
       }
     } catch (error) {
       Logger.warn('events', 'stop live failed', { error: String(error) })
-      showToast("Couldn't stop. Try again.", 'error', { haptic: 'error' })
+      showToast("Couldn’t stop. Try again.", 'error', { haptic: 'error' })
     } finally {
       setLeaving(false)
       load()
@@ -412,12 +412,12 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
         showToast('Address copied', 'info')
         announceOutcome('Address copied')
       })
-      .catch(() => showToast("Couldn't copy. Try again.", 'error'))
+      .catch(() => showToast("Couldn’t copy. Try again.", 'error'))
   }
   const claimUrl = detail && !detail.venue.claimed ? claimUrlFrom(detail.claim) : null
   const openClaim = () => {
     if (!claimUrl) return
-    Linking.openURL(claimUrl).catch(() => showToast("That page didn't open. Try again.", 'error'))
+    Linking.openURL(claimUrl).catch(() => showToast("That page didn’t open. Try again.", 'error'))
   }
 
   const shieldHeight = barHeight(insets.top, Platform.OS === 'android')

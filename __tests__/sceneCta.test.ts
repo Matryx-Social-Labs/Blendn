@@ -90,7 +90,7 @@ describe('what the button says', () => {
      * rather than greying out: a finished event is somebody looking for one.
      */
     expect(src).toContain('const disabled = !onPress')
-    expect(src).toContain(`ended: "See what's on tonight"`)
+    expect(src).toContain(`ended: "See what’s on tonight"`)
   })
 })
 
@@ -131,7 +131,7 @@ describe('the event screen IS the Scene now, and kept what the CTA lacks', () =>
     const table = cta.slice(0, cta.indexOf('}'))
     expect(table).toContain('Blend in')
     expect(table).not.toContain('Blend&apos;n')
-    expect(table).not.toContain("Blend'n")
+    expect(table).not.toContain("Blend’n")
   })
 
   it('has one pill and no tray behind it', () => {

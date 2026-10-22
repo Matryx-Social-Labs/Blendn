@@ -197,7 +197,7 @@ export default function SignIn() {
          * registered", or the password rule that was broken — and replacing
          * them with "something went wrong" would make the form unusable.
          */
-        setError(result.error || (isSignup ? "Couldn't create your account." : "Couldn't sign you in."))
+        setError(result.error || (isSignup ? "Couldn’t create your account." : "Couldn’t sign you in."))
         setWaiting(result.errorCode === 'RATE_LIMITED')
         refuse()
         return

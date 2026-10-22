@@ -51,7 +51,7 @@ const say = (text: string) => AccessibilityInfo.announceForAccessibility(text)
  */
 const GATED_TRIGGERS = new Set(['go_live_expiry', 'recap'])
 
-const LAUNCH_LINE = "Blend’n+ is free during launch in your city. Staying live and your full night history are everyone's for now — nothing to buy."
+const LAUNCH_LINE = "Blend’n+ is free during launch in your city. Staying live and your full night history are everyone’s for now — nothing to buy."
 
 /**
  * Blend'n+ — the page (Flow 12 · 12.2, R3-G, R4-D12; guidelines/flow-12/flow12.js `page`).
@@ -158,15 +158,15 @@ function PlusScreenContent() {
           H.success()
         }
         setPhase(granted ? 'done' : 'slow')
-        say(granted ? "You're in." : 'Taking longer than usual.')
+        say(granted ? "You’re in." : 'Taking longer than usual.')
       }
     }
   }
 
-  const open = (url: string) => openInApp(url).catch(() => showToast("That page didn't open. Try again.", 'error'))
+  const open = (url: string) => openInApp(url).catch(() => showToast("That page didn’t open. Try again.", 'error'))
   const manage = async () => {
     // A store's page, not ours: the store's own app opens for it.
-    Linking.openURL(await manageSubscriptionUrl()).catch(() => showToast("That page didn't open. Try again.", 'error'))
+    Linking.openURL(await manageSubscriptionUrl()).catch(() => showToast("That page didn’t open. Try again.", 'error'))
   }
 
   /** A store error in words, as a tray (R4-D12 12-3); "already bought" points at Manage subscription. */

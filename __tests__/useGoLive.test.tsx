@@ -62,7 +62,7 @@ describe('useGoLive', () => {
   })
 
   it('OUT_OF_RANGE offers Open Maps at the place; AGE_RESTRICTED offers adding your age (L3)', async () => {
-    ;(apiClient.goLive as jest.Mock).mockResolvedValue({ success: false, errorCode: 'OUT_OF_RANGE', error: "You're not at The Humming Tree yet." })
+    ;(apiClient.goLive as jest.Mock).mockResolvedValue({ success: false, errorCode: 'OUT_OF_RANGE', error: "You’re not at The Humming Tree yet." })
     const far = await run()
     const buttons = far.showTray.mock.calls[0][2] as { label: string; onPress: () => void }[]
     expect(buttons.map((b) => b.label)).toEqual(['Done', 'Open Maps'])

@@ -38,7 +38,7 @@ describe('the invite screen', () => {
 describe('sharing', () => {
   it('sends the link itself, in a line short enough for somebody else\'s chat', () => {
     const url = 'https://www.blendn.app/f/abcdefghijklmnopqrstuv'
-    expect(inviteMessage(url)).toBe(`Add me on Blend'n: ${url}`)
+    expect(inviteMessage(url)).toBe(`Add me on Blend’n: ${url}`)
   })
 })
 

@@ -46,7 +46,7 @@ describe('design tokens', () => {
       // on the scale: none of these should be reported
       'const ok = { color: EMBER.textPrimary, borderRadius: EMBER_RADIUS.pill, backgroundColor: tint(EMBER.success, 0.16) }',
       'const ok2 = { borderRadius: 0 }',
-      "// design-exception: Google's own button chrome",
+      "// design-exception: Google’s own button chrome",
       "const brand = { backgroundColor: '#FFFFFF' }",
     ].join('\n')
     const lines = checkSource(src, 'x.tsx').map((v: { line: number }) => v.line)

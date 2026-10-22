@@ -81,13 +81,13 @@ describe('sharing a Story', () => {
     const capture = jest.fn()
     await expect(shareStory({ url: URL, capture })).resolves.toBe('failed')
     expect(capture).not.toHaveBeenCalled()
-    expect(mockToast).toHaveBeenCalledWith("Couldn't copy the link. Try again.", 'error')
+    expect(mockToast).toHaveBeenCalledWith("Couldn’t copy the link. Try again.", 'error')
   })
 
-  it("opens Instagram's Story camera with the link copied when the picture cannot be made", async () => {
+  it("opens Instagram’s Story camera with the link copied when the picture cannot be made", async () => {
     await expect(shareStory({ url: URL, capture: async () => Promise.reject(new Error('no module')) })).resolves.toBe('link')
     expect(mockOpenURL).toHaveBeenCalledWith('instagram-stories://share')
-    expect(mockToast).toHaveBeenLastCalledWith("Couldn't make the picture. The link is copied; add it with the Link sticker.", 'info')
+    expect(mockToast).toHaveBeenLastCalledWith("Couldn’t make the picture. The link is copied; add it with the Link sticker.", 'info')
   })
 
   it('does the same when the share sheet is not available, and uses the Android camera link there', async () => {
@@ -100,7 +100,7 @@ describe('sharing a Story', () => {
   it('says Instagram did not open when neither the picture nor the camera could', async () => {
     mockOpenURL.mockRejectedValue(new Error('no instagram'))
     await expect(shareStory({ url: URL, capture: async () => Promise.reject(new Error('x')) })).resolves.toBe('failed')
-    expect(mockToast).toHaveBeenLastCalledWith("Instagram didn't open. The link is copied.", 'error')
+    expect(mockToast).toHaveBeenLastCalledWith("Instagram didn’t open. The link is copied.", 'error')
   })
 })
 

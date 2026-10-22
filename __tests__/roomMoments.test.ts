@@ -195,7 +195,7 @@ describe('who is here now', () => {
     expect(head([here('a'), left('b')])).toEqual({ title: 'Everyone who came', count: 2 })
   })
 
-  it("gives the room's number only where it is the right kind of number", () => {
+  it("gives the room’s number only where it is the right kind of number", () => {
     // With more to load, the number is the room's count of people inside:
     // true of "Everyone here", the wrong number for "Everyone who came".
     expect(everyoneHead([here('a')], { hasMore: true, hereCount: 30 })).toEqual({ title: 'Everyone here', count: 29 })

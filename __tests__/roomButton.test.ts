@@ -136,7 +136,7 @@ describe('the Pulse no longer carries the checked-in strip', () => {
   const pulse = readFileSync(join(__dirname, '..', 'app/(tabs)/events.tsx'), 'utf8')
 
   it('has dropped the carousel and its header', () => {
-    expect(pulse).not.toContain("You're checked in")
+    expect(pulse).not.toContain("You’re checked in")
     expect(pulse).not.toContain('renderCheckedInCarousel')
   })
 

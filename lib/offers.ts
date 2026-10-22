@@ -93,7 +93,7 @@ export const offersApi = {
 /** Who sees a yes, in the app's words: the organisation, and the place it runs. */
 export function knownLine(prefs: Pick<RegularPrefs, 'ownerName'>, venueName: string): string {
   const who = prefs.ownerName ? `${prefs.ownerName}, who runs ${venueName} on Blendn,` : venueName
-  return `${who} will see your first name and how many nights you've come in the last 30 — nothing else.`
+  return `${who} will see your first name and how many nights you’ve come in the last 30 — nothing else.`
 }
 
 /** The code on the pass is shown only while it is fresh: two seconds past its turn with no new one, it is hidden (L2). */
@@ -113,7 +113,7 @@ export function offerStateLine(state: OfferState, venueName: string): string | n
     case 'redeemed':
       return 'Redeemed. Enjoy it.'
     case 'used_tonight':
-      return `You've used a pass at ${venueName} tonight — one a night. This one works another night.`
+      return `You’ve used a pass at ${venueName} tonight — one a night. This one works another night.`
     case 'ended':
       return 'This offer has ended.'
   }

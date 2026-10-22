@@ -689,7 +689,7 @@ describe('live', () => {
     await act(async () => {
       fireEvent.press(screen.getByRole('button', { name: 'Stop' }))
     })
-    expect(mockShowToast).toHaveBeenCalledWith("Couldn't stop. Try again.", 'error', { haptic: 'error' })
+    expect(mockShowToast).toHaveBeenCalledWith("Couldn’t stop. Try again.", 'error', { haptic: 'error' })
     expect((apiClient.getVenue as jest.Mock).mock.calls.length).toBe(reads + 1)
   })
 

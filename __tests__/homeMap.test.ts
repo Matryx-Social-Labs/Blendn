@@ -45,7 +45,7 @@ describe('a viewport becomes the lists\' own query (HM-CU02)', () => {
     expect(q.radius).toBeLessThan(1.1)
   })
 
-  it("never asks past the server's bound, and never for nothing", () => {
+  it("never asks past the server’s bound, and never for nothing", () => {
     expect(viewportQuery([70, 5, 90, 25]).radius).toBe(MAX_QUERY_RADIUS_KM)
     expect(viewportQuery([77.5946, 12.9716, 77.5946, 12.9716]).radius).toBe(0.1)
   })
@@ -121,7 +121,7 @@ describe('the building a pin lights', () => {
     expect(buildingUnder(pin, [inFront, under])?.geometry.coordinates).toEqual([square(77.59, 12.97, 0.001)])
   })
 
-  it("is the stadium around a pin on its pitch (the ring's hole): the place is the ring", () => {
+  it("is the stadium around a pin on its pitch (the ring’s hole): the place is the ring", () => {
     const stadium = building('stadium', [square(77.589, 12.969, 0.003), square(77.5902, 12.9702, 0.0006)])
     expect(buildingUnder(pin, [stadium])?.id).toBe('stadium')
   })
@@ -199,7 +199,7 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
     expect(component).toMatch(/const padding = mapPadding\(\{ topChrome, mapHeight, drawerTop: drawerSnapTop \}\)/)
   })
 
-  it("draws the person's dot as a plain puck, never one that follows the compass (Android redrew the map forever)", () => {
+  it("draws the person’s dot as a plain puck, never one that follows the compass (Android redrew the map forever)", () => {
     expect(component).toMatch(/<NativeUserLocation mode="default" \/>/)
   })
 
@@ -209,7 +209,7 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
     expect(component).toMatch(/pitch: MAP_THEME\.camera\.pitch/)
   })
 
-  it("sizes circles only by the theme: the bucket's glow, the fixed dot, the fixed ground glow — never anything a place carries", () => {
+  it("sizes circles only by the theme: the bucket’s glow, the fixed dot, the fixed ground glow — never anything a place carries", () => {
     const radii = [...layers.matchAll(/'circle-radius':\s*([^,\n]+(?:,[^\n]*?\])?)\s*,?\s*\n/g)].map((m) => m[1].trim().replace(/,$/, ''))
     expect(radii.length).toBe(3)
     for (const r of radii) {
@@ -229,7 +229,7 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
     expect(component).not.toMatch(/queryRenderedFeatures/)
   })
 
-  it("keeps OpenFreeMap's buildings extrudable, credited by our own corner credit (the native one is off)", () => {
+  it("keeps OpenFreeMap’s buildings extrudable, credited by our own corner credit (the native one is off)", () => {
     expect(CITY_BUILDINGS).toMatchObject({ id: 'blendn-buildings', source: 'openmaptiles', sourceLayer: 'building' })
     expect(layers).toMatch(/<CityBuildings \/>/)
     expect(EMBER_MAP_STYLE.sources).toHaveProperty('openmaptiles')
@@ -251,7 +251,7 @@ describe('asking for pins (step 2 review)', () => {
     expect(insideLastCircle(null, last)).toBe(false)
   })
 
-  it("backs off on refusals, doubling to a minute, and never earlier than the server's Retry-After", () => {
+  it("backs off on refusals, doubling to a minute, and never earlier than the server’s Retry-After", () => {
     expect(backoffMs(0)).toBe(0)
     expect(backoffMs(1)).toBe(2_000)
     expect(backoffMs(3)).toBe(8_000)
@@ -324,7 +324,7 @@ describe('an event lights up when its doors open, without a new read (review M1)
     expect(liveAt(pin, t0)).toBe(pin)
   })
 
-  it("leaves a venue's liveness to its bucket", () => {
+  it("leaves a venue’s liveness to its bucket", () => {
     const [busy] = pinsFor('places', { events: [], venues: [{ id: 'b', name: 'B', latitude: 12.97, longitude: 77.59, liveNow: '20+' }] })
     expect(liveAt(busy, Date.now() + 10 * 86_400_000)).toBe(busy)
   })

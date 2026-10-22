@@ -170,7 +170,7 @@ export function LiveAtVenue() {
     closeTray,
     onPlusRequired,
     onLive: (result) =>
-      showToast(result.stay ? "You're live for as long as you're here" : `You're live until ${timeOf(result.expiresAt)}`, 'success'),
+      showToast(result.stay ? "You’re live for as long as you’re here" : `You’re live until ${timeOf(result.expiresAt)}`, 'success'),
   })
 
   useEffect(() => {

@@ -40,7 +40,7 @@ describe("a refused like", () => {
     expect(r.message).not.toMatch(/too many requests/i)
   })
 
-  it("passes the server's sentence through when it has one", () => {
+  it("passes the server’s sentence through when it has one", () => {
     expect(likeRefusal("FORBIDDEN", "Check in before liking anyone here").message).toBe(
       "Check in before liking anyone here"
     )
@@ -55,11 +55,11 @@ describe("a refused like", () => {
   })
 
   it("never passes through a sentence that names them, or a 404 (R3-D4 4.3)", () => {
-    expect(likeRefusal("RECIPIENT_NOT_HERE", "They're not in the room right now").message).toBe("That didn’t go through.")
+    expect(likeRefusal("RECIPIENT_NOT_HERE", "They’re not in the room right now").message).toBe("That didn’t go through.")
     expect(likeRefusal("NOT_FOUND", "User not found").message).toBe("That didn’t go through.")
   })
 
-  it("offers Check in beside a lapsed check-in, in the server's words", () => {
+  it("offers Check in beside a lapsed check-in, in the server’s words", () => {
     expect(likeRefusal("NOT_CHECKED_IN", "Check in to wave at people here")).toEqual({
       message: "Check in to wave at people here",
       variant: "info",

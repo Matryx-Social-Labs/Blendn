@@ -57,7 +57,7 @@ const square = (d: number, x = 0) =>
 const building = (over: Partial<LitBuilding> = {}): LitBuilding => ({ key: footprintKey([square(10)]), footprint: [square(10)], featureId: null, height: 5, base: 0, ...over })
 const place = (over: Partial<LitPlace>): LitPlace => ({ id: 'p', kind: 'event', live: false, at: [LNG, LAT], building: building(), ...over })
 
-describe("a lit building is drawn around the city's own, never on it", () => {
+describe("a lit building is drawn around the city’s own, never on it", () => {
   it('moves every edge of a square out by the outset, whichever way the ring winds', () => {
     expect(toM(outsetRing(square(10), 0.5))).toEqual([
       [-0.5, -0.5],
@@ -79,7 +79,7 @@ describe("a lit building is drawn around the city's own, never on it", () => {
     ])
   })
 
-  it("moves an L-shape's inner corner out of the building, not into it", () => {
+  it("moves an L-shape’s inner corner out of the building, not into it", () => {
     // Scaling from the centre pulled this corner (4,4) inwards and the city's walls showed through.
     const l = ringM([
       [0, 0],
@@ -167,7 +167,7 @@ describe('which building a pin lights, or a beacon (the beacon choice)', () => {
     expect(lit.building).toMatchObject({ footprint: [square(10)], featureId: null, height: 22, base: 3, key: footprintKey([square(10)]) })
   })
 
-  it("never lights by a merged tile's id; lights by id only where the tiles give each building its own (stage 2)", () => {
+  it("never lights by a merged tile’s id; lights by id only where the tiles give each building its own (stage 2)", () => {
     expect(litPlaceFor(pin, drawn(7)).building?.featureId).toBeNull()
     expect(litPlaceFor(pin, drawn(7), true).building).toMatchObject({ featureId: 7, key: 'id:7' })
   })
@@ -312,7 +312,7 @@ describe('chips above the roofs', () => {
     expect(nearestTo(items, [LNG, LAT], 2).map((i) => i.id)).toEqual(['centre', 'near'])
   })
 
-  it("say LIVE for a live event, its start in India's time otherwise, and a venue's bucket, never a number", () => {
+  it("say LIVE for a live event, its start in India’s time otherwise, and a venue’s bucket, never a number", () => {
     const now = Date.UTC(2026, 9, 9, 6, 0) // Fri 9 Oct, 11:30 IST
     expect(chipLine({ kind: 'event', live: true, startsAt: null, bucket: null }, now)).toBe('LIVE ●')
     // Fri 9 Oct 14:30Z is 8 PM in India, whatever the phone's zone.
@@ -322,7 +322,7 @@ describe('chips above the roofs', () => {
     expect(chipLine({ kind: 'venue', live: false, startsAt: null, bucket: 'quiet' }, now)).toBe('')
   })
 
-  it("put a late-night start on India's day, not UTC's", () => {
+  it("put a late-night start on India’s day, not UTC’s", () => {
     const now = Date.UTC(2026, 9, 9, 6, 0)
     // Fri 9 Oct 20:00Z is Sat 10 Oct, 1:30 AM in India.
     expect(chipLine({ kind: 'event', live: false, startsAt: '2026-10-09T20:00:00Z', bucket: null }, now)).toBe('Sat · 1:30 AM')
@@ -343,7 +343,7 @@ describe('chips above the roofs', () => {
   })
 })
 
-describe("the map theme is the one place for the map's look", () => {
+describe("the map theme is the one place for the map’s look", () => {
   const read = (rel: string) =>
     readFileSync(join(__dirname, '..', rel), 'utf8')
       .replace(/\/\*[\s\S]*?\*\//g, '')

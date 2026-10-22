@@ -145,7 +145,7 @@ describe('the screens read the server', () => {
     expect(VENUE).not.toMatch(/Polygon|Circle|geofence/)
   })
 
-  it("a place's room reads every refusal through roomRefusalState: on load, on send and on a reaction", () => {
+  it("a place’s room reads every refusal through roomRefusalState: on load, on send and on a reaction", () => {
     // The map itself is table-tested in placeRoom.test.ts; this pins that the room uses it at all three doors.
     expect(CHAT.match(/roomRefusalState\(result\.errorCode\)/g)?.length).toBe(3)
     expect(CHAT).toContain("{ kind: 'not_live' }")

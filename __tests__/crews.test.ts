@@ -69,8 +69,8 @@ describe('what a refusal says (code → copy)', () => {
       'A crew has at most 12 people.'
     )
     expect(
-      crewMessage({ error: "That's enough new crews for today — try again tomorrow.", errorCode: 'RATE_LIMITED' }, 'create', 'x')
-    ).toBe("That's enough new crews for today — try again tomorrow.")
+      crewMessage({ error: "That’s enough new crews for today — try again tomorrow.", errorCode: 'RATE_LIMITED' }, 'create', 'x')
+    ).toBe("That’s enough new crews for today — try again tomorrow.")
     // A 400 refusal of the name or bio carries no errorCode at all.
     expect(crewMessage({ error: 'A phone number. A crew card is shown to people you haven’t met…' }, 'create', 'x')).toBe(
       'A phone number. A crew card is shown to people you haven’t met…'

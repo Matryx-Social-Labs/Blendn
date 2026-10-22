@@ -91,7 +91,7 @@ describe('the Going card poster', () => {
   const poster = (coverImage: unknown) =>
     savedEventRows({ events: [{ ...base, coverImage } as never] })[0].cover_image_url
 
-  it("uses a clip's poster when the event has no cover", () => {
+  it("uses a clip’s poster when the event has no cover", () => {
     expect(poster({ type: 'video', url: 'https://x.test/c.mp4', thumbnail_url: 'https://x.test/c.jpg', order: 0 })).toBe(
       'https://x.test/c.jpg'
     )

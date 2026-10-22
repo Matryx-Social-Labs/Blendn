@@ -17,7 +17,7 @@ it('docks Save in the Dock, which clears the bottom inset', () => {
   expect(dock).toContain("from 'react-native-safe-area-context'")
 })
 
-it("never uses react-native's SafeAreaView", () => {
+it("never uses react-native’s SafeAreaView", () => {
   const rnImport = src.slice(src.indexOf('import {'), src.indexOf("} from 'react-native'"))
   expect(rnImport).not.toMatch(/\bSafeAreaView\b/)
 })

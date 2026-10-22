@@ -53,7 +53,7 @@ describe('goingSections: live events after midnight', () => {
     expect(labels(goingSections([soon, live], [], [], NOW))[0]).toBe('n:live')
   })
 
-  it("files a multi-day run by today's day, not the day the run began", () => {
+  it("files a multi-day run by today’s day, not the day the run began", () => {
     const hero = rsvp('hero', local(29, 10), local(29, 12))
     const festival = rsvp('fest', local(27, 18), local(30, 23), {
       session: { start_time: local(29, 18), end_time: local(29, 23) },
@@ -133,7 +133,7 @@ describe('the Going tab after a partial failure', () => {
     expect(GOING).toMatch(/if \(rsvps\.success && rsvps\.data\) setGoing/)
     expect(GOING).toMatch(/if \(past\.success && past\.data\) \{\s*setAttended/)
     expect(GOING).toMatch(/newFailure\(failedRef\.current, failed\)/)
-    expect(GOING).toMatch(/say\("Couldn't load all of your events\.", 'error', \{ label: 'Try again'/)
+    expect(GOING).toMatch(/say\("Couldn’t load all of your events\.", 'error', \{ label: 'Try again'/)
   })
 
   it('draws the tab from goingSections, so live events never sit under a past day', () => {

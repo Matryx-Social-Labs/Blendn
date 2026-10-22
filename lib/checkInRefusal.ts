@@ -114,9 +114,9 @@ export function checkInRefusal(
         icon: "map-pin",
       }
     case CHECK_IN_CODES.EVENT_NOT_STARTED:
-      return { title: "Doors aren't open", message, offerDirections: false, icon: "door-closed" }
+      return { title: "Doors aren’t open", message, offerDirections: false, icon: "door-closed" }
     case CHECK_IN_CODES.EVENT_ENDED:
-      return { title: "This one's over", message, offerDirections: false, icon: "moon" }
+      return { title: "This one’s over", message, offerDirections: false, icon: "moon" }
     case CHECK_IN_CODES.AGE_UNKNOWN:
       return AGE_FIX
     case CHECK_IN_CODES.AGE_RESTRICTED:

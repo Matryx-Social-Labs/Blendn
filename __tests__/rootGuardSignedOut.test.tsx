@@ -151,7 +151,7 @@ describe('signed out with the app still open (SCRUM-616)', () => {
   })
 
   it.each([
-    ["an event's public link", EVENT_LINK],
+    ["an event’s public link", EVENT_LINK],
     ['a friend invite', INVITE_LINK],
   ])('%s opened next goes to the entry screen and is held for after sign-in', async (_, link) => {
     const r = await renderSignedInOnSettings()

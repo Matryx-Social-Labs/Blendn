@@ -31,15 +31,15 @@ it('announces the message on iOS', async () => {
   const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {})
   await render(
     <ToastProvider>
-      <Trigger message="Couldn't save that. Try again." variant="error" />
+      <Trigger message="Couldn’t save that. Try again." variant="error" />
     </ToastProvider>
   )
   fireEvent.press(screen.getByRole('button'))
 
-  expect(await screen.findByText("Couldn't save that. Try again.")).toBeTruthy()
+  expect(await screen.findByText("Couldn’t save that. Try again.")).toBeTruthy()
   // Once, by the Toast itself: the provider adds none of its own.
   expect(announce).toHaveBeenCalledTimes(1)
-  expect(announce).toHaveBeenCalledWith("Couldn't save that. Try again.")
+  expect(announce).toHaveBeenCalledWith("Couldn’t save that. Try again.")
 })
 
 it('says an action is there, since the toast is then a control', async () => {

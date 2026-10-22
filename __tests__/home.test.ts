@@ -74,7 +74,7 @@ describe('the drawer, wired to the screen (step 2 review)', () => {
     expect(DRAWER_HEADER_HEIGHT).toBeGreaterThanOrEqual(DRAWER_HANDLE_HEIGHT + DRAWER_SEGMENTED_HEIGHT)
   })
 
-  it("sizes the pane to what shows, so a list's last row is reachable at half", () => {
+  it("sizes the pane to what shows, so a list’s last row is reachable at half", () => {
     expect(drawerContentHeight(points, 'half', PHONE.height)).toBe(PHONE.height - points.half - DRAWER_HEADER_HEIGHT)
     expect(drawerContentHeight(points, 'full', PHONE.height)).toBeGreaterThan(drawerContentHeight(points, 'half', PHONE.height))
     expect(drawerContentHeight(points, 'peek', PHONE.height)).toBeGreaterThanOrEqual(0)
@@ -124,7 +124,7 @@ describe('"at <Venue>" on an event card (HM-U08)', () => {
     )
   })
 
-  it("falls back to the organiser's words, then the city, when the server names no venue (disputed, archived, none)", () => {
+  it("falls back to the organiser’s words, then the city, when the server names no venue (disputed, archived, none)", () => {
     expect(placeLabel({ venue: null, venue_name: 'Some rooftop', city: 'Bengaluru' })).toBe('Some rooftop')
     expect(placeLabel({ venue: null, venue_name: '', city: 'Bengaluru' })).toBe('Bengaluru')
     expect(placeLabel({ venue_name: '  ', city: null })).toBeNull()

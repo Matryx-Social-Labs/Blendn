@@ -208,7 +208,7 @@ describe('Connect', () => {
     fireEvent.press(await screen.findByText('Connect'))
     fireEvent.press(await screen.findByText('Send request'))
 
-    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("Your request didn't send. Try again.", 'error', { haptic: 'error' }))
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("Your request didn’t send. Try again.", 'error', { haptic: 'error' }))
     expect(screen.getByText('Connect')).toBeTruthy()
     expect(screen.queryByText('Requested')).toBeNull()
     // The sheet stays open, with the message in it.
@@ -423,7 +423,7 @@ describe('a request they sent you, opened from their profile (R4.1 6.2)', () => 
     api.respondToMessageRequest.mockResolvedValue({ success: false, error: 'nope' })
     await render(<UserProfile />)
     await fireEvent.press(await screen.findByLabelText('Accept Ben’s request'))
-    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("Couldn't accept that request. Try again.", 'error', { haptic: 'error' }))
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("Couldn’t accept that request. Try again.", 'error', { haptic: 'error' }))
     expect(screen.getByText('Ben wants to message you')).toBeTruthy()
   })
 

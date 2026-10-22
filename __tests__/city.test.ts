@@ -80,7 +80,7 @@ describe('resolveBrowseCity', () => {
     ).toEqual(inferred('Bengaluru'))
   })
 
-  it("returns the server's spelling, not the geocoder's", () => {
+  it("returns the server’s spelling, not the geocoder’s", () => {
     // The value goes straight back as a filter, so it has to be one the server
     // will match rather than whatever the device's geocoder produced.
     expect(

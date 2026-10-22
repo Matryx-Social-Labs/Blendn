@@ -66,7 +66,7 @@ describe('an offer from a place', () => {
 
   it('says which organisation would see a yes (M2)', () => {
     expect(knownLine({ ownerName: 'Indiranagar Hospitality' }, 'Toit')).toBe(
-      "Indiranagar Hospitality, who runs Toit on Blendn, will see your first name and how many nights you've come in the last 30 — nothing else."
+      "Indiranagar Hospitality, who runs Toit on Blendn, will see your first name and how many nights you’ve come in the last 30 — nothing else."
     )
     expect(knownLine({ ownerName: null }, 'Toit')).toMatch(/^Toit will see your first name/)
   })

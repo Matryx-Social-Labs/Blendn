@@ -220,7 +220,7 @@ export const leaveConversationSheet = (
       action,
       ...(report ? { report } : {}),
     })
-    if (!result.success) return failed(result.error, "Couldn't do that.")
+    if (!result.success) return failed(result.error, "Couldn’t do that.")
     onLeft?.()
     return { ok: true, toast: report ? `${done}. ${REPORTED}` : done }
   }
@@ -284,14 +284,14 @@ export const blockStep = (userName: string, userId: string, onComplete?: () => v
   kind: 'actions',
   hue: 'rose',
   title: `Block ${userName}?`,
-  message: "They won't be able to see your profile or message you, and you won't see each other in rooms.",
+  message: "They won’t be able to see your profile or message you, and you won’t see each other in rooms.",
   actions: [
     {
       label: 'Block',
       variant: 'destructive',
       run: async () => {
         const result = await blockUser(userId)
-        if (!result.success) return failed(result.message, "Couldn't block them.")
+        if (!result.success) return failed(result.message, "Couldn’t block them.")
         onComplete?.()
         return { ok: true, toast: `${userName} is blocked` }
       },
@@ -311,7 +311,7 @@ export const userReportStep = (userName: string, userId: string, onComplete?: ()
   submitLabel: 'Send report',
   run: async (reason, description) => {
     const result = await reportUser(userId, reason as ReportType, description)
-    if (!result.success) return failed(result.message, "Couldn't send your report.")
+    if (!result.success) return failed(result.message, "Couldn’t send your report.")
     onComplete?.()
     return { ok: true, toast: REPORTED }
   },
@@ -346,7 +346,7 @@ export const messageReportStep = (
   submitLabel: 'Send report',
   run: async (reason, description) => {
     const result = await reportMessage(messageId, messageType, reason as MessageReportType, description)
-    if (!result.success) return failed(result.message, "Couldn't send your report.")
+    if (!result.success) return failed(result.message, "Couldn’t send your report.")
     opts.onComplete?.()
     return { ok: true, toast: REPORTED }
   },
@@ -415,9 +415,9 @@ export const showEventReportOptions = (
 ): void => {
   const reasons: { value: EventReportType; label: string }[] = [
     { value: 'misleading_listing', label: 'Misleading or inaccurate listing' },
-    { value: 'unsafe_venue', label: "The venue doesn't feel safe" },
+    { value: 'unsafe_venue', label: "The venue doesn’t feel safe" },
     { value: 'organiser_conduct', label: 'Concerns about the organiser' },
-    { value: 'not_real', label: "This doesn't look like a real event" },
+    { value: 'not_real', label: "This doesn’t look like a real event" },
     { value: 'other', label: 'Something else' },
   ]
 
@@ -429,7 +429,7 @@ export const showEventReportOptions = (
     submitLabel: 'Send report',
     run: async (reason, description) => {
       const result = await reportEvent(eventId, reason as EventReportType, description)
-      if (!result.success) return failed(result.message, "Couldn't send your report.")
+      if (!result.success) return failed(result.message, "Couldn’t send your report.")
       onComplete?.()
       /*
        * No promise about what happens to the event. A report is read by a
@@ -473,10 +473,10 @@ export const showRoomReportOptions = (chatGroupId: string, onComplete?: () => vo
     run: async (reason, description) => {
       try {
         const result = await apiClient.reportChatGroup(chatGroupId, reason, description)
-        if (!result.success) return failed(result.error, "Couldn't send your report.")
+        if (!result.success) return failed(result.error, "Couldn’t send your report.")
       } catch (error) {
         Logger.error('general', 'Error reporting room', { error })
-        return failed(undefined, "Couldn't send your report.")
+        return failed(undefined, "Couldn’t send your report.")
       }
       onComplete?.()
       return { ok: true, toast: REPORTED }
@@ -492,8 +492,8 @@ export type BoardTarget =
 /** A board report refused for volume says so, rather than "try again" into the same wall. */
 const boardReportFailed = (result: { error?: string; errorCode?: string }): SheetOutcome =>
   result.errorCode === 'RATE_LIMITED'
-    ? { ok: false, error: "You've sent a lot of reports. Try again later." }
-    : failed(result.error, "Couldn't send your report.")
+    ? { ok: false, error: "You’ve sent a lot of reports. Try again later." }
+    : failed(result.error, "Couldn’t send your report.")
 
 /**
  * Report or block somebody on the board — from a post's ⋯ or an ask's More.
@@ -517,7 +517,7 @@ export const boardSafetySheet = (target: BoardTarget, name: string, onBlocked: (
 const boardBlockStep = (target: BoardTarget, name: string, onBlocked: () => void): Sheet => ({
   kind: 'actions',
   title: `Block ${name}?`,
-  message: "Their posts and asks leave your boards, and you won't see each other in rooms or messages. They aren't told.",
+  message: "Their posts and asks leave your boards, and you won’t see each other in rooms or messages. They aren’t told.",
   actions: [
     {
       label: 'Block',
@@ -527,7 +527,7 @@ const boardBlockStep = (target: BoardTarget, name: string, onBlocked: () => void
           target.kind === 'post'
             ? await apiClient.blockBoardPost(target.eventId, target.postId)
             : await apiClient.blockBoardRequest(target.requestId)
-        if (!result.success) return failed(result.error, "Couldn't block them.")
+        if (!result.success) return failed(result.error, "Couldn’t block them.")
         onBlocked()
         return { ok: true, toast: `${name} is blocked` }
       },
@@ -538,7 +538,7 @@ const boardBlockStep = (target: BoardTarget, name: string, onBlocked: () => void
 
 const boardReportStep = (target: BoardTarget, name: string): Sheet => ({
   kind: 'reasons',
-  title: target.kind === 'post' ? 'Report this post' : `Report ${name}'s ask`,
+  title: target.kind === 'post' ? 'Report this post' : `Report ${name}’s ask`,
   message: target.kind === 'post' ? 'Why are you reporting this post?' : 'Why are you reporting this ask?',
   reasons: MESSAGE_REPORT_REASONS,
   submitLabel: 'Send report',

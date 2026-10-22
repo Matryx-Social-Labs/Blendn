@@ -178,7 +178,7 @@ describe('Google', () => {
     mockGoogle.mockRejectedValue(new Error('boom'))
     await draw()
     await fireEvent.press(google())
-    expect(screen.getByText("Couldn't sign in with Google. Try again.")).toBeTruthy()
+    expect(screen.getByText("Couldn’t sign in with Google. Try again.")).toBeTruthy()
     expect(error).toHaveBeenCalledTimes(1)
   })
 
@@ -200,7 +200,7 @@ describe('Google', () => {
 })
 
 describe('the account states (Flow 15 15.1 to 15.4)', () => {
-  const SUSPENDED = "This account has been suspended. Contact support@blendn.app if you think that's a mistake."
+  const SUSPENDED = "This account has been suspended. Contact support@blendn.app if you think that’s a mistake."
   const STAFF = 'This app is for attendees. Organisers, venue owners and sponsors sign in at the dashboard.'
 
   beforeEach(() => setAccountState(null))

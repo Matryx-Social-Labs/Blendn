@@ -86,7 +86,7 @@ function ShareFlow({ target, shown }: { target: ShareTarget; shown: boolean }) {
       const result = await Share.share({ message: text })
       if (result.action === Share.sharedAction) went.current = true
     } catch {
-      return closeThenSay("Couldn't open sharing. Try again.", 'error')
+      return closeThenSay("Couldn’t open sharing. Try again.", 'error')
     }
     finish()
   }
@@ -97,7 +97,7 @@ function ShareFlow({ target, shown }: { target: ShareTarget; shown: boolean }) {
       () => {
         went.current = true
       },
-      () => void closeThenSay("Couldn't copy the link. Try again.", 'error')
+      () => void closeThenSay("Couldn’t copy the link. Try again.", 'error')
     )
   }
 
@@ -121,7 +121,7 @@ function ShareFlow({ target, shown }: { target: ShareTarget; shown: boolean }) {
       await openStoryCamera()
       went.current = true
     } catch {
-      return closeThenSay("Instagram didn't open. Try again.", 'error')
+      return closeThenSay("Instagram didn’t open. Try again.", 'error')
     }
     return closeThenSay(STORY_LINK_COPIED, 'success')
   }

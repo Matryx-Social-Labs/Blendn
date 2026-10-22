@@ -143,7 +143,7 @@ export default function OfferScreen() {
         if (saved) showToast(saved, 'success')
         return true
       }
-      showToast(res.error || "That didn't save. Try again.", 'error', { haptic: 'error' })
+      showToast(res.error || "That didn’t save. Try again.", 'error', { haptic: 'error' })
       return false
     } finally {
       setSaving(false)
@@ -171,15 +171,15 @@ export default function OfferScreen() {
   const reportStep = (): Sheet => ({
     kind: 'reasons',
     title: 'Report this offer',
-    message: "What's wrong with it? We look at every report; the place isn't told who sent it.",
+    message: "What’s wrong with it? We look at every report; the place isn’t told who sent it.",
     reasons: OFFER_REPORT_REASONS.map(({ value, label }) => ({ value, label })),
     submitLabel: 'Send report',
     run: async (reason, note) => {
-      if (!id) return { ok: false, error: "That report didn't go through. Try again." }
+      if (!id) return { ok: false, error: "That report didn’t go through. Try again." }
       const res = await offersApi.report(id, reason as OfferReportReason, note)
       return res.success
         ? { ok: true, toast: 'Reported. Thanks — we look at every report.' }
-        : { ok: false, error: res.error || "That report didn't go through. Try again." }
+        : { ok: false, error: res.error || "That report didn’t go through. Try again." }
     },
   })
 

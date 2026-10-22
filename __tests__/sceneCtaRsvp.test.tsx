@@ -23,14 +23,14 @@ describe('the RSVP slot', () => {
   it('draws a waitlisted RSVP as "On the waitlist"', async () => {
     await render(<SceneCTA state="waitlisted" onPress={jest.fn()} />)
     expect(screen.getByLabelText('On the waitlist')).toBeTruthy()
-    expect(screen.queryByText("You're going")).toBeNull()
+    expect(screen.queryByText("You’re going")).toBeNull()
   })
 
   it('pending: a spinner, the label unchanged, nothing pressable', async () => {
     const onPress = jest.fn()
     await render(<SceneCTA state="rsvp" pending onPress={onPress} />)
     expect(screen.getByTestId('scene-cta-pending', { includeHiddenElements: true })).toBeTruthy()
-    const button = screen.getByLabelText("I'm going")
+    const button = screen.getByLabelText("I’m going")
     expect(button.props.accessibilityState).toEqual(expect.objectContaining({ disabled: true, busy: true }))
   })
 

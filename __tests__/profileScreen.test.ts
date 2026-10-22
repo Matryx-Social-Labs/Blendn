@@ -16,7 +16,7 @@ const SECTIONS = () => stripComments(read('components/profile/ProfileSections.ts
 const STAGE = () => stripComments(read('components/profile/ProfileHeroStage.tsx'))
 
 describe('the screen never re-decides the identity gate', () => {
-  it("takes the server's identityVisible, and fails closed without it", () => {
+  it("takes the server’s identityVisible, and fails closed without it", () => {
     /*
      * It used to infer "revealed" from a photo, a bio or an occupation having
      * arrived — so any identity field that turned up by mistake became a reveal

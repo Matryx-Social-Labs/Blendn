@@ -101,7 +101,7 @@ describe('the expiry prompt (PL-M02), as mounted', () => {
     await act(async () => { fireEvent.press(screen.getByText('Stay live till I leave · Blendn+')) })
     expect(apiClient.goLive).toHaveBeenCalledWith('v1', expect.objectContaining({ stay: true }))
     expect(screen.queryByText('Still at The Humming Tree?')).toBeNull()
-    expect(mockShowToast).toHaveBeenCalledWith("You're live for as long as you're here", 'success')
+    expect(mockShowToast).toHaveBeenCalledWith("You’re live for as long as you’re here", 'success')
   })
 
   it('does not show again once asked tonight, nor for "stay"', async () => {
@@ -159,7 +159,7 @@ describe('live:mockEnded, as mounted', () => {
     mockEnded[0]({ eventId: 'day-1', reason: 'manual' })
     expect(mockShowToast).not.toHaveBeenCalled()
     mockEnded[0]({ eventId: 'day-1', reason: 'expired' })
-    expect(mockShowToast).toHaveBeenCalledWith("You're no longer live at The Humming Tree.", 'info')
+    expect(mockShowToast).toHaveBeenCalledWith("You’re no longer live at The Humming Tree.", 'info')
     expect(checkInChanged).toHaveBeenCalledWith('day-1')
   })
 })

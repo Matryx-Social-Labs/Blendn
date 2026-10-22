@@ -22,7 +22,7 @@ import { toast } from './toast'
  */
 
 export const STORY_LINK_COPIED = 'Link copied — add it with the Link sticker'
-const NO_PICTURE = "Couldn't make the picture."
+const NO_PICTURE = "Couldn’t make the picture."
 
 /** How long a freshly mounted cover gets to paint before the card is photographed. */
 const COVER_PAINT_MS = 250
@@ -108,7 +108,7 @@ export async function shareStory({ url, capture }: { url?: string; capture: () =
       toast(STORY_LINK_COPIED, 'success')
     } catch (error) {
       Logger.warn('general', 'share:story:copy:failed', { error })
-      toast("Couldn't copy the link. Try again.", 'error')
+      toast("Couldn’t copy the link. Try again.", 'error')
       return 'failed'
     }
   }
@@ -124,7 +124,7 @@ export async function shareStory({ url, capture }: { url?: string; capture: () =
     return 'link'
   } catch (error) {
     Logger.warn('general', 'share:story:camera:failed', { error })
-    toast(url ? "Instagram didn't open. The link is copied." : "Instagram didn't open.", 'error')
+    toast(url ? "Instagram didn’t open. The link is copied." : "Instagram didn’t open.", 'error')
     return 'failed'
   }
 }

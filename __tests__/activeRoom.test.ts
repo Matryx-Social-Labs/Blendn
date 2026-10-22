@@ -40,7 +40,7 @@ describe('pickActiveRoom', () => {
     if (result.kind === 'room') expect(result.attendees).toHaveLength(2)
   })
 
-  it("names a Go Live's room for the place, not its venue day's bookkeeping title (step 5)", async () => {
+  it("names a Go Live’s room for the place, not its venue day’s bookkeeping title (step 5)", async () => {
     const live = { ...room('d1'), kind: 'venue_day', event: { id: 'd1', title: 'Venue day · Cubbon Park Bandstand · 2026-10-09', venueName: 'Cubbon Park Bandstand' } }
     expect(await pickActiveRoom([live], async () => ok(['a']))).toMatchObject({ eventTitle: 'Cubbon Park Bandstand' })
   })

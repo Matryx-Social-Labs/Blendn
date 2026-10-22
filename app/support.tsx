@@ -31,7 +31,7 @@ export default function SupportScreen() {
   const bold = useBoldText()
 
   const email = () =>
-    Linking.openURL(supportMailto({ subject: "Blend'n support", userId: user?.id })).catch(() =>
+    Linking.openURL(supportMailto({ subject: "Blend’n support", userId: user?.id })).catch(() =>
       // No mail app set up. The address is on screen, so say where to write.
       showToast(`No email app opened. Write to ${SUPPORT_EMAIL}.`, 'info')
     )

@@ -396,7 +396,7 @@ function UserProfileInner() {
     } catch (e) {
       setLiked(false)
       Logger.error('profile', 'like failed', { error: e })
-      showToast("That didn't go through. Try again.", 'error', { haptic: 'error' })
+      showToast("That didn’t go through. Try again.", 'error', { haptic: 'error' })
     } finally {
       setLikeBusy(false)
     }
@@ -424,11 +424,11 @@ function UserProfileInner() {
         setConnectOpen(false)
       } else {
         Logger.warn('profile', 'connect request failed', { error: result.error })
-        showToast("Your request didn't send. Try again.", 'error', { haptic: 'error' })
+        showToast("Your request didn’t send. Try again.", 'error', { haptic: 'error' })
       }
     } catch (e) {
       Logger.error('profile', 'connect request error', { error: e })
-      showToast("Your request didn't send. Try again.", 'error', { haptic: 'error' })
+      showToast("Your request didn’t send. Try again.", 'error', { haptic: 'error' })
     } finally {
       setConnectSending(false)
     }
@@ -445,7 +445,7 @@ function UserProfileInner() {
       const result = await apiClient.respondToMessageRequest(incoming.id, action)
       if (!result.success) {
         Logger.warn('profile', 'message request answer failed', { error: result.error })
-        showToast(`Couldn't ${action} that request. Try again.`, 'error', { haptic: 'error' })
+        showToast(`Couldn’t ${action} that request. Try again.`, 'error', { haptic: 'error' })
         return
       }
       setIncoming(null)
@@ -464,7 +464,7 @@ function UserProfileInner() {
       }
     } catch (e) {
       Logger.error('profile', 'message request answer error', { error: e })
-      showToast(`Couldn't ${action} that request. Try again.`, 'error', { haptic: 'error' })
+      showToast(`Couldn’t ${action} that request. Try again.`, 'error', { haptic: 'error' })
     } finally {
       setAnswering(null)
     }

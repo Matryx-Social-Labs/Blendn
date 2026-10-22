@@ -128,7 +128,7 @@ describe('"Show my badges" (M3) and the Tier B refusal (H1)', () => {
     expect(api.updateProfile).toHaveBeenCalledWith('me', { show_badges: false })
   })
 
-  it("says the day's limit is spent, and what was not saved", async () => {
+  it("says the day’s limit is spent, and what was not saved", async () => {
     const sentence = 'You can change your languages, home state, sign or field of work three times a day. Try again tomorrow.'
     api.updateProfile.mockResolvedValue({ success: false, error: sentence, errorCode: 'RATE_LIMITED' })
     await open()

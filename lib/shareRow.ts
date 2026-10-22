@@ -4,8 +4,8 @@ import { shareability } from './shareLinks'
 import { openShare } from './shareTray'
 import { toast } from './toast'
 
-const CANT_SHARE = "This one can't be shared."
-const CANT_OPEN = "Couldn't open sharing. Try again."
+const CANT_SHARE = "This one can’t be shared."
+const CANT_OPEN = "Couldn’t open sharing. Try again."
 
 /**
  * Shares an event from a place that has only a row: a Going card, the Pulse's peek. A row that says its visibility is

@@ -235,7 +235,7 @@ export default function EventDetail() {
   const now = useNow(60_000)
   /** Out to the browser; the dashboard's claim page needs no account. */
   const openClaimPage = (url: string) => {
-    Linking.openURL(url).catch(() => showToast("That page didn't open. Try again.", 'error'))
+    Linking.openURL(url).catch(() => showToast("That page didn’t open. Try again.", 'error'))
   }
 
   // Draw at once from the card that opened this screen, if the app did.
@@ -591,8 +591,8 @@ export default function EventDetail() {
       kind: 'actions',
       title: waitlisted ? 'Leave the waitlist?' : 'Cancel your RSVP?',
       message: waitlisted
-        ? "You'll lose your place in line. If you join again later, you go to the back."
-        : "You'll come off the list of people going. If it fills up, your place goes to someone else.",
+        ? "You’ll lose your place in line. If you join again later, you go to the back."
+        : "You’ll come off the list of people going. If it fills up, your place goes to someone else.",
       actions: [
         { label: waitlisted ? 'Stay on it' : 'Keep it', variant: 'secondary', then: () => {} },
         { label: waitlisted ? 'Leave waitlist' : 'Cancel RSVP', variant: 'destructive', then: () => void withdrawRsvp() },
@@ -798,7 +798,7 @@ export default function EventDetail() {
     showSheet({
       kind: 'actions',
       title: 'Delete this event?',
-      message: "Everyone going loses it, and it can't be undone.",
+      message: "Everyone going loses it, and it can’t be undone.",
       actions: [
         {
           label: 'Delete event',
@@ -808,11 +808,11 @@ export default function EventDetail() {
               const result = await apiClient.deleteEvent(String(id))
               if (!result.success) {
                 H.error()
-                return { ok: false, error: "Couldn't delete the event. Try again." }
+                return { ok: false, error: "Couldn’t delete the event. Try again." }
               }
             } catch {
               H.error()
-              return { ok: false, error: "Couldn't delete the event. Try again." }
+              return { ok: false, error: "Couldn’t delete the event. Try again." }
             }
             H.success()
             router.back()
@@ -1286,7 +1286,7 @@ export default function EventDetail() {
                     size="md"
                     icon="external-link"
                     label="Running this event? Claim it"
-                    accessibilityHint="Opens the Blend'n dashboard in your browser"
+                    accessibilityHint="Opens the Blend’n dashboard in your browser"
                     onPress={() => openClaimPage(claimUrl)}
                     testID="claim-event-link"
                   />

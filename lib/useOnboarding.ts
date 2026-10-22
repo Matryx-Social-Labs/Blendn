@@ -269,7 +269,7 @@ export function useOnboarding(step: OnboardingStep) {
           const synced = await syncInterests(userId, merged.interestIds)
           if (!synced) {
             Logger.warn('auth', 'Onboarding could not save the interest graph', { step })
-            failure = "Couldn't save your interests. Check your connection and try again."
+            failure = "Couldn’t save your interests. Check your connection and try again."
           }
         }
 
@@ -285,7 +285,7 @@ export function useOnboarding(step: OnboardingStep) {
             })
             // The server's sentence when it gave one: a refused field says
             // which, and that is what somebody needs to fix it.
-            failure = result.error || "Couldn't save that. Try again."
+            failure = result.error || "Couldn’t save that. Try again."
           } else if (body.photos) {
             saved = withStoredPhotos(merged, result.data)
           }

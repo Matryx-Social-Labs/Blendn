@@ -181,7 +181,7 @@ export function useBanterInbox() {
     } catch (e) {
       Logger.warn('chat', 'mark all read failed', { error: e })
       setPersonalChats(before)
-      showToast("Couldn't mark your chats as read. Try again.", 'error')
+      showToast("Couldn’t mark your chats as read. Try again.", 'error')
     }
   }, [personalChats, user, showToast])
 
@@ -632,7 +632,7 @@ export function useBanterInbox() {
       const result = await apiClient.respondToMessageRequest(requestId, action)
       if (!result.success) {
         Logger.error('chat', `Failed to ${action} request`, { requestId, error: result.error })
-        showToast(userMessage(result, `Couldn't ${action} that request. Try again.`), 'error', { haptic: 'error' })
+        showToast(userMessage(result, `Couldn’t ${action} that request. Try again.`), 'error', { haptic: 'error' })
         await loadChats(true, true)
         return
       }
@@ -653,7 +653,7 @@ export function useBanterInbox() {
       await loadChats(true, true)
     } catch (e) {
       Logger.error('chat', `Error ${action}ing request`, { requestId, error: e })
-      showToast(`Couldn't ${action} that request. Try again.`, 'error', { haptic: 'error' })
+      showToast(`Couldn’t ${action} that request. Try again.`, 'error', { haptic: 'error' })
       await loadChats(true, true)
     } finally {
       setRequestPending((prev) => {
@@ -688,7 +688,7 @@ export function useBanterInbox() {
           run: async () => {
             const result = await apiClient.respondToMessageRequest(request.request_id, 'block')
             if (!result.success) {
-              return { ok: false, error: userMessage(result, "Couldn't block them. Try again.") }
+              return { ok: false, error: userMessage(result, "Couldn’t block them. Try again.") }
             }
             setIncomingRequests((prev) => prev.filter((r) => r.request_id !== request.request_id))
             void loadChats(true, true)

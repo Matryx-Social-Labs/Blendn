@@ -83,7 +83,7 @@ export function pulseEmptyCopy(
       return {
         title: `Coming soon to ${city}`,
         message:
-          "We're not live here yet — you're early. Browse another city in the meantime, and we'll be here soon.",
+          "We’re not live here yet — you’re early. Browse another city in the meantime, and we’ll be here soon.",
       }
     case 'quiet':
       return {

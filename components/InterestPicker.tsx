@@ -112,7 +112,7 @@ export function InterestPicker({
         // An honest message beats an empty grid that reads as "the app has
         // nothing to offer". The caller lets them continue regardless.
         <Text style={styles.notice}>
-          Couldn&apos;t load interests. You can add them later from your profile.
+          Couldn’t load interests. You can add them later from your profile.
         </Text>
       ) : null}
 

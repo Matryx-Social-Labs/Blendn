@@ -1,6 +1,6 @@
 import { idParam, nameParam } from '../lib/routeParams'
 
-describe("a chat link's params are checked before use", () => {
+describe("a chat link’s params are checked before use", () => {
   it('an id is one segment the server could have minted', () => {
     expect(idParam('3f1c2a9e-7b4d-4c1e-9a2b-0d6e5f4a3b2c')).toBe('3f1c2a9e-7b4d-4c1e-9a2b-0d6e5f4a3b2c')
     for (const bad of ['../../users/me', 'a/b', 'a?x=1', 'a%2F..', '', ' id', ['a'], undefined, 'x'.repeat(65)]) {

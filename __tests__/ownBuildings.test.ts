@@ -108,7 +108,7 @@ describe('a tap on our buildings (review H3)', () => {
     expect(litStateTapped([{ id: 7 }, { id: 8 }, { id: 101 }], states)?.pinId).toBe('lupa')
   })
 
-  it("matches Android's string ids", () => {
+  it("matches Android’s string ids", () => {
     expect(litStateTapped([{ id: '8' }, { id: '101' }], states)?.pinId).toBe('lupa')
   })
 
@@ -135,7 +135,7 @@ describe('a building in our tiles, lit as itself', () => {
     expect(json).not.toMatch(/hide_3d/)
   })
 
-  it("takes the kind's crown colour from feature-state, brighter while live, the city's ramp otherwise (L1)", () => {
+  it("takes the kind’s crown colour from feature-state, brighter while live, the city’s ramp otherwise (L1)", () => {
     expect(paint['fill-extrusion-color']).toEqual([
       'case',
       ['==', litKind, 'event'],
@@ -187,7 +187,7 @@ describe('the credits (review H2; the owner, 2026-10-15: no (i) on the map)', ()
     for (const c of OWN_BUILDINGS_CREDITS) expect(credits).toContain(c)
   })
 
-  it("put the basemap's sources in the corner, and our buildings' too when our tiles draw, each once", () => {
+  it("put the basemap’s sources in the corner, and our buildings' too when our tiles draw, each once", () => {
     expect(mapCreditLine(false)).toBe('OpenFreeMap · © OpenMapTiles · © OpenStreetMap contributors')
     expect(mapCreditLine(true)).toBe(
       ['OpenFreeMap', '© OpenMapTiles', ...OWN_BUILDINGS_CREDITS.map((c) => c.text)].join(' · ')

@@ -49,7 +49,7 @@ describe('roomDisplayTitle', () => {
   it.each([
     ['a place room row: the place, never the bookkeeping title', groupRow(), 'Cubbon Park Bandstand'],
     ['a place check-in: the venue name', checkIn(), 'Cubbon Park Bandstand'],
-    ["an event's room: its event's title", groupRow({ name: 'Jazz Night Chat' }, { kind: 'event', title: 'Jazz Night', venueId: null }), 'Jazz Night'],
+    ["an event’s room: its event’s title", groupRow({ name: 'Jazz Night Chat' }, { kind: 'event', title: 'Jazz Night', venueId: null }), 'Jazz Night'],
     ['an event check-in: its title', checkIn({ kind: 'event', event: { id: 'e1', title: 'Jazz Night', venueName: 'Toast & Tonic' } }), 'Jazz Night'],
     ['an older server (no kind): the event title as before', groupRow({}, { kind: undefined }), 'Venue day · Cubbon Park Bandstand · 2026-10-09'],
     ['a place room with no name falls back to its venue name, then its title', groupRow({ name: ' ' }, { venueName: null }), 'Venue day · Cubbon Park Bandstand · 2026-10-09'],
@@ -65,7 +65,7 @@ describe('roomDisplayTitle', () => {
 
 describe('roomMemberCount (H5, D-19)', () => {
   it.each([
-    ["an event's room: its count", groupRow({ memberCount: 12 }, { kind: 'event' }), 12],
+    ["an event’s room: its count", groupRow({ memberCount: 12 }, { kind: 'event' }), 12],
     ['a place room: never, whatever an older server sends', groupRow({ memberCount: 3 }), null],
     ['a place room: never (server null)', groupRow(), null],
     ['no count, or zero: none', groupRow({ memberCount: 0 }, { kind: 'event' }), null],

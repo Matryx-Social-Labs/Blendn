@@ -125,7 +125,7 @@ describe('the tray', () => {
     expect(mockToast).not.toHaveBeenCalled()
     await expect(went).resolves.toBe(false)
     await act(async () => leave())
-    expect(mockToast).toHaveBeenCalledWith("Couldn't copy the link. Try again.", 'error')
+    expect(mockToast).toHaveBeenCalledWith("Couldn’t copy the link. Try again.", 'error')
   })
 
   it('More… opens the system sheet with the message; dismissing it reports nothing went', async () => {
@@ -145,7 +145,7 @@ describe('the tray', () => {
     await open(INVITE)
     expect(screen.getByText('A link only you can send · no name on the card')).toBeTruthy()
     await press('WhatsApp')
-    expect(mockOpenWhatsApp).toHaveBeenLastCalledWith("Add me on Blend'n: https://www.blendn.app/f/abc")
+    expect(mockOpenWhatsApp).toHaveBeenLastCalledWith("Add me on Blend’n: https://www.blendn.app/f/abc")
   })
 
   it('an unlisted event shows the area only: not in the line, not in the message', async () => {
@@ -210,7 +210,7 @@ describe('Instagram Story', () => {
     const { went } = await open(INVITE)
     await press('Instagram Story')
     await settle()
-    expect(mockToast).toHaveBeenCalledWith("Instagram didn't open. Try again.", 'error')
+    expect(mockToast).toHaveBeenCalledWith("Instagram didn’t open. Try again.", 'error')
     await expect(went).resolves.toBe(false)
   })
 })

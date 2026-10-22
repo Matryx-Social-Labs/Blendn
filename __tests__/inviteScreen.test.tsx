@@ -41,7 +41,7 @@ beforeEach(() => jest.clearAllMocks())
 it('says a dead link does not work, and nothing about why', async () => {
   api.openFriendInvite.mockResolvedValue({
     success: false,
-    error: "This invite link doesn't work any more",
+    error: "This invite link doesn’t work any more",
     errorCode: 'NOT_FOUND',
   })
   await render(<InviteScreen />)
@@ -83,7 +83,7 @@ it('stays put and says so when the request fails', async () => {
   await screen.findByText('Ana wants to blend with you')
   fireEvent.press(screen.getByText('Send friend request'))
 
-  await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("That didn't go through. Try again.", 'error', { haptic: 'error' }))
+  await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("That didn’t go through. Try again.", 'error', { haptic: 'error' }))
   expect(screen.getByText('Send friend request')).toBeTruthy()
 })
 

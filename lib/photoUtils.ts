@@ -223,7 +223,7 @@ export const pickImage = async (
       return result.canceled ? null : result
     } catch (error) {
       Logger.error('profile', 'Error picking image from library', { error })
-      toast("Your photos didn't open. Try again.", 'error')
+      toast("Your photos didn’t open. Try again.", 'error')
       return null
     }
   }

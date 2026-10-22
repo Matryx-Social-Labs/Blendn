@@ -85,7 +85,7 @@ export function venueAction(live: {
   if (live.closedReason === 'event_live_here' && live.eventId) return { kind: 'handoff', eventId: live.eventId }
   if (live.open) return { kind: 'goLive' }
   if (live.closedReason === 'no_check_in_area') return { kind: 'closed', message: NO_AREA_MESSAGE }
-  return { kind: 'closed', message: "You can't go live here right now." }
+  return { kind: 'closed', message: "You can’t go live here right now." }
 }
 
 /** Codes `POST /venues/:venueId/live` answers with besides the check-in door's (blendn-admin/docs/API.md). */
@@ -118,7 +118,7 @@ export type GoLiveRefusal =
   | { kind: 'plus' }
   | { kind: 'refused'; reason: RefusalReason; title: string; message: string; offerDirections: boolean; action?: RefusalAction }
 
-const GENERIC = "We couldn't make you live here. Please try again."
+const GENERIC = "We couldn’t make you live here. Please try again."
 
 /** "1 minute", "45 seconds" — for a rate limit's wait. */
 function waitLabel(seconds: number): string {
@@ -162,7 +162,7 @@ export function goLiveRefusal(
     case GO_LIVE_CODES.FORBIDDEN:
       return { kind: 'refused', reason: 'age', title: 'Finish your profile first', message, offerDirections: false }
     case GO_LIVE_CODES.NOT_FOUND:
-      return { kind: 'refused', reason: 'notFound', title: "This place isn't available", message, offerDirections: false }
+      return { kind: 'refused', reason: 'notFound', title: "This place isn’t available", message, offerDirections: false }
     case GO_LIVE_CODES.RATE_LIMITED:
       return {
         kind: 'refused',
@@ -173,9 +173,9 @@ export function goLiveRefusal(
       }
     case undefined:
       // No code: a timeout, no network, a 5xx. It may have landed — the caller re-reads.
-      return { kind: 'refused', reason: 'timeout', title: "Couldn't go live", message, offerDirections: false, action: 'retry' }
+      return { kind: 'refused', reason: 'timeout', title: "Couldn’t go live", message, offerDirections: false, action: 'retry' }
     default:
-      return { kind: 'refused', reason: 'other', title: "Couldn't go live", message, offerDirections: false }
+      return { kind: 'refused', reason: 'other', title: "Couldn’t go live", message, offerDirections: false }
   }
 }
 
@@ -187,11 +187,11 @@ export function liveEndedMessage(reason: string, venueName: string | null): stri
   const at = venueName ? ` at ${venueName}` : ''
   switch (reason) {
     case 'expired':
-      return `You're no longer live${at}.`
+      return `You’re no longer live${at}.`
     case 'event_started':
       return `An event just started${at}. Check in to it to join its room.`
     case 'left_area':
-      return `You left${venueName ? ` ${venueName}` : ' the place'}, so you're no longer live.`
+      return `You left${venueName ? ` ${venueName}` : ' the place'}, so you’re no longer live.`
     default:
       return null
   }

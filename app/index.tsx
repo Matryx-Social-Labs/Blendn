@@ -190,7 +190,7 @@ function IndexInner() {
         setError('Google Play services needs updating before you can sign in with Google.')
         H.error()
       } else {
-        setError("Couldn't sign in with Google. Try again.")
+        setError("Couldn’t sign in with Google. Try again.")
         H.error()
       }
     } finally {
@@ -244,7 +244,7 @@ function IndexInner() {
         Logger.info('auth', 'User cancelled Apple sign in')
       } else {
         Logger.error('auth', 'Apple Sign In failed', { error: err })
-        setError("Couldn't sign in with Apple. Try again.")
+        setError("Couldn’t sign in with Apple. Try again.")
         H.error()
       }
     } finally {

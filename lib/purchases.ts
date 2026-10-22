@@ -139,7 +139,7 @@ export type PurchaseOutcome =
   | { kind: 'cancelled' }
   | { kind: 'failed'; message: string; manage?: boolean }
 
-const NOT_SIGNED_IN = "We couldn't connect your account to the store. Close this and try again."
+const NOT_SIGNED_IN = "We couldn’t connect your account to the store. Close this and try again."
 
 /** What the store said, in words a person can act on. `manage`: point them at Manage subscription. */
 export function purchaseFailure(code: string | undefined): { message: string; manage?: boolean } {
@@ -147,13 +147,13 @@ export function purchaseFailure(code: string | undefined): { message: string; ma
     case PURCHASES_ERROR_CODE.PRODUCT_ALREADY_PURCHASED_ERROR:
       return { message: 'You already have this. See it under Manage subscription.', manage: true }
     case PURCHASES_ERROR_CODE.RECEIPT_ALREADY_IN_USE_ERROR:
-      return { message: "This store account's purchase belongs to another Blendn account. Sign in to that one to use it." }
+      return { message: "This store account’s purchase belongs to another Blendn account. Sign in to that one to use it." }
     case PURCHASES_ERROR_CODE.PURCHASE_NOT_ALLOWED_ERROR:
-      return { message: "Purchases aren't allowed on this device. Check Screen Time or your store's settings." }
+      return { message: "Purchases aren’t allowed on this device. Check Screen Time or your store’s settings." }
     case PURCHASES_ERROR_CODE.NETWORK_ERROR:
       return { message: "No connection to the store. Check your connection and try again." }
     default:
-      return { message: "The purchase didn't go through. Try again." }
+      return { message: "The purchase didn’t go through. Try again." }
   }
 }
 
@@ -183,7 +183,7 @@ export async function restore(
   /** The store's answer when it lands after the 20 s "didn't answer": it replaces that message, it is never dropped. */
   onLate?: (outcome: RestoreOutcome) => void
 ): Promise<RestoreOutcome> {
-  if (!configured) return { kind: 'failed', message: "Purchases aren't available yet." }
+  if (!configured) return { kind: 'failed', message: "Purchases aren’t available yet." }
   // A store that never answers (a sign-in sheet nobody sees, a stalled sandbox) ends in words, not a spinner.
   let timer: ReturnType<typeof setTimeout> | undefined
   let timedOut = false
@@ -206,7 +206,7 @@ export async function restore(
 
 /** How long Restore waits for the store before it says so. */
 export const RESTORE_TIMEOUT_MS = 20_000
-export const RESTORE_SILENT = "The store didn't answer. Try again."
+export const RESTORE_SILENT = "The store didn’t answer. Try again."
 
 async function restoreFor(userId: string | null | undefined): Promise<RestoreOutcome> {
   if (!(await canBuyAs(userId))) return { kind: 'failed', message: NOT_SIGNED_IN }
@@ -216,7 +216,7 @@ async function restoreFor(userId: string | null | undefined): Promise<RestoreOut
   } catch (error) {
     const code = (error as { code?: string })?.code
     Logger.warn('plus', 'Restore failed', { code })
-    return { kind: 'failed', message: code === PURCHASES_ERROR_CODE.NETWORK_ERROR ? purchaseFailure(code).message : "Couldn't reach the store. Try again." }
+    return { kind: 'failed', message: code === PURCHASES_ERROR_CODE.NETWORK_ERROR ? purchaseFailure(code).message : "Couldn’t reach the store. Try again." }
   }
 }
 

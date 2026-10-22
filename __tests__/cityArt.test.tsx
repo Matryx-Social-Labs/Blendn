@@ -33,7 +33,7 @@ describe("timeOfDay", () => {
   // 2026-09-28 in UTC; IST is UTC+5:30.
   const at = (utc: string) => new Date(`2026-09-28T${utc}Z`)
 
-  it("reads the city's clock, not the phone's", () => {
+  it("reads the city’s clock, not the phone’s", () => {
     expect(timeOfDay(at("06:30:00"), "Asia/Kolkata")).toBe("day") // 12:00 IST
     expect(timeOfDay(at("06:30:00"), "Europe/Berlin")).toBe("day") // 08:30 CEST
     expect(timeOfDay(at("16:00:00"), "Asia/Kolkata")).toBe("night") // 21:30 IST

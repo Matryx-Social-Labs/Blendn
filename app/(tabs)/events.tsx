@@ -572,7 +572,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       setInterestCounts(prev => ({ ...prev, [event.id]: prevCount }))
       // A refusal says so in a toast, whose haptic is the one `H.error` (frame 24, 25).
       showToast(
-        prevInterested ? "Couldn't remove this event from Saved. Try again." : "Couldn't save this event. Try again.",
+        prevInterested ? "Couldn’t remove this event from Saved. Try again." : "Couldn’t save this event. Try again.",
         'error',
         { haptic: 'error' }
       )
@@ -623,7 +623,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     const previousStatus = latestCheckinStatusesRef.current[event.id]
     const fail = () => {
       setCheckinStatuses(restoreStatus(event.id, previousStatus))
-      showToast("Couldn't check you out. Try again.", 'error', { haptic: 'error' })
+      showToast("Couldn’t check you out. Try again.", 'error', { haptic: 'error' })
     }
 
     // Optimistic removal from checked-in state
@@ -845,7 +845,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
 
       if (error) {
         Logger.error('events', 'Error fetching events', { error })
-        setNetError("Couldn't load events.")
+        setNetError("Couldn’t load events.")
         return
       }
 
@@ -875,7 +875,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       Logger.journey('events', 'fetch:success', { count: eventsData?.length || 0 })
     } catch (error) {
       Logger.error('events', 'Unexpected error', { error: error as any })
-      setNetError("Couldn't load events.")
+      setNetError("Couldn’t load events.")
     } finally {
       if (!options?.silent || !initialLoadedRef.current) {
         setLoading(false)
@@ -1059,7 +1059,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       } catch (error) {
         // Not being able to name where you are costs a "switch?" prompt and a
         // distance label. It must not interrupt browsing.
-        Logger.warn('events', "Couldn't resolve the device city", { error: error as any })
+        Logger.warn('events', "Couldn’t resolve the device city", { error: error as any })
       }
     })()
     return () => {

@@ -115,7 +115,7 @@ function MediaScreenInner() {
     // validator's or the server's words ("Photo must be less than 5MB"); it
     // used to say nothing, and the empty slot looked like a tap that missed.
     if (!picked.ok) {
-      if (!picked.cancelled) showToast(picked.error || "That photo wasn't added. Try again.", 'error', { haptic: 'error' })
+      if (!picked.cancelled) showToast(picked.error || "That photo wasn’t added. Try again.", 'error', { haptic: 'error' })
       return
     }
     const key = nextKey()

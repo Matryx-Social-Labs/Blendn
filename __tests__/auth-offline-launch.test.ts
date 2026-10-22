@@ -61,7 +61,7 @@ describe('a launch that cannot reach the server', () => {
     expect(markSessionExpired).not.toHaveBeenCalled()
   })
 
-  it("says it can't reach Blend'n when there is no stored user, and still signs nobody out", async () => {
+  it("says it can’t reach Blend’n when there is no stored user, and still signs nobody out", async () => {
     api.getSession.mockResolvedValue(OFFLINE as never)
     api.refreshSessionOutcome.mockResolvedValue('failed')
     store.getUser.mockResolvedValue(null)

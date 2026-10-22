@@ -35,8 +35,8 @@ describe('the Going count follows an RSVP', () => {
 
 describe('notification rows for VoiceOver', () => {
   it('puts one full stop between parts, never two', () => {
-    expect(notificationLabel('Board Game Night', "The night's over. Only you see what you say.", '8h')).toBe(
-      "Board Game Night. The night's over. Only you see what you say. 8h"
+    expect(notificationLabel('Board Game Night', "The night’s over. Only you see what you say.", '8h')).toBe(
+      "Board Game Night. The night’s over. Only you see what you say. 8h"
     )
     expect(notificationLabel('Tuesday Stand-up', 'Starting in ~60 minutes', '14h')).toBe(
       'Tuesday Stand-up. Starting in ~60 minutes. 14h'

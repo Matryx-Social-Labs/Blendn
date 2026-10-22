@@ -43,7 +43,7 @@ describe('feedPoster', () => {
       .toBe('a.jpg')
   })
 
-  it("uses a video's thumbnail when there is no image at all", () => {
+  it("uses a video’s thumbnail when there is no image at all", () => {
     // An event whose only upload is a clip still has something to draw while
     // the player warms up.
     expect(feedPoster([video()], null)).toBe('https://cdn.example/poster.jpg')

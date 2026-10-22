@@ -358,7 +358,7 @@ export const ACCOUNT_MIN_AGE = 18
 export const ACCOUNT_MAX_AGE = 120
 
 /** What someone under `ACCOUNT_MIN_AGE` is told, word for word what the server says. */
-export const ADULTS_ONLY = `Blend'n is for people ${ACCOUNT_MIN_AGE} and over.`
+export const ADULTS_ONLY = `Blend’n is for people ${ACCOUNT_MIN_AGE} and over.`
 
 export function isAccountAge(years: number | null | undefined): boolean {
   return (

@@ -187,7 +187,7 @@ function EditProfileContent() {
       hue: 'violet',
       icon: 'triangle-alert',
       title: 'Discard changes?',
-      message: "You have edits that aren't saved. Leave now and they're gone.",
+      message: "You have edits that aren’t saved. Leave now and they’re gone.",
       actions: [
         { label: 'Discard', variant: 'destructive', then: discardChanges },
         { label: 'Keep editing', cancel: true },
@@ -327,7 +327,7 @@ function EditProfileContent() {
 
       } catch (error) {
         Logger.error('profile', 'EditProfile: Load profile error', { error })
-        showToast("Couldn't load your profile. Try again.", 'error')
+        showToast("Couldn’t load your profile. Try again.", 'error')
       } finally {
         setLoading(false)
       }
@@ -458,7 +458,7 @@ function EditProfileContent() {
       Logger.error('profile', 'EditProfile: Save profile error', { error })
       // Never the thrown message: it is the server's or the client's wording
       // for a developer ("Failed to update profile"), not for the person.
-      showToast("Couldn't save your profile. Try again.", 'error', { haptic: 'error' })
+      showToast("Couldn’t save your profile. Try again.", 'error', { haptic: 'error' })
     } finally {
       setSaving(false)
     }

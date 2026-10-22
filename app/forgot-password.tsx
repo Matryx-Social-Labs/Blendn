@@ -126,7 +126,7 @@ export default function ForgotPassword() {
       return true
     } catch (e) {
       Logger.error('auth', 'Forgot password request failed', { error: e })
-      setError("Couldn't send the reset link. Try again.")
+      setError("Couldn’t send the reset link. Try again.")
       refusedBy()
       return false
     } finally {

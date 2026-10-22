@@ -37,7 +37,7 @@ describe('the disclosure names people the way the server does', () => {
      * person, after the fact.
      */
     const copy = connectDisclosure('Cosmic Panda', false)
-    expect(copy).toContain("You'll still see them as Cosmic Panda")
+    expect(copy).toContain("You’ll still see them as Cosmic Panda")
   })
 
   it('drops the second sentence once they are already revealed', () => {

@@ -66,7 +66,7 @@ const MARKER_X = R + R * Math.sin(MARKER_ANGLE)
 const MARKER_Y = R - R * Math.cos(MARKER_ANGLE)
 
 /** (c)'s label, with the venue its pill shows, so the name a screen reader or Voice Control has matches the words on screen. */
-const checkInLabel = (venue: string) => `You're at ${venue}. Check in to see who else is here`
+const checkInLabel = (venue: string) => `You’re at ${venue}. Check in to see who else is here`
 
 /** (c)'s label sits this far either side of the disc at most; a long venue is truncated. */
 const LABEL_REACH = SPACE.xxxl * 2
@@ -132,7 +132,7 @@ export function Disc({ target, onPress, venue, testID = 'disc' }: DiscProps) {
     play(v, discTransition(from, look, reduceMotion))
     // Politely: queued behind whatever is being read, not over it.
     if (look === 'c') {
-      AccessibilityInfo.announceForAccessibilityWithOptions(`You're at ${venue ?? 'an event'}. Check in from the Blend'n button.`, { queue: true })
+      AccessibilityInfo.announceForAccessibilityWithOptions(`You’re at ${venue ?? 'an event'}. Check in from the Blend’n button.`, { queue: true })
     }
   }, [look, reduceMotion, v, venue])
 

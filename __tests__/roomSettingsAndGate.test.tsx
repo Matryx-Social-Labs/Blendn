@@ -39,7 +39,7 @@ describe("the reveal switch when there is nothing to reveal", () => {
   })
 })
 
-describe("the way into the room's settings", () => {
+describe("the way into the room’s settings", () => {
   it("exists", () => {
     expect(code).toContain("'/event-preferences/[eventId]'")
   })

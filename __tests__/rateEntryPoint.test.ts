@@ -100,7 +100,7 @@ describe("the entry point to peer rating", () => {
     expect(DETAIL).toMatch(/onPress=\{cancelled \? undefined : primaryActionPress\}/)
   })
 
-  it("sends somebody who wasn't there to tonight, not to a dead pill", () => {
+  it("sends somebody who wasn’t there to tonight, not to a dead pill", () => {
     const press = DETAIL.slice(DETAIL.indexOf("const primaryActionPress"))
     const rate = press.indexOf("'/rate/[eventId]'")
     const tonight = press.indexOf("toTheOverlay(openBlendn)")
@@ -110,7 +110,7 @@ describe("the entry point to peer rating", () => {
   })
 })
 
-describe("the Going tab's way in to peer rating", () => {
+describe("the Going tab’s way in to peer rating", () => {
   /*
    * The second entry point: every Past row on Going carries the action, so
    * rating does not depend on reopening an old event. Past is only events you

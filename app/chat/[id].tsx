@@ -469,7 +469,7 @@ function GroupChatInner() {
     } catch (error) {
       Logger.warn('chat', 'send failed', { error })
       setMessage(optimistic.message_id, (m) => ({ ...m, failed: true, waiting: false }))
-      showToast("Couldn't send. Try again.", 'error', { haptic: 'error' })
+      showToast("Couldn’t send. Try again.", 'error', { haptic: 'error' })
     }
   }
 
@@ -536,7 +536,7 @@ function GroupChatInner() {
     if (reactRefused === 'left') markRoomLeft(roomId)
     else if (reactRefused === 'not_live') setNotLive(true)
     else if (lockFor(result.errorCode)) composer.apply(result.errorCode, undefined, result.error)
-    showToast(userMessage(result, "Couldn't add your reaction. Try again."), 'error', { haptic: 'error' })
+    showToast(userMessage(result, "Couldn’t add your reaction. Try again."), 'error', { haptic: 'error' })
   }
 
   /* Back in, or the server's refusal in its own words; a room you were never in is its 404 (check in). */
@@ -548,7 +548,7 @@ function GroupChatInner() {
     if (!result.success) {
       const closed = roomKind ? roomClosedLine(roomKind, result.errorCode) : null
       if (closed) return setClosedLine(closed)
-      showToast(result.errorCode === 'NOT_FOUND' ? 'Check in at the event to join its room.' : userMessage(result, "Couldn't rejoin this room. Try again."), 'error', { haptic: 'error' })
+      showToast(result.errorCode === 'NOT_FOUND' ? 'Check in at the event to join its room.' : userMessage(result, "Couldn’t rejoin this room. Try again."), 'error', { haptic: 'error' })
       return
     }
     markRoomJoined(roomId)
@@ -556,7 +556,7 @@ function GroupChatInner() {
     rejoinChatSocket(roomId)
     setOutOfRoom(false)
     setLoading(true)
-    showToast("You're back in the room", 'success')
+    showToast("You’re back in the room", 'success')
     void loadMessages(true)
   }
 
@@ -570,7 +570,7 @@ function GroupChatInner() {
     const result = await apiClient.rsvpToEvent(eventId, 'going')
     setRsvping(false)
     if (!result.success) {
-      return showToast(userMessage(result, "Couldn't save your RSVP. Try again."), 'error', { haptic: 'error' })
+      return showToast(userMessage(result, "Couldn’t save your RSVP. Try again."), 'error', { haptic: 'error' })
     }
     H.success()
     composer.setLock(null)

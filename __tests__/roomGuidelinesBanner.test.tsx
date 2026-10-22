@@ -110,7 +110,7 @@ it('"Got it" hides it, and it stays hidden when that room opens again', async ()
   expect(screen.queryByTestId(BANNER)).toBeNull()
 })
 
-it("shows again in a different event's room", async () => {
+it("shows again in a different event’s room", async () => {
   await AsyncStorage.setItem(roomGuidelinesKey('u_me', 'room_a'), 'dismissed')
   await openRoom('u_me', 'room_b')
   expect(screen.getByTestId(BANNER)).toBeTruthy()

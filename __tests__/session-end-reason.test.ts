@@ -51,7 +51,7 @@ process.env.EXPO_PUBLIC_API_BASE_URL = 'https://api.test'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { apiClient, TokenStorage } = require('../lib/apiClient') as typeof import('../lib/apiClient')
 
-const SUSPENDED = "This account has been suspended. Contact support@blendn.app if you think that's a mistake."
+const SUSPENDED = "This account has been suspended. Contact support@blendn.app if you think that’s a mistake."
 
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
@@ -79,7 +79,7 @@ beforeEach(async () => {
 })
 
 describe('a suspended phone is told why, through the sign-out that follows', () => {
-  it("keeps the refresh's sentence when the push-token DELETE 401s after the tokens are gone", async () => {
+  it("keeps the refresh’s sentence when the push-token DELETE 401s after the tokens are gone", async () => {
     await TokenStorage.setTokens('access-1', 'refresh-1')
     const seen = suspendedServer()
 
@@ -155,7 +155,7 @@ describe('the notice belongs to one session end', () => {
     expect(await consumeSessionEndedNotice()).toBe(false)
   })
 
-  it("lets the server's sentence replace a generic marker for the same end", async () => {
+  it("lets the server’s sentence replace a generic marker for the same end", async () => {
     markSessionStarted()
     markSessionExpired()
     markSessionExpired(SUSPENDED)
