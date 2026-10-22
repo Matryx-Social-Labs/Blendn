@@ -1,12 +1,15 @@
 /**
  * The links Blend'n sends and the links it opens (Flow 16 · 16.1 and 16.7), in one place.
  *
- * Outbound: `https://www.blendn.app/e/<event id>`, `/v/<venue id>` and `/f/<invite token>`. The host is `www` because
+ * Outbound: `https://www.blendn.app/event/<event id>` and `/f/<invite token>` for now (`WEB_PAGES_LIVE`), and a venue's
+ * share points at the site's front page: the live site's associated-domain file lists only `/f/*` and `/event/*`, and
+ * `/e/` and `/v/` serve the homepage, so a link on them opens nothing (SCRUM-738). The host is `www` because
  * that is the host the iOS associated domain and the Android intent filters verify (`app.json`); the bare domain
  * redirects, and a redirect hands the tap to the browser instead of the app. The id is the event's id, never its slug:
  * a link is a frozen snapshot forwarded to strangers, and a slug names the thing.
  *
- * Inbound: the same three, plus the paths the app already answers to (`/event/<id>`, from an organiser's QR code). The
+ * Inbound: `/e/`, `/v/` and `/f/` AND `/event/` / `/venue/`, whatever `WEB_PAGES_LIVE` says (links already sent, the Android
+ * intent filters and an organiser's QR code all use them). The
  * file routes are `app/event/[id]`, `app/venue/[id]` and `app/f/[token]`, so `/e/` and `/v/` are rewritten to them by
  * `app/+native-intent.tsx` before the router sees them.
  */
@@ -21,8 +24,18 @@ const SEGMENT = /^[A-Za-z0-9_-]{1,64}$/
 export type LinkKind = 'event' | 'venue' | 'invite'
 export type LinkTarget = { kind: LinkKind; id: string }
 
-export const eventLink = (id: string): string => `${SHARE_ORIGIN}/e/${id}`
-export const venueLink = (id: string): string => `${SHARE_ORIGIN}/v/${id}`
+/**
+ * The one switch for the interim (SCRUM-738). False until the public `/e/<id>` and `/v/<id>` pages and their associated-domain
+ * entries are live (SCRUM-689), then true: an event goes back to `/e/<id>` and a venue to its own `/v/<id>`.
+ *
+ * Why a venue is the front page meanwhile, not "the venue's next event": the card the sender approved says the venue, and
+ * the page behind the link would be an event (or nothing, for a venue with none coming), and a venue's event may not be
+ * shareable at all. A link that works and says less beats one that opens something else. The tray's text names the venue.
+ */
+export const WEB_PAGES_LIVE = false
+
+export const eventLink = (id: string): string => `${SHARE_ORIGIN}/${WEB_PAGES_LIVE ? 'e' : 'event'}/${id}`
+export const venueLink = (id: string): string => (WEB_PAGES_LIVE ? `${SHARE_ORIGIN}/v/${id}` : SHARE_ORIGIN)
 export const inviteLink = (token: string): string => `${SHARE_ORIGIN}/f/${token}`
 
 /** The file route a target opens in the app. */

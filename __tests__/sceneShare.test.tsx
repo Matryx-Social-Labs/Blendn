@@ -89,12 +89,12 @@ const open = async (data: ReturnType<typeof detail>) => {
 }
 
 describe('the share circle', () => {
-  it('opens the tray with the event card and its /e/ link', async () => {
+  it('opens the tray with the event card and its /event/ link', async () => {
     await open(detail())
     await fireEvent.press(await screen.findByRole('button', { name: 'Share' }))
     expect(mockOpenShare).toHaveBeenCalledWith({
       kind: 'event',
-      event: expect.objectContaining({ title: 'Vinyl Night', venue: 'Toit', area: 'Indiranagar', url: 'https://www.blendn.app/e/e1', unlisted: false, cancelled: false }),
+      event: expect.objectContaining({ title: 'Vinyl Night', venue: 'Toit', area: 'Indiranagar', url: 'https://www.blendn.app/event/e1', unlisted: false, cancelled: false }),
     })
   })
 
@@ -128,7 +128,7 @@ describe('“Bring someone?”', () => {
     await open(detail({}, { rsvpStatus: 'going' }))
     await fireEvent.press(await screen.findByRole('button', { name: 'WhatsApp, send Vinyl Night' }))
     await act(async () => {})
-    expect(mockOpenWhatsApp).toHaveBeenCalledWith(expect.stringContaining('https://www.blendn.app/e/e1'))
+    expect(mockOpenWhatsApp).toHaveBeenCalledWith(expect.stringContaining('https://www.blendn.app/event/e1'))
     expect(mockOpenShare).not.toHaveBeenCalled()
     mockOpenWhatsApp.mockResolvedValue(false)
     await fireEvent.press(screen.getByRole('button', { name: 'WhatsApp, send Vinyl Night' }))
