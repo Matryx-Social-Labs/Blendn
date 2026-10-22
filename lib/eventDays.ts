@@ -76,7 +76,6 @@ export const dayOfWords = (e: EventDays): string | null => (e.dayNumber ? `Day $
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const monthOf = (date: string) => MONTHS[Number(date.slice(5, 7)) - 1]
-const dayOfMonth = (date: string) => Number(date.slice(8, 10))
 
 /**
  * The run's own dates, "Sat 27 – Mon 29 Sep" (Flow 3 · 3.2 frame 04): the hero's badge on a run of days. The month is said once

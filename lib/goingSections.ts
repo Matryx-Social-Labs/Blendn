@@ -49,7 +49,8 @@ export function goingSections(
   going: RsvpEventRow[],
   saved: SavedEventRow[],
   attended: AttendancePayload['events'],
-  now: number = Date.now()
+  now: number = Date.now(),
+  paging: GoingPaging = {}
 ): GoingItem[] {
   const live = going.filter((r) => isLiveNow(r, now))
   const later = going.filter((r) => !isLiveNow(r, now) && !sessionOver(r, now))
@@ -81,9 +82,47 @@ export function goingSections(
 
   // Saved (minus anything above) and Past, exactly as `goingItems` draws them.
   const goingIds = new Set(going.map((r) => r.id))
-  const tail = goingItems([], saved.filter((r) => !goingIds.has(r.id)), attended, now)
-  return [...items, ...tail]
+  const savedOnly = saved.filter((r) => !goingIds.has(r.id))
+  const tail = goingItems([], savedOnly, attended, now)
+  const past = tail.filter((i) => i.kind === 'past').length
+  const more = (section: GoingSection, held: number): GoingItem[] => {
+    const p = paging[section]
+    if (!p?.hasMore) return []
+    const remaining = Math.max(1, (p.total ?? 0) - held)
+    return [{ kind: 'more', key: `m:${section}`, section, remaining, busy: !!p.busy, failed: !!p.failed }]
+  }
+  // The count a header carries is the server's, less the rows the screen holds and does not draw (a save already under Going, a
+  // night still running): what is drawn once it is all read.
+  const counted = (section: GoingSection, held: number, drawn: number): number | undefined => {
+    const p = paging[section]
+    // Said only where it tells more than the rows do: a short list needs no number.
+    return p?.hasMore && p.total != null ? Math.max(drawn, p.total - (held - drawn)) : undefined
+  }
+  const withEnds = (section: 'saved' | 'past', held: number, drawn: number): GoingItem[] => {
+    const lead = tail.filter((i) => (section === 'saved' ? i.key === 'h:saved' || i.key.startsWith('s:') : i.key === 'h:past' || i.key.startsWith('p:')))
+    const rows = lead.length ? lead : more(section, held).length ? [{ kind: 'header', key: `h:${section}`, title: section === 'saved' ? 'Saved' : 'Past' } as GoingItem] : []
+    const count = counted(section, held, drawn)
+    return [
+      ...rows.map((i) => (i.kind === 'header' && count !== undefined ? { ...i, count } : i)),
+      ...(rows.length ? more(section, held) : []),
+    ]
+  }
+  return [
+    ...items,
+    ...more('going', going.length),
+    ...withEnds('saved', saved.length, savedOnly.length),
+    ...withEnds('past', attended.length, past),
+  ]
 }
+
+/** What the screen knows of a section's pages: the server's total, whether more are to be had, and what a request is doing. */
+export interface SectionPaging {
+  total: number | null
+  hasMore: boolean
+  busy?: boolean
+  failed?: boolean
+}
+export type GoingPaging = Partial<Record<GoingSection, SectionPaging>>
 
 export type GoingSection = 'saved' | 'going' | 'past'
 

@@ -2478,8 +2478,8 @@ class ApiClientClass {
    * way `getProfileInterests` is wrapped. This was typed as the array and the
    * Going tab mapped over the envelope (SCRUM-175).
    */
-  async getUserFavorites(userId: string): Promise<ApiResponse<SavedEventsPayload>> {
-    return this.queuedRequest<SavedEventsPayload>(`/api/mobile/users/${userId}/favorites`)
+  async getUserFavorites(userId: string, page = 1, limit = 20): Promise<ApiResponse<SavedEventsPayload>> {
+    return this.queuedRequest<SavedEventsPayload>(`/api/mobile/users/${userId}/favorites?page=${page}&limit=${limit}`)
   }
 
   /**
@@ -2487,13 +2487,13 @@ class ApiClientClass {
    * there is no way to ask for somebody else's. A server older than this route
    * answers 404, which the Going tab reads as "no section", not as a failure.
    */
-  async getMyRsvps(): Promise<ApiResponse<RsvpEventsPayload>> {
-    return this.queuedRequest<RsvpEventsPayload>('/api/mobile/me/rsvps?limit=50')
+  async getMyRsvps(page = 1): Promise<ApiResponse<RsvpEventsPayload>> {
+    return this.queuedRequest<RsvpEventsPayload>(`/api/mobile/me/rsvps?page=${page}&limit=50`)
   }
 
   /** The events you attended, most recent first. `/me`-scoped, like the above. */
-  async getMyAttendance(limit = 10): Promise<ApiResponse<AttendancePayload>> {
-    return this.queuedRequest<AttendancePayload>(`/api/mobile/me/attendance?limit=${limit}`)
+  async getMyAttendance(limit = 10, page = 1): Promise<ApiResponse<AttendancePayload>> {
+    return this.queuedRequest<AttendancePayload>(`/api/mobile/me/attendance?limit=${limit}&page=${page}`)
   }
 
   /** Whether you have Blendn+ — the server's answer, the only one that unlocks anything. Never cached. */
