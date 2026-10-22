@@ -9,6 +9,7 @@ import { liveWindow } from './eventSession'
 import { getDistanceKm } from './geo'
 import { Logger } from './logger'
 import { pickTonight } from './roomMoments'
+import { FIX_MAX_AGE_MS, FIX_REQUIRED_ACCURACY_M, fixOf, type PreciseFix } from './roomButton'
 import { getRoomSignal, publishRoomSignal, subscribeRoomSignal } from './roomSignal'
 import { useLiveSync } from './useLiveSync'
 
@@ -70,14 +71,21 @@ const PREVIEW_TOP = 3
 /** The Pulse's page size, so the query — and so the cache entry — is the same. */
 const PULSE_PAGE = 20
 
+type QuietCoords = PreciseFix & { approximate: boolean }
+
 /** A fix only if the person already said yes. Never prompts. */
-async function quietLocation(): Promise<{ coords: { latitude: number; longitude: number } | null; location: TonightLocation }> {
+async function quietLocation(): Promise<{ coords: QuietCoords | null; location: TonightLocation }> {
   try {
     const permission = await Location.getForegroundPermissionsAsync()
     if (permission.status !== 'granted') return { coords: null, location: 'off' }
     const location = permission.ios?.accuracy === 'reduced' ? 'approximate' : 'on'
-    const last = await Location.getLastKnownPositionAsync()
-    return { coords: last?.coords ? { latitude: last.coords.latitude, longitude: last.coords.longitude } : null, location }
+    const last = await Location.getLastKnownPositionAsync({ maxAge: FIX_MAX_AGE_MS, requiredAccuracy: FIX_REQUIRED_ACCURACY_M })
+    return {
+      coords: last?.coords
+        ? { ...fixOf(last), approximate: location === 'approximate' }
+        : null,
+      location,
+    }
   } catch {
     return { coords: null, location: 'on' }
   }
@@ -163,7 +171,7 @@ export function useTonight(): TonightState {
      * city feed has no distances, and publishing from it would clear an
      * "inside" the Pulse had correctly worked out.
      */
-    if (coords) publishRoomSignal(result.data)
+    if (coords) publishRoomSignal(result.data, Date.now(), coords)
 
     const goingIds = new Set<string>(
       (rsvps?.data?.events ?? []).filter((e) => e.rsvpStatus === 'going').map((e) => e.id)

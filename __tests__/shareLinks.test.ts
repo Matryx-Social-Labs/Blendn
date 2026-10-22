@@ -3,15 +3,17 @@
  * for what may be linked at all.
  */
 import { redirectSystemPath } from '../app/+native-intent'
-import { eventLink, inviteLink, nativeIntentPath, parseLink, routeFor, shareability, venueLink } from '../lib/shareLinks'
+import { eventLink, inviteLink, nativeIntentPath, parseLink, routeFor, SHARE_ORIGIN, shareability, venueLink, WEB_PAGES_LIVE } from '../lib/shareLinks'
 
 const ID = '7f3a2c4e-91d0-4b8a-a1c2-0d5e6f7a8b9c'
 const TOKEN = 'abcdefghijklmnopqrstuv'
 
 describe('building a link', () => {
-  it('makes the www links the app is verified for, from the id and never a slug', () => {
-    expect(eventLink(ID)).toBe(`https://www.blendn.app/e/${ID}`)
-    expect(venueLink(ID)).toBe(`https://www.blendn.app/v/${ID}`)
+  // SCRUM-738: the live associated-domain file lists only /f/* and /event/*, and /e/ and /v/ serve the homepage.
+  it('makes only links the live site is verified for, from the id and never a slug', () => {
+    expect(WEB_PAGES_LIVE).toBe(false)
+    expect(eventLink(ID)).toBe(`https://www.blendn.app/event/${ID}`)
+    expect(venueLink(ID)).toBe('https://www.blendn.app')
     expect(inviteLink(TOKEN)).toBe(`https://www.blendn.app/f/${TOKEN}`)
   })
 
@@ -25,7 +27,8 @@ describe('building a link', () => {
 describe('reading a link', () => {
   it('reads back what it built', () => {
     expect(parseLink(eventLink(ID))).toEqual({ kind: 'event', id: ID })
-    expect(parseLink(venueLink(ID))).toEqual({ kind: 'venue', id: ID })
+    expect(parseLink(`${SHARE_ORIGIN}/v/${ID}`)).toEqual({ kind: 'venue', id: ID })
+    expect(parseLink(`${SHARE_ORIGIN}/e/${ID}`)).toEqual({ kind: 'event', id: ID })
     expect(parseLink(inviteLink(TOKEN))).toEqual({ kind: 'invite', id: TOKEN })
   })
 

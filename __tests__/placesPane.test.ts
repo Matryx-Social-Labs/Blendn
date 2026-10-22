@@ -353,6 +353,16 @@ describe('what a card is read as', () => {
     expect(hoursLine({ opensAt: '00:00', closesAt: '00:00' }, NOW)).toEqual({ lead: 'Open till', time: '12 AM' })
   })
 
+  it('hoursLine and the venue page read the same venue-day state', () => {
+    const { venueDayState } = require('../lib/venueHours') as typeof import('../lib/venueHours')
+    const sunday3am = new Date(2026, 9, 18, 3, 0).getTime()
+    const night = { opensAt: '18:00', closesAt: '02:00' }
+    // With the reset known, an hour after the close is Closed; without it, a list row says nothing (the night is over).
+    expect(venueDayState(night, sunday3am, 6)).toEqual({ state: 'closed' })
+    expect(hoursLine(night, sunday3am)).toEqual({ lead: 'Opens', time: '6 PM' })
+    expect(venueDayState(night, sunday3am, null)).toEqual({ state: 'opens', time: '6 PM' })
+  })
+
   it('times it cannot read are no line: a guess is worse than a blank', () => {
     expect(hoursLine({ opensAt: '6 PM', closesAt: '1 AM' }, NOW)).toBeNull()
     expect(hoursLine({ opensAt: '25:00', closesAt: '23:00' }, NOW)).toBeNull()

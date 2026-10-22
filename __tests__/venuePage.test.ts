@@ -31,6 +31,14 @@ const NOW = new Date(2026, 9, 17, 21, 0, 0).getTime()
 const min = (n: number) => NOW + n * 60_000
 const iso = (ms: number) => new Date(ms).toISOString()
 
+/**
+ * `GET /venues/:venueId` as the server sends it (app/api/mobile/venues/[venueId]/route.ts, admin origin/dev): the week's
+ * `hours` as `{ day, open, close }` rows in wall-clock HH:MM, `amenities` as names, `upcoming` without a going count.
+ * NOW is a Saturday, 21:00 (day 6).
+ */
+const SAT = 6
+const hoursOf = (...rows: { day: number; open: string; close: string }[]) => rows
+
 const detail = (over: { venue?: Partial<VenueDetail['venue']>; live?: Partial<VenueDetail['live']>; tonight?: VenueDetail['tonight'] } = {}): VenueDetail => ({
   venue: { id: 'v1', name: 'Toit', address: '100 Feet Road', city: 'Bengaluru', latitude: 12.97, longitude: 77.64, venueTypeLabel: 'Brewery', claimed: false, ...over.venue },
   live: { open: true, closedReason: null, eventId: null, liveNow: '5-9', youAreLive: false, ...over.live },
@@ -53,7 +61,7 @@ describe('the tiles', () => {
   it('draws only the fields the server sent, in the design’s order', () => {
     expect(venueTiles(detail({ live: { liveNow: null } }), NOW)).toEqual([])
     expect(venueTiles(detail(), NOW)).toEqual([{ label: 'LIVE', value: '5–9 so far', mono: false }])
-    const full = detail({ venue: { hours: { opensAt: iso(min(-300)), closesAt: iso(min(240)) }, dayResetHour: 6, capacity: 300 } })
+    const full = detail({ venue: { hours: hoursOf({ day: SAT, open: '16:00', close: '01:00' }), dayResetHour: 6, capacity: 300 } })
     expect(venueTiles(full, NOW)).toEqual([
       { label: 'OPEN', value: 'Till 1 AM', mono: true },
       { label: 'LIVE', value: '5–9 so far', mono: false },
@@ -62,10 +70,50 @@ describe('the tiles', () => {
     ])
   })
 
-  it('Open: before it opens, after it closes', () => {
-    const open = (a: number, b: number) => venueTiles(detail({ venue: { hours: { opensAt: iso(min(a)), closesAt: iso(min(b)) } }, live: { liveNow: null } }), NOW)[0]
-    expect(open(180, 600).value).toBe('Opens 12 AM')
-    expect(open(-600, -60).value).toBe('Closed')
+  it('Open: before it opens, while it is open past midnight, after it closes', () => {
+    const open = (...rows: { day: number; open: string; close: string }[]) =>
+      venueTiles(detail({ venue: { hours: rows }, live: { liveNow: null } }), NOW)[0]
+    expect(open({ day: SAT, open: '23:00', close: '02:00' }).value).toBe('Opens 11 PM')
+    expect(open({ day: SAT, open: '18:00', close: '01:00' }).value).toBe('Till 1 AM')
+    expect(open({ day: SAT, open: '12:00', close: '15:00' }).value).toBe('Closed')
+  })
+
+  it('Open: hours given for other days only is Closed today; a split day answers with its evening opening', () => {
+    const open = (...rows: { day: number; open: string; close: string }[]) =>
+      venueTiles(detail({ venue: { hours: rows }, live: { liveNow: null } }), NOW)[0]
+    expect(open({ day: 1, open: '12:00', close: '23:00' }).value).toBe('Closed')
+    expect(open({ day: SAT, open: '12:00', close: '15:00' }, { day: SAT, open: '19:00', close: '23:30' }).value).toBe('Till 11:30 PM')
+  })
+
+  it('Open: the venue day starts at its reset hour, so 01:00 Sunday is still Saturday’s row', () => {
+    const sunday1am = new Date(2026, 9, 18, 1, 0, 0).getTime()
+    const at = (hours: { day: number; open: string; close: string }[], reset: number) =>
+      venueTiles(detail({ venue: { hours, dayResetHour: reset }, live: { liveNow: null } }), sunday1am)[0]
+    expect(at([{ day: SAT, open: '18:00', close: '02:00' }], 6).value).toBe('Till 2 AM')
+    // With a midnight reset it is already Sunday, which has no row.
+    expect(at([{ day: SAT, open: '18:00', close: '02:00' }], 0).value).toBe('Closed')
+  })
+
+  it('Open: between the close and the reset hour it is Closed, not Opens (SCRUM-743 review M1)', () => {
+    const at = (day: number, hour: number, hours: { day: number; open: string; close: string }[]) =>
+      venueTiles(detail({ venue: { hours, dayResetHour: 6 }, live: { liveNow: null } }), new Date(2026, 9, day, hour, 0).getTime())[0].value
+    // Sunday 03:00 is still Saturday's day, whose 18:00 to 02:00 night closed an hour ago.
+    expect(at(18, 3, [{ day: SAT, open: '18:00', close: '02:00' }])).toBe('Closed')
+    // Sunday 05:00, Saturday 10:00 to 22:00: long closed, and the day has not turned over yet.
+    expect(at(18, 5, [{ day: SAT, open: '10:00', close: '22:00' }])).toBe('Closed')
+    // After the reset it is Sunday's day, whose own row answers.
+    expect(at(18, 7, [{ day: 0, open: '10:00', close: '22:00' }])).toBe('Opens 10 AM')
+    // Still inside Saturday's night at 01:00.
+    expect(at(18, 1, [{ day: SAT, open: '18:00', close: '02:00' }])).toBe('Till 2 AM')
+  })
+
+  it('no hours, an empty list, or rows that are not the server’s shape draw no Open tile', () => {
+    const tiles = (hours: unknown) => venueTiles(detail({ venue: { hours: hours as never }, live: { liveNow: null } }), NOW)
+    expect(tiles(null)).toEqual([])
+    expect(tiles([])).toEqual([])
+    expect(tiles({ opensAt: iso(min(-60)), closesAt: iso(min(60)) })).toEqual([])
+    expect(tiles([{ day: SAT, open: 18, close: null }])[0].value).toBe('Closed')
+    expect(tiles([{ day: SAT, open: 'late', close: 'later' }])[0].value).toBe('Closed')
   })
 
   it('the live tile is a bucket, and under five there is no live tile at all', () => {
@@ -81,21 +129,33 @@ describe('the tiles', () => {
 
 describe('good to know, coming up, the board', () => {
   it('one tile per amenity; a nameless one is dropped, not drawn blank', () => {
-    expect(goodToKnow([{ id: 'a', name: ' Rooftop ' }, { id: 'b', name: '  ' }])).toEqual([{ label: 'GOOD TO KNOW', value: 'Rooftop' }])
+    // The server sends the names, `string[]`.
+    expect(goodToKnow([' Rooftop ', '  ', 'Live music'])).toEqual([
+      { label: 'GOOD TO KNOW', value: 'Rooftop' },
+      { label: 'GOOD TO KNOW', value: 'Live music' },
+    ])
     expect(goodToKnow(null)).toEqual([])
+    expect(goodToKnow([{ id: 'a', name: 'Rooftop' }] as never)).toEqual([])
   })
 
-  it('upcoming events with their day and going count', () => {
+  it('upcoming events as the server sends them, with their day', () => {
+    const row = (id: string, title: string, start: Date) => ({
+      id,
+      title,
+      slug: null,
+      coverImageUrl: null,
+      startTime: start.toISOString(),
+      endTime: new Date(start.getTime() + 3 * 3_600_000).toISOString(),
+    })
     const rows = upcomingRows([
-      { id: 'a', title: 'Bass Thursday', startTime: new Date(2026, 9, 22, 22).toISOString(), goingCount: 31 },
-      { id: 'b', title: 'Comedy', startTime: new Date(2026, 9, 24, 21).toISOString(), goingCount: 0 },
-      { id: 'c', title: 'Trivia', startTime: new Date(2026, 9, 29, 21).toISOString() },
-      { id: 'd', title: 'Fourth', startTime: new Date(2026, 9, 30, 21).toISOString() },
+      row('a', 'Bass Thursday', new Date(2026, 9, 22, 22)),
+      row('b', 'Comedy', new Date(2026, 9, 24, 21)),
+      row('c', 'Trivia', new Date(2026, 9, 29, 21)),
+      row('d', 'Fourth', new Date(2026, 9, 30, 21)),
     ])
     // All four are rows; the page shows UPCOMING_SHOWN of them and keeps the rest behind See all.
     expect(rows).toHaveLength(4)
-    expect(rows[0]).toEqual({ id: 'a', title: 'Bass Thursday', day: 'Thu 22 Oct', going: '31 going' })
-    expect(rows[1].going).toBeNull()
+    expect(rows[0]).toEqual({ id: 'a', title: 'Bass Thursday', day: 'Thu 22 Oct' })
     expect(upcomingRows(undefined)).toEqual([])
   })
 

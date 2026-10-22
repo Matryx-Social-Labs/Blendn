@@ -24,9 +24,9 @@ describe('the date', () => {
 })
 
 describe('the shareable event', () => {
-  it('carries the title, the date, the place, the cover and the /e/ link, and nothing live or personal', () => {
+  it('carries the title, the date, the place, the cover and the /event/ link, and nothing live or personal', () => {
     const e = shareEventOf(NEON)!
-    expect(e).toMatchObject({ title: 'Neon Nights', venue: 'Toit', area: 'Indiranagar', cover: 'https://img/c.jpg', url: `https://www.blendn.app/e/${ID}`, cancelled: false, unlisted: false })
+    expect(e).toMatchObject({ title: 'Neon Nights', venue: 'Toit', area: 'Indiranagar', cover: 'https://img/c.jpg', url: `https://www.blendn.app/event/${ID}`, cancelled: false, unlisted: false })
     expect(Object.keys(e).sort()).toEqual(['area', 'cancelled', 'cover', 'date', 'dateText', 'title', 'unlisted', 'url', 'venue'])
   })
 
@@ -58,28 +58,28 @@ describe('the shareable event', () => {
 
 describe('the message that goes with the link', () => {
   it('is the title and date, the place, then the link', () => {
-    expect(shareText(eventTarget(NEON)!)).toBe(`Neon Nights · Sun 4 Oct, 9 PM\nToit, Indiranagar\nhttps://www.blendn.app/e/${ID}`)
+    expect(shareText(eventTarget(NEON)!)).toBe(`Neon Nights · Sun 4 Oct, 9 PM\nToit, Indiranagar\nhttps://www.blendn.app/event/${ID}`)
   })
 
   it('names the area only for an unlisted event: no venue, no street', () => {
     const text = shareText(eventTarget({ ...NEON, visibility: 'unlisted', address: '298, 100 Feet Rd' } as never)!)
-    expect(text).toBe(`Neon Nights · Sun 4 Oct, 9 PM\nIndiranagar\nhttps://www.blendn.app/e/${ID}`)
+    expect(text).toBe(`Neon Nights · Sun 4 Oct, 9 PM\nIndiranagar\nhttps://www.blendn.app/event/${ID}`)
     expect(text).not.toMatch(/Toit|Feet/)
   })
 
   it('has no dangling comma for a venue with no area, and no separator for a missing date', () => {
     const t = eventTarget({ ...NEON, city: '', startTime: undefined })!
-    expect(shareText(t)).toBe(`Neon Nights\nToit\nhttps://www.blendn.app/e/${ID}`)
+    expect(shareText(t)).toBe(`Neon Nights\nToit\nhttps://www.blendn.app/event/${ID}`)
   })
 
-  it('shares a venue by name and link, and an invite as the short ask with no name in it', () => {
+  it('shares a venue by name and the front-page link, and an invite as the short ask with no name in it', () => {
     const venue = venueTarget({ id: ID, name: 'Toit', venueTypeLabel: 'Brewery', city: 'Indiranagar' })
-    expect(shareText(venue)).toBe(`Toit\nhttps://www.blendn.app/v/${ID}`)
+    expect(shareText(venue)).toBe("Toit on Blend'n\nhttps://www.blendn.app")
     expect(shareText({ kind: 'invite', url: 'https://www.blendn.app/f/abc' })).toBe("Add me on Blend'n: https://www.blendn.app/f/abc")
   })
 
   it('copies the link alone', () => {
-    expect(shareUrl(eventTarget(NEON)!)).toBe(`https://www.blendn.app/e/${ID}`)
+    expect(shareUrl(eventTarget(NEON)!)).toBe(`https://www.blendn.app/event/${ID}`)
     expect(shareUrl({ kind: 'invite', url: 'https://www.blendn.app/f/abc' })).toBe('https://www.blendn.app/f/abc')
   })
 

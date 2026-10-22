@@ -47,11 +47,11 @@ describe('details', () => {
     mockCategories.mockResolvedValue(tree(2))
     await render(<DetailsScreen />)
     await fireEvent.changeText(screen.getByTestId('onboarding-bio-input'), 'x'.repeat(512))
-    expect(screen.getByText('Keep it under 500 characters · 512 now.')).toBeTruthy()
+    expect(screen.getByText('500 characters at most.')).toBeTruthy()
     expect(screen.getByTestId('onboarding-bio-input').props.value).toHaveLength(512)
     expect(primary().props.accessibilityState).toMatchObject({ disabled: true })
     await fireEvent.changeText(screen.getByTestId('onboarding-bio-input'), 'x'.repeat(500))
-    expect(screen.queryByText(/Keep it under/)).toBeNull()
+    expect(screen.queryByText(/characters at most/)).toBeNull()
     expect(primary().props.accessibilityState).toMatchObject({ disabled: false })
   })
 
@@ -105,6 +105,26 @@ describe('journey', () => {
       maxExpertise: 3,
     },
   }
+
+  it.each([
+    ['onboarding-city-input', 200, 'location'],
+    ['onboarding-job-input', 100, 'occupation'],
+    ['onboarding-school-input', 100, 'education'],
+  ])('%s past %i is not cut: it stays, says by how much, and Continue waits (SCRUM-745)', async (testID, cap) => {
+    mockWorkFields.mockResolvedValue(fields)
+    await render(<JourneyScreen />)
+    const long = 'x'.repeat(cap + 7)
+    await fireEvent.changeText(screen.getByTestId(testID), long)
+    expect(screen.getByTestId(testID).props.value).toBe(long)
+    expect(screen.getByText(`${cap} characters at most.`)).toBeTruthy()
+    expect(primary().props.accessibilityState).toMatchObject({ disabled: true })
+    await fireEvent.press(primary())
+    expect(mockCommit).not.toHaveBeenCalled()
+    await fireEvent.changeText(screen.getByTestId(testID), 'x'.repeat(cap))
+    expect(screen.queryByText(/characters at most/)).toBeNull()
+    expect(primary().props.accessibilityState).toMatchObject({ disabled: false })
+    expect(screen.getByText(`${cap}/${cap}`, { includeHiddenElements: true })).toBeTruthy()
+  })
 
   it('the field list shows a spinner and a line while it loads', async () => {
     mockWorkFields.mockReturnValue(new Promise(() => {}))

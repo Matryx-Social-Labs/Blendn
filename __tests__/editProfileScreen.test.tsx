@@ -77,10 +77,70 @@ it('is the six fields’ shape while it loads, then the fields', async () => {
   expect(screen.queryByTestId('edit-profile-name')).toBeNull()
 })
 
-it('counts the bio against its limit in the card’s header', async () => {
+it('counts the bio against its limit once, in the field’s own counter (not also in the card’s header)', async () => {
   await render(<EditProfile />)
   await screen.findByDisplayValue('Sam')
-  expect(screen.getByText('8 / 500')).toBeTruthy()
+  expect(screen.getAllByText('8/500', { includeHiddenElements: true })).toHaveLength(1)
+  expect(screen.queryByText('8 / 500')).toBeNull()
+})
+
+describe('no silent truncation: the server’s caps, with the count shown (SCRUM-745)', () => {
+  const loadWith = (over: { name?: string; location?: string }) =>
+    api.getProfile.mockResolvedValue({
+      ...LOADED,
+      data: { ...LOADED.data, name: over.name ?? 'Sam', profile: { ...LOADED.data.profile, location: over.location ?? 'Bengaluru' } },
+    } as never)
+
+  it('keeps a 90-character name and a 170-character location whole, and saves them as they are', async () => {
+    const name = 'N'.repeat(90)
+    const location = 'L'.repeat(170)
+    loadWith({ name, location })
+    await render(<EditProfile />)
+    expect(await screen.findByDisplayValue(name)).toBeTruthy()
+    expect(screen.getByDisplayValue(location)).toBeTruthy()
+    // Typing one more character does not cut anything.
+    await fireEvent.changeText(screen.getByTestId('edit-profile-location'), `${location}x`)
+    expect(screen.getByDisplayValue(`${location}x`)).toBeTruthy()
+    // Near the cap the DS counter appears: 171 of the server’s 200.
+    // The counter is decoration for a screen reader (the field says the count in its hint), so look past that.
+    expect(screen.getByText('171/200', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByText('90/100', { includeHiddenElements: true })).toBeTruthy()
+    await fireEvent.press(screen.getByText('Save'))
+    await waitFor(() => expect(api.updateProfile).toHaveBeenCalledWith('me', expect.objectContaining({ location: `${location}x` })))
+  })
+
+  it('a field far from its cap shows no counter', async () => {
+    await render(<EditProfile />)
+    await screen.findByDisplayValue('Sam')
+    expect(screen.queryByText(/^\d+\/(100|200)$/, { includeHiddenElements: true })).toBeNull()
+  })
+
+  it('a paste past the cap stays on screen, says by how much, and Save waits', async () => {
+    await render(<EditProfile />)
+    await screen.findByDisplayValue('Sam')
+    const tooLong = 'L'.repeat(205)
+    await fireEvent.changeText(screen.getByTestId('edit-profile-location'), tooLong)
+    expect(screen.getByDisplayValue(tooLong)).toBeTruthy()
+    expect(screen.getByText('200 characters at most.')).toBeTruthy()
+    await fireEvent.press(screen.getByText('Save'))
+    expect(api.updateProfile).not.toHaveBeenCalled()
+    // Back inside the cap, Save goes through again.
+    await fireEvent.changeText(screen.getByTestId('edit-profile-location'), 'L'.repeat(200))
+    expect(screen.queryByText(/characters at most/)).toBeNull()
+    await fireEvent.press(screen.getByText('Save'))
+    await waitFor(() => expect(api.updateProfile).toHaveBeenCalled())
+  })
+
+  it('the name takes up to 100 (the server’s cap), not 50', async () => {
+    await render(<EditProfile />)
+    await screen.findByDisplayValue('Sam')
+    const name = 'N'.repeat(100)
+    await fireEvent.changeText(screen.getByTestId('edit-profile-name'), name)
+    expect(screen.getByDisplayValue(name)).toBeTruthy()
+    expect(screen.queryByText(/characters at most/)).toBeNull()
+    await fireEvent.changeText(screen.getByTestId('edit-profile-name'), `${name}!`)
+    expect(screen.getByText('100 characters at most.')).toBeTruthy()
+  })
 })
 
 describe('Goals and Looking for', () => {

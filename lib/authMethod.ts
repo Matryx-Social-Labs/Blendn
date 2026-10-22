@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
 
 /**
- * How this phone signed the account in: the one fact Settings' Account card needs and the session does not carry.
+ * What the account signs in with: the one fact Settings' Account card needs to show or hide the Password row.
  *
  * An email account has a password to change; a Google or Apple account does not, and offering a reset link to one is a
- * door to nowhere. The server's `/auth/session` has no field for it (see the report: `signInMethod`), so the phone
- * remembers what it did at sign-in. A session that predates this is `null`, and the card then offers nothing it cannot
- * be sure of: it names the email and has no Password row.
+ * door to nowhere. The server answers for the account (`GET /auth/session` `signInMethod`: a password first, else the
+ * provider linked most recently) and that answer wins, so a session that predates this app version, or an account that
+ * added a password since, is right as soon as the session is read. What the phone did at sign-in is the fallback until
+ * then. With neither it is `null`, and the card offers nothing it cannot be sure of: it names the email and has no
+ * Password row.
  *
  * AsyncStorage is loaded at call time, as `lib/sessionEvents.ts` does: `useAuth` imports this module, and the native
  * module is null under jest's node environment the moment it is imported.
@@ -48,8 +50,8 @@ export async function forgetAuthMethod(): Promise<void> {
   }
 }
 
-/** The method for the screen that asks (null until read, and for a session older than this). */
-export function useAuthMethod(): AuthMethod | null {
+/** The method for the screen that asks: the server's answer when the session has one, else what this phone remembered. */
+export function useAuthMethod(fromServer?: unknown): AuthMethod | null {
   const [method, setMethod] = useState<AuthMethod | null>(null)
   useEffect(() => {
     let live = true
@@ -60,5 +62,5 @@ export function useAuthMethod(): AuthMethod | null {
       live = false
     }
   }, [])
-  return method
+  return isAuthMethod(fromServer) ? fromServer : method
 }

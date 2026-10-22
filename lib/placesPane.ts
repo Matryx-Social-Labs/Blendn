@@ -14,6 +14,7 @@ import type { IconName } from '../components/ui/Icon'
 import type { VenueListItem } from './apiClient'
 import { liveNowLabel } from './home'
 import { clockTime, startsLabel } from './roomMoments'
+import { venueDayState } from './venueHours'
 
 /** The chip row: the label the design prints and the server's `venueType` it asks for (null: all). */
 export const PLACE_TYPES = [
@@ -121,32 +122,17 @@ const SPOKEN_BUCKET = { '5-9': '5 to 9 people live', '10-19': '10 to 19 people l
 /** "5 to 9 people live" for a bucket the card prints; null below 5. */
 export const spokenBucket = (bucket: VenueListItem['liveNow']) => (bucket && bucket !== 'quiet' ? SPOKEN_BUCKET[bucket] : null)
 
-/** "18:00" → minutes since midnight and "6 PM" in the one clock grammar; null for anything else. */
-function wallClock(hhmm: string): { minutes: number; text: string } | null {
-  const m = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(hhmm.trim())
-  if (!m) return null
-  const [h, min] = [Number(m[1]), Number(m[2])]
-  return { minutes: h * 60 + min, text: clockTime(new Date(2000, 0, 1, h, min).getTime()) }
-}
-
 /**
  * The hours line on an Open tonight card (§C6): "Opens 6 PM" before opening, "Open till 1 AM" while open.
  * The server's `tonight` is wall-clock "HH:MM" in the venue's timezone, so they are formatted as they are
  * (a Date cannot parse them); a close at or before the open runs past midnight. Null when the item has no
- * hours, they are unreadable, or the night is over.
- * ponytail: "now" is the phone's clock, which is the venue's whenever the person is in the venue's city;
- * the server sending an `open` flag would make this exact anywhere.
+ * hours, they are unreadable, or the night is over. The reading is `venueDayState` (`lib/venueHours.ts`), shared with
+ * the venue page; a list row has no reset hour, so it passes none.
  */
 export function hoursLine(tonight: VenueListItem['tonight'], now: number): { lead: string; time: string } | null {
-  if (!tonight) return null
-  const open = wallClock(tonight.opensAt)
-  const close = wallClock(tonight.closesAt)
-  if (!open || !close) return null
-  const d = new Date(now)
-  const at = d.getHours() * 60 + d.getMinutes()
-  const pastMidnight = close.minutes <= open.minutes
-  if (at < open.minutes) return pastMidnight && at < close.minutes ? { lead: 'Open till', time: close.text } : { lead: 'Opens', time: open.text }
-  return pastMidnight || at < close.minutes ? { lead: 'Open till', time: close.text } : null
+  const day = venueDayState(tonight, now, null)
+  if (!day || day.state === 'closed') return null
+  return { lead: day.state === 'opens' ? 'Opens' : 'Open till', time: day.time }
 }
 
 /** What a live tile is read as: "{name}. {type}, {area}, {distance}. 10 to 19 people live." */

@@ -129,13 +129,13 @@ export function TonightHere({
   )
 }
 
-/** Coming up here: the date in Geist Mono, the title, the going count. */
+/** Coming up here: the date in Geist Mono and the title. */
 export function UpcomingList({
   rows,
   onOpen,
 }: {
   /** Every upcoming event the server sent, soonest first; three show, the rest behind See all. */
-  rows: { id: string; title: string; day: string; going: string | null }[]
+  rows: { id: string; title: string; day: string }[]
   onOpen: (eventId: string) => void
 }) {
   const bold = useBoldText()
@@ -150,7 +150,7 @@ export function UpcomingList({
           onPress={() => onOpen(r.id)}
           android_ripple={{ color: PRESSED_WASH.android }}
           accessibilityRole="button"
-          accessibilityLabel={[r.title, r.day, r.going].filter(Boolean).join(', ')}
+          accessibilityLabel={`${r.title}, ${r.day}`}
           style={styles.upcoming}
           testID={`venue-upcoming-${r.id}`}
         >
@@ -160,7 +160,6 @@ export function UpcomingList({
           <Text numberOfLines={1} style={[font('bodyStrong', bold), styles.ink, styles.upcomingTitle]}>
             {r.title}
           </Text>
-          {r.going ? <Text style={[font('meta', bold), styles.secondary]}>{r.going}</Text> : null}
         </Pressable>
       ))}
     </Section>

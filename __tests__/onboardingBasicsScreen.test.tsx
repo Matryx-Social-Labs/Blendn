@@ -97,3 +97,26 @@ it('the header is the glass bar with the step, no back on the first step, and th
   expect(screen.getByTestId('onboarding-progress', { includeHiddenElements: true })).toBeTruthy()
   expect(screen.getByTestId('onboarding-dock')).toBeTruthy()
 })
+
+it('a name past 100 is not cut: it stays, says by how much, and Continue waits (SCRUM-745)', async () => {
+  await render(<BasicsScreen />)
+  await fireEvent.press(screen.getByLabelText('Man'))
+  await dob('14', '03', '1998')
+  const long = 'N'.repeat(105)
+  await fireEvent.changeText(screen.getByTestId('onboarding-name-input'), long)
+  expect(screen.getByTestId('onboarding-name-input').props.value).toBe(long)
+  expect(screen.getByText('100 characters at most.')).toBeTruthy()
+  expect(primary().props.accessibilityState).toMatchObject({ disabled: true })
+  await fireEvent.press(primary())
+  expect(mockCommit).not.toHaveBeenCalled()
+  await fireEvent.changeText(screen.getByTestId('onboarding-name-input'), 'N'.repeat(100))
+  expect(screen.queryByText(/characters at most/)).toBeNull()
+  expect(primary().props.accessibilityState).toMatchObject({ disabled: false })
+  // The counter shows from 80% of the cap.
+  expect(screen.getByText('100/100', { includeHiddenElements: true })).toBeTruthy()
+})
+
+it('the name shows no counter far from its cap', async () => {
+  await render(<BasicsScreen />)
+  expect(screen.queryByText(/^\d+\/100$/, { includeHiddenElements: true })).toBeNull()
+})

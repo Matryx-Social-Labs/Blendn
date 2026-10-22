@@ -591,6 +591,9 @@ export interface FriendInvitePreview {
 
 
 
+/** One opening in a venue's week (`GET /venues/:venueId` `hours`). */
+export type VenueOpening = { day: number; open: string; close: string }
+
 export interface AuthUser {
   id: string
   email: string
@@ -598,6 +601,8 @@ export interface AuthUser {
   image: string | null
   emailVerified: string | null
   createdAt: string
+  /** What the account can sign in with, from `GET /auth/session` (the sign-in and refresh shapes do not carry it). */
+  signInMethod?: 'password' | 'google' | 'apple'
   profile: {
     phone: string | null
     name: string | null
@@ -873,14 +878,18 @@ export interface VenueDetail {
     capacity?: number | null
     /** The venue day starts at this local hour; "Reset 06:00". */
     dayResetHour?: number | null
-    /** Today's opening hours as instants. */
-    hours?: { opensAt: string; closesAt: string } | null
+    /**
+     * The week's opening hours as the server sends them (`venues.hours`, `lib/venue-hours.ts`): one row per opening,
+     * `day` 0 (Sunday) to 6, wall-clock "HH:MM" in the venue's own timezone, a close at or before the open is past
+     * midnight. Null: not given. Read through `tonightOpening`.
+     */
+    hours?: VenueOpening[] | null
     /** The owner's words about the place. */
     description?: string | null
-    /** Good to know: what the owner ticked. */
-    amenities?: { id: string; name: string; subtitle?: string | null; icon?: string | null }[] | null
-    /** Upcoming events here, soonest first (the page shows three). */
-    upcoming?: { id: string; title: string; startTime: string; goingCount?: number | null }[] | null
+    /** Good to know: the names of what the owner ticked (the server sends `string[]`, no ids). */
+    amenities?: string[] | null
+    /** Upcoming events here, soonest first (the page shows three), as the server sends them: no going count. */
+    upcoming?: { id: string; title: string; slug?: string | null; coverImageUrl?: string | null; startTime: string; endTime?: string }[] | null
   }
   live: {
     /** Whether going live here would be accepted now, the fence aside. */

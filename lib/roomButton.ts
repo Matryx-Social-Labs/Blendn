@@ -1,4 +1,5 @@
 import { liveWindow, type EventSession } from './eventSession'
+import { getDistanceMetres } from './geo'
 
 /**
  * What the Blend'n button in the middle of the bar is currently offering.
@@ -141,18 +142,75 @@ export function roomButtonAccessibilityLabel(target: RoomButtonTarget): string {
 /* -------------------------------------------------------------------------- */
 
 /** The fields these need. Anything shaped like a `BlendnEvent` satisfies it. */
+/** The fence an event without its own radius has, in metres. */
+const DEFAULT_RADIUS_M = 100
+
 export interface RoomButtonEvent {
   id: string
   start_time: string
   end_time?: string | null
   /** The day "running" means on a multi-day event — `lib/eventSession.ts`. */
   session?: EventSession | null
-  /** Kilometres, from the server, present only when a fix was sent. */
+  /**
+   * Kilometres, from the server, present only when a fix was sent. Measured from the position the phone put in the
+   * URL, which it rounds to ~110 m (`lib/coordinates.ts`): good for a label, not for a 100 m fence. `pickInsideEvent`
+   * measures from the precise fix instead whenever it has one and this event's coordinates.
+   */
   distance?: number | null
+  latitude?: number | null
+  longitude?: number | null
   check_in_radius?: number | null
   is_favorited?: boolean
   /** The venue, for the disc's (c) label "Check in · {venue}" and its coach mark. */
   venue_name?: string | null
+}
+
+/**
+ * The phone's own fix, never rounded: it stays on the phone. `accuracy` is the radius in metres the OS gives it, and
+ * `approximate` is iOS's reduced-accuracy grant (a fix good to kilometres): either makes it useless against a fence.
+ */
+export type PreciseFix = { latitude: number; longitude: number; accuracy?: number | null; approximate?: boolean; timestamp?: number | null }
+
+/** The oldest a fix may be and still say where somebody is now (ms), and the coarsest the last-known read may return (m). */
+export const FIX_MAX_AGE_MS = 120_000
+export const FIX_REQUIRED_ACCURACY_M = 100
+
+/** A fix as `expo-location` hands it over, kept with the accuracy and the time that make it usable against a fence. */
+export const fixOf = (position: { coords: { latitude: number; longitude: number; accuracy: number | null }; timestamp: number }): PreciseFix => ({
+  latitude: position.coords.latitude,
+  longitude: position.coords.longitude,
+  accuracy: position.coords.accuracy,
+  timestamp: position.timestamp,
+})
+
+/**
+ * A fix is judged precise against a zone only when it is recent, says it is good to within the zone's own radius, and is
+ * not iOS's approximate grant. Without a timestamp its age is unknown, and an unknown age is not trusted.
+ */
+const fixIsPrecise = (at: PreciseFix | null | undefined, radiusM: number, now: number): at is PreciseFix =>
+  !!at &&
+  !at.approximate &&
+  typeof at.accuracy === 'number' &&
+  Number.isFinite(at.accuracy) &&
+  at.accuracy >= 0 &&
+  at.accuracy <= radiusM &&
+  typeof at.timestamp === 'number' &&
+  now - at.timestamp <= FIX_MAX_AGE_MS
+
+/**
+ * How far the event's centre is, in metres: from the precise fix when it is good enough for this zone and the event has
+ * real coordinates, else the server's `distance` (which was measured from a position rounded to ~110 m, so it can be
+ * ~77 m out against a 100 m fence: SCRUM-744). A stale or coarse fix (older than `FIX_MAX_AGE_MS`, accuracy over the
+ * radius, none given, or iOS's approximate grant) would be worse than the server's number, so it is not used. Null when neither is known.
+ * (0, 0) is what a row with no coordinates was once written as.
+ */
+function distanceMetresTo(e: RoomButtonEvent, at: PreciseFix | null | undefined, now: number): number | null {
+  const { latitude, longitude } = e
+  const radiusM = typeof e.check_in_radius === 'number' ? e.check_in_radius : DEFAULT_RADIUS_M
+  if (fixIsPrecise(at, radiusM, now) && typeof latitude === 'number' && typeof longitude === 'number' && Number.isFinite(latitude) && Number.isFinite(longitude) && !(latitude === 0 && longitude === 0)) {
+    return getDistanceMetres(at.latitude, at.longitude, latitude, longitude)
+  }
+  return typeof e.distance === 'number' && Number.isFinite(e.distance) ? e.distance * 1000 : null
 }
 
 /**
@@ -173,14 +231,15 @@ export interface RoomButtonEvent {
  */
 export function pickInsideEvent(
   events: readonly RoomButtonEvent[],
-  now: number = Date.now()
+  now: number = Date.now(),
+  at?: PreciseFix | null
 ): string | null {
   let best: { id: string; distanceM: number } | null = null
 
   for (const e of events) {
-    if (typeof e.distance !== 'number' || !Number.isFinite(e.distance)) continue
-    const radiusM = typeof e.check_in_radius === 'number' ? e.check_in_radius : 100
-    const distanceM = e.distance * 1000
+    const distanceM = distanceMetresTo(e, at, now)
+    if (distanceM === null) continue
+    const radiusM = typeof e.check_in_radius === 'number' ? e.check_in_radius : DEFAULT_RADIUS_M
     if (distanceM > radiusM) continue
 
     const live = liveWindow(e)

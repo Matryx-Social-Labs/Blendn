@@ -33,6 +33,7 @@ jest.mock('react-native-safe-area-context', () => {
 const mockAuth = { user: { id: 'u_me' } }
 jest.mock('../lib/useAuth', () => ({
   useAuth: () => mockAuth,
+  refreshAuthUser: jest.fn(),
   signOut: jest.fn(),
   deleteAccount: jest.fn(),
 }))

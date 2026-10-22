@@ -625,6 +625,9 @@ export const signOutEverywhere = async (): Promise<{ success: boolean; error?: s
   }
 }
 
+/** The server's own JSON for one user, in its own key order: equal text is an unchanged user. */
+export const sameUser = (a: AuthUser | null | undefined, b: AuthUser): boolean => !!a && JSON.stringify(a) === JSON.stringify(b)
+
 /**
  * Re-read the session so `user.name` / `user.image` follow a profile edit.
  *
@@ -640,6 +643,8 @@ export const refreshAuthUser = async (): Promise<void> => {
       Logger.warn('auth', 'Session refresh did not return a user', { error: result.error })
       return
     }
+    // Settings reads the session every time it opens: an unchanged user must not notify every `useAuth` subscriber.
+    if (sameUser(globalAuthState.user, result.data)) return
     updateAuthState({ session: { user: result.data }, user: result.data })
     await TokenStorage.setUser(result.data)
   } catch (error) {

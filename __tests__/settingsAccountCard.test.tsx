@@ -23,9 +23,9 @@ jest.mock('react-native-safe-area-context', () => {
   }
 })
 const mockAuth = { user: { id: 'u_me', email: 'sam@example.com' } }
-jest.mock('../lib/useAuth', () => ({ useAuth: () => mockAuth, signOut: jest.fn(), signOutEverywhere: jest.fn(), deleteAccount: jest.fn() }))
+jest.mock('../lib/useAuth', () => ({ useAuth: () => mockAuth, refreshAuthUser: jest.fn(), signOut: jest.fn(), signOutEverywhere: jest.fn(), deleteAccount: jest.fn() }))
 const mockMethod = jest.fn()
-jest.mock('../lib/authMethod', () => ({ useAuthMethod: () => mockMethod() }))
+jest.mock('../lib/authMethod', () => ({ useAuthMethod: (fromServer?: unknown) => mockMethod(fromServer) }))
 jest.mock('../lib/apiClient', () => ({
   apiClient: { getProfile: jest.fn(), updateProfile: jest.fn(), getMyPlus: jest.fn(), queuedRequest: jest.fn(), forgotPassword: jest.fn() },
 }))
@@ -48,7 +48,7 @@ import { SheetHost } from '../components/SheetHost'
 import { apiClient } from '../lib/apiClient'
 import { H } from '../lib/haptics'
 import { closeSheet } from '../lib/sheet'
-import { deleteAccount, signOut, signOutEverywhere } from '../lib/useAuth'
+import { deleteAccount, refreshAuthUser, signOut, signOutEverywhere } from '../lib/useAuth'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
 const Screen = () => (
@@ -91,6 +91,15 @@ describe('the Account card', () => {
     await render(<Screen />)
     expect(await screen.findByLabelText('Signed in as, sam@example.com')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Password' })).toBeNull()
+  })
+
+  it("hands the session's signInMethod to the card and reads the session on opening, so an upgrader's Password row follows the server (SCRUM-742)", async () => {
+    mockAuth.user = { id: 'u_me', email: 'sam@example.com', signInMethod: 'password' } as never
+    await render(<Screen />)
+    await screen.findByLabelText('Signed in as, sam@example.com')
+    expect(mockMethod).toHaveBeenCalledWith('password')
+    expect(refreshAuthUser).toHaveBeenCalled()
+    mockAuth.user = { id: 'u_me', email: 'sam@example.com' } as never
   })
 
   it('the signed-in row is display only', async () => {

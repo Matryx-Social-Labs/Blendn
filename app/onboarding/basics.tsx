@@ -20,6 +20,7 @@ import {
 import { SPACE } from '../../lib/design/tokens'
 import { useOnboarding } from '../../lib/useOnboarding'
 import { signOut, useAuth } from '../../lib/useAuth'
+import { counterLimit, overCapMessage, PROFILE_LIMITS, serverLength } from '../../lib/profileLimits'
 
 /**
  * Step one: a name, a gender, a birth date.
@@ -51,8 +52,6 @@ const GENDERS: { label: string; value: OnboardingGender }[] = [
 const DOB_HINT = 'Your age will be private and used only for verification.'
 /** Under the name: what rooms show of it (SCRUM-493). */
 const NAME_HINT = 'In event rooms you go by a made-up name. If you choose to show yours, people there see your full name.'
-/** The server's cap on a name; typing stops there, as a `maxLength` did. */
-const NAME_MAX = 100
 const NOT_A_DATE = 'That is not a date we recognise.'
 
 function BasicsScreenInner() {
@@ -109,7 +108,9 @@ function BasicsScreenInner() {
 
   const dateOfBirth = joinDateOfBirth(dob.day, dob.month, dob.year)
   const patch = { name: name.trim(), gender, dateOfBirth }
-  const ready = canContinue('basics', patch)
+  // Never cut for the person: a paste past the server's cap stays on screen, says by how much, and Continue waits.
+  const nameOverCap = serverLength(name) > PROFILE_LIMITS.name
+  const ready = canContinue('basics', patch) && !nameOverCap
   // Continue commits only when it could, and `commit` refuses a second save while one is running.
   const submit = () => {
     if (ready && !saving) void commit(patch)
@@ -159,7 +160,10 @@ function BasicsScreenInner() {
             placeholder="First and last name"
             hint={NAME_HINT}
             value={name}
-            onChangeText={(value) => setName(value.slice(0, NAME_MAX))}
+            onChangeText={setName}
+            error={nameOverCap ? overCapMessage(PROFILE_LIMITS.name) : undefined}
+            limit={counterLimit(name, PROFILE_LIMITS.name)}
+            measure={serverLength}
             autoCapitalize="words"
             // A name is not a word to correct.
             autoCorrect={false}

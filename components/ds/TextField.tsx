@@ -257,11 +257,12 @@ export function TextArea({
   const focus = useFocus({ onFocus, onBlur })
   const input = useRef<TextInput>(null)
   const near = limit !== undefined && limit - measure(value) < COUNTER_WARN_AT
+  const over = limit !== undefined && measure(value) > limit
 
   let counter: ReactNode = null
   if (limit !== undefined) {
     counter = (
-      <Text accessibilityElementsHidden importantForAccessibility="no" style={[monoCaption(bold), { color: near ? COLOR.warning : COLOR.textTertiary }]}>
+      <Text accessibilityElementsHidden importantForAccessibility="no" style={[monoCaption(bold), { color: over ? COLOR.destructive : near ? COLOR.warning : COLOR.textTertiary }]}>
         {`${measure(value)}/${limit}`}
       </Text>
     )

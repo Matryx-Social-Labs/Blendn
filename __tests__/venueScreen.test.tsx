@@ -72,10 +72,11 @@ import { openBlendn } from '../lib/blendnOverlay'
 import { checkOutOf } from '../lib/checkIn'
 import { H } from '../lib/haptics'
 import { openInMaps } from '../lib/openInMaps'
-import { openPaywall } from '../lib/paywall'
 import { clockTime } from '../lib/roomMoments'
+import { openPaywall } from '../lib/paywall'
 /* eslint-enable import/first */
 
+const wall = (ms: number) => `${String(new Date(ms).getHours()).padStart(2, '0')}:${String(new Date(ms).getMinutes()).padStart(2, '0')}`
 const min = (n: number) => new Date(NOW + n * 60_000).toISOString()
 
 type Over = { venue?: Partial<VenueDetail['venue']>; live?: Partial<VenueDetail['live']>; tonight?: VenueDetail['tonight']; claim?: unknown }
@@ -203,8 +204,8 @@ describe('the place, not live', () => {
     expect(screen.getByLabelText('LIVE, 5–9 so far')).toBeTruthy()
     expect(screen.queryByLabelText(/^OPEN/)).toBeNull()
     expect(screen.queryByLabelText(/^SIZE/)).toBeNull()
-    await mount(venue({ venue: { hours: { opensAt: min(-300), closesAt: min(300) }, dayResetHour: 6, capacity: 300 } }))
-    expect(screen.getByLabelText(`OPEN, Till ${clockTime(NOW + 300 * 60_000)}`)).toBeTruthy()
+    await mount(venue({ venue: { hours: [{ day: new Date(NOW - 6 * 3_600_000).getDay(), open: wall(NOW - 2 * 3_600_000), close: wall(NOW + 4 * 3_600_000) }], dayResetHour: 6, capacity: 300 } }))
+    expect(screen.getByLabelText(`OPEN, Till ${clockTime(NOW + 4 * 3_600_000)}`)).toBeTruthy()
     expect(screen.getByLabelText('RESET, 06:00')).toBeTruthy()
     expect(screen.getByLabelText('SIZE, 300 people')).toBeTruthy()
   })
@@ -244,8 +245,8 @@ describe('the place, not live', () => {
       venue({
         venue: {
           description: 'Bengaluru’s first microbrewery.',
-          amenities: [{ id: 'a', name: 'Rooftop' }],
-          upcoming: [{ id: 'e2', title: 'Bass Thursday', startTime: min(60 * 24), goingCount: 31 }],
+          amenities: ['Rooftop'],
+          upcoming: [{ id: 'e2', title: 'Bass Thursday', slug: null, coverImageUrl: null, startTime: min(60 * 24), endTime: min(60 * 27) }],
         },
       })
     )
@@ -284,7 +285,7 @@ describe('the bar under the status bar', () => {
 
 describe('Coming up here', () => {
   it('sets the date on one line, as wide as it needs and no narrower than the column', async () => {
-    await mount(venue({ venue: { upcoming: [{ id: 'u1', title: 'Night 1', startTime: min(60 * 24), goingCount: 3 }] } }))
+    await mount(venue({ venue: { upcoming: [{ id: 'u1', title: 'Night 1', startTime: min(60 * 24) }] } }))
     const row = screen.getByTestId('venue-upcoming-u1')
     const day = within(row).getAllByText(/\d/)[0]
     expect(day.props.numberOfLines).toBe(1)
@@ -842,7 +843,7 @@ describe('claiming', () => {
 })
 
 describe('the hero', () => {
-  it('opens the share tray with the venue card and its /v/ link; there is no save without a venue-save endpoint', async () => {
+  it('opens the share tray with the venue card and the front-page link (SCRUM-738); there is no save without a venue-save endpoint', async () => {
     await mount()
     await fireEvent.press(screen.getByLabelText('Share'))
     expect(mockOpenShare).toHaveBeenCalledWith({
@@ -850,7 +851,7 @@ describe('the hero', () => {
       name: 'The Humming Tree',
       typeLabel: expect.any(String),
       area: expect.any(String),
-      url: 'https://www.blendn.app/v/v1',
+      url: 'https://www.blendn.app',
     })
     expect(screen.queryByLabelText('Save')).toBeNull()
     expect(within(screen.getByTestId('venue-hero')).queryByLabelText('Back')).toBeNull()

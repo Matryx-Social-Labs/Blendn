@@ -35,10 +35,26 @@ describe('one tray for every surface', () => {
   })
 
   it('links are built in `lib/shareLinks.ts` alone: no other code writes the host in front of an id', () => {
-    const building = /blendn\.app\/(e|v|f)\/\$\{/
+    const building = /blendn\.app\/(e|v|f|event|venue)\/\$\{/
     const builders = [...walk('app'), ...walk('components'), ...walk('lib')].filter((f) => building.test(read(f)))
     expect(builders).toEqual([])
-    expect(read('lib/shareLinks.ts')).toMatch(/\$\{SHARE_ORIGIN\}\/e\/\$\{id\}/)
+    expect(read('lib/shareLinks.ts')).toMatch(/WEB_PAGES_LIVE \? 'e' : 'event'/)
+  })
+})
+
+describe('a link we send is one the app is verified for (SCRUM-738)', () => {
+  // The live site's associated-domain file (curl https://www.blendn.app/.well-known/apple-app-site-association) lists these
+  // and no others; `/e/` and `/v/` serve the homepage until SCRUM-689. A new outbound path must be added here on purpose.
+  const LIVE_AASA_PATHS = ['/f/', '/event/']
+  const { eventLink, inviteLink, venueLink } = jest.requireActual('../lib/shareLinks') as typeof import('../lib/shareLinks')
+
+  it.each([
+    ['event', eventLink('abc')],
+    ['invite', inviteLink('abc')],
+    ['venue', venueLink('abc')],
+  ])('%s link opens a page the live site answers', (_name, url) => {
+    const { pathname } = new URL(url)
+    expect(pathname === '/' || LIVE_AASA_PATHS.some((p) => pathname.startsWith(p))).toBe(true)
   })
 })
 

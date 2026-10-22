@@ -36,12 +36,13 @@ import { Share } from 'react-native'
 
 import { ShareHost } from '../components/share/ShareHost'
 import { eventTarget } from '../lib/shareEvent'
+import { eventLink, venueLink } from '../lib/shareLinks'
 import { openShare, resetShareTray } from '../lib/shareTray'
 
 const START = new Date(2026, 9, 4, 21, 0, 0).toISOString()
 const EVENT = eventTarget({ id: 'e1', title: 'Neon Nights', startTime: START, venueName: 'Toit', city: 'Indiranagar', status: 'published', visibility: 'public' })!
-const URL = 'https://www.blendn.app/e/e1'
-const VENUE = { kind: 'venue' as const, name: 'Toit', typeLabel: 'Brewery', area: 'Indiranagar', url: 'https://www.blendn.app/v/v1' }
+const URL = eventLink('e1')
+const VENUE = { kind: 'venue' as const, name: 'Toit', typeLabel: 'Brewery', area: 'Indiranagar', url: venueLink('v1') }
 const INVITE = { kind: 'invite' as const, url: 'https://www.blendn.app/f/abc' }
 
 const wait = (ms: number) => act(async () => { await new Promise((r) => setTimeout(r, ms)) })
@@ -136,12 +137,12 @@ describe('the tray', () => {
     await expect(went).resolves.toBe(false)
   })
 
-  it('a venue shares its name and /v/ link; an invite shares the short ask and no name', async () => {
+  it('a venue shares its name and its link; an invite shares the short ask and no name', async () => {
     await render(<ShareHost />)
     await open(VENUE)
     expect(screen.getByText('Brewery · Indiranagar')).toBeTruthy()
     await press('WhatsApp')
-    expect(mockOpenWhatsApp).toHaveBeenLastCalledWith(`Toit\n${VENUE.url}`)
+    expect(mockOpenWhatsApp).toHaveBeenLastCalledWith(`Toit on Blend'n\n${VENUE.url}`)
     await open(INVITE)
     expect(screen.getByText('A link only you can send · no name on the card')).toBeTruthy()
     await press('WhatsApp')
