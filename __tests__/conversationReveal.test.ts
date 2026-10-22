@@ -26,6 +26,18 @@ const state = (over: Partial<ConversationRevealState> = {}): ConversationRevealS
 })
 
 describe('revealView (Flow 5 DM #01–#05)', () => {
+  it('both revealed: no bar, unless the server offers Add friend, which keeps the bar as `both`', () => {
+    const both = state({ youRevealed: true, theyRevealed: true })
+    expect(revealView(both).bar).toBeNull()
+    expect(revealView(both, false, true)).toEqual({ bar: 'both', line: { seen: true, text: 'You can both see each other' }, nudge: null })
+  })
+
+  it('an offer changes nothing before you have both revealed, or for a conversation that was never pseudonymous', () => {
+    expect(revealView(state({ youRevealed: true }), false, true).bar).toBe('youOnly')
+    expect(revealView(state({ theyRevealed: true }), false, true).bar).toBe('theyOnly')
+    expect(revealView(state({ pseudonymous: false }), false, true).bar).toBeNull()
+  })
+
   it('shows nothing on a conversation that was never pseudonymous', () => {
     // An accepted message request has shown real names since it existed.
     expect(revealView(state({ pseudonymous: false }))).toEqual({ bar: null, line: null, nudge: null })

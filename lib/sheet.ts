@@ -48,6 +48,8 @@ export type SheetAction = {
   icon?: IconName
   /** A state, not an action ("Requested"): the row is drawn quiet and does nothing. */
   disabled?: boolean
+  /** What a screen reader says of a row whose visible words are shorter ("Requested" is "Friend request sent"). */
+  accessibilityLabel?: string
   /**
    * The haptic this action plays on press-in when the frame names one that its kind does not carry: `H.primary` on a
    * Sign out the sheet draws as the white affirmative, `H.destructive` on a Delete that only leads to its confirm.

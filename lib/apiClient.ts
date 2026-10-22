@@ -958,6 +958,11 @@ export interface UserProfileData {
    * otherwise, and from an older server.
    */
   connection?: { conversationId: string | null; request: 'sent' | 'received' | null }
+  /**
+   * Whether to offer "Add friend" (SCRUM-750): `{ state, canAdd }`, read through `parseFriendOffer`. `GET /users/:id` sends it
+   * once admin `feat/friend-after-reveal` is on staging; `GET /profiles/:id` already does.
+   */
+  friend?: unknown
   /** Nested profile object from /api/mobile/profiles/[userId] */
   profile?: {
     /*

@@ -31,22 +31,23 @@ export const afterAsk = (state: 'requested' | 'friends'): FriendOffer => ({ stat
 
 /** What a surface draws for an offer. `lit` is the live action in the rose world; the rest are quiet states. */
 export type FriendAction =
-  | { kind: 'add'; label: 'Add friend'; icon: IconName; lit: true; disabled: false }
-  | { kind: 'accept'; label: 'Accept'; icon: IconName; lit: true; disabled: false }
-  | { kind: 'requested'; label: 'Requested'; icon: IconName; lit: false; disabled: true }
-  | { kind: 'friends'; label: 'Friends'; icon: IconName; lit: false; disabled: true }
+  | { kind: 'add'; label: 'Add friend'; icon: IconName; lit: true; disabled: false; accessibilityLabel?: string }
+  | { kind: 'accept'; label: 'Accept friend request'; icon: IconName; lit: true; disabled: false; accessibilityLabel?: string }
+  | { kind: 'requested'; label: 'Requested'; accessibilityLabel: string; icon: IconName; lit: false; disabled: true }
+  | { kind: 'friends'; label: 'Friends'; icon: IconName; lit: false; disabled: true; accessibilityLabel?: string }
 
 /**
  * `none` and `incoming` are addable when the server says `canAdd` (asking someone who has asked you is the accept);
- * `requested` and `friends` are states; nothing else, including a `none` the server does not offer, draws nothing.
+ * `requested` and `friends` are states (a surface that has nothing to say about a state ignores it: only a `lit`
+ * action takes room on a dock or a card); nothing else, including a `none` the server does not offer, draws nothing.
  */
 export function friendAction(offer: FriendOffer | null): FriendAction | null {
   if (!offer) return null
   if (offer.state === 'friends') return { kind: 'friends', label: 'Friends', icon: 'user-check', lit: false, disabled: true }
-  if (offer.state === 'requested') return { kind: 'requested', label: 'Requested', icon: 'clock', lit: false, disabled: true }
+  if (offer.state === 'requested') return { kind: 'requested', label: 'Requested', accessibilityLabel: 'Friend request sent', icon: 'clock', lit: false, disabled: true }
   if (!offer.canAdd) return null
   return offer.state === 'incoming'
-    ? { kind: 'accept', label: 'Accept', icon: 'user-check', lit: true, disabled: false }
+    ? { kind: 'accept', label: 'Accept friend request', icon: 'user-check', lit: true, disabled: false }
     : { kind: 'add', label: 'Add friend', icon: 'user-plus', lit: true, disabled: false }
 }
 
@@ -78,6 +79,8 @@ export function friendAskOutcome(response: AskResponse): FriendAskOutcome {
 export const FRIEND_COPY = {
   requested: (name: string) => `Friend request sent to ${name}`,
   friends: (name: string) => `You and ${name} are friends`,
+  /** The dock's note once asked: a state, said in a line rather than as a dead button. */
+  requestSentNote: 'Friend request sent',
   revealFirst: 'Reveal yourself first',
   failed: "That didn't go through. Try again.",
 } as const

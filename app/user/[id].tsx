@@ -27,7 +27,7 @@ import { likeRefusal } from '../../lib/likeRefusal'
 import { interestNames } from '../../lib/meProfile'
 import { profileIdentity, withheldUnlessVisible } from '../../lib/profileIdentity'
 import { aboutLine } from '../../lib/aboutYou'
-import { friendAction, isHandle, type FriendOffer } from '../../lib/friendOffer'
+import { FRIEND_COPY, friendAction, isHandle, parseFriendOffer, type FriendOffer } from '../../lib/friendOffer'
 import { incomingRequestFrom } from '../../lib/friends'
 import { isGone } from '../../lib/loadFailure'
 import { Logger } from '../../lib/logger'
@@ -73,6 +73,12 @@ interface UserProfileView {
   /** The server's `identityVisible`, or your own profile. Nothing else sets it. */
   identityVisible: boolean
 }
+
+/**
+ * Whether this screen may ask about a friend offer at all: never for yourself, and never for a room handle, which is not the
+ * real id `POST /friends/requests` needs. The offer itself is the server's, and only for somebody you may see.
+ */
+const mayOfferFriend = (viewerId: string | undefined, ref: string) => !!viewerId && viewerId !== ref && !isHandle(ref)
 
 type ProfileCtaMode = 'self' | 'connect' | 'requested' | 'message' | 'declined'
 const CTA_LABEL: Record<ProfileCtaMode, string> = {
@@ -249,28 +255,28 @@ function UserProfileInner() {
     setCtaMessage(CTA_HINT.connect)
   }, [authUser])
 
-  /*
-   * Only for somebody you may see, and never for a room handle: the ask needs their real id, which a handle is not
-   * (`POST /friends/requests` answers one as an id nobody has). A failed read is no offer, said in the log.
-   */
-  const loadFriendOffer = useCallback(
-    (loaded: UserProfileView | null) => {
-      setFriend(null)
-      if (!loaded?.identityVisible || !authUser || authUser.id === loaded.user_id || isHandle(loaded.user_id)) return
-      void Promise.resolve()
-        .then(() => apiClient.getFriendOffer(loaded.user_id))
-        .then(setFriend)
-        .catch((error) => Logger.warn('profile', 'friend offer failed to load', { error }))
-    },
-    [authUser]
-  )
 
   // State is set only in the callbacks, once the requests have settled; the
   // spinner for a reload is switched on in render, below.
-  const load = useCallback(() => {
+  // `isCurrent` is false once the page has moved on (another person, or closed): that load's answer, landing late, offers nothing.
+  const load = useCallback((isCurrent: () => boolean = () => true) => {
     if (!id) return
-    return apiClient.getPublicProfile(id)
-      .then(async (result) => {
+    /*
+     * ponytail: `GET /users/:id` carries `friend` once admin `feat/friend-after-reveal` is on staging; until then this reads
+     * it from `GET /profiles/:id`, asked beside the profile so the dock draws once. Delete `getFriendOffer`, `offerRead`
+     * and the `?? fallbackOffer` below when it is.
+     */
+    const offerRead: Promise<FriendOffer | null> = mayOfferFriend(authUser?.id, id)
+      ? Promise.resolve()
+          .then(() => apiClient.getFriendOffer(id))
+          .catch((error) => {
+            Logger.warn('profile', 'friend offer failed to load', { error })
+            return null
+          })
+      : Promise.resolve(null)
+    return Promise.all([apiClient.getPublicProfile(id), offerRead])
+      .then(async ([result, fallbackOffer]) => {
+        let offer: FriendOffer | null = null
         let nextProfile: UserProfileView | null = null
         let connection: ProfileConnection | undefined
         let gone = isGone(result)
@@ -278,6 +284,8 @@ function UserProfileInner() {
         if (result.success && result.data) {
           const data = result.data
           connection = data.connection
+          // The server's own answer when it sends one; the extra read only for a server that does not.
+          offer = parseFriendOffer(data.friend) ?? fallbackOffer
           const photos = data.photos || data.profile_photos || []
           const interests = interestNames(data.interests)
           nextProfile = {
@@ -330,18 +338,20 @@ function UserProfileInner() {
 
         // Fail closed: no identity field survives unless the server said you may see it.
         setProfile(nextProfile ? withheldUnlessVisible(nextProfile) : null)
+        // Only for somebody you may see (`identityVisible`), and with the same render as the profile: the dock never pops in.
+        if (isCurrent()) setFriend(nextProfile?.identityVisible && mayOfferFriend(authUser?.id, id) ? offer : null)
         setLoadError(nextProfile ? null : gone ? 'gone' : 'failed')
         if (nextProfile?.user_id) {
           await hydrateCtaState(nextProfile.user_id, connection)
         }
-        loadFriendOffer(nextProfile)
+
       })
       .catch((e) => {
         Logger.error('profile', 'User profile load failed', { error: e })
         setLoadError('failed')
       })
       .finally(() => setLoading(false))
-  }, [id, hydrateCtaState, loadFriendOffer])
+  }, [id, hydrateCtaState, authUser])
 
   // A new `load` is a new profile to fetch, and it shows as loading from this
   // render rather than one commit later. The first `load` rides on the
@@ -358,7 +368,11 @@ function UserProfileInner() {
   }
 
   useEffect(() => {
-    load()
+    let current = true
+    load(() => current)
+    return () => {
+      current = false
+    }
   }, [load])
 
   /*
@@ -499,14 +513,19 @@ function UserProfileInner() {
   }
 
   const addFriend = async () => {
-    const next = await friendAsk.ask(profile?.user_id)
-    if (next) setFriend(next)
+    const result = await friendAsk.ask(profile?.user_id)
+    if (result.ok) setFriend(result.offer)
   }
+  // The dock has room for one lit action: Add friend / Accept while the server offers it (Message steps down to secondary), and
+  // after an ask a note (which says more than the generic hint, and the hint is always set by the time the dock draws), not a disabled
+  // button. Friends already: nothing, as in the DM.
   const friendNow = friendAction(friend)
+  const friendLead = friendNow?.lit ? friendNow : null
+  const friendRequested = friendNow?.kind === 'requested'
 
   const ctaDisabled = ctaMode === 'self' || ctaMode === 'requested' || ctaMode === 'declined'
-  // Connect and Message are the live actions, lit in the screen's rose; Requested and Declined are states and stay quiet.
-  const ctaLit = ctaMode === 'connect' || ctaMode === 'message'
+  // Connect and Message are the live actions, lit in the screen's rose, unless Add friend is lit above them; Requested and Declined are states and stay quiet.
+  const ctaLit = (ctaMode === 'connect' || ctaMode === 'message') && !friendLead
 
   const back = () => router.back()
 
@@ -675,17 +694,18 @@ function UserProfileInner() {
       {showDock ? (
         <ProfileDock
           testID="profile-dock"
-          note={incoming ? null : ctaMessage || null}
+          note={incoming ? null : friendRequested ? FRIEND_COPY.requestSentNote : ctaMessage || null}
           onHeight={setDockHeight}
           lead={
-            friendNow ? (
+            friendLead ? (
               <Button
-                kind={friendNow.lit ? 'lit' : 'secondary'}
+                kind="lit"
                 size="md"
-                icon={friendNow.icon}
-                label={friendNow.label}
-                accessibilityLabel={friendNow.kind === 'add' ? `Add ${heroTitle} as a friend` : friendNow.kind === 'accept' ? `Accept ${heroTitle}'s friend request` : undefined}
-                disabled={friendNow.disabled}
+                icon={friendLead.icon}
+                label={friendLead.label}
+                accessibilityLabel={friendLead.kind === 'add' ? `Add ${heroTitle} as a friend` : `Accept ${heroTitle}'s friend request`}
+                // Accepting answers a person who asked you: the press is felt, as a screen's primary is. `H.success` follows on the answer.
+                pressHaptic={friendLead.kind === 'accept' ? () => H.primary() : false}
                 loading={friendAsk.busy}
                 onPress={() => void addFriend()}
                 testID="profile-friend"

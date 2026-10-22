@@ -84,3 +84,42 @@ it('Increase Contrast: the 50% hairline, the eye line in white', async () => {
   expect(flat('r-contrast')).toMatchObject({ borderWidth: 1, borderColor: MATERIAL.hairlineIncreaseContrast })
   expect(StyleSheet.flatten(screen.getAllByText('anonymous', { includeHiddenElements: true })[0].props.style).color).toBe(COLOR.textPrimary)
 })
+
+describe('both: the one thing left once you can see each other is to add them (SCRUM-750)', () => {
+  const PHOTOS = {
+    you: { face: { kind: 'photo', uri: 'https://example.com/sam.jpg' } as const, name: 'Sam' },
+    them: { face: { kind: 'photo', uri: 'https://example.com/priya.jpg' } as const, name: 'Priya' },
+  }
+
+  it('reads both sides as seen, says so, and has a lit small Add friend', async () => {
+    const onPress = jest.fn()
+    await draw({ state: 'both', ...PHOTOS, friend: { label: 'Add friend', onPress } })
+    expect(screen.getByLabelText('You, Sam, seen. Priya, seen.')).toBeTruthy()
+    expect(screen.getByText('You can both see each other')).toBeTruthy()
+    const add = screen.getByRole('button', { name: 'Add friend' })
+    expect(StyleSheet.flatten(add.props.style)).toMatchObject({ backgroundColor: SELECTION.ember.fill, height: 36 })
+    expect(screen.queryByRole('button', { name: 'Show them who you are' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Ask them' })).toBeNull()
+    await fireEvent.press(add)
+    expect(onPress).toHaveBeenCalledTimes(1)
+  })
+
+  it('an accept says so, and is felt on press-in; adding is silent', async () => {
+    const primary = jest.spyOn(H, 'primary').mockImplementation(() => {})
+    await draw({ state: 'both', ...PHOTOS, friend: { label: 'Accept friend request', accept: true, onPress: jest.fn() } })
+    await fireEvent(screen.getByRole('button', { name: 'Accept friend request' }), 'pressIn')
+    expect(primary).toHaveBeenCalledTimes(1)
+    primary.mockClear()
+    await screen.unmount()
+    await draw({ state: 'both', ...PHOTOS, friend: { label: 'Add friend', onPress: jest.fn() } })
+    await fireEvent(screen.getByRole('button', { name: 'Add friend' }), 'pressIn')
+    expect(primary).not.toHaveBeenCalled()
+    primary.mockRestore()
+  })
+
+  it('with no action to offer it is only the line', async () => {
+    await draw({ state: 'both', ...PHOTOS })
+    expect(screen.getByText('You can both see each other')).toBeTruthy()
+    expect(screen.queryByRole('button')).toBeNull()
+  })
+})

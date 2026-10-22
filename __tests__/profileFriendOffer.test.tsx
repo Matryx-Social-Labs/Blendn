@@ -4,6 +4,7 @@
  * never for a room handle, and always asked with their real id.
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
+import { StyleSheet } from 'react-native'
 
 let mockParams: { id: string; eventId?: string; pseudonym?: string; roomSeed?: string } = { id: 'u_ben' }
 const mockUser = { id: 'u_me' }
@@ -78,6 +79,8 @@ import { router } from 'expo-router'
 import { apiClient } from '../lib/apiClient'
 import { showUserSafetyActions } from '../lib/safetyUtils'
 import UserProfile, { stillAnonymous } from '../app/user/[id]'
+import { SELECTION } from '../components/ds/shared'
+import { H } from '../lib/haptics'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
 const BEN = { id: 'u_ben', name: 'Ben', photos: ['https://cdn/ben.jpg'], bio: 'Hi', identityVisible: true }
@@ -99,44 +102,51 @@ beforeEach(() => {
   mockShowToast.mockReset()
 })
 
-describe('what the dock draws for each state', () => {
-  it('none + canAdd: a lit Add friend, above Message', async () => {
+const fillOf = (id: string) => StyleSheet.flatten(screen.getByTestId(id).props.style).backgroundColor
+const LIT = SELECTION.rose.fill
+
+describe('what the dock draws for each state: one lit action', () => {
+  it('none + canAdd: a lit Add friend, and Message steps down to secondary', async () => {
     await open(OFFER('none', true))
     expect(await screen.findByTestId('profile-friend')).toBeTruthy()
     expect(screen.getByLabelText('Add Ben as a friend')).toBeTruthy()
     expect(screen.getByText('Add friend')).toBeTruthy()
     expect(api.getFriendOffer).toHaveBeenCalledWith('u_ben')
+    expect(fillOf('profile-friend')).toBe(LIT)
+    expect(fillOf('profile-cta')).not.toBe(LIT)
   })
 
-  it('incoming: a lit Accept', async () => {
+  it('incoming: a lit "Accept friend request"', async () => {
     await open(OFFER('incoming', true))
     expect(await screen.findByLabelText('Accept Ben\'s friend request')).toBeTruthy()
+    expect(screen.getByText('Accept friend request')).toBeTruthy()
+    expect(fillOf('profile-cta')).not.toBe(LIT)
   })
 
-  it('requested: a quiet, disabled Requested', async () => {
+  it('requested: no button at all, the dock says "Friend request sent", and Message is lit again', async () => {
     await open(OFFER('requested', false))
-    const button = await screen.findByTestId('profile-friend')
-    expect(button.props.accessibilityState).toMatchObject({ disabled: true })
-    expect(screen.getByText('Requested', { exact: true })).toBeTruthy()
-    await act(async () => fireEvent.press(button))
-    expect(api.sendFriendRequest).not.toHaveBeenCalled()
+    await flush()
+    expect(screen.queryByTestId('profile-friend')).toBeNull()
+    expect(screen.getByText('Friend request sent')).toBeTruthy()
+    expect(fillOf('profile-cta')).toBe(LIT)
   })
 
-  it('friends: a quiet, disabled Friends', async () => {
+  it('friends: nothing, as in the DM', async () => {
     await open(OFFER('friends', false))
-    const button = await screen.findByTestId('profile-friend')
-    expect(button.props.accessibilityState).toMatchObject({ disabled: true })
-    expect(screen.getByText('Friends')).toBeTruthy()
+    await flush()
+    expect(screen.queryByTestId('profile-friend')).toBeNull()
+    expect(screen.queryByText('Friend request sent')).toBeNull()
+    expect(fillOf('profile-cta')).toBe(LIT)
   })
 
   it.each([
     ['a person the server does not offer', OFFER('none', false)],
     ['an older server with no friend field', null],
-  ])('%s: nothing, and the dock is as it was', async (_name, offer) => {
+  ])('%s: nothing, and Message is lit as it was', async (_name, offer) => {
     await open(offer)
     await flush()
     expect(screen.queryByTestId('profile-friend')).toBeNull()
-    expect(screen.getByTestId('profile-cta')).toBeTruthy()
+    expect(fillOf('profile-cta')).toBe(LIT)
   })
 
   it('a friend read that fails draws nothing and the page still opens', async () => {
@@ -151,6 +161,47 @@ describe('what the dock draws for each state', () => {
   })
 })
 
+describe('the dock draws once', () => {
+  it('the friend action is there on the frame the profile is, not a beat later', async () => {
+    await open(OFFER('none', true))
+    // `open` waited for the name and nothing more.
+    expect(screen.getByTestId('profile-friend')).toBeTruthy()
+  })
+
+  it('a profile that carries `friend` is believed, with no second read needed', async () => {
+    await open(null, 'u_ben', { friend: { state: 'none', canAdd: true } })
+    expect(screen.getByTestId('profile-friend')).toBeTruthy()
+  })
+
+  it('the server’s `friend` on the profile wins over the fallback read', async () => {
+    await open(OFFER('none', true), 'u_ben', { friend: { state: 'requested', canAdd: false } })
+    expect(screen.queryByTestId('profile-friend')).toBeNull()
+    expect(screen.getByText('Friend request sent')).toBeTruthy()
+  })
+
+  it('a `friend` that is not one falls back to the read', async () => {
+    await open(OFFER('none', true), 'u_ben', { friend: { state: 'maybe' } })
+    expect(screen.getByTestId('profile-friend')).toBeTruthy()
+  })
+
+  it('a late answer from an earlier load draws nothing', async () => {
+    let late: (v: unknown) => void = () => {}
+    api.getPublicProfile.mockReturnValueOnce(new Promise((r) => (late = r)) as never)
+    api.getFriendOffer.mockResolvedValue(OFFER('none', true))
+    mockParams = { id: 'u_ben' }
+    const view = await render(<UserProfile />)
+    // The page is opened for somebody else before the first has answered; nobody is offered there.
+    mockParams = { id: 'u_zed' }
+    api.getPublicProfile.mockResolvedValue({ success: true, data: { ...BEN, id: 'u_zed', name: 'Zed' } })
+    api.getFriendOffer.mockResolvedValue(null)
+    await view.rerender(<UserProfile />)
+    await screen.findByText('Zed')
+    await act(async () => late({ success: true, data: BEN }))
+    await flush()
+    expect(screen.queryByTestId('profile-friend')).toBeNull()
+  })
+})
+
 describe('who is asked about at all', () => {
   it('not somebody you cannot see yet', async () => {
     mockParams = { id: 'u_ben' }
@@ -159,7 +210,7 @@ describe('who is asked about at all', () => {
     await render(<UserProfile />)
     await flush()
     expect(api.getPublicProfile).toHaveBeenCalled()
-    expect(api.getFriendOffer).not.toHaveBeenCalled()
+    // Asked beside the profile (nobody knows yet whether they may be seen), and never drawn for somebody who may not.
     expect(screen.queryByTestId('profile-friend')).toBeNull()
   })
 
@@ -178,7 +229,7 @@ describe('who is asked about at all', () => {
 })
 
 describe('asking', () => {
-  it('sends their real id, then draws Requested', async () => {
+  it('sends their real id, then the dock says it was sent', async () => {
     api.sendFriendRequest.mockResolvedValue({ success: true, data: { state: 'requested' } } as never)
     await open(OFFER('none', true))
     await act(async () => fireEvent.press(await screen.findByTestId('profile-friend')))
@@ -187,11 +238,11 @@ describe('asking', () => {
     expect(api.sendFriendRequest).toHaveBeenCalledTimes(1)
     expect(api.sendFriendRequest).toHaveBeenCalledWith({ userId: 'u_ben' })
     expect(mockShowToast).toHaveBeenCalledWith('Friend request sent to Ben', 'success', { haptic: 'success' })
-    expect(screen.getByTestId('profile-friend').props.accessibilityState).toMatchObject({ disabled: true })
-    expect(screen.getByText('Requested', { exact: true })).toBeTruthy()
+    expect(screen.queryByTestId('profile-friend')).toBeNull()
+    expect(screen.getByText('Friend request sent')).toBeTruthy()
   })
 
-  it('accepting a request they made draws Friends', async () => {
+  it('accepting a request they made lands as friends, and the action is gone', async () => {
     api.sendFriendRequest.mockResolvedValue({ success: true, data: { state: 'friends' } } as never)
     await open(OFFER('incoming', true))
     await act(async () => fireEvent.press(await screen.findByTestId('profile-friend')))
@@ -199,7 +250,7 @@ describe('asking', () => {
 
     expect(api.sendFriendRequest).toHaveBeenCalledWith({ userId: 'u_ben' })
     expect(mockShowToast).toHaveBeenCalledWith('You and Ben are friends', 'success', { haptic: 'success' })
-    expect(screen.getByText('Friends')).toBeTruthy()
+    expect(screen.queryByTestId('profile-friend')).toBeNull()
   })
 
   it('the button spins while the request is out, and a second press sends nothing more', async () => {
@@ -210,8 +261,24 @@ describe('asking', () => {
     await act(async () => fireEvent.press(button))
     await act(async () => fireEvent.press(screen.getByTestId('profile-friend')))
     expect(api.sendFriendRequest).toHaveBeenCalledTimes(1)
+    expect(screen.getByTestId('profile-friend').props.accessibilityState).toMatchObject({ busy: true })
     await act(async () => finish({ success: true, data: { state: 'requested' } }))
     await flush()
+  })
+})
+
+describe('Accept is felt on press-in', () => {
+  it('Accept plays H.primary; Add friend does not', async () => {
+    const primary = jest.spyOn(H, 'primary').mockImplementation(() => {})
+    await open(OFFER('incoming', true))
+    await act(async () => fireEvent(await screen.findByTestId('profile-friend'), 'pressIn'))
+    expect(primary).toHaveBeenCalledTimes(1)
+    primary.mockClear()
+    await screen.unmount()
+    await open(OFFER('none', true))
+    await act(async () => fireEvent(await screen.findByTestId('profile-friend'), 'pressIn'))
+    expect(primary).not.toHaveBeenCalled()
+    primary.mockRestore()
   })
 })
 

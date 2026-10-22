@@ -142,13 +142,13 @@ const failed = (serverSays: string | undefined, fallback: string): SheetOutcome 
   return { ok: false, error: `${said}${/[.!?]$/.test(said) ? '' : '.'} Try again.` }
 }
 
-/** The options' friend row: what to draw, and the ask it runs (the screen's toasts and haptic are in `ask`). */
-export type FriendRow = { action: FriendAction; ask: () => Promise<unknown> }
+/** The options' friend row: what to draw, and the ask it runs. A refusal comes back as its sentence, which the sheet shows under the row. */
+export type FriendRow = { action: FriendAction; ask: () => Promise<{ ok: true } | { ok: false; error: string }> }
 
 const friendRow = ({ action, ask }: FriendRow): SheetAction =>
   action.disabled
-    ? { label: action.label, icon: action.icon, disabled: true, then: () => {} }
-    : { label: action.label, icon: action.icon, variant: 'primary', run: async () => (await ask(), { ok: true }) }
+    ? { label: action.label, accessibilityLabel: action.accessibilityLabel, icon: action.icon, disabled: true, then: () => {} }
+    : { label: action.label, icon: action.icon, variant: 'primary', run: ask }
 
 /**
  * A conversation's ⋮ menu: the ordinary things first, leaving one step in.

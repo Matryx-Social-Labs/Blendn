@@ -126,6 +126,7 @@ export function SheetHost() {
                     {
                       key: a.label,
                       label: a.label,
+                      accessibilityLabel: a.accessibilityLabel,
                       icon: a.icon,
                       destructive: a.variant === 'destructive',
                       lit: a.variant === 'primary',
@@ -205,6 +206,7 @@ export function SheetHost() {
 type OptionRow = {
   key: string
   label: string
+  accessibilityLabel?: string
   icon?: IconName
   destructive?: boolean
   /** The row's glyph and label light in the sheet's world (a positive action, `Button kind="lit"`'s colour). */
@@ -231,7 +233,7 @@ export function OptionRows({ rows }: { rows: OptionRow[] }) {
             onPress={row.onPress}
             disabled={row.disabled || row.busy}
             accessibilityRole="button"
-            accessibilityLabel={row.label}
+            accessibilityLabel={row.accessibilityLabel ?? row.label}
             accessibilityState={{ disabled: !!row.disabled, busy: !!row.busy }}
             android_ripple={{ color: PRESSED_WASH.android }}
             style={({ pressed }) => [

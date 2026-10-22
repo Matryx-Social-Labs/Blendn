@@ -23,11 +23,11 @@ describe('friendAction: one reading of each state', () => {
   })
 
   it('incoming + canAdd is the lit Accept (asking back accepts)', () => {
-    expect(draw('incoming', true)).toMatchObject({ kind: 'accept', label: 'Accept', lit: true, disabled: false })
+    expect(draw('incoming', true)).toMatchObject({ kind: 'accept', label: 'Accept friend request', lit: true, disabled: false })
   })
 
-  it('requested is a quiet, disabled Requested', () => {
-    expect(draw('requested', false)).toMatchObject({ kind: 'requested', label: 'Requested', lit: false, disabled: true })
+  it('requested is a quiet, disabled Requested that a screen reader calls Friend request sent', () => {
+    expect(draw('requested', false)).toMatchObject({ kind: 'requested', label: 'Requested', accessibilityLabel: 'Friend request sent', lit: false, disabled: true })
   })
 
   it('friends is a quiet, disabled Friends', () => {
@@ -88,7 +88,26 @@ describe('friendAskOutcome', () => {
 })
 
 it('says who a request went to, and never names a place', () => {
+  expect(FRIEND_COPY.requestSentNote).toBe('Friend request sent')
   expect(FRIEND_COPY.requested('Mika')).toBe('Friend request sent to Mika')
   expect(FRIEND_COPY.friends('Mika')).toBe('You and Mika are friends')
   expect(FRIEND_COPY.revealFirst).toBe('Reveal yourself first')
+})
+
+/**
+ * The server is dropping `friend` from the conversations LIST (a card per person is a lot of queries for a row that never
+ * offers anything): only the one conversation and the profile read it. A reader of the list's rows would draw a stale
+ * or absent offer, so the places that parse one are pinned.
+ */
+it('reads the friend offer only from GET /conversations/:id, GET /profiles/:id and GET /users/:id', () => {
+  const fs = require('fs') as typeof import('fs')
+  const path = require('path') as typeof import('path')
+  const root = path.join(__dirname, '..')
+  const walk = (dir: string): string[] =>
+    fs.readdirSync(path.join(root, dir), { withFileTypes: true }).flatMap((e) => {
+      const rel = path.join(dir, e.name)
+      return e.isDirectory() ? walk(rel) : /\.(ts|tsx)$/.test(e.name) ? [rel] : []
+    })
+  const readers = ['app', 'components', 'lib'].flatMap(walk).filter((f) => /parseFriendOffer\(/.test(fs.readFileSync(path.join(root, f), 'utf8')))
+  expect(readers.sort()).toEqual(['app/private-chat/[conversationId].tsx', 'app/user/[id].tsx', 'lib/apiClient.ts', 'lib/friendOffer.ts'])
 })
