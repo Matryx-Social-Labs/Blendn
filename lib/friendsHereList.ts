@@ -8,6 +8,8 @@ import { Logger } from './logger'
 export const FRIENDS_PAGE = 50
 /** Typing waits this long before it asks (a search per keystroke is a request per keystroke). */
 export const SEARCH_DEBOUNCE_MS = 250
+/** The server filters on 1 to 40 characters. */
+export const SEARCH_MAX = 40
 /** Fixed heights, so `getItemLayout` is exact and a fast scroll never shows a blank cell. */
 export const LETTER_HEIGHT = 32
 export const FRIEND_ROW_HEIGHT = 64
@@ -78,6 +80,8 @@ export function useFriendsHereList(eventId: string | null) {
     const mine = ++ask.current
     more.current = false
     setLoadingMore(false)
+    // The last search's cursor is for the last search: a next page asked in the gap would be the wrong list.
+    setCursor(null)
     try {
       const r = await apiClient.getFriendsHere(eventId, { order: 'name', limit: FRIENDS_PAGE, q: debounced || undefined })
       if (mine !== ask.current) return
@@ -102,7 +106,8 @@ export function useFriendsHereList(eventId: string | null) {
   }, [first])
 
   const loadMore = useCallback(async () => {
-    if (!eventId || !cursor || more.current || status !== 'ready') return
+    // A search still typing (or on its way) has no next page yet: its cursor is the last search's.
+    if (!eventId || !cursor || more.current || status !== 'ready' || query.trim() !== debounced) return
     more.current = true
     setLoadingMore(true)
     const mine = ask.current
@@ -124,7 +129,7 @@ export function useFriendsHereList(eventId: string | null) {
       more.current = false
       if (mine === ask.current) setLoadingMore(false)
     }
-  }, [eventId, cursor, debounced, status])
+  }, [eventId, cursor, debounced, status, query])
 
   const retry = useCallback(() => {
     setStatus('loading')

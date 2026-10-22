@@ -73,18 +73,23 @@ describe('<FriendsHere>', () => {
     expect(screen.getAllByRole('button', { name: /^Message / })).toHaveLength(3)
     expect(screen.queryByText('Aarav Gupta')).toBeNull()
     expect(screen.getByText('1 more here')).toBeTruthy()
-    await fireEvent.press(screen.getByRole('button', { name: 'See all 4 friends here' }))
-    await fireEvent.press(screen.getByText('See all'))
+    // The header's action and the overflow row are both named for what they open.
+    const both = screen.getAllByRole('button', { name: 'See all 4 friends here' })
+    expect(both).toHaveLength(2)
+    await fireEvent.press(both[0])
+    await fireEvent.press(both[1])
     expect(onSeeAll).toHaveBeenCalledTimes(2)
   })
 
   it('sixty and five thousand: the first page is eight, the count is the truth', async () => {
     await draw({ friends: people(8), total: 60 })
     expect(screen.getByText('57 more here')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'See all 60 friends here' })).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: 'See all 60 friends here' })).toHaveLength(2)
     await draw({ friends: people(8), total: 1204 })
-    expect(screen.getByText('1201 more here')).toBeTruthy()
-    expect(screen.getByRole('header', { name: 'Friends here, 1204' })).toBeTruthy()
+    // Grouped, so a long count reads at a glance and does not wrap the header.
+    expect(screen.getByText('1,201 more here')).toBeTruthy()
+    expect(screen.getByRole('header', { name: 'Friends here, 1,204' })).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: 'See all 1,204 friends here' })).toHaveLength(2)
   })
 
   it('Message opens that friend’s chat', async () => {

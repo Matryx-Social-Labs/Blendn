@@ -102,6 +102,9 @@ export function useFriendsHere(eventId: string | null, inRoom: boolean): Friends
   return { friends: here?.friends ?? [], total: here?.total ?? 0, loaded: loadedFor === eventId, appearances, refresh: read }
 }
 
+/** 1204 reads "1,204": a long count stays a glance and never breaks a header or a row. */
+export const groupedCount = (n: number): string => n.toLocaleString('en-US')
+
 /** "Karthik Subramaniam Venkataraman" is Karthik: the toast speaks the way a friend would. */
 export const firstNameOf = (name: string): string => name.trim().split(/\s+/)[0] || name
 

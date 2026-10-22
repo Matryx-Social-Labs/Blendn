@@ -13,8 +13,8 @@ import { PersonRow, PersonRowSkeleton } from '../../components/friends/PersonRow
 import { useOffline } from '../../components/OfflineBanner'
 import { useToast } from '../../components/Toast'
 import { COLOR, FONT_FAMILY, SPACE } from '../../lib/design/tokens'
-import { useMessageFriend } from '../../lib/friendsHere'
-import { FRIEND_ROW_HEIGHT, layoutOf, useFriendsHereList, withLetters, type FriendsListItem } from '../../lib/friendsHereList'
+import { groupedCount, useMessageFriend } from '../../lib/friendsHere'
+import { SEARCH_MAX, FRIEND_ROW_HEIGHT, layoutOf, useFriendsHereList, withLetters, type FriendsListItem } from '../../lib/friendsHereList'
 import { useTopBarState } from '../../lib/useTopBarState'
 
 /**
@@ -41,7 +41,8 @@ function FriendsHereScreenContent() {
   const rows = withLetters(list.friends)
   const stickyHeaderIndices = rows.flatMap((r, i) => (r.kind === 'letter' ? [i] : []))
   const layout = layoutOf(rows)
-  const none = list.status === 'ready' && !list.query.trim() && !list.searching && list.friends.length === 0
+  // total is the unfiltered count: clearing a search that matched nobody is an empty list on its way back, not an empty room.
+  const none = list.status === 'ready' && !list.query.trim() && !list.searching && list.total === 0 && list.friends.length === 0
 
   // Everyone has gone while this was open: the section is gone too, so go back to the Room.
   useEffect(() => {
@@ -111,7 +112,8 @@ function FriendsHereScreenContent() {
 
   return (
     <View style={styles.container}>
-      <TopBar title="Friends here" sub={list.total > 0 ? String(list.total) : undefined} state={bar.state} onBack={() => router.back()} testID="friends-here-top" />
+      {/* ponytail: a DS gap. TopBar's title and sub are plain strings, so the count is not in Geist Mono beside the title as the frame draws it. */}
+      <TopBar title="Friends here" sub={list.total > 0 ? groupedCount(list.total) : undefined} state={bar.state} onBack={() => router.back()} testID="friends-here-top" />
       <View style={styles.search}>
         <SearchField
           value={list.query}
@@ -121,6 +123,7 @@ function FriendsHereScreenContent() {
           autoCapitalize="none"
           autoCorrect={false}
           returnKeyType="search"
+          maxLength={SEARCH_MAX}
           testID="friends-here-search"
         />
       </View>

@@ -3,7 +3,7 @@ import { AccessibilityInfo, StyleSheet, Text, View } from 'react-native'
 import Animated, { Easing, FadeIn, FadeOut, withTiming } from 'react-native-reanimated'
 
 import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, RADIUS, RISE, SIZE, SPACE } from '../../lib/design/tokens'
-import { FRIEND_OVERFLOW_FACES, FRIEND_ROWS, type FriendHere } from '../../lib/friendsHere'
+import { FRIEND_OVERFLOW_FACES, FRIEND_ROWS, groupedCount, type FriendHere } from '../../lib/friendsHere'
 import { useReducedMotion } from '../../lib/motion'
 import { PersonRow } from '../friends/PersonRow'
 import { Button } from '../ds/Button'
@@ -79,14 +79,14 @@ export function FriendsHere({
   if (total <= 0 || friends.length === 0) return null
   const rows = friends.slice(0, FRIEND_ROWS)
   const more = total - rows.length
-  const seeAll = `See all ${total} friends here`
+  const seeAll = `See all ${groupedCount(total)} friends here`
 
   return (
     <Animated.View testID={testID} entering={reduceMotion ? FadeIn.duration(DURATION.base) : enter} exiting={FadeOut.duration(DURATION.quick)} style={styles.section}>
       <SectionHeader
         title="Friends here"
         count={total > 1 ? total : undefined}
-        action={total > FRIEND_ROWS ? { label: 'See all', onPress: onSeeAll } : undefined}
+        action={total > FRIEND_ROWS ? { label: 'See all', onPress: onSeeAll, accessibilityLabel: seeAll } : undefined}
         testID={`${testID}-head`}
       />
       <View style={styles.card}>
@@ -122,7 +122,7 @@ export function FriendsHere({
           >
             <Facepile faces={friends.slice(FRIEND_ROWS, FRIEND_ROWS + FRIEND_OVERFLOW_FACES).map(faceOf)} size={24} max={FRIEND_OVERFLOW_FACES} text="" ring={COLOR.surface} />
             <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} numberOfLines={1} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.moreText]}>
-              {`${more} more here`}
+              {`${groupedCount(more)} more here`}
             </Text>
             <Icon name="chevron-right" size={ICON.control} color={COLOR.textTertiary} />
           </ScalePress>

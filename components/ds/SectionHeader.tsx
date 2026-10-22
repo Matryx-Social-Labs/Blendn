@@ -9,7 +9,11 @@ import { CONTROL_FONT_CAP, focusRing, font, minTarget, useBoldText, useSelection
 /** The lit count's capsule, as `Badge` at size 22. */
 const CAPSULE = 22
 
-export type SectionAction = { label: string; onPress: () => void; busy?: boolean }
+/** `accessibilityLabel` only when the words on screen are not enough alone ("See all" says how many); it starts with the label. */
+export type SectionAction = { label: string; onPress: () => void; busy?: boolean; accessibilityLabel?: string }
+
+/** A count in thousands is grouped ("1,204"): it reads at a glance and never wraps the header. */
+const grouped = (n: number) => n.toLocaleString('en-US')
 
 /**
  * How every section inside a screen starts (guidelines/components/SectionHeader.html):
@@ -53,7 +57,7 @@ export function SectionHeader({
   const sel = useSelection()
   const [focused, setFocused] = useState(false)
   const slop = (minTarget() - TYPE.meta.lineHeight) / 2
-  const heading = count == null ? title : `${title}, ${count}`
+  const heading = count == null ? title : `${title}, ${grouped(count)}`
 
   return (
     <View style={styles.block}>
@@ -70,13 +74,13 @@ export function SectionHeader({
           {count != null && countStyle === 'lit' ? (
             <View testID={testID && `${testID}-count`} style={[styles.capsule, { backgroundColor: sel.fill, borderColor: sel.edge }]}>
               <Text style={[font('caption', bold, FONT_FAMILY.mono[700]), styles.capsuleText, styles.tabular]} maxFontSizeMultiplier={CONTROL_FONT_CAP}>
-                {count}
+                {grouped(count)}
               </Text>
             </View>
           ) : count != null ? (
             <>
               <Text style={[font('heading', bold), styles.muted]}>·</Text>
-              <Text style={[font('heading', bold, FONT_FAMILY.mono[700]), styles.muted, styles.tabular]}>{count}</Text>
+              <Text style={[font('heading', bold, FONT_FAMILY.mono[700]), styles.muted, styles.tabular]}>{grouped(count)}</Text>
             </>
           ) : null}
         </View>
@@ -92,7 +96,7 @@ export function SectionHeader({
                   disabled={action.busy}
                   hitSlop={{ top: slop, bottom: slop }}
                   accessibilityRole="button"
-                  accessibilityLabel={action.label}
+                  accessibilityLabel={action.accessibilityLabel ?? action.label}
                   accessibilityState={{ disabled: !!action.busy, busy: !!action.busy }}
                   style={[styles.actionBox, { minWidth: minTarget() }, action.busy && styles.busy]}
                 >

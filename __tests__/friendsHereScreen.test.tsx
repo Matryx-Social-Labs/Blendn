@@ -107,6 +107,29 @@ describe('See all friends here', () => {
     expect(mockBack).not.toHaveBeenCalled()
   })
 
+  it('clearing a search that matched nobody stays; it does not leave as if the room were empty', async () => {
+    mockGet.mockResolvedValueOnce(page([friend('Asha Menon', 1)], 4))
+    await open()
+    mockGet.mockResolvedValue(page([], 0))
+    await act(async () => {
+      fireEvent.changeText(screen.getByPlaceholderText('Search friends here'), 'zzz')
+    })
+    await act(async () => {
+      jest.advanceTimersByTime(SEARCH_DEBOUNCE_MS)
+    })
+    expect(screen.getByText('No friend here by that name.')).toBeTruthy()
+    mockGet.mockResolvedValue(page([friend('Asha Menon', 1)], 4))
+    await act(async () => {
+      fireEvent.changeText(screen.getByPlaceholderText('Search friends here'), '')
+    })
+    expect(mockBack).not.toHaveBeenCalled()
+    await act(async () => {
+      jest.advanceTimersByTime(SEARCH_DEBOUNCE_MS)
+    })
+    expect(mockBack).not.toHaveBeenCalled()
+    expect(screen.getByText('Asha Menon')).toBeTruthy()
+  })
+
   it('a failed read offers Try again', async () => {
     mockGet.mockResolvedValueOnce({ success: false })
     await open()
@@ -124,6 +147,18 @@ describe('See all friends here', () => {
     await open()
     expect(mockBack).toHaveBeenCalled()
     expect(screen.queryByText('No friend here by that name.', HIDDEN)).toBeNull()
+  })
+
+  it('the search stops at 40 characters, as the server does', async () => {
+    mockGet.mockResolvedValue(page([friend('Asha Menon', 1)], 4))
+    await open()
+    expect(screen.getByPlaceholderText('Search friends here').props.maxLength).toBe(40)
+  })
+
+  it('a count in thousands is grouped under the title', async () => {
+    mockGet.mockResolvedValue(page([friend('Asha Menon', 1)], 1204))
+    await open()
+    expect(screen.getByText('1,204')).toBeTruthy()
   })
 
   it('a long name stays on one line next to its Message', async () => {

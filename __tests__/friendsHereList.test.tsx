@@ -152,4 +152,27 @@ describe('useFriendsHereList', () => {
     await act(async () => slow(page([f('Zed', 3)], 1, null)))
     expect(result.current.friends.map((x) => x.name)).toEqual(['Bea'])
   })
+
+  it('a next page is never asked with the last search’s cursor', async () => {
+    mockGet.mockResolvedValueOnce(page([f('A', 1)], 60, 'c1'))
+    const { result } = await renderHook(() => useFriendsHereList('e1'))
+    await settle()
+    mockGet.mockClear()
+    mockGet.mockReturnValue(new Promise(() => {}))
+    // Typing: the search is not asked yet, and the old cursor is the old list's.
+    await act(async () => result.current.search('b'))
+    await act(async () => {
+      await result.current.loadMore()
+    })
+    expect(mockGet).not.toHaveBeenCalled()
+    // Asked and not answered: still no next page.
+    await act(async () => {
+      jest.advanceTimersByTime(SEARCH_DEBOUNCE_MS)
+    })
+    mockGet.mockClear()
+    await act(async () => {
+      await result.current.loadMore()
+    })
+    expect(mockGet).not.toHaveBeenCalled()
+  })
 })
