@@ -16,6 +16,8 @@ import { StateScreen } from '../../components/ds/StateScreen'
 import FadeInUp from '../../components/motion/FadeInUp'
 import { Banner } from '../../components/ds/Banner'
 import { MeBadges } from '../../components/profile/MeBadges'
+import { MePlusRow } from '../../components/profile/MePlusRow'
+import { aboutYouFrom } from '../../lib/aboutYou'
 import { MeIdentity, MeSkeleton, StatsCard } from '../../components/profile/MeSections'
 import { NightsOut } from '../../components/profile/NightsOut'
 import { OfflineStrip, useOffline } from '../../components/profile/OfflineStrip'
@@ -112,6 +114,8 @@ function ProfileInner() {
   // What `GET /profiles/:you` adds (blendn-admin #716): your badges (null: none sent) and the photos moderation took down. Empty until it loads.
   const [badges, setBadges] = useState<Badge[] | null>(null)
   const [pulled, setPulled] = useState<PulledPhoto[]>([])
+  // The "Shows up" opt-in on the badges card; null until the profile says (then the card draws no switch).
+  const [showsUp, setShowsUp] = useState<boolean | null>(null)
   const lastBackgroundRefreshRef = React.useRef(0)
   // Tapping Me while already on it goes back to the top (the bar emits `tabPress`).
   const scrollRef = React.useRef<Animated.ScrollView>(null)
@@ -266,11 +270,28 @@ function ProfileInner() {
       const result = await apiClient.getProfile(user.id)
       const own = result.success ? result.data?.profile : undefined
       setBadges(parseBadges(own?.badges))
+      // Only a server that sends the field has the switch to show: an older one sends none, and the row is not drawn.
+      const sent = (own as Record<string, unknown> | undefined)?.shows_up_badge
+      setShowsUp(typeof sent === 'boolean' ? aboutYouFrom(own as Record<string, unknown>).showsUpBadge : null)
       setPulled(await unseenPulled(user.id, pulledPhotos(own?.photo_states)))
     } catch (error) {
       Logger.debug('profile', 'Failed to load badges and photo states', { error })
     }
   }, [user])
+
+  /** The "Shows up" switch on the badges card: written at once; true when the server kept it. */
+  const saveShowsUp = useCallback(
+    async (next: boolean) => {
+      if (!user) return false
+      const result = await apiClient.updateProfile(user.id, { shows_up_badge: next })
+      if (!result.success) return false
+      setShowsUp(next)
+      // The profile read for this screen is cached: a changed switch must not read back as the old one.
+      queryCache.invalidate(`profile_${user.id}`)
+      return true
+    },
+    [user]
+  )
 
   /*
    * On FOCUS, not on mount. A tab stays mounted, so a mount-only effect ran
@@ -390,13 +411,6 @@ function ProfileInner() {
           />
         </FadeInUp>
 
-        {/* Right under who you are (Flow 14 · 14.5); no card at all when the server sent none. */}
-        {badges !== null ? (
-          <FadeInUp {...next()}>
-            <MeBadges badges={badges} />
-          </FadeInUp>
-        ) : null}
-
         {/*
           Somebody is waiting on an answer: about another person, and the only thing here with a clock on it. Then your crews: made
           from your friends, so beside the way to add them; the dot is an invite waiting.
@@ -470,6 +484,16 @@ function ProfileInner() {
               onGoing={openGoing}
               onFriends={openFriends}
             />
+          </FadeInUp>
+        ) : null}
+
+        {/* Where you stand with Blend'n+, then your badges, above Nights out (Flow 14 R4.1 · Me 01 to 03). No badges card at all when the server sent none. */}
+        <FadeInUp {...next()}>
+          <MePlusRow />
+        </FadeInUp>
+        {badges !== null ? (
+          <FadeInUp {...next()}>
+            <MeBadges badges={badges} showsUp={showsUp === null ? undefined : { value: showsUp, onChange: saveShowsUp }} />
           </FadeInUp>
         ) : null}
 
