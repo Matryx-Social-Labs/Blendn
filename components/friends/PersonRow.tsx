@@ -4,7 +4,7 @@ import { StyleSheet, Text, View } from 'react-native'
 import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import type { FriendPerson } from '../../lib/friends'
 import { Avatar } from '../ds/Avatar'
-import { CONTROL_FONT_CAP, font, useBoldText } from '../ds/shared'
+import { CONTROL_FONT_CAP, font, useBoldText, useIncreaseContrast } from '../ds/shared'
 import ScalePress from '../motion/ScalePress'
 import { OptimizedImage } from '../OptimizedImage'
 import { SkeletonCircle, SkeletonLine } from '../Skeleton'
@@ -43,6 +43,7 @@ export function PersonRow({
   chevron?: boolean
 }) {
   const bold = useBoldText()
+  const contrast = useIncreaseContrast()
   const line = [detail, detailMono, detailTail].filter(Boolean).join('')
   const body = (
     <>
@@ -60,7 +61,12 @@ export function PersonRow({
         ) : null}
       </View>
       {trailing ? <View style={styles.trailing}>{trailing}</View> : null}
-      {chevron ? <Icon name="chevron-right" size={ICON.control} color={COLOR.textTertiary} /> : null}
+      {/* SettingsRow's chevron on SettingsRow's right edge, so the Friend requests card above and these rows share one (r7 M9). */}
+      {chevron ? (
+        <View style={styles.chevron}>
+          <Icon name="chevron-right" size={ICON.inline} color={contrast ? COLOR.textPrimary : COLOR.textTertiary} />
+        </View>
+      ) : null}
     </>
   )
 
@@ -118,6 +124,7 @@ const styles = StyleSheet.create({
   skeletonText: { flex: 1, gap: SPACE.sm },
   row: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, minHeight: ROW },
   avatar: { width: AVATAR, height: AVATAR, borderRadius: RADIUS.capsule },
+  chevron: { marginRight: SPACE.lg },
   text: { flex: 1, minWidth: 0 },
   // Centred on the row: a small button inside hugs its label, and without this it would sit at the row's top.
   trailing: { alignSelf: 'center' },
