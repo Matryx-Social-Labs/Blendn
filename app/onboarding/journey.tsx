@@ -13,7 +13,7 @@ import { apiClient, type WorkFieldsResponse } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import { DEFAULT_MAX_EXPERTISE, keepExpertise, toggleExpertise } from '../../lib/onboarding'
 import { useOnboarding } from '../../lib/useOnboarding'
-import { PROFILE_LIMITS } from '../../lib/profileLimits'
+import { counterLimit, limitErrors, PROFILE_LIMITS, serverLength } from '../../lib/profileLimits'
 
 /**
  * Step five — where you are, what you do, where you studied.
@@ -110,6 +110,9 @@ export default function JourneyScreen() {
       setExpertiseTouched(true)
     }
   }
+  // Never cut for the person: a paste past the server's cap stays on screen, says by how much, and Continue waits.
+  const overCap = limitErrors({ name: '', phone: '', bio: '', location, occupation, education })
+  const overCapped = Object.keys(overCap).length > 0
   const specialisms = workField ? (expertiseByField?.[workField] ?? []) : []
   const fieldLabel = fields.find((field) => field.slug === workField)?.label
 
@@ -121,7 +124,10 @@ export default function JourneyScreen() {
       subtitle="Where you live, what you do and where you studied. All optional."
       ctaLabel="Continue"
       ctaBusy={saving}
-      onContinue={() => void commit(patch)}
+      ctaDisabled={overCapped}
+      onContinue={() => {
+        if (!overCapped) void commit(patch)
+      }}
       // "Skip", because that is what `skip()` does: it advances and persists the
       // draft as it stands — nothing typed on this screen goes with it. The
       // frame's "Save as Draft" promised the one thing this button cannot do
@@ -145,7 +151,10 @@ export default function JourneyScreen() {
               label="City"
               placeholder="Search city"
               value={location}
-              onChangeText={(value) => setLocation(value.slice(0, PROFILE_LIMITS.location))}
+              onChangeText={setLocation}
+              error={overCap.location}
+              limit={counterLimit(location, PROFILE_LIMITS.location)}
+              measure={serverLength}
               autoCapitalize="words"
               testID="onboarding-city"
               {...reveal}
@@ -157,7 +166,10 @@ export default function JourneyScreen() {
               label="Job title"
               placeholder="e.g. Product designer"
               value={occupation}
-              onChangeText={(value) => setOccupation(value.slice(0, PROFILE_LIMITS.occupation))}
+              onChangeText={setOccupation}
+              error={overCap.occupation}
+              limit={counterLimit(occupation, PROFILE_LIMITS.occupation)}
+              measure={serverLength}
               autoCapitalize="sentences"
               testID="onboarding-job"
               {...reveal}
@@ -208,7 +220,10 @@ export default function JourneyScreen() {
               label="School / University"
               placeholder="Where you studied"
               value={education}
-              onChangeText={(value) => setEducation(value.slice(0, PROFILE_LIMITS.education))}
+              onChangeText={setEducation}
+              error={overCap.education}
+              limit={counterLimit(education, PROFILE_LIMITS.education)}
+              measure={serverLength}
               autoCapitalize="words"
               testID="onboarding-school"
               {...reveal}

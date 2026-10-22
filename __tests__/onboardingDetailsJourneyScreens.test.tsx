@@ -106,6 +106,26 @@ describe('journey', () => {
     },
   }
 
+  it.each([
+    ['onboarding-city-input', 200, 'location'],
+    ['onboarding-job-input', 100, 'occupation'],
+    ['onboarding-school-input', 100, 'education'],
+  ])('%s past %i is not cut: it stays, says by how much, and Continue waits (SCRUM-745)', async (testID, cap) => {
+    mockWorkFields.mockResolvedValue(fields)
+    await render(<JourneyScreen />)
+    const long = 'x'.repeat(cap + 7)
+    await fireEvent.changeText(screen.getByTestId(testID), long)
+    expect(screen.getByTestId(testID).props.value).toBe(long)
+    expect(screen.getByText(`Keep it under ${cap} characters · ${cap + 7} now.`)).toBeTruthy()
+    expect(primary().props.accessibilityState).toMatchObject({ disabled: true })
+    await fireEvent.press(primary())
+    expect(mockCommit).not.toHaveBeenCalled()
+    await fireEvent.changeText(screen.getByTestId(testID), 'x'.repeat(cap))
+    expect(screen.queryByText(/Keep it under/)).toBeNull()
+    expect(primary().props.accessibilityState).toMatchObject({ disabled: false })
+    expect(screen.getByText(`${cap}/${cap}`, { includeHiddenElements: true })).toBeTruthy()
+  })
+
   it('the field list shows a spinner and a line while it loads', async () => {
     mockWorkFields.mockReturnValue(new Promise(() => {}))
     await render(<JourneyScreen />)

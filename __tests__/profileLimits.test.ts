@@ -37,11 +37,11 @@ describe('nothing in Edit profile or onboarding cuts what a person typed', () =>
     expect(src).not.toMatch(/const (NAME|FIELD|BIO|PHONE)_LIMIT = /)
   })
 
-  it('the onboarding steps take their caps from the same constant', () => {
-    expect(read('app/onboarding/basics.tsx')).toMatch(/NAME_MAX = PROFILE_LIMITS\.name/)
-    const journey = read('app/onboarding/journey.tsx')
-    expect(journey).toMatch(/PROFILE_LIMITS\.location/)
-    expect(journey).toMatch(/PROFILE_LIMITS\.occupation/)
-    expect(journey).toMatch(/PROFILE_LIMITS\.education/)
+  it('the onboarding steps slice nothing and take their caps from the same constant', () => {
+    for (const file of ['app/onboarding/basics.tsx', 'app/onboarding/journey.tsx']) {
+      const src = read(file)
+      expect(src).not.toMatch(/value\.slice\(0, /)
+      expect(src).toMatch(/PROFILE_LIMITS\./)
+    }
   })
 })
