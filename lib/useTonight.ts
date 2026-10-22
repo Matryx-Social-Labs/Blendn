@@ -9,6 +9,7 @@ import { liveWindow } from './eventSession'
 import { getDistanceKm } from './geo'
 import { Logger } from './logger'
 import { pickTonight } from './roomMoments'
+import { FIX_MAX_AGE_MS, FIX_REQUIRED_ACCURACY_M, fixOf, type PreciseFix } from './roomButton'
 import { getRoomSignal, publishRoomSignal, subscribeRoomSignal } from './roomSignal'
 import { useLiveSync } from './useLiveSync'
 
@@ -70,11 +71,7 @@ const PREVIEW_TOP = 3
 /** The Pulse's page size, so the query — and so the cache entry — is the same. */
 const PULSE_PAGE = 20
 
-/** The last known fix is used only if it is this fresh and this good (metres): older or coarser is no position to judge a fence by. */
-const FIX_MAX_AGE_MS = 120_000
-const FIX_REQUIRED_ACCURACY_M = 100
-
-type QuietCoords = { latitude: number; longitude: number; accuracy: number | null; approximate: boolean }
+type QuietCoords = PreciseFix & { approximate: boolean }
 
 /** A fix only if the person already said yes. Never prompts. */
 async function quietLocation(): Promise<{ coords: QuietCoords | null; location: TonightLocation }> {
@@ -85,7 +82,7 @@ async function quietLocation(): Promise<{ coords: QuietCoords | null; location: 
     const last = await Location.getLastKnownPositionAsync({ maxAge: FIX_MAX_AGE_MS, requiredAccuracy: FIX_REQUIRED_ACCURACY_M })
     return {
       coords: last?.coords
-        ? { latitude: last.coords.latitude, longitude: last.coords.longitude, accuracy: last.coords.accuracy ?? null, approximate: location === 'approximate' }
+        ? { ...fixOf(last), approximate: location === 'approximate' }
         : null,
       location,
     }
