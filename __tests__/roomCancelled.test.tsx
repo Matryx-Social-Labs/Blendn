@@ -13,8 +13,15 @@ import { useRoomCancelled } from '../lib/useRoomCancelled'
 
 type Ended = (d: { eventId: string; reason: string }) => void
 let push: Ended = () => {}
+let pushCancelled: (d: { eventId: string }) => void = () => {}
+const mockSubscribedTo = jest.fn()
 const mockChanged = jest.fn()
 jest.mock('../lib/socketClient', () => ({
+  subscribeToEventCancelled: (id: string, cb: typeof pushCancelled) => {
+    mockSubscribedTo(id)
+    pushCancelled = cb
+    return () => {}
+  },
   subscribeToLiveEnded: (cb: Ended) => {
     push = cb
     return () => {}
@@ -25,6 +32,29 @@ jest.mock('react-native-safe-area-context', () => jest.requireActual('react-nati
 
 const EVENT = { id: 'e1', title: 'Vinyl Night' }
 beforeEach(() => mockChanged.mockClear())
+
+describe('useRoomCancelled · event:cancelled', () => {
+  beforeEach(() => mockSubscribedTo.mockClear())
+
+  it('listens in the room you are inside, and the socket event makes the card', async () => {
+    const { result } = await renderHook(() => useRoomCancelled(EVENT))
+    expect(mockSubscribedTo).toHaveBeenCalledWith('e1')
+    await act(async () => pushCancelled({ eventId: 'e1' }))
+    expect(result.current.cancelled).toEqual({ title: 'Vinyl Night' })
+    expect(mockChanged).toHaveBeenCalledWith('e1')
+  })
+
+  it('another event’s cancellation is not this room’s', async () => {
+    const { result } = await renderHook(() => useRoomCancelled(EVENT))
+    await act(async () => pushCancelled({ eventId: 'other' }))
+    expect(result.current.cancelled).toBeNull()
+  })
+
+  it('listens to nothing outside a room', async () => {
+    await renderHook(() => useRoomCancelled(null))
+    expect(mockSubscribedTo).not.toHaveBeenCalled()
+  })
+})
 
 describe('useRoomCancelled', () => {
   it('is nothing until the server says cancelled for this event', async () => {

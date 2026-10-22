@@ -80,6 +80,7 @@ type EventBadge = (typeof EVENT_BADGES)[number]
 const EVENT_BADGE: Partial<Record<NotificationKind, EventBadge>> = {
   event_update: 'clock',
   event_changed: 'clock',
+  event_cancelled: 'clock',
   announcement: 'megaphone',
   waitlist_promoted: 'star',
   rating_request: 'star',
@@ -170,7 +171,7 @@ function fallbackVisual(item: NotificationItem): NotificationVisualSpec {
       type: 'event',
       cover: null,
       badge: changed && reason === 'venue' ? 'map-pin' : badge,
-      cancelled: changed && reason === 'cancelled',
+      cancelled: item.kind === 'event_cancelled' || (changed && reason === 'cancelled'),
     }
   }
   return { type: 'glyph', icon: GLYPH[item.kind] ?? 'bell' }
@@ -180,6 +181,7 @@ function fallbackCopy(item: NotificationItem, when: string): { title: string; co
   switch (item.kind) {
     case 'event_update':
     case 'event_changed':
+    case 'event_cancelled':
       return { title: item.body || item.title, context: joinLine(item.title, when) }
     case 'announcement':
       return { title: item.body ? `From the organiser: ${item.body}` : item.title, context: joinLine(eventName(item.title), when) }

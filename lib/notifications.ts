@@ -380,6 +380,7 @@ export function notificationTarget(data: Record<string, any> | undefined): Href 
     case 'event_checkin':
     case 'event_update':
     case 'event_changed':
+    case 'event_cancelled':
     case 'event_reminder':
     case 'event':
     case 'waitlist_promoted': {

@@ -45,6 +45,7 @@ jest.mock('../lib/socketClient', () => ({
   connect: jest.fn(),
   subscribeToChatMessage: () => () => {},
   subscribeToLiveEnded: () => () => {},
+  subscribeToEventCancelled: () => () => {},
   subscribeToRoomFriends: () => () => {},
   subscribeConnectionStatus: () => () => {},
   subscribeToRoomWave: (fn: (d: unknown) => void) => {
