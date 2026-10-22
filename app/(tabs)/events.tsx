@@ -43,6 +43,7 @@ import { useToast } from '../../components/Toast'
 import { Skeleton } from '../../components/Skeleton'
 import { VirtualizedList } from '../../components/VirtualizedList'
 import { rateLimitWaitOf } from '../../lib/rateLimited'
+import { RateLimitedBanner } from '../../components/system/RateLimitedBanner'
 import { getEvents as fetchEventsApi, type BlendnEvent } from '../../lib/api'
 import {
   activeFilterCount,
@@ -384,7 +385,17 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   const [bannersHeight, setBannersHeight] = useState(0)
   const [netError, setNetError] = useState<string | null>(null)
   /** Seconds the server asked us to wait, when it refused a read for asking too fast (Flow 15 #15). */
-  const [rateLimit, setRateLimit] = useState<number | null>(null)
+  const [rateLimit, setRateLimit] = useState<{ seconds: number; onMore: boolean } | null>(null)
+  /**
+   * When the server's wait is over (ms), kept apart from the banner's count: the sync timers, a pull and a scroll to the end all
+   * read this list, and none of them may ask again before it, whatever they are. Only the banner's end reads again.
+   */
+  const rateLimitUntilRef = useRef(0)
+  const withinWait = useCallback(() => Date.now() < rateLimitUntilRef.current, [])
+  const refuse = useCallback((seconds: number, onMore: boolean) => {
+    rateLimitUntilRef.current = Date.now() + seconds * 1000
+    setRateLimit({ seconds, onMore })
+  }, [])
   /**
    * The list at its top, so the first card is on screen when the coach mark
    * starts. Once it is up it rides with the card, so it stops listening.
@@ -823,6 +834,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
    */
   const feedGenerationRef = useRef(0)
   const fetchEvents = useCallback(async (options?: { silent?: boolean; force?: boolean }) => {
+    if (withinWait()) return
     try {
       const isInitial = !initialLoadedRef.current
       const shouldShowLoading = isInitial || !options?.silent
@@ -861,7 +873,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
         // Asked too fast: the banner says the wait and reads again, and the page is not "couldn't load" (Flow 15 #15).
         const wait = rateLimitWaitOf(error)
         if (wait !== null) {
-          setRateLimit(wait)
+          refuse(wait, false)
           return
         }
         setNetError("Couldn’t load events.")
@@ -901,7 +913,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
         setLoading(false)
       }
     }
-  }, [userLocation, selectedCity, searchTerm, filters])
+  }, [userLocation, selectedCity, searchTerm, filters, withinWait, refuse])
 
   /** The filter sheet's "Show n events": the server's own count for the draft, in the scope of the list (city, search). */
   const countEventsFor = useCallback(
@@ -1261,7 +1273,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   const fetchMore = useCallback(async () => {
     // `onEndReached` fires more than once per arrival at the end; one request
     // at a time, and none once a short page has said there is nothing more.
-    if (loading || !hasMore || fetchMoreInFlightRef.current) return
+    if (loading || !hasMore || fetchMoreInFlightRef.current || withinWait()) return
     fetchMoreInFlightRef.current = true
     const generation = feedGenerationRef.current
     try {
@@ -1287,9 +1299,10 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       // The list was replaced while this was in flight; this page is not its.
       if (generation !== feedGenerationRef.current) return
       if (error) {
-        // A refused page says so and waits; no other failure here is loud (the next scroll asks again).
+        // A refused page says so near the bottom, where the reader is, and waits; the page is kept (it was not counted), so the
+        // end of the wait asks for this very page. No other failure here is loud (the next scroll asks again).
         const wait = rateLimitWaitOf(error)
-        if (wait !== null) setRateLimit(wait)
+        if (wait !== null) refuse(wait, true)
         return
       }
       const received = data ?? []
@@ -1310,7 +1323,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     } finally {
       fetchMoreInFlightRef.current = false
     }
-  }, [loading, hasMore, page, userLocation, selectedCity, searchTerm, filters])
+  }, [loading, hasMore, page, userLocation, selectedCity, searchTerm, filters, withinWait, refuse])
 
   // Cleared once the first content has committed; see `RevealRow` and `SectionReveal`.
   const mainRowsRevealPending = useRef(true)
@@ -1564,6 +1577,14 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     if (!showLoadingSkeleton && (rows.length > 0 || sections.length > 0)) mainRowsRevealPending.current = false
   }, [showLoadingSkeleton, rows.length, sections.length])
 
+  // The wait is over: the one place a refused read is asked again, for the page it was refused on.
+  const rateLimitDone = () => {
+    const onMore = rateLimit?.onMore === true
+    rateLimitUntilRef.current = 0
+    setRateLimit(null)
+    void (onMore ? fetchMore() : fetchEvents({ force: true }))
+  }
+
   // The banners ride in the feed's header, so they clear the bar with everything else and there is one scroll surface.
   const banners = (
     <PulseBanners
@@ -1576,12 +1597,8 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       onOpenSettings={() => void Linking.openSettings().catch(() => {})}
       // Only over a list that is still on screen: with nothing loaded the whole page is the error (`PulseLoadFailed`).
       refreshFailed={!!netError && events.length > 0}
-      rateLimit={rateLimit}
-      onRateLimitDone={() => {
-        // The wait is over: read again rather than leave the list as it was.
-        setRateLimit(null)
-        void fetchEvents({ force: true })
-      }}
+      rateLimit={rateLimit && !rateLimit.onMore ? rateLimit.seconds : null}
+      onRateLimitDone={rateLimitDone}
       onRetry={() => fetchEvents({ force: true })}
       onLayout={setBannersHeight}
     />
@@ -1768,6 +1785,14 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
           ListHeaderComponent={
             <View>{banners}</View>
           }
+          // A page refused for asking too fast says so where the reader is, at the foot, and is asked again when it is over.
+          ListFooterComponent={
+            rateLimit?.onMore ? (
+              <View style={styles.rateLimitFoot}>
+                <RateLimitedBanner seconds={rateLimit.seconds} onDone={rateLimitDone} testID="pulse-more-rate-limited" />
+              </View>
+            ) : null
+          }
         />
       </PulseSlots.Provider>
       {pull.native ? null : <PullIndicator progress={pull.progress} />}
@@ -1816,6 +1841,7 @@ const styles = StyleSheet.create({
    * One surface with the title-tabs band above it: the drawer's own (glass at half, its ink wash at full), no panel, no border, no
    * gradient. An ink of its own here drew a hard edge under the glass band.
    */
+  rateLimitFoot: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.md },
   container: { flex: 1 },
   /**
    * No horizontal padding of its own: every row carries its gutter (the rails and the Set list bleed to the edge), so a

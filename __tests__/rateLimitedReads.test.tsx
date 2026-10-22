@@ -63,10 +63,38 @@ describe('the Pulse', () => {
   it('the screen reads again when the wait is over, and shows neither the failed page nor the empty one meanwhile', () => {
     const events = src('app/(tabs)/events.tsx')
     expect(events).toMatch(/rateLimitWaitOf\(error\)/)
-    expect(events).toContain('rateLimit={rateLimit}')
+    expect(events).toContain('rateLimit={rateLimit && !rateLimit.onMore ? rateLimit.seconds : null}')
     expect(events).toMatch(/events\.length === 0 && !!netError && rateLimit === null/)
     expect(events).toMatch(/events\.length === 0 && !netError && rateLimit === null/)
-    expect(events).toMatch(/onRateLimitDone=\{\(\) => \{\s*[^}]*fetchEvents\(\{ force: true \}\)/)
+    expect(events).toContain('onRateLimitDone={rateLimitDone}')
+  })
+})
+
+describe('the Pulse waits out the server\'s wait, whoever asks (M4, M5)', () => {
+  const events = src('app/(tabs)/events.tsx')
+  const body = (name: string) => events.slice(events.indexOf(name), events.indexOf(name) + 900)
+
+  it('the first page, the sync timers, a pull and a scroll to the end all return early inside the wait', () => {
+    expect(events).toContain('const rateLimitUntilRef = useRef(0)')
+    expect(body('const fetchEvents = useCallback(async')).toMatch(/if \(withinWait\(\)\) return/)
+    expect(body('const fetchMore = useCallback(async')).toMatch(/withinWait\(\)\) return/)
+  })
+
+  it('a refusal sets the wait from the server\'s seconds, and only the banner\'s end clears it and reads again', () => {
+    expect(events).toContain('rateLimitUntilRef.current = Date.now() + seconds * 1000')
+    const done = events.slice(events.indexOf('const rateLimitDone = () =>'), events.indexOf('const rateLimitDone = () =>') + 400)
+    expect(done).toContain('rateLimitUntilRef.current = 0')
+    expect(done).toMatch(/onMore \? fetchMore\(\) : fetchEvents\(\{ force: true \}\)/)
+    expect(events.match(/rateLimitUntilRef\.current = 0/g)).toHaveLength(1)
+  })
+
+  it('a refused later page is recorded as one, shown at the foot and not the head, and asks for that page again', () => {
+    expect(events).toContain('refuse(wait, true)')
+    expect(events).toContain('rateLimit?.onMore ? (')
+    expect(events).toContain('testID="pulse-more-rate-limited"')
+    // The page is not counted when it is refused, so the retry asks for the same one.
+    const more = body('const fetchMore = useCallback(async')
+    expect(more.indexOf('refuse(wait, true)')).toBeLessThan(events.indexOf('setPage(prev => prev + 1)'))
   })
 })
 

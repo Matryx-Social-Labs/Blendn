@@ -27,7 +27,6 @@ import {
   emptyPaged,
   pagedRows,
   rereadPaged,
-  withFirstPage,
   withNextPage,
   withoutRow,
   withRowAt,
@@ -178,25 +177,24 @@ function GoingScreenInner() {
     latest.current = { saved: savedPaged, going: goingPaged, past: pastPaged }
   }, [savedPaged, goingPaged, pastPaged])
   const lockedRef = useRef<number | null>(null)
-  const readers = useMemo(() => {
-    const uid = authUser?.id ?? ''
-    return {
-      saved: async (ask: PageAsk): Promise<PageRead<EventRow, ApiResult>> => {
-        const res = await apiClient.getUserFavorites(uid, ask.page, SAVED_PAGE, ask.cursor)
-        return res.success && res.data ? { ok: true, rows: savedEventRows(res.data), meta: pageMeta(res.data.pagination) } : { ok: false, failure: res }
-      },
-      going: async (ask: PageAsk): Promise<PageRead<RsvpEventRow, ApiResult>> => {
-        const res = await apiClient.getMyRsvps(ask.page, ask.cursor)
-        return res.success && res.data ? { ok: true, rows: rsvpEventRows(res.data), meta: pageMeta(res.data.pagination) } : { ok: false, failure: res }
-      },
-      past: async (ask: PageAsk): Promise<PageRead<AttendancePayload['events'][number], ApiResult>> => {
-        const res = await apiClient.getMyAttendance(PAST_PAGE, ask.page, ask.cursor)
-        if (!res.success || !res.data) return { ok: false, failure: res }
-        if (ask.page === 1) lockedRef.current = res.data.lockedCount ?? 0
-        return { ok: true, rows: res.data.events ?? [], meta: pageMeta(res.data.pagination) }
-      },
-    }
-  }, [authUser?.id])
+  const uid = authUser?.id ?? ''
+  const readSaved = useCallback(
+    async (ask: PageAsk): Promise<PageRead<EventRow, ApiResult>> => {
+      const res = await apiClient.getUserFavorites(uid, ask.page, SAVED_PAGE, ask.cursor)
+      return res.success && res.data ? { ok: true, rows: savedEventRows(res.data), meta: pageMeta(res.data.pagination) } : { ok: false, failure: res }
+    },
+    [uid]
+  )
+  const readGoing = useCallback(async (ask: PageAsk): Promise<PageRead<RsvpEventRow, ApiResult>> => {
+    const res = await apiClient.getMyRsvps(ask.page, ask.cursor)
+    return res.success && res.data ? { ok: true, rows: rsvpEventRows(res.data), meta: pageMeta(res.data.pagination) } : { ok: false, failure: res }
+  }, [])
+  const readPast = useCallback(async (ask: PageAsk): Promise<PageRead<AttendancePayload['events'][number], ApiResult>> => {
+    const res = await apiClient.getMyAttendance(PAST_PAGE, ask.page, ask.cursor)
+    if (!res.success || !res.data) return { ok: false, failure: res }
+    if (ask.page === 1) lockedRef.current = res.data.lockedCount ?? 0
+    return { ok: true, rows: res.data.events ?? [], meta: pageMeta(res.data.pagination) }
+  }, [])
 
   const loadInterestedEvents = useCallback(async (): Promise<void> => {
     // No `setLoading(true)` here: `loading` starts true for the first load, and
@@ -223,9 +221,9 @@ function GoingScreenInner() {
       const id = ++loadId.current
       lockedRef.current = null
       const [saved, rsvps, past] = await Promise.all([
-        rereadPaged(latest.current.saved, SAVED_PAGE, readers.saved, (rows) => withPendingSaves(rows, pendingSaves.current, id)),
-        rereadPaged(latest.current.going, GOING_PAGE, readers.going),
-        rereadPaged(latest.current.past, PAST_PAGE, readers.past),
+        rereadPaged(latest.current.saved, SAVED_PAGE, readSaved, (rows) => withPendingSaves(rows, pendingSaves.current, id)),
+        rereadPaged(latest.current.going, GOING_PAGE, readGoing),
+        rereadPaged(latest.current.past, PAST_PAGE, readPast),
       ])
       if (id !== loadId.current) return
 
@@ -265,7 +263,7 @@ function GoingScreenInner() {
     } finally {
       setLoading(false)
     }
-  }, [authUser, say, readRatings, readers])
+  }, [authUser, say, readRatings, readSaved, readGoing, readPast])
 
   /*
    * The next page of one list, when the reader asks (the row at a section's end) or reaches the end of Past. One read per
@@ -282,15 +280,15 @@ function GoingScreenInner() {
       const askAfter = (held: { pages: number; nextCursor?: string | null }): PageAsk => ({ page: held.pages + 1, cursor: held.nextCursor ?? null })
       try {
         if (section === 'saved') {
-          const r = await readers.saved(askAfter(latest.current.saved))
+          const r = await readSaved(askAfter(latest.current.saved))
           if (!r.ok) throw new Error(r.failure.error || 'saved page refused')
           setSavedPaged((p) => withNextPage(p, r.rows, r.meta))
         } else if (section === 'going') {
-          const r = await readers.going(askAfter(latest.current.going))
+          const r = await readGoing(askAfter(latest.current.going))
           if (!r.ok) throw new Error(r.failure.error || 'going page refused')
           setGoingPaged((p) => withNextPage(p, r.rows, r.meta))
         } else {
-          const r = await readers.past(askAfter(latest.current.past))
+          const r = await readPast(askAfter(latest.current.past))
           if (!r.ok) throw new Error(r.failure.error || 'past page refused')
           setPastPaged((p) => withNextPage(p, r.rows, r.meta))
           readRatings(r.rows)
@@ -303,7 +301,7 @@ function GoingScreenInner() {
         moreInFlight.current[section] = false
       }
     },
-    [authUser, readers, readRatings]
+    [authUser, readSaved, readGoing, readPast, readRatings]
   )
   useEffect(() => {
     reloadRef.current = () => void loadInterestedEvents()

@@ -129,9 +129,9 @@ describe('the Going tab after a partial failure', () => {
 
   it('keeps each section’s last good rows and toasts with a Try again', () => {
     // A section only updates when its own request succeeds.
-    expect(GOING).toMatch(/if \(saved\.success && saved\.data\) \{[^}]*setSavedPaged\(\(p\) => withFirstPage/)
-    expect(GOING).toMatch(/if \(rsvps\.success && rsvps\.data\) \{[^}]*setGoingPaged\(\(p\) => withFirstPage/)
-    expect(GOING).toMatch(/if \(past\.success && past\.data\) \{[^}]*setPastPaged\(\(p\) => withFirstPage/)
+    expect(GOING).toContain('if (saved.ok) setSavedPaged(saved.paged)')
+    expect(GOING).toContain('if (rsvps.ok) setGoingPaged(rsvps.paged)')
+    expect(GOING).toMatch(/if \(past\.ok\) \{\s*setPastPaged\(past\.paged\)/)
     expect(GOING).toMatch(/newFailure\(failedRef\.current, failed\)/)
     expect(GOING).toMatch(/say\("Couldn’t load all of your events\.", 'error', \{ label: 'Try again'/)
   })
