@@ -120,7 +120,6 @@ export function upcomingRows(upcoming: VenueDetail['venue']['upcoming']) {
       id: e.id,
       title: e.title,
       day: dayLabel(e.startTime),
-      going: e.goingCount && e.goingCount > 0 ? `${e.goingCount} going` : null,
     }))
 }
 

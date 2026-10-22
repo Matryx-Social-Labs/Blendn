@@ -283,7 +283,7 @@ describe('the bar under the status bar', () => {
 
 describe('Coming up here', () => {
   it('sets the date on one line, as wide as it needs and no narrower than the column', async () => {
-    await mount(venue({ venue: { upcoming: [{ id: 'u1', title: 'Night 1', startTime: min(60 * 24), goingCount: 3 }] } }))
+    await mount(venue({ venue: { upcoming: [{ id: 'u1', title: 'Night 1', startTime: min(60 * 24) }] } }))
     const row = screen.getByTestId('venue-upcoming-u1')
     const day = within(row).getAllByText(/\d/)[0]
     expect(day.props.numberOfLines).toBe(1)

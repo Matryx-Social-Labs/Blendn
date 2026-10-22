@@ -888,11 +888,8 @@ export interface VenueDetail {
     description?: string | null
     /** Good to know: the names of what the owner ticked (the server sends `string[]`, no ids). */
     amenities?: string[] | null
-    /**
-     * Upcoming events here, soonest first (the page shows three). `goingCount` is not sent by the server today
-     * (SCRUM-743): a row says "N going" only if a later server adds it.
-     */
-    upcoming?: { id: string; title: string; slug?: string | null; coverImageUrl?: string | null; startTime: string; endTime?: string; goingCount?: number | null }[] | null
+    /** Upcoming events here, soonest first (the page shows three), as the server sends them: no going count. */
+    upcoming?: { id: string; title: string; slug?: string | null; coverImageUrl?: string | null; startTime: string; endTime?: string }[] | null
   }
   live: {
     /** Whether going live here would be accepted now, the fence aside. */

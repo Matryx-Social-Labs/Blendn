@@ -125,7 +125,7 @@ describe('good to know, coming up, the board', () => {
     expect(goodToKnow([{ id: 'a', name: 'Rooftop' }] as never)).toEqual([])
   })
 
-  it('upcoming events as the server sends them (no going count) with their day', () => {
+  it('upcoming events as the server sends them, with their day', () => {
     const row = (id: string, title: string, start: Date) => ({
       id,
       title,
@@ -142,10 +142,7 @@ describe('good to know, coming up, the board', () => {
     ])
     // All four are rows; the page shows UPCOMING_SHOWN of them and keeps the rest behind See all.
     expect(rows).toHaveLength(4)
-    expect(rows[0]).toEqual({ id: 'a', title: 'Bass Thursday', day: 'Thu 22 Oct', going: null })
-    // A later server that adds a count gets it drawn; zero is not drawn.
-    expect(upcomingRows([{ ...row('e', 'Quiz', new Date(2026, 9, 31, 20)), goingCount: 12 }])[0].going).toBe('12 going')
-    expect(upcomingRows([{ ...row('f', 'Quiz', new Date(2026, 9, 31, 20)), goingCount: 0 }])[0].going).toBeNull()
+    expect(rows[0]).toEqual({ id: 'a', title: 'Bass Thursday', day: 'Thu 22 Oct' })
     expect(upcomingRows(undefined)).toEqual([])
   })
 
