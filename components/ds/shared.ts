@@ -7,7 +7,7 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { AccessibilityInfo, Platform, type AccessibilityChangeEventName, type ViewStyle } from 'react-native'
 
-import { COLOR, DURATION, EASING, FONT_FAMILY, MATERIAL, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, MATERIAL, REDUCE_MOTION, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { tint } from '../../lib/theme'
 
 /**
@@ -150,11 +150,12 @@ export const quickTransition = (...properties: string[]): ViewStyle =>
  * and (later) RadioCard and ProgressBar light in it. The gradient stays the mark's and the one primary button's.
  */
 export type Hue = 'ember' | 'rose' | 'violet'
-export type Selection = { fill: string; edge: string; glyph: string }
+/** `flare` is the hue at 42% over `surface`: the light a lit button pours in on press and holds while busy. */
+export type Selection = { fill: string; edge: string; glyph: string; flare: string }
 export const SELECTION: Record<Hue, Selection> = {
-  ember: { fill: COLOR.selectionEmberFill, edge: COLOR.brandOrange, glyph: COLOR.selectionEmberGlyph },
-  rose: { fill: COLOR.selectionRoseFill, edge: COLOR.brandRose, glyph: COLOR.selectionRoseGlyph },
-  violet: { fill: COLOR.selectionVioletFill, edge: COLOR.brandViolet, glyph: COLOR.selectionVioletGlyph },
+  ember: { fill: COLOR.selectionEmberFill, edge: COLOR.brandOrange, glyph: COLOR.selectionEmberGlyph, flare: COLOR.selectionEmberFlare },
+  rose: { fill: COLOR.selectionRoseFill, edge: COLOR.brandRose, glyph: COLOR.selectionRoseGlyph, flare: COLOR.selectionRoseFlare },
+  violet: { fill: COLOR.selectionVioletFill, edge: COLOR.brandViolet, glyph: COLOR.selectionVioletGlyph, flare: COLOR.selectionVioletFlare },
 }
 const HueContext = createContext<Hue>('ember')
 export const HueProvider = HueContext.Provider
@@ -171,3 +172,29 @@ export const monoValue = (bold: boolean) => ({
   fontSize: 15,
   fontVariant: ['tabular-nums' as const],
 })
+
+/**
+ * The light that pours in from the leading edge and drains back (Chip's selection, Button's press flare). Each state's style
+ * carries its own `transition`, so the pour and the drain have different curves (CSS transitions, Reanimated 4: off the JS
+ * thread, retargeted from the presented value on a quick re-press, and never played on mount). Under Reduce Motion nothing
+ * translates: the opacity crosses over the Reduce Motion `quick`.
+ *
+ * Pouring in: the slide over `slideMs` on `curve`, the fade over `fadeMs`. Draining: both over `quick`, the slide on `standard`.
+ */
+const bezier = (curve: readonly number[]) => `cubic-bezier(${curve.join(', ')})`
+const asStyle = (style: object) => style as unknown as ViewStyle
+const GENTLE = bezier(EASING.gentle)
+const LIGHT_OFF_X = '-101%'
+export function pourStyles(slideMs: number, fadeMs: number, curve: readonly number[]) {
+  const reduced = `opacity ${REDUCE_MOTION.duration.quick}ms ${GENTLE}`
+  return {
+    pour: asStyle({ opacity: 1, transform: [{ translateX: '0%' }], transition: `transform ${slideMs}ms ${bezier(curve)}, opacity ${fadeMs}ms ${GENTLE}` }),
+    drain: asStyle({
+      opacity: 0,
+      transform: [{ translateX: LIGHT_OFF_X }],
+      transition: `transform ${DURATION.quick}ms ${bezier(EASING.standard)}, opacity ${DURATION.quick}ms ${GENTLE}`,
+    }),
+    pourReduced: asStyle({ opacity: 1, transition: reduced }),
+    drainReduced: asStyle({ opacity: 0, transition: reduced }),
+  }
+}

@@ -42,6 +42,18 @@ describe('SELECTION', () => {
   })
 })
 
+describe('the press flare', () => {
+  it.each(Object.entries(SELECTION))('%s: the white label reads on the flare at 8.5:1 or more, and the glyph at 3.5:1 or more', (_hue, { flare, glyph }) => {
+    expect(contrast(COLOR.textPrimary, flare)).toBeGreaterThanOrEqual(8.5)
+    expect(contrast(glyph, flare)).toBeGreaterThanOrEqual(3.5)
+  })
+
+  it.each(Object.entries(SELECTION))('%s: the rim reads against surface at 3:1 or more, and the glyph on the rest fill at 3:1', (_hue, { edge, glyph, fill }) => {
+    expect(contrast(edge, COLOR.surface)).toBeGreaterThanOrEqual(3)
+    expect(contrast(glyph, fill)).toBeGreaterThanOrEqual(3)
+  })
+})
+
 describe('the check disc (RadioCard, crew picks)', () => {
   it.each(Object.entries(SELECTION))('%s: the ink ✓ on the glyph-coloured disc is 7:1 or more', (_hue, { glyph }) => {
     expect(contrast(COLOR.selectionInk, glyph)).toBeGreaterThanOrEqual(7)

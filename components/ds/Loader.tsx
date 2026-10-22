@@ -21,13 +21,13 @@ const TRACK_ALPHA = 0.25
 
 /**
  * The spinner inside a control (the Loader page): 16 in a 36 pt pill, 18 beside
- * a switch, 20 in a 56 pt button; `dark` on a white (strong) button. It keeps
+ * a switch, 20 in a 56 pt button; `dark` on a white (strong) button, `color` on a lit one (the hue's glyph tone). It keeps
  * turning under Reduce Motion: it is state, not decoration. Hidden from screen
  * readers; the control's busy state is what they hear.
  *
  * ponytail: one turn per `DURATION.moment`; the tokens name no spin period.
  */
-export function Spinner({ size = 20, dark = false, testID }: { size?: 16 | 18 | 20; dark?: boolean; testID?: string }) {
+export function Spinner({ size = 20, dark = false, color, testID }: { size?: 16 | 18 | 20; dark?: boolean; color?: string; testID?: string }) {
   const turn = useSharedValue(0)
   useEffect(() => {
     turn.set(
@@ -36,7 +36,7 @@ export function Spinner({ size = 20, dark = false, testID }: { size?: 16 | 18 | 
     return () => cancelAnimation(turn)
   }, [turn])
   const spin = useAnimatedStyle(() => ({ transform: [{ rotate: `${turn.get() * 360}deg` }] }))
-  const ink = dark ? COLOR.ink : COLOR.textPrimary
+  const ink = color ?? (dark ? COLOR.ink : COLOR.textPrimary)
   return (
     <Animated.View
       testID={testID}

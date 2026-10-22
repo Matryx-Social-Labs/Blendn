@@ -5,12 +5,12 @@ import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-na
 import ScalePress from '../motion/ScalePress'
 import { Glyph } from '../ui/Glyph'
 import { Icon, type IconName } from '../ui/Icon'
-import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, MATERIAL, PRESS, RADIUS, REDUCE_MOTION, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, MATERIAL, PRESS, RADIUS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
 import { OPACITY, tint } from '../../lib/theme'
 import { monoCaption } from './MonoFamily'
-import { chipRest, CONTROL_FONT_CAP, focusRing, font, minTarget, PRESSED_WASH, useBoldText, useGround, useIncreaseContrast, useSelection } from './shared'
+import { chipRest, CONTROL_FONT_CAP, focusRing, font, minTarget, PRESSED_WASH, pourStyles, useBoldText, useGround, useIncreaseContrast, useSelection } from './shared'
 
 /** The off chip's edge: a 0.5 pt hairline (1 pt at 50% under Increase Contrast). */
 const HAIRLINE = 0.5
@@ -43,22 +43,11 @@ const EDGE_FADE = {
  * and never played on mount: a chip that mounts selected is already lit). Under Reduce Motion nothing translates: the fill
  * crossfades over the Reduce Motion `quick`.
  */
-const bezier = (curve: readonly number[]) => `cubic-bezier(${curve.join(', ')})`
-const asStyle = (style: object) => style as unknown as ViewStyle
-const LIGHT_OFF_X = '-101%'
-export const POUR = asStyle({
-  opacity: 1,
-  transform: [{ translateX: '0%' }],
-  transition: `transform ${DURATION.base}ms ${bezier(EASING.entrance)}, opacity ${DURATION.quick}ms ${CURVE}`,
-})
-export const DRAIN = asStyle({
-  opacity: 0,
-  transform: [{ translateX: LIGHT_OFF_X }],
-  transition: `transform ${DURATION.quick}ms ${bezier(EASING.standard)}, opacity ${DURATION.quick}ms ${CURVE}`,
-})
-const REDUCED_TRANSITION = `opacity ${REDUCE_MOTION.duration.quick}ms ${CURVE}`
-export const POUR_REDUCED = asStyle({ opacity: 1, transition: REDUCED_TRANSITION })
-export const DRAIN_REDUCED = asStyle({ opacity: 0, transition: REDUCED_TRANSITION })
+const LIGHT = pourStyles(DURATION.base, DURATION.quick, EASING.entrance)
+export const POUR = LIGHT.pour
+export const DRAIN = LIGHT.drain
+export const POUR_REDUCED = LIGHT.pourReduced
+export const DRAIN_REDUCED = LIGHT.drainReduced
 /** The + → ✓ slot: the plus fades out as the check fades in and draws itself (`Glyph`); the slot never changes width. */
 const SLOT_FADE = {
   transition: `opacity ${DURATION.quick}ms ${CURVE}`,

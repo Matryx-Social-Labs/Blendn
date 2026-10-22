@@ -10,6 +10,7 @@ import { AccessibilityInfo, Platform, StyleSheet } from 'react-native'
 import * as Reanimated from 'react-native-reanimated'
 
 import { Button } from '../components/ds/Button'
+import { HueProvider, SELECTION, type Hue } from '../components/ds/shared'
 import { COLOR, FONT_FAMILY, MATERIAL, RADIUS, SIZE, SPACE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { OPACITY } from '../lib/theme'
@@ -113,6 +114,95 @@ describe('kinds and sizes', () => {
     expect(flat('b').backgroundColor).toBe(MATERIAL.fillOnGlass)
     await draw({ kind: 'secondary', size: 'sm' })
     expect(flat('b').backgroundColor).toBe(COLOR.surfaceRaised)
+  })
+})
+
+describe('kind lit: a positive action inside a hue world', () => {
+  const HUES: Hue[] = ['ember', 'rose', 'violet']
+  const drawLit = (hue: Hue, props: Partial<React.ComponentProps<typeof Button>> = {}) =>
+    render(
+      <HueProvider value={hue}>
+        <Button label="Accept" kind="lit" size="sm" icon="user-check" onPress={jest.fn()} testID="b" {...props} />
+      </HueProvider>
+    )
+  const transform = (id: string) => JSON.stringify(flat(id).transform ?? [])
+
+  it.each(HUES)('under %s: the fill, the 1 pt rim, a white label and the glyph in the hue are its own', async (hue) => {
+    await drawLit(hue)
+    expect(flat('b').backgroundColor).toBe(SELECTION[hue].fill)
+    expect(flat('b-rim')).toMatchObject({ borderWidth: 1, borderColor: SELECTION[hue].edge })
+    expect(StyleSheet.flatten(screen.getByText('Accept').props.style).color).toBe(COLOR.textPrimary)
+    expect(JSON.stringify(screen.toJSON())).toContain(SELECTION[hue].glyph)
+  })
+
+  it('uses the flare tokens, one per hue, and the rim is the brand colour', async () => {
+    await drawLit('rose')
+    expect(flat('b-flare').backgroundColor).toBe(COLOR.selectionRoseFlare)
+    expect(flat('b-rim').borderColor).toBe(COLOR.brandRose)
+  })
+
+  it('rests with the flare drained, pours it in on press-in over press, and drains it over quick on release', async () => {
+    await drawLit('rose')
+    expect(flat('b-flare').opacity).toBe(0)
+    expect(transform('b-flare')).toContain('-101%')
+    const transition = () => String(StyleSheet.flatten(screen.getByTestId('b-flare').props.jestInlineStyle).transition)
+    await fireEvent(screen.getByTestId('b'), 'pressIn')
+    expect(flat('b-flare').opacity).toBe(1)
+    expect(transform('b-flare')).toContain('0%')
+    expect(transform('b-flare')).not.toContain('-101%')
+    expect(transition()).toBe('transform 100ms cubic-bezier(0.23, 1, 0.32, 1), opacity 100ms cubic-bezier(0.33, 1, 0.68, 1)')
+    await fireEvent(screen.getByTestId('b'), 'pressOut')
+    expect(flat('b-flare').opacity).toBe(0)
+    expect(transition()).toBe('transform 160ms cubic-bezier(0.2, 0, 0, 1), opacity 160ms cubic-bezier(0.33, 1, 0.68, 1)')
+  })
+
+  it('busy holds the flare, and the spinner is the hue’s glyph tone after the 300 ms grace', async () => {
+    jest.useFakeTimers()
+    await drawLit('violet', { loading: true })
+    expect(flat('b-flare').opacity).toBe(1)
+    expect(screen.queryByTestId('b-spinner', { includeHiddenElements: true })).toBeNull()
+    await act(async () => jest.advanceTimersByTime(300))
+    const arc = StyleSheet.flatten(screen.getByTestId('b-spinner', { includeHiddenElements: true }).props.style)
+    expect(arc.borderTopColor).toBe(COLOR.selectionVioletGlyph)
+    expect(screen.getByTestId('b').props.accessibilityState).toMatchObject({ busy: true })
+  })
+
+  it('Reduce Motion: the flare never translates, it crosses over opacity', async () => {
+    reduceMotion.mockReturnValue(true)
+    await drawLit('rose')
+    expect(transform('b-flare')).not.toContain('translateX')
+    await fireEvent(screen.getByTestId('b'), 'pressIn')
+    expect(transform('b-flare')).not.toContain('translateX')
+    expect(flat('b-flare').opacity).toBe(1)
+    expect(String(StyleSheet.flatten(screen.getByTestId('b-flare').props.jestInlineStyle).transition)).toBe('opacity 160ms cubic-bezier(0.33, 1, 0.68, 1)')
+  })
+
+  it('plays no press haptic unless a page names one', async () => {
+    await drawLit('rose')
+    await fireEvent(screen.getByTestId('b'), 'pressIn')
+    for (const spy of Object.values(haptics)) expect(spy).not.toHaveBeenCalled()
+    await drawLit('rose', { pressHaptic: H.primary })
+    await fireEvent(screen.getByTestId('b'), 'pressIn')
+    expect(haptics.primary).toHaveBeenCalledTimes(1)
+  })
+
+  it('the other kinds draw no flare and no rim', async () => {
+    await draw({ kind: 'secondary' })
+    expect(screen.queryByTestId('b-flare')).toBeNull()
+    expect(screen.queryByTestId('b-rim')).toBeNull()
+  })
+
+  it('warns once in development that lit is never lg', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    await drawLit('rose', { size: 'lg' })
+    await drawLit('rose', { size: 'lg' })
+    expect(warn.mock.calls.filter((c) => String(c[0]).includes('never size="lg"'))).toHaveLength(1)
+    warn.mockRestore()
+  })
+
+  it('a small lit button still takes the caller’s alignSelf', async () => {
+    await drawLit('rose', { style: { alignSelf: 'center' } })
+    expect(StyleSheet.flatten(screen.getByTestId('b').parent?.props.style).alignSelf).toBe('center')
   })
 })
 

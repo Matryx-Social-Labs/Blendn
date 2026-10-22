@@ -5,8 +5,9 @@ import Animated, { ReduceMotion, useAnimatedStyle, useSharedValue, withSequence,
 import ScalePress from '../motion/ScalePress'
 import { GradientFill } from '../ui/GradientFill'
 import { Icon, type IconName } from '../ui/Icon'
-import { COLOR, DURATION, FONT_FAMILY, ICON, MATERIAL, PRESS, RADIUS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, MATERIAL, PRESS, RADIUS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
+import { Logger } from '../../lib/logger'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { OPACITY } from '../../lib/theme'
 import { Spinner } from './Loader'
@@ -18,13 +19,16 @@ import {
   IC_HAIRLINE,
   minTarget,
   PRESSED_WASH,
+  pourStyles,
   quickTransition,
   SPINNER_GRACE_MS,
   useBoldText,
   useIncreaseContrast,
+  useSelection,
+  type Selection,
 } from './shared'
 
-export type ButtonKind = 'primary' | 'strong' | 'secondary' | 'tertiary' | 'destructive'
+export type ButtonKind = 'primary' | 'lit' | 'strong' | 'secondary' | 'tertiary' | 'destructive'
 export type ButtonSize = 'lg' | 'md' | 'sm' | 'raised'
 
 /**
@@ -41,15 +45,23 @@ const HEIGHT: Record<ButtonSize, number> = { lg: SIZE.primary, md: SIZE.control,
 const SHAKE_STEPS = [-1, 1, -0.75, 0.75, -0.375, 0]
 const PRESS_SPRING = { ...SPRING.press, reduceMotion: ReduceMotion.Never }
 const DISABLE_FADE = quickTransition('opacity')
+/** The lit button's flare: poured in from the leading edge over `press` on `snapOut` (down, or busy), drained over `quick`. */
+const FLARE = pourStyles(DURATION.press, DURATION.press, EASING.snapOut)
+/** The lit button's rim, as the selected chip's: 1 pt in the hue's edge. */
+const LIT_RIM = 1
+/** `lg` is the primary's 56 pt; a lit action is a row action (36) or a card / dock action (44, 48). */
+const LIT_LG_WARNING = 'Button kind="lit" is never size="lg": 56 pt is the primary’s'
+let warnedLitLg = false
 
-function fill(kind: ButtonKind, size: ButtonSize, onGlass: boolean) {
+function fill(kind: ButtonKind, size: ButtonSize, onGlass: boolean, sel: Selection) {
+  if (kind === 'lit') return sel.fill
   if (kind === 'strong') return COLOR.textPrimary
   if (kind === 'destructive') return COLOR.destructiveFill
   if (kind === 'secondary') return onGlass ? MATERIAL.fillOnGlass : size === 'sm' || size === 'raised' ? COLOR.surfaceRaised : COLOR.surface
   return 'transparent'
 }
 
-/** Kinds that play a haptic on press-in (§10.2): the screen's one primary, and the destructive button in a confirm. */
+/** Kinds that play a haptic on press-in (§10.2): the screen's one primary, and the destructive button in a confirm. `lit` is silent: a caller that wants one names it (`pressHaptic`). */
 const PRESS_HAPTIC: Partial<Record<ButtonKind, () => void>> = { primary: () => H.primary(), destructive: () => H.destructive() }
 
 /** A value once it has stopped changing for `DURATION.medium`: what a screen reader is told of a count that is still rolling. */
@@ -144,7 +156,9 @@ export type ButtonProps = {
  * The button (DESIGN-BRIEF §12, guidelines/components/Button.html).
  *
  * - `primary`: the gradient fill, white label. One per screen (§4.7).
- * - `strong`: white with an ink label, the primary on glass and in system screens.
+ * - `lit`: a positive action inside a hue world (`HueProvider`): the hue's fill, a 1 pt rim in its edge, a white 700 label, the
+ *   glyph in its light tone. Press-in pours the flare in from the leading edge, and a busy button holds it. Never `lg`.
+ * - `strong`: white with an ink label, only where there is no world (system screens) and over a photo.
  * - `secondary`: `surface`, 8% white on glass. `tertiary`: text.
  * - `destructive`: `destructiveFill`, never the text red.
  *
@@ -179,6 +193,9 @@ export function Button({
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const spinner = useGrace(loading)
+  const reduceMotion = useReducedMotion()
+  const sel = useSelection()
+  const [down, setDown] = useState(false)
   const shake = useRefusal(refused)
   const [focused, setFocused] = useState(false)
 
@@ -197,8 +214,17 @@ export function Button({
   const squareOff = (to: number) => () => {
     if (android) radius.set(withSpring(to, PRESS_SPRING))
   }
+  const lit = kind === 'lit'
+  useEffect(() => {
+    if (!lit || size !== 'lg' || warnedLitLg || !__DEV__) return
+    warnedLitLg = true
+    Logger.warn('general', LIT_LG_WARNING)
+  }, [lit, size])
+  const flareIn = down || loading || pressed
+  const flare = reduceMotion ? (flareIn ? FLARE.pourReduced : FLARE.drainReduced) : flareIn ? FLARE.pour : FLARE.drain
 
-  const ink = kind === 'strong' ? COLOR.ink : muted && kind === 'tertiary' ? COLOR.textSecondary : COLOR.textOnGradient
+  const ink = kind === 'strong' ? COLOR.ink : muted && kind === 'tertiary' ? COLOR.textSecondary : lit ? COLOR.textPrimary : COLOR.textOnGradient
+  const glyphInk = lit ? sel.glyph : ink
   const sm = size === 'sm'
   /** Small glyphs: the row action and the raised action. */
   const compact = sm || size === 'raised'
@@ -222,8 +248,14 @@ export function Button({
         hitSlop={textOnly ? { top: Math.max(slop, 0), bottom: Math.max(slop, 0), left: SPACE.lg, right: SPACE.lg } : slop > 0 ? { top: slop, bottom: slop } : undefined}
         haptic={typeof pressHaptic === 'function' ? pressHaptic : pressHaptic ? PRESS_HAPTIC[kind] : undefined}
         pressedScale={android ? 1 : PRESS.scale}
-        onPressIn={squareOff(RADIUS.pressedAndroid)}
-        onPressOut={squareOff(rest)}
+        onPressIn={() => {
+          setDown(true)
+          squareOff(RADIUS.pressedAndroid)()
+        }}
+        onPressOut={() => {
+          setDown(false)
+          squareOff(rest)()
+        }}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         android_ripple={{ color: PRESSED_WASH.android, foreground: true }}
@@ -235,7 +267,7 @@ export function Button({
         style={[
           styles.body,
           textOnly ? styles.bodyText : sm ? styles.bodySm : styles.bodyLg,
-          { height, backgroundColor: fill(kind, size, onGlass) },
+          { height, backgroundColor: fill(kind, size, onGlass, sel) },
           // Enabled ↔ disabled crosses over `quick` (a count arriving, a field becoming valid), never snaps.
           { opacity: disabled ? OPACITY.disabled : 1 },
           DISABLE_FADE,
@@ -243,9 +275,15 @@ export function Button({
         ]}
       >
         {kind === 'primary' ? <GradientFill style={StyleSheet.absoluteFill} /> : null}
+        {lit ? (
+          // The flare sits under the label, inside the pill's own corner: the clip follows the pill as Android squares it off.
+          <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.clip, shape]}>
+            <Animated.View testID={testID && `${testID}-flare`} style={[StyleSheet.absoluteFill, { backgroundColor: sel.flare }, flare]} />
+          </Animated.View>
+        ) : null}
         {pressed && android ? <View style={[StyleSheet.absoluteFill, { backgroundColor: PRESSED_WASH.android }]} /> : null}
         <View style={[styles.content, spinner && styles.hidden]}>
-          {leading ?? (icon ? <Icon name={icon} size={compact ? ICON.inline : ICON.control} color={ink} /> : null)}
+          {leading ?? (icon ? <Icon name={icon} size={compact ? ICON.inline : ICON.control} color={glyphInk} /> : null)}
           {count !== undefined ? (
             // A rolling number is a row of columns, not a run of text: the sentence is a row, a word space apart.
             <View style={styles.sentence}>
@@ -280,8 +318,15 @@ export function Button({
         </View>
         {spinner ? (
           <View style={[StyleSheet.absoluteFill, styles.center]}>
-            <Spinner testID={testID && `${testID}-spinner`} size={compact ? 16 : 20} dark={kind === 'strong'} />
+            <Spinner testID={testID && `${testID}-spinner`} size={compact ? 16 : 20} dark={kind === 'strong'} color={lit ? sel.glyph : undefined} />
           </View>
+        ) : null}
+        {lit ? (
+          <Animated.View
+            testID={testID && `${testID}-rim`}
+            pointerEvents="none"
+            style={[StyleSheet.absoluteFill, { borderWidth: LIT_RIM, borderColor: sel.edge }, shape]}
+          />
         ) : null}
         {outlined || (refused && kind !== 'tertiary') ? (
           <Animated.View
@@ -310,6 +355,7 @@ const styles = StyleSheet.create({
   content: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   sentence: { flexDirection: 'row', alignItems: 'center', columnGap: SPACE.xs },
   hidden: { opacity: 0 },
+  clip: { overflow: 'hidden' },
   center: { alignItems: 'center', justifyContent: 'center' },
   refused: { borderWidth: SPACE.xxs, borderColor: COLOR.destructive },
 })
