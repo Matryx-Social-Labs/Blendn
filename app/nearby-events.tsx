@@ -221,8 +221,8 @@ export default function NearbyEventsScreen() {
    * held (never re-sorted above the reader) and never twice. A refused page leaves its row saying so, and it is asked again by
    * that row alone, so a refusal cannot become a loop.
    */
-  const loadMore = useCallback(async () => {
-    if (!hasMore || more !== 'idle' || !userLocation) return
+  const loadMore = useCallback(async (retry = false) => {
+    if (!hasMore || !userLocation || (more !== 'idle' && !(retry && more === 'failed'))) return
     setMore('busy')
     try {
       const result = await fetchEventsApi(nearbyQuery(cityRef.current, userLocation, page + 1))
@@ -392,7 +392,7 @@ export default function NearbyEventsScreen() {
               <View style={styles.foot}><Spinner /></View>
             ) : more === 'failed' ? (
               <View style={styles.foot}>
-                <Button kind="tertiary" size="md" label="Couldn’t load more. Try again" onPress={() => { setMore('idle'); void loadMore() }} testID="nearby-more-failed" />
+                <Button kind="tertiary" size="md" label="Couldn’t load more. Try again" onPress={() => void loadMore(true)} testID="nearby-more-failed" />
               </View>
             ) : null
           }
