@@ -74,7 +74,7 @@ Appearance.setColorScheme('dark');
 SplashScreen.preventAutoHideAsync().catch(() => {});
 SplashScreen.setOptions({ fade: true, duration: 200 });
 
-const LOGO_ASSET = require('../assets/logo/monogram-gradient.png');
+const LOGO_ASSET = require('../assets/logo/monogram-gradient-centred.png');
 const PLACEHOLDER_ASSET = require('../assets/images/icon.png');
 
 function RootLayout() {
