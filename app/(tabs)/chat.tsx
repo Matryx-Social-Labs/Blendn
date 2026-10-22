@@ -1,6 +1,6 @@
 import { router, useFocusEffect, useScrollToTop } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { FlatList, Platform, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native'
+import { FlatList, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import Reanimated, { Easing, FadeInUp, FadeOut, LinearTransition, useReducedMotion } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -19,6 +19,7 @@ import {
   type RowLine,
 } from '../../components/banter/BanterParts'
 import { useLatest } from '../../lib/useLatest'
+import { usePullToRefresh } from '../../lib/usePullToRefresh'
 import { heldList, inboxTimeLabel, previewWithSender } from '../../components/banter/inbox'
 import { holdController } from '../../components/banter/hold'
 import { BanterPressGuard, type PressGuard } from '../../components/banter/pressGuard'
@@ -378,6 +379,8 @@ function ChatInner() {
 
   const headerHeight = banterHeaderHeight(insets.top, Platform.OS === 'android')
   const listTop = headerHeight + (searching ? SPACE.sm + SEARCH_FIELD + SEARCH_GAP : 0) + SPACE.lg
+  /* #18: the branded pull (monogram, H.threshold), under the header; Android keeps the platform control, offset the same. */
+  const pull = usePullToRefresh({ refreshing: inbox.refreshing, onRefresh: () => void inbox.onRefresh(), indicatorTop: listTop })
   const invites = crews.invites
   const requestsTotal = Math.max(inbox.requestsTotal ?? 0, incomingRequests.length)
   const shownRequests = requestsOpen ? incomingRequests : incomingRequests.slice(0, REQUESTS_PREVIEW)
@@ -525,7 +528,9 @@ function ChatInner() {
           setScrolling(true)
           step('dragBegin')
         }}
+        {...pull.listProps}
         onScrollEndDrag={(e) => {
+          pull.listProps.onScrollEndDrag(e)
           // A release with speed coasts: the momentum end settles it.
           if (Math.abs(e.nativeEvent.velocity?.y ?? 0) < COAST_MIN_VELOCITY) setScrolling(false)
           step('dragEnd')
@@ -599,17 +604,9 @@ function ChatInner() {
         }
         contentContainerStyle={[styles.content, { paddingTop: listTop, paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + SPACE.xl }]}
         showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={inbox.refreshing}
-            // A refresh is silent everywhere: RefreshControl reports only the start, and H.threshold is "armed".
-            onRefresh={() => void inbox.onRefresh()}
-            tintColor={COLOR.textSecondary}
-            progressViewOffset={listTop}
-          />
-        }
       />
       </BanterPressGuard.Provider>
+      {pull.indicator}
 
       <RealtimeStatusBanner status={inbox.socketStatus} style={{ ...styles.banner, top: listTop - SPACE.sm }} />
       {newAbove ? (

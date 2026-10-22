@@ -78,6 +78,7 @@ import { markDomainsDirty } from '../lib/liveSyncState'
 import { queryCache } from '../lib/queryCache'
 import { resetRoomMembership } from '../lib/roomMembership'
 import { noteBlocked } from '../lib/blockEpoch'
+import { H } from '../lib/haptics'
 import { namedList } from '../lib/namedList'
 /* eslint-enable import/first */
 
@@ -311,7 +312,7 @@ describe('the inbox reorders by gliding, and keeps still under a thumb', () => {
     const list = screen.getByTestId('banter-list')
     await act(async () => fireEvent(list, 'scrollBeginDrag'))
     expect(layoutAround(ROW)).toBeUndefined()
-    await act(async () => fireEvent(list, 'scrollEndDrag', { nativeEvent: { velocity: { y: 0 } } }))
+    await act(async () => fireEvent(list, 'scrollEndDrag', { nativeEvent: { contentOffset: { x: 0, y: 0 }, velocity: { y: 0 } } }))
     expect(layoutAround(ROW)).toBeDefined()
   })
 
@@ -319,7 +320,7 @@ describe('the inbox reorders by gliding, and keeps still under a thumb', () => {
     await open()
     const list = screen.getByTestId('banter-list')
     await act(async () => fireEvent(list, 'scrollBeginDrag'))
-    await act(async () => fireEvent(list, 'scrollEndDrag', { nativeEvent: { velocity: { y: 2 } } }))
+    await act(async () => fireEvent(list, 'scrollEndDrag', { nativeEvent: { contentOffset: { x: 0, y: 0 }, velocity: { y: 2 } } }))
     expect(layoutAround(ROW)).toBeUndefined()
     await act(async () => fireEvent(list, 'momentumScrollEnd'))
     expect(layoutAround(ROW)).toBeDefined()
@@ -506,5 +507,31 @@ describe('a Banter of thousands (SCRUM-760 b)', () => {
     await open()
     expect(screen.getByLabelText('Requests, 1')).toBeTruthy()
     expect(screen.queryByLabelText(/^Show all/)).toBeNull()
+  })
+})
+
+describe('the branded pull to refresh (#18)', () => {
+  const list = () => screen.getByTestId('banter-list')
+  const pull = async (y: number) => {
+    await act(async () => fireEvent.scroll(list(), { nativeEvent: { contentOffset: { x: 0, y }, contentSize: { height: 800, width: 400 }, layoutMeasurement: { height: 800, width: 400 } } }))
+    await act(async () => fireEvent(list(), 'scrollEndDrag', { nativeEvent: { contentOffset: { x: 0, y }, velocity: { x: 0, y: 0 } } }))
+    await flush()
+  }
+
+  it('refreshes by release past the arm point, with H.threshold once as it arms, and the stock control is gone', async () => {
+    const threshold = jest.spyOn(H, 'threshold').mockImplementation(() => {})
+    await open()
+    expect(list().props.refreshControl).toBeUndefined()
+    api.getChatGroups.mockClear()
+    await pull(-70)
+    expect(api.getChatGroups).toHaveBeenCalledWith({ force: true })
+    expect(threshold).toHaveBeenCalledTimes(1)
+  })
+
+  it('a short pull refreshes nothing', async () => {
+    await open()
+    api.getChatGroups.mockClear()
+    await pull(-20)
+    expect(api.getChatGroups).not.toHaveBeenCalled()
   })
 })
