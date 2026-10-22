@@ -512,22 +512,26 @@ function ChatInner() {
               testID="banter-no-match"
             />
           ) : inbox.listFailed ? (
-            <StateScreen
-              icon="cloud-off"
-              title="Couldn’t load your chats"
-              body="Check your connection and try again."
-              actions={[{ label: 'Try again', onPress: () => void inbox.loadChats(true, true) }]}
-              testID="banter-failed"
-            />
+            <View style={styles.stateBlock}>
+              <StateScreen
+                icon="cloud-off"
+                title="Couldn’t load your chats"
+                body="Check your connection and try again."
+                actions={[{ label: 'Try again', onPress: () => void inbox.loadChats(true, true) }]}
+                testID="banter-failed"
+              />
+            </View>
           ) : hasHeaderContent ? null : (
             // Live rooms or requests with nothing else is not an empty inbox.
-            <StateScreen
-              icon="message-circle"
-              title="No conversations yet"
-              body="Blend in to an event and its room appears here — or message someone you met there."
-              actions={[{ label: 'Explore events', onPress: () => router.push('/(tabs)/events' as never) }]}
-              testID="banter-empty"
-            />
+            <View style={styles.stateBlock}>
+              <StateScreen
+                icon="message-circle"
+                title="No conversations yet"
+                body="Blend in to an event and its room appears here — or message someone you met there."
+                actions={[{ label: 'Explore events', onPress: () => router.push('/(tabs)/events' as never) }]}
+                testID="banter-empty"
+              />
+            </View>
           )
         }
         contentContainerStyle={[styles.content, { paddingTop: listTop, paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + SPACE.xl }]}
@@ -568,6 +572,8 @@ const REQUEST_REFLOW = LinearTransition.duration(DURATION.base).easing(Easing.be
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: COLOR.ink },
   content: { paddingHorizontal: SPACE.gutter },
+  // The frame puts the block at 280, about 113 pt lower than it sat under the search row.
+  stateBlock: { marginTop: SPACE.xxxl * 2 + SPACE.lg },
   sections: { gap: SPACE.xl, marginBottom: SPACE.xl },
   section: { gap: SPACE.md },
   heading: { paddingTop: SPACE.lg, paddingBottom: SPACE.sm },

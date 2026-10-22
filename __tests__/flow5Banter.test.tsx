@@ -1,5 +1,6 @@
 import React from 'react'
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native'
+import { StyleSheet } from 'react-native'
 
 /**
  * The Banter (Flow 5 Banter frames, #27, R2-D2, R3-D5), rendered: its
@@ -153,6 +154,11 @@ it('empty: no conversations yet, and a way to find some', async () => {
   await open()
   expect(screen.getByText('No conversations yet')).toBeTruthy()
   expect(screen.getByLabelText('Explore events')).toBeTruthy()
+  // The frame puts the block at 280: well below the search row, not under it.
+  let node = screen.getByTestId('banter-empty').parent
+  let margin = 0
+  for (let depth = 0; node && depth < 4; depth++, node = node.parent) margin = Math.max(margin, StyleSheet.flatten(node.props.style)?.marginTop ?? 0)
+  expect(margin).toBeGreaterThanOrEqual(96)
 })
 
 it('failed: says so and offers to try again', async () => {
