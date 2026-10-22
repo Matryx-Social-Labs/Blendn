@@ -20,6 +20,8 @@ export type RoomRow = {
   eventTitle?: string
   /** When the event starts (ISO): the room opens a day before (`lib/preEventRoom.ts`). Absent for a crew's or a place's room. */
   startTime?: string
+  /** A place's room: when its venue day resets (the daily close). */
+  dayEndsAt?: string
   /** `memberCount`; never for a place's room, where an exact count is a differencing channel (H5). */
   memberCount: number | null
   /** Your role here: `admin` (Organiser), `moderator`, or a member. */
@@ -51,6 +53,7 @@ export function roomRowFrom(payload: unknown, roomId: string): RoomRow | null {
       eventTitle: room.event?.title ? String(room.event.title) : undefined,
       // A place's room is a venue day: it has no pre-event window.
       startTime: room.event?.startTime && room.event?.kind !== 'venue_day' ? String(room.event.startTime) : undefined,
+      dayEndsAt: room.event?.endTime && room.event?.kind === 'venue_day' ? String(room.event.endTime) : undefined,
       memberCount: roomMemberCount(room),
       role: room.membership?.role,
       live: room.isCheckedIn === true,

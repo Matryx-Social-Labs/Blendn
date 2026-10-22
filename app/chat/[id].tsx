@@ -33,9 +33,9 @@ import { contactWarning } from '../../lib/contactWarning'
 import { copyText, linkSheet, notSentSheet } from '../../lib/chatSheets'
 import { idParam, nameParam } from '../../lib/routeParams'
 import { subscribeCheckInChanged } from '../../lib/checkIn'
-import { newClientId } from '../../lib/clientId'
 import { opensInSpoken } from '../../lib/preEventRoom'
 import { usePreEventRoom } from '../../lib/usePreEventRoom'
+import { newClientId } from '../../lib/clientId'
 import { BLEND_CLOSED_LINE, defaultRoomName, roomClosedLine, roomKindParam } from '../../lib/crews'
 import { COLOR, SIZE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
@@ -47,8 +47,8 @@ import { messageMenu, type MessageMenu } from '../../lib/messageMenu'
 import { useActiveThread } from '../../lib/notifications'
 import { ScreenProfiler } from '../../lib/perf'
 import { roomRefusalState } from '../../lib/placeRoom'
-import { queryCache } from '../../lib/queryCache'
 import { printable } from '../../lib/pulseSections'
+import { queryCache } from '../../lib/queryCache'
 import { toggleReaction, withMine } from '../../lib/reactions'
 import { isMuted, markRoomJoined, markRoomLeft, roomSubtitle, useRoomMembership, useRoomMute } from '../../lib/roomMembership'
 import { isSpeech, isTemp, roomMessageFromSocket, roomMessagesFrom, type RoomMessage as Message } from '../../lib/roomMessages'
@@ -152,6 +152,8 @@ function GroupChatInner() {
   /* A place's room after your Go Live there ended (`NOT_LIVE`): going live again is the way back. */
   const [notLive, setNotLive] = useState(false)
   const notLiveRef = useLatest(notLive)
+  /** Why it ended, when the socket said (`live:ended`): the room's calm state is its own for each (11.5). */
+  const [endedReason, setEndedReason] = useState<string | null>(null)
   /** Removed by the organiser (`USER_BANNED`), in the server's sentence (R2-D2 room states #01). */
   const [removedLine, setRemovedLine] = useState<string | null | undefined>(undefined)
   /** An event room that is not there any more (404, R2-D2 room states #02). */
@@ -185,7 +187,7 @@ function GroupChatInner() {
         : gone
           ? { kind: 'gone' }
           : notLive
-            ? { kind: 'not_live' }
+            ? { kind: 'not_live', reason: endedReason, venueName: roomInfo.title ?? null, dayEndsAt: roomInfo.dayEndsAt ?? null }
             : left
               ? { kind: 'left' }
               : outOfRoom
@@ -195,9 +197,9 @@ function GroupChatInner() {
   /** From the room list (`memberCount`), less anyone who leaves while you watch (`chat:memberLeft`). */
   const [leftSince, setLeftSince] = useState(0)
   const memberCount = roomInfo.memberCount ? Math.max(0, roomInfo.memberCount - leftSince) : null
-  const { showToast } = useToast()
   /* A day before doors the room is served but not open: its header counts down, its composer says so (Flow 15 #8). */
   const opensIn = usePreEventRoom(eventRoom ? roomInfo.startTime : null)
+  const { showToast } = useToast()
 
   /* The long-press, a sender's card, your reaction's flight (#36, 5.1, #37). */
   const [menu, setMenu] = useState<{ message: Message; anchor: Rect } | null>(null)
@@ -277,6 +279,7 @@ function GroupChatInner() {
         // Live again at the place: the socket was taken out of the room at the end (M3).
         if (notLiveRef.current) rejoinChatSocket(roomId)
         setNotLive(false)
+        setEndedReason(null)
         markRoomJoined(roomId)
 
         const raw = Array.isArray(result.data) ? result.data : (result.data as any)?.messages || (result.data as any)?.data || []
@@ -404,7 +407,11 @@ function GroupChatInner() {
       }),
       // Removed while reading: the room becomes the removed state (R2-D2 #01), never a modal.
       subscribeToChatMemberBanned(roomId, (data) => {
-        if (data.userId === currentUser?.id && data.banned) setRemovedLine('The organiser has removed you from this room.')
+        if (data.userId !== currentUser?.id || !data.banned) return
+        // No organiser in a crew's room: its own sentence, the one a later read gives (10-9 · 23).
+        const crewLine = roomKind ? roomClosedLine(roomKind, 'USER_BANNED') : null
+        if (crewLine) setClosedLine(crewLine)
+        else setRemovedLine('The organiser has removed you from this room.')
       }),
       // Somebody left: one fewer in the header's count.
       subscribeToChatMemberLeft(roomId, () => setLeftSince((n) => n + 1)),
@@ -438,7 +445,11 @@ function GroupChatInner() {
   const deliver = async (optimistic: Message) => {
     try {
       const result = await apiClient.sendChatMessage(roomId, optimistic.message_text, 'text', undefined, optimistic.reply_to_message_id ?? undefined, optimistic.client_id)
-      if (!result.success && result.errorCode === 'USER_BANNED') return setRemovedLine(result.error || null)
+      if (!result.success && result.errorCode === 'USER_BANNED') {
+        // A crew's or a Blend's room has no organiser: it says the crew's own line (10-8, 10-9).
+        const crewLine = roomKind ? roomClosedLine(roomKind, result.errorCode) : null
+        return crewLine ? setClosedLine(crewLine) : setRemovedLine(result.error || null)
+      }
       // Every answer re-decides the lock: a refusal sets it, a send that got through lifts it.
       const place = result.success ? null : refusalPlace(result.errorCode, result.error)
       if (place !== 'links') composer.apply(result.success ? null : result.errorCode, result.retryAfter, result.error)
@@ -589,7 +600,9 @@ function GroupChatInner() {
     () =>
       subscribeToLiveEnded((data) => {
         const mine = roomEventIdRef.current
-        if (!mine || mine === data.eventId) void loadMessagesRef.current(true)
+        if (mine && mine !== data.eventId) return
+        setEndedReason(data.reason)
+        void loadMessagesRef.current(true)
       }),
     [loadMessagesRef, roomEventIdRef]
   )
@@ -757,7 +770,7 @@ function GroupChatInner() {
       <Grain />
       <KeyboardFrame>
         {outside ? (
-          <RoomOutside outside={outside} rejoining={rejoining} onRejoin={() => void rejoin()} onGoLive={goLiveAgain} onBack={goBack} />
+          <RoomOutside outside={outside} roomKind={roomKind} rejoining={rejoining} onRejoin={() => void rejoin()} onGoLive={goLiveAgain} onBack={goBack} />
         ) : (
           <>
             <FlatList
@@ -864,6 +877,8 @@ function GroupChatInner() {
                 state={lock?.state ?? 'normal'}
                 reason={lock?.reason}
                 countdown={composer.countdown}
+                // Advice before sending, never a gate (5.10): the server decides; a crew's people already know each other.
+                warning={roomKind === 'blend' ? null : contactWarning(newMessage, eventRoom ? 'anonymous' : 'crew')}
                 action={lock?.state === 'notcheckedin' && roomInfo.eventId ? { label: 'I’m going', onPress: () => void imGoing(), loading: rsvping } : undefined}
                 reply={replyingTo ? { name: replyingTo.sender_name, text: replyingTo.message_text } : null}
                 onCancelReply={() => setReplyingTo(null)}
@@ -872,8 +887,6 @@ function GroupChatInner() {
               />
             </View>
           </>
-                // Advice before sending, never a gate (5.10): the server decides; a crew's people already know each other.
-                warning={roomKind === 'blend' ? null : contactWarning(newMessage, eventRoom ? 'anonymous' : 'crew')}
         )}
       </KeyboardFrame>
 
