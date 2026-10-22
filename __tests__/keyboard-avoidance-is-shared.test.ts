@@ -20,8 +20,8 @@ const files = execSync("grep -rl 'KeyboardAvoidingView' app components --include
 
 describe('KeyboardAvoidingView behaviour', () => {
   it('found the screens, so the loop below is not empty', () => {
-    // Six since the rebuilds moved the Board, the filters and the friends screens onto the Sheet and KeyboardFrame.
-    expect(files.length).toBeGreaterThanOrEqual(6)
+    // Four since the entry screens and onboarding moved to `KeyboardPage` (keyboard-controller, motion #34).
+    expect(files.length).toBeGreaterThanOrEqual(4)
   })
 
   it.each(files)('%s uses KEYBOARD_BEHAVIOR and no per-platform guess', (file) => {

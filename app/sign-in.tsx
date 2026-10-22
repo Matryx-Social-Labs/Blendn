@@ -1,14 +1,13 @@
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useEffect, useRef, useState } from 'react'
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { StyleSheet, Text, TextInput, View } from 'react-native'
 
 import { LegalLine } from '../components/LegalLine'
 import { Logger } from '../lib/logger'
 import { currentDeviceInfo } from '../components/onboarding/authForm'
 import { Backdrop, ORB_LEVEL } from '../components/onboarding/Backdrop'
-import { Dock } from '../components/ds/Dock'
 import { FormHeader } from '../components/onboarding/FormHeader'
-import { useRevealFocused } from '../components/onboarding/revealFocused'
+import { KeyboardPage } from '../components/onboarding/KeyboardPage'
 import { useRefusedPulse } from '../components/onboarding/useRefusedPulse'
 import { Banner } from '../components/ds/Banner'
 import { Button } from '../components/ds/Button'
@@ -19,8 +18,8 @@ import { COLOR, SPACE } from '../lib/design/tokens'
 import { setAccountState } from '../lib/accountState'
 import { accountRefusalOf } from '../lib/sessionEnd'
 import { signInWithEmail, signUp } from '../lib/useAuth'
-import { KEYBOARD_BEHAVIOR, useKeyboardShown } from '../lib/keyboard'
-import { accountAgeError } from '../lib/onboarding'
+import { useKeyboardShown } from '../lib/keyboard'
+import { accountAgeError, NAME_LENGTH_SENTENCE, nameTooShort } from '../lib/onboarding'
 import { PendingInvite } from '../components/friends/PendingInvite'
 
 
@@ -91,9 +90,6 @@ export default function SignIn() {
   const ageRef = useRef<TextInput>(null)
   const refs: Record<Field, React.RefObject<TextInput | null>> = { name: nameRef, email: emailRef, password: passwordRef, age: ageRef }
   const { refused, refuse } = useRefusedPulse()
-  // Four fields and a segmented control do not fit above the keyboard: the page follows the field being typed in.
-  const { scrollRef, bodyRef, reveal, onScroll, onViewportLayout, onBodyLayout } = useRevealFocused()
-  const focusing = { onFocus: reveal }
   /*
    * A ref as well as `busy`: the keyboard's "go" and the button can land in
    * the same frame, and both read the `busy` of the render before either set
@@ -135,6 +131,7 @@ export default function SignIn() {
     const problems: FieldErrors = {}
     if (!trimmedEmail.includes('@')) problems.email = 'Enter a valid email address.'
     if (isSignup && !name.trim()) problems.name = 'Enter your name.'
+    else if (isSignup && nameTooShort(name)) problems.name = NAME_LENGTH_SENTENCE
     if (isSignup) {
       const ageProblem = accountAgeError(age, { required: true })
       if (ageProblem) problems.age = ageProblem
@@ -219,25 +216,54 @@ export default function SignIn() {
     }
   }
 
+  /* Docked: the primary is one thumb away; over the keyboard it rides on glass, at rest it is only the button on the page. */
+  const dock = (
+    <>
+      {/* A refusal plays its H.error within the press (the button's `refused`), so the press-in is silent: one haptic, not two. */}
+      <Button
+        label={isSignup ? 'Create account' : 'Sign in'}
+        onPress={() => void submit()}
+        loading={busy}
+        refused={refused}
+        pressHaptic={false}
+        testID="sign-in-primary"
+      />
+      {!keyboardUp && !isSignup ? (
+        <View style={styles.forgot}>
+          <Button
+            label="Forgot your password?"
+            kind="tertiary"
+            size="sm"
+            // The address typed here goes with them, so it is not typed twice.
+            onPress={() =>
+              router.push(
+                trimmedEmail
+                  ? { pathname: '/forgot-password', params: { email: trimmedEmail } }
+                  : '/forgot-password'
+              )
+            }
+            testID="sign-in-forgot"
+            // A small button hugs its label with alignSelf flex-start, which beats the wrapper's centring: centre it here.
+            style={styles.centred}
+          />
+        </View>
+      ) : null}
+      {!keyboardUp && isSignup ? <LegalLine lead="By creating an account you" /> : null}
+    </>
+  )
+
   return (
     <View style={styles.root}>
       <Backdrop level={ORB_LEVEL.form} paused={keyboardUp} />
 
       <FormHeader testID="sign-in-header" />
 
-      <KeyboardAvoidingView style={styles.flex} behavior={KEYBOARD_BEHAVIOR}>
-        <ScrollView
-          ref={scrollRef}
-          testID="sign-in-scroll"
-          onScroll={onScroll}
-          scrollEventThrottle={16}
-          onLayout={onViewportLayout}
-          style={styles.flex}
-          contentContainerStyle={styles.scroll}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-          showsVerticalScrollIndicator={false}
-        >
+      {/* Four fields and a segmented control do not fit above the keyboard: the page follows the field being typed in. */}
+      <KeyboardPage
+        scrollProps={{ testID: 'sign-in-scroll', contentContainerStyle: styles.scroll }}
+        dockProps={{ glass: keyboardUp, keyboardUp, testID: 'sign-in-dock' }}
+        dock={dock}
+      >
           <PendingInvite signIn />
 
           {notice && !error ? (
@@ -261,7 +287,7 @@ export default function SignIn() {
             fields, so Next on the name opened a number pad and Next on the
             number pad (which has none on iOS) was a dead end.
           */}
-          <View ref={bodyRef} onLayout={onBodyLayout} style={styles.fields}>
+          <View style={styles.fields}>
             {isSignup && (
               <TextField
                 inputRef={nameRef}
@@ -279,7 +305,6 @@ export default function SignIn() {
                 submitBehavior="submit"
                 onSubmitEditing={() => emailRef.current?.focus()}
                 testID="sign-in-name"
-                {...focusing}
               />
             )}
 
@@ -299,7 +324,6 @@ export default function SignIn() {
               submitBehavior="submit"
               onSubmitEditing={() => passwordRef.current?.focus()}
               testID="sign-in-email"
-              {...focusing}
             />
 
             <TextField
@@ -325,7 +349,6 @@ export default function SignIn() {
               submitBehavior={isSignup ? 'submit' : 'blurAndSubmit'}
               onSubmitEditing={isSignup ? () => ageRef.current?.focus() : () => void submit()}
               testID="sign-in-password"
-              {...focusing}
             />
 
             {isSignup && (
@@ -341,48 +364,12 @@ export default function SignIn() {
                 returnKeyType="go"
                 onSubmitEditing={() => void submit()}
                 testID="sign-in-age"
-                {...focusing}
               />
             )}
           </View>
 
           {error ? <Banner kind="error" text={error} icon={waiting ? 'clock' : undefined} testID="sign-in-error" /> : null}
-        </ScrollView>
-
-        {/* Docked: the primary is one thumb away; over the keyboard it rides on glass, at rest it is only the button on the page. */}
-        <Dock glass={keyboardUp} keyboardUp={keyboardUp} testID="sign-in-dock">
-          {/* A refusal plays its H.error within the press (the button's `refused`), so the press-in is silent: one haptic, not two. */}
-          <Button
-            label={isSignup ? 'Create account' : 'Sign in'}
-            onPress={() => void submit()}
-            loading={busy}
-            refused={refused}
-            pressHaptic={false}
-            testID="sign-in-primary"
-          />
-          {!keyboardUp && !isSignup ? (
-            <View style={styles.forgot}>
-              <Button
-                label="Forgot your password?"
-                kind="tertiary"
-                size="sm"
-                // The address typed here goes with them, so it is not typed twice.
-                onPress={() =>
-                  router.push(
-                    trimmedEmail
-                      ? { pathname: '/forgot-password', params: { email: trimmedEmail } }
-                      : '/forgot-password'
-                  )
-                }
-                testID="sign-in-forgot"
-                // A small button hugs its label with alignSelf flex-start, which beats the wrapper's centring: centre it here.
-                style={styles.centred}
-              />
-            </View>
-          ) : null}
-          {!keyboardUp && isSignup ? <LegalLine lead="By creating an account you" /> : null}
-        </Dock>
-      </KeyboardAvoidingView>
+      </KeyboardPage>
     </View>
   )
 }

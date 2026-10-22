@@ -1,11 +1,10 @@
 import { barTop } from '../../lib/barGeometry'
 import { ReactNode } from 'react'
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Backdrop, ORB_LEVEL } from './Backdrop'
-import { Dock } from '../ds/Dock'
-import { useRevealFocused } from './revealFocused'
+import { KeyboardPage } from './KeyboardPage'
 import { Button } from '../ds/Button'
 import { IconButton } from '../ds/IconButton'
 import { ProgressBar } from '../ds/ProgressBar'
@@ -13,7 +12,7 @@ import { font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from '../ds/share
 import { Icon } from '../ui/Icon'
 import { Material } from '../ui/Material'
 import { COLOR, FONT_FAMILY, SIZE, SPACE } from '../../lib/design/tokens'
-import { KEYBOARD_BEHAVIOR, useKeyboardShown } from '../../lib/keyboard'
+import { useKeyboardShown } from '../../lib/keyboard'
 import { ONBOARDING_STEPS, progress, stepIndex, type OnboardingStep } from '../../lib/onboarding'
 
 /**
@@ -42,15 +41,20 @@ interface Props {
    * The form body. Optional because the two permission screens have no form: their content is an illustration, which is
    * still a child. A screen with nothing to scroll does not scroll.
    *
-   * A function when the body has text fields: it is handed the `onFocus` that makes the page follow the field (spread it on a
-   * `TextField`). A render prop rather than a context, because the page owns the scroll and its fields are drawn by the screen
-   * above it, which a provider inside the page cannot reach.
+   * The page follows the focused field by itself (`KeyboardPage`): a text field needs nothing spread onto it.
    */
-  children?: ReactNode | ((page: { onFocus: () => void }) => ReactNode)
+  children?: ReactNode
 
   ctaLabel: string
   onContinue: () => void
   ctaDisabled?: boolean
+  /**
+   * A press on the primary while it is off: the screen says why (a sentence under the field) rather than leave a dead button.
+   * A disabled button takes no press, so the press is taken by the wrapper around it.
+   */
+  onCtaDisabledPress?: () => void
+  /** The primary refused (motion #20): its shake and the one `H.error`. */
+  ctaRefused?: boolean
   ctaBusy?: boolean
 
   /** Under the primary: "Maybe later", "Skip". */
@@ -75,6 +79,8 @@ export function OnboardingScreen({
   ctaLabel,
   onContinue,
   ctaDisabled,
+  onCtaDisabledPress,
+  ctaRefused,
   ctaBusy,
   secondaryLabel,
   onSecondary,
@@ -85,7 +91,6 @@ export function OnboardingScreen({
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const keyboardUp = useKeyboardShown()
-  const { scrollRef, bodyRef, reveal, onScroll, onViewportLayout, onBodyLayout } = useRevealFocused()
   const android = Platform.OS === 'android'
   const circle = android ? SIZE.circleButtonAndroid : SIZE.circleButton
 
@@ -113,57 +118,49 @@ export function OnboardingScreen({
         </View>
       ) : null}
 
-      {/*
-       * The avoiding view holds the scroll AND the dock, with no offset: it used to hold only the scroll, so the keyboard
-       * covered Continue. Its own frame is what `padding` measures against, so 0 is right.
-       */}
-      <KeyboardAvoidingView style={styles.flex} behavior={KEYBOARD_BEHAVIOR} keyboardVerticalOffset={0}>
-        <ScrollView
-          ref={scrollRef}
-          testID="onboarding-scroll"
-          onScroll={onScroll}
-          scrollEventThrottle={16}
-          onLayout={onViewportLayout}
-          style={styles.flex}
-          contentContainerStyle={[styles.scrollContent, step ? null : styles.scrollContentBare]}
-          keyboardShouldPersistTaps="handled"
-          // Drag the form down to put the keyboard away, as in Messages.
-          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-          showsVerticalScrollIndicator={false}
+      <KeyboardPage
+        scrollProps={{
+          testID: 'onboarding-scroll',
+          contentContainerStyle: [styles.scrollContent, step ? null : styles.scrollContentBare],
           // A screen with nothing to scroll must not rubber-band: it reads as the screen being broken.
-          alwaysBounceVertical={false}
-          scrollEnabled={!!children}
-        >
-          <View style={styles.headline}>
-            <Text style={[font('display', bold), styles.title]} accessibilityRole="header">
-              {title}
-              {titleAccent ? <Text>{titleAccent}</Text> : null}
-            </Text>
-            {subtitle ? <Text style={[font('body', bold), styles.subtitle]}>{subtitle}</Text> : null}
+          alwaysBounceVertical: false,
+          scrollEnabled: !!children,
+        }}
+        dockProps={{ keyboardUp, testID: 'onboarding-dock' }}
+        dock={
+          <>
+            {/* A disabled primary takes no press: the wrapper does, so a tap on it can say why it is off. */}
+            <Pressable accessible={false} disabled={!ctaDisabled || !onCtaDisabledPress} onPress={onCtaDisabledPress} testID="onboarding-primary-frame">
+              <Button label={ctaLabel} onPress={onContinue} disabled={ctaDisabled} refused={ctaRefused} loading={ctaBusy} testID="onboarding-primary" />
+            </Pressable>
+            {/* The way out stays with the button; only the note waits for the keyboard to go. Off while the primary saves: a Skip during a save navigated twice. */}
+            {secondaryLabel && onSecondary ? (
+              <Button label={secondaryLabel} kind="tertiary" size="md" onPress={onSecondary} disabled={ctaBusy} testID="onboarding-secondary" />
+            ) : null}
+            {footerNote && !keyboardUp ? (
+              <View style={styles.note}>
+                {/* design-exception: the frame draws the lock at 14 and the note at 11/16, a step under the scale */}
+                <Icon name="lock" size={14} color={COLOR.textTertiary} />
+                <Text style={[font('label', bold), styles.noteText, styles.noteSize]}>{footerNote.toUpperCase()}</Text>
+              </View>
+            ) : null}
+          </>
+        }
+      >
+        <View style={styles.headline}>
+          <Text style={[font('display', bold), styles.title]} accessibilityRole="header">
+            {title}
+            {titleAccent ? <Text>{titleAccent}</Text> : null}
+          </Text>
+          {subtitle ? <Text style={[font('body', bold), styles.subtitle]}>{subtitle}</Text> : null}
+        </View>
+
+        {children ? (
+          <View testID="onboarding-body" style={styles.body}>
+            {children}
           </View>
-
-          {children ? (
-            <View ref={bodyRef} testID="onboarding-body" onLayout={onBodyLayout} style={styles.body}>
-              {typeof children === 'function' ? children({ onFocus: reveal }) : children}
-            </View>
-          ) : null}
-        </ScrollView>
-
-        <Dock keyboardUp={keyboardUp} testID="onboarding-dock">
-          <Button label={ctaLabel} onPress={onContinue} disabled={ctaDisabled} loading={ctaBusy} testID="onboarding-primary" />
-          {/* The way out stays with the button; only the note waits for the keyboard to go. Off while the primary saves: a Skip during a save navigated twice. */}
-          {secondaryLabel && onSecondary ? (
-            <Button label={secondaryLabel} kind="tertiary" size="md" onPress={onSecondary} disabled={ctaBusy} testID="onboarding-secondary" />
-          ) : null}
-          {footerNote && !keyboardUp ? (
-            <View style={styles.note}>
-              {/* design-exception: the frame draws the lock at 14 and the note at 11/16, a step under the scale */}
-              <Icon name="lock" size={14} color={COLOR.textTertiary} />
-              <Text style={[font('label', bold), styles.noteText, styles.noteSize]}>{footerNote.toUpperCase()}</Text>
-            </View>
-          ) : null}
-        </Dock>
-      </KeyboardAvoidingView>
+        ) : null}
+      </KeyboardPage>
     </View>
   )
 }

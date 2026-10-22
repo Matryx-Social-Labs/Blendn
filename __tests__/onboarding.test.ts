@@ -16,6 +16,8 @@ import {
   advance,
   anonymousByDefault,
   canContinue,
+  NAME_LENGTH_SENTENCE,
+  nameTooShort,
   isCompleteDateOfBirth,
   joinDateOfBirth,
   nextStep,
@@ -232,6 +234,18 @@ describe('the birth date', () => {
   })
 })
 
+describe('nameTooShort', () => {
+  it('is for a name that was started: blank is "Enter your name.", not a length', () => {
+    expect([nameTooShort(undefined), nameTooShort(''), nameTooShort('   ')]).toEqual([false, false, false])
+  })
+  it('counts the characters a person sees, so one emoji is one and two are enough', () => {
+    expect([nameTooShort('S'), nameTooShort('😀'), nameTooShort('😀😀'), nameTooShort('Li')]).toEqual([true, true, false, false])
+  })
+  it('says the range with the server’s own ceiling, not the frame’s 30', () => {
+    expect(NAME_LENGTH_SENTENCE).toBe('Use 2 to 100 letters.')
+  })
+})
+
 describe('canContinue', () => {
   it('holds the first step until there is a name and a usable birth date', () => {
     expect(canContinue('basics', {})).toBe(false)
@@ -239,6 +253,12 @@ describe('canContinue', () => {
     expect(canContinue('basics', { dateOfBirth: dobForAge(30) })).toBe(false)
     expect(canContinue('basics', { name: '   ', dateOfBirth: dobForAge(30) })).toBe(false)
     expect(canContinue('basics', { name: 'Julian', dateOfBirth: dobForAge(30) })).toBe(true)
+  })
+
+  it('holds the first step on a one-letter name, the way the frames draw it refused', () => {
+    expect(canContinue('basics', { name: 'S', dateOfBirth: dobForAge(30) })).toBe(false)
+    expect(canContinue('basics', { name: ' S ', dateOfBirth: dobForAge(30) })).toBe(false)
+    expect(canContinue('basics', { name: 'Li', dateOfBirth: dobForAge(30) })).toBe(true)
   })
 
   it('lets every other step through', () => {

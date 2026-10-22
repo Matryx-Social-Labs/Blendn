@@ -129,82 +129,79 @@ export default function DetailsScreen() {
       onSecondary={() => void skip()}
       onBack={goBack}
     >
-      {(reveal) => (
-        <>
-          {/*
-        Before the interest chips, not after.
+      <>
+        {/*
+      Before the interest chips, not after.
 
-        The chips are a long, scrolling wall of choices; a text field below them
-        is a field most people never reach. This is also the more personal
-        question, and asking it first means it gets answered while attention is
-        still fresh.
-      */}
-          <View style={styles.bio}>
-            <TextArea
-              label="About me"
-              placeholder="Ask me about… the best coffee in the city, a trip I’m planning, or what I’m reading."
-              value={bio}
-              onChangeText={setBio}
-              limit={BIO_LIMIT}
-              // The server's `max(500)` counts UTF-16 units of the trimmed text, not what a person sees as characters.
-              measure={serverLength}
-              error={overCap ? bioOverCap : undefined}
-              testID="onboarding-bio"
-              {...reveal}
-            />
-            {/* A tap puts the prompt in the bio (H.select, the chip's). */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-              contentContainerStyle={styles.prompts}
-            >
-              {BIO_PROMPTS.map((prompt) => (
-                <Chip
-                  key={prompt}
-                  label={prompt}
-                  icon="plus"
-                  dimmed={!promptFits(bio, prompt, BIO_LIMIT)}
-                  onPress={() => setBio((current) => bioWithPrompt(current, prompt, BIO_LIMIT))}
-                  testID={`onboarding-prompt-${prompt.slice(0, 6)}`}
-                />
-              ))}
-            </ScrollView>
-          </View>
-
-          <View style={styles.interests}>
-            <View style={styles.interestsHead}>
-              <Text accessibilityRole="header" style={[font('heading', bold), styles.heading]}>
-                Interests
-              </Text>
-              <Text
-                accessibilityLabel={`${interestIds.length} of ${MAX_INTERESTS} chosen`}
-                style={[monoCaption(bold), { color: atCap ? COLOR.warning : COLOR.textSecondary }]}
-              >
-                {`${interestIds.length} of ${MAX_INTERESTS}`}
-              </Text>
-            </View>
-
-            {groupsStatus !== 'ready' ? <ListLoadState status={groupsStatus} what="interests" onRetry={() => void loadGroups()} /> : null}
-
-            {groups.map((group) => (
-              <ChipSet
-                key={group.id}
-                label={group.name}
-                items={group.items.map((item) => ({ key: item.id, label: item.name, dimmed: atCap && !interestIds.includes(item.id) }))}
-                selection="multi"
-                selected={group.items.filter((item) => interests.includes(item.name)).map((item) => item.id)}
-                capHint={`Up to ${MAX_INTERESTS}`}
-                onToggle={(id) => {
-                  const item = group.items.find((i) => i.id === id)
-                  if (item) toggle(item.id, item.name)
-                }}
-                testID={`onboarding-interests-${group.id}`}
+      The chips are a long, scrolling wall of choices; a text field below them
+      is a field most people never reach. This is also the more personal
+      question, and asking it first means it gets answered while attention is
+      still fresh.
+    */}
+        <View style={styles.bio}>
+          <TextArea
+            label="About me"
+            placeholder="Ask me about… the best coffee in the city, a trip I’m planning, or what I’m reading."
+            value={bio}
+            onChangeText={setBio}
+            limit={BIO_LIMIT}
+            // The server's `max(500)` counts UTF-16 units of the trimmed text, not what a person sees as characters.
+            measure={serverLength}
+            error={overCap ? bioOverCap : undefined}
+            testID="onboarding-bio"
+          />
+          {/* A tap puts the prompt in the bio (H.select, the chip's). */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.prompts}
+          >
+            {BIO_PROMPTS.map((prompt) => (
+              <Chip
+                key={prompt}
+                label={prompt}
+                icon="plus"
+                dimmed={!promptFits(bio, prompt, BIO_LIMIT)}
+                onPress={() => setBio((current) => bioWithPrompt(current, prompt, BIO_LIMIT))}
+                testID={`onboarding-prompt-${prompt.slice(0, 6)}`}
               />
             ))}
+          </ScrollView>
+        </View>
+
+        <View style={styles.interests}>
+          <View style={styles.interestsHead}>
+            <Text accessibilityRole="header" style={[font('heading', bold), styles.heading]}>
+              Interests
+            </Text>
+            <Text
+              accessibilityLabel={`${interestIds.length} of ${MAX_INTERESTS} chosen`}
+              style={[monoCaption(bold), { color: atCap ? COLOR.warning : COLOR.textSecondary }]}
+            >
+              {`${interestIds.length} of ${MAX_INTERESTS}`}
+            </Text>
           </View>
-        </>
-      )}
+
+          {groupsStatus !== 'ready' ? <ListLoadState status={groupsStatus} what="interests" onRetry={() => void loadGroups()} /> : null}
+
+          {groups.map((group) => (
+            <ChipSet
+              key={group.id}
+              label={group.name}
+              items={group.items.map((item) => ({ key: item.id, label: item.name, dimmed: atCap && !interestIds.includes(item.id) }))}
+              selection="multi"
+              selected={group.items.filter((item) => interests.includes(item.name)).map((item) => item.id)}
+              capHint={`Up to ${MAX_INTERESTS}`}
+              onToggle={(id) => {
+                const item = group.items.find((i) => i.id === id)
+                if (item) toggle(item.id, item.name)
+              }}
+              testID={`onboarding-interests-${group.id}`}
+            />
+          ))}
+        </View>
+      </>
     </OnboardingScreen>
   )
 }

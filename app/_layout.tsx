@@ -27,7 +27,7 @@ import { ShareHost } from '../components/share/ShareHost';
 import { useAuth } from '../lib/useAuth';
 import { useUpdateRequired } from '../lib/updateRequired';
 import { UpdateRequiredScreen } from '../components/system/UpdateRequiredScreen';
-import { EMBER } from '../lib/theme';
+import { COLOR } from '../lib/design/tokens';
 import { handleAndroidBack } from '../lib/androidBack';
 import { CoachMarkHost } from '../components/ds/CoachMarkHost';
 import { initSentry, Sentry } from '../lib/sentry';
@@ -40,8 +40,8 @@ initSentry();
 /*
  * Tell the OS what the app already is.
  *
- * There is no light theme: `EMBER` is a dark palette and all 73 stylesheets
- * hardcode it. But `UIUserInterfaceStyle` is `Automatic` in the committed
+ * There is no light theme: the design tokens (`COLOR`, lib/design/tokens.ts) are
+ * a dark palette and every screen draws from them. But `UIUserInterfaceStyle` is `Automatic` in the committed
  * Info.plist and Android's `AppTheme` derives from a DayNight parent, so every
  * surface iOS and Android draw *for* us followed the phone's setting instead —
  * and on a phone set to light that means a white alert on a black screen.
@@ -544,7 +544,7 @@ function RootLayout() {
               // Every pushed screen sits on the same flat surface as the root.
               // This was `#000000`, so a push revealed a different black than
               // the tab underneath it.
-              contentStyle: { backgroundColor: EMBER.bg },
+              contentStyle: { backgroundColor: COLOR.ink },
               animation: routeTransition,
             }}
           >
@@ -698,9 +698,11 @@ function RootLayout() {
       {/* Notifications (the bell opens it) and its settings, from the ⋯ and from Settings. */}
       <Stack.Screen name="notifications" options={{ headerShown: false }} />
       <Stack.Screen name="notification-settings" options={{ headerShown: false }} />
+      <Stack.Screen name="muted-rooms" options={{ headerShown: false }} />
       {/* Settings' About and Contact support. */}
       <Stack.Screen name="about" options={{ headerShown: false }} />
       <Stack.Screen name="support" options={{ headerShown: false }} />
+      <Stack.Screen name="tips" options={{ headerShown: false }} />
       {/* Friends. Declared so none of them inherits the native header. */}
       <Stack.Screen name="friends/index" options={{ headerShown: false }} />
       <Stack.Screen name="friends/add" options={{ headerShown: false }} />
@@ -787,6 +789,6 @@ const styles = StyleSheet.create({
      * The frame is flat `#0F0E0E`. A gradient here is one more surface than the
      * design has.
      */
-    backgroundColor: EMBER.bg,
+    backgroundColor: COLOR.ink,
   },
 })

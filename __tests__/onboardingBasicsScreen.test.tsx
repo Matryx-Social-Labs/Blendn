@@ -66,6 +66,37 @@ it('30 February is “not a date we recognise”, not under 18, with no exit off
   expect(screen.queryByTestId('onboarding-under-age-sign-out')).toBeNull()
 })
 
+it('a one-letter name is told "Use 2 to 100 letters." once the field is left, and Continue waits', async () => {
+  mockDraft = { name: '' }
+  await render(<BasicsScreen />)
+  await dob('14', '03', '1998')
+  await fireEvent.changeText(screen.getByTestId('onboarding-name-input'), 'S')
+  expect(screen.queryByText('Use 2 to 100 letters.')).toBeNull()
+  await fireEvent(screen.getByTestId('onboarding-name-input'), 'blur')
+  expect(screen.getByText('Use 2 to 100 letters.')).toBeTruthy()
+  expect(primary().props.accessibilityState).toMatchObject({ disabled: true })
+  await fireEvent.changeText(screen.getByTestId('onboarding-name-input'), 'Sa')
+  expect(screen.queryByText('Use 2 to 100 letters.')).toBeNull()
+  expect(primary().props.accessibilityState).toMatchObject({ disabled: false })
+})
+
+it('pressing the dead Continue says why: the name’s sentence shows at once, without leaving the field', async () => {
+  mockDraft = { name: '' }
+  await render(<BasicsScreen />)
+  await dob('14', '03', '1998')
+  await fireEvent.changeText(screen.getByTestId('onboarding-name-input'), 'S')
+  expect(screen.queryByText('Use 2 to 100 letters.')).toBeNull()
+  await fireEvent.press(screen.getByTestId('onboarding-primary'))
+  expect(screen.getByText('Use 2 to 100 letters.')).toBeTruthy()
+  expect(mockCommit).not.toHaveBeenCalled()
+})
+
+it('a one-letter name already there (a resume) shows its sentence on opening', async () => {
+  mockDraft = { name: 'S' }
+  await render(<BasicsScreen />)
+  expect(screen.getByText('Use 2 to 100 letters.')).toBeTruthy()
+})
+
 it('nothing is said while the boxes are half full', async () => {
   await render(<BasicsScreen />)
   await fireEvent.changeText(screen.getByLabelText('Date of birth, day'), '14')

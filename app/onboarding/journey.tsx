@@ -136,101 +136,96 @@ export default function JourneyScreen() {
       onSecondary={() => void skip()}
       onBack={goBack}
     >
-      {(reveal) => (
-        <>
-          {/*
-        Three cards, not seven stacked fields.
+      <>
+        {/*
+      Three cards, not seven stacked fields.
 
-        The screen asks three unrelated questions — where you are, what you do,
-        where you studied — and without a boundary between them they read as one
-        long form. Enclosing each is what makes them three things, which is what
-        the frame does and what "just casual boxes" was describing.
-      */}
-          <CardSection icon="map-pin" title="Where you live" caption="Used to show you events nearby">
-            <TextField
-              label="City"
-              placeholder="Search city"
-              value={location}
-              onChangeText={setLocation}
-              error={overCap.location}
-              limit={counterLimit(location, PROFILE_LIMITS.location)}
-              measure={serverLength}
-              autoCapitalize="words"
-              testID="onboarding-city"
-              {...reveal}
+      The screen asks three unrelated questions — where you are, what you do,
+      where you studied — and without a boundary between them they read as one
+      long form. Enclosing each is what makes them three things, which is what
+      the frame does and what "just casual boxes" was describing.
+    */}
+        <CardSection icon="map-pin" title="Where you live" caption="Used to show you events nearby">
+          <TextField
+            label="City"
+            placeholder="Search city"
+            value={location}
+            onChangeText={setLocation}
+            error={overCap.location}
+            limit={counterLimit(location, PROFILE_LIMITS.location)}
+            measure={serverLength}
+            autoCapitalize="words"
+            testID="onboarding-city"
+          />
+        </CardSection>
+
+        <CardSection icon="briefcase" title="Occupation" caption="Your job title and where you work">
+          <TextField
+            label="Job title"
+            placeholder="e.g. Product designer"
+            value={occupation}
+            onChangeText={setOccupation}
+            error={overCap.occupation}
+            limit={counterLimit(occupation, PROFILE_LIMITS.occupation)}
+            measure={serverLength}
+            autoCapitalize="sentences"
+            testID="onboarding-job"
+          />
+
+          {/* The chips once the server has answered; until then, or if it did
+          not, the section says so rather than silently missing. */}
+          {fieldsStatus !== 'ready' ? (
+            <View style={styles.fieldBlock}>
+              <FieldLabel text="Field of work" bold={bold} contrast={contrast} />
+              <ListLoadState status={fieldsStatus} what="fields of work" onRetry={() => void loadFields()} />
+            </View>
+          ) : fields.length > 0 ? (
+            <ChipSet
+              label="Field of work"
+              hint="The only part of this shown in a room. Your job title and employer are not."
+              items={fields.map((field) => ({ key: field.slug, label: field.label }))}
+              selection="single"
+              selected={workField ? [workField] : []}
+              onToggle={chooseField}
+              testID="onboarding-field-of-work"
             />
-          </CardSection>
+          ) : null}
 
-          <CardSection icon="briefcase" title="Occupation" caption="Your job title and where you work">
-            <TextField
-              label="Job title"
-              placeholder="e.g. Product designer"
-              value={occupation}
-              onChangeText={setOccupation}
-              error={overCap.occupation}
-              limit={counterLimit(occupation, PROFILE_LIMITS.occupation)}
-              measure={serverLength}
-              autoCapitalize="sentences"
-              testID="onboarding-job"
-              {...reveal}
-            />
-
-            {/* The chips once the server has answered; until then, or if it did
-            not, the section says so rather than silently missing. */}
-            {fieldsStatus !== 'ready' ? (
-              <View style={styles.fieldBlock}>
-                <FieldLabel text="Field of work" bold={bold} contrast={contrast} />
-                <ListLoadState status={fieldsStatus} what="fields of work" onRetry={() => void loadFields()} />
-              </View>
-            ) : fields.length > 0 ? (
+          {/* Step two of the field: what you do within it. Not drawn for a field with none ("Something else"). */}
+          {fieldsStatus === 'ready' && specialisms.length > 0 ? (
+            <View style={styles.expertise}>
               <ChipSet
-                label="Field of work"
-                hint="The only part of this shown in a room. Your job title and employer are not."
-                items={fields.map((field) => ({ key: field.slug, label: field.label }))}
-                selection="single"
-                selected={workField ? [workField] : []}
-                onToggle={chooseField}
-                testID="onboarding-field-of-work"
+                label={`Expertise · ${fieldLabel ?? ''}`}
+                items={specialisms.map((entry) => ({ key: entry.slug, label: entry.label }))}
+                selection="multi"
+                selected={expertise}
+                max={maxExpertise}
+                capHint={`Up to ${maxExpertise}`}
+                hint="Up to three. If you change the field, these clear."
+                onToggle={(slug) => {
+                  setExpertise((current) => toggleExpertise(current, slug, maxExpertise))
+                  setExpertiseTouched(true)
+                }}
+                testID="onboarding-expertise"
               />
-            ) : null}
+            </View>
+          ) : null}
+        </CardSection>
 
-            {/* Step two of the field: what you do within it. Not drawn for a field with none ("Something else"). */}
-            {fieldsStatus === 'ready' && specialisms.length > 0 ? (
-              <View style={styles.expertise}>
-                <ChipSet
-                  label={`Expertise · ${fieldLabel ?? ''}`}
-                  items={specialisms.map((entry) => ({ key: entry.slug, label: entry.label }))}
-                  selection="multi"
-                  selected={expertise}
-                  max={maxExpertise}
-                  capHint={`Up to ${maxExpertise}`}
-                  hint="Up to three. If you change the field, these clear."
-                  onToggle={(slug) => {
-                    setExpertise((current) => toggleExpertise(current, slug, maxExpertise))
-                    setExpertiseTouched(true)
-                  }}
-                  testID="onboarding-expertise"
-                />
-              </View>
-            ) : null}
-          </CardSection>
-
-          <CardSection icon="graduation-cap" title="Education" caption="Where you studied, if you want to say">
-            <TextField
-              label="School / University"
-              placeholder="Where you studied"
-              value={education}
-              onChangeText={setEducation}
-              error={overCap.education}
-              limit={counterLimit(education, PROFILE_LIMITS.education)}
-              measure={serverLength}
-              autoCapitalize="words"
-              testID="onboarding-school"
-              {...reveal}
-            />
-          </CardSection>
-        </>
-      )}
+        <CardSection icon="graduation-cap" title="Education" caption="Where you studied, if you want to say">
+          <TextField
+            label="School / University"
+            placeholder="Where you studied"
+            value={education}
+            onChangeText={setEducation}
+            error={overCap.education}
+            limit={counterLimit(education, PROFILE_LIMITS.education)}
+            measure={serverLength}
+            autoCapitalize="words"
+            testID="onboarding-school"
+          />
+        </CardSection>
+      </>
     </OnboardingScreen>
   )
 }

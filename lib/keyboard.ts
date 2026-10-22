@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Keyboard, Platform } from 'react-native'
+import { KeyboardEvents } from 'react-native-keyboard-controller'
 
 /**
  * How every screen avoids the keyboard — on BOTH platforms.
@@ -19,14 +19,18 @@ import { Keyboard, Platform } from 'react-native'
 export const KEYBOARD_BEHAVIOR = 'padding' as const
 
 /**
- * Whether the keyboard is up (iOS as it starts to rise, Android once shown):
- * the chat's dock drops its safe-area padding over it and the orbs pause (#34).
+ * Whether the keyboard is up, from the moment it starts to rise or fall, on both platforms: the chat's dock drops its
+ * safe-area padding over it and the orbs pause (#34).
+ *
+ * react-native-keyboard-controller's `keyboardWillShow` / `keyboardWillHide`, as the Sheet reads them. React Native's own
+ * Android events come at the END of the animation (`keyboardDidShow`), so a dock that swapped its padding on them
+ * snapped after the keyboard had landed.
  */
 export function useKeyboardShown(): boolean {
   const [shown, setShown] = useState(false)
   useEffect(() => {
-    const show = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', () => setShown(true))
-    const hide = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => setShown(false))
+    const show = KeyboardEvents.addListener('keyboardWillShow', () => setShown(true))
+    const hide = KeyboardEvents.addListener('keyboardWillHide', () => setShown(false))
     return () => {
       show.remove()
       hide.remove()
