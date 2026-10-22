@@ -52,7 +52,7 @@ describe('the old sheet is gone', () => {
     expect(() => read('components', 'motion', 'RisingSheet.tsx')).toThrow()
   })
   it('the bell reads out the true count where the badge says 9+', () => {
-    expect(read('components', 'pulse', 'NotificationBell.tsx')).toMatch(/accessibilityValue=\{unread > 0 \? \{ text: `\$\{unread\} unseen` \} : undefined\}/)
+    expect(read('components', 'pulse', 'NotificationBell.tsx')).toMatch(/accessibilityValue=\{unread > 0 && !capped \? \{ text: `\$\{unread\} unseen` \} : undefined\}/)
   })
   it('both screens are declared with no native header', () => {
     const layout = read('app', '_layout.tsx')

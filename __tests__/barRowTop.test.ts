@@ -34,7 +34,8 @@ it.each(CHROME)('%s lays no chrome row at the inset plus a gap', (file) => {
 })
 
 it('the bars take their row top from lib/barGeometry, so there is one place to read', () => {
-  for (const file of CHROME) {
+  // A screen that draws the DS TopBar has its row top from it (dsTopBar pins that), and needs no geometry of its own.
+  for (const file of CHROME.filter((f) => !/components\/ds\/TopBar'/.test(read(f)))) {
     expect(read(file)).toMatch(/barTop|barHeight|barCircleBottom|BAR_BOTTOM/)
   }
 })
