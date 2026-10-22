@@ -120,6 +120,7 @@ function EditProfileContent() {
   const [maxExpertise, setMaxExpertise] = useState(3)
   /** The fields of work could not be read: the heading says so, and its line reads them again (6-3). */
   const [workFieldsFailed, setWorkFieldsFailed] = useState(false)
+  const [workFieldsRetrying, setWorkFieldsRetrying] = useState(false)
   const loadWorkFields = useCallback(async () => {
     const fields = await apiClient.getWorkFields()
     if (fields.success && fields.data?.workFields) {
@@ -526,7 +527,11 @@ function EditProfileContent() {
               onChangeExpertise={setExpertise}
               workFields={workFields}
               workFieldsFailed={workFieldsFailed}
-              onRetryWorkFields={() => void loadWorkFields()}
+              onRetryWorkFields={() => {
+                setWorkFieldsRetrying(true)
+                void loadWorkFields().finally(() => setWorkFieldsRetrying(false))
+              }}
+              workFieldsRetrying={workFieldsRetrying}
               gender={gender}
               onChangeGender={setGender}
               orientations={orientations}

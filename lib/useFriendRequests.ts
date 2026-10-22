@@ -6,7 +6,7 @@ import { apiClient } from './apiClient'
 import { friendRefusal, friendRefusalLine } from './friendRefusal'
 import { askFriendsSeeMe, useStillHere } from './friendsSeeMeAsk'
 import type { FriendRequest } from './friends'
-import { appendUnique, requestsPageFrom, type RequestSide } from './friendsPaging'
+import { appendUnique, refreshFirstPage, requestsPageFrom, type RequestSide } from './friendsPaging'
 import { Logger } from './logger'
 
 const FAILED_LINE = "That didn’t go through. Try again."
@@ -79,8 +79,18 @@ export function useFriendRequests() {
     const inc = result.success ? requestsPageFrom(result.data, 'incoming') : null
     const out = result.success ? requestsPageFrom(result.data, 'outgoing') : null
     if (inc && out) {
-      put('incoming', { items: inc.items, total: inc.total, cursor: inc.nextCursor, loadingMore: false, moreFailed: false })
-      put('outgoing', { items: out.items, total: out.total, cursor: out.nextCursor, loadingMore: false, moreFailed: false })
+      /*
+       * The head is read again and what was read further down stays (`refreshFirstPage`, as Friends does), so coming back to the
+       * list, or a pull, does not throw the person to the top of it. A list that was never read past its first page is simply
+       * replaced.
+       */
+      const meet = (side: RequestSide, page: NonNullable<typeof inc>) => {
+        const now = latest.current[side]
+        const merged = refreshFirstPage(now.items, page, requestKey)
+        put(side, { items: merged.items, total: page.total, cursor: merged.keptTail ? now.cursor : page.nextCursor, loadingMore: false, moreFailed: false })
+      }
+      meet('incoming', inc)
+      meet('outgoing', out)
       setFailed(false)
       setLoaded(true)
     } else {

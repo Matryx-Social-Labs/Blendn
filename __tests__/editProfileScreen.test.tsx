@@ -2,7 +2,8 @@
  * Edit profile on the design system (Flow 6 `edit`): the cards in the frame's order, the loading frame at its final geometry, Goals and
  * Looking for as DS chips with an Add sheet, and Save held while offline.
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
+import { StyleSheet } from 'react-native'
 
 let mockOffline = false
 jest.mock('../lib/networkStatus', () => ({
@@ -242,6 +243,21 @@ describe('fields of work that did not load (6-3, Edit profile · 04)', () => {
     await fireEvent.press(screen.getByLabelText('Couldn’t load fields of work. Try again.'))
     await screen.findByText('Design')
     expect(screen.queryByText('Couldn’t load fields of work. Try again.')).toBeNull()
+  })
+
+  it('M8: the line is a full target tall, reaches up and down only, and holds still while it retries', async () => {
+    api.getWorkFields.mockResolvedValueOnce({ success: false, error: 'No internet connection.' } as never)
+    await render(<EditProfile />)
+    const line = await screen.findByLabelText('Couldn’t load fields of work. Try again.')
+    expect(StyleSheet.flatten(line.props.style).minHeight).toBeGreaterThanOrEqual(44)
+    expect(line.props.hitSlop).toEqual({ top: 4, bottom: 4 })
+    let answer: (v: unknown) => void = () => {}
+    api.getWorkFields.mockReturnValueOnce(new Promise((r) => (answer = r)) as never)
+    await fireEvent.press(line)
+    const busy = await screen.findByLabelText('Trying again')
+    expect(busy.props.accessibilityState).toMatchObject({ disabled: true, busy: true })
+    await act(async () => answer({ success: false }))
+    await screen.findByLabelText('Couldn’t load fields of work. Try again.')
   })
 
   it('a list that loaded draws no failure line', async () => {

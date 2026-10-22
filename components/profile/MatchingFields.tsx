@@ -106,12 +106,14 @@ export interface MatchingFieldsProps {
    */
   workFieldsFailed?: boolean
   onRetryWorkFields?: () => void
+  /** The retry is on its way: the line says so and holds still. */
+  workFieldsRetrying?: boolean
 }
 
 /** Edit profile · 04: the failure line under the heading, in the frame's words. */
 export const WORK_FIELDS_FAILED = 'Couldn’t load fields of work. Try again.'
 
-function WorkFieldsFailed({ onRetry }: { onRetry?: () => void }) {
+function WorkFieldsFailed({ onRetry, retrying }: { onRetry?: () => void; retrying: boolean }) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   return (
@@ -119,13 +121,15 @@ function WorkFieldsFailed({ onRetry }: { onRetry?: () => void }) {
       <FieldLabel text="WHAT DO YOU DO?" bold={bold} contrast={contrast} />
       <Pressable
         onPress={onRetry}
-        disabled={!onRetry}
+        disabled={!onRetry || retrying}
         accessibilityRole="button"
-        accessibilityLabel={WORK_FIELDS_FAILED}
-        hitSlop={minTarget()}
+        accessibilityLabel={retrying ? 'Trying again' : WORK_FIELDS_FAILED}
+        accessibilityState={{ disabled: !onRetry || retrying, busy: retrying }}
+        // The target is the line's own box, a full 44 tall; the slop reaches up and down only, so it never covers the field beside it.
+        hitSlop={{ top: SPACE.xs, bottom: SPACE.xs }}
         style={styles.failed}
       >
-        <Text style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textTertiary }]}>{WORK_FIELDS_FAILED}</Text>
+        <Text style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textTertiary }]}>{retrying ? 'Trying again…' : WORK_FIELDS_FAILED}</Text>
       </Pressable>
     </View>
   )
@@ -151,6 +155,7 @@ export function MatchingFields({
   onChangeExpertise,
   workFieldsFailed = false,
   onRetryWorkFields,
+  workFieldsRetrying = false,
 }: MatchingFieldsProps) {
   const wantsDating = offerDating && intents.includes('dating')
   const offered = offerDating ? INTENTS : INTENTS.filter((intent) => intent.value !== 'dating')
@@ -225,7 +230,7 @@ export function MatchingFields({
 
       <View style={styles.set}>
         {workFieldsFailed && workFields.length === 0 ? (
-          <WorkFieldsFailed onRetry={onRetryWorkFields} />
+          <WorkFieldsFailed onRetry={onRetryWorkFields} retrying={workFieldsRetrying} />
         ) : (
           <ChipSet
             label="WHAT DO YOU DO?"
@@ -259,5 +264,5 @@ export function MatchingFields({
 
 const styles = StyleSheet.create({
   set: { marginTop: SPACE.xl },
-  failed: { paddingTop: SPACE.xs },
+  failed: { minHeight: minTarget(), justifyContent: 'center' },
 })

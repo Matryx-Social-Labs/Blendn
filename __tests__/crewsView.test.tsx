@@ -5,6 +5,7 @@
  * failed read with a retry; the latest tap wins; a page from before a reload
  * never lands on top of it; a failed page says so and offers the retry.
  */
+import { StyleSheet } from 'react-native'
 import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react-native'
 
 jest.mock('expo-router', () => ({
@@ -116,7 +117,11 @@ describe('no crew yet (10-7 · 16)', () => {
     api.openToCrews.mockResolvedValue({ success: true, data: { openToCrews: true } })
     await render(<Harness checkInKey="ci-none" />)
     await waitFor(() => screen.getByText('No crew yet — make one from your friends.'))
-    await fireEvent.press(screen.getByTestId('room-no-crew'))
+    const line = screen.getByTestId('room-no-crew')
+    // M9: a full target tall, with a hint, and a chevron: it reads as the way to Make a crew.
+    expect(StyleSheet.flatten(line.props.style).minHeight).toBeGreaterThanOrEqual(44)
+    expect(line.props.accessibilityHint).toBe('Opens Make a crew')
+    await fireEvent.press(line)
     expect(router.push).toHaveBeenCalledWith('/crews/new')
   })
 

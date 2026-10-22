@@ -23,10 +23,12 @@ jest.mock('../lib/apiClient', () => ({
 }))
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn() } }))
 jest.mock('../lib/friendsSeeMeAsk', () => ({ askFriendsSeeMe: jest.fn(), useStillHere: () => () => true }))
+let mockFocus: () => void = () => {}
 jest.mock('expo-router', () => ({
   router: { back: jest.fn(), push: (...a: unknown[]) => mockPush(...a) },
   useFocusEffect: (effect: () => void) => {
     const { useEffect } = require('react')
+    mockFocus = effect
     useEffect(effect, [effect])
   },
 }))
@@ -101,6 +103,22 @@ describe('Requests (incoming)', () => {
     expect(list().props.data).toHaveLength(51)
     await reachEnd()
     expect(mockGet).toHaveBeenCalledTimes(2)
+  })
+
+  it('M10: coming back reads the head again and keeps the pages read further down; the next page still follows them', async () => {
+    mockGet
+      .mockResolvedValueOnce({ success: true, data: { incoming: reqs(50), outgoing: [], pagination: { incoming: meta(120, 'i1'), outgoing: meta(0, null) } } })
+      .mockResolvedValueOnce({ success: true, data: { incoming: reqs(50, 50), pagination: { incoming: meta(120, 'i2') } } })
+    await open()
+    await reachEnd()
+    expect(list().props.data).toHaveLength(100)
+    mockGet.mockResolvedValueOnce({ success: true, data: { incoming: reqs(50), outgoing: [], pagination: { incoming: meta(120, 'i1'), outgoing: meta(0, null) } } })
+    await act(async () => mockFocus())
+    expect(list().props.data).toHaveLength(100)
+    mockGet.mockResolvedValueOnce({ success: true, data: { incoming: reqs(20, 100), pagination: { incoming: meta(120, null) } } })
+    await reachEnd()
+    expect(mockGet).toHaveBeenLastCalledWith({ side: 'incoming', cursor: 'i2' })
+    expect(list().props.data).toHaveLength(120)
   })
 
   it('a failed page keeps the cards and offers Try again', async () => {
