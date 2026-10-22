@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { checkInChanged } from './checkIn'
 import { subscribeToLiveEnded } from './socketClient'
+import { useLatest } from './useLatest'
 
 /** The server's word for a check-in ended because the organiser cancelled the event (`live:ended`, Flow 4 R4.1 4.6). */
 export const CANCELLED_REASON = 'cancelled'
@@ -20,8 +21,7 @@ export const CANCELLED_REASON = 'cancelled'
  */
 export function useRoomCancelled(event: { id: string; title: string } | null): { cancelled: { title: string } | null; dismiss: () => void } {
   const [cancelled, setCancelled] = useState<{ eventId: string; title: string } | null>(null)
-  const current = useRef(event)
-  current.current = event
+  const current = useLatest(event)
 
   useEffect(
     () =>
@@ -32,14 +32,11 @@ export function useRoomCancelled(event: { id: string; title: string } | null): {
         // The disc drains live to idle now, not at its next poll.
         checkInChanged(inside.id)
       }),
-    []
+    [current]
   )
 
-  // A different room is a clean slate.
-  const here = event?.id ?? null
-  useEffect(() => {
-    if (here && cancelled && here !== cancelled.eventId) setCancelled(null)
-  }, [here, cancelled])
+  // A different room is a clean slate: the card is only ever for the event it was cancelled in.
+  const shown = cancelled && (!event || event.id === cancelled.eventId) ? cancelled : null
 
-  return { cancelled: cancelled ? { title: cancelled.title } : null, dismiss: () => setCancelled(null) }
+  return { cancelled: shown ? { title: shown.title } : null, dismiss: () => setCancelled(null) }
 }
