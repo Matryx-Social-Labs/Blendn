@@ -50,7 +50,7 @@ describe('<Stepper>', () => {
     await draw()
     expect(flat('s-minus')).toMatchObject({ width: SIZE.control, height: SIZE.control, backgroundColor: COLOR.surfaceSunken })
     const n = StyleSheet.flatten(screen.getByText('2', { includeHiddenElements: true }).props.style)
-    expect(n).toMatchObject({ fontFamily: FONT_FAMILY.mono[700], fontVariant: ['tabular-nums'] })
+    expect(n).toMatchObject({ fontFamily: FONT_FAMILY.mono[700], fontVariant: ['tabular-nums'], fontSize: 20 })
   })
 
   it('on a glass sheet the discs are 8% white', async () => {
@@ -78,6 +78,53 @@ describe('<Stepper>', () => {
     expect(StyleSheet.flatten(screen.getByText('1', { includeHiddenElements: true }).props.style).color).toBe(COLOR.textPrimary)
     await draw({ value: 20, onChange })
     expect(flat('s-plus').opacity).toBe(OPACITY.disabled)
+  })
+
+  describe('motion #40: the nudge at a bound and the digit roll', () => {
+    const spring = Reanimated.withSpring as jest.Mock
+    const nudges = () => spring.mock.calls.filter(([to]) => to === 4 || to === -4)
+
+    it('a press at the ceiling nudges the number 4 pt toward plus on M.press and lets it back, with no haptic and no change', async () => {
+      const onChange = jest.fn()
+      await draw({ value: 20, onChange })
+      spring.mockClear()
+      await fireEvent.press(screen.getByTestId('s-plus', HIDDEN))
+      expect(spring).toHaveBeenCalledWith(4, expect.objectContaining({ stiffness: SPRING.press.stiffness }))
+      expect(spring).toHaveBeenCalledWith(0, expect.objectContaining({ stiffness: SPRING.press.stiffness }))
+      expect(onChange).not.toHaveBeenCalled()
+      expect(select).not.toHaveBeenCalled()
+    })
+
+    it('a press at the floor nudges toward minus', async () => {
+      await draw({ value: 1 })
+      spring.mockClear()
+      await fireEvent.press(screen.getByTestId('s-minus', HIDDEN))
+      expect(spring).toHaveBeenCalledWith(-4, expect.anything())
+    })
+
+    it('Reduce Motion: no nudge', async () => {
+      reduceMotion.mockReturnValue(true)
+      await draw({ value: 20 })
+      spring.mockClear()
+      await fireEvent.press(screen.getByTestId('s-plus', HIDDEN))
+      expect(nudges()).toHaveLength(0)
+    })
+
+    it('a step inside the range does not nudge; a disabled stepper does not either', async () => {
+      await draw({ value: 5 })
+      spring.mockClear()
+      await fireEvent.press(screen.getByTestId('s-plus', HIDDEN))
+      expect(nudges()).toHaveLength(0)
+      await draw({ value: 20, disabled: true })
+      await fireEvent.press(screen.getByTestId('s-plus', HIDDEN))
+      expect(nudges()).toHaveLength(0)
+    })
+
+    it('the number is a rolling number: the digit that changes rolls out and in', async () => {
+      const view = await draw({ value: 2 })
+      await view.rerender(<Stepper label="Spaces" value={3} onChange={jest.fn()} testID="s" />)
+      expect(screen.getByTestId('s-number-0-out', HIDDEN)).toBeTruthy()
+    })
   })
 
   it('the discs are not separate elements on Android either', async () => {
