@@ -22,8 +22,10 @@ import { BLENDN_LINKS, openInApp } from '../lib/links'
 import { dataCopyMailto, SUPPORT_EMAIL } from '../lib/support'
 import { passwordLinkSheet, signOutEverywhereSheet, signOutSheet } from '../lib/settingsSheets'
 import { useLatest } from '../lib/useLatest'
+import { usePushPreference } from '../lib/usePushPreference'
 import { Logger } from '../lib/logger'
 import { useAuth, refreshAuthUser, signOut, signOutEverywhere, deleteAccount } from '../lib/useAuth'
+import { notificationsHint, useMutedRooms } from '../lib/mutedRooms'
 import { openPaywall } from '../lib/paywall'
 import { plusStatusLine, usePlusStatus, type PlusStatus } from '../lib/plus'
 import { manageSubscriptionUrl } from '../lib/purchases'
@@ -84,6 +86,9 @@ function SettingsScreenContent() {
   useFocusEffect(refreshPlus)
   /** The delete is in flight: the row says so and nothing can close the sheet (Flow 7 frame 15). */
   const [deleting, setDeleting] = useState(false)
+  /** The Notifications row's hint: how many rooms are muted, else whether pushes are on. */
+  const muted = useMutedRooms()
+  const push = usePushPreference()
   const bar = useTopBarOverlay()
   const insets = useSafeAreaInsets()
   const bold = useBoldText()
@@ -479,9 +484,20 @@ function SettingsScreenContent() {
           />
         </SettingsGroup>
 
-        {/* Push, what to hear about and offers live on their own screen (Flow 9 · 9.6). */}
-        <SettingsGroup title="Notifications">
-          <SettingsRow icon="bell" title="Notifications" trail="chevron" onPress={() => router.push('/notification-settings')} testID="settings-notifications" />
+        {/*
+          Push, what to hear about, offers and the rooms you muted live on their own screen (Flow 9 · 9.6); what matching
+          reads about you is Edit profile's about-you fields, reached from here too (Flow 14 · 14.4, R4.1 7.1 frame 01).
+        */}
+        <SettingsGroup title="Notifications & matching">
+          <SettingsRow
+            icon="bell"
+            title="Notifications"
+            hint={notificationsHint(muted.rooms.length, push.enabled === null ? null : push.enabled && !push.off)}
+            trail="chevron"
+            onPress={() => router.push('/notification-settings')}
+            testID="settings-notifications"
+          />
+          <SettingsRow icon="sparkles" title="How you match" hint="What matching reads" trail="chevron" onPress={() => router.push('/edit-about-you')} testID="settings-how-you-match" />
         </SettingsGroup>
 
         {/* Blocked users leads Safety: blocking is the most consequential safety action in the product. */}

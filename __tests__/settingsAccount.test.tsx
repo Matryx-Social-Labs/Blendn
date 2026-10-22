@@ -36,7 +36,7 @@ jest.mock('../lib/useAuth', () => ({
   deleteAccount: jest.fn(),
 }))
 jest.mock('../lib/apiClient', () => ({
-  apiClient: { getProfile: jest.fn(), updateProfile: jest.fn(), getMyPlus: jest.fn(), queuedRequest: jest.fn() },
+  apiClient: { getProfile: jest.fn(), updateProfile: jest.fn(), getMyPlus: jest.fn(), queuedRequest: jest.fn(), getChatGroups: jest.fn() },
 }))
 jest.mock('../lib/notifications', () => ({
   initializePushNotifications: jest.fn(async () => null),
@@ -83,6 +83,7 @@ beforeEach(() => {
   api.getProfile.mockResolvedValue({ success: true, data: { profile: { push_enabled: true } } } as never)
   api.updateProfile.mockResolvedValue({ success: true } as never)
   api.getMyPlus.mockResolvedValue({ success: true, data: plusStatus() } as never)
+  ;(api.getChatGroups as jest.Mock).mockResolvedValue({ success: true, data: { groups: [] } })
   permissions.mockResolvedValue({ status: 'granted', canAskAgain: true })
   ;(api.queuedRequest as jest.Mock).mockImplementation((_url: string, init?: RequestInit) =>
     Promise.resolve({ success: true, data: { enabled: init?.method === 'PUT' ? JSON.parse(String(init.body)).enabled : true } })
@@ -134,23 +135,51 @@ it('plays H.primary once, on the Sign out confirm and not when the sheet opens (
 describe('Notifications row', () => {
   it('opens Notification settings, where the push switch now lives (the Settings screen has no switch of its own)', async () => {
     await render(<Screen />)
-    fireEvent.press(await screen.findByRole('button', { name: 'Notifications' }))
+    fireEvent.press(await screen.findByRole('button', { name: /^Notifications/ }))
     expect(router.push).toHaveBeenCalledWith('/notification-settings')
     expect(screen.queryByRole('switch', { name: /^Push notifications/ })).toBeNull()
+  })
+
+  it('says On when nothing is muted (frame 01)', async () => {
+    await render(<Screen />)
+    expect(await screen.findByRole('button', { name: 'Notifications, On' })).toBeTruthy()
+  })
+
+  it('says how many rooms are muted (frame 02)', async () => {
+    const mute = { muted: true, until: null }
+    ;(api.getChatGroups as jest.Mock).mockResolvedValue({
+      success: true,
+      data: { groups: [{ id: 'a', event: { title: 'A' }, mute }, { id: 'b', event: { title: 'B' }, mute }, { id: 'c', event: { title: 'C' } }] },
+    })
+    await render(<Screen />)
+    expect(await screen.findByRole('button', { name: 'Notifications, 2 rooms muted' })).toBeTruthy()
+  })
+})
+
+describe('How you match row (Flow 14 · 14.4)', () => {
+  it('sits beside Notifications and opens the about-you fields', async () => {
+    await render(<Screen />)
+    fireEvent.press(await screen.findByRole('button', { name: 'How you match, What matching reads' }))
+    expect(router.push).toHaveBeenCalledWith('/edit-about-you')
+    expect(screen.getByText('Notifications & matching')).toBeTruthy()
   })
 })
 
 it('offers Try again when the settings did not load, and it works', async () => {
-  api.getProfile.mockResolvedValueOnce({ success: false, error: 'No internet connection.' })
+  // Every read fails (the Settings read and the Notifications hint's push read both ask), until the connection is back.
+  api.getProfile.mockResolvedValue({ success: false, error: 'No internet connection.' })
   await render(<Screen />)
 
   expect(await screen.findByText("Your settings didn’t load. Pull down or try again.")).toBeTruthy()
   // The switches hold still until it works (frame 06).
   expect(screen.getByRole('switch', { name: 'Read receipts' }).props.accessibilityState.disabled).toBe(true)
+  const before = api.getProfile.mock.calls.length
+  api.getProfile.mockResolvedValue({ success: true, data: { profile: { push_enabled: true } } } as never)
   fireEvent.press(screen.getByRole('button', { name: 'Try again' }))
 
   await waitFor(() => expect(screen.queryByText("Your settings didn’t load. Pull down or try again.")).toBeNull())
-  expect(api.getProfile).toHaveBeenCalledTimes(2)
+  // The Settings read and the Notifications hint's push read each ask once at the start; Try again asks again.
+  expect(api.getProfile.mock.calls.length).toBeGreaterThan(before)
 })
 
 describe('Delete account', () => {

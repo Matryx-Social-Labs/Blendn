@@ -698,6 +698,7 @@ function RootLayout() {
       {/* Notifications (the bell opens it) and its settings, from the ⋯ and from Settings. */}
       <Stack.Screen name="notifications" options={{ headerShown: false }} />
       <Stack.Screen name="notification-settings" options={{ headerShown: false }} />
+      <Stack.Screen name="muted-rooms" options={{ headerShown: false }} />
       {/* Settings' About and Contact support. */}
       <Stack.Screen name="about" options={{ headerShown: false }} />
       <Stack.Screen name="support" options={{ headerShown: false }} />

@@ -9,6 +9,7 @@ import { TopBar } from '../components/ds/TopBar'
 import { OffersFromPlacesRow } from '../components/notifications/OffersFromPlacesRow'
 import { COLOR, SPACE } from '../lib/design/tokens'
 import { openChannelSettings } from '../lib/channelSettings'
+import { muteEnds, mutedRoomRoute, useMutedRooms } from '../lib/mutedRooms'
 import { OPACITY } from '../lib/theme'
 import { PREF_ROWS, PREFS_FOOT } from '../lib/notificationPrefs'
 import { useNotificationPrefs } from '../lib/useNotificationPrefs'
@@ -17,6 +18,8 @@ import { useTopBarOverlay } from '../lib/useTopBarState'
 
 const ANDROID = Platform.OS === 'android'
 const OS_BLOCKING_TEXT = 'Your phone is blocking Blend’n’s notifications.'
+/** The rooms listed here before "See all": past this the list is its own screen, which is virtualised. */
+const MUTED_PREVIEW = 3
 const ANDROID_FOOT = 'Each row opens that channel in your phone’s settings. '
 
 /**
@@ -36,6 +39,8 @@ function NotificationSettingsContent() {
   const kinds = useNotificationPrefs()
   const masterOff = push.enabled === false
   const phoneBlocks = push.off && push.enabled !== false
+  const muted = useMutedRooms()
+  const mutedMore = muted.rooms.length - MUTED_PREVIEW
 
   return (
     <View style={styles.container}>
@@ -85,6 +90,32 @@ function NotificationSettingsContent() {
             <OffersFromPlacesRow key="offers" />
           </SettingsGroup>
         </View>
+        {/* Frame 04: the rooms you silenced, each opening its info. A few here; the rest on their own screen. */}
+        {muted.rooms.length > 0 ? (
+          <SettingsGroup title="Muted rooms" testID="notification-settings-muted">
+            {muted.rooms.slice(0, MUTED_PREVIEW).map((room) => (
+              <SettingsRow
+                key={room.id}
+                icon="bell-off"
+                title={room.title}
+                hint={muteEnds(room.mute)}
+                trail="chevron"
+                onPress={() => router.push(mutedRoomRoute(room) as never)}
+                testID={`muted-room-${room.id}`}
+              />
+            ))}
+            {mutedMore > 0 || muted.scanning || muted.capped ? (
+              <SettingsRow
+                key="all"
+                icon="bell-off"
+                title={mutedMore > 0 && !muted.scanning && !muted.capped ? `See all ${muted.rooms.length} muted rooms` : 'See all muted rooms'}
+                trail="chevron"
+                onPress={() => router.push('/muted-rooms')}
+                testID="notification-settings-muted-all"
+              />
+            ) : null}
+          </SettingsGroup>
+        ) : null}
         <Text style={[font('meta', bold), styles.foot]}>{(ANDROID ? ANDROID_FOOT : '') + PREFS_FOOT}</Text>
       </ScrollView>
       <View style={bar.barPin} pointerEvents="box-none">
