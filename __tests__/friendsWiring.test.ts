@@ -102,7 +102,9 @@ describe('the in-rooms switch', () => {
   it('is off by default and saved under the name the API reads', () => {
     const src = read('app/settings.tsx')
     expect(src).toMatch(/friendsSeeMe: false,/)
-    expect(src).toContain('friends_see_me_in_rooms: next.friendsSeeMe')
+    // The column name the API reads, sent alone when it is the switch that changed (see settingsAccount.test).
+    expect(src).toMatch(/friendsSeeMe: 'friends_see_me_in_rooms'/)
+    expect(src).toContain('{ [PREFERENCE_COLUMN[key]]: next[key] }')
     expect(src).toContain('toBoolean(profile.friends_see_me_in_rooms, DEFAULT_PREFERENCES.friendsSeeMe)')
   })
 })
