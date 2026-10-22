@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons'
 import { router, useFocusEffect } from 'expo-router'
 import { useCallback, useEffect, useState } from 'react'
-import { Platform, StyleSheet, View } from 'react-native'
+import { AppState, Platform, StyleSheet, View } from 'react-native'
 
 import { apiClient } from '../../lib/apiClient'
 import { iconBadgeFor, setAppIconBadge } from '../../lib/appBadge'
@@ -68,6 +68,15 @@ export function NotificationBell({ glass = false }: { glass?: boolean } = {}) {
    * when the app held three sockets, and a re-read cannot drift that way.
    */
   useEffect(() => subscribeToBell(() => void load()), [load])
+
+  // And when the app comes back to the front: rows and messages landed while it was away, and the icon's number is the one thing
+  // that shows from outside, so it is re-read the moment the app is looked at.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') void load()
+    })
+    return () => sub.remove()
+  }, [load])
 
   const open = useCallback(() => {
     // Optimistic: the badge clears on tap rather than after a round trip, because opening it is what "seen" means.

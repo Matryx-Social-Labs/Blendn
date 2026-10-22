@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { preloadImages } from '../components/OptimizedImage'
 import { useToast } from '../components/Toast'
+import { refreshAppIconBadge } from './appBadge'
 import { apiClient } from './apiClient'
 import { subscribeChatListUpdates } from './chatListUpdates'
 import { crewRoomsFrom, type CrewRoomRow } from './crews'
@@ -178,6 +179,8 @@ export function useBanterInbox() {
       const result = await apiClient.markAllConversationsRead()
       if (!result.success) throw new Error(result.error || 'mark all read refused')
       queryCache.set(`personal_chats_${user.id}`, cleared, PERSONAL_CHAT_CACHE_TTL)
+      // The icon counts conversations with something unread: it just changed.
+      void refreshAppIconBadge()
     } catch (e) {
       Logger.warn('chat', 'mark all read failed', { error: e })
       setPersonalChats(before)

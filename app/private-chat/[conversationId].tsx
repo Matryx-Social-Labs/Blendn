@@ -26,6 +26,7 @@ import { DayPill, UnreadDivider as UnreadRule } from '../../components/ds/Unread
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useToast } from '../../components/Toast'
 import { apiClient } from '../../lib/apiClient'
+import { scheduleIconBadgeRefresh } from '../../lib/appBadge'
 import { runPlace } from '../../lib/chatFeed'
 import { emitChatListUpdate } from '../../lib/chatListUpdates'
 import { dmThread, draftOf, failedOf, keepFailed, setDraft } from '../../lib/chatOutbox'
@@ -322,7 +323,11 @@ function PrivateChatInner() {
   useEffect(() => {
     if (!myId || !conversationId || messages.length === 0) return
     const unreadIds = messages.filter((m) => !m.isRead && m.senderId !== myId && !isLocalMessage(m)).map((m) => m.id)
-    if (unreadIds.length > 0) markPrivateMessagesRead(conversation, unreadIds)
+    if (unreadIds.length > 0) {
+      markPrivateMessagesRead(conversation, unreadIds)
+      // A socket read has no answer to wait for: the icon is re-read once the server has had a moment.
+      scheduleIconBadgeRefresh()
+    }
   }, [messages, myId, conversationId, conversation])
 
   // This phone's unsent messages stay where the thread (and the Banter) can find them; the draft too.

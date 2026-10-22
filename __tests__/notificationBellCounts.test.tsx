@@ -4,6 +4,7 @@
  * feed's counts as blendn-admin's notification-feed-details.itest.ts builds them (two unseen rows and one conversation: 2 and 3).
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
+import { AppState } from 'react-native'
 
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() } }))
 jest.mock('expo-router', () => ({
@@ -60,4 +61,21 @@ it('an older server sends no badgeCount: the bell works and the icon is left alo
   await waitFor(() => expect(screen.getByLabelText('Notifications').props.accessibilityValue).toEqual({ text: '2 unseen' }))
   await act(async () => {})
   expect(setBadge).not.toHaveBeenCalled()
+})
+
+it('when the app comes back to the front it reads the counts again, so the icon is right the moment it is looked at', async () => {
+  let listener: (state: string) => void = () => {}
+  const spy = jest.spyOn(AppState, 'addEventListener').mockImplementation(((_: string, fn: (s: string) => void) => {
+    listener = fn
+    return { remove: jest.fn() }
+  }) as never)
+  api.getNotifications.mockResolvedValue(feed({ unreadCount: 1, badgeCount: 1 }))
+  await render(<NotificationBell />)
+  await waitFor(() => expect(setBadge).toHaveBeenCalledWith(1))
+  api.getNotifications.mockResolvedValue(feed({ unreadCount: 1, badgeCount: 4 }))
+  await act(async () => listener('background'))
+  expect(setBadge).not.toHaveBeenCalledWith(4)
+  await act(async () => listener('active'))
+  await waitFor(() => expect(setBadge).toHaveBeenCalledWith(4))
+  spy.mockRestore()
 })

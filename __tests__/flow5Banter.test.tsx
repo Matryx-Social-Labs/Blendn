@@ -61,6 +61,8 @@ jest.mock('../components/RealtimeStatusBanner', () => ({ __esModule: true, defau
 jest.mock('../components/board/BoardRequestsSection', () => ({ BoardRequestsSection: () => null }))
 jest.mock('../components/OptimizedImage', () => ({ preloadImages: jest.fn() }))
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn() }) }))
+const mockRefreshBadge = jest.fn()
+jest.mock('../lib/appBadge', () => ({ refreshAppIconBadge: () => mockRefreshBadge(), scheduleIconBadgeRefresh: jest.fn() }))
 
 /* eslint-disable import/first */
 import { router } from 'expo-router'
@@ -351,5 +353,28 @@ describe('the header’s height (Flow 5 Banter: 116 on a 402 pt iPhone)', () => 
     const header = require('react-native').StyleSheet.flatten(title.parent!.props.style)
     expect(header.height).toBe(parts.banterHeaderHeight(0, false))
     expect(header.paddingTop).toBe(2)
+  })
+})
+
+describe('the app icon follows what the Banter reads (badgeCount counts unread conversations)', () => {
+  it('Mark all read re-reads the icon once the server has it', async () => {
+    api.markAllConversationsRead.mockResolvedValue({ success: true, data: { marked: 1 } } as never)
+    await open()
+    await act(async () => {
+      fireEvent.press(screen.getByText('Mark all read'))
+    })
+    await flush()
+    expect(api.markAllConversationsRead).toHaveBeenCalled()
+    expect(mockRefreshBadge).toHaveBeenCalledTimes(1)
+  })
+
+  it('and not when the server refused: the count did not change', async () => {
+    api.markAllConversationsRead.mockResolvedValue({ success: false, error: 'no' } as never)
+    await open()
+    await act(async () => {
+      fireEvent.press(screen.getByText('Mark all read'))
+    })
+    await flush()
+    expect(mockRefreshBadge).not.toHaveBeenCalled()
   })
 })

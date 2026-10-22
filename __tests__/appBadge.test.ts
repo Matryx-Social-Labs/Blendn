@@ -9,11 +9,13 @@ jest.mock('expo-notifications', () => ({
   setBadgeCountAsync: (...a: unknown[]) => mockSetBadge(...a),
   requestPermissionsAsync: jest.fn(),
 }))
+const mockGetNotifications = jest.fn()
+jest.mock('../lib/apiClient', () => ({ apiClient: { getNotifications: (...a: unknown[]) => mockGetNotifications(...a) } }))
 const mockWarn = jest.fn()
 jest.mock('../lib/logger', () => ({ Logger: { warn: (...a: unknown[]) => mockWarn(...a), debug: jest.fn(), info: jest.fn(), error: jest.fn() } }))
 
 import * as Notifications from 'expo-notifications'
-import { setAppIconBadge } from '../lib/appBadge'
+import { refreshAppIconBadge, scheduleIconBadgeRefresh, setAppIconBadge } from '../lib/appBadge'
 
 beforeEach(() => {
   jest.clearAllMocks()
@@ -26,9 +28,10 @@ it('sets the number when notifications are granted', async () => {
   expect(mockSetBadge).toHaveBeenCalledWith(3)
 })
 
-it('clears the icon with zero', async () => {
+it('clears the icon with zero, without asking the phone for its permissions', async () => {
   await setAppIconBadge(0)
   expect(mockSetBadge).toHaveBeenCalledWith(0)
+  expect(mockGetPermissions).not.toHaveBeenCalled()
 })
 
 it('leaves the icon alone when the server sent no count', async () => {
@@ -58,4 +61,37 @@ it('costs only the number when the phone refuses: logged, never thrown', async (
   mockSetBadge.mockRejectedValue(new Error('no launcher support'))
   await expect(setAppIconBadge(5)).resolves.toBeUndefined()
   expect(mockWarn).toHaveBeenCalledWith('notifications', 'badge:failed', expect.anything())
+})
+
+describe('reading the count again', () => {
+  const feed = (badgeCount: unknown) => ({ success: true, data: { notifications: [], unreadCount: 1, pagination: { limit: 1, hasMore: false }, badgeCount } })
+
+  it('sets the icon to the server\'s badgeCount', async () => {
+    mockGetNotifications.mockResolvedValue(feed(4))
+    await refreshAppIconBadge()
+    expect(mockGetNotifications).toHaveBeenCalledWith({ limit: 1 })
+    expect(mockSetBadge).toHaveBeenCalledWith(4)
+  })
+
+  it('leaves the icon alone when the read failed or the server sent no count', async () => {
+    mockGetNotifications.mockResolvedValue({ success: false })
+    await refreshAppIconBadge()
+    mockGetNotifications.mockResolvedValue(feed(undefined))
+    await refreshAppIconBadge()
+    mockGetNotifications.mockRejectedValue(new Error('offline'))
+    await expect(refreshAppIconBadge()).resolves.toBeUndefined()
+    expect(mockSetBadge).not.toHaveBeenCalled()
+  })
+
+  it('a scheduled refresh waits, and many in the wait are one', async () => {
+    jest.useFakeTimers()
+    mockGetNotifications.mockResolvedValue(feed(2))
+    scheduleIconBadgeRefresh(1000)
+    scheduleIconBadgeRefresh(1000)
+    scheduleIconBadgeRefresh(1000)
+    expect(mockGetNotifications).not.toHaveBeenCalled()
+    await jest.advanceTimersByTimeAsync(1000)
+    expect(mockGetNotifications).toHaveBeenCalledTimes(1)
+    jest.useRealTimers()
+  })
 })
