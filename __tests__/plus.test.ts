@@ -16,7 +16,6 @@ import {
   PLUS_COMING_SOON,
   PLUS_FEATURES,
   PLUS_POLL_EVERY_MS,
-  plusStatusCard,
   plusStatusLine,
   waitForPlus,
 } from '../lib/plus'
@@ -149,17 +148,6 @@ describe('the page\'s own rules', () => {
     expect(at('night_pass', 'google')).toBe('buy')
     expect(at('plus', 'apple', false)).toBe('buy')
     expect(dockMode(null)).toBe('buy')
-  })
-
-  it('the status card: nothing when nothing is active, a Night Pass does not renew, a subscription names its store', () => {
-    expect(plusStatusCard(null)).toBeNull()
-    expect(plusStatusCard(inactive.data as never)).toBeNull()
-    expect(plusStatusCard({ active: true, gated: true, product: 'night_pass', source: 'google', expiresAt: '2026-10-11T00:30:00.000Z' })).toMatchObject({
-      kind: 'night',
-      sentence: expect.stringMatching(/^Night Pass until .*\. It doesn’t renew; another one adds 24 hours\.$/),
-    })
-    expect(plusStatusCard(active.data as never)).toMatchObject({ kind: 'active', sentence: expect.stringMatching(/^Blend’n\+ until .* · App Store$/) })
-    expect(plusStatusCard({ ...active.data, source: 'grant' } as never)?.sentence).toMatch(/^Blend’n\+ until [^·]*$/)
   })
 })
 

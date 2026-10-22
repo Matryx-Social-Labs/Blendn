@@ -37,8 +37,12 @@ export function useHeaderHeight() {
  * Flow 12 `page` header: a glass bar over the scroll, the back circle on the
  * left and "Not now" (or "Done" once something happened) in a glass pill on
  * the right. Always there, no delay timer, no guilt. Both ways out close.
+ *
+ * Scroll-edge chrome (motion #30, TopBar): at rest there is no bar, the circle and
+ * the pill sit straight on the page; once the content has moved under it the bar's
+ * glass is mounted, never faded (glass fades wrong, §5.2 rule 6).
  */
-export function PlusHeader({ done, onClose }: { done: boolean; onClose: () => void }) {
+export function PlusHeader({ done, onClose, state = 'rest' }: { done: boolean; onClose: () => void; state?: 'rest' | 'scrolled' }) {
   const insets = useSafeAreaInsets()
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
@@ -48,10 +52,12 @@ export function PlusHeader({ done, onClose }: { done: boolean; onClose: () => vo
   const height = useHeaderHeight()
   return (
     <View testID="plus-header" style={[styles.header, { paddingTop: barTop(insets.top), height }]}>
-      <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-        <Material role="bar" style={StyleSheet.absoluteFill} />
-        {contrast ? <View style={styles.barContrast} /> : null}
-      </View>
+      {state === 'scrolled' ? (
+        <View pointerEvents="none" style={StyleSheet.absoluteFill} testID="plus-header-bar">
+          <Material role="bar" style={StyleSheet.absoluteFill} />
+          {contrast ? <View style={styles.barContrast} /> : null}
+        </View>
+      ) : null}
       <View style={styles.headerRow}>
         <IconButton icon={android ? 'arrow-left' : 'chevron-left'} accessibilityLabel="Back" onPress={onClose} />
         <ScalePress
@@ -307,7 +313,7 @@ export function PlusFooter({
   )
 }
 
-const LEGAL = {
+export const LEGAL = {
   ios: 'Payment is charged to your Apple Account at confirmation. Subscriptions renew automatically unless cancelled at least 24 hours before the end of the current period; manage or cancel in Settings › Apple Account › Subscriptions. Night Pass is a one-off. Prices include GST.',
   android:
     'Payment is charged to your Google Play account at confirmation. Subscriptions renew automatically unless cancelled before the end of the current period; cancel anytime in Google Play › Payments & subscriptions. Night Pass is a one-off. Prices include GST.',

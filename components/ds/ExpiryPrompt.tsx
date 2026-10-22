@@ -15,7 +15,9 @@ const SERVER = {
   notLive: 'You’re not live here any more. Go live at the venue to join today’s room.',
   reset: 'Today’s room has closed. Tomorrow’s opens at 6.',
 }
-/** ROUND3 G1: the built free extend (client `lib/goLive.ts`). */
+/** The reset sentence at the venue's own hour; the server's "6" when the hour is not known (`resetHour`). */
+const resetLine = (opensAt?: string) => (opensAt ? SERVER.reset.replace('at 6', `at ${opensAt}`) : SERVER.reset)
+/** ROUND3 G1: the built free extend (client `lib/goLive.ts`, `EXTEND_CHOICE`). */
 const FREE_EXTEND = 'Extend 45 min — free'
 const noop = () => {}
 
@@ -30,6 +32,11 @@ const noop = () => {}
  * `H.primary` on Extend; none as it appears, on the Plus row or on Done (the
  * R3-G frame's annotations; the page's `H.threshold` at 2 minutes is
  * overruled). Read title, "Still here?", then the three buttons.
+ *
+ * The row is Blend'n+'s where Blend'n+ is sold (`from`, the store's lowest
+ * price): it opens the Tonight sheet. Where staying is simply free (a launch
+ * season, or somebody who has Blend'n+) the same row reads "Stay while you're
+ * here · up to 4 h" and stays; nothing is sold there, so no "from".
  */
 export function ExpiryPrompt({
   kind,
@@ -39,19 +46,29 @@ export function ExpiryPrompt({
   plus,
   firstGoLiveTonight = false,
   extending = false,
+  staying = false,
+  opensAt,
   onDone,
 }: {
   kind: 'ended' | 'reset'
   visible: boolean
   venue: string
   onExtend?: () => void
-  /** The Blend'n+ row (opens the Tonight sheet's expiry trigger), from the store's own lowest price; omitted while Plus gating is off. */
-  plus?: { from: string; onPress: () => void }
-  /** The client rule: no Plus row on a night's first Go Live. */
+  /**
+   * The Stay row. With `from` (the store's own lowest price) it is Blend'n+'s and opens the Tonight sheet's expiry
+   * trigger; without, staying is free here and it goes live.
+   */
+  plus?: { from?: string; onPress: () => void }
+  /** The client rule: no Blend'n+ row on a person's first Go Live (it is never a first impression). */
   firstGoLiveTonight?: boolean
   extending?: boolean
+  /** A Stay is on its way: everything holds, as for Extend, but Extend shows no spinner. */
+  staying?: boolean
+  /** `reset`: when tomorrow's room opens ("6", "noon"), from the venue's own reset hour. */
+  opensAt?: string
   onDone: () => void
 }) {
+  const held = extending || staying
   if (kind === 'reset') {
     return (
       <Sheet
@@ -59,25 +76,25 @@ export function ExpiryPrompt({
         onClose={onDone}
         icon="moon"
         title="Today’s room has closed"
-        body={`${SERVER.reset} Pseudonyms reset with it.`}
+        body={`${resetLine(opensAt)} Pseudonyms reset with it.`}
         actions={[{ label: 'Done for now', kind: 'lit', onPress: onDone }]}
       />
     )
   }
   return (
-    // While Extend is on its way the sheet holds, as `<Sheet>` does for its own busy actions.
-    <Sheet visible={visible} onClose={extending ? noop : onDone} icon="hourglass" title={`Your live time at ${venue} is up`} body="Still here?">
+    // While Extend or Stay is on its way the sheet holds, as `<Sheet>` does for its own busy actions.
+    <Sheet visible={visible} onClose={held ? noop : onDone} icon="hourglass" title={`Your live time at ${venue} is up`} body="Still here?">
       <View style={styles.actions}>
-        <Button kind="primary" label={FREE_EXTEND} loading={extending} onPress={onExtend} />
-        {plus && !firstGoLiveTonight ? <PlusRow from={plus.from} disabled={extending} onPress={plus.onPress} /> : null}
-        <Button kind="tertiary" label="Done for now" disabled={extending} onPress={onDone} />
+        <Button kind="primary" label={FREE_EXTEND} loading={extending} disabled={staying} onPress={onExtend} />
+        {plus && !(plus.from && firstGoLiveTonight) ? <PlusRow from={plus.from} disabled={held} onPress={plus.onPress} /> : null}
+        <Button kind="tertiary" label="Done for now" disabled={held} onPress={onDone} />
       </View>
     </Sheet>
   )
 }
 
-/** "Stay while you're here with Blend'n+ · up to 4 h · from ₹49": solid, since glass in a sheet would be glass on glass. */
-function PlusRow({ from, disabled, onPress }: { from: string; disabled: boolean; onPress: () => void }) {
+/** "Stay while you're here with Blend'n+ · up to 4 h · from ₹49": solid, since glass in a sheet would be glass on glass. Free to stay: "Stay while you're here · up to 4 h". */
+function PlusRow({ from, disabled, onPress }: { from?: string; disabled: boolean; onPress: () => void }) {
   const android = Platform.OS === 'android'
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
@@ -92,16 +109,16 @@ function PlusRow({ from, disabled, onPress }: { from: string; disabled: boolean;
         onBlur={() => setFocused(false)}
         android_ripple={{ color: PRESSED_WASH.android, foreground: true }}
         accessibilityRole="button"
-        accessibilityLabel={`Stay while you’re here with Blend’n+, up to 4 h, from ${spokenPrice(from)}`}
+        accessibilityLabel={from ? `Stay while you’re here with Blend’n+, up to 4 h, from ${spokenPrice(from)}` : 'Stay while you’re here, up to 4 h'}
         accessibilityState={{ disabled }}
         style={[styles.plus, contrast && IC_HAIRLINE, disabled && { opacity: OPACITY.disabled }]}
       >
         <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('button', bold), styles.ink]}>
-          Stay while you’re here with Blend’n+
+          {from ? 'Stay while you’re here with Blend’n+' : 'Stay while you’re here'}
         </Text>
         <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold, FONT_FAMILY.brand[400]), { color: COLOR.textSecondary }]}>
-          {'up to 4 h · from '}
-          <Text style={monoCaption(bold)}>{from}</Text>
+          {from ? 'up to 4 h · from ' : 'up to 4 h'}
+          {from ? <Text style={monoCaption(bold)}>{from}</Text> : null}
         </Text>
       </ScalePress>
       {focused ? focusRing(RADIUS.button).map((r, i) => <View key={i} pointerEvents="none" style={r} />) : null}

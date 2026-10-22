@@ -5,20 +5,20 @@ import { Platform } from 'react-native'
 import { apiClient, type GoLiveResult } from './apiClient'
 import { checkInChanged } from './checkIn'
 import { reasonOf } from './sessionEnd'
-import { goLiveRefusal, rememberLiveSession, type GoLiveChoice, type GoLiveRefusal } from './goLive'
+import { goLiveRefusal, noteOwnGoLive, rememberLiveSession, type GoLiveChoice, type GoLiveRefusal } from './goLive'
 import { H } from './haptics'
 import { getCurrentLocation, type ShowTray } from './locationFix'
 import { Logger } from './logger'
 import { openInMaps } from './openInMaps'
 import { useAuth } from './useAuth'
 import { afterSheetDismissed } from './sheetDismissed'
-import { openPaywall } from './paywall'
+import { openTonight } from './paywall'
 
 /**
  * Going live at a place, from wherever the button is: the place screen's Go
- * Live sheet and the expiry prompt's "Extend" and "Stay live till I leave".
- * A "stay" refused as Blendn+'s (`PLUS_REQUIRED`) opens the paywall through
- * its policy (`lib/paywall.ts`). Where you are comes through the
+ * Live sheet and the expiry prompt's "Extend" and "Stay". A "stay" refused as
+ * Blendn+'s (`PLUS_REQUIRED`) opens the Tonight sheet through the paywall's
+ * policy (`lib/paywall.ts`). Where you are comes through the
  * check-in's own gates (`lib/locationFix.ts`); the answer is read by its code
  * (`goLiveRefusal`). The trays are the caller's.
  */
@@ -187,6 +187,7 @@ export function useGoLive({
       if (result.success && result.data) {
         // Go Live is the check-in's twin (§21.5): the same important success.
         H.success({ important: true })
+        noteOwnGoLive()
         if (userId) {
           await rememberLiveSession({ userId, venueDayId: result.data.venueDayId, venueId: place.id, venueName: place.name, choice })
         }
@@ -199,13 +200,15 @@ export function useGoLive({
       const refusal = goLiveRefusal(reasonOf(result), result.error, result.eventId, result.retryAfter)
       // No haptic on a refusal (R4-D11 11-1): a refusal about the place is not about you.
       Logger.info('events', 'go live refused', { code: reasonOf(result) })
-      const seePlus = () => void openPaywall('go_live_expiry', { userInitiated: true })
+      // A tap on "See Blend'n+" and the automatic ask are the same sheet: the Stay tap, with the free hour as its way on.
+      const stayOffer = { trigger: 'stay' as const, venue: place.name, onFree: () => void goLive({ minutes: 60 }), onUnlocked: () => void goLive({ stay: true }) }
+      const seePlus = () => void openTonight(stayOffer, { userInitiated: true })
       if (refusal.kind === 'plus') {
         // "Stay" is Blendn+'s in this city: the paywall, if its policy lets it come now (step 11) —
         // once the tray has finished leaving (iOS will not present over a dismissing modal).
         closeTray()
         await afterSheetDismissed()
-        const opened = await openPaywall('go_live_expiry')
+        const opened = await openTonight(stayOffer)
         if (onPlusRequired) {
           onPlusRequired(opened)
           return false

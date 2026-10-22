@@ -76,9 +76,40 @@ describe('<ExpiryPrompt>', () => {
     expect(onDone).not.toHaveBeenCalled()
   })
 
-  it('never a Plus row on a night’s first Go Live', async () => {
+  it('never a Blend’n+ row on a person’s first Go Live', async () => {
     await render(ended({ firstGoLiveTonight: true }))
     expect(screen.queryByRole('button', { name: /Blend’n\+/ })).toBeNull()
+  })
+
+  /**
+   * Negative control: dropping the `plus.from &&` in the first-Go-Live test hides the free row too, and
+   * fails "where staying is free the row stays, even on a first Go Live".
+   */
+  it('where staying is free the row stays, with no price and no Blend’n+, even on a first Go Live', async () => {
+    const onStay = jest.fn()
+    await render(ended({ plus: { onPress: onStay }, firstGoLiveTonight: true }))
+    const row = screen.getByRole('button', { name: 'Stay while you’re here, up to 4 h' })
+    expect(screen.getByText('Stay while you’re here')).toBeTruthy()
+    expect(screen.getByText('up to 4 h')).toBeTruthy()
+    expect(screen.queryByText(/Blend’n\+/)).toBeNull()
+    await fireEvent.press(row)
+    expect(onStay).toHaveBeenCalledTimes(1)
+  })
+
+  it('while Stay is on its way the rest wait, but Extend shows no spinner', async () => {
+    await render(ended({ staying: true }))
+    expect(screen.getByRole('button', { name: 'Extend 45 min — free' }).props.accessibilityState).toMatchObject({ disabled: true })
+    expect(screen.getByRole('button', { name: 'Extend 45 min — free' }).props.accessibilityState.busy).toBeFalsy()
+    expect(screen.getByRole('button', { name: 'Done for now' }).props.accessibilityState).toMatchObject({ disabled: true })
+    expect(screen.getByRole('button', { name: /Stay while you’re here/ }).props.accessibilityState).toMatchObject({ disabled: true })
+  })
+
+  it('reset at the venue’s own hour: tomorrow’s opens when the venue’s day does', async () => {
+    await render(<ExpiryPrompt kind="reset" visible venue="Toit" opensAt="5" onDone={jest.fn()} />)
+    expect(screen.getByText(/Tomorrow’s opens at 5\./)).toBeTruthy()
+    expect(screen.queryByText(/opens at 6/)).toBeNull()
+    await render(<ExpiryPrompt kind="reset" visible venue="Toit" opensAt="noon" onDone={jest.fn()} />)
+    expect(screen.getByText(/Tomorrow’s opens at noon\./)).toBeTruthy()
   })
 
   it('reset at 06:00: the server’s sentence, one action', async () => {

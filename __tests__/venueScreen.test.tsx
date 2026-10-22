@@ -44,7 +44,7 @@ jest.mock('expo-linear-gradient', () => {
 })
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShowToast }) }))
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn() } }))
-jest.mock('../lib/apiClient', () => ({ apiClient: { getVenue: jest.fn(), goLive: jest.fn(), queuedRequest: jest.fn().mockResolvedValue({ success: false }) } }))
+jest.mock('../lib/apiClient', () => ({ apiClient: { getVenue: jest.fn(), getVenueUpcoming: jest.fn(), goLive: jest.fn(), queuedRequest: jest.fn().mockResolvedValue({ success: false }) } }))
 jest.mock('../lib/blendnOverlay', () => ({ openBlendn: jest.fn() }))
 jest.mock('../lib/checkIn', () => ({ checkOutOf: jest.fn(), checkInChanged: jest.fn(), subscribeCheckInChanged: () => () => {} }))
 jest.mock('../lib/socketClient', () => ({ subscribeToLiveEnded: (cb: never) => { mockEnded.push(cb); return () => {} } }))
@@ -53,7 +53,7 @@ jest.mock('../lib/locationFix', () => ({ getCurrentLocation: jest.fn(async () =>
 jest.mock('../lib/sheetDismissed', () => ({ ...jest.requireActual('../lib/sheetDismissed'), afterSheetDismissed: () => Promise.resolve() }))
 jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { id: 'u1' } }) }))
 jest.mock('../lib/plus', () => ({ usePlusStatus: () => ({ status: null, refresh: jest.fn() }) }))
-jest.mock('../lib/paywall', () => ({ openPaywall: jest.fn(async () => true) }))
+jest.mock('../lib/paywall', () => ({ openTonight: jest.fn(async () => true) }))
 const mockOpenShare = jest.fn((_target?: unknown) => Promise.resolve(true))
 jest.mock('../lib/shareTray', () => ({ openShare: (t: unknown) => mockOpenShare(t) }))
 jest.mock('../lib/openInMaps', () => ({ openInMaps: jest.fn(() => Promise.resolve()) }))
@@ -72,8 +72,8 @@ import { openBlendn } from '../lib/blendnOverlay'
 import { checkOutOf } from '../lib/checkIn'
 import { H } from '../lib/haptics'
 import { openInMaps } from '../lib/openInMaps'
+import { openTonight } from '../lib/paywall'
 import { clockTime } from '../lib/roomMoments'
-import { openPaywall } from '../lib/paywall'
 /* eslint-enable import/first */
 
 const wall = (ms: number) => `${String(new Date(ms).getHours()).padStart(2, '0')}:${String(new Date(ms).getMinutes()).padStart(2, '0')}`
@@ -304,19 +304,35 @@ describe('the Where card’s map', () => {
 })
 
 describe('the page, the design’s details', () => {
-  it('Coming up here shows three and the rest behind See all', async () => {
-    const upcoming = [1, 2, 3, 4].map((n) => ({ id: `u${n}`, title: `Night ${n}`, startTime: min(60 * 24 * n) }))
-    await mount(venue({ venue: { upcoming } }))
+  const nights = (n: number, from = 1) => Array.from({ length: n }, (_, i) => ({ id: `u${from + i}`, title: `Night ${from + i}`, startTime: min(60 * 24 * (from + i)) }))
+
+  it('Coming up here shows three of the first few, counts them all in the heading, and opens the rest from See all', async () => {
+    ;(apiClient.getVenueUpcoming as jest.Mock).mockResolvedValue({
+      success: true,
+      data: { events: nights(2, 6), pagination: { limit: 20, hasMore: false, nextCursor: null, totalCount: 7 } },
+    })
+    await mount(venue({ venue: { upcoming: nights(5), upcomingTotal: 7, upcomingNextCursor: 'c1' } }))
     expect(screen.queryByTestId('venue-upcoming-u4')).toBeNull()
+    expect(screen.getByRole('header', { name: 'Coming up here, 7' })).toBeTruthy()
     await act(async () => {
       fireEvent.press(screen.getByRole('button', { name: 'See all' }))
     })
-    expect(screen.getByTestId('venue-upcoming-u4')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'See all' })).toBeNull()
+    await act(async () => { await Promise.resolve() })
+    // The sheet has the page's five and fetches the rest from where the page stopped.
+    expect(apiClient.getVenueUpcoming).toHaveBeenCalledWith('v1', 'c1', 20)
+    expect(screen.getByTestId('venue-upcoming-all-u4')).toBeTruthy()
+    expect(screen.getByTestId('venue-upcoming-all-u7')).toBeTruthy()
+    expect(screen.queryByTestId('venue-upcoming-more')).toBeNull()
+  })
+
+  it('See all when there are more than three, with or without a total', async () => {
+    await mount(venue({ venue: { upcoming: nights(4) } }))
+    expect(screen.getByRole('button', { name: 'See all' })).toBeTruthy()
+    expect(screen.getByRole('header', { name: 'Coming up here, 4' })).toBeTruthy()
   })
 
   it('three or fewer have no See all', async () => {
-    await mount(venue({ venue: { upcoming: [{ id: 'u1', title: 'Night', startTime: min(1440) }] } }))
+    await mount(venue({ venue: { upcoming: nights(1), upcomingTotal: 1, upcomingNextCursor: null } }))
     expect(screen.queryByRole('button', { name: 'See all' })).toBeNull()
   })
 
@@ -493,9 +509,9 @@ describe('the dock', () => {
       expect(screen.queryAllByRole('radio').length).toBe(4)
     })
 
-    it('“Staying live is part of Blend’n+” when the paywall may not open: Pick a time goes back to the dial, See Blend’n+ opens the paywall', async () => {
+    it('“Staying live is part of Blend’n+” when the paywall may not open: Pick a time goes back to the dial, See Blend’n+ opens the Tonight sheet', async () => {
       goLiveApi.mockResolvedValue({ success: false, errorCode: 'PLUS_REQUIRED', error: 'Staying live is part of Blendn+.' })
-      ;(openPaywall as jest.Mock).mockResolvedValue(false)
+      ;(openTonight as jest.Mock).mockResolvedValue(false)
       await mount()
       await openDial(3)
       await hold()
@@ -512,7 +528,7 @@ describe('the dock', () => {
         fireEvent.press(screen.getByRole('button', { name: 'See Blend’n+' }))
       })
       await act(async () => { jest.advanceTimersByTime(900) })
-      expect(openPaywall).toHaveBeenLastCalledWith('go_live_expiry', { userInitiated: true })
+      expect(openTonight).toHaveBeenLastCalledWith(expect.objectContaining({ trigger: 'stay', venue: 'The Humming Tree' }), { userInitiated: true })
     })
 
     const openDialAgainStay = async () => {
@@ -532,14 +548,14 @@ describe('the dock', () => {
     })
   })
 
-  it('Stay is Blend’n+’s where the server gates it: the dial shows it locked, and a tap opens the paywall once the dial has left', async () => {
+  it('Stay is Blend’n+’s where the server gates it: the dial shows it locked, and a tap opens the Tonight sheet once the dial has left', async () => {
     const plus = require('../lib/plus')
     jest.spyOn(plus, 'usePlusStatus').mockReturnValue({ status: { active: false, gated: true }, refresh: jest.fn() })
-    ;(openPaywall as jest.Mock).mockResolvedValue(true)
+    ;(openTonight as jest.Mock).mockResolvedValue(true)
     await mount()
     await openDial(3)
     await act(async () => { jest.advanceTimersByTime(900) })
-    expect(openPaywall).toHaveBeenCalledWith('go_live_expiry', { userInitiated: true })
+    expect(openTonight).toHaveBeenCalledWith(expect.objectContaining({ trigger: 'stay', venue: 'The Humming Tree', onFree: expect.any(Function), onUnlocked: expect.any(Function) }), { userInitiated: true })
     expect(goLiveApi).not.toHaveBeenCalled()
   })
 

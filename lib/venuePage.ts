@@ -113,16 +113,42 @@ export function timeRange(startIso: string, endIso: string): string {
   return Number.isFinite(end) ? `${clockTime(start)} – ${clockTime(end)}` : clockTime(start)
 }
 
-/** "Coming up here": the first three show, the rest behind See all. */
+/**
+ * "Coming up here": the first three show; "See all" is a sheet that pages the rest in (`GET /venues/:id/upcoming`, 20
+ * at a time by cursor). `GET /venues/:id` brings the first few and `upcomingTotal`; a server that sends no total
+ * leaves the list at what it sent, capped here at `UPCOMING_MAX` so nothing it sends can draw hundreds of rows.
+ */
 export const UPCOMING_SHOWN = 3
-export function upcomingRows(upcoming: VenueDetail['venue']['upcoming']) {
+export const UPCOMING_MAX = 20
+/** A page of the sheet's list. */
+export const UPCOMING_PAGE = 20
+
+export type UpcomingRow = { id: string; title: string; day: string }
+
+export function upcomingRows(upcoming: VenueDetail['venue']['upcoming'], max: number = UPCOMING_MAX): UpcomingRow[] {
   return (upcoming ?? [])
     .filter((e) => e.title && dayLabel(e.startTime))
+    .slice(0, max)
     .map((e) => ({
       id: e.id,
       title: e.title,
       day: dayLabel(e.startTime),
     }))
+}
+
+/** How many events the page can say there are: the server's total, else what it sent. */
+export function upcomingCount(venue: Pick<VenueDetail['venue'], 'upcoming' | 'upcomingTotal'>, shownRows: number): number {
+  const total = venue.upcomingTotal
+  return typeof total === 'number' && Number.isFinite(total) && total >= shownRows ? total : shownRows
+}
+
+/** "See all" where there is more than the page shows. */
+export const hasMoreThanShown = (count: number): boolean => count > UPCOMING_SHOWN
+
+/** A page appended to what is there, an event never twice (the list can move under a person between pages). */
+export function appendUpcoming(have: readonly UpcomingRow[], page: readonly UpcomingRow[]): UpcomingRow[] {
+  const seen = new Set(have.map((r) => r.id))
+  return [...have, ...page.filter((r) => !seen.has(r.id))]
 }
 
 /**

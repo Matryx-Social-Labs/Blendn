@@ -81,6 +81,8 @@ export function TonightSheet({
   onRestore,
   status = 'idle',
   store,
+  legal,
+  restoring = false,
 }: {
   visible: boolean
   onClose: () => void
@@ -101,6 +103,14 @@ export function TonightSheet({
   onRestore: () => void
   status?: 'idle' | 'pending' | 'cancelled' | 'failed'
   store: 'ios' | 'android'
+  /**
+   * The store's wording for what renews and how to cancel (App Store 3.1.2 / Play), shown where a subscription is
+   * the pick: it stands in place of "Prices include GST." because it ends with it. The Night Pass is a one-off and
+   * says so.
+   */
+  legal?: string
+  /** Restore purchases is on its way: the link says so and holds. */
+  restoring?: boolean
 }) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
@@ -112,8 +122,9 @@ export function TonightSheet({
   const links: [string, () => void][] = [
     ['Terms', onTerms],
     ['Privacy', onPrivacy],
-    ['Restore purchases', onRestore],
+    [restoring ? 'Restoring…' : 'Restore purchases', restoring ? () => {} : onRestore],
   ]
+  const terms = pick === 'monthly' && legal ? legal : pick === 'night' ? 'Night Pass is a one-off. Prices include GST.' : 'Prices include GST.'
   const header = useRef<ComponentRef<typeof View>>(null)
 
   return (
@@ -167,8 +178,10 @@ export function TonightSheet({
       </View>
       <View style={styles.foot}>
         <Button kind="tertiary" size="sm" label="See all plans" onPress={onSeeAll} style={styles.centred} />
+        <Text testID="tonight-legal" style={[font('meta', bold), styles.legalText, { color: quiet }]}>
+          {terms}
+        </Text>
         <View style={styles.legal}>
-          <Text style={[font('meta', bold), { color: quiet }]}>Prices include GST.</Text>
           {links.map(([label, onPress], i) => (
             <View key={label} style={styles.legal}>
               {i ? (
@@ -176,7 +189,7 @@ export function TonightSheet({
                   ·
                 </Text>
               ) : null}
-              <Pressable onPress={onPress} hitSlop={LINK_SLOP} accessibilityRole="link" accessibilityLabel={label}>
+              <Pressable onPress={onPress} hitSlop={LINK_SLOP} accessibilityRole="link" accessibilityLabel={label} accessibilityState={{ busy: restoring && i === 2 }}>
                 <Text style={[font('meta', bold), { color: quiet }]}>{label}</Text>
               </Pressable>
             </View>
@@ -202,6 +215,7 @@ const styles = StyleSheet.create({
   level: { width: LEVEL, height: LEVEL, borderRadius: RADIUS.capsule, borderWidth: LEVEL_EDGE, borderColor: COLOR.textPrimary, overflow: 'hidden' },
   levelFill: { position: 'absolute', left: 0, right: 0, bottom: 0, height: LEVEL_FILL, backgroundColor: COLOR.textPrimary },
   centre: { textAlign: 'center' },
+  legalText: { textAlign: 'center' },
   legal: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', columnGap: SPACE.xs },
   centred: { alignSelf: 'center' },
   line: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACE.sm },

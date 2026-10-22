@@ -164,10 +164,13 @@ describe('the screens read the server', () => {
     expect(read('lib/activeRoom.ts')).toContain('eventTitle: roomDisplayTitle(checkin)')
   })
 
-  it('the expiry prompt offers the free extension and a real "stay", no locked placeholder (step 11)', () => {
-    expect(LIVE).toContain("label: 'Extend 45 min · free'")
-    expect(LIVE).toContain("label: stayLabel, onPress: goLiveWith(STAY_CHOICE, 'stay')")
-    expect(LIVE).toContain("'Stay live till I leave · Blendn+'")
-    expect(LIVE).not.toMatch(/locked|showPlusPlaceholder/i)
+  it('the expiry prompt is the design’s ExpiryPrompt: the free 45 minutes and a real "stay", no locked placeholder (step 11, Flow 11 · 11.4)', () => {
+    const prompt = read('components/ds/ExpiryPrompt.tsx')
+    expect(LIVE).toContain('<ExpiryPrompt')
+    expect(LIVE).toContain('onExtend={goLiveWith(EXTEND_CHOICE')
+    expect(LIVE).toContain("goLiveWith(STAY_CHOICE, 'stay')")
+    expect(prompt).toContain("'Extend 45 min — free'")
+    expect(prompt).toContain('Stay while you’re here')
+    expect(LIVE).not.toMatch(/\blocked\b|showPlusPlaceholder/i)
   })
 })

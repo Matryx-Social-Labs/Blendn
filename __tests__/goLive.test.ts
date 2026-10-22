@@ -3,13 +3,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import {
   clearLiveSession,
   countdownLabel,
-  EXPIRY_PROMPT_LEAD_MS,
   goLiveRefusal,
+  hasGoneLiveBefore,
   liveEndedMessage,
   markLivePrompted,
+  noteGoLiveDay,
   noteLiveDayEnd,
   oneTapChoice,
-  promptDelayMs,
+  opensAtWords,
+  resetHourOf,
   readLiveSession,
   rememberLiveSession,
   remainingMs,
@@ -46,21 +48,7 @@ describe('the countdown reads the server clock (PL-CU02)', () => {
   })
 })
 
-describe('the expiry prompt (PL-M02)', () => {
-  it('shows five minutes before a fixed window ends', () => {
-    expect(EXPIRY_PROMPT_LEAD_MS).toBe(5 * 60_000)
-    expect(promptDelayMs({ expiresAt: at(20), stay: false }, NOW, false)).toBe(15 * 60_000)
-    // Already inside the last five minutes: now.
-    expect(promptDelayMs({ expiresAt: at(3), stay: false }, NOW, false)).toBe(0)
-  })
-
-  it('shows at most once a night, never for an ended window, never for "stay"', () => {
-    expect(promptDelayMs({ expiresAt: at(20), stay: false }, NOW, true)).toBeNull()
-    expect(promptDelayMs({ expiresAt: at(-1), stay: false }, NOW, false)).toBeNull()
-    expect(promptDelayMs({ expiresAt: at(20), stay: true }, NOW, false)).toBeNull()
-    expect(promptDelayMs({ expiresAt: null, stay: false }, NOW, false)).toBeNull()
-  })
-
+describe('the expiry prompt (PL-M02, Flow 11 · 11.4): asked once a night, when the window has run out', () => {
   it('remembers a prompt for the venue day it was shown on, and forgets it for a new one', async () => {
     await AsyncStorage.clear()
     const session = { userId: 'u1', venueId: 'v1', venueName: 'The Humming Tree' }
@@ -81,6 +69,39 @@ describe('the expiry prompt (PL-M02)', () => {
     expect(await readLiveSession(null)).toBeNull()
     await clearLiveSession()
     expect(await readLiveSession('u1')).toBeNull()
+    expect(await hasGoneLiveBefore('u1', 'day-9')).toBe(false)
+  })
+})
+
+describe('a first Go Live (the expiry prompt never sells Blendn+ on one)', () => {
+  /**
+   * Negative control: counting the same night's own day as "before" (dropping the `d !== venueDayId`
+   * filter) fails "an extension on the same night is still the first".
+   */
+  it('is the first venue day, not the first window: an extension on the same night is still the first', async () => {
+    await AsyncStorage.clear()
+    expect(await hasGoneLiveBefore('u1', 'day-1')).toBe(false)
+    await rememberLiveSession({ userId: 'u1', venueDayId: 'day-1', venueId: 'v1', venueName: 'X', choice: { minutes: 20 } })
+    await rememberLiveSession({ userId: 'u1', venueDayId: 'day-1', venueId: 'v1', venueName: 'X', choice: { minutes: 45 } })
+    expect(await hasGoneLiveBefore('u1', 'day-1')).toBe(false)
+  })
+
+  it('a later night has been preceded by an earlier one', async () => {
+    await AsyncStorage.clear()
+    await rememberLiveSession({ userId: 'u1', venueDayId: 'day-1', venueId: 'v1', venueName: 'X' })
+    await rememberLiveSession({ userId: 'u1', venueDayId: 'day-2', venueId: 'v1', venueName: 'X' })
+    expect(await hasGoneLiveBefore('u1', 'day-2')).toBe(true)
+    // Only the last two nights are kept, however many there were.
+    for (const d of ['day-3', 'day-4', 'day-5']) await noteGoLiveDay('u1', d)
+    expect(JSON.parse((await AsyncStorage.getItem('blendn.goLive.days')) as string).days).toEqual(['day-5', 'day-4'])
+  })
+
+  it("is one account's: another account on the phone is on its first", async () => {
+    await AsyncStorage.clear()
+    await noteGoLiveDay('u1', 'day-1')
+    await noteGoLiveDay('u1', 'day-2')
+    expect(await hasGoneLiveBefore('u1', 'day-2')).toBe(true)
+    expect(await hasGoneLiveBefore('u2', 'day-2')).toBe(false)
   })
 })
 
@@ -192,5 +213,20 @@ describe('live:ended says what happened, and nothing for an end you made', () =>
     expect(liveEndedMessage('event_started', null)).toMatch(/^An event just started\./)
     expect(liveEndedMessage('manual', 'X')).toBeNull()
     expect(liveEndedMessage('switched_event', 'X')).toBeNull()
+  })
+})
+
+describe('the reset hour is the venue day’s own (not a fixed 6)', () => {
+  it('is the local hour of the day’s end', () => {
+    expect(resetHourOf({ dayEndsAt: new Date(2026, 9, 23, 5, 0).toISOString() })).toBe(5)
+    expect(resetHourOf({ dayEndsAt: new Date(2026, 9, 23, 6, 0).toISOString() })).toBe(6)
+    expect(resetHourOf({ dayEndsAt: undefined })).toBeNull()
+    expect(resetHourOf({ dayEndsAt: 'nope' })).toBeNull()
+    expect(resetHourOf(null)).toBeNull()
+  })
+
+  it('and is said the way the room says it', () => {
+    expect([5, 6, 11].map(opensAtWords)).toEqual(['5', '6', '11'])
+    expect([0, 12, 13, 23].map(opensAtWords)).toEqual(['midnight', 'noon', '1 pm', '11 pm'])
   })
 })

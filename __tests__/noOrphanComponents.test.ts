@@ -66,8 +66,6 @@ const KNOWN_ORPHANS: Record<string, string> = {
   'PollBubble.tsx': 'redesign P3 component; the organiser poll in the room — the room says a poll as a notice until a `poll` message carries its poll id (server; docs/CHAT.md) (Flow 15 #8)',
   /* The P2 events and people (ROUND3 B4), built ahead of their flows; each goes with the first flow that adopts it. */
   /* P4, the rest of R2-D0 (ROUND3 B4), built ahead of Flows 9–16; each goes with the first flow that adopts it. */
-  'ExpiryPrompt.tsx': 'redesign P4 component (ExpiryPrompt, NotLiveNotice); replaces LiveAtVenue’s expiry prompt with the Places-live redesign (Flow 11 · 11.4)',
-  'TonightSheet.tsx': 'redesign P4 component; the contextual Blend’n+ sheet the client builds next (ROUND3 G2, Flow 12 · 12.1)',
   'OfferCard.tsx': 'redesign P4 component; replaces the offer screen’s card with the Regulars redesign and the Passes & offers list (Flow 13, ROUND3 G3)',
 }
 

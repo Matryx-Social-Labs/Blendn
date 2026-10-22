@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AccessibilityInfo, Linking, Platform, ScrollView, StyleSheet, View } from 'react-native'
+import { AccessibilityInfo, Platform, ScrollView, StyleSheet, View } from 'react-native'
 
 import { Banner } from '../components/ds/Banner'
 import { Spinner } from '../components/ds/Loader'
@@ -11,6 +11,7 @@ import { Grain } from '../components/ds/Grain'
 import { NightPassRow, PlanCard, PlanList } from '../components/ds/PlanCard'
 import { HueProvider } from '../components/ds/shared'
 import { StateScreen } from '../components/ds/StateScreen'
+import { openStoreSubscriptions, showStoreError } from '../components/plus/storeActions'
 import { PlusActions, PlusFooter, PlusHeader, PlusHeading, PlusHero, PlusNote, useHeaderHeight, WhatYouGet } from '../components/plus/PlusSections'
 import { useToast } from '../components/Toast'
 import { apiClient } from '../lib/apiClient'
@@ -27,14 +28,14 @@ import {
   planSubline,
   PLUS_COMING_SOON,
   PLUS_FEATURES,
-  plusStatusCard,
   waitForPlus,
   type PlusStatus,
 } from '../lib/plus'
-import { buyPackage, canBuyAs, loadPlusOffers, manageSubscriptionUrl, purchasesAvailable, restore, type PlusOffer, type RestoreOutcome } from '../lib/purchases'
-import { showSheet } from '../lib/sheet'
+import { manageCard } from '../lib/plusManage'
+import { buyPackage, canBuyAs, loadPlusOffers, purchasesAvailable, restore, type PlusOffer, type RestoreOutcome } from '../lib/purchases'
 import { useAuth } from '../lib/useAuth'
 import { notePaywallClosed, notePaywallEvent } from '../lib/paywall'
+import { useTopBarState } from '../lib/useTopBarState'
 
 type Phase = 'idle' | 'confirming' | 'pending' | 'slow' | 'done'
 
@@ -75,6 +76,7 @@ function PlusScreenContent() {
   const userId = user?.id ?? null
   const { showToast } = useToast()
   const headerHeight = useHeaderHeight()
+  const bar = useTopBarState()
 
   const [status, setStatus] = useState<PlusStatus | null>(null)
   const [statusLoad, setStatusLoad] = useState<StatusLoad>('loading')
@@ -100,7 +102,8 @@ function PlusScreenContent() {
     return () => {
       mounted.current = false
       if (!outcome.current) notePaywallEvent('dismissed', trigger)
-      notePaywallClosed()
+      // Bought or restored here: the people who waited on it (the expiry prompt) hear it was done, not declined.
+      notePaywallClosed(outcome.current ? 'done' : 'dismissed')
     }
   }, [trigger])
 
@@ -164,23 +167,7 @@ function PlusScreenContent() {
   }
 
   const open = (url: string) => openInApp(url).catch(() => showToast("That page didn’t open. Try again.", 'error'))
-  const manage = async () => {
-    // A store's page, not ours: the store's own app opens for it.
-    Linking.openURL(await manageSubscriptionUrl()).catch(() => showToast("That page didn’t open. Try again.", 'error'))
-  }
-
-  /** A store error in words, as a tray (R4-D12 12-3); "already bought" points at Manage subscription. */
-  const showStoreError = (message: string, manageIt: boolean | undefined) =>
-    showSheet({
-      kind: 'actions',
-      hue: 'violet',
-      icon: 'circle-alert',
-      title: manageIt ? 'Already purchased' : 'The purchase didn’t go through',
-      message,
-      actions: manageIt
-        ? [{ label: 'Manage subscription', then: () => void manage() }, { label: 'Close', cancel: true }]
-        : [{ label: 'Close', cancel: true }],
-    })
+  const manage = () => void openStoreSubscriptions(() => showToast("That page didn’t open. Try again.", 'error'))
 
   const buy = async (offer: PlusOffer) => {
     if (working.current || !buyable) return
@@ -193,7 +180,7 @@ function PlusScreenContent() {
       if (!mounted.current) return
       if (result.kind === 'cancelled') return
       if (result.kind === 'failed') {
-        showStoreError(result.message, result.manage)
+        showStoreError(result.message, result.manage, manage)
         say(result.message)
         return
       }
@@ -255,7 +242,8 @@ function PlusScreenContent() {
   const sellable = purchasesAvailable() && buyable && (offers?.length ?? 0) > 0
   // Anything bought or restored moves the phase on (pending, confirming, …): from then the way out is Done.
   const finished = phase !== 'idle'
-  const card = plusStatusCard(status)
+  // What you have, in Manage's words (one card, one set of sentences); nothing for a launch season, which is the banner's.
+  const card = status?.active ? manageCard(status, Platform.OS === 'android' ? 'android' : 'ios') : null
   const failed = !forSale && statusLoad === 'failed'
   const pick = offers?.find((o) => o.pkg.identifier === picked) ?? offers?.find((o) => o.pkg.identifier === defaultPick(offers ?? []))
   // A subscriber manages in the store (12.2 #06): the plans stay drawn, but nothing is pickable and no pick plays a haptic.
@@ -331,11 +319,12 @@ function PlusScreenContent() {
       <Orbs set="brand" />
       <Grain />
       {/* First in the tree for the focus order (it draws over the scroll by zIndex). */}
-      <PlusHeader done={finished} onClose={close} />
+      <PlusHeader done={finished} onClose={close} state={bar.state === 'rest' ? 'rest' : 'scrolled'} />
       <ScrollView
         testID="plus-scroll"
         contentContainerStyle={[styles.content, { paddingTop: headerHeight + SPACE.sm, paddingBottom: (dockShown ? dockHeight : 0) + SPACE.xl }]}
         showsVerticalScrollIndicator={false}
+        {...bar.scrollProps}
       >
         <PlusHero />
         {failed ? (
@@ -348,7 +337,7 @@ function PlusScreenContent() {
           />
         ) : (
           <>
-            {card ? <ManageStatusRow status={card.kind} sentence={card.sentence} store={Platform.OS === 'android' ? 'android' : 'ios'} testID="plus-status" /> : null}
+            {card ? <ManageStatusRow status={card.status} sentence={card.sentence} store={card.store} testID="plus-status" /> : null}
             {launch ? <Banner kind="info" text={LAUNCH_LINE} testID="plus-launch" /> : null}
             <WhatYouGet features={PLUS_FEATURES} comingSoon={PLUS_COMING_SOON} />
             <NeverForSalePanel />
@@ -363,7 +352,7 @@ function PlusScreenContent() {
           onTerms={() => void open(BLENDN_LINKS.terms)}
           onPrivacy={() => void open(BLENDN_LINKS.privacy)}
           onRestore={() => void restoreAll()}
-          onManage={() => void manage()}
+          onManage={() => manage()}
         />
       </ScrollView>
       {dockShown ? (
@@ -377,7 +366,7 @@ function PlusScreenContent() {
           disabled={locked || !pick}
           buying={busy === 'buy'}
           onBuy={() => pick && void buy(pick)}
-          onManage={() => void manage()}
+          onManage={() => manage()}
         />
       ) : null}
     </View>

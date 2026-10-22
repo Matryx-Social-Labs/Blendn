@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AppState } from 'react-native'
 
-import type { PlusStatus as ManageStatus } from '../components/ds/ManageStatusRow'
 import type { IconName } from '../components/ui/Icon'
 import { apiClient } from './apiClient'
+import type { PlusGrant, PlusState } from './plusManage'
 import { NIGHT_PASS_ID, type PlusOffer } from './purchases'
 import { clockTime } from './time'
 
@@ -22,6 +22,12 @@ export type PlusStatus = {
   product: 'plus' | 'night_pass' | null
   source: 'apple' | 'google' | 'grant' | null
   expiresAt: string | null
+  /**
+   * How a subscription stands, and which gift a grant is: not sent yet (`lib/plusManage.ts` reads them when they are,
+   * and never guesses). Absent, a subscription is "active" and a grant is "nothing renews".
+   */
+  state?: PlusState | null
+  grant?: PlusGrant | null
 }
 
 export type PlusFeature = { icon: IconName; title: string; detail: string }
@@ -59,9 +65,24 @@ export function plusStatusLine(status: PlusStatus | null | undefined): string | 
   return `${name} until ${until}`
 }
 
+/** The last answer anyone got, so a tap on Settings › Blend'n+ can tell Manage from the page without asking first. */
+let lastKnown: PlusStatus | null = null
+export const knownPlus = (): PlusStatus | null => lastKnown
+/** At sign-out, or another account: the last answer was somebody else's. */
+export function clearKnownPlus(): void {
+  lastKnown = null
+}
+
+/** Every mounted `usePlusStatus`, told when the server has just granted Blendn+: a sheet that sold it is not a screen's focus. */
+const plusChangedListeners = new Set<() => void>()
+export function notifyPlusChanged(): void {
+  for (const fn of [...plusChangedListeners]) fn()
+}
+
 /**
- * The person's Blendn+, kept fresh: read on mount and when the app comes back
- * to the foreground (a pending payment confirmed while away). A screen also
+ * The person's Blendn+, kept fresh: read on mount, when the app comes back
+ * to the foreground (a pending payment confirmed while away) and when a
+ * purchase or restore has landed (`notifyPlusChanged`). A screen also
  * passes `refresh` to `useFocusEffect`, so coming back to it re-reads. Null
  * until the first answer; after a failed one the last answer stands.
  */
@@ -71,7 +92,10 @@ export function usePlusStatus(): { status: PlusStatus | null; refresh: () => voi
     apiClient
       .getMyPlus()
       .then((res) => {
-        if (res.success && res.data) setStatus(res.data)
+        if (res.success && res.data) {
+          lastKnown = res.data
+          setStatus(res.data)
+        }
       })
       .catch(() => {})
   }, [])
@@ -80,7 +104,11 @@ export function usePlusStatus(): { status: PlusStatus | null; refresh: () => voi
     const app = AppState.addEventListener('change', (state) => {
       if (state === 'active') refresh()
     })
-    return () => app.remove()
+    plusChangedListeners.add(refresh)
+    return () => {
+      app.remove()
+      plusChangedListeners.delete(refresh)
+    }
   }, [refresh])
   return { status, refresh }
 }
@@ -100,25 +128,15 @@ export async function waitForPlus(stopped: () => boolean = () => false, now: () 
   while (!stopped()) {
     // A failed ask (offline, a cleared queue) is "not yet", never the end of the wait.
     const res = await apiClient.getMyPlus().catch(() => null)
-    if (res?.success && res.data?.active) return res.data
+    if (res?.success && res.data?.active) {
+      lastKnown = res.data
+      notifyPlusChanged()
+      return res.data
+    }
     if (now() + PLUS_POLL_EVERY_MS > until) return null
     await new Promise((resolve) => setTimeout(resolve, PLUS_POLL_EVERY_MS))
   }
   return null
-}
-
-/**
- * The card for what is active, in the Manage status card's words: the server's
- * own sentence (`plusStatusLine`) with where it was bought, or — for a Night
- * Pass — that it does not renew and another adds 24 hours. Null when nothing is
- * active (a launch season is the page's banner, not a card).
- */
-export function plusStatusCard(status: PlusStatus | null | undefined): { kind: Extract<ManageStatus, 'active' | 'night'>; sentence: string } | null {
-  const line = plusStatusLine(status)
-  if (!status?.active || !line) return null
-  if (status.product === 'night_pass') return { kind: 'night', sentence: `${line}. It doesn’t renew; another one adds 24 hours.` }
-  const store = status.source === 'apple' ? 'App Store' : status.source === 'google' ? 'Google Play' : null
-  return { kind: 'active', sentence: store ? `${line} · ${store}` : line }
 }
 
 /**

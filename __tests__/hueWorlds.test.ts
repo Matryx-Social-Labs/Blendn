@@ -30,11 +30,13 @@ const ROSE = [
   'app/chat-info/[id].tsx',
   'components/PresenceSheets.tsx',
 ]
-const VIOLET = ['app/plus.tsx', 'app/onboarding/_layout.tsx', 'app/edit-about-you.tsx', 'app/edit-profile.tsx', 'app/(tabs)/profile.tsx', 'app/settings.tsx', 'app/notification-settings.tsx', 'app/muted-rooms.tsx', 'app/blocked-users.tsx', 'app/tips.tsx', 'app/event-preferences/[eventId].tsx']
+const VIOLET = ['app/plus.tsx', 'app/plus-manage.tsx', 'app/onboarding/_layout.tsx', 'app/edit-about-you.tsx', 'app/edit-profile.tsx', 'app/(tabs)/profile.tsx', 'app/settings.tsx', 'app/notification-settings.tsx', 'app/muted-rooms.tsx', 'app/blocked-users.tsx', 'app/tips.tsx', 'app/event-preferences/[eventId].tsx']
 /** Mounted app-level, outside every screen: they take the hue their caller names (`lib/sheet`'s `hue`), ember when none. */
 const CARRIED: Record<string, string> = {
   'components/SheetHost.tsx': "<HueProvider value={current.hue ?? 'ember'}>",
   'components/share/ShareHost.tsx': "<HueProvider value={target.kind === 'invite' ? 'rose' : 'ember'}>",
+  // Blend'n+ is yours, not an outing, wherever its sheet is raised from (the venue, Going, the expiry prompt).
+  'components/plus/TonightHost.tsx': '<HueProvider value="violet">',
 }
 /** Going out: ember is the default, so none of these sets a hue. */
 const EMBER = [

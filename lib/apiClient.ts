@@ -856,6 +856,13 @@ export interface VenuesListResponse {
   order?: string
 }
 
+/** A page of a venue's coming events — `GET /api/mobile/venues/:venueId/upcoming`. */
+export interface VenueUpcomingPage {
+  /** As `VenueDetail`'s `upcoming`: no going count (SCRUM-743; admin `lib/venue-upcoming.ts` sends none). */
+  events: { id: string; title: string; slug?: string | null; coverImageUrl?: string | null; startTime: string; endTime?: string | null }[]
+  pagination: { limit: number; hasMore: boolean; nextCursor: string | null; totalCount: number }
+}
+
 /** One venue — `GET /api/mobile/venues/:venueId`, as the place screen reads it. */
 export interface VenueDetail {
   venue: {
@@ -889,8 +896,12 @@ export interface VenueDetail {
     description?: string | null
     /** Good to know: the names of what the owner ticked (the server sends `string[]`, no ids). */
     amenities?: string[] | null
-    /** Upcoming events here, soonest first (the page shows three), as the server sends them: no going count. */
-    upcoming?: { id: string; title: string; slug?: string | null; coverImageUrl?: string | null; startTime: string; endTime?: string }[] | null
+    /** Upcoming events here, soonest first: the server's first few (the page shows three), as it sends them, no going count; the rest are `getVenueUpcoming`'s. */
+    upcoming?: { id: string; title: string; slug?: string | null; coverImageUrl?: string | null; startTime: string; endTime?: string | null }[] | null
+    /** How many there are in all, whatever `upcoming` holds. Absent from a server that does not send it. */
+    upcomingTotal?: number | null
+    /** Where `getVenueUpcoming` resumes after `upcoming`; null when `upcoming` is all of them. */
+    upcomingNextCursor?: string | null
   }
   live: {
     /** Whether going live here would be accepted now, the fence aside. */
@@ -1946,6 +1957,13 @@ class ApiClientClass {
   /** One venue — `GET /venues/:venueId`. Not cached: it carries the live count. */
   async getVenue(venueId: string): Promise<ApiResponse<VenueDetail>> {
     return this.queuedRequest<VenueDetail>(`/api/mobile/venues/${encodeURIComponent(venueId)}`)
+  }
+
+  /** The rest of a venue's coming events, a page at a time, soonest first: `cursor` is the last page's `nextCursor`. */
+  async getVenueUpcoming(venueId: string, cursor?: string | null, limit = 20): Promise<ApiResponse<VenueUpcomingPage>> {
+    const params = new URLSearchParams({ limit: String(limit) })
+    if (cursor) params.set('cursor', cursor)
+    return this.queuedRequest<VenueUpcomingPage>(`/api/mobile/venues/${encodeURIComponent(venueId)}/upcoming?${params}`)
   }
 
   /**
