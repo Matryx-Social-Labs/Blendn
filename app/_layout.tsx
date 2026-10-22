@@ -706,6 +706,8 @@ function RootLayout() {
       <Stack.Screen name="friends/add" options={{ headerShown: false }} />
       <Stack.Screen name="friends/requests" options={{ headerShown: false }} />
       <Stack.Screen name="friends/[userId]" options={{ headerShown: false }} />
+      {/* See all friends here, from the Room's Friends here section (rose, a pushed screen). */}
+      <Stack.Screen name="room/friends-here" options={{ headerShown: false }} />
       {/* A room's info, from the options button in its header. */}
       <Stack.Screen name="chat-info/[id]" options={{ headerShown: false }} />
       {/* Placeholder screen: logic complete, design provisional (docs/PLACEHOLDER_SCREENS.md §6). */}
