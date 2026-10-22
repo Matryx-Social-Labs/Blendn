@@ -96,7 +96,8 @@ const KEEPS_ITS_QUERY: readonly RegExp[] = [/^exp\+blendn:\/\/expo-development-c
  * link on another host goes to the root; any other path keeps only its own segments.
  */
 export function nativeIntentPath(path: string): string {
-  if (KEEPS_ITS_QUERY.some((re) => re.test(path))) return path
+  // The dev client's launch link only exists in development; a Release build strips it like any other.
+  if (__DEV__ && KEEPS_ITS_QUERY.some((re) => re.test(path))) return path
   const n = normalise(path)
   if (n.host !== null && !OUR_HOSTS.has(n.host)) return '/'
   const target = targetOf(n)

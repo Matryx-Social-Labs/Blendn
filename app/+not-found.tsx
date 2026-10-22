@@ -3,6 +3,17 @@ import { router, usePathname } from 'expo-router'
 import { DiscMark } from '../components/ds/DiscMark'
 import { SystemScreen } from '../components/system/SystemScreen'
 
+/**
+ * The path is echoed only when it has the shape of one of our own links (a known first segment and id-like parts), so a
+ * crafted link cannot print a sentence of its choosing on a branded screen.
+ */
+const ECHOABLE_ROOTS = new Set(['e', 'v', 'f', 'event', 'venue', 'crews', 'user', 'friends', 'offer', 'board', 'chat', 'private-chat', 'rate'])
+export function echoable(pathname: string | null | undefined): boolean {
+  if (!pathname || pathname === '/' || pathname.length > 64) return false
+  const [root, ...rest] = pathname.split('/').filter(Boolean)
+  return ECHOABLE_ROOTS.has(root ?? '') && rest.length <= 2 && rest.every((part) => /^[A-Za-z0-9_-]{1,40}$/.test(part))
+}
+
 /** The mark's height on this screen (Flow 15 `notFound`: the gradient disc mark, 96). */
 const MARK_HEIGHT = 96
 
@@ -13,7 +24,7 @@ const MARK_HEIGHT = 96
  */
 export default function NotFoundScreen() {
   const pathname = usePathname()
-  const asked = pathname && pathname !== '/' ? `blendn.app${pathname}` : undefined
+  const asked = echoable(pathname) ? `blendn.app${pathname}` : undefined
   return (
     <SystemScreen
       icon="unlink"
