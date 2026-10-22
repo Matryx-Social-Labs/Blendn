@@ -46,7 +46,7 @@ export function RoomCancelled({
           title={said}
           body="The organiser called it off. You’re checked out."
           actions={[
-            { label: 'See what’s on tonight', kind: 'primary', onPress: onSeeTonight },
+            { label: 'See what’s on tonight', kind: 'lit', onPress: onSeeTonight },
             { label: 'Close', kind: 'tertiary', onPress: onClose },
           ]}
           testID={testID && `${testID}-state`}
