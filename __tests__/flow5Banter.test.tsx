@@ -12,13 +12,18 @@ import { StyleSheet } from 'react-native'
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
 )
+// The screen's latest focus effect: a test calls it to come back to the Banter from a room.
+let mockRefocus: (() => void | (() => void)) | null = null
 jest.mock('expo-router', () => {
   const React = require('react')
   return {
     router: { push: jest.fn(), back: jest.fn(), replace: jest.fn() },
     useScrollToTop: () => {},
     // The screen is focused once, on mount.
-    useFocusEffect: (effect: () => void | (() => void)) => React.useEffect(effect, [effect]),
+    useFocusEffect: (effect: () => void | (() => void)) => {
+      mockRefocus = effect
+      React.useEffect(effect, [effect])
+    },
   }
 })
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
@@ -36,6 +41,8 @@ jest.mock('../lib/apiClient', () => ({
     markAllConversationsRead: jest.fn(),
     respondToMessageRequest: jest.fn(),
     getConversationMessages: jest.fn(),
+    // Older pages (lib/chatPaging, lib/useBanterInbox) read through the queue.
+    queuedRequest: jest.fn(),
   },
 }))
 jest.mock('../lib/crewsApi', () => ({ crewsApi: { myCrews: jest.fn(async () => ({ success: true, data: { crews: [], invites: [] } })) } }))
@@ -72,6 +79,9 @@ import { clearOutbox, dmThread, keepFailed, roomThread, setDraft } from '../lib/
 import { markDomainsDirty } from '../lib/liveSyncState'
 import { queryCache } from '../lib/queryCache'
 import { resetRoomMembership } from '../lib/roomMembership'
+import { noteBlocked } from '../lib/blockEpoch'
+import { H } from '../lib/haptics'
+import { namedList } from '../lib/namedList'
 /* eslint-enable import/first */
 
 const api = apiClient as jest.Mocked<typeof apiClient>
@@ -304,7 +314,7 @@ describe('the inbox reorders by gliding, and keeps still under a thumb', () => {
     const list = screen.getByTestId('banter-list')
     await act(async () => fireEvent(list, 'scrollBeginDrag'))
     expect(layoutAround(ROW)).toBeUndefined()
-    await act(async () => fireEvent(list, 'scrollEndDrag', { nativeEvent: { velocity: { y: 0 } } }))
+    await act(async () => fireEvent(list, 'scrollEndDrag', { nativeEvent: { contentOffset: { x: 0, y: 0 }, velocity: { y: 0 } } }))
     expect(layoutAround(ROW)).toBeDefined()
   })
 
@@ -312,7 +322,7 @@ describe('the inbox reorders by gliding, and keeps still under a thumb', () => {
     await open()
     const list = screen.getByTestId('banter-list')
     await act(async () => fireEvent(list, 'scrollBeginDrag'))
-    await act(async () => fireEvent(list, 'scrollEndDrag', { nativeEvent: { velocity: { y: 2 } } }))
+    await act(async () => fireEvent(list, 'scrollEndDrag', { nativeEvent: { contentOffset: { x: 0, y: 0 }, velocity: { y: 2 } } }))
     expect(layoutAround(ROW)).toBeUndefined()
     await act(async () => fireEvent(list, 'momentumScrollEnd'))
     expect(layoutAround(ROW)).toBeDefined()
@@ -376,5 +386,200 @@ describe('the app icon follows what the Banter reads (badgeCount counts unread c
     })
     await flush()
     expect(mockRefreshBadge).not.toHaveBeenCalled()
+  })
+})
+
+describe('unread to read (#29): the dot leaves where it is seen, on the way back', () => {
+  const unreadRoom = { ...pastRoom, status: 'open', unreadCount: 2 }
+  const rowLabel = /Jazz Brunch, .*unread/
+
+  it('the room is opened and the row still says unread underneath; coming back clears it', async () => {
+    serve({ rooms: [unreadRoom], dms: [], requests: [] })
+    await open()
+    expect(screen.getByLabelText(rowLabel)).toBeTruthy()
+    await act(async () => fireEvent.press(screen.getByLabelText(rowLabel)))
+    expect(router.push).toHaveBeenCalledWith(expect.objectContaining({ pathname: '/chat/[id]' }))
+    // Behind the room it is not yet redrawn: the cue is for the person who returns.
+    expect(screen.getByLabelText(rowLabel)).toBeTruthy()
+    await act(async () => void mockRefocus?.())
+    expect(screen.queryByLabelText(rowLabel)).toBeNull()
+    expect(screen.getByLabelText(/^Jazz Brunch, .*Tuesday|^Jazz Brunch, /)).toBeTruthy()
+  })
+
+  it('a room you did not open keeps its dot when you come back', async () => {
+    serve({ rooms: [unreadRoom, { ...unreadRoom, id: 'g-two', name: 'Disco Lunch', event: { id: 'e9', title: 'Disco Lunch' } }], dms: [], requests: [] })
+    await open()
+    await act(async () => fireEvent.press(screen.getByLabelText(rowLabel)))
+    await act(async () => void mockRefocus?.())
+    expect(screen.getByLabelText(/Disco Lunch, .*unread/)).toBeTruthy()
+  })
+
+  it('the Live now pill is a view that leaves over quick, and under Reduce Motion simply goes', () => {
+    const src = require('fs').readFileSync(require.resolve('../components/banter/BanterParts'), 'utf8') as string
+    expect(src).toMatch(/exiting=\{leaves\(reduceMotion\)\}/)
+    expect(src).toMatch(/reduceMotion \? undefined : FadeOut\.duration\(DURATION\.quick\)/)
+  })
+})
+
+describe('a Banter of thousands (SCRUM-760 b)', () => {
+  const queued = apiClient.queuedRequest as jest.Mock
+  const room = (n: number) => ({ id: `g-${n}`, name: `Room ${n}`, memberCount: 12, isCheckedIn: false, status: 'open', event: { id: `e${n}`, title: `Room ${n}` }, lastMessage: { content: `line ${n}`, createdAt: at, user: { id: 'u-c', name: 'Cosmic Panda' } } })
+  const conv = (n: number) => ({ ...dm, id: `c-${n}`, otherUser: { id: `u-${n}`, name: `Fox ${n}`, image: null }, unreadCount: 0 })
+  const groups = (n: number, hasMore: boolean, page = 1) => ({ success: true, data: { groups: [room(n)], pagination: { page, hasMore } } })
+  // What the real `getConversations` hands back: the rows, with the server's cursor kept beside them.
+  const conversations = (rows: object[], nextCursor?: string) =>
+    namedList({ success: true, data: { conversations: rows, ...(nextCursor ? { pagination: { hasMore: true, nextCursor } } : {}) } } as never, 'conversations') as never
+  const reachEnd = () => act(async () => fireEvent(screen.getByTestId('banter-list'), 'endReached'))
+
+  beforeEach(() => {
+    queued.mockReset()
+    serve({ rooms: [], dms: [], requests: [] })
+  })
+
+  it('loads the next page of rooms by number, once, appended under what is held', async () => {
+    api.getChatGroups.mockResolvedValue(groups(1, true) as never)
+    queued.mockResolvedValueOnce(groups(2, false, 2))
+    await open()
+    expect(screen.getAllByText('Room 1').length).toBeGreaterThan(0)
+    await reachEnd()
+    expect(queued).toHaveBeenCalledWith('/api/mobile/chat/groups?page=2')
+    expect((await screen.findAllByText('Room 2')).length).toBeGreaterThan(0)
+    // Nothing more to ask: the last page said so.
+    await reachEnd()
+    expect(queued).toHaveBeenCalledTimes(1)
+  })
+
+  it('conversations load by the server’s cursor only when People is asked ("Show more people"), never arriving under a reader', async () => {
+    api.getConversations.mockResolvedValue(conversations([conv(1)], 'k1'))
+    queued.mockResolvedValueOnce({ success: true, data: { conversations: [conv(2)] } })
+    await open()
+    expect(screen.getAllByText('Fox 1').length).toBeGreaterThan(0)
+    // The end of the list does not fetch them: a page in the middle would push the rooms below it away.
+    await reachEnd()
+    expect(queued).not.toHaveBeenCalled()
+    await act(async () => fireEvent.press(screen.getByTestId('banter-people-more')))
+    expect(queued).toHaveBeenCalledWith('/api/mobile/conversations?limit=50&cursor=k1')
+    expect((await screen.findAllByText('Fox 2')).length).toBeGreaterThan(0)
+    // The last page said so: the button goes.
+    expect(screen.queryByTestId('banter-people-more')).toBeNull()
+  })
+
+  it('no layout glide on a page append: the list’s reorder animation is off for a beat after one lands', async () => {
+    api.getChatGroups.mockResolvedValue(groups(1, true) as never)
+    queued.mockResolvedValueOnce(groups(2, false, 2))
+    await open()
+    await reachEnd()
+    await screen.findAllByText('Room 2')
+    expect(screen.getByTestId('banter-list').props.itemLayoutAnimation).toBeUndefined()
+  })
+
+  it('a server that sends no paging is one page, and nothing more is asked', async () => {
+    api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [room(1)] } } as never)
+    api.getConversations.mockResolvedValue([conv(1)] as never)
+    await open()
+    await reachEnd()
+    expect(queued).not.toHaveBeenCalled()
+  })
+
+  it('a page that fails keeps the list, does not loop, and retries on its own button', async () => {
+    api.getChatGroups.mockResolvedValue(groups(1, true) as never)
+    queued.mockResolvedValueOnce({ success: false, error: 'offline' })
+    await open()
+    await reachEnd()
+    expect(await screen.findByTestId('banter-more-failed')).toBeTruthy()
+    expect(screen.getAllByText('Room 1').length).toBeGreaterThan(0)
+    await reachEnd()
+    expect(queued).toHaveBeenCalledTimes(1)
+    queued.mockResolvedValueOnce(groups(2, false, 2))
+    await act(async () => fireEvent.press(screen.getByTestId('banter-more-failed')))
+    expect((await screen.findAllByText('Room 2')).length).toBeGreaterThan(0)
+  })
+
+  it('keeps the older pages through a quiet refresh of the newest', async () => {
+    api.getChatGroups.mockResolvedValue(groups(1, true) as never)
+    queued.mockResolvedValueOnce(groups(2, false, 2))
+    await open()
+    await reachEnd()
+    await screen.findAllByText('Room 2')
+    await act(async () => void (await mockSync.onSync?.()))
+    await flush()
+    expect(screen.getAllByText('Room 2').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Room 1').length).toBeGreaterThan(0)
+  })
+
+  it('a room bumped off the newest page by a busier one stays on screen once older pages are loaded (demotion)', async () => {
+    api.getChatGroups.mockResolvedValue(groups(1, true) as never)
+    queued.mockResolvedValueOnce(groups(2, false, 2))
+    await open()
+    await reachEnd()
+    await screen.findAllByText('Room 2')
+    // Room 3 is now the newest and Room 1 has slid off page one: it is not on the new page, and still on screen.
+    api.getChatGroups.mockResolvedValue(groups(3, true) as never)
+    markDomainsDirty(['chat'])
+    await act(async () => void (await mockSync.onSync?.()))
+    await flush()
+    expect(screen.getAllByText('Room 3').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Room 1').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Room 2').length).toBeGreaterThan(0)
+  })
+
+  it('a block anywhere starts the lists over: the blocked person’s conversation on an older page is gone', async () => {
+    api.getConversations.mockResolvedValue(conversations([conv(1)], 'k1'))
+    queued.mockResolvedValueOnce({ success: true, data: { conversations: [conv(9)] } })
+    await open()
+    await act(async () => fireEvent.press(screen.getByTestId('banter-people-more')))
+    expect((await screen.findAllByText('Fox 9')).length).toBeGreaterThan(0)
+
+    // The server now leaves them out of the first page too.
+    api.getConversations.mockResolvedValue(conversations([conv(1)]))
+    await act(async () => noteBlocked())
+    await flush()
+    expect(screen.queryByText('Fox 9')).toBeNull()
+    expect(screen.getAllByText('Fox 1').length).toBeGreaterThan(0)
+  })
+
+  it('the Requests section is a strip of three with the server’s true count and a "See all" to the screen of them', async () => {
+    const rs = (from: number, n: number) => Array.from({ length: n }, (_, i) => ({ id: `r${from + i}`, senderId: `s${from + i}`, sender: { id: `s${from + i}`, name: `Asker ${from + i}` }, message: `hello ${from + i}`, createdAt: at }))
+    api.getMessageRequests.mockResolvedValue({ success: true, data: { requests: rs(0, 20), totalCount: 140 } } as never)
+    await open()
+    expect(screen.getByLabelText('Requests, 140')).toBeTruthy()
+    expect(screen.getAllByLabelText(/^Accept the request from/)).toHaveLength(3)
+    await act(async () => fireEvent.press(screen.getByLabelText('See all 140')))
+    expect(router.push).toHaveBeenCalledWith('/message-requests')
+    // The strip stays a strip: nothing expands in place.
+    expect(screen.getAllByLabelText(/^Accept the request from/)).toHaveLength(3)
+  })
+
+  it('a few requests are all shown, with no "Show all"', async () => {
+    serve()
+    await open()
+    expect(screen.getByLabelText('Requests, 1')).toBeTruthy()
+    expect(screen.queryByLabelText(/^Show all/)).toBeNull()
+  })
+})
+
+describe('the branded pull to refresh (#18)', () => {
+  const list = () => screen.getByTestId('banter-list')
+  const pull = async (y: number) => {
+    await act(async () => fireEvent.scroll(list(), { nativeEvent: { contentOffset: { x: 0, y }, contentSize: { height: 800, width: 400 }, layoutMeasurement: { height: 800, width: 400 } } }))
+    await act(async () => fireEvent(list(), 'scrollEndDrag', { nativeEvent: { contentOffset: { x: 0, y }, velocity: { x: 0, y: 0 } } }))
+    await flush()
+  }
+
+  it('refreshes by release past the arm point, with H.threshold once as it arms, and the stock control is gone', async () => {
+    const threshold = jest.spyOn(H, 'threshold').mockImplementation(() => {})
+    await open()
+    expect(list().props.refreshControl).toBeUndefined()
+    api.getChatGroups.mockClear()
+    await pull(-70)
+    expect(api.getChatGroups).toHaveBeenCalledWith({ force: true })
+    expect(threshold).toHaveBeenCalledTimes(1)
+  })
+
+  it('a short pull refreshes nothing', async () => {
+    await open()
+    api.getChatGroups.mockClear()
+    await pull(-20)
+    expect(api.getChatGroups).not.toHaveBeenCalled()
   })
 })

@@ -23,6 +23,9 @@ const ROSE = [
   'app/f/[token].tsx',
   'app/notifications.tsx',
   'app/(tabs)/chat.tsx',
+  'app/message-requests.tsx',
+  // The Board is people looking for company before the night: rose, as the Banter its answers arrive in.
+  'app/board/[eventId].tsx',
   'app/private-chat/[conversationId].tsx',
   'app/rate/[eventId].tsx',
   'components/blendn/BlendnScreen.tsx',
@@ -44,7 +47,6 @@ const EMBER = [
   'app/(tabs)/going.tsx',
   'app/venue/[id].tsx',
   'app/event/[id].tsx',
-  'app/board/[eventId].tsx',
   'app/offer/[id].tsx',
   'app/sign-in.tsx',
   'components/home/HomeShell.tsx',

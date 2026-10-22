@@ -170,6 +170,8 @@ export interface ServerToClientEvents {
    * `left_area`.
    */
   "live:ended": (data: { eventId: string; reason: string }) => void
+  /** Your board post was taken down (blendn-admin lib/board-takedown.ts): to the author alone, never the post's words. */
+  "board:postRemoved": (data: { eventId: string; postId: string }) => void
   error: (data: { message: string; code?: string }) => void
   connected: (data: { userId: string }) => void
 }
@@ -333,6 +335,7 @@ const roomWaveSubscriptions = new Set<RoomWaveCallback>()
 const roomFriendsSubscriptions = new Set<RoomFriendsCallback>()
 const bellSubscriptions = new Set<BellCallback>()
 const liveEndedSubscriptions = new Set<LiveEndedCallback>()
+const boardPostRemovedSubscriptions = new Set<(data: { eventId: string; postId: string }) => void>()
 type DeliveredCallback = (data: { conversationId: string; messageIds: string[] }) => void
 const deliveredSubscriptions = new Set<DeliveredCallback>()
 /** Who this socket signed in as (from `connected`), so an ack is never for your own message. */
@@ -781,6 +784,11 @@ function setupSocketHandlers(sock: TypedSocket): void {
     liveEndedSubscriptions.forEach((cb) => cb(data))
   })
 
+  /* Your own board post was taken down: the Board re-reads and says so. Nothing else about it is sent. */
+  sock.on("board:postRemoved", (data) => {
+    boardPostRemovedSubscriptions.forEach((cb) => cb(data))
+  })
+
   sock.on("private:typing", (data) => {
     const callbacks = conversationSubscriptions.get(data.conversationId)
     callbacks?.forEach((h) => h.onTyping?.(data))
@@ -1216,6 +1224,15 @@ export function subscribeToLiveEnded(callback: LiveEndedCallback): () => void {
   liveEndedSubscriptions.add(callback)
   return () => {
     liveEndedSubscriptions.delete(callback)
+  }
+}
+
+/** Your board post was taken down. Same delivery as `subscribeToLiveEnded`: your `user:{id}` room. */
+export function subscribeToBoardPostRemoved(callback: (data: { eventId: string; postId: string }) => void): () => void {
+  if (!socket?.connected) connect()
+  boardPostRemovedSubscriptions.add(callback)
+  return () => {
+    boardPostRemovedSubscriptions.delete(callback)
   }
 }
 

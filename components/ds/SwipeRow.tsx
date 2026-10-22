@@ -48,7 +48,7 @@ export type SwipeRowProps = {
  *
  * The same actions sit in the row's accessibility actions (and its ⋯ and the
  * thread's info screen), so nobody has to swipe; the tray is hidden from a
- * screen reader. Android: the same gesture, no ripple on the tray. Reduce
+ * screen reader. A hold opens the same tray, with `H.longPress`. Android: the same gesture, no ripple on the tray. Reduce
  * Motion: the drag is kept (direct manipulation) and it snaps without the
  * spring. The page's shadow on the open row is not drawn: surfaces are flat.
  */
@@ -158,6 +158,13 @@ export function SwipeRow({ actions, onPress, accessibilityLabel, open, onOpenCha
             accessibilityActions={actions.map((a) => ({ name: a.label, label: a.label }))}
             onAccessibilityAction={byName}
             onPress={() => (shownOpen ? close() : onPress?.())}
+            // The same tray from a hold, for whoever does not know to swipe: H.longPress as it opens (a context menu, DS H.longPress).
+            onLongPress={() => {
+              if (shownOpen) return
+              H.longPress()
+              slide(true, 0, true)
+              report(true)
+            }}
             android_ripple={{ color: PRESSED_WASH.android }}
           >
             {children}

@@ -10,6 +10,7 @@ import { H } from '../../lib/haptics'
 import { useToastDock } from '../toastDock'
 import { Button } from './Button'
 import { ReplyPreview } from './ReplyPreview'
+import { SystemNotice } from './SystemNotice'
 import { focusRing, font, IC_HAIRLINE, minTarget, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
 
 /** The server's limit, enforced here so the count that stops you is the one that would refuse you. */
@@ -72,6 +73,11 @@ export type ComposerProps = {
   reason?: string
   /** `ratelimited` only, when the server sends retryAfter: "0:12", ticked by the screen. */
   countdown?: string
+  /**
+   * A line of advice above the field while the text looks like contact details (5.10): an info row, never a lock,
+   * and Send stays enabled. Announced politely as it appears.
+   */
+  warning?: string | null
   /** `notcheckedin`: the one action (I'm going). */
   action?: { label: string; onPress: () => void; loading?: boolean }
   placeholder?: string
@@ -112,6 +118,7 @@ export function Composer({
   onRetry,
   reason,
   countdown,
+  warning,
   action,
   placeholder = 'Say something to the room',
   onFocus,
@@ -121,6 +128,7 @@ export function Composer({
 }: ComposerProps) {
   const contrast = useIncreaseContrast()
   useStateChange(state, reason)
+  useAnnounceWarning(warning)
   const gone = state === 'banned' || state === 'left' || state === 'ended'
   // The Android snackbar stands above the composer while it is drawn.
   const [height, setHeight] = useState(0)
@@ -136,6 +144,11 @@ export function Composer({
 
   return (
     <View testID={testID} onLayout={(e) => setHeight(e.nativeEvent.layout.height)}>
+      {warning && !locked ? (
+        <View accessibilityLiveRegion="polite" style={styles.warning}>
+          <SystemNotice text={warning} icon="info" testID={testID && `${testID}-warning`} />
+        </View>
+      ) : null}
       <Material role="bar" style={shape}>
         {locked ? (
           <LockedRow state={state} reason={reason} countdown={countdown} action={action} />
@@ -187,6 +200,19 @@ function useStateChange(state: ComposerState, reason?: string) {
     // On a change of state only; the reason is read as it stood then.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state])
+}
+
+/**
+ * The warning appearing is announced (iOS has no live regions; Android reads the row's own): once as it goes from nothing to a
+ * sentence, not on every keystroke while it stays, and again if it goes and returns.
+ */
+function useAnnounceWarning(warning: string | null | undefined) {
+  const had = useRef(false)
+  useEffect(() => {
+    const has = !!warning
+    if (has && !had.current && Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(warning)
+    had.current = has
+  }, [warning])
 }
 
 function Field({
@@ -313,6 +339,7 @@ function LockedRow({ state, reason, countdown, action }: { state: Locked } & Pic
 
 const styles = StyleSheet.create({
   bar: { overflow: 'hidden' },
+  warning: { marginBottom: SPACE.sm },
   row: {
     minHeight: SIZE.input,
     flexDirection: 'row',

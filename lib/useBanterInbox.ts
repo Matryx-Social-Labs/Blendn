@@ -1,15 +1,19 @@
 import { router, useFocusEffect } from 'expo-router'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 
 import { preloadImages } from '../components/OptimizedImage'
 import { useToast } from '../components/Toast'
 import { refreshAppIconBadge } from './appBadge'
 import { apiClient } from './apiClient'
+import { CONVERSATIONS_PAGE } from './conversationsPage'
+import { blockEpoch, subscribeBlocks } from './blockEpoch'
+import { laidOver, nextGroupsPage } from './chatPaging'
 import { subscribeChatListUpdates } from './chatListUpdates'
 import { crewRoomsFrom, type CrewRoomRow } from './crews'
 import { H } from './haptics'
 import { hasDirtyDomain } from './liveSyncState'
 import { Logger } from './logger'
+import { conversationsCursor, namedList, type NamedList } from './namedList'
 import { isPlaceRoom, roomDisplayTitle, roomMemberCount } from './placeRoom'
 import { queryCache } from './queryCache'
 import { rememberRoomMute } from './roomMembership'
@@ -18,6 +22,7 @@ import { userReportStep } from './safetyUtils'
 import { showSheet } from './sheet'
 import { type ChatMessageCallback, type PrivateMessageCallback, subscribeToChatMessage, subscribeToUserNotifications } from './socketClient'
 import { useAuth } from './useAuth'
+import { useLatest } from './useLatest'
 import { useLiveSync } from './useLiveSync'
 import { userMessage } from './userMessage'
 import { previewText } from '../components/banter/inbox'
@@ -126,15 +131,100 @@ const displayPreview = (text?: string, fallback: string = 'Start chatting'): str
   (text && text.trim().length > 0 ? text : fallback)
 
 
+/** A room as `GET /chat/groups` describes it, as the Banter draws it. */
+export const groupChatFrom = (room: any, userId: string | undefined): GroupChat => {
+  const preview = previewFromConversation(room)
+  return {
+    chat_room_id: String(room.id || room.chat_room_id || room.chatRoomId || ''),
+    // A place's room is named for the place; its venue day's title is bookkeeping (step 5).
+    event_title: roomDisplayTitle(room) || room.event_title || room.eventTitle || room.title || room.name || 'Event chat',
+    // `memberCount` is what `GET /chat/groups` sends; never for a place's room (H5, D-19).
+    participant_count: roomMemberCount(room) ?? 0,
+    event_image: room.event?.coverImageUrl || room.event?.cover_image_url || room.coverImageUrl || room.cover_image_url || null,
+    last_message: preview.text,
+    last_message_time: preview.time,
+    // The sender's room pseudonym (`anonymous_name`), or null.
+    last_sender_name: room.lastMessage?.user?.name || undefined,
+    last_sender_is_me: !!room.lastMessage?.user?.id && room.lastMessage.user.id === userId,
+    unread_count: Number(room.unreadCount ?? room.unread_count) || 0,
+    is_checked_in: room.isCheckedIn === true,
+    is_place: isPlaceRoom(room),
+    room_state: roomStateFrom(room),
+  }
+}
+
+/** A conversation as `GET /conversations` describes it, as the Banter draws it. */
+export const personalChatFrom = (conv: any, userId: string | undefined): PersonalChat => {
+  const convId = String(conv.id || conv.conversation_id || '')
+  const preview = previewFromConversation(conv)
+  const otherUser = conv.otherUser || conv.other_user || {}
+  return {
+    conversation_id: convId,
+    /*
+     * Already the pseudonym when they have not revealed —
+     * `displayNameInConversation` on the server decides this and every
+     * other surface resolves through it. "Someone" rather than
+     * "Unknown" to match the server's own last resort; "Unknown" reads
+     * as a data error, which this is not.
+     */
+    other_user_name: otherUser?.name || otherUser?.display_name || 'Someone',
+    other_user_id: String(otherUser?.id || otherUser?.user_id || ''),
+    other_user_avatar: otherUser?.image || otherUser?.avatar || null,
+    last_message: preview.text,
+    last_message_time: preview.time,
+    last_message_from_me: !!conv.lastMessage?.senderId && conv.lastMessage.senderId === userId,
+    unread_count: (conv.unreadCount ?? conv.unread_count) || 0,
+    /*
+     * Absent means revealed, which looks like the wrong direction and
+     * is not.
+     *
+     * The gate is entirely server-side: `name` is already the pseudonym
+     * and `image` already `null` before a reveal, so this flag decides
+     * a *picture*, not a permission, and cannot leak either way.
+     *
+     * Defaulting to `false` would draw a generated disc over every
+     * accepted message request — conversations that never had a
+     * pseudonym and have shown real names since they existed
+     * (`mayShowRealName` returns `true` for them precisely so this does
+     * not happen). Failing "closed" here would mislabel real people as
+     * anonymous, which is the worse error.
+     */
+    from_match: conv.fromMatch === true,
+    they_revealed: conv.theyRevealed !== false,
+    reveal_requested: conv.revealRequested === true,
+  }
+}
+
+/** The rooms in a `GET /chat/groups` payload: an array, or the wrapped `groups` (never the crew `rooms` while `groups` is there). */
+const roomsFrom = (data: unknown): unknown =>
+  Array.isArray(data) ? data : (data as any).groups || (data as any).rooms || (data as any).data || []
+
+/** A pending message request as `GET /message-requests` sends it. */
+const requestFrom = (r: any): MessageRequest => ({
+  request_id: r.id,
+  sender_id: r.senderId || r.sender?.id || null,
+  sender_name: r.sender?.name || null,
+  sender_avatar: r.sender?.avatar || null,
+  initial_message: r.message || null,
+  created_at: r.createdAt || null,
+})
+
+/** After a page is appended the list's reorder glide stays off this long. */
+const APPEND_QUIET_MS = 500
 const GROUP_CHAT_CACHE_TTL = 60 * 1000
 const PERSONAL_CHAT_CACHE_TTL = 60 * 1000
 const MESSAGE_REQUESTS_CACHE_TTL = 60 * 1000
 const CHAT_BACKGROUND_REFRESH_THROTTLE_MS = 15 * 1000
 
-export function useBanterInbox() {
+/**
+ * `requestsOnly`: the "See all" requests screen reads and answers the same requests through this hook and nothing else:
+ * no rooms, no conversations, no sockets for them.
+ */
+export function useBanterInbox({ requestsOnly = false }: { requestsOnly?: boolean } = {}) {
   const { user, loading: authLoading } = useAuth()
   const { showToast } = useToast()
   const [incomingRequests, setIncomingRequests] = useState<MessageRequest[]>([])
+  const incomingRef = useLatest(incomingRequests)
   const [groupChats, setGroupChats] = useState<GroupChat[]>([])
   /** Crew chats and open Blend rooms (`rooms` on `GET /chat/groups`, step 9). */
   const [crewRooms, setCrewRooms] = useState<CrewRoomRow[]>([])
@@ -149,6 +239,33 @@ export function useBanterInbox() {
   const isLoadingRef = useRef(false)
   const lastFetchRef = useRef({ list: 0, requests: 0 })
   const groupChatUnsubsRef = useRef<Map<string, () => void>>(new Map())
+
+  /*
+   * Older pages (SCRUM-760: a list is designed for thousands). Rooms page by number (`GET /chat/groups?page=`),
+   * conversations by cursor (`GET /conversations?cursor=`, blendn-admin feat/redesign-sv-a), message requests by offset
+   * with their `totalCount`. Page one is what every load reads; what later pages brought is kept under it
+   * (`laidOver`) until a forced load starts the lists over, which is also how a block drops them (`blockEpoch`).
+   * A server that sends no next page leaves nothing to ask: the list is the page it always was.
+   */
+  const olderGroupIds = useRef(new Set<string>())
+  const olderPersonalIds = useRef(new Set<string>())
+  const olderRequestIds = useRef(new Set<string>())
+  const groupsNextRef = useRef<number | null>(null)
+  const conversationsNextRef = useRef<string | null>(null)
+  /** Moves when the lists start over: a page still on its way is for the lists as they were. */
+  const moreEpoch = useRef(0)
+  const moreBusyRef = useRef(false)
+  const [hasMore, setHasMore] = useState(false)
+  /** More conversations on the server: People's own "Show more people". */
+  const [hasMorePeople, setHasMorePeople] = useState(false)
+  /** A page was just appended: the list does not glide for a moment. */
+  const [appending, setAppending] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  /** Which page did not come: its retry asks for that one. */
+  const [moreFailed, setMoreFailed] = useState<'rooms' | 'people' | null>(null)
+  /** Pending message requests on the server, when it says: the count is this, not the page held. */
+  const [requestsTotal, setRequestsTotal] = useState<number | null>(null)
+  const [requestsLoadingMore, setRequestsLoadingMore] = useState(false)
 
   /*
    * The room open on top of this tab, if any. A message arriving for it is
@@ -195,7 +312,7 @@ export function useBanterInbox() {
       const cached = queryCache.get<{ incoming: MessageRequest[]; outgoing: MessageRequest[] }>(cacheKey)
       if (cached) {
         if (loadId !== undefined && latestLoadIdRef.current !== loadId) return
-        setIncomingRequests(cached.incoming)
+        setIncomingRequests((prev) => laidOver(cached.incoming, prev, (r) => r.request_id, olderRequestIds.current))
         return
       }
     }
@@ -204,14 +321,12 @@ export function useBanterInbox() {
       if (loadId !== undefined && latestLoadIdRef.current !== loadId) return
 
       if (result.success && result.data?.requests) {
-        const requests: MessageRequest[] = result.data.requests.map((r: any) => ({
-          request_id: r.id,
-          sender_id: r.senderId || r.sender?.id || null,
-          sender_name: r.sender?.name || null,
-          sender_avatar: r.sender?.avatar || null,
-          initial_message: r.message || null,
-          created_at: r.createdAt || null,
-        }))
+        const page: MessageRequest[] = result.data.requests.map(requestFrom)
+        const total = typeof result.data.totalCount === 'number' ? result.data.totalCount : null
+        // A forced load starts over; a quiet one lays the newest page over the older ones already loaded.
+        const requests = force || !olderRequestIds.current.size ? page : laidOver(page, incomingRef.current, (r) => r.request_id, olderRequestIds.current)
+        if (force || !olderRequestIds.current.size) olderRequestIds.current = new Set()
+        setRequestsTotal(total)
         setIncomingRequests(requests)
         Logger.info('chat', 'Message requests loaded', { count: requests.length })
         if (cacheKey) {
@@ -236,7 +351,8 @@ export function useBanterInbox() {
    * is on screen alone: clearing it turned a network error into "No
    * conversations yet", or silently dropped every room.
    */
-  const loadGroupChats = async (loadId?: number, cacheKey?: string, force = false): Promise<boolean> => {
+  /** `force` bypasses the response cache; `reset` (a forced load, a block) also starts the older pages over. */
+  const loadGroupChats = async (loadId?: number, cacheKey?: string, force = false, reset = false): Promise<boolean> => {
     try {
       const result = await apiClient.getChatGroups({ force })
 
@@ -246,37 +362,14 @@ export function useBanterInbox() {
       }
 
       // Normalize API response shape (array vs wrapped payload)
-      const rooms = Array.isArray(result.data)
-        ? result.data
-        : (result.data as any).groups || (result.data as any).rooms || (result.data as any).data || []
+      const rooms = roomsFrom(result.data)
 
       if (!Array.isArray(rooms)) {
         Logger.warn('chat', 'Unexpected group chat payload shape', { data: result.data })
         return false
       }
 
-      const groupChatData: GroupChat[] = rooms
-        .map((room: any) => {
-          const preview = previewFromConversation(room)
-          return {
-            chat_room_id: String(room.id || room.chat_room_id || room.chatRoomId || ''),
-            // A place's room is named for the place; its venue day's title is bookkeeping (step 5).
-            event_title: roomDisplayTitle(room) || room.event_title || room.eventTitle || room.title || room.name || 'Event chat',
-            // `memberCount` is what `GET /chat/groups` sends; never for a place's room (H5, D-19).
-            participant_count: roomMemberCount(room) ?? 0,
-            event_image: room.event?.coverImageUrl || room.event?.cover_image_url || room.coverImageUrl || room.cover_image_url || null,
-            last_message: preview.text,
-            last_message_time: preview.time,
-            // The sender's room pseudonym (`anonymous_name`), or null.
-            last_sender_name: room.lastMessage?.user?.name || undefined,
-            last_sender_is_me: !!room.lastMessage?.user?.id && room.lastMessage.user.id === user?.id,
-            unread_count: Number(room.unreadCount ?? room.unread_count) || 0,
-            is_checked_in: room.isCheckedIn === true,
-            is_place: isPlaceRoom(room),
-            room_state: roomStateFrom(room),
-          }
-        })
-        .filter((chat) => chat.chat_room_id)
+      const groupChatData: GroupChat[] = rooms.map((room: any) => groupChatFrom(room, user?.id)).filter((chat) => chat.chat_room_id)
       // Each row carries your mute of it; the store is what the rows read.
       for (const room of rooms) rememberRoomMute(String(room.id || room.chat_room_id || room.chatRoomId || ''), room.mute)
 
@@ -284,7 +377,17 @@ export function useBanterInbox() {
       const others = crewRoomsFrom(result.data)
       for (const r of others) rememberRoomMute(r.id, r.mute)
       if (loadId === undefined || latestLoadIdRef.current === loadId) {
-        setGroupChats(groupChatData)
+        // A forced load starts over (and so drops the older pages); a quiet one lays the newest page over them.
+        if (reset || !olderGroupIds.current.size) {
+          if (reset) moreEpoch.current += 1
+          olderGroupIds.current = new Set()
+          groupsNextRef.current = nextGroupsPage(result.data)
+          setGroupChats(groupChatData)
+        } else {
+          setGroupChats((prev) => laidOver(groupChatData, prev, (c) => c.chat_room_id, olderGroupIds.current))
+        }
+        setHasMore(groupsNextRef.current !== null)
+        setHasMorePeople(conversationsNextRef.current !== null)
         setCrewRooms(others)
       }
       if (cacheKey) {
@@ -299,7 +402,7 @@ export function useBanterInbox() {
     }
   }
 
-  const loadPersonalChats = async (loadId?: number, cacheKey?: string, force = false): Promise<boolean> => {
+  const loadPersonalChats = async (loadId?: number, cacheKey?: string, force = false, reset = false): Promise<boolean> => {
     try {
       const result = await apiClient.getConversations({ force })
 
@@ -307,48 +410,19 @@ export function useBanterInbox() {
 
       if (result.success && result.data) {
         const conversations = result.data
-        const personalChatData: PersonalChat[] = conversations.map((conv: any) => {
-          const convId = String(conv.id || conv.conversation_id || '')
-          const preview = previewFromConversation(conv)
-          const otherUser = conv.otherUser || conv.other_user || {}
-          return {
-            conversation_id: convId,
-            /*
-             * Already the pseudonym when they have not revealed —
-             * `displayNameInConversation` on the server decides this and every
-             * other surface resolves through it. "Someone" rather than
-             * "Unknown" to match the server's own last resort; "Unknown" reads
-             * as a data error, which this is not.
-             */
-            other_user_name: otherUser?.name || otherUser?.display_name || 'Someone',
-            other_user_id: String(otherUser?.id || otherUser?.user_id || ''),
-            other_user_avatar: otherUser?.image || otherUser?.avatar || null,
-            last_message: preview.text,
-            last_message_time: preview.time,
-            last_message_from_me: !!conv.lastMessage?.senderId && conv.lastMessage.senderId === user?.id,
-            unread_count: (conv.unreadCount ?? conv.unread_count) || 0,
-            /*
-             * Absent means revealed, which looks like the wrong direction and
-             * is not.
-             *
-             * The gate is entirely server-side: `name` is already the pseudonym
-             * and `image` already `null` before a reveal, so this flag decides
-             * a *picture*, not a permission, and cannot leak either way.
-             *
-             * Defaulting to `false` would draw a generated disc over every
-             * accepted message request — conversations that never had a
-             * pseudonym and have shown real names since they existed
-             * (`mayShowRealName` returns `true` for them precisely so this does
-             * not happen). Failing "closed" here would mislabel real people as
-             * anonymous, which is the worse error.
-             */
-            from_match: conv.fromMatch === true,
-            they_revealed: conv.theyRevealed !== false,
-            reveal_requested: conv.revealRequested === true,
-          }
-        }).filter((conv: PersonalChat) => !!conv.conversation_id)
+        const personalChatData: PersonalChat[] = conversations.map((conv: any) => personalChatFrom(conv, user?.id)).filter((conv: PersonalChat) => !!conv.conversation_id)
 
-        setPersonalChats(personalChatData)
+        // As the rooms: a forced load starts over, a quiet one lays the newest page over the older ones.
+        if (reset || !olderPersonalIds.current.size) {
+          if (reset) moreEpoch.current += 1
+          olderPersonalIds.current = new Set()
+          conversationsNextRef.current = conversationsCursor(conversations)
+          setPersonalChats(personalChatData)
+        } else {
+          setPersonalChats((prev) => laidOver(personalChatData, prev, (c) => c.conversation_id, olderPersonalIds.current))
+        }
+        setHasMore(groupsNextRef.current !== null)
+        setHasMorePeople(conversationsNextRef.current !== null)
         if (cacheKey) queryCache.set(cacheKey, personalChatData, PERSONAL_CHAT_CACHE_TTL)
         try {
           const firstScreenUrls = personalChatData
@@ -399,11 +473,12 @@ export function useBanterInbox() {
       ? null
       : queryCache.get<{ incoming: MessageRequest[]; outgoing: MessageRequest[] }>(requestsCacheKey)
 
-    if (cachedGroupChats) setGroupChats(cachedGroupChats)
+    // The cache holds the newest page only: a paint from it lays that over the older pages already loaded.
+    if (cachedGroupChats) setGroupChats((prev) => laidOver(cachedGroupChats, prev, (c) => c.chat_room_id, olderGroupIds.current))
     const cachedCrewRooms = force ? null : queryCache.get<CrewRoomRow[]>(`${groupCacheKey}_rooms`)
     if (cachedCrewRooms) setCrewRooms(cachedCrewRooms)
-    if (cachedPersonalChats) setPersonalChats(cachedPersonalChats)
-    if (cachedRequests) setIncomingRequests(cachedRequests.incoming)
+    if (cachedPersonalChats) setPersonalChats((prev) => laidOver(cachedPersonalChats, prev, (c) => c.conversation_id, olderPersonalIds.current))
+    if (cachedRequests) setIncomingRequests((prev) => laidOver(cachedRequests.incoming, prev, (r) => r.request_id, olderRequestIds.current))
 
     const hasCachedList = !!cachedGroupChats && !!cachedPersonalChats
     const hasCachedRequests = !!cachedRequests
@@ -414,10 +489,10 @@ export function useBanterInbox() {
     const now = Date.now()
     // Bypass throttle when the chat domain is dirty (e.g. user just sent a message
     // and navigated back) so stale data is never shown after a known change.
-    const shouldFetchList = force
+    const shouldFetchList = !requestsOnly && (force
       || !hasCachedList
       || chatDirty
-      || (refreshEvenIfCached && now - lastFetchRef.current.list > CHAT_BACKGROUND_REFRESH_THROTTLE_MS)
+      || (refreshEvenIfCached && now - lastFetchRef.current.list > CHAT_BACKGROUND_REFRESH_THROTTLE_MS))
     const shouldFetchRequests = force
       || !hasCachedRequests
       || (refreshEvenIfCached && now - lastFetchRef.current.requests > CHAT_BACKGROUND_REFRESH_THROTTLE_MS)
@@ -437,8 +512,8 @@ export function useBanterInbox() {
         // internal SWR response cache so we don't get stale data from it either.
         const bypassApiCache = force || !hasCachedList || chatDirty
         const [groupsOk, personalOk] = await Promise.all([
-          loadGroupChats(loadId, groupCacheKey, bypassApiCache),
-          loadPersonalChats(loadId, personalCacheKey, bypassApiCache),
+          loadGroupChats(loadId, groupCacheKey, bypassApiCache, force),
+          loadPersonalChats(loadId, personalCacheKey, bypassApiCache, force),
         ])
         if (latestLoadIdRef.current === loadId) setListFailed(!(groupsOk && personalOk))
         lastFetchRef.current.list = now
@@ -464,6 +539,90 @@ export function useBanterInbox() {
     }
   }
 
+  /*
+   * The next older page. Rooms land at the end of the list (Past rooms is last), so they load as the end comes near
+   * (`onEndReached`). Conversations land in the middle (People sits above Past rooms), and a page arriving there while
+   * you read below it would push everything down, so they load only when asked ("Show more people"). Either: one request
+   * at a time, appended and deduped under what is held; a refusal keeps what is drawn and offers its own retry.
+   */
+  const loadMore = useCallback(
+    async (which: 'rooms' | 'people' = 'rooms') => {
+      if (!user || moreBusyRef.current) return
+      const groupsPage = which === 'rooms' ? groupsNextRef.current : null
+      const cursor = which === 'people' ? conversationsNextRef.current : null
+      if (groupsPage === null && cursor === null) return
+      moreBusyRef.current = true
+      setLoadingMore(true)
+      setMoreFailed(null)
+      const epoch = moreEpoch.current
+      let failed = false
+      try {
+        if (groupsPage !== null) {
+          const result = await apiClient.queuedRequest<unknown>(`/api/mobile/chat/groups?page=${groupsPage}`).catch(() => null)
+          if (epoch !== moreEpoch.current) return
+          if (result?.success && result.data) {
+            const rooms = roomsFrom(result.data)
+            const list: unknown[] = Array.isArray(rooms) ? rooms : []
+            const mapped = list.map((room: any) => groupChatFrom(room, user.id)).filter((c) => c.chat_room_id)
+            for (const room of list as any[]) rememberRoomMute(String(room.id || room.chat_room_id || room.chatRoomId || ''), room.mute)
+            for (const c of mapped) olderGroupIds.current.add(c.chat_room_id)
+            setGroupChats((prev) => {
+              const have = new Set(prev.map((c) => c.chat_room_id))
+              return [...prev, ...mapped.filter((c) => !have.has(c.chat_room_id))]
+            })
+            groupsNextRef.current = nextGroupsPage(result.data)
+          } else failed = true
+        }
+        if (cursor !== null) {
+          const raw = await apiClient.queuedRequest<NamedList<'conversations'>>(`/api/mobile/conversations?limit=${CONVERSATIONS_PAGE}&cursor=${encodeURIComponent(cursor)}`).catch(() => null)
+          if (epoch !== moreEpoch.current) return
+          const result = raw ? namedList(raw, 'conversations') : null
+          if (result?.success && result.data) {
+            const mapped = result.data.map((conv: any) => personalChatFrom(conv, user.id)).filter((c) => !!c.conversation_id)
+            for (const c of mapped) olderPersonalIds.current.add(c.conversation_id)
+            setPersonalChats((prev) => {
+              const have = new Set(prev.map((c) => c.conversation_id))
+              return [...prev, ...mapped.filter((c) => !have.has(c.conversation_id))]
+            })
+            conversationsNextRef.current = conversationsCursor(result.data)
+          } else failed = true
+        }
+        setMoreFailed(failed ? which : null)
+        setHasMore(groupsNextRef.current !== null)
+        setHasMorePeople(conversationsNextRef.current !== null)
+        // The rows just appended settle where they are: the list's layout glide stays off for a beat (no animated page insert).
+        setAppending(true)
+        setTimeout(() => setAppending(false), APPEND_QUIET_MS)
+      } finally {
+        moreBusyRef.current = false
+        setLoadingMore(false)
+      }
+    },
+    [user]
+  )
+
+  /* Message requests are the second screenful of the Requests section: the next page by offset, appended. */
+  const loadMoreRequests = useCallback(async () => {
+    if (requestsLoadingMore) return
+    setRequestsLoadingMore(true)
+    const epoch = moreEpoch.current
+    try {
+      const result = await apiClient.getMessageRequests({ status: 'pending', offset: incomingRef.current.length }, { force: true })
+      if (epoch !== moreEpoch.current || !result.success || !result.data?.requests) return
+      const page = result.data.requests.map(requestFrom)
+      for (const r of page) olderRequestIds.current.add(r.request_id)
+      setIncomingRequests((prev) => {
+        const have = new Set(prev.map((r) => r.request_id))
+        return [...prev, ...page.filter((r) => !have.has(r.request_id))]
+      })
+      if (typeof result.data.totalCount === 'number') setRequestsTotal(result.data.totalCount)
+    } catch (error) {
+      Logger.warn('chat', 'More requests failed', { error: String(error) })
+    } finally {
+      setRequestsLoadingMore(false)
+    }
+  }, [requestsLoadingMore, incomingRef])
+
   const onRefresh = useCallback(async () => {
     if (isLoadingRef.current) return
     setRefreshing(true)
@@ -473,9 +632,20 @@ export function useBanterInbox() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  /* A block anywhere takes that person out of the pages already loaded: start over from the server, which now leaves them out. */
+  const blocks = useSyncExternalStore(subscribeBlocks, blockEpoch)
+  const seenBlocks = useRef(blocks)
+  useEffect(() => {
+    if (seenBlocks.current === blocks) return
+    seenBlocks.current = blocks
+    if (user) void loadChats(true, true)
+    // loadChats is rebuilt each render; a block is the only trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [blocks])
+
   // Real-time private message updates via Socket.io
   useEffect(() => {
-    if (!user) return
+    if (!user || requestsOnly) return
 
     Logger.info('chat', 'Setting up real-time message subscription')
 
@@ -517,7 +687,7 @@ export function useBanterInbox() {
   // Real-time group chat updates — subscribe to loaded group chat rooms.
   // Uses incremental delta-subscription to avoid a teardown gap when the list changes.
   useEffect(() => {
-    if (!user) return
+    if (!user || requestsOnly) return
 
     const handleGroupMessage: ChatMessageCallback = (data) => {
       Logger.debug('chat', 'Group message received on chat tab', { chatGroupId: data.chatGroupId })
@@ -631,6 +801,7 @@ export function useBanterInbox() {
      * second slower than it had to be. The fade is the row's `exiting`.
      */
     setIncomingRequests((prev) => prev.filter((r) => r.request_id !== requestId))
+    setRequestsTotal((t) => (t === null ? t : Math.max(0, t - 1)))
     try {
       const result = await apiClient.respondToMessageRequest(requestId, action)
       if (!result.success) {
@@ -740,5 +911,14 @@ export function useBanterInbox() {
     socketStatus,
     boardRefreshKey,
     noteOpenRoom,
+    loadMore,
+    hasMore,
+    hasMorePeople,
+    appending,
+    loadingMore,
+    moreFailed,
+    requestsTotal,
+    loadMoreRequests,
+    requestsLoadingMore,
   }
 }

@@ -9,6 +9,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { AttendancePayload, RsvpEventsPayload, SavedEventsPayload } from './savedEvents'
 import type { PaywallEvent, PaywallTrigger } from './paywallPolicy'
 import type { PlusStatus } from './plus'
+import { noteBlocked } from './blockEpoch'
+import { CONVERSATIONS_PAGE } from './conversationsPage'
 import { namedList, type NamedList } from './namedList'
 import * as SecureStore from 'expo-secure-store'
 import { AppState, Platform } from 'react-native'
@@ -520,6 +522,16 @@ export interface WorkFieldsResponse {
   workFields: { slug: string; label: string }[]
   expertiseByField?: Record<string, { slug: string; label: string }[]>
   maxExpertise?: number
+}
+
+/**
+ * A block that went through moves `lib/blockEpoch`, so every list loaded a page at a time starts over from the server,
+ * which now leaves that person out. Here, in the client, so no route to a block (a card, a profile, a board post or ask,
+ * a message request, a conversation) can forget it.
+ */
+function noteBlockedOn<T extends { success: boolean }>(result: T): T {
+  if (result.success) noteBlocked()
+  return result
 }
 
 export interface ApiResponse<T = unknown> {
@@ -1168,7 +1180,7 @@ export const PUSH_CHANNEL_SET = 2
  * `limit` and no `cursor` the server answers in its legacy mode for installed builds; new code always says how many.
  * ponytail: first pages only. Friends, requests and the blocked set are not paged past these yet; `count` stays the whole list.
  */
-export const LIST_PAGE = { conversations: 50, friends: 100, friendRequests: 50, blocked: 100 } as const
+export const LIST_PAGE = { conversations: CONVERSATIONS_PAGE, friends: 100, friendRequests: 50, blocked: 100 } as const
 
 /**
  * Said on every request, from the one constant the push token posts: a build that knows `event_changed` declares it, and
@@ -3118,12 +3130,14 @@ class ApiClientClass {
       report?: { reason: string; description?: string; messageId?: string }
     } = {}
   ): Promise<ApiResponse<{ closed: boolean; blocked: boolean; reported: boolean }>> {
-    return this.queuedRequest(
+    const result = await this.queuedRequest<{ closed: boolean; blocked: boolean; reported: boolean }>(
       `/api/mobile/conversations/${conversationId}/leave`,
       { method: 'POST', body: JSON.stringify({ action: options.action ?? 'unmatch', ...options }) },
       true,
       3
     )
+    if (options.action === 'block') noteBlockedOn(result)
+    return result
   }
 
   async getConversationMessages(
@@ -3342,7 +3356,12 @@ class ApiClientClass {
     conversationId: string | null
     sender: { id: string; name: string | null; avatar: string | null }
   }>> {
-    return this.queuedRequest(
+    const result = await this.queuedRequest<{
+      success: boolean
+      status: string
+      conversationId: string | null
+      sender: { id: string; name: string | null; avatar: string | null }
+    }>(
       `/api/mobile/message-requests/${requestId}/respond`,
       {
         method: 'POST',
@@ -3351,6 +3370,8 @@ class ApiClientClass {
       true,
       2
     )
+    if (action === 'block') noteBlockedOn(result)
+    return result
   }
 
   // === FRIENDS ===
@@ -3516,11 +3537,13 @@ class ApiClientClass {
   }
 
   async blockBoardPost(eventId: string, postId: string): Promise<ApiResponse<{ blocked: boolean }>> {
-    return this.queuedRequest(
-      `/api/mobile/events/${encodeURIComponent(eventId)}/board/${encodeURIComponent(postId)}/block`,
-      { method: 'POST' },
-      true,
-      2
+    return noteBlockedOn(
+      await this.queuedRequest<{ blocked: boolean }>(
+        `/api/mobile/events/${encodeURIComponent(eventId)}/board/${encodeURIComponent(postId)}/block`,
+        { method: 'POST' },
+        true,
+        2
+      )
     )
   }
 
@@ -3537,22 +3560,26 @@ class ApiClientClass {
   }
 
   async blockBoardRequest(requestId: string): Promise<ApiResponse<{ blocked: boolean }>> {
-    return this.queuedRequest(
-      `/api/mobile/board/requests/${encodeURIComponent(requestId)}/block`,
-      { method: 'POST' },
-      true,
-      2
+    return noteBlockedOn(
+      await this.queuedRequest<{ blocked: boolean }>(
+        `/api/mobile/board/requests/${encodeURIComponent(requestId)}/block`,
+        { method: 'POST' },
+        true,
+        2
+      )
     )
   }
 
   // === SAFETY ENDPOINTS ===
 
   async blockUser(userId: string): Promise<ApiResponse<{ blocked: boolean }>> {
-    return this.queuedRequest(
-      `/api/mobile/users/${userId}/block`,
-      { method: 'POST' },
-      true,
-      2
+    return noteBlockedOn(
+      await this.queuedRequest<{ blocked: boolean }>(
+        `/api/mobile/users/${userId}/block`,
+        { method: 'POST' },
+        true,
+        2
+      )
     )
   }
 

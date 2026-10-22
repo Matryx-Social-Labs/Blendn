@@ -1,6 +1,6 @@
 import { router, useScrollToTop } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { FlatList, Platform, RefreshControl, StyleSheet, Text, View } from 'react-native'
+import { FlatList, Platform, StyleSheet, Text, View } from 'react-native'
 import Reanimated, { Easing, FadeInUp, FadeOut, LinearTransition, useReducedMotion } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -19,6 +19,8 @@ import {
   type RowLine,
 } from '../../components/banter/BanterParts'
 import { useLatest } from '../../lib/useLatest'
+import { usePullToRefresh } from '../../lib/usePullToRefresh'
+import { useReadOnReturn } from '../../lib/useReadOnReturn'
 import { heldList, inboxTimeLabel, previewWithSender } from '../../components/banter/inbox'
 import { holdController } from '../../components/banter/hold'
 import { BanterPressGuard, type PressGuard } from '../../components/banter/pressGuard'
@@ -26,6 +28,9 @@ import { BoardRequestsSection } from '../../components/board/BoardRequestsSectio
 import { LeaveRoomSheet, MuteSheet } from '../../components/chat/RoomSheets'
 import { SearchField } from '../../components/ds/SearchField'
 import { SectionHeader } from '../../components/ds/SectionHeader'
+import { Button } from '../../components/ds/Button'
+import { RequestRow } from '../../components/banter/RequestRow'
+import { PageFooter } from '../../components/chat/PageFooter'
 import { font, HueProvider, useBoldText } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { SwipeRow, type SwipeAction } from '../../components/ds/SwipeRow'
@@ -40,6 +45,7 @@ import { crewRoomTitle, type CrewRoomRow } from '../../lib/crews'
 import { COLOR, DURATION, EASING, SPACE, SPRING, STAGGER } from '../../lib/design/tokens'
 import { matchRowPreview } from '../../lib/matchOpener'
 import { ScreenProfiler } from '../../lib/perf'
+import { printable } from '../../lib/pulseSections'
 import { isMuted, useRoomMembership } from '../../lib/roomMembership'
 import { roomStateLine } from '../../lib/roomState'
 import { SPONSORED, useBanterInbox, type GroupChat, type MessageRequest, type PersonalChat } from '../../lib/useBanterInbox'
@@ -61,13 +67,19 @@ type Row = {
   swipe: SwipeAction[]
 }
 
-type Item = { type: 'heading'; key: string; title: string; markAll?: boolean } | { type: 'row'; key: string; row: Row; index: number }
+type Item =
+  | { type: 'heading'; key: string; title: string; markAll?: boolean }
+  | { type: 'row'; key: string; row: Row; index: number }
+  /** People's own "Show more people": a page of conversations lands mid-list, so it is asked for, never arriving under a reader. */
+  | { type: 'more'; key: string }
 
 /** #27: a moved row travels to its new place on M.settle, 300 ms after its preview changed. */
 /** A release slower than this (pt/ms) does not coast. */
 const COAST_MIN_VELOCITY = 0.1
 const REORDER = LinearTransition.delay(300).springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping).mass(SPRING.settle.mass)
 const SEARCH_GAP = SPACE.sm
+/** Message requests show this many before "Show all": a Requests section stays a strip however many are waiting. */
+const REQUESTS_PREVIEW = 3
 /** A press held this long is a hold, not a tap (Pressable's own long-press delay). */
 const HELD_PRESS_MS = 500
 
@@ -113,16 +125,29 @@ function ChatInner() {
   const [revealSeen, setRevealSeen] = useState<ReadonlySet<string>>(() => new Set())
   const roomMuted = useCallback((id: string) => isMuted(membership.mutes.get(id)), [membership.mutes])
 
+  /*
+   * #29, unread to read: the dot and the pill leave over `quick` as you come back, where it is seen — cleared as the
+   * room opened, they left behind the screen that covered them. The room is read the moment it opens (the server
+   * marks it so, and no message in it counts here); only the list's drawing of that waits for the return.
+   */
+  const clearRead = useCallback(
+    (opened: ReadonlySet<string>) => {
+      setGroupChats((prev) => prev.map((c) => (opened.has(c.chat_room_id) ? { ...c, unread_count: 0 } : c)))
+      setCrewRooms((prev) => prev.map((r) => (opened.has(r.id) ? { ...r, unreadCount: 0 } : r)))
+    },
+    [setGroupChats, setCrewRooms]
+  )
+  const noteOpened = useReadOnReturn(clearRead)
   const openRoom = useCallback(
     (chat: GroupChat) => {
       inbox.noteOpenRoom(chat.chat_room_id)
-      setGroupChats((prev) => prev.map((c) => (c.chat_room_id === chat.chat_room_id ? { ...c, unread_count: 0 } : c)))
+      noteOpened(chat.chat_room_id)
       router.push({
         pathname: '/chat/[id]',
         params: { id: chat.chat_room_id, roomName: chat.event_title, eventTitle: chat.event_title } as never,
       })
     },
-    [inbox, setGroupChats]
+    [inbox, noteOpened]
   )
   const openDm = useCallback(
     (chat: PersonalChat) => {
@@ -140,13 +165,13 @@ function ChatInner() {
   )
   const openCrewRoom = useCallback(
     (r: CrewRoomRow) => {
-      setCrewRooms((prev) => prev.map((x) => (x.id === r.id ? { ...x, unreadCount: 0 } : x)))
+      noteOpened(r.id)
       router.push({
         pathname: '/chat/[id]',
         params: { id: r.id, roomName: crewRoomTitle(r), kind: r.kind, ...(r.crewId ? { crewId: r.crewId } : {}), ...(r.blendId ? { blendId: r.blendId } : {}) } as never,
       })
     },
-    [setCrewRooms]
+    [noteOpened]
   )
 
   /* "Mark read" on one DM: the thread's first page is what opens it on the server (no per-thread route exists). */
@@ -266,6 +291,8 @@ function ChatInner() {
    * on lift the rows settle and the pill goes (C12, `heldList`).
    */
   const [heldOrder, setHeldOrder] = useState<string[] | null>(null)
+  // Only for the whole list: a search narrows what is loaded, and says so, not what the server has.
+  const morePeople = inbox.hasMorePeople && !trimmed
   const items = useMemo<Item[]>(() => {
     const sections: [string, Row[], boolean][] = [
       ['Crews', match(crewRows), false],
@@ -278,9 +305,10 @@ function ChatInner() {
       if (!rows.length) continue
       out.push({ type: 'heading', key: `h:${title}`, title, markAll })
       for (const row of rows) out.push({ type: 'row', key: row.key, row, index: index++ })
+      if (title === 'People' && morePeople) out.push({ type: 'more', key: 'more:people' })
     }
     return out
-  }, [crewRows, peopleRows, pastRows, match])
+  }, [crewRows, peopleRows, pastRows, match, morePeople])
   const liveOrder = useLatest(() => items.map((i) => i.key))
   // The touch's state and its timers (`holdController`): driven only by the list's event handlers.
   const [hold] = useState(() => holdController((held) => setHeldOrder(held ? liveOrder.current() : null)))
@@ -324,6 +352,13 @@ function ChatInner() {
         </View>
       )
     }
+    if (item.type === 'more') {
+      return (
+        <View style={styles.more}>
+          <Button kind="tertiary" size="sm" label="Show more people" loading={inbox.loadingMore} onPress={pressGuard(() => void inbox.loadMore('people'))} testID="banter-people-more" />
+        </View>
+      )
+    }
     const { row } = item
     const label = rowLabel(row.title, row.line, row.time, row.unread, row.muted)
     // In a SwipeRow the row is drawn and the SwipeRow is the element (its actions in the rotor).
@@ -362,7 +397,11 @@ function ChatInner() {
 
   const headerHeight = banterHeaderHeight(insets.top, Platform.OS === 'android')
   const listTop = headerHeight + (searching ? SPACE.sm + SEARCH_FIELD + SEARCH_GAP : 0) + SPACE.lg
+  /* #18: the branded pull (monogram, H.threshold), under the header; Android keeps the platform control, offset the same. */
+  const pull = usePullToRefresh({ refreshing: inbox.refreshing, onRefresh: () => void inbox.onRefresh(), indicatorTop: listTop })
   const invites = crews.invites
+  const requestsTotal = Math.max(inbox.requestsTotal ?? 0, incomingRequests.length)
+  const shownRequests = incomingRequests.slice(0, REQUESTS_PREVIEW)
   const hasHeaderContent = liveRooms.length + blendRooms.length + incomingRequests.length + invites.length + boardCount > 0
 
   const header = (
@@ -378,7 +417,7 @@ function ChatInner() {
               testID={`banter-live-${c.chat_room_id}`}
               title={c.event_title}
               coverUrl={c.event_image}
-              count={c.participant_count}
+              count={printable(c.participant_count) ?? 0}
               here={c.is_place}
               unread={c.unread_count}
               muted={roomMuted(c.chat_room_id)}
@@ -410,7 +449,13 @@ function ChatInner() {
 
       {!trimmed && (incomingRequests.length || invites.length) ? (
         <View style={styles.section}>
-          <SectionHeader title="Requests" count={incomingRequests.length + invites.length} testID="banter-requests" />
+          {/* The server's count, not the page held: "Requests, 140" over the three shown and a way to the rest. */}
+          <SectionHeader
+            title="Requests"
+            count={requestsTotal + invites.length}
+            action={requestsTotal > REQUESTS_PREVIEW ? { label: `See all ${requestsTotal}`, onPress: pressGuard(() => router.push('/message-requests')) } : undefined}
+            testID="banter-requests"
+          />
           {invites.map((invite) => (
             <Reanimated.View key={`i:${invite.crewId}`} exiting={reduceMotion ? undefined : FadeOut.duration(DURATION.quick)} layout={reduceMotion ? undefined : REQUEST_REFLOW}>
               <RequestCard
@@ -426,22 +471,8 @@ function ChatInner() {
               />
             </Reanimated.View>
           ))}
-          {incomingRequests.map((r: MessageRequest) => (
-            <Reanimated.View key={r.request_id} exiting={reduceMotion ? undefined : FadeOut.duration(DURATION.quick)} layout={reduceMotion ? undefined : REQUEST_REFLOW}>
-              <RequestCard
-                testID={`banter-request-${r.request_id}`}
-                face={<RequestFace photo={r.sender_avatar} pseudonym={r.sender_name ?? undefined} />}
-                name={r.sender_name || 'Someone'}
-                // The request's note, verbatim (ROUND3 C11).
-                note={r.initial_message?.trim() || 'Wants to message you'}
-                time={inboxTimeLabel(r.created_at)}
-                pending={inbox.requestPending[r.request_id]}
-                onAccept={() => void inbox.respondToRequest(r, 'accept')}
-                onDecline={() => void inbox.respondToRequest(r, 'decline')}
-                onMore={() => inbox.openRequestMore(r)}
-                onOpen={r.sender_id ? () => router.push({ pathname: '/user/[id]', params: { id: String(r.sender_id) } } as never) : undefined}
-              />
-            </Reanimated.View>
+          {shownRequests.map((r: MessageRequest) => (
+            <RequestRow key={r.request_id} request={r} inbox={inbox} />
           ))}
         </View>
       ) : null}
@@ -475,7 +506,7 @@ function ChatInner() {
         ref={listRef}
         testID="banter-list"
         // A thread that moves up when a message lands glides there after a beat; never while the list is under a finger or coasting.
-        itemLayoutAnimation={reduceMotion || scrolling ? undefined : REORDER}
+        itemLayoutAnimation={reduceMotion || scrolling || inbox.appending ? undefined : REORDER}
         data={inbox.loading && !items.length ? [] : shown}
         keyExtractor={(item) => item.key}
         renderItem={renderItem}
@@ -491,7 +522,9 @@ function ChatInner() {
           setScrolling(true)
           step('dragBegin')
         }}
+        {...pull.listProps}
         onScrollEndDrag={(e) => {
+          pull.listProps.onScrollEndDrag(e)
           // A release with speed coasts: the momentum end settles it.
           if (Math.abs(e.nativeEvent.velocity?.y ?? 0) < COAST_MIN_VELOCITY) setScrolling(false)
           step('dragEnd')
@@ -538,19 +571,21 @@ function ChatInner() {
             </View>
           )
         }
+        // Older pages as the end comes near (SCRUM-760): rooms by page, conversations by cursor; a refusal has its own retry.
+        onEndReached={() => {
+          if (!inbox.moreFailed && inbox.hasMore) void inbox.loadMore('rooms')
+        }}
+        onEndReachedThreshold={1.5}
+        initialNumToRender={12}
+        windowSize={9}
+        ListFooterComponent={
+          <PageFooter loading={inbox.loadingMore} failed={!!inbox.moreFailed} onRetry={() => void inbox.loadMore(inbox.moreFailed ?? 'rooms')} what="chats" testID="banter-more-failed" />
+        }
         contentContainerStyle={[styles.content, { paddingTop: listTop, paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + SPACE.xl }]}
         showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={inbox.refreshing}
-            // A refresh is silent everywhere: RefreshControl reports only the start, and H.threshold is "armed".
-            onRefresh={() => void inbox.onRefresh()}
-            tintColor={COLOR.textSecondary}
-            progressViewOffset={listTop}
-          />
-        }
       />
       </BanterPressGuard.Provider>
+      {pull.indicator}
 
       <RealtimeStatusBanner status={inbox.socketStatus} style={{ ...styles.banner, top: listTop - SPACE.sm }} />
       {newAbove ? (
@@ -584,6 +619,8 @@ const styles = StyleSheet.create({
   search: { position: 'absolute', left: SPACE.lg, right: SPACE.lg, zIndex: 2 },
   banner: { position: 'absolute', left: SPACE.gutter, right: SPACE.gutter, zIndex: 2 },
   secondary: { color: COLOR.textSecondary },
+  more: { alignItems: 'flex-start', paddingVertical: SPACE.sm },
+  ink: { color: COLOR.textPrimary },
 })
 
 /*

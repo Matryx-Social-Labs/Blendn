@@ -17,6 +17,8 @@ const read = (p: string) => readFileSync(join(__dirname, '..', p), 'utf8')
  */
 const stripComments = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 
+/** The request card moved to one row both the strip and the See all screen draw. */
+const REQUEST_ROW = () => stripComments(read('components/banter/RequestRow.tsx'))
 const SCREEN = () => stripComments(read('app/(tabs)/chat.tsx'))
 const PARTS = () => stripComments(read('components/banter/BanterParts.tsx'))
 const INBOX = () => stripComments(read('lib/useBanterInbox.ts'))
@@ -70,12 +72,13 @@ describe('one inbox, not two tabs', () => {
 describe('message requests', () => {
   it('still load, and are still answerable', () => {
     expect(INBOX()).toContain('loadMessageRequests')
-    expect(SCREEN()).toContain("inbox.respondToRequest(r, 'accept')")
-    expect(SCREEN()).toContain("inbox.respondToRequest(r, 'decline')")
+    expect(REQUEST_ROW()).toContain("inbox.respondToRequest(r, 'accept')")
+    expect(REQUEST_ROW()).toContain("inbox.respondToRequest(r, 'decline')")
+    expect(SCREEN()).toContain('<RequestRow')
   })
 
   it('show the note verbatim, in two lines (ROUND3 C11)', () => {
-    expect(SCREEN()).toContain('note={r.initial_message?.trim() ||')
+    expect(REQUEST_ROW()).toContain('note={r.initial_message?.trim() ||')
     expect(PARTS()).toMatch(/numberOfLines=\{2\}[^>]*>\s*\{note\}/)
   })
 
@@ -143,7 +146,8 @@ describe('the room you are standing in', () => {
 
   it('shows the room count from `memberCount`, rolling', () => {
     expect(INBOX()).toContain('participant_count: roomMemberCount(room) ?? 0')
-    expect(SCREEN()).toContain('count={c.participant_count}')
+    // Five and up, as every people count says it (the owner's floor).
+    expect(SCREEN()).toContain('count={printable(c.participant_count) ?? 0}')
     expect(PARTS()).toContain('<RollingNumber value={count}')
   })
 
@@ -200,7 +204,7 @@ describe('what the API already sends is read', () => {
   })
 
   it('knows when the last DM was yours', () => {
-    expect(INBOX()).toContain('conv.lastMessage.senderId === user?.id')
+    expect(INBOX()).toContain('conv.lastMessage.senderId === userId')
     expect(SCREEN()).toContain('previewWithSender(c.last_message, { fromMe: c.last_message_from_me })')
   })
 

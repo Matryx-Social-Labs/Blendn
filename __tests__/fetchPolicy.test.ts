@@ -77,6 +77,8 @@ const ALLOWED: Record<string, string> = {
   'components/home/HomeMap.tsx':
     'a viewport the person moved to (or a segment they picked) is the ask; a venue an event ' +
     'has taken over must not linger as a pin from a cached page',
+  'lib/useBanterInbox.ts':
+    '"Show more requests" asks for the next page by offset: a human tapped, and a cached page is not the next one',
   'lib/useRoom.ts':
     'load-more raises the limit, which is a different query rather than a ' +
     're-read of the same one',

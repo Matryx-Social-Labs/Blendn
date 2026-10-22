@@ -107,14 +107,14 @@ it('the window ends: the room becomes "not live", and comes back — socket rejo
   ;(apiClient.getChatMessages as jest.Mock).mockResolvedValue(refused)
   await act(async () => mockEnded.forEach((f) => f({ eventId: 'day-1', reason: 'expired' })))
   await flush()
-  expect(screen.getByText("You’re not live here any more")).toBeTruthy()
+  expect(screen.getByText('Not live here any more')).toBeTruthy()
   // Out of the room: no live sync (and no socket join) for a room that refuses you (X3).
   expect(mockLiveSync.mock.calls[mockLiveSync.mock.calls.length - 1][0].enabled).toBe(false)
 
   ;(apiClient.getChatMessages as jest.Mock).mockResolvedValue(served)
   await act(async () => mockChanged.forEach((f) => f()))
   await flush()
-  expect(screen.queryByText("You’re not live here any more")).toBeNull()
+  expect(screen.queryByText('Not live here any more')).toBeNull()
   expect(mockRejoin).toHaveBeenCalledWith('g1')
 })
 

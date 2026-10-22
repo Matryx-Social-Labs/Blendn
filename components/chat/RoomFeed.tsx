@@ -1,8 +1,11 @@
 import { memo } from 'react'
 import { StyleSheet, View } from 'react-native'
 import Animated, { FadeOut } from 'react-native-reanimated'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { broadcastParts } from '../../lib/chatFeed'
+import { goneKindFor } from '../../lib/chatGone'
+import { liveEndedState } from '../../lib/chatLiveEnded'
 import { markSeed } from '../../lib/pseudonymAvatar'
 import { DURATION, SPACE } from '../../lib/design/tokens'
 import { isTemp, type RoomMessage } from '../../lib/roomMessages'
@@ -12,6 +15,10 @@ import { ChatBubble, type BubbleReaction } from '../ds/ChatBubble'
 import type { Rect } from '../ds/chatShared'
 import { StateScreen } from '../ds/StateScreen'
 import { SystemLine, SystemNotice } from '../ds/SystemNotice'
+import { GoneCard } from '../system/GoneCard'
+import type { PollRefusal } from '../../lib/chatPoll'
+import { RoomPoll } from './RoomPoll'
+import { chatHeaderBottom } from './ChatHeader'
 
 export type RowHandlers = {
   menu: (m: RoomMessage, anchor: Rect) => void
@@ -20,6 +27,8 @@ export type RowHandlers = {
   reply: (m: RoomMessage) => void
   sender: (m: RoomMessage) => void
   link: (url: string) => void
+  /** A vote the room itself refused (closed, not in it, not live): the room locks. */
+  pollRefusal: (reason: PollRefusal) => void
 }
 
 /**
@@ -51,6 +60,8 @@ export const RoomMessageRow = memo(function RoomMessageRow({
   landed,
   arriving = false,
   senderTappable,
+  eventId,
+  pollViewable = false,
   handlers,
 }: {
   item: RoomMessage
@@ -65,19 +76,32 @@ export const RoomMessageRow = memo(function RoomMessageRow({
   arriving?: boolean
   /** An event room's sender opens their card (5.1); a crew's or a Blend's is Flow 10's. */
   senderTappable: boolean
+  /** The event this room belongs to: a poll is read and voted on through it. Null for a crew's or a Blend's. */
+  eventId?: string | null
+  /** This poll's row is on screen: it is read only then. */
+  pollViewable?: boolean
   handlers: RowHandlers
 }) {
   if (item.sender_id === 'system') return <SystemLine text={item.message_text} />
   /*
-   * A poll is the organiser's question. Its options and votes are a read the
-   * room can't make yet — the message doesn't carry its poll's id — so it is
-   * said as a notice, never as somebody's bubble. TODO(server): the poll id on
-   * a `poll` message, and this becomes <PollBubble> (Flow 15 #17, R2-D2).
+   * A poll is the organiser's question. With its poll id on the message (SV8) it is the poll, answerable, as
+   * <PollBubble>; until the server names it, the room says it as a notice, never as somebody's bubble.
    */
   if (item.message_type === 'poll') {
     return (
       <View style={styles.runStart}>
-        <SystemNotice icon="chart-column" text={`Poll: ${item.message_text}`} testID={`poll-${item.message_id}`} />
+        {item.poll_id && eventId ? (
+          <RoomPoll
+            eventId={eventId}
+            pollId={item.poll_id}
+            question={item.message_text}
+            viewable={pollViewable}
+            onRoomRefusal={handlers.pollRefusal}
+            testID={`poll-${item.message_id}`}
+          />
+        ) : (
+          <SystemNotice icon="chart-column" text={`Poll: ${item.message_text}`} testID={`poll-${item.message_id}`} />
+        )}
       </View>
     )
   }
@@ -124,7 +148,8 @@ export type Outside =
   | { kind: 'closed'; line: string }
   | { kind: 'removed'; line: string | null }
   | { kind: 'gone' }
-  | { kind: 'not_live' }
+  /** `reason` is the socket's `live:ended` reason when this phone heard it; a read refused with NOT_LIVE carries none. */
+  | { kind: 'not_live'; reason?: string | null; venueName?: string | null; dayEndsAt?: string | null }
   | { kind: 'left' }
   | { kind: 'out' }
 
@@ -136,21 +161,35 @@ export type Outside =
  */
 export function RoomOutside({
   outside,
+  roomKind = null,
   rejoining,
   onRejoin,
   onGoLive,
   onBack,
 }: {
   outside: Outside
+  /** A crew's or a Blend's room, told apart from an event's: their wording has no event to check in at. */
+  roomKind?: 'crew' | 'blend' | null
   rejoining: boolean
   onRejoin: () => void
   onGoLive: () => void
   onBack: () => void
 }) {
+  const insets = useSafeAreaInsets()
   const back = [{ label: 'Back', kind: 'secondary' as const, onPress: onBack }]
   switch (outside.kind) {
-    case 'closed':
+    case 'closed': {
+      // A closed crew or Blend is the shared "isn't here any more" card (#11); being removed from a crew's chat is not.
+      const gone = goneKindFor(outside.line)
+      if (gone) {
+        return (
+          <View style={[styles.gone, { paddingTop: chatHeaderBottom(insets.top) + SPACE.lg }]}>
+            <GoneCard kind={gone} onBack={onBack} testID="room-gone-card" />
+          </View>
+        )
+      }
       return <StateScreen variant="screen" icon="door-closed" title={outside.line} actions={back} testID="room-closed" />
+    }
     case 'removed':
       return (
         <StateScreen
@@ -172,36 +211,56 @@ export function RoomOutside({
           testID="room-gone"
         />
       )
-    case 'not_live':
+    case 'not_live': {
+      const state = liveEndedState(outside.reason, { venueName: outside.venueName, dayEndsAt: outside.dayEndsAt })
       return (
         <StateScreen
           variant="screen"
-          icon="radio"
-          title="You’re not live here any more"
-          body="Today’s room is for the people live at this place. Go live there again to rejoin it."
-          actions={[{ label: 'Go live again', onPress: onGoLive }]}
+          icon={state.icon}
+          title={state.title}
+          body={state.body}
+          actions={[{ label: state.action.label, onPress: state.action.kind === 'back' ? onBack : onGoLive }]}
           testID="room-not-live"
         />
       )
-    default:
+    }
+    default: {
+      const left = outside.kind === 'left'
+      // A Blend you left is over for both sides: nothing to rejoin (10-10, proposed copy).
+      if (roomKind === 'blend') {
+        return <StateScreen variant="screen" icon="door-open" title="You left this Blend" body="Nothing you wrote has gone anywhere." actions={back} testID="room-left" />
+      }
+      // A crew's room has no event to check in at (5-1, "a crew room falls through here with event wording").
+      const words = roomKind === 'crew' ? CREW_WORDS : EVENT_WORDS
       return (
         <StateScreen
           variant="screen"
           icon="door-open"
-          title={outside.kind === 'left' ? 'You left this room' : 'You’re not in this room'}
-          body={
-            outside.kind === 'left'
-              ? 'Check in at the event again to rejoin. Nothing you wrote has gone anywhere.'
-              : 'If you left it, you can rejoin. Otherwise, check in at the event to join its room.'
-          }
+          title={left ? words.leftTitle : words.outTitle}
+          body={left ? words.left : words.out}
           actions={[{ label: 'Rejoin', onPress: onRejoin, loading: rejoining }]}
           testID="room-left"
         />
       )
+    }
   }
+}
+
+const EVENT_WORDS = {
+  leftTitle: 'You left this room',
+  left: 'Check in at the event again to rejoin. Nothing you wrote has gone anywhere.',
+  outTitle: 'You’re not in this room',
+  out: 'If you left it, you can rejoin. Otherwise, check in at the event to join its room.',
+}
+const CREW_WORDS = {
+  leftTitle: 'You left this chat',
+  left: 'Rejoin to see it again. Nothing you wrote has gone anywhere.',
+  outTitle: 'You’re not in this crew’s chat',
+  out: 'If you left it, you can rejoin. Otherwise, ask somebody in the crew.',
 }
 
 const styles = StyleSheet.create({
   runStart: { marginTop: SPACE.lg },
   inRun: { marginTop: SPACE.xs },
+  gone: { flex: 1, paddingHorizontal: SPACE.gutter },
 })

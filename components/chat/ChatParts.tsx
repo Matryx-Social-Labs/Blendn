@@ -37,7 +37,7 @@ export function CountLine({ count }: { count: number }) {
     <>
       <PresenceDot kind="live" size={HEADER_DOT} />
       <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary]}>
-        <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{count}</Text> in the room
+        <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{count.toLocaleString('en-US')}</Text> in the room
       </Text>
     </>
   )
