@@ -18,7 +18,7 @@ jest.mock('react-native-safe-area-context', () => jest.requireActual('react-nati
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn(), journey: jest.fn() } }))
 jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { id: 'u-a' } }) }))
 jest.mock('../lib/apiClient', () => ({
-  apiClient: { getChatGroups: jest.fn(), getChatParticipants: jest.fn(), getEventMatches: jest.fn(), setChatGroupMute: jest.fn(), leaveChatGroup: jest.fn() },
+  apiClient: { getChatGroups: jest.fn(), getChatParticipants: jest.fn(), getEventMatches: jest.fn(), getVenue: jest.fn(), setChatGroupMute: jest.fn(), leaveChatGroup: jest.fn() },
 }))
 jest.mock('../lib/socketClient', () => ({ subscribeToChatMemberLeft: () => () => {} }))
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn() }) }))
@@ -119,5 +119,97 @@ describe('nothing collides with the clock or the back button (drive 2)', () => {
     // The inset (whatever the device's), the back button's row and the 10 pt the glass reaches under it.
     expect(shield.height).toBeGreaterThanOrEqual(SIZE.circleButton + SPACE.sm + SPACE.xxs)
     expect(screen.getByText('ORGANISER').props.numberOfLines).toBe(1)
+  })
+})
+
+describe('a room of thousands (large data)', () => {
+  const page = (from: number, n: number, totalCount: number) => ({
+    success: true,
+    data: { participants: Array.from({ length: n }, (_, i) => ({ userId: `u-${from + i}`, name: `Fox ${from + i}`, role: 'member' })), totalCount },
+  })
+  const list = () => screen.getByTestId('info-list')
+  const reachEnd = async () => act(async () => fireEvent(list(), 'endReached'))
+
+  it('never mounts a page of 100 at once, and says the truthful total, not what has loaded', async () => {
+    api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [{ ...eventRow, memberCount: 5000 }] } } as never)
+    api.getChatParticipants.mockResolvedValue(page(0, 100, 5000) as never)
+    await open()
+    expect(screen.getByText('5,000')).toBeTruthy()
+    expect(screen.getByLabelText('In the room, 5000')).toBeTruthy()
+    const mounted = screen.queryAllByTestId(/^info-member-/).length
+    expect(mounted).toBeGreaterThan(0)
+    expect(mounted).toBeLessThan(100)
+  })
+
+  it('asks for the next page from where the list stands as the end comes near, one at a time', async () => {
+    api.getChatParticipants.mockResolvedValueOnce(page(0, 100, 250) as never).mockResolvedValueOnce(page(100, 100, 250) as never)
+    await open()
+    expect(api.getChatParticipants).toHaveBeenLastCalledWith('g1', { limit: 100, offset: 0 })
+    await reachEnd()
+    expect(api.getChatParticipants).toHaveBeenLastCalledWith('g1', { limit: 100, offset: 100 })
+    expect(api.getChatParticipants).toHaveBeenCalledTimes(2)
+  })
+
+  it('stops asking once everybody is here', async () => {
+    api.getChatParticipants.mockResolvedValue(page(0, 3, 3) as never)
+    await open()
+    await reachEnd()
+    expect(api.getChatParticipants).toHaveBeenCalledTimes(1)
+  })
+
+  it('a later page that fails keeps who is shown and offers its own retry', async () => {
+    api.getChatParticipants.mockResolvedValueOnce(page(0, 100, 250) as never).mockResolvedValueOnce({ success: false, error: 'offline' } as never)
+    await open()
+    await reachEnd()
+    expect(screen.getByTestId('info-members-more-failed')).toBeTruthy()
+    expect(screen.queryByText('Couldn’t load who’s in this room')).toBeNull()
+    // The list does not hammer a failing page on every scroll event.
+    await reachEnd()
+    expect(api.getChatParticipants).toHaveBeenCalledTimes(2)
+    api.getChatParticipants.mockResolvedValueOnce(page(100, 100, 250) as never)
+    await act(async () => fireEvent.press(screen.getByTestId('info-members-more-failed')))
+    expect(api.getChatParticipants).toHaveBeenLastCalledWith('g1', { limit: 100, offset: 100 })
+    expect(screen.queryByTestId('info-members-more-failed')).toBeNull()
+  })
+
+  it('draws no presence: a person is a creature and a name', async () => {
+    api.getChatParticipants.mockResolvedValue(page(0, 5, 5) as never)
+    await open()
+    expect(screen.queryByText(/online|active now|here now/i)).toBeNull()
+  })
+
+  it('says no count under five', async () => {
+    api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [{ ...eventRow, memberCount: 3 }] } } as never)
+    await open()
+    expect(screen.queryByText(/in the room/)).toBeNull()
+    expect(screen.queryByLabelText(/^In the room, /)).toBeNull()
+  })
+})
+
+describe('a place’s room (C5, 5-2)', () => {
+  const placeRow = { id: 'g1', name: 'Toit', memberCount: 3, event: { id: 'd1', kind: 'venue_day', venueId: 'v1', title: 'Venue day · Toit · 2026-10-22' } }
+  beforeEach(() => {
+    api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [placeRow] } } as never)
+    api.getVenue.mockResolvedValue({ success: true, data: { live: { liveNow: '5-9' } } } as never)
+  })
+
+  it('is titled for the place and says a bucket, never the exact count', async () => {
+    await open()
+    expect(screen.getByText('Toit · tonight')).toBeTruthy()
+    expect(screen.getByText('5–9')).toBeTruthy()
+    expect(screen.queryByText('3')).toBeNull()
+    // Its people are not counted in the section heading either.
+    expect(screen.queryByLabelText(/^In the room, \d/)).toBeNull()
+  })
+
+  it('leaving says what it does to tonight, and that going live again brings you back', async () => {
+    await open()
+    expect(screen.getByText('You leave Toit’s room for tonight. Go live again any time you’re here.')).toBeTruthy()
+  })
+
+  it('below five live it says nothing rather than "Under 5"', async () => {
+    api.getVenue.mockResolvedValue({ success: true, data: { live: { liveNow: 'quiet' } } } as never)
+    await open()
+    expect(screen.queryByText(/in the room/)).toBeNull()
   })
 })
