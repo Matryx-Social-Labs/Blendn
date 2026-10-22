@@ -333,6 +333,8 @@ export type PlaceView = {
   filters: PlaceFilters
   /** A search is typed: the answer is a flat list of places, no strata. */
   searching: boolean
+  /** The read was refused for asking too fast (Flow 15 #15): the banner is the state, so no skeleton, error or empty row stands in for it. */
+  rateLimited?: boolean
   /** The top areas, from §C5 (not read yet): drawn only when `SHOW_AREA_SECTION` and there are two or more. */
   areas?: readonly PlaceAreaSummary[]
 }
@@ -349,6 +351,7 @@ export function placeRows(view: PlaceView): PlaceRow[] {
   const rows: PlaceRow[] = [{ kind: 'title', key: 'title' }, { kind: 'search', key: 'search' }]
   const all = [...strata.live, ...strata.open, ...strata.quiet]
   if (all.length === 0) {
+    if (view.rateLimited) return rows
     if (status === 'error') rows.push({ kind: 'error', key: 'error' })
     else if (status === 'ready') rows.push({ kind: 'empty', key: 'empty', reason: emptyReason(view) })
     else rows.push({ kind: 'skeleton', key: 'skeleton' })

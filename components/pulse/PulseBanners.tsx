@@ -1,8 +1,9 @@
-import { StyleSheet } from 'react-native'
+import { StyleSheet, View } from 'react-native'
 import Animated, { LinearTransition, useReducedMotion } from 'react-native-reanimated'
 
 import { Banner } from '../ds/Banner'
 import { bannerFadeIn, bannerIn, bannerOut } from '../motion/presence'
+import { RateLimitedBanner } from '../system/RateLimitedBanner'
 import RealtimeStatusBanner from '../RealtimeStatusBanner'
 import { SPACE, SPRING } from '../../lib/design/tokens'
 import type { SocketConnectionStatus } from '../../lib/socketClient'
@@ -19,6 +20,9 @@ type BannersProps = {
   onOpenSettings: () => void
   /** A refresh failed over a list that is still on screen. */
   refreshFailed: boolean
+  /** Seconds the server asked us to wait after refusing a read for asking too fast (Flow 15 #15); null when it has not. */
+  rateLimit?: number | null
+  onRateLimitDone?: () => void
   onRetry: () => void
   onLayout?: (height: number) => void
 }
@@ -34,7 +38,7 @@ type BannersProps = {
  * The first-run tip is not a banner any more (it is the one-off coach mark), and a switch offer and the away notice
  * are never both: `lib/city.ts` pins that across every combination.
  */
-export function PulseBanners({ socketStatus, switchTo, onSwitch, away, locationDenied, onOpenSettings, refreshFailed, onRetry, onLayout }: BannersProps) {
+export function PulseBanners({ socketStatus, switchTo, onSwitch, away, locationDenied, onOpenSettings, refreshFailed, rateLimit = null, onRateLimitDone, onRetry, onLayout }: BannersProps) {
   const reduceMotion = useReducedMotion()
   const enter = reduceMotion ? bannerFadeIn : bannerIn
   const glide = reduceMotion ? undefined : LinearTransition.springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping).mass(SPRING.settle.mass)
@@ -56,7 +60,12 @@ export function PulseBanners({ socketStatus, switchTo, onSwitch, away, locationD
           <Banner kind="paused" text="Turn on location to see nearby events and check in." action={{ label: 'Settings', onPress: onOpenSettings }} testID="pulse-denied" />
         </Animated.View>
       ) : null}
-      {refreshFailed ? (
+      {rateLimit !== null ? (
+        <View style={styles.item}>
+          <RateLimitedBanner seconds={rateLimit} onDone={onRateLimitDone} testID="pulse-rate-limited" />
+        </View>
+      ) : null}
+      {refreshFailed && rateLimit === null ? (
         <Animated.View entering={enter} exiting={bannerOut} style={styles.item}>
           <Banner kind="offline" text="Couldn’t refresh events." action={{ label: 'Try again', onPress: onRetry }} testID="pulse-refresh-failed" />
         </Animated.View>

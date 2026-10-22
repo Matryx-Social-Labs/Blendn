@@ -42,6 +42,7 @@ import { showSheet } from '../../lib/sheet'
 import { useToast } from '../../components/Toast'
 import { Skeleton } from '../../components/Skeleton'
 import { VirtualizedList } from '../../components/VirtualizedList'
+import { rateLimitWait } from '../../lib/rateLimited'
 import { getEvents as fetchEventsApi, type BlendnEvent } from '../../lib/api'
 import {
   activeFilterCount,
@@ -382,6 +383,8 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   /** Height of the banners above the header, so the Featured card still clears the bar. */
   const [bannersHeight, setBannersHeight] = useState(0)
   const [netError, setNetError] = useState<string | null>(null)
+  /** Seconds the server asked us to wait, when it refused a read for asking too fast (Flow 15 #15). */
+  const [rateLimit, setRateLimit] = useState<number | null>(null)
   /**
    * The list at its top, so the first card is on screen when the coach mark
    * starts. Once it is up it rides with the card, so it stops listening.
@@ -855,9 +858,16 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
 
       if (error) {
         Logger.error('events', 'Error fetching events', { error })
+        // Asked too fast: the banner says the wait and reads again, and the page is not "couldn't load" (Flow 15 #15).
+        const wait = rateLimitWait([error])
+        if (wait !== null) {
+          setRateLimit(wait)
+          return
+        }
         setNetError("Couldn’t load events.")
         return
       }
+      setRateLimit(null)
 
       const normalized = (eventsData || []).map(normalizeEvent)
       setEvents(normalized)
@@ -1276,7 +1286,12 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       })
       // The list was replaced while this was in flight; this page is not its.
       if (generation !== feedGenerationRef.current) return
-      if (error) return
+      if (error) {
+        // A refused page says so and waits; no other failure here is loud (the next scroll asks again).
+        const wait = rateLimitWait([error])
+        if (wait !== null) setRateLimit(wait)
+        return
+      }
       const received = data ?? []
       setHasMore(pageHasMore(received.length, PAGE_SIZE))
       if (received.length === 0) return
@@ -1561,6 +1576,12 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       onOpenSettings={() => void Linking.openSettings().catch(() => {})}
       // Only over a list that is still on screen: with nothing loaded the whole page is the error (`PulseLoadFailed`).
       refreshFailed={!!netError && events.length > 0}
+      rateLimit={rateLimit}
+      onRateLimitDone={() => {
+        // The wait is over: read again rather than leave the list as it was.
+        setRateLimit(null)
+        void fetchEvents({ force: true })
+      }}
       onRetry={() => fetchEvents({ force: true })}
       onLayout={setBannersHeight}
     />
@@ -1627,12 +1648,13 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     </View>
   ) : (
     <View>
-      {events.length === 0 && !!netError ? (
+      {events.length === 0 && !!netError && rateLimit === null ? (
         <FadeInUp delay={SECTION_MOTION_BASE_DELAY}>
           <PulseLoadFailed onRetry={() => fetchEvents({ force: true })} />
         </FadeInUp>
       ) : null}
-      {events.length === 0 && !netError ? (
+      {/* A refused read is the banner above, and neither "couldn’t load" nor "nothing here". */}
+      {events.length === 0 && !netError && rateLimit === null ? (
         <FadeInUp delay={SECTION_MOTION_BASE_DELAY}>
           <PulseEmpty
             kind={emptyKind}

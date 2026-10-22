@@ -100,7 +100,8 @@ export async function getEvents(params?: EventsParams, options?: { force?: boole
     }
   }
   Logger.warn('api', 'getEvents failed', { error: result.error })
-  return { data: null, error: { message: result.error || 'Failed to fetch events' } }
+  // The code and the wait ride along: a refusal for asking too fast is not "check your connection" (Flow 15 #15, `lib/rateLimited.ts`).
+  return { data: null, error: { message: result.error || 'Failed to fetch events', errorCode: result.errorCode, retryAfter: result.retryAfter } }
 }
 
 /**

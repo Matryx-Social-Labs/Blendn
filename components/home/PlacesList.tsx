@@ -39,7 +39,9 @@ import {
   type PlaceStrata,
   type WhatsOn,
 } from '../../lib/placesPane'
+import { rateLimitWait } from '../../lib/rateLimited'
 import { clockTime } from '../../lib/roomMoments'
+import { RateLimitedBanner } from '../system/RateLimitedBanner'
 import { useNow } from '../../lib/useNow'
 import { usePullToRefresh } from '../../lib/usePullToRefresh'
 import type { HomeBrowse } from './HomeShell'
@@ -144,7 +146,7 @@ export function PlacesList({
           })
         } else {
           Logger.warn('events', 'Could not load places', { page, error: res.error })
-          dispatch({ type: 'failed', key, page })
+          dispatch({ type: 'failed', key, page, rateLimit: rateLimitWait([res]) ?? undefined })
         }
       } catch (error) {
         Logger.warn('events', 'Places request threw', { page, error: String(error) })
@@ -206,13 +208,20 @@ export function PlacesList({
     }
   }
 
+  // The wait is over: read again, the page it was refused on.
+  const rateLimitPage = state.rateLimit?.page ?? 1
+  const rateLimitDone = useCallback(() => {
+    dispatch({ type: 'rateLimitDone', key })
+    void (rateLimitPage <= 1 ? refresh() : request(rateLimitPage))
+  }, [key, rateLimitPage, refresh, request])
+
   // The drawer keeps this one line at peek, when only its header shows.
   const summary = peekLine(strata, state.hasMore)
   useEffect(() => onSummary?.(summary), [onSummary, summary])
 
   const rows = useMemo(
-    () => placeRows({ status: state.status, strata, more: state.hasMore, quietOpen, near, hasFix, filters, searching }),
-    [state.status, strata, state.hasMore, quietOpen, near, hasFix, filters, searching]
+    () => placeRows({ status: state.status, strata, more: state.hasMore, quietOpen, near, hasFix, filters, searching, rateLimited: state.rateLimit !== null }),
+    [state.status, strata, state.hasMore, quietOpen, near, hasFix, filters, searching, state.rateLimit]
   )
 
   // The map's pins: Near you's rows, while Near you is on screen.
@@ -268,6 +277,12 @@ export function PlacesList({
                 </View>
               ) : null}
               {state.refreshFailed && !offline ? <RefreshFailed onRetry={() => void refresh()} /> : null}
+              {/* Asked too fast: the wait, counting down, and then it reads again (Flow 15 #15). */}
+              {state.rateLimit && state.rateLimit.page <= 1 ? (
+                <View style={styles.banner}>
+                  <RateLimitedBanner seconds={state.rateLimit.seconds} onDone={rateLimitDone} testID="places-rate-limited" />
+                </View>
+              ) : null}
             </View>
           )
         case 'search':
@@ -362,7 +377,7 @@ export function PlacesList({
       }
     },
     [
-      city, openCityPicker, stat, searching, state.status, state.readAt, state.refreshFailed, filters, offline, now, search, whatsOn, typeLabel, barOn,
+      city, openCityPicker, stat, searching, state.status, state.readAt, state.refreshFailed, state.rateLimit, rateLimitDone, filters, offline, now, search, whatsOn, typeLabel, barOn,
       chooseKind, refresh, requestLocation, onShowNearOnMap, toggleFold, seeAllLive, seeAllOpen, openFilters, clearFilter,
     ]
   )
@@ -375,7 +390,15 @@ export function PlacesList({
         renderItem={renderItem}
         itemLayoutAnimation={reduceMotion ? undefined : UNFOLD}
         stickyHeaderIndices={PLACES_STICKY}
-        ListFooterComponent={state.loadingMore ? <View style={styles.more}><Spinner /></View> : null}
+        ListFooterComponent={
+          state.loadingMore ? (
+            <View style={styles.more}><Spinner /></View>
+          ) : state.rateLimit && state.rateLimit.page > 1 ? (
+            <View style={styles.banner}>
+              <RateLimitedBanner seconds={state.rateLimit.seconds} onDone={rateLimitDone} testID="places-more-rate-limited" />
+            </View>
+          ) : null
+        }
         testID="places-list"
         onEndReachedThreshold={0.5}
         onEndReached={() => void loadMore()}
