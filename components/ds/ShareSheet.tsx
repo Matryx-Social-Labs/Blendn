@@ -7,7 +7,7 @@ import { Icon, type IconName } from '../ui/Icon'
 import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
-import { LinkPreviewCard, type LinkPreview, type ShareEvent } from './LinkPreviewCard'
+import { joinParts, LinkPreviewCard, type LinkPreview, type ShareEvent } from './LinkPreviewCard'
 import { monoCaption } from './MonoFamily'
 import { Sheet } from './Sheet'
 import { announceOutcome, CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from './shared'
@@ -28,7 +28,7 @@ function previewOf(share: ShareTarget): LinkPreview {
   return { template: 'invite' }
 }
 
-const placeOf = (e: ShareEvent) => (e.unlisted ? e.area : `${e.venue}, ${e.area}`)
+const placeOf = (e: ShareEvent) => (e.unlisted ? e.area : joinParts([e.venue, e.area], ', '))
 
 /**
  * Sharing shows you the card before anyone else sees it
@@ -54,6 +54,7 @@ export function ShareSheet({
   onStory,
   onCopy,
   onMore,
+  onDismissed,
   testID,
 }: {
   visible: boolean
@@ -66,6 +67,8 @@ export function ShareSheet({
   onStory: () => void
   onCopy: () => void
   onMore: () => void
+  /** Once the tray has left the screen: a sheet that follows it (the Story options) waits for this. */
+  onDismissed?: () => void
   testID?: string
 }) {
   const bold = useBoldText()
@@ -87,7 +90,7 @@ export function ShareSheet({
     share.kind === 'event'
       ? [share.event.title, share.event.dateText, placeOf(share.event)].filter(Boolean).join(', ')
       : share.kind === 'venue'
-        ? `${share.name}, ${share.typeLabel}, ${share.area}`
+        ? joinParts([share.name, share.typeLabel, share.area], ', ')
         : 'Your invite to Blend’n'
 
   const actions: { id: string; label: string; icon: IconName; onPress: () => void; haptic?: () => void; strong?: boolean; live?: boolean }[] = [
@@ -110,7 +113,7 @@ export function ShareSheet({
   ]
 
   return (
-    <Sheet visible={visible} onClose={onClose} title="Share" testID={testID}>
+    <Sheet visible={visible} onClose={onClose} onDismissed={onDismissed} title="Share" testID={testID}>
       <View accessible accessibilityLabel={`This is what they’ll see: ${spoken}`} style={styles.preview}>
         <View style={[styles.cardEdge, contrast && IC_HAIRLINE]}>
           <LinkPreviewCard preview={previewOf(share)} width={width - 2 * SPACE.gutter} radius={RADIUS.rowInCard} />
@@ -126,7 +129,7 @@ export function ShareSheet({
           </Text>
         ) : (
           <Text style={[font('meta', bold), { color: detail }]}>
-            {share.kind === 'venue' ? `${share.typeLabel} · ${share.area}` : 'A link only you can send · no name on the card'}
+            {share.kind === 'venue' ? joinParts([share.typeLabel, share.area], ' · ') : 'A link only you can send · no name on the card'}
           </Text>
         )}
       </View>

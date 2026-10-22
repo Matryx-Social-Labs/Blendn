@@ -23,6 +23,7 @@ import { PresenceMonitor } from '../components/PresenceMonitor';
 import { LiveAtVenue } from '../components/LiveAtVenue';
 import { notePathname } from '../lib/paywall';
 import { SheetHost } from '../components/SheetHost';
+import { ShareHost } from '../components/share/ShareHost';
 import { useAuth } from '../lib/useAuth';
 import { useUpdateRequired } from '../lib/updateRequired';
 import { UpdateRequiredScreen } from '../components/system/UpdateRequiredScreen';
@@ -751,6 +752,8 @@ function RootLayout() {
             finished step can say what it did.
           */}
           <SheetHost />
+          {/* The share tray and the Story sheet, for whoever calls `openShare` (lib/shareTray.ts). */}
+          <ShareHost />
           {/*
             Last, so nothing in the app draws over it (Android elevation
             included): every coach mark and its dim (components/ds/CoachMarkHost).
