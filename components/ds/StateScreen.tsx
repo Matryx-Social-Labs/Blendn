@@ -107,7 +107,7 @@ export function StateScreen({ icon, title, body, bodyLink, lead, note, noteMono 
       ) : (
         <GlyphWell icon={icon} size={variant} testID={testID && `${testID}-well`} />
       )}
-      <Text accessibilityRole="header" style={[font('title', bold), styles.title]}>
+      <Text accessibilityRole="header" textBreakStrategy="balanced" style={[font('title', bold), styles.title]}>
         {title}
       </Text>
       {body ? (

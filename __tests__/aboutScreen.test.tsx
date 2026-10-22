@@ -99,3 +99,8 @@ describe('the grievance officer', () => {
     system.mockRestore()
   })
 })
+
+it('keeps a licence whole when a map-data row wraps: "(CC BY 4.0)" has non-breaking spaces', async () => {
+  await render(<AboutScreen />)
+  expect(screen.getByText('Google Open Buildings (CC BY 4.0)')).toBeTruthy()
+})

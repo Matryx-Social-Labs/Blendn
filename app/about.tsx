@@ -26,7 +26,8 @@ const FONT_CREDIT = 'Satoshi © Indian Type Foundry · Geist Mono © Vercel'
 
 /** Who the map is drawn from, with their licences (the map's own credit fades: this is where it stays). */
 const MAP_DATA = Object.values(MAP_CREDITS).map((c) => ({
-  title: 'licence' in c ? `${c.text} (${c.licence})` : c.text,
+  // A non-breaking space inside the licence keeps "(CC BY 4.0)" whole when the row wraps.
+  title: 'licence' in c ? `${c.text} (${c.licence.replace(/ /g, '\u00A0')})` : c.text,
   url: c.href,
 }))
 

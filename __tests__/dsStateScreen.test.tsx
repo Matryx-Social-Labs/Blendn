@@ -104,3 +104,8 @@ describe('<StateScreen gutter> (Going’s empty state: the frame’s left 24 / r
     expect(src).toMatch(/stateBlock: \{ marginTop: SPACE\.xxxl \* 2 \}/)
   })
 })
+
+it('balances the title’s wrap on Android, so a two-line title never leaves one word alone', async () => {
+  await render(<StateScreen icon="users" title="Meet other crews" body="x" />)
+  expect(screen.getByRole('header', { name: 'Meet other crews' }).props.textBreakStrategy).toBe('balanced')
+})
