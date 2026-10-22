@@ -42,6 +42,8 @@ export const stretchScale = (pull: number, height: number) => {
 
 export type ProfileHeroStageProps = {
   width: number
+  /** The page's fit for its fold (`heroFoldHeight`, r7 M2); absent, the drawn W × 1.3. */
+  height?: number
   /** The page's scroll offset; absent, the hero holds still. */
   scrollY?: SharedValue<number>
   /** Their photos, when they are shown. */
@@ -68,13 +70,14 @@ export type ProfileHeroStageProps = {
  *
  * DS #32: pulled past the top on iOS the hero scales from its bottom edge, up to 1.15 (kept under Reduce Motion: it is direct
  * manipulation). Android stretches the whole page with the system's own overscroll instead. The hero is `width × 1.3` tall, so
- * the name, the overlap line and the first section show above the fold.
+ * the name, the overlap line and the first section show above the fold; the page may pass a `height` that lands its fold on a
+ * section's top (`heroFoldHeight`, r7 M2).
  */
-export function ProfileHeroStage({ width, scrollY, photos, blurredUri, name, age, subtitle, seed, anonymous = false, onPressPhoto, testID }: ProfileHeroStageProps) {
+export function ProfileHeroStage({ width, height: fitted, scrollY, photos, blurredUri, name, age, subtitle, seed, anonymous = false, onPressPhoto, testID }: ProfileHeroStageProps) {
   const insets = useSafeAreaInsets()
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
-  const height = heroHeightFor(width)
+  const height = fitted ?? heroHeightFor(width)
   const [page, setPage] = useState(0)
   const circle = Platform.OS === 'android' ? SIZE.circleButtonAndroid : SIZE.circleButton
 

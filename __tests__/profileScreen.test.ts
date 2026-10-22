@@ -45,8 +45,9 @@ describe('the screen never re-decides the identity gate', () => {
     expect(src).not.toContain('Private')
     // Each section is conditional on its own field.
     expect(src).toContain('{profile?.bio ? (')
-    expect(src).toContain('{profile?.occupation ? <ProfileDetail')
-    expect(src).toContain('{profile?.education ? <ProfileDetail')
+    // Each detail sits in its fold block (r7 M2), still behind its own field.
+    expect(src).toMatch(/\{profile\?\.occupation \? \(\s*<FoldBlock id="occupation"[^>]*>\s*<ProfileDetail label="OCCUPATION"/)
+    expect(src).toMatch(/\{profile\?\.education \? \(\s*<FoldBlock id="education"[^>]*>\s*<ProfileDetail label="EDUCATION"/)
   })
 
   it('says out loud that an unrevealed profile is working as intended', () => {

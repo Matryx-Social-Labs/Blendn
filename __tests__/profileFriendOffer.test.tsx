@@ -4,7 +4,7 @@
  * never for a room handle, and always asked with their real id.
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
-import { StyleSheet } from 'react-native'
+import { Dimensions, StyleSheet } from 'react-native'
 
 let mockParams: { id: string; eventId?: string; pseudonym?: string; roomSeed?: string } = { id: 'u_ben' }
 const mockUser = { id: 'u_me' }
@@ -58,9 +58,13 @@ jest.mock('../components/profile/ProfileHeroStage', () => {
   const { Text } = require('react-native')
   return {
     heroHeightFor: (w: number) => Math.round(w * 1.3),
-    ProfileHeroStage: (p: { name: string; age?: number | null }) => React.createElement(Text, null, p.age ? `${p.name}, ${p.age}` : p.name),
+    ProfileHeroStage: (p: { name: string; age?: number | null; height?: number }) => {
+      mockHeroHeight = p.height
+      return React.createElement(Text, null, p.age ? `${p.name}, ${p.age}` : p.name)
+    },
   }
 })
+let mockHeroHeight: number | undefined
 jest.mock('../components/profile/ProfileSections', () => {
   const React = require('react')
   const { Text, View } = require('react-native')
@@ -299,5 +303,28 @@ describe('when it does not go through', () => {
     await flush()
     expect(mockShowToast).toHaveBeenCalledWith("That didn’t go through. Try again.", 'error', { haptic: 'error' })
     expect(screen.getByText('Add friend')).toBeTruthy()
+  })
+})
+
+describe('the first view ends on a section top, from the dock it measured (r7 M2)', () => {
+  it('a heading that would ghost through the fade over the taller Add friend dock moves under its solid foot', async () => {
+    await open(OFFER('none', true), 'u_ben', { interests: ['Jazz'] })
+    await screen.findByTestId('profile-friend')
+    const width = Dimensions.get('window').width
+    const design = Math.round(width * 1.3)
+    expect(mockHeroHeight).toBe(design)
+    // The page 1400 tall and the dock 200 (Add friend over Message): its solid foot starts at 1200. About at 8 in the canvas,
+    // Interests at 200: drawn as designed its top is at design + 200, inside the fade.
+    const dockTop = 1400 - 200
+    expect(design + 200).toBeGreaterThan(dockTop - 48 - 48)
+    expect(design + 200).toBeLessThan(dockTop)
+    const layout = (height: number, y = 0) => ({ nativeEvent: { layout: { x: 0, y, width, height } } })
+    await act(async () => {
+      fireEvent(screen.getByTestId('profile-scroll'), 'layout', layout(1400))
+      fireEvent(screen.getByTestId('profile-dock'), 'layout', layout(200))
+      fireEvent(screen.getByTestId('profile-fold-bio'), 'layout', layout(40, 8))
+      fireEvent(screen.getByTestId('profile-fold-interests'), 'layout', layout(80, 200))
+    })
+    expect(mockHeroHeight).toBe(dockTop - 200)
   })
 })

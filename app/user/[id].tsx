@@ -2,7 +2,7 @@ import { H } from '../../lib/haptics'
 import { ScreenProfiler } from '../../lib/perf'
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useState } from 'react'
-import { StyleSheet, Text, useWindowDimensions, View } from 'react-native'
+import { StyleSheet, Text, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native'
 import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
@@ -24,6 +24,7 @@ import { Icon } from '../../components/ui/Icon'
 import { apiClient, type UserProfileData } from '../../lib/apiClient'
 import { COLOR, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
 import { likeRefusal } from '../../lib/likeRefusal'
+import { heroFoldHeight } from '../../lib/profileFold'
 import { interestNames } from '../../lib/meProfile'
 import { profileIdentity, withheldUnlessVisible } from '../../lib/profileIdentity'
 import { aboutLine } from '../../lib/aboutYou'
@@ -150,6 +151,19 @@ function UserProfileInner() {
   const { width: windowWidth } = useWindowDimensions()
   const bold = useBoldText()
   const [dockHeight, setDockHeight] = useState(0)
+  // The first view's fold (r7 M2): the page's height and each section's top in the canvas, so the hero can land the fold on one.
+  const [viewport, setViewport] = useState(0)
+  const [blockTops, setBlockTops] = useState<Record<string, number>>({})
+  const onBlockTop = useCallback((id: string, top: number | null) => {
+    setBlockTops((prev) => {
+      if (top === null) {
+        if (!(id in prev)) return prev
+        const { [id]: _gone, ...rest } = prev
+        return rest
+      }
+      return prev[id] === top ? prev : { ...prev, [id]: top }
+    })
+  }, [])
   // The page's scroll offset, written on the UI thread: the bar and the hero's stretch read it, React never renders for it.
   const scrollY = useSharedValue(0)
   const onScroll = useAnimatedScrollHandler((e) => {
@@ -593,6 +607,15 @@ function UserProfileInner() {
   const columnWidth = Math.floor((windowWidth - SPACE.gutter * 2 - SPACE.sm) / 2)
   const sharedCount = profile?.sharedInterests?.length ?? 0
   const showDock = !loading && !!profile && ctaMode !== 'self'
+  const heroHeight = heroFoldHeight({
+    width: windowWidth,
+    design: heroHeightFor(windowWidth),
+    // The dock's real height, measured: Add friend over Connect makes it taller than any guess.
+    dockTop: showDock && dockHeight > 0 && viewport > 0 ? viewport - dockHeight : 0,
+    fade: DOCK_FADE,
+    // The first block is the one the first view always shows; the fold can only land on one after it.
+    tops: Object.values(blockTops).sort((a, b) => a - b).slice(1),
+  })
 
   return (
     <View style={styles.container}>
@@ -609,6 +632,7 @@ function UserProfileInner() {
         testID="profile-scroll"
         onScroll={onScroll}
         scrollEventThrottle={16}
+        onLayout={(e: LayoutChangeEvent) => setViewport(e.nativeEvent.layout.height)}
         // The fade above the dock is drawn over the page, so the last section clears it too, not only the dock (r7 M2).
         contentContainerStyle={{ paddingBottom: (dockHeight || dockClearance(insets.bottom)) + DOCK_FADE + SPACE.xl }}
         showsVerticalScrollIndicator={false}
@@ -620,6 +644,7 @@ function UserProfileInner() {
             <ProfileHeroStage
               testID="profile-hero"
               width={windowWidth}
+              height={heroHeight}
               scrollY={scrollY}
               photos={revealed ? photos : []}
               blurredUri={blurHero[0] ?? null}
@@ -638,22 +663,28 @@ function UserProfileInner() {
                  * Said plainly rather than left as a screen that looks half-loaded. The absence IS the product working, and a
                  * person who does not know that reads it as a bug.
                  */
-                <View accessible accessibilityLabel={stillAnonymous(identity.name)} style={styles.note}>
-                  <Icon name="eye-off" size={ICON.control} color={COLOR.textPrimary} />
-                  <Text style={[font('meta', bold), styles.noteText]}>{stillAnonymous(identity.name)}</Text>
-                </View>
+                <FoldBlock id="note" onTop={onBlockTop}>
+                  <View accessible accessibilityLabel={stillAnonymous(identity.name)} style={styles.note}>
+                    <Icon name="eye-off" size={ICON.control} color={COLOR.textPrimary} />
+                    <Text style={[font('meta', bold), styles.noteText]}>{stillAnonymous(identity.name)}</Text>
+                  </View>
+                </FoldBlock>
               ) : null}
 
               {profile?.bio ? (
-                <ProfileSection title="About">
-                  <ProfileBio text={profile.bio} />
-                </ProfileSection>
+                <FoldBlock id="bio" onTop={onBlockTop}>
+                  <ProfileSection title="About">
+                    <ProfileBio text={profile.bio} />
+                  </ProfileSection>
+                </FoldBlock>
               ) : null}
 
               {profile?.interests && profile.interests.length > 0 ? (
-                <ProfileSection title="Interests" trailing={sharedCount > 0 ? `${sharedCount} shared` : null}>
-                  <ProfileInterests interests={profile.interests} sharedInterests={profile.sharedInterests} />
-                </ProfileSection>
+                <FoldBlock id="interests" onTop={onBlockTop}>
+                  <ProfileSection title="Interests" trailing={sharedCount > 0 ? `${sharedCount} shared` : null}>
+                    <ProfileInterests interests={profile.interests} sharedInterests={profile.sharedInterests} />
+                  </ProfileSection>
+                </FoldBlock>
               ) : null}
 
               {/*
@@ -662,10 +693,22 @@ function UserProfileInner() {
                 reading as a table. Either can be absent; both are behind the
                 identity gate.
               */}
-              {profile?.about ? <ProfileDetail label="ABOUT" value={profile.about} variant="ruled" /> : null}
+              {profile?.about ? (
+                <FoldBlock id="about" onTop={onBlockTop}>
+                  <ProfileDetail label="ABOUT" value={profile.about} variant="ruled" />
+                </FoldBlock>
+              ) : null}
 
-              {profile?.occupation ? <ProfileDetail label="OCCUPATION" value={profile.occupation} /> : null}
-              {profile?.education ? <ProfileDetail label="EDUCATION" value={profile.education} variant="ruled" /> : null}
+              {profile?.occupation ? (
+                <FoldBlock id="occupation" onTop={onBlockTop}>
+                  <ProfileDetail label="OCCUPATION" value={profile.occupation} />
+                </FoldBlock>
+              ) : null}
+              {profile?.education ? (
+                <FoldBlock id="education" onTop={onBlockTop}>
+                  <ProfileDetail label="EDUCATION" value={profile.education} variant="ruled" />
+                </FoldBlock>
+              ) : null}
 
               {/*
                 The gallery is the photos beyond the hero's. The hero already
@@ -673,18 +716,20 @@ function UserProfileInner() {
                 same picture twice on one screen.
               */}
               {photos.length > 1 ? (
-                <ProfileSection title="Photos" trailing={`${photos.length} photos`}>
-                  <ProfileGallery
-                    photos={photos.slice(1)}
-                    columnWidth={columnWidth}
-                    /*
-                     * `+1` because the gallery is `photos.slice(1)` -- the hero
-                     * already cycles the first one. Without the offset every
-                     * tap opened the photo before the one you touched.
-                     */
-                    onPressPhoto={(i, from) => setViewer({ index: i + 1, from })}
-                  />
-                </ProfileSection>
+                <FoldBlock id="photos" onTop={onBlockTop}>
+                  <ProfileSection title="Photos" trailing={`${photos.length} photos`}>
+                    <ProfileGallery
+                      photos={photos.slice(1)}
+                      columnWidth={columnWidth}
+                      /*
+                       * `+1` because the gallery is `photos.slice(1)` -- the hero
+                       * already cycles the first one. Without the offset every
+                       * tap opened the photo before the one you touched.
+                       */
+                      onPressPhoto={(i, from) => setViewer({ index: i + 1, from })}
+                    />
+                  </ProfileSection>
+                </FoldBlock>
               ) : null}
             </View>
           </>
@@ -799,6 +844,12 @@ function UserProfileInner() {
       ) : null}
     </View>
   )
+}
+
+/** A block of the canvas that tells the page where it starts, and forgets it when it goes (r7 M2's fold). */
+function FoldBlock({ id, onTop, children }: { id: string; onTop: (id: string, top: number | null) => void; children: React.ReactNode }) {
+  useEffect(() => () => onTop(id, null), [id, onTop])
+  return <View testID={`profile-fold-${id}`} onLayout={(e) => onTop(id, e.nativeEvent.layout.y)}>{children}</View>
 }
 
 /** Flow 6 `user` 01: the note an unrevealed profile carries above its sections. */
