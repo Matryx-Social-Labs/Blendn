@@ -23,6 +23,7 @@ import { COLOR, FONT_FAMILY, RADIUS, SIZE, SPACE } from '../lib/design/tokens'
 import { useAuth, refreshAuthUser } from '../lib/useAuth'
 import { KEYBOARD_BEHAVIOR } from '../lib/keyboard'
 import { profileFormErrors } from '../lib/onboarding'
+import { counterLimit, limitErrors, PROFILE_LIMITS, serverLength } from '../lib/profileLimits'
 import { normaliseIntents, toggleIntent } from '../lib/intents'
 import { SettingsRow } from '../components/ds/SettingsRow'
 
@@ -44,11 +45,6 @@ interface UserProfile {
   looking_for?: string[]
 }
 
-/** The same cap as the onboarding step and the server's schema (__tests__/onboarding-labels-and-caps). */
-const BIO_LIMIT = 500
-const NAME_LIMIT = 50
-const FIELD_LIMIT = 100
-const PHONE_LIMIT = 20
 const AGE_DIGITS = 3
 
 /**
@@ -345,8 +341,12 @@ function EditProfileContent() {
     setExpertise((prev) => prev.filter((e) => keep.has(e)))
   }
 
+  /** Never cut for the person: a value over the server's cap stays on screen with its count, and Save waits. */
+  const overCap = limitErrors({ name, location, occupation, education, phone, bio })
+  const overCapped = Object.keys(overCap).length > 0
+
   const handleSave = async () => {
-    if (!authUser) return
+    if (!authUser || overCapped) return
 
     const trimmedName = name.trim()
     const errors = profileFormErrors({ name, age, storedAge: profile?.age ?? null })
@@ -478,7 +478,7 @@ function EditProfileContent() {
           title="Edit profile"
           state={bar.state}
           onBack={() => router.back()}
-          save={{ onPress: handleSave, saving, disabled: saving || offline }}
+          save={{ onPress: handleSave, saving, disabled: saving || offline || overCapped }}
           testID="edit-profile-top"
         />
 
@@ -545,11 +545,13 @@ function EditProfileContent() {
                   inputRef={nameInputRef}
                   value={name}
                   onChangeText={(value) => {
-                    setName(value.slice(0, NAME_LIMIT))
+                    setName(value)
                     if (nameError && value.trim()) setNameError(null)
                   }}
                   onBlur={() => setNameError(profileFormErrors({ name, age, storedAge: profile?.age ?? null }).name)}
-                  error={nameError ?? undefined}
+                  error={overCap.name ?? nameError ?? undefined}
+                  limit={counterLimit(name, PROFILE_LIMITS.name)}
+                  measure={serverLength}
                   placeholder="Enter your name"
                   autoComplete="name"
                   textContentType="name"
@@ -573,28 +575,40 @@ function EditProfileContent() {
                 <TextField
                   label="Location"
                   value={location}
-                  onChangeText={(value) => setLocation(value.slice(0, FIELD_LIMIT))}
+                  onChangeText={setLocation}
+                  error={overCap.location}
+                  limit={counterLimit(location, PROFILE_LIMITS.location)}
+                  measure={serverLength}
                   placeholder="City, State"
                   testID="edit-profile-location"
                 />
                 <TextField
                   label="Occupation"
                   value={occupation}
-                  onChangeText={(value) => setOccupation(value.slice(0, FIELD_LIMIT))}
+                  onChangeText={setOccupation}
+                  error={overCap.occupation}
+                  limit={counterLimit(occupation, PROFILE_LIMITS.occupation)}
+                  measure={serverLength}
                   placeholder="e.g. Software Engineer"
                   testID="edit-profile-occupation"
                 />
                 <TextField
                   label="Education"
                   value={education}
-                  onChangeText={(value) => setEducation(value.slice(0, FIELD_LIMIT))}
+                  onChangeText={setEducation}
+                  error={overCap.education}
+                  limit={counterLimit(education, PROFILE_LIMITS.education)}
+                  measure={serverLength}
                   placeholder="e.g. University of California"
                   testID="edit-profile-education"
                 />
                 <TextField
                   label="Phone"
                   value={phone}
-                  onChangeText={(value) => setPhone(value.slice(0, PHONE_LIMIT))}
+                  onChangeText={setPhone}
+                  error={overCap.phone}
+                  limit={counterLimit(phone, PROFILE_LIMITS.phone)}
+                  measure={serverLength}
                   placeholder="Phone number"
                   keyboardType="phone-pad"
                   autoComplete="tel"
@@ -605,15 +619,17 @@ function EditProfileContent() {
             )}
           </EditCard>
 
-          <EditCard title="About you" sub={isLoading ? undefined : `${[...bio].length} / ${BIO_LIMIT}`}>
+          <EditCard title="About you" sub={isLoading ? undefined : `${serverLength(bio)} / ${PROFILE_LIMITS.bio}`}>
             {isLoading ? (
               <SkeletonBlock width="100%" height={ABOUT_SKELETON} borderRadius={RADIUS.mediaInCard} />
             ) : (
               <TextArea
                 label="Bio"
                 value={bio}
-                onChangeText={(value) => setBio(value.slice(0, BIO_LIMIT))}
-                limit={BIO_LIMIT}
+                onChangeText={setBio}
+                limit={PROFILE_LIMITS.bio}
+                measure={serverLength}
+                error={overCap.bio}
                 placeholder="Tell people about yourself..."
                 testID="edit-profile-bio"
               />

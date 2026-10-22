@@ -9,6 +9,7 @@ import { join } from 'path'
  * number in three places (this screen, edit-profile, the server's schema); a
  * lower one here cuts a longer bio on its next edit.
  */
+import { PROFILE_LIMITS } from '../lib/profileLimits'
 const read = (p: string) => readFileSync(join(__dirname, '..', p), 'utf8')
 
 describe('onboarding secondaries wired to skip()', () => {
@@ -22,10 +23,10 @@ describe('onboarding secondaries wired to skip()', () => {
 
 describe('the bio cap', () => {
   it('is the same number on the onboarding step and the profile editor', () => {
-    const limit = Number(read('app/onboarding/details.tsx').match(/const BIO_LIMIT = (\d+)/)?.[1])
-    const editor = Number(read('app/edit-profile.tsx').match(/const BIO_LIMIT = (\d+)/)?.[1])
-    expect(limit).toBe(editor)
-    expect(limit).toBe(500)
+    // Both read the one constant (lib/profileLimits), which is the server's `bio: max(500)`.
+    expect(read('app/onboarding/details.tsx')).toMatch(/const BIO_LIMIT = PROFILE_LIMITS\.bio/)
+    expect(read('app/edit-profile.tsx')).toMatch(/limit=\{PROFILE_LIMITS\.bio\}/)
+    expect(PROFILE_LIMITS.bio).toBe(500)
   })
 })
 

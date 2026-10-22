@@ -13,6 +13,7 @@ import { apiClient, type WorkFieldsResponse } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import { DEFAULT_MAX_EXPERTISE, keepExpertise, toggleExpertise } from '../../lib/onboarding'
 import { useOnboarding } from '../../lib/useOnboarding'
+import { PROFILE_LIMITS } from '../../lib/profileLimits'
 
 /**
  * Step five — where you are, what you do, where you studied.
@@ -29,9 +30,6 @@ import { useOnboarding } from '../../lib/useOnboarding'
  * The frame's Education block also has a "class year" box with no column. Left
  * out for the same reason — a field that saves nowhere is a lie told in a form.
  */
-/** The server's caps, which typing stops at as a `maxLength` did: a city is 200, a job title and a school 100. */
-const LOCATION_MAX = 200
-const TEXT_MAX = 100
 
 export default function JourneyScreen() {
   const { draft, loaded, saving, commit, skip, goBack } = useOnboarding('journey')
@@ -147,7 +145,7 @@ export default function JourneyScreen() {
               label="City"
               placeholder="Search city"
               value={location}
-              onChangeText={(value) => setLocation(value.slice(0, LOCATION_MAX))}
+              onChangeText={(value) => setLocation(value.slice(0, PROFILE_LIMITS.location))}
               autoCapitalize="words"
               testID="onboarding-city"
               {...reveal}
@@ -159,7 +157,7 @@ export default function JourneyScreen() {
               label="Job title"
               placeholder="e.g. Product designer"
               value={occupation}
-              onChangeText={(value) => setOccupation(value.slice(0, TEXT_MAX))}
+              onChangeText={(value) => setOccupation(value.slice(0, PROFILE_LIMITS.occupation))}
               autoCapitalize="sentences"
               testID="onboarding-job"
               {...reveal}
@@ -210,7 +208,7 @@ export default function JourneyScreen() {
               label="School / University"
               placeholder="Where you studied"
               value={education}
-              onChangeText={(value) => setEducation(value.slice(0, TEXT_MAX))}
+              onChangeText={(value) => setEducation(value.slice(0, PROFILE_LIMITS.education))}
               autoCapitalize="words"
               testID="onboarding-school"
               {...reveal}

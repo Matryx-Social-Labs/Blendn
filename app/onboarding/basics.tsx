@@ -20,6 +20,7 @@ import {
 import { SPACE } from '../../lib/design/tokens'
 import { useOnboarding } from '../../lib/useOnboarding'
 import { signOut, useAuth } from '../../lib/useAuth'
+import { PROFILE_LIMITS } from '../../lib/profileLimits'
 
 /**
  * Step one: a name, a gender, a birth date.
@@ -52,7 +53,7 @@ const DOB_HINT = 'Your age will be private and used only for verification.'
 /** Under the name: what rooms show of it (SCRUM-493). */
 const NAME_HINT = 'In event rooms you go by a made-up name. If you choose to show yours, people there see your full name.'
 /** The server's cap on a name; typing stops there, as a `maxLength` did. */
-const NAME_MAX = 100
+const NAME_MAX = PROFILE_LIMITS.name
 const NOT_A_DATE = 'That is not a date we recognise.'
 
 function BasicsScreenInner() {

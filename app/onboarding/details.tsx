@@ -15,6 +15,7 @@ import { COLOR, SPACE } from '../../lib/design/tokens'
 import { Logger } from '../../lib/logger'
 import { bioWithPrompt, promptFits } from '../../lib/onboarding'
 import { useOnboarding } from '../../lib/useOnboarding'
+import { overCapMessage, PROFILE_LIMITS } from '../../lib/profileLimits'
 
 /**
  * Writing prompts: they exist to unstick a blank textarea, so a tap puts one in it. The frame's were filler ("I thrive
@@ -45,8 +46,8 @@ const BIO_PROMPTS = ['A perfect Sunday for me is…', 'Lately I’ve been learni
  * reading "412/300" and was cut on the first keystroke (SCRUM-185). One
  * number, and the server owns it.
  */
-const BIO_LIMIT = 500
-const bioOverCap = (length: number) => `Keep it under ${BIO_LIMIT} characters · ${length} now.`
+const BIO_LIMIT = PROFILE_LIMITS.bio
+const bioOverCap = (length: number) => overCapMessage(BIO_LIMIT, length)
 
 export default function DetailsScreen() {
   const { draft, loaded, saving, commit, skip, goBack } = useOnboarding('details')
