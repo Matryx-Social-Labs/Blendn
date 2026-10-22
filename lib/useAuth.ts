@@ -73,7 +73,7 @@ let authStateListeners: ((state: AuthState) => void)[] = []
 // machine and fail on another. This form is correct under either resolution.
 let sessionCheckInterval: ReturnType<typeof setInterval> | null = null
 /** How the last session read failed, for the can't-reach screen: the server said it is being worked on, or it said nothing. */
-let lastSessionFailure: { errorCode?: string; retryAfter?: number } | null = null
+let lastSessionFailure: { errorCode?: string; reasonCode?: string; retryAfter?: number } | null = null
 let isInitializing = false // Prevent concurrent initialization
 let initializationPromise: Promise<AuthState> | null = null // Promise-based wait instead of polling
 let appStateListenerRegistered = false
@@ -153,7 +153,7 @@ const initializeAuth = async (): Promise<AuthState> => {
         if (result.success && result.data) {
           await signInVerified(result.data, 'Session verified')
         } else {
-          lastSessionFailure = { errorCode: result.errorCode, retryAfter: result.retryAfter }
+          lastSessionFailure = { errorCode: result.errorCode, reasonCode: result.reasonCode, retryAfter: result.retryAfter }
           /*
            * Signed out only when the server refused the refresh token.
            *

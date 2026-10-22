@@ -4,6 +4,7 @@
  * server's sentences under the field they are about, and one create per tap.
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
+import { StyleSheet } from 'react-native'
 
 jest.mock('expo-router', () => ({
   router: { back: jest.fn(), push: jest.fn(), replace: jest.fn() },
@@ -124,6 +125,17 @@ describe('step 1 · name and vibe', () => {
     expect(screen.getByLabelText('3 of 3')).toBeTruthy()
     await fireEvent.press(screen.getAllByLabelText('Run club')[0])
     expect(screen.getByLabelText('2 of 3')).toBeTruthy()
+  })
+
+  it('insets a label once, 4 pt, at the field label’s own edge: the row around it adds no second left', async () => {
+    await render(<NewCrewScreen />)
+    for (const text of ['Here for', 'As strangers will see it']) {
+      const label = screen.getByText(text)
+      let left = StyleSheet.flatten(label.props.style).paddingLeft ?? 0
+      const row = label.parent
+      left += StyleSheet.flatten(row?.props.style)?.paddingLeft ?? StyleSheet.flatten(row?.props.style)?.paddingHorizontal ?? 0
+      expect(left).toBe(4)
+    }
   })
 
   it('draws the card as strangers will see it as you type', async () => {

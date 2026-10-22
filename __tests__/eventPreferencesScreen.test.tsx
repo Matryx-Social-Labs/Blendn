@@ -17,7 +17,7 @@ jest.mock('../lib/logger', () => ({
 }))
 const mockParams: Record<string, string> = {}
 jest.mock('expo-router', () => ({
-  router: { back: jest.fn(), push: jest.fn() },
+  router: { back: jest.fn(), push: jest.fn(), replace: jest.fn(), canGoBack: jest.fn(() => true) },
   useLocalSearchParams: () => mockParams,
 }))
 jest.mock('react-native-safe-area-context', () => {
@@ -234,5 +234,25 @@ describe('the top bar (visual QA r5: the ✕ floated and the copy scrolled under
     const layout = readFileSync(join(__dirname, '..', 'app', '_layout.tsx'), 'utf8')
     const prefs = layout.slice(layout.indexOf('name="event-preferences/[eventId]"'))
     expect(prefs.slice(0, prefs.indexOf('/>'))).toContain("presentation: 'fullScreenModal'")
+  })
+})
+
+describe('opened cold, with nothing behind it', () => {
+  beforeEach(() => (router.canGoBack as jest.Mock).mockReturnValue(false))
+  afterEach(() => (router.canGoBack as jest.Mock).mockReturnValue(true))
+
+  it('✕ goes to the event, not nowhere', async () => {
+    await render(<EventPreferences />)
+    await fireEvent.press(await screen.findByRole('button', { name: 'Close' }))
+    expect(router.back).not.toHaveBeenCalled()
+    expect(router.replace).toHaveBeenCalledWith({ pathname: '/event/[id]', params: { id: 'e1' } })
+  })
+
+  it('a saved choice ends on the event too', async () => {
+    await render(<EventPreferences />)
+    await fireEvent.press(await screen.findByRole('checkbox', { name: /^Making friends/ }))
+    await fireEvent.press(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith({ pathname: '/event/[id]', params: { id: 'e1' } }))
+    expect(router.back).not.toHaveBeenCalled()
   })
 })

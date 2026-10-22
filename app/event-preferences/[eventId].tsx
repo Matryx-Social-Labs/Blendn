@@ -156,6 +156,12 @@ function EventPreferencesContent() {
     setIntent((prev) => toggleIntent(prev, value))
   }, [])
 
+  /** Back, or the event itself when this was opened cold (a link or a push) with nothing behind it. */
+  const leave = useCallback(() => {
+    if (router.canGoBack()) router.back()
+    else router.replace({ pathname: '/event/[id]', params: { id: String(eventId) } } as never)
+  }, [eventId])
+
   const save = useCallback(async () => {
     if (!eventId || saving) return
     setSaving(true)
@@ -180,14 +186,14 @@ function EventPreferencesContent() {
         showToast(res.error || 'Could not save. Try again.', 'error', { haptic: 'error' })
         return
       }
-      router.back()
+      leave()
     } catch (e) {
       Logger.error('match', 'Failed to save match preferences', { error: e })
       showToast('Could not save. Try again.', 'error', { haptic: 'error' })
     } finally {
       setSaving(false)
     }
-  }, [askIntent, eventId, intent, intentTouched, rememberReveal, revealed, saving, showToast])
+  }, [askIntent, eventId, intent, intentTouched, leave, rememberReveal, revealed, saving, showToast])
 
   const intents = under18 ? INTENTS.filter((i) => i.value !== 'dating') : INTENTS
   const lookingIntents = intents.filter((i) => i.value !== 'just_here')
@@ -320,7 +326,7 @@ function EventPreferencesContent() {
         modal, and Close is the first thing a screen reader should land on.
       */}
       <View style={bar.barPin} pointerEvents="box-none">
-        <TopBar close state={bar.state} onBack={() => router.back()} testID="prefs-top" />
+        <TopBar close state={bar.state} onBack={leave} testID="prefs-top" />
       </View>
       {/* Docked, not at the end of the scroll: with four intents it fell below the fold. The first-door answer cannot be nothing: an empty save would write an empty default. */}
       <Dock floating onHeight={setDockHeight} testID="prefs-dock">

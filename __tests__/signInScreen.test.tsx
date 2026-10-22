@@ -119,6 +119,21 @@ describe('the server answers', () => {
     expect(screen.getByTestId('sign-in-primary').props.accessibilityState).toMatchObject({ busy: true })
   })
 
+  it('is released after 8 s if the screen was never replaced, so a routing that never came does not leave the form dead', async () => {
+    mockSignIn.mockResolvedValue({ success: true })
+    await fill()
+    await submit()
+    const primary = () => screen.getByTestId('sign-in-primary').props.accessibilityState
+    await act(async () => {
+      jest.advanceTimersByTime(7_900)
+    })
+    expect(primary()).toMatchObject({ busy: true })
+    await act(async () => {
+      jest.advanceTimersByTime(200)
+    })
+    expect(primary()).toMatchObject({ busy: false })
+  })
+
   it('is free again after a refusal', async () => {
     mockSignIn.mockResolvedValue({ success: false, error: 'Invalid email or password' })
     await fill()

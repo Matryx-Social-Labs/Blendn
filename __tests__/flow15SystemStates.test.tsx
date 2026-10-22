@@ -177,6 +177,13 @@ describe('the outage lines (15.13)', () => {
     expect(backByLabel(new Date(2026, 9, 21, 2, 30).getTime())).toMatch(/2:30/)
   })
 
+  it('reads reasonCode ?? errorCode: MAINTENANCE in either field is maintenance', () => {
+    expect(outageFrom({ errorCode: 'SERVER_ERROR', reasonCode: 'MAINTENANCE', retryAfter: 600 }, 1_000)).toEqual({ kind: 'maintenance', until: 601_000 })
+    expect(outageFrom({ errorCode: 'MAINTENANCE', reasonCode: undefined })).toEqual({ kind: 'maintenance', until: null })
+    // A reason that is not maintenance wins over an errorCode that was.
+    expect(outageFrom({ errorCode: 'MAINTENANCE', reasonCode: 'SOMETHING_ELSE' })).toEqual({ kind: 'down' })
+  })
+
   it('counts its tries', () => {
     expect(AUTO_RETRY_MS).toBe(30_000)
     expect(outageNote(0)).toBe('Retries on its own every 30 s')

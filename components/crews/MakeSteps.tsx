@@ -290,7 +290,8 @@ const styles = StyleSheet.create({
   ink: { color: COLOR.textPrimary },
   centre: { textAlign: 'center' },
   group: { gap: SPACE.sm },
-  labelRow: { paddingHorizontal: SPACE.xs },
+  // FieldLabel carries the 4 pt left inset itself; the row adds only the right one (a counter beside it), not a second left.
+  labelRow: { paddingRight: SPACE.xs },
   toggleRow: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -266,6 +266,23 @@ describe('every request names the build (Flow 15 15.14), and a refusal to serve 
     expect(gate.isUpdateRefusal(403, 'FORBIDDEN')).toBe(false)
   })
 
+  it('a refusal that names UPDATE_REQUIRED in reasonCode marks the app too; an old server (errorCode only) still does', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const gate = require('../lib/updateRequired') as typeof import('../lib/updateRequired')
+    gate.resetUpdateRequired()
+    global.fetch = jest.fn(async () => json(400, { success: false, error: 'Update', errorCode: 'BAD_REQUEST', reasonCode: 'UPDATE_REQUIRED' })) as typeof fetch
+    await apiClient.getSession()
+    expect(gate.isUpdateRequired()).toBe(true)
+    gate.resetUpdateRequired()
+    global.fetch = jest.fn(async () => json(400, { success: false, error: 'Update', errorCode: 'UPDATE_REQUIRED' })) as typeof fetch
+    await apiClient.getSession()
+    expect(gate.isUpdateRequired()).toBe(true)
+    gate.resetUpdateRequired()
+    global.fetch = jest.fn(async () => json(400, { success: false, error: 'Nope', errorCode: 'BAD_REQUEST', reasonCode: 'PROFILE_INCOMPLETE' })) as typeof fetch
+    await apiClient.getSession()
+    expect(gate.isUpdateRequired()).toBe(false)
+  })
+
   it('does not send it from the web build (a custom header there is a preflight the server does not allow yet)', async () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { Platform } = require('react-native') as { Platform: { OS: string } }

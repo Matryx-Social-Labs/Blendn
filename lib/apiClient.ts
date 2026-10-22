@@ -1298,7 +1298,16 @@ class ApiClientClass {
 
     if (!response.ok) {
       // A build the server no longer serves: the whole app says so (Flow 15 15.14), not this one screen.
-      if (isUpdateRefusal(response.status, parsed.errorCode)) markUpdateRequired()
+      if (
+        isUpdateRefusal(
+          response.status,
+          reasonOf({
+            errorCode: typeof parsed.errorCode === 'string' ? parsed.errorCode : undefined,
+            reasonCode: typeof parsed.reasonCode === 'string' ? parsed.reasonCode : undefined,
+          })
+        )
+      )
+        markUpdateRequired()
       return {
         success: false,
         // Carried through so a screen can branch on the reason rather than

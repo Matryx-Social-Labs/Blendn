@@ -83,10 +83,18 @@ describe('the door, by reasonCode beside the old errorCode', () => {
   })
 })
 
+describe('the cold-start failure keeps the reason for the outage screen', () => {
+  it('stores errorCode and reasonCode, so maintenance named in either reaches `outageFrom`', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const src = require('fs').readFileSync(require('path').join(__dirname, '../lib/useAuth.ts'), 'utf8') as string
+    expect(src).toContain('lastSessionFailure = { errorCode: result.errorCode, reasonCode: result.reasonCode, retryAfter: result.retryAfter }')
+  })
+})
+
 describe('the sign-in results carry it to the screens that route on it', () => {
   it('Google, Apple and email each hand `reasonCode` on with the `errorCode`', () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const src = require('fs').readFileSync(require('path').join(__dirname, '../lib/useAuth.ts'), 'utf8') as string
-    expect(src.match(/errorCode: result\.errorCode, reasonCode: result\.reasonCode/g)).toHaveLength(3)
+    expect(src.match(/return \{ success: false, error: [^}]*errorCode: result\.errorCode, reasonCode: result\.reasonCode/g)).toHaveLength(3)
   })
 })

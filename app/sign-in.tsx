@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router'
-import React, { useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 
 import { LegalLine } from '../components/LegalLine'
@@ -59,6 +59,8 @@ import { PendingInvite } from '../components/friends/PendingInvite'
  * before a round trip, rather than after.
  */
 const MIN_PASSWORD_LENGTH = 12
+/** The busy button is released after this long if the screen has not been replaced: a routing that never came must not leave the form dead. */
+const BUSY_SAFETY_MS = 8_000
 
 /** The age box takes three digits. */
 const AGE_DIGITS = 3
@@ -99,6 +101,8 @@ export default function SignIn() {
    * an account that had just been created.
    */
   const inFlight = useRef(false)
+  const busyTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => { if (busyTimer.current) clearTimeout(busyTimer.current) }, [])
   /*
    * Why they are here, when the server signed them out: the entry screen hands
    * its notice on. Without it, somebody signed out mid-use who chose email
@@ -211,6 +215,7 @@ export default function SignIn() {
     } finally {
       inFlight.current = false
       if (!stayBusy) setBusy(false)
+      else busyTimer.current = setTimeout(() => setBusy(false), BUSY_SAFETY_MS)
     }
   }
 

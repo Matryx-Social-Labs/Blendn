@@ -1,3 +1,5 @@
+import { reasonOf } from './sessionEnd'
+
 /**
  * Why the server could not be reached, as the "Can't reach Blend'n" screen needs it (Flow 15 15.13).
  *
@@ -12,9 +14,13 @@ export const AUTO_RETRY_MS = 30_000
 
 export const MAINTENANCE_CODE = 'MAINTENANCE'
 
-export function outageFrom(failure: { errorCode?: string; retryAfter?: number } | null | undefined, now = Date.now()): Outage {
-  if (failure?.errorCode !== MAINTENANCE_CODE) return { kind: 'down' }
-  const seconds = failure.retryAfter
+export function outageFrom(
+  failure: { errorCode?: string; reasonCode?: string; retryAfter?: number } | null | undefined,
+  now = Date.now()
+): Outage {
+  // `reasonCode ?? errorCode`: the server's reason when it names one, the code it always sent otherwise.
+  if (reasonOf(failure) !== MAINTENANCE_CODE) return { kind: 'down' }
+  const seconds = failure?.retryAfter
   return { kind: 'maintenance', until: typeof seconds === 'number' && Number.isFinite(seconds) && seconds > 0 ? now + seconds * 1000 : null }
 }
 
