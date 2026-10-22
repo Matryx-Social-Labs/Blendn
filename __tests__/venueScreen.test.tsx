@@ -73,7 +73,6 @@ import { checkOutOf } from '../lib/checkIn'
 import { H } from '../lib/haptics'
 import { openInMaps } from '../lib/openInMaps'
 import { openPaywall } from '../lib/paywall'
-import { clockTime } from '../lib/roomMoments'
 /* eslint-enable import/first */
 
 const min = (n: number) => new Date(NOW + n * 60_000).toISOString()
@@ -203,8 +202,8 @@ describe('the place, not live', () => {
     expect(screen.getByLabelText('LIVE, 5–9 so far')).toBeTruthy()
     expect(screen.queryByLabelText(/^OPEN/)).toBeNull()
     expect(screen.queryByLabelText(/^SIZE/)).toBeNull()
-    await mount(venue({ venue: { hours: { opensAt: min(-300), closesAt: min(300) }, dayResetHour: 6, capacity: 300 } }))
-    expect(screen.getByLabelText(`OPEN, Till ${clockTime(NOW + 300 * 60_000)}`)).toBeTruthy()
+    await mount(venue({ venue: { hours: [{ day: new Date(NOW - 6 * 3_600_000).getDay(), open: '00:00', close: '23:59' }], dayResetHour: 6, capacity: 300 } }))
+    expect(screen.getByLabelText("OPEN, Till 11:59 PM")).toBeTruthy()
     expect(screen.getByLabelText('RESET, 06:00')).toBeTruthy()
     expect(screen.getByLabelText('SIZE, 300 people')).toBeTruthy()
   })
@@ -244,8 +243,8 @@ describe('the place, not live', () => {
       venue({
         venue: {
           description: 'Bengaluru’s first microbrewery.',
-          amenities: [{ id: 'a', name: 'Rooftop' }],
-          upcoming: [{ id: 'e2', title: 'Bass Thursday', startTime: min(60 * 24), goingCount: 31 }],
+          amenities: ['Rooftop'],
+          upcoming: [{ id: 'e2', title: 'Bass Thursday', slug: null, coverImageUrl: null, startTime: min(60 * 24), endTime: min(60 * 27) }],
         },
       })
     )
@@ -842,7 +841,7 @@ describe('claiming', () => {
 })
 
 describe('the hero', () => {
-  it('opens the share tray with the venue card and its /v/ link; there is no save without a venue-save endpoint', async () => {
+  it('opens the share tray with the venue card and the front-page link (SCRUM-738); there is no save without a venue-save endpoint', async () => {
     await mount()
     await fireEvent.press(screen.getByLabelText('Share'))
     expect(mockOpenShare).toHaveBeenCalledWith({
@@ -850,7 +849,7 @@ describe('the hero', () => {
       name: 'The Humming Tree',
       typeLabel: expect.any(String),
       area: expect.any(String),
-      url: 'https://www.blendn.app/v/v1',
+      url: 'https://www.blendn.app',
     })
     expect(screen.queryByLabelText('Save')).toBeNull()
     expect(within(screen.getByTestId('venue-hero')).queryByLabelText('Back')).toBeNull()

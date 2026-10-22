@@ -19,7 +19,7 @@ import type { GoLiveRefusal as SheetKind } from '../components/ds/GoLiveSheet'
 import { countdownLabel, EXTEND_CHOICE, remainingMs, type GoLiveChoice, type GoLiveRefusal, type VenueAction } from './goLive'
 import { liveNowWord } from './home'
 import { VENUE_PLATES } from './design/tokens'
-import { distanceText, plateFor, type PlateKey } from './placesPane'
+import { distanceText, hoursLine, plateFor, type PlateKey } from './placesPane'
 
 /** A restaurant reuses the café's pair (owner's ruling on A87), as `VenuePlate` does. */
 const PLATE_PAIRS: Record<PlateKey, readonly [string, string]> = { ...VENUE_PLATES, restaurant: VENUE_PLATES.cafe }
@@ -47,6 +47,27 @@ export function venueHero(detail: Pick<VenueDetail, 'venue' | 'tonight'>): Venue
 
 export type TileSpec = { label: string; value: string; mono: boolean }
 
+const HOUR_MS = 60 * MINUTE_MS
+
+/**
+ * The opening that answers "tonight": the week's `hours` rows for the weekday of the venue's current day (`day` 0 is
+ * Sunday, as `getDay`), shaped for `hoursLine`, the reading the Places card already uses. The venue's day starts at its
+ * reset hour, not at midnight: at 01:00 on Saturday a venue that resets at 06:00 is still in Friday's, and Friday's row
+ * answers (`lib/venue-tonight.ts` on the server). Null when no hours are given or none for that weekday. A split day
+ * answers with its latest opening, as the server's card does. Rows that are not the server's shape are dropped.
+ * ponytail: "now" is the phone's clock, the venue's whenever the person is in the venue's city; the server does not send
+ * the venue's timezone. Add it to `GET /venues/:id` to make this exact anywhere.
+ */
+export function tonightOpening(hours: VenueDetail['venue']['hours'], dayResetHour: number | null | undefined, now: number): { opensAt: string; closesAt: string } | null {
+  if (!Array.isArray(hours)) return null
+  const reset = typeof dayResetHour === 'number' && dayResetHour >= 0 && dayResetHour <= 23 ? dayResetHour : 0
+  const weekday = new Date(now - reset * HOUR_MS).getDay()
+  const rows = hours.filter((h) => h && h.day === weekday && typeof h.open === 'string' && typeof h.close === 'string')
+  if (rows.length === 0) return null
+  const latest = rows.reduce((a, b) => (b.open > a.open ? b : a))
+  return { opensAt: latest.open, closesAt: latest.close }
+}
+
 /**
  * The page's tiles: Open · Live · Reset · Size. Each is drawn only when its
  * field is here, and Live only for a bucket the server tells that shows (a null
@@ -55,11 +76,10 @@ export type TileSpec = { label: string; value: string; mono: boolean }
 export function venueTiles(detail: Pick<VenueDetail, 'venue' | 'live'>, now: number): TileSpec[] {
   const tiles: TileSpec[] = []
   const hours = detail.venue.hours
-  const opens = hours ? Date.parse(hours.opensAt) : NaN
-  const closes = hours ? Date.parse(hours.closesAt) : NaN
-  if (Number.isFinite(opens) && Number.isFinite(closes)) {
-    const value = now < opens ? `Opens ${clockTime(opens)}` : now < closes ? `Till ${clockTime(closes)}` : 'Closed'
-    tiles.push({ label: 'OPEN', value, mono: true })
+  if (Array.isArray(hours) && hours.length > 0) {
+    // Hours are given: a weekday with no row, or a night that is over, is Closed.
+    const line = hoursLine(tonightOpening(hours, detail.venue.dayResetHour, now), now)
+    tiles.push({ label: 'OPEN', value: line ? `${line.lead === 'Opens' ? 'Opens' : 'Till'} ${line.time}` : 'Closed', mono: true })
   }
   const liveWord = liveNowWord(detail.live.liveNow)
   if (liveWord) tiles.push({ label: 'LIVE', value: `${liveWord} so far`, mono: false })
@@ -70,10 +90,10 @@ export function venueTiles(detail: Pick<VenueDetail, 'venue' | 'live'>, now: num
   return tiles
 }
 
-/** Good to know: one tile per amenity the owner ticked; a nameless one is dropped, not drawn blank. */
+/** Good to know: one tile per amenity the owner ticked (the server sends their names); a nameless one is dropped, not drawn blank. */
 export function goodToKnow(amenities: VenueDetail['venue']['amenities']): { label: string; value: string }[] {
-  return (amenities ?? [])
-    .map((a) => ({ label: 'GOOD TO KNOW', value: a.name?.trim() ?? '' }))
+  return (Array.isArray(amenities) ? amenities : [])
+    .map((name) => ({ label: 'GOOD TO KNOW', value: typeof name === 'string' ? name.trim() : '' }))
     .filter((a) => a.value.length > 0)
 }
 

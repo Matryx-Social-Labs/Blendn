@@ -58,8 +58,8 @@ is absent, never a guess. (`lib/apiClient.ts` `VenueDetail`.)
 
 - `venue.venueType` (the key; the server already has it) — which plate.
 - `tonight.coverImageUrl` (the server has it) — the hero.
-- `venue.hours { opensAt, closesAt }`, `venue.dayResetHour`, `venue.capacity` — the tiles.
-- `venue.description`, `venue.amenities[]`, `venue.upcoming[]` — About, Good to know, Coming up.
+- `venue.hours [{ day, open, close }]` (the week, wall-clock HH:MM), `venue.dayResetHour`, `venue.capacity` — the tiles.
+- `venue.description`, `venue.amenities` (names), `venue.upcoming[]` — About, Good to know, Coming up.
 - `live.stayUntil` — "ends 00:40 at the latest" on a stay window.
 - `GET /venues`: a way to list live places first, so Live now is found without paging.
 - `GET /venues/:id/regular`: `eligible`, so the offer is drawn only for people who qualify.
