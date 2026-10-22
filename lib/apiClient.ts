@@ -639,6 +639,18 @@ export interface EventApiItem {
    * older server; null when every day is cancelled.
    */
   session?: { startTime: string; endTime: string } | null
+  /**
+   * What moved under the people who had heard of the event (blendn-admin #716, `lib/event-change.ts`): when, which, and what
+   * the time and place were before. null, [] and null for an event that has not changed. All absent from an older server
+   * (`parseEventChange`).
+   */
+  changedAt?: string | null
+  changedFields?: Array<'time' | 'venue' | 'cancelled'>
+  changedFrom?: { startTime?: string; endTime?: string; venueName?: string | null; address?: string | null } | null
+  /** The days of the run and where `session` is in it (`parseEventDays`). One day for a one-day event; absent from an older server. */
+  days?: Array<{ date: string; startTime: string; endTime: string; cancelled: boolean }>
+  dayCount?: number
+  dayNumber?: number | null
   timezone: string
   status: string
   visibility: string
@@ -997,6 +1009,16 @@ export interface UserProfileData {
      * says so (SCRUM-141).
      */
     show_online?: boolean
+    /**
+     * `GET /profiles/:id` (blendn-admin #716): what check-ins earned, for you and for anyone who may see who you are. Absent when
+     * the person turned badges off, for a viewer the profile is anonymous to, and from an older server (`parseBadges`).
+     */
+    badges?: Badge[]
+    /**
+     * Your own profile only: `photos` in order, each `pulled: false`, then the photos moderation took down in the last 7 days,
+     * `pulled: true` with `url: null` (the object is withdrawn) and `was_main`. Absent from an older server (`pulledPhotos`).
+     */
+    photo_states?: Array<{ url: string | null; pulled: boolean; pulled_at: string | null; was_main: boolean }>
     created_at?: string
     updated_at?: string
   }
