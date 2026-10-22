@@ -44,3 +44,7 @@ jest.mock('expo-web-browser', () => ({
 
 // The keyboard's frame is native; the package ships its own mock (plain Views, a no-op provider).
 jest.mock('react-native-keyboard-controller', () => require('react-native-keyboard-controller/jest'))
+
+// AsyncStorage is native. Screens that only reach it through `lib/pushAsk` (a like, an RSVP) should load without each
+// test mocking it; a test that cares mocks it itself and wins.
+jest.mock('@react-native-async-storage/async-storage', () => require('@react-native-async-storage/async-storage/jest/async-storage-mock'))

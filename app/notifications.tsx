@@ -16,7 +16,7 @@ import { CollapsingRow } from '../components/notifications/CollapsingRow'
 import { LandingHighlight } from '../components/notifications/LandingHighlight'
 import { NewPill } from '../components/notifications/NewPill'
 import { NotificationsSkeleton } from '../components/notifications/NotificationsSkeleton'
-import { OfflineBanner } from '../components/OfflineBanner'
+import { OfflineBanner, useOffline } from '../components/OfflineBanner'
 import { OverflowMenu } from '../components/crews/OverflowMenu'
 import { PullIndicator } from '../components/pulse/PullIndicator'
 import { COLOR, DURATION, EASING, RADIUS, RISE, SPACE } from '../lib/design/tokens'
@@ -83,6 +83,8 @@ function NotificationsScreenContent() {
     },
   })
   const push = usePushPreference()
+  const offline = useOffline()
+  const bannerShown = offline || (push.off && feed.load !== 'loading')
   const onRefresh = () => void feed.refresh()
   // iOS pulls with the monogram (motion #18) and plays H.threshold as it arms; Android keeps the platform's control.
   const pull = usePullToRefresh({ refreshing: feed.refreshing, onRefresh })
@@ -104,8 +106,8 @@ function NotificationsScreenContent() {
   )
 
   const volatile = useMemo(
-    () => ({ fresh: feed.fresh, requests: feed.requestState, landing, live: feed.liveIds }),
-    [feed.fresh, feed.requestState, landing, feed.liveIds]
+    () => ({ fresh: feed.fresh, requests: feed.requestState, landing, live: feed.liveIds, bannerShown }),
+    [feed.fresh, feed.requestState, landing, feed.liveIds, bannerShown]
   )
   const entries = useMemo(() => buildEntries(feed.groups, { allWaiting, hasMore: feed.hasMore }), [feed.groups, allWaiting, feed.hasMore])
 
@@ -192,11 +194,13 @@ function NotificationsScreenContent() {
     </View>
   )
 
-  const renderEntry = ({ item: entry }: { item: NotificationEntry }) => {
+  const renderEntry = ({ item: entry, index }: { item: NotificationEntry; index: number }) => {
+    // The frame's list gap is 20 between sections; the first has none above it unless a banner does.
+    const gap = index === 0 && !bannerShown ? null : styles.section
     if (entry.type === 'waiting') {
       return (
         <CollapsingRow>
-          <View style={styles.section}>
+          <View style={gap}>
             <View style={styles.inset}>
               <SectionHeader
                 title="Waiting on you"
@@ -218,7 +222,7 @@ function NotificationsScreenContent() {
     }
     if (entry.type === 'header') {
       return (
-        <View style={[styles.inset, styles.section]}>
+        <View style={[styles.inset, gap]}>
           <SectionHeader title={entry.title} testID={`notifications-${entry.title.toLowerCase()}`} />
         </View>
       )
