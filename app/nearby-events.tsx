@@ -368,7 +368,8 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: COLOR.ink },
   banner: { paddingHorizontal: SPACE.gutter },
   state: { flex: 1, paddingHorizontal: SPACE.gutter, paddingTop: SPACE.xxxl * 2 },
-  list: { paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.xxl },
+  // The first row stands clear of the bar's hairline (r7 L12: it sat 8 pt under it).
+  list: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.md, paddingBottom: SPACE.xxl },
   row: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, minHeight: ROW_HEIGHT },
   card: { flex: 1, minWidth: 0 },
   skeletonRow: { marginBottom: SPACE.xs },

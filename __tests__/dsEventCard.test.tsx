@@ -137,9 +137,12 @@ describe('row · lead="distance"', () => {
 describe('row', () => {
   it('a long venue gives way; the time is never the part cut off', async () => {
     await render(<EventCard kind="row" {...VINYL} venue="Toit Brewpub, 100 Feet Road, Indiranagar" />)
-    const venue = screen.getByText('Toit Brewpub, 100 Feet Road, Indiranagar · 1.2 km ·', { includeHiddenElements: true })
+    const venue = screen.getByText('Toit Brewpub, 100 Feet Road, Indiranagar · 1.2 km', { includeHiddenElements: true })
     expect(venue.props.numberOfLines).toBe(1)
     expect(StyleSheet.flatten(venue.props.style).flexShrink).toBe(1)
+    // The separator before the time is its own run, so truncating the venue never takes it (r7 L12).
+    const dot = screen.getByText('·', { includeHiddenElements: true })
+    expect(StyleSheet.flatten(dot.props.style).flexShrink ?? 0).toBe(0)
     const time = screen.getByText('9 PM', { includeHiddenElements: true })
     expect(StyleSheet.flatten(time.props.style).flexShrink ?? 0).toBe(0)
   })

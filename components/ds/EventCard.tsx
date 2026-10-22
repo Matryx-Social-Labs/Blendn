@@ -159,7 +159,11 @@ export function EventCard(props: EventCardProps) {
             {/* The venue gives way to a long name; the time, the thing the row is for, never does. */}
             <View style={styles.rowMeta}>
               <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary, styles.shrink]}>
-                {[venue, leading ? undefined : distance].filter(Boolean).join(' · ')} ·
+                {[venue, leading ? undefined : distance].filter(Boolean).join(' · ')}
+              </Text>
+              {/* Outside the run that truncates, so a long venue keeps its "·" before the time (r7 L12). */}
+              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary]}>
+                ·
               </Text>
               <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary, styles.tabular]}>
                 <MonoRun text={time} />
