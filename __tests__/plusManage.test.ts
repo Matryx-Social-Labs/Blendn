@@ -25,18 +25,20 @@ describe('short dates', () => {
 
 describe('what the server says today', () => {
   it('a subscription is active, with its renewal date and the store it was bought in', () => {
-    expect(card({})).toEqual({ status: 'active', sentence: expect.stringMatching(/^Renews .*Nov.* · Google Play$/) })
-    expect(card({ source: 'apple' })?.sentence).toMatch(/ · App Store$/)
+    // The server has not said how it stands: on until its date, and where it was bought. "Renews" is for a state that says so.
+    expect(card({})).toEqual({ status: 'active', sentence: expect.stringMatching(/^Blend’n\+ until .*Nov.* · Google Play$/), store: 'android' })
+    expect(card({ source: 'apple' })).toMatchObject({ sentence: expect.stringMatching(/ · App Store$/), store: 'ios' })
+    expect(card({ state: 'active' })?.sentence).toMatch(/^Renews .*Nov.* · Google Play$/)
   })
 
   it('a subscription with no date still says it is on', () => {
-    expect(card({ expiresAt: null, source: null })).toEqual({ status: 'active', sentence: 'Blend’n+ is on' })
+    expect(card({ expiresAt: null, source: null })).toEqual({ status: 'active', sentence: 'Blend’n+ is on', store: 'android' })
   })
 
   it('a Night Pass says until when, that it doesn’t renew, and that another adds 24 hours', () => {
     const c = card({ product: 'night_pass', source: 'google', expiresAt: '2026-10-23T21:42:00' })
     expect(c?.status).toBe('night')
-    expect(c?.sentence).toMatch(/^Until .*Oct.*\. It doesn’t renew; another one adds 24 hours\.$/)
+    expect(c?.sentence).toBe('Until 9:42 pm tomorrow. It doesn’t renew; another one adds 24 hours.')
   })
 
   it('a gift we cannot tell apart is not called a trial: until its date, nothing renews', () => {
@@ -49,6 +51,7 @@ describe('what the server says today', () => {
     expect(manageCard({ active: false, gated: false, product: null, source: null, expiresAt: null }, 'ios', NOW)).toEqual({
       status: 'launch',
       sentence: 'Everything’s unlocked in your city for now. Nothing to pay, nothing renews.',
+      store: 'ios',
     })
   })
 
@@ -65,21 +68,34 @@ describe('what it will say when the server sends `state` and `grant`', () => {
   it.each([
     ['cancelled', /^You keep Blend’n\+ until .*Nov.*\. Nothing renews after that\.$/],
     ['grace', /^You still have Blend’n\+\. Fix it in Google Play to keep Blend’n\+ after .*Nov.*\.$/],
-    ['hold', /^Blend’n\+ is paused until the payment is fixed in Google Play\.$/],
-    ['paused', /^You paused Blend’n\+ in Google Play\.$/],
-  ] as const)('%s', (state, sentence) => {
-    expect(card({ state })).toEqual({ status: state, sentence: expect.stringMatching(sentence) })
+  ] as const)('%s (still active)', (state, sentence) => {
+    expect(card({ state })).toEqual({ status: state, sentence: expect.stringMatching(sentence), store: 'android' })
   })
 
-  it('names the App Store on iOS', () => {
-    expect(card({ state: 'grace' }, 'ios')?.sentence).toContain('Fix it in the App Store')
+  /**
+   * H1: the server sends a payment on hold and a pause with `active: false`; they came after `expired` and were dropped.
+   * Negative control: moving the `hold` / `paused` lines back below the launch and `expired` lines fails these.
+   */
+  it.each([
+    ['hold', /^Blend’n\+ is paused until the payment is fixed in Google Play\.$/],
+    ['paused', /^You paused Blend’n\+ in Google Play\.$/],
+  ] as const)('%s, which the server sends as not active', (state, sentence) => {
+    expect(card({ active: false, state })).toEqual({ status: state, sentence: expect.stringMatching(sentence), store: 'android' })
+    expect(hasSomethingToManage({ ...base, active: false, state })).toBe(true)
+  })
+
+  it('names the store the status was bought in, else the phone’s', () => {
+    expect(card({ state: 'grace', source: 'apple' }, 'android')).toMatchObject({ store: 'ios', sentence: expect.stringContaining('Fix it in the App Store') })
+    expect(card({ state: 'grace', source: 'google' }, 'ios')).toMatchObject({ store: 'android', sentence: expect.stringContaining('Fix it in Google Play') })
+    expect(card({ active: false, state: 'hold', source: null }, 'ios')).toMatchObject({ store: 'ios', sentence: expect.stringContaining('the App Store') })
+    expect(card({ source: 'grant', expiresAt: '2026-10-29T12:00:00' }, 'ios')?.store).toBe('ios')
   })
 
   it('a trial and a referral month say which, and that nothing renews', () => {
     expect(card({ source: 'grant', grant: 'trial', expiresAt: '2026-10-29T12:00:00' })?.status).toBe('trial')
     const referral = card({ source: 'grant', grant: 'referral', expiresAt: '2026-11-04T12:00:00' })
     expect(referral?.status).toBe('referral')
-    expect(referral?.sentence).toMatch(/^Your referral month runs until .*4.*\. Nothing renews unless you choose a plan\.$/)
+    expect(referral?.sentence).toMatch(/^Your referral month runs to .*4.*\. Nothing renews unless you choose a plan\.$/)
   })
 
   it('ended and refunded are said without blame, and are the two that sell again', () => {
@@ -90,5 +106,21 @@ describe('what it will say when the server sends `state` and `grant`', () => {
     expect(startsAgain('expired')).toBe(true)
     expect(startsAgain('refunded')).toBe(true)
     for (const s of ['active', 'cancelled', 'grace', 'hold', 'paused', 'trial', 'night', 'launch', 'referral'] as const) expect(startsAgain(s)).toBe(false)
+  })
+
+  it('in a launch season nothing ended: no "extras are locked", and nothing is sold', () => {
+    const card2 = manageCard({ active: false, gated: false, product: null, source: null, expiresAt: '2026-11-03T12:00:00', state: 'expired' }, 'ios', NOW)
+    expect(card2?.status).toBe('launch')
+    expect(card2?.sentence).not.toMatch(/\blocked\b|ended/)
+    expect(manageCard({ active: false, gated: false, product: null, source: null, expiresAt: null, state: 'refunded' }, 'ios', NOW)?.status).toBe('launch')
+  })
+})
+
+describe('a Night Pass names the day, as the frame does', () => {
+  const pass = (expiresAt: string) => manageCard({ ...base, product: 'night_pass', expiresAt }, 'ios', NOW)?.sentence
+  it('"Until 9:42 pm tomorrow." / today / a date', () => {
+    expect(pass('2026-10-23T21:42:00')).toMatch(/^Until 9:42 pm tomorrow\. It doesn’t renew; another one adds 24 hours\.$/)
+    expect(pass('2026-10-22T23:30:00')).toMatch(/^Until 11:30 pm today\./)
+    expect(pass('2026-10-25T21:42:00')).toMatch(/^Until .*25.*, 9:42 pm\./)
   })
 })

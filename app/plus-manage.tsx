@@ -73,7 +73,7 @@ function ManageContent() {
   }, [nothing])
 
   // The price of starting again, only where this screen would sell it.
-  const sells = card ? startsAgain(card.status) : false
+  const sells = card ? startsAgain(card.status) && status?.gated === true : false
   useEffect(() => {
     if (!sells) return
     let cancelled = false
@@ -108,7 +108,7 @@ function ManageContent() {
   }
 
   const start = () => router.push({ pathname: '/plus', params: { trigger: 'profile' } } as never)
-  const storeName = STORE === 'android' ? 'Google Play' : 'the App Store'
+  const storeName = card?.store === 'android' ? 'Google Play' : card?.store === 'ios' ? 'the App Store' : 'the store'
 
   return (
     <View style={styles.container}>
@@ -134,7 +134,7 @@ function ManageContent() {
           />
         ) : card ? (
           <>
-            <ManageStatusRow status={card.status} sentence={card.sentence} store={STORE} onFix={manage} testID="plus-manage-status" />
+            <ManageStatusRow status={card.status} sentence={card.sentence} store={card.store} onFix={manage} testID="plus-manage-status" />
             <SettingsGroup>
               <SettingsRow
                 icon="external-link"
@@ -151,7 +151,8 @@ function ManageContent() {
               <Button kind="secondary" label="Nothing to buy during launch" disabled />
             ) : sells ? (
               <Button
-                label="Start Blend’n+ —"
+                // A dash only leads into a price: with none, it is the words alone.
+                label={monthly ? 'Start Blend’n+ —' : 'Start Blend’n+'}
                 price={monthly ? { amount: monthly.price, per: planRowFor(monthly)?.per } : undefined}
                 accessibilityLabel={monthly ? `Start Blend’n+, ${monthly.price} a month` : 'Start Blend’n+'}
                 onPress={start}

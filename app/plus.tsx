@@ -28,10 +28,10 @@ import {
   planSubline,
   PLUS_COMING_SOON,
   PLUS_FEATURES,
-  plusStatusCard,
   waitForPlus,
   type PlusStatus,
 } from '../lib/plus'
+import { manageCard } from '../lib/plusManage'
 import { buyPackage, canBuyAs, loadPlusOffers, purchasesAvailable, restore, type PlusOffer, type RestoreOutcome } from '../lib/purchases'
 import { useAuth } from '../lib/useAuth'
 import { notePaywallClosed, notePaywallEvent } from '../lib/paywall'
@@ -241,7 +241,8 @@ function PlusScreenContent() {
   const sellable = purchasesAvailable() && buyable && (offers?.length ?? 0) > 0
   // Anything bought or restored moves the phase on (pending, confirming, …): from then the way out is Done.
   const finished = phase !== 'idle'
-  const card = plusStatusCard(status)
+  // What you have, in Manage's words (one card, one set of sentences); nothing for a launch season, which is the banner's.
+  const card = status?.active ? manageCard(status, Platform.OS === 'android' ? 'android' : 'ios') : null
   const failed = !forSale && statusLoad === 'failed'
   const pick = offers?.find((o) => o.pkg.identifier === picked) ?? offers?.find((o) => o.pkg.identifier === defaultPick(offers ?? []))
   // A subscriber manages in the store (12.2 #06): the plans stay drawn, but nothing is pickable and no pick plays a haptic.
@@ -335,7 +336,7 @@ function PlusScreenContent() {
           />
         ) : (
           <>
-            {card ? <ManageStatusRow status={card.kind} sentence={card.sentence} store={Platform.OS === 'android' ? 'android' : 'ios'} testID="plus-status" /> : null}
+            {card ? <ManageStatusRow status={card.status} sentence={card.sentence} store={card.store} testID="plus-status" /> : null}
             {launch ? <Banner kind="info" text={LAUNCH_LINE} testID="plus-launch" /> : null}
             <WhatYouGet features={PLUS_FEATURES} comingSoon={PLUS_COMING_SOON} />
             <NeverForSalePanel />

@@ -34,49 +34,72 @@ export function shortDate(iso: string | null | undefined, now: number = Date.now
 
 const through = (date: string | null, otherwise: string) => (date ? `until ${date}` : otherwise)
 
+/** "9:42 pm tomorrow", "9:42 pm today", or "25 Oct, 9:42 pm": a pass stacks, so the day matters (Flow 12 `night`). */
+function passEnd(iso: string, now: number): string | null {
+  const at = new Date(iso)
+  if (Number.isNaN(at.getTime())) return null
+  const time = at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).toLowerCase()
+  const midnight = (ms: number) => new Date(new Date(ms).getFullYear(), new Date(ms).getMonth(), new Date(ms).getDate()).getTime()
+  const days = Math.round((midnight(at.getTime()) - midnight(now)) / 86_400_000)
+  if (days === 0) return `${time} today`
+  if (days === 1) return `${time} tomorrow`
+  return `${shortDate(iso, now)}, ${time}`
+}
+
+/** The store a status is about: where it was bought, else the one this phone has. */
+const storeOf = (status: PlusStatus, device: PlusStore): PlusStore => (status.source === 'apple' ? 'ios' : status.source === 'google' ? 'android' : device)
+
+export type ManageCard = { status: ManageStatus; sentence: string; store: PlusStore }
+
 /**
  * The card, or null when there is nothing to manage: not loaded, or somebody who
- * has never had Blend'n+ (they have the page, not this screen).
+ * has never had Blend'n+ (they have the page, not this screen). `device` is the
+ * store of this phone, used where the status does not say where it was bought.
  */
-export function manageCard(
-  status: PlusStatus | null | undefined,
-  store: PlusStore,
-  now: number = Date.now()
-): { status: ManageStatus; sentence: string } | null {
+export function manageCard(status: PlusStatus | null | undefined, device: PlusStore, now: number = Date.now()): ManageCard | null {
   if (!status) return null
+  const store = storeOf(status, device)
+  const card = (kind: ManageStatus, sentence: string): ManageCard => ({ status: kind, sentence, store })
   const date = shortDate(status.expiresAt, now)
   const name = STORE_NAME[store]
   const bought = status.source === 'apple' ? 'App Store' : status.source === 'google' ? 'Google Play' : null
 
   if (!status.active) {
-    if (status.state === 'expired') return { status: 'expired', sentence: `${date ? `It ended ${date}. ` : ''}Everything you had is still yours to see; the extras are locked.` }
-    if (status.state === 'refunded') return { status: 'refunded', sentence: 'The store refunded this, so Blend’n+ is off. You can start again anytime.' }
-    // A launch season: sold nowhere, free everywhere (the server's `gated`).
-    if (!status.gated) return { status: 'launch', sentence: 'Everything’s unlocked in your city for now. Nothing to pay, nothing renews.' }
+    // The stores' own answers come first: a payment on hold or a pause is a subscription that exists, `active: false`.
+    if (status.state === 'hold') return card('hold', `Blend’n+ is paused until the payment is fixed in ${name}.`)
+    if (status.state === 'paused') return card('paused', `You paused Blend’n+ in ${name}.`)
+    // A launch season: sold nowhere, free everywhere (the server's `gated`). Nothing is locked then, so nothing "ended" is said.
+    if (!status.gated) return card('launch', 'Everything’s unlocked in your city for now. Nothing to pay, nothing renews.')
+    if (status.state === 'expired') return card('expired', `${date ? `It ended ${date}. ` : ''}Everything you had is still yours to see; the extras are locked.`)
+    if (status.state === 'refunded') return card('refunded', 'The store refunded this, so Blend’n+ is off. You can start again anytime.')
     return null
   }
 
   if (status.product === 'night_pass') {
-    return { status: 'night', sentence: `${date ? `Until ${date}, ${new Date(status.expiresAt ?? '').toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}. ` : ''}It doesn’t renew; another one adds 24 hours.` }
+    const end = status.expiresAt ? passEnd(status.expiresAt, now) : null
+    return card('night', `${end ? `Until ${end}. ` : ''}It doesn’t renew; another one adds 24 hours.`)
   }
 
   if (status.source === 'grant') {
-    if (status.grant === 'referral') return { status: 'referral', sentence: `Your referral month runs ${through(date, 'for now')}. Nothing renews unless you choose a plan.` }
+    if (status.grant === 'referral') return card('referral', `Your referral month runs ${date ? `to ${date}` : 'for now'}. Nothing renews unless you choose a plan.`)
     // A trial or a gift we cannot tell apart: both end on their date and renew nothing.
-    return { status: status.grant === 'trial' ? 'trial' : 'active', sentence: `Blend’n+ ${through(date, 'for now')} · nothing renews` }
+    return card(status.grant === 'trial' ? 'trial' : 'active', `Blend’n+ ${through(date, 'for now')} · nothing renews`)
   }
 
   switch (status.state) {
     case 'cancelled':
-      return { status: 'cancelled', sentence: `You keep Blend’n+ ${through(date, 'for now')}. Nothing renews after that.` }
+      return card('cancelled', `You keep Blend’n+ ${through(date, 'for now')}. Nothing renews after that.`)
     case 'grace':
-      return { status: 'grace', sentence: `You still have Blend’n+. Fix it in ${name} to keep Blend’n+${date ? ` after ${date}` : ''}.` }
+      return card('grace', `You still have Blend’n+. Fix it in ${name} to keep Blend’n+${date ? ` after ${date}` : ''}.`)
     case 'hold':
-      return { status: 'hold', sentence: `Blend’n+ is paused until the payment is fixed in ${name}.` }
+      return card('hold', `Blend’n+ is paused until the payment is fixed in ${name}.`)
     case 'paused':
-      return { status: 'paused', sentence: `You paused Blend’n+ in ${name}.` }
+      return card('paused', `You paused Blend’n+ in ${name}.`)
+    case 'active':
+      return card('active', `${date ? `Renews ${date}` : 'Blend’n+ is on'}${bought ? ` · ${bought}` : ''}`)
     default:
-      return { status: 'active', sentence: `${date ? `Renews ${date}` : 'Blend’n+ is on'}${bought ? ` · ${bought}` : ''}` }
+      // The server has not said how it stands: it is on until its date, and that is all we know.
+      return card('active', `Blend’n+ ${through(date, 'is on')}${bought ? ` · ${bought}` : ''}`)
   }
 }
 

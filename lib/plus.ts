@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AppState } from 'react-native'
 
-import type { PlusStatus as ManageStatus } from '../components/ds/ManageStatusRow'
 import type { IconName } from '../components/ui/Icon'
 import { apiClient } from './apiClient'
 import type { PlusGrant, PlusState } from './plusManage'
@@ -134,20 +133,6 @@ export async function waitForPlus(stopped: () => boolean = () => false, now: () 
     await new Promise((resolve) => setTimeout(resolve, PLUS_POLL_EVERY_MS))
   }
   return null
-}
-
-/**
- * The card for what is active, in the Manage status card's words: the server's
- * own sentence (`plusStatusLine`) with where it was bought, or — for a Night
- * Pass — that it does not renew and another adds 24 hours. Null when nothing is
- * active (a launch season is the page's banner, not a card).
- */
-export function plusStatusCard(status: PlusStatus | null | undefined): { kind: Extract<ManageStatus, 'active' | 'night'>; sentence: string } | null {
-  const line = plusStatusLine(status)
-  if (!status?.active || !line) return null
-  if (status.product === 'night_pass') return { kind: 'night', sentence: `${line}. It doesn’t renew; another one adds 24 hours.` }
-  const store = status.source === 'apple' ? 'App Store' : status.source === 'google' ? 'Google Play' : null
-  return { kind: 'active', sentence: store ? `${line} · ${store}` : line }
 }
 
 /**

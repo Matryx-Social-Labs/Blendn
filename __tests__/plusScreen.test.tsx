@@ -278,7 +278,7 @@ describe('what is already active', () => {
   it('a Night Pass says until when, that it does not renew, and the dock still sells another', async () => {
     ;(apiClient.getMyPlus as jest.Mock).mockResolvedValue(pass)
     await mount()
-    expect(screen.getByText(/^Night Pass until .*2026, .*\d:\d{2}.*\. It doesn’t renew; another one adds 24 hours\.$/)).toBeTruthy()
+    expect(screen.getByText(/^Until .*\d:\d{2}.*\. It doesn’t renew; another one adds 24 hours\.$/)).toBeTruthy()
     expect(screen.getByText('Night Pass · 24 hours')).toBeTruthy()
     expect(button(MONTHLY_CTA)).toBeTruthy()
   })

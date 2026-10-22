@@ -72,7 +72,7 @@ describe('an active subscription', () => {
   it('the card, Manage in the store, Restore — and nothing to buy', async () => {
     await mount(status({}))
     expect(screen.getByRole('header', { name: 'Blend’n+' })).toBeTruthy()
-    expect(screen.getByLabelText(/^Blend’n\+ · active\. Renews .* · App Store$/)).toBeTruthy()
+    expect(screen.getByLabelText(/^Blend’n\+ · active\. Blend’n\+ until .* · App Store$/)).toBeTruthy()
     expect(screen.getByRole('link', { name: /Manage in the App Store/ })).toBeTruthy()
     expect(screen.getByRole('button', { name: /Restore purchases/ })).toBeTruthy()
     expect(screen.queryByTestId('plus-manage-start')).toBeNull()
@@ -100,6 +100,18 @@ describe('a payment that failed (when the server says so)', () => {
   })
 })
 
+describe('a payment on hold or a pause arrives as not active (H1)', () => {
+  it.each([
+    ['hold', /On hold\. Blend’n\+ is paused until the payment is fixed in the App Store/],
+    ['paused', /Paused\. You paused Blend’n\+ in the App Store/],
+  ])('%s is a card, not the page', async (state, label) => {
+    await mount(status({ active: false, state, product: null, expiresAt: null }))
+    expect(screen.getByLabelText(label)).toBeTruthy()
+    expect(router.replace).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('plus-manage-start')).toBeNull()
+  })
+})
+
 describe('where a subscription ended, and only there, it sells', () => {
   it('Start Blend’n+ at the store’s own price opens the page — never itself', async () => {
     await mount(status({ active: false, product: null, source: null, expiresAt: '2026-11-03T12:00:00', state: 'expired' }))
@@ -114,10 +126,20 @@ describe('where a subscription ended, and only there, it sells', () => {
     ;(loadPlusOffers as jest.Mock).mockResolvedValue(null)
     await mount(status({ active: false, product: null, source: null, state: 'refunded' }))
     expect(screen.getByTestId('plus-manage-start').props.accessibilityLabel).toBe('Start Blend’n+')
+    // A dash only leads into a price.
+    expect(screen.queryByText('Start Blend’n+ —')).toBeNull()
+    expect(screen.getByText('Start Blend’n+')).toBeTruthy()
   })
 })
 
 describe('a launch season', () => {
+  it('sells nothing even when the server still says the subscription ended', async () => {
+    await mount(status({ active: false, gated: false, product: null, source: null, state: 'expired' }))
+    expect(screen.queryByTestId('plus-manage-start')).toBeNull()
+    expect(screen.queryByText(/extras are locked/)).toBeNull()
+    expect(screen.getByLabelText(/Free during launch\./)).toBeTruthy()
+  })
+
   it('says nothing renews and that there is nothing to buy', async () => {
     await mount(status({ active: false, gated: false, product: null, source: null, expiresAt: null }))
     expect(screen.getByLabelText(/Free during launch\./)).toBeTruthy()
