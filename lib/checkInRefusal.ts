@@ -30,6 +30,7 @@
  */
 
 import type { IconName } from "../components/ui/Icon"
+import { NO_LONGER_AVAILABLE, ORGANISER_SUSPENDED } from "./noLongerAvailable"
 
 /** Codes `lib/api-response.ts` can attach to a refused check-in. */
 export const CHECK_IN_CODES = {
@@ -44,6 +45,8 @@ export const CHECK_IN_CODES = {
   AGE_UNKNOWN: "AGE_UNKNOWN",
   ALREADY_CHECKED_IN: "ALREADY_CHECKED_IN",
   EVENT_FULL: "EVENT_FULL",
+  /** The `reasonCode` of the door's 404 for an event whose organiser was suspended: a refusal by design, not a failure. */
+  ORGANISER_SUSPENDED,
 } as const
 
 /**
@@ -127,6 +130,9 @@ export function checkInRefusal(
       return PROFILE_FIX
     case CHECK_IN_CODES.FORBIDDEN:
       return PROFILE_FIX
+    case ORGANISER_SUSPENDED:
+      // The event's organiser was suspended (`reasonCode` on the door's 404): the same sentence as the Scene's, never "try again".
+      return { title: NO_LONGER_AVAILABLE.title, message: NO_LONGER_AVAILABLE.body, offerDirections: false, icon: "calendar-off" }
     case CHECK_IN_CODES.EVENT_FULL:
       // ROUND3 C12 deleted this sheet: the server never sends it. Kept so a stray code still reads right.
       return { title: "At capacity", message, offerDirections: false, icon: "users" }

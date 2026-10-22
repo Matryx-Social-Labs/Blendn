@@ -1,4 +1,5 @@
 import { CHECK_IN_CODES } from './checkInRefusal'
+import { ORGANISER_SUSPENDED } from './noLongerAvailable'
 import { reasonOf } from './sessionEnd'
 
 /**
@@ -16,9 +17,6 @@ import { reasonOf } from './sessionEnd'
  * gone, and must not fall through to "try again" because `reasonOf` preferred the new code.
  */
 export type EventLoadFailure = 'network' | 'notFound' | 'minor' | 'age_unknown' | 'profile' | 'broken'
-
-/** `reasonCode` on the 404 of an event hidden because its organisation was suspended. */
-export const ORGANISER_SUSPENDED = 'ORGANISER_SUSPENDED'
 
 const ADD_YOUR_AGE = /add your (age|date of birth)/i
 

@@ -28,7 +28,7 @@ import { likeRefusal } from '../../lib/likeRefusal'
 import { interestNames } from '../../lib/meProfile'
 import { profileIdentity, withheldUnlessVisible } from '../../lib/profileIdentity'
 import { aboutLine, type Badge } from '../../lib/aboutYou'
-import { parseBadges } from '../../lib/profileBadges'
+import { badgesOnUserRead, profileExtras } from '../../lib/profileExtras'
 import { incomingRequestFrom } from '../../lib/friends'
 import { isGone } from '../../lib/loadFailure'
 import { Logger } from '../../lib/logger'
@@ -125,7 +125,8 @@ function UserProfileInner() {
   const { showToast } = useToast()
   const [profile, setProfile] = useState<UserProfileView | null>(null)
   // Their badges, from `GET /profiles/:id` (the server gives them to whoever may see who they are); none until it answers.
-  const [badges, setBadges] = useState<Badge[]>([])
+  const [badgesOf, setBadgesOf] = useState<{ for: string; list: Badge[] } | null>(null)
+  const badges = badgesOf?.for === id ? badgesOf.list : []
   const [loading, setLoading] = useState(true)
   /*
    * Why there is no profile: `gone` is the server's 404, `failed` is anything
@@ -249,12 +250,9 @@ function UserProfileInner() {
   }, [authUser])
 
   const loadBadges = useCallback(async (userId: string) => {
-    try {
-      const result = await apiClient.getProfile(userId)
-      setBadges(result.success ? (parseBadges(result.data?.profile?.badges) ?? []) : [])
-    } catch (error) {
-      Logger.debug('profile', 'Failed to load badges', { error })
-    }
+    const extras = await profileExtras(userId)
+    // An answer for somebody the page has moved on from finds another person's entry here, and is dropped.
+    setBadgesOf((prev) => (prev?.for === userId ? { for: userId, list: extras?.badges ?? [] } : prev))
   }, [])
 
   // State is set only in the callbacks, once the requests have settled; the
@@ -324,8 +322,10 @@ function UserProfileInner() {
         setProfile(nextProfile ? withheldUnlessVisible(nextProfile) : null)
         setLoadError(nextProfile ? null : gone ? 'gone' : 'failed')
         // Only `/profiles/:id` carries badges, and only for someone you may see: its own request, and never a reason to fail.
-        setBadges([])
-        if (nextProfile?.identityVisible) void loadBadges(id)
+        // The server that sends `friend` on this read sends their badges with it; an older one is asked once more, and only for somebody you may see.
+        const sent = result.success && result.data ? badgesOnUserRead(result.data as { badges?: unknown; friend?: unknown }) : null
+        setBadgesOf({ for: id, list: sent ?? [] })
+        if (sent === null && nextProfile?.identityVisible) void loadBadges(id)
         if (nextProfile?.user_id) {
           await hydrateCtaState(nextProfile.user_id, connection)
         }

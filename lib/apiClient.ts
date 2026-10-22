@@ -647,9 +647,13 @@ export interface EventApiItem {
   changedAt?: string | null
   changedFields?: Array<'time' | 'venue' | 'cancelled'>
   changedFrom?: { startTime?: string; endTime?: string; venueName?: string | null; address?: string | null } | null
-  /** The days of the run and where `session` is in it (`parseEventDays`). One day for a one-day event; absent from an older server. */
-  days?: Array<{ date: string; startTime: string; endTime: string; cancelled: boolean }>
+  /**
+   * The days of the run and where `session` is in it (`parseEventDays`, blendn-admin #724): `days` is at most 31 of them from
+   * `daysFrom` (1-based), while `dayCount` and `dayNumber` are the whole run. Absent from an older server.
+   */
+  days?: Array<{ date: string; startTime: string; endTime: string; cancelled: boolean; cancelledAt?: string | null }>
   dayCount?: number
+  daysFrom?: number
   dayNumber?: number | null
   timezone: string
   status: string
@@ -1408,7 +1412,7 @@ class ApiClientClass {
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      // Which build is asking, so the server can refuse one it no longer serves (Flow 15 15.14). Not from the web build: a custom header there is a CORS preflight the server does not yet allow, and would block every call.
+      // Which build is asking, so the server can refuse one it no longer serves (Flow 15 15.14). Not from the web build, which has no native build number to judge (the server's CORS allow-list names this header and `X-Channel-Set`, so a preflight is no reason).
       ...(Platform.OS !== 'web' ? { 'X-App-Version': appVersionNumber() } : {}),
       ...CHANNEL_SET_HEADER,
       ...(options.headers as Record<string, string>),
@@ -2208,9 +2212,14 @@ class ApiClientClass {
 
   // === PROFILE ENDPOINTS ===
 
-  async getProfile(userId: string): Promise<ApiResponse<UserProfileData>> {
+  /**
+   * `cache: false` reads fresh and leaves the cache alone: the cache holds one profile, and reading somebody else's must not
+   * replace your own (`lib/profileExtras.ts`).
+   */
+  async getProfile(userId: string, options: { cache?: boolean } = {}): Promise<ApiResponse<UserProfileData>> {
+    const useCache = options.cache !== false
     // Check cache first for instant response
-    const cached = ProfileCache.get(userId)
+    const cached = useCache ? ProfileCache.get(userId) : null
     if (cached) {
       return { success: true, data: cached }
     }
@@ -2218,7 +2227,7 @@ class ApiClientClass {
     const result = await this.queuedRequest<UserProfileData>(`/api/mobile/profiles/${userId}`)
 
     // Cache successful responses
-    if (result.success && result.data) {
+    if (useCache && result.success && result.data) {
       ProfileCache.set(userId, result.data)
     }
 

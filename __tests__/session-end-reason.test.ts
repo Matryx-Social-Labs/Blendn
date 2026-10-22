@@ -283,7 +283,7 @@ describe('every request names the build (Flow 15 15.14), and a refusal to serve 
     expect(gate.isUpdateRequired()).toBe(false)
   })
 
-  it('does not send it from the web build (a custom header there is a preflight the server does not allow yet)', async () => {
+  it('does not send it from the web build, which has no native build number to judge', async () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { Platform } = require('react-native') as { Platform: { OS: string } }
     const was = Platform.OS

@@ -11,6 +11,7 @@ import { SectionHeader } from '../ds/SectionHeader'
 import { font, useBoldText } from '../ds/shared'
 import { Toggle } from '../ds/Toggle'
 import { useOpenToCrews, type CrewActions, type CrewsHereState } from '../crews/CrewsView'
+import { NO_LONGER_AVAILABLE } from '../../lib/noLongerAvailable'
 
 type MyCrewHere = CrewsAtEvent['myCrews'][number]
 
@@ -129,6 +130,8 @@ export function CrewsHead({
         <Spinner />
       ) : state.status === 'not_here' ? (
         <Line text="Check in to see the crews here." />
+      ) : state.status === 'gone' ? (
+        <Line text={NO_LONGER_AVAILABLE.line} />
       ) : state.status === 'error' ? (
         <Pressable onPress={() => void reload()} accessibilityRole="button">
           <Line text="The crews didn’t load. Tap to try again." />

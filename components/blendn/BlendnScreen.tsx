@@ -49,6 +49,7 @@ import { RoomView } from './RoomView'
 import { TonightView } from './TonightView'
 import { WaveToast } from './WaveToast'
 import { markCoachUsed, useCoachMark } from '../../lib/coachMarks'
+import { isOrganiserSuspended, NO_LONGER_AVAILABLE } from '../../lib/noLongerAvailable'
 import { parseBadges } from '../../lib/profileBadges'
 import { useCoachMarkSpot } from '../ds/CoachMarkHost'
 
@@ -681,9 +682,11 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   // --- the room chat ----------------------------------------------------------
   const openChat = useCallback(async () => {
     let id = chatGroupId
+    let gone = false
     if (!id && eventId) {
       try {
         const r = await apiClient.getEventChat(eventId)
+        gone = isOrganiserSuspended(r)
         id = (r.success && (r.data?.chatGroupId ?? r.data?.id)) || null
         // Left it: the chat opens on "You left this room" and its Rejoin.
         if (!id && r.errorCode === 'LEFT_ROOM' && r.chatGroupId) {
@@ -695,7 +698,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
       }
     }
     if (!id) {
-      say('The chat for this event is not open yet.')
+      say(gone ? NO_LONGER_AVAILABLE.line : 'The chat for this event is not open yet.')
       return
     }
     // A push, not a replace: the room is an overlay under the stack, so the chat lands on top and Back returns here.

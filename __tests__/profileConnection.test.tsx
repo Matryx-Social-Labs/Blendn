@@ -8,7 +8,7 @@
  * screen takes its word, and still reads the lists when an older server sends
  * none.
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
 
 let mockParams: { id: string; eventId?: string; pseudonym?: string; roomSeed?: string } = { id: 'rh_ben', eventId: 'e1' }
 const mockUser = { id: 'u_me' }
@@ -435,24 +435,46 @@ describe('a request they sent you, opened from their profile (R4.1 6.2)', () => 
   })
 })
 
-describe('their badges (GET /profiles/:id, blendn-admin #716)', () => {
-  // profile-badges.itest.ts: given to whoever may see who they are; the key is absent otherwise.
-  const open = async (profile: unknown) => {
-    api.getPublicProfile.mockResolvedValue({ success: true, data: { ...BEN, connection: { conversationId: null, request: null } } })
-    api.getProfile.mockResolvedValue(profile as never)
+describe('their badges', () => {
+  // profile-badges.itest.ts: `{ kind, label }[]`, given to whoever may see who they are; the key is absent otherwise. A server that
+  // also sends `friend` on `GET /users/:id` sends them there; an older one has them only on `GET /profiles/:id`.
+  const NIGHTS = [{ kind: 'nights_out', label: '5+ nights this month' }]
+  const connection = { conversationId: null, request: null }
+  const openWith = async (users: Record<string, unknown>, profile?: unknown) => {
+    api.getPublicProfile.mockResolvedValue({ success: true, data: { ...BEN, connection, ...users } } as never)
+    if (profile !== undefined) api.getProfile.mockResolvedValue(profile as never)
     await render(<UserProfile />)
     await screen.findByText('Connect')
   }
 
-  it('draws what they earned as DS pills, when you may see who they are', async () => {
-    await open({ success: true, data: { profile: { badges: [{ kind: 'nights_out', label: '5+ nights this month' }] } } })
+  it('reads them from the one answer when the server sends them there, and asks nothing more', async () => {
+    await openWith({ friend: { state: 'none', canAdd: true }, badges: NIGHTS })
     expect(await screen.findByLabelText('Badge: 5+ nights this month')).toBeTruthy()
-    expect(api.getProfile).toHaveBeenCalledWith('rh_ben')
+    expect(api.getProfile).not.toHaveBeenCalled()
   })
 
-  it('draws nothing for none earned', async () => {
-    await open({ success: true, data: { profile: { badges: [] } } })
+  it('a missing `badges` beside `friend` means they are off: none drawn, and nothing more asked', async () => {
+    await openWith({ friend: { state: 'none', canAdd: true } })
+    expect(screen.queryByTestId('profile-badges')).toBeNull()
+    expect(api.getProfile).not.toHaveBeenCalled()
+  })
+
+  it('an older server (no `friend`) is asked ONCE for `/profiles/:id`, without touching the cached profile (yours)', async () => {
+    await openWith({}, { success: true, data: { profile: { badges: NIGHTS } } })
+    expect(await screen.findByLabelText('Badge: 5+ nights this month')).toBeTruthy()
+    expect(api.getProfile).toHaveBeenCalledTimes(1)
+    expect(api.getProfile).toHaveBeenCalledWith('rh_ben', { cache: false })
+  })
+
+  it('draws nothing for none earned, and for a read that failed or threw: the page stands', async () => {
+    await openWith({}, { success: true, data: { profile: { badges: [] } } })
     await waitFor(() => expect(api.getProfile).toHaveBeenCalled())
+    expect(screen.queryByTestId('profile-badges')).toBeNull()
+  })
+
+  it('a badges read that throws costs only the badges', async () => {
+    api.getProfile.mockRejectedValue(new Error('network'))
+    await openWith({})
     expect(screen.queryByTestId('profile-badges')).toBeNull()
   })
 
@@ -463,11 +485,16 @@ describe('their badges (GET /profiles/:id, blendn-admin #716)', () => {
     expect(api.getProfile).not.toHaveBeenCalled()
   })
 
-  it('a badges read that throws costs only the badges', async () => {
-    api.getPublicProfile.mockResolvedValue({ success: true, data: { ...BEN, connection: { conversationId: null, request: null } } })
-    api.getProfile.mockRejectedValue(new Error('network'))
-    await render(<UserProfile />)
-    expect(await screen.findByText('Connect')).toBeTruthy()
+  it('an answer for somebody the page has moved on from is dropped, not drawn on the next person', async () => {
+    let answerBen: (v: unknown) => void = () => {}
+    api.getProfile.mockImplementation(((id: string) => (id === 'rh_ben' ? new Promise((r) => (answerBen = r)) : Promise.resolve({ success: true, data: { profile: { badges: [] } } }))) as never)
+    api.getPublicProfile.mockImplementation((async (id: string) => ({ success: true, data: { ...BEN, id, name: id === 'rh_ben' ? 'Ben' : 'Cleo', connection } })) as never)
+    const view = await render(<UserProfile />)
+    await screen.findByText('Connect')
+    mockParams = { id: 'rh_cleo', eventId: 'e1' }
+    await view.rerender(<UserProfile />)
+    await screen.findByText('Cleo')
+    await act(async () => answerBen({ success: true, data: { profile: { badges: NIGHTS } } }))
     expect(screen.queryByTestId('profile-badges')).toBeNull()
   })
 })

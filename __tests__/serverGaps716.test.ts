@@ -11,11 +11,15 @@
 process.env.EXPO_PUBLIC_API_BASE_URL = 'https://api.test'
 
 import { changeLines, parseEventChange } from '../lib/eventChange'
-import { dayLabel, dayOfWords, parseEventDays } from '../lib/eventDays'
+import { dayLabel, dayOfWords, eventToday, parseEventDays, sessionDay, sessionIsToday } from '../lib/eventDays'
 import { eventLoadFailure } from '../lib/eventLinkRefusal'
 import { mainWasPulled, pulledPhotos } from '../lib/photoStates'
 import { BADGE_MEANING, parseBadges } from '../lib/profileBadges'
 import { iconBadgeAfterRead, iconBadgeFor } from '../lib/appBadge'
+import { checkInRefusal, isExpectedRefusal } from '../lib/checkInRefusal'
+import { isOrganiserSuspended, NO_LONGER_AVAILABLE } from '../lib/noLongerAvailable'
+import { reasonOf } from '../lib/sessionEnd'
+import { spokenAge } from '../components/scene/SceneChange'
 import type { NotificationItem } from '../lib/notificationFormat'
 import { rowFor } from '../lib/notificationRows'
 
@@ -107,6 +111,12 @@ describe('what changed (GET /events/:id)', () => {
     expect(changeLines(address!, current, NOW)[0]).toMatchObject({ was: '2 Other Rd', now: '1 Road' })
   })
 
+  it('a venue that had no name falls back to the address, never a line that says "null"', () => {
+    // changedFrom.venueName is null when the event had no name before (event-changed-scene.itest.ts "put back": `{ venue_name }`).
+    const change = parseEventChange({ changedAt: changed.changedAt, changedFields: ['venue'], changedFrom: { venueName: null, address: '2 Other Rd' } })
+    expect(changeLines(change!, current, NOW)[0]).toMatchObject({ was: '2 Other Rd', now: '1 Road' })
+  })
+
   it('draws no line it cannot say both halves of', () => {
     const noFrom = parseEventChange({ changedAt: changed.changedAt, changedFields: ['time', 'venue'], changedFrom: null })
     expect(changeLines(noFrom!, current, NOW)).toEqual([])
@@ -117,15 +127,18 @@ describe('what changed (GET /events/:id)', () => {
   })
 })
 
-describe('the days of a run (GET /events/:id)', () => {
-  // event-changed-scene.itest.ts "the days of a run": three days, the third cancelled, today is the second.
+describe('the days of a run (GET /events/:id, #716 and the #724 window)', () => {
+  // event-changed-scene.itest.ts "the days of a run": three days, the third called off, today the second. `cancelledAt` is the
+  // timestamp beside `cancelled`, and `daysFrom` is 1 for an ordinary event (blendn-admin event-days.itest.ts, `body`).
+  const at = (n: number) => ({ startTime: `2031-01-0${n}T19:00:00.000Z`, endTime: `2031-01-0${n}T22:00:00.000Z` })
   const run = {
     days: [
-      { date: '2031-01-01', startTime: '2031-01-01T19:00:00.000Z', endTime: '2031-01-01T22:00:00.000Z', cancelled: false },
-      { date: '2031-01-02', startTime: '2031-01-02T19:00:00.000Z', endTime: '2031-01-02T22:00:00.000Z', cancelled: false },
-      { date: '2031-01-03', startTime: '2031-01-03T19:00:00.000Z', endTime: '2031-01-03T22:00:00.000Z', cancelled: true },
+      { date: '2031-01-01', ...at(1), cancelled: false, cancelledAt: null },
+      { date: '2031-01-02', ...at(2), cancelled: false, cancelledAt: null },
+      { date: '2031-01-03', ...at(3), cancelled: true, cancelledAt: '2030-12-30T10:00:00.000Z' },
     ],
     dayCount: 3,
+    daysFrom: 1,
     dayNumber: 2,
   }
 
@@ -134,19 +147,69 @@ describe('the days of a run (GET /events/:id)', () => {
     expect(dayOfWords(days)).toBe('Day 2 of 3')
     expect(days.days.map((d) => d.cancelled)).toEqual([false, false, true])
     expect(days.days.map((d) => dayLabel(d.date))).toEqual(['Wed 1', 'Thu 2', 'Fri 3'])
+    expect(days).toMatchObject({ daysFrom: 1, dayCount: 3, dayNumber: 2 })
   })
 
-  it('has nothing to strip for a one-day event, or an older server', () => {
-    expect(parseEventDays({ days: [run.days[0]], dayCount: 1, dayNumber: 1 })).toBeNull()
+  it('a day is called off by `cancelled` or by `cancelledAt`, whichever the server sent', () => {
+    const only = { ...run, days: [run.days[0], { date: '2031-01-02', cancelledAt: '2030-12-30T10:00:00.000Z' }, run.days[1]] }
+    expect(parseEventDays(only)!.days.map((d) => d.cancelled)).toEqual([false, true, false])
+  })
+
+  // event-days.itest.ts "caps a 120-day run at a window around today and still says 120": `days` is at most 31 (EVENT_DAYS_WINDOW),
+  // from two days before today's, `dayCount` and `dayNumber` are the whole run. A 60-day run, today day 40: the window is days
+  // 30..60 (`first = min(index - 2, 60 - 31)`).
+  const window60 = {
+    days: Array.from({ length: 31 }, (_, i) => ({
+      date: new Date(Date.UTC(2031, 0, 30 + i)).toISOString().slice(0, 10),
+      startTime: '2031-01-01T19:00:00.000Z',
+      endTime: '2031-01-01T22:00:00.000Z',
+      cancelled: false,
+      cancelledAt: null,
+    })),
+    dayCount: 60,
+    daysFrom: 30,
+    dayNumber: 40,
+  }
+
+  it('reads a window of a long run: the whole run\'s count and day number, and where the window starts', () => {
+    const days = parseEventDays(window60)!
+    expect(days.days).toHaveLength(31)
+    expect(days).toMatchObject({ daysFrom: 30, dayCount: 60, dayNumber: 40 })
+    expect(dayOfWords(days)).toBe('Day 40 of 60')
+    expect(sessionDay(days)).toEqual(days.days[10])
+  })
+
+  it('does not trust a window that would run past the end of the run: it starts at 1 then', () => {
+    expect(parseEventDays({ ...window60, daysFrom: 38 })!.daysFrom).toBe(1)
+    expect(parseEventDays({ ...window60, daysFrom: 0 })!.daysFrom).toBe(1)
+    expect(parseEventDays({ ...window60, daysFrom: undefined })!.daysFrom).toBe(1)
+  })
+
+  it('never counts fewer days than it was given, and a run with one day has nothing to strip', () => {
+    expect(parseEventDays({ ...run, dayCount: 2 })!.dayCount).toBe(3)
+    expect(parseEventDays({ ...run, dayCount: undefined })!.dayCount).toBe(3)
+    expect(parseEventDays({ days: [run.days[0]], dayCount: 1, daysFrom: 1, dayNumber: 1 })).toBeNull()
     expect(parseEventDays({})).toBeNull()
   })
 
-  it('says no day is running when every day is cancelled (dayNumber null)', () => {
+  it('says no day is running when every day is cancelled (dayNumber null), and does not trust a dayNumber outside the run', () => {
     expect(dayOfWords(parseEventDays({ ...run, dayNumber: null })!)).toBeNull()
+    expect(parseEventDays({ ...run, dayNumber: 9 })!.dayNumber).toBeNull()
+    expect(parseEventDays({ ...window60, dayNumber: 61 })!.dayNumber).toBeNull()
+    expect(sessionDay(parseEventDays({ ...window60, dayNumber: 3 })!)).toBeNull()
   })
 
-  it('does not trust a dayNumber outside the run', () => {
-    expect(parseEventDays({ ...run, dayNumber: 9 })!.dayNumber).toBeNull()
+  it('"today" is the event\'s own date in its zone, not the phone\'s', () => {
+    // 2031-01-01T20:00Z is already Jan 2 in Kolkata and still Jan 1 in Los Angeles.
+    const instant = Date.parse('2031-01-01T20:00:00Z')
+    expect(eventToday('Asia/Kolkata', instant)).toBe('2031-01-02')
+    expect(eventToday('America/Los_Angeles', instant)).toBe('2031-01-01')
+    expect(sessionIsToday(parseEventDays(run)!, 'Asia/Kolkata', instant)).toBe(true)
+    expect(sessionIsToday(parseEventDays(run)!, 'America/Los_Angeles', instant)).toBe(false)
+  })
+
+  it('an unknown zone falls back to the phone\'s date rather than throwing', () => {
+    expect(eventToday('Not/AZone', Date.parse('2031-01-01T12:00:00Z'))).toMatch(/^\d{4}-\d{2}-\d{2}$/)
   })
 })
 
@@ -176,6 +239,41 @@ describe('the organiser was suspended (SCRUM-749)', () => {
   it('does not turn the age or profile refusals into a landing', () => {
     expect(eventLoadFailure({ errorCode: 'AGE_RESTRICTED', reasonCode: 'AGE_UNKNOWN', error: 'Add your age' })).toBe('age_unknown')
     expect(eventLoadFailure({ errorCode: 'FORBIDDEN', reasonCode: 'PROFILE_INCOMPLETE', error: 'Finish your profile' })).toBe('profile')
+  })
+})
+
+describe('the suspension on the other routes that refuse the event (check-in, chat, crews)', () => {
+  // The same body on every one of them (blendn-admin ce249325 `eventAccessResponse`): 404, errorCode NOT_FOUND, reasonCode beside it.
+  const withReason = { success: false, errorCode: 'NOT_FOUND', reasonCode: 'ORGANISER_SUSPENDED', error: 'Event not found' }
+
+  it('the door says the one sentence, offers no directions and no retry, and is a refusal by design', () => {
+    const refusal = checkInRefusal(reasonOf(withReason), withReason.error)
+    expect(refusal).toMatchObject({ title: NO_LONGER_AVAILABLE.title, message: NO_LONGER_AVAILABLE.body, offerDirections: false })
+    expect(refusal.fix).toBeUndefined()
+    expect(isExpectedRefusal(reasonOf(withReason))).toBe(true)
+  })
+
+  it('is recognised by its code, and a plain 404 is not it', () => {
+    expect(isOrganiserSuspended(withReason)).toBe(true)
+    expect(isOrganiserSuspended({ errorCode: 'NOT_FOUND' } as { reasonCode?: string })).toBe(false)
+    expect(isOrganiserSuspended(undefined)).toBe(false)
+  })
+})
+
+it('the room chat says the same sentence when it was the suspension that closed it (the screen has no harness: pinned at its source)', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const src = require('fs').readFileSync(require('path').join(__dirname, '../components/blendn/BlendnScreen.tsx'), 'utf8') as string
+  expect(src).toContain('gone = isOrganiserSuspended(r)')
+  expect(src).toContain("say(gone ? NO_LONGER_AVAILABLE.line : 'The chat for this event is not open yet.')")
+})
+
+describe('how the change was long ago, said aloud', () => {
+  it('is lowercase and in words', () => {
+    expect(spokenAge('2 h ago')).toBe('2 hours ago')
+    expect(spokenAge('1 h ago')).toBe('1 hour ago')
+    expect(spokenAge('5 min ago')).toBe('5 minutes ago')
+    expect(spokenAge('Just now')).toBe('just now')
+    expect(spokenAge('Yesterday')).toBe('yesterday')
   })
 })
 
