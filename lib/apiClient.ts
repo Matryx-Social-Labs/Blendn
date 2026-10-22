@@ -598,6 +598,8 @@ export interface AuthUser {
   image: string | null
   emailVerified: string | null
   createdAt: string
+  /** What the account can sign in with, from `GET /auth/session` (the sign-in and refresh shapes do not carry it). */
+  signInMethod?: 'password' | 'google' | 'apple'
   profile: {
     phone: string | null
     name: string | null

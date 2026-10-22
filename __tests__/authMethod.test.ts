@@ -7,7 +7,8 @@ jest.mock('@react-native-async-storage/async-storage', () =>
 )
 
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { forgetAuthMethod, isAuthMethod, readAuthMethod, rememberAuthMethod } from '../lib/authMethod'
+import { renderHook, waitFor } from '@testing-library/react-native'
+import { forgetAuthMethod, isAuthMethod, readAuthMethod, rememberAuthMethod, useAuthMethod } from '../lib/authMethod'
 
 beforeEach(async () => AsyncStorage.clear())
 
@@ -40,4 +41,28 @@ it('sign-in remembers the method it used, and clearing the session forgets it (s
   expect(src).toContain("rememberAuthMethod('google')")
   expect(src).toContain("rememberAuthMethod('apple')")
   expect(src.slice(src.indexOf('const clearAuthState'), src.indexOf('const clearAuthState') + 200)).toContain('forgetAuthMethod()')
+})
+
+describe('useAuthMethod (SCRUM-742: the server answers for the account)', () => {
+  it("an upgrader's session with no remembered method gets the Password row from the server's answer", async () => {
+    const { result } = await renderHook(() => useAuthMethod('password'))
+    expect(result.current).toBe('password')
+  })
+
+  it("the server's answer beats what this phone remembered (a password added since)", async () => {
+    await rememberAuthMethod('google')
+    const { result } = await renderHook(() => useAuthMethod('password'))
+    expect(result.current).toBe('password')
+  })
+
+  it('without a server answer it falls back to what the phone remembered', async () => {
+    await rememberAuthMethod('apple')
+    const { result } = await renderHook(() => useAuthMethod(undefined))
+    await waitFor(() => expect(result.current).toBe('apple'))
+  })
+
+  it('an answer that is not a method is ignored, never trusted', async () => {
+    const { result } = await renderHook(() => useAuthMethod('facebook'))
+    expect(result.current).toBeNull()
+  })
 })

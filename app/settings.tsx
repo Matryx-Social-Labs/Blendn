@@ -23,7 +23,7 @@ import { dataCopyMailto, SUPPORT_EMAIL } from '../lib/support'
 import { passwordLinkSheet, signOutEverywhereSheet, signOutSheet } from '../lib/settingsSheets'
 import { useLatest } from '../lib/useLatest'
 import { Logger } from '../lib/logger'
-import { useAuth, signOut, signOutEverywhere, deleteAccount } from '../lib/useAuth'
+import { useAuth, refreshAuthUser, signOut, signOutEverywhere, deleteAccount } from '../lib/useAuth'
 import { openPaywall } from '../lib/paywall'
 import { plusStatusLine, usePlusStatus, type PlusStatus } from '../lib/plus'
 import { manageSubscriptionUrl } from '../lib/purchases'
@@ -88,7 +88,11 @@ function SettingsScreenContent() {
   const insets = useSafeAreaInsets()
   const bold = useBoldText()
   const reduceMotion = useReducedMotion()
-  const authMethod = useAuthMethod()
+  const authMethod = useAuthMethod(user?.signInMethod)
+  // The Password row follows the server's `signInMethod`, which a password added elsewhere changes: read the session on opening.
+  useEffect(() => {
+    void refreshAuthUser()
+  }, [])
 
   const settingsStorageKey = useMemo(() => (
     user?.id ? `settings_preferences_${user.id}` : null
