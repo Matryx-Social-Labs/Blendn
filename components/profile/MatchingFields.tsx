@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { StyleSheet, View } from 'react-native'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 import {
   GENDERS,
@@ -13,7 +13,9 @@ import {
   type Orientation,
 } from '../../lib/dating'
 import { ChipSet } from '../ds/ChipSet'
-import { SPACE } from '../../lib/design/tokens'
+import { font, minTarget, useBoldText, useIncreaseContrast } from '../ds/shared'
+import { FieldLabel } from '../ds/TextField'
+import { COLOR, SPACE } from '../../lib/design/tokens'
 
 /**
  * The five fields matching runs on: intent, work field, and — only when dating
@@ -98,6 +100,39 @@ export interface MatchingFieldsProps {
    * orientation questions it opens are shown (SCRUM-294).
    */
   offerDating: boolean
+  /**
+   * The list of fields of work could not be read (6-3, Edit profile · 04): the heading stands with the failure line under it, and
+   * the line is the retry. A heading alone says nothing. Only a host that can retry passes both; onboarding is unchanged.
+   */
+  workFieldsFailed?: boolean
+  onRetryWorkFields?: () => void
+  /** The retry is on its way: the line says so and holds still. */
+  workFieldsRetrying?: boolean
+}
+
+/** Edit profile · 04: the failure line under the heading, in the frame's words. */
+export const WORK_FIELDS_FAILED = 'Couldn’t load fields of work. Try again.'
+
+function WorkFieldsFailed({ onRetry, retrying }: { onRetry?: () => void; retrying: boolean }) {
+  const bold = useBoldText()
+  const contrast = useIncreaseContrast()
+  return (
+    <View testID="matching-work-field-failed">
+      <FieldLabel text="WHAT DO YOU DO?" bold={bold} contrast={contrast} />
+      <Pressable
+        onPress={onRetry}
+        disabled={!onRetry || retrying}
+        accessibilityRole="button"
+        accessibilityLabel={retrying ? 'Trying again' : WORK_FIELDS_FAILED}
+        accessibilityState={{ disabled: !onRetry || retrying, busy: retrying }}
+        // The target is the line's own box, a full 44 tall; the slop reaches up and down only, so it never covers the field beside it.
+        hitSlop={{ top: SPACE.xs, bottom: SPACE.xs }}
+        style={styles.failed}
+      >
+        <Text style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textTertiary }]}>{retrying ? 'Trying again…' : WORK_FIELDS_FAILED}</Text>
+      </Pressable>
+    </View>
+  )
 }
 
 export function MatchingFields({
@@ -118,6 +153,9 @@ export function MatchingFields({
   expertise = [],
   maxExpertise = DEFAULT_MAX_EXPERTISE,
   onChangeExpertise,
+  workFieldsFailed = false,
+  onRetryWorkFields,
+  workFieldsRetrying = false,
 }: MatchingFieldsProps) {
   const wantsDating = offerDating && intents.includes('dating')
   const offered = offerDating ? INTENTS : INTENTS.filter((intent) => intent.value !== 'dating')
@@ -191,14 +229,18 @@ export function MatchingFields({
       ) : null}
 
       <View style={styles.set}>
-        <ChipSet
-          label="WHAT DO YOU DO?"
-          items={workFields.map((f) => ({ key: f.slug, label: f.label }))}
-          selection="single"
-          selected={workField ? [workField] : []}
-          onToggle={(slug) => onChangeWorkField(workField === slug ? null : slug)}
-          testID="matching-work-field"
-        />
+        {workFieldsFailed && workFields.length === 0 ? (
+          <WorkFieldsFailed onRetry={onRetryWorkFields} retrying={workFieldsRetrying} />
+        ) : (
+          <ChipSet
+            label="WHAT DO YOU DO?"
+            items={workFields.map((f) => ({ key: f.slug, label: f.label }))}
+            selection="single"
+            selected={workField ? [workField] : []}
+            onToggle={(slug) => onChangeWorkField(workField === slug ? null : slug)}
+            testID="matching-work-field"
+          />
+        )}
       </View>
 
       {workField && expertiseOptions?.length && onChangeExpertise ? (
@@ -222,4 +264,5 @@ export function MatchingFields({
 
 const styles = StyleSheet.create({
   set: { marginTop: SPACE.xl },
+  failed: { minHeight: minTarget(), justifyContent: 'center' },
 })

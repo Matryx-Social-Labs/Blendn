@@ -80,10 +80,24 @@ describe('friendAskOutcome', () => {
   it.each([
     { errorCode: 'NOT_FOUND' },
     { errorCode: 'NOT_FOUND', reasonCode: 'SOMETHING_ELSE' },
-    { errorCode: 'RATE_LIMITED' },
     { errorCode: undefined },
   ])('any other refusal (%p) is the standard failure', (refusal) => {
     expect(friendAskOutcome({ success: false, ...refusal })).toEqual({ ok: false, reason: 'failed' })
+  })
+})
+
+describe('the two refusals with a fix (Flow 15 15.19)', () => {
+  it('an unfinished profile (403 FORBIDDEN, reasonCode PROFILE_INCOMPLETE)', () => {
+    expect(friendAskOutcome({ success: false, errorCode: 'FORBIDDEN', reasonCode: 'PROFILE_INCOMPLETE' })).toEqual({ ok: false, reason: 'profile' })
+  })
+
+  it('asking too fast (429 RATE_LIMITED), whether or not the server names the reason', () => {
+    expect(friendAskOutcome({ success: false, errorCode: 'RATE_LIMITED', reasonCode: 'RATE_LIMITED', retryAfter: 30 })).toEqual({ ok: false, reason: 'ratelimit' })
+    expect(friendAskOutcome({ success: false, errorCode: 'RATE_LIMITED' })).toEqual({ ok: false, reason: 'ratelimit' })
+  })
+
+  it('a bare 403 is still only the standard failure', () => {
+    expect(friendAskOutcome({ success: false, errorCode: 'FORBIDDEN' })).toEqual({ ok: false, reason: 'failed' })
   })
 })
 

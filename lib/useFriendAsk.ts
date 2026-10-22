@@ -3,6 +3,7 @@ import { useCallback, useRef, useState } from 'react'
 import { useToast } from '../components/Toast'
 import { apiClient } from './apiClient'
 import { afterAsk, FRIEND_COPY, friendAskOutcome, isHandle, type FriendOffer } from './friendOffer'
+import { friendRefusalLine } from './friendRefusal'
 import { Logger } from './logger'
 
 /** What an ask came to: the offer to draw next, or the sentence for why not. */
@@ -41,7 +42,11 @@ export function useFriendAsk(name: string) {
           showToast(FRIEND_COPY[outcome.state](name), 'success', { haptic: 'success' })
           return { ok: true, offer: afterAsk(outcome.state) }
         }
-        return outcome.reason === 'reveal-first' ? fail(FRIEND_COPY.revealFirst, 'info') : fail(FRIEND_COPY.failed)
+        if (outcome.reason === 'reveal-first') return fail(FRIEND_COPY.revealFirst, 'info')
+        // An unfinished profile or asking too fast says so; both are about you and the clock, never about them.
+        if (outcome.reason === 'profile') return fail(friendRefusalLine({ kind: 'profile' }))
+        if (outcome.reason === 'ratelimit') return fail(friendRefusalLine({ kind: 'ratelimit', seconds: 0 }), 'info')
+        return fail(FRIEND_COPY.failed)
       } catch (error) {
         Logger.warn('friends', 'friend request from a match failed', { error })
         return fail(FRIEND_COPY.failed)

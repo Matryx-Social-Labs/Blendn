@@ -5,6 +5,7 @@ import { COLOR, RADIUS, SPACE } from '../../lib/design/tokens'
 import type { Badge } from '../../lib/aboutYou'
 import { BADGE_MEANING } from '../../lib/profileBadges'
 import { AchievementBadge } from '../ds/AchievementBadge'
+import { SettingsRow } from '../ds/SettingsRow'
 import { announceOutcome, font, useBoldText } from '../ds/shared'
 import { ProfileSection } from './ProfileSections'
 
@@ -25,7 +26,14 @@ export function BadgeRow({ badges, onPress, testID }: { badges: readonly Badge[]
  * when the server sent none (the person turned them off, or an older server): `badges` is `null` then, and the card is absent.
  * Composed from the DS heading, `AchievementBadge` and the surface card; "Show 'Shows up'" stays in About you.
  */
-export function MeBadges({ badges }: { badges: readonly Badge[] | null }) {
+export function MeBadges({
+  badges,
+  showsUp,
+}: {
+  badges: readonly Badge[] | null
+  /** The "Shows up" opt-in on the card (14.5): its value and the write; `onChange` says whether the server kept it. Omitted: the row is not drawn. */
+  showsUp?: { value: boolean; onChange: (next: boolean) => Promise<boolean> }
+}) {
   const bold = useBoldText()
   const [meaning, setMeaning] = useState<string | null>(null)
   if (badges === null) return null
@@ -53,8 +61,55 @@ export function MeBadges({ badges }: { badges: readonly Badge[] | null }) {
             Nothing to unlock.
           </Text>
         )}
+        {showsUp ? <ShowsUpRow value={showsUp.value} onChange={showsUp.onChange} /> : null}
       </View>
     </ProfileSection>
+  )
+}
+
+const SHOWS_UP_ON = 'When 80%+ of your RSVPs turn into nights, 3 or more'
+const SHOWS_UP_OFF = 'Off · earned, not shown'
+
+/**
+ * Show "Shows up" (Flow 14 · 14.5 #01 to #03): the one opt-in on the card, a switch under a hairline. It changes at once and
+ * is written at once; a write the server refuses puts it back and says so under the row (`error`, which plays `H.error`).
+ */
+function ShowsUpRow({ value, onChange }: { value: boolean; onChange: (next: boolean) => Promise<boolean> }) {
+  const [on, setOn] = useState(value)
+  const [busy, setBusy] = useState(false)
+  const [failed, setFailed] = useState(false)
+  // What the server holds, when it changes from outside (the profile read again): state adjusted in render.
+  const [held, setHeld] = useState(value)
+  if (held !== value) {
+    setHeld(value)
+    setOn(value)
+  }
+  const change = async (next: boolean) => {
+    if (busy) return
+    setOn(next)
+    setBusy(true)
+    setFailed(false)
+    const kept = await onChange(next)
+    setBusy(false)
+    if (!kept) {
+      setOn(!next)
+      setFailed(true)
+    }
+  }
+  return (
+    <View style={styles.rule}>
+      <SettingsRow
+        testID="me-shows-up"
+        icon="calendar-check"
+        title="Show “Shows up”"
+        hint={failed ? 'Couldn’t save that. Try again.' : on ? SHOWS_UP_ON : SHOWS_UP_OFF}
+        trail="switch"
+        value={on}
+        busy={busy}
+        error={failed}
+        onValueChange={(next) => void change(next)}
+      />
+    </View>
   )
 }
 
@@ -62,4 +117,6 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
   card: { backgroundColor: COLOR.surface, borderRadius: RADIUS.card, padding: SPACE.lg, gap: SPACE.md },
   muted: { color: COLOR.textSecondary },
+  // The row spans the card, edge to edge, under a hairline: it brings its own padding, so the card's is taken back.
+  rule: { marginHorizontal: -SPACE.lg, marginBottom: -SPACE.lg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: COLOR.hairline },
 })

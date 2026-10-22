@@ -30,8 +30,13 @@ jest.mock('../lib/apiClient', () => ({
     getMyAttendance: jest.fn(),
     getFriends: jest.fn(async () => ({ success: true, data: { count: 9, friends: [] } })),
     getFriendRequests: jest.fn(async () => ({ success: true, data: { incoming: [{ id: 'r1' }, { id: 'r2' }] } })),
+    getMyPlus: jest.fn(async () => ({ success: true, data: { active: false, gated: true, product: null, source: null, expiresAt: null } })),
+    updateProfile: jest.fn(),
   },
 }))
+const mockOpenPaywall = jest.fn()
+jest.mock('../lib/paywall', () => ({ openPaywall: (...a: unknown[]) => mockOpenPaywall(...a) }))
+jest.mock('../lib/useMonthlyPrice', () => ({ useMonthlyPrice: () => '₹199' }))
 jest.mock('../lib/crewsApi', () => ({
   crewsApi: { myCrews: jest.fn(async () => ({ success: true, data: { crews: [{ crewId: 'c1', emblemSeed: 'a' }, { crewId: 'c2', emblemSeed: 'b' }], invites: [{ crewId: 'c3' }] } })) },
 }))
@@ -197,13 +202,61 @@ describe('what GET /profiles/:you adds (blendn-admin #716): badges and photos ta
   ]
 
   it('draws the earned badges as DS pills in a Badges card under who you are, and a tap says what one means', async () => {
-    await mount({ success: true, data: { profile: { badges } } })
+    // Shows up is off, so the switch row's line is "Off · earned, not shown" and the meaning below is said once.
+    await mount({ success: true, data: { profile: { badges, shows_up_badge: false } } })
     expect(await screen.findByTestId('me-badges')).toBeTruthy()
     expect(screen.getByLabelText('Badge: Shows up')).toBeTruthy()
     expect(screen.getByLabelText('Badge: 5+ nights this month')).toBeTruthy()
     expect(screen.getByText('From your check-ins. They can’t be bought, and they come and go on their own.')).toBeTruthy()
     await fireEvent.press(screen.getByLabelText('Badge: Shows up'))
     expect(screen.getByText('When 80%+ of your RSVPs turn into nights, 3 or more')).toBeTruthy()
+  })
+
+  describe('Blend’n+ on Me and the "Shows up" switch (Flow 14 R4.1 · Me 01 to 03)', () => {
+    it('says Blend’n+ with the store’s price when you have not got it; one tap goes to the paywall as asked for', async () => {
+      await mount({ success: true, data: { profile: { badges } } })
+      await screen.findByTestId('me-plus-row')
+      expect(await screen.findByText('₹199 a month')).toBeTruthy()
+      await fireEvent.press(screen.getByTestId('me-plus-row'))
+      expect(mockOpenPaywall).toHaveBeenCalledWith('profile', { userInitiated: true })
+    })
+
+    it('sits under the stats and above Nights out, with the badges under Nights out', async () => {
+      await mount({ success: true, data: { profile: { badges } } })
+      await screen.findByTestId('me-badges')
+      await screen.findByTestId('nights-first')
+      // In the order they are drawn (R4.1 · Me 01 to 03): the Blend’n+ row, Nights out, then the badges under them.
+      expect(screen.getAllByTestId(/^(me-plus-row|me-badges|nights-first)$/).map((n) => n.props.testID)).toEqual(['me-plus-row', 'nights-first', 'me-badges'])
+    })
+
+    it('with Plus on, the line is the renewal', async () => {
+      ;(api.getMyPlus as jest.Mock).mockResolvedValue({ success: true, data: { active: true, gated: true, product: 'plus', source: 'apple', state: 'active', expiresAt: '2027-01-03T00:00:00Z' } })
+      await mount({ success: true, data: { profile: { badges } } })
+      expect(await screen.findByText(/^Renews 3 Jan 2027 · App Store$/)).toBeTruthy()
+    })
+
+    it('draws the switch on the card, on by what the profile says, and a tap writes it at once', async () => {
+      ;(api.updateProfile as jest.Mock).mockResolvedValue({ success: true })
+      await mount({ success: true, data: { profile: { badges, shows_up_badge: true } } })
+      const row = await screen.findByTestId('me-shows-up')
+      expect(screen.getByText('When 80%+ of your RSVPs turn into nights, 3 or more')).toBeTruthy()
+      await fireEvent.press(row)
+      await waitFor(() => expect(api.updateProfile).toHaveBeenCalledWith('me', { shows_up_badge: false }))
+      expect(await screen.findByText('Off · earned, not shown')).toBeTruthy()
+    })
+
+    it('a refused write puts the switch back and says so under it', async () => {
+      ;(api.updateProfile as jest.Mock).mockResolvedValue({ success: false, error: 'no' })
+      await mount({ success: true, data: { profile: { badges, shows_up_badge: true } } })
+      await fireEvent.press(await screen.findByTestId('me-shows-up'))
+      expect(await screen.findByText('Couldn’t save that. Try again.')).toBeTruthy()
+    })
+
+    it('no switch when the profile did not say (an older server)', async () => {
+      await mount({ success: true, data: { profile: { badges } } })
+      await screen.findByTestId('me-badges')
+      expect(screen.queryByTestId('me-shows-up')).toBeNull()
+    })
   })
 
   it('none earned yet is a sentence and no pills, and nothing to unlock', async () => {

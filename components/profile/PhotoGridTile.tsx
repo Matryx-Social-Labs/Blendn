@@ -26,6 +26,8 @@ const tile = StyleSheet.create({
   base: { ...StyleSheet.absoluteFill, borderRadius: RADIUS.rowInCard, overflow: 'hidden', backgroundColor: COLOR.surfaceSunken },
   centre: { alignItems: 'center', justifyContent: 'center', gap: SPACE.xs, padding: SPACE.sm },
   fail: { borderWidth: 1, borderColor: tint(COLOR.destructive, FAIL_EDGE_ALPHA) },
+  // The frame's hairline round an empty tile: nothing of the photo is left, and nothing red either (a removal, not an error).
+  pulled: { borderWidth: 1, borderColor: COLOR.hairlineStrong },
   dashed: { borderWidth: 1, borderStyle: 'dashed', borderColor: COLOR.hairlineStrong },
   ink: { color: COLOR.textPrimary, textAlign: 'center' },
   fill: { width: '100%', height: '100%' },
@@ -151,8 +153,10 @@ export function FailedFace({ onRetry, disabled }: { onRetry: () => void; disable
 }
 
 /**
- * A photo moderation took down (Flow 6 edit 05): gone, and why. Its × clears the slot; with `onReplace` the tile itself is the way
- * to put a different photo in its place. The picture and the × are separate elements, so a screen reader reaches both.
+ * A photo moderation took down (Flow 6 · 6.3 #13, C13): an empty tile with the shield glyph, nothing of the photo left and no
+ * words on it (the approved tile said "Removed · didn't meet the photo rules"; Me and the notes under the grid say why). Its ×
+ * clears the slot; with `onReplace` the tile itself is the way to put a different photo in its place. The picture and the ×
+ * are separate elements, so a screen reader reaches both, and the reader's label still says what happened.
  */
 export function PulledFace({
   onRemove,
@@ -165,11 +169,10 @@ export function PulledFace({
   removeDisabled: boolean
   onReplace?: () => void
 }) {
-  const bold = useBoldText()
   const slop = Math.max(0, (minTarget() - REMOVE) / 2)
   const why = 'Removed. This photo didn’t meet the photo rules'
   return (
-    <View testID="tile-pulled" style={[tile.base, tile.fail]}>
+    <View testID="tile-pulled" style={[tile.base, tile.pulled]}>
       <Pressable
         testID="tile-pulled-replace"
         onPress={onReplace}
@@ -181,10 +184,7 @@ export function PulledFace({
         android_ripple={onReplace ? { color: PRESSED_WASH.android } : undefined}
         style={[StyleSheet.absoluteFill, tile.centre]}
       >
-        <Icon name="shield-alert" size={ICON.control} color={COLOR.destructive} />
-        <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), tile.ink]}>
-          Removed · didn’t meet the photo rules
-        </Text>
+        <Icon name="shield" size={ICON.nav} color={COLOR.textSecondary} />
       </Pressable>
       <Pressable onPress={onRemove} disabled={removeDisabled} hitSlop={slop} accessibilityRole="button" accessibilityLabel={removeLabel} style={styles.remove}>
         <Icon name="x" size={ICON.inline} color={COLOR.textPrimary} active />

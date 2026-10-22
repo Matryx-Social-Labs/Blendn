@@ -21,7 +21,7 @@ jest.mock('../lib/photoUtils', () => ({
   cachePhoto: jest.fn(async () => null),
   deletePhoto: jest.fn(async () => undefined),
   loadUserPhotos: jest.fn(),
-  loadPulledPhotos: jest.fn(async () => []),
+  loadPulledPhotos: jest.fn(async () => ({ pulled: [], live: null })),
   reorderPhotos: jest.fn(),
   selectAndUploadPhoto: jest.fn(),
   uploadPhoto: jest.fn(),
@@ -54,6 +54,13 @@ describe('PhotoManager', () => {
     await mount(1)
     await fireEvent.press(screen.getByLabelText('Add photo'))
     await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Photo must be less than 5MB.', 'error', { haptic: 'error' }))
+  })
+
+  it('tells the reposition step it is the main photo only when it is the first one', async () => {
+    photoUtils.selectAndUploadPhoto.mockResolvedValue({ success: false, cancelled: true, error: 'cancelled' })
+    await mount(1)
+    await fireEvent.press(screen.getByLabelText('Add photo'))
+    await waitFor(() => expect(photoUtils.selectAndUploadPhoto).toHaveBeenCalledWith('u1', expect.objectContaining({ main: false })))
   })
 
   it('stays quiet when the picker is cancelled', async () => {

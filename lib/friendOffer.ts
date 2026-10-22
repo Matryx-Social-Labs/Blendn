@@ -1,4 +1,5 @@
 import type { IconName } from '../components/ui/Icon'
+import { friendRefusal } from './friendRefusal'
 
 /**
  * "Add as friend" after a match (owner, 2026-10-22: "if users have matched and they have revealed themselves we can
@@ -62,9 +63,9 @@ export const NOT_A_REVEALED_MATCH = 'NOT_A_REVEALED_MATCH'
 
 export type FriendAskOutcome =
   | { ok: true; state: 'requested' | 'friends' }
-  | { ok: false; reason: 'reveal-first' | 'failed' }
+  | { ok: false; reason: 'reveal-first' | 'profile' | 'ratelimit' | 'failed' }
 
-type AskResponse = { success: boolean; data?: { state?: string }; reasonCode?: string; errorCode?: string }
+type AskResponse = { success: boolean; data?: { state?: string }; reasonCode?: string; errorCode?: string; retryAfter?: number }
 
 /** The answer to `POST /friends/requests`: `requested`, `friends` (they had already asked), or one of two refusals. */
 export function friendAskOutcome(response: AskResponse): FriendAskOutcome {
@@ -72,7 +73,11 @@ export function friendAskOutcome(response: AskResponse): FriendAskOutcome {
     const state = response.data?.state
     return state === 'requested' || state === 'friends' ? { ok: true, state } : { ok: false, reason: 'failed' }
   }
-  return { ok: false, reason: (response.reasonCode ?? response.errorCode) === NOT_A_REVEALED_MATCH ? 'reveal-first' : 'failed' }
+  if ((response.reasonCode ?? response.errorCode) === NOT_A_REVEALED_MATCH) return { ok: false, reason: 'reveal-first' }
+  // The two refusals with a fix of their own (Flow 15 15.19): an unfinished profile, and asking too fast.
+  const refusal = friendRefusal(response)
+  if (refusal) return { ok: false, reason: refusal.kind }
+  return { ok: false, reason: 'failed' }
 }
 
 /** What each outcome says. A request sent is a toast of its own: the button flips, but the sheet that sent it has closed. */

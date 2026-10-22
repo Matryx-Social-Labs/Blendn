@@ -28,6 +28,7 @@ import { useAuth } from '../../lib/useAuth'
 import { serverOffset } from '../../lib/serverClock'
 import { useBlends } from '../../lib/useBlends'
 import { useNow } from '../../lib/useNow'
+import { Banner } from '../ds/Banner'
 import { Button } from '../ds/Button'
 import { Creature, creatureFor } from '../ds/Creature'
 import { CrewEmblem, EMBLEM_SQUIRCLE } from '../ds/CrewEmblem'
@@ -123,7 +124,7 @@ export function useBlendRoom(blendId: string | null, top: number): BlendRoomChro
   const { showToast } = useToast()
   const reduceMotion = useReducedMotion()
   const cardOut = FadeOut.duration(reduceMotion ? motionTokens(true).duration.base : DURATION.quick)
-  const { blends, reload } = useBlends(!!blendId)
+  const { blends, reload, loaded, failed } = useBlends(!!blendId)
   const [menu, setMenu] = useState(false)
   const [asking, setAsking] = useState(false)
   const [revealing, setRevealing] = useState(false)
@@ -155,7 +156,17 @@ export function useBlendRoom(blendId: string | null, top: number): BlendRoomChro
   const coach = useCoachMark('blend_first_open', { ready: shown })
 
   if (!blendId || !blend) {
-    return { blend: null, gone, title: null, leading: null, subtitle: null, bar: null, barSpace: 0, overlays: null, openMenu: () => {} }
+    /*
+     * The read failed and nothing is known of this Blend (10-11): said, with a way back, never read as "closed". A Blend seen
+     * open and now missing is `gone` and the room says it closed; a read that never answered is neither.
+     */
+    const unreadable = !!blendId && !gone && loaded && failed
+    const bar = unreadable ? (
+      <View pointerEvents="box-none" onLayout={(e) => setHeight(e.nativeEvent.layout.height)} style={[styles.bar, { top }]}>
+        <Banner kind="info" text="This Blend didn’t load" action={{ label: 'Try again', onPress: () => void reload() }} testID="blend-unreadable" />
+      </View>
+    ) : null
+    return { blend: null, gone, title: null, leading: null, subtitle: null, bar, barSpace: bar ? height : 0, overlays: null, openMenu: () => {} }
   }
 
   const { mine, theirs } = blendSides(blend, myId)

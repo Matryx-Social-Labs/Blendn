@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { useToast } from '../components/Toast'
 import { apiClient } from './apiClient'
+import { requestsPageFrom } from './friendsPaging'
 import { iconBadgeAfterRead, iconBadgeFor, setAppIconBadge } from './appBadge'
 import { askFriendsSeeMe, useStillHere } from './friendsSeeMeAsk'
 import { readAnswered, rememberAnswered, type Outcome } from './answeredRequests'
@@ -131,8 +132,9 @@ export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) =
         // The list shows at once; whether its requests were answered elsewhere is reconciled after (a second read).
         void incomingRequests(page).then((incoming) => {
           if (!incoming) return
-          incoming.forEach((sender, requestId) => senders.current.set(requestId, sender))
-          setItems((prev) => closeAnsweredElsewhere(prev, new Set(incoming.keys())))
+          // Who sent each request is true of a partial list as well; only a whole list can say a request is gone.
+          incoming.senders.forEach((sender, requestId) => senders.current.set(requestId, sender))
+          if (incoming.whole) setItems((prev) => closeAnsweredElsewhere(prev, new Set(incoming.senders.keys())))
         })
       } catch (error) {
         Logger.warn('notifications', 'load:failed', { error: error as never })
@@ -367,11 +369,13 @@ function answerRequest(item: NotificationItem, action: 'accept' | 'decline'): Pr
  * did not load (then nothing is closed). A server that says whether a request's row is still open sends `open` (#716), and an
  * older one does not, so a request accepted or declined on Friends › Requests would wait here for good without this.
  */
-async function incomingRequests(page: readonly NotificationItem[]): Promise<ReadonlyMap<string, string> | null> {
+async function incomingRequests(page: readonly NotificationItem[]): Promise<{ senders: ReadonlyMap<string, string>; whole: boolean } | null> {
   if (!page.some((n) => n.kind === 'friend_request' && n.open !== false)) return null
   try {
     const result = await apiClient.getFriendRequests()
-    return result.success && result.data ? new Map(result.data.incoming.map((r) => [r.id, r.person.userId])) : null
+    const page = result.success ? requestsPageFrom(result.data, 'incoming') : null
+    // `whole`: no page behind this one. Only then is a request missing from it answered; with more pages, one not on the first may still be waiting.
+    return page ? { senders: new Map(page.items.map((r) => [r.id, r.person.userId])), whole: page.nextCursor === null } : null
   } catch (error) {
     Logger.warn('notifications', 'requests:failed', { error: error as never })
     return null

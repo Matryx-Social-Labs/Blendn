@@ -1,6 +1,7 @@
+import { router } from 'expo-router'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 
-import { COLOR, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
 import type { Crew, CrewCard as CrewCardData, CrewsAtEvent } from '../../lib/crews'
 import { Button } from '../ds/Button'
 import { CrewCard } from '../ds/CrewCard'
@@ -8,7 +9,8 @@ import { CrewStrip, type StripCrew } from '../ds/CrewStrip'
 import { LikingAsChip } from '../ds/LikingAsChip'
 import { Spinner } from '../ds/Loader'
 import { SectionHeader } from '../ds/SectionHeader'
-import { font, useBoldText } from '../ds/shared'
+import { font, minTarget, useBoldText } from '../ds/shared'
+import { Icon } from '../ui/Icon'
 import { Toggle } from '../ds/Toggle'
 import { useOpenToCrews, type CrewActions, type CrewsHereState } from '../crews/CrewsView'
 import { NO_LONGER_AVAILABLE } from '../../lib/noLongerAvailable'
@@ -139,13 +141,29 @@ export function CrewsHead({
       ) : !state.data.crewsEnabled ? (
         <Line text="Crews are off at this event." />
       ) : state.data.crews.length === 0 ? (
-        <Line
-          text={
-            solo && !open.value
-              ? 'Turn on “Open to joining a crew tonight” to see crews with room for one more.'
-              : 'No other crews here yet. A crew shows once two of them have checked in.'
-          }
-        />
+        solo && open.value ? (
+          // 10-7 · 16: nobody here to like, and you have no crew of your own: the way to one is your friends (Make a crew).
+          <Pressable
+            onPress={() => router.push('/crews/new')}
+            accessibilityRole="button"
+            accessibilityHint="Opens Make a crew"
+            testID="room-no-crew"
+            style={styles.noCrew}
+          >
+            <View style={styles.fill}>
+              <Line text="No crew yet — make one from your friends." />
+            </View>
+            <Icon name="chevron-right" size={ICON.inline} color={COLOR.textTertiary} />
+          </Pressable>
+        ) : (
+          <Line
+            text={
+              solo
+                ? 'Turn on “Open to joining a crew tonight” to see crews with room for one more.'
+                : 'No other crews here yet. A crew shows once two of them have checked in.'
+            }
+          />
+        )
       ) : null}
     </View>
   )
@@ -208,6 +226,8 @@ const styles = StyleSheet.create({
   gutter: { paddingHorizontal: SPACE.gutter },
   head: { gap: SPACE.md },
   fill: { flex: 1 },
+  // The line is a way to Make a crew: a full target tall, the line and a chevron.
+  noCrew: { minHeight: minTarget(), flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
   solo: { borderRadius: RADIUS.sheet, backgroundColor: COLOR.surface, padding: SPACE.lg, gap: SPACE.sm },

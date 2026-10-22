@@ -14,6 +14,37 @@ import { COLOR, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 export const MAIN_RATIO = 1.55
 /** The remove badge is 24 pt, reached by slop to the target. */
 const REMOVE = 24
+/**
+ * A photo moderation took down (Flow 2 · 2.3 #19, C13): an empty tile with the shield glyph, nothing of the photo left. Tapping
+ * it adds a different one; the × clears it. A screen reader hears why it is empty.
+ */
+export function PulledPhotoTile({ slot, onAdd, onDismiss, disabled = false }: { slot: number; onAdd: () => void; onDismiss: () => void; disabled?: boolean }) {
+  const contrast = useIncreaseContrast()
+  return (
+    <View testID="photo-tile-pulled" style={[styles.tile, styles.pulled, { width: slot, height: slot }, contrast && IC_HAIRLINE]}>
+      <Pressable
+        onPress={onAdd}
+        disabled={disabled}
+        accessibilityRole="button"
+        accessibilityLabel="Removed. This photo didn’t meet the photo rules. Add a different photo"
+        accessibilityState={{ disabled }}
+        style={[StyleSheet.absoluteFill, styles.pulledWell]}
+      >
+        <Icon name="shield" size={ICON.nav} color={COLOR.textSecondary} />
+      </Pressable>
+      <Pressable
+        onPress={onDismiss}
+        hitSlop={SPACE.md}
+        accessibilityRole="button"
+        accessibilityLabel="Dismiss removed photo"
+        style={[styles.remove, contrast && IC_HAIRLINE]}
+      >
+        <Icon name="x" size={ICON.inline} color={COLOR.textPrimary} />
+      </Pressable>
+    </View>
+  )
+}
+
 /** A photo that is not on the server yet is shown at 45%, under its ring or its Retry. */
 const IN_FLIGHT_OPACITY = 0.45
 
@@ -22,7 +53,7 @@ const IN_FLIGHT_OPACITY = 0.45
  * others "Make main"; a determinate ring and its percentage while it uploads; "Didn't upload" with Retry when it did not
  * get there; and Remove at the corner. A tile still on its way has no label pill and cannot be made main.
  *
- * (The design's fourth state, a photo moderation took down, is not drawn: the server sends no such flag yet.)
+ * A photo moderation took down is `PulledPhotoTile`, beside these.
  */
 export function PhotoTile({
   tile,
@@ -119,6 +150,8 @@ export function PhotoTile({
 
 const styles = StyleSheet.create({
   centred: { alignSelf: 'center' },
+  pulled: { borderWidth: 1, borderColor: COLOR.hairlineStrong },
+  pulledWell: { alignItems: 'center', justifyContent: 'center' },
   tile: { borderRadius: RADIUS.mediaInCard, backgroundColor: COLOR.surface, overflow: 'hidden' },
   main: { width: '100%' },
   chosen: { borderWidth: SPACE.xxs },

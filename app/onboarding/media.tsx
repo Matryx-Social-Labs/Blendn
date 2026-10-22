@@ -1,19 +1,23 @@
 import { ScreenProfiler } from '../../lib/perf'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Platform, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
 import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated'
 
 import { font, PRESSED_WASH, useBoldText } from '../../components/ds/shared'
 import { useToast } from '../../components/Toast'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
-import { PhotoTile, MAIN_RATIO } from '../../components/onboarding/PhotoTile'
-import { photoNote, readyPhotos, withMainFirst, type PhotoTile as Tile } from '../../components/onboarding/photoTiles'
+import { PhotoTile, PulledPhotoTile, MAIN_RATIO } from '../../components/onboarding/PhotoTile'
+import { photoNote, readyPhotos, withMainFirst, withoutPulledDraftPhotos, type PhotoTile as Tile } from '../../components/onboarding/photoTiles'
 import { Icon } from '../../components/ui/Icon'
 import { COLOR, DURATION, ICON, PRESS, RADIUS, SPACE, SPRING } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import ScalePress from '../../components/motion/ScalePress'
-import { selectPhoto, uploadPhoto } from '../../lib/photoUtils'
+import { RepositionHost } from '../../components/profile/Reposition'
+import { loadPulledPhotos, selectPhoto, uploadPhoto } from '../../lib/photoUtils'
+import { mainWasPulled, type PulledPhoto } from '../../lib/photoStates'
+import { markPulledSeen } from '../../lib/pulledNotices'
+import { SUPPORT_EMAIL } from '../../lib/support'
 import { useAuth } from '../../lib/useAuth'
 import { useOnboarding } from '../../lib/useOnboarding'
 
@@ -56,9 +60,9 @@ import { useOnboarding } from '../../lib/useOnboarding'
  * ## The pulled photo
  *
  * The design draws a fourth tile state, "This photo was removed. Add a different one.", for a photo moderation took down
- * after it was added. The server now says which photos it pulled (`photo_states`, blendn-admin #716), but only on your own
- * `GET /profiles/:id`, which onboarding's draft does not read: Edit profile draws it (`components/PhotoManager.tsx`). Here a photo
- * pulled mid-onboarding is simply gone from the next read of the draft.
+ * after it was added. The server says which photos it pulled (`photo_states`, blendn-admin #716) on your own `GET /profiles/:id`,
+ * which onboarding's draft does not read, so this screen reads it too: an empty tile with a shield for each pulled one, and the draft
+ * reconciled with the photos that are up (`withoutPulledDraftPhotos`), so Continue never sends a pulled URL back.
  */
 
 const SLOTS = 6
@@ -78,6 +82,27 @@ function MediaScreenInner() {
   const slot = Math.floor((window.width - SPACE.gutter * 2 - GRID_GAP) / 2)
 
   const [tiles, setTiles] = useState<Tile[]>([])
+  /** The photos moderation took down since they were added (`photo_states`, your own profile): empty tiles with a shield, until dismissed or replaced. */
+  const [pulled, setPulled] = useState<PulledPhoto[]>([])
+  /** The photos that are up, once any has been pulled: the draft may still list a pulled one, and Continue must not send it. */
+  const [liveOnly, setLiveOnly] = useState<string[] | null>(null)
+  const userId = user?.id
+  useEffect(() => {
+    if (!loaded || !userId) return
+    let alive = true
+    void loadPulledPhotos(userId).then((own) => {
+      if (!alive) return
+      setPulled(own.pulled)
+      // Reconciled only when something was pulled: the draft is otherwise what it was, and a failed read (no list) judges nothing.
+      if (own.pulled.length > 0 && own.live) {
+        setLiveOnly(own.live)
+        setTiles((current) => withoutPulledDraftPhotos(current, own.live as string[]))
+      }
+    })
+    return () => {
+      alive = false
+    }
+  }, [loaded, userId])
 
   /*
    * The draft's photos, whenever they change: once it has loaded, and again
@@ -88,9 +113,11 @@ function MediaScreenInner() {
   const [shown, setShown] = useState<string[] | undefined>(undefined)
   if (loaded && draft.photos !== shown) {
     setShown(draft.photos)
-    setTiles((draft.photos ?? []).map((url) => ({ key: url, state: 'ready' as const, url })))
+    setTiles(withoutPulledDraftPhotos((draft.photos ?? []).map((url) => ({ key: url, state: 'ready' as const, url })), liveOnly ?? (draft.photos ?? [])))
   }
 
+  // The empty tiles never take the well's slot: the last one is always the way to add.
+  const pulledShown = pulled.slice(0, Math.max(0, SLOTS - 1 - tiles.length))
   const uploading = tiles.some((tile) => tile.state === 'uploading')
   const replace = (key: string, next: Tile) => setTiles((current) => current.map((tile) => (tile.key === key ? next : tile)))
 
@@ -112,13 +139,19 @@ function MediaScreenInner() {
 
   const add = async () => {
     if (!user?.id || uploading || tiles.length >= SLOTS) return
-    const picked = await selectPhoto()
+    const picked = await selectPhoto({ main: tiles.length === 0 })
     // A cancelled picker is not a failure. Anything else says why, in the
     // validator's or the server's words ("Photo must be less than 5MB"); it
     // used to say nothing, and the empty slot looked like a tap that missed.
     if (!picked.ok) {
       if (!picked.cancelled) showToast(picked.error || "That photo wasn’t added. Try again.", 'error', { haptic: 'error' })
       return
+    }
+    // A different photo stands in for the first removed one: its notice is done.
+    const replaced = pulled[0]
+    if (replaced) {
+      setPulled((current) => current.filter((p) => p !== replaced))
+      void markPulledSeen(user.id, replaced)
     }
     const key = nextKey()
     setTiles((current) => [...current, { key, state: 'uploading', uri: picked.uri, progress: 0 }])
@@ -154,7 +187,18 @@ function MediaScreenInner() {
       onSecondary={() => void skip()}
       onBack={goBack}
     >
-      <Text style={[font('meta', bold), styles.note]}>{photoNote(tiles.length)}</Text>
+      {mainWasPulled(pulled) ? (
+        <View testID="media-main-pulled" style={styles.mainPulled}>
+          <Text style={[font('meta', bold), styles.noteStrong]}>
+            {tiles.length > 0 ? 'Your main photo was removed. The next one is your main photo now.' : 'Your main photo was removed.'}
+          </Text>
+          <Text style={[font('meta', bold), styles.note]}>Think we got it wrong? Write to {SUPPORT_EMAIL}.</Text>
+        </View>
+      ) : (
+        <Text style={[font('meta', bold), styles.note]}>{photoNote(tiles.length)}</Text>
+      )}
+      {/* The reposition step a chosen photo goes through (6.3 #08); it draws nothing until one is asked. */}
+      <RepositionHost />
 
       {/* Every photo so far, plus one well to add the next. Six empty squares made the screen twice as tall as it needed to be. */}
       <View style={styles.grid}>
@@ -169,6 +213,19 @@ function MediaScreenInner() {
             onRetry={() => (tile.state === 'failed' ? void upload(tile.key, tile.uri) : undefined)}
             retryDisabled={uploading}
             animation={{ layout: glide, exiting: leave, entering: enter }}
+          />
+        ))}
+
+        {pulledShown.map((notice, k) => (
+          <PulledPhotoTile
+            key={`pulled-${notice.pulledAt ?? k}`}
+            slot={slot}
+            disabled={uploading}
+            onAdd={() => void add()}
+            onDismiss={() => {
+              setPulled((current) => current.filter((p) => p !== notice))
+              if (userId) void markPulledSeen(userId, notice)
+            }}
           />
         ))}
 
@@ -198,6 +255,8 @@ function MediaScreenInner() {
 
 const styles = StyleSheet.create({
   note: { color: COLOR.textSecondary },
+  noteStrong: { color: COLOR.textPrimary },
+  mainPulled: { gap: SPACE.xs },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GRID_GAP },
   muted: { color: COLOR.textSecondary },
   wide: { width: '100%' },

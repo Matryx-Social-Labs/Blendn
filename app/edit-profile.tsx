@@ -1,6 +1,6 @@
 import { router, useNavigation } from 'expo-router'
 import { usePreventRemove, type NavigationAction } from 'expo-router/react-navigation'
-import React, { useEffect, useRef, useState, type ReactNode } from 'react'
+import React, { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { KeyboardAvoidingView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { font, HueProvider, useBoldText } from '../components/ds/shared'
@@ -8,6 +8,7 @@ import { TextArea, TextField } from '../components/ds/TextField'
 import { TopBar } from '../components/ds/TopBar'
 import PhotoManager from '../components/PhotoManager'
 import { MatchingFields, type Intent } from '../components/profile/MatchingFields'
+import { RepositionHost } from '../components/profile/Reposition'
 import { OfflineStrip, useOffline } from '../components/profile/OfflineStrip'
 import { TagsField } from '../components/profile/TagsField'
 import { mayDate, type Gender, type Orientation } from '../lib/dating'
@@ -117,6 +118,20 @@ function EditProfileContent() {
   const [expertise, setExpertise] = useState<string[]>([])
   const [expertiseByField, setExpertiseByField] = useState<Record<string, { slug: string; label: string }[]>>({})
   const [maxExpertise, setMaxExpertise] = useState(3)
+  /** The fields of work could not be read: the heading says so, and its line reads them again (6-3). */
+  const [workFieldsFailed, setWorkFieldsFailed] = useState(false)
+  const [workFieldsRetrying, setWorkFieldsRetrying] = useState(false)
+  const loadWorkFields = useCallback(async () => {
+    const fields = await apiClient.getWorkFields()
+    if (fields.success && fields.data?.workFields) {
+      setWorkFields(fields.data.workFields)
+      setExpertiseByField(fields.data.expertiseByField ?? {})
+      if (fields.data.maxExpertise) setMaxExpertise(fields.data.maxExpertise)
+      setWorkFieldsFailed(false)
+    } else {
+      setWorkFieldsFailed(true)
+    }
+  }, [])
   const [gender, setGender] = useState<Gender | null>(null)
   const [orientations, setOrientations] = useState<Orientation[]>([])
   const [interestedIn, setInterestedIn] = useState<Gender[]>([])
@@ -314,12 +329,7 @@ function EditProfileContent() {
           interestedIn: loadedInterestedIn,
         }))
 
-        const fields = await apiClient.getWorkFields()
-        if (fields.success && fields.data?.workFields) {
-          setWorkFields(fields.data.workFields)
-          setExpertiseByField(fields.data.expertiseByField ?? {})
-          if (fields.data.maxExpertise) setMaxExpertise(fields.data.maxExpertise)
-        }
+        await loadWorkFields()
 
       } catch (error) {
         Logger.error('profile', 'EditProfile: Load profile error', { error })
@@ -332,7 +342,7 @@ function EditProfileContent() {
     if (authUser) {
       loadProfile()
     }
-  }, [authUser, showToast])
+  }, [authUser, showToast, loadWorkFields])
 
   /** A new field clears what they do within the old one, silently: the server prunes the same way, so a stale chip never saves. */
   const changeWorkField = (slug: string | null) => {
@@ -468,6 +478,8 @@ function EditProfileContent() {
 
   return (
     <View style={styles.container}>
+      {/* The reposition step a chosen photo goes through (6.3 #08); it draws nothing until one is asked. */}
+      <RepositionHost />
       <KeyboardAvoidingView
         style={styles.container}
         // 'padding' on both platforms (lib/keyboard.ts): an edge-to-edge Android window ignores adjustResize, so the
@@ -514,6 +526,12 @@ function EditProfileContent() {
               maxExpertise={maxExpertise}
               onChangeExpertise={setExpertise}
               workFields={workFields}
+              workFieldsFailed={workFieldsFailed}
+              onRetryWorkFields={() => {
+                setWorkFieldsRetrying(true)
+                void loadWorkFields().finally(() => setWorkFieldsRetrying(false))
+              }}
+              workFieldsRetrying={workFieldsRetrying}
               gender={gender}
               onChangeGender={setGender}
               orientations={orientations}

@@ -77,3 +77,10 @@ it('a small button in a row is centred on it, not pinned to its top', async () =
   const holder = screen.getByTestId('trail').parent
   expect(StyleSheet.flatten(holder?.props.style).alignSelf).toBe('center')
 })
+
+it('M6: a person row is exactly one row tall (the lists that window it place rows by index), and a long name does not change that', async () => {
+  const { PERSON_ROW_HEIGHT } = require('../components/friends/PersonRow') as typeof import('../components/friends/PersonRow')
+  await render(<PersonRow person={{ userId: 'u', name: 'Venkataramanan-Subramanian-Iyer-Krishnamurthy-Bhattacharya', photo: null }} detail="Friends since " detailMono="Mar 2026" onPress={jest.fn()} />)
+  const row = screen.getByRole('button')
+  expect(StyleSheet.flatten(row.props.style).height).toBe(PERSON_ROW_HEIGHT)
+})

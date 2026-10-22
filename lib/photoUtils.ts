@@ -6,6 +6,7 @@ import * as ImagePicker from 'expo-image-picker'
 import { Linking } from 'react-native'
 import { apiClient } from './apiClient'
 import { Logger } from './logger'
+import { hasRepositionHost, requestReposition } from './photoReposition'
 import { pulledPhotos, type PulledPhoto } from './photoStates'
 import { unseenPulled } from './pulledNotices'
 import { queryCache } from './queryCache'
@@ -71,14 +72,15 @@ export interface PhotoOptions {
  * legacy UIImagePickerController (losing the privacy picker) whose small
  * "Move and Scale" step testers read as "no crop". Worse, the square it
  * enforced is the wrong shape for where the photo is shown — the profile
- * hero is `PROFILE_HERO_ASPECT = 751/390`, a tall portrait, so a square lost
+ * hero is `PROFILE_HERO_ASPECT = 1.3` tall to wide, a portrait, so a square lost
  * the height the main surface needs and `cover` then cropped the sides too.
  *
  * The reference apps auto-fit to their card ratio (Tinder: 4:5 portrait,
  * 1080×1350 recommended) and, where they let you adjust, do it in-app after
  * upload rather than in the OS picker. Every surface here already renders
  * with `contentFit="cover"`, so the crop happens per surface at render;
- * an in-app reposition step is the design task, not the picker's editor.
+ * the in-app reposition step (`selectPhoto`, `components/profile/Reposition`) is where the person frames the main one,
+ * not the picker's editor.
  *
  * `width` only: expo-image-manipulator keeps the ratio when one dimension is
  * given and STRETCHES when both are — the old 800×800 squashed any photo
@@ -441,7 +443,7 @@ export const validatePhoto = (imageInfo: ImagePicker.ImagePickerAsset): { valid:
   // Check dimensions (minimum size)
   const minDimension = 200
   if (imageInfo.width < minDimension || imageInfo.height < minDimension) {
-    return { valid: false, error: 'Photo must be at least 200x200 pixels' }
+    return { valid: false, error: 'Photo must be at least 200 × 200 pixels.' }
   }
 
   return { valid: true }
@@ -748,18 +750,26 @@ export const loadUserPhotos = async (userId: string): Promise<ProfilePhoto[] | n
   }
 }
 
+/** What your own profile says about your photos: the ones moderation pulled, and the ones that are up (`null` when the read failed). */
+export type OwnPhotoStates = { pulled: PulledPhoto[]; live: string[] | null }
+
 /**
- * The photos moderation took down in the last seven days (`photo_states`, your own profile only), newest first, less the ones already dismissed or replaced (`lib/pulledNotices.ts`). Read after
- * `loadUserPhotos`, whose request it shares through the profile cache. A failed read or an older server is none: the grid then
- * draws what it always did.
+ * The photos moderation took down in the last seven days (`photo_states`, your own profile only), newest first, less the ones already
+ * dismissed or replaced (`lib/pulledNotices.ts`), and the photos that are up (`photos`). Read after `loadUserPhotos`, whose request it
+ * shares through the profile cache. A failed read or an older server is none pulled and `live: null`: the grid then draws what it always did.
  */
-export const loadPulledPhotos = async (userId: string): Promise<PulledPhoto[]> => {
+export const loadPulledPhotos = async (userId: string): Promise<OwnPhotoStates> => {
   try {
     const result = await apiClient.getProfile(userId)
-    return result.success ? await unseenPulled(userId, pulledPhotos(result.data?.profile?.photo_states)) : []
+    if (!result.success) return { pulled: [], live: null }
+    const photos = result.data?.profile?.photos
+    return {
+      pulled: await unseenPulled(userId, pulledPhotos(result.data?.profile?.photo_states)),
+      live: Array.isArray(photos) ? (photos as string[]) : null,
+    }
   } catch (error) {
-    Logger.warn('profile', 'photoUtils: Get pulled photos error', { error, userId })
-    return []
+    Logger.warn('profile', 'photoUtils: Get pulled photos error', { error })
+    return { pulled: [], live: null }
   }
 }
 
@@ -768,41 +778,102 @@ export const getUserPhotos = async (userId: string): Promise<ProfilePhoto[]> => 
 /** What choosing a photo came to: the file to upload, or why there is none (a cancelled picker is not a failure). */
 export type PhotoSelection = { ok: true; uri: string } | { ok: false; cancelled?: boolean; error?: string }
 
+/** What the reposition step came to: the file to go on with, back to the source sheet, or the person stopped. */
+type Repositioned = { kind: 'ready'; uri: string } | { kind: 'again' } | { kind: 'cancel' }
+
+/** The re-encoded copy the step works on is at most this long on its long side: a 48 MP original is not decoded into a view or cropped at full size. */
+export const FIT_LONG_SIDE = 2560
+
+/** The resize that brings a photo to `FIT_LONG_SIDE` on its long side, or none when it already is. One dimension, so the ratio is kept. */
+export const fitResize = (width: number, height: number): ImageManipulator.Action[] =>
+  Math.max(width, height) <= FIT_LONG_SIDE ? [] : [{ resize: width >= height ? { width: FIT_LONG_SIDE } : { height: FIT_LONG_SIDE } }]
+
+/** A file this step made and no longer needs. A failure to delete is not worth saying. */
+const discard = (uri: string) => {
+  void FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {})
+}
+
 /**
- * Choose a photo: the source sheet, the picker, the size and type check and the quality check. Nothing is uploaded, so a
- * caller can show the tile while it does, and keep the file to try again when it fails.
+ * The reposition step (Flow 6 · 6.3 #08): drag and pinch the photo in the frame it is cropped to, Use photo or Choose another.
+ *
+ * The photo is re-encoded once first, down to `FIT_LONG_SIDE`, and the step shows, and crops, that file: what the manipulator decoded
+ * is the pixels the frame is laid over, so a photo carrying an EXIF turn is not cropped at the wrong place on a phone that reads it
+ * differently from the picker. (The long side is judged on the size the picker reported; a picker that reports an unturned size for
+ * a turned photo would resize the short side. The picker applies the turn on both platforms today.) A screen with nowhere to ask
+ * (`hasRepositionHost`) carries on with the photo as picked, and so does a photo that cannot be re-encoded: this step never stops
+ * somebody adding a photo. The copy it made is deleted when it is done with it.
  */
-export const selectPhoto = async (): Promise<PhotoSelection> => {
+const repositionPhoto = async (picked: { uri: string; width: number; height: number }, main: boolean): Promise<Repositioned> => {
+  const original = picked.uri
+  if (!hasRepositionHost()) return { kind: 'ready', uri: original }
+  let fitted: { uri: string; width: number; height: number; main: boolean }
   try {
-    // Show source selection
-    const source = await showPhotoSourceActionSheet()
-    if (!source) {
-      return { ok: false, cancelled: true, error: 'User cancelled' }
+    const out = await ImageManipulator.manipulateAsync(original, fitResize(picked.width, picked.height), { compress: 0.92, format: ImageManipulator.SaveFormat.JPEG })
+    fitted = { uri: out.uri, width: out.width, height: out.height, main }
+  } catch (error) {
+    Logger.warn('profile', 'photoUtils: Could not prepare the photo to reposition', { error })
+    return { kind: 'ready', uri: original }
+  }
+  const answer = await requestReposition(fitted)
+  if (answer.kind === 'again' || answer.kind === 'cancel') {
+    discard(fitted.uri)
+    return { kind: answer.kind }
+  }
+  if (answer.kind === 'skip') {
+    discard(fitted.uri)
+    return { kind: 'ready', uri: original }
+  }
+  try {
+    const cropped = await ImageManipulator.manipulateAsync(fitted.uri, [{ crop: answer.rect }], { compress: 0.92, format: ImageManipulator.SaveFormat.JPEG })
+    discard(fitted.uri)
+    return { kind: 'ready', uri: cropped.uri }
+  } catch (error) {
+    Logger.warn('profile', 'photoUtils: Could not crop the photo', { error })
+    return { kind: 'ready', uri: fitted.uri }
+  }
+}
+
+/**
+ * Choose a photo: the source sheet, the picker, the size and type check, the quality check, and the reposition step.
+ * Nothing is uploaded, so a caller can show the tile while it does, and keep the file to try again when it fails.
+ * "Choose another" on the reposition step is the source sheet again.
+ */
+export const selectPhoto = async ({ main = true }: { main?: boolean } = {}): Promise<PhotoSelection> => {
+  try {
+    for (;;) {
+      // Show source selection
+      const source = await showPhotoSourceActionSheet()
+      if (!source) {
+        return { ok: false, cancelled: true, error: 'User cancelled' }
+      }
+
+      // Pick image
+      const imageResult = await pickImage(source)
+      if (!imageResult || imageResult.canceled) {
+        return { ok: false, cancelled: true, error: 'No image selected' }
+      }
+
+      const asset = imageResult.assets[0]
+
+      // Validate image
+      const validation = validatePhoto(asset)
+      if (!validation.valid) {
+        // Returned, not shown: both callers say why a photo was not added,
+        // and an alert here as well made it two messages for one refusal.
+        return { ok: false, error: validation.error }
+      }
+
+      // Verify photo quality (optional)
+      const verification = await verifyPhoto(asset.uri)
+      if (!verification.isValid && verification.issues.length > 0) {
+        Logger.warn('profile', 'photoUtils: Photo verification issues', { issues: verification.issues })
+      }
+
+      const repositioned = await repositionPhoto(asset, main)
+      if (repositioned.kind === 'again') continue
+      if (repositioned.kind === 'cancel') return { ok: false, cancelled: true, error: 'No image selected' }
+      return { ok: true, uri: repositioned.uri }
     }
-
-    // Pick image
-    const imageResult = await pickImage(source)
-    if (!imageResult || imageResult.canceled) {
-      return { ok: false, cancelled: true, error: 'No image selected' }
-    }
-
-    const asset = imageResult.assets[0]
-
-    // Validate image
-    const validation = validatePhoto(asset)
-    if (!validation.valid) {
-      // Returned, not shown: both callers say why a photo was not added,
-      // and an alert here as well made it two messages for one refusal.
-      return { ok: false, error: validation.error }
-    }
-
-    // Verify photo quality (optional)
-    const verification = await verifyPhoto(asset.uri)
-    if (!verification.isValid && verification.issues.length > 0) {
-      Logger.warn('profile', 'photoUtils: Photo verification issues', { issues: verification.issues })
-    }
-
-    return { ok: true, uri: asset.uri }
   } catch (error) {
     Logger.error('profile', 'photoUtils: Photo selection error', { error })
     return { ok: false, error: error instanceof Error ? error.message : 'Unknown error' }
@@ -814,9 +885,9 @@ export const selectPhoto = async (): Promise<PhotoSelection> => {
  */
 export const selectAndUploadPhoto = async (
   userId: string,
-  hooks: { onPicked?: (uri: string) => void; onProgress?: (fraction: number) => void } = {}
+  hooks: { onPicked?: (uri: string) => void; onProgress?: (fraction: number) => void; main?: boolean } = {}
 ): Promise<PhotoUploadResult & { uri?: string }> => {
-  const selection = await selectPhoto()
+  const selection = await selectPhoto({ main: hooks.main })
   if (!selection.ok) return { success: false, cancelled: selection.cancelled ? true : undefined, error: selection.error }
   hooks.onPicked?.(selection.uri)
   try {

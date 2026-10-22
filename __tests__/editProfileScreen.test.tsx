@@ -2,7 +2,8 @@
  * Edit profile on the design system (Flow 6 `edit`): the cards in the frame's order, the loading frame at its final geometry, Goals and
  * Looking for as DS chips with an Add sheet, and Save held while offline.
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
+import { StyleSheet } from 'react-native'
 
 let mockOffline = false
 jest.mock('../lib/networkStatus', () => ({
@@ -229,6 +230,40 @@ describe('expertise, step 2 of the field of work (14.3)', () => {
     await fireEvent.press(screen.getByText('Save'))
     await waitFor(() => expect(api.updateProfile).toHaveBeenCalled())
     expect(api.updateProfile.mock.calls[0][1]).toMatchObject({ work_field: 'finance', expertise: [] })
+  })
+})
+
+describe('fields of work that did not load (6-3, Edit profile · 04)', () => {
+  it('the heading stands with the failure line under it, and the line reads them again', async () => {
+    api.getWorkFields.mockResolvedValueOnce({ success: false, error: 'No internet connection.' } as never)
+    await render(<EditProfile />)
+    await screen.findByText('Couldn’t load fields of work. Try again.')
+    expect(screen.getByText('WHAT DO YOU DO?')).toBeTruthy()
+    api.getWorkFields.mockResolvedValueOnce({ success: true, data: { workFields: [{ slug: 'design', label: 'Design' }] } } as never)
+    await fireEvent.press(screen.getByLabelText('Couldn’t load fields of work. Try again.'))
+    await screen.findByText('Design')
+    expect(screen.queryByText('Couldn’t load fields of work. Try again.')).toBeNull()
+  })
+
+  it('M8: the line is a full target tall, reaches up and down only, and holds still while it retries', async () => {
+    api.getWorkFields.mockResolvedValueOnce({ success: false, error: 'No internet connection.' } as never)
+    await render(<EditProfile />)
+    const line = await screen.findByLabelText('Couldn’t load fields of work. Try again.')
+    expect(StyleSheet.flatten(line.props.style).minHeight).toBeGreaterThanOrEqual(44)
+    expect(line.props.hitSlop).toEqual({ top: 4, bottom: 4 })
+    let answer: (v: unknown) => void = () => {}
+    api.getWorkFields.mockReturnValueOnce(new Promise((r) => (answer = r)) as never)
+    await fireEvent.press(line)
+    const busy = await screen.findByLabelText('Trying again')
+    expect(busy.props.accessibilityState).toMatchObject({ disabled: true, busy: true })
+    await act(async () => answer({ success: false }))
+    await screen.findByLabelText('Couldn’t load fields of work. Try again.')
+  })
+
+  it('a list that loaded draws no failure line', async () => {
+    await render(<EditProfile />)
+    await screen.findByDisplayValue('Sam')
+    expect(screen.queryByText('Couldn’t load fields of work. Try again.')).toBeNull()
   })
 })
 

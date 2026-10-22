@@ -19,3 +19,13 @@ export function withMainFirst<T extends { key: string }>(tiles: readonly T[], ke
   const chosen = tiles.find((tile) => tile.key === key)
   return chosen ? [chosen, ...tiles.filter((tile) => tile.key !== key)] : [...tiles]
 }
+
+/**
+ * The draft's photos less the ones moderation has since pulled: what the draft still lists that the server's own profile no longer
+ * does. Only the tiles the draft itself put there (their key is their URL) are judged; a photo uploaded on this screen and not yet
+ * saved is not in the profile's list, and it stays. Continue would otherwise send a pulled URL back, and the server refuses the lot.
+ */
+export function withoutPulledDraftPhotos(tiles: readonly PhotoTile[], live: readonly string[]): PhotoTile[] {
+  const up = new Set(live)
+  return tiles.filter((tile) => !(tile.state === 'ready' && tile.key === tile.url) || up.has(tile.url))
+}

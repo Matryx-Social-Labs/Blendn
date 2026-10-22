@@ -100,7 +100,7 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
         setLoadFailed(false)
         setPhotos(userPhotos)
         setLoading(false)
-        void loadPulledPhotos(userId).then(setPulled)
+        void loadPulledPhotos(userId).then((own) => setPulled(own.pulled))
         // Pre-cache photos for better performance
         userPhotos.forEach((photo) => {
           if (photo.url.startsWith('http://') || photo.url.startsWith('https://')) {
@@ -173,6 +173,8 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
       const result = await selectAndUploadPhoto(userId, {
         onPicked: (uri) => setPending({ uri, state: 'uploading', progress: 0 }),
         onProgress,
+        // The first photo is the main one: the step says so only then.
+        main: photos.length === 0,
       })
       if (result.success && result.url) {
         await putOnProfile(result.url, result.path)

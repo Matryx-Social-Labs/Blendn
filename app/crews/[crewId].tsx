@@ -1,5 +1,5 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
-import { useCallback, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native'
 import Animated from 'react-native-reanimated'
 
@@ -33,7 +33,8 @@ import {
 import { crewsApi, type CrewPatch } from '../../lib/crewsApi'
 import { crewBarState, leaveSheet, removeSheet, textFieldOf } from '../../lib/crewsScreens'
 import { COLOR, RADIUS, SPACE } from '../../lib/design/tokens'
-import type { Friend } from '../../lib/friends'
+import { FRIEND_SEARCH_OFFER } from '../../lib/friendsPaging'
+import { pickerView, useFriendsList } from '../../lib/useFriendsList'
 import { isMuted, rememberRoomMute, useRoomMute } from '../../lib/roomMembership'
 import { useRoomRow } from '../../lib/roomRow'
 import { showSheet } from '../../lib/sheet'
@@ -84,7 +85,9 @@ function CrewScreenContent() {
       setBarState(next)
     }
   }
-  const [inviting, setInviting] = useState<{ friends: Friend[] | null | 'failed' } | null>(null)
+  // Your friends for the invite sheet, a page at a time; `inviting` is only whether the sheet is open.
+  const friendList = useFriendsList()
+  const [inviting, setInviting] = useState(false)
   const [editing, setEditing] = useState(false)
   const [editError, setEditError] = useState<{ field: 'name' | 'bio'; text: string } | null>(null)
 
@@ -92,6 +95,12 @@ function CrewScreenContent() {
   // The page fades in over the skeleton only if a skeleton was drawn (a load under 300 ms just shows the page).
   const arrive = useSkeletonCrossfade(load.kind === 'loading')
   const owner = crew?.you?.role === 'owner'
+  // The friends not already in the crew, of the pages read so far.
+  const members = crew?.members
+  const invitable = useMemo(
+    () => pickerView(friendList.status, members ? friendsToInvite(friendList.friends, members) : friendList.friends),
+    [friendList.status, friendList.friends, members]
+  )
   // The room's own row fills the mute store; every screen reads the one answer.
   useRoomRow(crew?.chatGroupId ?? null)
   const muted = isMuted(useRoomMute(crew?.chatGroupId ?? null))
@@ -147,12 +156,10 @@ function CrewScreenContent() {
    * `isFriend` and their name and photo (`friendsToInvite`). A failed read is
    * not "none to ask": it says so and offers the retry.
    */
-  const startInvite = async () => {
+  const startInvite = () => {
     if (!crew) return
-    setInviting({ friends: null })
-    const result = await apiClient.getFriends()
-    const friends = result.success && result.data ? friendsToInvite(result.data.friends, crew.members) : ('failed' as const)
-    setInviting({ friends })
+    setInviting(true)
+    void friendList.refresh('reset')
   }
 
   const sendInvites = async (userIds: string[]) => {
@@ -161,7 +168,7 @@ function CrewScreenContent() {
     const result = await crewsApi.invite(crewId, userIds)
     setBusy(null)
     if (!result.success || !result.data) return showToast(crewMessage(result, 'crew', 'Couldn’t send the invites. Try again.'), 'error', { haptic: 'error' })
-    setInviting(null)
+    setInviting(false)
     // `invited` is how many you asked for, never who got one.
     showToast(result.data.invited === 1 ? 'Asked 1 friend' : `Asked ${result.data.invited} friends`, 'success')
   }
@@ -374,13 +381,15 @@ function CrewScreenContent() {
             ]}
           />
           <InviteFriendsSheet
-            visible={!!inviting}
-            friends={inviting?.friends ?? null}
+            visible={inviting}
+            friends={invitable}
+            search={{ query: friendList.query, onChange: friendList.search, searching: friendList.searching, active: friendList.searched !== null, offered: friendList.allTotal > FRIEND_SEARCH_OFFER }}
+            paging={{ hasMore: friendList.hasMore, loadingMore: friendList.loadingMore, moreFailed: friendList.moreFailed, onMore: () => void friendList.loadMore() }}
             room={CREW_MAX_MEMBERS - crew.size}
             asking={busy === 'invite'}
-            onRetry={() => void startInvite()}
+            onRetry={startInvite}
             onAsk={(ids) => void sendInvites(ids)}
-            onClose={() => setInviting(null)}
+            onClose={() => setInviting(false)}
           />
           {owner ? (
             <EditCrewSheet

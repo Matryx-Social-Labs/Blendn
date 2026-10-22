@@ -14,6 +14,7 @@ import { useToast } from '../components/Toast'
 import { COLOR, SPACE as DS_SPACE, SPRING } from '../lib/design/tokens'
 import type { IconName } from '../components/ui/Icon'
 import { H } from '../lib/haptics'
+import { PLUS_FREE_SHEET } from '../lib/plusFree'
 import { showSheet, type Sheet } from '../lib/sheet'
 import { useTopBarOverlay } from '../lib/useTopBarState'
 import { apiClient } from '../lib/apiClient'
@@ -569,15 +570,6 @@ function SettingsScreenContent() {
       </View>
     </View>
   )
-}
-
-const PLUS_FREE_SHEET: Sheet = {
-  kind: 'actions',
-  hue: 'violet',
-  icon: 'sparkles',
-  title: 'Blendn+ is free here for now',
-  message: "During launch in your city, staying live while you’re here and your full night history are everyone’s. There’s nothing to buy.",
-  actions: [{ label: 'Got it', variant: 'primary', then: () => {} }],
 }
 
 const styles = StyleSheet.create({

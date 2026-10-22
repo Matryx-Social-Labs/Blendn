@@ -26,6 +26,13 @@ jest.mock('react-native-safe-area-context', () => {
 })
 jest.mock('../lib/crewsApi', () => ({ crewsApi: { myCrews: jest.fn(), join: jest.fn(), decline: jest.fn() } }))
 jest.mock('../lib/sheet', () => ({ showSheet: jest.fn() }))
+// The Board's list motion, watched: what the empty state leaves with and what the first item arrives with (#47).
+const mockMotion = { emptyOut: jest.fn(() => () => ({ initialValues: {}, animations: {} })), riseIn: jest.fn(() => () => ({ initialValues: {}, animations: {} })), fadeIn: jest.fn(() => () => ({ initialValues: {}, animations: {} })) }
+jest.mock('../components/board/boardMotion', () => ({
+  emptyOut: (...a: unknown[]) => (mockMotion.emptyOut as (...x: unknown[]) => unknown)(...a),
+  riseIn: (...a: unknown[]) => (mockMotion.riseIn as (...x: unknown[]) => unknown)(...a),
+  fadeIn: (...a: unknown[]) => (mockMotion.fadeIn as (...x: unknown[]) => unknown)(...a),
+}))
 jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { id: 'me' } }) }))
 const mockAskPush = jest.fn()
 jest.mock('../lib/crewPushAsk', () => ({ askCrewPush: (id: string) => mockAskPush(id) }))
@@ -271,5 +278,81 @@ describe('an invite', () => {
     await act(async () => (sheet.actions.find((a) => a.label === 'Decline') as { then: () => void }).then())
     await waitFor(() => expect(mockToast).toHaveBeenCalledWith('Couldn’t decline. Try again.', 'error', { haptic: 'error' }))
     expect(router.back).not.toHaveBeenCalled()
+  })
+})
+
+describe('the bar and the first crew (motion #30, #47)', () => {
+  it('#30: the bar is bare at rest and has glass once the list has scrolled', async () => {
+    api.myCrews.mockResolvedValue(list([crew()], []))
+    await render(<CrewsScreen />)
+    await waitFor(() => screen.getByLabelText('Nebula, Crew of 4'))
+    expect(screen.queryByTestId('crews-top-bar')).toBeNull()
+    await fireEvent.scroll(screen.getByTestId('crews-scroll'), { nativeEvent: { contentOffset: { y: 40 } } })
+    expect(screen.getByTestId('crews-top-bar')).toBeTruthy()
+    await fireEvent.scroll(screen.getByTestId('crews-scroll'), { nativeEvent: { contentOffset: { y: 0 } } })
+    expect(screen.queryByTestId('crews-top-bar')).toBeNull()
+  })
+
+  it('#47: the empty state leaves with its drop, and the first crew rises in; a first load does not', async () => {
+    mockMotion.emptyOut.mockClear()
+    mockMotion.riseIn.mockClear()
+    api.myCrews.mockResolvedValueOnce(list([crew()], []))
+    const first = await render(<CrewsScreen />)
+    await waitFor(() => screen.getByLabelText('Nebula, Crew of 4'))
+    // A list on its first load is not "the first item".
+    expect(mockMotion.riseIn).not.toHaveBeenCalled()
+    await first.unmount()
+
+    api.myCrews.mockResolvedValueOnce(list([], []))
+    await render(<CrewsScreen />)
+    await waitFor(() => screen.getByText('Go out together. Meet other crews.'))
+    expect(mockMotion.emptyOut).toHaveBeenCalledWith(false)
+    expect(mockMotion.riseIn).not.toHaveBeenCalled()
+
+    // The first crew arrives (a pull, or coming back from making one): that list is the one that rises, at once.
+    api.myCrews.mockResolvedValueOnce(list([crew()], []))
+    await act(async () => {
+      await screen.getByTestId('crews-scroll').props.refreshControl.props.onRefresh()
+    })
+    await waitFor(() => screen.getByLabelText('Nebula, Crew of 4'))
+    expect(mockMotion.riseIn).toHaveBeenCalledWith(0)
+  })
+})
+
+describe('invites, a page at a time (admin invitesPagination)', () => {
+  const many = (n: number, from = 0) => Array.from({ length: n }, (_, i) => invite({ crewId: `c-inv-${from + i}`, name: `Crew ${from + i}` }))
+  const withPage = (invites: CrewInvite[], hasMore: boolean, totalCount: number) => ({
+    success: true as const,
+    data: { crews: [], invites, invitesPagination: { limit: 50, hasMore, nextCursor: hasMore ? 'n1' : null, totalCount } },
+  })
+
+  it('asks for the first 50, says how many there are in all, and Show more invites reads the next page by cursor', async () => {
+    api.myCrews.mockResolvedValueOnce(withPage(many(50), true, 120))
+    await render(<CrewsScreen />)
+    await waitFor(() => screen.getByTestId('crews-more-invites'))
+    expect(api.myCrews).toHaveBeenCalledWith()
+    expect(screen.getByLabelText('Invites, 120')).toBeTruthy()
+    api.myCrews.mockResolvedValueOnce(withPage(many(50, 50), false, 120))
+    await fireEvent.press(screen.getByTestId('crews-more-invites'))
+    await waitFor(() => expect(screen.queryByTestId('crews-more-invites')).toBeNull())
+    expect(api.myCrews).toHaveBeenLastCalledWith('n1')
+    expect(within(screen.getByTestId('crews-invites')).getAllByLabelText(/^See invite/)).toHaveLength(100)
+  })
+
+  it('a page that fails keeps the invites and offers Try again', async () => {
+    api.myCrews.mockResolvedValueOnce(withPage(many(50), true, 60))
+    await render(<CrewsScreen />)
+    await waitFor(() => screen.getByTestId('crews-more-invites'))
+    api.myCrews.mockResolvedValueOnce({ success: false, error: 'x' })
+    await fireEvent.press(screen.getByTestId('crews-more-invites'))
+    await waitFor(() => screen.getByText('Couldn’t load more · Try again'))
+    expect(within(screen.getByTestId('crews-invites')).getAllByLabelText(/^See invite/)).toHaveLength(50)
+  })
+
+  it('a server before the paging sends none: every invite, no button', async () => {
+    api.myCrews.mockResolvedValueOnce({ success: true, data: { crews: [], invites: many(3) } })
+    await render(<CrewsScreen />)
+    await waitFor(() => screen.getByLabelText('Invites, 3'))
+    expect(screen.queryByTestId('crews-more-invites')).toBeNull()
   })
 })

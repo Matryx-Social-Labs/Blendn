@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { FlatList, Platform, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native'
 import Animated from 'react-native-reanimated'
 
 import { COLOR, FONT_FAMILY, ICON, MATERIAL, RADIUS, SPACE } from '../../lib/design/tokens'
@@ -7,11 +7,14 @@ import { CONSENT_LINE, CREW_BIO_MAX, CREW_MAX_MEMBERS, CREW_MAX_TAGS, CREW_NAME_
 import { INTENT_CHOICES, type IntentChoice } from '../../lib/crewsScreens'
 import type { Friend } from '../../lib/friends'
 import { OPACITY, tint } from '../../lib/theme'
+import { PagedFooter } from '../friends/PagedFooter'
+import { SearchField } from '../ds/SearchField'
+import { FRIEND_SEARCH_MAX } from '../../lib/friendsPaging'
 import { Avatar } from '../ds/Avatar'
 import { ChipSet } from '../ds/ChipSet'
 import { CrewCard } from '../ds/CrewCard'
 import { CrewEmblem } from '../ds/CrewEmblem'
-import { font, minTarget, quickTransition, useBoldText, useIncreaseContrast, useSelection } from '../ds/shared'
+import { CONTROL_FONT_CAP, font, minTarget, quickTransition, useBoldText, useIncreaseContrast, useSelection } from '../ds/shared'
 import { SegmentedControl } from '../ds/SegmentedControl'
 import { FieldLabel, TextArea, TextField } from '../ds/TextField'
 import { Toggle } from '../ds/Toggle'
@@ -20,7 +23,12 @@ import { Icon } from '../ui/Icon'
 
 /** flow10.js `make`: the line about the crew is a one-liner's height. */
 const BIO_MIN_HEIGHT = 72
+/** A friend's row is exactly this tall: the picker windows its rows (`getItemLayout`), so a thousand friends cost a screenful. */
 const FRIEND_ROW = 64
+/** The list's own height, as a share of the window, inside the tall sheet: it scrolls there and windows its rows. */
+const LIST_SHARE = 0.5
+/** Rows drawn before the first scroll: more than the list shows, so the pick of a short list never waits on a batch. */
+const FIRST_ROWS = 20
 const NO_FRIENDS = 'Add friends first — a crew is made from your friends.'
 const FRIEND_FACE = 48
 /** The pick circle: 28, ringed at 35% white when off. */
@@ -166,7 +174,7 @@ function FriendPick({ friend, picked, capped, onToggle }: { friend: Friend; pick
       ) : (
         <Avatar kind="creature" pseudonym={friend.name} size={FRIEND_FACE} />
       )}
-      <Text numberOfLines={1} style={[font('bodyStrong', bold), styles.ink, styles.fill]}>
+      <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold), styles.ink, styles.fill]}>
         {friend.name}
       </Text>
       {/* The pick lights in the screen's hue: the disc fills as the ink check draws itself. */}
@@ -193,18 +201,49 @@ export type FriendsStepProps = {
   none?: string
   /** How many can be asked at most (11 for a new crew: twelve with you). At it, the rest dim and the footer says why. */
   limit?: number
+  /** The friends are read a page at a time: asking for the next, and what the foot says while it comes or when it did not. */
+  paging?: { hasMore: boolean; loadingMore: boolean; moreFailed: boolean; onMore: () => void }
+  /**
+   * Search over your friends (a word of the name starts with it). Offered when there is more than a screen of them: a short list is
+   * seen whole. `active` is the word the list is narrowed to, so an empty result says "no friend by that name", not "none to ask".
+   * Whoever is picked stays picked through a search: the picks are ids, not rows.
+   */
+  search?: { query: string; onChange: (text: string) => void; searching: boolean; active: boolean; offered: boolean }
 }
 
-/** Step 2 · Invite friends: friends only, no search; the count says how many, never who was skipped. */
-export function FriendsStep({ friends, picked, onToggle, onRetry, none = NO_FRIENDS, limit = CREW_MAX_MEMBERS - 1 }: FriendsStepProps) {
+/**
+ * Step 2 · Invite friends: friends only, no search; the count says how many, never who was skipped.
+ *
+ * The rows are a FlatList of fixed 64 pt rows with a height of its own inside the tall sheet (as the venue's "Coming up
+ * here" is), asking for the next page of friends as the end comes into view: a person with a thousand friends scrolls a
+ * windowed list, not a thousand views. A failed page keeps the rows and says so with Try again.
+ */
+export function FriendsStep({ friends, picked, onToggle, onRetry, none = NO_FRIENDS, limit = CREW_MAX_MEMBERS - 1, paging, search }: FriendsStepProps) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const secondary = contrast ? COLOR.textPrimary : COLOR.textSecondary
+  const windowHeight = useWindowDimensions().height
   const full = picked.length >= limit
   const line = (text: string) => <Text style={[font('meta', bold), styles.centre, { color: secondary }]}>{text}</Text>
+  // As tall as its rows up to its share of the screen, and past that it scrolls.
+  const listHeight = Array.isArray(friends) ? Math.min(friends.length * FRIEND_ROW + (paging && (paging.loadingMore || paging.moreFailed) ? FRIEND_ROW : 0), Math.round(windowHeight * LIST_SHARE)) : 0
   return (
     <>
       <Text style={[font('body', bold), { color: secondary }]}>Friends only. The count says how many, never who was skipped.</Text>
+      {search && (search.offered || search.query) ? (
+        <SearchField
+          value={search.query}
+          onChangeText={search.onChange}
+          placeholder="Search friends"
+          busy={search.searching}
+          inSheet
+          autoCapitalize="none"
+          autoCorrect={false}
+          returnKeyType="search"
+          maxLength={FRIEND_SEARCH_MAX}
+          testID="friend-pick-search"
+        />
+      ) : null}
       <View style={styles.list}>
         {friends === null ? (
           line('Loading your friends…')
@@ -213,18 +252,37 @@ export function FriendsStep({ friends, picked, onToggle, onRetry, none = NO_FRIE
             {line('Your friends didn’t load — try again')}
           </Pressable>
         ) : friends.length === 0 ? (
-          line(none)
+          line(search?.active ? 'No friend by that name.' : none)
         ) : (
-          friends.map((f, i) => (
-            <View key={f.userId} style={i ? styles.divided : undefined}>
-              <FriendPick
-                friend={f}
-                picked={picked.includes(f.userId)}
-                capped={full && !picked.includes(f.userId)}
-                onToggle={() => onToggle(f.userId)}
-              />
-            </View>
-          ))
+          <FlatList
+            testID="friend-pick-list"
+            data={friends}
+            extraData={picked}
+            keyExtractor={(f) => f.userId}
+            style={{ height: listHeight }}
+            nestedScrollEnabled
+            getItemLayout={(_data, index) => ({ length: FRIEND_ROW, offset: FRIEND_ROW * index, index })}
+            initialNumToRender={FIRST_ROWS}
+            windowSize={7}
+            removeClippedSubviews
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            onEndReachedThreshold={1.5}
+            onEndReached={() => paging?.hasMore && paging.onMore()}
+            ListFooterComponent={
+              paging ? <PagedFooter loading={paging.loadingMore} failed={paging.moreFailed} onRetry={paging.onMore} testID="friend-pick-more" /> : null
+            }
+            renderItem={({ item: f, index }) => (
+              <View style={[styles.cell, index ? styles.divided : null]}>
+                <FriendPick
+                  friend={f}
+                  picked={picked.includes(f.userId)}
+                  capped={full && !picked.includes(f.userId)}
+                  onToggle={() => onToggle(f.userId)}
+                />
+              </View>
+            )}
+          />
         )}
       </View>
       <View style={styles.footer} accessibilityLiveRegion="polite">
@@ -308,10 +366,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACE.md,
-    paddingVertical: SPACE.sm,
     paddingHorizontal: SPACE.lg,
-    minHeight: FRIEND_ROW,
+    flex: 1,
   },
+  // Fixed, never a minimum: the list places any row from its index alone. The divider is inside the 64, not on top of it.
+  cell: { height: FRIEND_ROW },
   divided: {
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: COLOR.hairline,

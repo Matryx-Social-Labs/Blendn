@@ -347,6 +347,24 @@ describe('closing and closed', () => {
     await waitFor(() => expect(crews.blends).toHaveBeenCalled())
     expect(screen.queryByText(/closed/i)).toBeNull()
   })
+
+  it('10-11: it says "This Blend didn’t load", with Try again, and the Blend arrives when the read lands', async () => {
+    crews.blends.mockResolvedValueOnce({ success: false, error: 'No internet connection.' })
+    await render(<Room />)
+    await waitFor(() => screen.getByText('This Blend didn’t load'))
+    expect(screen.queryByTestId('gone')).toBeNull()
+    serve(blend())
+    await fireEvent.press(screen.getByText('Try again'))
+    await waitFor(() => screen.getByText('Blend with Crew Five'))
+    expect(screen.queryByText('This Blend didn’t load')).toBeNull()
+  })
+
+  it('a Blend that was seen open and then failed to re-read keeps its sides, not the failure card', async () => {
+    serve(blend())
+    await open()
+    crews.blends.mockResolvedValueOnce({ success: false, error: 'No internet connection.' })
+    expect(screen.queryByText('This Blend didn’t load')).toBeNull()
+  })
 })
 
 describe('around the room', () => {
