@@ -28,7 +28,7 @@ describe('haptics: one answer, one haptic', () => {
   it('a failed submit toast (not a load, not a link) carries the error haptic, and never also plays one by hand (U-M18)', () => {
     for (const file of ['lib/useFriendRequests.ts', 'app/edit-profile.tsx', 'app/settings.tsx', 'components/PhotoManager.tsx']) {
       const src = read(file)
-      const errorToasts = src.split('\n').filter((l) => /showToast\(.*'error'/.test(l) && !/page didn['’]t open|Sign in to edit|Couldn't load|haptic/.test(l))
+      const errorToasts = src.split('\n').filter((l) => /showToast\(.*'error'/.test(l) && !/page didn['’]t open|Sign in to edit|Couldn['’]t load|haptic/.test(l))
       expect(errorToasts).toEqual([])
     }
   })

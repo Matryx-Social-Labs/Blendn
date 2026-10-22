@@ -212,7 +212,7 @@ describe('banners and the dock', () => {
   it('before the doors the primary is "I’m going"', async () => {
     api.getEvent.mockResolvedValue(detail() as never)
     await open()
-    expect(await screen.findByRole('button', { name: 'I\'m going' })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'I’m going' })).toBeTruthy()
   })
 
   it('says it is offline, under the hero, while it still shows what it had', async () => {
@@ -230,7 +230,7 @@ describe('the RSVP answers are the app\'s Sheet, not a tray', () => {
   it('"You’re going" asks before it lets go: Keep it, or the destructive Cancel RSVP (whose press plays the haptic)', async () => {
     api.getEvent.mockResolvedValue(detail({}, { rsvpStatus: 'going' }) as never)
     await open()
-    await fireEvent.press(await screen.findByRole('button', { name: 'You\'re going' }))
+    await fireEvent.press(await screen.findByRole('button', { name: 'You’re going' }))
     const sheet = (showSheet as jest.Mock).mock.calls[0][0]
     expect(sheet).toMatchObject({ kind: 'actions', title: 'Cancel your RSVP?' })
     expect(sheet.actions.map((a: { label: string; variant: string }) => [a.label, a.variant])).toEqual([
@@ -250,7 +250,7 @@ describe('the RSVP answers are the app\'s Sheet, not a tray', () => {
     const { H } = jest.requireActual('../lib/haptics')
     const error = jest.spyOn(H, 'error').mockImplementation(() => {})
     await open()
-    await fireEvent.press(await screen.findByRole('button', { name: 'I\'m going' }))
+    await fireEvent.press(await screen.findByRole('button', { name: 'I’m going' }))
     await waitFor(() => expect(showSheet).toHaveBeenCalledWith(expect.objectContaining({ title: 'Couldn’t RSVP' })))
     expect(error).toHaveBeenCalledTimes(1)
   })

@@ -72,7 +72,7 @@ describe('<EventCard> on the Pulse', () => {
 
   it('the Nearby row is the design system’s own row: venue · distance · time, no column of its own', async () => {
     await render(<EventCard kind="row" title="Vinyl Night" time="Live" venue="Toit" distance="350 m" testID="r" />)
-    expect(screen.getByText('Toit · 350 m ·')).toBeTruthy()
+    expect(screen.getByText('Toit · 350 m')).toBeTruthy()
     expect(screen.getByText('Live')).toBeTruthy()
   })
 })

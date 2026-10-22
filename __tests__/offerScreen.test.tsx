@@ -221,7 +221,7 @@ describe('the other faces of the pass', () => {
     reads = [offer('used_tonight', null)]
     await mount()
     expect(screen.getByLabelText('Used tonight')).toBeTruthy()
-    expect(screen.getByText(/You've used a pass at The Humming Tree tonight — one a night/)).toBeTruthy()
+    expect(screen.getByText(/You’ve used a pass at The Humming Tree tonight — one a night/)).toBeTruthy()
     expect(screen.queryByText('K7Q 4M2')).toBeNull()
   })
 
