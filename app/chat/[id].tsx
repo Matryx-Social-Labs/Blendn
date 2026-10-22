@@ -727,6 +727,7 @@ function GroupChatInner() {
         landed={landed?.id === item.message_id ? landed.emoji : undefined}
         arriving={arrivingRef.current.has(item.message_id)}
         senderTappable={eventRoom}
+        eventId={eventRoom ? roomInfo.eventId : null}
         handlers={handlers}
       />
     )

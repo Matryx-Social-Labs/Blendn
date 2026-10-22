@@ -3,7 +3,7 @@ import type { IconName } from '../components/ui/Icon'
 /**
  * Every `live:ended` reason gets its own calm state in the place's room (Flow 11 · 11.5, R4.1 "Every live:ended reason,
  * its own calm state"), so none of them reads as the same generic refusal. The socket carries `{ eventId, reason }`
- * (blendn-admin docs/SOCKET_EVENTS.md): `expired` (the window ran out, or the venue's day reset: the room's own
+ * (the server's socket event catalog): `expired` (the window ran out, or the venue's day reset: the room's own
  * end time tells which), `event_started`, `switched_event`, `manual`, `left_area`. An unknown reason, or a room
  * refused with no reason at all (`NOT_LIVE` on a read), is the plain "not live here any more".
  *

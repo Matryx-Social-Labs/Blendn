@@ -24,6 +24,8 @@ export interface RoomMessage {
   failedLine?: string
   /** Offline: held until the connection is back, failed after two minutes (R3-D5 5.8). */
   waiting?: boolean
+  /** A `poll` message's poll (SV8): until the server names it, the room says the poll as a notice. */
+  poll_id?: string
   /** A sponsored broadcast's media (R3-D5 5.5). */
   media?: { kind: 'image'; uri: string } | { kind: 'video'; uri: string; poster?: string; duration: string }
 }
@@ -49,6 +51,17 @@ export function mediaOf(msg: any): RoomMessage['media'] {
   return { kind: 'image', uri: String(url) }
 }
 
+/** A `poll` message's poll id, from whichever field the server names it in (SV8). Null while it names none. */
+export function pollIdOf(msg: any): string | null {
+  const id = msg?.pollId ?? msg?.poll_id ?? msg?.metadata?.pollId ?? msg?.metadata?.poll_id
+  return typeof id === 'string' && id ? id : null
+}
+
+const pollField = (msg: any): { poll_id?: string } => {
+  const id = pollIdOf(msg)
+  return id && (msg.message_type || msg.type) === 'poll' ? { poll_id: id } : {}
+}
+
 /** A history page, as the room holds it: your own is "You", a quote resolved where its parent is loaded. */
 export function roomMessagesFrom(raw: any[], userId?: string): RoomMessage[] {
   const list: RoomMessage[] = raw.map((msg: any) => {
@@ -65,6 +78,7 @@ export function roomMessagesFrom(raw: any[], userId?: string): RoomMessage[] {
       removed: Boolean(msg.moderation_hidden),
       message_type: sponsored ? 'sponsored' : msg.message_type || msg.type || 'text',
       ...(sponsored ? { media: mediaOf(msg) } : {}),
+      ...pollField(msg),
       // The server's field is `parent_id`; a reply lost its quote on reload otherwise.
       reply_to_message_id: msg.parent_id || msg.reply_to_message_id || msg.replyToMessageId || null,
       created_at: msg.created_at || msg.createdAt,
@@ -92,7 +106,7 @@ export function roomMessagesFrom(raw: any[], userId?: string): RoomMessage[] {
 
 /** A `chat:message` from the socket, as the room holds it. */
 export function roomMessageFromSocket(
-  message: { id: string; userId: string; userName?: string; content: string; kind?: string; type?: string; parentId?: string | null; createdAt: string },
+  message: { id: string; userId: string; userName?: string; content: string; kind?: string; type?: string; parentId?: string | null; createdAt: string; pollId?: string },
   userId: string | undefined
 ): RoomMessage {
   return {
@@ -103,5 +117,6 @@ export function roomMessageFromSocket(
     message_type: message.kind === 'sponsored' ? 'sponsored' : message.type || 'text',
     reply_to_message_id: message.parentId || null,
     created_at: message.createdAt,
+    ...pollField(message),
   }
 }

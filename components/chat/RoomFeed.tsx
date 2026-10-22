@@ -16,6 +16,7 @@ import type { Rect } from '../ds/chatShared'
 import { StateScreen } from '../ds/StateScreen'
 import { SystemLine, SystemNotice } from '../ds/SystemNotice'
 import { GoneCard } from '../system/GoneCard'
+import { RoomPoll } from './RoomPoll'
 import { chatHeaderBottom } from './ChatHeader'
 
 export type RowHandlers = {
@@ -56,6 +57,7 @@ export const RoomMessageRow = memo(function RoomMessageRow({
   landed,
   arriving = false,
   senderTappable,
+  eventId,
   handlers,
 }: {
   item: RoomMessage
@@ -70,19 +72,23 @@ export const RoomMessageRow = memo(function RoomMessageRow({
   arriving?: boolean
   /** An event room's sender opens their card (5.1); a crew's or a Blend's is Flow 10's. */
   senderTappable: boolean
+  /** The event this room belongs to: a poll is read and voted on through it. Null for a crew's or a Blend's. */
+  eventId?: string | null
   handlers: RowHandlers
 }) {
   if (item.sender_id === 'system') return <SystemLine text={item.message_text} />
   /*
-   * A poll is the organiser's question. Its options and votes are a read the
-   * room can't make yet — the message doesn't carry its poll's id — so it is
-   * said as a notice, never as somebody's bubble. TODO(server): the poll id on
-   * a `poll` message, and this becomes <PollBubble> (Flow 15 #17, R2-D2).
+   * A poll is the organiser's question. With its poll id on the message (SV8) it is the poll, answerable, as
+   * <PollBubble>; until the server names it, the room says it as a notice, never as somebody's bubble.
    */
   if (item.message_type === 'poll') {
     return (
       <View style={styles.runStart}>
-        <SystemNotice icon="chart-column" text={`Poll: ${item.message_text}`} testID={`poll-${item.message_id}`} />
+        {item.poll_id && eventId ? (
+          <RoomPoll eventId={eventId} pollId={item.poll_id} question={item.message_text} testID={`poll-${item.message_id}`} />
+        ) : (
+          <SystemNotice icon="chart-column" text={`Poll: ${item.message_text}`} testID={`poll-${item.message_id}`} />
+        )}
       </View>
     )
   }
