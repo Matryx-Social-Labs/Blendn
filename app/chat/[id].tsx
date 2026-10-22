@@ -29,6 +29,7 @@ import { LINKS_LINE, refusalPlace, runPlace } from '../../lib/chatFeed'
 import { emitChatListUpdate } from '../../lib/chatListUpdates'
 import { draftOf, failedOf, keepFailed, roomThread, setDraft } from '../../lib/chatOutbox'
 import { CHAT_REACTIONS } from '../../lib/chatReactions'
+import { contactWarning } from '../../lib/contactWarning'
 import { copyText, linkSheet, notSentSheet } from '../../lib/chatSheets'
 import { idParam, nameParam } from '../../lib/routeParams'
 import { subscribeCheckInChanged } from '../../lib/checkIn'
@@ -871,6 +872,8 @@ function GroupChatInner() {
               />
             </View>
           </>
+                // Advice before sending, never a gate (5.10): the server decides; a crew's people already know each other.
+                warning={roomKind === 'blend' ? null : contactWarning(newMessage, eventRoom ? 'anonymous' : 'crew')}
         )}
       </KeyboardFrame>
 

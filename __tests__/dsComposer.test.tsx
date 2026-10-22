@@ -170,3 +170,22 @@ describe('<Composer>', () => {
     expect(StyleSheet.flatten(screen.getByTestId('glass').props.style).borderColor).toBe(MATERIAL.hairlineIncreaseContrast)
   })
 })
+
+describe('<Composer> contact-details warning (5.10)', () => {
+  it('shows the advice above the field and keeps Send enabled: a row, not a lock', async () => {
+    const onSend = jest.fn()
+    await render(composer({ value: 'call 9876543210', onSend, warning: 'This looks like a phone number. This room is anonymous.' }))
+    expect(screen.getByTestId('c-warning')).toBeTruthy()
+    expect(screen.getByText(/This looks like a phone number/)).toBeTruthy()
+    expect(send().props.accessibilityState).toMatchObject({ disabled: false })
+    await fireEvent.press(send())
+    expect(onSend).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows nothing without a warning, and never over a locked composer', async () => {
+    const { rerender } = await render(composer({ value: 'hello' }))
+    expect(screen.queryByTestId('c-warning')).toBeNull()
+    await rerender(composer({ value: 'x', state: 'muted', warning: 'This looks like a phone number.' }))
+    expect(screen.queryByTestId('c-warning')).toBeNull()
+  })
+})
