@@ -1,5 +1,5 @@
 import { appliedFilters, NO_FILTERS, withoutFilter } from '../lib/eventFilters'
-import { eventShareText, peekActions } from '../lib/pulsePeek'
+import { peekActions } from '../lib/pulsePeek'
 
 describe('what the peek offers, in the frame\'s order', () => {
   it('Save, Share, Preview for an event you are not at', () => {
@@ -12,10 +12,6 @@ describe('what the peek offers, in the frame\'s order', () => {
     expect(peekActions({ interested: false, checkedIn: false, withinFence: true })).toEqual(['save', 'share', 'preview', 'checkIn'])
     expect(peekActions({ interested: false, checkedIn: true, withinFence: true })).toEqual(['save', 'share', 'preview', 'checkOut'])
     expect(peekActions({ interested: false, checkedIn: true, withinFence: false })).toEqual(['save', 'share', 'preview', 'checkOut'])
-  })
-  it('shares the name, the venue and the address, skipping what is missing', () => {
-    expect(eventShareText({ title: 'Vinyl Night', venue_name: 'Toit', address: '100 Feet Road' })).toBe('Vinyl Night\nToit\n100 Feet Road')
-    expect(eventShareText({ title: 'Vinyl Night', venueName: 'Toit', address: null })).toBe('Vinyl Night\nToit')
   })
 })
 

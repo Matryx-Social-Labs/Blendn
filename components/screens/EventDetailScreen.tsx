@@ -1,9 +1,10 @@
 import { barTop } from '../../lib/barGeometry'
 import FadeInUp from '../motion/FadeInUp'
+import { bannerFadeIn } from '../motion/presence'
 import { H } from '../../lib/haptics'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { InteractionManager, Linking, Platform, Share, StyleSheet, View } from 'react-native'
+import { InteractionManager, Linking, Platform, StyleSheet, View } from 'react-native'
 import Animated, { FadeIn, LayoutAnimationConfig, LinearTransition, ReduceMotion, useAnimatedScrollHandler, useReducedMotion, useSharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { OverflowMenu } from '../crews/OverflowMenu'
@@ -36,7 +37,10 @@ import { useToastDock } from '../toastDock'
 import { amenityTiles, type ServerAmenity } from '../../lib/amenityTile'
 import { eventDetailBlocks, type ServerEventDetails } from '../../lib/eventDetails'
 import { showEventReportOptions } from '../../lib/safetyUtils'
-import { eventShareText } from '../../lib/pulsePeek'
+import { eventTarget, shareText } from '../../lib/shareEvent'
+import { openShare } from '../../lib/shareTray'
+import { openWhatsApp } from '../../lib/shareWhatsApp'
+import { BringSomeoneRow } from '../share/BringSomeoneRow'
 import { apiClient, type RsvpStatus } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import {
@@ -151,6 +155,8 @@ interface EventDetailData {
   claim_url?: string | null
   /** `cancelled` draws the banner, the struck date and the quiet "Cancelled" button. */
   status?: string
+  /** `public`, `unlisted` or `private`: whether, and how much of it, may be put in a link (`lib/shareLinks.ts`). */
+  visibility?: string
   /** The organiser's age floor and door: the Door tile and the age pill. */
   min_age?: number | null
   door_policy?: string | null
@@ -335,6 +341,7 @@ export default function EventDetail() {
       details: (d.details ?? undefined) as ServerEventDetails | undefined,
       claim_url: claimUrlFrom(d.claim),
       status: d.status,
+      visibility: d.visibility,
       min_age: d.minAge ?? null,
       door_policy: d.doorPolicy ?? null,
     })
@@ -824,15 +831,29 @@ export default function EventDetail() {
     if (event) void openPlaceInMaps(event)
   }
 
-  const handleShare = async () => {
-    try {
-      if (!event) return
-      await Share.share({
+  /*
+   * What this event may say in a link: null for a private one or a draft, and then there is no share control at all
+   * (hidden, never disabled). An unlisted one shares its area only (`lib/shareEvent.ts`).
+   */
+  const shareTarget = event
+    ? eventTarget({
+        id: event.id,
         title: event.title,
-        message: eventShareText(event)
+        startTime: event.start_time,
+        venueName: event.venue_name,
+        city: event.city,
+        coverImageUrl: event.cover_image_url,
+        status: event.status,
+        visibility: event.visibility,
       })
-    } catch {}
-  }
+    : null
+  const handleShare = shareTarget ? () => void openShare(shareTarget) : undefined
+  /** "Bring someone?": WhatsApp with the message already written; no WhatsApp, the tray. */
+  const bringViaWhatsApp = shareTarget
+    ? async () => {
+        if (!(await openWhatsApp(shareText(shareTarget)))) void openShare(shareTarget)
+      }
+    : undefined
 
   const isCheckedIn = checkInStatus?.checked_in || false
   /*
@@ -1281,6 +1302,12 @@ export default function EventDetail() {
 
       {/* The dock: a glass bar outside the scroll, so the one action stays where the thumb is. */}
       <Dock floating onHeight={setCtaDockHeight} testID="scene-dock">
+        {/* Going, not yet there, and shareable: the moment somebody most wants to send the night on. Never after check-in. */}
+        {ctaState === 'rsvpd' && event && shareTarget && handleShare && bringViaWhatsApp ? (
+          <Animated.View entering={bannerFadeIn}>
+            <BringSomeoneRow eventTitle={event.title} onWhatsApp={() => void bringViaWhatsApp()} onShare={handleShare} testID="scene-bring" />
+          </Animated.View>
+        ) : null}
         <SceneCTA
           state={ctaState}
           pending={rsvpPending}

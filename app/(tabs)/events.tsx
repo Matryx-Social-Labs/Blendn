@@ -10,7 +10,6 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   RefreshControl,
-  Share,
   StyleSheet,
   Text,
   View
@@ -82,7 +81,9 @@ import { useNow } from '../../lib/useNow'
 import { usePullToRefresh } from '../../lib/usePullToRefresh'
 import { COLOR, FONT_FAMILY, RADIUS, SPACE, STAGGER, TYPE as DESIGN_TYPE } from '../../lib/design/tokens'
 import { mergeEventPage, pageHasMore, pulseEmptyCopy, pulseEmptyKind } from '../../lib/pulseFeed'
-import { eventShareText, type PeekAction } from '../../lib/pulsePeek'
+import { type PeekAction } from '../../lib/pulsePeek'
+import { shareEvent } from '../../lib/shareRow'
+import { PulseArrival } from '../../components/share/PulseArrival'
 import { checkOutOf } from '../../lib/checkIn'
 import { openBlendn } from '../../lib/blendnOverlay'
 import { apiClient } from '../../lib/apiClient'
@@ -659,7 +660,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     (action: PeekAction, event: Event) => {
       if (action === 'save' || action === 'unsave') return void toggleInterest(event)
       if (action === 'preview') return handleEventPress(event)
-      if (action === 'share') return void Share.share({ title: event.title, message: eventShareText(event) }).catch(() => {})
+      if (action === 'share') return void shareEvent(event)
       // Into the Blend'n pass: a check-in always goes through the hold (docs/redesign/SCREENS.md, Pulse).
       if (action === 'checkIn') return openBlendn()
       /*
@@ -1810,6 +1811,8 @@ export default function Events() {
   return (
     <ScreenProfiler id="pulse">
       <HomeShell renderEvents={renderPulse} />
+      {/* "You were sent …": once, for a person who arrived from a shared link (Flow 16 · 16.7). */}
+      <PulseArrival />
     </ScreenProfiler>
   )
 }

@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Share } from 'react-native'
 
 import { apiClient } from './apiClient'
-import { inviteMessage, type FriendInvite } from './friends'
-import { Logger } from './logger'
+import type { FriendInvite } from './friends'
+import { inviteLink } from './shareLinks'
+import { openShare } from './shareTray'
 
 /**
- * Your invite link: loaded once, shared through the OS sheet, reset on demand.
+ * Your invite link: loaded once, shared through the share tray (Flow 16 · 16.1, the invite card with no inviter on it),
+ * reset on demand.
  *
  * Used by the screen after onboarding and by Add friends, so the two cannot
  * say different things about the same link.
@@ -33,16 +34,10 @@ export function useFriendInvite() {
 
   const load = useCallback(async () => settle(await apiClient.getFriendInvite()), [settle])
 
-  /** True when the sheet reports it went somewhere; false for a dismiss or no link. */
+  /** True when the link went somewhere (WhatsApp, Story, Copy, More…); false for a dismiss or no link. */
   const share = useCallback(async (): Promise<boolean> => {
     if (!invite) return false
-    try {
-      const result = await Share.share({ message: inviteMessage(invite.url) })
-      return result.action === Share.sharedAction
-    } catch (error) {
-      Logger.debug('friends', 'Share sheet failed', { error })
-      return false
-    }
+    return openShare({ kind: 'invite', url: inviteLink(invite.token) })
   }, [invite])
 
   /** A new link; the old one stops working. False when it did not happen. */

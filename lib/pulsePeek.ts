@@ -14,8 +14,3 @@ export function peekActions({ interested, checkedIn, withinFence }: { interested
     ...(checkedIn ? (['checkOut'] as const) : []),
   ]
 }
-
-/** The words an event is shared in: its name, where, and the address. */
-export function eventShareText(event: { title: string; venue_name?: string | null; venueName?: string | null; address?: string | null }): string {
-  return [event.title, event.venue_name ?? event.venueName, event.address].filter(Boolean).join('\n')
-}

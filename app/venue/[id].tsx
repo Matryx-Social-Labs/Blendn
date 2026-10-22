@@ -2,7 +2,7 @@ import { barHeight, barTop } from '../../lib/barGeometry'
 import * as Clipboard from 'expo-clipboard'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Animated, AppState, Linking, Platform, Share, StyleSheet, Text, View } from 'react-native'
+import { Animated, AppState, Linking, Platform, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { AmenityGrid } from '../../components/ds/AmenityTile'
@@ -45,6 +45,8 @@ import { placeArea } from '../../lib/placesPane'
 import { usePlusStatus } from '../../lib/plus'
 import { idParam } from '../../lib/routeParams'
 import { serverNow } from '../../lib/serverClock'
+import { venueTarget } from '../../lib/shareEvent'
+import { openShare } from '../../lib/shareTray'
 import { subscribeToLiveEnded } from '../../lib/socketClient'
 import { useAuth } from '../../lib/useAuth'
 import { useGoLive } from '../../lib/useGoLive'
@@ -397,8 +399,7 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
 
   const openEvent = (eventId: string) => router.push(`/event/${eventId}` as never)
   const share = () => {
-    if (!detail) return
-    Share.share({ title: detail.venue.name, message: [detail.venue.name, detail.venue.address].filter(Boolean).join('\n') }).catch(() => {})
+    if (detail) void openShare(venueTarget(detail.venue))
   }
   const directions = () => {
     if (detail) directionsTo(detail)

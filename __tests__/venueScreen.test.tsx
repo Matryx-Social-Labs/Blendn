@@ -54,6 +54,8 @@ jest.mock('../lib/sheetDismissed', () => ({ ...jest.requireActual('../lib/sheetD
 jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { id: 'u1' } }) }))
 jest.mock('../lib/plus', () => ({ usePlusStatus: () => ({ status: null, refresh: jest.fn() }) }))
 jest.mock('../lib/paywall', () => ({ openPaywall: jest.fn(async () => true) }))
+const mockOpenShare = jest.fn((_target?: unknown) => Promise.resolve(true))
+jest.mock('../lib/shareTray', () => ({ openShare: (t: unknown) => mockOpenShare(t) }))
 jest.mock('../lib/openInMaps', () => ({ openInMaps: jest.fn(() => Promise.resolve()) }))
 jest.mock('../lib/goLive', () => ({
   ...jest.requireActual('../lib/goLive'),
@@ -840,12 +842,16 @@ describe('claiming', () => {
 })
 
 describe('the hero', () => {
-  it('shares the place as text; there is no save without a venue-save endpoint', async () => {
-    const { Share } = require('react-native')
-    const share = jest.spyOn(Share, 'share').mockResolvedValue({ action: 'sharedAction' })
+  it('opens the share tray with the venue card and its /v/ link; there is no save without a venue-save endpoint', async () => {
     await mount()
     await fireEvent.press(screen.getByLabelText('Share'))
-    expect(share).toHaveBeenCalledWith({ title: 'The Humming Tree', message: 'The Humming Tree\n298, 100 Feet Road' })
+    expect(mockOpenShare).toHaveBeenCalledWith({
+      kind: 'venue',
+      name: 'The Humming Tree',
+      typeLabel: expect.any(String),
+      area: expect.any(String),
+      url: 'https://www.blendn.app/v/v1',
+    })
     expect(screen.queryByLabelText('Save')).toBeNull()
     expect(within(screen.getByTestId('venue-hero')).queryByLabelText('Back')).toBeNull()
   })

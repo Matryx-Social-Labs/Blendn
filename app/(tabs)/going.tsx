@@ -1,7 +1,7 @@
 import { ScreenProfiler } from '../../lib/perf'
 import { router, useFocusEffect, useScrollToTop } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { AppState, FlatList, Pressable, Share, StyleSheet, Text, View } from 'react-native'
+import { AppState, FlatList, Pressable, StyleSheet, Text, View } from 'react-native'
 import Animated, { Easing, FadeIn, FadeOut, LinearTransition, useReducedMotion } from 'react-native-reanimated'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { EventCover } from '../../components/EventCover'
@@ -43,6 +43,7 @@ import { DURATION, EASING, SPRING } from '../../lib/motion'
 import { openInMaps } from '../../lib/openInMaps'
 import { addToCalendar } from '../../lib/calendar'
 import { openPaywall } from '../../lib/paywall'
+import { shareEvent } from '../../lib/shareRow'
 import { isNightRated, markNightRated, useRatedNights } from '../../lib/ratedNights'
 import { TAB_BAR_CLEARANCE } from './_layout'
 
@@ -291,11 +292,8 @@ function GoingScreenInner() {
       })
   }, [events, restoreRow, say, markSave, settleSave])
 
-  const shareEvent = useCallback(async (event: EventRow) => {
-    try {
-      await Share.share({ title: event.title, message: `${event.title}\n${event.venue_name}\n${event.address}` })
-    } catch {}
-  }, [])
+  // The tray (Flow 16 · 16.1). The rows do not say whether an event may be shared, so the tray asks the event itself.
+  const shareRow = useCallback((event: EventRow) => void shareEvent(event), [])
 
   const openEvent = useCallback((id: string) => {
     router.push({ pathname: '/event/[id]', params: { id } as any })
@@ -376,12 +374,12 @@ function GoingScreenInner() {
             ) : (
               <HeroAction icon="calendar" accessibilityLabel={`Add ${row.title} to calendar`} onPress={() => addToCalendar(row)} />
             )}
-            <HeroAction icon="share" accessibilityLabel={`Share ${row.title}`} onPress={() => shareEvent(row)} />
+            <HeroAction icon="share" accessibilityLabel={`Share ${row.title}`} onPress={() => shareRow(row)} />
           </View>
         </View>
       </View>
     )
-  }, [bold, openEvent, refreshCount, shareEvent])
+  }, [bold, openEvent, refreshCount, shareRow])
 
   /*
    * Every item carries its own space above it, because a FlatList has no `gap`:

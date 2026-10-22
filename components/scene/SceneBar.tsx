@@ -37,7 +37,8 @@ export type SceneBarProps = {
   saved: boolean
   onBack: () => void
   onSave: () => void
-  onShare: () => void
+  /** Absent when the event may not be shared (private, a draft): the control is not drawn, never disabled. */
+  onShare?: () => void
   onMore: () => void
   /** The page's `contentOffset.y`, from a worklet scroll handler; absent, the bar stays at rest. */
   scrollY?: SharedValue<number>
@@ -76,7 +77,7 @@ export function SceneBar({ title, saved, onBack, onSave, onShare, onMore, scroll
         <IconButton icon={android ? 'arrow-left' : 'chevron-left'} tier="media" accessibilityLabel="Back" onPress={onBack} testID="scene-back" />
         <View pointerEvents="box-none" style={styles.actions}>
           <IconButton icon="heart" tier="media" selected={saved} accessibilityLabel={saved ? 'Saved' : 'Save'} onPress={onSave} testID="scene-save" />
-          <IconButton icon="share" tier="media" accessibilityLabel="Share" onPress={onShare} testID="scene-share" />
+          {onShare ? <IconButton icon="share" tier="media" accessibilityLabel="Share" onPress={onShare} testID="scene-share" /> : null}
           <IconButton icon="ellipsis" tier="media" accessibilityLabel="More options" onPress={onMore} testID="scene-more" />
         </View>
       </View>
