@@ -69,7 +69,8 @@ export function changeLines(change: EventChange, current: Current, now: number =
     }
   }
   if (change.fields.includes('venue')) {
-    const byName = change.from.venueName !== undefined
+    // A name that was null (the event had none) says nothing of the old place: the address does.
+    const byName = typeof change.from.venueName === 'string'
     const was = byName ? change.from.venueName : change.from.address
     const nowPlace = byName ? current.venue_name : current.address
     if (was && nowPlace) out.push({ key: 'venue', label: 'Updated · new venue', was, now: nowPlace })

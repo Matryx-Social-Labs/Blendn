@@ -24,7 +24,7 @@ import { AnnouncementSheet, EditEventSheet } from '../scene/EventSheets'
 import { SceneBar } from '../scene/SceneBar'
 import { SceneChangedLines, SceneDayStrip } from '../scene/SceneChange'
 import { changeLines, parseEventChange, type EventChange } from '../../lib/eventChange'
-import { dayOfWords, parseEventDays, type EventDays } from '../../lib/eventDays'
+import { dayOfWords, parseEventDays, sessionIsToday, type EventDays } from '../../lib/eventDays'
 import { showSheet } from '../../lib/sheet'
 import { useSingleFlight } from '../../lib/useSingleFlight'
 import { SkeletonBlock } from '../Skeleton'
@@ -1133,8 +1133,14 @@ export default function EventDetail() {
    * Where are always known; the crowd tile waits for a real number; Door says the age floor and the organiser's door.
    */
   const door = [`${minAge ?? MIN_AGE}+`, doorWords(event?.door_policy)].filter(Boolean).join(' · ')
-  // A run of days says where today is in it where the doors' time was (Flow 3 · 3.2); one day keeps its doors.
-  const dayWords = event?.days ? dayOfWords(event.days) : null
+  /*
+   * A run of days says where today is in it where the doors' time was (Flow 3 · 3.2), but only when the day the session is on is
+   * today in the event's own zone. Between days it is the NEXT day's doors, and the tile keeps its clock time and says so; a
+   * one-day event keeps its doors as always.
+   */
+  const sessionToday = event?.days ? sessionIsToday(event.days, event.timezone, now) : false
+  const dayWords = event?.days && sessionToday ? dayOfWords(event.days) : null
+  const doorsLabel = event?.days && event.days.dayNumber && !sessionToday ? 'NEXT DOORS' : 'DOORS'
   /*
    * Said to the people who had heard of the night (going, maybe, waitlisted, saved): what moved, and what it was. A cancel is
    * the banner's, so it is no line here.
@@ -1145,7 +1151,7 @@ export default function EventDetail() {
     ...(dayWords
       ? [{ label: 'DOORS', value: dayWords, mono: true, testID: 'scene-tile-doors' }]
       : heroStart
-        ? [{ label: 'DOORS', value: clockTime(new Date(heroStart).getTime()), mono: true, testID: 'scene-tile-doors' }]
+        ? [{ label: doorsLabel, value: clockTime(new Date(heroStart).getTime()), mono: true, testID: 'scene-tile-doors' }]
         : []),
     ...(event?.venue_name
       ? [{ label: 'WHERE', value: [event.venue_name, event.city].filter(Boolean).join(', '), onPress: openInMaps, testID: 'scene-tile-where' }]
@@ -1244,7 +1250,7 @@ export default function EventDetail() {
 
               {event?.days ? (
                 <FadeInUp delay={SECTION_DELAY[0]}>
-                  <SceneDayStrip days={event.days} testID="scene-days" />
+                  <SceneDayStrip days={event.days} today={sessionToday} testID="scene-days" />
                 </FadeInUp>
               ) : null}
 
