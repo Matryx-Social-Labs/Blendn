@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AppState } from 'react-native'
 import { apiClient, AuthUser, TokenStorage } from './apiClient'
+import { setAppIconBadge } from './appBadge'
 import { forgetAuthMethod, rememberAuthMethod } from './authMethod'
 import { REQUEST_TIMEOUT_MS, settleWithin } from './fetchTimeout'
 import { Logger } from './logger'
@@ -275,6 +276,8 @@ const keepStoredSession = async () => {
 const clearAuthState = async () => {
   await settleWithin(TokenStorage.clearAll(), REQUEST_TIMEOUT_MS, undefined)
   void forgetAuthMethod()
+  // The icon's number was the last account's: the next person to open the app on this phone does not inherit it.
+  void setAppIconBadge(0)
   stopSessionRefresh()
   /*
    * The centre button's cache is per-account.

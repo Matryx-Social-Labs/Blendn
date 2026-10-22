@@ -9,8 +9,8 @@ import type { NotificationItem, NotificationKind } from './notificationFormat'
  * server stores a push's own words, and those are nameless on purpose (a lock
  * screen is read by other people), so the row's leading visual, title and
  * context come from `kind` and the payload's ids unless the server has added
- * `display` for the person reading (not sent yet; `parseDisplay` guards the
- * boundary). Nothing here invents a person, a photo or a crew's emblem: a
+ * `display` for the person reading (blendn-admin #716: a friend request's asker, a match's pseudonym,
+ * a crew's emblem seed, an event's cover; `parseVisual` guards the boundary, and an older server sends none). Nothing here invents a person, a photo or a crew's emblem: a
  * row with no `display` draws a glyph tile or the event tile, never a wrong face.
  */
 

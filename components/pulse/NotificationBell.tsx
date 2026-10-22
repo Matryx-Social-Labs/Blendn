@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Platform, StyleSheet, View } from 'react-native'
 
 import { apiClient } from '../../lib/apiClient'
+import { iconBadgeFor, setAppIconBadge } from '../../lib/appBadge'
 import { Logger } from '../../lib/logger'
 import { badgeLabel } from '../../lib/notificationFormat'
 import { subscribeToBell } from '../../lib/socketClient'
@@ -30,11 +31,18 @@ import ScalePress from '../motion/ScalePress'
 export function NotificationBell({ glass = false }: { glass?: boolean } = {}) {
   const [unread, setUnread] = useState(0)
 
-  /** One row is enough: the feed carries the count beside it, and the bell asks for nothing else. */
+  /**
+   * One row is enough: the feed carries the counts beside it, and the bell asks for nothing else. The bell says
+   * `unreadCount` (its own rows, which opening it clears); the app icon says `badgeCount`, which holds the unread
+   * conversations too (`lib/appBadge`).
+   */
   const load = useCallback(async () => {
     try {
       const result = await apiClient.getNotifications({ limit: 1 })
-      if (result.success && result.data) setUnread(result.data.unreadCount)
+      if (result.success && result.data) {
+        setUnread(result.data.unreadCount)
+        void setAppIconBadge(iconBadgeFor(result.data))
+      }
     } catch (error) {
       Logger.warn('notifications', 'count:failed', { error: error as never })
     }

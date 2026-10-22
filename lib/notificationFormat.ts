@@ -44,11 +44,13 @@ export type NotificationKind =
   | 'venue_offer'
 
 /**
- * What the server may add to a row once it resolves the people and the event
- * for the person reading (Flow 9 · 9.3: "names are filled in by fetching the
- * target, only where you may already see it; otherwise the stored title").
- * Every field is optional and read through `parseDisplay`: an absent or
- * malformed one means the row draws from the stored title and `kind`.
+ * What the server adds to a row once it resolves the people and the event for the
+ * person reading (Flow 9 · 9.3: "names are filled in by fetching the target, only
+ * where you may already see it; otherwise the stored title"). Every field is
+ * optional and read through `rowFor`/`parseVisual`: an absent or malformed one
+ * means the row draws from the stored title and `kind`. A friend request's is the
+ * asker's first name and photo; a match's, the room pseudonym; a crew's, its emblem
+ * seed; an event's, its cover and the kind's badge.
  */
 export interface NotificationDisplay {
   title?: string
@@ -66,15 +68,18 @@ export interface NotificationItem {
   data: Record<string, string | undefined> | null
   readAt: string | null
   createdAt: string
-  /** Not sent yet: see `NotificationDisplay`. */
+  /** What the row can say for its reader (`display`, from blendn-admin `lib/notification-display.ts`). Absent: the row draws from `kind` and the stored title. */
   display?: NotificationDisplay | null
-  /** Not sent yet: a request kind's row says whether it is still the reader's to answer. Absent reads as open. */
+  /** A request kind's row says whether it is still the reader's to answer; `false` once it is not. Absent reads as open. */
   open?: boolean
 }
 
 export interface NotificationFeed {
   notifications: NotificationItem[]
+  /** Unseen bell rows: the bell's badge. */
   unreadCount: number
+  /** The app icon's number: `unreadCount` plus conversations with something unread (`lib/appBadge`). Absent from a server that does not send it. */
+  badgeCount?: number
   pagination: { limit: number; hasMore: boolean; nextCursor?: string }
   /** Whether `DELETE /notifications` leaves the requests waiting on you in place (Flow 9 · 9.2 frame 11). Not sent yet: absent means it clears them too. */
   clearKeepsRequests?: boolean
