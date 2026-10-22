@@ -224,7 +224,6 @@ describe('when it does not go through, the row stays and the sheet says why (no 
 
   it.each([
     ['any other 404', { success: false, errorCode: 'NOT_FOUND', error: 'Not found' }],
-    ['a rate limit', { success: false, errorCode: 'RATE_LIMITED', error: 'Slow down' }],
     ['a thrown request', new Error('network')],
   ])('%s is the standard error', async (_name, response) => {
     await press(response)
@@ -232,6 +231,19 @@ describe('when it does not go through, the row stays and the sheet says why (no 
     expect(sheet().queryByText('Reveal yourself first')).toBeNull()
     expect(sheet().getByLabelText('Add friend')).toBeTruthy()
     expect(mockShowToast).not.toHaveBeenCalled()
+  })
+
+  it('an unfinished profile says so, in the reason’s own words (Flow 15 15.19), and the row stays', async () => {
+    await press({ success: false, errorCode: 'FORBIDDEN', reasonCode: 'PROFILE_INCOMPLETE', error: 'Finish your profile' })
+    expect(sheet().getByText('Finish your profile to add friends')).toBeTruthy()
+    expect(sheet().queryByText('That didn’t go through. Try again.')).toBeNull()
+    expect(sheet().getByLabelText('Add friend')).toBeTruthy()
+  })
+
+  it('asking too fast says to slow down, not that it failed', async () => {
+    await press({ success: false, errorCode: 'RATE_LIMITED', reasonCode: 'RATE_LIMITED', retryAfter: 40, error: 'Slow down' })
+    expect(sheet().getByText('Slow down — try again in a minute')).toBeTruthy()
+    expect(sheet().getByLabelText('Add friend')).toBeTruthy()
   })
 
   it('never calls with a handle, even if the server offered one', async () => {
