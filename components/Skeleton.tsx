@@ -19,10 +19,10 @@ type SkeletonProps = {
  *
  * The same under Reduce Motion (#17 rm "Same"): a fade is not movement.
  */
-const appear = FadeIn.delay(SPINNER_GRACE_MS).duration(DURATION.quick)
+export const SKELETON_APPEAR = FadeIn.delay(SPINNER_GRACE_MS).duration(DURATION.quick)
 
 export const Skeleton: React.FC<SkeletonProps> = ({ width = '100%', height = 12, borderRadius = RADIUS.thumb, style }) => (
-  <Animated.View entering={appear} style={[{ width, height, borderRadius, backgroundColor: COLOR.surfaceSunken } as ViewStyle, style]} />
+  <Animated.View entering={SKELETON_APPEAR} style={[{ width, height, borderRadius, backgroundColor: COLOR.surfaceSunken } as ViewStyle, style]} />
 )
 
 export const SkeletonLine: React.FC<Pick<SkeletonProps, 'width' | 'style'>> = ({ width = '100%', style }) => (

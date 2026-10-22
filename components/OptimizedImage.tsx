@@ -1,9 +1,11 @@
 import { Image, ImageContentFit, ImageSource } from 'expo-image'
 import React, { memo, useCallback, useEffect, useState } from 'react'
-import { ActivityIndicator, Animated, StyleSheet, View, ViewStyle } from 'react-native'
+import { Animated, StyleSheet, View, ViewStyle } from 'react-native'
+import Reanimated from 'react-native-reanimated'
 import { Logger } from '../lib/logger'
 import { getOptimizedImageUrl } from '../lib/photoUtils'
-import { EMBER, tint } from '../lib/theme'
+import { COLOR } from '../lib/design/tokens'
+import { SKELETON_APPEAR } from './Skeleton'
 
 interface OptimizedImageProps {
   source: string | ImageSource
@@ -194,13 +196,13 @@ export const OptimizedImage = memo<OptimizedImageProps>(({
           </Animated.View>
         ) : null}
 
-        {/* Loading indicator — only while there is something to load. An empty
-            source never loads and never fails, so it spun for ever: every
+        {/* Placeholder — only while there is something to load. An empty
+            source never loads and never fails, so it showed for ever: every
             person without a photo on the Banter (SCRUM-404). */}
         {hasSource && !loadingState.highQualityLoaded && !loadingState.hasError && (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="small" color={EMBER.textSecondary} accessibilityLabel="Loading image" />
-          </View>
+          // A still shape, like every skeleton (DS #17): nothing turns, nothing is drawn for a load under 300 ms, so
+          // there is nothing to loop past 5 s (#48). The picture replaces it when it lands.
+          <Reanimated.View entering={SKELETON_APPEAR} style={styles.placeholder} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" />
         )}
       </>
     )
@@ -301,10 +303,8 @@ const styles = StyleSheet.create({
   container: {
     overflow: 'hidden',
   },
-  loadingContainer: {
+  placeholder: {
     ...StyleSheet.absoluteFill,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: tint(EMBER.bg, 0.1),
-  }
+    backgroundColor: COLOR.surfaceSunken,
+  },
 })
