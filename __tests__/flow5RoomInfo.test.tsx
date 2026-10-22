@@ -147,7 +147,8 @@ describe('a room of thousands (large data)', () => {
     expect(screen.getByLabelText('In the room, 5000')).toBeTruthy()
     const mounted = screen.queryAllByTestId(/^info-member-/).length
     expect(mounted).toBeGreaterThan(0)
-    expect(mounted).toBeLessThan(100)
+    // Six rows of four: the first window, not the page (without windowSize and initialNumToRender it is 40).
+    expect(mounted).toBeLessThanOrEqual(24)
   })
 
   it('asks for the next page from where the list stands as the end comes near, one at a time', async () => {
