@@ -1,6 +1,6 @@
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
 
-import { EMBER, EMBER_RADIUS } from '../../lib/theme'
+import { COLOR, RADIUS } from '../../lib/design/tokens'
 
 /**
  * The handle at the top of a bottom sheet.
@@ -18,7 +18,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     width: 40,
     height: 4,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.textTertiary,
+    borderRadius: RADIUS.capsule,
+    backgroundColor: COLOR.textTertiary,
   },
 })
