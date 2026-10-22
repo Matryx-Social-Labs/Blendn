@@ -15,6 +15,7 @@ import type { TrayButton, TrayExtra } from '../../lib/locationFix'
 import { Logger } from '../../lib/logger'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { overlapOf } from '../../lib/overlapLine'
+import { useRoomCancelled } from '../../lib/useRoomCancelled'
 import { everyoneHead, meetNext, reasonLine, reasonLines } from '../../lib/roomMoments'
 import { markRoomLeft } from '../../lib/roomMembership'
 import { roomRecap, type RoomRecap as Recap } from '../../lib/roomRecap'
@@ -45,6 +46,7 @@ import { ConnectSheet } from '../grid/ConnectSheet'
 import ScalePress from '../motion/ScalePress'
 import { CrewsFoot, CrewsHead, PeopleCrewStrip, RoomCrewCard } from './RoomCrews'
 import { faceOf, RoomSkeleton, useNow } from './RoomSections'
+import { RoomCancelled } from './RoomCancelled'
 import { RoomStage } from './RoomStage'
 import { RoomView } from './RoomView'
 import { TonightView } from './TonightView'
@@ -159,6 +161,8 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   const waves = useRoomWaves()
   const { user } = useAuth()
   const now = useNow(15_000)
+  // R4: the event was cancelled while you were inside; the server has checked you out.
+  const { cancelled, dismiss: dismissCancelled } = useRoomCancelled(room.event)
 
   // --- a toast of the overlay's own (refusals off the card, crew likes) --------
   const [toast, setToast] = useState<{ key: number; kind: ToastKind; text: string } | null>(null)
@@ -990,6 +994,22 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
           }
         }}
       />
+
+      {cancelled ? (
+        <RoomCancelled
+          title={cancelled.title}
+          onSeeTonight={() => {
+            dismissCancelled()
+            void room.refresh()
+            void tonight.refresh()
+          }}
+          onClose={() => {
+            dismissCancelled()
+            onClose()
+          }}
+          testID="room-cancelled"
+        />
+      ) : null}
 
       {/*
         Faces only where they have been earned (D · 4.4): theirs is a photo only
