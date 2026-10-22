@@ -27,17 +27,24 @@ export async function readOsPush(): Promise<OsPush> {
 /**
  * The phone's answer, read now and on every return to the app: the fix for
  * `blocked` is a trip to the phone's Settings, and coming back should show
- * that it worked. `refresh` re-reads on demand (after a Turn on).
+ * that it worked. `refresh` re-reads on demand (after a Turn on); `known` is false until the first read, so
+ * nothing says "off" about a phone that has not answered yet.
  */
-export function useOsPush(): { os: OsPush; refresh: () => Promise<void> } {
+export function useOsPush(): { os: OsPush; known: boolean; refresh: () => Promise<void> } {
   const [os, setOs] = useState<OsPush>('askable')
-  const refresh = useCallback(async () => setOs(await readOsPush()), [])
+  const [known, setKnown] = useState(false)
+  const refresh = useCallback(async () => {
+    setOs(await readOsPush())
+    setKnown(true)
+  }, [])
   useEffect(() => {
+    // `refresh` sets state only after its first await; the rule cannot see through the async function.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refresh()
     const sub = AppState.addEventListener('change', (next) => {
       if (next === 'active') void refresh()
     })
     return () => sub.remove()
   }, [refresh])
-  return { os, refresh }
+  return { os, known, refresh }
 }

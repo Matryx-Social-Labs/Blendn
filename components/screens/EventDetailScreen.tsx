@@ -27,6 +27,7 @@ import { SkeletonBlock } from '../Skeleton'
 import { liveWindow, sessionFromApi, type EventSession } from '../../lib/eventSession'
 import { cardTime, peopleLabel } from '../../lib/pulse'
 import { subscribeCheckInChanged } from '../../lib/checkIn'
+import { askPushInContext } from '../../lib/pushAsk'
 import { openInMaps as openPlaceInMaps } from '../../lib/openInMaps'
 import { addToCalendar } from '../../lib/calendar'
 import { openBlendn, openPass } from '../../lib/blendnOverlay'
@@ -652,6 +653,8 @@ export default function EventDetail() {
           showToast("You’re going.", 'success', {
             action: { label: 'Add to calendar', onPress: () => addToCalendar(planned) },
           })
+          // The first time only, and only to a phone that can still be asked (Flow 9 · 9.7).
+          void askPushInContext('rsvp')
         }
       }
     } catch {

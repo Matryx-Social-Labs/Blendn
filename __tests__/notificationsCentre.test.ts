@@ -6,6 +6,8 @@ import { badgeLabel, notificationAge } from '../lib/notificationFormat'
 const SRC = () => readFileSync(join(__dirname, '..', 'lib', 'notifications.ts'), 'utf8')
 const BELL = () =>
   readFileSync(join(__dirname, '..', 'components', 'pulse', 'NotificationBell.tsx'), 'utf8')
+/** The Notifications screen's data (the bell opens that screen; the rows live there). */
+const FEED = () => readFileSync(join(__dirname, '..', 'lib', 'useNotificationFeed.ts'), 'utf8')
 
 /**
  * Declarations only.
@@ -136,7 +138,7 @@ describe('every kind the server can send goes somewhere', () => {
   })
 })
 
-describe('the bell reuses the push switch rather than copying it', () => {
+describe('the Notifications screen reuses the push switch rather than copying it', () => {
   it('calls navigateFromNotificationData', () => {
     /*
      * A bell row and a tapped push describe the same event and carry the same
@@ -144,10 +146,10 @@ describe('the bell reuses the push switch rather than copying it', () => {
      * two places to add a case, and the one nobody remembered would quietly
      * open the wrong screen.
      */
-    const bell = BELL()
-    expect(bell).toContain('navigateFromNotificationData')
-    // No second switch on `kind` in the component.
-    expect(bell).not.toMatch(/switch\s*\(\s*item\.kind/)
+    const feed = FEED()
+    expect(feed).toContain('navigateFromNotificationData')
+    // No second switch on `kind` where a row is opened.
+    expect(feed).not.toMatch(/switch\s*\(\s*item\.kind/)
   })
 
   it('marks everything read on open, not per row', () => {
@@ -157,10 +159,17 @@ describe('the bell reuses the push switch rather than copying it', () => {
      * leaves a badge lit after you have read everything in it, which teaches
      * people to ignore the badge.
      */
-    expect(BELL()).toContain('.markNotificationsRead()')
-    // And reloads only once the mark-read has settled: fired together, the
-    // reload came back with the pre-read count and relit the badge.
-    expect(BELL()).toMatch(/\.markNotificationsRead\(\)[\s\S]{0,300}\.finally\(\(\) => void load\(\)\)/)
+    expect(FEED()).toContain('.markNotificationsRead()')
+    // The bell only counts and opens; it never marks. And the screen does not reload the
+    // list after marking: the rows that were unseen stay New for the visit (the snapshot),
+    // and the bell re-reads its count when the tab is looked at again.
+    expect(BELL()).not.toContain('markNotificationsRead')
+    expect(FEED()).not.toMatch(/\.markNotificationsRead\(\)[\s\S]{0,300}\.finally/)
+  })
+
+  it('clears the badge on the tap, before the screen has asked the server anything', () => {
+    // Optimistic: opening is what "seen" means, and the round trip is the slowest part of it.
+    expect(BELL()).toMatch(/setUnread\(0\)\s*\n\s*router\.push\('\/notifications'\)/)
   })
 
   it('does not poll, but does look when you look', () => {

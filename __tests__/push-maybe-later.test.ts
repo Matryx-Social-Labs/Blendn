@@ -76,8 +76,8 @@ describe('wiring', () => {
   })
 
   it('turning notifications on in Settings clears it and asks', () => {
-    expect(read('app/settings.tsx')).toMatch(
-      /void clearPushDeclined\(user\.id\)\s*\.then\(\(\) => initializePushNotifications\(\)\)\s*\.catch\(\(\) => \{\}\)/
+    expect(read('lib/usePushPreference.ts')).toMatch(
+      /void clearPushDeclined\(userId\)\s*\.then\(\(\) => initializePushNotifications\(\)\)\s*\.catch\(\(\) => \{\}\)/
     )
   })
 })

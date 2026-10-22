@@ -35,7 +35,7 @@ const SAID_NO_LONGER_THERE = 'NOT_FOUND'
  * Keep a request that was answered here as Waiting on you (`rememberAnswered`), or claim a decline to anybody:
  * Decline is told to nobody. A refresh never shortens a list that has been paged (`mergeFeed`).
  */
-export function useNotificationFeed() {
+export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) => void } = {}) {
   const { showToast } = useToast()
   const [load, setLoad] = useState<FeedLoad>('loading')
   const [items, setItems] = useState<NotificationItem[]>([])
@@ -50,8 +50,9 @@ export function useNotificationFeed() {
   const [clearKeepsRequests, setClearKeepsRequests] = useState(false)
   /** When the page was read: "2 min ago" is measured from here, so a render never reads the clock. */
   const [readAt, setReadAt] = useState(0)
-  /** Rows that landed while the screen was open, newest read since the last `consumeArrivals`. */
-  const [arrivals, setArrivals] = useState(0)
+  /** The rows that landed while the screen was open: they fade in, the first page never does. */
+  const [liveIds, setLiveIds] = useState<ReadonlySet<string>>(new Set())
+  const onArriveRef = useRef(onArrive)
 
   const itemsRef = useRef(items)
   const pagingRef = useRef(paging)
@@ -60,6 +61,7 @@ export function useNotificationFeed() {
   useEffect(() => {
     itemsRef.current = items
     pagingRef.current = paging
+    onArriveRef.current = onArrive
   })
   useEffect(() => {
     const live = timers.current
@@ -93,7 +95,10 @@ export function useNotificationFeed() {
           setPaging({ hasMore: pagination.hasMore, cursor: pagination.nextCursor })
         }
         if (arrived.length) setFreshIds((prev) => new Set([...prev, ...arrived]))
-        if (mode === 'live' && arrived.length) setArrivals((n) => n + arrived.length)
+        if (mode === 'live' && arrived.length) {
+          setLiveIds((prev) => new Set([...prev, ...arrived]))
+          onArriveRef.current?.(arrived.length)
+        }
         setLoad('ready')
         if (arrived.length || page.some((n) => n.readAt === null)) markSeen()
       } catch (error) {
@@ -107,6 +112,8 @@ export function useNotificationFeed() {
 
   useEffect(() => {
     void readAnswered().then(setAnswered)
+    // Every setState in `read` comes after its first await; the rule cannot see through the async function.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void read('open')
   }, [read])
   // A row landing while the screen is open: the server says so on your own socket room.
@@ -168,7 +175,6 @@ export function useNotificationFeed() {
     setAnswered((prev) => new Map(prev).set(id, outcome))
     void rememberAnswered(id, outcome)
   }, [])
-  const consumeArrivals = useCallback(() => setArrivals(0), [])
 
   const answer = useCallback(
     async (row: FeedRow, action: RowAction['key']) => {
@@ -245,7 +251,7 @@ export function useNotificationFeed() {
     loadingMore,
     refreshing,
     clearKeepsRequests,
-    arrivals,
+    liveIds,
     items,
     retry,
     refresh,
@@ -254,7 +260,6 @@ export function useNotificationFeed() {
     touch,
     settle,
     clear,
-    consumeArrivals,
   }
 }
 

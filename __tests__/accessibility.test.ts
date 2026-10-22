@@ -31,7 +31,7 @@ describe('text in a fixed-height box is capped', () => {
     ['the tab bar label (the 64 pt capsule)', ['components', 'ds', 'TabBar.tsx']],
     ['the featured card (fixed aspect)', ['components', 'pulse', 'FeaturedCard.tsx']],
     ['the hero title (48/56)', ['components', 'scene', 'SceneHero.tsx']],
-    ['the bell badge (18pt)', ['components', 'pulse', 'NotificationBell.tsx']],
+    ['the bell badge (18pt, the DS Badge)', ['components', 'ds', 'MonoFamily.tsx']],
   ]
 
   it.each(FIXED_BOXES)('%s', (_label, parts) => {

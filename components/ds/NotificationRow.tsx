@@ -1,10 +1,12 @@
 import { Image } from 'expo-image'
 import { useEffect, useRef, useState } from 'react'
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
+import Animated, { Easing, FadeOut } from 'react-native-reanimated'
 
 import { Icon, type IconName } from '../ui/Icon'
-import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
+import { useReducedMotion } from '../../lib/motion'
 import { Avatar } from './Avatar'
 import { Button } from './Button'
 import { Creature, creatureFor } from './Creature'
@@ -158,7 +160,7 @@ function useRecordedOutcome(state: NotificationRowProps['state'], doneText: stri
  * intro says "This isn't available any more").
  *
  * The row is one button, "{title}, {context}, new", silent like every row; the
- * pills follow it as buttons. A strong pill (Accept, Join) plays `H.primary`
+ * pills follow it as buttons. Unread → read (motion #29): the dot leaves over `quick` and the title steps to 500 at once, never while it is being read (the screen decides when `fresh` ends). A strong pill (Accept, Join) plays `H.primary`
  * on press-in and the row plays `H.success` when the server records it (the
  * Flow 9 prototype); Decline plays nothing. Pressed: the row wash on iOS, the
  * ripple on Android. Text scales and the row grows.
@@ -177,6 +179,7 @@ export function NotificationRow({
 }: NotificationRowProps) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
+  const reduceMotion = useReducedMotion()
   useRecordedOutcome(state, doneText)
   /** The pill that was tapped carries the spinner while the request is pending; the others wait. */
   const [tapped, setTapped] = useState(0)
@@ -216,9 +219,10 @@ export function NotificationRow({
           ) : null}
         </View>
         {fresh && !pills ? (
-          <View style={styles.dot}>
+          // Motion #29, unread → read: the dot leaves over `quick` as the title's weight swaps (at once, in the font above). Reduce Motion: it goes.
+          <Animated.View style={styles.dot} exiting={reduceMotion ? undefined : DOT_EXIT}>
             <PresenceDot size={SPACE.sm} testID={testID && `${testID}-dot`} />
-          </View>
+          </Animated.View>
         ) : null}
       </Pressable>
       {pills ? (
@@ -243,6 +247,9 @@ export function NotificationRow({
     </View>
   )
 }
+
+/** The unread dot's way out (motion #29). */
+const DOT_EXIT = FadeOut.duration(DURATION.quick).easing(Easing.bezier(...EASING.exit))
 
 /** Where the text column starts: past the row's padding, the visual and the gap. */
 const TEXT_INSET = SPACE.lg + ROW_VISUAL + SPACE.md

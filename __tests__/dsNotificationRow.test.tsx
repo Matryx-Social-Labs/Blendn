@@ -165,3 +165,20 @@ describe('<NotificationRow>', () => {
     for (const s of spies) expect(s).not.toHaveBeenCalled()
   })
 })
+
+describe('unread → read (motion #29)', () => {
+  it('the title steps from 700 to 500 and the dot goes when the row is no longer fresh', async () => {
+    const visual = { type: 'glyph', icon: 'sparkles' } as const
+    const view = await render(<NotificationRow visual={visual} title="It’s a Blend" context="Now" fresh testID="r" />)
+    expect(screen.getByTestId('r-dot', { includeHiddenElements: true })).toBeTruthy()
+    expect(StyleSheet.flatten(screen.getByText('It’s a Blend').props.style)).toMatchObject({ fontFamily: FONT_FAMILY.brand[700] })
+    await view.rerender(<NotificationRow visual={visual} title="It’s a Blend" context="Now" testID="r" />)
+    expect(StyleSheet.flatten(screen.getByText('It’s a Blend').props.style)).toMatchObject({ fontFamily: FONT_FAMILY.brand[500] })
+  })
+
+  it('the dot leaves over quick on the exit curve, and is not animated at all under Reduce Motion', () => {
+    const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'components', 'ds', 'NotificationRow.tsx'), 'utf8')
+    expect(src).toMatch(/FadeOut\.duration\(DURATION\.quick\)\.easing\(Easing\.bezier\(\.\.\.EASING\.exit\)\)/)
+    expect(src).toMatch(/exiting=\{reduceMotion \? undefined : DOT_EXIT\}/)
+  })
+})

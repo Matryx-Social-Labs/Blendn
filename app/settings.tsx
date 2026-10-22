@@ -1,8 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import * as Notifications from 'expo-notifications'
 import { router, useFocusEffect } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AppState, Linking, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Linking, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
 import Animated, { LinearTransition, useReducedMotion } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Banner } from '../components/ds/Banner'
@@ -17,14 +16,11 @@ import type { IconName } from '../components/ui/Icon'
 import { H } from '../lib/haptics'
 import { showSheet, type Sheet } from '../lib/sheet'
 import { useTopBarOverlay } from '../lib/useTopBarState'
-import { offersApi } from '../lib/offers'
 import { apiClient } from '../lib/apiClient'
 import { useAuthMethod } from '../lib/authMethod'
 import { BLENDN_LINKS, openInApp } from '../lib/links'
 import { dataCopyMailto, SUPPORT_EMAIL } from '../lib/support'
-import { PUSH_BLOCKED_SHEET, passwordLinkSheet, signOutEverywhereSheet, signOutSheet } from '../lib/settingsSheets'
-import { initializePushNotifications, removePushTokenFromProfile } from '../lib/notifications'
-import { clearPushDeclined } from '../lib/pushDecline'
+import { passwordLinkSheet, signOutEverywhereSheet, signOutSheet } from '../lib/settingsSheets'
 import { useLatest } from '../lib/useLatest'
 import { Logger } from '../lib/logger'
 import { useAuth, signOut, signOutEverywhere, deleteAccount } from '../lib/useAuth'
@@ -35,11 +31,10 @@ import { manageSubscriptionUrl } from '../lib/purchases'
 /** The banner's sentence when the profile could not be read (Flow 7 frame 06). */
 const SETTINGS_NOT_LOADED = 'Your settings didn’t load. Pull down or try again.'
 
-type PreferenceKey = 'pushEnabled' | 'showOnlineStatus' | 'shareReadReceipts' | 'locationSharing' | 'friendsSeeMe'
+type PreferenceKey = 'showOnlineStatus' | 'shareReadReceipts' | 'locationSharing' | 'friendsSeeMe'
 
 /** The visible row title per key, so a failure can name the setting it lost. */
 const PREFERENCE_TITLES: Record<PreferenceKey, string> = {
-  pushEnabled: 'Push notifications',
   showOnlineStatus: 'Show online status',
   shareReadReceipts: 'Read receipts',
   locationSharing: 'Share location for nearby events',
@@ -47,7 +42,6 @@ const PREFERENCE_TITLES: Record<PreferenceKey, string> = {
 }
 
 interface PreferencesState {
-  pushEnabled: boolean
   showOnlineStatus: boolean
   shareReadReceipts: boolean
   locationSharing: boolean
@@ -55,7 +49,6 @@ interface PreferencesState {
 }
 
 const DEFAULT_PREFERENCES: PreferencesState = {
-  pushEnabled: true,
   showOnlineStatus: true,
   shareReadReceipts: true,
   locationSharing: true,
@@ -67,27 +60,6 @@ const DEFAULT_PREFERENCES: PreferencesState = {
 const toBoolean = (value: unknown, fallback: boolean) =>
   typeof value === 'boolean' ? value : fallback
 
-/**
- * What the phone itself says about notifications, apart from what the account says.
- *
- * `blocked` is a no the app can no longer ask past: iOS after the first
- * refusal, Android once "Don't ask again" is set. Only the phone's Settings can
- * undo it, so the switch shows off whatever the account says, and turning it on
- * explains that instead of saving a preference nothing will ever deliver on.
- */
-type OsPush = 'granted' | 'askable' | 'blocked'
-
-async function readOsPush(): Promise<OsPush> {
-  try {
-    const { status, canAskAgain } = await Notifications.getPermissionsAsync()
-    if (status === 'granted') return 'granted'
-    return canAskAgain ? 'askable' : 'blocked'
-  } catch {
-    // Unknown reads as askable: the switch then behaves as it always did.
-    return 'askable'
-  }
-}
-
 function SettingsScreenContent() {
   const { user } = useAuth()
   const { showToast } = useToast()
@@ -97,7 +69,6 @@ function SettingsScreenContent() {
   // it was called with wrote the sibling's OLD value back into storage.
   const preferencesRef = useLatest(preferences)
   const [saving, setSaving] = useState<Record<PreferenceKey, boolean>>({
-    pushEnabled: false,
     showOnlineStatus: false,
     shareReadReceipts: false,
     locationSharing: false,
@@ -111,7 +82,6 @@ function SettingsScreenContent() {
   /** Blendn+ as the server says it: the row's words, and the delete tray's warning. */
   const { status: plus, refresh: refreshPlus } = usePlusStatus()
   useFocusEffect(refreshPlus)
-  const [osPush, setOsPush] = useState<OsPush>('askable')
   /** The delete is in flight: the row says so and nothing can close the sheet (Flow 7 frame 15). */
   const [deleting, setDeleting] = useState(false)
   const bar = useTopBarOverlay()
@@ -119,18 +89,6 @@ function SettingsScreenContent() {
   const bold = useBoldText()
   const reduceMotion = useReducedMotion()
   const authMethod = useAuthMethod()
-
-  /*
-   * Read now and on every return to the app: the fix for `blocked` is a trip
-   * to the phone's Settings, and coming back should show that it worked.
-   */
-  useEffect(() => {
-    void readOsPush().then(setOsPush)
-    const sub = AppState.addEventListener('change', (next) => {
-      if (next === 'active') void readOsPush().then(setOsPush)
-    })
-    return () => sub.remove()
-  }, [])
 
   const settingsStorageKey = useMemo(() => (
     user?.id ? `settings_preferences_${user.id}` : null
@@ -167,7 +125,6 @@ function SettingsScreenContent() {
     const profile = resultData?.profile || resultData || {}
 
     const nextPrefs: PreferencesState = {
-      pushEnabled: toBoolean(profile.push_enabled, DEFAULT_PREFERENCES.pushEnabled),
       showOnlineStatus: toBoolean(profile.show_online, DEFAULT_PREFERENCES.showOnlineStatus),
       shareReadReceipts: toBoolean(profile.read_receipts, DEFAULT_PREFERENCES.shareReadReceipts),
       locationSharing: toBoolean(profile.share_location, DEFAULT_PREFERENCES.locationSharing),
@@ -186,7 +143,6 @@ function SettingsScreenContent() {
           if (cached) {
             const parsed = JSON.parse(cached) as Partial<PreferencesState>
             setPreferences({
-              pushEnabled: toBoolean(parsed.pushEnabled, DEFAULT_PREFERENCES.pushEnabled),
               showOnlineStatus: toBoolean(parsed.showOnlineStatus, DEFAULT_PREFERENCES.showOnlineStatus),
               shareReadReceipts: toBoolean(parsed.shareReadReceipts, DEFAULT_PREFERENCES.shareReadReceipts),
               locationSharing: toBoolean(parsed.locationSharing, DEFAULT_PREFERENCES.locationSharing),
@@ -231,7 +187,7 @@ function SettingsScreenContent() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
-    await Promise.all([loadPreferences(), readOsPush().then(setOsPush)])
+    await loadPreferences()
     setRefreshing(false)
   }, [loadPreferences])
 
@@ -244,7 +200,6 @@ function SettingsScreenContent() {
       // `preferences` wrapper and no camelCase alias -- the previous twelve
       // variants matched none of them, so nothing was ever persisted.
       const payload = {
-        push_enabled: next.pushEnabled,
         show_online: next.showOnlineStatus,
         read_receipts: next.shareReadReceipts,
         share_location: next.locationSharing,
@@ -254,19 +209,6 @@ function SettingsScreenContent() {
       const result = await apiClient.updateProfile(user.id, payload)
       if (!result.success) {
         throw new Error(result.error || 'Failed to save setting')
-      }
-
-      if (key === 'pushEnabled') {
-        if (next.pushEnabled) {
-          // Turning it on is the answer onboarding's "Maybe later" deferred. It may
-          // ask the phone for the first time; read its answer back either way.
-          void clearPushDeclined(user.id)
-            .then(() => initializePushNotifications())
-            .catch(() => {})
-            .finally(() => void readOsPush().then(setOsPush))
-        } else {
-          removePushTokenFromProfile().catch(() => {})
-        }
       }
 
       await savePreferencesLocal(next)
@@ -286,18 +228,13 @@ function SettingsScreenContent() {
   }, [user, savePreferencesLocal, showToast, preferencesRef])
 
   const onTogglePreference = useCallback((key: PreferenceKey) => {
-    // Turning push on after the phone has said no: explain, and change nothing.
-    if (key === 'pushEnabled' && osPush === 'blocked') {
-      showSheet(PUSH_BLOCKED_SHEET)
-      return
-    }
     const previous = preferencesRef.current
     const next = { ...previous, [key]: !previous[key] }
     preferencesRef.current = next
     setPreferences(next)
     savePreferencesLocal(next)
     persistPreference(next, previous, key)
-  }, [persistPreference, savePreferencesLocal, osPush, preferencesRef])
+  }, [persistPreference, savePreferencesLocal, preferencesRef])
 
   /*
    * Our own pages open in the in-app browser; a store's page (Manage
@@ -452,16 +389,14 @@ function SettingsScreenContent() {
    * second profile editor.
    */
   const preferenceRow = (key: PreferenceKey, icon: IconName, title: string, hint?: string) => {
-    // Push is on only when the account AND the phone say so.
-    const pushBlocked = key === 'pushEnabled' && osPush === 'blocked'
     return (
       <SettingsRow
         key={key}
         icon={icon}
         title={title}
-        hint={pushBlocked ? 'Off in your phone’s settings.' : hint}
+        hint={hint}
         trail="switch"
-        value={preferences[key] && !pushBlocked}
+        value={preferences[key]}
         onValueChange={() => onTogglePreference(key)}
         busy={saving[key]}
         // Loading, or the profile did not come: the switches show what was cached and hold still (frames 05, 06).
@@ -538,10 +473,9 @@ function SettingsScreenContent() {
           />
         </SettingsGroup>
 
+        {/* Push, what to hear about and offers live on their own screen (Flow 9 · 9.6). */}
         <SettingsGroup title="Notifications">
-          {preferenceRow('pushEnabled', 'bell', 'Push notifications')}
-          {/* Offers from the places you keep going back to (step 12): its own switch, kept on the server. */}
-          <OffersFromPlacesRow />
+          <SettingsRow icon="bell" title="Notifications" trail="chevron" onPress={() => router.push('/notification-settings')} testID="settings-notifications" />
         </SettingsGroup>
 
         {/* Blocked users leads Safety: blocking is the most consequential safety action in the product. */}
@@ -620,51 +554,6 @@ const styles = StyleSheet.create({
   // The banner and the groups share the column's gap; an empty slot takes none.
   banners: { gap: DS_SPACE.sm },
 })
-
-/**
- * "Offers from places" (step 12 review M6): one switch for every place's
- * offers. The server keeps it (`/me/offers`) and leaves you out of every
- * audience while it is off; the switch shows what the server saved.
- */
-function OffersFromPlacesRow() {
-  const { showToast } = useToast()
-  const [enabled, setEnabled] = useState<boolean | null>(null)
-  const [saving, setSaving] = useState(false)
-  useEffect(() => {
-    Promise.resolve()
-      .then(() => offersApi.offersFromPlaces())
-      .then((res) => {
-        if (res.success && res.data) setEnabled(res.data.enabled)
-      })
-      .catch(() => {})
-  }, [])
-  const flip = async () => {
-    if (enabled === null || saving) return
-    setSaving(true)
-    try {
-      const res = await offersApi.setOffersFromPlaces(!enabled)
-      if (res.success && res.data) setEnabled(res.data.enabled)
-      else showToast(res.error || "That didn’t save. Try again.", 'error', { haptic: 'error' })
-    } catch {
-      showToast("That didn’t save. Try again.", 'error', { haptic: 'error' })
-    } finally {
-      setSaving(false)
-    }
-  }
-  return (
-    <SettingsRow
-      icon="gift"
-      title="Offers from places"
-      hint="Offers places you keep going back to send their regulars. They never learn who gets them."
-      trail="switch"
-      value={enabled === true}
-      onValueChange={() => void flip()}
-      busy={saving}
-      disabled={enabled === null}
-      testID="settings-offers"
-    />
-  )
-}
 
 /** Violet world: one hue on this screen (`HueProvider`). */
 export default function SettingsScreen() {

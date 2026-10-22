@@ -54,7 +54,7 @@ const REQUEST_ACTIONS: Partial<Record<NotificationKind, RowAction[]>> = {
 export const isRequestKind = (kind: string): boolean => kind in REQUEST_ACTIONS
 
 /** The glyph tile for a kind that is about somebody, or nobody by design. */
-const GLYPH: Record<string, IconName> = {
+export const GLYPH: Record<string, IconName> = {
   friend_request: 'user-plus',
   friend_accepted: 'user-check',
   match: 'heart',

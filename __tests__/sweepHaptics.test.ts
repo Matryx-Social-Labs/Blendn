@@ -24,13 +24,14 @@ describe('what a save, a refresh and a failure play', () => {
     expect(code('components/home/PlacesList.tsx')).not.toMatch(/H\.threshold|haptics/)
   })
 
-  it('Clear all in the notifications sheet ticks H.destructive on the confirm, and a failure restores the rows and answers from its toast', () => {
-    const src = code('components/pulse/NotificationBell.tsx')
+  it('Clear all on the Notifications screen ticks H.destructive on the confirm, and a failure restores the rows and answers from its toast', () => {
+    const screen = code('app/notifications.tsx')
+    const feed = code('lib/useNotificationFeed.ts')
     // The confirm is the DS Sheet's destructive button, which plays the tick on press-in itself: a second call here would play it twice.
-    expect(src).toMatch(/label: 'Clear all',\s*kind: 'destructive'/)
-    expect(src).not.toMatch(/H\.destructive/)
-    expect(src).toMatch(/showToast\('Couldn’t clear\. Try again\.', 'error', \{ haptic: 'error' \}\)/)
-    expect(src).toMatch(/setItems\(before\.items\)/)
+    expect(screen).toMatch(/label: 'Clear all', variant: 'destructive'/)
+    expect(screen).not.toMatch(/H\.destructive/)
+    expect(feed).toMatch(/showToast\('Couldn’t clear\. Try again\.', 'error', \{ haptic: 'error' \}\)/)
+    expect(feed).toMatch(/setItems\(before\)/)
   })
 
   it('every onboarding submit failure asks its toast for the error haptic', () => {
@@ -42,10 +43,10 @@ describe('what a save, a refresh and a failure play', () => {
   })
 })
 
-describe('the notification sheet’s decorative glyphs and spinner', () => {
+describe('the Notifications screen’s decorative glyphs and skeleton', () => {
   it('are hidden from, or named for, a screen reader', () => {
-    const src = code('components/pulse/NotificationBell.tsx')
-    expect(src.match(/accessibilityElementsHidden/g)?.length).toBeGreaterThanOrEqual(2)
-    expect(src).toMatch(/accessibilityLabel="Loading notifications"/)
+    // The state glyphs are the StateScreen's (decorative, the title says it); the skeleton names itself once.
+    expect(code('components/notifications/NotificationsSkeleton.tsx')).toMatch(/accessibilityLabel="Loading notifications"/)
+    expect(code('components/ds/NotificationRow.tsx')).toMatch(/accessibilityElementsHidden/)
   })
 })

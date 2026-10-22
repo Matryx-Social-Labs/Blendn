@@ -23,7 +23,7 @@ const ROSE = [
   'app/rate/[eventId].tsx',
   'components/blendn/BlendnScreen.tsx',
 ]
-const VIOLET = ['app/plus.tsx', 'app/onboarding/_layout.tsx', 'app/edit-about-you.tsx', 'app/edit-profile.tsx', 'app/(tabs)/profile.tsx', 'app/settings.tsx', 'app/event-preferences/[eventId].tsx']
+const VIOLET = ['app/plus.tsx', 'app/onboarding/_layout.tsx', 'app/edit-about-you.tsx', 'app/edit-profile.tsx', 'app/(tabs)/profile.tsx', 'app/settings.tsx', 'app/notification-settings.tsx', 'app/event-preferences/[eventId].tsx']
 /** Going out: ember is the default, so none of these sets a hue. */
 const EMBER = [
   'app/(tabs)/events.tsx',
@@ -32,6 +32,7 @@ const EMBER = [
   'app/event/[id].tsx',
   'app/board/[eventId].tsx',
   'app/offer/[id].tsx',
+  'app/notifications.tsx',
   'app/sign-in.tsx',
   'components/home/HomeShell.tsx',
   'components/home/PlacesList.tsx',

@@ -692,6 +692,9 @@ function RootLayout() {
       */}
       <Stack.Screen name="preview" options={{ headerShown: false }} />
       <Stack.Screen name="nearby-events" options={{ headerShown: false }} />
+      {/* Notifications (the bell opens it) and its settings, from the ⋯ and from Settings. */}
+      <Stack.Screen name="notifications" options={{ headerShown: false }} />
+      <Stack.Screen name="notification-settings" options={{ headerShown: false }} />
       {/* Settings' About and Contact support. */}
       <Stack.Screen name="about" options={{ headerShown: false }} />
       <Stack.Screen name="support" options={{ headerShown: false }} />

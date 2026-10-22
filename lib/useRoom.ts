@@ -35,6 +35,7 @@ import {
 import { useAuth } from './useAuth'
 import { useLatest } from './useLatest'
 import { useLiveSync } from './useLiveSync'
+import { askPushInContext } from './pushAsk'
 
 /**
  * The Room's data: who is here, who just walked in, and what you can do about
@@ -709,6 +710,7 @@ export function useRoom(): RoomState & RoomActions {
         }
 
         const conversationId = result.data?.mutual ? result.data.conversationId : undefined
+        if (!conversationId) void askPushInContext('like')
         if (conversationId) {
           setConversations((prev) => ({ ...prev, [id]: conversationId }))
           celebrate({

@@ -6,6 +6,7 @@ import { useCallback } from 'react'
 import { useFocusEffect, type Href } from 'expo-router'
 import { openWhenReady } from './pendingRoute'
 import { apiClient, TokenStorage } from './apiClient'
+import { bannerPresentation } from './inAppBanners'
 import { Logger } from './logger'
 import { setPushTokenRef, getPushTokenRef } from './pushTokenRef'
 
@@ -50,15 +51,30 @@ function threadOf(data: Record<string, unknown> | undefined): string | null {
   return null
 }
 
-// How a push that arrives while the app is open is shown.
+/**
+ * Whether a push is about the conversation or room on screen: it is not shown over what you are reading.
+ * The in-app banner host asks the same question.
+ */
+export function isOnScreenThread(data: Record<string, unknown> | undefined): boolean {
+  const thread = threadOf(data)
+  return thread !== null && thread === activeThread
+}
+
+/**
+ * How a push that arrives while the app is open is shown.
+ *
+ * Nothing for the thread you are reading. Otherwise it is the in-app capsule (`lib/inAppBanners`, Flow 9 · 9.4)
+ * where the tabs are showing, nothing for the kinds that only fill the bell, and the system's banner
+ * everywhere else: a pushed screen over the tabs, or a kind with no capsule.
+ */
 Notifications.setNotificationHandler({
   handleNotification: async (notification) => {
-    const thread = threadOf(notification.request.content.data)
-    const onScreen = thread !== null && thread === activeThread
+    const data = notification.request.content.data
+    const system = !isOnScreenThread(data) && bannerPresentation(data) === 'system'
     return {
-      shouldShowBanner: !onScreen,
-      shouldShowList: !onScreen,
-      shouldPlaySound: !onScreen,
+      shouldShowBanner: system,
+      shouldShowList: system,
+      shouldPlaySound: system,
       shouldSetBadge: false,
     }
   },
@@ -79,24 +95,65 @@ Notifications.setNotificationHandler({
  */
 export async function ensureNotificationChannels(): Promise<void> {
   const base = { vibrationPattern: [0, 250, 250, 250], lightColor: '#FF6B6B' }
+  /*
+   * Flow 9 · 9.5 (Android): people and crew are private on the lock screen (the notification shows "Contents
+   * hidden" there), events are shown, and "After the night" is low. `lockscreenVisibility` is as the channel is
+   * created, like importance. The three new channels (`matches`, `crew`, `after-the-night`) are for Notification
+   * settings' rows to open; a push reaches them only when the server sends their id (`channelId`, see the
+   * server contract in the Flow 9 report): until then `messages` stays what carries people and `events` the rest.
+   */
+  const PRIVATE = Notifications.AndroidNotificationVisibility.PRIVATE
+  const PUBLIC = Notifications.AndroidNotificationVisibility.PUBLIC
   await Promise.all([
     Notifications.setNotificationChannelAsync('messages', {
       ...base,
       name: 'Messages and people',
       description: 'Direct messages, friend requests and matches',
       importance: Notifications.AndroidImportance.HIGH,
+      lockscreenVisibility: PRIVATE,
+    }),
+    Notifications.setNotificationChannelAsync('matches', {
+      ...base,
+      name: 'Matches and friends',
+      description: 'Friend requests, matches and reveals',
+      importance: Notifications.AndroidImportance.HIGH,
+      lockscreenVisibility: PRIVATE,
+    }),
+    Notifications.setNotificationChannelAsync('crew', {
+      ...base,
+      name: 'Your crew',
+      description: 'Crew invites, “we’re here” and Blends',
+      importance: Notifications.AndroidImportance.HIGH,
+      lockscreenVisibility: PRIVATE,
     }),
     Notifications.setNotificationChannelAsync('events', {
       ...base,
       name: 'Events',
       description: 'Changes to events you are going to, reminders and organiser announcements',
       importance: Notifications.AndroidImportance.HIGH,
+      lockscreenVisibility: PUBLIC,
     }),
     Notifications.setNotificationChannelAsync('rooms', {
       ...base,
       name: 'Room replies',
       description: 'Someone replied to you in an event room',
       importance: Notifications.AndroidImportance.DEFAULT,
+      lockscreenVisibility: PRIVATE,
+    }),
+    Notifications.setNotificationChannelAsync('after-the-night', {
+      ...base,
+      name: 'After the night',
+      description: 'Rate the night, and what comes after it',
+      importance: Notifications.AndroidImportance.LOW,
+      lockscreenVisibility: PRIVATE,
+    }),
+    // The server already sends offers on this id (`deliveryFor`); an install without it filed them under "Miscellaneous".
+    Notifications.setNotificationChannelAsync('offers', {
+      ...base,
+      name: 'Offers from places',
+      description: 'Offers from places you keep going back to',
+      importance: Notifications.AndroidImportance.DEFAULT,
+      lockscreenVisibility: PRIVATE,
     }),
   ])
 }

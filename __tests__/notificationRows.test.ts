@@ -35,7 +35,7 @@ describe('notificationWhen', () => {
     // 2026-10-19 is a Monday.
     expect(notificationWhen(ago(3 * DAY), NOW)).toBe('Mon')
     expect(notificationWhen(ago(10 * DAY), NOW)).toBe('12 Oct')
-    expect(notificationWhen(ago(400 * DAY), NOW)).toBe('18 Sep 2025')
+    expect(notificationWhen(ago(400 * DAY), NOW)).toBe('17 Sep 2025')
   })
 
   it('does not go backwards on a clock skew, or print NaN', () => {
@@ -143,7 +143,7 @@ describe('parseVisual', () => {
   it('caps a stack at six people and drops a non-positive or fractional extra', () => {
     const people = Array.from({ length: 9 }, (_, i) => ({ pseudonym: `P${i}` }))
     expect(parseVisual({ type: 'stack', people, extra: 0 })).toMatchObject({ people: expect.any(Array), extra: undefined })
-    expect((parseVisual({ type: 'stack', people }) as { people: unknown[] }).people).toHaveLength(6)
+    expect((parseVisual({ type: 'stack', people }) as { people: readonly unknown[] }).people).toHaveLength(6)
     expect(parseVisual({ type: 'stack', people, extra: 1.5 })).toMatchObject({ extra: undefined })
   })
 })

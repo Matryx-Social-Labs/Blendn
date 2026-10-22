@@ -130,40 +130,12 @@ it('plays H.primary once, on the Sign out confirm and not when the sheet opens (
   expect(H.destructive).not.toHaveBeenCalled()
 })
 
-describe('Push notifications', () => {
-  it('shows off when the phone blocks them, whatever the account says', async () => {
-    permissions.mockResolvedValue({ status: 'denied', canAskAgain: false })
+describe('Notifications row', () => {
+  it('opens Notification settings, where the push switch now lives (the Settings screen has no switch of its own)', async () => {
     await render(<Screen />)
-
-    expect(await screen.findByText('Off in your phone’s settings.')).toBeTruthy()
-    const toggle = screen.getByRole('switch', { name: /^Push notifications/ })
-    expect(toggle.props.accessibilityState.checked).toBe(false)
-  })
-
-  it('explains, and offers Settings, instead of saving a switch nothing will deliver on', async () => {
-    permissions.mockResolvedValue({ status: 'denied', canAskAgain: false })
-    const openSettings = jest.spyOn(Linking, 'openSettings').mockResolvedValue()
-    await render(<Screen />)
-    await screen.findByText('Off in your phone’s settings.')
-
-    fireEvent.press(screen.getByRole('switch', { name: /^Push notifications/ }))
-
-    expect(await screen.findByText('Notifications are off')).toBeTruthy()
-    expect(api.updateProfile).not.toHaveBeenCalled()
-    fireEvent.press(screen.getByText('Open Settings'))
-    expect(openSettings).toHaveBeenCalled()
-  })
-
-  it('saves as before when the phone allows them', async () => {
-    await render(<Screen />)
-    const toggle = () => screen.getByRole('switch', { name: /^Push notifications/ })
-    await waitFor(() => expect(toggle().props.accessibilityState).toMatchObject({ checked: true, disabled: false }))
-
-    // The row is the target: a tap anywhere on it flips the switch.
-    fireEvent.press(toggle())
-
-    await waitFor(() => expect(api.updateProfile).toHaveBeenCalledWith('u_me', expect.objectContaining({ push_enabled: false })))
-    expect(screen.queryByText('Notifications are off')).toBeNull()
+    fireEvent.press(await screen.findByRole('button', { name: 'Notifications' }))
+    expect(router.push).toHaveBeenCalledWith('/notification-settings')
+    expect(screen.queryByRole('switch', { name: /^Push notifications/ })).toBeNull()
   })
 })
 

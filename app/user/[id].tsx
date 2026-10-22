@@ -32,6 +32,7 @@ import { isGone } from '../../lib/loadFailure'
 import { Logger } from '../../lib/logger'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
 import { useAuth } from '../../lib/useAuth'
+import { askPushInContext } from '../../lib/pushAsk'
 
 
 interface UserProfileView {
@@ -387,6 +388,9 @@ function UserProfileInner() {
         setCtaMessage(CTA_HINT.message)
         // The moment the room gives a mutual like, rather than a button quietly changing.
         setMatch({ conversationId: result.data.conversationId, you: result.data.pseudonyms?.you ?? null })
+      } else {
+        // Not mutual yet: the moment a push about it pays off (Flow 9 · 9.7), the first time only.
+        void askPushInContext('like')
       }
     } catch (e) {
       setLiked(false)

@@ -47,7 +47,7 @@ jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShow
 
 import * as Notifications from 'expo-notifications'
 import { router } from 'expo-router'
-import SettingsScreen from '../app/settings'
+import SettingsScreen from '../app/notification-settings'
 import { apiClient } from '../lib/apiClient'
 import { deleteAccount, signOut } from '../lib/useAuth'
 

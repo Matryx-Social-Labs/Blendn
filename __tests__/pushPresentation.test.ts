@@ -24,7 +24,8 @@ jest.mock('expo-notifications', () => ({
   setNotificationChannelAsync: (...a: unknown[]) => mockChannel(...a),
   getAllScheduledNotificationsAsync: () => mockScheduled(),
   cancelScheduledNotificationAsync: (...a: unknown[]) => mockCancel(...a),
-  AndroidImportance: { MAX: 5, HIGH: 4, DEFAULT: 3 },
+  AndroidImportance: { MAX: 5, HIGH: 4, DEFAULT: 3, LOW: 2 },
+  AndroidNotificationVisibility: { PUBLIC: 1, PRIVATE: 0, SECRET: -1 },
 }))
 jest.mock('expo-router', () => ({ router: { push: jest.fn() }, useFocusEffect: jest.fn() }))
 jest.mock('../lib/apiClient', () => ({ apiClient: {}, TokenStorage: {} }))
@@ -66,6 +67,21 @@ describe('Android channels', () => {
     expect(ids).toEqual(expect.arrayContaining(['messages', 'rooms', 'events']))
   })
 
+  it('adds the three Flow 9 channels and the offers one the server already sends on', async () => {
+    await ensureNotificationChannels()
+    const ids = mockChannel.mock.calls.map((c) => c[0])
+    expect(ids).toEqual(expect.arrayContaining(['matches', 'crew', 'after-the-night', 'offers']))
+  })
+
+  it('hides people and crew on the lock screen, shows events, and makes After the night quiet', async () => {
+    await ensureNotificationChannels()
+    const by = Object.fromEntries(mockChannel.mock.calls.map((c) => [c[0], c[1] as { lockscreenVisibility: number; importance: number }]))
+    // PRIVATE = 0, PUBLIC = 1 (the mock mirrors the enum).
+    for (const id of ['messages', 'matches', 'crew', 'rooms']) expect(by[id].lockscreenVisibility).toBe(0)
+    expect(by.events.lockscreenVisibility).toBe(1)
+    expect(by['after-the-night'].importance).toBeLessThan(by.rooms.importance)
+  })
+
   it('makes people and events louder than room replies', async () => {
     await ensureNotificationChannels()
     const importance = Object.fromEntries(
@@ -73,6 +89,18 @@ describe('Android channels', () => {
     )
     expect(importance.messages).toBeGreaterThan(importance.rooms)
     expect(importance.events).toBeGreaterThan(importance.rooms)
+  })
+})
+
+describe('a push with the app open', () => {
+  it('leaves the system banner to the in-app capsule only while the tabs have claimed it', async () => {
+    const { claimBannerHost } = require('../lib/inAppBanners')
+    expect((await present({ type: 'match' })).shouldShowBanner).toBe(true)
+    const release = claimBannerHost('tabs')
+    expect(await present({ type: 'match' })).toMatchObject({ shouldShowBanner: false, shouldShowList: false, shouldPlaySound: false })
+    // A kind with no capsule still gets the system's.
+    expect((await present({ type: 'venue_offer' })).shouldShowBanner).toBe(true)
+    release()
   })
 })
 

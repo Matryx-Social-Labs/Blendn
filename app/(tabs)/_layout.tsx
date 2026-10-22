@@ -6,6 +6,7 @@ import { BlendnScreen } from '../../components/blendn/BlendnScreen'
 import { InAppBanner } from '../../components/ds/InAppBanner'
 import { TabBar, type Tab } from '../../components/ds/TabBar'
 import { useCoachMarkSpot } from '../../components/ds/CoachMarkHost'
+import { ForegroundBanners } from '../../components/notifications/ForegroundBanners'
 import { markCoachUsed, useCoachMark } from '../../lib/coachMarks'
 import { apiClient } from '../../lib/apiClient'
 import { openBlendn, setLiveHint, useBlendnOpen } from '../../lib/blendnOverlay'
@@ -334,6 +335,7 @@ export default function TabLayout() {
         </View>
       ) : null}
       <WaveFromTheTabs room={activeRoom} />
+      <ForegroundBanners />
     </View>
   )
 }
