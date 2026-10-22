@@ -53,6 +53,7 @@ import { SheetHost } from '../components/SheetHost'
 import { closeSheet } from '../lib/sheet'
 import { H } from '../lib/haptics'
 import { apiClient } from '../lib/apiClient'
+import { resetMutedRooms } from '../lib/mutedRooms'
 import { deleteAccount, signOut } from '../lib/useAuth'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
@@ -80,6 +81,7 @@ afterEach(async () => {
 
 beforeEach(() => {
   jest.clearAllMocks()
+  resetMutedRooms()
   api.getProfile.mockResolvedValue({ success: true, data: { profile: { push_enabled: true } } } as never)
   api.updateProfile.mockResolvedValue({ success: true } as never)
   api.getMyPlus.mockResolvedValue({ success: true, data: plusStatus() } as never)
@@ -160,6 +162,28 @@ it('Help has Tips, which opens the screen that lists every coach-mark sentence (
   await render(<Screen />)
   fireEvent.press(await screen.findByRole('button', { name: 'Tips' }))
   expect(router.push).toHaveBeenCalledWith('/tips')
+})
+
+describe('the muted count is the truth, or says it is not all of it', () => {
+  const mute = { muted: true, until: null }
+  it('the server’s own count wins when it sends one', async () => {
+    ;(api.queuedRequest as jest.Mock).mockImplementation((url: string) =>
+      Promise.resolve(url.includes('notification-preferences') ? { success: true, data: { mutedRooms: 41 } } : { success: false, errorCode: 'NOT_FOUND' })
+    )
+    ;(api.getChatGroups as jest.Mock).mockResolvedValue({ success: true, data: { groups: [{ id: 'a', event: { title: 'A' }, mute }] } })
+    await render(<Screen />)
+    expect(await screen.findByRole('button', { name: 'Notifications, 41 rooms muted' })).toBeTruthy()
+  })
+
+  it('a scan that lost a page says "N+", never a quietly short count', async () => {
+    ;(api.queuedRequest as jest.Mock).mockImplementation(() => Promise.resolve({ success: false, errorCode: 'NOT_FOUND' }))
+    ;(api.getChatGroups as jest.Mock).mockResolvedValue({
+      success: true,
+      data: { groups: [{ id: 'a', event: { title: 'A' }, mute }], pagination: { hasMore: true } },
+    })
+    await render(<Screen />)
+    expect(await screen.findByRole('button', { name: 'Notifications, 1+ rooms muted' })).toBeTruthy()
+  })
 })
 
 describe('How you match row (Flow 14 · 14.4)', () => {

@@ -1,7 +1,7 @@
 jest.mock('../lib/apiClient', () => ({ apiClient: {} }))
 jest.mock('../lib/logger', () => ({ Logger: { warn: jest.fn(), info: jest.fn(), error: jest.fn(), debug: jest.fn() } }))
 
-import { hasMorePages, muteEnds, mutedRoomRoute, mutedRoomsFrom, notificationsHint } from '../lib/mutedRooms'
+import { hasMorePages, muteEnds, mutedCountFrom, mutedRoomRoute, mutedRoomsFrom, mutedRoomsFromServer, notificationsHint } from '../lib/mutedRooms'
 
 const NOW = new Date('2026-10-22T18:00:00')
 const later = (h: number) => new Date(NOW.getTime() + h * 3600_000).toISOString()
@@ -63,6 +63,11 @@ describe('the words', () => {
     expect(notificationsHint(0, false)).toBe('Off')
     expect(notificationsHint(0, null)).toBeUndefined()
   })
+
+  it('says "N+" when the count is only what was read so far', () => {
+    expect(notificationsHint(3, true, true)).toBe('3+ rooms muted')
+    expect(notificationsHint(1, true, true)).toBe('1+ rooms muted')
+  })
 })
 
 describe('mutedRoomRoute', () => {
@@ -80,5 +85,20 @@ describe('mutedRoomRoute', () => {
   })
   it('a crew with no crew id still opens, as its room', () => {
     expect(mutedRoomRoute({ id: 'c1', title: 'Nebula', kind: 'crew', mute }).pathname).toBe('/chat/[id]')
+  })
+})
+
+describe('the server’s own read', () => {
+  const mute = { muted: true, until: null }
+  it('takes rows as a chat list’s, event rooms and crew and Blend rooms together', () => {
+    const rows = mutedRoomsFromServer({ rooms: [{ id: 'e1', event: { title: 'Bass' }, mute }, { id: 'c1', kind: 'crew', name: 'Nebula', crewId: 'k1', mute }, { id: 'e2', event: { title: 'No' }, mute: { muted: false, until: null } }] })
+    expect(rows?.map((r) => [r.id, r.kind])).toEqual([['e1', 'event'], ['c1', 'crew']])
+  })
+  it('an answer with no rooms list is not an answer, so the caller falls back', () => {
+    for (const bad of [null, {}, { rooms: 'x' }]) expect(mutedRoomsFromServer(bad)).toBeNull()
+  })
+  it('reads the count the server puts on the notification preferences, and only a count', () => {
+    expect(mutedCountFrom({ mutedRooms: 7 })).toBe(7)
+    for (const bad of [null, {}, { mutedRooms: '7' }, { mutedRooms: -1 }]) expect(mutedCountFrom(bad)).toBeNull()
   })
 })

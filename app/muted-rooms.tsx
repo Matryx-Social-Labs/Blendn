@@ -9,12 +9,13 @@ import { StateScreen } from '../components/ds/StateScreen'
 import { TopBar } from '../components/ds/TopBar'
 import { SkeletonCircle, SkeletonLine } from '../components/Skeleton'
 import { COLOR, SPACE } from '../lib/design/tokens'
-import { muteEnds, mutedRoomRoute, useMutedRooms, MUTED_SCAN_PAGES, type MutedRoom } from '../lib/mutedRooms'
+import { muteEnds, mutedRoomRoute, useMutedRooms, MUTED_PAGE_SIZE, MUTED_SCAN_PAGES, type MutedRoom } from '../lib/mutedRooms'
+import { Button } from '../components/ds/Button'
 import { useTopBarOverlay } from '../lib/useTopBarState'
 
 const SKELETON_ROWS = [0, 1, 2]
-/** Pages of 20 rooms; said when the scan stopped here with more behind it. */
-const CAPPED_NOTE = `Showing rooms from your ${MUTED_SCAN_PAGES * 20} most recent.`
+/** Said when the scan stopped at its cap with more behind it. */
+const CAPPED_NOTE = `Showing rooms from your ${MUTED_SCAN_PAGES * MUTED_PAGE_SIZE} most recent.`
 
 /**
  * Every room you muted (Settings › Notifications › Muted rooms, Flow 9 · 9.6 frame 04), when there are more than the
@@ -66,6 +67,15 @@ function MutedRoomsContent() {
     />
   ) : muted.scanning ? (
     <Text style={[font('meta', bold), styles.foot]}>Checking your rooms…</Text>
+  ) : muted.partial ? (
+    // Nothing found, but not everything was read: "No muted rooms" would be a guess.
+    <StateScreen
+      icon="cloud-off"
+      title="Some rooms didn’t load"
+      body="Check your connection and try again."
+      actions={[{ label: 'Try again', onPress: muted.refresh }]}
+      testID="muted-rooms-partial-empty"
+    />
   ) : (
     <StateScreen
       icon="bell"
@@ -75,14 +85,21 @@ function MutedRoomsContent() {
     />
   )
 
+  // Never a quietly short list: a page that did not come says so, with a way to read again.
   const foot =
-    muted.rooms.length > 0 && (muted.scanning || muted.capped) ? (
+    muted.rooms.length > 0 && muted.partial ? (
+      <View style={styles.partial} testID="muted-rooms-partial">
+        <Text style={[font('meta', bold), styles.foot]}>Some rooms didn’t load.</Text>
+        <Button kind="tertiary" size="sm" label="Try again" onPress={muted.refresh} />
+      </View>
+    ) : muted.rooms.length > 0 && (muted.scanning || muted.capped) ? (
       <Text style={[font('meta', bold), styles.foot]}>{muted.scanning ? 'Checking more rooms…' : CAPPED_NOTE}</Text>
     ) : null
 
   return (
     <View style={styles.container}>
       <FlatList
+        testID="muted-rooms-list"
         data={muted.rooms}
         keyExtractor={(room) => room.id}
         renderItem={renderRoom}
@@ -93,7 +110,7 @@ function MutedRoomsContent() {
         showsVerticalScrollIndicator={false}
         initialNumToRender={12}
         windowSize={7}
-        refreshControl={<RefreshControl refreshing={false} onRefresh={muted.refresh} tintColor={COLOR.textSecondary} progressViewOffset={bar.indicatorTop} />}
+        refreshControl={<RefreshControl refreshing={muted.loading && muted.rooms.length > 0} onRefresh={muted.refresh} tintColor={COLOR.textSecondary} progressViewOffset={bar.indicatorTop} />}
         {...bar.scrollProps}
       />
       <View style={bar.barPin} pointerEvents="box-none">
@@ -108,6 +125,7 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: SPACE.gutter, gap: SPACE.md },
   emptyContent: { flexGrow: 1 },
   foot: { color: COLOR.textTertiary, textAlign: 'center', paddingVertical: SPACE.lg },
+  partial: { alignItems: 'center' },
   skeletons: { gap: SPACE.lg },
   skeletonRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
   skeletonText: { flex: 1, gap: SPACE.sm },

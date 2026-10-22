@@ -104,11 +104,11 @@ function NotificationSettingsContent() {
                 testID={`muted-room-${room.id}`}
               />
             ))}
-            {mutedMore > 0 || muted.scanning || muted.capped ? (
+            {mutedMore > 0 || muted.scanning || muted.capped || muted.partial ? (
               <SettingsRow
                 key="all"
                 icon="bell-off"
-                title={mutedMore > 0 && !muted.scanning && !muted.capped ? `See all ${muted.rooms.length} muted rooms` : 'See all muted rooms'}
+                title={mutedMore > 0 && !muted.scanning && !muted.capped && !muted.partial ? `See all ${muted.rooms.length} muted rooms` : 'See all muted rooms'}
                 trail="chevron"
                 onPress={() => router.push('/muted-rooms')}
                 testID="notification-settings-muted-all"

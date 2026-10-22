@@ -492,7 +492,7 @@ function SettingsScreenContent() {
           <SettingsRow
             icon="bell"
             title="Notifications"
-            hint={notificationsHint(muted.rooms.length, push.enabled === null ? null : push.enabled && !push.off)}
+            hint={notificationsHint(muted.count, push.enabled === null ? null : push.enabled && !push.off, muted.atLeast)}
             trail="chevron"
             onPress={() => router.push('/notification-settings')}
             testID="settings-notifications"
