@@ -470,7 +470,7 @@ describe('your position sits in the middle of the map you can see (owner, TestFl
     // Keyed on the settled snap's top, not the animated drawer value.
     expect(code('components/home/HomeShell.tsx')).toMatch(/drawerSnapTop=\{points\[snap\]\}/)
     // The map waits for its own height, so the first frame is centred too.
-    expect(code('components/home/HomeShell.tsx')).toMatch(/\{mapHeight !== null \? \(\s*<HomeMap/)
+    expect(code('components/home/HomeShell.tsx')).toMatch(/\{mapHeight !== null && mapPainted \? \(\s*<HomeMap/)
   })
 })
 

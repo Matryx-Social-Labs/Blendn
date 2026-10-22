@@ -101,7 +101,7 @@ export function StateScreen({ icon, title, body, bodyLink, lead, note, noteMono 
   const content = (
     <View style={styles.column}>
       {lead ? (
-        <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+        <View testID={testID && `${testID}-lead`} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
           {lead}
         </View>
       ) : (

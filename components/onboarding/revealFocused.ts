@@ -1,5 +1,5 @@
-import { useCallback, useRef, type RefObject } from 'react'
-import { ScrollView, TextInput, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native'
+import { useCallback, useEffect, useRef, type RefObject } from 'react'
+import { Keyboard, Platform, ScrollView, TextInput, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native'
 
 /** Room kept above the field for its label, and below it for the hint (two or three lines of small print). */
 export const REVEAL_ABOVE = 32
@@ -41,8 +41,25 @@ export function useRevealFocused(): {
   const viewport = useRef(0)
   const bodyY = useRef(0)
 
+  /**
+   * The input focus last landed on. iOS hands first responder to the Strong Password sheet while it is up, so
+   * `currentlyFocusedInput` is empty exactly when the keyboard (and the viewport) changes size; without this the
+   * page never followed the field, and the dock sat over it.
+   */
+  const lastFocused = useRef<ReturnType<NonNullable<typeof TextInput.State.currentlyFocusedInput>> | null>(null)
+
+  // With the keyboard gone nothing is being typed in: the page must not chase a field it was left on.
+  useEffect(() => {
+    const hide = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => {
+      lastFocused.current = null
+    })
+    return () => hide.remove()
+  }, [])
+
   const reveal = useCallback(() => {
-    const field = TextInput.State.currentlyFocusedInput?.()
+    const focused = TextInput.State.currentlyFocusedInput?.()
+    if (focused) lastFocused.current = focused
+    const field = focused ?? lastFocused.current
     const body = bodyRef.current
     if (!field || !body || viewport.current === 0) return
     field.measureLayout(

@@ -561,6 +561,8 @@ function RootLayout() {
         */}
       <Stack.Screen name="sign-in" options={{ headerShown: false }} />
       <Stack.Screen name="forgot-password" options={{ headerShown: false }} />
+      {/* The unmatched route draws its own screen: without this the native stack titled it "+not-found" in a white header. */}
+      <Stack.Screen name="+not-found" options={{ headerShown: false }} />
       <Stack.Screen
         name="(tabs)"
         options={{ 

@@ -39,7 +39,7 @@ const currentHost = (): BannerHost | null => claims[claims.length - 1]?.host ?? 
 
 const PEOPLE = ['friend_request', 'match', 'reveal_request', 'reveal', 'message_request', 'board_request', 'private_message', 'group_message']
 const CREW = ['crew_invite', 'crew_here', 'blend']
-const EVENT = ['event_update']
+const EVENT = ['event_update', 'event_changed']
 /** They land in the bell and nowhere else while the app is open. */
 const SILENT = ['announcement', 'rating_request', 'waitlist_promoted', 'message_request_response', 'board_request_accepted', 'friend_accepted']
 
@@ -124,7 +124,7 @@ export function bannerFor(content: PushContent, now: number): BannerSpec | null 
   if (!isBannerKind(type)) return null
   const data = asStrings(content.data)
   const base = { key: `${type}:${now}`, type, data, merged: 1, at: now }
-  if (type === 'event_update') {
+  if (type === 'event_update' || type === 'event_changed') {
     return {
       ...base,
       visual: { type: 'event', cover: null, badge: data.reason === 'venue' ? 'map-pin' : 'clock', cancelled: data.reason === 'cancelled' },

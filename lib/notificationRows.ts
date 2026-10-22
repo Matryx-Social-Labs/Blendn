@@ -78,6 +78,7 @@ type EventBadge = (typeof EVENT_BADGES)[number]
 /** The event kinds and the badge on their tile. */
 const EVENT_BADGE: Partial<Record<NotificationKind, EventBadge>> = {
   event_update: 'clock',
+  event_changed: 'clock',
   announcement: 'megaphone',
   waitlist_promoted: 'star',
   rating_request: 'star',
@@ -163,7 +164,7 @@ function fallbackVisual(item: NotificationItem): NotificationVisualSpec {
   if (badge) {
     // `data.reason` is how the five event changes are told apart, once the server sends it.
     const reason = item.data?.reason
-    const changed = item.kind === 'event_update'
+    const changed = item.kind === 'event_update' || item.kind === 'event_changed'
     return {
       type: 'event',
       cover: null,
@@ -177,6 +178,7 @@ function fallbackVisual(item: NotificationItem): NotificationVisualSpec {
 function fallbackCopy(item: NotificationItem, when: string): { title: string; context: string } {
   switch (item.kind) {
     case 'event_update':
+    case 'event_changed':
       return { title: item.body || item.title, context: joinLine(item.title, when) }
     case 'announcement':
       return { title: item.body ? `From the organiser: ${item.body}` : item.title, context: joinLine(eventName(item.title), when) }

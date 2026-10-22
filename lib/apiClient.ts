@@ -1080,6 +1080,9 @@ let rejectedReason: string | undefined
 let rejectedCode: string | undefined
 
 // API Client Class
+/** The Android channel set this build creates (lib/notifications): 2 = the Flow 9 channels. Bump with the set. */
+export const PUSH_CHANNEL_SET = 2
+
 class ApiClientClass {
   private baseUrl: string
   private inFlight = new Map<string, Promise<ApiResponse<unknown>>>()
@@ -2781,7 +2784,9 @@ class ApiClientClass {
       '/api/mobile/notifications/token',
       {
         method: 'POST',
-        body: JSON.stringify({ token, platform }),
+        // `channelSet` tells the server this install created the Flow 9 Android channels (matches, crew, after-the-night);
+        // without it the server keeps sending the old ones, so a push never lands in a channel this build lacks.
+        body: JSON.stringify({ token, platform, channelSet: PUSH_CHANNEL_SET }),
       },
       true,
       2 // High priority
