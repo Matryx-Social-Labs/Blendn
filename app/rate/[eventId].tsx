@@ -24,6 +24,7 @@ import { apiClient, type PeerRatingIssue } from '../../lib/apiClient'
 import { COLOR, DURATION, EASING, FONT_FAMILY, RADIUS, RISE, SPACE, SPRING } from '../../lib/design/tokens'
 import { Logger } from '../../lib/logger'
 import { askAboutNight, ratePeople, type RatePerson } from '../../lib/ratePeople'
+import { rateRefusal } from '../../lib/rateRefusal'
 import { isNightRated, markNightRated } from '../../lib/ratedNights'
 
 /**
@@ -126,13 +127,6 @@ const noteLength = (value: string) => value.length
 /** Never the server's sentence: it is written for an API caller. */
 const SAVE_FAILED = "Couldn’t save that. Try again."
 
-/**
- * A refusal that says the night is not open to rate (it is gone, or you were not there, or it has not ended): a 404 or a 403.
- * That is the object's own state, not a failure to retry, so the screen says it with the shared "isn't here any more" card.
- */
-const notOpen = (res: { errorCode?: string; reasonCode?: string } | null | undefined) =>
-  res?.errorCode === 'NOT_FOUND' || res?.errorCode === 'FORBIDDEN'
-
 type Load =
   | { kind: 'loading' }
   | { kind: 'error' }
@@ -177,6 +171,7 @@ function RatePeersContent() {
   const { eventId } = useLocalSearchParams<{ eventId: string }>()
   const { showToast } = useToast()
   const bar = useTopBarOverlay()
+  const resetBar = bar.reset
   const bold = useBoldText()
   // An answer cannot be sent offline: the banner says so and the writes wait (reads stay), Flow 15 #16.
   const offline = useOffline()
@@ -230,7 +225,7 @@ function RatePeersContent() {
         if (cancelled) return
         if (!peers.success || !peers.data) {
           Logger.warn('match', 'Ratable peers refused', { error: peers.error })
-          setLoad({ kind: notOpen(peers) ? 'gone' : 'error' })
+          setLoad({ kind: rateRefusal(peers).kind === 'gone' ? 'gone' : 'error' })
           return
         }
         const people = ratePeople(peers.data.userIds, conversations?.success ? conversations.data ?? [] : [])
@@ -260,8 +255,8 @@ function RatePeersContent() {
     setNote('')
     setIndex((i) => i + 1)
     // The next form starts at its top, so the bar is at rest again (#30).
-    bar.reset()
-  }, [bar])
+    resetBar()
+  }, [resetBar])
 
   /** One tap and it is sent: the night is a single question. */
   const rateNight = useCallback(
@@ -274,7 +269,13 @@ function RatePeersContent() {
         if (!res.success) {
           setEventRating(null)
           Logger.warn('events', 'Event rating refused', { error: res.error })
-          if (notOpen(res)) return setLoad({ kind: 'gone' })
+          const refusal = rateRefusal(res)
+          if (refusal.kind === 'gone') return setLoad({ kind: 'gone' })
+          // Not allowed, and asking again cannot change that: say why and go on to the people.
+          if (refusal.kind === 'refused') {
+            showToast(refusal.sentence, 'error', { haptic: 'error' })
+            return advance()
+          }
           showToast(SAVE_FAILED, 'error', { haptic: 'error' })
           return
         }
@@ -308,7 +309,13 @@ function RatePeersContent() {
       })
       if (!res.success) {
         Logger.warn('match', 'Peer rating refused', { error: res.error })
-        if (notOpen(res)) return setLoad({ kind: 'gone' })
+        const refusal = rateRefusal(res)
+        if (refusal.kind === 'gone') return setLoad({ kind: 'gone' })
+        // Not allowed to rate this person: say why and go on to the next, for a retry would be refused the same.
+        if (refusal.kind === 'refused') {
+          showToast(refusal.sentence, 'error', { haptic: 'error' })
+          return advance()
+        }
         showToast(SAVE_FAILED, 'error', { haptic: 'error' })
         return
       }
@@ -334,13 +341,7 @@ function RatePeersContent() {
         onBack={close}
         state={bar.state}
         testID="rate-bar"
-        trailing={
-          load.kind === 'ready' && person ? (
-            <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary]} testID="rate-progress">
-              {index + 1} of {people.length}
-            </Text>
-          ) : null
-        }
+        progress={load.kind === 'ready' && person ? `${index + 1} of ${people.length}` : undefined}
       />
     </View>
   )

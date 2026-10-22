@@ -89,7 +89,8 @@ it('the night: one tap on a number sends it and moves to the first person', asyn
   await fireEvent.press(await screen.findByLabelText(/^The night: 5 out of 5, Loved it/))
   await waitFor(() => expect(api.rateEvent).toHaveBeenCalledWith('e1', 5))
   expect(await screen.findByText('Night Cat')).toBeTruthy()
-  expect(screen.getByTestId('rate-progress').props.children.join('')).toBe('1 of 2')
+  expect(screen.getByTestId('rate-bar-progress').props.children).toBe('1 of 2')
+  expect(screen.getByLabelText('Person 1 of 2')).toBeTruthy()
 })
 
 it('a person: Submit is docked and disabled until a rating; issues are one radio group; the note is labelled', async () => {
@@ -185,13 +186,36 @@ describe('the night is not open to rate (Flow 15 #11)', () => {
     expect(router.back).toHaveBeenCalled()
   })
 
-  it('a send the server refuses as not open (403) ends on the same card, not a toast', async () => {
+  it('a night rating refused (403) says why and goes on to the people: asking again cannot change it', async () => {
     loads()
-    api.rateEvent.mockResolvedValue({ success: false, error: 'You can rate this event once it has ended', errorCode: 'FORBIDDEN' } as never)
+    api.rateEvent.mockResolvedValue({ success: false, error: 'x', errorCode: 'FORBIDDEN', reasonCode: 'NOT_ENDED' } as never)
     await view()
     await fireEvent.press(await screen.findByLabelText(/^The night: 5 out of 5, Loved it/))
-    expect(await screen.findByText('Rating isn’t open for this night')).toBeTruthy()
-    expect(mockShowToast).not.toHaveBeenCalled()
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('You can rate this night once it has ended.', 'error', { haptic: 'error' }))
+    expect(screen.queryByText('Rating isn’t open for this night')).toBeNull()
+    expect(await screen.findByText('Night Cat')).toBeTruthy()
+  })
+
+  it('a person refused (403) toasts the server\'s reason and advances to the next person, never the gone card', async () => {
+    loads()
+    api.ratePeer.mockResolvedValue({ success: false, error: 'x', errorCode: 'FORBIDDEN', reasonCode: 'NOT_CONNECTED' } as never)
+    await view()
+    await fireEvent.press(await screen.findByLabelText(/^The night: 5 out of 5, Loved it/))
+    await fireEvent.press(await screen.findByLabelText(/^Meeting Night Cat: 4 out of 5/))
+    await fireEvent.press(screen.getByTestId('rate-submit'))
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('You can only rate people you connected with.', 'error', { haptic: 'error' }))
+    expect(screen.queryByText('Rating isn’t open for this night')).toBeNull()
+    expect(await screen.findByText('Quiet Fox')).toBeTruthy()
+  })
+
+  it('a 403 with no reason named (an older server) still says something, and moves on', async () => {
+    loads()
+    api.ratePeer.mockResolvedValue({ success: false, error: 'x', errorCode: 'FORBIDDEN' } as never)
+    await view()
+    await fireEvent.press(await screen.findByLabelText(/^The night: 5 out of 5, Loved it/))
+    await fireEvent.press(await screen.findByLabelText(/^Meeting Night Cat: 4 out of 5/))
+    await fireEvent.press(screen.getByTestId('rate-submit'))
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('That one can’t be rated.', 'error', { haptic: 'error' }))
   })
 
   it('a refusal that is only a failure (500, no code) is still a toast and the form stays', async () => {
