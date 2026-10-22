@@ -41,9 +41,9 @@ describe('focus order: the header is read first (U-M15)', () => {
     expect(src.indexOf('<BanterHeader')).toBeLessThan(src.indexOf('<Reanimated.FlatList'))
   })
 
-  it('Room info: Back comes before the scroll view, and stays on top by zIndex', () => {
+  it('Room info: Back comes before the list, and stays on top by zIndex', () => {
     const src = read('app/chat-info/[id].tsx')
-    expect(src.indexOf('accessibilityLabel="Back"')).toBeLessThan(src.indexOf('<Animated.ScrollView'))
+    expect(src.indexOf('accessibilityLabel="Back"')).toBeLessThan(src.indexOf('<Animated.FlatList'))
     expect(src).toMatch(/back: \{[^}]*zIndex: 2/)
   })
 })

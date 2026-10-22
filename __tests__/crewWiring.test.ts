@@ -24,8 +24,8 @@ describe('crew and Blend rooms in the chat screen', () => {
   })
 
   it('a send refused because the room closed closes the room on screen', () => {
-    // On load, on a send, and on a refused rejoin (H2).
-    expect(chat.match(/roomClosedLine\(roomKind, result\.errorCode\)/g)).toHaveLength(3)
+    // On load, on a send, on a refused rejoin (H2), and on a send refused as a removal: a crew's room has no organiser (10-8).
+    expect(chat.match(/roomClosedLine\(roomKind, result\.errorCode\)/g)).toHaveLength(4)
     // Served: the closed line clears (M10).
     expect(chat).toContain('setClosedLine(null)')
     // Opened without a kind (an older push, a deep link): found in `rooms` (H2).

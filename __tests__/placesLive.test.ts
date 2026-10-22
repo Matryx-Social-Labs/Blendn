@@ -148,7 +148,7 @@ describe('the screens read the server', () => {
   it("a place's room reads every refusal through roomRefusalState: on load, on send and on a reaction", () => {
     // The map itself is table-tested in placeRoom.test.ts; this pins that the room uses it at all three doors.
     expect(CHAT.match(/roomRefusalState\(result\.errorCode\)/g)?.length).toBe(3)
-    expect(CHAT).toContain("{ kind: 'not_live' }")
+    expect(CHAT).toContain("kind: 'not_live'")
     expect(read('components/chat/RoomFeed.tsx')).toContain("case 'not_live':")
     expect(CHAT).toContain('subscribeToLiveEnded(')
   })
