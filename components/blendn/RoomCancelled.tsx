@@ -57,6 +57,7 @@ export function RoomCancelled({
       <Grain />
       {/* A scroll, so a long title at the largest type never clips the actions: the card still sits where the frame puts it. */}
       <ScrollView
+        testID={testID && `${testID}-scroll`}
         contentContainerStyle={[
           styles.scroll,
           { paddingTop: Math.round(height * CARD_TOP) },
