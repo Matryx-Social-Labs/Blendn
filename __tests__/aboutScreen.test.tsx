@@ -65,7 +65,7 @@ it('a link that will not open is a toast, not a silent row', async () => {
   const system = jest.spyOn(Linking, 'openURL').mockRejectedValue(new Error('no browser'))
   await render(<AboutScreen />)
   fireEvent.press(screen.getByLabelText(/OpenFreeMap/))
-  await waitFor(() => expect(mockToast).toHaveBeenCalledWith("That page didn't open. Try again.", 'error'))
+  await waitFor(() => expect(mockToast).toHaveBeenCalledWith("That page didn’t open. Try again.", 'error'))
   system.mockRestore()
 })
 

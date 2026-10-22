@@ -233,7 +233,7 @@ describe('Delete account', () => {
     api.getMyPlus.mockResolvedValue({ success: true, data: plusStatus({ active: true, source }) } as never)
     await openTray()
     expect(
-      await screen.findByText(`Cancel Blendn+ in your ${store} subscriptions first. Deleting your account doesn't cancel it.`)
+      await screen.findByText(`Cancel Blendn+ in your ${store} subscriptions first. Deleting your account doesn’t cancel it.`)
     ).toBeTruthy()
     fireEvent.press(screen.getByRole('button', { name: 'Manage subscription' }))
     await waitFor(() => expect(opened).toHaveBeenCalledWith(expect.stringMatching(/^https:\/\/(apps\.apple\.com|play\.google\.com)\//)))
@@ -246,7 +246,7 @@ describe('Delete account', () => {
       api.getMyPlus.mockResolvedValue({ success: true, data } as never)
       await openTray()
       await waitFor(() => expect(api.getMyPlus).toHaveBeenCalled())
-      expect(screen.queryByText(/Deleting your account doesn't cancel it/)).toBeNull()
+      expect(screen.queryByText(/Deleting your account doesn’t cancel it/)).toBeNull()
       fireEvent.press(screen.getByRole('button', { name: 'Cancel' }))
     }
   })
@@ -287,7 +287,7 @@ it('says which setting did not save, as a toast that plays the one error haptic'
   await waitFor(() => expect(toggle().props.accessibilityState.disabled).toBe(false))
   fireEvent.press(toggle())
 
-  await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("Couldn't save “Read receipts”. Try again.", 'error', { haptic: 'error' }))
+  await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("Couldn’t save “Read receipts”. Try again.", 'error', { haptic: 'error' }))
 })
 
 it('opens About and Contact support', async () => {

@@ -62,7 +62,7 @@ export const TOP_BAR_HEIGHT = 64
 export function PulseTopBar({
   leading,
   actions,
-  title = "Blend'n",
+  title = "Blend’n",
   floating = false,
 }: {
   /**

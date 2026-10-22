@@ -36,7 +36,7 @@ export default function SupportScreen() {
       showToast(`No email app opened. Write to ${SUPPORT_EMAIL}.`, 'info')
     )
 
-  const openHelp = () => openInApp(BLENDN_LINKS.help).catch(() => showToast("That page didn't open. Try again.", 'error'))
+  const openHelp = () => openInApp(BLENDN_LINKS.help).catch(() => showToast("That page didn’t open. Try again.", 'error'))
 
   const os = platformParts()
   const details: { icon: IconName; name: string; value: string }[] = [

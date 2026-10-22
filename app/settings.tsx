@@ -279,7 +279,7 @@ function SettingsScreenContent() {
       setPreferences(rolled)
       await savePreferencesLocal(rolled)
       // The switch has already flipped back; this says why.
-      showToast(`Couldn't save “${PREFERENCE_TITLES[key]}”. Try again.`, 'error', { haptic: 'error' })
+      showToast(`Couldn’t save “${PREFERENCE_TITLES[key]}”. Try again.`, 'error', { haptic: 'error' })
     } finally {
       setSaving(prev => ({ ...prev, [key]: false }))
     }
@@ -308,13 +308,13 @@ function SettingsScreenContent() {
    */
   const openPage = useCallback(
     (url: string) => {
-      openInApp(url).catch(() => showToast("That page didn't open. Try again.", 'error'))
+      openInApp(url).catch(() => showToast("That page didn’t open. Try again.", 'error'))
     },
     [showToast]
   )
   const openStore = useCallback(
     (url: string) => {
-      Linking.openURL(url).catch(() => showToast("That page didn't open. Try again.", 'error'))
+      Linking.openURL(url).catch(() => showToast("That page didn’t open. Try again.", 'error'))
     },
     [showToast]
   )
@@ -336,7 +336,7 @@ function SettingsScreenContent() {
             const result = await deleteAccount()
             if (!result.success) {
               setDeleting(false)
-              return { ok: false, error: result.error || "Your account wasn't deleted. Try again." }
+              return { ok: false, error: result.error || "Your account wasn’t deleted. Try again." }
             }
             /*
              * The session is already gone and the guard is on its way to sign-in.
@@ -346,7 +346,7 @@ function SettingsScreenContent() {
             return { ok: true, toast: 'Your account has been deleted.' }
           } catch {
             setDeleting(false)
-            return { ok: false, error: "Your account wasn't deleted. Check your connection and try again." }
+            return { ok: false, error: "Your account wasn’t deleted. Check your connection and try again." }
           }
         },
       },
@@ -366,7 +366,7 @@ function SettingsScreenContent() {
         // A running store subscription keeps billing after the account is gone: say so first (review H1).
         content: storePlus ? (
           <Text accessibilityLiveRegion="polite" style={[font('bodyStrong', bold), { color: COLOR.textPrimary }]}>
-            {`Cancel Blendn+ in your ${store} subscriptions first. Deleting your account doesn't cancel it.`}
+            {`Cancel Blendn+ in your ${store} subscriptions first. Deleting your account doesn’t cancel it.`}
           </Text>
         ) : undefined,
         onDismiss: () => {
@@ -610,7 +610,7 @@ const PLUS_FREE_SHEET: Sheet = {
   kind: 'actions',
   icon: 'sparkles',
   title: 'Blendn+ is free here for now',
-  message: "During launch in your city, staying live while you're here and your full night history are everyone's. There's nothing to buy.",
+  message: "During launch in your city, staying live while you’re here and your full night history are everyone’s. There’s nothing to buy.",
   actions: [{ label: 'Got it', variant: 'primary', then: () => {} }],
 }
 
@@ -644,9 +644,9 @@ function OffersFromPlacesRow() {
     try {
       const res = await offersApi.setOffersFromPlaces(!enabled)
       if (res.success && res.data) setEnabled(res.data.enabled)
-      else showToast(res.error || "That didn't save. Try again.", 'error', { haptic: 'error' })
+      else showToast(res.error || "That didn’t save. Try again.", 'error', { haptic: 'error' })
     } catch {
-      showToast("That didn't save. Try again.", 'error', { haptic: 'error' })
+      showToast("That didn’t save. Try again.", 'error', { haptic: 'error' })
     } finally {
       setSaving(false)
     }

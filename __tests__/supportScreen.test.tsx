@@ -69,5 +69,5 @@ it('the Help centre opens in the app, and a refusal is a toast', async () => {
   await waitFor(() => expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(BLENDN_LINKS.help, expect.any(Object)))
   ;(WebBrowser.openBrowserAsync as jest.Mock).mockRejectedValueOnce(new Error('no browser'))
   fireEvent.press(screen.getByLabelText(/^Help centre/))
-  await waitFor(() => expect(mockToast).toHaveBeenCalledWith("That page didn't open. Try again.", 'error'))
+  await waitFor(() => expect(mockToast).toHaveBeenCalledWith("That page didn’t open. Try again.", 'error'))
 })

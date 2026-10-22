@@ -45,7 +45,7 @@ export default function AboutScreen() {
   const bold = useBoldText()
   const version = appVersionLabel()
 
-  const fail = () => showToast("That page didn't open. Try again.", 'error')
+  const fail = () => showToast("That page didn’t open. Try again.", 'error')
   const openOurs = (url: string) => () => void openInApp(url).catch(fail)
   const openTheirs = (url: string) => () => void Linking.openURL(url).catch(fail)
 
@@ -116,7 +116,7 @@ export default function AboutScreen() {
         <Text style={[font('caption', bold), styles.credit]}>{FONT_CREDIT}</Text>
       </ScrollView>
       <View style={bar.barPin} pointerEvents="box-none">
-        <TopBar title="About Blend'n" state={bar.state} onBack={() => router.back()} testID="about-top" />
+        <TopBar title="About Blend’n" state={bar.state} onBack={() => router.back()} testID="about-top" />
       </View>
     </View>
   )
