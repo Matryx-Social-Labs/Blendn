@@ -14,7 +14,8 @@ import type { NotificationItem, NotificationKind } from './notificationFormat'
  * row with no `display` draws a glyph tile or the event tile, never a wrong face.
  */
 
-export type RowAction = { key: 'accept' | 'decline' | 'join' | 'view'; label: string; kind: 'strong' | 'secondary' }
+/** Accept and Join are `lit` (with their glyph); Decline and View are `secondary`. */
+export type RowAction = { key: 'accept' | 'decline' | 'join' | 'view'; label: string; kind: 'lit' | 'secondary'; icon?: IconName }
 
 export type FeedRow = {
   id: string
@@ -39,11 +40,11 @@ const DAY_MS = 24 * 60 * 60 * 1000
 /** The kinds that ask the reader something. */
 const REQUEST_ACTIONS: Partial<Record<NotificationKind, RowAction[]>> = {
   friend_request: [
-    { key: 'accept', label: 'Accept', kind: 'strong' },
+    { key: 'accept', label: 'Accept', kind: 'lit', icon: 'user-check' },
     { key: 'decline', label: 'Decline', kind: 'secondary' },
   ],
   crew_invite: [
-    { key: 'join', label: 'Join', kind: 'strong' },
+    { key: 'join', label: 'Join', kind: 'lit', icon: 'users' },
     { key: 'decline', label: 'Decline', kind: 'secondary' },
   ],
   reveal_request: [{ key: 'view', label: 'View', kind: 'secondary' }],

@@ -1,10 +1,10 @@
 import { useEffect, useRef } from 'react'
-import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
+import { AccessibilityInfo, Platform, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 
 import { Icon, type IconName } from '../ui/Icon'
-import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE, TYPE } from '../../lib/design/tokens'
-import { OPACITY } from '../../lib/theme'
-import { CONTROL_FONT_CAP, font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast } from './shared'
+import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
+import { Button } from './Button'
+import { CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from './shared'
 
 export type BannerKind = 'offline' | 'paused' | 'info' | 'visibility' | 'error'
 
@@ -24,8 +24,9 @@ export type BannerProps = {
   mono?: string
   /** The kind's own glyph unless given. */
   icon?: IconName
-  action?: { label: string; onPress: () => void }
-  /** The action is in flight: dimmed and held. */
+  /** A lit button in the screen's hue (`icon`: its leading glyph, 16 pt). */
+  action?: { label: string; onPress: () => void; icon?: IconName }
+  /** The action is in flight: the button holds its flare and, after 300 ms, shows its spinner. */
   busy?: boolean
   testID?: string
 }
@@ -38,7 +39,7 @@ export type BannerProps = {
  *
  * No haptic: a banner arrives unsolicited, and its action's haptic belongs to
  * the action. A system banner is announced politely when it appears; the
- * VisibilityBanner is read in place. Text scales freely; past 1.3× the action
+ * VisibilityBanner is read in place. The action is a `lit` Button, in the hue of the screen the banner sits in. Text scales freely; past 1.3× the action
  * wraps under the sentence. Increase Contrast adds the 50% hairline.
  */
 export function Banner({ kind, text, mono, icon, action, busy = false, testID }: BannerProps) {
@@ -75,18 +76,9 @@ export function Banner({ kind, text, mono, icon, action, busy = false, testID }:
         )}
       </Text>
       {action ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityState={{ disabled: busy, busy }}
-          disabled={busy}
-          hitSlop={(minTarget() - TYPE.meta.lineHeight) / 2}
-          onPress={action.onPress}
-          style={[busy && { opacity: OPACITY.disabled }, wrapped && styles.under]}
-        >
-          <Text numberOfLines={1} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.action]}>
-            {action.label}
-          </Text>
-        </Pressable>
+        <View style={wrapped ? styles.under : undefined}>
+          <Button kind="lit" size="sm" icon={action.icon} label={action.label} loading={busy} onPress={action.onPress} testID={testID && `${testID}-action`} />
+        </View>
       ) : null}
     </View>
   )
@@ -151,5 +143,4 @@ const styles = StyleSheet.create({
   wrapped: { flexWrap: 'wrap' },
   text: { flex: 1, color: COLOR.textPrimary },
   under: { flexBasis: '100%', paddingLeft: ICON.control + SPACE.md },
-  action: { color: COLOR.textPrimary },
 })

@@ -87,6 +87,13 @@ describe('<PresenceDot>', () => {
     expect(screen.getByTestId('d', { includeHiddenElements: true }).props.accessibilityElementsHidden).toBe(true)
   })
 
+  it('takes a colour for the unread dot (a world’s light glyph tone), and the live dot ignores it', async () => {
+    await render(<PresenceDot color={COLOR.selectionRoseGlyph} size={8} testID="d" />)
+    expect(flat('d')).toMatchObject({ width: 8, backgroundColor: COLOR.selectionRoseGlyph })
+    await render(<PresenceDot kind="live" color={COLOR.selectionRoseGlyph} testID="d" />)
+    expect(flat('d').backgroundColor).toBe(COLOR.live)
+  })
+
   it('takes a size and a ring on a face', async () => {
     await render(<PresenceDot kind="live" size={12} ring={COLOR.ink} testID="d" />)
     expect(flat('d')).toMatchObject({ width: 12, borderColor: COLOR.ink })

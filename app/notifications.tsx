@@ -8,7 +8,7 @@ import { Banner } from '../components/ds/Banner'
 import { Spinner } from '../components/ds/Loader'
 import { NotificationRow, type NotificationAction } from '../components/ds/NotificationRow'
 import { SectionHeader } from '../components/ds/SectionHeader'
-import { font, useBoldText } from '../components/ds/shared'
+import { font, HueProvider, useBoldText } from '../components/ds/shared'
 import { StateScreen } from '../components/ds/StateScreen'
 import { TopBar } from '../components/ds/TopBar'
 import { useSkeletonCrossfade } from '../components/motion/useSkeletonCrossfade'
@@ -16,6 +16,7 @@ import { CollapsingRow } from '../components/notifications/CollapsingRow'
 import { LandingHighlight } from '../components/notifications/LandingHighlight'
 import { NewPill } from '../components/notifications/NewPill'
 import { NotificationsSkeleton } from '../components/notifications/NotificationsSkeleton'
+import type { IconName } from '../components/ui/Icon'
 import { OfflineBanner, useOffline } from '../components/OfflineBanner'
 import { OverflowMenu } from '../components/crews/OverflowMenu'
 import { PullIndicator } from '../components/pulse/PullIndicator'
@@ -38,6 +39,8 @@ const EMPTY_BODY = 'Friend requests, matches, crew news and event changes land h
 const FOOTNOTE = 'That’s everything we keep: read notifications for 30 days, unread for 90.'
 const PUSH_OFF_TEXT = 'Push is off. These still land here, but your phone won’t tell you.'
 const DONE_TEXT: Record<string, string> = { friend_request: 'You’re friends now' }
+/** A glyph tile turns over with the answer: the request's `user-plus` becomes `user-check` (the tile pops, `Glyph`). */
+const DONE_GLYPH: Record<string, IconName> = { friend_request: 'user-check' }
 
 /** The sections sit 20 apart in the frame. design-exception: 20 is not on the space scale; 16 + 4 is the nearest sum of two. */
 const SECTION_GAP = SPACE.lg + SPACE.xs
@@ -153,7 +156,7 @@ function NotificationsScreenContent() {
     navigateFromNotificationData(row.item.data ?? undefined)
   }
   const actionsOf = (row: FeedRow): NotificationAction[] =>
-    row.actions.map((a) => ({ label: a.label, kind: a.kind, onPress: () => void feed.answer(row, a.key) }))
+    row.actions.map((a) => ({ label: a.label, kind: a.kind, icon: a.icon, onPress: () => void feed.answer(row, a.key) }))
 
   const confirmClear = () => {
     const waiting = feed.groups.waiting.length > 0
@@ -178,11 +181,15 @@ function NotificationsScreenContent() {
     ...(feed.items.length ? [{ icon: 'trash' as const, label: 'Clear all', onPress: confirmClear }] : []),
   ]
 
+  const visualOf = (row: FeedRow, requestState: string | undefined) => {
+    const answered = requestState === 'done' ? DONE_GLYPH[row.item.kind] : undefined
+    return answered && row.visual.type === 'glyph' ? { ...row.visual, icon: answered } : row.visual
+  }
   const rowOf = (row: FeedRow, ground: string) => (
     <View>
       <NotificationRow
         testID={`notification-${row.id}`}
-        visual={row.visual}
+        visual={visualOf(row, feed.requestState[row.id])}
         title={row.title}
         context={row.context}
         fresh={feed.fresh.has(row.id)}
@@ -207,6 +214,7 @@ function NotificationsScreenContent() {
               <SectionHeader
                 title="Waiting on you"
                 count={entry.total}
+                countStyle="lit"
                 action={entry.total > entry.rows.length ? { label: `See all ${entry.total}`, onPress: () => setAllWaiting(true) } : undefined}
                 testID="notifications-waiting"
               />
@@ -249,7 +257,7 @@ function NotificationsScreenContent() {
     <View style={styles.banners}>
       <OfflineBanner text="Offline. Showing what you had." testID="notifications-offline" />
       {push.off && feed.load !== 'loading' ? (
-        <Banner kind="info" icon="bell-off" text={PUSH_OFF_TEXT} action={{ label: 'Turn on', onPress: () => void push.turnOn() }} busy={push.saving} testID="notifications-push-off" />
+        <Banner kind="info" icon="bell-off" text={PUSH_OFF_TEXT} action={{ label: 'Turn on', icon: 'bell', onPress: () => void push.turnOn() }} busy={push.saving} testID="notifications-push-off" />
       ) : null}
     </View>
   )
@@ -369,5 +377,11 @@ const styles = StyleSheet.create({
   footnote: { color: COLOR.textTertiary, textAlign: 'center', paddingHorizontal: SPACE.lg, paddingTop: SPACE.sm, paddingBottom: SPACE.xxl },
 })
 
-/** Ember, the default hue (no provider): the screen reaches friends, crews and events at once, and the bell lives on the going-out screens. */
-export default NotificationsScreenContent
+/** Rose world: mostly people (friend requests, matches, crew invites, reveals), so one hue on this screen (`HueProvider`): the Waiting count, the Accept and Join pills, the glyph tiles, the unread dots and Turn on all light in it. */
+export default function NotificationsScreen() {
+  return (
+    <HueProvider value="rose">
+      <NotificationsScreenContent />
+    </HueProvider>
+  )
+}

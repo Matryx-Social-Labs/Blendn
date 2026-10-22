@@ -198,3 +198,6 @@ export function pourStyles(slideMs: number, fadeMs: number, curve: readonly numb
     drainReduced: asStyle({ opacity: 0, transition: reduced }),
   }
 }
+
+/** The hue's light as a chip, a settings tile or a switch's glyph tile takes it: in over `base` on `entrance`, back over `quick`. */
+export const LIGHT = pourStyles(DURATION.base, DURATION.quick, EASING.entrance)

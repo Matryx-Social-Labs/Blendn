@@ -106,14 +106,27 @@ const DOT = { unread: 10, live: 8 } as const
  * A dot. A trait of its row, not an element: the row's label says "unread" or
  * "live". `ring` cuts it out of a face (`size` 12 there).
  */
-export function PresenceDot({ kind = 'unread', size = DOT[kind], ring, testID }: { kind?: 'unread' | 'live'; size?: number; ring?: string; testID?: string }) {
+export function PresenceDot({
+  kind = 'unread',
+  size = DOT[kind],
+  ring,
+  color,
+  testID,
+}: {
+  kind?: 'unread' | 'live'
+  size?: number
+  ring?: string
+  /** The unread dot in a world's light tone (a notification row: `useSelection().glyph`), instead of white. */
+  color?: string
+  testID?: string
+}) {
   return (
     <View
       testID={testID}
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
       style={[
-        { width: size, height: size, borderRadius: RADIUS.capsule, backgroundColor: kind === 'live' ? COLOR.live : COLOR.textPrimary },
+        { width: size, height: size, borderRadius: RADIUS.capsule, backgroundColor: kind === 'live' ? COLOR.live : (color ?? COLOR.textPrimary) },
         ring ? { borderWidth: SPACE.xxs, borderColor: ring } : null,
       ]}
     />

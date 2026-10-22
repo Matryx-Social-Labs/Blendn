@@ -9,9 +9,9 @@ import React from 'react'
 import { AccessibilityInfo, Dimensions, Platform, StyleSheet } from 'react-native'
 
 import { Banner, VisibilityBanner } from '../components/ds/Banner'
+import { HueProvider, SELECTION } from '../components/ds/shared'
 import { COLOR, FONT_FAMILY, MATERIAL, RADIUS } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
-import { OPACITY } from '../lib/theme'
 
 const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id).props.style)
 
@@ -44,7 +44,7 @@ describe('<Banner>', () => {
     for (const spy of spies) expect(spy).not.toHaveBeenCalled()
   })
 
-  it('its action is a button; busy dims it and holds it', async () => {
+  it('its action is a lit Button in the screen’s hue, with the glyph the caller names; busy holds it', async () => {
     const onPress = jest.fn()
     await render(<Banner kind="info" text="Dating is on for this event." action={{ label: 'Change', onPress }} />)
     await fireEvent.press(screen.getByRole('button', { name: 'Change' }))
@@ -52,8 +52,26 @@ describe('<Banner>', () => {
 
     await render(<Banner kind="info" text="Dating is on for this event." action={{ label: 'Change', onPress }} busy />)
     const action = screen.getByRole('button', { name: 'Change' })
-    expect(action.props.accessibilityState).toMatchObject({ disabled: true, busy: true })
-    expect(StyleSheet.flatten(action.props.style).opacity).toBe(OPACITY.disabled)
+    expect(action.props.accessibilityState).toMatchObject({ busy: true })
+    await fireEvent.press(action)
+    expect(onPress).toHaveBeenCalledTimes(1)
+  })
+
+  it.each(['ember', 'rose', 'violet'] as const)('the action is a lit Button under %s: the hue’s fill and rim, a white label, the named glyph', async (hue) => {
+    await render(
+      <HueProvider value={hue}>
+        <Banner kind="info" text="Push is off." action={{ label: 'Turn on', icon: 'bell', onPress: jest.fn() }} testID="b" />
+      </HueProvider>
+    )
+    expect(flat('b-action').backgroundColor).toBe(SELECTION[hue].fill)
+    expect(flat('b-action-rim').borderColor).toBe(SELECTION[hue].edge)
+    expect(StyleSheet.flatten(screen.getByText('Turn on').props.style).color).toBe(COLOR.textPrimary)
+    expect(JSON.stringify(screen.toJSON())).toContain(SELECTION[hue].glyph)
+  })
+
+  it('a banner without an action draws no button', async () => {
+    await render(<Banner kind="offline" text="Offline." testID="b" />)
+    expect(screen.queryByRole('button')).toBeNull()
   })
 
   it('Increase Contrast adds the 50% hairline', async () => {

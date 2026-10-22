@@ -6,7 +6,7 @@ import { COLOR, EASING, MATERIAL, SPRING } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { OPACITY } from '../../lib/theme'
-import { focusRing, minTarget, useIncreaseContrast } from './shared'
+import { focusRing, minTarget, useIncreaseContrast, useSelection } from './shared'
 
 /*
  * The two switch shapes (the Toggle page; §13). iOS: the 51 × 31 UISwitch,
@@ -48,15 +48,16 @@ export type ToggleProps = {
 
 /**
  * The switch (DESIGN-BRIEF §12, guidelines/components/Toggle.html; ROUND3
- * F1): on is a white track with an ink thumb, off is the #959090 track with a
- * white thumb. iOS draws the UISwitch's proportions; Android draws Material's,
+ * F1): on is a track in the screen's hue edge (`HueProvider`; violet in
+ * Settings) under a white thumb, off is the #959090 track under the same white
+ * thumb (foundations C, part 2: the owner's call, on everywhere a switch lives). iOS draws the UISwitch's proportions; Android draws Material's,
  * with the outlined off track (the R3 ruling: Android reads as Material).
  *
  * The thumb travels on `M.snap` and the colours cross-fade; Reduce Motion
  * jumps the thumb and keeps the cross-fade. `H.toggle` as it changes (§10.2,
  * a custom switch). Fixed-size: text never scales it. Increase Contrast
- * outlines the iOS off track at 50%; the on track and Android's outline
- * already pass.
+ * outlines the iOS off track at 50%; the on track (3.3:1 against its card, 4.8:1
+ * under the thumb in violet) and Android's outline already pass.
  *
  * It lives in a `SettingsRow`, which is the one element a screen reader
  * hears; on its own it is a switch named by `accessibilityLabel`.
@@ -67,6 +68,7 @@ export function Toggle({ value, onValueChange, accessibilityLabel, disabled = fa
   const android = Platform.OS === 'android'
   const reduceMotion = useReducedMotion()
   const contrast = useIncreaseContrast()
+  const sel = useSelection()
   const [down, setDown] = useState(false)
   const [focused, setFocused] = useState(false)
   const pressed = held || down || previewState === 'pressed'
@@ -120,7 +122,7 @@ export function Toggle({ value, onValueChange, accessibilityLabel, disabled = fa
         <View testID={testID && `${testID}-track`} style={[{ width, height, borderRadius: round }, off]} />
         <Animated.View
           testID={testID && `${testID}-on`}
-          style={[StyleSheet.absoluteFill, { borderRadius: round, backgroundColor: COLOR.selectionFill }, toneStyle]}
+          style={[StyleSheet.absoluteFill, { borderRadius: round, backgroundColor: sel.edge }, toneStyle]}
         />
         <Animated.View
           testID={testID && `${testID}-thumb`}
@@ -129,12 +131,7 @@ export function Toggle({ value, onValueChange, accessibilityLabel, disabled = fa
             { width: g.width, height: g.height, top: (height - g.height) / 2, borderRadius: g.height / 2 },
             thumbStyle,
           ]}
-        >
-          <Animated.View
-            testID={testID && `${testID}-thumb-ink`}
-            style={[StyleSheet.absoluteFill, { borderRadius: g.height / 2, backgroundColor: COLOR.selectionInk }, toneStyle]}
-          />
-        </Animated.View>
+        />
       </Pressable>
       {focused || previewState === 'focused'
         ? focusRing(round).map((ring, i) => (

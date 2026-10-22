@@ -46,7 +46,7 @@ function NotificationSettingsContent() {
         {...bar.scrollProps}
       >
         {phoneBlocks ? (
-          <Banner kind="info" icon="bell-off" text={OS_BLOCKING_TEXT} action={{ label: 'Turn on', onPress: () => void push.turnOn() }} testID="notification-settings-os" />
+          <Banner kind="info" icon="bell-off" text={OS_BLOCKING_TEXT} action={{ label: 'Turn on', icon: 'bell', onPress: () => void push.turnOn() }} testID="notification-settings-os" />
         ) : null}
 
         <SettingsGroup testID="notification-settings-master">

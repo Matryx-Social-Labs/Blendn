@@ -1,10 +1,11 @@
 import { Image } from 'expo-image'
 import { useEffect, useRef, useState } from 'react'
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
-import Animated, { Easing, FadeOut } from 'react-native-reanimated'
+import Animated, { Easing, FadeIn, FadeOut, LinearTransition, withTiming } from 'react-native-reanimated'
 
+import { Glyph } from '../ui/Glyph'
 import { Icon, type IconName } from '../ui/Icon'
-import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, PRESS, RADIUS, SPACE, SPRING } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
 import { Avatar } from './Avatar'
@@ -12,7 +13,7 @@ import { Button } from './Button'
 import { Creature, creatureFor } from './Creature'
 import { CrewEmblem } from './CrewEmblem'
 import { Badge, PresenceDot } from './MonoFamily'
-import { announceOutcome, font, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
+import { announceOutcome, font, PRESSED_WASH, useBoldText, useIncreaseContrast, useSelection } from './shared'
 
 /** Someone in a stack, as the server lets you see them: a photo only where the face is already yours to see. */
 export type StackPerson = { pseudonym: string } | { uri: string }
@@ -51,28 +52,44 @@ const ROW_VISUAL = 40
  * A notification's leading visual at 40 (a row) or 32 (the in-app banner).
  * Decorative: the title beside it names the actor. `ground` is the colour it
  * sits on, so a stack's faces and the event badge cut out of it.
+ *
+ * `lit` (a row on Notifications, in its world): the glyph tile takes the hue's fill and light glyph, and `play` runs the glyph's
+ * verb once. `halo` rings a face in the hue's edge, outside its cut-out: a request's. The banner draws neither.
  */
 export function NotificationVisual({
   visual,
   size,
   ground = COLOR.ink,
+  lit = false,
+  halo,
+  play,
   testID,
 }: {
   visual: NotificationVisualSpec
   size: 32 | 40
   ground?: string
+  lit?: boolean
+  halo?: string
+  play?: boolean
   testID?: string
 }) {
+  const sel = useSelection()
   const corner = Math.round(size * TILE_CORNER)
+  // A halo needs the cut-out inside it, or it would touch the face.
+  const faceRing = halo ? ground : undefined
   const box = { width: size, height: size }
   return (
     <View testID={testID} style={box} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      {visual.type === 'photo' ? <Avatar kind="photo" uri={visual.uri} size={size} /> : null}
-      {visual.type === 'creature' ? <Avatar kind="creature" pseudonym={visual.pseudonym} size={size} /> : null}
+      {visual.type === 'photo' ? <Avatar kind="photo" uri={visual.uri} size={size} ring={faceRing} halo={halo} testID={testID && `${testID}-face`} /> : null}
+      {visual.type === 'creature' ? <Avatar kind="creature" pseudonym={visual.pseudonym} size={size} ring={faceRing} halo={halo} testID={testID && `${testID}-face`} /> : null}
       {visual.type === 'emblem' ? <CrewEmblem seed={visual.seed} size={size} /> : null}
       {visual.type === 'glyph' ? (
-        <View style={[box, styles.center, { borderRadius: corner, backgroundColor: COLOR.surfaceRaised }]}>
-          <Icon name={visual.icon} size={size === 40 ? ICON.control : ICON.inline} />
+        <View testID={testID && `${testID}-tile`} style={[box, styles.center, { borderRadius: corner, backgroundColor: lit ? sel.fill : COLOR.surfaceRaised }]}>
+          {lit ? (
+            <Glyph name={visual.icon} size={size === 40 ? ICON.control : ICON.inline} color={sel.glyph} play={play} />
+          ) : (
+            <Icon name={visual.icon} size={size === 40 ? ICON.control : ICON.inline} />
+          )}
         </View>
       ) : null}
       {visual.type === 'event' ? (
@@ -116,7 +133,8 @@ function Stack({ people, extra, size, ground }: { people: readonly StackPerson[]
   )
 }
 
-export type NotificationAction = { label: string; kind: 'strong' | 'secondary'; onPress: () => void }
+/** Accept and Join are `lit` (a glyph before the label); Decline and View are `secondary`. */
+export type NotificationAction = { label: string; kind: 'lit' | 'secondary'; icon?: IconName; onPress: () => void }
 
 export type NotificationRowProps = {
   visual: NotificationVisualSpec
@@ -125,7 +143,7 @@ export type NotificationRowProps = {
   context: string
   /** Unseen: the title at 700 and the 8 pt dot (no dot on a request: its pills say it). */
   fresh?: boolean
-  /** A request's 36 pt pills: Accept / Join strong-neutral, Decline / View / Not now raised. */
+  /** A request's 36 pt pills: Accept / Join lit in the screen's hue, Decline / View / Not now raised. While set, a request's face takes the hue's ring. */
   actions?: NotificationAction[]
   /** pending: the tapped pill is busy (the first, if it came in pending) and the rest wait · done: the outcome replaces the pills · stale: dimmed, "This request is no longer open". */
   state?: 'pending' | 'done' | 'stale'
@@ -138,9 +156,19 @@ export type NotificationRowProps = {
   testID?: string
 }
 
-/** `H.success` and the outcome said once when a request is recorded (pending → done, the server's answer); never for a row that arrives done. */
+/**
+ * `H.success` and the outcome said once when a request is recorded (pending → done, the server's answer); never for a row that
+ * arrives done. Returns whether this row was answered while it was on screen: only then does the outcome come in and the ✓ draw.
+ */
 function useRecordedOutcome(state: NotificationRowProps['state'], doneText: string | undefined) {
   const was = useRef(state)
+  // Derived during render (not from the ref, which is for the effect): the previous state is kept beside the verdict.
+  const [seen, setSeen] = useState(state)
+  const [answered, setAnswered] = useState(false)
+  if (seen !== state) {
+    setSeen(state)
+    setAnswered(seen === 'pending' && state === 'done')
+  }
   useEffect(() => {
     if (state === 'done' && was.current === 'pending') {
       H.success()
@@ -150,6 +178,24 @@ function useRecordedOutcome(state: NotificationRowProps['state'], doneText: stri
     // `doneText` is read as it stood when the answer came.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state])
+  return answered
+}
+
+/** The outcome line: it comes in over `base`, and the ✓ draws itself on the frame it lands (Reduce Motion: drawn at once, `Glyph`). */
+function DoneLine({ text, answered, bold, testID }: { text: string; answered: boolean; bold: boolean; testID?: string }) {
+  const sel = useSelection()
+  // `Glyph` plays on the edge false → true after mount, so an answered row's ✓ draws once; a row that arrives done shows it drawn.
+  const [drawn, setDrawn] = useState(false)
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (answered) setDrawn(true)
+  }, [answered])
+  return (
+    <Animated.View testID={testID} entering={answered ? OUTCOME_IN : undefined} accessibilityLiveRegion="polite" style={styles.done}>
+      <Glyph name="check" size={ICON.inline} color={sel.glyph} active play={drawn} testID={testID && `${testID}-check`} />
+      <Text style={[font('meta', bold), styles.ink]}>{text}</Text>
+    </Animated.View>
+  )
 }
 
 /**
@@ -160,7 +206,7 @@ function useRecordedOutcome(state: NotificationRowProps['state'], doneText: stri
  * intro says "This isn't available any more").
  *
  * The row is one button, "{title}, {context}, new", silent like every row; the
- * pills follow it as buttons. Unread → read (motion #29): the dot leaves over `quick` and the title steps to 500 at once, never while it is being read (the screen decides when `fresh` ends). A strong pill (Accept, Join) plays `H.primary`
+ * pills follow it as buttons. Unread → read (motion #29): the dot leaves over `quick` and the title steps to 500 at once, never while it is being read (the screen decides when `fresh` ends). A lit pill (Accept, Join) plays `H.primary`
  * on press-in and the row plays `H.success` when the server records it (the
  * Flow 9 prototype); Decline plays nothing. Pressed: the row wash on iOS, the
  * ripple on Android. Text scales and the row grows.
@@ -180,7 +226,8 @@ export function NotificationRow({
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const reduceMotion = useReducedMotion()
-  useRecordedOutcome(state, doneText)
+  const sel = useSelection()
+  const answered = useRecordedOutcome(state, doneText)
   /** The pill that was tapped carries the spinner while the request is pending; the others wait. */
   const [tapped, setTapped] = useState(0)
   const stale = state === 'stale'
@@ -188,9 +235,11 @@ export function NotificationRow({
   const line = stale ? 'This request is no longer open' : context
   const pills = actions?.length && !stale && state !== 'done' ? actions : null
   const detail = contrast ? COLOR.textPrimary : COLOR.textSecondary
+  // The row's height settles as the pills fold and the outcome line comes in. Reduce Motion: it jumps.
+  const glide = reduceMotion ? undefined : SETTLE
 
   return (
-    <View testID={testID}>
+    <Animated.View testID={testID} layout={glide}>
       <Pressable
         onPress={onPress}
         disabled={!onPress}
@@ -201,7 +250,7 @@ export function NotificationRow({
         style={({ pressed }) => [styles.row, pressed && Platform.OS === 'ios' ? { backgroundColor: PRESSED_WASH.ios } : null]}
       >
         <View testID={testID && `${testID}-visual`} style={stale ? { opacity: STALE_OPACITY } : null}>
-          <NotificationVisual visual={visual} size={ROW_VISUAL} ground={ground} />
+          <NotificationVisual visual={visual} size={ROW_VISUAL} ground={ground} lit halo={actions?.length ? sel.edge : undefined} play={state === 'done'} testID={testID && `${testID}-art`} />
         </View>
         <View style={styles.text}>
           <Text
@@ -211,42 +260,54 @@ export function NotificationRow({
             {title}
           </Text>
           <Text style={[font('meta', bold), { color: stale ? COLOR.textTertiary : detail }]}>{line}</Text>
-          {done ? (
-            <View accessibilityLiveRegion="polite" style={styles.done}>
-              <Icon name="check" size={ICON.inline} active />
-              <Text style={[font('meta', bold), styles.ink]}>{done}</Text>
-            </View>
-          ) : null}
+          {done ? <DoneLine text={done} answered={answered} bold={bold} testID={testID && `${testID}-done`} /> : null}
         </View>
         {fresh && !pills ? (
           // Motion #29, unread → read: the dot leaves over `quick` as the title's weight swaps (at once, in the font above). Reduce Motion: it goes.
           <Animated.View style={styles.dot} exiting={reduceMotion ? undefined : DOT_EXIT}>
-            <PresenceDot size={SPACE.sm} testID={testID && `${testID}-dot`} />
+            <PresenceDot size={SPACE.sm} color={sel.glyph} testID={testID && `${testID}-dot`} />
           </Animated.View>
         ) : null}
       </Pressable>
       {pills ? (
-        <View style={styles.pills}>
+        // The pills fold away over `quick` (scaled to 0.97) as the outcome line comes in; Reduce Motion: a crossfade.
+        <Animated.View exiting={reduceMotion ? PILLS_OUT_REDUCED : pillsOut} style={styles.pills}>
           {pills.map((a, i) => (
             <Button
               key={a.label}
+              testID={testID && `${testID}-pill-${i}`}
               kind={a.kind}
               size="sm"
+              icon={a.icon}
               label={a.label}
               loading={state === 'pending' && i === tapped}
               disabled={state === 'pending' && i !== tapped}
-              pressHaptic={a.kind === 'strong' ? H.primary : false}
+              pressHaptic={a.kind === 'lit' ? H.primary : false}
               onPress={() => {
                 setTapped(i)
                 a.onPress()
               }}
             />
           ))}
-        </View>
+        </Animated.View>
       ) : null}
-    </View>
+    </Animated.View>
   )
 }
+
+/** The pills fold: opacity to 0 and a squeeze to the press scale over `quick`, as the outcome takes their place. */
+const pillsOut = () => {
+  'worklet'
+  const t = { duration: DURATION.quick, easing: Easing.bezier(...EASING.exit) }
+  return {
+    initialValues: { opacity: 1, transform: [{ scale: 1 }] },
+    animations: { opacity: withTiming(0, t), transform: [{ scale: withTiming(PRESS.scale, t) }] },
+  }
+}
+const PILLS_OUT_REDUCED = FadeOut.duration(DURATION.quick).easing(Easing.bezier(...EASING.exit))
+/** The outcome line arrives over `base` on the entrance curve; the row's height settles on `SPRING.settle`. */
+const OUTCOME_IN = FadeIn.duration(DURATION.base).easing(Easing.bezier(...EASING.entrance))
+const SETTLE = LinearTransition.springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping).mass(SPRING.settle.mass)
 
 /** The unread dot's way out (motion #29). */
 const DOT_EXIT = FadeOut.duration(DURATION.quick).easing(Easing.bezier(...EASING.exit))

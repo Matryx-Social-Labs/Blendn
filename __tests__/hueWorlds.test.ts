@@ -20,6 +20,7 @@ const ROSE = [
   'app/friends/requests.tsx',
   'app/friends/[userId].tsx',
   'app/f/[token].tsx',
+  'app/notifications.tsx',
   'app/rate/[eventId].tsx',
   'components/blendn/BlendnScreen.tsx',
 ]
@@ -32,7 +33,6 @@ const EMBER = [
   'app/event/[id].tsx',
   'app/board/[eventId].tsx',
   'app/offer/[id].tsx',
-  'app/notifications.tsx',
   'app/sign-in.tsx',
   'components/home/HomeShell.tsx',
   'components/home/PlacesList.tsx',

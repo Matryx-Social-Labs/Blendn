@@ -60,9 +60,21 @@ describe('a row from the stored push, which names nobody', () => {
     for (const k of ['match', 'friend_accepted', 'crew_here', 'blend', 'announcement'] as const) expect(labels(k)).toEqual([])
   })
 
-  it('makes the first pill strong: Accept and Join, nothing else', () => {
-    expect(rowFor(item({ id: 'a', kind: 'friend_request' }), NOW).actions.map((a) => a.kind)).toEqual(['strong', 'secondary'])
+  it('makes the first pill lit, with its glyph: Accept (user-check) and Join (users), nothing else', () => {
+    expect(rowFor(item({ id: 'a', kind: 'friend_request' }), NOW).actions).toEqual([
+      { key: 'accept', label: 'Accept', kind: 'lit', icon: 'user-check' },
+      { key: 'decline', label: 'Decline', kind: 'secondary' },
+    ])
+    expect(rowFor(item({ id: 'c', kind: 'crew_invite' }), NOW).actions[0]).toEqual({ key: 'join', label: 'Join', kind: 'lit', icon: 'users' })
     expect(rowFor(item({ id: 'b', kind: 'reveal_request' }), NOW).actions.map((a) => a.kind)).toEqual(['secondary'])
+  })
+
+  // A friend request comes only through your invite link (app/f/[token]), so it is a person and a time: never an event or a room.
+  it.each(['friend_request', 'friend_accepted'] as const)('%s is the person and the time, never an event or a room', (kind) => {
+    const row = rowFor(item({ id: kind, kind, title: 'New friend request', body: 'Priya asked at Vinyl Night' }), NOW)
+    expect(row.context).toBe('5 min ago')
+    expect(row.context).not.toContain('·')
+    expect(row.context).not.toContain('Vinyl')
   })
 
   it('draws an event tile with the kind’s badge for the event kinds', () => {
@@ -103,11 +115,11 @@ describe('a row with what the server resolved for the reader', () => {
       item({
         id: 'a',
         kind: 'friend_request',
-        display: { title: 'Priya wants to be friends', context: 'Vinyl Night · 2 min ago', visual: { type: 'photo', uri: 'https://x/p.jpg' } },
+        display: { title: 'Priya wants to be friends', context: 'Wants to be friends · 2 min ago', visual: { type: 'photo', uri: 'https://x/p.jpg' } },
       }),
       NOW
     )
-    expect(row).toMatchObject({ title: 'Priya wants to be friends', context: 'Vinyl Night · 2 min ago', visual: { type: 'photo', uri: 'https://x/p.jpg' } })
+    expect(row).toMatchObject({ title: 'Priya wants to be friends', context: 'Wants to be friends · 2 min ago', visual: { type: 'photo', uri: 'https://x/p.jpg' } })
   })
 
   it('falls back field by field when a part is missing or malformed', () => {

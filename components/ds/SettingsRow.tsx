@@ -1,17 +1,22 @@
 import { Children, Fragment, isValidElement, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
+import Animated from 'react-native-reanimated'
 
+import { Glyph } from '../ui/Glyph'
 import { Icon, type IconName } from '../ui/Icon'
 import { COLOR, ICON, MATERIAL, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
+import { useReducedMotion } from '../../lib/motion'
 import { OPACITY, tint } from '../../lib/theme'
 import { Spinner } from './Loader'
-import { font, IC_HAIRLINE, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
+import { font, IC_HAIRLINE, LIGHT, PRESSED_WASH, useBoldText, useIncreaseContrast, useSelection } from './shared'
 import { Toggle } from './Toggle'
 
 export type SettingsTrail = 'switch' | 'chevron' | 'external' | 'none'
 
 const ROW_MIN_HEIGHT = SIZE.primary
+/** The tile a switch row's glyph sits in: 32 pt, `RADIUS.thumb`, `surfaceRaised`; the hue's light pours into it when the switch is on. */
+const TILE = SPACE.xxl
 /** The Danger zone's outline (Flow 7 `settings`): the destructive colour at 38%. */
 const DANGER_RING = 0.38
 const ROLE = { switch: 'switch', chevron: 'button', external: 'link', none: undefined } as const
@@ -56,9 +61,28 @@ function useRollbackHaptic(error: boolean) {
   }, [error])
 }
 
+/** A switch row's leading glyph: in its tile, lit in the screen's hue while the switch is on, its verb played as it turns on. */
+function SwitchTile({ icon, on, testID }: { icon: IconName; on: boolean; testID?: string }) {
+  const sel = useSelection()
+  const reduceMotion = useReducedMotion()
+  const light = on ? (reduceMotion ? LIGHT.pourReduced : LIGHT.pour) : reduceMotion ? LIGHT.drainReduced : LIGHT.drain
+  return (
+    <View testID={testID} style={styles.tile}>
+      <Animated.View testID={testID && `${testID}-light`} pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: sel.fill }, light]} />
+      <Glyph name={icon} size={ICON.control} color={on ? sel.glyph : COLOR.textPrimary} play={on} />
+    </View>
+  )
+}
+
+/** Where a row's text starts, so the hairline under the row above begins there. */
+const textEdge = (row: unknown) => {
+  const p = isValidElement(row) ? (row.props as Partial<SettingsRowProps>) : null
+  return SPACE.lg + (p?.trail === 'switch' && p.icon && !p.leading ? TILE : ICON.control) + SPACE.lg
+}
+
 /**
  * A settings row (guidelines/components/SettingsRow.html): at least 56 pt, a
- * 20 pt glyph, a title, a hint, and a switch, chevron or external-link trail.
+ * 20 pt glyph (a switch row's sits in a 32 pt tile that the hue lights while it is on), a title, a hint, and a switch, chevron or external-link trail.
  *
  * One element for a screen reader: "{title}, {hint}, switch, on" — the whole
  * row toggles, so the switch is drawn, not focused. It plays `H.toggle` (§10.2,
@@ -126,7 +150,8 @@ export function SettingsRow({
         disabled && { opacity: OPACITY.disabled },
       ]}
     >
-      {leading ?? (icon ? <Icon name={icon} size={ICON.control} color={ink} /> : null)}
+      {leading ??
+        (icon ? isSwitch ? <SwitchTile testID={testID && `${testID}-tile`} icon={icon} on={value} /> : <Icon name={icon} size={ICON.control} color={ink} /> : null)}
       <View style={styles.text}>
         <Text style={[font('bodyStrong', bold), { color: ink }]}>{title}</Text>
         {hint ? <Text style={[font('meta', bold), { color: error ? COLOR.destructive : COLOR.textSecondary }]}>{hint}</Text> : null}
@@ -186,7 +211,13 @@ export function SettingsGroup({
         {Children.toArray(children).map((row, i) => (
           // `toArray` keys each row, so a row's focus and rollback state stay with it when rows come and go.
           <Fragment key={isValidElement(row) ? row.key : i}>
-            {i ? <View testID={testID && `${testID}-hairline`} accessibilityElementsHidden style={[styles.hairline, contrast && styles.hairlineContrast]} /> : null}
+            {i ? (
+              <View
+                testID={testID && `${testID}-hairline`}
+                accessibilityElementsHidden
+                style={[styles.hairline, { marginLeft: textEdge(row) }, contrast && styles.hairlineContrast]}
+              />
+            ) : null}
             {row}
           </Fragment>
         ))}
@@ -203,6 +234,7 @@ const styles = StyleSheet.create({
     padding: SPACE.lg,
     minHeight: ROW_MIN_HEIGHT,
   },
+  tile: { width: TILE, height: TILE, borderRadius: RADIUS.thumb, backgroundColor: COLOR.surfaceRaised, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   text: { flex: 1, minWidth: 0, gap: SPACE.xxs },
   accessory: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   focus: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, borderRadius: RADIUS.rowInCard, borderWidth: SPACE.xxs, borderColor: COLOR.focusRing },
@@ -212,6 +244,6 @@ const styles = StyleSheet.create({
   card: { borderRadius: RADIUS.sheet, backgroundColor: COLOR.surface, overflow: 'hidden' },
   dangerCard: { backgroundColor: 'transparent', borderWidth: 1, borderColor: tint(COLOR.destructive, DANGER_RING) },
   dangerRoom: { marginTop: SPACE.xl },
-  hairline: { height: StyleSheet.hairlineWidth, backgroundColor: COLOR.hairline, marginLeft: SPACE.lg + ICON.control + SPACE.lg },
+  hairline: { height: StyleSheet.hairlineWidth, backgroundColor: COLOR.hairline },
   hairlineContrast: { height: 1, backgroundColor: MATERIAL.hairlineIncreaseContrast },
 })

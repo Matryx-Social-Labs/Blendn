@@ -1,6 +1,6 @@
 /*
- * <Toggle> (guidelines/components/Toggle.html; ROUND3 F1): on is a white
- * track with an ink thumb, off is #959090 with a white thumb; iOS's 51 × 31,
+ * <Toggle> (guidelines/components/Toggle.html; foundations C part 2): on is a
+ * track in the screen's hue edge under a white thumb, off is #959090 under the same white thumb; iOS's 51 × 31,
  * Android's Material 52 × 32 with the outlined off track and the 16 → 24 → 28
  * thumb; H.toggle as it changes; M.snap travel that Reduce Motion drops.
  */
@@ -9,6 +9,7 @@ import React from 'react'
 import { AccessibilityInfo, Platform, StyleSheet } from 'react-native'
 import * as Reanimated from 'react-native-reanimated'
 
+import { HueProvider, SELECTION } from '../components/ds/shared'
 import { Toggle } from '../components/ds/Toggle'
 import { COLOR, MATERIAL, SPRING } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
@@ -43,12 +44,28 @@ describe('<Toggle>', () => {
     expect(flat('t-thumb')).toMatchObject({ width: 27, height: 27, backgroundColor: COLOR.textPrimary })
   })
 
-  it('on: the white track and the ink thumb (F1), at the far end', async () => {
-    await draw({ value: true })
+  it('on: the hue’s edge track under the white thumb, at the far end (violet in Settings)', async () => {
+    await render(
+      <HueProvider value="violet">
+        <Toggle value onValueChange={jest.fn()} accessibilityLabel="Event updates" testID="t" />
+      </HueProvider>
+    )
     expect(animated('t-on').opacity).toBe(1)
-    expect(flat('t-on').backgroundColor).toBe(COLOR.selectionFill)
-    expect(flat('t-thumb-ink').backgroundColor).toBe(COLOR.selectionInk)
+    expect(flat('t-on').backgroundColor).toBe(SELECTION.violet.edge)
+    expect(flat('t-on').backgroundColor).toBe(COLOR.brandViolet)
+    expect(flat('t-thumb').backgroundColor).toBe(COLOR.textPrimary)
+    expect(screen.queryByTestId('t-thumb-ink', { includeHiddenElements: true })).toBeNull()
     expect(animated('t-thumb').left).toBe(51 - 27 - 2)
+  })
+
+  it.each(['ember', 'rose', 'violet'] as const)('on under %s: the track is that hue’s edge; off is unchanged', async (hue) => {
+    await render(
+      <HueProvider value={hue}>
+        <Toggle value onValueChange={jest.fn()} accessibilityLabel="x" testID="t" />
+      </HueProvider>
+    )
+    expect(flat('t-on').backgroundColor).toBe(SELECTION[hue].edge)
+    expect(flat('t-track').backgroundColor).toBe(COLOR.switchOffTrack)
   })
 
   it('Android: Material’s 52 × 32, an outlined off track and a 16 thumb; 24 when on', async () => {

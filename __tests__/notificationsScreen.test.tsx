@@ -6,7 +6,7 @@
  * See all, the ⋯ menu and Clear all, paging, opening marking everything seen.
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
-import { View } from 'react-native'
+import { StyleSheet, View } from 'react-native'
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
@@ -60,6 +60,7 @@ import * as Notifications from 'expo-notifications'
 import { router } from 'expo-router'
 import NotificationsScreen from '../app/notifications'
 import { SheetHost } from '../components/SheetHost'
+import { COLOR } from '../lib/design/tokens'
 import { apiClient } from '../lib/apiClient'
 import { crewsApi } from '../lib/crewsApi'
 import type { NotificationItem } from '../lib/notificationFormat'
@@ -274,6 +275,44 @@ describe('answering a request in place', () => {
     await render(<Screen />)
     await screen.findByText('You have a new match')
     expect(screen.queryByText('New friend request')).toBeNull()
+  })
+})
+
+describe('the rose world (foundations C, part 2)', () => {
+  const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id, { includeHiddenElements: true }).props.style)
+
+  it('lights the Waiting count, the glyph tile and the Accept pill in rose', async () => {
+    await render(<Screen />)
+    await screen.findByText('New friend request')
+    expect(flat('notifications-waiting-count').backgroundColor).toBe(COLOR.selectionRoseFill)
+    expect(flat('notifications-waiting-count').borderColor).toBe(COLOR.brandRose)
+    expect(flat('notification-f1-art-tile').backgroundColor).toBe(COLOR.selectionRoseFill)
+    expect(flat('notification-f1-pill-0').backgroundColor).toBe(COLOR.selectionRoseFill)
+    expect(screen.getByRole('header', { name: 'Waiting on you, 1' })).toBeTruthy()
+  })
+
+  it('a friend row is the person and the time: no event, no room', async () => {
+    await render(<Screen />)
+    await screen.findByText('New friend request')
+    expect(screen.getAllByText('5 min ago').length).toBeGreaterThan(0)
+    expect(screen.queryByText(/·/)).toBeNull()
+  })
+
+  it('answering turns the tile’s glyph from user-plus to user-check', async () => {
+    api.respondToFriendRequest.mockResolvedValue({ success: true } as never)
+    await render(<Screen />)
+    await screen.findByText('New friend request')
+    const before = JSON.stringify(screen.getByTestId('notification-f1-art-tile', { includeHiddenElements: true }).children)
+    fireEvent.press(screen.getByRole('button', { name: 'Accept' }))
+    await screen.findByText('You’re friends now')
+    expect(JSON.stringify(screen.getByTestId('notification-f1-art-tile', { includeHiddenElements: true }).children)).not.toBe(before)
+  })
+
+  it('Turn on is a lit button with the bell, in rose', async () => {
+    permissions.mockResolvedValue({ status: 'denied', canAskAgain: false })
+    await render(<Screen />)
+    await screen.findByText(/Push is off/)
+    expect(flat('notifications-push-off-action').backgroundColor).toBe(COLOR.selectionRoseFill)
   })
 })
 

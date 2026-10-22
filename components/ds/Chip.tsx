@@ -10,7 +10,7 @@ import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
 import { OPACITY, tint } from '../../lib/theme'
 import { monoCaption } from './MonoFamily'
-import { chipRest, CONTROL_FONT_CAP, focusRing, font, minTarget, PRESSED_WASH, pourStyles, useBoldText, useGround, useIncreaseContrast, useSelection } from './shared'
+import { chipRest, CONTROL_FONT_CAP, focusRing, font, LIGHT, minTarget, PRESSED_WASH, useBoldText, useGround, useIncreaseContrast, useSelection } from './shared'
 
 /** The off chip's edge: a 0.5 pt hairline (1 pt at 50% under Increase Contrast). */
 const HAIRLINE = 0.5
@@ -43,7 +43,6 @@ const EDGE_FADE = {
  * and never played on mount: a chip that mounts selected is already lit). Under Reduce Motion nothing translates: the fill
  * crossfades over the Reduce Motion `quick`.
  */
-const LIGHT = pourStyles(DURATION.base, DURATION.quick, EASING.entrance)
 export const POUR = LIGHT.pour
 export const DRAIN = LIGHT.drain
 export const POUR_REDUCED = LIGHT.pourReduced

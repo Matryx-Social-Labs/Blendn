@@ -8,6 +8,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
 import { AccessibilityInfo, Platform, StyleSheet, Text } from 'react-native'
 
+import { HueProvider, SELECTION } from '../components/ds/shared'
 import { SectionHeader } from '../components/ds/SectionHeader'
 import { COLOR, FONT_FAMILY, SIZE, TYPE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
@@ -40,6 +41,46 @@ it('the count is "· N" in Geist Mono 700, tabular, at textSecondary; the headin
   expect(style('14')).toMatchObject({ fontFamily: FONT_FAMILY.mono[700], color: COLOR.textSecondary, fontVariant: ['tabular-nums'] })
   expect(style('·').color).toBe(COLOR.textSecondary)
   expect(screen.getByRole('header', { name: 'Everyone here, 14' })).toBeTruthy()
+})
+
+describe('countStyle="lit"', () => {
+  const lit = (count: number, hue: 'ember' | 'rose' | 'violet' = 'rose') =>
+    render(
+      <HueProvider value={hue}>
+        <SectionHeader title="Waiting on you" count={count} countStyle="lit" testID="h" />
+      </HueProvider>
+    )
+
+  it.each(['ember', 'rose', 'violet'] as const)('draws the count as a 22 pt capsule in the %s fill with its 1 pt edge, the number white in Geist Mono 700', async (hue) => {
+    await lit(3, hue)
+    expect(StyleSheet.flatten(screen.getByTestId('h-count').props.style)).toMatchObject({
+      minHeight: 22,
+      minWidth: 22,
+      borderWidth: 1,
+      backgroundColor: SELECTION[hue].fill,
+      borderColor: SELECTION[hue].edge,
+    })
+    expect(style('3')).toMatchObject({ fontFamily: FONT_FAMILY.mono[700], fontSize: 12, lineHeight: 16, color: COLOR.textPrimary, fontVariant: ['tabular-nums'] })
+  })
+
+  it('has no “·”, and the reader still hears “Waiting on you, 3”', async () => {
+    await lit(3)
+    expect(screen.queryByText('·', { includeHiddenElements: true })).toBeNull()
+    expect(screen.getByRole('header', { name: 'Waiting on you, 3' })).toBeTruthy()
+  })
+
+  it('a three-digit count grows the capsule rather than clipping it', async () => {
+    await lit(128)
+    expect(StyleSheet.flatten(screen.getByTestId('h-count').props.style).minWidth).toBe(22)
+    expect(StyleSheet.flatten(screen.getByTestId('h-count').props.style).width).toBeUndefined()
+    expect(style('128')).toBeTruthy()
+  })
+
+  it('without a count there is no capsule; plain is the default', async () => {
+    await render(<SectionHeader title="Everyone here" count={14} countStyle="plain" testID="h" />)
+    expect(screen.queryByTestId('h-count')).toBeNull()
+    expect(style('·').color).toBe(COLOR.textSecondary)
+  })
 })
 
 it('the action is its own button, 700 14 white, silent, reaching the 44 pt target', async () => {

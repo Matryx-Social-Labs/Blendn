@@ -9,8 +9,8 @@ import React from 'react'
 import { AccessibilityInfo, StyleSheet, Text } from 'react-native'
 
 import { SettingsGroup, SettingsRow } from '../components/ds/SettingsRow'
-import { PRESSED_WASH } from '../components/ds/shared'
-import { COLOR, ICON, MATERIAL, SPACE } from '../lib/design/tokens'
+import { HueProvider, PRESSED_WASH, SELECTION } from '../components/ds/shared'
+import { COLOR, ICON, MATERIAL, RADIUS, SPACE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { OPACITY } from '../lib/theme'
 
@@ -57,10 +57,55 @@ describe('<SettingsRow>', () => {
     expect(toggle).toHaveBeenCalledWith(true)
   })
 
-  it('draws the P1 Toggle: on is the white track with the ink thumb (F1)', async () => {
-    await render(push())
-    expect(flat('r-toggle-on').backgroundColor).toBe(COLOR.selectionFill)
-    expect(flat('r-toggle-thumb-ink').backgroundColor).toBe(COLOR.selectionInk)
+  it('draws the P1 Toggle: on is the hue’s edge track under the white thumb', async () => {
+    await render(<HueProvider value="violet">{push()}</HueProvider>)
+    expect(flat('r-toggle-on').backgroundColor).toBe(COLOR.brandViolet)
+    expect(flat('r-toggle-thumb').backgroundColor).toBe(COLOR.textPrimary)
+  })
+
+  describe('the glyph tile of a switch row', () => {
+    const tile = (value: boolean) => (
+      <HueProvider value="violet">
+        <SettingsRow icon="bell" title="Push notifications" trail="switch" value={value} onValueChange={jest.fn()} testID="r" />
+      </HueProvider>
+    )
+
+    it('is 32 pt, thumb-cornered, on surfaceRaised', async () => {
+      await render(tile(false))
+      expect(flat('r-tile')).toMatchObject({ width: 32, height: 32, borderRadius: RADIUS.thumb, backgroundColor: COLOR.surfaceRaised, overflow: 'hidden' })
+    })
+
+    it('lights in the hue only when the switch is on: the light is poured in and the glyph takes the hue’s tone', async () => {
+      await render(tile(false))
+      expect(flat('r-tile-light')).toMatchObject({ backgroundColor: SELECTION.violet.fill, opacity: 0 })
+      expect(JSON.stringify(screen.toJSON())).not.toContain(SELECTION.violet.glyph)
+      await render(tile(true))
+      expect(flat('r-tile-light')).toMatchObject({ backgroundColor: SELECTION.violet.fill, opacity: 1 })
+      expect(JSON.stringify(screen.toJSON())).toContain(SELECTION.violet.glyph)
+    })
+
+    it('a chevron or external row has no tile: a plain glyph', async () => {
+      await render(<SettingsRow icon="shield" title="Blocked users" trail="chevron" onPress={jest.fn()} testID="r" />)
+      expect(screen.queryByTestId('r-tile', { includeHiddenElements: true })).toBeNull()
+    })
+
+    it('a row with its own leading mark keeps it, with no tile', async () => {
+      await render(<SettingsRow leading={<Text>L</Text>} icon="bell" title="Crew" trail="switch" value onValueChange={jest.fn()} testID="r" />)
+      expect(screen.queryByTestId('r-tile', { includeHiddenElements: true })).toBeNull()
+    })
+
+    it('the group’s hairline starts at the text edge of the row below it: past the 32 pt tile, or the 20 pt glyph', async () => {
+      await render(
+        <SettingsGroup testID="g">
+          <SettingsRow icon="bell" title="A" trail="switch" value={false} onValueChange={jest.fn()} />
+          <SettingsRow icon="bell" title="B" trail="switch" value={false} onValueChange={jest.fn()} />
+          <SettingsRow icon="shield" title="C" trail="chevron" onPress={jest.fn()} />
+        </SettingsGroup>
+      )
+      const lines = screen.getAllByTestId('g-hairline', { includeHiddenElements: true })
+      expect(StyleSheet.flatten(lines[0].props.style).marginLeft).toBe(SPACE.lg + 32 + SPACE.lg)
+      expect(StyleSheet.flatten(lines[1].props.style).marginLeft).toBe(SPACE.lg + ICON.control + SPACE.lg)
+    })
   })
 
   it('the row’s press reaches the toggle: its thumb widens under the finger', async () => {

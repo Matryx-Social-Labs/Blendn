@@ -25,7 +25,6 @@ const walk = (dir: string): string[] =>
 /** White that stays, and why. */
 const WHITE_STAYS: Record<string, string> = {
   'components/ds/IconButton.tsx': 'a toggle over glass or a photo: the disc is the control, not a set',
-  'components/ds/Toggle.tsx': 'the toggle track stays uncoloured (owner)',
   'components/ds/ShareSheet.tsx': 'the strong action’s disc: the strong button is white',
   'components/ds/StoryCard.tsx': 'a rendered share image, not UI',
   'components/ds/OfferCard.tsx': 'the “used” status mark',
@@ -40,7 +39,7 @@ describe('the white selection that is left', () => {
     expect(users.sort()).toEqual(Object.keys(WHITE_STAYS).sort())
   })
 
-  it.each(['Chip', 'SegmentedControl', 'RadioCard', 'LookingForCard', 'PlanCard', 'ProgressBar', 'MakeSteps', 'TitleTabs'])(
+  it.each(['Chip', 'SegmentedControl', 'RadioCard', 'LookingForCard', 'PlanCard', 'ProgressBar', 'MakeSteps', 'TitleTabs', 'Toggle'])(
     '%s lights in the hue, never in white',
     (name) => {
       const file = [...walk('components')].find((f) => path.basename(f) === `${name}.tsx`)!

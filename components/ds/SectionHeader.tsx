@@ -4,7 +4,10 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { COLOR, FONT_FAMILY, RADIUS, SPACE, TYPE } from '../../lib/design/tokens'
 import { OPACITY } from '../../lib/theme'
 import { PresenceDot } from './MonoFamily'
-import { focusRing, font, minTarget, useBoldText } from './shared'
+import { CONTROL_FONT_CAP, focusRing, font, minTarget, useBoldText, useSelection } from './shared'
+
+/** The lit count's capsule, as `Badge` at size 22. */
+const CAPSULE = 22
 
 export type SectionAction = { label: string; onPress: () => void; busy?: boolean }
 
@@ -21,10 +24,14 @@ export type SectionAction = { label: string; onPress: () => void; busy?: boolean
  *
  * Screen reader: a heading "{title}, {N}", then the action as its own button.
  * The page's count is 18 pt, between roles: it is drawn at the heading's 20.
+ *
+ * `countStyle="lit"` (a screen's own list, in its world): the count is a 22 pt capsule in the hue's fill with its 1 pt edge, the
+ * number white in Geist Mono 700 12/16, `Badge`'s geometry. The reader still hears "{title}, {N}".
  */
 export function SectionHeader({
   title,
   count,
+  countStyle = 'plain',
   action,
   live = false,
   caption,
@@ -33,6 +40,8 @@ export function SectionHeader({
 }: {
   title: string
   count?: number
+  /** `plain`: "· N" in textSecondary. `lit`: a capsule in the screen's hue (`HueProvider`). */
+  countStyle?: 'plain' | 'lit'
   action?: SectionAction
   /** The live dot before the title ("Live now"). */
   live?: boolean
@@ -41,6 +50,7 @@ export function SectionHeader({
   testID?: string
 }) {
   const bold = useBoldText()
+  const sel = useSelection()
   const [focused, setFocused] = useState(false)
   const slop = (minTarget() - TYPE.meta.lineHeight) / 2
   const heading = count == null ? title : `${title}, ${count}`
@@ -57,7 +67,13 @@ export function SectionHeader({
           <Text numberOfLines={2} style={[font('heading', bold), styles.title]}>
             {title}
           </Text>
-          {count != null ? (
+          {count != null && countStyle === 'lit' ? (
+            <View testID={testID && `${testID}-count`} style={[styles.capsule, { backgroundColor: sel.fill, borderColor: sel.edge }]}>
+              <Text style={[font('caption', bold, FONT_FAMILY.mono[700]), styles.capsuleText, styles.tabular]} maxFontSizeMultiplier={CONTROL_FONT_CAP}>
+                {count}
+              </Text>
+            </View>
+          ) : count != null ? (
             <>
               <Text style={[font('heading', bold), styles.muted]}>·</Text>
               <Text style={[font('heading', bold, FONT_FAMILY.mono[700]), styles.muted, styles.tabular]}>{count}</Text>
@@ -107,6 +123,18 @@ const styles = StyleSheet.create({
   title: { color: COLOR.textPrimary, flexShrink: 0 },
   muted: { color: COLOR.textSecondary },
   tabular: { fontVariant: ['tabular-nums'] },
+  /** `Badge`'s 22: a pill that grows with a large count, a 1 pt edge inside it. */
+  capsule: {
+    alignSelf: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: CAPSULE,
+    minWidth: CAPSULE,
+    paddingHorizontal: SPACE.sm,
+    borderRadius: RADIUS.capsule,
+    borderWidth: 1,
+  },
+  capsuleText: { color: COLOR.textPrimary },
   right: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, flexShrink: 1, minWidth: 0, marginLeft: 'auto' },
   action: { color: COLOR.textPrimary },
   /** A short action ("Edit") still reaches the 44 / 48 width; the label sits at the right edge. */
