@@ -64,7 +64,7 @@ import * as Notifications from 'expo-notifications'
 import { router } from 'expo-router'
 import NotificationsScreen from '../app/notifications'
 import { SheetHost } from '../components/SheetHost'
-import { COLOR } from '../lib/design/tokens'
+import { COLOR, SPACE } from '../lib/design/tokens'
 import { apiClient } from '../lib/apiClient'
 import { crewsApi } from '../lib/crewsApi'
 import type { NotificationItem } from '../lib/notificationFormat'
@@ -177,6 +177,17 @@ describe('the states', () => {
     // The request carries its pills; a plain row does not.
     expect(screen.getByRole('button', { name: 'Accept' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Decline' })).toBeTruthy()
+  })
+
+  it('sits on the app’s one 24 pt gutter, like every other list (r7 M3)', async () => {
+    await render(<Screen />)
+    await screen.findByRole('header', { name: 'Waiting on you, 1' })
+    const card = StyleSheet.flatten(screen.getByTestId('notifications-waiting-card').props.style)
+    expect(card.marginHorizontal).toBe(SPACE.gutter)
+    // The section heading's inset: the first ancestor that pads it.
+    let node = screen.getByTestId('notifications-new').parent
+    while (node && StyleSheet.flatten(node.props.style)?.paddingHorizontal === undefined) node = node.parent
+    expect(StyleSheet.flatten(node!.props.style).paddingHorizontal).toBe(SPACE.gutter)
   })
 
   it('shows three of the requests and “See all N” for the rest', async () => {
