@@ -93,6 +93,8 @@ export default function SignIn() {
   const { refused, refuse } = useRefusedPulse()
   // Four fields and a segmented control do not fit above the keyboard: the page follows the field being typed in.
   const { scrollRef, bodyRef, reveal, onScroll, onViewportLayout, onBodyLayout } = useRevealFocused()
+  // The page has moved under the header: it wears the bar (r7 M11).
+  const [scrolled, setScrolled] = useState(false)
   const focusing = { onFocus: reveal }
   /*
    * A ref as well as `busy`: the keyboard's "go" and the button can land in
@@ -223,13 +225,16 @@ export default function SignIn() {
     <View style={styles.root}>
       <Backdrop level={ORB_LEVEL.form} paused={keyboardUp} />
 
-      <FormHeader testID="sign-in-header" />
+      <FormHeader testID="sign-in-header" scrolled={scrolled} />
 
       <KeyboardAvoidingView style={styles.flex} behavior={KEYBOARD_BEHAVIOR}>
         <ScrollView
           ref={scrollRef}
           testID="sign-in-scroll"
-          onScroll={onScroll}
+          onScroll={(e) => {
+            onScroll(e)
+            setScrolled(e.nativeEvent.contentOffset.y > 0)
+          }}
           scrollEventThrottle={16}
           onLayout={onViewportLayout}
           style={styles.flex}
