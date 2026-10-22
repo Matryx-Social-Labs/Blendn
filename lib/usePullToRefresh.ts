@@ -1,8 +1,12 @@
-import { useCallback, useRef } from 'react'
-import { Platform, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native'
+import { createElement, useCallback, useMemo, useRef, type ReactElement } from 'react'
+import { Platform, RefreshControl, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native'
 import { useSharedValue, type SharedValue } from 'react-native-reanimated'
 
+import { PullIndicator } from '../components/pulse/PullIndicator'
+import { COLOR } from './design/tokens'
 import { H } from './haptics'
+
+type ScrollEvent = NativeSyntheticEvent<NativeScrollEvent>
 
 /** How far the list is pulled to arm a refresh, and where it holds while it loads (DS #18: the pull is the page's 64). */
 export const PULL_ARM = 64
@@ -16,14 +20,40 @@ export const pullProgress = (offsetY: number) => Math.min(1, Math.max(0, -offset
  *
  * Android has no overscroll to read: it keeps the platform's `RefreshControl` (`native`), tinted. Reduce Motion changes
  * nothing: the pull is direct manipulation.
+ *
+ * ## Wiring a screen (the whole of it)
+ *
+ * ```tsx
+ * const pull = usePullToRefresh({ refreshing, onRefresh })
+ * <FlatList {...pull.listProps} ... />   // FlatList, ScrollView, FlashList, VirtualizedList
+ * {pull.indicator}                        // a sibling of the list inside the same positioned parent; null on Android
+ * ```
+ *
+ * `listProps` is `onScroll`, `scrollEventThrottle`, `onScrollEndDrag`, `contentInset` (iOS) and `refreshControl`
+ * (Android). Do not set a `refreshControl` of your own. Your own scroll handler (a top bar's, a list's) goes in as
+ * `onScroll` here and is called first with every event; spreading `listProps` and then setting `onScroll` replaces the pull.
+ * A list under a floating bar passes `indicatorTop` (the bar's bottom edge, where the monogram sits); the Android control
+ * is offset by the same amount.
  */
-export function usePullToRefresh({ refreshing, onRefresh }: { refreshing: boolean; onRefresh: () => void }) {
+export function usePullToRefresh({
+  refreshing,
+  onRefresh,
+  onScroll: chainedOnScroll,
+  indicatorTop = 0,
+}: {
+  refreshing: boolean
+  onRefresh: () => void
+  /** The screen's own scroll handler; called with every event before the pull reads it. */
+  onScroll?: (e: ScrollEvent) => void
+  /** The top of the monogram's slot, in the list's parent. Default 0: the parent's top edge. */
+  indicatorTop?: number
+}) {
   const progress: SharedValue<number> = useSharedValue(0)
   const armed = useRef(false)
   const native = Platform.OS !== 'ios'
 
-  const onScroll = useCallback(
-    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+  const onPullScroll = useCallback(
+    (e: ScrollEvent) => {
       if (native) return
       const p = pullProgress(e.nativeEvent.contentOffset.y)
       progress.set(refreshing ? 1 : p)
@@ -36,18 +66,51 @@ export function usePullToRefresh({ refreshing, onRefresh }: { refreshing: boolea
     [native, progress, refreshing]
   )
   const onScrollEndDrag = useCallback(
-    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    (e: ScrollEvent) => {
       if (native || refreshing) return
       if (pullProgress(e.nativeEvent.contentOffset.y) >= 1) onRefresh()
       armed.current = false
     },
     [native, refreshing, onRefresh]
   )
+  const onScroll = useCallback(
+    (e: ScrollEvent) => {
+      chainedOnScroll?.(e)
+      onPullScroll(e)
+    },
+    [chainedOnScroll, onPullScroll]
+  )
+  const holdInset = refreshing && !native ? PULL_ARM : 0
+
+  const listProps = useMemo(
+    () => ({
+      onScroll,
+      scrollEventThrottle: 16,
+      onScrollEndDrag,
+      contentInset: { top: holdInset },
+      refreshControl: native
+        ? createElement(RefreshControl, { refreshing, onRefresh, tintColor: COLOR.textSecondary, progressViewOffset: indicatorTop })
+        : undefined,
+    }),
+    [onScroll, onScrollEndDrag, holdInset, native, refreshing, onRefresh, indicatorTop]
+  )
+  const indicator: ReactElement | null = native
+    ? null
+    : createElement(
+        View,
+        { pointerEvents: 'none', style: { position: 'absolute', top: indicatorTop, left: 0, right: 0 } },
+        createElement(PullIndicator, { progress })
+      )
+
   return {
     native,
     progress,
     /** Hold the list down while it loads (iOS `contentInset`). */
-    holdInset: refreshing && !native ? PULL_ARM : 0,
+    holdInset,
     scrollProps: { onScroll, onScrollEndDrag },
+    /** Spread onto the list: everything it needs, on either platform. */
+    listProps,
+    /** The monogram that traces as you pull (iOS); null on Android, where the platform control draws itself. */
+    indicator,
   }
 }
