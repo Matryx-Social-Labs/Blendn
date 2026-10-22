@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { CREW_MAX_MEMBERS } from '../../lib/crews'
 import type { Friend } from '../../lib/friends'
 import { Sheet } from '../ds/Sheet'
-import { FriendsStep } from './MakeSteps'
+import { FriendsStep, type FriendsStepProps } from './MakeSteps'
 
 const NONE_TO_ASK = 'Every friend of yours is in this crew, or you have none to ask yet.'
 
@@ -15,6 +15,7 @@ const NONE_TO_ASK = 'Every friend of yours is in this crew, or you have none to 
 export function InviteFriendsSheet({
   visible,
   friends,
+  paging,
   room,
   asking,
   onRetry,
@@ -24,6 +25,8 @@ export function InviteFriendsSheet({
   visible: boolean
   /** null while loading; 'failed' is not "none to ask". */
   friends: Friend[] | null | 'failed'
+  /** The friends are read a page at a time. */
+  paging?: FriendsStepProps['paging']
   room: number
   asking: boolean
   onRetry: () => void
@@ -52,7 +55,7 @@ export function InviteFriendsSheet({
       ]}
       testID="crew-invite-sheet"
     >
-      <FriendsStep friends={friends} picked={picked} onToggle={toggle} onRetry={onRetry} none={NONE_TO_ASK} limit={Math.min(room, CREW_MAX_MEMBERS - 1)} />
+      <FriendsStep friends={friends} picked={picked} onToggle={toggle} onRetry={onRetry} none={NONE_TO_ASK} limit={Math.min(room, CREW_MAX_MEMBERS - 1)} paging={paging} />
     </Sheet>
   )
 }

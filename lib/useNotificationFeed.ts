@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { useToast } from '../components/Toast'
 import { apiClient } from './apiClient'
+import { requestsPageFrom } from './friendsPaging'
 import { iconBadgeAfterRead, iconBadgeFor, setAppIconBadge } from './appBadge'
 import { askFriendsSeeMe, useStillHere } from './friendsSeeMeAsk'
 import { readAnswered, rememberAnswered, type Outcome } from './answeredRequests'
@@ -371,7 +372,9 @@ async function incomingRequests(page: readonly NotificationItem[]): Promise<Read
   if (!page.some((n) => n.kind === 'friend_request' && n.open !== false)) return null
   try {
     const result = await apiClient.getFriendRequests()
-    return result.success && result.data ? new Map(result.data.incoming.map((r) => [r.id, r.person.userId])) : null
+    const page = result.success ? requestsPageFrom(result.data, 'incoming') : null
+    // Only a whole list can say a request is gone: with more pages behind it, one not on the first may still be waiting.
+    return page && page.nextCursor === null ? new Map(page.items.map((r) => [r.id, r.person.userId])) : null
   } catch (error) {
     Logger.warn('notifications', 'requests:failed', { error: error as never })
     return null

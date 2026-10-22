@@ -27,6 +27,7 @@ import { ProfileBio, ProfileDetail, ProfileInterests, ProfileSection, SECTION_GA
 import { CrewEmblem } from '../../components/ds/CrewEmblem'
 import type { Rect } from '../../components/ds/chatShared'
 import { apiClient } from '../../lib/apiClient'
+import { requestsPageFrom } from '../../lib/friendsPaging'
 import { crewsApi } from '../../lib/crewsApi'
 import type { Crew } from '../../lib/crews'
 import { COLOR, SPACE, STAGGER } from '../../lib/design/tokens'
@@ -244,7 +245,8 @@ function ProfileInner() {
     })
     // Its own request, so a slow one never holds up the friend count.
     void apiClient.getFriendRequests().then((result) => {
-      if (result.success && result.data) setRequestCount(result.data.incoming.length)
+      // The server's count of everyone waiting, not the length of the first page of them.
+      if (result.success && result.data) setRequestCount(requestsPageFrom(result.data, 'incoming')?.total ?? 0)
     })
     // Your crews, and the invites waiting: the Crews row's count and dot.
     void crewsApi.myCrews().then((result) => {

@@ -13,7 +13,9 @@ import { Icon } from '../ui/Icon'
 /** The avatar's box and its decode hint, one number so they cannot drift (Flow 6 `personRow`: 48). */
 const AVATAR = 48
 /** The row's height: the frame's 64. */
-const ROW = SIZE.primary + SPACE.sm
+/** Exported for the lists that window these rows (`getItemLayout`). */
+export const PERSON_ROW_HEIGHT = SIZE.primary + SPACE.sm
+const ROW = PERSON_ROW_HEIGHT
 
 /**
  * One person on a friend surface (Flow 6 `personRow`): a 48 pt photo, the name in 500 17/24, a line under it, and whatever the screen

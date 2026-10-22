@@ -8,7 +8,6 @@ import { stepIn, stepOut, type StepDir } from '../../components/crews/stepMotion
 import { MadeBeat } from '../../components/crews/MadeBeat'
 import { ConsentStep, FriendsStep, NameStep } from '../../components/crews/MakeSteps'
 import { Sheet, type SheetAction } from '../../components/ds/Sheet'
-import { apiClient } from '../../lib/apiClient'
 import { CREW_MAX_MEMBERS, CREW_TAGS, createCrewBody, crewMessage, toggleTag } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
 import {
@@ -23,7 +22,7 @@ import {
   type MakeStep,
   stepNote,
 } from '../../lib/crewsScreens'
-import type { Friend } from '../../lib/friends'
+import { pickerView, useFriendsList } from '../../lib/useFriendsList'
 import { SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
@@ -59,8 +58,6 @@ function NewCrewScreenContent() {
   const [openToSolo, setOpenToSolo] = useState(false)
   const [keepAnonymous, setKeepAnonymous] = useState(false)
   const [picked, setPicked] = useState<string[]>([])
-  /** null while loading; 'failed' is not "no friends" — it offers a retry. */
-  const [friends, setFriends] = useState<Friend[] | null | 'failed'>(null)
   const [errors, setErrors] = useState<{ name?: string; bio?: string }>({})
   const [refusal, setRefusal] = useState<CrewRefusal | null>(null)
   const [stuck, setStuck] = useState(false)
@@ -71,21 +68,12 @@ function NewCrewScreenContent() {
   /** One create at a time: `sending` lags a fast second tap by a render. */
   const inFlight = useRef(false)
 
-  const loadFriends = useCallback(
-    () => apiClient.getFriends().then((r) => (r.success && r.data ? r.data.friends : ('failed' as const))),
-    []
-  )
+  // Your friends, a page at a time. 'failed' is not "no friends": the step offers a retry.
+  const friendList = useFriendsList()
+  const { refresh: readFriends } = friendList
   useEffect(() => {
-    let live = true
-    void loadFriends().then((f) => live && setFriends(f))
-    return () => {
-      live = false
-    }
-  }, [loadFriends])
-  const retryFriends = () => {
-    setFriends(null)
-    void loadFriends().then(setFriends)
-  }
+    void readFriends('reset')
+  }, [readFriends])
 
   const labels = CREW_TAGS.filter((t) => tags.includes(t.slug)).map((t) => t.label)
   const intent = intentOf(choice)
@@ -235,7 +223,13 @@ function NewCrewScreenContent() {
                   intentText={intentLine(intent) ?? ''}
                 />
               ) : step === 2 ? (
-                <FriendsStep friends={friends} picked={picked} onToggle={togglePick} onRetry={retryFriends} />
+                <FriendsStep
+                  friends={pickerView(friendList.status, friendList.friends)}
+                  picked={picked}
+                  onToggle={togglePick}
+                  onRetry={() => void readFriends('reset')}
+                  paging={{ hasMore: friendList.hasMore, loadingMore: friendList.loadingMore, moreFailed: friendList.moreFailed, onMore: () => void friendList.loadMore() }}
+                />
               ) : (
                 <ConsentStep
                   name={cleanName(name)}

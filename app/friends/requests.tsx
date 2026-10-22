@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { TopBar } from '../../components/ds/TopBar'
 import { IncomingRequestRow, RequestSkeleton } from '../../components/friends/IncomingRequestRow'
+import { PagedFooter } from '../../components/friends/PagedFooter'
 import { OfflineStrip, useOffline } from '../../components/profile/OfflineStrip'
 import { COLOR, SPACE } from '../../lib/design/tokens'
 import { useFriendRequests } from '../../lib/useFriendRequests'
@@ -18,10 +19,12 @@ import { HueProvider } from '../../components/ds/shared'
  *
  * Incoming only. Your own sent requests live on Add friends beside your link,
  * where you would go to send one. Accept and Not now behave exactly as they do
- * there (`useFriendRequests`).
+ * there (`useFriendRequests`). A page at a time by the server's cursor, windowed:
+ * the cards' heights follow the type size, so there is no `getItemLayout`, only
+ * the window.
  */
 function FriendRequestsScreenContent() {
-  const { incoming, loaded, failed, load, respond, busy } = useFriendRequests()
+  const { incoming, incomingPage, loaded, failed, load, loadMore, respond, busy } = useFriendRequests()
   const [refreshing, setRefreshing] = useState(false)
   const bar = useTopBarState()
   const insets = useSafeAreaInsets()
@@ -69,6 +72,15 @@ function FriendRequestsScreenContent() {
               onRespond={(action) => void respond(item, action)}
             />
           )}
+          testID="requests-list"
+          onEndReachedThreshold={1.5}
+          onEndReached={() => void loadMore('incoming')}
+          initialNumToRender={6}
+          windowSize={7}
+          removeClippedSubviews
+          ListFooterComponent={
+            <PagedFooter loading={incomingPage.loadingMore} failed={incomingPage.moreFailed} onRetry={() => void loadMore('incoming')} testID="requests-more" />
+          }
           contentContainerStyle={[incoming.length ? styles.list : styles.emptyList, { paddingBottom: insets.bottom + SPACE.xl }]}
           ListEmptyComponent={empty}
           // `textSecondary`, the one pull-to-refresh colour (docs/DESIGN_SYSTEM.md).

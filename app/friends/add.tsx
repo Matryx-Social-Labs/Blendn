@@ -1,6 +1,6 @@
 import { router } from 'expo-router'
 import { useState } from 'react'
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Button } from '../../components/ds/Button'
@@ -12,7 +12,10 @@ import { font, HueProvider, useBoldText } from '../../components/ds/shared'
 import { TopBar } from '../../components/ds/TopBar'
 import { IncomingRequestRow } from '../../components/friends/IncomingRequestRow'
 import { InviteLinkCard } from '../../components/friends/InviteLinkCard'
-import { PersonRow } from '../../components/friends/PersonRow'
+import { PagedFooter } from '../../components/friends/PagedFooter'
+import { PersonRow, PERSON_ROW_HEIGHT } from '../../components/friends/PersonRow'
+import { RequestsRow } from '../../components/friends/RequestsRow'
+import { SettingsGroup } from '../../components/ds/SettingsRow'
 import { COLOR, SPACE } from '../../lib/design/tokens'
 import { showSheet } from '../../lib/sheet'
 import { useAuth } from '../../lib/useAuth'
@@ -33,7 +36,7 @@ import { useTopBarState } from '../../lib/useTopBarState'
 function AddFriendsScreenContent() {
   const { invite, failed, reload, share, reset } = useFriendInvite()
   const requests = useFriendRequests()
-  const { incoming, outgoing, busy, respond, withdraw } = requests
+  const { incoming, outgoing, incomingTotal, outgoingPage, busy, respond, withdraw, loadMore } = requests
   const [refreshing, setRefreshing] = useState(false)
   const [reloadingLink, setReloadingLink] = useState(false)
   const bar = useTopBarState()
@@ -77,72 +80,88 @@ function AddFriendsScreenContent() {
       <Orbs set="brand" />
       <Grain />
       <TopBar title="Add friends" state={bar.state} onBack={() => router.back()} />
-      <ScrollView
+      <FlatList
+        testID="add-friends-list"
         {...bar.scrollProps}
+        data={outgoing}
+        keyExtractor={(request) => request.id}
+        renderItem={({ item: request }) => (
+          <PersonRow
+            person={request.person}
+            detail="Requested"
+            trailing={
+              <Button
+                kind="secondary"
+                size="sm"
+                label="Withdraw"
+                accessibilityLabel={`Withdraw request to ${request.person.name}`}
+                onPress={() => void withdraw(request)}
+                disabled={busy.has(request.id)}
+                style={styles.centred}
+              />
+            }
+          />
+        )}
+        getItemLayout={(_data, index) => ({ length: PERSON_ROW_HEIGHT, offset: PERSON_ROW_HEIGHT * index, index })}
+        onEndReachedThreshold={1.5}
+        onEndReached={() => void loadMore('outgoing')}
+        initialNumToRender={8}
+        windowSize={7}
+        removeClippedSubviews
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + SPACE.xl }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLOR.textSecondary} />}
         showsVerticalScrollIndicator={false}
-      >
-        <Text style={[font('body', bold), styles.intro]}>
-          Nobody can find you on Blend’n by searching. Share your link, and anyone you send it to can ask to be your friend.
-        </Text>
-        <InviteLinkCard url={invite?.url} failed={failed} name={user?.name} photo={user?.image} />
-        {failed && !invite ? (
-          <Button kind="lit" size="md" icon="rotate-ccw" label="Try again" onPress={() => void retryLink()} loading={reloadingLink} />
-        ) : (
-          <Button label="Share my link" icon="share" onPress={() => void share()} disabled={!invite} />
-        )}
-        {invite ? <Button kind="tertiary" muted label="Reset link" onPress={confirmReset} style={styles.reset} /> : null}
+        ListHeaderComponent={
+          <View style={styles.head}>
+            <Text style={[font('body', bold), styles.intro]}>
+              Nobody can find you on Blend’n by searching. Share your link, and anyone you send it to can ask to be your friend.
+            </Text>
+            <InviteLinkCard url={invite?.url} failed={failed} name={user?.name} photo={user?.image} />
+            {failed && !invite ? (
+              <Button kind="lit" size="md" icon="rotate-ccw" label="Try again" onPress={() => void retryLink()} loading={reloadingLink} />
+            ) : (
+              <Button label="Share my link" icon="share" onPress={() => void share()} disabled={!invite} />
+            )}
+            {invite ? <Button kind="tertiary" muted label="Reset link" onPress={confirmReset} style={styles.reset} /> : null}
 
-        {/*
-          Requests that didn't load used to leave this half of the screen
-          blank — indistinguishable from having none. Said, with a way back.
-        */}
-        {requests.failed && !requests.loaded ? (
-          <View style={styles.section}>
-            <SectionHeader title="Requests" />
-            <Banner kind="info" text="Your requests didn’t load." action={{ label: 'Try again', onPress: () => void requests.load() }} testID="requests-failed" />
-          </View>
-        ) : null}
+            {/*
+              Requests that didn't load used to leave this half of the screen
+              blank — indistinguishable from having none. Said, with a way back.
+            */}
+            {requests.failed && !requests.loaded ? (
+              <View style={styles.section}>
+                <SectionHeader title="Requests" />
+                <Banner kind="info" text="Your requests didn’t load." action={{ label: 'Try again', onPress: () => void requests.load() }} testID="requests-failed" />
+              </View>
+            ) : null}
 
-        {incoming.length > 0 ? (
-          <View style={styles.section}>
-            <SectionHeader title="Requests" />
-            {incoming.map((request) => (
-              <IncomingRequestRow
-                key={request.id}
-                request={request}
-                busy={busy.has(request.id)}
-                onRespond={(action) => void respond(request, action)}
-              />
-            ))}
-          </View>
-        ) : null}
-
-        {outgoing.length > 0 ? (
-          <View style={styles.sent}>
-            <SectionHeader title="Sent" />
-            {outgoing.map((request) => (
-              <PersonRow
-                key={request.id}
-                person={request.person}
-                detail="Requested"
-                trailing={
-                  <Button
-                    kind="secondary"
-                    size="sm"
-                    label="Withdraw"
-                    accessibilityLabel={`Withdraw request to ${request.person.name}`}
-                    onPress={() => void withdraw(request)}
-                    disabled={busy.has(request.id)}
-                    style={styles.centred}
+            {/* The first few; the rest are on Requests, a page at a time. Never every one of them in a column. */}
+            {incoming.length > 0 ? (
+              <View style={styles.section}>
+                <SectionHeader title="Requests" />
+                {incoming.slice(0, REQUESTS_PREVIEW).map((request) => (
+                  <IncomingRequestRow
+                    key={request.id}
+                    request={request}
+                    busy={busy.has(request.id)}
+                    onRespond={(action) => void respond(request, action)}
                   />
-                }
-              />
-            ))}
+                ))}
+                {incomingTotal > REQUESTS_PREVIEW ? (
+                  <SettingsGroup>
+                    <RequestsRow count={incomingTotal} />
+                  </SettingsGroup>
+                ) : null}
+              </View>
+            ) : null}
+
+            {outgoing.length > 0 ? <SectionHeader title="Sent" /> : null}
           </View>
-        ) : null}
-      </ScrollView>
+        }
+        ListFooterComponent={
+          <PagedFooter loading={outgoingPage.loadingMore} failed={outgoingPage.moreFailed} onRetry={() => void loadMore('outgoing')} testID="sent-more" />
+        }
+      />
     </View>
   )
 }
@@ -151,13 +170,16 @@ function AddFriendsScreenContent() {
 // design-exception: the frame's column gap is 20
 const COLUMN_GAP = 20
 
+/** Requests answered on this page; the rest are one row away. */
+const REQUESTS_PREVIEW = 3
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLOR.ink },
-  content: { paddingHorizontal: SPACE.gutter, paddingVertical: SPACE.lg, gap: COLUMN_GAP },
+  content: { paddingHorizontal: SPACE.gutter, paddingVertical: SPACE.lg },
+  head: { gap: COLUMN_GAP, paddingBottom: SPACE.xs },
   intro: { color: COLOR.textSecondary },
   reset: { alignSelf: 'stretch' },
   section: { gap: SPACE.md },
-  sent: { gap: SPACE.xs },
   centred: { alignSelf: 'center' },
 })
 

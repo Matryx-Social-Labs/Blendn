@@ -35,6 +35,31 @@ export interface FriendRequest {
   createdAt: string
 }
 
+/** The server's page meta (admin #724). Absent on an older server: read as one page, the whole list. */
+export interface PageMeta {
+  limit: number
+  hasMore: boolean
+  nextCursor: string | null
+  totalCount: number
+}
+
+/** `GET /friends`: a page of `friends`, and `count`, the whole list. */
+export interface FriendsPayload {
+  friends: Friend[]
+  count: number
+  pagination?: PageMeta
+}
+
+/**
+ * `GET /friends/requests`: a page of each side, `pagination` named by side. A call with `?list=` answers only that side's array
+ * (read it through `requestsPageFrom`, which does not trust the other to be there).
+ */
+export interface FriendRequestsPayload {
+  incoming: FriendRequest[]
+  outgoing: FriendRequest[]
+  pagination?: { incoming?: PageMeta; outgoing?: PageMeta }
+}
+
 export interface FriendProfile {
   userId: string
   name: string

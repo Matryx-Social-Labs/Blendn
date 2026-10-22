@@ -19,7 +19,8 @@ import type { CityOption } from './city'
 import { Logger } from './logger'
 import { markOffline, markOnline } from './networkStatus'
 import type { NotificationFeed } from './notificationFormat'
-import type { Friend, FriendInvite, FriendPerson, FriendProfile, FriendRequest, FriendState } from './friends'
+import { FRIENDS_PAGE } from './friendsPaging'
+import type { FriendInvite, FriendPerson, FriendProfile, FriendRequestsPayload, FriendsPayload, FriendState } from './friends'
 import type { BoardPost, BoardReportReason, BoardRequestStatus, BoardRequests } from './board'
 import type { Badge, Choice, Overlap, ProfileOptions } from './aboutYou'
 import { reasonOf, SESSION_END_CODES } from './sessionEnd'
@@ -1178,9 +1179,9 @@ export const PUSH_CHANNEL_SET = 2
 /**
  * The first page each paged list asks for (admin #724: `?limit=` 1-100, `pagination.nextCursor` for the next). With no
  * `limit` and no `cursor` the server answers in its legacy mode for installed builds; new code always says how many.
- * ponytail: first pages only. Friends, requests and the blocked set are not paged past these yet; `count` stays the whole list.
+ * Friends and the requests page on by `pagination.nextCursor` (`lib/friendsPaging.ts`); `count` stays the whole list.
  */
-export const LIST_PAGE = { conversations: CONVERSATIONS_PAGE, friends: 100, friendRequests: 50, blocked: 100 } as const
+export const LIST_PAGE = { conversations: CONVERSATIONS_PAGE, friends: FRIENDS_PAGE, friendRequests: 50, blocked: 100 } as const
 
 /**
  * Said on every request, from the one constant the push token posts: a build that knows `event_changed` declares it, and
@@ -3378,8 +3379,9 @@ class ApiClientClass {
   // No search, by design: see lib/friends.ts. Reads go through `queuedRequest`
   // uncached — these lists change the moment someone taps Accept.
 
-  async getFriends(): Promise<ApiResponse<{ friends: Friend[]; count: number }>> {
-    return this.queuedRequest(`/api/mobile/friends?limit=${LIST_PAGE.friends}`)
+  /** A page of your friends: the first with no cursor, the next with the last page's `pagination.nextCursor`. `count` is the whole list. */
+  async getFriends(cursor?: string | null): Promise<ApiResponse<FriendsPayload>> {
+    return this.queuedRequest(`/api/mobile/friends?limit=${LIST_PAGE.friends}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`)
   }
 
   async getFriend(userId: string): Promise<ApiResponse<FriendProfile>> {
@@ -3425,8 +3427,13 @@ class ApiClientClass {
     return this.queuedRequest(`/api/mobile/friends/invite/${encodeURIComponent(token)}/preview`, {}, false)
   }
 
-  async getFriendRequests(): Promise<ApiResponse<{ incoming: FriendRequest[]; outgoing: FriendRequest[] }>> {
-    return this.queuedRequest(`/api/mobile/friends/requests?limit=${LIST_PAGE.friendRequests}`)
+  /**
+   * Both sides' first page, or (`page`) one side's next: `?list=incoming|outgoing&cursor=` answers only that array, its
+   * `pagination` named by side.
+   */
+  async getFriendRequests(page?: { side: 'incoming' | 'outgoing'; cursor: string }): Promise<ApiResponse<FriendRequestsPayload>> {
+    const side = page ? `&list=${page.side}&cursor=${encodeURIComponent(page.cursor)}` : ''
+    return this.queuedRequest(`/api/mobile/friends/requests?limit=${LIST_PAGE.friendRequests}${side}`)
   }
 
   async sendFriendRequest(
