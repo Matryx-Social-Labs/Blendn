@@ -161,7 +161,7 @@ it('draws the four facts as tiles: Doors, Where, Going and Door, and Where opens
   await open()
   expect(await screen.findByTestId('scene-tile-doors')).toBeTruthy()
   expect(screen.getByTestId('scene-tile-crowd').props.accessibilityLabel).toBe('GOING, 42')
-  expect(screen.getByTestId('scene-tile-door').props.accessibilityLabel).toBe('DOOR, 18+')
+  expect(screen.getByTestId('scene-tile-door').props.accessibilityLabel).toBe('ENTRY, 18+')
   await fireEvent.press(screen.getByTestId('scene-tile-where'))
   expect(openInMaps).toHaveBeenCalled()
 })
@@ -169,7 +169,7 @@ it('draws the four facts as tiles: Doors, Where, Going and Door, and Where opens
 it('says the age floor and the door in the Door tile and an age pill above 18', async () => {
   api.getEvent.mockResolvedValue(detail({ minAge: 21, doorPolicy: 'guest_list' }) as never)
   await open()
-  expect((await screen.findByTestId('scene-tile-door')).props.accessibilityLabel).toBe('DOOR, 21+ · Guest list')
+  expect((await screen.findByTestId('scene-tile-door')).props.accessibilityLabel).toBe('ENTRY, 21+ · Guest list')
   expect(screen.getByTestId('scene-pill-age')).toBeTruthy()
 })
 

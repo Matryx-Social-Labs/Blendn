@@ -228,7 +228,7 @@ describe('the facts are the design system\'s tiles', () => {
     // 2 x 2 at 76 pt (`AmenityTile`), folding past seven: not a hand-built grid of our own.
     const detail = DETAIL()
     expect(detail).toContain('<AmenityGrid tiles={tiles}')
-    for (const label of ["'DOORS'", "'WHERE'", "'DOOR'"]) expect(detail).toContain(`label: ${label}`)
+    for (const label of ["'DOORS'", "'WHERE'", "'ENTRY'"]) expect(detail).toContain(`label: ${label}`)
     expect(detail).toContain('...amenities.map(')
   })
 

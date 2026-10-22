@@ -649,7 +649,7 @@ export default function EventDetail() {
            * place is not a plan yet.
            */
           const planned = event
-          showToast("You're going.", 'success', {
+          showToast("You’re going.", 'success', {
             action: { label: 'Add to calendar', onPress: () => addToCalendar(planned) },
           })
         }
@@ -1101,7 +1101,7 @@ export default function EventDetail() {
       ? [{ label: 'WHERE', value: [event.venue_name, event.city].filter(Boolean).join(', '), onPress: openInMaps, testID: 'scene-tile-where' }]
       : []),
     ...(printable(crowd.count) !== null ? [{ label: crowd.label, value: String(crowd.count), mono: true, testID: 'scene-tile-crowd' }] : []),
-    { label: 'DOOR', value: door, testID: 'scene-tile-door' },
+    { label: 'ENTRY', value: door, testID: 'scene-tile-door' },
     ...amenities.map((a) => ({ label: a.title.toUpperCase(), value: a.subtitle || 'Included', testID: `scene-tile-${a.id}` })),
   ]
 
