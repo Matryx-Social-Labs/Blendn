@@ -232,6 +232,25 @@ describe('expertise, step 2 of the field of work (14.3)', () => {
   })
 })
 
+describe('fields of work that did not load (6-3, Edit profile · 04)', () => {
+  it('the heading stands with the failure line under it, and the line reads them again', async () => {
+    api.getWorkFields.mockResolvedValueOnce({ success: false, error: 'No internet connection.' } as never)
+    await render(<EditProfile />)
+    await screen.findByText('Couldn’t load fields of work. Try again.')
+    expect(screen.getByText('WHAT DO YOU DO?')).toBeTruthy()
+    api.getWorkFields.mockResolvedValueOnce({ success: true, data: { workFields: [{ slug: 'design', label: 'Design' }] } } as never)
+    await fireEvent.press(screen.getByLabelText('Couldn’t load fields of work. Try again.'))
+    await screen.findByText('Design')
+    expect(screen.queryByText('Couldn’t load fields of work. Try again.')).toBeNull()
+  })
+
+  it('a list that loaded draws no failure line', async () => {
+    await render(<EditProfile />)
+    await screen.findByDisplayValue('Sam')
+    expect(screen.queryByText('Couldn’t load fields of work. Try again.')).toBeNull()
+  })
+})
+
 it('stops the page scrolling while a photo is in the hand', async () => {
   await render(<EditProfile />)
   await screen.findByDisplayValue('Sam')

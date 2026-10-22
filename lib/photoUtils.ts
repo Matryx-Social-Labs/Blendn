@@ -441,7 +441,7 @@ export const validatePhoto = (imageInfo: ImagePicker.ImagePickerAsset): { valid:
   // Check dimensions (minimum size)
   const minDimension = 200
   if (imageInfo.width < minDimension || imageInfo.height < minDimension) {
-    return { valid: false, error: 'Photo must be at least 200x200 pixels' }
+    return { valid: false, error: 'Photo must be at least 200 × 200 pixels.' }
   }
 
   return { valid: true }
