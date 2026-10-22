@@ -27,7 +27,7 @@ import { ShareHost } from '../components/share/ShareHost';
 import { useAuth } from '../lib/useAuth';
 import { useUpdateRequired } from '../lib/updateRequired';
 import { UpdateRequiredScreen } from '../components/system/UpdateRequiredScreen';
-import { EMBER } from '../lib/theme';
+import { COLOR } from '../lib/design/tokens';
 import { handleAndroidBack } from '../lib/androidBack';
 import { CoachMarkHost } from '../components/ds/CoachMarkHost';
 import { initSentry, Sentry } from '../lib/sentry';
@@ -544,7 +544,7 @@ function RootLayout() {
               // Every pushed screen sits on the same flat surface as the root.
               // This was `#000000`, so a push revealed a different black than
               // the tab underneath it.
-              contentStyle: { backgroundColor: EMBER.bg },
+              contentStyle: { backgroundColor: COLOR.ink },
               animation: routeTransition,
             }}
           >
@@ -789,6 +789,6 @@ const styles = StyleSheet.create({
      * The frame is flat `#0F0E0E`. A gradient here is one more surface than the
      * design has.
      */
-    backgroundColor: EMBER.bg,
+    backgroundColor: COLOR.ink,
   },
 })
