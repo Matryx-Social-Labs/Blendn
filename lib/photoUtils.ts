@@ -7,6 +7,7 @@ import { Linking } from 'react-native'
 import { apiClient } from './apiClient'
 import { Logger } from './logger'
 import { pulledPhotos, type PulledPhoto } from './photoStates'
+import { unseenPulled } from './pulledNotices'
 import { queryCache } from './queryCache'
 import { refreshAuthUser } from './useAuth'
 import { sheetClosed, showSheet } from './sheet'
@@ -748,14 +749,14 @@ export const loadUserPhotos = async (userId: string): Promise<ProfilePhoto[] | n
 }
 
 /**
- * The photos moderation took down in the last seven days (`photo_states`, your own profile only), newest first. Read after
+ * The photos moderation took down in the last seven days (`photo_states`, your own profile only), newest first, less the ones already dismissed or replaced (`lib/pulledNotices.ts`). Read after
  * `loadUserPhotos`, whose request it shares through the profile cache. A failed read or an older server is none: the grid then
  * draws what it always did.
  */
 export const loadPulledPhotos = async (userId: string): Promise<PulledPhoto[]> => {
   try {
     const result = await apiClient.getProfile(userId)
-    return result.success ? pulledPhotos(result.data?.profile?.photo_states) : []
+    return result.success ? await unseenPulled(userId, pulledPhotos(result.data?.profile?.photo_states)) : []
   } catch (error) {
     Logger.warn('profile', 'photoUtils: Get pulled photos error', { error, userId })
     return []

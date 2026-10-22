@@ -33,6 +33,7 @@ import { Logger } from '../../lib/logger'
 import { interestNames, profileGaps, type NightsStatus } from '../../lib/meProfile'
 import { mainWasPulled, pulledPhotos, type PulledPhoto } from '../../lib/photoStates'
 import { parseBadges } from '../../lib/profileBadges'
+import { unseenPulled } from '../../lib/pulledNotices'
 import { queryCache } from '../../lib/queryCache'
 import { pastEventRows, type PastEventRow } from '../../lib/savedEvents'
 import { useAuth } from '../../lib/useAuth'
@@ -263,7 +264,7 @@ function ProfileInner() {
       const result = await apiClient.getProfile(user.id)
       const own = result.success ? result.data?.profile : undefined
       setBadges(parseBadges(own?.badges))
-      setPulled(pulledPhotos(own?.photo_states))
+      setPulled(await unseenPulled(user.id, pulledPhotos(own?.photo_states)))
     } catch (error) {
       Logger.debug('profile', 'Failed to load badges and photo states', { error })
     }
@@ -354,7 +355,9 @@ function ProfileInner() {
               icon="shield-alert"
               text={
                 mainWasPulled(pulled)
-                  ? 'Your main photo was removed. The next one is your main photo now.'
+                  ? photoList.length > 0
+                    ? 'Your main photo was removed. The next one is your main photo now.'
+                    : 'Your main photo was removed. Add a different one.'
                   : 'A photo of yours was removed. It didn’t meet the photo rules.'
               }
               action={{ label: 'Add a different photo', onPress: openEdit, icon: 'camera' }}

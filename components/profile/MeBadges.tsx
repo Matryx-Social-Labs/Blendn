@@ -5,7 +5,7 @@ import { COLOR, RADIUS, SPACE } from '../../lib/design/tokens'
 import type { Badge } from '../../lib/aboutYou'
 import { BADGE_MEANING } from '../../lib/profileBadges'
 import { AchievementBadge } from '../ds/AchievementBadge'
-import { font, useBoldText } from '../ds/shared'
+import { announceOutcome, font, useBoldText } from '../ds/shared'
 import { ProfileSection } from './ProfileSections'
 
 /** The badges as pills, 8 pt apart (Flow 14 · 14.5). `onPress` makes each one say what it means. */
@@ -34,7 +34,15 @@ export function MeBadges({ badges }: { badges: readonly Badge[] | null }) {
       <View style={styles.card}>
         {badges.length > 0 ? (
           <>
-            <BadgeRow badges={badges} onPress={(b) => setMeaning(BADGE_MEANING[b.kind])} />
+            <BadgeRow
+              badges={badges}
+              onPress={(b) => {
+                const line = BADGE_MEANING[b.kind]
+                setMeaning(line)
+                // iOS does not read a live region that changes: said out loud.
+                announceOutcome(line)
+              }}
+            />
             <Text accessibilityLiveRegion="polite" style={[font('meta', bold), styles.muted]}>
               {meaning ?? 'From your check-ins. They can’t be bought, and they come and go on their own.'}
             </Text>

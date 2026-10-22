@@ -15,6 +15,7 @@
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native'
 
+jest.mock('@react-native-async-storage/async-storage', () => require('@react-native-async-storage/async-storage/jest/async-storage-mock'))
 jest.mock('../lib/photoUtils', () => ({
   selectAndUploadPhoto: jest.fn(),
   reorderPhotos: jest.fn(),

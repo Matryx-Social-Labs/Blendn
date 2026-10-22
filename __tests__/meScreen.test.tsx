@@ -3,10 +3,12 @@
  * is the DS list-enter (28 ms apart, capped), not the old 70 ms × 9.
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
-import { StyleSheet } from 'react-native'
+import { AccessibilityInfo, Platform, StyleSheet } from 'react-native'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 
 const mockPush = jest.fn()
 const mockNavigate = jest.fn()
+jest.mock('@react-native-async-storage/async-storage', () => require('@react-native-async-storage/async-storage/jest/async-storage-mock'))
 jest.mock('expo-router', () => ({
   router: { push: (...a: unknown[]) => mockPush(...a), navigate: (...a: unknown[]) => mockNavigate(...a) },
   useFocusEffect: (cb: () => void) => require('react').useEffect(cb, [cb]),
@@ -204,6 +206,34 @@ describe('what GET /profiles/:you adds (blendn-admin #716): badges and photos ta
     await mount({ success: true, data: { profile: { photo_states: [states(false)[0]] } } })
     await waitFor(() => expect(api.getProfile).toHaveBeenCalled())
     expect(screen.queryByTestId('me-photo-pulled')).toBeNull()
+  })
+
+
+  it('says it out loud on iOS when a badge\'s meaning appears (a live region is not read there)', async () => {
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {})
+    Object.defineProperty(Platform, 'OS', { value: 'ios', configurable: true })
+    await mount({ success: true, data: { profile: { badges } } })
+    await fireEvent.press(await screen.findByLabelText('Badge: Shows up'))
+    expect(announce).toHaveBeenCalledWith('When 80%+ of your RSVPs turn into nights, 3 or more')
+    announce.mockRestore()
+  })
+
+  it('with no photo left, says to add a different one: "the next one is your main photo" would be false', async () => {
+    api.getPublicProfile.mockResolvedValue({ ...PROFILE, data: { ...PROFILE.data, photos: [], bio: '' } } as never)
+    api.getMyAttendance.mockResolvedValue({ success: true, data: { events: [] } } as never)
+    api.getProfile.mockResolvedValue({ success: true, data: { profile: { photo_states: states(true) } } } as never)
+    await render(<Profile />)
+    expect(await screen.findByText('Your main photo was removed. Add a different one.')).toBeTruthy()
+    expect(screen.queryByText(/The next one is your main photo now/)).toBeNull()
+  })
+
+  it('a notice dismissed or replaced in Edit profile is not said again here', async () => {
+    await AsyncStorage.setItem('pulled:me', JSON.stringify(['2026-10-21T09:15:00.000Z']))
+    await mount({ success: true, data: { profile: { photo_states: states(false) } } })
+    await waitFor(() => expect(api.getProfile).toHaveBeenCalled())
+    await act(async () => {})
+    expect(screen.queryByTestId('me-photo-pulled')).toBeNull()
+    await AsyncStorage.clear()
   })
 
   it('a failed read of the profile leaves both out and the page standing', async () => {

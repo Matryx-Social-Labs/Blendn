@@ -12,6 +12,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-
 import type { ActionSheet, Sheet } from '../lib/sheet'
 
 const mockShowToast = jest.fn()
+jest.mock('@react-native-async-storage/async-storage', () => require('@react-native-async-storage/async-storage/jest/async-storage-mock'))
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShowToast }) }))
 const mockShowSheet = jest.fn<void, [Sheet]>()
 jest.mock('../lib/sheet', () => ({ showSheet: (s: Sheet) => mockShowSheet(s) }))

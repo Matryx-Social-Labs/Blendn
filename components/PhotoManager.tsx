@@ -14,6 +14,7 @@ import { Logger } from '../lib/logger'
 import { inSlotOrder, moveItem, reordered, type GridSpec } from '../lib/photoOrder'
 import { cachePhoto, deletePhoto, loadPulledPhotos, loadUserPhotos, ProfilePhoto, reorderPhotos, selectAndUploadPhoto, uploadPhoto } from '../lib/photoUtils'
 import { mainWasPulled, type PulledPhoto } from '../lib/photoStates'
+import { markPulledSeen } from '../lib/pulledNotices'
 import { SUPPORT_EMAIL } from '../lib/support'
 import { showSheet } from '../lib/sheet'
 
@@ -63,8 +64,8 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
   const [pending, setPending] = useState<Pending | null>(null)
   // The photos moderation took down: tiles after the live ones, and nothing in any write.
   const [pulled, setPulled] = useState<PulledPhoto[]>([])
-  // Which pulled tile the Add in flight came from: its notice goes once the replacement is on the profile.
-  const replacing = useRef<number | null>(null)
+  // Which pulled tile the Add in flight came from: its notice goes once the replacement is on the profile, however many tries (Retry) that takes.
+  const replacing = useRef<PulledPhoto | null>(null)
   const [uploading, setUploading] = useState(false)
   const writing = useRef(false)
   const addedCount = useRef(0)
@@ -142,7 +143,11 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
     H.success()
     setPhotos((prev) => adoptStoredUrls(prev, saved.photos))
     const replaced = replacing.current
-    if (replaced !== null) setPulled((prev) => prev.filter((_, i) => i !== replaced))
+    if (replaced !== null) {
+      replacing.current = null
+      setPulled((prev) => prev.filter((p) => p !== replaced))
+      void markPulledSeen(userId, replaced)
+    }
     AccessibilityInfo.announceForAccessibility('Photo added')
     Logger.info('profile', 'PhotoManager: Photo added', { userId, path: path || url })
   }
@@ -179,6 +184,8 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
          */
         upFailed(result.error)
       } else {
+        // Changed their mind: this Add is not a replacement any more.
+        replacing.current = null
         setPending(null)
       }
     } catch (error) {
@@ -186,7 +193,6 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
       upFailed()
     } finally {
       writing.current = false
-      replacing.current = null
       setUploading(false)
     }
   }
@@ -428,15 +434,18 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
           </View>
         ) : null}
 
-        {pulledShown.map((_, k) => (
-          <View key={`pulled-${k}`} style={slotRect(taken + k)}>
+        {pulledShown.map((notice, k) => (
+          <View key={`pulled-${notice.pulledAt ?? k}`} style={slotRect(taken + k)}>
             <PulledFace
               onReplace={() => {
                 if (writing.current) return
-                replacing.current = k
+                replacing.current = notice
                 void handleAddPhoto()
               }}
-              onRemove={() => setPulled((prev) => prev.filter((__, i) => i !== k))}
+              onRemove={() => {
+                setPulled((prev) => prev.filter((p) => p !== notice))
+                void markPulledSeen(userId, notice)
+              }}
               removeLabel="Dismiss removed photo"
               removeDisabled={busy}
             />
@@ -448,8 +457,9 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
             {/* One Add in the reading order; every empty slot is still a tap target for a finger. */}
             <AddFace
               onPress={() => {
-                // A failed tile is left behind by choosing again.
+                // A failed tile is left behind by choosing again, and with it any replacement it was for.
                 if (pending?.state === 'failed') setPending(null)
+                replacing.current = null
                 void handleAddPhoto()
               }}
               disabled={busy}

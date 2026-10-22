@@ -5,6 +5,7 @@
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
 
+jest.mock('@react-native-async-storage/async-storage', () => require('@react-native-async-storage/async-storage/jest/async-storage-mock'))
 jest.mock('../lib/photoUtils', () => ({
   cachePhoto: jest.fn(async () => null),
   deletePhoto: jest.fn(async () => true),
@@ -27,14 +28,16 @@ import { H } from '../lib/haptics'
 import PhotoManager from '../components/PhotoManager'
 import { PulledFace } from '../components/profile/PhotoGridTile'
 import { pulledPhotos } from '../lib/photoStates'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 /* eslint-enable import/first */
 
 const pu = photoUtils as jest.Mocked<typeof photoUtils>
 const url = (n: number) => `https://cdn/p${n}.jpg`
 const list = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `u_${i}`, url: url(i), order: i, isPrimary: i === 0 }))
 
-beforeEach(() => {
+beforeEach(async () => {
   jest.clearAllMocks()
+  await AsyncStorage.clear()
   pu.loadUserPhotos.mockResolvedValue(list(3))
   pu.reorderPhotos.mockResolvedValue({ ok: true, photos: [] } as never)
 })
@@ -217,6 +220,72 @@ describe('a photo moderation took down (edit 05)', () => {
     expect(screen.getByText('Your main photo was removed. The next one is your main photo now.')).toBeTruthy()
     expect(screen.getByText('Think we got it wrong? Write to support@blendn.app.')).toBeTruthy()
     expect(screen.queryByText(/Drag to reorder/)).toBeNull()
+  })
+
+  const REPLACE = 'Removed. This photo didn’t meet the photo rules. Add a different photo'
+  const STAMP = '2026-10-21T09:15:00.000Z'
+
+  it('a dismissed notice stays dismissed: it is kept per account, and the next load does not draw it', async () => {
+    pu.loadUserPhotos.mockResolvedValue(list(2))
+    pu.loadPulledPhotos.mockResolvedValue(pulledPhotos(photoStates(false)))
+    await render(<PhotoManager userId="u" />)
+    await screen.findByTestId('tile-pulled')
+    await fireEvent.press(screen.getByLabelText('Dismiss removed photo'))
+    await waitFor(async () => expect(await AsyncStorage.getItem('pulled:u')).toBe(JSON.stringify([STAMP])))
+  })
+
+  it('a replaced notice is kept too, once the replacement is on the profile', async () => {
+    pu.loadUserPhotos.mockResolvedValue(list(2))
+    pu.loadPulledPhotos.mockResolvedValue(pulledPhotos(photoStates(false)))
+    pu.selectAndUploadPhoto.mockResolvedValue({ success: true, url: url(9) } as never)
+    await render(<PhotoManager userId="u" />)
+    await screen.findByTestId('tile-pulled')
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText(REPLACE))
+    })
+    await screen.findByLabelText('Photo 3 of 3')
+    await waitFor(async () => expect(await AsyncStorage.getItem('pulled:u')).toBe(JSON.stringify([STAMP])))
+  })
+
+  it('a replacement that failed to upload and went through on Retry still clears the notice it was for', async () => {
+    pu.loadUserPhotos.mockResolvedValue(list(2))
+    pu.loadPulledPhotos.mockResolvedValue(pulledPhotos(photoStates(false)))
+    pu.selectAndUploadPhoto.mockImplementation(async (_, hooks) => {
+      hooks?.onPicked?.('file://new.jpg')
+      return { success: false, error: 'Upload failed with status 502' } as never
+    })
+    await render(<PhotoManager userId="u" />)
+    await screen.findByTestId('tile-pulled')
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText(REPLACE))
+    })
+    await screen.findByLabelText('Didn’t upload. Retry')
+    expect(screen.getByTestId('tile-pulled')).toBeTruthy()
+    pu.uploadPhoto.mockResolvedValue({ success: true, url: url(9) })
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Didn’t upload. Retry'))
+    })
+    await screen.findByLabelText('Photo 3 of 3')
+    expect(screen.queryByTestId('tile-pulled')).toBeNull()
+    await waitFor(async () => expect(await AsyncStorage.getItem('pulled:u')).toBe(JSON.stringify([STAMP])))
+  })
+
+  it('a replacement that was cancelled is not carried into the next, plain Add: the notice stays', async () => {
+    pu.loadUserPhotos.mockResolvedValue(list(2))
+    pu.loadPulledPhotos.mockResolvedValue(pulledPhotos(photoStates(false)))
+    pu.selectAndUploadPhoto.mockResolvedValueOnce({ success: false, cancelled: true } as never)
+    await render(<PhotoManager userId="u" />)
+    await screen.findByTestId('tile-pulled')
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText(REPLACE))
+    })
+    pu.selectAndUploadPhoto.mockResolvedValueOnce({ success: true, url: url(9) } as never)
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Add photo'))
+    })
+    await screen.findByLabelText('Photo 3 of 3')
+    expect(screen.getByTestId('tile-pulled')).toBeTruthy()
+    expect(await AsyncStorage.getItem('pulled:u')).toBeNull()
   })
 
   it('a removed photo that was not the main one leaves the usual line', async () => {
