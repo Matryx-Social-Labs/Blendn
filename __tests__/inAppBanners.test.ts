@@ -88,7 +88,12 @@ describe('merging', () => {
     expect(nextBanner(null, req)).toBe(req)
   })
 
-  it('a merged banner is a new one (its own key), so it lands and announces again', () => {
-    expect(nextBanner(match(1000), match(2000)).key).not.toBe(match(1000).key)
+  it('a merged banner keeps the key of the one on screen, so it updates in place instead of landing again', () => {
+    const first = match(1000)
+    const two = nextBanner(first, match(2000))
+    expect(two.key).toBe(first.key)
+    expect(nextBanner(two, match(3000)).key).toBe(first.key)
+    // A fresh arrival after the window is a new banner.
+    expect(nextBanner(two, match(MERGE_WINDOW_MS * 3)).key).not.toBe(first.key)
   })
 })

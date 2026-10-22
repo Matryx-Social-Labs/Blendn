@@ -61,7 +61,7 @@ const EMPTY_OUT_REDUCED = FadeOut.duration(DURATION.quick).easing(Easing.bezier(
 /** A row that lands while the screen is open fades in on `base` (the first page never does). */
 const ARRIVE = FadeIn.duration(DURATION.base).easing(Easing.bezier(...EASING.entrance))
 
-type LandingParams = { type?: string; requestId?: string; crewId?: string; eventId?: string }
+type LandingParams = { type?: string; requestId?: string; crewId?: string; eventId?: string; conversationId?: string }
 
 function NotificationsScreenContent() {
   const bold = useBoldText()
@@ -113,8 +113,8 @@ function NotificationsScreenContent() {
 
   // Landing from a push or a link: scroll to a third of the screen, then the highlight (motion #50). Once, and only for a row it can find.
   const landingId = useMemo(() => {
-    const { type, requestId, crewId, eventId } = params
-    return findLandingRow(feed.items, { type, requestId, crewId, eventId })?.id ?? null
+    const { type, requestId, crewId, eventId, conversationId } = params
+    return findLandingRow(feed.items, { type, requestId, crewId, eventId, conversationId })?.id ?? null
   }, [params, feed.items])
   useEffect(() => {
     if (feed.load !== 'ready' || !landingId || landed.current) return

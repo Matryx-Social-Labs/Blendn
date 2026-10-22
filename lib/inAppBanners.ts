@@ -1,4 +1,7 @@
+import { useSyncExternalStore } from 'react'
+
 import type { NotificationVisualSpec } from '../components/ds/NotificationRow'
+import { SIZE, SPACE } from './design/tokens'
 import { GLYPH } from './notificationRows'
 
 /**
@@ -50,6 +53,41 @@ export function bannerPresentation(data: Record<string, unknown> | undefined): P
   const type = typeOf(data ?? {})
   if (isBannerKind(type)) return 'in-app'
   return SILENT.includes(type) ? 'none' : 'system'
+}
+
+/*
+ * A banner and a toast are both a capsule at the top on iOS. The banner is the one that arrived first and is
+ * about something else, so the toast's lane steps down by the banner's height and its gap while one shows (the
+ * toast keeps its own dwell and its own look). Android's snackbar is at the bottom and never meets it.
+ * Counted, so a banner leaving as the next lands never lets the toast jump up between them.
+ */
+export const BANNER_LANE_DROP = SIZE.primary + SPACE.sm
+
+let showing = 0
+const showingListeners = new Set<() => void>()
+const emitShowing = () => showingListeners.forEach((fn) => fn())
+
+/** A banner is on screen from mount to unmount; returns the give-back. */
+export function registerBannerShowing(): () => void {
+  showing += 1
+  emitShowing()
+  return () => {
+    showing -= 1
+    emitShowing()
+  }
+}
+
+/** Whether any banner is on screen. */
+export function useBannerShowing(): boolean {
+  return useSyncExternalStore(
+    (fn) => {
+      showingListeners.add(fn)
+      return () => {
+        showingListeners.delete(fn)
+      }
+    },
+    () => showing > 0
+  )
 }
 
 export type BannerSpec = {
@@ -107,5 +145,6 @@ export function nextBanner(current: BannerSpec | null, incoming: BannerSpec): Ba
   const mergeTitle = MERGED_TITLE[incoming.type]
   if (!current || !mergeTitle || current.type !== incoming.type || incoming.at - current.at > MERGE_WINDOW_MS) return incoming
   const merged = current.merged + 1
-  return { ...incoming, merged, title: mergeTitle(merged), context: NOW, data: {} }
+  // The key stays: the banner on screen updates in place instead of leaving and landing again.
+  return { ...incoming, key: current.key, merged, title: mergeTitle(merged), context: NOW, data: {} }
 }

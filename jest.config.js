@@ -49,6 +49,7 @@ module.exports = {
   // packages and fail for reasons that have nothing to do with this app.
   testMatch: ["<rootDir>/__tests__/**/*.test.ts?(x)"],
   setupFiles: ["<rootDir>/jest.setup.js"],
+  setupFilesAfterEnv: ["<rootDir>/jest.setup.after.js"],
   // Satoshi is gitignored (licence: never in this public repo), so CI and a
   // fresh clone have no file to resolve. Tests need its name, not its glyphs.
   moduleNameMapper: {

@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react'
 import { apiClient } from '../../lib/apiClient'
 import { bannerFor, bannerPresentation, claimBannerHost, nextBanner, type BannerSpec } from '../../lib/inAppBanners'
 import { Logger } from '../../lib/logger'
-import { isOnScreenThread, navigateFromNotificationData } from '../../lib/notifications'
+import { isOnScreenThread, landFromNotificationData } from '../../lib/notifications'
 import { InAppBanner } from '../ds/InAppBanner'
 
 /**
@@ -14,7 +14,7 @@ import { InAppBanner } from '../ds/InAppBanner'
  * one lands as a new banner. It claims the banner host while the tabs are focused, which is what makes the
  * push handler (`lib/notifications`) leave the system banner and the sound out.
  *
- * Tapping it goes where the push would and marks it read when the push says which row it is
+ * Tapping it goes where the push would (`landFromNotificationData`: a request lands on the Notifications screen, highlighted) and marks it read when the push says which row it is
  * (`data.notificationId`); a merged one opens the Notifications screen, which has all of them.
  */
 export function ForegroundBanners() {
@@ -40,7 +40,7 @@ export function ForegroundBanners() {
       router.push('/notifications')
       return
     }
-    navigateFromNotificationData(banner.data)
+    landFromNotificationData(banner.data)
     const id = banner.data.notificationId
     if (id) {
       apiClient.markNotificationsRead([id]).catch((error) => {

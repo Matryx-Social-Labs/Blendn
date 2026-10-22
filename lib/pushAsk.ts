@@ -4,7 +4,7 @@ import { TokenStorage } from './apiClient'
 import { mayAskForPush } from './crewPushAsk'
 import { Logger } from './logger'
 import { initializePushNotifications } from './notifications'
-import { clearPushDeclined } from './pushDecline'
+import { clearPushDeclined, hasDeclinedPush, markPushDeclined } from './pushDecline'
 import { showSheet } from './sheet'
 
 /**
@@ -16,7 +16,8 @@ import { showSheet } from './sheet'
  * - only a phone that can still be asked (never answered, `mayAskForPush`): once the phone has said no, or yes,
  *   nothing here ever asks again; the bell's "Push is off" row and Settings are the way back;
  * - once per account and per moment, whatever the answer: Not now is not asked again either;
- * - a person who chose "Maybe later" in onboarding has said not now already, so the first ask is theirs.
+ * - a no anywhere ("Maybe later" in onboarding, or Not now at the other moment) is remembered per account
+ *   (`lib/pushDecline`) and ends the asking; Continue clears it.
  *
  * "Continue" is the one that asks the phone (the OS dialog follows); it is silent until then.
  */
@@ -49,6 +50,8 @@ export async function askPushInContext(moment: AskMoment): Promise<boolean> {
     const user = await TokenStorage.getUser()
     if (!user) return false
     if (await alreadyAsked(user.id, moment)) return false
+    // An earlier no, in onboarding or at the other moment, is a no (`lib/pushDecline`): only Settings or the bell's row can undo it.
+    if (await hasDeclinedPush(user.id)) return false
     if (!(await mayAskForPush())) return false
     await AsyncStorage.setItem(keyFor(user.id, moment), '1')
     const { title, body } = ASK_COPY[moment]
@@ -63,7 +66,8 @@ export async function askPushInContext(moment: AskMoment): Promise<boolean> {
           variant: 'primary',
           then: () => void clearPushDeclined(user.id).then(() => initializePushNotifications()).catch(() => {}),
         },
-        { label: 'Not now', cancel: true },
+        // Not now is a no too: the next moment does not ask again.
+        { label: 'Not now', variant: 'secondary', then: () => void markPushDeclined(user.id) },
       ],
     })
     return true

@@ -222,3 +222,57 @@ describe('a notification about a person opens the person, not a place', () => {
     expect(branch.slice(0, branch.indexOf('break'))).toContain("target = '/(tabs)/chat'")
   })
 })
+
+describe('a tapped push lands where the request is answered (Flow 9, motion #50)', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const loadLib = () => {
+    jest.resetModules()
+    jest.doMock('expo-notifications', () => ({ setNotificationHandler: jest.fn() }))
+    jest.doMock('expo-device', () => ({}))
+    jest.doMock('expo-constants', () => ({}))
+    jest.doMock('../lib/apiClient', () => ({ apiClient: {}, TokenStorage: {} }))
+    jest.doMock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn() } }))
+    const open = jest.fn()
+    jest.doMock('../lib/pendingRoute', () => ({ openWhenReady: open }))
+    jest.doMock('expo-router', () => ({ router: { push: jest.fn() }, useFocusEffect: jest.fn() }))
+    return { lib: require('../lib/notifications') as typeof import('../lib/notifications'), open }
+  }
+
+  it('sends each request kind to the Notifications screen with the ids that name its row', () => {
+    const { lib } = loadLib()
+    expect(lib.landingTarget({ type: 'friend_request', requestId: 'r1' })).toEqual({ pathname: '/notifications', params: { type: 'friend_request', requestId: 'r1' } })
+    expect(lib.landingTarget({ type: 'crew_invite', crewId: 'c1' })).toEqual({ pathname: '/notifications', params: { type: 'crew_invite', crewId: 'c1' } })
+    expect(lib.landingTarget({ type: 'board_request', eventId: 'e1', requestId: 'r2' })).toEqual({
+      pathname: '/notifications',
+      params: { type: 'board_request', eventId: 'e1', requestId: 'r2' },
+    })
+    expect(lib.landingTarget({ type: 'reveal_request', conversationId: 'v1' })).toEqual({ pathname: '/notifications', params: { type: 'reveal_request', conversationId: 'v1' } })
+    expect(lib.landingTarget({ type: 'message_request', requestId: 'm1' })).toMatchObject({ pathname: '/notifications' })
+  })
+
+  it('leaves every other kind going to its destination, and a request’s own View/Join too', () => {
+    const { lib } = loadLib()
+    expect(lib.landingTarget({ type: 'match', conversationId: 'c' })).toEqual(lib.notificationTarget({ type: 'match', conversationId: 'c' }))
+    expect(lib.landingTarget({ type: 'event_update', eventId: 'e' })).toEqual(lib.notificationTarget({ type: 'event_update', eventId: 'e' }))
+    // The row's View/Join goes through `navigateFromNotificationData`: the destination, not back to the feed (that would loop).
+    expect(lib.notificationTarget({ type: 'crew_invite', crewId: 'c1' })).toMatchObject({ pathname: '/crews/invite/[crewId]' })
+    expect(lib.landingTarget(undefined)).toBeNull()
+  })
+
+  it('opens it when ready, for a banner or a warm tap (landFromNotificationData) and not through the destination switch', () => {
+    const { lib, open } = loadLib()
+    lib.landFromNotificationData({ type: 'friend_request', requestId: 'r1' })
+    expect(open).toHaveBeenCalledWith({ pathname: '/notifications', params: { type: 'friend_request', requestId: 'r1' } })
+    lib.navigateFromNotificationData({ type: 'friend_request', requestId: 'r1' })
+    expect(open).toHaveBeenLastCalledWith('/friends/add')
+  })
+
+  it('the cold start and the warm tap both land, and so does the banner', () => {
+    const src = SRC()
+    const listener = src.slice(src.indexOf('export function setupNotificationResponseListener'))
+    expect(listener.match(/landFromNotificationData\(data\)/g)).toHaveLength(2)
+    expect(listener).not.toMatch(/navigateFromNotificationData/)
+    const banner = readFileSync(join(__dirname, '..', 'components', 'notifications', 'ForegroundBanners.tsx'), 'utf8')
+    expect(banner).toContain('landFromNotificationData(banner.data)')
+  })
+})

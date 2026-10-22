@@ -3,6 +3,7 @@ import React, { useCallback, useContext, useEffect, useMemo, useState } from 're
 import { Platform, StyleSheet, View } from 'react-native'
 
 import { SIZE, SPACE } from '../lib/design/tokens'
+import { BANNER_LANE_DROP, useBannerShowing } from '../lib/inAppBanners'
 import { setToastHandler, type ToastVariant } from '../lib/toast'
 import { Toast as DsToast } from './ds/Toast'
 import { ToastContext, ToastDockContext, ToastInsetContext, type ToastAction, type ToastHaptic } from './toastDock'
@@ -45,6 +46,8 @@ let nextId = 0
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [queue, setQueue] = useState<ToastMessage[]>([])
   const pathname = usePathname()
+  // iOS only: the snackbar is at the bottom. The lane steps down so a toast never overlaps an in-app banner.
+  const bannerUp = useBannerShowing() && Platform.OS === 'ios'
 
   const showToast = useCallback((message: string, variant: ToastVariant = 'info', options?: { action?: ToastAction; haptic?: ToastHaptic }) => {
     const id = ++nextId
@@ -81,7 +84,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               testID="toast-lane"
               pointerEvents="box-none"
               // Every toast sits below the top bar's band, so the back and ⋯ buttons stay tappable for as long as one shows.
-              style={styles.lane}
+              style={[styles.lane, bannerUp && { top: TOP_BAR_BAND + BANNER_LANE_DROP }]}
             >
               <DsToast
                 // A new toast is a new mount: its own enter, its own dwell.

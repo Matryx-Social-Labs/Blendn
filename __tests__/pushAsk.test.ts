@@ -4,7 +4,11 @@ jest.mock('expo-notifications', () => ({ getPermissionsAsync: () => mockPerm() }
 jest.mock('@react-native-async-storage/async-storage', () => require('@react-native-async-storage/async-storage/jest/async-storage-mock'))
 jest.mock('../lib/apiClient', () => ({ TokenStorage: { getUser: jest.fn(async () => ({ id: 'me' })) } }))
 jest.mock('../lib/notifications', () => ({ initializePushNotifications: jest.fn(async () => 'token') }))
-jest.mock('../lib/pushDecline', () => ({ clearPushDeclined: jest.fn(async () => {}) }))
+jest.mock('../lib/pushDecline', () => ({
+  clearPushDeclined: jest.fn(async () => {}),
+  markPushDeclined: jest.fn(async () => {}),
+  hasDeclinedPush: jest.fn(async () => false),
+}))
 jest.mock('../lib/sheet', () => ({ showSheet: jest.fn() }))
 jest.mock('../lib/logger', () => ({ Logger: { warn: jest.fn() } }))
 
@@ -13,12 +17,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { TokenStorage } from '../lib/apiClient'
 import { initializePushNotifications } from '../lib/notifications'
 import { ASK_COPY, askPushInContext } from '../lib/pushAsk'
-import { clearPushDeclined } from '../lib/pushDecline'
+import { clearPushDeclined, hasDeclinedPush, markPushDeclined } from '../lib/pushDecline'
 import { showSheet, type ActionSheet } from '../lib/sheet'
 
 beforeEach(async () => {
   jest.clearAllMocks()
   await AsyncStorage.clear()
+  ;(hasDeclinedPush as jest.Mock).mockReset().mockResolvedValue(false)
+  ;(markPushDeclined as jest.Mock).mockReset().mockResolvedValue(undefined)
   mockPerm.mockResolvedValue({ status: 'undetermined', canAskAgain: true })
 })
 
@@ -63,6 +69,24 @@ describe('askPushInContext', () => {
     await new Promise((r) => setImmediate(r))
     expect(clearPushDeclined).toHaveBeenCalledWith('me')
     expect(initializePushNotifications).toHaveBeenCalledTimes(1)
-    expect(sheet().actions.find((a) => a.label === 'Not now')).toMatchObject({ cancel: true })
+  })
+
+  it('a no from onboarding (or anywhere) is a no: no RSVP ask, and the moment is not spent', async () => {
+    ;(hasDeclinedPush as jest.Mock).mockResolvedValueOnce(true)
+    expect(await askPushInContext('rsvp')).toBe(false)
+    expect(showSheet).not.toHaveBeenCalled()
+    expect(await askPushInContext('rsvp')).toBe(true)
+  })
+
+  it('Not now records the no, and a no at the RSVP means no like ask', async () => {
+    const declined = new Set<string>()
+    ;(markPushDeclined as jest.Mock).mockImplementation(async (id: string) => void declined.add(id))
+    ;(hasDeclinedPush as jest.Mock).mockImplementation(async (id: string) => declined.has(id))
+    await askPushInContext('rsvp')
+    ;(sheet().actions.find((a) => a.label === 'Not now') as { then: () => void }).then()
+    expect(markPushDeclined).toHaveBeenCalledWith('me')
+    ;(showSheet as jest.Mock).mockClear()
+    expect(await askPushInContext('like')).toBe(false)
+    expect(showSheet).not.toHaveBeenCalled()
   })
 })

@@ -484,6 +484,33 @@ export function notificationTarget(data: Record<string, any> | undefined): Href 
   return target
 }
 
+/**
+ * The kinds that are asked something, whose push lands on the Notifications screen (Flow 9 · 9.2, motion #50):
+ * the request is answered there, where Accept and Decline are, and the screen scrolls to it and washes it.
+ * (A row's own View/Join, on that screen, goes to `notificationTarget`: the destination, not the feed.)
+ */
+const LANDS_IN_THE_FEED = ['friend_request', 'crew_invite', 'reveal_request', 'board_request', 'message_request']
+const LANDING_KEYS = ['requestId', 'crewId', 'eventId', 'conversationId'] as const
+
+/** Where a tapped push or banner goes: the Notifications screen with its payload ids for a request kind, otherwise the destination. */
+export function landingTarget(data: Record<string, any> | undefined): Href | null {
+  const type = data?.type
+  if (!data || typeof type !== 'string' || !LANDS_IN_THE_FEED.includes(type)) return notificationTarget(data)
+  const params: Record<string, string> = { type }
+  for (const key of LANDING_KEYS) if (typeof data[key] === 'string') params[key] = data[key]
+  return { pathname: '/notifications', params }
+}
+
+/** A tapped push (cold start, warm) or banner: the landing. */
+export function landFromNotificationData(data: Record<string, any> | undefined) {
+  try {
+    const target = landingTarget(data)
+    if (target) openWhenReady(target)
+  } catch (e) {
+    Logger.warn('notifications', 'Failed to land from notification', { error: e })
+  }
+}
+
 // Navigate based on notification payload data
 export function navigateFromNotificationData(data: Record<string, any> | undefined) {
   try {
@@ -503,7 +530,7 @@ export function setupNotificationResponseListener(
     if (response) {
       Logger.debug('notifications', 'Cold-start notification tap', { id: response.notification.request.identifier })
       const data = response.notification.request.content.data
-      navigateFromNotificationData(data)
+      landFromNotificationData(data)
     }
   }).catch(() => {})
 
@@ -512,7 +539,7 @@ export function setupNotificationResponseListener(
     Logger.debug('notifications', 'Notification tapped', { id: response.notification.request.identifier })
     onNotificationResponse?.(response)
     const data = response.notification.request.content.data
-    navigateFromNotificationData(data)
+    landFromNotificationData(data)
   })
 
   return subscription

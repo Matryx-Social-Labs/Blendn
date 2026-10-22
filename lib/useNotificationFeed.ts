@@ -264,8 +264,11 @@ export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) =
 }
 
 /** Accept or decline a request: a friend request through its id, a crew invite through its crew. */
-function answerRequest(item: NotificationItem, action: 'accept' | 'decline') {
-  if (item.kind === 'crew_invite' && item.data?.crewId) return crewsApi.decline(item.data.crewId)
+function answerRequest(item: NotificationItem, action: 'accept' | 'decline'): Promise<{ success: boolean; errorCode?: string }> {
+  // Accepting a crew invite is Join, which opens the invite and never joins from the list: only Decline is answered here.
+  if (item.kind === 'crew_invite' && item.data?.crewId) {
+    return action === 'decline' ? crewsApi.decline(item.data.crewId) : Promise.resolve({ success: false })
+  }
   if (item.kind === 'friend_request' && item.data?.requestId) {
     return apiClient.respondToFriendRequest(item.data.requestId, action === 'accept' ? 'accept' : 'dismiss')
   }

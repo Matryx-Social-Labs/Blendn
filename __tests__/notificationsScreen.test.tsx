@@ -260,6 +260,8 @@ describe('answering a request in place', () => {
     await render(<Screen />)
     fireEvent.press(await screen.findByRole('button', { name: 'Join' }))
     expect(navigateFromNotificationData).toHaveBeenCalledWith({ crewId: 'cr1' })
+    // Join is not Decline: nothing is answered, nothing is sent to the crew.
+    expect(crewsApi.decline).not.toHaveBeenCalled()
   })
 
   it('does not bring an answered request back as Waiting the next time', async () => {
@@ -399,6 +401,14 @@ describe('landing from a push', () => {
     const hidden = { includeHiddenElements: true }
     await waitFor(() => expect(screen.getByTestId('landing-f1', hidden)).toBeTruthy())
     expect(screen.queryByTestId('landing-m1', hidden)).toBeNull()
+  })
+
+  it('lands on a reveal request by its conversation, as the push names it', async () => {
+    api.getNotifications.mockResolvedValue(feed([item({ id: 'rv', kind: 'reveal_request', data: { conversationId: 'v9' } }), match]) as never)
+    mockParams.type = 'reveal_request'
+    mockParams.conversationId = 'v9'
+    await render(<Screen />)
+    await waitFor(() => expect(screen.getByTestId('landing-rv', { includeHiddenElements: true })).toBeTruthy())
   })
 
   it('highlights nothing for a payload it cannot find', async () => {
