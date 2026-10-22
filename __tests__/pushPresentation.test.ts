@@ -37,6 +37,7 @@ import * as Notifications from 'expo-notifications'
 import {
   cancelLegacyEventReminders,
   claimThread,
+  DEFAULT_CHANNEL_NAME,
   ensureNotificationChannels,
   setActiveThread,
 } from '../lib/notifications'
@@ -60,6 +61,13 @@ beforeEach(() => {
 })
 
 describe('Android channels', () => {
+  it('names the `default` channel for a person, never by its bare id (the stray lowercase "default", drive r7)', () => {
+    expect(DEFAULT_CHANNEL_NAME).toBe('Other notifications')
+    const src = read('lib', 'notifications.ts')
+    expect(src).toMatch(/setNotificationChannelAsync\('default', \{\s+name: DEFAULT_CHANNEL_NAME,/)
+    expect(src).not.toMatch(/name: 'default'/)
+  })
+
   it('creates the three the server sends on', async () => {
     // blendn-admin `deliveryFor` picks one of these for every kind.
     await ensureNotificationChannels()

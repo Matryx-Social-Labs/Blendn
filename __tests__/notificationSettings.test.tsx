@@ -178,3 +178,11 @@ describe('openChannelSettings', () => {
     Platform.OS = original
   })
 })
+
+describe('one offers row', () => {
+  it('Android lists “Offers from places” once: no second “Offers channel” row beside it (drive r7)', () => {
+    const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'app', 'notification-settings.tsx'), 'utf8') as string
+    expect(src).not.toMatch(/Offers channel/)
+    expect(src.match(/<OffersFromPlacesRow\b/g)).toHaveLength(1)
+  })
+})

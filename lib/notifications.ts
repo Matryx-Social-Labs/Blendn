@@ -93,6 +93,9 @@ Notifications.setNotificationHandler({
  * first and last word on it — a person changes it in system settings after
  * that. A no-op on iOS.
  */
+/** What Android lists for the `default` channel. */
+export const DEFAULT_CHANNEL_NAME = 'Other notifications'
+
 export async function ensureNotificationChannels(): Promise<void> {
   const base = { vibrationPattern: [0, 250, 250, 250], lightColor: '#FF6B6B' }
   /*
@@ -167,10 +170,12 @@ export async function registerForPushNotificationsAsync(
   let token: string | null = null
 
   if (Platform.OS === 'android') {
-    // `default` carries only a payload with no type; kept because installs
-    // already have it and nothing can lower its importance now.
+    // `default` carries a push with no payload (the server's `deliveryFor`), so it stays, and installs already have it
+    // (its importance can no longer be lowered). Its name is what Android lists in the app's settings: it was the bare
+    // id, a stray lowercase "default" beside the named channels. A name can be changed after creation; this renames it.
     await Notifications.setNotificationChannelAsync('default', {
-      name: 'default',
+      name: DEFAULT_CHANNEL_NAME,
+      description: 'Notifications that are none of the other kinds',
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: '#FF6B6B',

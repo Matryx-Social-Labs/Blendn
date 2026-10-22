@@ -10,7 +10,7 @@ import { OffersFromPlacesRow } from '../components/notifications/OffersFromPlace
 import { COLOR, SPACE } from '../lib/design/tokens'
 import { openChannelSettings } from '../lib/channelSettings'
 import { OPACITY } from '../lib/theme'
-import { OFFERS_CHANNEL, PREF_ROWS, PREFS_FOOT } from '../lib/notificationPrefs'
+import { PREF_ROWS, PREFS_FOOT } from '../lib/notificationPrefs'
 import { useNotificationPrefs } from '../lib/useNotificationPrefs'
 import { usePushPreference } from '../lib/usePushPreference'
 import { useTopBarOverlay } from '../lib/useTopBarState'
@@ -81,10 +81,8 @@ function NotificationSettingsContent() {
                 />
               ) : null
             )}
+            {/* One offers row on both platforms: the account's switch. Android's offers channel is in the phone's settings with the rest. */}
             <OffersFromPlacesRow key="offers" />
-            {ANDROID ? (
-              <SettingsRow key="offers-channel" icon="gift" title="Offers channel" trail="external" opens="opens your phone’s settings" onPress={() => void openChannelSettings(OFFERS_CHANNEL)} testID="pref-offers-channel" />
-            ) : null}
           </SettingsGroup>
         </View>
         <Text style={[font('meta', bold), styles.foot]}>{(ANDROID ? ANDROID_FOOT : '') + PREFS_FOOT}</Text>

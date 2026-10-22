@@ -30,9 +30,6 @@ export function parsePrefs(raw: unknown): NotificationPrefs | null {
   return { matches, crew, night }
 }
 
-/** The Android channel that carries the kinds the server sends today; the three above are new (`ensureNotificationChannels`). */
-export const OFFERS_CHANNEL = 'offers'
-
 /** The same fact, as the push settings sentence says it. */
 export const PREFS_FOOT = 'These stop the push only; the bell still fills.'
 
