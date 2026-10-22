@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Platform, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -25,6 +25,8 @@ export type TopBarProps = {
   close?: boolean
   /** Glass circles on the right, named by what they do. */
   actions?: readonly { icon: IconName; label: string; onPress: () => void }[]
+  /** Anything else the screen says at the right of the bar (Rate's "2 of 5"): drawn after the actions, as it is given. */
+  trailing?: ReactNode
   /** The Save pill: `H.primary` on press-in; `H.success` is the screen's, when the save lands. */
   save?: { onPress: () => void; saving?: boolean; disabled?: boolean }
   testID?: string
@@ -46,7 +48,7 @@ export type TopBarProps = {
  *
  * Save is the 48 pt `md` button: Button has no 44.
  */
-export function TopBar({ title, sub, state = 'rest', onBack, close = false, actions = [], save, testID }: TopBarProps) {
+export function TopBar({ title, sub, state = 'rest', onBack, close = false, actions = [], trailing, save, testID }: TopBarProps) {
   const android = Platform.OS === 'android'
   const insets = useSafeAreaInsets()
   const bold = useBoldText()
@@ -88,6 +90,7 @@ export function TopBar({ title, sub, state = 'rest', onBack, close = false, acti
           {actions.map((a) => (
             <IconButton key={a.label} icon={a.icon} accessibilityLabel={a.label} onPress={a.onPress} />
           ))}
+          {trailing}
           {save ? <Button label="Save" size={android ? "md" : "raised"} onPress={save.onPress} loading={save.saving} disabled={save.disabled} /> : null}
         </View>
       </View>

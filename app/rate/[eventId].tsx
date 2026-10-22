@@ -1,16 +1,16 @@
-import { BAR_BOTTOM, barTop } from '../../lib/barGeometry'
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Keyboard, ScrollView, StyleSheet, Text, View } from 'react-native'
 import Animated, { Easing, FadeIn, FadeOut, LinearTransition, useReducedMotion, withTiming } from 'react-native-reanimated'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { KeyboardFrame } from '../../components/chat/KeyboardFrame'
 import { Avatar } from '../../components/ds/Avatar'
 import { Button } from '../../components/ds/Button'
 import { ScaleSteps } from '../../components/ds/ScaleSteps'
 import { Dock } from '../../components/ds/Dock'
-import { IconButton } from '../../components/ds/IconButton'
+import { TopBar } from '../../components/ds/TopBar'
+import { GoneCard } from '../../components/system/GoneCard'
+import { useTopBarOverlay } from '../../lib/useTopBarState'
 import { RadioCard } from '../../components/ds/RadioCard'
 import { SectionHeader } from '../../components/ds/SectionHeader'
 import { StateScreen } from '../../components/ds/StateScreen'
@@ -126,9 +126,18 @@ const noteLength = (value: string) => value.length
 /** Never the server's sentence: it is written for an API caller. */
 const SAVE_FAILED = "Couldn’t save that. Try again."
 
+/**
+ * A refusal that says the night is not open to rate (it is gone, or you were not there, or it has not ended): a 404 or a 403.
+ * That is the object's own state, not a failure to retry, so the screen says it with the shared "isn't here any more" card.
+ */
+const notOpen = (res: { errorCode?: string; reasonCode?: string } | null | undefined) =>
+  res?.errorCode === 'NOT_FOUND' || res?.errorCode === 'FORBIDDEN'
+
 type Load =
   | { kind: 'loading' }
   | { kind: 'error' }
+  /** The night is not there to rate, or its window is not open (Flow 15 #11): the shared card, never a raw error. */
+  | { kind: 'gone' }
   | {
       kind: 'ready'
       people: RatePerson[]
@@ -167,7 +176,7 @@ function Scale({
 function RatePeersContent() {
   const { eventId } = useLocalSearchParams<{ eventId: string }>()
   const { showToast } = useToast()
-  const insets = useSafeAreaInsets()
+  const bar = useTopBarOverlay()
   const bold = useBoldText()
   // An answer cannot be sent offline: the banner says so and the writes wait (reads stay), Flow 15 #16.
   const offline = useOffline()
@@ -221,7 +230,7 @@ function RatePeersContent() {
         if (cancelled) return
         if (!peers.success || !peers.data) {
           Logger.warn('match', 'Ratable peers refused', { error: peers.error })
-          setLoad({ kind: 'error' })
+          setLoad({ kind: notOpen(peers) ? 'gone' : 'error' })
           return
         }
         const people = ratePeople(peers.data.userIds, conversations?.success ? conversations.data ?? [] : [])
@@ -250,7 +259,9 @@ function RatePeersContent() {
     setIssue('none')
     setNote('')
     setIndex((i) => i + 1)
-  }, [])
+    // The next form starts at its top, so the bar is at rest again (#30).
+    bar.reset()
+  }, [bar])
 
   /** One tap and it is sent: the night is a single question. */
   const rateNight = useCallback(
@@ -263,6 +274,7 @@ function RatePeersContent() {
         if (!res.success) {
           setEventRating(null)
           Logger.warn('events', 'Event rating refused', { error: res.error })
+          if (notOpen(res)) return setLoad({ kind: 'gone' })
           showToast(SAVE_FAILED, 'error', { haptic: 'error' })
           return
         }
@@ -296,6 +308,7 @@ function RatePeersContent() {
       })
       if (!res.success) {
         Logger.warn('match', 'Peer rating refused', { error: res.error })
+        if (notOpen(res)) return setLoad({ kind: 'gone' })
         showToast(SAVE_FAILED, 'error', { haptic: 'error' })
         return
       }
@@ -312,15 +325,23 @@ function RatePeersContent() {
 
   const close = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)/going'))
 
-  // First in the tree, so a screen reader starts at Close; the glass circle and the "n of m" in Geist Mono.
+  // First in the tree, so a screen reader starts at Close. The DS bar, pinned over the form: the form scrolls under it and the
+  // glass comes in behind (#30). "n of m" is Geist Mono at the right.
   const topBar = (
-    <View style={[styles.topBar, { paddingTop: barTop(insets.top) }]}>
-      <IconButton icon="x" accessibilityLabel="Close" onPress={close} testID="rate-close" />
-      {load.kind === 'ready' && person ? (
-        <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary]} testID="rate-progress">
-          {index + 1} of {people.length}
-        </Text>
-      ) : null}
+    <View style={[bar.barPin, styles.pin]}>
+      <TopBar
+        close
+        onBack={close}
+        state={bar.state}
+        testID="rate-bar"
+        trailing={
+          load.kind === 'ready' && person ? (
+            <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary]} testID="rate-progress">
+              {index + 1} of {people.length}
+            </Text>
+          ) : null
+        }
+      />
     </View>
   )
 
@@ -329,7 +350,7 @@ function RatePeersContent() {
       <View style={styles.screen}>
         {topBar}
         {/* Shaped like what is coming: a face and two lines (U-L1), not a lone spinner. */}
-        <View accessibilityLabel="Loading who you met" accessibilityState={{ busy: true }} style={styles.skeleton} testID="rate-skeleton">
+        <View accessibilityLabel="Loading who you met" accessibilityState={{ busy: true }} style={[styles.skeleton, { paddingTop: bar.contentTop + SPACE.xxxl }]} testID="rate-skeleton">
           <SkeletonCircle width={FACE} />
           <SkeletonBlock width="60%" height={30} borderRadius={RADIUS.thumb} />
           <SkeletonBlock width="80%" height={20} borderRadius={RADIUS.thumb} />
@@ -342,7 +363,7 @@ function RatePeersContent() {
     return (
       <View style={styles.screen}>
         {topBar}
-        <Animated.View style={styles.state} entering={entering}>
+        <Animated.View style={[styles.state, { paddingTop: bar.contentTop + SPACE.xxxl }]} entering={entering}>
           <StateScreen
             icon="cloud-off"
             title="Couldn’t load who you met"
@@ -355,6 +376,17 @@ function RatePeersContent() {
     )
   }
 
+  if (load.kind === 'gone') {
+    return (
+      <View style={styles.screen}>
+        {topBar}
+        <Animated.View style={[styles.state, { paddingTop: bar.contentTop + SPACE.xxxl }]} entering={entering}>
+          <GoneCard kind="rating" onBack={close} testID="rate-gone" />
+        </Animated.View>
+      </View>
+    )
+  }
+
   const onNight = index === -1
   const done = !onNight && index >= people.length
   // Nothing was ever asked: no night to rate and nobody to rate.
@@ -362,15 +394,14 @@ function RatePeersContent() {
   // Recap #04's words: you rated this night, so it says thanks rather than that there is nothing here.
   const ratedBefore = sent === 0 && load.rated
   const docked = done || !!person
-  const scrollPad = { paddingBottom: (docked ? dockHeight : 0) + SPACE.xl }
+  // Said at the head of the form it is true of: a rating cannot be sent offline, and reads stay.
+  const offlineNote = <OfflineBanner text="Offline. You can rate once you’re back." testID="rate-offline" />
+  const scrollPad = { paddingTop: bar.contentTop, paddingBottom: (docked ? dockHeight : 0) + SPACE.xl }
 
   return (
     <View style={styles.screen}>
       <KeyboardFrame>
         {topBar}
-        <View style={styles.banner}>
-          <OfflineBanner text="Offline. You can rate once you’re back." testID="rate-offline" />
-        </View>
         <View style={styles.stage}>
           {done ? (
             <Animated.View key="done" style={styles.layer} entering={entering}>
@@ -394,7 +425,8 @@ function RatePeersContent() {
             </Animated.View>
           ) : onNight ? (
             <Animated.View key="night" style={styles.layer} entering={entering} exiting={fadeOutStage}>
-              <ScrollView contentContainerStyle={[styles.scroll, scrollPad]}>
+              <ScrollView contentContainerStyle={[styles.scroll, scrollPad]} scrollIndicatorInsets={{ top: bar.indicatorTop }} {...bar.scrollProps}>
+                {offlineNote}
                 <Text style={[font('label', bold), styles.secondary]}>THE NIGHT</Text>
                 {/* `title`, not `display`: an event's name can run long, and 34pt wrapped to five lines. */}
                 <Text accessibilityRole="header" numberOfLines={3} maxFontSizeMultiplier={1.4} style={[font('title', bold), styles.ink]}>
@@ -428,10 +460,14 @@ function RatePeersContent() {
             <Animated.View key={`peer-${index}`} style={styles.layer} entering={entering} exiting={fadeOutStage}>
               <ScrollView
                 ref={peerScroll}
+                testID="rate-form"
                 contentContainerStyle={[styles.scroll, scrollPad]}
                 keyboardShouldPersistTaps="handled"
                 keyboardDismissMode="interactive"
+                scrollIndicatorInsets={{ top: bar.indicatorTop }}
+                {...bar.scrollProps}
               >
+                {offlineNote}
                 <View style={styles.who}>
                   {person.photo ? (
                     <Avatar kind="photo" uri={person.photo} size={FACE} label={person.name} />
@@ -497,9 +533,9 @@ function RatePeersContent() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: COLOR.ink },
-  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACE.lg, paddingBottom: BAR_BOTTOM },
   // Outgoing and incoming layers overlap here during a swap, so both are absolute.
-  banner: { paddingHorizontal: SPACE.gutter },
+  // Over the form that scrolls under it, and still first in the tree: a screen reader starts at Close.
+  pin: { zIndex: 2 },
   stage: { flex: 1 },
   layer: { ...StyleSheet.absoluteFill },
   scroll: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.lg, gap: SPACE.md },
