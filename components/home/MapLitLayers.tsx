@@ -11,7 +11,7 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { AccessibilityInfo, StyleSheet, View, type NativeSyntheticEvent } from 'react-native'
 
 import { Logger } from '../../lib/logger'
-import { glowBreathes, glowOpacity, glowRadius, litStateTapped, type BandFeature, type GlowFeature } from '../../lib/mapLit'
+import { glowRadius, litFade, litStateTapped, type BandFeature, type GlowFeature } from '../../lib/mapLit'
 import {
   CITY_BUILDINGS,
   LABELS_FROM_LAYER_ID,
@@ -150,6 +150,7 @@ export const LitBuildings = memo(function LitBuildings({
   /** The city's buildings layer showing: the copies go over it. */
   over: string
 }) {
+  const { opacity, transition } = useLitFade(data.features.length > 0)
   return (
     <GeoJSONSource id="lit-buildings" data={data} onPress={onPress}>
       <Layer
@@ -161,7 +162,8 @@ export const LitBuildings = memo(function LitBuildings({
           'fill-extrusion-color': ['get', 'color'],
           'fill-extrusion-height': ['get', 'height'],
           'fill-extrusion-base': ['get', 'base'],
-          'fill-extrusion-opacity': 1,
+          'fill-extrusion-opacity': opacity,
+          'fill-extrusion-opacity-transition': transition,
           // Each band is one solid colour: the foot-to-crown step is the gradient.
           'fill-extrusion-vertical-gradient': false,
         }}
@@ -190,39 +192,39 @@ export function useReduceMotion(): boolean {
 }
 
 /**
- * The glow on the ground under every lit place, under the buildings. A live
- * event's breathes by flipping its opacity every half period and letting the
- * paint transition carry it — no per-frame JavaScript — for
- * `MAP_THEME.glow.breatheForMs` after the places change, then holds steady, so
- * the map stops redrawing (review H2, WCAG 2.2.2). It holds steady at once with
- * Reduce Motion, or with the map out of view.
+ * The lit layers' one fade-in (motion #42): 0 until there is something to light, then 1 for good, so the layer arrives
+ * over `long` (200 ms under Reduce Motion) the first time and is never faded again. `opacity` is a constant a paint
+ * transition can carry; a data-driven one is not transitioned by the map.
+ */
+function useLitFade(hasData: boolean) {
+  const reduceMotion = useReduceMotion()
+  const [arrived, setArrived] = useState(false)
+  // A frame after the first data is drawn at 0, so the transition has a start to run from.
+  useEffect(() => {
+    if (!hasData) return
+    const frame = requestAnimationFrame(() => setArrived(true))
+    return () => cancelAnimationFrame(frame)
+  }, [hasData])
+  return { opacity: arrived ? 1 : 0, transition: litFade(reduceMotion) }
+}
+
+/**
+ * The glow on the ground under every lit place, under the buildings. It does not pulse (motion #42: "No pulse"): each
+ * glow arrives with the layers' one fade and holds still, so the map redraws nothing while it is looked at (WCAG 2.2.2).
+ * Two layers, a building's and a beacon's, because a paint transition needs a constant opacity.
+ *
+ * `visible` is HomeMap's, from when the glow breathed; it no longer changes anything.
  */
 export const GroundGlow = memo(function GroundGlow({
   data,
-  visible,
   under,
 }: {
   data: Collection<GlowFeature>
-  visible: boolean
+  visible?: boolean
   /** The city's buildings layer showing: the glow goes under it. */
   under: string
 }) {
-  const reduceMotion = useReduceMotion()
-  const breathing = glowBreathes({ visible, reduceMotion, anyLive: data.features.some((f) => f.properties.pulse) })
-  const [phase, setPhase] = useState<'steady' | 'low' | 'high'>('steady')
-  const { periodMs, breatheForMs } = MAP_THEME.glow
-  useEffect(() => {
-    if (!breathing) return
-    const tick = setInterval(() => setPhase((p) => (p === 'high' ? 'low' : 'high')), periodMs / 2)
-    const stop = setTimeout(() => {
-      clearInterval(tick)
-      setPhase('steady')
-    }, breatheForMs)
-    return () => {
-      clearInterval(tick)
-      clearTimeout(stop)
-    }
-  }, [breathing, data, periodMs, breatheForMs])
+  const { opacity, transition } = useLitFade(data.features.length > 0)
   const look: NonNullable<CircleLayerSpecification['paint']> = {
     'circle-color': ['get', 'color'],
     'circle-radius': GLOW_RADIUS,
@@ -230,6 +232,7 @@ export const GroundGlow = memo(function GroundGlow({
     // Flat on the ground, shrinking into the distance like the ground does.
     'circle-pitch-alignment': 'map',
     'circle-pitch-scale': 'map',
+    'circle-opacity-transition': transition,
   }
   return (
     <GeoJSONSource id="lit-glow" data={data}>
@@ -237,15 +240,15 @@ export const GroundGlow = memo(function GroundGlow({
         id="glow-still"
         type="circle"
         beforeId={under}
-        filter={['!=', ['get', 'pulse'], true]}
-        paint={{ ...look, 'circle-opacity': ['get', 'opacity'] }}
+        filter={['!=', ['get', 'beacon'], true]}
+        paint={{ ...look, 'circle-opacity': opacity * MAP_THEME.glow.still }}
       />
       <Layer
-        id="glow-live"
+        id="glow-beacon"
         type="circle"
         beforeId={under}
-        filter={['==', ['get', 'pulse'], true]}
-        paint={{ ...look, 'circle-opacity': glowOpacity(breathing ? phase : 'steady'), 'circle-opacity-transition': { duration: periodMs / 2, delay: 0 } }}
+        filter={['==', ['get', 'beacon'], true]}
+        paint={{ ...look, 'circle-opacity': opacity * MAP_THEME.glow.beacon }}
       />
     </GeoJSONSource>
   )

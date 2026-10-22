@@ -19,6 +19,7 @@
  * `MAP_THEME`. Nothing here knows where anybody may check in
  * (`__tests__/homeMap.test.ts` reads it to be sure).
  */
+import { DURATION, REDUCE_MOTION } from './design/tokens'
 import { liveNowLabel, type LiveNow } from './home'
 import { featureIdOf } from './mapStyleEmber'
 import { MAP_THEME } from './mapTheme'
@@ -275,7 +276,7 @@ export type BandFeature = {
 export type GlowFeature = {
   type: 'Feature'
   geometry: { type: 'Point'; coordinates: LngLat }
-  properties: { id: string; kind: string; color: string; pulse: boolean; opacity: number }
+  properties: { id: string; kind: string; color: string; beacon: boolean }
 }
 
 /**
@@ -311,16 +312,15 @@ export function bandsFor(p: LitPlace): BandFeature[] {
 }
 
 /**
- * The ground glow at a pin: every lit place has one. A live event's breathes;
- * a beacon's is stronger (a pillar is thin, its foot carries it); a lit
- * building's is still.
+ * The ground glow at a pin: every lit place has one, and none of them moves (motion #42:
+ * "No pulse"). A beacon's is stronger (a pillar is thin, its foot carries it) than a lit
+ * building's; which of the two layers draws it is `beacon`.
  */
 export function glowFor(p: LitPlace): GlowFeature {
-  const pulse = p.kind === 'event' && p.live
   return {
     type: 'Feature',
     geometry: { type: 'Point', coordinates: p.at },
-    properties: { id: p.id, kind: p.kind, color: MAP_THEME[p.kind].glow, pulse, opacity: p.building ? MAP_THEME.glow.still : MAP_THEME.glow.beacon },
+    properties: { id: p.id, kind: p.kind, color: MAP_THEME[p.kind].glow, beacon: !p.building },
   }
 }
 
@@ -358,16 +358,12 @@ export function chipLiftPx(topM: number, view: { zoom: number; pitch: number; la
 /* Motion                                                                      */
 /* -------------------------------------------------------------------------- */
 
-/** Whether a live glow may breathe: in view, motion allowed, and something live to breathe. */
-export function glowBreathes(s: { visible: boolean; reduceMotion: boolean; anyLive: boolean }): boolean {
-  return s.visible && !s.reduceMotion && s.anyLive
-}
-
-/** The live glow's opacity: steady unless breathing, then this half-period's end. */
-export function glowOpacity(phase: 'steady' | 'low' | 'high'): number {
-  const { steady, pulseLow, pulseHigh } = MAP_THEME.glow
-  if (phase === 'steady') return steady
-  return phase === 'high' ? pulseHigh : pulseLow
+/**
+ * How the lit layers arrive (motion #42): once, over `long`, when there is something to light; a 200 ms fade under Reduce
+ * Motion. Nothing on the map pulses, so nothing outlives the first fade.
+ */
+export function litFade(reduceMotion: boolean): { duration: number; delay: number } {
+  return { duration: reduceMotion ? REDUCE_MOTION.duration.long : DURATION.long, delay: 0 }
 }
 
 /* -------------------------------------------------------------------------- */
