@@ -16,6 +16,7 @@ import type { Rect } from '../../components/ds/chatShared'
 import { Composer } from '../../components/ds/Composer'
 import { LongPressMenu, placeLongPress, type MenuItem } from '../../components/ds/ContextMenu'
 import { Grain } from '../../components/ds/Grain'
+import { HueProvider } from '../../components/ds/shared'
 import { Orbs } from '../../components/ds/Orbs'
 import { REACTION_CELL, reactionBarWidth } from '../../components/ds/ReactionBar'
 import { StateScreen } from '../../components/ds/StateScreen'
@@ -944,9 +945,12 @@ const styles = StyleSheet.create({
  */
 export default function GroupChat() {
   if (!idParam(useLocalSearchParams().id)) return <BrokenLink />
+  // Rose world: a room is people together, as Banter and its DMs are; its sheets inherit it.
   return (
-    <ScreenProfiler id="event-chat">
-      <GroupChatInner />
-    </ScreenProfiler>
+    <HueProvider value="rose">
+      <ScreenProfiler id="event-chat">
+        <GroupChatInner />
+      </ScreenProfiler>
+    </HueProvider>
   )
 }

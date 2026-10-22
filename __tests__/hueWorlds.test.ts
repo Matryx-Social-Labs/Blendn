@@ -25,6 +25,9 @@ const ROSE = [
   'app/private-chat/[conversationId].tsx',
   'app/rate/[eventId].tsx',
   'components/blendn/BlendnScreen.tsx',
+  'app/chat/[id].tsx',
+  'app/chat-info/[id].tsx',
+  'components/PresenceSheets.tsx',
 ]
 const VIOLET = ['app/plus.tsx', 'app/onboarding/_layout.tsx', 'app/edit-about-you.tsx', 'app/edit-profile.tsx', 'app/(tabs)/profile.tsx', 'app/settings.tsx', 'app/notification-settings.tsx', 'app/event-preferences/[eventId].tsx']
 /** Going out: ember is the default, so none of these sets a hue. */

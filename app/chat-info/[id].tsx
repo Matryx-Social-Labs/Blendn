@@ -13,7 +13,7 @@ import { IconButton } from '../../components/ds/IconButton'
 import { ScrimPill, TimeBadge } from '../../components/ds/MonoFamily'
 import { SectionHeader } from '../../components/ds/SectionHeader'
 import { SettingsGroup, SettingsRow } from '../../components/ds/SettingsRow'
-import { font, minTarget, useBoldText } from '../../components/ds/shared'
+import { font, HueProvider, minTarget, useBoldText } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { Icon } from '../../components/ui/Icon'
 import { PhotoScrim, StatusScrim } from '../../components/ui/GradientFill'
@@ -65,7 +65,12 @@ const roleLabel = (role: string) => (role === 'admin' ? 'Organiser' : role === '
  */
 export default function ChatInfo() {
   if (!idParam(useLocalSearchParams().id)) return <BrokenLink />
-  return <ChatInfoInner />
+  // Rose world, as the room it is about.
+  return (
+    <HueProvider value="rose">
+      <ChatInfoInner />
+    </HueProvider>
+  )
 }
 
 /** How many are live at the place, as a bucket ("5–9"); null below 5, and until the place answers. */

@@ -1,5 +1,6 @@
 import { H } from '../lib/haptics'
 import { PRESENCE_COPY } from '../lib/presence'
+import { HueProvider } from './ds/shared'
 import { Sheet } from './ds/Sheet'
 
 /**
@@ -26,8 +27,9 @@ export function PresenceSheets({
   notice: boolean
   onNoticeDone: () => void
 }) {
+  // Rose: these are the Room's sheets, though mounted app-level (`PresenceMonitor`), outside any screen's world.
   return (
-    <>
+    <HueProvider value="rose">
       <Sheet
         visible={asking}
         onClose={() => {}}
@@ -50,6 +52,6 @@ export function PresenceSheets({
         testID="presence-notice"
         actions={[{ label: 'Got it', kind: 'lit', pressHaptic: false, onPress: onNoticeDone }]}
       />
-    </>
+    </HueProvider>
   )
 }
