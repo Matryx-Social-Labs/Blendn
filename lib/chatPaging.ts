@@ -32,3 +32,19 @@ type BoardPage = { posts: BoardPostView[]; pagination?: { hasMore?: boolean; nex
 export function getBoardPage(eventId: string, cursor: string): Promise<ApiResponse<BoardPage>> {
   return apiClient.queuedRequest<BoardPage>(`/api/mobile/events/${encodeURIComponent(eventId)}/board?cursor=${encodeURIComponent(cursor)}`)
 }
+
+/**
+ * A refresh's newest page laid over what the list already holds: the page first, then the older pages loaded earlier
+ * (`older` names them), minus anything the page now has. The page's copy wins. A forced refresh does not use this:
+ * it starts the list over, which is how a block or a pull drops what was loaded under it.
+ */
+export function laidOver<T>(page: readonly T[], held: readonly T[], idOf: (item: T) => string, older: ReadonlySet<string>): T[] {
+  const onPage = new Set(page.map(idOf))
+  return [...page, ...held.filter((item) => older.has(idOf(item)) && !onPage.has(idOf(item)))]
+}
+
+/** `GET /chat/groups` pages by number; this is the next one, or null on the last (or when it sends no paging). */
+export function nextGroupsPage(body: unknown): number | null {
+  const meta = (body as { pagination?: { page?: unknown; hasMore?: unknown } } | null | undefined)?.pagination
+  return meta?.hasMore === true ? (typeof meta.page === 'number' ? meta.page : 1) + 1 : null
+}

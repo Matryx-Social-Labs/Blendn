@@ -1,6 +1,6 @@
 import { router, useFocusEffect, useScrollToTop } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { FlatList, Platform, RefreshControl, StyleSheet, Text, View } from 'react-native'
+import { FlatList, Platform, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native'
 import Reanimated, { Easing, FadeInUp, FadeOut, LinearTransition, useReducedMotion } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -26,7 +26,8 @@ import { BoardRequestsSection } from '../../components/board/BoardRequestsSectio
 import { LeaveRoomSheet, MuteSheet } from '../../components/chat/RoomSheets'
 import { SearchField } from '../../components/ds/SearchField'
 import { SectionHeader } from '../../components/ds/SectionHeader'
-import { font, HueProvider, useBoldText } from '../../components/ds/shared'
+import { Button } from '../../components/ds/Button'
+import { font, HueProvider, minTarget, useBoldText } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { SwipeRow, type SwipeAction } from '../../components/ds/SwipeRow'
 import { NotificationBell } from '../../components/pulse/NotificationBell'
@@ -36,9 +37,10 @@ import { apiClient } from '../../lib/apiClient'
 import { BOARD_ENABLED } from '../../lib/board'
 import { dmThread, outboxLine, roomThread, useOutbox, type Thread } from '../../lib/chatOutbox'
 import { crewRoomTitle, type CrewRoomRow } from '../../lib/crews'
-import { COLOR, DURATION, EASING, SPACE, SPRING, STAGGER } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, SPACE, SPRING, STAGGER } from '../../lib/design/tokens'
 import { matchRowPreview } from '../../lib/matchOpener'
 import { ScreenProfiler } from '../../lib/perf'
+import { printable } from '../../lib/pulseSections'
 import { isMuted, useRoomMembership } from '../../lib/roomMembership'
 import { roomStateLine } from '../../lib/roomState'
 import { SPONSORED, useBanterInbox, type GroupChat, type MessageRequest, type PersonalChat } from '../../lib/useBanterInbox'
@@ -67,6 +69,8 @@ type Item = { type: 'heading'; key: string; title: string; markAll?: boolean } |
 const COAST_MIN_VELOCITY = 0.1
 const REORDER = LinearTransition.delay(300).springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping).mass(SPRING.settle.mass)
 const SEARCH_GAP = SPACE.sm
+/** Message requests show this many before "Show all": a Requests section stays a strip however many are waiting. */
+const REQUESTS_PREVIEW = 3
 /** A press held this long is a hold, not a tap (Pressable's own long-press delay). */
 const HELD_PRESS_MS = 500
 
@@ -98,6 +102,7 @@ function ChatInner() {
   const outbox = useOutbox()
   const membership = useRoomMembership()
   const [boardCount, setBoardCount] = useState(0)
+  const [requestsOpen, setRequestsOpen] = useState(false)
   const [searching, setSearching] = useState(false)
   const [query, setQuery] = useState('')
   const [muteFor, setMuteFor] = useState<string | null>(null)
@@ -374,6 +379,8 @@ function ChatInner() {
   const headerHeight = banterHeaderHeight(insets.top, Platform.OS === 'android')
   const listTop = headerHeight + (searching ? SPACE.sm + SEARCH_FIELD + SEARCH_GAP : 0) + SPACE.lg
   const invites = crews.invites
+  const requestsTotal = Math.max(inbox.requestsTotal ?? 0, incomingRequests.length)
+  const shownRequests = requestsOpen ? incomingRequests : incomingRequests.slice(0, REQUESTS_PREVIEW)
   const hasHeaderContent = liveRooms.length + blendRooms.length + incomingRequests.length + invites.length + boardCount > 0
 
   const header = (
@@ -389,7 +396,7 @@ function ChatInner() {
               testID={`banter-live-${c.chat_room_id}`}
               title={c.event_title}
               coverUrl={c.event_image}
-              count={c.participant_count}
+              count={printable(c.participant_count) ?? 0}
               here={c.is_place}
               unread={c.unread_count}
               muted={roomMuted(c.chat_room_id)}
@@ -421,7 +428,13 @@ function ChatInner() {
 
       {!trimmed && (incomingRequests.length || invites.length) ? (
         <View style={styles.section}>
-          <SectionHeader title="Requests" count={incomingRequests.length + invites.length} testID="banter-requests" />
+          {/* The server's count, not the page held: "Requests, 140" over the three shown and a way to the rest. */}
+          <SectionHeader
+            title="Requests"
+            count={requestsTotal + invites.length}
+            action={requestsTotal > REQUESTS_PREVIEW ? { label: requestsOpen ? 'Show fewer' : `Show all ${requestsTotal}`, onPress: pressGuard(() => setRequestsOpen((o) => !o)) } : undefined}
+            testID="banter-requests"
+          />
           {invites.map((invite) => (
             <Reanimated.View key={`i:${invite.crewId}`} exiting={reduceMotion ? undefined : FadeOut.duration(DURATION.quick)} layout={reduceMotion ? undefined : REQUEST_REFLOW}>
               <RequestCard
@@ -437,7 +450,7 @@ function ChatInner() {
               />
             </Reanimated.View>
           ))}
-          {incomingRequests.map((r: MessageRequest) => (
+          {shownRequests.map((r: MessageRequest) => (
             <Reanimated.View key={r.request_id} exiting={reduceMotion ? undefined : FadeOut.duration(DURATION.quick)} layout={reduceMotion ? undefined : REQUEST_REFLOW}>
               <RequestCard
                 testID={`banter-request-${r.request_id}`}
@@ -454,6 +467,16 @@ function ChatInner() {
               />
             </Reanimated.View>
           ))}
+          {requestsOpen && incomingRequests.length < requestsTotal ? (
+            <Button
+              kind="tertiary"
+              size="sm"
+              label="Show more requests"
+              loading={inbox.requestsLoadingMore}
+              onPress={pressGuard(() => void inbox.loadMoreRequests())}
+              testID="banter-requests-more"
+            />
+          ) : null}
         </View>
       ) : null}
 
@@ -549,6 +572,31 @@ function ChatInner() {
             </View>
           )
         }
+        // Older pages as the end comes near (SCRUM-760): rooms by page, conversations by cursor; a refusal has its own retry.
+        onEndReached={() => {
+          if (!inbox.moreFailed) void inbox.loadMore()
+        }}
+        onEndReachedThreshold={1.5}
+        initialNumToRender={12}
+        windowSize={9}
+        ListFooterComponent={
+          inbox.loadingMore ? (
+            <Text accessibilityRole="progressbar" accessibilityLabel="Loading more chats" style={[font('meta', bold), styles.secondary, styles.footer]}>
+              Loading…
+            </Text>
+          ) : inbox.moreFailed ? (
+            <Pressable
+              testID="banter-more-failed"
+              onPress={() => void inbox.loadMore()}
+              accessibilityRole="button"
+              accessibilityLabel="Couldn’t load more chats. Try again"
+              hitSlop={(minTarget() - SPACE.xl) / 2}
+              style={styles.footer}
+            >
+              <Text style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>Couldn’t load more · Try again</Text>
+            </Pressable>
+          ) : null
+        }
         contentContainerStyle={[styles.content, { paddingTop: listTop, paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + SPACE.xl }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -595,6 +643,8 @@ const styles = StyleSheet.create({
   search: { position: 'absolute', left: SPACE.lg, right: SPACE.lg, zIndex: 2 },
   banner: { position: 'absolute', left: SPACE.gutter, right: SPACE.gutter, zIndex: 2 },
   secondary: { color: COLOR.textSecondary },
+  ink: { color: COLOR.textPrimary },
+  footer: { alignSelf: 'center', textAlign: 'center', paddingVertical: SPACE.lg },
 })
 
 /*

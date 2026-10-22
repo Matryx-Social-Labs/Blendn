@@ -41,6 +41,8 @@ jest.mock('../lib/apiClient', () => ({
     markAllConversationsRead: jest.fn(),
     respondToMessageRequest: jest.fn(),
     getConversationMessages: jest.fn(),
+    // Older pages (lib/chatPaging, lib/useBanterInbox) read through the queue.
+    queuedRequest: jest.fn(),
   },
 }))
 jest.mock('../lib/crewsApi', () => ({ crewsApi: { myCrews: jest.fn(async () => ({ success: true, data: { crews: [], invites: [] } })) } }))
@@ -75,6 +77,8 @@ import { clearOutbox, dmThread, keepFailed, roomThread, setDraft } from '../lib/
 import { markDomainsDirty } from '../lib/liveSyncState'
 import { queryCache } from '../lib/queryCache'
 import { resetRoomMembership } from '../lib/roomMembership'
+import { noteBlocked } from '../lib/blockEpoch'
+import { namedList } from '../lib/namedList'
 /* eslint-enable import/first */
 
 const api = apiClient as jest.Mocked<typeof apiClient>
@@ -388,5 +392,119 @@ describe('unread to read (#29): the dot leaves where it is seen, on the way back
     const src = require('fs').readFileSync(require.resolve('../components/banter/BanterParts'), 'utf8') as string
     expect(src).toMatch(/exiting=\{leaves\(reduceMotion\)\}/)
     expect(src).toMatch(/reduceMotion \? undefined : FadeOut\.duration\(DURATION\.quick\)/)
+  })
+})
+
+describe('a Banter of thousands (SCRUM-760 b)', () => {
+  const queued = apiClient.queuedRequest as jest.Mock
+  const room = (n: number) => ({ id: `g-${n}`, name: `Room ${n}`, memberCount: 12, isCheckedIn: false, status: 'open', event: { id: `e${n}`, title: `Room ${n}` }, lastMessage: { content: `line ${n}`, createdAt: at, user: { id: 'u-c', name: 'Cosmic Panda' } } })
+  const conv = (n: number) => ({ ...dm, id: `c-${n}`, otherUser: { id: `u-${n}`, name: `Fox ${n}`, image: null }, unreadCount: 0 })
+  const groups = (n: number, hasMore: boolean, page = 1) => ({ success: true, data: { groups: [room(n)], pagination: { page, hasMore } } })
+  // What the real `getConversations` hands back: the rows, with the server's cursor kept beside them.
+  const conversations = (rows: object[], nextCursor?: string) =>
+    namedList({ success: true, data: { conversations: rows, ...(nextCursor ? { pagination: { hasMore: true, nextCursor } } : {}) } } as never, 'conversations') as never
+  const reachEnd = () => act(async () => fireEvent(screen.getByTestId('banter-list'), 'endReached'))
+
+  beforeEach(() => {
+    queued.mockReset()
+    serve({ rooms: [], dms: [], requests: [] })
+  })
+
+  it('loads the next page of rooms by number, once, appended under what is held', async () => {
+    api.getChatGroups.mockResolvedValue(groups(1, true) as never)
+    queued.mockResolvedValueOnce(groups(2, false, 2))
+    await open()
+    expect(screen.getAllByText('Room 1').length).toBeGreaterThan(0)
+    await reachEnd()
+    expect(queued).toHaveBeenCalledWith('/api/mobile/chat/groups?page=2')
+    expect((await screen.findAllByText('Room 2')).length).toBeGreaterThan(0)
+    // Nothing more to ask: the last page said so.
+    await reachEnd()
+    expect(queued).toHaveBeenCalledTimes(1)
+  })
+
+  it('loads the next page of conversations by the server’s cursor', async () => {
+    api.getConversations.mockResolvedValue(conversations([conv(1)], 'k1'))
+    queued.mockResolvedValueOnce({ success: true, data: { conversations: [conv(2)] } })
+    await open()
+    expect(screen.getAllByText('Fox 1').length).toBeGreaterThan(0)
+    await reachEnd()
+    expect(queued).toHaveBeenCalledWith('/api/mobile/conversations?cursor=k1')
+    expect((await screen.findAllByText('Fox 2')).length).toBeGreaterThan(0)
+    await reachEnd()
+    expect(queued).toHaveBeenCalledTimes(1)
+  })
+
+  it('a server that sends no paging is one page, and nothing more is asked', async () => {
+    api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [room(1)] } } as never)
+    api.getConversations.mockResolvedValue([conv(1)] as never)
+    await open()
+    await reachEnd()
+    expect(queued).not.toHaveBeenCalled()
+  })
+
+  it('a page that fails keeps the list, does not loop, and retries on its own button', async () => {
+    api.getChatGroups.mockResolvedValue(groups(1, true) as never)
+    queued.mockResolvedValueOnce({ success: false, error: 'offline' })
+    await open()
+    await reachEnd()
+    expect(await screen.findByTestId('banter-more-failed')).toBeTruthy()
+    expect(screen.getAllByText('Room 1').length).toBeGreaterThan(0)
+    await reachEnd()
+    expect(queued).toHaveBeenCalledTimes(1)
+    queued.mockResolvedValueOnce(groups(2, false, 2))
+    await act(async () => fireEvent.press(screen.getByTestId('banter-more-failed')))
+    expect((await screen.findAllByText('Room 2')).length).toBeGreaterThan(0)
+  })
+
+  it('keeps the older pages through a quiet refresh of the newest', async () => {
+    api.getChatGroups.mockResolvedValue(groups(1, true) as never)
+    queued.mockResolvedValueOnce(groups(2, false, 2))
+    await open()
+    await reachEnd()
+    await screen.findAllByText('Room 2')
+    await act(async () => void (await mockSync.onSync?.()))
+    await flush()
+    expect(screen.getAllByText('Room 2').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Room 1').length).toBeGreaterThan(0)
+  })
+
+  it('a block anywhere starts the lists over: the blocked person’s conversation on an older page is gone', async () => {
+    api.getConversations.mockResolvedValue(conversations([conv(1)], 'k1'))
+    queued.mockResolvedValueOnce({ success: true, data: { conversations: [conv(9)] } })
+    await open()
+    await reachEnd()
+    expect((await screen.findAllByText('Fox 9')).length).toBeGreaterThan(0)
+
+    // The server now leaves them out of the first page too.
+    api.getConversations.mockResolvedValue(conversations([conv(1)]))
+    await act(async () => noteBlocked())
+    await flush()
+    expect(screen.queryByText('Fox 9')).toBeNull()
+    expect(screen.getAllByText('Fox 1').length).toBeGreaterThan(0)
+  })
+
+  it('the Requests section is a strip of three with the server’s true count and a way to all of them', async () => {
+    const rs = (from: number, n: number) => Array.from({ length: n }, (_, i) => ({ id: `r${from + i}`, senderId: `s${from + i}`, sender: { id: `s${from + i}`, name: `Asker ${from + i}` }, message: `hello ${from + i}`, createdAt: at }))
+    api.getMessageRequests.mockResolvedValue({ success: true, data: { requests: rs(0, 20), totalCount: 140 } } as never)
+    await open()
+    expect(screen.getByLabelText('Requests, 140')).toBeTruthy()
+    expect(screen.getAllByLabelText(/^Accept the request from/)).toHaveLength(3)
+    await act(async () => fireEvent.press(screen.getByLabelText('Show all 140')))
+    expect(screen.getAllByLabelText(/^Accept the request from/)).toHaveLength(20)
+    api.getMessageRequests.mockResolvedValue({ success: true, data: { requests: rs(20, 20), totalCount: 140 } } as never)
+    await act(async () => fireEvent.press(screen.getByLabelText('Show more requests')))
+    await flush()
+    expect(api.getMessageRequests).toHaveBeenLastCalledWith({ status: 'pending', offset: 20 }, { force: true })
+    expect(screen.getAllByLabelText(/^Accept the request from/)).toHaveLength(40)
+    await act(async () => fireEvent.press(screen.getByLabelText('Show fewer')))
+    expect(screen.getAllByLabelText(/^Accept the request from/)).toHaveLength(3)
+  })
+
+  it('a few requests are all shown, with no "Show all"', async () => {
+    serve()
+    await open()
+    expect(screen.getByLabelText('Requests, 1')).toBeTruthy()
+    expect(screen.queryByLabelText(/^Show all/)).toBeNull()
   })
 })

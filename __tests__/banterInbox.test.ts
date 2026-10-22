@@ -143,7 +143,8 @@ describe('the room you are standing in', () => {
 
   it('shows the room count from `memberCount`, rolling', () => {
     expect(INBOX()).toContain('participant_count: roomMemberCount(room) ?? 0')
-    expect(SCREEN()).toContain('count={c.participant_count}')
+    // Five and up, as every people count says it (the owner's floor).
+    expect(SCREEN()).toContain('count={printable(c.participant_count) ?? 0}')
     expect(PARTS()).toContain('<RollingNumber value={count}')
   })
 
@@ -200,7 +201,7 @@ describe('what the API already sends is read', () => {
   })
 
   it('knows when the last DM was yours', () => {
-    expect(INBOX()).toContain('conv.lastMessage.senderId === user?.id')
+    expect(INBOX()).toContain('conv.lastMessage.senderId === userId')
     expect(SCREEN()).toContain('previewWithSender(c.last_message, { fromMe: c.last_message_from_me })')
   })
 

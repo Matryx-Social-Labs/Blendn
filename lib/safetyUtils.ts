@@ -1,5 +1,6 @@
 import { leaveConfirmation } from './conversationReveal'
 import { apiClient } from './apiClient'
+import { noteBlocked } from './blockEpoch'
 import { Logger } from './logger'
 import { showSheet, type Sheet, type SheetAction, type SheetOutcome } from './sheet'
 
@@ -54,8 +55,12 @@ const safely = async (
   }
 }
 
-export const blockUser = (userId: string): Promise<SafetyActionResult> =>
-  safely('blocking user', 'Failed to block user', 'User blocked', () => apiClient.blockUser(userId))
+export const blockUser = async (userId: string): Promise<SafetyActionResult> => {
+  const result = await safely('blocking user', 'Failed to block user', 'User blocked', () => apiClient.blockUser(userId))
+  // Lists loaded a page at a time start over: their older pages may hold this person (`lib/blockEpoch.ts`).
+  if (result.success) noteBlocked()
+  return result
+}
 
 export const unblockUser = (userId: string): Promise<SafetyActionResult> =>
   safely('unblocking user', 'Failed to unblock user', 'User unblocked', () => apiClient.unblockUser(userId))
