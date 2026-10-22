@@ -238,8 +238,8 @@ describe('pickInsideEvent', () => {
       getDistanceMetres(roundCoordinate(fix.latitude), roundCoordinate(fix.longitude), at.latitude, at.longitude) / 1000
 
     const door = { latitude: 12.97, longitude: 77.59 }
-    const inside = { latitude: 12.9693, longitude: 77.59 } // 78 m south of the door; rounds to 111 m
-    const outside = { latitude: 12.9745, longitude: 77.5945 } // 155 m from the other event; rounds to 78 m
+    const inside = { latitude: 12.9693, longitude: 77.59, accuracy: 15 } // 78 m south of the door; rounds to 111 m
+    const outside = { latitude: 12.9745, longitude: 77.5945, accuracy: 15 } // 155 m from the other event; rounds to 78 m
     const farDoor = { latitude: 12.9755, longitude: 77.5955 }
 
     it('offers check-in to somebody 78 m inside whom the rounded distance puts outside', () => {
@@ -263,10 +263,28 @@ describe('pickInsideEvent', () => {
       expect(pickInsideEvent([running({ ...farDoor, distance: null })], now, null)).toBeNull()
     })
 
+    it('a coarse, unknown-accuracy or approximate fix is not used: the server’s distance stands', () => {
+      const e = running({ ...door, distance: serverKm(inside, door) }) // rounded: 111 m, outside
+      const fix = (over: object) => ({ ...inside, ...over })
+      expect(pickInsideEvent([e], now, fix({ accuracy: 100 }))).toBe('e') // exactly the zone radius: used
+      expect(pickInsideEvent([e], now, fix({ accuracy: 101 }))).toBeNull() // coarser than the zone
+      expect(pickInsideEvent([e], now, fix({ accuracy: 1500 }))).toBeNull()
+      expect(pickInsideEvent([e], now, fix({ accuracy: null }))).toBeNull()
+      expect(pickInsideEvent([e], now, { latitude: inside.latitude, longitude: inside.longitude })).toBeNull()
+      expect(pickInsideEvent([e], now, fix({ approximate: true }))).toBeNull() // iOS reduced accuracy, even with a small number
+    })
+
+    it('a fix is judged against the zone’s own radius: 60 m accuracy suits a 100 m zone, not a 50 m one', () => {
+      const small = running({ ...door, check_in_radius: 50, distance: 0.04 })
+      expect(pickInsideEvent([small], now, { ...door, accuracy: 60 })).toBe('e') // falls back to the server's 40 m
+      const wide = running({ ...door, check_in_radius: 100, distance: 0.2 })
+      expect(pickInsideEvent([wide], now, { ...door, accuracy: 60 })).toBe('e') // fix used: 0 m
+    })
+
     it('the nearer centre still wins when two fences overlap', () => {
       const near = running({ id: 'near', latitude: 12.97, longitude: 77.59, check_in_radius: 200 })
       const far = running({ id: 'far', latitude: 12.9702, longitude: 77.59, check_in_radius: 200 })
-      expect(pickInsideEvent([far, near], now, { latitude: 12.97, longitude: 77.5899 })).toBe('near')
+      expect(pickInsideEvent([far, near], now, { latitude: 12.97, longitude: 77.5899, accuracy: 10 })).toBe('near')
     })
   })
 
@@ -359,9 +377,24 @@ describe('the callers hand the centre button the precise fix (SCRUM-744)', () =>
 
   it('the Pulse (both pages) and Tonight publish with the phone’s own position', () => {
     const pulse = read('app/(tabs)/events.tsx')
-    expect(pulse).toMatch(/publishRoomSignal\(normalized, Date\.now\(\), userLocation\)/)
-    expect(pulse).toMatch(/publishRoomSignal\(merged, Date\.now\(\), userLocation\)/)
+    expect(pulse).toMatch(/publishRoomSignal\(normalized, Date\.now\(\), userLocation && \{ \.\.\.userLocation, approximate: approximateRef\.current \}\)/)
+    expect(pulse).toMatch(/publishRoomSignal\(merged, Date\.now\(\), userLocation && \{ \.\.\.userLocation, approximate: approximateRef\.current \}\)/)
     expect(read('lib/useTonight.ts')).toMatch(/publishRoomSignal\(result\.data, Date\.now\(\), coords\)/)
+  })
+
+  it('the Tonight read asks for a fresh, accurate last-known fix and passes its accuracy on', () => {
+    const tonight = read('lib/useTonight.ts')
+    expect(tonight).toMatch(/getLastKnownPositionAsync\(\{ maxAge: FIX_MAX_AGE_MS, requiredAccuracy: FIX_REQUIRED_ACCURACY_M \}\)/)
+    expect(tonight).toMatch(/FIX_MAX_AGE_MS = 120_000/)
+    expect(tonight).toMatch(/approximate: location === 'approximate'/)
+  })
+
+  it('the Pulse keeps accuracy on every position it sets and says when the grant is approximate', () => {
+    const pulse = read('app/(tabs)/events.tsx')
+    expect(pulse.match(/setUserLocation\(\{[^}]*\}\)/g)?.every((c) => c.includes('accuracy'))).toBe(true)
+    expect(pulse).not.toMatch(/: \{ latitude: position\.coords\.latitude, longitude: position\.coords\.longitude \}\n/)
+    expect(pulse).toMatch(/approximate: approximateRef\.current/)
+    expect(pulse).toMatch(/ios\?\.accuracy === 'reduced'/)
   })
 
   it('publishRoomSignal judges inside from the fix it is given', () => {
@@ -379,7 +412,7 @@ describe('the callers hand the centre button the precise fix (SCRUM-744)', () =>
     clearRoomSignal()
     publishRoomSignal([event], now)
     expect(getRoomSignal().insideEventId).toBeNull()
-    publishRoomSignal([event], now, { latitude: 12.9693, longitude: 77.59 })
+    publishRoomSignal([event], now, { latitude: 12.9693, longitude: 77.59, accuracy: 15 })
     expect(getRoomSignal().insideEventId).toBe('door')
     clearRoomSignal()
   })

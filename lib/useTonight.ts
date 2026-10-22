@@ -70,14 +70,25 @@ const PREVIEW_TOP = 3
 /** The Pulse's page size, so the query — and so the cache entry — is the same. */
 const PULSE_PAGE = 20
 
+/** The last known fix is used only if it is this fresh and this good (metres): older or coarser is no position to judge a fence by. */
+const FIX_MAX_AGE_MS = 120_000
+const FIX_REQUIRED_ACCURACY_M = 100
+
+type QuietCoords = { latitude: number; longitude: number; accuracy: number | null; approximate: boolean }
+
 /** A fix only if the person already said yes. Never prompts. */
-async function quietLocation(): Promise<{ coords: { latitude: number; longitude: number } | null; location: TonightLocation }> {
+async function quietLocation(): Promise<{ coords: QuietCoords | null; location: TonightLocation }> {
   try {
     const permission = await Location.getForegroundPermissionsAsync()
     if (permission.status !== 'granted') return { coords: null, location: 'off' }
     const location = permission.ios?.accuracy === 'reduced' ? 'approximate' : 'on'
-    const last = await Location.getLastKnownPositionAsync()
-    return { coords: last?.coords ? { latitude: last.coords.latitude, longitude: last.coords.longitude } : null, location }
+    const last = await Location.getLastKnownPositionAsync({ maxAge: FIX_MAX_AGE_MS, requiredAccuracy: FIX_REQUIRED_ACCURACY_M })
+    return {
+      coords: last?.coords
+        ? { latitude: last.coords.latitude, longitude: last.coords.longitude, accuracy: last.coords.accuracy ?? null, approximate: location === 'approximate' }
+        : null,
+      location,
+    }
   } catch {
     return { coords: null, location: 'on' }
   }

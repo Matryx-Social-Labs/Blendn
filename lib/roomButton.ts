@@ -142,6 +142,9 @@ export function roomButtonAccessibilityLabel(target: RoomButtonTarget): string {
 /* -------------------------------------------------------------------------- */
 
 /** The fields these need. Anything shaped like a `BlendnEvent` satisfies it. */
+/** The fence an event without its own radius has, in metres. */
+const DEFAULT_RADIUS_M = 100
+
 export interface RoomButtonEvent {
   id: string
   start_time: string
@@ -162,17 +165,27 @@ export interface RoomButtonEvent {
   venue_name?: string | null
 }
 
-/** The phone's own fix, never rounded: it stays on the phone. */
-export type PreciseFix = { latitude: number; longitude: number }
+/**
+ * The phone's own fix, never rounded: it stays on the phone. `accuracy` is the radius in metres the OS gives it, and
+ * `approximate` is iOS's reduced-accuracy grant (a fix good to kilometres): either makes it useless against a fence.
+ */
+export type PreciseFix = { latitude: number; longitude: number; accuracy?: number | null; approximate?: boolean }
+
+/** A fix is judged precise against a zone only when it says it is good to within the zone's own radius. */
+const fixIsPrecise = (at: PreciseFix | null | undefined, radiusM: number): at is PreciseFix =>
+  !!at && !at.approximate && typeof at.accuracy === 'number' && Number.isFinite(at.accuracy) && at.accuracy >= 0 && at.accuracy <= radiusM
 
 /**
- * How far the event's centre is, in metres: from the precise fix when there is one and the event has real coordinates,
- * else the server's `distance` (which was measured from a position rounded to ~110 m, so it can be ~77 m out against a
- * 100 m fence: SCRUM-744). Null when neither is known. (0, 0) is what a row with no coordinates was once written as.
+ * How far the event's centre is, in metres: from the precise fix when it is good enough for this zone and the event has
+ * real coordinates, else the server's `distance` (which was measured from a position rounded to ~110 m, so it can be
+ * ~77 m out against a 100 m fence: SCRUM-744). A stale or coarse fix (accuracy over the radius, none given, or iOS's
+ * approximate grant) would be worse than the server's number, so it is not used. Null when neither is known.
+ * (0, 0) is what a row with no coordinates was once written as.
  */
 function distanceMetresTo(e: RoomButtonEvent, at?: PreciseFix | null): number | null {
   const { latitude, longitude } = e
-  if (at && typeof latitude === 'number' && typeof longitude === 'number' && Number.isFinite(latitude) && Number.isFinite(longitude) && !(latitude === 0 && longitude === 0)) {
+  const radiusM = typeof e.check_in_radius === 'number' ? e.check_in_radius : DEFAULT_RADIUS_M
+  if (fixIsPrecise(at, radiusM) && typeof latitude === 'number' && typeof longitude === 'number' && Number.isFinite(latitude) && Number.isFinite(longitude) && !(latitude === 0 && longitude === 0)) {
     return getDistanceMetres(at.latitude, at.longitude, latitude, longitude)
   }
   return typeof e.distance === 'number' && Number.isFinite(e.distance) ? e.distance * 1000 : null
@@ -204,7 +217,7 @@ export function pickInsideEvent(
   for (const e of events) {
     const distanceM = distanceMetresTo(e, at)
     if (distanceM === null) continue
-    const radiusM = typeof e.check_in_radius === 'number' ? e.check_in_radius : 100
+    const radiusM = typeof e.check_in_radius === 'number' ? e.check_in_radius : DEFAULT_RADIUS_M
     if (distanceM > radiusM) continue
 
     const live = liveWindow(e)

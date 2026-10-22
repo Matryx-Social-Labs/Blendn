@@ -459,6 +459,8 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   // Location permission status: 'checking' | 'granted' | 'denied' | 'undetermined'
   const [locationStatus, setLocationStatus] = useState<'checking' | 'granted' | 'denied' | 'undetermined'>('checking')
   const locationRequestInFlight = useRef(false)
+  /** iOS's reduced-accuracy grant: its fixes are good to kilometres, so the centre button never judges a fence by one. */
+  const approximateRef = useRef(false)
   const interestInFlightRef = useRef<Set<string>>(new Set())
   const checkOutInFlightRef = useRef<Set<string>>(new Set())
   const lastFetchLocationRef = useRef<string>('none')
@@ -683,7 +685,8 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   const getCurrentLocationQuietly = useCallback(async () => {
     try {
       // Best-effort permission request with quick timeout; fallback if denied/unavailable
-      const { status } = await Location.requestForegroundPermissionsAsync()
+      const { status, ios } = await Location.requestForegroundPermissionsAsync()
+      approximateRef.current = ios?.accuracy === 'reduced'
       if (status !== 'granted') {
         setUserLocation(null)
         setLocationStatus(status === 'denied' ? 'denied' : 'undetermined')
@@ -726,7 +729,8 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   useEffect(() => {
     const checkLocationPermission = async () => {
       try {
-        const { status } = await Location.getForegroundPermissionsAsync()
+        const { status, ios } = await Location.getForegroundPermissionsAsync()
+        approximateRef.current = ios?.accuracy === 'reduced'
         if (status === 'granted') {
           // Permission already granted - mark as granted immediately (before fetching coords)
           setLocationStatus('granted')
@@ -740,7 +744,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
           setTimeout(async () => {
             try {
               const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
-              setUserLocation({ latitude: position.coords.latitude, longitude: position.coords.longitude })
+              setUserLocation({ latitude: position.coords.latitude, longitude: position.coords.longitude, accuracy: position.coords.accuracy })
             } catch {
               // Position fetch failed but permission is still granted - don't show prompt
             }
@@ -860,7 +864,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
        * going to tonight — and re-deriving them there would mean a second
        * location permission dance and a second copy of this list on a timer.
        */
-      publishRoomSignal(normalized, Date.now(), userLocation)
+      publishRoomSignal(normalized, Date.now(), userLocation && { ...userLocation, approximate: approximateRef.current })
       setPage(0)
       setHasMore(pageHasMore(normalized.length, PAGE_SIZE))
       lastFetchLocationRef.current = lat && lon ? `${lat},${lon}` : 'none'
@@ -1118,7 +1122,8 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
        * status on every foreground so a grant elsewhere clears it.
        */
       Location.getForegroundPermissionsAsync()
-        .then(({ status }) => {
+        .then(({ status, ios }) => {
+          approximateRef.current = ios?.accuracy === 'reduced'
           setLocationStatus(status === 'granted' ? 'granted' : status === 'denied' ? 'denied' : 'undetermined')
         })
         .catch(() => {})
@@ -1130,7 +1135,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
             Math.abs(current.latitude - position.coords.latitude) < 0.01 &&
             Math.abs(current.longitude - position.coords.longitude) < 0.01
               ? current
-              : { latitude: position.coords.latitude, longitude: position.coords.longitude }
+              : { latitude: position.coords.latitude, longitude: position.coords.longitude, accuracy: position.coords.accuracy }
           )
         })
         // A refused or unavailable fix is not an error worth surfacing: it just
@@ -1269,7 +1274,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       if (received.length === 0) return
       setEvents(prev => {
         const merged = mergeEventPage(prev, received.map(normalizeEvent))
-        publishRoomSignal(merged, Date.now(), userLocation)
+        publishRoomSignal(merged, Date.now(), userLocation && { ...userLocation, approximate: approximateRef.current })
         return merged
       })
       setPage(prev => prev + 1)
