@@ -528,7 +528,7 @@ function EditProfileContent() {
             */}
             <SettingsRow
               icon="sparkles"
-              title="Languages, home, sign & this-or-that"
+              title="Languages, home & more"
               label="Languages, home state, sign and this or that. Shown on cards when you share one with someone. Never used to rank."
               trail="chevron"
               onPress={() => router.push('/edit-about-you')}
@@ -715,7 +715,8 @@ const styles = StyleSheet.create({
   column: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.sm, gap: SPACE.lg },
   card: { backgroundColor: COLOR.surface, borderRadius: RADIUS.card, padding: CARD_PAD, gap: CARD_GAP },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
-  cardTitle: { color: COLOR.textSecondary },
+  // FieldLabel's inset, so the card's label and the set labels inside it start on one edge (r7 L8).
+  cardTitle: { color: COLOR.textSecondary, paddingLeft: SPACE.xs },
   cardSub: { color: COLOR.textTertiary },
   // Form fields: the design system's TextField / TextArea, one gap between them.
   fields: { gap: SPACE.lg },
