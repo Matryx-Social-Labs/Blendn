@@ -190,7 +190,7 @@ describe('How you match row (Flow 14 · 14.4)', () => {
   it('sits beside Notifications and opens the about-you fields', async () => {
     await render(<Screen />)
     fireEvent.press(await screen.findByRole('button', { name: 'How you match, What matching reads' }))
-    expect(router.push).toHaveBeenCalledWith('/edit-about-you')
+    expect(router.push).toHaveBeenCalledWith({ pathname: '/edit-about-you', params: { from: 'settings' } })
     expect(screen.getByText('Notifications & matching')).toBeTruthy()
   })
 })

@@ -71,7 +71,7 @@ describe('there is one profile editor', () => {
     // The one door the design draws (R4.1 7.1, Flow 14 · 14.4): "How you match", to the about-you fields' own screen.
     // The old `/about-you` route, a second profile editor, stays gone.
     expect(src.replace("'/edit-about-you'", '')).not.toContain('about-you')
-    expect(src).toContain("router.push('/edit-about-you')")
+    expect(src).toContain("pathname: '/edit-about-you'")
     expect(src).not.toContain('/edit-profile')
     // And no profile card above the list, whose outer press went to the Me tab.
     expect(src).not.toContain('profileCard')

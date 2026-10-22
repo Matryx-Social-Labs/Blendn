@@ -351,7 +351,7 @@ export const NAME_MIN_LENGTH = 2
 
 /**
  * A name that was started and is too short to be one. Blank is not this: an empty field is "Enter your name.", not a
- * sentence about length. Counted in characters a person sees, so one emoji is one.
+ * sentence about length. Counted in code points (`Array.from`), so one emoji is one; a flag or a family, which joins several, counts as more.
  */
 export function nameTooShort(name: string | undefined): boolean {
   const length = Array.from((name ?? '').trim()).length

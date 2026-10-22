@@ -497,7 +497,7 @@ function SettingsScreenContent() {
             onPress={() => router.push('/notification-settings')}
             testID="settings-notifications"
           />
-          <SettingsRow icon="sparkles" title="How you match" hint="What matching reads" trail="chevron" onPress={() => router.push('/edit-about-you')} testID="settings-how-you-match" />
+          <SettingsRow icon="sparkles" title="How you match" hint="What matching reads" trail="chevron" onPress={() => router.push({ pathname: '/edit-about-you', params: { from: 'settings' } })} testID="settings-how-you-match" />
         </SettingsGroup>
 
         {/* Blocked users leads Safety: blocking is the most consequential safety action in the product. */}

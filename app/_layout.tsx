@@ -40,8 +40,8 @@ initSentry();
 /*
  * Tell the OS what the app already is.
  *
- * There is no light theme: `EMBER` is a dark palette and all 73 stylesheets
- * hardcode it. But `UIUserInterfaceStyle` is `Automatic` in the committed
+ * There is no light theme: the design tokens (`COLOR`, lib/design/tokens.ts) are
+ * a dark palette and every screen draws from them. But `UIUserInterfaceStyle` is `Automatic` in the committed
  * Info.plist and Android's `AppTheme` derives from a DayNight parent, so every
  * surface iOS and Android draw *for* us followed the phone's setting instead —
  * and on a phone set to light that means a white alert on a black screen.

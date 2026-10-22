@@ -1,6 +1,6 @@
 import { barTop } from '../../lib/barGeometry'
 import { ReactNode } from 'react'
-import { Platform, StyleSheet, Text, View } from 'react-native'
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Backdrop, ORB_LEVEL } from './Backdrop'
@@ -48,6 +48,13 @@ interface Props {
   ctaLabel: string
   onContinue: () => void
   ctaDisabled?: boolean
+  /**
+   * A press on the primary while it is off: the screen says why (a sentence under the field) rather than leave a dead button.
+   * A disabled button takes no press, so the press is taken by the wrapper around it.
+   */
+  onCtaDisabledPress?: () => void
+  /** The primary refused (motion #20): its shake and the one `H.error`. */
+  ctaRefused?: boolean
   ctaBusy?: boolean
 
   /** Under the primary: "Maybe later", "Skip". */
@@ -72,6 +79,8 @@ export function OnboardingScreen({
   ctaLabel,
   onContinue,
   ctaDisabled,
+  onCtaDisabledPress,
+  ctaRefused,
   ctaBusy,
   secondaryLabel,
   onSecondary,
@@ -120,7 +129,10 @@ export function OnboardingScreen({
         dockProps={{ keyboardUp, testID: 'onboarding-dock' }}
         dock={
           <>
-            <Button label={ctaLabel} onPress={onContinue} disabled={ctaDisabled} loading={ctaBusy} testID="onboarding-primary" />
+            {/* A disabled primary takes no press: the wrapper does, so a tap on it can say why it is off. */}
+            <Pressable accessible={false} disabled={!ctaDisabled || !onCtaDisabledPress} onPress={onCtaDisabledPress} testID="onboarding-primary-frame">
+              <Button label={ctaLabel} onPress={onContinue} disabled={ctaDisabled} refused={ctaRefused} loading={ctaBusy} testID="onboarding-primary" />
+            </Pressable>
             {/* The way out stays with the button; only the note waits for the keyboard to go. Off while the primary saves: a Skip during a save navigated twice. */}
             {secondaryLabel && onSecondary ? (
               <Button label={secondaryLabel} kind="tertiary" size="md" onPress={onSecondary} disabled={ctaBusy} testID="onboarding-secondary" />

@@ -8,6 +8,7 @@ import { DateField, type DateParts } from '../../components/ds/DateField'
 import { Sheet } from '../../components/ds/Sheet'
 import { TextField } from '../../components/ds/TextField'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
+import { useRefusedPulse } from '../../components/onboarding/useRefusedPulse'
 import {
   ADULTS_ONLY,
   canContinue,
@@ -63,6 +64,7 @@ function BasicsScreenInner() {
   const [name, setName] = useState('')
   // The length sentence waits for the person to leave the field: one letter typed is not yet a mistake.
   const [nameLeft, setNameLeft] = useState(false)
+  const { refused, refuse } = useRefusedPulse()
   const [gender, setGender] = useState<OnboardingGender | undefined>()
   const [dob, setDob] = useState({ day: '', month: '', year: '' })
 
@@ -88,6 +90,8 @@ function BasicsScreenInner() {
   if (loaded && !prefilled) {
     setPrefilled(true)
     setName(draft.name ?? user?.name ?? '')
+    // A name already there (a resume, the account's) has been left: its sentence, if it needs one, shows at once.
+    setNameLeft(!!(draft.name ?? user?.name))
     setGender(draft.gender)
     setDob(splitDateOfBirth(draft.dateOfBirth))
   }
@@ -143,6 +147,12 @@ function BasicsScreenInner() {
       subtitle="Tell us a bit about yourself. You can change any of it later."
       ctaLabel="Continue"
       ctaDisabled={!ready}
+      // Tapping the dead button says why, when why is the name: the sentence under it, and the primary's refusal.
+      onCtaDisabledPress={() => {
+        setNameLeft(true)
+        refuse()
+      }}
+      ctaRefused={refused}
       ctaBusy={saving}
       onContinue={submit}
       secondaryLabel="Not you? Sign out"

@@ -11,7 +11,8 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
 import { ScrollView, StyleSheet } from 'react-native'
 
-jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: jest.fn(), replace: jest.fn() } }))
+let mockParams: Record<string, string> = {}
+jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: jest.fn(), replace: jest.fn() }, useLocalSearchParams: () => mockParams }))
 jest.mock('react-native-safe-area-context', () => {
   const React = require('react')
   const { View } = require('react-native')
@@ -75,6 +76,7 @@ const profile = (over: Record<string, unknown> = {}) => ({
 
 beforeEach(() => {
   jest.clearAllMocks()
+  mockParams = {}
   api.getProfileOptions.mockResolvedValue({ success: true, data: OPTIONS })
   api.getProfile.mockResolvedValue(profile())
   api.getThisOrThat.mockResolvedValue({ success: true, data: { answers: {} } })
@@ -97,6 +99,23 @@ const save = async () => {
     fireEvent.press(screen.getByText('Save'))
   })
 }
+
+describe('the bar says where you came from (Settings › How you match)', () => {
+  it('is "About you" from Edit profile', async () => {
+    await open()
+    expect(screen.getByText('About you')).toBeTruthy()
+  })
+  it('is "How you match" when Settings opened it', async () => {
+    mockParams = { from: 'settings' }
+    await open()
+    expect(screen.getByText('How you match')).toBeTruthy()
+  })
+  it('prints nothing a link says: only the flag picks between the two bars', async () => {
+    mockParams = { from: 'settings', title: 'Free money' }
+    await open()
+    expect(screen.queryByText('Free money')).toBeNull()
+  })
+})
 
 describe('the sign is never preselected (M4)', () => {
   it('says it shows next to the age, offers the birthday sign as a hint, and saves none until picked', async () => {
