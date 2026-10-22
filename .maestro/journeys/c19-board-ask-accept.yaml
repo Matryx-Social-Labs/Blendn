@@ -40,7 +40,7 @@ tags:
     timeout: 20000
 - tapOn: "The Board.*"
 - extendedWaitUntil:
-    visible: ".*(Nobody's posted yet|Write a post).*"
+    visible: ".*(Nobody’s posted yet|Write a post).*"
     timeout: 20000
 - tapOn: "Write a post"
 - tapOn: "Your post.*"

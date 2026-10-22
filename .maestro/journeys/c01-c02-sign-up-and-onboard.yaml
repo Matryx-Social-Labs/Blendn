@@ -138,7 +138,7 @@ tags:
     visible: "Edit my details"
     timeout: 20000
 - takeScreenshot: c02-ready
-- tapOn: "Start Blend'n"
+- tapOn: "Start Blend’n"
 # onboarded is true from here; the invite screen comes after it.
 - extendedWaitUntil:
     visible: "Share my link"
