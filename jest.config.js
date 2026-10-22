@@ -56,4 +56,14 @@ module.exports = {
     "/assets/fonts/satoshi/.+\\.otf$": "<rootDir>/__mocks__/fontAsset.js",
   },
   clearMocks: true,
+  /*
+   * 30 s a test, not jest's 5.
+   *
+   * The suites that flaked under load (onboardingReady, useCheckInFlow, dsAchievementBadge, roomVisibility, tabScrollToTop…)
+   * have no real timer in them: two already run on fake timers and two wait on nothing. What failed was the FIRST test in a
+   * file, which pays for transforming the whole import graph of a screen, and on a busy machine that alone passes 5 s.
+   * Every one of them passes alone. A longer ceiling takes the machine's load out of the verdict without touching what a
+   * test asserts; a test that really hangs still fails, 30 s later.
+   */
+  testTimeout: 30000,
 }
