@@ -16,6 +16,7 @@ const mockShowToast = jest.fn()
 const mockEnded: Array<(d: { eventId: string; reason: string }) => void> = []
 const mockChanged = new Set<() => void>()
 let mockPath = '/venue/v1'
+let mockRoomOpen = false
 
 jest.mock('@react-native-async-storage/async-storage', () => require('@react-native-async-storage/async-storage/jest/async-storage-mock'))
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
@@ -70,6 +71,7 @@ jest.mock('../components/ds/ExpiryPrompt', () => {
   }
 })
 jest.mock('../lib/purchases', () => ({ loadPlusOffers: jest.fn() }))
+jest.mock('../lib/blendnOverlay', () => ({ isBlendnOpen: () => mockRoomOpen }))
 jest.mock('../lib/socketClient', () => ({
   subscribeToLiveEnded: (cb: never) => {
     mockEnded.push(cb)
@@ -146,6 +148,7 @@ beforeEach(async () => {
   mockChanged.clear()
   mockPaywallClosed.clear()
   mockPath = '/venue/v1'
+  mockRoomOpen = false
   jest.clearAllMocks()
   await require('@react-native-async-storage/async-storage').clear()
   // A second night: this is not a first Go Live.
@@ -347,6 +350,20 @@ describe('the Stay row (Flow 11 · R2-D7, 12.1 #05)', () => {
       for (const fn of [...mockPaywallClosed]) fn('done')
     })
     expect(isUp('Still here?')).toBe(false)
+  })
+
+  /**
+   * H2: never a paywall over a chat or the room: Extend and Done only, for the sold row and the free one alike.
+   * Negative control: dropping `isQuietSurface` from `stayRow` fails these.
+   */
+  it.each([['a chat', '/chat/g1', false], ['a DM', '/private-chat/c1', false], ['the room overlay', '/(tabs)/events', true]])('over %s there is no Stay row', async (_label, path, roomOpen) => {
+    mockPath = path
+    mockRoomOpen = roomOpen
+    await ended()
+    expect(isUp('Still here?')).toBe(true)
+    expect(screen.getByRole('button', { name: 'Extend 45 min — free' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Done for now' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Stay while you’re here/ })).toBeNull()
   })
 
   it('never on a person’s first Go Live', async () => {

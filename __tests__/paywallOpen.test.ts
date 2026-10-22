@@ -90,10 +90,23 @@ describe('openTonight', () => {
     expect(host).toHaveBeenCalledTimes(1)
   })
 
-  it('an automatic ask never arrives over a chat or the room, but a tap does', async () => {
-    notePathname('/chat/abc')
+  /**
+   * H2 (MN-CU01): never over a chat or the room, a tap included; Settings' own row is the one exception, and it is not here.
+   * Negative control: dropping the quiet-surface line in `mayShow` fails the tap cases.
+   */
+  it.each(['/chat/abc', '/private-chat/c1', '/room', '/event/e1'])('never opens over %s, an automatic ask or a tap', async (path) => {
+    notePathname(path)
     expect(await openTonight(stay)).toBe(false)
-    expect(await openTonight(stay, { userInitiated: true })).toBe(true)
+    expect(await openTonight(stay, { userInitiated: true })).toBe(false)
+    expect(await openPaywall('recap', { userInitiated: true })).toBe(false)
+    expect(await openPaywall('second_event', { userInitiated: true })).toBe(false)
+    expect(host).not.toHaveBeenCalled()
+    expect(router.push).not.toHaveBeenCalled()
+  })
+
+  it('Settings’ Blend’n+ row opens wherever it is asked for', async () => {
+    notePathname('/settings')
+    expect(await openPaywall('profile', { userInitiated: true })).toBe(true)
   })
 
   it.each(['/plus', '/onboarding/basics'])('never opens at %s, not even on a tap', async (path) => {

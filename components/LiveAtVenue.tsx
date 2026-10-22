@@ -3,6 +3,7 @@ import { AppState } from 'react-native'
 import { usePathname } from 'expo-router'
 
 import { apiClient } from '../lib/apiClient'
+import { isBlendnOpen } from '../lib/blendnOverlay'
 import { checkInChanged, subscribeCheckInChanged } from '../lib/checkIn'
 import {
   EXTEND_CHOICE,
@@ -19,6 +20,7 @@ import { Logger } from '../lib/logger'
 import type { TrayButton } from '../lib/locationFix'
 import { trayKind } from '../lib/sheet'
 import { openTonight, subscribePaywallClosed } from '../lib/paywall'
+import { isQuietSurface } from '../lib/paywallPolicy'
 import { usePlusStatus } from '../lib/plus'
 import { serverNow } from '../lib/serverClock'
 import { afterSheetDismissed } from '../lib/sheetDismissed'
@@ -253,9 +255,12 @@ export function LiveAtVenue() {
     }
   }, [wantsPrice])
 
-  /** The row: Blendn+'s with a price from the store; plain "Stay" where staying is free; none where Plus is sold but the store has no price to name. */
+  /**
+   * The row: Blendn+'s with a price from the store; plain "Stay" where staying is free; none where Plus is sold but the
+   * store has no price to name, and none over a chat or the room (never a paywall there, MN-CU01): Extend and Done only.
+   */
   const stayRow = (() => {
-    if (!ended || ended.kind !== 'ended') return undefined
+    if (!ended || ended.kind !== 'ended' || isQuietSurface(pathname, isBlendnOpen())) return undefined
     if (!sold) return { onPress: goLiveWith(STAY_CHOICE, 'stay') }
     if (!from) return undefined
     return {

@@ -4,6 +4,7 @@ import { apiClient } from './apiClient'
 import { isBlendnOpen } from './blendnOverlay'
 import { Logger } from './logger'
 import {
+  isQuietSurface,
   mayOpenPaywall,
   readPaywallMemory,
   rememberPaywallEvent,
@@ -91,6 +92,8 @@ export async function openPaywall(trigger: PaywallTrigger, { userInitiated = fal
 /** The one gate in front of either surface: where the person is, and (for an automatic one) the policy. */
 async function mayShow(trigger: PaywallTrigger, userInitiated: boolean): Promise<boolean> {
   if (paywallBlockedAt(currentPathname)) return false
+  // Never over a chat or the room, not even for a tap on a lock (MN-CU01): only Settings' own Blend'n+ row is asked for there.
+  if (trigger !== 'profile' && isQuietSurface(currentPathname, isBlendnOpen())) return false
   if (userInitiated) return true
   const memory = await readPaywallMemory()
   const ctx = { userInitiated, automaticShownThisSession, pathname: currentPathname, roomOpen: isBlendnOpen() }
