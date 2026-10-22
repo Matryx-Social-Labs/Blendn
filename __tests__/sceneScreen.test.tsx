@@ -236,17 +236,33 @@ describe('the days of a run (Flow 3 · 3.2, #724 window)', () => {
     await open()
     await screen.findByTestId('scene-when')
     // Three days: the first day's date to the last, the month said once.
-    expect(screen.getByLabelText(/^Vinyl Night\. \w{3} \d+ – \w{3} \d+ \w{3}\./)).toBeTruthy()
+    expect(screen.getByLabelText(/^Vinyl Night\. \w{3} \d+ to \w{3} \d+ \w{3}\./)).toBeTruthy()
   })
 
   it('between days, to somebody who is going, the pill says when the next day starts and is still the RSVP\'s off-switch (frame 06)', async () => {
-    api.getEvent.mockResolvedValue(detail(run(false), { rsvpStatus: 'going' }) as never)
+    api.getEvent.mockResolvedValue(detail({ ...run(false), startTime: hours(-30), endTime: hours(60), session: { startTime: hours(3), endTime: hours(6) } }, { rsvpStatus: 'going' }) as never)
     await open()
     const pill = await screen.findByLabelText(/^Day 2 starts .*\. You’re going$/)
     expect(pill.props.accessibilityState).toEqual(expect.objectContaining({ disabled: false }))
     expect(screen.queryByText('You’re going')).toBeNull()
     await fireEvent.press(pill)
     expect(showSheet).toHaveBeenCalledWith(expect.objectContaining({ title: 'Cancel your RSVP?' }))
+  })
+
+  it('before the first day there is no "between": the pill is the RSVP\'s own words even when the next day is not today', async () => {
+    // The run has not begun: the session is day 1, and its start is in the future (no day has opened yet).
+    const r = run(false)
+    api.getEvent.mockResolvedValue(detail({ ...r, startTime: hours(30), endTime: hours(60) }, { rsvpStatus: 'going' }) as never)
+    await open()
+    expect(await screen.findByLabelText('You’re going')).toBeTruthy()
+    expect(screen.queryByLabelText(/starts/)).toBeNull()
+  })
+
+  it('between days the pill keeps its check and says how to cancel', async () => {
+    api.getEvent.mockResolvedValue(detail({ ...run(false), startTime: hours(-30), endTime: hours(60), session: { startTime: hours(3), endTime: hours(6) } }, { rsvpStatus: 'going' }) as never)
+    await open()
+    const pill = await screen.findByLabelText(/^Day 2 starts .*\. You’re going$/)
+    expect(pill.props.accessibilityHint).toBe('Double-tap to cancel your RSVP')
   })
 
   it('not going, or on the day itself, the pill is the RSVP\'s own words', async () => {

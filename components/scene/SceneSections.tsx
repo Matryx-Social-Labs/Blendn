@@ -20,7 +20,7 @@ import { Avatar } from '../ds/Avatar'
 import { Spinner } from '../ds/Loader'
 import { RollingNumber } from '../ds/RollingNumber'
 import { SectionHeader } from '../ds/SectionHeader'
-import { font, useBoldText } from '../ds/shared'
+import { CONTROL_FONT_CAP, font, useBoldText } from '../ds/shared'
 import ScalePress from '../motion/ScalePress'
 import { fadeInFast, popIn } from '../motion/presence'
 import { GradientFill } from '../ui/GradientFill'
@@ -353,8 +353,8 @@ export function SceneCTA({
   alone?: boolean
   /**
    * Between the days of a run, a line the pill says in place of its label and glyph ("Day 3 starts Tue, Sep 29, 9:00 PM",
-   * Flow 3 · 3.2 frame 06): the next door, in Geist Mono. The press is still the RSVP's own off-switch, so a screen reader is
-   * told both, and nothing about the pill's width or state changes.
+   * Flow 3 · 3.2 frame 06): the next door, in Geist Mono, beside the check that says you are going. The press is still the RSVP's
+   * own off-switch, so a screen reader is told both, and nothing about the pill's width or state changes.
    */
   note?: string
   /** Drawn in the colour the pill hands it — dark on the accent fill, `textPrimary` on the quiet one. */
@@ -363,6 +363,7 @@ export function SceneCTA({
   iconKey?: string
   onPress?: () => void
 }) {
+  const bold = useBoldText()
   // Only while a handler is busy; no state is a dead end.
   const disabled = !onPress || pending
   /*
@@ -398,6 +399,7 @@ export function SceneCTA({
       accessibilityRole="button"
       accessibilityState={{ disabled, busy: pending, selected: state === 'going' }}
       accessibilityLabel={note ? `${note}. ${sceneCtaLabel(state, alone)}` : sceneCtaLabel(state, alone)}
+      accessibilityHint={note ? 'Double-tap to cancel your RSVP' : undefined}
     >
       {/*
         Full width, the gradient while there is something still to do, 8% white
@@ -414,7 +416,7 @@ export function SceneCTA({
         <LayoutAnimationConfig skipEntering>
           {pending ? (
             <Spinner testID="scene-cta-pending" color={COLOR.textOnGradient} />
-          ) : icon && !note ? (
+          ) : icon ? (
             <Animated.View key={iconKey} entering={reduceMotion ? changeFade : popIn}>
               {icon(COLOR.textOnGradient)}
             </Animated.View>
@@ -423,7 +425,8 @@ export function SceneCTA({
             key={note ? `${state}:note` : state}
             entering={reduceMotion ? changeFade : ctaLabelIn}
             exiting={reduceMotion ? ctaFadeOut : ctaLabelOut}
-            style={[note ? styles.ctaNote : styles.ctaLabel, styles.ctaInk]}
+            style={[note ? [font('meta', bold, FONT_FAMILY.mono[500]), styles.ctaNote] : styles.ctaLabel, styles.ctaInk]}
+            maxFontSizeMultiplier={note ? CONTROL_FONT_CAP : undefined}
             numberOfLines={note ? 2 : 1}
           >
             {note ?? sceneCtaLabel(state, alone)}
@@ -689,7 +692,7 @@ const styles = StyleSheet.create({
   ctaFillQuiet: { backgroundColor: MATERIAL.fillOnGlass, borderColor: 'transparent' },
   // TYPE.button's 24pt line is one of the terms SCENE_CTA_HEIGHT is summed from.
   ctaLabel: { ...TYPE.button },
-  // The between-days line: the meta role in Geist Mono, centred, over as many lines as the reader's type needs (the dock measures the pill).
-  ctaNote: { ...TYPE.meta, fontFamily: FONT_FAMILY.mono[500], textAlign: 'center', flexShrink: 1 },
+  // The between-days line (`font('meta')` in Geist Mono, capped), centred, over as many lines as the reader's type needs (the dock measures the pill).
+  ctaNote: { textAlign: 'center', flexShrink: 1 },
   ctaInk: { color: COLOR.textOnGradient },
 })

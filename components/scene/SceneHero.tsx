@@ -55,6 +55,7 @@ export function SceneHero({
   playlist,
   title,
   when,
+  whenSpoken,
   struck = false,
   pills = [],
   place,
@@ -69,8 +70,10 @@ export function SceneHero({
    */
   playlist?: FeedMediaItem[]
   title: string
-  /** The badge: "Live", "Ended", "9 PM", "Sat 24 Oct · 9 PM". */
+  /** The badge: "Live", "Ended", "9 PM", "Sat 24 Oct · 9 PM", "Sat 27 – Mon 29 Sep". */
   when: string
+  /** What a screen reader says for the badge when the words on it read badly aloud (a range's dash: "Sat 27 to Mon 29 Sep"). */
+  whenSpoken?: string
   /** A cancelled event's date is struck through. */
   struck?: boolean
   pills?: ScenePill[]
@@ -127,7 +130,7 @@ export function SceneHero({
         pointerEvents="none"
         accessible
         accessibilityRole="header"
-        accessibilityLabel={[title, when, ...pills.map((p) => p.text), place].filter(Boolean).join('. ')}
+        accessibilityLabel={[title, whenSpoken ?? when, ...pills.map((p) => p.text), place].filter(Boolean).join('. ')}
       >
         <View style={styles.pills}>
           {struck ? (

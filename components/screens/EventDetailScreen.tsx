@@ -1144,7 +1144,9 @@ export default function EventDetail() {
   const doorsLabel = event?.days && event.days.dayNumber && !sessionToday ? 'NEXT DOORS' : 'DOORS'
   // Between days, to somebody who is going: the next door, said where "You're going" was (frame 06). Nothing else changes.
   const betweenLine =
-    event?.days && ctaState === 'rsvpd' && !sessionToday && heroStart ? betweenDaysLine(event.days, heroStart, event.timezone) : null
+    event?.days && ctaState === 'rsvpd' && !sessionToday && heroStart && Date.parse(event.start_time) <= now
+      ? betweenDaysLine(event.days, heroStart, event.timezone)
+      : null
   /*
    * Said to the people who had heard of the night (going, maybe, waitlisted, saved): what moved, and what it was. A cancel is
    * the banner's, so it is no line here.
@@ -1213,6 +1215,7 @@ export default function EventDetail() {
                 source={event?.cover_image_url ? { uri: event.cover_image_url } : undefined}
                 title={event?.title || ''}
                 when={when}
+                whenSpoken={when.replace(' – ', ' to ')}
                 struck={cancelled}
                 pills={pills}
                 place={place}
