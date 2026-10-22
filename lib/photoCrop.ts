@@ -9,20 +9,14 @@
  * aborts a Release build: `__tests__/workletCallees.test.ts`).
  */
 
-/** The frame's height over its width: the frame's `W × 1.3`. */
-export const CROP_ASPECT = 1.3
-/** A pinch zooms to four times the covering size and no more. */
+/** A pinch zooms to four times the covering size and no more … */
 export const MAX_ZOOM = 4
+/** … and never so far that the crop keeps fewer than this many pixels across: a zoom into a small photo is a blur, not a crop. */
+export const MIN_CROP_PX = 540
 
 export type Size = { width: number; height: number }
 export type Offset = { x: number; y: number }
 export type CropRect = { originX: number; originY: number; width: number; height: number }
-
-/** The frame for a screen `width` wide: full width, `CROP_ASPECT` tall. */
-export function frameFor(width: number): Size {
-  'worklet'
-  return { width, height: Math.round(width * CROP_ASPECT) }
-}
 
 /** Points per source pixel at which the photo just covers the frame. */
 export function coverScale(image: Size, frame: Size): number {
@@ -42,10 +36,30 @@ const clamp = (v: number, lo: number, hi: number) => {
   return Math.min(hi, Math.max(lo, v))
 }
 
-/** A zoom held inside 1 to `MAX_ZOOM`. */
-export function clampZoom(zoom: number): number {
+/**
+ * The most this photo may be zoomed in this frame: `MAX_ZOOM`, or less where the crop would keep under `MIN_CROP_PX` pixels
+ * across. Never under 1: a photo already smaller than that is cropped at 1× and not zoomed at all.
+ */
+export function maxZoomFor(image: Size, frame: Size): number {
   'worklet'
-  return clamp(zoom, 1, MAX_ZOOM)
+  const acrossAtOne = frame.width / coverScale(image, frame)
+  return clamp(acrossAtOne / MIN_CROP_PX, 1, MAX_ZOOM)
+}
+
+/** A zoom held inside 1 and `max` (`maxZoomFor`). */
+export function clampZoom(zoom: number, max: number = MAX_ZOOM): number {
+  'worklet'
+  return clamp(zoom, 1, max)
+}
+
+/**
+ * Where a pinch puts the photo: the point that was under the fingers when it began stays under them, wherever they move.
+ * All of it relative to the frame's centre. `ratio` is the zoom now over the zoom when the pinch began; `startOffset` is the
+ * photo's offset then, and `startFocal` the fingers' midpoint then. Unbounded: the bound is `clampOffset`'s, at release.
+ */
+export function pinchOffset(focal: Offset, startFocal: Offset, startOffset: Offset, ratio: number): Offset {
+  'worklet'
+  return { x: focal.x - (startFocal.x - startOffset.x) * ratio, y: focal.y - (startFocal.y - startOffset.y) * ratio }
 }
 
 /** An offset held where the frame stays covered. */
@@ -61,7 +75,7 @@ export function clampOffset(image: Size, frame: Size, zoom: number, offset: Offs
  */
 export function cropRect(image: Size, frame: Size, zoom: number, offset: Offset): CropRect {
   'worklet'
-  const z = clampZoom(zoom)
+  const z = clampZoom(zoom, maxZoomFor(image, frame))
   const o = clampOffset(image, frame, z, offset)
   const scale = coverScale(image, frame) * z
   const width = Math.min(image.width, Math.round(frame.width / scale))

@@ -15,14 +15,15 @@ jest.mock('../lib/toast', () => ({ toast: jest.fn() }))
 jest.mock('../lib/queryCache', () => ({ queryCache: { invalidate: jest.fn() } }))
 jest.mock('../lib/useAuth', () => ({ refreshAuthUser: jest.fn() }))
 jest.mock('@react-native-async-storage/async-storage', () => ({}))
-jest.mock('expo-file-system/legacy', () => ({ getInfoAsync: jest.fn(async () => ({ exists: true, size: 900000 })) }))
+jest.mock('expo-file-system/legacy', () => ({ getInfoAsync: jest.fn(async () => ({ exists: true, size: 900000 })), deleteAsync: jest.fn(async () => undefined) }))
 jest.mock('expo-image-manipulator', () => ({ SaveFormat: { JPEG: 'jpeg' }, manipulateAsync: jest.fn() }))
 jest.mock('../lib/apiClient', () => ({ apiClient: {} }))
 jest.mock('../lib/logger', () => ({ Logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() } }))
 
+import * as FileSystem from 'expo-file-system/legacy'
 import * as ImageManipulator from 'expo-image-manipulator'
 import * as ImagePicker from 'expo-image-picker'
-import { selectPhoto, validatePhoto } from '../lib/photoUtils'
+import { FIT_LONG_SIDE, fitResize, selectPhoto, validatePhoto } from '../lib/photoUtils'
 import { mountRepositionHost, requestReposition, settleReposition } from '../lib/photoReposition'
 import { showSheet, type ActionSheet } from '../lib/sheet'
 
@@ -61,7 +62,8 @@ describe('Use photo', () => {
     // The step was asked, about the file the manipulator decoded (its size, not the picker's).
     settleReposition({ kind: 'use', rect: RECT })
     await expect(selecting).resolves.toEqual({ ok: true, uri: 'file:///cropped.jpg' })
-    expect(manipulate).toHaveBeenNthCalledWith(1, 'file:///picked.jpg', [], expect.objectContaining({ format: 'jpeg' }))
+    // 4000 × 3000 is over the cap on its long side: the copy the step works on is brought down, ratio kept.
+    expect(manipulate).toHaveBeenNthCalledWith(1, 'file:///picked.jpg', [{ resize: { width: FIT_LONG_SIDE } }], expect.objectContaining({ format: 'jpeg' }))
     expect(manipulate).toHaveBeenNthCalledWith(2, 'file:///fitted.jpg', [{ crop: RECT }], expect.objectContaining({ format: 'jpeg' }))
     unmount()
   })
@@ -73,6 +75,57 @@ describe('Use photo', () => {
     manipulate.mockRejectedValueOnce(new Error('crop failed'))
     settleReposition({ kind: 'use', rect: RECT })
     await expect(selecting).resolves.toEqual({ ok: true, uri: 'file:///fitted.jpg' })
+    unmount()
+  })
+})
+
+describe('the copy the step works on (M1)', () => {
+  it('is at most 2560 on its long side: a 48 MP original is not decoded at full size', () => {
+    expect(fitResize(8000, 6000)).toEqual([{ resize: { width: 2560 } }])
+    expect(fitResize(6000, 8000)).toEqual([{ resize: { height: 2560 } }])
+  })
+
+  it('a photo already inside it is re-encoded as it is (no resize, no upscale)', () => {
+    expect(fitResize(2560, 1920)).toEqual([])
+    expect(fitResize(1080, 1440)).toEqual([])
+  })
+})
+
+describe('the temporary copy (LOW)', () => {
+  const deleted = () => (FileSystem.deleteAsync as jest.Mock).mock.calls.map((c) => c[0])
+
+  it('is deleted once the crop is made, and the crop (which goes on to be uploaded) is not', async () => {
+    const unmount = mountRepositionHost()
+    const selecting = selectPhoto()
+    await chooseLibrary()
+    settleReposition({ kind: 'use', rect: RECT })
+    await selecting
+    expect(deleted()).toEqual(['file:///fitted.jpg'])
+    unmount()
+  })
+
+  it.each(['cancel', 'again'] as const)('is deleted when the person chooses %s', async (kind) => {
+    const unmount = mountRepositionHost()
+    const selecting = selectPhoto()
+    await chooseLibrary()
+    settleReposition({ kind })
+    if (kind === 'again') {
+      await chooseLibrary()
+      settleReposition({ kind: 'cancel' })
+    }
+    await selecting
+    expect(deleted()).toContain('file:///fitted.jpg')
+    unmount()
+  })
+
+  it('stays when the crop failed: it is the file that goes on', async () => {
+    const unmount = mountRepositionHost()
+    const selecting = selectPhoto()
+    await chooseLibrary()
+    manipulate.mockRejectedValueOnce(new Error('crop failed'))
+    settleReposition({ kind: 'use', rect: RECT })
+    await selecting
+    expect(deleted()).toEqual([])
     unmount()
   })
 })

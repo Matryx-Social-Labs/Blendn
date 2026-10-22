@@ -7,7 +7,7 @@ import { font, PRESSED_WASH, useBoldText } from '../../components/ds/shared'
 import { useToast } from '../../components/Toast'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import { PhotoTile, PulledPhotoTile, MAIN_RATIO } from '../../components/onboarding/PhotoTile'
-import { photoNote, readyPhotos, withMainFirst, type PhotoTile as Tile } from '../../components/onboarding/photoTiles'
+import { photoNote, readyPhotos, withMainFirst, withoutPulledDraftPhotos, type PhotoTile as Tile } from '../../components/onboarding/photoTiles'
 import { Icon } from '../../components/ui/Icon'
 import { COLOR, DURATION, ICON, PRESS, RADIUS, SPACE, SPRING } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
@@ -60,9 +60,9 @@ import { useOnboarding } from '../../lib/useOnboarding'
  * ## The pulled photo
  *
  * The design draws a fourth tile state, "This photo was removed. Add a different one.", for a photo moderation took down
- * after it was added. The server now says which photos it pulled (`photo_states`, blendn-admin #716), but only on your own
- * `GET /profiles/:id`, which onboarding's draft does not read: Edit profile draws it (`components/PhotoManager.tsx`). Here a photo
- * pulled mid-onboarding is simply gone from the next read of the draft.
+ * after it was added. The server says which photos it pulled (`photo_states`, blendn-admin #716) on your own `GET /profiles/:id`,
+ * which onboarding's draft does not read, so this screen reads it too: an empty tile with a shield for each pulled one, and the draft
+ * reconciled with the photos that are up (`withoutPulledDraftPhotos`), so Continue never sends a pulled URL back.
  */
 
 const SLOTS = 6
@@ -84,13 +84,23 @@ function MediaScreenInner() {
   const [tiles, setTiles] = useState<Tile[]>([])
   /** The photos moderation took down since they were added (`photo_states`, your own profile): empty tiles with a shield, until dismissed or replaced. */
   const [pulled, setPulled] = useState<PulledPhoto[]>([])
+  /** The photos that are up, once any has been pulled: the draft may still list a pulled one, and Continue must not send it. */
+  const [liveOnly, setLiveOnly] = useState<string[] | null>(null)
   const userId = user?.id
   useEffect(() => {
     if (!loaded || !userId) return
-    let live = true
-    void loadPulledPhotos(userId).then((list) => live && setPulled(list))
+    let alive = true
+    void loadPulledPhotos(userId).then((own) => {
+      if (!alive) return
+      setPulled(own.pulled)
+      // Reconciled only when something was pulled: the draft is otherwise what it was, and a failed read (no list) judges nothing.
+      if (own.pulled.length > 0 && own.live) {
+        setLiveOnly(own.live)
+        setTiles((current) => withoutPulledDraftPhotos(current, own.live as string[]))
+      }
+    })
     return () => {
-      live = false
+      alive = false
     }
   }, [loaded, userId])
 
@@ -103,7 +113,7 @@ function MediaScreenInner() {
   const [shown, setShown] = useState<string[] | undefined>(undefined)
   if (loaded && draft.photos !== shown) {
     setShown(draft.photos)
-    setTiles((draft.photos ?? []).map((url) => ({ key: url, state: 'ready' as const, url })))
+    setTiles(withoutPulledDraftPhotos((draft.photos ?? []).map((url) => ({ key: url, state: 'ready' as const, url })), liveOnly ?? (draft.photos ?? [])))
   }
 
   // The empty tiles never take the well's slot: the last one is always the way to add.

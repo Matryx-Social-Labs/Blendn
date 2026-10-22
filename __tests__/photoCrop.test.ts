@@ -1,12 +1,6 @@
-import { clampOffset, clampZoom, coverScale, CROP_ASPECT, cropRect, frameFor, MAX_ZOOM, maxOffset } from '../lib/photoCrop'
+import { clampOffset, clampZoom, coverScale, cropRect, MAX_ZOOM, maxOffset, maxZoomFor, MIN_CROP_PX, pinchOffset } from '../lib/photoCrop'
 
-const FRAME = frameFor(400) // 400 × 520
-
-describe('the frame', () => {
-  it('is the full width and 1.3 tall', () => {
-    expect(FRAME).toEqual({ width: 400, height: Math.round(400 * CROP_ASPECT) })
-  })
-})
+const FRAME = { width: 400, height: 520 } // the hero's 1 : 1.3
 
 describe('covering the frame', () => {
   it('a landscape photo is scaled to the frame’s height, a portrait one to its width', () => {
@@ -84,5 +78,56 @@ describe('what the frame keeps', () => {
   it('clampOffset leaves a legal offset alone', () => {
     const o = { x: 10, y: 0 }
     expect(clampOffset(image, FRAME, 1, o)).toEqual(o)
+  })
+})
+
+describe('how far a photo may be zoomed (maxZoomFor)', () => {
+  it('a 200 × 200 photo is not zoomed at all: the crop already keeps fewer than 540 pixels', () => {
+    expect(maxZoomFor({ width: 200, height: 200 }, FRAME)).toBe(1)
+  })
+
+  it('1080 × 1440 may be zoomed to 2×: 1080 across at 1×, 540 across at 2×', () => {
+    expect(maxZoomFor({ width: 1080, height: 1440 }, FRAME)).toBeCloseTo(2, 1)
+    const rect = cropRect({ width: 1080, height: 1440 }, FRAME, 9, { x: 0, y: 0 })
+    expect(rect.width).toBeGreaterThanOrEqual(MIN_CROP_PX - 1)
+  })
+
+  it('a 48 MP photo (8000 × 6000) reaches the plain ceiling of 4×', () => {
+    expect(maxZoomFor({ width: 8000, height: 6000 }, FRAME)).toBe(MAX_ZOOM)
+  })
+
+  it('clampZoom holds a zoom inside 1 and the photo’s own maximum', () => {
+    expect(clampZoom(3, 2)).toBe(2)
+    expect(clampZoom(0.5, 2)).toBe(1)
+    expect(clampZoom(9)).toBe(MAX_ZOOM)
+  })
+
+  it('a landscape photo is limited by its height covering the frame, not its width', () => {
+    const image = { width: 4000, height: 1800 }
+    expect(maxZoomFor(image, FRAME)).toBeCloseTo(FRAME.width / (coverScale(image, FRAME) * MIN_CROP_PX), 5)
+  })
+})
+
+describe('where a pinch puts the photo (pinchOffset)', () => {
+  it('with the fingers still and the ratio 1, nothing moves', () => {
+    expect(pinchOffset({ x: 30, y: -10 }, { x: 30, y: -10 }, { x: 12, y: 7 }, 1)).toEqual({ x: 12, y: 7 })
+  })
+
+  it('zooming about the middle of the frame keeps the photo centred', () => {
+    expect(pinchOffset({ x: 0, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 0 }, 2)).toEqual({ x: 0, y: 0 })
+  })
+
+  it('zooming 2× about a point away from the middle moves the photo so that point stays under the fingers', () => {
+    // The point at (40, 0) from the middle: after 2× the photo has moved 40 the other way.
+    expect(pinchOffset({ x: 40, y: 0 }, { x: 40, y: 0 }, { x: 0, y: 0 }, 2)).toEqual({ x: -40, y: 0 })
+  })
+
+  it('fingers that travel while they zoom carry the photo with them', () => {
+    const at = pinchOffset({ x: 70, y: 0 }, { x: 40, y: 0 }, { x: 0, y: 0 }, 2)
+    expect(at.x).toBe(70 - 40 * 2)
+  })
+
+  it('a pan that was in progress is kept as the starting offset', () => {
+    expect(pinchOffset({ x: 0, y: 0 }, { x: 0, y: 0 }, { x: 25, y: 5 }, 1.5)).toEqual({ x: 0 - (0 - 25) * 1.5, y: 0 - (0 - 5) * 1.5 })
   })
 })

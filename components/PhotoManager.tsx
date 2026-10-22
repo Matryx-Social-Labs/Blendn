@@ -100,7 +100,7 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
         setLoadFailed(false)
         setPhotos(userPhotos)
         setLoading(false)
-        void loadPulledPhotos(userId).then(setPulled)
+        void loadPulledPhotos(userId).then((own) => setPulled(own.pulled))
         // Pre-cache photos for better performance
         userPhotos.forEach((photo) => {
           if (photo.url.startsWith('http://') || photo.url.startsWith('https://')) {

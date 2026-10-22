@@ -10,7 +10,7 @@ jest.mock('../lib/photoUtils', () => ({
   cachePhoto: jest.fn(async () => null),
   deletePhoto: jest.fn(async () => true),
   loadUserPhotos: jest.fn(),
-  loadPulledPhotos: jest.fn(async () => []),
+  loadPulledPhotos: jest.fn(async () => ({ pulled: [], live: null })),
   reorderPhotos: jest.fn(),
   selectAndUploadPhoto: jest.fn(),
   uploadPhoto: jest.fn(),
@@ -156,7 +156,7 @@ describe('a photo moderation took down (edit 05)', () => {
 
   it('is drawn after the photos that are up, and is never part of what is written', async () => {
     pu.loadUserPhotos.mockResolvedValue(list(2))
-    pu.loadPulledPhotos.mockResolvedValue(pulledPhotos(photoStates(false)))
+    pu.loadPulledPhotos.mockResolvedValue({ pulled: pulledPhotos(photoStates(false)), live: null })
     await render(<PhotoManager userId="u" />)
     await screen.findByTestId('tile-pulled')
     // Two photos up and one removed: the count is of the photos on the profile.
@@ -169,7 +169,7 @@ describe('a photo moderation took down (edit 05)', () => {
   })
 
   it('draws nothing when the server sends no photo_states (an older server)', async () => {
-    pu.loadPulledPhotos.mockResolvedValue(pulledPhotos(undefined))
+    pu.loadPulledPhotos.mockResolvedValue({ pulled: pulledPhotos(undefined), live: null })
     await render(<PhotoManager userId="u" />)
     await screen.findByLabelText('Photo 3 of 3')
     expect(screen.queryByTestId('tile-pulled')).toBeNull()
@@ -178,7 +178,7 @@ describe('a photo moderation took down (edit 05)', () => {
 
   it('lets the person replace it: the tile adds a different photo, and its notice goes once that photo is on the profile', async () => {
     pu.loadUserPhotos.mockResolvedValue(list(2))
-    pu.loadPulledPhotos.mockResolvedValue(pulledPhotos(photoStates(false)))
+    pu.loadPulledPhotos.mockResolvedValue({ pulled: pulledPhotos(photoStates(false)), live: null })
     pu.selectAndUploadPhoto.mockResolvedValue({ success: true, url: url(9) } as never)
     await render(<PhotoManager userId="u" />)
     await screen.findByTestId('tile-pulled')
@@ -193,7 +193,7 @@ describe('a photo moderation took down (edit 05)', () => {
 
   it('keeps the notice when the replacement is cancelled, and its × dismisses it', async () => {
     pu.loadUserPhotos.mockResolvedValue(list(2))
-    pu.loadPulledPhotos.mockResolvedValue(pulledPhotos(photoStates(false)))
+    pu.loadPulledPhotos.mockResolvedValue({ pulled: pulledPhotos(photoStates(false)), live: null })
     pu.selectAndUploadPhoto.mockResolvedValue({ success: false, cancelled: true } as never)
     await render(<PhotoManager userId="u" />)
     await screen.findByTestId('tile-pulled')
@@ -207,7 +207,7 @@ describe('a photo moderation took down (edit 05)', () => {
 
   it('gives its slot to a photo when the grid is full: never more than six tiles', async () => {
     pu.loadUserPhotos.mockResolvedValue(list(6))
-    pu.loadPulledPhotos.mockResolvedValue(pulledPhotos(photoStates(false)))
+    pu.loadPulledPhotos.mockResolvedValue({ pulled: pulledPhotos(photoStates(false)), live: null })
     await render(<PhotoManager userId="u" />)
     await screen.findByLabelText('Photo 6 of 6')
     expect(screen.queryByTestId('tile-pulled')).toBeNull()
@@ -215,7 +215,7 @@ describe('a photo moderation took down (edit 05)', () => {
 
   it('says what the main photo is now when the main one was taken down, and where to write', async () => {
     pu.loadUserPhotos.mockResolvedValue(list(2))
-    pu.loadPulledPhotos.mockResolvedValue(pulledPhotos(photoStates(true)))
+    pu.loadPulledPhotos.mockResolvedValue({ pulled: pulledPhotos(photoStates(true)), live: null })
     await render(<PhotoManager userId="u" />)
     await screen.findByTestId('photos-main-pulled')
     expect(screen.getByText('Your main photo was removed. The next one is your main photo now.')).toBeTruthy()
@@ -228,7 +228,7 @@ describe('a photo moderation took down (edit 05)', () => {
 
   it('a dismissed notice stays dismissed: it is kept per account, and the next load does not draw it', async () => {
     pu.loadUserPhotos.mockResolvedValue(list(2))
-    pu.loadPulledPhotos.mockResolvedValue(pulledPhotos(photoStates(false)))
+    pu.loadPulledPhotos.mockResolvedValue({ pulled: pulledPhotos(photoStates(false)), live: null })
     await render(<PhotoManager userId="u" />)
     await screen.findByTestId('tile-pulled')
     await fireEvent.press(screen.getByLabelText('Dismiss removed photo'))
@@ -237,7 +237,7 @@ describe('a photo moderation took down (edit 05)', () => {
 
   it('a replaced notice is kept too, once the replacement is on the profile', async () => {
     pu.loadUserPhotos.mockResolvedValue(list(2))
-    pu.loadPulledPhotos.mockResolvedValue(pulledPhotos(photoStates(false)))
+    pu.loadPulledPhotos.mockResolvedValue({ pulled: pulledPhotos(photoStates(false)), live: null })
     pu.selectAndUploadPhoto.mockResolvedValue({ success: true, url: url(9) } as never)
     await render(<PhotoManager userId="u" />)
     await screen.findByTestId('tile-pulled')
@@ -250,7 +250,7 @@ describe('a photo moderation took down (edit 05)', () => {
 
   it('a replacement that failed to upload and went through on Retry still clears the notice it was for', async () => {
     pu.loadUserPhotos.mockResolvedValue(list(2))
-    pu.loadPulledPhotos.mockResolvedValue(pulledPhotos(photoStates(false)))
+    pu.loadPulledPhotos.mockResolvedValue({ pulled: pulledPhotos(photoStates(false)), live: null })
     pu.selectAndUploadPhoto.mockImplementation(async (_, hooks) => {
       hooks?.onPicked?.('file://new.jpg')
       return { success: false, error: 'Upload failed with status 502' } as never
@@ -273,7 +273,7 @@ describe('a photo moderation took down (edit 05)', () => {
 
   it('a replacement that was cancelled is not carried into the next, plain Add: the notice stays', async () => {
     pu.loadUserPhotos.mockResolvedValue(list(2))
-    pu.loadPulledPhotos.mockResolvedValue(pulledPhotos(photoStates(false)))
+    pu.loadPulledPhotos.mockResolvedValue({ pulled: pulledPhotos(photoStates(false)), live: null })
     pu.selectAndUploadPhoto.mockResolvedValueOnce({ success: false, cancelled: true } as never)
     await render(<PhotoManager userId="u" />)
     await screen.findByTestId('tile-pulled')
@@ -291,7 +291,7 @@ describe('a photo moderation took down (edit 05)', () => {
 
   it('a removed photo that was not the main one leaves the usual line', async () => {
     pu.loadUserPhotos.mockResolvedValue(list(2))
-    pu.loadPulledPhotos.mockResolvedValue(pulledPhotos(photoStates(false)))
+    pu.loadPulledPhotos.mockResolvedValue({ pulled: pulledPhotos(photoStates(false)), live: null })
     await render(<PhotoManager userId="u" />)
     await screen.findByTestId('tile-pulled')
     expect(screen.queryByTestId('photos-main-pulled')).toBeNull()

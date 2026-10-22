@@ -14,7 +14,7 @@ const mockPerm = jest.fn()
 const mockSelect = jest.fn()
 const mockUpload = jest.fn()
 const mockInvite = jest.fn()
-const mockPulled = jest.fn(async (..._a: unknown[]) => [] as unknown[])
+const mockPulled = jest.fn(async (..._a: unknown[]) => ({ pulled: [] as unknown[], live: null as string[] | null }))
 const mockSeen = jest.fn()
 jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: jest.fn(), replace: jest.fn() }, useFocusEffect: jest.fn() }))
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
@@ -47,7 +47,7 @@ import PreferencesScreen from '../app/onboarding/preferences'
 beforeEach(() => {
   jest.clearAllMocks()
   mockDraft = {}
-  mockPulled.mockImplementation(async () => [])
+  mockPulled.mockImplementation(async () => ({ pulled: [], live: null }))
 })
 
 describe('location', () => {
@@ -137,7 +137,7 @@ describe('photos', () => {
 
     it('is an empty tile with the shield glyph, beside the photos, and the add well is still there', async () => {
       mockDraft = { photos: ['https://media/a', 'https://media/b'] }
-      mockPulled.mockResolvedValue([PULLED])
+      mockPulled.mockResolvedValue({ pulled: [PULLED], live: null })
       await render(<MediaScreen />)
       await screen.findByTestId('photo-tile-pulled')
       expect(screen.getByLabelText(REMOVED)).toBeTruthy()
@@ -148,7 +148,7 @@ describe('photos', () => {
 
     it('× clears it for good, and says so to the phone so it is not drawn again', async () => {
       mockDraft = { photos: ['https://media/a'] }
-      mockPulled.mockResolvedValue([PULLED])
+      mockPulled.mockResolvedValue({ pulled: [PULLED], live: null })
       await render(<MediaScreen />)
       await fireEvent.press(await screen.findByLabelText('Dismiss removed photo'))
       expect(screen.queryByTestId('photo-tile-pulled')).toBeNull()
@@ -157,7 +157,7 @@ describe('photos', () => {
 
     it('adding a different photo takes its notice away', async () => {
       mockDraft = { photos: ['https://media/a'] }
-      mockPulled.mockResolvedValue([PULLED])
+      mockPulled.mockResolvedValue({ pulled: [PULLED], live: null })
       mockSelect.mockResolvedValue(picked)
       mockUpload.mockResolvedValue({ success: true, url: 'https://media/two' })
       await render(<MediaScreen />)
@@ -168,7 +168,7 @@ describe('photos', () => {
 
     it('a removed main photo says the next one is main now, and where to write', async () => {
       mockDraft = { photos: ['https://media/a'] }
-      mockPulled.mockResolvedValue([{ ...PULLED, wasMain: true }])
+      mockPulled.mockResolvedValue({ pulled: [{ ...PULLED, wasMain: true }], live: null })
       await render(<MediaScreen />)
       await screen.findByTestId('media-main-pulled')
       expect(screen.getByText('Your main photo was removed. The next one is your main photo now.')).toBeTruthy()
@@ -177,14 +177,58 @@ describe('photos', () => {
 
     it('with nothing left, it is only "Your main photo was removed."', async () => {
       mockDraft = {}
-      mockPulled.mockResolvedValue([{ ...PULLED, wasMain: true }])
+      mockPulled.mockResolvedValue({ pulled: [{ ...PULLED, wasMain: true }], live: null })
       await render(<MediaScreen />)
       await screen.findByText('Your main photo was removed.')
     })
 
+    it('H2: the draft is reconciled with the photos that are up: Continue never sends a pulled URL, and keeps what is not saved yet', async () => {
+      mockDraft = { photos: ['https://media/a', 'https://media/pulled', 'https://media/b'] }
+      mockPulled.mockResolvedValue({ pulled: [PULLED], live: ['https://media/a', 'https://media/b'] })
+      mockSelect.mockResolvedValue(picked)
+      mockUpload.mockResolvedValue({ success: true, url: 'https://media/new' })
+      await render(<MediaScreen />)
+      await screen.findByTestId('photo-tile-pulled')
+      // A photo added here and not saved yet is not in the profile's list: it is kept.
+      await fireEvent.press(screen.getByLabelText('Add a photo'))
+      await waitFor(() => expect(mockUpload).toHaveBeenCalled())
+      await fireEvent.press(screen.getByTestId('onboarding-primary'))
+      expect(mockCommit).toHaveBeenCalledWith({ photos: ['https://media/a', 'https://media/b', 'https://media/new'] })
+      expect(JSON.stringify(mockCommit.mock.calls)).not.toContain('pulled')
+    })
+
+    it('H2: nothing pulled means the draft is the draft, even when the profile lists fewer photos', async () => {
+      mockDraft = { photos: ['https://media/a', 'https://media/b'] }
+      mockPulled.mockResolvedValue({ pulled: [], live: ['https://media/a'] })
+      await render(<MediaScreen />)
+      await screen.findByLabelText('Add a photo')
+      await fireEvent.press(screen.getByTestId('onboarding-primary'))
+      expect(mockCommit).toHaveBeenCalledWith({ photos: ['https://media/a', 'https://media/b'] })
+    })
+
+    it('H2: a profile read that failed (no list) judges nothing', async () => {
+      mockDraft = { photos: ['https://media/a', 'https://media/pulled'] }
+      mockPulled.mockResolvedValue({ pulled: [PULLED], live: null })
+      await render(<MediaScreen />)
+      await screen.findByTestId('photo-tile-pulled')
+      await fireEvent.press(screen.getByTestId('onboarding-primary'))
+      expect(mockCommit).toHaveBeenCalledWith({ photos: ['https://media/a', 'https://media/pulled'] })
+    })
+
+    it('H2: the draft read again later (a save swaps the uploads) is still held to the photos that are up', async () => {
+      mockDraft = { photos: ['https://media/a', 'https://media/pulled'] }
+      mockPulled.mockResolvedValue({ pulled: [PULLED], live: ['https://media/a'] })
+      const view = await render(<MediaScreen />)
+      await screen.findByTestId('photo-tile-pulled')
+      mockDraft = { photos: ['https://media/a', 'https://media/pulled'].slice() }
+      await view.rerender(<MediaScreen />)
+      await fireEvent.press(screen.getByTestId('onboarding-primary'))
+      expect(mockCommit).toHaveBeenLastCalledWith({ photos: ['https://media/a'] })
+    })
+
     it('five photos leave the sixth place to the well: no empty tile takes it', async () => {
       mockDraft = { photos: ['a', 'b', 'c', 'd', 'e'].map((k) => `https://media/${k}`) }
-      mockPulled.mockResolvedValue([PULLED])
+      mockPulled.mockResolvedValue({ pulled: [PULLED], live: null })
       await render(<MediaScreen />)
       await screen.findByLabelText('Add a photo')
       expect(screen.queryByTestId('photo-tile-pulled')).toBeNull()
