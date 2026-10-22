@@ -4,7 +4,7 @@
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { Keyboard, ScrollView, TextInput } from 'react-native'
+import { Keyboard } from 'react-native'
 
 import { H } from '../lib/haptics'
 
@@ -242,22 +242,5 @@ describe('forgot and the keyboard', () => {
     })
     expect(screen.queryByText('Forgot your password?')).toBeNull()
     expect(screen.getByTestId('sign-in-primary')).toBeTruthy()
-  })
-})
-
-describe('the focused field stays above the dock', () => {
-  it('sign-up: Age takes the page with it even when the Strong Password sheet holds first responder as the keyboard grows', async () => {
-    const scrollTo = jest.fn()
-    jest.spyOn(ScrollView.prototype as unknown as { scrollTo: () => void }, 'scrollTo').mockImplementation(scrollTo)
-    await render(<SignIn />)
-    await createAccount()
-    const age = { measureLayout: (_to: unknown, ok: (x: number, y: number, w: number, h: number) => void) => ok(0, 420, 340, 56) }
-    const focused = jest.spyOn(TextInput.State, 'currentlyFocusedInput').mockReturnValue(age as never)
-    await fireEvent(screen.getByTestId('sign-in-scroll'), 'layout', { nativeEvent: { layout: { height: 560, x: 0, y: 0, width: 390 } } })
-    await fireEvent(screen.getByTestId('sign-in-age-input'), 'focus')
-    focused.mockReturnValue(null as never)
-    scrollTo.mockClear()
-    await fireEvent(screen.getByTestId('sign-in-scroll'), 'layout', { nativeEvent: { layout: { height: 200, x: 0, y: 0, width: 390 } } })
-    expect(scrollTo).toHaveBeenCalledWith({ y: 420 + 56 + 72 - 200, animated: true })
   })
 })

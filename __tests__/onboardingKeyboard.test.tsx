@@ -1,10 +1,12 @@
 /**
- * Onboarding with the keyboard up: the page keeps what it needs reachable.
- * The focused field scrolls into the shorter viewport (with its label and its
- * hint), and the footer shrinks to the button so the page has room.
+ * Onboarding with the keyboard up (motion #34): the page follows the keyboard on react-native-keyboard-controller, as the
+ * chat and the sheets do. The scroll clears the focused field of the keyboard and the dock, the dock rides the keyboard's
+ * top edge, and the footer shrinks to the button so the page has room.
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
-import { Keyboard, ScrollView, StyleSheet, TextInput } from 'react-native'
+import { readFileSync } from 'fs'
+import { join } from 'path'
+import { Keyboard, StyleSheet } from 'react-native'
 
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 34, left: 0, right: 0 }),
@@ -13,7 +15,7 @@ jest.mock('react-native-safe-area-context', () => ({
 /* eslint-disable import/first */
 import { TextField } from '../components/ds/TextField'
 import { OnboardingScreen } from '../components/onboarding/OnboardingScreen'
-import { REVEAL_ABOVE, REVEAL_BELOW, revealOffset } from '../components/onboarding/revealFocused'
+import { HINT_ROOM } from '../components/onboarding/KeyboardPage'
 /* eslint-enable import/first */
 
 /** Every Keyboard listener, by event: more than one hook listens for the same one. */
@@ -27,25 +29,6 @@ function keyboardListeners() {
     get: (_t, event: string) => () => byEvent[event]?.forEach((cb) => cb()),
   })
 }
-
-describe('revealOffset', () => {
-  const viewport = 300
-  it('a field already inside the viewport (with its label and hint) does not move the page', () => {
-    expect(revealOffset({ top: 100, bottom: 156 }, 0, viewport)).toBeNull()
-  })
-
-  it('a field below the viewport scrolls up until its hint is in view', () => {
-    expect(revealOffset({ top: 500, bottom: 556 }, 0, viewport)).toBe(556 + REVEAL_BELOW - viewport)
-  })
-
-  it('a field above the top scrolls back down to its label', () => {
-    expect(revealOffset({ top: 100, bottom: 156 }, 400, viewport)).toBe(100 - REVEAL_ABOVE)
-  })
-
-  it('never scrolls above the start', () => {
-    expect(revealOffset({ top: 10, bottom: 66 }, 40, viewport)).toBe(0)
-  })
-})
 
 describe('the footer with the keyboard up', () => {
   function page() {
@@ -82,45 +65,12 @@ describe('the footer with the keyboard up', () => {
   })
 })
 
-describe('a field takes the page with it', () => {
-  /** Three fields on a page whose viewport is 300 tall, the third 500 down: the keyboard has made the page short. */
-  function page() {
-    return render(
-      <OnboardingScreen step="journey" title="Your journey" ctaLabel="Continue" onContinue={jest.fn()}>
-        {(reveal) => (
-          <>
-            <TextField label="City" value="" onChangeText={() => {}} {...reveal} />
-            <TextField label="Job title" value="" onChangeText={() => {}} {...reveal} />
-            <TextField label="School" value="" onChangeText={() => {}} {...reveal} />
-          </>
-        )}
-      </OnboardingScreen>
-    )
-  }
-
-  afterEach(() => jest.restoreAllMocks())
-
-  it('focusing the third field scrolls the page to it (the screen above the page, not inside it, spreads the focus)', async () => {
-    const scrollTo = jest.fn()
-    jest.spyOn(ScrollView.prototype as unknown as { scrollTo: () => void }, 'scrollTo').mockImplementation(scrollTo)
-    await page()
-    await fireEvent(screen.getByTestId('onboarding-body'), 'layout', { nativeEvent: { layout: { y: 0, x: 0, width: 390, height: 800 } } })
-    jest.spyOn(TextInput.State, 'currentlyFocusedInput').mockReturnValue({
-      measureLayout: (_to: unknown, ok: (x: number, y: number, w: number, h: number) => void) => ok(0, 500, 340, 80),
-    } as never)
-    await fireEvent(screen.getByTestId('onboarding-scroll'), 'layout', { nativeEvent: { layout: { height: 300, y: 0, x: 0, width: 390 } } })
-    scrollTo.mockClear()
-    await fireEvent(screen.getByLabelText('School'), 'focus')
-    expect(scrollTo).toHaveBeenCalledWith({ y: 500 + 80 + REVEAL_BELOW - 300, animated: true })
-  })
-})
-
 describe('the page while the keyboard is up', () => {
   it('drops the dock to the keyboard (no home-indicator room)', async () => {
     const listeners = keyboardListeners()
         await render(
       <OnboardingScreen step="basics" title="The basics" ctaLabel="Continue" onContinue={jest.fn()}>
-        {(reveal) => <TextField label="Name" value="" onChangeText={() => {}} {...reveal} />}
+        <TextField label="Name" value="" onChangeText={() => {}} />
       </OnboardingScreen>
     )
     const rest = StyleSheet.flatten(screen.getByTestId('onboarding-dock').props.style)
@@ -130,78 +80,38 @@ describe('the page while the keyboard is up', () => {
   })
 })
 
-describe('the page keeps following a field the system sheet took focus from', () => {
-  afterEach(() => jest.restoreAllMocks())
+describe('the page follows the keyboard through react-native-keyboard-controller', () => {
+  const read = (rel: string) => readFileSync(join(__dirname, '..', rel), 'utf8')
 
-  it('when the viewport shrinks while no input reports focus (the Strong Password sheet is up), it scrolls to the field focus last landed on', async () => {
-    const scrollTo = jest.fn()
-    jest.spyOn(ScrollView.prototype as unknown as { scrollTo: () => void }, 'scrollTo').mockImplementation(scrollTo)
+  it('the scroll clears the focused field of the dock and the hint under it: bottomOffset is the dock’s height plus the hint’s room', async () => {
     await render(
-      <OnboardingScreen step="journey" title="Your journey" ctaLabel="Continue" onContinue={jest.fn()}>
-        {(reveal) => <TextField label="School" value="" onChangeText={() => {}} {...reveal} />}
+      <OnboardingScreen step="basics" title="The basics" ctaLabel="Continue" onContinue={jest.fn()}>
+        <TextField label="Name" value="" onChangeText={() => {}} />
       </OnboardingScreen>
     )
-    await fireEvent(screen.getByTestId('onboarding-body'), 'layout', { nativeEvent: { layout: { y: 0, x: 0, width: 390, height: 800 } } })
-    const field = { measureLayout: (_to: unknown, ok: (x: number, y: number, w: number, h: number) => void) => ok(0, 500, 340, 80) }
-    const focused = jest.spyOn(TextInput.State, 'currentlyFocusedInput').mockReturnValue(field as never)
-    await fireEvent(screen.getByTestId('onboarding-scroll'), 'layout', { nativeEvent: { layout: { height: 600, y: 0, x: 0, width: 390 } } })
-    await fireEvent(screen.getByLabelText('School'), 'focus')
-    // The sheet takes first responder; the keyboard grows, the viewport shrinks.
-    focused.mockReturnValue(null as never)
-    scrollTo.mockClear()
-    await fireEvent(screen.getByTestId('onboarding-scroll'), 'layout', { nativeEvent: { layout: { height: 300, y: 0, x: 0, width: 390 } } })
-    expect(scrollTo).toHaveBeenCalledWith({ y: 500 + 80 + REVEAL_BELOW - 300, animated: true })
+    expect(screen.getByTestId('onboarding-scroll').props.bottomOffset).toBe(HINT_ROOM)
+    await act(async () => {
+      fireEvent(screen.getByTestId('onboarding-dock'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 390, height: 140 } } })
+    })
+    expect(screen.getByTestId('onboarding-scroll').props.bottomOffset).toBe(140 + HINT_ROOM)
   })
 
-  it('forgets the field once the keyboard has gone, so a later layout does not chase it', async () => {
-    const listeners = keyboardListeners()
-        const scrollTo = jest.fn()
-    jest.spyOn(ScrollView.prototype as unknown as { scrollTo: () => void }, 'scrollTo').mockImplementation(scrollTo)
+  it('the dock sits in the keyboard-sticky view, so it rides the keyboard frame by frame, interactive dismiss included', async () => {
     await render(
-      <OnboardingScreen step="journey" title="Your journey" ctaLabel="Continue" onContinue={jest.fn()}>
-        {(reveal) => <TextField label="School" value="" onChangeText={() => {}} {...reveal} />}
+      <OnboardingScreen step="basics" title="The basics" ctaLabel="Continue" onContinue={jest.fn()}>
+        <TextField label="Name" value="" onChangeText={() => {}} />
       </OnboardingScreen>
     )
-    await fireEvent(screen.getByTestId('onboarding-body'), 'layout', { nativeEvent: { layout: { y: 0, x: 0, width: 390, height: 800 } } })
-    const focused = jest.spyOn(TextInput.State, 'currentlyFocusedInput').mockReturnValue({
-      measureLayout: (_to: unknown, ok: (x: number, y: number, w: number, h: number) => void) => ok(0, 500, 340, 80),
-    } as never)
-    await fireEvent(screen.getByTestId('onboarding-scroll'), 'layout', { nativeEvent: { layout: { height: 300, y: 0, x: 0, width: 390 } } })
-    await fireEvent(screen.getByLabelText('School'), 'focus')
-    focused.mockReturnValue(null as never)
-    await act(async () => listeners.keyboardWillHide?.())
-    scrollTo.mockClear()
-    await fireEvent(screen.getByTestId('onboarding-scroll'), 'layout', { nativeEvent: { layout: { height: 200, y: 0, x: 0, width: 390 } } })
-    expect(scrollTo).not.toHaveBeenCalled()
-  })
-})
-
-describe('the page follows the field once the keyboard has landed, even when the viewport never reports its new height', () => {
-  afterEach(() => {
-    jest.restoreAllMocks()
-    delete (ScrollView.prototype as unknown as { measureInWindow?: unknown }).measureInWindow
+    expect(screen.getByTestId('keyboard-page-dock-frame')).toContainElement(screen.getByTestId('onboarding-dock'))
   })
 
-  it('keyboardDidShow measures the viewport again and scrolls the focused field above the dock', async () => {
-    const listeners = keyboardListeners()
-    const scrollTo = jest.fn()
-    jest.spyOn(ScrollView.prototype as unknown as { scrollTo: () => void }, 'scrollTo').mockImplementation(scrollTo)
-    await render(
-      <OnboardingScreen step="journey" title="Your journey" ctaLabel="Continue" onContinue={jest.fn()}>
-        {(reveal) => <TextField label="School" value="" onChangeText={() => {}} {...reveal} />}
-      </OnboardingScreen>
-    )
-    await fireEvent(screen.getByTestId('onboarding-body'), 'layout', { nativeEvent: { layout: { y: 0, x: 0, width: 390, height: 800 } } })
-    jest.spyOn(TextInput.State, 'currentlyFocusedInput').mockReturnValue({
-      measureLayout: (_to: unknown, ok: (x: number, y: number, w: number, h: number) => void) => ok(0, 500, 340, 80),
-    } as never)
-    // At rest the whole field fits: focusing it scrolls nothing.
-    await fireEvent(screen.getByTestId('onboarding-scroll'), 'layout', { nativeEvent: { layout: { height: 700, y: 0, x: 0, width: 390 } } })
-    await fireEvent(screen.getByLabelText('School'), 'focus')
-    scrollTo.mockClear()
-    // The keyboard lands and the viewport is 300 now, but no layout event says so.
-    ;(ScrollView.prototype as unknown as { measureInWindow: unknown }).measureInWindow = (done: (x: number, y: number, w: number, h: number) => void) => done(0, 0, 390, 300)
-    await act(async () => listeners.keyboardDidShow())
-    expect(scrollTo).toHaveBeenCalledWith({ y: 500 + 80 + REVEAL_BELOW - 300, animated: true })
+  it('no screen of the entry flow keeps the hand-written reveal or React Native’s avoiding view', () => {
+    for (const rel of ['components/onboarding/OnboardingScreen.tsx', 'app/sign-in.tsx']) {
+      const src = read(rel)
+      expect(src).not.toMatch(/revealFocused|useRevealFocused/)
+      expect(src).not.toMatch(/KeyboardAvoidingView/)
+      expect(src).toContain('KeyboardPage')
+    }
+    expect(read('components/onboarding/KeyboardPage.tsx')).toMatch(/KeyboardAwareScrollView, KeyboardStickyView \} from 'react-native-keyboard-controller'/)
   })
 })

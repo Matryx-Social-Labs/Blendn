@@ -148,85 +148,82 @@ function BasicsScreenInner() {
       secondaryLabel="Not you? Sign out"
       onSecondary={() => setConfirmSignOut(true)}
     >
-      {(reveal) => (
-        <>
-          {/*
-        Full name; a made-up name in rooms until the person shows theirs, and
-        then the whole of it (`roomIdentity`, admin lib/identity.ts). The
-        helper said "only your first name" and nothing shortens it (SCRUM-493).
+      <>
+        {/*
+      Full name; a made-up name in rooms until the person shows theirs, and
+      then the whole of it (`roomIdentity`, admin lib/identity.ts). The
+      helper said "only your first name" and nothing shortens it (SCRUM-493).
 
-        `User.name` is one field and holds whatever signup wrote, so collecting
-        the whole thing costs nothing and the room is protected by the pseudonym
-        regardless — a full name is only ever seen by someone who has matched,
-        opened a conversation, or been revealed to.
-      */}
-          <TextField
-            label="Your name"
-            placeholder="First and last name"
-            hint={NAME_HINT}
-            value={name}
-            onChangeText={setName}
-            error={nameOverCap ? overCapMessage(PROFILE_LIMITS.name, serverLength(name)) : nameLeft && nameTooShort(name) ? NAME_LENGTH_SENTENCE : undefined}
-            onBlur={() => setNameLeft(true)}
-            limit={counterLimit(name, PROFILE_LIMITS.name)}
-            measure={serverLength}
-            autoCapitalize="words"
-            // A name is not a word to correct.
-            autoCorrect={false}
-            autoComplete="name"
-            textContentType="name"
-            // The birth date is three boxes of its own, which the keyboard cannot walk to: done puts it away.
-            returnKeyType="done"
-            testID="onboarding-name"
-            {...reveal}
+      `User.name` is one field and holds whatever signup wrote, so collecting
+      the whole thing costs nothing and the room is protected by the pseudonym
+      regardless — a full name is only ever seen by someone who has matched,
+      opened a conversation, or been revealed to.
+    */}
+        <TextField
+          label="Your name"
+          placeholder="First and last name"
+          hint={NAME_HINT}
+          value={name}
+          onChangeText={setName}
+          error={nameOverCap ? overCapMessage(PROFILE_LIMITS.name, serverLength(name)) : nameLeft && nameTooShort(name) ? NAME_LENGTH_SENTENCE : undefined}
+          onBlur={() => setNameLeft(true)}
+          limit={counterLimit(name, PROFILE_LIMITS.name)}
+          measure={serverLength}
+          autoCapitalize="words"
+          // A name is not a word to correct.
+          autoCorrect={false}
+          autoComplete="name"
+          textContentType="name"
+          // The birth date is three boxes of its own, which the keyboard cannot walk to: done puts it away.
+          returnKeyType="done"
+          testID="onboarding-name"
+        />
+
+        <ChipSet
+          label="Gender identity"
+          items={GENDERS.map((option) => ({ key: option.value, label: option.label }))}
+          selection="single"
+          selected={gender ? [gender] : []}
+          // Tapping the chosen one again clears it. Gender is optional and
+          // there is otherwise no way back to "unanswered" once tapped.
+          onToggle={(value) => setGender(gender === value ? undefined : (value as typeof gender))}
+          testID="onboarding-gender"
+        />
+
+        <View style={styles.date}>
+          <DateField
+            label="Date of birth"
+            value={[dob.day, dob.month, dob.year] as DateParts}
+            onChange={([day, month, year]) => setDob({ day, month, year })}
+            error={dateError}
+            hint={dateError ? undefined : DOB_HINT}
+            testID="onboarding-dob"
           />
-
-          <ChipSet
-            label="Gender identity"
-            items={GENDERS.map((option) => ({ key: option.value, label: option.label }))}
-            selection="single"
-            selected={gender ? [gender] : []}
-            // Tapping the chosen one again clears it. Gender is optional and
-            // there is otherwise no way back to "unanswered" once tapped.
-            onToggle={(value) => setGender(gender === value ? undefined : (value as typeof gender))}
-            testID="onboarding-gender"
-          />
-
-          <View style={styles.date}>
-            <DateField
-              label="Date of birth"
-              value={[dob.day, dob.month, dob.year] as DateParts}
-              onChange={([day, month, year]) => setDob({ day, month, year })}
-              error={dateError}
-              hint={dateError ? undefined : DOB_HINT}
-              testID="onboarding-dob"
+          {/* Under 18 is a dead end on this account, so the exit sits beside the sentence. */}
+          {underAge ? (
+            <Button
+              label="Sign out"
+              kind="tertiary"
+              size="sm"
+              onPress={() => setConfirmSignOut(true)}
+              testID="onboarding-under-age-sign-out"
             />
-            {/* Under 18 is a dead end on this account, so the exit sits beside the sentence. */}
-            {underAge ? (
-              <Button
-                label="Sign out"
-                kind="tertiary"
-                size="sm"
-                onPress={() => setConfirmSignOut(true)}
-                testID="onboarding-under-age-sign-out"
-              />
-            ) : null}
-          </View>
+          ) : null}
+        </View>
 
-          <Sheet
-            visible={confirmSignOut}
-            onClose={() => setConfirmSignOut(false)}
-            icon="log-out"
-            title="Sign out?"
-            body="What you’ve filled in stays on this phone, so you can pick up here when you sign back in."
-            actions={[
-              { label: 'Cancel', kind: 'secondary', onPress: () => setConfirmSignOut(false), disabled: signingOut },
-              { label: 'Sign out', kind: 'primary', onPress: () => void leave(), loading: signingOut },
-            ]}
-            testID="sign-out-sheet"
-          />
-        </>
-      )}
+        <Sheet
+          visible={confirmSignOut}
+          onClose={() => setConfirmSignOut(false)}
+          icon="log-out"
+          title="Sign out?"
+          body="What you’ve filled in stays on this phone, so you can pick up here when you sign back in."
+          actions={[
+            { label: 'Cancel', kind: 'secondary', onPress: () => setConfirmSignOut(false), disabled: signingOut },
+            { label: 'Sign out', kind: 'primary', onPress: () => void leave(), loading: signingOut },
+          ]}
+          testID="sign-out-sheet"
+        />
+      </>
     </OnboardingScreen>
   )
 }
