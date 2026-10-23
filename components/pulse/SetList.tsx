@@ -31,9 +31,9 @@ const NODE = 9
 export const STACK_AT_FONT_SCALE = 1.5
 
 /** "10:00" and "PM", for the time over its meridiem. */
-export function splitClock(ms: number): { time: string; meridiem: string } {
-  const match = /^(\d{1,2})(?::(\d{2}))? (AM|PM)$/.exec(clockTime(ms))
-  if (!match) return { time: clockTime(ms), meridiem: '' }
+export function splitClock(ms: number, timeZone?: string): { time: string; meridiem: string } {
+  const match = /^(\d{1,2})(?::(\d{2}))? (AM|PM)$/.exec(clockTime(ms, timeZone))
+  if (!match) return { time: clockTime(ms, timeZone), meridiem: '' }
   return { time: `${match[1]}:${match[2] ?? '00'}`, meridiem: match[3] }
 }
 
@@ -42,7 +42,7 @@ export function setRowLabel(event: BlendnEvent, withDistance: boolean): string {
   const start = Date.parse(liveWindow(event).start_time)
   const going = printable(event.going_count)
   return [
-    clockTime(start),
+    clockTime(start, event.timezone),
     [event.title, event.venue_name ? `at ${event.venue_name}` : null, withDistance ? distanceText(event.distance) : null, going ? `${going} going` : null]
       .filter(Boolean)
       .join(', '),
@@ -64,7 +64,8 @@ type RowProps = {
 const Row = memo(function Row({ event, withDistance, stacked, onPress, onPressIn, onLongPress }: RowProps) {
   const bold = useBoldText()
   const start = Date.parse(liveWindow(event).start_time)
-  const { time, meridiem } = splitClock(start)
+  // The event's own zone (RC drive 5 D-4).
+  const { time, meridiem } = splitClock(start, event.timezone)
   const distance = withDistance ? distanceText(event.distance) : null
   const going = printable(event.going_count)
   const box = useRef<View>(null)

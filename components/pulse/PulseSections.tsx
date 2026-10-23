@@ -150,7 +150,7 @@ export const FeaturedSection = memo(function FeaturedSection({
         title: e.title,
         tag: e.category || null,
         playlist: feedPlaylist(e.media, e.cover_image_url),
-        dateLabel: featuredDateLabel(e.start_time, new Date(now)),
+        dateLabel: featuredDateLabel(e.start_time, new Date(now), e.timezone),
         placeLabel: placeLabel(e),
         peopleLabel: peopleLabel(e, isLiveNow(e, now)),
         promoted: featuredLabel(e) === PROMOTED_LABEL,

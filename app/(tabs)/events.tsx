@@ -1498,7 +1498,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
           event={event}
           title={card.title}
           // Under its day's heading a row needs only its clock; a running event says so.
-          time={onNow(event) ? 'Live' : clockTime(Date.parse(live.start_time))}
+          time={onNow(event) ? 'Live' : clockTime(Date.parse(live.start_time), event.timezone)}
           venue={card.venue}
           distance={card.distance}
           cover={card.cover}

@@ -56,6 +56,7 @@ import { openInMaps } from '../lib/openInMaps'
 import { showEventReportOptions } from '../lib/safetyUtils'
 import { showSheet } from '../lib/sheet'
 import { markOffline, markOnline } from '../lib/networkStatus'
+import { clockTime } from '../lib/time'
 /* eslint-enable import/first */
 
 const api = apiClient as jest.Mocked<typeof apiClient>
@@ -270,6 +271,21 @@ describe('the days of a run (Flow 3 · 3.2, #724 window)', () => {
     await open()
     expect(await screen.findByLabelText('I’m going')).toBeTruthy()
     expect(screen.queryByLabelText(/starts/)).toBeNull()
+  })
+
+  it('the DOORS tile is the event’s own clock, not the phone’s: a Berlin phone, an IST night (drive 5 D-4)', async () => {
+    const zone = process.env.TZ
+    process.env.TZ = 'Europe/Berlin'
+    try {
+      const start = hours(3)
+      api.getEvent.mockResolvedValue(detail({ timezone: ZONE, startTime: start, days: [day(0, { startTime: start })], dayCount: 1, daysFrom: 1, dayNumber: 1 }) as never)
+      await open()
+      const tile = await screen.findByTestId('scene-tile-doors')
+      expect(tile.props.accessibilityLabel).toBe(`DOORS, ${clockTime(start, ZONE)}`)
+      expect(clockTime(start, ZONE)).not.toBe(clockTime(start))
+    } finally {
+      process.env.TZ = zone
+    }
   })
 
   it('a one-day event has no strip and keeps its doors', async () => {

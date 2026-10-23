@@ -3,7 +3,7 @@ import type { ShareTarget } from '../components/ds/ShareSheet'
 import { inviteMessage } from './friends'
 import { clockTime } from './roomMoments'
 import { eventLink, shareability, venueLink } from './shareLinks'
-import { calendarDate, MONTHS, WEEKDAYS } from './time'
+import { calendarDate, clockIn, dateIn, MONTHS, weekdayIn, WEEKDAYS } from './time'
 
 /**
  * What an event or a venue says when it is shared (Flow 16 · 16.1/16.2): the fields the card and the message are made
@@ -24,25 +24,32 @@ export type ShareSource = {
   cover_image_url?: string | null
   status?: string | null
   visibility?: string | null
+  /** The event's IANA zone: the card's day and time are its own, not the phone's (RC drive 5 D-4). */
+  timezone?: string | null
 }
 
 const two = (n: number) => String(n).padStart(2, '0')
 
 /** "9:00 PM": the card's time line keeps its minutes (Geist Mono, a stack of four). */
-function stackTime(d: Date): string {
-  const h12 = d.getHours() % 12 === 0 ? 12 : d.getHours() % 12
-  return `${h12}:${two(d.getMinutes())} ${d.getHours() < 12 ? 'AM' : 'PM'}`
+function stackTime(d: Date, timeZone?: string): string {
+  const [h, m] = clockIn(d, timeZone)
+  return `${h % 12 === 0 ? 12 : h % 12}:${two(m)} ${h < 12 ? 'AM' : 'PM'}`
 }
 
-/** The date in the device's own time, in fixed English short names so a card does not change shape with a locale. */
-export function dateParts(startIso: string | null | undefined): Pick<ShareEvent, 'date' | 'dateText'> {
+/**
+ * The date in the event's own zone (the phone's when none is known), in fixed English short names so a card does not
+ * change shape with a locale (RC drive 5 D-4: a Berlin phone said an IST night's time in Berlin's).
+ */
+export function dateParts(startIso: string | null | undefined, timeZone?: string | null): Pick<ShareEvent, 'date' | 'dateText'> {
   const d = new Date(startIso ?? '')
   if (Number.isNaN(d.getTime())) return { date: { day: '', num: '', month: '', time: '' }, dateText: undefined }
-  const weekday = WEEKDAYS[d.getDay()]
-  const month = MONTHS[d.getMonth()]
+  const zone = timeZone ?? undefined
+  const [, mon, day] = dateIn(d, zone)
+  const weekday = WEEKDAYS[weekdayIn(d, zone)]
+  const month = MONTHS[mon]
   return {
-    date: { day: weekday.toUpperCase(), num: two(d.getDate()), month: month.toUpperCase(), time: stackTime(d) },
-    dateText: `${calendarDate(d, { weekday: true, year: false })}, ${clockTime(d.getTime())}`,
+    date: { day: weekday.toUpperCase(), num: two(day), month: month.toUpperCase(), time: stackTime(d, zone) },
+    dateText: `${calendarDate(d, { weekday: true, year: false, timeZone: zone })}, ${clockTime(d.getTime(), zone)}`,
   }
 }
 
@@ -55,7 +62,7 @@ export function shareEventOf(source: ShareSource): ShareEvent | null {
   if (kind === 'never' || kind === 'unknown') return null
   return {
     title: source.title,
-    ...dateParts(source.startTime ?? source.start_time),
+    ...dateParts(source.startTime ?? source.start_time, source.timezone),
     // An unlisted event never carries its venue: nothing downstream can print what it was never given.
     venue: kind === 'unlisted' ? '' : (source.venueName ?? source.venue_name ?? ''),
     area: source.city ?? '',

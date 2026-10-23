@@ -58,6 +58,40 @@ export function clockTime(time: string | number | Date, timeZone?: string): stri
   return `${h % 12 || 12}${m ? `:${String(m).padStart(2, '0')}` : ''} ${h < 12 ? 'AM' : 'PM'}`
 }
 
+/**
+ * Whole calendar days from `a` to `b`, ignoring the clock, as the days fall in `timeZone` (an event's own zone, so a
+ * Berlin phone and an IST event agree on "Tomorrow" with the event's own day line; RC drive 5 D-4).
+ */
+export function calendarDaysBetween(a: Date, b: Date, timeZone?: string): number {
+  const [ay, am, ad] = dateIn(a, timeZone)
+  const [by, bm, bd] = dateIn(b, timeZone)
+  return Math.round((Date.UTC(by, bm, bd) - Date.UTC(ay, am, ad)) / 86_400_000)
+}
+
+/** The weekday (0 = Sunday) of `d` in `timeZone`, or the phone's. */
+export function weekdayIn(d: Date, timeZone?: string): number {
+  const [y, m, day] = dateIn(d, timeZone)
+  return new Date(Date.UTC(y, m, day)).getUTCDay()
+}
+
+/** The hour (0–23) of `d` in `timeZone`, or the phone's. */
+export function hourIn(d: Date, timeZone?: string): number {
+  return clockIn(d, timeZone)[0]
+}
+
+/** The hour (0–23) and minute of `d` in `timeZone`, or the phone's. */
+export function clockIn(d: Date, timeZone?: string): [number, number] {
+  return timeZone ? zonedClock(d, timeZone) : [d.getHours(), d.getMinutes()]
+}
+
+/** The calendar date [year, month 0–11, day] of `d` in `timeZone`, or the phone's. */
+export const dateIn = (d: Date, timeZone?: string): [number, number, number] => (timeZone ? zonedDate(d, timeZone) : [d.getFullYear(), d.getMonth(), d.getDate()])
+
+/** A calendar key ("2026-9-24") of `d` in `timeZone`, or the phone's: what a day heading groups by. */
+export function dayKeyIn(d: Date, timeZone?: string): string {
+  return dateIn(d, timeZone).join('-')
+}
+
 /** The hour (0–23) and minute in a named zone; the phone's own clock if this engine cannot (no ICU). */
 function zonedClock(d: Date, timeZone: string): [number, number] {
   try {

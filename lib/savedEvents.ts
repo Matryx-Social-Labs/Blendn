@@ -38,6 +38,8 @@ export interface SavedEventRow {
    * (`changedFields`). The list routes do not send it yet, so it is `[]` until they do and no row says "New time" before then.
    */
   changed?: ChangedField[]
+  /** The event's IANA zone: its times are said in it, not the phone's (RC drive 5 D-4). Absent from an older server. */
+  timezone?: string
 }
 
 export interface SavedEventsPayload {
@@ -60,6 +62,8 @@ export interface SavedEventsPayload {
     status: SavedEventRow['status']
     /** What the detail route sends (`changedFields`); the list routes may carry it beside it. Absent from the server today. */
     changedFields?: ChangedField[] | null
+    /** Both list routes send it (`/me/rsvps`, `/users/:id/favorites`). */
+    timezone?: string | null
   }[]
   pagination?: { page: number; totalCount: number; hasMore: boolean; nextCursor?: string | null }
 }
@@ -80,6 +84,7 @@ export function savedEventRows(data: SavedEventsPayload | undefined | null): Sav
     longitude: e.longitude ?? NaN,
     status: e.status,
     changed: Array.isArray(e.changedFields) ? e.changedFields.filter((f) => f === 'time' || f === 'venue') : [],
+    ...(typeof e.timezone === 'string' && e.timezone ? { timezone: e.timezone } : {}),
   }))
 }
 
@@ -156,6 +161,8 @@ export interface PastEventRow {
   start_time: string
   end_time: string
   cover_image_url: string | null
+  /** The event's zone, when the attendance route sends one (it does not yet: the phone's zone until then). */
+  timezone?: string
   /** A visit to a place you went live at, not an event: it reads "Live here · 28 Sep" under the place's name. */
   visit?: { attendedAt: string; stayMinutes: number | null; venueId: string | null; venueType: string | null }
 }

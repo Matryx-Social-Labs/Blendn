@@ -726,6 +726,7 @@ export default function EventDetail() {
         coverImageUrl: event.cover_image_url,
         status: event.status,
         visibility: event.visibility,
+        timezone: event.timezone,
       })
     : null
   const handleShare = shareTarget ? () => void openShare(shareTarget) : undefined
@@ -1025,7 +1026,7 @@ export default function EventDetail() {
       // TODAY, not DOORS: "DOORS: Day 2 of 2" read as a time for the doors (RC drive 2 D-9).
       ? [{ label: 'TODAY', value: dayWords, mono: true, testID: 'scene-tile-doors' }]
       : heroStart
-        ? [{ label: doorsLabel, value: clockTime(new Date(heroStart).getTime()), mono: true, testID: 'scene-tile-doors' }]
+        ? [{ label: doorsLabel, value: clockTime(new Date(heroStart).getTime(), event?.timezone), mono: true, testID: 'scene-tile-doors' }]
         : []),
     ...(event?.venue_name
       ? [{ label: 'WHERE', value: [event.venue_name, event.city].filter(Boolean).join(', '), onPress: openInMaps, testID: 'scene-tile-where' }]

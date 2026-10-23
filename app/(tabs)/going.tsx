@@ -412,7 +412,7 @@ function GoingScreenInner() {
       showSheet({
         kind: 'actions',
         title: row.title,
-        message: [placeLabel(row), `${featuredDateLabel(liveWindow(row).start_time)} · ${timeLabel(liveWindow(row).start_time)}`].filter(Boolean).join(' · '),
+        message: [placeLabel(row), `${featuredDateLabel(liveWindow(row).start_time, new Date(), row.timezone)} · ${timeLabel(liveWindow(row).start_time, row.timezone)}`].filter(Boolean).join(' · '),
         actions: [
           { label: 'Share', variant: 'secondary', then: () => shareRow(row) },
           // A night called off has nowhere to go and nothing to put in a calendar.
@@ -448,7 +448,7 @@ function GoingScreenInner() {
      * listed until the run's end, and says so rather than naming a start.
      */
     const today = liveWindow(row)
-    const when = sessionOver(row) ? 'Ended' : nextUpLabel(today.start_time, today.end_time)
+    const when = sessionOver(row) ? 'Ended' : nextUpLabel(today.start_time, today.end_time, new Date(), row.timezone)
     const live = when === HAPPENING_NOW
     const place = placeLabel(row)
     const cancelled = row.status === 'cancelled'
@@ -560,7 +560,7 @@ function GoingScreenInner() {
           cover={row.cover_image_url}
           retry={refreshCount}
           // Today's day of a multi-day run, as the heading above it is.
-          time={timeLabel(liveWindow(row).start_time)}
+          time={timeLabel(liveWindow(row).start_time, row.timezone)}
           venue={placeLabel(row)}
           onPress={() => openEvent(row.id)}
           onLongPress={() => rowActions(row)}
@@ -621,7 +621,7 @@ function GoingScreenInner() {
           title={row.title}
           cover={row.cover_image_url}
           retry={refreshCount}
-          time={featuredDateLabel(row.start_time)}
+          time={featuredDateLabel(row.start_time, new Date(), row.timezone)}
           venue={placeLabel(row)}
           onPress={() => openEvent(row.id)}
           trailing={
@@ -653,7 +653,7 @@ function GoingScreenInner() {
           title={row.title}
           cover={row.cover_image_url}
           retry={refreshCount}
-          time={`${featuredDateLabel(row.start_time)} · ${timeLabel(row.start_time)}`}
+          time={`${featuredDateLabel(row.start_time, new Date(), row.timezone)} · ${timeLabel(row.start_time, row.timezone)}`}
           venue={placeLabel(row)}
           onPress={() => openEvent(row.id)}
           onLongPress={() => rowActions(row)}

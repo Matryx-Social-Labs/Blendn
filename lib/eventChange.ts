@@ -50,6 +50,8 @@ export interface ChangeLine {
 interface Current {
   start_time: string
   end_time: string
+  /** The event's zone: the old and new times are said in it (RC drive 5 D-4). */
+  timezone?: string
   venue_name: string
   address: string
 }
@@ -64,7 +66,7 @@ export function changeLines(change: EventChange, current: Current, now: number =
     const moved = change.from.startTime !== undefined ? 'start_time' : change.from.endTime !== undefined ? 'end_time' : null
     const was = moved === 'start_time' ? change.from.startTime : change.from.endTime
     if (moved && was) {
-      const words = (iso: string) => cardTime({ start_time: iso, end_time: iso }, now)
+      const words = (iso: string) => cardTime({ start_time: iso, end_time: iso, timezone: current.timezone }, now)
       out.push({ key: 'time', label: `Updated · new ${moved === 'start_time' ? 'start' : 'end'} time`, was: words(was), now: words(current[moved]) })
     }
   }

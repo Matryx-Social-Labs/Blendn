@@ -53,7 +53,7 @@ export async function lookUpArrival(target: LinkTarget): Promise<ArrivalLookup> 
       const e = result.data
       if (e.status === 'draft' || e.visibility === 'private') return { status: 'gone' }
       const place = e.visibility === 'unlisted' ? e.city : [e.venueName, e.city].filter(Boolean).join(', ')
-      const when = dateParts(e.startTime).dateText
+      const when = dateParts(e.startTime, e.timezone).dateText
       return {
         status: 'ready',
         details: { title: e.title, meta: [when, place].filter(Boolean).join(' · '), cover: e.coverImageUrl || null, route: routeFor(target) },
