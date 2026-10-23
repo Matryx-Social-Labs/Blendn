@@ -11,7 +11,7 @@ import { State } from 'react-native-gesture-handler'
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils'
 import * as Reanimated from 'react-native-reanimated'
 
-import { fieldScroll, settleDetent, Sheet, sheetBottomPadding, sheetFrame, sheetHeightAt, sheetMaxHeight } from '../components/ds/Sheet'
+import { fieldScroll, headPull, settleDetent, Sheet, sheetBottomPadding, sheetFrame, sheetHeightAt, sheetMaxHeight } from '../components/ds/Sheet'
 import { COLOR, FONT_FAMILY, MATERIAL, SPRING } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 
@@ -382,15 +382,83 @@ describe('an overflowing sheet still drags by its header (review HIGH-1: only th
     expect(head.failOffsetYStart).toBe(-8)
   })
 
-  it('scrolled down, the header is the scroll’s; back at the top it drags again', async () => {
+  const pull = async (velocityY = 1500, translationY = 400) =>
+    act(async () =>
+      fireGestureHandler(getByGestureTestId('s-head-drag'), [
+        { state: State.BEGAN },
+        { state: State.ACTIVE, translationY: 0 },
+        { state: State.ACTIVE, translationY },
+        { state: State.END, translationY, velocityY },
+      ])
+    )
+
+  it('scrolled down, a pull on the header is the scroll’s: the sheet neither moves nor closes (review R2: read on the UI thread)', async () => {
+    jest.useFakeTimers()
+    try {
+      const { Text } = jest.requireActual('react-native')
+      const onClose = jest.fn()
+      await render(signOut({ onClose, children: <Text>Form</Text> }))
+      await overflow()
+      await scrollTo(120)
+      await pull()
+      await act(async () => jest.advanceTimersByTime(50))
+      expect(onClose).not.toHaveBeenCalled()
+      // Back at the top the same pull closes it.
+      await scrollTo(0)
+      await pull()
+      await act(async () => jest.advanceTimersByTime(50))
+      expect(onClose).toHaveBeenCalledTimes(1)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('the pull takes up from where the scroll reached its top, with no jump (headPull)', () => {
+    // Scrolling: the finger's place is the zero.
+    expect(headPull(60, false, 0)).toEqual({ travel: null, from: 60 })
+    // At the top: only what comes after it moves the sheet.
+    expect(headPull(100, true, 60)).toEqual({ travel: 40, from: 60 })
+    expect(headPull(30, true, 0)).toEqual({ travel: 30, from: 0 })
+  })
+
+  it('the scroll’s own pan is in RNGH and runs alongside the header’s, so iOS cannot hand it the pull first (review R1)', async () => {
     const { Text } = jest.requireActual('react-native')
     await render(signOut({ children: <Text>Form</Text> }))
+    const native = getByGestureTestId('s-scroll-native')
+    const head = getByGestureTestId('s-head-drag')
+    expect(native.handlerName).toBe('NativeViewGestureHandler')
+    // Once attached, RNGH keeps a relation as the other handler's tag.
+    const tags = (g: { config: { simultaneousWith?: (number | { handlerTag: number })[] } }) => (g.config.simultaneousWith ?? []).map((x) => (typeof x === 'number' ? x : x.handlerTag))
+    expect(tags(head as never)).toContain(native.handlerTag)
+    expect(tags(native as never)).toContain(head.handlerTag)
+  })
+
+  it('Android: no overscroll glow under the pull while it scrolls (review R1)', async () => {
+    const { Text } = jest.requireActual('react-native')
+    await render(signOut({ children: <Text>Form</Text> }))
+    expect(screen.getByTestId('s-content', hidden).props.overScrollMode).toBe('auto')
     await overflow()
-    await scrollTo(120)
-    expect(getByGestureTestId('s-head-drag').config.enabled).toBe(false)
-    expect(getByGestureTestId('s-drag').config.enabled).toBe(true)
-    await scrollTo(0)
-    expect(getByGestureTestId('s-head-drag').config.enabled).toBe(true)
+    expect(screen.getByTestId('s-content', hidden).props.overScrollMode).toBe('never')
+  })
+
+  it('a sheet opened again starts at its scroll’s top (review R3)', async () => {
+    jest.useFakeTimers()
+    try {
+      const { Text } = jest.requireActual('react-native')
+      const onClose = jest.fn()
+      const view = await render(signOut({ onClose, children: <Text>Form</Text> }))
+      await overflow()
+      await scrollTo(120)
+      await view.rerender(signOut({ visible: false, onClose, children: <Text>Form</Text> }))
+      await act(async () => jest.advanceTimersByTime(1000))
+      await view.rerender(signOut({ visible: true, onClose, children: <Text>Form</Text> }))
+      await overflow()
+      await pull()
+      await act(async () => jest.advanceTimersByTime(50))
+      expect(onClose).toHaveBeenCalledTimes(1)
+    } finally {
+      jest.useRealTimers()
+    }
   })
 
   it('the grip is a full target while it scrolls, and the 24 pt strip when it does not', async () => {

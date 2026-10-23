@@ -5,7 +5,6 @@ import {
   Modal,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   TextInput,
   Text,
@@ -14,7 +13,7 @@ import {
 } from 'react-native'
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler'
 import { KeyboardController, KeyboardEvents, useKeyboardContext } from 'react-native-keyboard-controller'
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated'
+import Animated, { Easing, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { scheduleOnRN } from 'react-native-worklets'
 
@@ -60,6 +59,16 @@ export function settleDetent(heights: number[], from: number, height: number, dr
     if (Math.abs(h - height) < Math.abs(heights[nearest] - height)) nearest = i
   })
   return nearest
+}
+
+/**
+ * A pull on the header of a sheet whose scroll has more: how far it has moved the sheet, or null while the scroll still owns
+ * the finger. Until the scroll is at its top, where the finger is becomes the pull's zero (`from`), so the sheet takes up
+ * from there without a jump (as RoomStage does over its scroll).
+ */
+export function headPull(translationY: number, atTop: boolean, from: number): { travel: number | null; from: number } {
+  'worklet'
+  return atTop ? { travel: translationY - from, from } : { travel: null, from: translationY }
 }
 
 /**
@@ -272,13 +281,10 @@ function useSheetMotion({
   visibleHeight,
   insetTop,
   headScrolls,
-  headAtTop,
 }: {
   visible: boolean
   /** The header is in a scroll that has more than fits: the header drags the sheet only as a pull down from the scroll's top. */
   headScrolls: boolean
-  /** That scroll is at its top (offset 0). */
-  headAtTop: boolean
   /** Lowest first. */
   heights: number[]
   /** How far the foot is raised onto the keyboard (`sheetFrame`); eased in step with it. */
@@ -320,6 +326,11 @@ function useSheetMotion({
   const at = useSharedValue(opening)
   const natural = useSharedValue(0)
   const lift = useSharedValue(0)
+  /** The header's scroll is at its top, on the UI thread (`useAnimatedScrollHandler`): a pull down there drags the sheet. */
+  const headAtTop = useSharedValue(true)
+  /** A header pull's zero, and whether it has moved the sheet at all (`headPull`). */
+  const headFrom = useSharedValue(0)
+  const headEngaged = useSharedValue(false)
   /*
    * The keyboard's own frame, every frame, on the UI thread (DS #34: follow it frame by frame). iOS only for now: there
    * the controller's height is the keyboard's height as the system moves it, so while it is moving the sheet's foot is
@@ -354,6 +365,8 @@ function useSheetMotion({
       at.set(opening)
       height.set(heights[opening] ?? 0)
       flingV.set(0)
+      // A sheet opens with its scroll at the top.
+      headAtTop.set(true)
       if (reduceMotion) {
         offset.set(0)
         fade.set(withTiming(1, { duration: base, easing: gentle }))
@@ -405,18 +418,33 @@ function useSheetMotion({
     }, DRAG_CLOSE_ASK_MS)
   }, [requestClose, levels, offset, height, at, natural, flingV])
   // One drag, on two surfaces: the grip, always; the header too, which in a scroll that has more is a pull down from its top.
-  // `downOnly`: it starts on a pull down, and a push up (the scroll's) fails it at once.
+  // `downOnly`: it starts on a pull down, a push up (the scroll's) fails it at once, and it moves the sheet only from the
+  // scroll's top (`headPull`).
   const pan = (enabled: boolean, downOnly = false) =>
     (downOnly ? Gesture.Pan().activeOffsetY(SPACE.sm).failOffsetY(-SPACE.sm) : Gesture.Pan().activeOffsetY([-SPACE.sm, SPACE.sm]))
       .enabled(enabled)
+      .onBegin(() => {
+        headFrom.set(0)
+        headEngaged.set(!downOnly)
+      })
       .onUpdate((e) => {
+        let ty = e.translationY
+        if (downOnly) {
+          const pull = headPull(ty, headAtTop.get(), headFrom.get())
+          headFrom.set(pull.from)
+          if (pull.travel === null) return
+          headEngaged.set(true)
+          ty = pull.travel
+        }
         const stops = levels ?? [natural.get()]
         const max = stops[stops.length - 1]
-        const h = stops[at.get()] - e.translationY
+        const h = stops[at.get()] - ty
         height.set(h <= max ? Math.max(h, stops[0]) : max + (h - max) * RUBBER_BAND)
         offset.set(Math.max(0, stops[0] - h))
       })
       .onEnd((e) => {
+        // The scroll had the finger the whole way: the sheet never moved, and the flick was the scroll's.
+        if (!headEngaged.get()) return
         const stops = levels ?? [natural.get()]
         const to = settleDetent(stops, at.get(), height.get(), offset.get(), e.velocityY)
         if (to === 'dismiss') {
@@ -435,7 +463,14 @@ function useSheetMotion({
   const drag = pan(canDrag)
   // In a scroll with more, only a pull down from its top: the title kept dragging the sheet before it scrolled (review HIGH-1).
   // eslint-disable-next-line react-hooks/refs
-  const headDrag = pan(canDrag && (!headScrolls || headAtTop), headScrolls)
+  const headDrag = pan(canDrag, headScrolls)
+  /*
+   * The scroll's own pan, inside RNGH (`Gesture.Native()`), recognised alongside the header's rather than racing it: on iOS the
+   * ScrollView's recogniser could take the pull before the header's pan saw it (review R1). RoomStage does the same.
+   */
+  const scrollNative = Gesture.Native()
+  headDrag.simultaneousWithExternalGesture(scrollNative)
+  scrollNative.simultaneousWithExternalGesture(headDrag)
 
   // `marginBottom` is the one thing that lifts the sheet over the keyboard; a detent sheet's height is what is left above it, at this frame's lift.
   const placeStyle = useAnimatedStyle(() => {
@@ -450,7 +485,7 @@ function useSheetMotion({
     }
   })
   const scrimStyle = useAnimatedStyle(() => ({ opacity: scrim.get() }))
-  return { mounted, drag, headDrag, placeStyle, scrimStyle, natural, fixedHeight: !!levels }
+  return { mounted, drag, headDrag, scrollNative, headAtTop, placeStyle, scrimStyle, natural, fixedHeight: !!levels }
 }
 
 /**
@@ -500,13 +535,11 @@ export function Sheet({ visible, onClose, title, headerAction, headerNote, body,
    * and there is more), and the field is brought into view once, not against a hand that has already
    * taken the scroll over (`handScrolled`).
    */
-  const content = useRef<ScrollView>(null)
+  const content = useRef<Animated.ScrollView>(null)
   const contentHeight = useRef(0)
   const contentSize = useRef(0)
   const handScrolled = useRef(false)
   const [overflowing, setOverflowing] = useState(false)
-  /** The scroll is at its top: a pull down on the header there drags the sheet. */
-  const [atTop, setAtTop] = useState(true)
   const measureOverflow = () => setOverflowing(contentSize.current > contentHeight.current + 1)
   useEffect(() => {
     if (overflowing) content.current?.flashScrollIndicators()
@@ -553,7 +586,7 @@ export function Sheet({ visible, onClose, title, headerAction, headerNote, body,
     dismissed.current = onDismissed
   })
   const ios = Platform.OS === 'ios'
-  const { mounted, drag, headDrag, placeStyle, scrimStyle, natural, fixedHeight } = useSheetMotion({
+  const { mounted, drag, headDrag, scrollNative, headAtTop, placeStyle, scrimStyle, natural, fixedHeight } = useSheetMotion({
     visible,
     heights,
     opening,
@@ -565,7 +598,6 @@ export function Sheet({ visible, onClose, title, headerAction, headerNote, body,
     visibleHeight,
     insetTop: insets.top,
     headScrolls: overflowing,
-    headAtTop: atTop,
     onGone: () => {
       if (!ios) dismissed.current?.()
     },
@@ -573,7 +605,14 @@ export function Sheet({ visible, onClose, title, headerAction, headerNote, body,
   if (testID) {
     drag.withTestId(`${testID}-drag`)
     headDrag.withTestId(`${testID}-head-drag`)
+    scrollNative.withTestId(`${testID}-scroll-native`)
   }
+  // On the UI thread: the header's pull reads it without a render (review R2).
+  const onContentScroll = useAnimatedScrollHandler({
+    onScroll: (e) => {
+      headAtTop.set(e.contentOffset.y <= 0)
+    },
+  })
   const hasHead = !!(icon || title || headerAction || headerNote || body)
   const largeText = useLargeText()
   const iconEl =
@@ -742,41 +781,45 @@ export function Sheet({ visible, onClose, title, headerAction, headerNote, body,
                  * out off the screen and nothing scrolled (RC drive 3 D-E). It scrolls only when it has more than fits, so
                  * the header's drag never fights a scroll with nowhere to go.
                  */
-                <ScrollView
-                  ref={content}
-                  onLayout={(e) => {
-                    contentHeight.current = e.nativeEvent.layout.height
-                    measureOverflow()
-                  }}
-                  onContentSizeChange={(_w, h) => {
-                    contentSize.current = h
-                    measureOverflow()
-                  }}
-                  onScrollBeginDrag={() => (handScrolled.current = true)}
-                  onScroll={(e) => setAtTop(e.nativeEvent.contentOffset.y <= 0)}
-                  scrollEventThrottle={16}
-                  testID={testID && `${testID}-content`}
-                  style={styles.content}
-                  // Under a pinned title, or with no header at all, the content keeps its 12 pt from what is above it (review L8).
-                  contentContainerStyle={[styles.contentInner, !scrollsFromTop && styles.contentBelow]}
-                  keyboardShouldPersistTaps="handled"
-                  // Capped with more below, by the keyboard or by its own height: say so, and let the hand scroll it on both
-                  // platforms. Make a crew stranded a section label at the fold over the dock with nothing to say it went on
-                  // (r7 L6): Android keeps the bar and fades the edge; iOS flashes its indicator once when it overflows.
-                  showsVerticalScrollIndicator={overflowing}
-                  persistentScrollbar={overflowing}
-                  fadingEdgeLength={overflowing ? SPACE.xxxl : 0}
-                  nestedScrollEnabled
-                  scrollEnabled={overflowing}
-                  bounces={false}
-                >
-                  {scrollHead ? (
-                    <GestureDetector gesture={headDrag}>
-                      <View style={styles.head}>{scrollHead}</View>
-                    </GestureDetector>
-                  ) : null}
-                  <GroundProvider value={android ? 'surface' : 'glass'}>{children}</GroundProvider>
-                </ScrollView>
+                <GestureDetector gesture={scrollNative}>
+                  <Animated.ScrollView
+                    ref={content}
+                    onLayout={(e) => {
+                      contentHeight.current = e.nativeEvent.layout.height
+                      measureOverflow()
+                    }}
+                    onContentSizeChange={(_w, h) => {
+                      contentSize.current = h
+                      measureOverflow()
+                    }}
+                    onScrollBeginDrag={() => (handScrolled.current = true)}
+                    onScroll={onContentScroll}
+                    scrollEventThrottle={16}
+                    // No Android overscroll glow under a pull that is the sheet's (review R1).
+                    overScrollMode={overflowing ? 'never' : 'auto'}
+                    testID={testID && `${testID}-content`}
+                    style={styles.content}
+                    // Under a pinned title, or with no header at all, the content keeps its 12 pt from what is above it (review L8).
+                    contentContainerStyle={[styles.contentInner, !scrollsFromTop && styles.contentBelow]}
+                    keyboardShouldPersistTaps="handled"
+                    // Capped with more below, by the keyboard or by its own height: say so, and let the hand scroll it on both
+                    // platforms. Make a crew stranded a section label at the fold over the dock with nothing to say it went on
+                    // (r7 L6): Android keeps the bar and fades the edge; iOS flashes its indicator once when it overflows.
+                    showsVerticalScrollIndicator={overflowing}
+                    persistentScrollbar={overflowing}
+                    fadingEdgeLength={overflowing ? SPACE.xxxl : 0}
+                    nestedScrollEnabled
+                    scrollEnabled={overflowing}
+                    bounces={false}
+                  >
+                    {scrollHead ? (
+                      <GestureDetector gesture={headDrag}>
+                        <View style={styles.head}>{scrollHead}</View>
+                      </GestureDetector>
+                    ) : null}
+                    <GroundProvider value={android ? 'surface' : 'glass'}>{children}</GroundProvider>
+                  </Animated.ScrollView>
+                </GestureDetector>
               ) : null}
               {sorted.length ? (
                 <View style={[styles.actions, fixedHeight && styles.pinned]}>
