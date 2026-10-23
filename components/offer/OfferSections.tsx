@@ -7,10 +7,10 @@ import { Button } from '../ds/Button'
 import { DoorCode } from '../ds/VenuePass'
 import { IconButton } from '../ds/IconButton'
 import { LiquidDisc } from '../ds/LiquidDisc'
-import { font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from '../ds/shared'
+import { font, IC_HAIRLINE, useBoldText, useIncreaseContrast, useMinMeasure } from '../ds/shared'
 import { monoCaption } from '../ds/MonoFamily'
 import { Icon, type IconName } from '../ui/Icon'
-import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { endedLabel, knownLine, type PassView, type RegularPrefs } from '../../lib/offers'
 
 /** The disc at the ticket's middle (Flow 13 pass.js: 200). */
@@ -173,11 +173,17 @@ export function RegularAsk({
 /** They said yes: one line, and Turn off in one tap (no confirmation sheet). */
 export function RegularOn({ venueName, saving, onOff }: { venueName: string; saving: boolean; onOff: () => void }) {
   const bold = useBoldText()
+  const measure = useMinMeasure('bodyStrong')
   return (
     <View testID="regular-on" style={styles.rowCard}>
       <Icon name="badge-check" size={ICON.control} color={COLOR.textPrimary} />
-      <Text style={[font('bodyStrong', bold), styles.ink, styles.fill]}>{`${venueName} knows you’re a regular`}</Text>
-      <Button kind="tertiary" size="sm" label="Turn off" disabled={saving} accessibilityLabel={`Turn off: ${venueName} knows you’re a regular`} onPress={onOff} />
+      {/* The sentence keeps its measure and Turn off wraps under it, rather than squeeze a long venue name a word a line. */}
+      <View testID="regular-on-body" style={styles.beside}>
+        <Text testID="regular-on-text" maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink, styles.besideText, measure]}>
+          {`${venueName} knows you’re a regular`}
+        </Text>
+        <Button kind="tertiary" size="sm" label="Turn off" disabled={saving} accessibilityLabel={`Turn off: ${venueName} knows you’re a regular`} onPress={onOff} />
+      </View>
     </View>
   )
 }
@@ -220,6 +226,9 @@ const styles = StyleSheet.create({
   fact: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.md },
   actions: { flexDirection: 'row', gap: SPACE.sm, paddingTop: SPACE.xs },
   fill: { flex: 1 },
+  /** A sentence and its action in a row that wraps (`useMinMeasure`). */
+  beside: { flex: 1, minWidth: 0, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: SPACE.md },
+  besideText: { flexGrow: 1, flexShrink: 1 },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
 })

@@ -17,6 +17,8 @@ import { OnboardingScreen } from '../components/onboarding/OnboardingScreen'
 import { BringSomeoneRow } from '../components/share/BringSomeoneRow'
 import { RequestCard } from '../components/banter/BanterParts'
 import { NAME_LINES_ALONE, PersonRow, PERSON_ROW_HEIGHT } from '../components/friends/PersonRow'
+import { InviteRow } from '../components/crews/InviteRow'
+import { RegularOn } from '../components/offer/OfferSections'
 import { CONTROL_FONT_CAP } from '../components/ds/shared'
 import { MAX_FONT_SCALE, SPACE, TYPE } from '../lib/design/tokens'
 /* eslint-enable import/first */
@@ -142,3 +144,22 @@ describe('a person row (Friends here at 360 dp and 1.3: "Aarav …" beside Messa
   })
 })
 
+describe('the same squeeze, swept: a sentence beside one action keeps its measure and the action wraps under it', () => {
+  const invite = { id: 'i1', crewId: 'c1', name: 'The Usual Suspects', invitedBy: 'Aisha', invitedAt: new Date().toISOString(), emblemSeed: 'x', size: 6 } as never
+
+  it('Crews › an invite, at AX XXXL beside See invite', async () => {
+    await at(402, 3.1)
+    await render(<InviteRow row={{ invite, lapsed: false }} onSee={jest.fn()} />)
+    expect(flat('invite-row-body')).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap' })
+    expect(flat('invite-row-text')).toMatchObject({ flexGrow: 1, minWidth: measureOf('bodyStrong', 3.1), flexBasis: measureOf('bodyStrong', 3.1) })
+    expect(screen.getByText('Aisha invited you to The Usual Suspects', hidden).props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.bodyStrong)
+  })
+
+  it('a venue’s "knows you’re a regular", at 360 dp and 1.3 beside Turn off', async () => {
+    await at(360, 1.3)
+    await render(<RegularOn venueName="The Big Pitcher Brewing Company" saving={false} onOff={jest.fn()} />)
+    expect(flat('regular-on-body')).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap' })
+    expect(flat('regular-on-text')).toMatchObject({ flexGrow: 1, minWidth: measureOf('bodyStrong', 1.3) })
+    expect(flat('regular-on-text').flex).toBeUndefined()
+  })
+})
