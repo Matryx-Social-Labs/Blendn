@@ -118,11 +118,18 @@ describe('the peek (onLongPress)', () => {
 })
 
 describe('row · lead="distance"', () => {
-  it('moves the distance into a 64 pt Geist Mono 700 column ahead of the thumb, and out of the meta line', async () => {
+  it('moves the distance into a Geist Mono 700 column ahead of the thumb, and out of the meta line', async () => {
     await render(<EventCard kind="row" lead="distance" {...VINYL} testID="e" />)
-    expect(style('1.2 km')).toMatchObject({ fontFamily: FONT_FAMILY.mono[700], width: 64 })
+    expect(style('1.2 km')).toMatchObject({ fontFamily: FONT_FAMILY.mono[700], minWidth: 64 })
     expect(screen.queryByText(/Toit · 1\.2 km/, { includeHiddenElements: true })).toBeNull()
     expect(screen.getByRole('button').props.accessibilityLabel).toContain('1.2 km')
+  })
+
+  it('the column is at least 64 and sizes to its words up to 96, never a fixed width that clips them (drive 4 D-4)', async () => {
+    await render(<EventCard kind="row" lead="distance" {...VINYL} distance="16 km" testID="e" />)
+    const lead = style('16 km')
+    expect(lead.width).toBeUndefined()
+    expect(lead).toMatchObject({ minWidth: 64, maxWidth: 96, flexShrink: 0 })
   })
 
   it('draws no column when the row has no distance, and leaves the default row alone', async () => {

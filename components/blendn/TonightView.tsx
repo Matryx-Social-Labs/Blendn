@@ -4,6 +4,7 @@ import { GestureDetector } from 'react-native-gesture-handler'
 import Animated from 'react-native-reanimated'
 
 import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { distanceText } from '../../lib/placesPane'
 import { clockTime, startsLabel } from '../../lib/roomMoments'
 import type { TonightEvent, TonightLocation } from '../../lib/useTonight'
 import { Banner } from '../ds/Banner'
@@ -31,11 +32,6 @@ const STATE_TOP = SPACE.xxxl + SPACE.xl
 /** Below this a card stops reading as a card; the page scrolls instead. */
 const MIN_CARD = 280
 
-function distanceText(km: number | null) {
-  if (km === null || !Number.isFinite(km)) return undefined
-  return km < 1 ? `${Math.max(50, Math.round((km * 1000) / 50) * 50)} m` : `${km.toFixed(1)} km`
-}
-
 /** Today, by the phone's clock: the "You're going · 9 PM" ribbon is for tonight only (Flow 4 Tonight #05). */
 function startsToday(iso: string, now: number) {
   const d = new Date(iso)
@@ -49,7 +45,7 @@ export function deckEvent(e: TonightEvent, now: number): DeckEvent {
     title: e.title,
     time: startsLabel(e, now).text,
     venue: e.venue,
-    distance: distanceText(e.distanceKm),
+    distance: distanceText(e.distanceKm) ?? undefined,
     going: e.goingCount ?? undefined,
     cover: e.photo,
     saved: e.going && startsToday(e.startsAt, now) ? clockTime(new Date(e.startsAt).getTime()) : undefined,

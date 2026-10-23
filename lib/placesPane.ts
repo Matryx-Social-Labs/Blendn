@@ -61,10 +61,16 @@ export const SHOW_AREA_SECTION = false
 /** An area on the By area grid, from the venue summary (§C5). */
 export type PlaceAreaSummary = { slug: string; name: string; count: number; liveCount: number }
 
-/** "350 m" under a kilometre (to the nearest 50), "4.8 km" above; null with no fix. */
+/** Ten kilometres and over the decimal is noise ("11 km", not "11.2 km"), and it is what clipped Nearby's column (drive 4 D-4). */
+const WHOLE_KM_FROM = 10
+
+/** "350 m" under a kilometre (to the nearest 50), "4.8 km" up to ten, "11 km" from there; null with no fix. */
 export function distanceText(km: number | null | undefined): string | null {
   if (km == null || !Number.isFinite(km) || km < 0) return null
-  return km < 1 ? `${Math.max(50, Math.round((km * 1000) / 50) * 50)} m` : `${km.toFixed(1)} km`
+  if (km < 1) return `${Math.max(50, Math.round((km * 1000) / 50) * 50)} m`
+  // Judged on the shown tenth, so 9.96 is "10 km", never "10.0 km".
+  const tenths = Math.round(km * 10) / 10
+  return tenths < WHOLE_KM_FROM ? `${tenths.toFixed(1)} km` : `${Math.round(km)} km`
 }
 
 /** Tonight's event at a place, in the one date grammar: "Live", "In 25 min", "9 PM". Null when it is another day. */

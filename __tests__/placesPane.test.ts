@@ -86,6 +86,11 @@ describe('words', () => {
     expect(distanceText(0.35)).toBe('350 m')
     expect(distanceText(0.02)).toBe('50 m')
     expect(distanceText(4.84)).toBe('4.8 km')
+    // Ten and over, whole kilometres: the decimal is noise, and it clipped Nearby's distance column (drive 4 D-4).
+    expect(distanceText(9.94)).toBe('9.9 km')
+    expect(distanceText(9.96)).toBe('10 km')
+    expect(distanceText(11.2)).toBe('11 km')
+    expect(distanceText(15.6)).toBe('16 km')
     expect(distanceText(null)).toBeNull()
     expect(distanceText(-1)).toBeNull()
   })

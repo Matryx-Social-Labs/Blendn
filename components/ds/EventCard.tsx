@@ -67,7 +67,13 @@ const DEFAULT_SIZE: Record<'hero' | 'compact', ViewStyle> = { hero: { height: 30
 /** The scrim covers the lower 62% of the photo (the page). */
 const SCRIM_HEIGHT = '62%'
 const ROW_HEIGHT = 64
+/**
+ * The distance column: 64 at least, so the rows' thumbs line up at the default size, and sized to its words past that
+ * (a larger font scale, "9.9 km") up to 96, which holds six Geist Mono characters at the 1.3 cap. A fixed 64 clipped
+ * "11.2 km" to "11.2…" (RC drive 4 D-4).
+ */
 const LEAD_WIDTH = 64
+const LEAD_MAX = 96
 /**
  * The words on the photo stop at 1.5×: the card is a fixed size, and past it a
  * two-line title runs up under the pills (the page lets them scale freely; a
@@ -302,7 +308,7 @@ const styles = StyleSheet.create({
   wash: { backgroundColor: PRESSED_WASH.android },
   row: { height: ROW_HEIGHT, flexDirection: 'row', alignItems: 'center', gap: SPACE.md, borderRadius: RADIUS.rowInCard },
   rowPressed: { backgroundColor: PRESSED_WASH.ios },
-  lead: { width: LEAD_WIDTH, color: COLOR.textPrimary, fontVariant: ['tabular-nums'] },
+  lead: { minWidth: LEAD_WIDTH, maxWidth: LEAD_MAX, flexShrink: 0, color: COLOR.textPrimary, fontVariant: ['tabular-nums'] },
   thumb: { width: SIZE.primary, height: SIZE.primary, borderRadius: RADIUS.thumb, overflow: 'hidden', backgroundColor: COLOR.surface },
   rowText: { flex: 1, minWidth: 0 },
   rowMeta: { flexDirection: 'row', alignItems: 'baseline', gap: SPACE.xs },
