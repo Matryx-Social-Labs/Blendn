@@ -49,6 +49,7 @@ export function ExpiryPrompt({
   staying = false,
   opensAt,
   onDone,
+  onShown,
 }: {
   kind: 'ended' | 'reset'
   visible: boolean
@@ -67,6 +68,8 @@ export function ExpiryPrompt({
   /** `reset`: when tomorrow's room opens ("6", "noon"), from the venue's own reset hour. */
   opensAt?: string
   onDone: () => void
+  /** On screen (the Modal's onShow): Go Live's "asked tonight" is written then, never for a prompt that was not seen. */
+  onShown?: () => void
 }) {
   const held = extending || staying
   if (kind === 'reset') {
@@ -74,6 +77,7 @@ export function ExpiryPrompt({
       <Sheet
         visible={visible}
         onClose={onDone}
+        onShown={onShown}
         icon="moon"
         title="Today’s room has closed"
         body={`${resetLine(opensAt)} Pseudonyms reset with it.`}
@@ -83,7 +87,7 @@ export function ExpiryPrompt({
   }
   return (
     // While Extend or Stay is on its way the sheet holds, as `<Sheet>` does for its own busy actions.
-    <Sheet visible={visible} onClose={held ? noop : onDone} icon="hourglass" title={`Your live time at ${venue} is up`} body="Still here?">
+    <Sheet visible={visible} onClose={held ? noop : onDone} onShown={onShown} icon="hourglass" title={`Your live time at ${venue} is up`} body="Still here?">
       <View style={styles.actions}>
         <Button kind="primary" label={FREE_EXTEND} loading={extending} disabled={staying} onPress={onExtend} />
         {plus && !(plus.from && firstGoLiveTonight) ? <PlusRow from={plus.from} disabled={held} onPress={plus.onPress} /> : null}

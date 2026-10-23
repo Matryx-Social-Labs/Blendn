@@ -148,8 +148,9 @@ export function LiveAtVenue() {
       askedRef.current.add(askKey)
       const firstGoLive = userId ? !(await hasGoneLiveBefore(userId, eventId)) : true
       const resetHour = resetHourOf(here)
+      // Tonight's one prompt is spent when it is on screen (`onShown` below), not when it is asked for: a prompt that
+      // waited for another sheet and was withdrawn, or that iOS refused, was never seen (review MED-2).
       if (!cancelled) setEnded({ kind: reset ? 'reset' : 'ended', venueDayId: eventId, venueId: here.venueId, venueName: here.venueName, visible: true, firstGoLive, opensAt: reset && resetHour !== null ? opensAtWords(resetHour) : undefined })
-      if (userId && !reset) void markLivePrompted(userId, eventId)
       return { asked: true, reset, inRoom }
     }
     /**
@@ -350,6 +351,9 @@ export function LiveAtVenue() {
         extending={busy && pressed === 'extend'}
         staying={busy && pressed === 'stay'}
         onDone={hideEnded}
+        onShown={() => {
+          if (userId && ended?.kind === 'ended') void markLivePrompted(userId, ended.venueDayId)
+        }}
       />
       <Sheet
         visible={tray !== null}

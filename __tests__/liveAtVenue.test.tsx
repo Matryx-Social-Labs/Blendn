@@ -47,12 +47,22 @@ jest.mock('../lib/paywall', () => ({
 }))
 jest.mock('../components/plus/TonightHost', () => ({ TonightHost: () => null }))
 // The prompt's own drawing is `dsExpiryPrompt.test.tsx`'s; here, what LiveAtVenue tells it. A sheet that left is gone from the tree.
+/** Whether the prompt reaches the screen when asked (its Sheet's onShow): false is one that waited and was withdrawn, or iOS refused. */
+let mockShows = true
 jest.mock('../components/ds/ExpiryPrompt', () => {
   const { Text, Pressable, View } = require('react-native')
+  const { useEffect } = require('react')
+  const Shown = ({ onShown }: { onShown?: () => void }) => {
+    useEffect(() => {
+      if (mockShows) onShown?.()
+    }, [onShown])
+    return null
+  }
   return {
     ExpiryPrompt: (p: any) =>
       p.visible ? (
         <View>
+          <Shown onShown={p.onShown} />
           <Text accessibilityRole="header">{p.kind === 'reset' ? 'Today’s room has closed' : `Your live time at ${p.venue} is up`}</Text>
           {p.kind === 'ended' ? <Text>Still here?</Text> : null}
           {p.opensAt ? <Text>{`opens at ${p.opensAt}`}</Text> : null}
@@ -147,6 +157,7 @@ beforeEach(async () => {
   })
   noteOwnGoLive(0)
   mockEnded.length = 0
+  mockShows = true
   mockChanged.clear()
   mockPaywallClosed.clear()
   mockPath = '/venue/v1'
@@ -173,7 +184,8 @@ describe('the expiry prompt (Flow 11 · 11.4), as mounted', () => {
     expect(isUp('Still here?')).toBe(false)
     await endWith('expired')
     expect(isUp('Still here?')).toBe(true)
-    expect(isUp('Still here?')).toBe(true)
+    // Spent once it is on screen (its onShow), which writes a moment later.
+    await flush()
     expect((await readLiveSession('u1'))?.prompted).toBe(true)
     expect(checkInChanged).toHaveBeenCalledWith('day-1')
 
@@ -283,10 +295,27 @@ describe('an end the socket missed', () => {
     notLive()
     await readsAgain()
     expect(isUp('Still here?')).toBe(true)
+    await flush()
     expect((await readLiveSession('u1'))?.prompted).toBe(true)
     await press('Done for now')
     await endWith('expired')
     expect(isUp('Still here?')).toBe(false)
+  })
+
+  it('a prompt asked for but never on screen does not spend the night’s one (review MED-2)', async () => {
+    // Arrange: the prompt waits behind another sheet, or iOS refuses it; it never reaches the screen.
+    mockShows = false
+    active(at(5))
+    await mount()
+
+    // Act
+    jest.setSystemTime(NOW + 6 * 60_000)
+    notLive()
+    await readsAgain()
+    await flush()
+
+    // Assert: tonight's prompt is still to come.
+    expect((await readLiveSession('u1'))?.prompted).toBe(false)
   })
 
   it('the night’s prompt spent, a window the read finds over is still said: the toast, not silence (drive 4 D-8)', async () => {
