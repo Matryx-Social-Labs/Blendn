@@ -279,16 +279,43 @@ export const nextSession = (): number => ++sessionEpoch
  * supported way off it, without patching the module. Not taken: a keychain call on the JS thread freezes the UI for as long
  * as `securityd` takes, which trades a stuck sign-out for a frozen app, and there is no sync delete. The queue is protected
  * instead: permission reads wait for the critical path (`lib/criticalPath`), are made once and bounded (`lib/pushStatus`).
+ *
+ * And the session is kept in memory (RC drive 2 D-A): once the queue was stuck anyway (`usernotificationsd` wedged, a
+ * permission read made after the grace), every authed request's token read waited behind it, and Me, Banter and Going all
+ * read "Couldn't load". The keychain is read once, at the launch's restore, and written at sign-in and refresh; after that
+ * every read is answered from memory, and the keychain is only persistence. Writes and deletes set memory before they are
+ * queued, so memory is always the newest word: a sign-out empties it at once, whatever the queue is doing.
  */
 // Token Storage
 class TokenStorage {
+  /**
+   * What the keychain holds, as this process last read or wrote it. A key not here has not been read yet; `null` is known
+   * empty. Only a read that succeeded fills it: a keychain that failed (locked, say) is asked again next time.
+   */
+  private static memory = new Map<string, string | null>()
+
+  /** A new process (tests' relaunch): memory is gone, the keychain is what is left. */
+  static forgetMemory(): void {
+    this.memory.clear()
+  }
+
   private static async secureGet(key: string): Promise<string | null> {
+    if (this.memory.has(key)) return this.memory.get(key) ?? null
+    const value = await this.readStored(key)
+    // A write or a clear while the read was out is newer than what it found, and stays. The caller still gets what was
+    // read: sign-out queues its reads ahead of its deletes so that the POST carries the session it is ending.
+    if (value !== undefined && !this.memory.has(key)) this.memory.set(key, value)
+    return value ?? null
+  }
+
+  /** The stored value, or `undefined` when the read failed (the fallback's answer, never remembered). */
+  private static async readStored(key: string): Promise<string | null | undefined> {
     if (Platform.OS === 'web') {
       warnUnencryptedWebStorage()
       try {
         return await AsyncStorage.getItem(key)
       } catch {
-        return null
+        return undefined
       }
     }
     const started = Date.now()
@@ -299,9 +326,10 @@ class TokenStorage {
       // log it so it's visible in Sentry rather than silently swallowed.
       Logger.warn('auth', 'SecureStore read failed, falling back to AsyncStorage', { key, error })
       try {
-        return await AsyncStorage.getItem(key)
+        // A value written there by a failed keychain write is real; nothing there says nothing about the keychain.
+        return (await AsyncStorage.getItem(key)) ?? undefined
       } catch {
-        return null
+        return undefined
       }
     } finally {
       noteKeychain('get', key, started)
@@ -309,6 +337,7 @@ class TokenStorage {
   }
 
   private static async secureSet(key: string, value: string): Promise<void> {
+    this.memory.set(key, value)
     if (Platform.OS === 'web') {
       warnUnencryptedWebStorage()
       await AsyncStorage.setItem(key, value)
@@ -330,6 +359,7 @@ class TokenStorage {
   }
 
   private static async secureRemove(key: string): Promise<void> {
+    this.memory.set(key, null)
     if (Platform.OS !== 'web') {
       try {
         await SecureStore.deleteItemAsync(key, SECURE_OPTIONS)
@@ -1702,7 +1732,12 @@ class ApiClientClass {
             Logger.info('api', 'refresh:stale', { reason: 'session ended while it was in flight' })
             return 'failed'
           }
-          await TokenStorage.setTokens(data.data.accessToken, data.data.refreshToken)
+          /*
+           * In memory now, before anything else runs, so every request from here sends them; the keychain is written behind
+           * (RC drive 2 D-A). Awaited, a native queue stuck behind another module failed the refresh and every request after.
+           */
+          void TokenStorage.setTokens(data.data.accessToken, data.data.refreshToken).catch((error) =>
+            Logger.warn('auth', 'Refreshed tokens not persisted', { error }))
           return 'ok'
         }
 

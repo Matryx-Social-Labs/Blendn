@@ -166,8 +166,9 @@ const initializeAuth = async (): Promise<AuthState> => {
         return globalAuthState
       }
 
-      // Check if we have stored tokens
-      const accessToken = await TokenStorage.getAccessToken()
+      // Check if we have stored tokens. Both are read now, on the critical path, into memory (RC drive 2 D-A): no request or
+      // refresh after this waits on the keychain, whatever is stuck on the native queue later.
+      const [accessToken] = await Promise.all([TokenStorage.getAccessToken(), TokenStorage.getRefreshToken()])
 
       if (accessToken) {
         // We have a token, verify it's still valid
@@ -254,7 +255,8 @@ const signInVerified = async (user: AuthUser, message: string) => {
     loading: false,
     initialized: true,
   })
-  await TokenStorage.setUser(user)
+  // In memory at once, the keychain behind (D-A): a stuck native queue does not hold the launch's restore open.
+  void TokenStorage.setUser(user).catch(() => {})
   startSessionRefresh()
 }
 

@@ -49,6 +49,8 @@ beforeEach(async () => {
   mockStalledWrites.clear()
   mockExpired.mockClear()
   await TokenStorage.setTokens('access-1', 'refresh-1')
+  // The keychain as a launch finds it: nothing read into memory yet (RC drive 2 D-A), so every read here asks the keychain.
+  TokenStorage.forgetMemory()
 })
 afterEach(async () => {
   // Let the background refresh retries (2 s, 5 s, 10 s) run out inside the test, not after it.
@@ -82,28 +84,25 @@ it('a refresh-token read that never answers is a failed refresh, not a rejected 
   expect(mockExpired).not.toHaveBeenCalled()
 })
 
-it('a refresh that hangs is released at its deadline: the next 401 starts its own rather than joining a dead one', async () => {
+it('a keychain write that never finishes does not hold the refresh: its tokens go at once (RC drive 2 D-A)', async () => {
   let refreshes = 0
-  global.fetch = jest.fn(async (url: RequestInfo | URL) => {
+  global.fetch = jest.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
     if (String(url).endsWith('/auth/refresh')) {
       refreshes += 1
       return json(200, { success: true, data: { accessToken: 'access-2', refreshToken: 'refresh-2' } })
     }
-    return json(401, { success: false })
+    const bearer = (init?.headers as Record<string, string> | undefined)?.Authorization
+    return bearer === 'Bearer access-2' ? json(200, { success: true, data: { id: 'u1' } }) : json(401, { success: false })
   }) as typeof fetch
-  // The refresh reaches the server, then storing what it sent never finishes.
+  // The refresh reaches the server, then storing what it sent never finishes. It used to hold the refresh to its deadline.
   mockStalledWrites.add(ACCESS)
-  const first = apiClient.getSession()
-  await jest.advanceTimersByTimeAsync(REFRESH_DEADLINE_MS)
-  await expect(first).resolves.toEqual({ success: false, error: TIMEOUT_MESSAGE })
+  await expect(apiClient.getSession()).resolves.toMatchObject({ success: true })
+  expect(refreshes).toBe(1)
+  // Not persisted, and not waited for: the next request sends the new token from memory, with no second refresh.
+  expect(mockSecure.get(ACCESS)).toBe('access-1')
+  await expect(apiClient.getSession()).resolves.toMatchObject({ success: true })
   expect(refreshes).toBe(1)
   expect(mockExpired).not.toHaveBeenCalled()
-
-  mockStalledWrites.clear()
-  const second = apiClient.getSession()
-  await jest.advanceTimersByTimeAsync(REFRESH_DEADLINE_MS)
-  await second
-  expect(refreshes).toBeGreaterThanOrEqual(2)
 })
 
 it('a slow keychain leaves a breadcrumb; a quick one says nothing', async () => {
@@ -111,6 +110,7 @@ it('a slow keychain leaves a breadcrumb; a quick one says nothing', async () => 
   warn.mockClear()
   await TokenStorage.getAccessToken()
   expect(warn).not.toHaveBeenCalledWith('auth', 'keychain:slow', expect.anything())
+  TokenStorage.forgetMemory()
   mockHold = true
   const read = TokenStorage.getAccessToken()
   mockHold = false
@@ -118,6 +118,17 @@ it('a slow keychain leaves a breadcrumb; a quick one says nothing', async () => 
   mockHeld?.('access-1')
   await read
   expect(warn).toHaveBeenCalledWith('auth', 'keychain:slow', expect.objectContaining({ op: 'get', key: ACCESS }))
+})
+
+it('a keychain read that lands after a clear never puts the cleared session back in memory (RC drive 2 D-A)', async () => {
+  mockHold = true
+  const read = TokenStorage.getAccessToken()
+  mockHold = false
+  await TokenStorage.clearAll()
+  mockHeld?.('access-1')
+  // Its caller gets what it read (sign-out's POST relies on that); memory keeps the clear.
+  await expect(read).resolves.toBe('access-1')
+  await expect(TokenStorage.getAccessToken()).resolves.toBeNull()
 })
 
 describe('sign-out always finishes (SCRUM-733)', () => {

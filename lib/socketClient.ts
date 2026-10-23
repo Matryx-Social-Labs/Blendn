@@ -430,7 +430,7 @@ export async function connect(opts: { force?: boolean } = {}): Promise<boolean> 
        * storage.
        *
        * Note that a callback alone would not have fixed it:
-       * `TokenStorage.getAccessToken()` is a bare SecureStore read with no
+       * `TokenStorage.getAccessToken()` is a bare storage read with no
        * expiry awareness, so re-reading serves the same expired token.
        * `buildAuthPayload` refreshes first. See lib/socketAuth.ts.
        */

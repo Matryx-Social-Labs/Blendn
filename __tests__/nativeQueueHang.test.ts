@@ -44,7 +44,7 @@ jest.mock('expo-notifications', () => ({
 
 process.env.EXPO_PUBLIC_API_BASE_URL = 'https://api.test'
 /* eslint-disable @typescript-eslint/no-require-imports */
-const { apiClient } = require('../lib/apiClient') as typeof import('../lib/apiClient')
+const { apiClient, TokenStorage } = require('../lib/apiClient') as typeof import('../lib/apiClient')
 const auth = require('../lib/useAuth') as typeof import('../lib/useAuth')
 const { forgetPushPermission, readPushPermission, PERMISSION_READ_MS } = require('../lib/pushStatus') as typeof import('../lib/pushStatus')
 const { setAppIconBadge } = require('../lib/appBadge') as typeof import('../lib/appBadge')
@@ -70,10 +70,18 @@ let mockExpiredAccess: string | null = null
 const mockExpired = new Set<string>()
 /** The next token refresh waits for this before it answers (one-shot). */
 let mockHoldRefresh: Promise<void> | null = null
+/** The bearer each session read carried, in order. */
+let sessionBearers: (string | null)[] = []
+/** A new process: memory is gone, and the native queue with it; the keychain and AsyncStorage are what is left. */
+function relaunch() {
+  TokenStorage.forgetMemory()
+  mockTail = Promise.resolve()
+}
 /** Held reads of `/api/mobile/thing`: the test answers them as whoever it likes. */
 const heldThings: ((who: string) => void)[] = []
 beforeEach(() => {
   signOutPosts = []
+  sessionBearers = []
   mockExpiredAccess = null
   mockExpired.clear()
   mockHoldRefresh = null
@@ -99,7 +107,10 @@ beforeEach(() => {
       const n = session++
       return json(200, { success: true, data: { user: USER, accessToken: `access-${n}`, refreshToken: `refresh-${n}` } })
     }
-    if (u.endsWith('/auth/session')) return bearer && mockExpired.has(bearer) ? json(401, { success: false }) : json(200, { success: true, data: USER })
+    if (u.endsWith('/auth/session')) {
+      sessionBearers.push(bearer)
+      return !bearer || mockExpired.has(bearer) ? json(401, { success: false }) : json(200, { success: true, data: USER })
+    }
     if (u.endsWith('/auth/signout')) {
       signOutPosts.push({ bearer, body: JSON.parse(String(init?.body ?? '{}')) })
       if (bearer && bearer === mockExpiredAccess) return json(401, { success: false })
@@ -158,6 +169,7 @@ describe('sign-out clears the keychain before it tells the server (security revi
     expect(mockSecure.has(REFRESH)).toBe(false)
     expect(mockSecure.has('blendn_user')).toBe(false)
     // The relaunch: the launch's restore finds nothing to restore.
+    TokenStorage.forgetMemory()
     const relaunched = await auth.reinitializeAuth()
     expect(relaunched.user).toBeNull()
     mockHoldSignOut = null
@@ -176,7 +188,7 @@ describe('sign-out clears the keychain before it tells the server (security revi
     // The deletes never ran: the session is still in the keychain when iOS kills the app.
     expect(mockSecure.has(ACCESS)).toBe(true)
     // The relaunch: a new process, a new queue, the same keychain and AsyncStorage.
-    mockTail = Promise.resolve()
+    relaunch()
     expect((await auth.reinitializeAuth()).user).toBeNull()
     expect(mockSecure.has(ACCESS)).toBe(false)
     expect(mockSecure.has(REFRESH)).toBe(false)
@@ -250,6 +262,7 @@ describe('a token refresh in flight across a sign-out (Opus review H1)', () => {
     await jest.advanceTimersByTimeAsync(0)
     expect(mockSecure.has(ACCESS)).toBe(false)
     expect(mockSecure.has(REFRESH)).toBe(false)
+    relaunch()
     expect((await auth.reinitializeAuth()).user).toBeNull()
     await jest.advanceTimersByTimeAsync(20_000)
   })
@@ -257,7 +270,6 @@ describe('a token refresh in flight across a sign-out (Opus review H1)', () => {
   it('the launch’s signed-out marker ends it too: a refresh in flight stores nothing over its clear (re-review L2)', async () => {
     const { read, release } = await refreshHeldInFlight()
     // The phone was signed out and its deletes never landed: the launch finds the marker and clears the keychain itself.
-    const { TokenStorage } = require('../lib/apiClient') as typeof import('../lib/apiClient')
     TokenStorage.markSignedOut()
     expect((await auth.reinitializeAuth()).user).toBeNull()
     expect(mockSecure.has(ACCESS)).toBe(false)
@@ -279,8 +291,68 @@ describe('a token refresh in flight across a sign-out (Opus review H1)', () => {
     await jest.advanceTimersByTimeAsync(0)
     expect(mockSecure.get(ACCESS)).toBe(b.access)
     expect(mockSecure.get(REFRESH)).toBe(b.refresh)
+    // Nor what B's requests send (RC drive 2 D-A: they read memory).
+    await apiClient.getSession()
+    expect(sessionBearers.at(-1)).toBe(b.access)
     await auth.signOut()
     await jest.advanceTimersByTimeAsync(20_000)
+  })
+})
+
+describe('authed requests read the session from memory (RC drive 2 D-A)', () => {
+  it('with the native queue stuck after sign-in, authed reads, a refresh and sign-out all still go', async () => {
+    await auth.signInWithEmail('a@b.c', 'pw')
+    const access = mockSecure.get(ACCESS)
+    // usernotificationsd is wedged: every native call from here waits behind this one for good.
+    void mockQueue('stuck', mockNever)
+    const from = mockLog.length
+
+    await expect(apiClient.getSession()).resolves.toMatchObject({ success: true, data: USER })
+    await expect(apiClient.getSession()).resolves.toMatchObject({ success: true, data: USER })
+    expect(sessionBearers).toEqual([access, access])
+    // Not one keychain read was queued for them.
+    expect(mockLog.slice(from).filter((c) => c.startsWith('get '))).toEqual([])
+
+    // The access token expires: the refresh reads the refresh token from memory, and its tokens are used at once.
+    mockExpired.add(String(access))
+    await expect(apiClient.getSession()).resolves.toMatchObject({ success: true, data: USER })
+    const rotated = sessionBearers.at(-1)
+    expect(rotated).toMatch(/^access-/)
+    expect(rotated).not.toBe(access)
+    // Written behind: queued for the keychain, not waited on.
+    expect(mockLog.slice(from)).toContain(`set ${ACCESS}`)
+    expect(mockSecure.get(ACCESS)).toBe(access)
+    await expect(apiClient.getSession()).resolves.toMatchObject({ success: true })
+    expect(sessionBearers.at(-1)).toBe(rotated)
+
+    // Sign-out reads the session from memory too: the server ends it, and the deletes are queued.
+    const leaving = auth.signOut()
+    await jest.advanceTimersByTimeAsync(35_000)
+    await expect(leaving).resolves.toEqual({ success: true })
+    expect(signOutPosts.at(-1)?.bearer).toBe(rotated)
+    expect(signOutPosts.at(-1)?.body.refreshToken).toMatch(/^refresh-/)
+    expect(mockLog.slice(from)).toContain(`delete ${ACCESS}`)
+    // And memory is empty at once: the next authed request carries no token, though the keychain still holds one.
+    expect(mockSecure.has(ACCESS)).toBe(true)
+    await expect(apiClient.getSession()).resolves.toMatchObject({ success: false })
+    expect(sessionBearers.at(-1)).toBeNull()
+
+    // The relaunch: the marker means the keychain's leftovers are cleared, not restored.
+    relaunch()
+    expect((await auth.reinitializeAuth()).user).toBeNull()
+    expect(mockSecure.has(ACCESS)).toBe(false)
+  })
+
+  it('the launch reads both tokens into memory, so a refresh after the queue sticks still goes', async () => {
+    await auth.signInWithEmail('a@b.c', 'pw')
+    relaunch()
+    expect((await auth.reinitializeAuth()).user?.id).toBe(USER.id)
+    void mockQueue('stuck', mockNever)
+    mockExpired.add(String(mockSecure.get(ACCESS)))
+    await expect(apiClient.getSession()).resolves.toMatchObject({ success: true, data: USER })
+    expect(sessionBearers.at(-1)).not.toBe(mockSecure.get(ACCESS))
+    relaunch()
+    await auth.signOut()
   })
 })
 
@@ -309,16 +381,15 @@ it('signs in, reads the token and signs out with a permission read that never an
   expect(await signingIn).toEqual({ success: true })
   expect(mockLog).not.toContain('getPermissionsAsync')
 
-  // Token reads still happen: an authenticated request reads the access token from the keychain and goes.
+  // An authenticated request goes, its token from memory (D-A): it never queues behind what may stick.
   await expect(apiClient.getSession()).resolves.toMatchObject({ success: true, data: USER })
-  expect(mockLog).toContain(`get ${ACCESS}`)
+  expect(mockLog).not.toContain(`get ${ACCESS}`)
 
   // Once the session is stored and the first screen has had its grace, the read goes, and never answers.
   await jest.advanceTimersByTimeAsync(PAINT_GRACE_MS)
   const at = mockLog.indexOf('getPermissionsAsync')
   expect(at).toBeGreaterThan(mockLog.indexOf(`set ${ACCESS}`))
   expect(at).toBeGreaterThan(mockLog.indexOf(`set ${REFRESH}`))
-  expect(at).toBeGreaterThan(mockLog.indexOf(`get ${ACCESS}`))
 
   // The UI never waits on it: bounded, then unavailable for the session, and asked no more.
   await jest.advanceTimersByTimeAsync(PERMISSION_READ_MS)
@@ -329,10 +400,10 @@ it('signs in, reads the token and signs out with a permission read that never an
   // Sign-out with the queue now blocked: signed out at once, before any keychain call behind the stuck read returns.
   const leaving = auth.signOut()
   expect(await auth.getCurrentUser()).toBeNull()
-  // The server half is bounded too: the refresh-token read behind the stuck call times out and sign-out still returns.
+  // The server is told with the session from memory (D-A); the keychain deletes are bounded, and sign-out returns.
   await jest.advanceTimersByTimeAsync(35_000)
-  await expect(leaving).resolves.toMatchObject({ success: false })
+  await expect(leaving).resolves.toEqual({ success: true })
   // Its keychain deletes are queued (they land when the queue frees), after the sign-in's writes.
   expect(mockLog.lastIndexOf(`delete ${ACCESS}`)).toBeGreaterThan(at)
-  expect(signedOutOnServer).toBe(0)
+  expect(signedOutOnServer).toBe(1)
 })

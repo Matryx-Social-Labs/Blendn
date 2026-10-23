@@ -15,6 +15,7 @@ jest.mock('../lib/apiClient', () => ({
   },
   TokenStorage: {
     getAccessToken: jest.fn(),
+    getRefreshToken: jest.fn(),
     getUser: jest.fn(),
     setUser: jest.fn().mockResolvedValue(undefined),
     clearAll: jest.fn().mockResolvedValue(undefined),
