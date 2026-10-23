@@ -1771,7 +1771,6 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
           */
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
-          enableVirtualization={!isLoading && rows.length > 20}
           /*
            * 4, not 10: `initialNumToRender` is rendered *synchronously before first paint*. At 10 that is ~4,700 pt of
            * content, five screens, and ten image decodes, to show two cards. Four covers the fold with one row of slack
