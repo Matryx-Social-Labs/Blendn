@@ -58,7 +58,11 @@ describe('a zone at New Year, and an engine that cannot read zones (review L10)'
       throw new RangeError('no ICU')
     }) as never)
     try {
-      expect(calendarDate(local, { weekday: true, now: NOW, timeZone: 'Asia/Kolkata' })).toBe('Thu 31 Dec')
+      // A fresh lib/time: its formatters are cached once built (one per zone), and the engine here can build none.
+      jest.isolateModules(() => {
+        const fresh = require('../lib/time') as typeof import('../lib/time')
+        expect(fresh.calendarDate(local, { weekday: true, now: NOW, timeZone: 'Asia/Kolkata' })).toBe('Thu 31 Dec')
+      })
     } finally {
       spy.mockRestore()
     }
