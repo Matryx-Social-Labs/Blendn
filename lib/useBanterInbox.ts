@@ -26,6 +26,7 @@ import { useLatest } from './useLatest'
 import { useLiveSync } from './useLiveSync'
 import { userMessage } from './userMessage'
 import { previewText } from '../components/banter/inbox'
+import { subscribeCheckInChanged } from './checkIn'
 
 /*
  * The Banter's data (`app/(tabs)/chat.tsx`): rooms, crew chats and Blends,
@@ -642,6 +643,20 @@ export function useBanterInbox({ requestsOnly = false }: { requestsOnly?: boolea
     // loadChats is rebuilt each render; a block is the only trigger.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [blocks])
+
+  /*
+   * Your own check-in or Go Live began or ended (a checkout here, the presence monitor's, a window that ran out): the
+   * Live now hero is the server's `isCheckedIn`, so the rooms are read again at once, past every cache. A stale
+   * "483 in the room" hero stayed for a minute and a tab switch after a checkout (RC drive 5 D-2).
+   */
+  const reloadForCheckIn = useLatest(() => {
+    apiClient.forgetChatGroups()
+    void loadChats(true, true)
+  })
+  useEffect(() => {
+    if (!user || requestsOnly) return
+    return subscribeCheckInChanged(() => reloadForCheckIn.current())
+  }, [user, requestsOnly, reloadForCheckIn])
 
   // Real-time private message updates via Socket.io
   useEffect(() => {

@@ -43,6 +43,16 @@ jest.mock('../lib/apiClient', () => ({
     getConversationMessages: jest.fn(),
     // Older pages (lib/chatPaging, lib/useBanterInbox) read through the queue.
     queuedRequest: jest.fn(),
+    forgetChatGroups: jest.fn(),
+  },
+}))
+/** Your own check-in changing (lib/checkIn's bus): a checkout here, the presence monitor's, a window that ran out. */
+const mockCheckInChanged = new Set<() => void>()
+jest.mock('../lib/checkIn', () => ({
+  ...jest.requireActual('../lib/checkIn'),
+  subscribeCheckInChanged: (f: () => void) => {
+    mockCheckInChanged.add(f)
+    return () => mockCheckInChanged.delete(f)
   },
 }))
 jest.mock('../lib/crewsApi', () => ({ crewsApi: { myCrews: jest.fn(async () => ({ success: true, data: { crews: [], invites: [] } })) } }))
@@ -264,6 +274,22 @@ describe('a finger resting on the Live now card holds the order (drive 5, Androi
     jest.useRealTimers()
     Object.defineProperty(Platform, 'OS', { value: 'ios', configurable: true })
   })
+})
+
+it('a checkout drops the Live now hero at once, not a minute and a tab switch later (drive 5 D-2)', async () => {
+  // Arrange: standing in Vinyl Night, its hero up.
+  await open()
+  expect(screen.getByTestId('banter-live-g-live')).toBeTruthy()
+
+  // Act: you check out; the server's row says so.
+  serve({ rooms: [{ ...liveRoom, isCheckedIn: false }, pastRoom] })
+  await act(async () => mockCheckInChanged.forEach((f) => f()))
+  await flush()
+
+  // Assert: read again past every cache, and no hero.
+  expect(api.forgetChatGroups).toHaveBeenCalled()
+  expect(api.getChatGroups).toHaveBeenLastCalledWith(expect.objectContaining({ force: true }))
+  expect(screen.queryByTestId('banter-live-g-live')).toBeNull()
 })
 
 describe('one press guard for everything in the list (drive 6: the Live now card opened its room after a hold)', () => {
