@@ -29,8 +29,34 @@ import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
 import { HueProvider } from '../../components/ds/shared'
 import { RouteModal } from '../../components/system/RouteModal'
+import { crewDraftThread, draftOf, setDraft } from '../../lib/chatOutbox'
+import { isClosingForLink } from '../../lib/pendingRoute'
+import { useAuth } from '../../lib/useAuth'
+import { useLatest } from '../../lib/useLatest'
 
 const BIO_TOO_LONG = 'A crew bio is at most 140 characters'
+
+/** What Make a crew keeps when a link closes it: the form, not the step or what the server said. */
+type CrewDraft = {
+  name: string
+  bio: string
+  choice: IntentChoice
+  tags: string[]
+  openToSolo: boolean
+  keepAnonymous: boolean
+  picked: string[]
+}
+
+/** The draft a link left, read (pure: it is taken out of the store once the sheet has opened with it). */
+function readCrewDraft(thread: ReturnType<typeof crewDraftThread>): Partial<CrewDraft> {
+  const kept = draftOf(thread)
+  if (!kept) return {}
+  try {
+    return JSON.parse(kept) as Partial<CrewDraft>
+  } catch {
+    return {}
+  }
+}
 
 type Made = { crewId: string; chatGroupId: string; invited: number; /** Null until the server's own seed is read. */ emblemSeed: string | null }
 
@@ -53,13 +79,19 @@ function NewCrewScreenContent() {
   const [step, setStep] = useState<MakeStep>(1)
   /** Which way the last step went: forward from the right, back from the left. Set before the step changes, read when each animation starts. */
   const dir = useSharedValue<StepDir>(1)
-  const [name, setName] = useState('')
-  const [bio, setBio] = useState('')
-  const [choice, setChoice] = useState<IntentChoice>('friendship')
-  const [tags, setTags] = useState<string[]>([])
-  const [openToSolo, setOpenToSolo] = useState(false)
-  const [keepAnonymous, setKeepAnonymous] = useState(false)
-  const [picked, setPicked] = useState<string[]>([])
+  const { user } = useAuth()
+  const draftThread = crewDraftThread(user?.id)
+  // A link closed this sheet with something in it: it opens again as it was left (step 1, so it reads from the top).
+  const [kept] = useState(() => readCrewDraft(draftThread))
+  // Taken once it is on screen: a sheet the person closes themselves does not bring it back again.
+  useEffect(() => setDraft(draftThread, ''), [draftThread])
+  const [name, setName] = useState(kept.name ?? '')
+  const [bio, setBio] = useState(kept.bio ?? '')
+  const [choice, setChoice] = useState<IntentChoice>(kept.choice ?? 'friendship')
+  const [tags, setTags] = useState<string[]>(kept.tags ?? [])
+  const [openToSolo, setOpenToSolo] = useState(kept.openToSolo ?? false)
+  const [keepAnonymous, setKeepAnonymous] = useState(kept.keepAnonymous ?? false)
+  const [picked, setPicked] = useState<string[]>(kept.picked ?? [])
   const [errors, setErrors] = useState<{ name?: string; bio?: string }>({})
   const [refusal, setRefusal] = useState<CrewRefusal | null>(null)
   const [stuck, setStuck] = useState(false)
@@ -67,6 +99,16 @@ function NewCrewScreenContent() {
   const [made, setMade] = useState<Made | null>(null)
   /** The stand-in emblem for the preview: the server draws the real one, from its own seed, when the crew is made. */
   const [previewSeed] = useState(() => `preview-${Math.random().toString(36).slice(2)}`)
+  // Closed by a link before the crew was made: what was typed is kept for next time. Closed by the person: let go.
+  const form = useLatest({ draft: { name, bio, choice, tags, openToSolo, keepAnonymous, picked } as CrewDraft, made: made !== null })
+  useEffect(
+    () => () => {
+      const { draft, made: wasMade } = form.current
+      const typed = draft.name.trim() || draft.bio.trim() || draft.tags.length || draft.picked.length
+      if (isClosingForLink() && !wasMade && typed) setDraft(draftThread, JSON.stringify(draft))
+    },
+    [draftThread, form],
+  )
   /** One create at a time: `sending` lags a fast second tap by a render. */
   const inFlight = useRef(false)
 

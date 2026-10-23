@@ -18,12 +18,16 @@ jest.mock('react-native-safe-area-context', () => ({
 }))
 jest.mock('../lib/apiClient', () => ({ apiClient: { getFriends: jest.fn() } }))
 jest.mock('../lib/crewsApi', () => ({ crewsApi: { create: jest.fn(), crew: jest.fn() } }))
+jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { id: 'u-me' } }) }))
+const mockClosingForLink = { value: false }
+jest.mock('../lib/pendingRoute', () => ({ isClosingForLink: () => mockClosingForLink.value }))
 
 import { router } from 'expo-router'
 import NewCrewScreen from '../app/crews/new'
 import { apiClient } from '../lib/apiClient'
 import { CONSENT_LINE, KEEP_ANONYMOUS_LABEL } from '../lib/crews'
 import { crewsApi } from '../lib/crewsApi'
+import { crewDraftThread, draftOf, setDraft } from '../lib/chatOutbox'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
 const crews = crewsApi as jest.Mocked<typeof crewsApi>
@@ -32,6 +36,8 @@ const friend = (userId: string, name: string) => ({ userId, name, photo: null, s
 
 beforeEach(() => {
   jest.clearAllMocks()
+  mockClosingForLink.value = false
+  setDraft(crewDraftThread('u-me'), '')
   crews.create.mockReset()
   crews.crew.mockReset()
   api.getFriends.mockResolvedValue({ success: true, data: { friends: [friend('u-priya', 'Priya'), friend('u-rohan', 'Rohan')], count: 2 } })
@@ -386,3 +392,48 @@ describe('going back', () => {
     expect(screen.getByTestId('make-name-input').props.value).toBe('Nebula')
   })
 })
+
+describe('a link that closes the sheet keeps what was typed (review LOW)', () => {
+  const nameField = () => screen.getByTestId('make-name-input')
+
+  it('closed for a link: reopening gives back the name, the friends picked and the rest', async () => {
+    await toFriends('Nebula')
+    await waitFor(() => screen.getByRole('checkbox', { name: 'Ask Priya' }))
+    await fireEvent.press(screen.getByRole('checkbox', { name: 'Ask Priya' }))
+    mockClosingForLink.value = true
+    await screen.unmount()
+    mockClosingForLink.value = false
+
+    await render(<NewCrewScreen />)
+    expect(nameField().props.value).toBe('Nebula')
+    await press('Next')
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Ask Priya' }).props.accessibilityState?.checked).toBe(true))
+  })
+
+  it('it is given back once: closed by the person after that, the next open is empty', async () => {
+    await render(<NewCrewScreen />)
+    await name('Nebula')
+    mockClosingForLink.value = true
+    await screen.unmount()
+    mockClosingForLink.value = false
+    await render(<NewCrewScreen />)
+    expect(nameField().props.value).toBe('Nebula')
+    await screen.unmount()
+
+    await render(<NewCrewScreen />)
+    expect(nameField().props.value).toBe('')
+  })
+
+  it('closed by the person, nothing is kept; and an empty sheet closed for a link keeps nothing either', async () => {
+    await render(<NewCrewScreen />)
+    await name('Nebula')
+    await screen.unmount()
+    expect(draftOf(crewDraftThread('u-me'))).toBe('')
+
+    await render(<NewCrewScreen />)
+    mockClosingForLink.value = true
+    await screen.unmount()
+    expect(draftOf(crewDraftThread('u-me'))).toBe('')
+  })
+})
+

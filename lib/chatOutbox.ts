@@ -27,6 +27,8 @@ export type Thread = string | null
 
 export const roomThread = (chatGroupId: string, userId: string | null | undefined): Thread => (userId ? `${userId}:room:${chatGroupId}` : null)
 export const dmThread = (conversationId: string, userId: string | null | undefined): Thread => (userId ? `${userId}:dm:${conversationId}` : null)
+/** Make a crew's draft: one per account, kept when a link closed the sheet (review LOW), given back when it opens again. */
+export const crewDraftThread = (userId: string | null | undefined): Thread => (userId ? `${userId}:crew:new` : null)
 
 type State = { drafts: ReadonlyMap<string, string>; failed: ReadonlyMap<string, readonly unknown[]> }
 
