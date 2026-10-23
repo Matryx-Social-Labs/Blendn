@@ -62,7 +62,9 @@ export function readPushPermission({ fresh = false }: { fresh?: boolean } = {}):
       onReadable.clear()
       waiting.forEach((fn) => fn())
     }, () => {
+      // It failed rather than answered: nothing was learnt, so what waited for an answer does not run (re-review L1).
       stuck = false
+      onReadable.clear()
     })
     return 'unavailable'
   })()
@@ -81,6 +83,8 @@ export function notePushPermission(answer: Notifications.NotificationPermissions
 /** Drop what was read (sign-out, tests). A read that is stuck stays known to be: the queue is still blocked. */
 export function forgetPushPermission(): void {
   known = null
+  // And what waited on the last session's read: a registration queued for A never runs for B (re-review L1).
+  onReadable.clear()
 }
 
 /**
