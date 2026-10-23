@@ -71,7 +71,7 @@ import {
 import { clockTime } from '../../lib/time'
 import { withDaySeparators } from '../../lib/unreadDivider'
 import { useAuth } from '../../lib/useAuth'
-import { lockFor, useComposerLock, type ComposerLock } from '../../lib/useComposerLock'
+import { isReadOnlyLock, lockFor, useComposerLock, type ComposerLock } from '../../lib/useComposerLock'
 import { scrollListToEnd, useFollowEnd } from '../../lib/useFollowEnd'
 import type { PollRefusal } from '../../lib/chatPoll'
 import { useLatest } from '../../lib/useLatest'
@@ -105,6 +105,9 @@ const stamp = (m: { created_at: string }) => Date.parse(m.created_at) || 0
  * or name opens their card. The composer says why it can't post, in the
  * server's words. Crew chats and Blend rooms are this screen too (`kind`).
  */
+/** A send only this phone holds: refused ("Not sent") or waiting for a connection. */
+const isPendingSend = (m: Message) => !!(m.failed || m.waiting)
+
 function GroupChatInner() {
   const params = useLocalSearchParams()
   const chatRoomId = params.id
@@ -203,6 +206,13 @@ function GroupChatInner() {
                 ? { kind: 'out' }
                 : null
   const outsideRef = useLatest(outside)
+  /*
+   * Read-only for good: a lock no retry gets past, or a room that closed, went or removed you. Nothing is queued or kept
+   * as "Not sent · Tap to retry" under it, and what was pending goes (state adjusted in render), here and in the
+   * Banter's "Not sent" (RC drive 4 D-6).
+   */
+  const readOnly = isReadOnlyLock(composer.lock) || outside?.kind === 'closed' || outside?.kind === 'gone' || outside?.kind === 'removed'
+  if (readOnly && messages.some(isPendingSend)) setMessages((prev) => prev.filter((m) => !isPendingSend(m)))
   const muted = isMuted(useRoomMute(chatRoomId ? roomId : null))
   /** In the room now: the Room's number, live (`useHereCount`); a chat leave is not leaving the room. */
   const hereCount = useHereCount(roomInfo)
@@ -519,7 +529,7 @@ function GroupChatInner() {
   })
 
   const sendMessage = async () => {
-    if (!newMessage.trim() || !currentUser || sendInFlightRef.current) return
+    if (readOnly || !newMessage.trim() || !currentUser || sendInFlightRef.current) return
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
     stopTyping(roomId)
     sendInFlightRef.current = true
@@ -553,6 +563,7 @@ function GroupChatInner() {
   }
 
   const retrySend = (message: Message) => {
+    if (readOnly) return
     setMessage(message.message_id, (m) => ({ ...m, failed: false, failedLine: undefined }))
     void deliver({ ...message, failed: false, failedLine: undefined })
   }

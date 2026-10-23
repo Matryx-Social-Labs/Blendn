@@ -40,6 +40,15 @@ export function lockFor(errorCode: string | null | undefined, serverText?: strin
   }
 }
 
+/**
+ * A lock no retry gets past: the organiser locked the room, its window closed, its event was hidden. Unlike a mute, a
+ * rate limit or an RSVP away, waiting does not open it, so a "Not sent · Tap to retry" under it is a promise it cannot
+ * keep (RC drive 4 D-6).
+ */
+export function isReadOnlyLock(lock: ComposerLock | null | undefined): boolean {
+  return lock?.state === 'locked' || lock?.state === 'closed' || lock?.state === 'hidden'
+}
+
 export function useComposerLock() {
   const [lock, setLock] = useState<ComposerLock | null>(null)
   const [waitLeft, setWaitLeft] = useState<number | null>(null)

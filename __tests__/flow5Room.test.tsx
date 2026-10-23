@@ -76,7 +76,7 @@ jest.mock('../lib/notifications', () => ({ useActiveThread: jest.fn() }))
 /* eslint-disable import/first */
 import GroupChat from '../app/chat/[id]'
 import { apiClient } from '../lib/apiClient'
-import { clearOutbox, keepFailed, roomThread } from '../lib/chatOutbox'
+import { clearOutbox, failedOf, keepFailed, roomThread } from '../lib/chatOutbox'
 import { resetRoomMembership } from '../lib/roomMembership'
 /* eslint-enable import/first */
 
@@ -247,6 +247,34 @@ describe('a send the server refuses', () => {
     await send('hello')
     expect(screen.getByLabelText(`${title}. ${error}`)).toBeTruthy()
     expect(screen.queryByLabelText('Message')).toBeNull()
+  })
+})
+
+describe('a room that will not take a send again (drive 4 D-6)', () => {
+  it.each([
+    ['CHAT_LOCKED', 'This chat has been locked by the organiser'],
+    ['CHAT_CLOSED', 'This chat has closed. Event chats stay open for 24 hours after the event ends.'],
+  ])('%s: no "Not sent · Tap to retry" under the read-only bar, and nothing kept for the Banter', async (errorCode, error) => {
+    // Arrange: a send that failed earlier is still held for this room.
+    keepFailed(roomThread('g1', 'u-a'), [{ message_id: 'temp-old', sender_id: 'u-a', sender_name: 'You', message_text: 'earlier', message_type: 'text', created_at: '2026-10-15T18:00:00.000Z', failed: true }])
+    api.sendChatMessage.mockResolvedValue({ success: false, errorCode, error } as never)
+    await open()
+    expect(screen.getByLabelText(/^Not sent: earlier/)).toBeTruthy()
+
+    // Act: the send that finds the room locked.
+    await send('hello')
+
+    // Assert: the lock says why; no bubble promises a retry, and the Banter holds no "Not sent" for it.
+    expect(screen.queryByLabelText('Message')).toBeNull()
+    expect(screen.queryByLabelText(/^Not sent/)).toBeNull()
+    expect(failedOf(roomThread('g1', 'u-a'))).toEqual([])
+  })
+
+  it('a mute is not that: the refused bubble stays, to retry once it lifts', async () => {
+    api.sendChatMessage.mockResolvedValue({ success: false, errorCode: 'USER_MUTED', error: 'You have been muted in this chat' } as never)
+    await open()
+    await send('hello')
+    expect(screen.getByLabelText(/^Not sent: hello/)).toBeTruthy()
   })
 })
 
