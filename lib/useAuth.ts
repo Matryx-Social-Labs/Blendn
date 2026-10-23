@@ -12,6 +12,7 @@ import { clearOutbox } from './chatOutbox'
 import { clearRoomSignal } from './roomSignal'
 import { resetRoomMembership } from './roomMembership'
 import { forgetRosters } from './rosterMemory'
+import { forgetHeldForm } from './heldSignInForm'
 import { forgetEventDetails } from './eventDetailCache'
 import { rateLimitedMessage } from './signInRefusal'
 import { Sentry } from './sentry'
@@ -117,6 +118,8 @@ const updateAuthState = (newState: Partial<AuthState>) => {
   authStateListeners.forEach((listener) => listener(globalAuthState))
 
   if (globalAuthState.user?.id !== previousUserId) {
+    // The sign-in form's words were the person who just came in, or went out: never the next one's (re-review M1).
+    forgetHeldForm()
     Sentry.setUser(globalAuthState.user ? { id: globalAuthState.user.id } : null)
     // RevenueCat buys as this account and nobody else (step 11): every path
     // that signs in, restores a session or signs out comes through here.
@@ -321,6 +324,7 @@ const resetLocalSession = () => {
    */
   forgetRosters()
   forgetEventDetails()
+  forgetHeldForm()
   /*
    * A Go Live remembered on this phone is that account's (step 5 review, M5).
    * Loaded when needed: `goLive` brings AsyncStorage, which nothing else on

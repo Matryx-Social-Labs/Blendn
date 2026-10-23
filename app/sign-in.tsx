@@ -21,6 +21,7 @@ import { signInWithEmail, signUp } from '../lib/useAuth'
 import { useKeyboardShown } from '../lib/keyboard'
 import { accountAgeError, NAME_LENGTH_SENTENCE, nameTooShort } from '../lib/onboarding'
 import { PendingInvite } from '../components/friends/PendingInvite'
+import { forgetHeldForm, heldForm } from '../lib/heldSignInForm'
 
 
 /**
@@ -71,11 +72,6 @@ type FieldErrors = Partial<Record<Field, string>>
 /** The order the form walks in, which is the order the first bad field is found in. */
 const FIELD_ORDER: readonly Field[] = ['name', 'email', 'password', 'age']
 
-/**
- * What the form held, kept in memory across a remount (a text-size change re-lays the screen out from scratch, Opus review
- * M4). Never the password, and never on disk; dropped once the account is in.
- */
-export const heldForm: { mode: Mode; email: string; name: string; age: string } = { mode: 'signin', email: '', name: '', age: '' }
 
 export default function SignIn() {
   const bold = useBoldText()
@@ -216,8 +212,8 @@ export default function SignIn() {
       // The button stays busy until this screen is replaced: freeing it here left an idle form for the frames the next screen
       // takes to draw (a blank frame on Android).
       stayBusy = true
-      // In: nothing of this form is kept for the next one (M4).
-      Object.assign(heldForm, { mode: 'signin', email: '', name: '', age: '' })
+      // In: nothing of this form is kept for the next one (M4; `useAuth` drops it on every sign-in too).
+      forgetHeldForm()
     } catch (e) {
       Logger.error('auth', 'Email auth failed', { error: e })
       setError('Something went wrong. Please try again.')

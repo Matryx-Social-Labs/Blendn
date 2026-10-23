@@ -24,7 +24,8 @@ jest.mock('../lib/logger', () => ({ Logger: { info: jest.fn(), warn: jest.fn(), 
 jest.mock('../components/friends/PendingInvite', () => ({ PendingInvite: () => null }))
 
 import { router, useLocalSearchParams } from 'expo-router'
-import SignIn, { heldForm } from '../app/sign-in'
+import SignIn from '../app/sign-in'
+import { forgetHeldForm } from '../lib/heldSignInForm'
 
 let error: jest.SpyInstance
 beforeEach(() => {
@@ -35,7 +36,7 @@ beforeEach(() => {
   jest.spyOn(H, 'select').mockImplementation(() => {})
   ;(useLocalSearchParams as jest.Mock).mockReturnValue({})
   // Each test is a fresh form: what one typed is held across a remount (M4), not across tests.
-  Object.assign(heldForm, { mode: 'signin', email: '', name: '', age: '' })
+  forgetHeldForm()
 })
 
 describe('a remount (a text-size change re-lays the screen out, Opus review M4)', () => {
