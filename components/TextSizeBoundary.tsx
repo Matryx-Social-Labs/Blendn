@@ -1,5 +1,5 @@
 import { Fragment, type ReactElement, type ReactNode } from 'react'
-import { useWindowDimensions } from 'react-native'
+import { Platform, useWindowDimensions } from 'react-native'
 
 /**
  * Text laid out afresh when the phone's text size changes while the app is open (RC drive D2).
@@ -15,10 +15,15 @@ import { useWindowDimensions } from 'react-native'
  * Applied per leaf screen (`rootTextSizeLayout` on the root stack, `textSizeLayout` on each nested navigator) so no navigator is remounted: one that unmounts drops its
  * state, and the person would land on the first tab. What a screen holds in local state starts over; its route and its
  * params stay.
+ *
+ * iOS only. Android relaunches the Activity on a font-size change (`fontScale` is not in the manifest's `configChanges`),
+ * so the app's new root lays every text out afresh anyway; remounting the old tree's screens as it is torn down only ran
+ * their mount effects again, navigations among them, at the moment the relaunch was least able to take one (RC drive 2
+ * D-1). Should `fontScale` ever join `configChanges`, Android needs this too.
  */
 export function TextSizeBoundary({ children }: { children: ReactNode }) {
   const { fontScale } = useWindowDimensions()
-  return <Fragment key={fontScale}>{children}</Fragment>
+  return <Fragment key={Platform.OS === 'android' ? 'relaunched' : fontScale}>{children}</Fragment>
 }
 
 /**

@@ -2,6 +2,7 @@ import { Asset } from 'expo-asset';
 import { router, Stack, usePathname, type Href } from "expo-router";
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useRef, useState } from 'react';
+import { useNavigationReady } from '../lib/useNavigationReady';
 import { Appearance, BackHandler, Platform, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
@@ -87,6 +88,8 @@ function RootLayout() {
   // The paywall never arrives by itself over onboarding, a check-in or a chat (lib/paywall.ts).
   useEffect(() => notePathname(pathname), [pathname]);
   const lastRedirectRef = useRef<string | null>(null);
+  // No redirect before the root navigator can take it: an Android font-size relaunch mounts this signed in (RC drive 2 D-1).
+  const navigationReady = useNavigationReady();
   const pushInitRef = useRef<boolean>(false);
   const isNavigatingRef = useRef<boolean>(false);
   // Reduce Motion: every push is the system cross-fade (DS #3 rm), not a slide across the screen.
@@ -221,6 +224,14 @@ function RootLayout() {
 
   useEffect(() => {
     if (loading) {
+      setRouteReady(false);
+      return;
+    }
+    /*
+     * Every branch below may navigate (`replaceIfNeeded`, the held route's push): not until the navigator is mounted. And
+     * a tap that arrives meanwhile is held, not pushed: the module's "ready" outlives the relaunch's old tree.
+     */
+    if (!navigationReady) {
       setRouteReady(false);
       return;
     }
@@ -447,7 +458,7 @@ function RootLayout() {
     // replaceIfNeeded is redefined every render; adding it here would rerun
     // this effect (and its routing decisions) on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, loading, pathname, isNewAccount, unreachable]);
+  }, [user, loading, pathname, isNewAccount, unreachable, navigationReady]);
 
   /*
    * Android hardware back, registered ONCE.

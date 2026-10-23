@@ -9,7 +9,7 @@ import { act, render, screen } from '@testing-library/react-native'
 import { readFileSync, readdirSync, existsSync } from 'fs'
 import { join } from 'path'
 import React, { useEffect } from 'react'
-import { Dimensions, StyleSheet, Text, View } from 'react-native'
+import { Dimensions, Platform, StyleSheet, Text, View } from 'react-native'
 import type { ReactTestRendererJSON } from 'react-test-renderer'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
@@ -178,6 +178,29 @@ describe('a live change of the text size (React Native does not re-measure mount
     expect(mounts).toBe(1)
     await atScale(AX_XXXL)
     expect(mounts).toBe(2)
+  })
+
+  it('on Android it holds still: the Activity relaunch lays out afresh, and the old tree is not remounted (RC drive 2 D-1)', async () => {
+    Object.defineProperty(Platform, 'OS', { value: 'android', configurable: true })
+    try {
+      let mounts = 0
+      const Probe = () => {
+        useEffect(() => {
+          mounts += 1
+        }, [])
+        return <Text>probe</Text>
+      }
+      await atScale(1)
+      await render(
+        <TextSizeBoundary>
+          <Probe />
+        </TextSizeBoundary>
+      )
+      await atScale(1.3)
+      expect(mounts).toBe(1)
+    } finally {
+      Object.defineProperty(Platform, 'OS', { value: 'ios', configurable: true })
+    }
   })
 
   it('every navigator carries it on its screens, and the root skips exactly the routes that are navigators', () => {
