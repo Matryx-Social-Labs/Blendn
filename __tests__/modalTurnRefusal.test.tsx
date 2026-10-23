@@ -122,12 +122,14 @@ describe('HIGH-1: a Modal iOS refused gives the screen up', () => {
     const gone = screen.getByTestId('src-modal', HIDDEN).props.onDismiss
     let pickerOpen = false
     let closePicker: () => void = () => {}
+    // The photo source sheet's choice: it has just closed the sheet (`afterClosing`).
     const picked = holdTurnWhile(
       () =>
         new Promise<void>((resolve) => {
           pickerOpen = true
           closePicker = resolve
-        })
+        }),
+      { afterClosing: true }
     )
     await view.rerender(<Sheet visible={false} onClose={() => {}} title="Add a photo" testID="src" />)
     await tick(300)
@@ -340,4 +342,14 @@ describe('afterSheetDismissed leaves no stale waiter (review LOW)', () => {
     await tick(50)
     expect(shown('b')).toBe(true)
   })
+})
+
+it('a link opened from a sheet that stays up (Delete account → What’s kept) opens at once, over it', async () => {
+  await render(<Sheet visible onClose={() => {}} title="Delete account?" testID="del" />)
+  let opened = false
+  void holdTurnWhile(async () => {
+    opened = true
+  })
+  await act(async () => Promise.resolve())
+  expect(opened).toBe(true)
 })

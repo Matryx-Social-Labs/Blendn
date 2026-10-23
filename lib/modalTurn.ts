@@ -25,6 +25,8 @@ let holder: Turn | null = null
 let queue: readonly Turn[] = []
 /** Turns that are whole screens (a router modal, a native picker or browser), not a Modal drawn over one. */
 const screens = new WeakSet<Turn>()
+/** Turns whose Modal has been closed and is on its way out (waiting for iOS to say it has gone). */
+const leaving = new WeakSet<Turn>()
 const listeners = new Set<() => void>()
 const emit = () => listeners.forEach((listener) => listener())
 
@@ -53,6 +55,7 @@ export function requestTurn(turn: Turn, { front = false, screen = false }: { fro
 
 /** Gone (or never wanted after all): the next in line gets the screen. Idempotent; a waiter that gives up leaves the line. */
 export function releaseTurn(turn: Turn): void {
+  leaving.delete(turn)
   if (holder !== turn) {
     queue = queue.filter((t) => t !== turn)
     return
@@ -187,6 +190,11 @@ export function useTurnWatch(gate: TurnGate, modalUp: boolean, { animationMs = 0
     return () => clearTimeout(timer)
   }, [refused, modalUp, setBackoff])
 
+  // Closed while it holds the screen: it is leaving, which a native screen opened now waits for (`holdTurnWhile`).
+  useEffect(() => {
+    if (queued && !wanted && holder === turn) leaving.add(turn)
+  }, [queued, wanted, turn])
+
   // Not wanted and not drawn: the turn goes back once iOS says the Modal has gone (or at once if it never reached it).
   useEffect(() => {
     if (!queued || wanted || modalUp) return
@@ -232,17 +240,20 @@ export const NATIVE_GONE_MS = 350
 
 /**
  * A native screen that is not a Modal (the photo picker, the share sheet, the in-app browser) holds the screen while it
- * is up: it waits for the turn (a leaving sheet's onDismiss, at most `waitMs`), so it is not dropped, and a sheet that
+ * is up: it waits for a Modal on its way out (its onDismiss, at most `waitMs`), so it is not dropped, and a sheet that
  * comes due under it waits rather than being refused (review MED-B). Ahead of anyone already waiting: it was asked for.
+ *
+ * A Modal that stays up (the sheet a link was opened from, the paywall) is presented over at once, as before.
+ * `afterClosing`: the caller has just closed the Modal holding the screen (the photo source sheet), which React may not
+ * have drawn closed yet: wait for whatever Modal holds it.
  */
-export async function holdTurnWhile<T>(work: () => Promise<T>, waitMs: number = MODAL_GONE_FALLBACK_MS): Promise<T> {
+export async function holdTurnWhile<T>(
+  work: () => Promise<T>,
+  { afterClosing = false, waitMs = MODAL_GONE_FALLBACK_MS }: { afterClosing?: boolean; waitMs?: number } = {}
+): Promise<T> {
   if (Platform.OS !== 'ios') return work()
   const turn: Turn = {}
-  /*
-   * A Modal holding the screen is waited for (most often the sheet that asked, still leaving: its onDismiss), at most
-   * `waitMs`; a whole screen holding it (the paywall it was opened from) is presented over at once, as before.
-   */
-  const waitingOn = holder !== null && !screens.has(holder) ? holder : null
+  const waitingOn = holder !== null && !screens.has(holder) && (afterClosing || leaving.has(holder)) ? holder : null
   requestTurn(turn, { front: true, screen: true })
   if (waitingOn) {
     await new Promise<void>((resolve) => {

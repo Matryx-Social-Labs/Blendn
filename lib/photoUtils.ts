@@ -220,7 +220,7 @@ export const pickImage = async (
   if (source === 'library') {
     try {
       // Waits for the source sheet to have gone and holds the screen while the picker is up (lib/modalTurn).
-      const result = await holdTurnWhile(() => ImagePicker.launchImageLibraryAsync(pickerOptions(finalOptions)))
+      const result = await holdTurnWhile(() => ImagePicker.launchImageLibraryAsync(pickerOptions(finalOptions)), { afterClosing: true })
       return result.canceled ? null : result
     } catch (error) {
       Logger.error('profile', 'Error picking image from library', { error })
@@ -235,7 +235,7 @@ export const pickImage = async (
     if (permission !== 'granted') {
       fallback = permission
     } else {
-      const result = await holdTurnWhile(() => ImagePicker.launchCameraAsync(pickerOptions(finalOptions)))
+      const result = await holdTurnWhile(() => ImagePicker.launchCameraAsync(pickerOptions(finalOptions)), { afterClosing: true })
       return result.canceled ? null : result
     }
   } catch (error) {
