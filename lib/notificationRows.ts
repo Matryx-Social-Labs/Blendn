@@ -1,6 +1,7 @@
 import type { NotificationVisualSpec, StackPerson } from '../components/ds/NotificationRow'
 import type { IconName } from '../components/ui/Icon'
 import type { NotificationItem, NotificationKind } from './notificationFormat'
+import { calendarDate, WEEKDAYS } from './time'
 
 /**
  * What a notification becomes on the Notifications screen (Flow 9 · 9.2, 9.3).
@@ -129,8 +130,6 @@ export function parseVisual(raw: unknown): NotificationVisualSpec | null {
   }
 }
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 /**
  * When, as the flow writes it: "2 min ago", "3 h ago", "Yesterday", "Tue", "9 Oct".
@@ -148,8 +147,7 @@ export function notificationWhen(createdAt: string, now: number = Date.now()): s
   const days = Math.floor((now - ms) / DAY_MS)
   if (days < 2) return 'Yesterday'
   if (days < 7) return WEEKDAYS[then.getDay()]
-  const date = `${then.getDate()} ${MONTHS[then.getMonth()]}`
-  return then.getFullYear() === new Date(now).getFullYear() ? date : `${date} ${then.getFullYear()}`
+  return calendarDate(then, { now })
 }
 
 const joinLine = (...parts: (string | null | undefined)[]) => parts.filter(Boolean).join(' · ')

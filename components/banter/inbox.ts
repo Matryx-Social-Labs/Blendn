@@ -8,7 +8,7 @@
  * phones is not one design.
  */
 
-import { MONTHS, WEEKDAYS } from '../../lib/time'
+import { calendarDate, WEEKDAYS } from '../../lib/time'
 
 const MINUTE = 60 * 1000
 const HOUR = 60 * MINUTE
@@ -29,7 +29,7 @@ const toDate = (time: string | number | Date | null | undefined): Date | null =>
  * A row's timestamp, as short as it can be and still be read without thinking.
  *
  * "now" · "5m" · "3h" (earlier today) · "Yesterday" · "Tue" (this past week) ·
- * "Oct 4" (this year) · "Oct 4, 2025". A time in the future — a skewed clock —
+ * "4 Oct" (this year) · "4 Oct 2025". A time in the future — a skewed clock —
  * is "now" rather than a negative number.
  */
 export function inboxTimeLabel(
@@ -45,8 +45,7 @@ export function inboxTimeLabel(
   if (days <= 0) return `${Math.floor(diff / HOUR)}h`
   if (days === 1) return 'Yesterday'
   if (days < 7) return WEEKDAYS[then.getDay()]
-  const monthDay = `${MONTHS[then.getMonth()]} ${then.getDate()}`
-  return then.getFullYear() === now.getFullYear() ? monthDay : `${monthDay}, ${then.getFullYear()}`
+  return calendarDate(then, { now })
 }
 
 /**

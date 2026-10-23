@@ -1,3 +1,5 @@
+import { calendarDate } from './time'
+
 /**
  * "N unread messages", right above the first one you have not read (SCRUM-406).
  *
@@ -30,7 +32,7 @@ export interface DaySeparator {
   label: string
 }
 
-/** "Today", "Yesterday", or "Mar 4" (with the year when it is not this one). */
+/** "Today", "Yesterday", or "4 Mar" (with the year when it is not this one). */
 const dayLabel = (d: Date) => {
   const today = new Date()
   const yesterday = new Date(); yesterday.setDate(today.getDate() - 1)
@@ -38,7 +40,7 @@ const dayLabel = (d: Date) => {
     a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
   if (same(d, today)) return 'Today'
   if (same(d, yesterday)) return 'Yesterday'
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: d.getFullYear() !== today.getFullYear() ? 'numeric' : undefined })
+  return calendarDate(d, { now: today })
 }
 
 /** A chat's messages as list rows, with a day heading before each day's first message. */

@@ -5,6 +5,8 @@
  * (`YYYY-MM-DD`) and whether it was called off (`cancelled`, and `cancelledAt` beside it). `dayNumber` is null when every day is
  * cancelled. Absent from a server that does not send it: no strip, which is what the Scene drew before.
  */
+import { calendarDate, clockTime, MONTHS, WEEKDAYS } from './time'
+
 export interface EventDay {
   date: string
   cancelled: boolean
@@ -63,8 +65,6 @@ export function sessionIsToday(e: EventDays, timeZone: string | undefined, now: 
   return sessionDay(e)?.date === eventToday(timeZone, now)
 }
 
-const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-
 /** "Sat 27": the day's own calendar date read as UTC, so the phone's zone cannot move it a day. */
 export function dayLabel(date: string): string {
   const d = new Date(`${date}T00:00:00Z`)
@@ -78,7 +78,6 @@ export function dayLabel(date: string): string {
  */
 export const dayOfWords = (e: EventDays): string | null => (e.dayNumber ? `Day\u00a0${e.dayNumber} of\u00a0${e.dayCount}` : null)
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const monthOf = (date: string) => MONTHS[Number(date.slice(5, 7)) - 1]
 
 /**
@@ -98,21 +97,14 @@ export function runRange(
   return `${from} – ${dayLabel(last)} ${monthOf(last)}`
 }
 
-const WHEN: Intl.DateTimeFormatOptions = { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }
-
 /**
- * "Day 3 starts Tue, Sep 29, 9:00 PM" (frame 06): the server's own sentence for a door that is refused between days
- * (`lib/checkin-messages.ts` in blendn-admin), said on the Scene before anybody asks. `nextStart` is the session's start, the next
+ * "Day 3 starts Tue 29 Sep, 9 PM" (frame 06): the server's sentence for a door that is refused between days
+ * (`lib/checkin-messages.ts` in blendn-admin), said on the Scene before anybody asks, in the app's one date and clock
+ * (`calendarDate`, `clockTime`) rather than en-US's "Tue, Sep 29, 9:00 PM". `nextStart` is the session's start, the next
  * day going ahead, so a day called off is already skipped; null when every day is called off or the start is not a time.
  */
 export function betweenDaysLine(e: EventDays, nextStart: string, timeZone: string | undefined): string | null {
   const at = Date.parse(nextStart)
   if (!e.dayNumber || !Number.isFinite(at)) return null
-  let when: string
-  try {
-    when = new Intl.DateTimeFormat('en-US', { ...WHEN, timeZone }).format(at)
-  } catch {
-    when = new Intl.DateTimeFormat('en-US', WHEN).format(at)
-  }
-  return `Day ${e.dayNumber} starts ${when}`
+  return `Day ${e.dayNumber} starts ${calendarDate(at, { weekday: true, timeZone })}, ${clockTime(at, timeZone)}`
 }

@@ -25,7 +25,7 @@ import { venueDayState } from './venueHours'
 /** A restaurant reuses the café's pair (owner's ruling on A87), as `VenuePlate` does. */
 const PLATE_PAIRS: Record<PlateKey, readonly [string, string]> = { ...VENUE_PLATES, restaurant: VENUE_PLATES.cafe }
 import { clockTime } from './roomMoments'
-import { MONTHS, WEEKDAYS } from './time'
+import { calendarDate } from './time'
 
 const MINUTE_MS = 60_000
 /** The expiry window: the last five minutes read as mm:ss and offer Extend. */
@@ -101,8 +101,8 @@ export function goodToKnow(amenities: VenueDetail['venue']['amenities']): { labe
 
 /** "Thu 9 Oct", in the phone's local day. */
 export function dayLabel(iso: string): string {
-  const d = new Date(iso)
-  return Number.isNaN(d.getTime()) ? '' : `${WEEKDAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`
+  // No year: the Coming up row gives the day a fixed column.
+  return calendarDate(iso, { weekday: true, year: false })
 }
 
 /** "9 PM – 1 AM". */

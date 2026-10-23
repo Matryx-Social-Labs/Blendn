@@ -38,7 +38,7 @@ export function PersonRow({
   detail?: string
   /** Drawn in Geist Mono right after `detail` ("Friends since " + "Mar 2026"). */
   detailMono?: string
-  /** After `detailMono`, in the line's own face ("Blocked " + "Sep 12" + " · Harassment"). */
+  /** After `detailMono`, in the line's own face ("Blocked " + "12 Sep" + " · Harassment"). */
   detailTail?: string
   onPress?: () => void
   trailing?: ReactNode

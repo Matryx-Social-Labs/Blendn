@@ -3,7 +3,7 @@ import type { ShareTarget } from '../components/ds/ShareSheet'
 import { inviteMessage } from './friends'
 import { clockTime } from './roomMoments'
 import { eventLink, shareability, venueLink } from './shareLinks'
-import { MONTHS, WEEKDAYS } from './time'
+import { calendarDate, MONTHS, WEEKDAYS } from './time'
 
 /**
  * What an event or a venue says when it is shared (Flow 16 · 16.1/16.2): the fields the card and the message are made
@@ -42,7 +42,7 @@ export function dateParts(startIso: string | null | undefined): Pick<ShareEvent,
   const month = MONTHS[d.getMonth()]
   return {
     date: { day: weekday.toUpperCase(), num: two(d.getDate()), month: month.toUpperCase(), time: stackTime(d) },
-    dateText: `${weekday} ${d.getDate()} ${month}, ${clockTime(d.getTime())}`,
+    dateText: `${calendarDate(d, { weekday: true, year: false })}, ${clockTime(d.getTime())}`,
   }
 }
 

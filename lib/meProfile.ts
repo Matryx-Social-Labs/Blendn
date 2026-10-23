@@ -7,7 +7,7 @@
  * value that is missing drops its part rather than printing a placeholder.
  */
 
-import { MONTHS, WEEKDAYS } from './time'
+import { calendarDate, MONTHS } from './time'
 
 /** Interest names from a profile payload: plain strings, or `{ id, name, slug, icon }` objects. */
 export const interestNames = (raw: unknown): string[] =>
@@ -172,7 +172,8 @@ export function agoLabel(startTime: string, now: Date = new Date()): string {
 /** "Fri 3 Oct": the eyebrow on a night's tile (Flow 6 `me`). Empty when the date is unreadable. */
 export function nightLabel(startTime: string): string {
   const d = new Date(startTime)
-  return Number.isNaN(d.getTime()) ? '' : `${WEEKDAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`
+  // No year: the tile has room for "THU 22 OCT" and no more, and Nights out is the last twelve weeks.
+  return calendarDate(d, { weekday: true, year: false })
 }
 
 /** How many nights the Me tab's grid shows (Flow 6 `me`: two rows of three). */

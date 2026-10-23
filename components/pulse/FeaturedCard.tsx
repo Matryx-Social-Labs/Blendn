@@ -118,7 +118,7 @@ interface Props {
    * for every caller that does not track viewability.
    */
   isActive?: boolean
-  /** "Oct 24", formatted by the caller so this component holds no date logic. */
+  /** "24 Oct", formatted by the caller so this component holds no date logic. */
   dateLabel: string
   /** Venue name, or the city when the venue is unnamed. */
   placeLabel?: string | null

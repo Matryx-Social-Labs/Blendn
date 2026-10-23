@@ -10,7 +10,7 @@ import { liveWindow, type SessionSource } from './eventSession'
 import { isLiveNow, printable } from './pulseSections'
 import { distanceText } from './placesPane'
 import { clockTime } from './roomMoments'
-import { MONTHS, WEEKDAYS } from './time'
+import { calendarDate, WEEKDAYS, WEEKDAYS_LONG } from './time'
 
 /**
  * The heading over one day of the Upcoming list: "Today" / "Thursday".
@@ -19,7 +19,7 @@ import { MONTHS, WEEKDAYS } from './time'
  * time — the date is said once, above the group, instead of down every card.
  * `title` is what somebody scans for; `weekday` is the quieter line beside it.
  * "Today" and "Tomorrow" take the place of a date for the same reason
- * `featuredDateLabel` uses them: "Oct 24" makes the reader do the arithmetic.
+ * `featuredDateLabel` uses them: "24 Oct" makes the reader do the arithmetic.
  *
  * The year appears only when it is not this one.
  */
@@ -30,14 +30,11 @@ export function dayGroupLabel(
   const d = new Date(startTime)
   if (Number.isNaN(d.getTime())) return null
 
-  const weekday = longWeekday(d)
+  const weekday = WEEKDAYS_LONG[d.getDay()]
   const days = calendarDaysBetween(now, d)
   if (days === 0) return { title: 'Today', weekday }
   if (days === 1) return { title: 'Tomorrow', weekday }
-  if (d.getFullYear() !== now.getFullYear()) {
-    return { title: `${shortMonth(d)} ${d.getDate()}, ${d.getFullYear()}`, weekday }
-  }
-  return { title: `${shortMonth(d)} ${d.getDate()}`, weekday }
+  return { title: calendarDate(d, { now }), weekday }
 }
 
 /**
@@ -75,7 +72,7 @@ export const timeLabel = (startTime: string): string => clockTime(startTime)
  * The date on a featured card.
  *
  * "Today" and "Tomorrow" rather than a date, because a featured card is a thing
- * you might act on now and "Oct 24" makes the reader do the arithmetic. Beyond
+ * you might act on now and "24 Oct" makes the reader do the arithmetic. Beyond
  * that it is the plain short date — "in 3 days" stops being useful somewhere
  * around two and starts being vague.
  */
@@ -92,7 +89,7 @@ export const HAPPENING_NOW = 'Happening now'
  * - "Happening now" — started and not yet over.
  * - "Tonight · 6:30 PM" — later today, from 5pm.
  * - "Today · 10:00 AM" / "Tomorrow · 6:30 PM".
- * - "Sat, Oct 4 · 6:30 PM" beyond that, with the year only when it is not this
+ * - "Sat 4 Oct · 6:30 PM" beyond that, with the year only when it is not this
  *   one.
  *
  * "Tonight" is a separate word from "Today" because it is the one people plan
@@ -116,8 +113,7 @@ export function nextUpLabel(
   if (days === 0) return `${start.getHours() >= 17 ? 'Tonight' : 'Today'} · ${time}`
   if (days === 1) return `Tomorrow · ${time}`
 
-  const year = start.getFullYear() !== now.getFullYear() ? `, ${start.getFullYear()}` : ''
-  return `${shortWeekday(start)}, ${shortMonth(start)} ${start.getDate()}${year} · ${time}`
+  return `${calendarDate(start, { weekday: true, now })} · ${time}`
 }
 
 /**
@@ -158,8 +154,8 @@ export function cardTime(event: SessionSource, now: number): string {
   const clock = clockTime(start.getTime())
   const days = calendarDaysBetween(new Date(now), start)
   if (days <= 0) return clock
-  if (days < 7) return `${shortWeekday(start)} · ${clock}`
-  return `${shortWeekday(start)} ${start.getDate()} ${shortMonth(start)} · ${clock}`
+  if (days < 7) return `${WEEKDAYS[start.getDay()]} · ${clock}`
+  return `${calendarDate(start, { weekday: true, now })} · ${clock}`
 }
 
 /** A count a card may print: five and up (`printable`); a small number of people is not said. */
@@ -188,35 +184,6 @@ export function peopleLabel(
 }
 
 /* -------------------------------------------------------------------------- */
-
-function shortMonth(d: Date): string {
-  try {
-    return d.toLocaleString(undefined, { month: 'short' })
-  } catch {
-    // `toLocaleString` with options throws on a JS engine built without ICU,
-    // which is a real configuration on older Android RN builds rather than a
-    // hypothetical. A three-letter month is recoverable without it.
-    return MONTHS[d.getMonth()]
-  }
-}
-
-function shortWeekday(d: Date): string {
-  try {
-    return d.toLocaleString(undefined, { weekday: 'short' })
-  } catch {
-    return WEEKDAYS[d.getDay()]
-  }
-}
-
-function longWeekday(d: Date): string {
-  try {
-    return d.toLocaleString(undefined, { weekday: 'long' })
-  } catch {
-    return ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][
-      d.getDay()
-    ]
-  }
-}
 
 /**
  * Whole calendar days from `a` to `b`, ignoring the clock.

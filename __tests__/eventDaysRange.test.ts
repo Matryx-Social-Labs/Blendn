@@ -1,8 +1,8 @@
 import { betweenDaysLine, parseEventDays, runRange } from '../lib/eventDays'
 
 /**
- * Flow 3 · 3.2 frames 04 and 06: the hero's date range ("Sat 27 – Mon 29 Sep") and the between-days line ("Day 3 starts Tue,
- * Sep 29, 9:00 PM", the server's own sentence for the door's refusal, which the Scene says before anybody asks).
+ * Flow 3 · 3.2 frames 04 and 06: the hero's date range ("Sat 27 – Mon 29 Sep") and the between-days line ("Day 3 starts Tue
+ * 29 Sep, 9 PM", the server's sentence for the door's refusal, which the Scene says before anybody asks, in the app's one date).
  */
 const day = (date: string, cancelled = false) => ({ date, cancelled, cancelledAt: cancelled ? '2030-01-01T00:00:00Z' : null })
 const run = (dates: string[], extra: Record<string, unknown> = {}) =>
@@ -36,13 +36,13 @@ describe('the between-days line', () => {
   // Day 3 opens 2026-09-29 21:00 IST = 15:30Z.
   const next = '2026-09-29T15:30:00Z'
 
-  it('is the server\'s sentence for the next day, in the event zone', () => {
-    expect(betweenDaysLine(run(['2026-09-27', '2026-09-28', '2026-09-29'], { dayNumber: 3 }), next, 'Asia/Kolkata')).toBe('Day 3 starts Tue, Sep 29, 9:00 PM')
+  it('names the next day in the event zone, in the app\'s one date and clock', () => {
+    expect(betweenDaysLine(run(['2026-09-27', '2026-09-28', '2026-09-29'], { dayNumber: 3 }), next, 'Asia/Kolkata')).toBe('Day 3 starts Tue 29 Sep, 9 PM')
   })
 
   it('names the next day going ahead, so a called-off day is skipped', () => {
     const days = parseEventDays({ days: [day('2026-09-27'), day('2026-09-28', true), day('2026-09-29')], dayCount: 3, daysFrom: 1, dayNumber: 3 })!
-    expect(betweenDaysLine(days, next, 'Asia/Kolkata')).toBe('Day 3 starts Tue, Sep 29, 9:00 PM')
+    expect(betweenDaysLine(days, next, 'Asia/Kolkata')).toBe('Day 3 starts Tue 29 Sep, 9 PM')
   })
 
   it('is nothing when every day is called off, or when the start is not a time', () => {

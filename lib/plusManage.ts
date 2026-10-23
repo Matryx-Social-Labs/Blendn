@@ -1,6 +1,6 @@
 import type { PlusStatus as ManageStatus } from '../components/ds/ManageStatusRow'
 import type { PlusStatus } from './plus'
-import { clockTime, MONTHS } from './time'
+import { calendarDate, clockTime } from './time'
 
 /**
  * Manage (Settings › Blend'n+, Flow 12 · 12.3): what is true about the person's
@@ -26,12 +26,7 @@ const STORE_NAME: Record<PlusStore, string> = { ios: 'the App Store', android: '
 
 /** "3 Nov", with the year only when it is not this one. */
 export function shortDate(iso: string | null | undefined, now: number = Date.now()): string | null {
-  if (!iso) return null
-  const at = new Date(iso)
-  if (Number.isNaN(at.getTime())) return null
-  const sameYear = at.getFullYear() === new Date(now).getFullYear()
-  // Fixed English month names, never the device locale's ("Sept" on one engine, "Sep" on another).
-  return `${at.getDate()} ${MONTHS[at.getMonth()]}${sameYear ? '' : ` ${at.getFullYear()}`}`
+  return calendarDate(iso, { now }) || null
 }
 
 const through = (date: string | null, otherwise: string) => (date ? `until ${date}` : otherwise)

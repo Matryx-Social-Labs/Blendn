@@ -352,7 +352,7 @@ export function SceneCTA({
   /** Nobody but you checked in: `rate` then asks about the night, not people. */
   alone?: boolean
   /**
-   * Between the days of a run, a line the pill says in place of its label and glyph ("Day 3 starts Tue, Sep 29, 9:00 PM",
+   * Between the days of a run, a line the pill says in place of its label and glyph ("Day 3 starts Tue 29 Sep, 9 PM",
    * Flow 3 · 3.2 frame 06): the next door, in Geist Mono, beside the check that says you are going. The press is still the RSVP's
    * own off-switch, so a screen reader is told both, and nothing about the pill's width or state changes.
    */

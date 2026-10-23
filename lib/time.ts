@@ -4,6 +4,42 @@
  */
 export const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 export const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+export const WEEKDAYS_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+
+/**
+ * A calendar date in the app's one grammar, as the clock has one (`clockTime`): "24 Oct", "Sat 24 Oct" with `weekday`, "Sat"
+ * alone with `weekday: 'only'` (a day this week), and "24 Oct 2027" when it is not this year. Day first, fixed English names, no comma, no dot, whatever the phone's locale says: on
+ * an en_DE iPhone `toLocaleDateString` wrote "until 23. Oct 2027" in Settings beside Manage's "23 Oct 2027" (RC drive 3).
+ *
+ * `year`: when it is not `now`'s year (the default), `false` never (a tile with no room for it), `true` always. Local day, or the
+ * day in `timeZone` when one is named (an event's own zone). Empty for a date it can't read.
+ */
+export function calendarDate(
+  time: string | number | Date | null | undefined,
+  { weekday = false, year, now = Date.now(), timeZone }: { weekday?: boolean | 'only'; year?: boolean; now?: number | Date; timeZone?: string } = {}
+): string {
+  if (time === null || time === undefined || time === '') return ''
+  const d = new Date(time)
+  if (Number.isNaN(d.getTime())) return ''
+  const [y, m, day] = timeZone ? zonedDate(d, timeZone) : [d.getFullYear(), d.getMonth(), d.getDate()]
+  // The weekday of that calendar date, wherever it is: a UTC date has no zone to shift it.
+  const dow = new Date(Date.UTC(y, m, day)).getUTCDay()
+  if (weekday === 'only') return WEEKDAYS[dow]
+  const showYear = year ?? y !== new Date(now).getFullYear()
+  return `${weekday ? `${WEEKDAYS[dow]} ` : ''}${day} ${MONTHS[m]}${showYear ? ` ${y}` : ''}`
+}
+
+/** The year, month (0–11) and day in a named zone; the phone's own date if this engine cannot (no ICU, an unknown zone). */
+function zonedDate(d: Date, timeZone: string): [number, number, number] {
+  try {
+    // en-CA formats a date as YYYY-MM-DD.
+    const [y, m, day] = new Intl.DateTimeFormat('en-CA', { timeZone }).format(d).split('-').map(Number)
+    if ([y, m, day].every(Number.isFinite)) return [y, m - 1, day]
+  } catch {
+    // Falls through to the local date.
+  }
+  return [d.getFullYear(), d.getMonth(), d.getDate()]
+}
 
 /**
  * A clock time in the design's one grammar (r7 M7): "9 PM" on the hour, "9:30 PM" otherwise. Every card, chat, pass and

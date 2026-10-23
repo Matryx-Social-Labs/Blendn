@@ -5,7 +5,7 @@ import type { IconName } from '../components/ui/Icon'
 import { apiClient } from './apiClient'
 import type { PlusGrant, PlusState } from './plusManage'
 import { NIGHT_PASS_ID, type PlusOffer } from './purchases'
-import { clockTime } from './time'
+import { calendarDate, clockTime } from './time'
 
 /**
  * Blendn+ as the server says it (`GET /api/mobile/me/plus`). The server is the
@@ -50,7 +50,8 @@ export const PLUS_COMING_SOON: readonly PlusFeature[] = [
   { icon: 'users', title: 'Crew extras', detail: 'A crew photo seen only inside the crew · your pick of the 12 emblem palettes' },
 ]
 
-const dateOf = (iso: string) => new Date(iso).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' })
+/** The app's one date (`calendarDate`), as Manage says it: the phone's locale wrote "23. Oct 2027" here (RC drive 3, en_DE). */
+const dateOf = (iso: string) => calendarDate(iso)
 
 /**
  * "Blendn+ until 10 Nov 2026" / "Night Pass until 11 Oct 2026, 4:30 AM" — or

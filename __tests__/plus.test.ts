@@ -30,10 +30,10 @@ describe('the status line', () => {
   it('says nothing without Plus; names the product and when it ends', () => {
     expect(plusStatusLine(null)).toBeNull()
     expect(plusStatusLine(inactive.data as never)).toBeNull()
-    expect(plusStatusLine(active.data as never)).toMatch(/^Blend’n\+ until .*2026/)
+    expect(plusStatusLine(active.data as never)).toMatch(/^Blend’n\+ until 10 Nov( 2026)?$/)
     // A pass shows its day as well as its time: passes stack, and the hour alone could be any day's (review LOW).
     expect(plusStatusLine({ active: true, gated: true, product: 'night_pass', source: 'grant', expiresAt: '2026-10-11T00:30:00.000Z' })).toMatch(
-      /^Night Pass until .*2026, \d{1,2}:\d{2}/
+      /^Night Pass until 1[01] Oct( 2026)?, \d{1,2}(:\d{2})? [AP]M$/
     )
     expect(plusStatusLine({ active: true, gated: true, product: 'plus', source: 'grant', expiresAt: null })).toBe('You have Blend’n+')
   })

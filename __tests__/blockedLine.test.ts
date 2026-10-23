@@ -16,18 +16,18 @@ describe('blockedLine', () => {
   it('splits the words, the date and the reason, so the date can be set in mono', () => {
     expect(blockedLine({ blocked_at: '2026-09-12T10:00:00Z', reason: 'harassment' }, NOW)).toEqual({
       detail: 'Blocked ',
-      mono: 'Sep 12',
+      mono: '12 Sep',
       tail: ' · Harassment',
     })
   })
 
   it('has no reason when there is none, or it is not one we can name', () => {
-    expect(blockedLine({ blocked_at: '2026-08-03T10:00:00Z', reason: null }, NOW)).toEqual({ detail: 'Blocked ', mono: 'Aug 3' })
+    expect(blockedLine({ blocked_at: '2026-08-03T10:00:00Z', reason: null }, NOW)).toEqual({ detail: 'Blocked ', mono: '3 Aug' })
     expect(blockedLine({ blocked_at: '2026-08-03T10:00:00Z', reason: 'made_up' }, NOW)).not.toHaveProperty('tail')
   })
 
   it('shows the year only for another year', () => {
-    expect(blockedLine({ blocked_at: '2025-12-30T10:00:00Z', reason: null }, NOW).mono).toBe('Dec 30, 2025')
+    expect(blockedLine({ blocked_at: '2025-12-30T10:00:00Z', reason: null }, NOW).mono).toBe('30 Dec 2025')
   })
 
   it('is just "Blocked" when the date cannot be read', () => {
