@@ -169,6 +169,12 @@ function GroupChatInner() {
   /* A crew's or a Blend's room (step 9), told by the opener; null for an event's. */
   const roomKind = roomKindParam(params.kind) ?? roomInfo.kind ?? null
   const eventRoom = roomKind === null
+  /*
+   * Known to be an event's room: its row names the event, or an event opener said so. A bare link or a push carries no
+   * kind, and a closed crew's or Blend's room answers it with the same 404 an event's does: that one is not told it was
+   * an event (RC drive 4 D-5).
+   */
+  const eventKnown = eventRoom && (!!roomInfo.eventId || !!nameParam(params.eventTitle))
   /* Back, or — opened from a push with nothing underneath — the Banter. */
   const goBack = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)/chat'))
   const crewIdParam = idParam(params.crewId) ?? roomInfo.crewId
@@ -188,7 +194,7 @@ function GroupChatInner() {
         : removedLine !== undefined
         ? { kind: 'removed', line: removedLine }
         : gone
-          ? { kind: 'gone' }
+          ? { kind: 'gone', event: eventKnown }
           : notLive
             ? { kind: 'not_live', reason: endedReason, venueName: roomInfo.title ?? null, dayEndsAt: roomInfo.dayEndsAt ?? null }
             : left

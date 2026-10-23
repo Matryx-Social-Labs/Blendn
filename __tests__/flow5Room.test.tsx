@@ -202,6 +202,20 @@ describe('the feed’s states', () => {
     expect(screen.queryByLabelText('Message')).toBeNull()
   })
 
+  it('a bare link to a room nobody knows the kind of: "This room has closed", never the event sentence (drive 4 D-5)', async () => {
+    // Arrange: a closed crew's or Blend's room by a link with no kind, and no row in the Banter (it is gone from it).
+    api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [] } } as never)
+    api.getChatMessages.mockResolvedValue({ success: false, errorCode: 'NOT_FOUND', error: 'Chat group not found' } as never)
+
+    // Act
+    await open()
+
+    // Assert
+    expect(screen.getByText('This room has closed')).toBeTruthy()
+    expect(screen.queryByText(/The event ended/)).toBeNull()
+    expect(screen.queryByLabelText('Message')).toBeNull()
+  })
+
   it('removed: the server’s sentence, and no composer', async () => {
     api.getChatMessages.mockResolvedValue({ success: false, errorCode: 'USER_BANNED', error: 'The organiser removed you from this chat.' } as never)
     await open()

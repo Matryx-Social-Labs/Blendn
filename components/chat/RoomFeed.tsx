@@ -147,7 +147,8 @@ export const RoomMessageRow = memo(function RoomMessageRow({
 export type Outside =
   | { kind: 'closed'; line: string }
   | { kind: 'removed'; line: string | null }
-  | { kind: 'gone' }
+  /** `event`: known to be an event's room. Without it the room's kind is unknown, and the card says only that it has closed. */
+  | { kind: 'gone'; event?: boolean }
   /** `reason` is the socket's `live:ended` reason when this phone heard it; a read refused with NOT_LIVE carries none. */
   | { kind: 'not_live'; reason?: string | null; venueName?: string | null; dayEndsAt?: string | null }
   | { kind: 'left' }
@@ -205,8 +206,8 @@ export function RoomOutside({
         <StateScreen
           variant="screen"
           icon="ghost"
-          title="This room isn’t here any more"
-          body="The event ended or was taken down. Nothing you wrote has gone anywhere."
+          title={outside.event ? 'This room isn’t here any more' : 'This room has closed'}
+          body={outside.event ? 'The event ended or was taken down. Nothing you wrote has gone anywhere.' : 'Nothing you wrote has gone anywhere.'}
           actions={back}
           testID="room-gone"
         />
