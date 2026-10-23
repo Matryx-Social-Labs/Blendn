@@ -70,3 +70,16 @@ it('500 Pulse rows in two zones build a handful of formatters, not thousands (re
   // A date and a clock formatter per zone at most.
   expect(built).toBeLessThanOrEqual(4)
 })
+
+it('a mixed-zone list never draws one day’s heading twice (review LOW)', () => {
+  // By start time: Sat 25 01:00 IST (Fri 24 London), Fri 24 22:00 London, Sat 25 09:00 IST.
+  const rows = [
+    { id: 'a', start_time: '2026-10-24T19:30:00.000Z', timezone: IST },
+    { id: 'b', start_time: '2026-10-24T21:00:00.000Z', timezone: 'Europe/London' },
+    { id: 'c', start_time: '2026-10-25T03:30:00.000Z', timezone: IST },
+  ]
+  const groups = groupByDay(rows, new Date(NOW))
+  // One heading a day, in calendar order; each day keeps the list's order.
+  expect(groups.map((g) => g.key)).toEqual(['2026-9-24', '2026-9-25'])
+  expect(groups[1].items.map((r) => r.id)).toEqual(['a', 'c'])
+})

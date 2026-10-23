@@ -39,17 +39,19 @@ export function dayGroupLabel(
 }
 
 /**
- * Events split into runs of the same local calendar day, in the order given.
+ * Events grouped by their local calendar day, each in its own zone, the days in calendar order.
  *
- * The caller's order is kept (the list is already sorted by start time), so
- * this only draws the lines between days — it never reorders. An event whose
- * start time cannot be read is left out rather than filed under a made-up day.
+ * The caller's order is kept within a day (every caller's list is sorted by start time, soonest first). By key, not
+ * by adjacency: in a list of mixed zones a start-time order can put Fri 24 (London) between two Sat 25s (IST), and
+ * adjacency drew "Sat 25" twice (review). An event whose start time cannot be read is left out rather than filed
+ * under a made-up day.
  */
 export function groupByDay<T extends { start_time: string; timezone?: string | null }>(
   items: T[],
   now: Date = new Date()
 ): { key: string; title: string; weekday: string; items: T[] }[] {
   const groups: { key: string; title: string; weekday: string; items: T[] }[] = []
+  const byKey = new Map<string, { key: string; title: string; weekday: string; items: T[] }>()
   for (const item of items) {
     const d = new Date(item.start_time)
     // Each event's day is its own zone's (RC drive 5 D-4).
@@ -57,11 +59,20 @@ export function groupByDay<T extends { start_time: string; timezone?: string | n
     const label = dayGroupLabel(item.start_time, now, zone)
     if (!label) continue
     const key = dayKeyIn(d, zone)
-    const last = groups[groups.length - 1]
-    if (last && last.key === key) last.items.push(item)
-    else groups.push({ key, ...label, items: [item] })
+    const group = byKey.get(key)
+    if (group) group.items.push(item)
+    else {
+      const next = { key, ...label, items: [item] }
+      byKey.set(key, next)
+      groups.push(next)
+    }
   }
-  return groups
+  // Days in calendar order (a stable sort: one zone's list is already in it).
+  const dayOf = (key: string) => {
+    const [y, m, day] = key.split('-').map(Number)
+    return Date.UTC(y, m, day)
+  }
+  return groups.sort((a, b) => dayOf(a.key) - dayOf(b.key))
 }
 
 /**

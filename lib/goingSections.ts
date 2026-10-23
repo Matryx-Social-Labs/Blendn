@@ -68,7 +68,8 @@ export function goingSections(
 
   const restLater = rest
     .filter((r) => !isLiveNow(r, now) && !sessionOver(r, now))
-    .map((row) => ({ start_time: liveWindow(row).start_time, row }))
+    // Under the event's own day, as its row's time is (RC drive 5 D-4).
+    .map((row) => ({ start_time: liveWindow(row).start_time, timezone: row.timezone, row }))
   for (const day of groupByDay(restLater, new Date(now))) {
     items.push({ kind: 'day', key: `d:${day.key}`, title: day.title, weekday: day.weekday })
     for (const { row } of day.items) items.push({ kind: 'going', key: `g:${row.id}`, row })
