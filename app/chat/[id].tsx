@@ -52,7 +52,7 @@ import { queryCache } from '../../lib/queryCache'
 import { toggleReaction, withMine } from '../../lib/reactions'
 import { isMuted, markRoomJoined, markRoomLeft, roomSubtitle, useRoomMembership, useRoomMute } from '../../lib/roomMembership'
 import { isSpeech, isTemp, roomMessageFromSocket, roomMessagesFrom, type RoomMessage as Message } from '../../lib/roomMessages'
-import { useRoomRow, type RoomRow } from '../../lib/roomRow'
+import { useHereCount, useRoomRow, type RoomRow } from '../../lib/roomRow'
 import { blockStep, messageReportStep } from '../../lib/safetyUtils'
 import { sendOutcome } from '../../lib/sendOutcome'
 import { showSheet } from '../../lib/sheet'
@@ -61,7 +61,6 @@ import {
   startTyping,
   stopTyping,
   subscribeToChatMemberBanned,
-  subscribeToChatMemberLeft,
   subscribeToChatMemberMuted,
   subscribeToChatMessage,
   subscribeToChatMessageDeleted,
@@ -199,9 +198,8 @@ function GroupChatInner() {
                 : null
   const outsideRef = useLatest(outside)
   const muted = isMuted(useRoomMute(chatRoomId ? roomId : null))
-  /** From the room list (`memberCount`), less anyone who leaves while you watch (`chat:memberLeft`). */
-  const [leftSince, setLeftSince] = useState(0)
-  const memberCount = roomInfo.memberCount ? Math.max(0, roomInfo.memberCount - leftSince) : null
+  /** In the room now: the Room's number, live (`useHereCount`); a chat leave is not leaving the room. */
+  const hereCount = useHereCount(roomInfo)
   /* A day before doors the room is served but not open: its header counts down, its composer says so (Flow 15 #8). */
   const opensIn = usePreEventRoom(eventRoom ? roomInfo.startTime : null)
   /* The room opening is said aloud, once, as the countdown ends (iOS: nothing else announces it). */
@@ -429,8 +427,6 @@ function GroupChatInner() {
         if (crewLine) setClosedLine(crewLine)
         else setRemovedLine('The organiser has removed you from this room.')
       }),
-      // Somebody left: one fewer in the header's count.
-      subscribeToChatMemberLeft(roomId, () => setLeftSince((n) => n + 1)),
       // A mute arriving live flips the composer in place, with a "Just now" line (R2-D2 #06).
       subscribeToChatMemberMuted(roomId, (data) => {
         if (data.userId !== currentUser?.id) return
@@ -790,13 +786,13 @@ function GroupChatInner() {
   const name = roomName || defaultRoomName(roomKind)
   // Most rooms are named for their event: then the line is the live count (dot, Geist Mono), else the event's title.
   // Five and up, as every people count says it (the owner's floor): under that the line is the event's title, or nothing.
-  const line = roomSubtitle(name, eventTitle || undefined, printable(memberCount))
+  const line = roomSubtitle(name, eventTitle || undefined, printable(hereCount))
   const subtitle = opensIn ? (
-    <OpensLine label={opensIn} spoken={opensInSpoken(opensIn)} count={printable(memberCount)} />
+    <OpensLine label={opensIn} spoken={opensInSpoken(opensIn)} count={printable(hereCount)} />
   ) : !line ? null : line === eventTitle ? (
     <SubtitleText>{line}</SubtitleText>
   ) : (
-    <CountLine count={memberCount ?? 0} />
+    <CountLine count={printable(hereCount) ?? 0} />
   )
   // Advice before sending, never a gate (5.10): the server decides. A crew's room says its own sentence; the rest are anonymous.
   const warning = useMemo(() => contactWarning(newMessage, roomKind === 'crew' ? 'crew' : 'anonymous'), [newMessage, roomKind])

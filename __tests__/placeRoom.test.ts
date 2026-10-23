@@ -1,4 +1,4 @@
-import { isPlaceRoom, roomDisplayTitle, roomMemberCount, roomRefusalState, roomVenueId } from '../lib/placeRoom'
+import { isPlaceRoom, roomDisplayTitle, roomHereCount, roomRefusalState, roomVenueId } from '../lib/placeRoom'
 
 /**
  * A place's room wherever a room is drawn — one rule each (step 5 review):
@@ -63,15 +63,18 @@ describe('roomDisplayTitle', () => {
   })
 })
 
-describe('roomMemberCount (H5, D-19)', () => {
+describe('roomHereCount (H5, D-19; RC drive 3)', () => {
   it.each([
-    ["an event’s room: its count", groupRow({ memberCount: 12 }, { kind: 'event' }), 12],
+    // RC drive 3: 515 members over 483 inside. The Room's number wins over the members.
+    ["an event’s room: in it now, not its members", groupRow({ hereCount: 483, memberCount: 515 }, { kind: 'event' }), 483],
+    ['an older server, with no hereCount: its memberCount', groupRow({ memberCount: 12 }, { kind: 'event' }), 12],
     ['a place room: never, whatever an older server sends', groupRow({ memberCount: 3 }), null],
+    ['a place room: never, not even hereCount', groupRow({ hereCount: 3, memberCount: 3 }), null],
     ['a place room: never (server null)', groupRow(), null],
     ['no count, or zero: none', groupRow({ memberCount: 0 }, { kind: 'event' }), null],
     ['a string count is read', groupRow({ memberCount: '7' }, { kind: 'event' }), 7],
   ])('%s', (_label, room, count) => {
-    expect(roomMemberCount(room)).toBe(count)
+    expect(roomHereCount(room)).toBe(count)
   })
 })
 

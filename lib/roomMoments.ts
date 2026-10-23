@@ -141,21 +141,24 @@ export function hereNowStack<T extends { id: string; insideNow?: boolean }>(
 /**
  * The face grid's heading and its number.
  *
- * "Everyone here" stops being true once somebody in it has left. With more to
- * load, the number is the room's count of people inside — right under
- * "Everyone here", the wrong kind of number under "Everyone who came", which
- * then shows none (0 hides it).
+ * "Everyone here" is the room's number, inside now (`hereCount`, you
+ * included): the one the Room's headline, the chat header and Room info all
+ * say (RC drive 3 had 482, 515 and 450 for one room of 483). Not the faces
+ * loaded, and not the room minus you — the grid leaves out friends (their own
+ * section) and "show online" off (counted, not listed), so its length was
+ * never the room.
+ *
+ * "Everyone here" stops being true once somebody in it has left: then it is
+ * "Everyone who came", counted by its faces only when they are all loaded
+ * (the room's number is the wrong kind of number there, so none: 0 hides it).
  */
 export function everyoneHead(
   people: readonly { insideNow?: boolean }[],
   { hasMore, hereCount }: { hasMore: boolean; hereCount: number }
 ): { title: string; count: number } {
-  // ponytail: C3 (plans/friends-in-room.md 9.2), held with the concert work. The server deck is a ranked top 100, so
-  // once the room is bigger than that (`!hasMore`, `people.length` = 100 while 5,000 are here) this count says 100.
-  // The truth for a big room is `hereCount - 1`, the "Picked for you from everyone here" caption and the end note.
   const allHere = people.every((p) => p.insideNow !== false)
   if (!allHere) return { title: 'Everyone who came', count: hasMore ? 0 : people.length }
-  return { title: 'Everyone here', count: hasMore ? Math.max(hereCount - 1, people.length) : people.length }
+  return { title: 'Everyone here', count: hereCount }
 }
 
 /* -------------------------------------------------------------------------- */

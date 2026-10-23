@@ -156,9 +156,9 @@ describe('the screens read the server', () => {
   it('names and counts a room through the one rule, in all three places that draw a room (H5)', () => {
     // The rule is table-tested with the real row shape in placeRoom.test.ts; these pin that it is used.
     expect(read('lib/useBanterInbox.ts')).toContain('event_title: roomDisplayTitle(room) ||')
-    expect(read('lib/useBanterInbox.ts')).toContain('participant_count: roomMemberCount(room) ?? 0')
+    expect(read('lib/useBanterInbox.ts')).toContain('participant_count: roomHereCount(room) ?? 0')
     // The room and Room info read their row through one reader (lib/roomRow.ts).
-    expect(read('lib/roomRow.ts')).toContain('memberCount: roomMemberCount(room)')
+    expect(read('lib/roomRow.ts')).toContain('hereCount: roomHereCount(room)')
     expect(read('lib/roomRow.ts')).toContain('const title = roomDisplayTitle(room) ||')
     expect(CHAT).toContain('useRoomRow(')
     expect(read('lib/activeRoom.ts')).toContain('eventTitle: roomDisplayTitle(checkin)')

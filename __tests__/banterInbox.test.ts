@@ -144,8 +144,8 @@ describe('the room you are standing in', () => {
     expect(src).toContain('.filter((c) => !c.is_checked_in)')
   })
 
-  it('shows the room count from `memberCount`, rolling', () => {
-    expect(INBOX()).toContain('participant_count: roomMemberCount(room) ?? 0')
+  it('shows the room count from `hereCount` (in the room now), rolling', () => {
+    expect(INBOX()).toContain('participant_count: roomHereCount(room) ?? 0')
     // Five and up, as every people count says it (the owner's floor).
     expect(SCREEN()).toContain('count={printable(c.participant_count) ?? 0}')
     expect(PARTS()).toContain('<RollingNumber value={count}')

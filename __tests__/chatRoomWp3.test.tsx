@@ -44,9 +44,16 @@ jest.mock('../lib/apiClient', () => ({
     queuedRequest: jest.fn().mockResolvedValue({ success: false, errorCode: 'NOT_FOUND', error: 'Not found' }),
   },
 }))
+/** The event's checkout listeners: the header's count follows the server's recount. */
+const mockCheckOut: ((data: { hereCount?: number }) => void)[] = []
 jest.mock('../lib/socketClient', () => {
   const noop = () => () => {}
   return {
+    subscribeToEventCheckIn: noop,
+    subscribeToEventCheckOut: (_event: string, cb: (data: { hereCount?: number }) => void) => {
+      mockCheckOut.push(cb)
+      return () => {}
+    },
     subscribeToLiveEnded: (cb: never) => {
       mockEnded.push(cb)
       return () => {}
@@ -137,6 +144,21 @@ describe('the pre-event room (C1, Flow 15 #8)', () => {
     expect(screen.queryByText(/Opens in/)).toBeNull()
     expect(screen.getByLabelText('Message')).toBeTruthy()
     expect(screen.getByText(/in the room/)).toBeTruthy()
+  })
+
+  it('says the Room’s number, not the room’s members, and follows each recount (RC drive 3)', async () => {
+    mockCheckOut.length = 0
+    ;(apiClient.getChatGroups as jest.Mock).mockResolvedValue({
+      success: true,
+      data: { groups: [eventRow({ hereCount: 483, memberCount: 515 }, { startTime: new Date(Date.now() - HOUR).toISOString() })] },
+    })
+    await render(<GroupChat />)
+    await flush()
+    expect(screen.getByText('483')).toBeTruthy()
+    expect(screen.queryByText('515')).toBeNull()
+    // Somebody checks out: the server's recount, as the Room hears it.
+    await act(async () => mockCheckOut.forEach((cb) => cb({ hereCount: 482 })))
+    expect(screen.getByText('482')).toBeTruthy()
   })
 
   it('a place has no pre-event window', async () => {

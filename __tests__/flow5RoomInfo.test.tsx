@@ -20,7 +20,16 @@ jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { id: 'u-a' } }) })
 jest.mock('../lib/apiClient', () => ({
   apiClient: { getChatGroups: jest.fn(), getChatParticipants: jest.fn(), getEventMatches: jest.fn(), getVenue: jest.fn(), setChatGroupMute: jest.fn(), leaveChatGroup: jest.fn() },
 }))
-jest.mock('../lib/socketClient', () => ({ subscribeToChatMemberLeft: () => () => {} }))
+/** The event's checkout listeners: Room info's count follows the server's recount. */
+const mockCheckOut: ((data: { hereCount?: number }) => void)[] = []
+jest.mock('../lib/socketClient', () => ({
+  subscribeToChatMemberLeft: () => () => {},
+  subscribeToEventCheckIn: () => () => {},
+  subscribeToEventCheckOut: (_event: string, cb: (data: { hereCount?: number }) => void) => {
+    mockCheckOut.push(cb)
+    return () => {}
+  },
+}))
 // The card's own block flow is SenderCard's; this room only needs to hear that somebody was blocked.
 const mockCard: { props?: { sender: unknown; onBlocked: (id: string) => void } } = {}
 jest.mock('../components/chat/SenderCard', () => ({
@@ -222,6 +231,32 @@ describe('a room of thousands (large data)', () => {
   })
 })
 
+describe('one number for the room (RC drive 3)', () => {
+  const page = (n: number, totalCount: number) => ({
+    success: true,
+    data: { participants: Array.from({ length: n }, (_, i) => ({ userId: `u-${i}`, name: `Fox ${i}`, role: 'member' })), totalCount },
+  })
+
+  it('says the Room’s number on both lines: not the 515 members, not the 450 listed', async () => {
+    api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [{ ...eventRow, hereCount: 483, memberCount: 515 }] } } as never)
+    api.getChatParticipants.mockResolvedValue(page(100, 450) as never)
+    await open()
+    expect(screen.getByLabelText('In the room, 483')).toBeTruthy()
+    expect(screen.getAllByText('483').length).toBe(2)
+    expect(screen.queryByText('515')).toBeNull()
+    expect(screen.queryByText('450')).toBeNull()
+  })
+
+  it('follows the server’s recount as people check out', async () => {
+    mockCheckOut.length = 0
+    api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [{ ...eventRow, hereCount: 483 }] } } as never)
+    api.getChatParticipants.mockResolvedValue(page(100, 450) as never)
+    await open()
+    await act(async () => mockCheckOut.forEach((cb) => cb({ hereCount: 482 })))
+    expect(screen.getByLabelText('In the room, 482')).toBeTruthy()
+  })
+})
+
 describe('a place’s room (C5, 5-2)', () => {
   const placeRow = { id: 'g1', name: 'Toit', memberCount: 3, event: { id: 'd1', kind: 'venue_day', venueId: 'v1', title: 'Venue day · Toit · 2026-10-22' } }
   beforeEach(() => {
@@ -251,7 +286,7 @@ describe('a place’s room (C5, 5-2)', () => {
 })
 
 describe('a block takes the person off the list (safety)', () => {
-  it('removes them from what is loaded and from the count, and the next page asks from where the list now stands', async () => {
+  it('removes them from what is loaded, and the next page asks from where the list now stands', async () => {
     const page = (from: number, n: number, totalCount: number) => ({
       success: true,
       data: { participants: Array.from({ length: n }, (_, i) => ({ userId: `u-${from + i}`, name: `Fox ${from + i}`, role: 'member' })), totalCount },
@@ -262,7 +297,8 @@ describe('a block takes the person off the list (safety)', () => {
     await act(async () => fireEvent.press(screen.getByTestId('info-member-u-1')))
     await act(async () => mockCard.props!.onBlocked('u-1'))
     expect(screen.queryByTestId('info-member-u-1')).toBeNull()
-    expect(screen.getByLabelText('In the room, 249')).toBeTruthy()
+    // Off the list, and still in the room: the count is the room's, as the Room and the chat say it (RC drive 3).
+    expect(screen.getByLabelText('In the room, 250')).toBeTruthy()
     await act(async () => fireEvent(screen.getByTestId('info-list'), 'endReached'))
     // 99 held now, and the server's own list no longer has them: the next page starts at 99.
     expect(api.getChatParticipants).toHaveBeenLastCalledWith('g1', { limit: 100, offset: 99 })

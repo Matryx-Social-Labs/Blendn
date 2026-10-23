@@ -45,6 +45,8 @@ jest.mock('../lib/apiClient', () => ({
 jest.mock('../lib/socketClient', () => {
   const noop = () => () => {}
   return {
+    subscribeToEventCheckIn: noop,
+    subscribeToEventCheckOut: noop,
     subscribeToLiveEnded: noop,
     subscribeToChatMessage: (_room: string, cb: never) => {
       mockMessage.push(cb)

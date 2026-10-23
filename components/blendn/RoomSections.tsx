@@ -5,6 +5,7 @@ import Animated, { Easing, FadeIn, FadeOut, withDelay, withSpring, withTiming } 
 import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE, SPRING, STAGGER } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
 import { overlapOf } from '../../lib/overlapLine'
+import { printable } from '../../lib/pulseSections'
 import { hereNowStack, reasonLine, shuffleCountdownLabel, timeHereLabel } from '../../lib/roomMoments'
 import type { RoomPerson } from '../../lib/useRoom'
 import { Avatar } from '../ds/Avatar'
@@ -227,11 +228,11 @@ export const RoomGridFace = memo(function RoomGridFace({
   )
 })
 
-/** "Everyone here · 14" (or "Everyone who came"), and the empty room's state under it. */
+/** "Everyone here · 14" (or "Everyone who came"), and the empty room's state under it. Five and up, as every people count (the owner's floor). */
 export function EveryoneHead({ title, count }: { title: string; count: number }) {
   return (
     <View style={[styles.section, styles.gridHead]}>
-      <SectionHeader title={title} count={count > 0 ? count : undefined} testID="everyone-head" />
+      <SectionHeader title={title} count={printable(count) ?? undefined} testID="everyone-head" />
     </View>
   )
 }
