@@ -1022,7 +1022,8 @@ export default function EventDetail() {
   const changeRows = event?.change && heardOfIt ? changeLines(event.change, event, now) : []
   const tiles: AmenityTileProps[] = [
     ...(dayWords
-      ? [{ label: 'DOORS', value: dayWords, mono: true, testID: 'scene-tile-doors' }]
+      // TODAY, not DOORS: "DOORS: Day 2 of 2" read as a time for the doors (RC drive 2 D-9).
+      ? [{ label: 'TODAY', value: dayWords, mono: true, testID: 'scene-tile-doors' }]
       : heroStart
         ? [{ label: doorsLabel, value: clockTime(new Date(heroStart).getTime()), mono: true, testID: 'scene-tile-doors' }]
         : []),

@@ -144,7 +144,7 @@ describe('the days of a run (GET /events/:id, #716 and the #724 window)', () => 
 
   it('says "Day 2 of 3" and names each day by its own calendar date, in any time zone', () => {
     const days = parseEventDays(run)!
-    expect(dayOfWords(days)).toBe('Day 2 of 3')
+    expect(dayOfWords(days)).toBe('Day\u00a02 of\u00a03')
     expect(days.days.map((d) => d.cancelled)).toEqual([false, false, true])
     expect(days.days.map((d) => dayLabel(d.date))).toEqual(['Wed 1', 'Thu 2', 'Fri 3'])
     expect(days).toMatchObject({ daysFrom: 1, dayCount: 3, dayNumber: 2 })
@@ -175,7 +175,7 @@ describe('the days of a run (GET /events/:id, #716 and the #724 window)', () => 
     const days = parseEventDays(window60)!
     expect(days.days).toHaveLength(31)
     expect(days).toMatchObject({ daysFrom: 30, dayCount: 60, dayNumber: 40 })
-    expect(dayOfWords(days)).toBe('Day 40 of 60')
+    expect(dayOfWords(days)).toBe('Day\u00a040 of\u00a060')
     expect(sessionDay(days)).toEqual(days.days[10])
   })
 

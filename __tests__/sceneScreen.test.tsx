@@ -215,7 +215,7 @@ describe('the days of a run (Flow 3 · 3.2, #724 window)', () => {
   it('says where today is in the Doors tile when the session is today, and draws the strip, a called-off day struck and labelled', async () => {
     api.getEvent.mockResolvedValue(detail(run(true)) as never)
     await open()
-    expect((await screen.findByTestId('scene-tile-doors')).props.accessibilityLabel).toBe('DOORS, Day 2 of 3')
+    expect((await screen.findByTestId('scene-tile-doors')).props.accessibilityLabel).toBe('TODAY, Day\u00a02 of\u00a03')
     expect(screen.getByTestId('scene-day-1').props.accessibilityLabel).toMatch(/, day 1 of 3$/)
     expect(screen.getByTestId('scene-day-2').props.accessibilityLabel).toMatch(/, day 2 of 3, today$/)
     expect(screen.getByTestId('scene-day-3').props.accessibilityLabel).toMatch(/, cancelled$/)
@@ -227,7 +227,7 @@ describe('the days of a run (Flow 3 · 3.2, #724 window)', () => {
     await open()
     const tile = await screen.findByTestId('scene-tile-doors')
     expect(tile.props.accessibilityLabel).toMatch(/^NEXT DOORS, \d/)
-    expect(tile.props.accessibilityLabel).not.toMatch(/Day 2 of 3/)
+    expect(tile.props.accessibilityLabel).not.toMatch(/Day\s2\sof\s3/)
     expect(screen.getByTestId('scene-day-2').props.accessibilityLabel).toMatch(/, day 2 of 3, next$/)
   })
 
@@ -293,7 +293,7 @@ describe('the days of a run (Flow 3 · 3.2, #724 window)', () => {
     const days = Array.from({ length: 31 }, (_, i) => day(i - 10))
     api.getEvent.mockResolvedValue(detail({ timezone: ZONE, days, dayCount: 60, daysFrom: 30, dayNumber: 40 }) as never)
     await open()
-    expect((await screen.findByTestId('scene-tile-doors')).props.accessibilityLabel).toBe('DOORS, Day 40 of 60')
+    expect((await screen.findByTestId('scene-tile-doors')).props.accessibilityLabel).toBe('TODAY, Day\u00a040 of\u00a060')
     expect(screen.getByLabelText('Days 30 to 60 of 60')).toBeTruthy()
     expect(screen.getByTestId('scene-day-40').props.accessibilityLabel).toMatch(/, day 40 of 60, today$/)
     // It opens a day before today's, not at the window's start, and never draws the whole window.

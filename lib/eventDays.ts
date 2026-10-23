@@ -72,7 +72,11 @@ export function dayLabel(date: string): string {
 }
 
 /** "Day 2 of 3", or null when no day is running (every day cancelled). */
-export const dayOfWords = (e: EventDays): string | null => (e.dayNumber ? `Day ${e.dayNumber} of ${e.dayCount}` : null)
+/**
+ * "Day 2 of 3", with no-break spaces inside each half (RC drive 2 D-8): it may wrap only as "Day 2 / of 3", never leaving
+ * a widowed "3" on a tile's second line.
+ */
+export const dayOfWords = (e: EventDays): string | null => (e.dayNumber ? `Day\u00a0${e.dayNumber} of\u00a0${e.dayCount}` : null)
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const monthOf = (date: string) => MONTHS[Number(date.slice(5, 7)) - 1]

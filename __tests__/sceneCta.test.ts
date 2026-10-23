@@ -228,7 +228,10 @@ describe('the facts are the design system\'s tiles', () => {
     // 2 x 2 at 76 pt (`AmenityTile`), folding past seven: not a hand-built grid of our own.
     const detail = DETAIL()
     expect(detail).toContain('<AmenityGrid tiles={tiles}')
-    for (const label of ["'DOORS'", "'WHERE'", "'ENTRY'"]) expect(detail).toContain(`label: ${label}`)
+    for (const label of ["'WHERE'", "'ENTRY'"]) expect(detail).toContain(`label: ${label}`)
+    // Doors is named through `doorsLabel` (NEXT DOORS between days), and a run's today reads TODAY (RC drive 2 D-9).
+    expect(detail).toContain("'NEXT DOORS' : 'DOORS'")
+    expect(detail).toContain("label: 'TODAY'")
     expect(detail).toContain('...amenities.map(')
   })
 
