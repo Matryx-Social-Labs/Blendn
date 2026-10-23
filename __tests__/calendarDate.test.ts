@@ -14,7 +14,7 @@ import { validUntil } from '../lib/offers'
 import { plusStatusLine } from '../lib/plus'
 import { shortDate } from '../lib/plusManage'
 import { muteLabel } from '../lib/roomMembership'
-import { calendarDate } from '../lib/time'
+import { calendarDate, zonedDate } from '../lib/time'
 import { eventToday } from '../lib/eventDays'
 /* eslint-enable import/first */
 
@@ -43,6 +43,28 @@ describe('calendarDate', () => {
   })
 })
 
+describe('a zone at New Year, and an engine that cannot read zones (review L10)', () => {
+  it('names the zone’s own day and year across New Year', () => {
+    // 20:00 UTC on 31 Dec is 01:30 on 1 Jan in Kolkata, and still the 31st in Los Angeles.
+    expect(calendarDate('2026-12-31T20:00:00Z', { weekday: true, now: NOW, timeZone: 'Asia/Kolkata' })).toBe('Fri 1 Jan 2027')
+    expect(calendarDate('2026-12-31T20:00:00Z', { weekday: true, now: NOW, timeZone: 'America/Los_Angeles' })).toBe('Thu 31 Dec')
+    expect(calendarDate('2026-12-31T20:00:00Z', { weekday: true, year: false, now: NOW, timeZone: 'Asia/Kolkata' })).toBe('Fri 1 Jan')
+  })
+
+  it('falls back to the phone’s own date when the zone cannot be read (no ICU, an unknown zone)', () => {
+    const local = new Date(2026, 11, 31, 22)
+    expect(zonedDate(local, 'Not/AZone')).toEqual([2026, 11, 31])
+    const spy = jest.spyOn(Intl, 'DateTimeFormat').mockImplementation((() => {
+      throw new RangeError('no ICU')
+    }) as never)
+    try {
+      expect(calendarDate(local, { weekday: true, now: NOW, timeZone: 'Asia/Kolkata' })).toBe('Thu 31 Dec')
+    } finally {
+      spy.mockRestore()
+    }
+  })
+})
+
 describe('a zone read by part (review L5: en-CA "YYYY-MM-DD" was split on "-")', () => {
   it('holds when an engine formats the date some other way: only the parts are read', () => {
     const Real = Intl.DateTimeFormat
@@ -60,12 +82,33 @@ describe('a zone read by part (review L5: en-CA "YYYY-MM-DD" was split on "-")',
   })
 })
 
-describe('on an en_DE phone (the locale writes "23. Okt. 2027")', () => {
+/*
+ * The phone's locale, set the way the device has it (review L10): Intl's default locale is a German-pattern one, so anything
+ * asked without a locale (`[]`, `undefined`) formats as the phone does ("23. Okt. 2027"); a locale named outright is kept.
+ * Node's Date methods do not consult the global Intl the way Hermes's do, so they are pointed at it, not given a string.
+ */
+const PHONE_LOCALE = 'de-DE'
+const RealDateTimeFormat = Intl.DateTimeFormat
+const phoneLocale = (locales?: Intl.LocalesArgument) => (locales === undefined || (Array.isArray(locales) && locales.length === 0) ? PHONE_LOCALE : locales)
+
+describe('on an en_DE phone (its locale writes "23. Okt. 2027")', () => {
   let spies: jest.SpyInstance[] = []
   beforeEach(() => {
     jest.useFakeTimers({ now: NOW })
-    const german = () => '23. Okt. 2027'
-    spies = [jest.spyOn(Date.prototype, 'toLocaleDateString').mockImplementation(german), jest.spyOn(Date.prototype, 'toLocaleString').mockImplementation(german)]
+    const make = (locales?: Intl.LocalesArgument, options?: Intl.DateTimeFormatOptions) => new RealDateTimeFormat(phoneLocale(locales), options)
+    spies = [
+      jest.spyOn(Intl, 'DateTimeFormat').mockImplementation(make as never),
+      jest.spyOn(Date.prototype, 'toLocaleDateString').mockImplementation(function (this: Date, locales?: Intl.LocalesArgument, options?: Intl.DateTimeFormatOptions) {
+        return new Intl.DateTimeFormat(locales, options).format(this)
+      }),
+      jest.spyOn(Date.prototype, 'toLocaleString').mockImplementation(function (this: Date, locales?: Intl.LocalesArgument, options?: Intl.DateTimeFormatOptions) {
+        return new Intl.DateTimeFormat(locales, options).format(this)
+      }),
+    ]
+  })
+
+  it('is that phone: a date asked of the locale comes out German-shaped', () => {
+    expect(new Date(2027, 9, 23, 12).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' })).toBe('23. Okt. 2027')
   })
   afterEach(() => {
     spies.forEach((s) => s.mockRestore())
