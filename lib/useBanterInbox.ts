@@ -14,7 +14,7 @@ import { H } from './haptics'
 import { hasDirtyDomain } from './liveSyncState'
 import { Logger } from './logger'
 import { conversationsCursor, namedList, type NamedList } from './namedList'
-import { isPlaceRoom, roomDisplayTitle, roomMemberCount } from './placeRoom'
+import { isPlaceRoom, roomDisplayTitle, roomHereCount } from './placeRoom'
 import { queryCache } from './queryCache'
 import { rememberRoomMute } from './roomMembership'
 import { roomStateFrom, type RoomState } from './roomState'
@@ -37,7 +37,7 @@ import { previewText } from '../components/banter/inbox'
 export interface GroupChat {
   chat_room_id: string
   event_title: string
-  /** `memberCount` — active members. 0 when the server did not say. */
+  /** `hereCount`: in the room now (`roomHereCount`). 0 when the server did not say. */
   participant_count: number
   /** The event's cover — the room's square avatar. */
   event_image?: string | null
@@ -138,8 +138,8 @@ export const groupChatFrom = (room: any, userId: string | undefined): GroupChat 
     chat_room_id: String(room.id || room.chat_room_id || room.chatRoomId || ''),
     // A place's room is named for the place; its venue day's title is bookkeeping (step 5).
     event_title: roomDisplayTitle(room) || room.event_title || room.eventTitle || room.title || room.name || 'Event chat',
-    // `memberCount` is what `GET /chat/groups` sends; never for a place's room (H5, D-19).
-    participant_count: roomMemberCount(room) ?? 0,
+    // In the room now, the Room's number; never for a place's room (H5, D-19).
+    participant_count: roomHereCount(room) ?? 0,
     event_image: room.event?.coverImageUrl || room.event?.cover_image_url || room.coverImageUrl || room.cover_image_url || null,
     last_message: preview.text,
     last_message_time: preview.time,

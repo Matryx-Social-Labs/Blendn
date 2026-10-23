@@ -28,7 +28,7 @@ import { printable } from '../../lib/pulseSections'
 import { Logger } from '../../lib/logger'
 import { markSeed } from '../../lib/pseudonymAvatar'
 import { isMuted, muteLabel, useRoomMute } from '../../lib/roomMembership'
-import { useRoomRow } from '../../lib/roomRow'
+import { useHereCount, useRoomRow } from '../../lib/roomRow'
 import { idParam, nameParam } from '../../lib/routeParams'
 import { showRoomReportOptions } from '../../lib/safetyUtils'
 import { subscribeToChatMemberLeft } from '../../lib/socketClient'
@@ -149,7 +149,7 @@ function ChatInfoInner() {
   )
 
   /* The next page as the end comes into view; one at a time, and not while a page is failing (its retry is the way on). */
-  /* Blocking somebody from their card takes them off the list at once, and the count with them; the server's next pages leave them out too. */
+  /* Blocking somebody from their card takes them off the list at once; the server's next pages leave them out too. `total` is the list's length, for paging — the count the screen prints is the room's (`people`). */
   const removeMember = (userId: string) => {
     setMembers((prev) => prev.filter((m) => m.userId !== userId))
     setTotal((t) => Math.max(0, t - 1))
@@ -171,7 +171,7 @@ function ChatInfoInner() {
   /* A block made anywhere starts the roster over from the server, which now leaves that person out. */
   useOnBlock(() => void loadMembers(0))
 
-  /* Somebody leaving takes their creature off the grid at once, and the count with them. */
+  /* Somebody leaving the chat takes their creature off the grid at once. */
   useEffect(
     () =>
       subscribeToChatMemberLeft(chatGroupId, ({ userId }) => {
@@ -192,9 +192,17 @@ function ChatInfoInner() {
   const title = place ? `${place} · tonight` : row?.title || nameParam(params.roomName) || nameParam(params.eventTitle) || 'Event chat'
   const eventTitle = place ? undefined : row?.eventTitle || nameParam(params.eventTitle)
   const cover = row?.image || null
-  // A place says a bucket; a room says how many from five up, and nothing under it (the owner's floor).
-  const roomCount = printable(row?.memberCount ?? (total || null))
-  const count = row?.venueId ? bucket : roomCount === null ? null : roomCount.toLocaleString('en-US')
+  /*
+   * How many are in the room: an event's room says the Room's number, inside now
+   * (`useHereCount`), the one the Room and the chat header say — never the list's
+   * length, which leaves out friends and "show online" off (counted, not listed).
+   * A crew's or a Blend's says its list. Nothing until the row says which (no
+   * list length first, then the room's). From five up, nothing under it (the
+   * owner's floor); a place says a bucket.
+   */
+  const here = useHereCount(row)
+  const people = printable(row?.kind ? total || null : here)
+  const count = row?.venueId ? bucket : people === null ? null : people.toLocaleString('en-US')
 
   const leaveHint = place ? leavePlaceLine(place) : 'Rejoin by checking in at the event again.'
 
@@ -288,8 +296,8 @@ function ChatInfoInner() {
           </SettingsGroup>
         </View>
 
-        {/* The truthful total (five and up), never the number loaded so far; a place says no count at all. */}
-        <SectionHeader title="In the room" count={loading || failed || place ? undefined : (printable(total) ?? undefined)} testID="info-members" />
+        {/* The room's number, as the line above says it (five and up), never the number loaded so far; a place says no count at all. */}
+        <SectionHeader title="In the room" count={loading || failed || place ? undefined : (people ?? undefined)} testID="info-members" />
         {loading ? (
           <View style={styles.grid}>
             {Array.from({ length: COLUMNS * 2 }, (_, i) => (

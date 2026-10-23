@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 
 import { apiClient } from './apiClient'
 import { roomKindParam } from './crews'
-import { roomDisplayTitle, roomMemberCount, roomVenueId } from './placeRoom'
+import { roomDisplayTitle, roomHereCount, roomVenueId } from './placeRoom'
 import { rememberRoomMute } from './roomMembership'
+import { subscribeToEventCheckIn, subscribeToEventCheckOut } from './socketClient'
 
 /**
  * A room as the Banter's list (`GET /chat/groups`) describes it: what the room
@@ -22,8 +23,8 @@ export type RoomRow = {
   startTime?: string
   /** A place's room: when its venue day resets (the daily close). */
   dayEndsAt?: string
-  /** `memberCount`; never for a place's room, where an exact count is a differencing channel (H5). */
-  memberCount: number | null
+  /** In the room now (`roomHereCount`); never for a place's room, where an exact count is a differencing channel (H5). */
+  hereCount: number | null
   /** Your role here: `admin` (Organiser), `moderator`, or a member. */
   role?: string
   /** You are checked in and have not checked out: the room is live for you. */
@@ -54,7 +55,7 @@ export function roomRowFrom(payload: unknown, roomId: string): RoomRow | null {
       // A place's room is a venue day: it has no pre-event window.
       startTime: room.event?.startTime && room.event?.kind !== 'venue_day' ? String(room.event.startTime) : undefined,
       dayEndsAt: room.event?.endTime && room.event?.kind === 'venue_day' ? String(room.event.endTime) : undefined,
-      memberCount: roomMemberCount(room),
+      hereCount: roomHereCount(room),
       role: room.membership?.role,
       live: room.isCheckedIn === true,
       mute: room.mute,
@@ -64,7 +65,7 @@ export function roomRowFrom(payload: unknown, roomId: string): RoomRow | null {
   if (!other) return null
   return {
     title: other.name ? String(other.name) : undefined,
-    memberCount: null,
+    hereCount: null,
     kind: roomKindParam(other.kind) ?? undefined,
     crewId: other.crewId ? String(other.crewId) : undefined,
     blendId: other.blendId ? String(other.blendId) : undefined,
@@ -93,4 +94,31 @@ export function useRoomRow(roomId: string | null): RoomRow | null {
     }
   }, [roomId])
   return row
+}
+
+/**
+ * How many are in an event's room now, kept live: the row's `hereCount`, then
+ * the server's recount on each check-in and checkout (`event:checkin`,
+ * `event:checkout`), as the Room keeps its own headline. A chat leave is not
+ * one: whoever presses Leave is still in the room. Null for a place's room
+ * and for a crew's or a Blend's.
+ */
+export function useHereCount(row: Partial<RoomRow> | null | undefined): number | null {
+  const eventId = row && !row.venueId && !row.kind ? row.eventId ?? null : null
+  const [live, setLive] = useState<{ eventId: string; count: number } | null>(null)
+  useEffect(() => {
+    if (!eventId) return
+    const take = (data: { hereCount?: number }) => {
+      const n = data.hereCount
+      if (typeof n === 'number' && Number.isFinite(n) && n >= 0) setLive({ eventId, count: Math.floor(n) })
+    }
+    const offIn = subscribeToEventCheckIn(eventId, take)
+    const offOut = subscribeToEventCheckOut(eventId, take)
+    return () => {
+      offIn()
+      offOut()
+    }
+  }, [eventId])
+  if (!eventId) return null
+  return live?.eventId === eventId ? live.count : row?.hereCount ?? null
 }
