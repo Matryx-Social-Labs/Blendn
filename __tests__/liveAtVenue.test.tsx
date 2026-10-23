@@ -318,6 +318,21 @@ describe('an end the socket missed', () => {
     expect((await readLiveSession('u1'))?.prompted).toBe(false)
   })
 
+  it('a prompt withdrawn unseen is asked again at the next end (review LOW: asked is set on show)', async () => {
+    mockShows = false
+    active(at(20))
+    await mount()
+    await endWith('expired')
+    expect(isUp('Still here?')).toBe(true)
+    // Never on screen, and taken away.
+    await press('Done for now')
+    expect(isUp('Still here?')).toBe(false)
+    // The next end: asked again, not a toast.
+    mockShows = true
+    await endWith('expired')
+    expect(isUp('Still here?')).toBe(true)
+  })
+
   it('the night’s prompt spent, a window the read finds over is still said: the toast, not silence (drive 4 D-8)', async () => {
     // Arrange: tonight's one prompt was already asked.
     await markLivePrompted('u1', 'day-1')

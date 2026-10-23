@@ -48,7 +48,7 @@ jest.mock('expo-linear-gradient', () => {
   return { LinearGradient: (props: object) => <View {...props} /> }
 })
 /** The router modal's transitionEnd listeners (its screen sliding away). */
-const mockTransitionEnd: Array<() => void> = []
+const mockTransitionEnd: (() => void)[] = []
 const mockNavigation = {
   addListener: (_event: string, cb: () => void) => {
     mockTransitionEnd.push(cb)

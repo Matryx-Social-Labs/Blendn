@@ -120,7 +120,7 @@ export function LiveAtVenue() {
   const { status: plus } = usePlusStatus()
   /** Which of the prompt's Go Live buttons was pressed: its spinner, not the other's. */
   const [pressed, setPressed] = useState<'extend' | 'stay' | null>(null)
-  /** Asked on this run — before the asking is on disk. */
+  /** Seen on this run (the prompt's onShown) — before the asking is on disk. */
   const askedRef = useRef(new Set<string>())
   // The last answer about Blend'n+ was this account's: another account (or none) on this phone starts with nothing.
   useEffect(() => () => clearKnownPlus(), [userId])
@@ -148,7 +148,6 @@ export function LiveAtVenue() {
       const askKey = `${reset ? 'reset' : 'ended'}:${eventId}`
       const ask = reason === 'expired' && here !== null && !askedRef.current.has(askKey) && (reset ? !inRoom : !here.prompted)
       if (!ask || !here) return { asked: false, reset, inRoom }
-      askedRef.current.add(askKey)
       const firstGoLive = userId ? !(await hasGoneLiveBefore(userId, eventId)) : true
       const resetHour = resetHourOf(here)
       // Tonight's one prompt is spent when it is on screen (`onShown` below), not when it is asked for: a prompt that
@@ -356,7 +355,10 @@ export function LiveAtVenue() {
         staying={busy && pressed === 'stay'}
         onDone={hideEnded}
         onShown={() => {
-          if (userId && ended?.kind === 'ended') void markLivePrompted(userId, ended.venueDayId)
+          if (!ended) return
+          // Asked on this run once it is seen: a prompt withdrawn unseen (it waited, iOS refused it) can be asked again (review LOW).
+          askedRef.current.add(`${ended.kind}:${ended.venueDayId}`)
+          if (userId && ended.kind === 'ended') void markLivePrompted(userId, ended.venueDayId)
         }}
       />
       <Sheet
