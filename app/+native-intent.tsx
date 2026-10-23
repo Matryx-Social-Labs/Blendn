@@ -1,3 +1,4 @@
+import { dismissModals } from '../lib/pendingRoute'
 import { nativeIntentPath } from '../lib/shareLinks'
 
 /**
@@ -12,6 +13,9 @@ import { nativeIntentPath } from '../lib/shareLinks'
  * screens read params (a DM's `draft`, sign-in's `notice`, the Scene's title and cover) that only the app itself should set.
  * In-app `router.push` does not pass through here, so the app's own navigation keeps its params.
  */
-export function redirectSystemPath({ path }: { path: string; initial: boolean }): string {
-  return nativeIntentPath(path)
+export function redirectSystemPath({ path, initial }: { path: string; initial: boolean }): string | Promise<string> {
+  const target = nativeIntentPath(path)
+  // With the app open, a modal route that is up closes first, and the link opens over what presented it (`dismissModals`).
+  // A cold start stays synchronous: there is nothing to close, and the first state is read from it.
+  return initial ? target : dismissModals().then(() => target)
 }

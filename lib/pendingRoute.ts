@@ -1,4 +1,4 @@
-import { router, type Href } from 'expo-router'
+import { router, type Href, type useNavigationContainerRef } from 'expo-router'
 
 /**
  * A route that arrived before the app could open it.
@@ -25,6 +25,7 @@ let pending: Href | null = null
 
 export function openWhenReady(target: Href): void {
   if (ready) {
+    void dismissModals()
     router.push(target)
     return
   }
@@ -82,4 +83,59 @@ export function pendingEventLink(): boolean {
 export function resetPendingRoute(): void {
   ready = false
   pending = null
+}
+
+/**
+ * The root stack's modal routes: those with a modal `presentation` in `app/_layout.tsx` (`__tests__/linkOverModal.test.tsx`
+ * reads it back).
+ */
+export const ROOT_MODAL_ROUTES: readonly string[] = ['event-preferences/[eventId]', 'crews/new', 'plus', 'f/[token]']
+
+type LinkNavigator = Pick<ReturnType<typeof useNavigationContainerRef>, 'isReady' | 'getRootState' | 'dispatch' | 'addListener'>
+type NavigationState = ReturnType<LinkNavigator['getRootState']>
+let linkNavigator: LinkNavigator | null = null
+
+/** The root navigation container, set by the root layout while it is mounted. */
+export function setLinkNavigator(next: LinkNavigator | null): void {
+  linkNavigator = next
+}
+
+/** How long a link waits for the modal it closed to leave the navigation state, if the state never says so. */
+const DISMISS_FALLBACK_MS = 1000
+
+/**
+ * A link or a notification tap that arrives while a modal route is up closes it first, and opens over whatever presented
+ * it (RC drive 5). A link is somewhere new to go, not a step inside the paywall or a sheet: pushed over the modal, the
+ * stack lays it out as part of the modal, a modal's own hold on the screen (`RouteModal`) stays up under it, and closing
+ * the modal later takes the linked screen with it.
+ *
+ * Every route from the lowest modal up is popped, in one action on the stack that holds them. Resolves once the state
+ * has taken it: a link's own navigation dispatched in the same tick was lost under the pop (measured in
+ * `__tests__/plusManageOverPlus.test.tsx`), so `+native-intent` waits; `openWhenReady`'s push is queued by the router
+ * and runs after it anyway. Resolves at once when nothing modal is up, or before the navigator is ready (a cold start's
+ * link has nothing to close).
+ */
+export function dismissModals(): Promise<void> {
+  const navigator = linkNavigator
+  if (!navigator?.isReady()) return Promise.resolve()
+  // Down the focused chain to the stack that holds them (the container wraps the root stack in a route of its own).
+  let state: NavigationState | undefined = navigator.getRootState()
+  while (state) {
+    const lowest = state.routes.findIndex((route) => ROOT_MODAL_ROUTES.includes(route.name))
+    if (lowest > 0) {
+      const { key, routes } = state
+      return new Promise((resolve) => {
+        const off = navigator.addListener('state', () => done())
+        const timer = setTimeout(() => done(), DISMISS_FALLBACK_MS)
+        const done = () => {
+          off()
+          clearTimeout(timer)
+          resolve()
+        }
+        navigator.dispatch({ type: 'POP', payload: { count: routes.length - lowest }, target: key })
+      })
+    }
+    state = state.routes[state.index]?.state as NavigationState | undefined
+  }
+  return Promise.resolve()
 }

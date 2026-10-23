@@ -19,6 +19,8 @@ jest.mock('expo-router', () => ({
   ...jest.requireActual('expo-router'),
   useNavigationContainerRef: () => ({
     isReady: () => mockNav.ready,
+    // Nothing modal is up: a held tap closes nothing before it opens (lib/pendingRoute `dismissModals`).
+    getRootState: () => undefined,
     addListener: (_event: string, callback: () => void) => {
       mockNav.listeners.push(callback)
       return () => {

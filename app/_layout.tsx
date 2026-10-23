@@ -1,5 +1,5 @@
 import { Asset } from 'expo-asset';
-import { router, Stack, usePathname, type Href } from "expo-router";
+import { router, Stack, useNavigationContainerRef, usePathname, type Href } from "expo-router";
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigationReady } from '../lib/useNavigationReady';
@@ -18,7 +18,7 @@ import {
 import { initSocketWithAppState, cleanup as cleanupSocket, disconnect as disconnectSocket } from '../lib/socketClient';
 import { ONBOARDING_ROUTES, mayParticipate, resumeStep } from '../lib/onboarding';
 import { useReducedMotion } from '../lib/motion';
-import { openWhenReady, setRouteReady, takePendingRoute } from '../lib/pendingRoute';
+import { openWhenReady, setLinkNavigator, setRouteReady, takePendingRoute } from '../lib/pendingRoute';
 import { readOnboarding } from '../lib/onboardingStorage';
 import { hasDeclinedPush } from '../lib/pushDecline';
 import { PresenceMonitor } from '../components/PresenceMonitor';
@@ -90,6 +90,12 @@ function RootLayout() {
   const lastRedirectRef = useRef<string | null>(null);
   // No redirect before the root navigator can take it: an Android font-size relaunch mounts this signed in (RC drive 2 D-1).
   const navigationReady = useNavigationReady();
+  // What a link or a tap closes before it opens: a modal route that is up (lib/pendingRoute `dismissModals`).
+  const navigationRef = useNavigationContainerRef();
+  useEffect(() => {
+    setLinkNavigator(navigationRef);
+    return () => setLinkNavigator(null);
+  }, [navigationRef]);
   const pushInitRef = useRef<boolean>(false);
   const isNavigatingRef = useRef<boolean>(false);
   // Reduce Motion: every push is the system cross-fade (DS #3 rm), not a slide across the screen.
