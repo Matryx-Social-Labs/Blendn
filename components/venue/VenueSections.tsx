@@ -59,7 +59,7 @@ export function LiveCard({ live, name, onZero }: { live: VenueDetail['live']; na
 /** An event has the place: the venue defers, and its card is the way in. */
 export function EventOnCard({ tonight, now, onPress }: { tonight: NonNullable<VenueDetail['tonight']> | null; now: number; onPress: () => void }) {
   const bold = useBoldText()
-  const when = tonight ? startsLabel({ startsAt: tonight.startTime, endsAt: tonight.endTime }, now).text : ''
+  const when = tonight ? startsLabel({ startsAt: tonight.startTime, endsAt: tonight.endTime, timeZone: tonight.timezone }, now).text : ''
   return (
     <ScalePress
       testID="venue-event-on"
@@ -80,7 +80,7 @@ export function EventOnCard({ tonight, now, onPress }: { tonight: NonNullable<Ve
         <>
           <Text style={[font('title', bold), styles.ink]}>{tonight.title}</Text>
           <Text style={[font('meta', bold), styles.secondary]}>
-            {`Doors ${timeRange(tonight.startTime, tonight.endTime)}. `}
+            {`Doors ${timeRange(tonight.startTime, tonight.endTime, tonight.timezone)}. `}
             While an event is on, this room is the event’s room: check in to it.
           </Text>
         </>
@@ -106,7 +106,7 @@ export function TonightHere({
   onOpen: (eventId: string) => void
 }) {
   const bold = useBoldText()
-  const when = tonight ? startsLabel({ startsAt: tonight.startTime, endsAt: tonight.endTime }, now).text : ''
+  const when = tonight ? startsLabel({ startsAt: tonight.startTime, endsAt: tonight.endTime, timeZone: tonight.timezone }, now).text : ''
   return (
     <Section>
       <SectionHeader title="Tonight here" />

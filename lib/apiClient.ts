@@ -955,6 +955,8 @@ export interface VenueListItem {
     coverImageUrl: string | null
     startTime: string
     endTime: string
+    /** The event's IANA zone (admin #749): its time is said in it. Absent from an older server: the phone's. */
+    timezone?: string | null
   } | null
 }
 
@@ -972,7 +974,7 @@ export interface VenuesListResponse {
 /** A page of a venue's coming events — `GET /api/mobile/venues/:venueId/upcoming`. */
 export interface VenueUpcomingPage {
   /** As `VenueDetail`'s `upcoming`: no going count (SCRUM-743; admin `lib/venue-upcoming.ts` sends none). */
-  events: { id: string; title: string; slug?: string | null; coverImageUrl?: string | null; startTime: string; endTime?: string | null }[]
+  events: { id: string; title: string; slug?: string | null; coverImageUrl?: string | null; startTime: string; endTime?: string | null; timezone?: string | null }[]
   pagination: { limit: number; hasMore: boolean; nextCursor: string | null; totalCount: number }
 }
 
@@ -1010,7 +1012,7 @@ export interface VenueDetail {
     /** Good to know: the names of what the owner ticked (the server sends `string[]`, no ids). */
     amenities?: string[] | null
     /** Upcoming events here, soonest first: the server's first few (the page shows three), as it sends them, no going count; the rest are `getVenueUpcoming`'s. */
-    upcoming?: { id: string; title: string; slug?: string | null; coverImageUrl?: string | null; startTime: string; endTime?: string | null }[] | null
+    upcoming?: { id: string; title: string; slug?: string | null; coverImageUrl?: string | null; startTime: string; endTime?: string | null; timezone?: string | null }[] | null
     /** How many there are in all, whatever `upcoming` holds. Absent from a server that does not send it. */
     upcomingTotal?: number | null
     /** Where `getVenueUpcoming` resumes after `upcoming`; null when `upcoming` is all of them. */
@@ -1037,7 +1039,7 @@ export interface VenueDetail {
    * one (`{ url }`, built on the dashboard host). Read through `claimUrlFrom`.
    */
   claim?: { url?: unknown } | null
-  tonight: { id: string; title: string; startTime: string; endTime: string; coverImageUrl?: string | null } | null
+  tonight: { id: string; title: string; startTime: string; endTime: string; coverImageUrl?: string | null; timezone?: string | null } | null
 }
 
 /** `POST /api/mobile/venues/:venueId/live` — your window at a place. */

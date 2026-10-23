@@ -169,11 +169,11 @@ export function agoLabel(startTime: string, now: Date = new Date()): string {
   return months < 24 ? 'LAST YEAR' : `${Math.floor(months / 12)} YEARS AGO`
 }
 
-/** "Fri 3 Oct": the eyebrow on a night's tile (Flow 6 `me`). Empty when the date is unreadable. */
-export function nightLabel(startTime: string): string {
+/** "Fri 3 Oct": the eyebrow on a night's tile (Flow 6 `me`), in the event's own day when its zone is known. Empty when the date is unreadable. */
+export function nightLabel(startTime: string, timeZone?: string | null): string {
   const d = new Date(startTime)
   // No year: the tile has room for "THU 22 OCT" and no more, and Nights out is the last twelve weeks.
-  return calendarDate(d, { weekday: true, year: false })
+  return calendarDate(d, { weekday: true, year: false, timeZone: timeZone ?? undefined })
 }
 
 /** How many nights the Me tab's grid shows (Flow 6 `me`: two rows of three). */

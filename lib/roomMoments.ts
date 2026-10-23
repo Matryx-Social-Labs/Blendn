@@ -11,7 +11,7 @@
  */
 
 import { fnv1a } from './pseudonymAvatar'
-import { clockTime } from './time'
+import { clockTime, eventClock } from './time'
 
 /** A reason line has to fit under a face in a three-column grid. */
 export const REASON_MAX = 24
@@ -272,7 +272,7 @@ export { clockTime }
  * says nothing.
  */
 export function startsLabel(
-  { startsAt, endsAt }: { startsAt?: string | null; endsAt?: string | null },
+  { startsAt, endsAt, timeZone }: { startsAt?: string | null; endsAt?: string | null; timeZone?: string | null },
   now: number
 ): { kind: StartsKind; text: string } {
   const start = startsAt ? new Date(startsAt).getTime() : NaN
@@ -284,7 +284,8 @@ export function startsLabel(
 
   const until = start - now
   if (until < SOON_MS) return { kind: 'soon', text: `In ${Math.max(1, Math.ceil(until / 60_000))} min` }
-  return { kind: 'later', text: clockTime(start) }
+  // The event's own clock, named when it is not the phone's (RC drive 5 D-4; admin #749 sends the zone).
+  return { kind: 'later', text: eventClock(start, timeZone) }
 }
 
 /* -------------------------------------------------------------------------- */

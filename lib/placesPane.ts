@@ -13,8 +13,9 @@
 import type { IconName } from '../components/ui/Icon'
 import type { VenueListItem } from './apiClient'
 import { liveNowLabel } from './home'
-import { clockTime, startsLabel } from './roomMoments'
+import { startsLabel } from './roomMoments'
 import { venueDayState } from './venueHours'
+import { calendarDaysBetween, eventClock } from './time'
 
 /** The chip row: the label the design prints and the server's `venueType` it asks for (null: all). */
 export const PLACE_TYPES = [
@@ -81,12 +82,13 @@ export function tonightEvent(
   if (!next) return null
   const start = new Date(next.startTime)
   if (Number.isNaN(start.getTime())) return null
-  const today = new Date(now)
-  const sameDay = start.getFullYear() === today.getFullYear() && start.getMonth() === today.getMonth() && start.getDate() === today.getDate()
-  const label = startsLabel({ startsAt: next.startTime, endsAt: next.endTime }, now)
+  // "Tonight" is the event's own day, in its zone when the server names it (admin #749), else the phone's.
+  const zone = next.timezone ?? undefined
+  const sameDay = calendarDaysBetween(new Date(now), start, zone) === 0
+  const label = startsLabel({ startsAt: next.startTime, endsAt: next.endTime, timeZone: zone }, now)
   // Running now counts whatever day it started; an ended one is nothing to show.
   if (label.kind === 'ended' || (label.kind !== 'live' && !sameDay)) return null
-  return { id: next.id, title: next.title, when: label.text || clockTime(start.getTime()), cover: next.coverImageUrl }
+  return { id: next.id, title: next.title, when: label.text || eventClock(start.getTime(), zone), cover: next.coverImageUrl }
 }
 
 export type PlaceStrata = {

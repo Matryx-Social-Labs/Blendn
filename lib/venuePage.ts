@@ -25,7 +25,7 @@ import { venueDayState } from './venueHours'
 /** A restaurant reuses the café's pair (owner's ruling on A87), as `VenuePlate` does. */
 const PLATE_PAIRS: Record<PlateKey, readonly [string, string]> = { ...VENUE_PLATES, restaurant: VENUE_PLATES.cafe }
 import { clockTime } from './roomMoments'
-import { calendarDate } from './time'
+import { calendarDate, zoneSuffix } from './time'
 
 const MINUTE_MS = 60_000
 /** The expiry window: the last five minutes read as mm:ss and offer Extend. */
@@ -99,18 +99,20 @@ export function goodToKnow(amenities: VenueDetail['venue']['amenities']): { labe
     .filter((a) => a.value.length > 0)
 }
 
-/** "Thu 9 Oct", in the phone's local day. */
-export function dayLabel(iso: string): string {
+/** "Thu 9 Oct", in the event's own day (admin #749 sends its zone), else the phone's. */
+export function dayLabel(iso: string, timeZone?: string | null): string {
   // No year: the Coming up row gives the day a fixed column.
-  return calendarDate(iso, { weekday: true, year: false })
+  return calendarDate(iso, { weekday: true, year: false, timeZone: timeZone ?? undefined })
 }
 
-/** "9 PM – 1 AM". */
-export function timeRange(startIso: string, endIso: string): string {
+/** "9 PM – 1 AM", in the event's own clock, named once at the end when it is not the phone's ("9 PM – 1 AM EDT"). */
+export function timeRange(startIso: string, endIso: string, timeZone?: string | null): string {
   const start = Date.parse(startIso)
   const end = Date.parse(endIso)
   if (!Number.isFinite(start)) return ''
-  return Number.isFinite(end) ? `${clockTime(start)} – ${clockTime(end)}` : clockTime(start)
+  const zone = timeZone ?? undefined
+  const range = Number.isFinite(end) ? `${clockTime(start, zone)} – ${clockTime(end, zone)}` : clockTime(start, zone)
+  return `${range}${zoneSuffix(start, timeZone)}`
 }
 
 /**
@@ -132,7 +134,7 @@ export function upcomingRows(upcoming: VenueDetail['venue']['upcoming'], max: nu
     .map((e) => ({
       id: e.id,
       title: e.title,
-      day: dayLabel(e.startTime),
+      day: dayLabel(e.startTime, e.timezone),
     }))
 }
 

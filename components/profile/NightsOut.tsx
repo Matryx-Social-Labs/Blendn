@@ -9,7 +9,7 @@ import { SkeletonBlock } from '../Skeleton'
 import { MemoryTile, MEMORY_HEIGHT } from './MemoryTile'
 import { ProfileSection } from './ProfileSections'
 
-type Night = { id: string; title: string; start_time: string; cover_image_url: string | null }
+type Night = { id: string; title: string; start_time: string; cover_image_url: string | null; timezone?: string }
 
 const COLUMNS = 3
 /** Flow 6 `me`: the first-night card pads 20, between the 16 and 24 steps. */
@@ -99,7 +99,7 @@ export function NightsOut({
           <View testID="nights-grid" style={styles.grid}>
             {events.slice(0, NIGHT_TILES).map((event) => (
               <View key={event.id} style={cell}>
-                <MemoryTile title={event.title} imageUrl={event.cover_image_url} when={nightLabel(event.start_time)} onPress={() => onOpenEvent(event.id)} />
+                <MemoryTile title={event.title} imageUrl={event.cover_image_url} when={nightLabel(event.start_time, event.timezone)} onPress={() => onOpenEvent(event.id)} />
               </View>
             ))}
           </View>

@@ -130,6 +130,8 @@ export interface AttendancePayload {
     venue_name: string | null
     city: string | null
     attendedAt: string
+    /** The event's IANA zone (admin #749): its day is said in it. Absent from an older server: the phone's. */
+    timezone?: string | null
     /** `venue_day` is a visit to a place you went live at; its `title` is bookkeeping, its `venue_name` the place (blendn-admin D-6). */
     kind?: 'event' | 'venue_day'
     /**
@@ -161,7 +163,7 @@ export interface PastEventRow {
   start_time: string
   end_time: string
   cover_image_url: string | null
-  /** The event's zone, when the attendance route sends one (it does not yet: the phone's zone until then). */
+  /** The event's zone, when the attendance route sends it (admin #749); the phone's zone without. */
   timezone?: string
   /** A visit to a place you went live at, not an event: it reads "Live here · 28 Sep" under the place's name. */
   visit?: { attendedAt: string; stayMinutes: number | null; venueId: string | null; venueType: string | null }
@@ -196,6 +198,7 @@ export function pastEventRows(
       start_time: e.start_time,
       end_time: e.end_time,
       cover_image_url: e.cover_image_url,
+      ...(typeof e.timezone === 'string' && e.timezone ? { timezone: e.timezone } : {}),
       ...(e.kind === 'venue_day' && {
         visit: { attendedAt: e.attendedAt || e.start_time, stayMinutes: e.stay_minutes ?? null, venueId: e.venue_id ?? null, venueType: e.venue_type ?? null },
       }),

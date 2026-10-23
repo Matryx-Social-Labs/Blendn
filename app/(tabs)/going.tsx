@@ -598,7 +598,7 @@ function GoingScreenInner() {
       // A place you went live at (Flow 4 · Past venues): its name, its type art, "Live here · 28 Sep · 1h 40m" and a "Venue" tag.
       const { visit } = item.row
       const stay = stayLabel(visit.stayMinutes)
-      const when = [featuredDateLabel(visit.attendedAt), stay].filter(Boolean).join(' · ')
+      const when = [featuredDateLabel(visit.attendedAt, new Date(), item.row.timezone), stay].filter(Boolean).join(' · ')
       return (
         <GoingRow
           title={item.row.title}
