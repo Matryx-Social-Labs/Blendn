@@ -179,8 +179,9 @@ describe("the match moment’s opener becomes a draft, never a message", () => {
 
   it('the DM fills its composer once, on mount, and does not send it', () => {
     const dm = DM()
-    // The route's opener first; else the draft this phone kept for the thread (R3-D5 5.8).
-    expect(dm).toContain('useState(() => draftParam(draft) || draftOf(thread))')
+    // What this phone kept for the thread first (a remount must not put the opener back over it, Opus review M4); else
+    // the route's opener (R3-D5 5.8).
+    expect(dm).toContain('useState(() => draftOf(thread) || draftParam(draft))')
     // Read once, as the initial state: no effect re-applies it, and it never
     // reaches the send path on its own.
     expect(dm.match(/\bdraft\b/g)).toHaveLength(2)

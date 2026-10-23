@@ -121,7 +121,7 @@ function PrivateChatInner() {
   const [ended, setEnded] = useState(false)
   /*
    * A suggested opener (the match moment's "Try …") fills the composer once; nothing sends until you do. What you typed
-   * wins over it (Opus review M4): the draft is kept on unmount, and a remount (a text-size change) put the opener back
+   * wins over it (Opus review M4): it is kept on unmount, and a remount (a text-size change) put the opener back
    * over your edits.
    */
   const [newMessage, setNewMessage] = useState(() => draftOf(thread) || draftParam(draft))
