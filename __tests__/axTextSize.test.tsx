@@ -366,30 +366,47 @@ describe('a 360 dp phone at font scale 1.3 (Android, RC drive 3: text one word p
   })
 })
 
-describe('the Banner hangs from its sentence’s first line (review L9: the glyph floated once the action wrapped)', () => {
-  const at = (fontScale: number) => act(async () => Dimensions.set({ window: { ...window, width: 360, fontScale }, screen: { ...window, width: 360, fontScale } }))
+describe('the Banner: as it was beside its action, hung from the first line once the action is under (review L9, R6)', () => {
+  const at = (width: number, fontScale: number) => act(async () => Dimensions.set({ window: { ...window, width, fontScale }, screen: { ...window, width, fontScale } }))
   const hidden = { includeHiddenElements: true }
-  const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id, hidden).props.style)
+  const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id, hidden).props.style) ?? {}
+  const lay = (id: string, layout: { y: number; height: number }) =>
+    act(async () => fireEvent(screen.getByTestId(id, hidden), 'layout', { nativeEvent: { layout: { x: 0, width: 200, ...layout } } }))
 
-  it.each([1, 1.3, AX_XXXL])('at %sx the glyph sits on the first line, level with the sentence, not centred on the banner', async (scale) => {
-    await at(scale)
+  it('1x, a two-line sentence beside its action: the old layout exactly (all centred, nothing offset)', async () => {
+    await at(390, 1)
     await render(<VisibilityBanner state="anon" onAction={jest.fn()} testID="b" />)
-    expect(flat('b').alignItems).toBe('flex-start')
-    expect(flat('b-body').alignItems).toBe('flex-start')
-    const line = 20 * scale
-    expect(flat('b-glyph').height).toBeCloseTo(line)
-    // The glyph and the sentence start at the same height: one line, one centre.
-    expect(flat('b-glyph').marginTop).toBe(flat('b-text').marginTop)
-    // Beside the 36 pt action a short line is centred on it; a line taller than it is not pushed down.
-    expect(flat('b-text').marginTop).toBeCloseTo(Math.max(0, (36 - line) / 2))
+    await lay('b-text', { y: 0, height: 40 })
+    await lay('b-slot', { y: 2, height: 36 })
+    expect(flat('b').alignItems).toBe('center')
+    expect(flat('b-body').alignItems).toBe('center')
+    for (const id of ['b-glyph', 'b-text', 'b-slot']) expect(flat(id).marginTop).toBeUndefined()
+    expect(flat('b-glyph').height).toBeUndefined()
   })
 
-  it('with no action nothing is offset', async () => {
-    await at(1)
+  it('the action wrapped under the sentence by the measure (360 dp at 1.3): the glyph sits on the first line', async () => {
+    await at(360, 1.3)
+    await render(<VisibilityBanner state="anon" onAction={jest.fn()} testID="b" />)
+    await lay('b-text', { y: 0, height: 52 })
+    await lay('b-slot', { y: 64, height: 36 })
+    expect(flat('b').alignItems).toBe('flex-start')
+    expect(flat('b-body').alignItems).toBe('flex-start')
+    expect(flat('b-glyph').height).toBeCloseTo(20 * 1.3)
+  })
+
+  it('past 1.3x the action is under it from the start, and the glyph on the first line', async () => {
+    await at(390, AX_XXXL)
+    await render(<VisibilityBanner state="anon" onAction={jest.fn()} testID="b" />)
+    expect(flat('b').alignItems).toBe('flex-start')
+    expect(flat('b-glyph').height).toBeCloseTo(20 * AX_XXXL)
+    expect(flat('b-text').marginTop).toBeUndefined()
+  })
+
+  it('with no action it is centred, as it was', async () => {
+    await at(390, 1)
     const { Banner } = jest.requireActual('../components/ds/Banner')
     await render(<Banner kind="offline" text="You’re offline." testID="o" />)
-    expect(flat('o-glyph').marginTop).toBe(0)
-    expect(flat('o-text').marginTop).toBe(0)
+    expect(flat('o').alignItems).toBe('center')
   })
 })
 

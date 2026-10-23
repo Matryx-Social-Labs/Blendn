@@ -1,9 +1,9 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AccessibilityInfo, Platform, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 
 import { Icon, type IconName } from '../ui/Icon'
 import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE, TYPE } from '../../lib/design/tokens'
-import { Button, ROW_ACTION_HEIGHT } from './Button'
+import { Button } from './Button'
 import { CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast, useMinMeasure } from './shared'
 
 export type BannerKind = 'offline' | 'paused' | 'info' | 'visibility' | 'error'
@@ -59,12 +59,14 @@ export function Banner({ kind, text, mono, icon, action, busy = false, testID }:
   const wrapped = fontScale > CONTROL_FONT_CAP
   const measure = useMinMeasure('meta')
   /*
-   * Everything hangs from the sentence's first line, not from the middle of the banner: once the action wrapped under the
-   * sentence, a centred glyph floated beside the gap between them (review L9). The glyph sits on that line; a one-line
-   * sentence beside the 36 pt action is centred on it, and an action beside a taller line on that line.
+   * Beside its action the banner is laid out as it always was, centred (review R6). Once the action is under the sentence
+   * (past 1.3x, or wrapped there by the measure, which only layout can say), everything hangs from the sentence's first
+   * line: a centred glyph floated beside the gap between the two (review L9).
    */
+  const [textHeight, setTextHeight] = useState(0)
+  const [slotTop, setSlotTop] = useState(0)
+  const under = !!action && (wrapped || (textHeight > 0 && slotTop >= textHeight))
   const line = TYPE.meta.lineHeight * fontScale
-  const lead = action ? Math.max(0, (ROW_ACTION_HEIGHT - line) / 2) : 0
 
   // The mono part is read with the sentence the first time; a count that ticks beneath it (a wait: 0:52) never re-announces.
   const monoNow = useRef(mono)
@@ -79,17 +81,18 @@ export function Banner({ kind, text, mono, icon, action, busy = false, testID }:
     <View
       testID={testID}
       accessibilityRole={kind === 'error' ? 'alert' : undefined}
-      style={[styles.banner, { backgroundColor: LOOK[kind].fill }, contrast && IC_HAIRLINE]}
+      style={[styles.banner, { backgroundColor: LOOK[kind].fill }, under && styles.top, contrast && IC_HAIRLINE]}
     >
-      <View testID={testID && `${testID}-glyph`} style={[styles.glyph, { height: line, marginTop: lead }]}>
+      <View testID={testID && `${testID}-glyph`} style={under ? [styles.glyph, { height: line }] : undefined}>
         <Icon name={icon ?? LOOK[kind].icon} size={ICON.control} />
       </View>
       {/* The sentence and its action in a row that wraps: the action goes under the sentence rather than squeeze it. */}
-      <View testID={testID && `${testID}-body`} style={styles.body}>
+      <View testID={testID && `${testID}-body`} style={[styles.body, under && styles.top]}>
         <Text
           testID={testID && `${testID}-text`}
           accessibilityLiveRegion={kind === 'error' ? 'assertive' : announced ? 'polite' : 'none'}
-          style={[font('meta', bold), styles.text, { flexBasis: measure, marginTop: lead }]}
+          onLayout={(e) => setTextHeight(e.nativeEvent.layout.height)}
+          style={[font('meta', bold), styles.text, { flexBasis: measure }]}
         >
           {mono ? (
             <>
@@ -101,7 +104,7 @@ export function Banner({ kind, text, mono, icon, action, busy = false, testID }:
           )}
         </Text>
         {action ? (
-          <View testID={testID && `${testID}-slot`} style={wrapped ? styles.under : { marginTop: Math.max(0, (line - ROW_ACTION_HEIGHT) / 2) }}>
+          <View testID={testID && `${testID}-slot`} onLayout={(e) => setSlotTop(e.nativeEvent.layout.y)} style={wrapped ? styles.under : undefined}>
             <Button kind={LIT_KINDS.has(kind) ? 'lit' : 'secondary'} size="sm" icon={action.icon} label={action.label} loading={busy} onPress={action.onPress} testID={testID && `${testID}-action`} />
           </View>
         ) : null}
@@ -163,11 +166,13 @@ const styles = StyleSheet.create({
     paddingVertical: SPACE.md,
     paddingHorizontal: SPACE.lg,
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: SPACE.md,
   },
+  /** The action is under the sentence: hang from its first line. */
+  top: { alignItems: 'flex-start' },
   glyph: { justifyContent: 'center' },
-  body: { flex: 1, minWidth: 0, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', gap: SPACE.md },
+  body: { flex: 1, minWidth: 0, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: SPACE.md },
   text: { flexGrow: 1, flexShrink: 1, color: COLOR.textPrimary },
   under: { flexBasis: '100%' },
 })
