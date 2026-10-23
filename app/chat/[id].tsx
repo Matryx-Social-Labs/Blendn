@@ -166,7 +166,8 @@ function GroupChatInner() {
    * refusal (D-7). The opener may hand it over (the Room's chat button) so the countdown is there from the first frame;
    * the server's answer below is what holds it. Never an error, and never shown to someone the server only refused.
    */
-  const [notOpen, setNotOpen] = useState<string | null>(() => futureInstant(params.opensAt))
+  // Only beside the event it is for: the door is asked about that event, and its answer is what holds the countdown.
+  const [notOpen, setNotOpen] = useState<string | null>(() => (idParam(params.eventId) ? futureInstant(params.opensAt) : null))
   const [opening, setOpening] = useState(false)
   /* A place's room after your Go Live there ended (`NOT_LIVE`): going live again is the way back. */
   const [notLive, setNotLive] = useState(false)
@@ -334,6 +335,7 @@ function GroupChatInner() {
         setOutOfRoom(false)
         setRemovedLine(undefined)
         setGone(false)
+        setNotOpen(null)
         // Live again at the place: the socket was taken out of the room at the end (M3).
         if (notLiveRef.current) rejoinChatSocket(roomId)
         setNotLive(false)
@@ -655,7 +657,10 @@ function GroupChatInner() {
    */
   const askedDoor = useRef(false)
   const askEventDoor = async (): Promise<'joined' | 'notopen' | 'out'> => {
-    if (!roomEventId) return 'out'
+    if (!roomEventId) {
+      setNotOpen(null)
+      return 'out'
+    }
     // A door that cannot be read is "not in this room", as before.
     const door = await Promise.resolve()
       .then(() => apiClient.getEventChat(roomEventId))
@@ -671,6 +676,8 @@ function GroupChatInner() {
       rejoinChatSocket(roomId)
       return 'joined'
     }
+    // Not entitled (or an older server): no countdown, whatever a link's `opensAt` said (review LOW).
+    setNotOpen(null)
     return 'out'
   }
   // Once per open, as soon as the event is known (the row may land after the refusal): a door that joins you is read

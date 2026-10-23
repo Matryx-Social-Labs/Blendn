@@ -426,6 +426,22 @@ describe('an event’s room before it opens (D-7: NOT_OPEN_YET)', () => {
     expect(screen.getByText('Anyone near the stage?')).toBeTruthy()
   })
 
+  it('a crafted link’s opensAt never counts down for someone the door refuses (review LOW)', async () => {
+    mockParams = { id: 'g1', eventId: 'e1', opensAt: new Date(Date.now() + 5 * HOUR).toISOString() }
+    api.getChatMessages.mockResolvedValue(notMember as never)
+    api.getEventChat.mockResolvedValue({ success: false, errorCode: 'FORBIDDEN', error: 'RSVP to this event to join the chat' } as never)
+    await open()
+    expect(screen.getByText('You’re not in this room')).toBeTruthy()
+    expect(screen.queryByText('Not open yet')).toBeNull()
+  })
+
+  it('a member served the room sees the room, whatever a link’s opensAt said', async () => {
+    mockParams = { id: 'g1', eventId: 'e1', opensAt: new Date(Date.now() + 5 * HOUR).toISOString() }
+    await open()
+    expect(screen.getByText('Anyone near the stage?')).toBeTruthy()
+    expect(screen.queryByText('Not open yet')).toBeNull()
+  })
+
   it('someone the server only refused (not going, or an older server’s bare 403): no countdown, as before', async () => {
     api.getChatMessages.mockResolvedValue(notMember as never)
     api.getEventChat.mockResolvedValue({ success: false, errorCode: 'FORBIDDEN', error: 'RSVP to this event to join the chat' } as never)
