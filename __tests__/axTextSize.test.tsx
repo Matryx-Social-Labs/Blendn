@@ -443,6 +443,15 @@ describe('an ordinary phone at an ordinary size keeps text and its trailing piec
     }
   })
 
+  it('375 dp at 1.0 (an iPhone SE or mini) takes the measure: the threshold is exclusive (review R7)', async () => {
+    await at(375, 1)
+    await render(crewRow())
+    expect(basis('make-crew-row-text')).toBe(6 * 17)
+    await at(376, 1)
+    await render(crewRow())
+    expect(basis('make-crew-row-text')).toBe(0)
+  })
+
   it('360 dp at 1.3, and a narrow phone at 1.0, take the measure', async () => {
     await at(360, 1.3)
     await render(crewRow())
