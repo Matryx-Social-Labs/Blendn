@@ -4,7 +4,7 @@
  * back, busy holding it open, the three detents and H.detent when a drag
  * settles on another, no haptic on open, and Reduce Motion.
  */
-import { act, fireEvent, render, screen } from '@testing-library/react-native'
+import { act, fireEvent, render, screen, within } from '@testing-library/react-native'
 import React from 'react'
 import { AccessibilityInfo, Dimensions, Platform, StyleSheet } from 'react-native'
 import { State } from 'react-native-gesture-handler'
@@ -349,12 +349,15 @@ describe('the cap (drive 2: the composer slid under the status bar with the keyb
     Object.defineProperty(Platform, 'OS', { value: 'ios', configurable: true })
   })
 
-  it('scrolls the content inside it, the title and the actions outside the scroll', async () => {
+  it('scrolls the title, the body and the content inside it as one, the actions outside the scroll (RC drive 3 D-E)', async () => {
     const { Text } = jest.requireActual('react-native')
+    const hidden = { includeHiddenElements: true }
     await render(signOut({ children: <Text>Form</Text> }))
-    const content = screen.getByTestId('s-content', { includeHiddenElements: true })
+    const content = screen.getByTestId('s-content', hidden)
     expect(content.type).toBe('RCTScrollView')
-    expect(screen.getByText('Form', { includeHiddenElements: true })).toBeTruthy()
+    expect(within(content).getByText('Form', hidden)).toBeTruthy()
+    expect(within(content).getByText('Sign out?', hidden)).toBeTruthy()
+    expect(within(content).queryByText('Cancel', hidden)).toBeNull()
   })
 })
 

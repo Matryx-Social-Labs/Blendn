@@ -20,13 +20,13 @@ import { scheduleOnRN } from 'react-native-worklets'
 
 import { Icon, type IconName } from '../ui/Icon'
 import { Material } from '../ui/Material'
-import { COLOR, DURATION, EASING, FONT_FAMILY, MATERIAL, RADIUS, SIZE, SPACE, SPRING, TYPE } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, MATERIAL, MAX_FONT_SCALE, RADIUS, SIZE, SPACE, SPRING, TYPE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { notifySheetDismissed } from '../../lib/sheetDismissed'
 import { OPACITY, tint } from '../../lib/theme'
 import { Button, type ButtonKind, type ButtonProps } from './Button'
-import { font, GroundProvider, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast } from './shared'
+import { CONTROL_FONT_CAP, font, GroundProvider, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast } from './shared'
 
 export type Detent = 'short' | 'medium' | 'tall'
 
@@ -78,8 +78,8 @@ export const SHEET_TOP_GAP = SPACE.sm
 /**
  * The tallest a sheet may be: from the top safe area and a margin down to the
  * keyboard's top edge (its `screenY`) when one is up, else to the bottom of the
- * sheet's own root (the real visible height). Past it, the sheet's content
- * scrolls inside it; the title and the actions stay put.
+ * sheet's own root (the real visible height). Past it, the title, body and
+ * content scroll inside it; the actions stay put.
  *
  * The keyboard's top, not window height less keyboard height: on Android
  * edge-to-edge the translucent modal is the whole screen while the window and
@@ -236,7 +236,7 @@ export type SheetProps = {
   actions?: SheetAction[]
   /** The detents a drag may settle on, opening at the first. Omit for a tray as tall as its content. */
   detents?: readonly Detent[]
-  /** Between the body and the actions: a reason list, a form. Scroll it yourself if it can outgrow the detent. */
+  /** Between the body and the actions: a reason list, a form. It scrolls with the title and body when the sheet is at its cap. */
   children?: ReactNode
   /**
    * `false`: a question that must be answered (Flow 7 "Still at the event?"). No handle, a scrim and a drag that
@@ -271,8 +271,11 @@ function useSheetMotion({
   liftMs,
   visibleHeight,
   insetTop,
+  headScrolls,
 }: {
   visible: boolean
+  /** The header is in a scroll that has more than fits: the scroll owns the pan there, so only the grip drags the sheet. */
+  headScrolls: boolean
   /** Lowest first. */
   heights: number[]
   /** How far the foot is raised onto the keyboard (`sheetFrame`); eased in step with it. */
@@ -398,31 +401,37 @@ function useSheetMotion({
       height.set(withSpring((levels ?? [natural.get()])[at.get()], SPRING.fling))
     }, DRAG_CLOSE_ASK_MS)
   }, [requestClose, levels, offset, height, at, natural, flingV])
-  const drag = Gesture.Pan()
-    .enabled(visible && !busy && dismissible)
-    .activeOffsetY([-SPACE.sm, SPACE.sm])
-    .onUpdate((e) => {
-      const stops = levels ?? [natural.get()]
-      const max = stops[stops.length - 1]
-      const h = stops[at.get()] - e.translationY
-      height.set(h <= max ? Math.max(h, stops[0]) : max + (h - max) * RUBBER_BAND)
-      offset.set(Math.max(0, stops[0] - h))
-    })
-    // The compiler reads `dragClose` (it checks `visibleRef` inside a timer, never in render) as a ref read during render.
-    // eslint-disable-next-line react-hooks/refs
-    .onEnd((e) => {
-      const stops = levels ?? [natural.get()]
-      const to = settleDetent(stops, at.get(), height.get(), offset.get(), e.velocityY)
-      if (to === 'dismiss') {
-        flingV.set(e.velocityY)
-        scheduleOnRN(dragClose)
-        return
-      }
-      if (to !== at.get()) scheduleOnRN(playDetent)
-      at.set(to)
-      height.set(withSpring(stops[to], { ...SPRING.fling, velocity: -e.velocityY }))
-      offset.set(withSpring(0, { ...SPRING.fling, velocity: e.velocityY }))
-    })
+  // One drag, on two surfaces: the grip, always; the header, while its scroll has nothing to scroll.
+  const pan = (enabled: boolean) =>
+    Gesture.Pan()
+      .enabled(enabled)
+      .activeOffsetY([-SPACE.sm, SPACE.sm])
+      .onUpdate((e) => {
+        const stops = levels ?? [natural.get()]
+        const max = stops[stops.length - 1]
+        const h = stops[at.get()] - e.translationY
+        height.set(h <= max ? Math.max(h, stops[0]) : max + (h - max) * RUBBER_BAND)
+        offset.set(Math.max(0, stops[0] - h))
+      })
+      .onEnd((e) => {
+        const stops = levels ?? [natural.get()]
+        const to = settleDetent(stops, at.get(), height.get(), offset.get(), e.velocityY)
+        if (to === 'dismiss') {
+          flingV.set(e.velocityY)
+          scheduleOnRN(dragClose)
+          return
+        }
+        if (to !== at.get()) scheduleOnRN(playDetent)
+        at.set(to)
+        height.set(withSpring(stops[to], { ...SPRING.fling, velocity: -e.velocityY }))
+        offset.set(withSpring(0, { ...SPRING.fling, velocity: e.velocityY }))
+      })
+  const canDrag = visible && !busy && dismissible
+  // The compiler reads `dragClose` (it checks `visibleRef` inside a timer, never in render) as a ref read during render.
+  // eslint-disable-next-line react-hooks/refs
+  const drag = pan(canDrag)
+  // eslint-disable-next-line react-hooks/refs
+  const headDrag = pan(canDrag && !headScrolls)
 
   // `marginBottom` is the one thing that lifts the sheet over the keyboard; a detent sheet's height is what is left above it, at this frame's lift.
   const placeStyle = useAnimatedStyle(() => {
@@ -437,7 +446,7 @@ function useSheetMotion({
     }
   })
   const scrimStyle = useAnimatedStyle(() => ({ opacity: scrim.get() }))
-  return { mounted, drag, placeStyle, scrimStyle, natural, fixedHeight: !!levels }
+  return { mounted, drag, headDrag, placeStyle, scrimStyle, natural, fixedHeight: !!levels }
 }
 
 /**
@@ -538,7 +547,7 @@ export function Sheet({ visible, onClose, title, headerAction, headerNote, body,
     dismissed.current = onDismissed
   })
   const ios = Platform.OS === 'ios'
-  const { mounted, drag, placeStyle, scrimStyle, natural, fixedHeight } = useSheetMotion({
+  const { mounted, drag, headDrag, placeStyle, scrimStyle, natural, fixedHeight } = useSheetMotion({
     visible,
     heights,
     opening,
@@ -549,11 +558,16 @@ export function Sheet({ visible, onClose, title, headerAction, headerNote, body,
     liftMs: keyboard?.duration,
     visibleHeight,
     insetTop: insets.top,
+    headScrolls: overflowing,
     onGone: () => {
       if (!ios) dismissed.current?.()
     },
   })
-  if (testID) drag.withTestId(`${testID}-drag`)
+  if (testID) {
+    drag.withTestId(`${testID}-drag`)
+    headDrag.withTestId(`${testID}-head-drag`)
+  }
+  const hasHead = !!(icon || title || headerAction || headerNote || body)
   // Once the modal is on screen: iOS presents it a frame after mount and drops a focus sent earlier.
   const focusTitle = () => {
     const target = titleRef.current ?? focusRef?.current
@@ -622,8 +636,9 @@ export function Sheet({ visible, onClose, title, headerAction, headerNote, body,
                 contrast && IC_HAIRLINE,
               ]}
             >
+              {/* The grip stays above the scroll: a sheet scrolled down to its actions can still be dragged away. */}
               <GestureDetector gesture={drag}>
-                <View style={styles.head}>
+                <View style={styles.grip}>
                   {dismissible ? (
                     <Pressable
                       accessibilityRole="button"
@@ -635,55 +650,15 @@ export function Sheet({ visible, onClose, title, headerAction, headerNote, body,
                       <View testID={testID && `${testID}-handle`} style={[styles.handle, handle]} />
                     </Pressable>
                   ) : null}
-                  {icon ? (
-                    <View
-                      accessibilityElementsHidden
-                      importantForAccessibility="no-hide-descendants"
-                      style={[styles.well, { backgroundColor: android ? COLOR.surfaceSunken : MATERIAL.fillOnGlass }]}
-                    >
-                      <Icon name={icon} />
-                    </View>
-                  ) : null}
-                  {title || headerAction || headerNote ? (
-                    <View style={styles.titleRow}>
-                      {title ? (
-                        <Text ref={titleRef} accessibilityRole="header" style={[font('title', bold), styles.title, styles.titleText]}>
-                          {title}
-                        </Text>
-                      ) : (
-                        <View style={styles.titleText} />
-                      )}
-                      {headerNote ? (
-                        <View
-                          accessible
-                          accessibilityLabel={headerNote.label ?? `${headerNote.lead ?? ''}${headerNote.text}`}
-                          testID={testID && `${testID}-note`}
-                          style={styles.note}
-                        >
-                          {headerNote.lead ? <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.title]}>{headerNote.lead}</Text> : null}
-                          <Text style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{headerNote.text}</Text>
-                        </View>
-                      ) : null}
-                      {headerAction ? (
-                        <Pressable
-                          testID={testID && `${testID}-header-action`}
-                          accessibilityRole="button"
-                          accessibilityState={{ disabled: !!headerAction.disabled }}
-                          disabled={headerAction.disabled}
-                          hitSlop={(minTarget() - TYPE.meta.lineHeight) / 2}
-                          onPress={headerAction.onPress}
-                          style={headerAction.disabled && { opacity: OPACITY.disabled }}
-                        >
-                          <Text style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.title]}>{headerAction.label}</Text>
-                        </Pressable>
-                      ) : null}
-                    </View>
-                  ) : null}
-                  {body ? <Text style={[font('body', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{body}</Text> : null}
                 </View>
               </GestureDetector>
-              {children ? (
-                // Scrolls only when the sheet is at its cap; otherwise it is exactly its content.
+              {hasHead || children ? (
+                /*
+                 * The title, the body and the children scroll as one under the cap; the actions below it stay put. With only
+                 * `children` inside, a header taller than the cap (AX XXXL: "Sign out?" and its body) pushed Cancel and Sign
+                 * out off the screen and nothing scrolled (RC drive 3 D-E). It scrolls only when it has more than fits, so
+                 * the header's drag never fights a scroll with nowhere to go.
+                 */
                 <ScrollView
                   ref={content}
                   onLayout={(e) => {
@@ -706,9 +681,62 @@ export function Sheet({ visible, onClose, title, headerAction, headerNote, body,
                   persistentScrollbar={overflowing}
                   fadingEdgeLength={overflowing ? SPACE.xxxl : 0}
                   nestedScrollEnabled
-                  scrollEnabled
+                  scrollEnabled={overflowing}
                   bounces={false}
                 >
+                  {hasHead ? (
+                    <GestureDetector gesture={headDrag}>
+                      <View style={styles.head}>
+                        {icon ? (
+                          <View
+                            accessibilityElementsHidden
+                            importantForAccessibility="no-hide-descendants"
+                            style={[styles.well, { backgroundColor: android ? COLOR.surfaceSunken : MATERIAL.fillOnGlass }]}
+                          >
+                            <Icon name={icon} />
+                          </View>
+                        ) : null}
+                        {title || headerAction || headerNote ? (
+                          <View style={styles.titleRow}>
+                            {title ? (
+                              <Text ref={titleRef} accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.title, styles.titleText]}>
+                                {title}
+                              </Text>
+                            ) : (
+                              <View style={styles.titleText} />
+                            )}
+                            {headerNote ? (
+                              <View
+                                accessible
+                                accessibilityLabel={headerNote.label ?? `${headerNote.lead ?? ''}${headerNote.text}`}
+                                testID={testID && `${testID}-note`}
+                                style={styles.note}
+                              >
+                                {headerNote.lead ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.title]}>{headerNote.lead}</Text> : null}
+                                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{headerNote.text}</Text>
+                              </View>
+                            ) : null}
+                            {headerAction ? (
+                              <Pressable
+                                testID={testID && `${testID}-header-action`}
+                                accessibilityRole="button"
+                                accessibilityState={{ disabled: !!headerAction.disabled }}
+                                disabled={headerAction.disabled}
+                                hitSlop={(minTarget() - TYPE.meta.lineHeight) / 2}
+                                onPress={headerAction.onPress}
+                                style={headerAction.disabled && { opacity: OPACITY.disabled }}
+                              >
+                                <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.title]}>{headerAction.label}</Text>
+                              </Pressable>
+                            ) : null}
+                          </View>
+                        ) : null}
+                        {body ? (
+                          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{body}</Text>
+                        ) : null}
+                      </View>
+                    </GestureDetector>
+                  ) : null}
                   <GroundProvider value={android ? 'surface' : 'glass'}>{children}</GroundProvider>
                 </ScrollView>
               ) : null}
@@ -743,10 +771,10 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: RADIUS.sheet,
     borderTopRightRadius: RADIUS.sheet,
     paddingHorizontal: SPACE.gutter,
-    gap: SPACE.md,
   },
-  /** The top padding is the head's, so the handle above the title is inside the drag's bounds (Android checks them). */
-  head: { gap: SPACE.md, paddingTop: SPACE.xl },
+  /** The handle's strip (the head's old top padding), so the handle is inside the drag's bounds (Android checks them). */
+  grip: { height: SPACE.xl },
+  head: { gap: SPACE.md },
   handleHit: {
     position: 'absolute',
     top: 0,
@@ -769,7 +797,7 @@ const styles = StyleSheet.create({
   titleText: { flexGrow: 1, flexShrink: 0, maxWidth: '100%' },
   note: { flexDirection: 'row', flexShrink: 1, minWidth: 0, justifyContent: 'flex-end' },
   title: { color: COLOR.textPrimary },
-  actions: { gap: SPACE.sm },
+  actions: { gap: SPACE.sm, paddingTop: SPACE.md },
   content: { flexGrow: 0, flexShrink: 1 },
   contentInner: { gap: SPACE.md },
   pinned: { marginTop: 'auto' },

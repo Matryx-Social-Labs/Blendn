@@ -5,11 +5,12 @@
  * The rule (`AX_FONT_SCALE`, components/ds/shared.ts): reading text grows to its cap and wraps; nothing that grows sits in a
  * box of fixed height; controls and tab labels stop at CONTROL_FONT_CAP.
  */
-import { act, render, screen } from '@testing-library/react-native'
+import { act, fireEvent, render, screen, within } from '@testing-library/react-native'
 import { readFileSync, readdirSync, existsSync } from 'fs'
 import { join } from 'path'
 import React, { useEffect } from 'react'
 import { Dimensions, Platform, StyleSheet, Text, View } from 'react-native'
+import { getByGestureTestId } from 'react-native-gesture-handler/jest-utils'
 import type { ReactTestRendererJSON } from 'react-test-renderer'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
@@ -44,6 +45,7 @@ import { Composer } from '../components/ds/Composer'
 import { SettingsGroup, SettingsRow } from '../components/ds/SettingsRow'
 import { LegalLine } from '../components/LegalLine'
 import { KeyboardPage } from '../components/onboarding/KeyboardPage'
+import { Sheet } from '../components/ds/Sheet'
 /* eslint-enable import/first */
 
 /** iOS AX XXXL: body 53 pt over 17. */
@@ -262,6 +264,55 @@ describe('at AX XXXL (fontScale 3.1)', () => {
     // The hairline starts at the stacked text's edge, not past a glyph that is now above it.
     expect(StyleSheet.flatten(screen.getByTestId('g-hairline', hidden).props.style).marginLeft).toBe(SPACE.lg)
     expect(uncapped(screen.toJSON())).toEqual([])
+  })
+
+  it('a confirm Sheet keeps its actions on screen (RC drive 3 D-E: "Sign out?" pushed Cancel and Sign out off it): the title, body and content scroll as one, the actions are pinned under the scroll, and the title and body stop at their caps', async () => {
+    const title = 'Sign out of Blendn on this phone and every other one?'
+    const body = 'You’ll need to sign in again to see your events, friends and messages. Drafts on this phone are kept until you sign in again.'
+    const hidden = { includeHiddenElements: true }
+    await render(
+      <Sheet
+        visible
+        onClose={jest.fn()}
+        icon="log-out"
+        title={title}
+        body={body}
+        actions={[
+          { label: 'Cancel', kind: 'tertiary', onPress: jest.fn() },
+          { label: 'Sign out', kind: 'destructive', onPress: jest.fn() },
+        ]}
+        testID="s"
+      >
+        <Text>Your crews stay yours.</Text>
+      </Sheet>
+    )
+    const scroll = screen.getByTestId('s-content', hidden)
+    expect(scroll.type).toBe('RCTScrollView')
+    // The header is inside the scroll, with the content.
+    for (const text of [title, body, 'Your crews stay yours.']) expect(within(scroll).getByText(text, hidden)).toBeTruthy()
+    // Both actions are rendered, outside the scroll, after it: the scroll shrinks under the cap, they never do.
+    for (const label of ['Cancel', 'Sign out']) {
+      expect(screen.getByText(label, hidden)).toBeTruthy()
+      expect(within(scroll).queryByText(label, hidden)).toBeNull()
+    }
+    expect(StyleSheet.flatten(scroll.props.style)).toMatchObject({ flexShrink: 1 })
+    expect(screen.getByText(title, hidden).props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.title)
+    expect(screen.getByText(body, hidden).props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.body)
+    // Taller than the cap: it scrolls, and the header's drag gives way to it; the grip still drags.
+    await act(async () => fireEvent(scroll, 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 393, height: 500 } } }))
+    await act(async () => fireEvent(scroll, 'contentSizeChange', 393, 1400))
+    expect(screen.getByTestId('s-content', hidden).props.scrollEnabled).toBe(true)
+    expect(getByGestureTestId('s-head-drag').config.enabled).toBe(false)
+    expect(getByGestureTestId('s-drag').config.enabled).toBe(true)
+  })
+
+  it('a Sheet that fits does not scroll, so dragging its header still moves the sheet', async () => {
+    await render(<Sheet visible onClose={jest.fn()} title="Sign out?" actions={[{ label: 'Sign out', onPress: jest.fn() }]} testID="s" />)
+    const scroll = screen.getByTestId('s-content', { includeHiddenElements: true })
+    await act(async () => fireEvent(scroll, 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 393, height: 200 } } }))
+    await act(async () => fireEvent(scroll, 'contentSizeChange', 393, 200))
+    expect(screen.getByTestId('s-content', { includeHiddenElements: true }).props.scrollEnabled).toBe(false)
+    expect(getByGestureTestId('s-head-drag').config.enabled).toBe(true)
   })
 
   it('Going’s empty and failed states scroll, so the action is never under the tab bar', () => {
