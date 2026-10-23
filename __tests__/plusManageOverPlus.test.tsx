@@ -9,7 +9,7 @@
  *
  * Negative controls: the code before the fix (the screen's own `<Stack.Screen options={{ … }} />`, the route not declared
  * in the root layout) fails the first test with the loop and the boundary. The literal alone, with the declaration kept,
- * did not loop here, and fails the second test: no screen sets its options that way.
+ * did not loop here, and fails the guard test, which takes any `<X.Screen>` or `.setOptions(` outside a layout.
  *
  * And what a link or a notification tap does while a modal route is up: the modal closes, and the link opens over what
  * presented it (`dismissModals`, lib/pendingRoute). Links are delivered the way iOS delivers them to the running app,
@@ -176,15 +176,20 @@ describe('Manage over the paywall (RC drive 5)', () => {
     expect(Sentry.captureException).not.toHaveBeenCalled()
   })
 
-  it('no screen sets its own options with an object literal: a route declares them in its layout', () => {
-    const app = join(__dirname, '..', 'app')
+  it('no screen or component sets navigation options from its render: a route declares them in its layout', () => {
+    const root = join(__dirname, '..')
     const files = (dir: string): string[] =>
       readdirSync(dir).flatMap((name) => {
         const path = join(dir, name)
         return statSync(path).isDirectory() ? files(path) : /\.tsx?$/.test(name) && !/_layout\.tsx$/.test(name) ? [path] : []
       })
-    const offenders = files(app).filter((path) => /<Stack\.Screen\b[^>]*options=\{\{/.test(readFileSync(path, 'utf8')))
-    expect(offenders.map((path) => relative(app, path))).toEqual([])
+    // `<Stack.Screen options=…>` / `<Tabs.Screen …>` in a screen (any navigator's), and `navigation.setOptions(…)`: each
+    // sets options as the screen renders, and a new object every render looped over a modal (RC drive 5).
+    const SETS_OPTIONS = /<\w+\.Screen\b|\.setOptions\(/
+    const offenders = ['app', 'components']
+      .flatMap((dir) => files(join(root, dir)))
+      .filter((path) => SETS_OPTIONS.test(readFileSync(path, 'utf8')))
+    expect(offenders.map((path) => relative(root, path))).toEqual([])
   })
 
   describe('a link or a tap while a modal route is up (RC drive 5): the modal closes, the link opens over its presenter', () => {
