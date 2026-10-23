@@ -53,6 +53,9 @@ export const LIVE_READ_RETRY_MS = 15_000
 /** A window that stopped being a "stay" this soon after a Go Live of ours was our own doing. */
 const OWN_GO_LIVE_MS = 15_000
 
+/** An end found this long after it happened (the app was away) is old news: no toast for it (review LOW-5). */
+export const STALE_END_MS = 10 * 60_000
+
 /** "Reset" is told by the venue day's own end: the window ran out within this long of it. */
 const RESET_SLACK_MS = 60_000
 
@@ -158,11 +161,12 @@ export function LiveAtVenue() {
      * after that the toast "You're no longer live at ‹place›." — whether the socket told this phone or a read found it.
      * A read used to say nothing at all for a window it found over after the night's one prompt (RC drive 4 D-8).
      */
-    const sayEnded = async (eventId: string, reason: string, remembered: LiveSession | null, window: string | null) => {
+    const sayEnded = async (eventId: string, reason: string, remembered: LiveSession | null, window: string | null, endedAt: string | null = null) => {
       if (window && said.has(window)) return
       if (window) said.add(window)
       const asked = await askEnded(eventId, reason, remembered)
       if (asked.asked || cancelled) return
+      if (endedAt && serverNow() - Date.parse(endedAt) > STALE_END_MS) return
       const message = liveEndedMessage(reason, nameRef.current ?? remembered?.venueName ?? null)
       if (message && !(asked.reset && asked.inRoom)) showToast(message, 'info')
     }
@@ -198,7 +202,7 @@ export function LiveAtVenue() {
         }
         // The window ran out while the socket was away: `live:ended` never came, and the read is what finds out.
         if (!next && before && !before.stay && before.expiresAt && Date.parse(before.expiresAt) <= serverNow()) {
-          void sayEnded(before.venueDayId, 'expired', remembered, windowOf(before.venueDayId, before.expiresAt))
+          void sayEnded(before.venueDayId, 'expired', remembered, windowOf(before.venueDayId, before.expiresAt), before.expiresAt)
         }
         // Live again (an extension, here or elsewhere): "your live time is up" says something false. A read that
         // still shows the window that just ended (it lands beside the end) is not that.

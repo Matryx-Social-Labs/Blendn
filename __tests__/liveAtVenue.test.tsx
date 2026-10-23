@@ -334,6 +334,16 @@ describe('an end the socket missed', () => {
     expect(mockShowToast).toHaveBeenCalledWith("You’re no longer live at The Humming Tree.", 'info')
   })
 
+  it('an end found long after it happened (the app was away an hour) is not toasted as news (review LOW-5)', async () => {
+    await markLivePrompted('u1', 'day-1')
+    active(at(5))
+    await mount()
+    jest.setSystemTime(NOW + 70 * 60_000)
+    notLive()
+    await readsAgain()
+    expect(mockShowToast).not.toHaveBeenCalled()
+  })
+
   it('the socket and the read that follows it say one end once', async () => {
     await markLivePrompted('u1', 'day-1')
     active(at(5))
