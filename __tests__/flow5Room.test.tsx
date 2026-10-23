@@ -76,7 +76,7 @@ jest.mock('../lib/notifications', () => ({ useActiveThread: jest.fn() }))
 /* eslint-disable import/first */
 import GroupChat from '../app/chat/[id]'
 import { apiClient } from '../lib/apiClient'
-import { clearOutbox, failedOf, keepFailed, roomThread } from '../lib/chatOutbox'
+import { clearOutbox, draftOf, failedOf, keepFailed, roomThread } from '../lib/chatOutbox'
 import { resetRoomMembership } from '../lib/roomMembership'
 /* eslint-enable import/first */
 
@@ -268,6 +268,8 @@ describe('a room that will not take a send again (drive 4 D-6)', () => {
     expect(screen.queryByLabelText('Message')).toBeNull()
     expect(screen.queryByLabelText(/^Not sent/)).toBeNull()
     expect(failedOf(roomThread('g1', 'u-a'))).toEqual([])
+    // What was typed is not lost: the last of it is the thread's draft (review LOW-3).
+    expect(draftOf(roomThread('g1', 'u-a'))).toBe('hello')
   })
 
   it('a mute is not that: the refused bubble stays, to retry once it lifts', async () => {

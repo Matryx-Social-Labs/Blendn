@@ -209,10 +209,15 @@ function GroupChatInner() {
   /*
    * Read-only for good: a lock no retry gets past, or a room that closed, went or removed you. Nothing is queued or kept
    * as "Not sent · Tap to retry" under it, and what was pending goes (state adjusted in render), here and in the
-   * Banter's "Not sent" (RC drive 4 D-6).
+   * Banter's "Not sent" (RC drive 4 D-6). The last of it is not lost: it is kept as the thread's draft, unless one was
+   * being written (review LOW-3), so it is there to copy if the room ever opens again.
    */
   const readOnly = isReadOnlyLock(composer.lock) || outside?.kind === 'closed' || outside?.kind === 'gone' || outside?.kind === 'removed'
-  if (readOnly && messages.some(isPendingSend)) setMessages((prev) => prev.filter((m) => !isPendingSend(m)))
+  if (readOnly && messages.some(isPendingSend)) {
+    const lastUnsent = [...messages].reverse().find(isPendingSend)
+    if (lastUnsent && !newMessage.trim()) setNewMessage(lastUnsent.message_text)
+    setMessages((prev) => prev.filter((m) => !isPendingSend(m)))
+  }
   const muted = isMuted(useRoomMute(chatRoomId ? roomId : null))
   /** In the room now: the Room's number, live (`useHereCount`); a chat leave is not leaving the room. */
   const hereCount = useHereCount(roomInfo)
