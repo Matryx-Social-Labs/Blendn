@@ -53,6 +53,12 @@ if (!API_BASE_URL) {
 const ACCESS_TOKEN_KEY = 'blendn_access_token'
 const REFRESH_TOKEN_KEY = 'blendn_refresh_token'
 const USER_KEY = 'blendn_user'
+/**
+ * "Signed out on this phone", in AsyncStorage (Opus review M2). AsyncStorage is its own native module, off Expo's shared
+ * queue: written at sign-out before any await, it lands even when SecureStore's deletes are queued behind a stuck call and
+ * the app is killed before they run. The launch honours it before restoring anything (`useAuth.initializeAuth`).
+ */
+const SIGNED_OUT_KEY = 'blendn_signed_out'
 
 // Secure storage options
 const SECURE_OPTIONS: SecureStore.SecureStoreOptions = {
@@ -369,6 +375,27 @@ class TokenStorage {
       this.secureRemove(REFRESH_TOKEN_KEY),
       this.secureRemove(USER_KEY),
     ])
+  }
+
+  /** Mark this phone signed out (M2): called before any await at sign-out, so the write is issued whatever follows. */
+  static markSignedOut(): void {
+    AsyncStorage.setItem(SIGNED_OUT_KEY, '1').catch(() => {})
+  }
+
+  /** Whether a sign-out here may not have reached the keychain. Unreadable reads as no: never a reason to sign anyone out. */
+  static async signedOutHere(): Promise<boolean> {
+    try {
+      return (await AsyncStorage.getItem(SIGNED_OUT_KEY)) === '1'
+    } catch {
+      return false
+    }
+  }
+
+  /** The keychain is known clear, or holds a newer session: the marker goes. */
+  static async forgetSignedOut(): Promise<void> {
+    try {
+      await AsyncStorage.removeItem(SIGNED_OUT_KEY)
+    } catch {}
   }
 
   static async setTokens(accessToken: string, refreshToken: string): Promise<void> {
@@ -1784,6 +1811,8 @@ class ApiClientClass {
       this.clearResponseCache()
       await TokenStorage.setTokens(result.data.accessToken, result.data.refreshToken)
       await TokenStorage.setUser(result.data.user)
+      // Only once this session is in the keychain: dropped earlier, a kill before the writes land restored the last one (M2).
+      await TokenStorage.forgetSignedOut()
     }
     return result
   }
@@ -1892,6 +1921,7 @@ class ApiClientClass {
 
     if (result.success) {
       nextSession()
+      TokenStorage.markSignedOut()
       // Bounded like sign-out's (D1): a keychain stuck behind another native call clears when it frees.
       await withinDeadline(TokenStorage.clearAll())
       requestQueue.clear()
@@ -1934,6 +1964,7 @@ class ApiClientClass {
     })
     if (!result.success) return result
     nextSession()
+    TokenStorage.markSignedOut()
     setPushTokenRef(null)
     await TokenStorage.clearAll()
     requestQueue.clear()
@@ -1956,6 +1987,8 @@ class ApiClientClass {
    */
   async signOut(revokeAll: boolean = false): Promise<ApiResponse<void>> {
     nextSession()
+    // First, and before any await (M2): if the keychain deletes below never run, the next launch still knows.
+    TokenStorage.markSignedOut()
     /*
      * The push token rides in the POST, and nothing else may use it (Opus review M1): the root layout's sign-out
      * `removePushTokenFromProfile` ran with the ref still set, 401'd with no token, and its refresh found none, so a sign-out

@@ -165,6 +165,27 @@ describe('sign-out clears the keychain before it tells the server (security revi
     await expect(leaving).resolves.toEqual({ success: true })
   })
 
+  it('a sign-out behind a stuck native queue, then a kill: the relaunch restores no one (Opus review M2)', async () => {
+    await auth.signInWithEmail('a@b.c', 'pw')
+    // Something else's native call never answers: every SecureStore call from here waits behind it.
+    void mockQueue('stuck', mockNever)
+    const leaving = auth.signOut()
+    expect(await auth.getCurrentUser()).toBeNull()
+    await jest.advanceTimersByTimeAsync(35_000)
+    await leaving
+    // The deletes never ran: the session is still in the keychain when iOS kills the app.
+    expect(mockSecure.has(ACCESS)).toBe(true)
+    // The relaunch: a new process, a new queue, the same keychain and AsyncStorage.
+    mockTail = Promise.resolve()
+    expect((await auth.reinitializeAuth()).user).toBeNull()
+    expect(mockSecure.has(ACCESS)).toBe(false)
+    expect(mockSecure.has(REFRESH)).toBe(false)
+    // Cleared, so the marker goes; and a later sign-in is restored as usual.
+    await auth.signInWithEmail('a@b.c', 'pw')
+    expect((await auth.reinitializeAuth()).user?.id).toBe(USER.id)
+    await auth.signOut()
+  })
+
   it('an expired access token is refreshed with the tokens it read, ends the rotated session, and stores nothing', async () => {
     await auth.signInWithEmail('a@b.c', 'pw')
     mockExpiredAccess = mockSecure.get(ACCESS) ?? null

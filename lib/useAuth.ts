@@ -4,6 +4,7 @@ import { apiClient, AuthUser, TokenStorage } from './apiClient'
 import { setAppIconBadge } from './appBadge'
 import { forgetAuthMethod, rememberAuthMethod } from './authMethod'
 import { onCriticalPath } from './criticalPath'
+import { REQUEST_TIMEOUT_MS, settleWithin } from './fetchTimeout'
 import { Logger } from './logger'
 import { outageFrom, type Outage } from './outage'
 import { syncPurchasesUser } from './purchases'
@@ -144,6 +145,20 @@ const initializeAuth = async (): Promise<AuthState> => {
     updateAuthState({ loading: true })
 
     try {
+      /*
+       * Signed out here, and the keychain may still hold the session (Opus review M2): its deletes were queued behind a
+       * stuck native call and the app was killed first. Never restored: the tokens are deleted again, and the marker goes
+       * once they are.
+       */
+      if (await TokenStorage.signedOutHere()) {
+        Logger.info('auth', 'Signed out on this phone; not restoring the keychain session')
+        const cleared = await settleWithin(TokenStorage.clearAll().then(() => true), REQUEST_TIMEOUT_MS, false)
+        if (cleared) await TokenStorage.forgetSignedOut()
+        updateAuthState({ session: null, user: null, loading: false, initialized: true, unreachable: false })
+        isInitializing = false
+        return globalAuthState
+      }
+
       // Check if we have stored tokens
       const accessToken = await TokenStorage.getAccessToken()
 

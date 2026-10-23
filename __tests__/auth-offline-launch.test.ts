@@ -18,6 +18,9 @@ jest.mock('../lib/apiClient', () => ({
     getUser: jest.fn(),
     setUser: jest.fn().mockResolvedValue(undefined),
     clearAll: jest.fn().mockResolvedValue(undefined),
+    // No sign-out recorded on this phone (Opus review M2): the launch reads the keychain.
+    signedOutHere: jest.fn().mockResolvedValue(false),
+    forgetSignedOut: jest.fn().mockResolvedValue(undefined),
   },
 }))
 jest.mock('../lib/logger', () => ({
