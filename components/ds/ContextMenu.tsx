@@ -193,7 +193,7 @@ export function LongPressMenu({ visible, anchor, side, items, reactions, onClose
   // The Modal stays up for the exit and goes after it (state adjusted in render), like the Sheet.
   const [mounted, setMounted] = useState(shown)
   if (shown && !mounted) setMounted(true)
-  const turn = useTurnWatch(gate, mounted, { onGiveUp: onClose })
+  const turn = useTurnWatch(gate, mounted)
   // Each open starts from this menu's own estimate, not the last one's measure (state adjusted in render).
   const [openedFor, setOpenedFor] = useState(shown)
   if (shown !== openedFor) {

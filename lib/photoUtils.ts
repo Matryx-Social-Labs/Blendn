@@ -11,8 +11,9 @@ import { pulledPhotos, type PulledPhoto } from './photoStates'
 import { unseenPulled } from './pulledNotices'
 import { queryCache } from './queryCache'
 import { refreshAuthUser } from './useAuth'
-import { sheetClosed, showSheet } from './sheet'
+import { showSheet } from './sheet'
 import { toast } from './toast'
+import { holdTurnWhile } from './modalTurn'
 
 export interface PhotoUploadResult {
   success: boolean
@@ -130,9 +131,9 @@ const ensureCameraPermission = async (): Promise<PermissionOutcome> => {
  * was the one most people want. The one sheet draws every option in the
  * order given, on both platforms.
  *
- * Waits for the sheet to be off screen before resolving: every choice here
- * opens the camera or the photo picker next, and iOS drops a presentation
- * made while the sheet's Modal is still fading (`sheetClosed`).
+ * Every choice here opens the camera or the photo picker next, and iOS drops a
+ * presentation made while the sheet's Modal is still fading: the picker waits
+ * for the sheet's own onDismiss (`holdTurnWhile`, lib/modalTurn).
  */
 function choose<T>(
   title: string,
@@ -144,8 +145,8 @@ function choose<T>(
     const settle = (value: T | null) => {
       if (settled) return
       settled = true
-      if (value === null) resolve(null)
-      else void sheetClosed().then(() => resolve(value))
+      // The picker or camera it opens waits for the sheet's own onDismiss (`holdTurnWhile`), not a flat fade.
+      resolve(value)
     }
     showSheet({
       kind: 'actions',
@@ -218,7 +219,8 @@ export const pickImage = async (
 
   if (source === 'library') {
     try {
-      const result = await ImagePicker.launchImageLibraryAsync(pickerOptions(finalOptions))
+      // Waits for the source sheet to have gone and holds the screen while the picker is up (lib/modalTurn).
+      const result = await holdTurnWhile(() => ImagePicker.launchImageLibraryAsync(pickerOptions(finalOptions)))
       return result.canceled ? null : result
     } catch (error) {
       Logger.error('profile', 'Error picking image from library', { error })
@@ -233,7 +235,7 @@ export const pickImage = async (
     if (permission !== 'granted') {
       fallback = permission
     } else {
-      const result = await ImagePicker.launchCameraAsync(pickerOptions(finalOptions))
+      const result = await holdTurnWhile(() => ImagePicker.launchCameraAsync(pickerOptions(finalOptions)))
       return result.canceled ? null : result
     }
   } catch (error) {

@@ -520,8 +520,8 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
   const android = Platform.OS === 'android'
   /*
    * One Modal on screen at a time on iOS (`lib/modalTurn.ts`, RC drive 4 D-9): asked for, `visible` waits for the
-   * screen to be free; a sheet iOS refuses anyway is taken down and asks again, and after that is closed rather than
-   * hold the screen. A sheet inside another Modal (or a router modal) is drawn as asked, and so is every sheet on Android.
+   * screen to be free; a sheet iOS refuses anyway is taken down and asks again, backing off, while it is wanted. A sheet
+   * inside another Modal (or a router modal) is drawn as asked, and so is every sheet on Android.
    */
   const gate = useTurnGate(wanted)
   const visible = gate.allowed
@@ -617,7 +617,7 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
       if (!ios) dismissed.current?.()
     },
   })
-  const watch = useTurnWatch(gate, mounted, { onGiveUp: onClose })
+  const watch = useTurnWatch(gate, mounted)
   /*
    * Asked for and closed before it ever reached the screen (it waited, or iOS refused it): it has "left" all the same,
    * so a chain that waits on `onDismissed` (the next card, the next step) still runs.

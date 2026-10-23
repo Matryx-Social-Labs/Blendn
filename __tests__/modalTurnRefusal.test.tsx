@@ -13,7 +13,7 @@ import { AppState, Platform } from 'react-native'
 import { OverflowMenu } from '../components/crews/OverflowMenu'
 import { RouteModal } from '../components/system/RouteModal'
 import { Sheet } from '../components/ds/Sheet'
-import { holdsTurn, MAX_REFUSALS, requestTurn, resetModalTurns } from '../lib/modalTurn'
+import { holdTurnWhile, holdsTurn, requestTurn, resetModalTurns, retryDelay } from '../lib/modalTurn'
 import { afterSheetDismissed, HANDOFF_MS } from '../lib/sheetDismissed'
 
 /** Modals whose onShow iOS never sends (refused): every other Modal says it is shown as it is drawn. */
@@ -94,13 +94,44 @@ describe('HIGH-1: a Modal iOS refused gives the screen up', () => {
     expect(shown('b')).toBe(true)
   })
 
-  it('refused again and again, it is closed and dropped rather than hold the screen', async () => {
+  it('refused again and again, it is never closed for it: it keeps asking, 0.5 → 1 → 2 s, capped (review MED-B)', async () => {
+    expect([1, 2, 3, 4, 9].map(retryDelay)).toEqual([500, 1000, 2000, 2000, 2000])
     mockRefused.add('a-modal')
     const onClose = jest.fn()
     await render(<Sheet visible onClose={onClose} title="A" testID="a" />)
-    await settle(MAX_REFUSALS * 3)
-    expect(onClose).toHaveBeenCalled()
-    expect(shown('a')).toBe(false)
+    await settle(12)
+    expect(onClose).not.toHaveBeenCalled()
+    // Whenever iOS takes it, it is shown.
+    mockRefused.clear()
+    await settle(4)
+    expect(shown('a')).toBe(true)
+  })
+
+  it('a native screen (the photo picker) waits for a leaving sheet and holds the screen while it is up', async () => {
+    const view = await render(<Sheet visible onClose={() => {}} title="Add a photo" testID="src" />)
+    const gone = screen.getByTestId('src-modal', HIDDEN).props.onDismiss
+    let pickerOpen = false
+    let closePicker: () => void = () => {}
+    const picked = holdTurnWhile(
+      () =>
+        new Promise<void>((resolve) => {
+          pickerOpen = true
+          closePicker = resolve
+        })
+    )
+    await view.rerender(<Sheet visible={false} onClose={() => {}} title="Add a photo" testID="src" />)
+    await tick(300)
+    expect(pickerOpen).toBe(false)
+    await act(async () => gone())
+    await act(async () => Promise.resolve())
+    expect(pickerOpen).toBe(true)
+    // A sheet that comes due while the picker is up waits for it.
+    await view.rerender(<Sheet visible onClose={() => {}} title="Checked out" testID="late" />)
+    expect(shown('late')).toBe(false)
+    await act(async () => closePicker())
+    await act(async () => picked)
+    await tick(400)
+    expect(shown('late')).toBe(true)
   })
 
   it('refused once while another was leaving, it asks again and is shown', async () => {

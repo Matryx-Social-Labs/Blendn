@@ -81,7 +81,7 @@ export function SceneLightbox({
   const listRef = useRef<FlatList<FeedMediaItem>>(null)
 
   // One Modal on screen at a time on iOS (lib/modalTurn).
-  const turn = useQueuedModal(visible, { onGiveUp: onClose, animationMs: MODAL_FADE_MS })
+  const turn = useQueuedModal(visible, { animationMs: MODAL_FADE_MS })
   const onShow = useCallback(() => {
     setIndex(initialIndex)
     setZoomed(false)

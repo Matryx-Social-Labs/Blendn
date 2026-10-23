@@ -3,6 +3,7 @@ import * as WebBrowser from 'expo-web-browser'
 import { COMMUNITY_GUIDELINES_URL } from './communityGuidelines'
 import { COLOR } from './design/tokens'
 import { Logger } from './logger'
+import { holdTurnWhile } from './modalTurn'
 
 /**
  * The web pages the app links out to.
@@ -36,12 +37,15 @@ export async function openInApp(url: string): Promise<void> {
     Logger.warn('general', 'Refused to open a page that is not ours in the in-app browser', { url })
     throw new Error('Not one of our pages')
   }
-  await WebBrowser.openBrowserAsync(url, {
-    controlsColor: COLOR.textPrimary,
-    toolbarColor: COLOR.ink,
-    dismissButtonStyle: 'close',
-    enableBarCollapsing: true,
-  })
+  // Holds the screen while the browser is up: a sheet that comes due under it waits (lib/modalTurn).
+  await holdTurnWhile(() =>
+    WebBrowser.openBrowserAsync(url, {
+      controlsColor: COLOR.textPrimary,
+      toolbarColor: COLOR.ink,
+      dismissButtonStyle: 'close',
+      enableBarCollapsing: true,
+    })
+  )
 }
 
 /** Where organisers, venue owners and sponsors sign in (Flow 15 #2). Not one of our in-app pages: it opens in the browser. */

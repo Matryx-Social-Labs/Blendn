@@ -321,8 +321,8 @@ export function RepositionHost() {
   const photo = usePendingReposition()
   const reduceMotion = useReducedMotion()
   useEffect(() => mountRepositionHost(), [])
-  // One Modal on screen at a time on iOS (lib/modalTurn); refused for good, it is a cancel.
-  const turn = useQueuedModal(!!photo, { onGiveUp: () => settleReposition({ kind: 'cancel' }), animationMs: reduceMotion ? 0 : MODAL_FADE_MS })
+  // One Modal on screen at a time on iOS (lib/modalTurn).
+  const turn = useQueuedModal(!!photo, { animationMs: reduceMotion ? 0 : MODAL_FADE_MS })
   return (
     <Modal
       visible={turn.visible}

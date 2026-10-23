@@ -1,4 +1,3 @@
-import { useFocusEffect } from 'expo-router'
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { AppState, Platform } from 'react-native'
 
@@ -16,7 +15,7 @@ import { useLatest } from './useLatest'
  *
  * So a Modal asks for the turn before it is drawn, and gives it back once it has gone; one asked for while another holds
  * it waits, in order. A Modal iOS refuses anyway (no `onShow` within `SHOW_WATCHDOG_MS`) is taken down, gives the turn
- * up, and asks again, `MAX_REFUSALS` times, then is dropped with a log rather than hold the screen. A Modal drawn inside
+ * up, and asks again, backing off, for as long as it is wanted. A Modal drawn inside
  * another Modal or a router modal presents from it, and does not queue (`PresentsHere`). Android presents a Modal over
  * another: nothing queues there.
  */
@@ -24,6 +23,8 @@ export type Turn = object
 
 let holder: Turn | null = null
 let queue: readonly Turn[] = []
+/** Turns that are whole screens (a router modal, a native picker or browser), not a Modal drawn over one. */
+const screens = new WeakSet<Turn>()
 const listeners = new Set<() => void>()
 const emit = () => listeners.forEach((listener) => listener())
 
@@ -37,7 +38,8 @@ export function onTurnRequested(listener: (turn: Turn) => void): () => void {
 }
 
 /** Ask for the screen. Free, it is yours at once; held, you wait behind whoever asked first (`front`: ahead of them). */
-export function requestTurn(turn: Turn, { front = false }: { front?: boolean } = {}): void {
+export function requestTurn(turn: Turn, { front = false, screen = false }: { front?: boolean; screen?: boolean } = {}): void {
+  if (screen) screens.add(turn)
   if (holder === turn || queue.includes(turn)) return
   if (holder === null) {
     holder = turn
@@ -97,9 +99,13 @@ export const MODAL_FADE_MS = 400
 const LATE_FIRE_MS = 250
 /** iOS answers a dismissal with `onDismiss`; if it never does, the next in line goes after this. */
 export const MODAL_GONE_FALLBACK_MS = 600
-/** A refused Modal asks again this soon after it was taken down, and this many times in all. */
-const RETRY_MS = 400
-export const MAX_REFUSALS = 3
+/**
+ * A refused Modal asks again after it was taken down: 0.5 s, then 1 s, then every 2 s, for as long as it is wanted. It
+ * is never closed for being refused: its owner wanted it, and closing it said nothing (review MED-B).
+ */
+const RETRY_FIRST_MS = 500
+const RETRY_MAX_MS = 2000
+export const retryDelay = (refusals: number) => Math.min(RETRY_FIRST_MS * 2 ** Math.max(0, refusals - 1), RETRY_MAX_MS)
 
 export type TurnGate = ReturnType<typeof useTurnGate>
 
@@ -122,14 +128,12 @@ export function useTurnGate(wanted: boolean) {
 /**
  * The Modal's side of the turn: `modalUp` is whether the owner's Modal is drawn (it may stay a moment after `allowed`
  * goes, for its own exit). Returns `refused` (draw the Modal off: iOS refused it) and the Modal's `onShow`/`onDismiss`.
- * `onGiveUp`: refused `MAX_REFUSALS` times; the owner should close it.
  */
-export function useTurnWatch(gate: TurnGate, modalUp: boolean, { onGiveUp, animationMs = 0 }: { onGiveUp?: () => void; animationMs?: number } = {}) {
+export function useTurnWatch(gate: TurnGate, modalUp: boolean, { animationMs = 0 }: { animationMs?: number } = {}) {
   const { turn, queued, wanted, setBackoff } = gate
   const shown = useRef(false)
   const presented = useRef(false)
   const wantedNow = useLatest(wanted)
-  const giveUp = useLatest(onGiveUp)
   const refusals = useRef(0)
   const [refused, setRefused] = useState(false)
   if (!wanted && refused) setRefused(false)
@@ -168,22 +172,18 @@ export function useTurnWatch(gate: TurnGate, modalUp: boolean, { onGiveUp, anima
       setRefused(true)
       setBackoff(true)
       releaseTurn(turn)
-      if (refusals.current >= MAX_REFUSALS) {
-        Logger.error('navigation', 'a modal iOS kept refusing was dropped', { refusals: refusals.current })
-        giveUp.current?.()
-      }
     }
     arm()
     return () => clearTimeout(timer)
-  }, [queued, modalUp, refused, turn, setBackoff, giveUp, animationMs])
+  }, [queued, modalUp, refused, turn, setBackoff, animationMs])
 
-  // Refused and taken down: ask again, unless it was dropped.
+  // Refused and taken down: ask again, backing off, while it is wanted.
   useEffect(() => {
-    if (!refused || modalUp || refusals.current >= MAX_REFUSALS) return
+    if (!refused || modalUp) return
     const timer = setTimeout(() => {
       setRefused(false)
       setBackoff(false)
-    }, RETRY_MS)
+    }, retryDelay(refusals.current))
     return () => clearTimeout(timer)
   }, [refused, modalUp, setBackoff])
 
@@ -221,24 +221,45 @@ export function useTurnWatch(gate: TurnGate, modalUp: boolean, { onGiveUp, anima
 }
 
 /** A plain Modal (no exit of its own) that takes its turn: pass `visible`, `onShow` and `onDismiss` to it. */
-export function useQueuedModal(wanted: boolean, options: { onGiveUp?: () => void; animationMs?: number } = {}) {
+export function useQueuedModal(wanted: boolean, options: { animationMs?: number } = {}) {
   const gate = useTurnGate(wanted)
   const watch = useTurnWatch(gate, gate.allowed, options)
   return { visible: gate.allowed && !watch.refused, onShow: watch.onShow, onDismiss: watch.onDismiss }
 }
 
+/** A native screen's own dismissal (the photo picker sliding down) is given this long before the next Modal asks. */
+export const NATIVE_GONE_MS = 350
+
 /**
- * A router modal (the paywall, Make a crew, a friend link, event preferences) holds the screen while it is focused:
- * a sheet that comes due under it waits, rather than being refused. Ahead of anyone already waiting, because it is on
- * screen. Wrap its content in `PresentsHere` so its own sheets present from it.
+ * A native screen that is not a Modal (the photo picker, the share sheet, the in-app browser) holds the screen while it
+ * is up: it waits for the turn (a leaving sheet's onDismiss, at most `waitMs`), so it is not dropped, and a sheet that
+ * comes due under it waits rather than being refused (review MED-B). Ahead of anyone already waiting: it was asked for.
  */
-export function useRouteModalTurn(): void {
-  const [turn] = useState<Turn>(() => ({}))
-  useFocusEffect(
-    useCallback(() => {
-      if (Platform.OS !== 'ios') return
-      requestTurn(turn, { front: true })
-      return () => releaseTurn(turn)
-    }, [turn])
-  )
+export async function holdTurnWhile<T>(work: () => Promise<T>, waitMs: number = MODAL_GONE_FALLBACK_MS): Promise<T> {
+  if (Platform.OS !== 'ios') return work()
+  const turn: Turn = {}
+  /*
+   * A Modal holding the screen is waited for (most often the sheet that asked, still leaving: its onDismiss), at most
+   * `waitMs`; a whole screen holding it (the paywall it was opened from) is presented over at once, as before.
+   */
+  const waitingOn = holder !== null && !screens.has(holder) ? holder : null
+  requestTurn(turn, { front: true, screen: true })
+  if (waitingOn) {
+    await new Promise<void>((resolve) => {
+      const done = () => {
+        off()
+        clearTimeout(timer)
+        resolve()
+      }
+      const timer = setTimeout(done, waitMs)
+      const off = subscribeTurns(() => {
+        if (holder !== waitingOn) done()
+      })
+    })
+  }
+  try {
+    return await work()
+  } finally {
+    setTimeout(() => releaseTurn(turn), NATIVE_GONE_MS)
+  }
 }

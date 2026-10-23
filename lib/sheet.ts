@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react'
 import { useSyncExternalStore } from 'react'
-import { Platform } from 'react-native'
 
 import type { ButtonKind } from '../components/ds/Button'
 import type { Hue } from '../components/ds/shared'
@@ -137,22 +136,6 @@ export function dismissSheet(): void {
   closeSheet()
   if (sheet?.kind === 'actions') sheet.onDismiss?.()
 }
-
-/**
- * Resolves once a closing sheet is off screen on iOS.
- *
- * iOS will not present a native view controller — the photo picker, the
- * camera — while a `Modal` is still fading out; the presentation is dropped
- * without an error. A flow that closes the sheet and then opens the picker
- * waits for this first. Android starts an activity over a closing dialog
- * without complaint, so there it is immediate.
- */
-export function sheetClosed(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, Platform.OS === 'ios' ? SHEET_FADE_MS : 0))
-}
-
-/** The Modal's fade (`animationType="fade"`), with a frame to spare. */
-const SHEET_FADE_MS = 350
 
 const subscribe = (listener: () => void) => {
   listeners.add(listener)

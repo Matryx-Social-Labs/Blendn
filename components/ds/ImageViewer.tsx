@@ -195,7 +195,7 @@ export function ImageViewer({ visible, uri, sender, time, onClose, onMore, from,
   const shown = chrome || screenReader
 
   // One Modal on screen at a time on iOS (lib/modalTurn).
-  const turn = useQueuedModal(visible, { onGiveUp: onClose })
+  const turn = useQueuedModal(visible)
   return (
     <Modal
       testID={testID && `${testID}-modal`}

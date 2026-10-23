@@ -8,6 +8,7 @@ import type { RefObject } from 'react'
 import { STORY } from '../components/ds/StoryCard'
 import { Logger } from './logger'
 import { toast } from './toast'
+import { holdTurnWhile } from './modalTurn'
 
 /**
  * Getting a Story to Instagram (Flow 16 · 16.3): the link is copied first (the card carries no live URL, the Link
@@ -84,7 +85,7 @@ export async function captureStory(node: RefObject<unknown>): Promise<string> {
 export async function shareImageFile(uri: string): Promise<void> {
   const Sharing = require('expo-sharing') as typeof import('expo-sharing')
   if (!(await Sharing.isAvailableAsync())) throw new Error('Sharing is not available here')
-  await Sharing.shareAsync(uri, { mimeType: 'image/png', UTI: 'public.png', dialogTitle: 'Share to Instagram' })
+  await holdTurnWhile(() => Sharing.shareAsync(uri, { mimeType: 'image/png', UTI: 'public.png', dialogTitle: 'Share to Instagram' }))
 }
 
 /** Instagram's Story camera, with no picture: the Link sticker still carries the copied link. */
