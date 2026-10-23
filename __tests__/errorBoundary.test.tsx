@@ -88,8 +88,12 @@ it('reports once, as the exception, with the route it happened on', async () => 
     </ErrorBoundary>
   )
   expect(Sentry.captureException).toHaveBeenCalledTimes(1)
-  const [error, context] = (Sentry.captureException as jest.Mock).mock.calls[0]
+  const [error, hint] = (Sentry.captureException as jest.Mock).mock.calls[0]
+  const context = hint.captureContext
   expect(error).toBeInstanceOf(Error)
+  // Unhandled, so it counts against the crash-free rate; a hint, so Sentry keeps the mechanism (review LOW).
+  expect(hint.mechanism).toEqual({ type: 'react.error-boundary', handled: false })
+  expect(Object.keys(hint).sort()).toEqual(['captureContext', 'mechanism'])
   expect(context.tags).toEqual({ context: 'error-boundary', error_id: onError.mock.calls[0][2], route: 'plus-manage' })
   expect(error.message).toBe('boom: a stack-trace fragment')
   expect(context.extra.componentStack).toContain('ErrorBoundary')

@@ -296,7 +296,7 @@ describe('Manage over the paywall (RC drive 5)', () => {
     /** What leaves for Sentry: the event built from the exception and its context, through the app's `beforeSend`. */
     const sent = () =>
       (Sentry.captureException as jest.Mock).mock.calls.map(([error, context]) =>
-        JSON.stringify(scrubEvent({ exception: { values: [{ type: error.name, value: error.message }] }, ...context })),
+        JSON.stringify(scrubEvent({ exception: { values: [{ type: error.name, value: error.message }] }, ...context.captureContext })),
       )
     const logged = () => errors.filter((line) => line.startsWith('[error-boundary]'))
 
@@ -308,7 +308,7 @@ describe('Manage over the paywall (RC drive 5)', () => {
 
       // The harness remounts the root after the navigator goes down, into the still-broken host: a second report, from
       // wherever it landed. What matters is what each one carries.
-      expect((Sentry.captureException as jest.Mock).mock.calls[0][1].tags.route).toBe('/f/[token]')
+      expect((Sentry.captureException as jest.Mock).mock.calls[0][1].captureContext.tags.route).toBe('/f/[token]')
       expect(sent().join()).not.toContain('abc123')
       expect(logged().length).toBeGreaterThan(0)
       expect(logged().join()).not.toContain('abc123')
@@ -320,7 +320,7 @@ describe('Manage over the paywall (RC drive 5)', () => {
       await act(async () => router.push('/f/abc123'))
       await settle()
 
-      expect((Sentry.captureException as jest.Mock).mock.calls[0][1].tags.route).toBe('f/[token]')
+      expect((Sentry.captureException as jest.Mock).mock.calls[0][1].captureContext.tags.route).toBe('f/[token]')
       expect(sent().join()).not.toContain('abc123')
       expect(logged().join()).not.toContain('abc123')
     })

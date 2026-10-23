@@ -89,9 +89,14 @@ export class ErrorBoundary extends Component<Props, State> {
     const route = this.props.route ?? 'unknown'
     // The exception's message goes as its value, scrubbed on the way out (`scrubEvent`, lib/sentry): not copied here.
     Sentry.captureException(error, {
-      // The id the crash screen shows and puts in the support email.
-      tags: { context: 'error-boundary', error_id: errorId, route },
-      extra: { componentStack: errorInfo.componentStack },
+      // Unhandled: the screen fell over, whatever drew in its place. It counts against the crash-free rate (review LOW).
+      // A hint, not a context: Sentry reads `{ tags, mechanism }` together as a context and drops the mechanism.
+      mechanism: { type: 'react.error-boundary', handled: false },
+      captureContext: {
+        // The id the crash screen shows and puts in the support email.
+        tags: { context: 'error-boundary', error_id: errorId, route },
+        extra: { componentStack: errorInfo.componentStack },
+      },
     })
     // Read on a device with no Sentry (a local release build): the unified log carries console.error. Sentry keeps console
     // lines as breadcrumbs too, so it is scrubbed like the report.

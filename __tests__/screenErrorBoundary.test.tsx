@@ -60,7 +60,7 @@ it('a screen that throws shows the crash screen in its place, and says which scr
   await go(() => router.push('/broken'))
 
   expect(screen.getByText('Something went wrong')).toBeTruthy()
-  expect((Sentry.captureException as jest.Mock).mock.calls[0][1].tags.route).toBe('broken')
+  expect((Sentry.captureException as jest.Mock).mock.calls[0][1].captureContext.tags.route).toBe('broken')
 })
 
 it('the app still goes elsewhere (a link, a push), and comes back', async () => {
