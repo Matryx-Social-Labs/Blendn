@@ -11,6 +11,8 @@ import { syncPurchasesUser } from './purchases'
 import { clearOutbox } from './chatOutbox'
 import { clearRoomSignal } from './roomSignal'
 import { resetRoomMembership } from './roomMembership'
+import { forgetRosters } from './rosterMemory'
+import { forgetEventDetails } from './eventDetailCache'
 import { rateLimitedMessage } from './signInRefusal'
 import { Sentry } from './sentry'
 import { markSessionExpired, subscribeSessionExpired } from './sessionEvents'
@@ -312,6 +314,13 @@ const resetLocalSession = () => {
    */
   clearOutbox()
   resetRoomMembership()
+  /*
+   * And the rooms' rosters and the events' details this account read: both are keyed by event, not by account, so the next
+   * person to sign in on the phone was served the last one's roster and `userStatus` (going, checked in) until they expired
+   * (Opus review). `forgetRosters` said it was called on sign-out, and had no callers.
+   */
+  forgetRosters()
+  forgetEventDetails()
   /*
    * A Go Live remembered on this phone is that account's (step 5 review, M5).
    * Loaded when needed: `goLive` brings AsyncStorage, which nothing else on
