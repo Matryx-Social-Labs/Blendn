@@ -221,7 +221,9 @@ export const leaveConversationSheet = (
 ): Sheet => {
   const copy = leaveConfirmation(displayName, theyKnowYou, fromMatch)
   const verb = fromMatch ? 'Unmatch' : 'End conversation'
-  const done = fromMatch ? `Unmatched ${displayName}` : 'Conversation ended'
+  // What happened, by what was done: a block says the block (RC drive 4 D-12 read "Unmatched Eli Rc." after Block and report).
+  const doneFor = (action: 'unmatch' | 'block') =>
+    action === 'block' ? `${displayName} is blocked` : fromMatch ? `Unmatched ${displayName}` : 'Conversation ended'
 
   const leave = async (
     action: 'unmatch' | 'block',
@@ -233,6 +235,7 @@ export const leaveConversationSheet = (
     })
     if (!result.success) return failed(result.error, "Couldn’t do that.")
     onLeft?.()
+    const done = doneFor(action)
     return { ok: true, toast: report ? `${done}. ${REPORTED}` : done }
   }
 
