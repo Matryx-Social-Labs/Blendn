@@ -188,12 +188,12 @@ describe('<TextArea>', () => {
     expect(input().props.maxLength).toBeUndefined()
   })
 
-  it('grows with its text (flex-grow from its content, never basis 0) and scales it freely', async () => {
+  it('grows with its text (flex-grow from its content, never basis 0), its text to the body role’s cap (RC drive 3 D-B)', async () => {
     await render(area())
     expect(StyleSheet.flatten(input().props.style)).toMatchObject({ flexGrow: 1 })
     expect(StyleSheet.flatten(input().props.style).flexBasis).toBeUndefined()
     expect(StyleSheet.flatten(input().props.style).flex).toBeUndefined()
-    expect(input().props.maxFontSizeMultiplier).toBeUndefined()
+    expect(input().props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.body)
   })
 
   it('error: the ring and the sentence; focus: the 2 pt white ring', async () => {

@@ -255,7 +255,7 @@ export function TextField({
  * 160 pt minimum (`minHeight` for a one-liner such as a crew's line), and the
  * counter in the label row in Geist Mono, amber in the last 40 characters.
  * Nothing buzzes near the cap; the amber is the signal. It grows with its
- * text, so nothing is capped.
+ * text, so its text stops at the body role's cap and wraps (no one-line control cap).
  */
 export function TextArea({
   label,
@@ -288,7 +288,7 @@ export function TextArea({
   let counter: ReactNode = null
   if (limit !== undefined) {
     counter = (
-      <Text accessibilityElementsHidden importantForAccessibility="no" style={[monoCaption(bold), { color: over ? COLOR.destructive : near ? COLOR.warning : COLOR.textTertiary }]}>
+      <Text accessibilityElementsHidden importantForAccessibility="no" maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[monoCaption(bold), { color: over ? COLOR.destructive : near ? COLOR.warning : COLOR.textTertiary }]}>
         {`${measure(value)}/${limit}`}
       </Text>
     )
@@ -317,6 +317,8 @@ export function TextArea({
           selectionColor={COLOR.textPrimary}
           cursorColor={COLOR.textPrimary}
           textAlignVertical="top"
+          // Reading text in a box that grows with it: the body role's cap, not the one-line control cap (RC drive 3 D-B).
+          maxFontSizeMultiplier={MAX_FONT_SCALE.body}
           accessibilityLabel={label ?? rest.placeholder}
           accessibilityHint={spokenHint(error, value, limit, hint, measure)}
           accessibilityState={{ disabled }}

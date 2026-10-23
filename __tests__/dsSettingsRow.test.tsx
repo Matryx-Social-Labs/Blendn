@@ -6,7 +6,7 @@
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { AccessibilityInfo, StyleSheet, Text } from 'react-native'
+import { AccessibilityInfo, Dimensions, StyleSheet, Text } from 'react-native'
 
 import { SettingsGroup, SettingsRow } from '../components/ds/SettingsRow'
 import { HueProvider, PRESSED_WASH, SELECTION } from '../components/ds/shared'
@@ -95,16 +95,24 @@ describe('<SettingsRow>', () => {
     })
 
     it('the group’s hairline starts at the text edge of the row below it: past the 32 pt tile, or the 20 pt glyph', async () => {
-      await render(
-        <SettingsGroup testID="g">
-          <SettingsRow icon="bell" title="A" trail="switch" value={false} onValueChange={jest.fn()} />
-          <SettingsRow icon="bell" title="B" trail="switch" value={false} onValueChange={jest.fn()} />
-          <SettingsRow icon="shield" title="C" trail="chevron" onPress={jest.fn()} />
-        </SettingsGroup>
-      )
-      const lines = screen.getAllByTestId('g-hairline', { includeHiddenElements: true })
-      expect(StyleSheet.flatten(lines[0].props.style).marginLeft).toBe(SPACE.lg + 32 + SPACE.lg)
-      expect(StyleSheet.flatten(lines[1].props.style).marginLeft).toBe(SPACE.lg + ICON.control + SPACE.lg)
+      // Side by side: below the accessibility sizes (jest's window is at 2, where a switch row stacks; axTextSize covers that).
+      const window = Dimensions.get('window')
+      const screenSize = Dimensions.get('screen')
+      Dimensions.set({ window: { ...window, fontScale: 1 }, screen: { ...screenSize, fontScale: 1 } })
+      try {
+        await render(
+          <SettingsGroup testID="g">
+            <SettingsRow icon="bell" title="A" trail="switch" value={false} onValueChange={jest.fn()} />
+            <SettingsRow icon="bell" title="B" trail="switch" value={false} onValueChange={jest.fn()} />
+            <SettingsRow icon="shield" title="C" trail="chevron" onPress={jest.fn()} />
+          </SettingsGroup>
+        )
+        const lines = screen.getAllByTestId('g-hairline', { includeHiddenElements: true })
+        expect(StyleSheet.flatten(lines[0].props.style).marginLeft).toBe(SPACE.lg + 32 + SPACE.lg)
+        expect(StyleSheet.flatten(lines[1].props.style).marginLeft).toBe(SPACE.lg + ICON.control + SPACE.lg)
+      } finally {
+        Dimensions.set({ window, screen: screenSize })
+      }
     })
   })
 

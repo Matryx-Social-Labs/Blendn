@@ -5,13 +5,13 @@ import ScalePress from '../motion/ScalePress'
 import { GradientFill } from '../ui/GradientFill'
 import { Icon, type IconName } from '../ui/Icon'
 import { Material } from '../ui/Material'
-import { COLOR, FONT_FAMILY, ICON, MATERIAL, PRESS, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, MATERIAL, MAX_FONT_SCALE, PRESS, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useToastDock } from '../toastDock'
 import { Button } from './Button'
 import { ReplyPreview } from './ReplyPreview'
 import { SystemNotice } from './SystemNotice'
-import { focusRing, font, IC_HAIRLINE, minTarget, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
+import { CONTROL_FONT_CAP, focusRing, font, IC_HAIRLINE, minTarget, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
 
 /** The server's limit, enforced here so the count that stops you is the one that would refuse you. */
 const MAX_LENGTH = 1000
@@ -253,6 +253,9 @@ function Field({
           placeholder={placeholder}
           placeholderTextColor={COLOR.textSecondary}
           accessibilityLabel="Message"
+          // The field is a control, as a TextField's input is: one line centred on the Send disc, five lines then it scrolls.
+          // Uncapped it drew typed text at 53 pt over two lines (RC drive 3 D-B), so it stops at the control cap.
+          maxFontSizeMultiplier={CONTROL_FONT_CAP}
           style={[font('body', bold), styles.field]}
         />
         <View style={pressed && !android && styles.pressedIos}>
@@ -279,7 +282,7 @@ function Field({
         </View>
       </View>
       {value.length >= COUNT_FROM ? (
-        <Text style={[font('caption', bold, FONT_FAMILY.mono[500]), styles.counter]}>{MAX_LENGTH - value.length} left</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold, FONT_FAMILY.mono[500]), styles.counter]}>{MAX_LENGTH - value.length} left</Text>
       ) : null}
     </>
   )
@@ -296,7 +299,7 @@ function Failed({ onRetry }: { onRetry?: () => void }) {
       style={[styles.failed, { minHeight: minTarget() }]}
     >
       <Icon name="circle-alert" size={ICON.inline} color={COLOR.destructive} />
-      <Text style={[font('caption', bold), styles.destructive]}>Not sent · Tap to retry</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.destructive]}>Not sent · Tap to retry</Text>
     </Pressable>
   )
 }
@@ -320,9 +323,9 @@ function LockedRow({ state, reason, countdown, action }: { state: Locked } & Pic
           <Icon name={icon} size={ICON.control} />
         </View>
         <View style={styles.words}>
-          <Text style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.primary]}>{title}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.primary]}>{title}</Text>
           {body ? (
-            <Text style={[font('meta', bold), styles.secondary]}>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
               {body}
               {clock ? ' You can post again in ' : null}
               {clock ? <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.primary]}>{clock}</Text> : null}

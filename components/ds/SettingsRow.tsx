@@ -4,12 +4,12 @@ import Animated from 'react-native-reanimated'
 
 import { Glyph } from '../ui/Glyph'
 import { Icon, type IconName } from '../ui/Icon'
-import { COLOR, ICON, MATERIAL, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, ICON, MATERIAL, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
 import { OPACITY, tint } from '../../lib/theme'
 import { Spinner } from './Loader'
-import { font, IC_HAIRLINE, LIGHT, PRESSED_WASH, useBoldText, useIncreaseContrast, useSelection } from './shared'
+import { font, IC_HAIRLINE, LIGHT, PRESSED_WASH, useBoldText, useIncreaseContrast, useLargeText, useSelection } from './shared'
 import { Toggle } from './Toggle'
 
 export type SettingsTrail = 'switch' | 'chevron' | 'external' | 'none'
@@ -74,9 +74,10 @@ function SwitchTile({ icon, on, testID }: { icon: IconName; on: boolean; testID?
   )
 }
 
-/** Where a row's text starts, so the hairline under the row above begins there. */
-const textEdge = (row: unknown) => {
+/** Where a row's text starts, so the hairline under the row above begins there. A stacked row's text starts at its edge. */
+const textEdge = (row: unknown, large: boolean) => {
   const p = isValidElement(row) ? (row.props as Partial<SettingsRowProps>) : null
+  if (large && p?.trail === 'switch') return SPACE.lg
   return SPACE.lg + (p?.trail === 'switch' && p.icon && !p.leading ? TILE : ICON.control) + SPACE.lg
 }
 
@@ -88,8 +89,12 @@ const textEdge = (row: unknown) => {
  * row toggles, so the switch is drawn, not focused. It plays `H.toggle` (§10.2,
  * a switch changes); a chevron or external row is silent. Pressed: a 6% wash on
  * iOS, a ripple on Android; no scale on rows, but the row's press reaches the
- * <Toggle>'s thumb. Busy dims the toggle beside its spinner. Text scales
- * freely and the row grows. Increase Contrast whitens the trailing glyph.
+ * <Toggle>'s thumb. Busy dims the toggle beside its spinner. The title and
+ * hint grow to their roles' caps and the row grows. At the accessibility sizes
+ * a switch row stacks, as iOS Settings does: the glyph, the text at the card's
+ * full width, then the switch under it. Side by side, the 51 pt switch left the
+ * text a column one to three words wide, four screens tall (RC drive 3 D-D).
+ * Increase Contrast whitens the trailing glyph.
  */
 export function SettingsRow({
   icon,
@@ -118,6 +123,7 @@ export function SettingsRow({
   useRollbackHaptic(error)
 
   const isSwitch = trail === 'switch'
+  const stacked = useLargeText() && isSwitch
   const ink = destructive ? COLOR.destructive : COLOR.textPrimary
   const press = isSwitch
     ? () => {
@@ -143,6 +149,7 @@ export function SettingsRow({
       accessibilityState={{ disabled, busy, checked: isSwitch ? value : undefined }}
       style={({ pressed }) => [
         styles.row,
+        stacked && styles.stacked,
         // Android's live press is the ripple; the wash stands in for it only in the gallery.
         ((pressed && Platform.OS !== 'android') || previewState === 'pressed') && {
           backgroundColor: PRESSED_WASH[Platform.OS === 'android' ? 'android' : 'ios'],
@@ -152,18 +159,26 @@ export function SettingsRow({
     >
       {leading ??
         (icon ? isSwitch ? <SwitchTile testID={testID && `${testID}-tile`} icon={icon} on={value} /> : <Icon name={icon} size={ICON.control} color={ink} /> : null)}
-      <View style={styles.text}>
-        <Text style={[font('bodyStrong', bold), { color: ink }]}>{title}</Text>
-        {hint ? <Text style={[font('meta', bold), { color: error ? COLOR.destructive : COLOR.textSecondary }]}>{hint}</Text> : null}
+      <View testID={testID && `${testID}-text`} style={stacked ? styles.textStacked : styles.text}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), { color: ink }]}>
+          {title}
+        </Text>
+        {hint ? (
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: error ? COLOR.destructive : COLOR.textSecondary }]}>
+            {hint}
+          </Text>
+        ) : null}
       </View>
       {accessory ? (
         <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.accessory}>
           {accessory}
         </View>
       ) : null}
-      {busy ? <Spinner testID={testID && `${testID}-spinner`} size={18} /> : null}
+      {busy && !isSwitch ? <Spinner testID={testID && `${testID}-spinner`} size={18} /> : null}
       {isSwitch ? (
-        <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+        // The spinner and the switch are one trail, so stacked they stay side by side under the text.
+        <View testID={testID && `${testID}-trail`} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.trail}>
+          {busy ? <Spinner testID={testID && `${testID}-spinner`} size={18} /> : null}
           <Toggle value={value} disabled={busy} pressed={down || previewState === 'pressed'} testID={testID && `${testID}-toggle`} />
         </View>
       ) : null}
@@ -200,10 +215,11 @@ export function SettingsGroup({
 }) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
+  const large = useLargeText()
   return (
     <View testID={testID} style={[styles.group, danger && styles.dangerRoom]}>
       {title ? (
-        <Text accessibilityRole="header" style={[font('label', bold), styles.label, contrast && styles.labelContrast]}>
+        <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.label, contrast && styles.labelContrast]}>
           {title}
         </Text>
       ) : null}
@@ -215,7 +231,7 @@ export function SettingsGroup({
               <View
                 testID={testID && `${testID}-hairline`}
                 accessibilityElementsHidden
-                style={[styles.hairline, { marginLeft: textEdge(row) }, contrast && styles.hairlineContrast]}
+                style={[styles.hairline, { marginLeft: textEdge(row, large) }, contrast && styles.hairlineContrast]}
               />
             ) : null}
             {row}
@@ -235,7 +251,12 @@ const styles = StyleSheet.create({
     minHeight: ROW_MIN_HEIGHT,
   },
   tile: { width: TILE, height: TILE, borderRadius: RADIUS.thumb, backgroundColor: COLOR.surfaceRaised, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  /** Stacked: a column at the card's width, everything from its leading edge. */
+  stacked: { flexDirection: 'column', alignItems: 'flex-start', gap: SPACE.md },
   text: { flex: 1, minWidth: 0, gap: SPACE.xxs },
+  /** No `flex: 1` in a column of auto height: its zero basis would collapse the text. */
+  textStacked: { alignSelf: 'stretch', gap: SPACE.xxs },
+  trail: { flexDirection: 'row', alignItems: 'center', gap: SPACE.lg },
   accessory: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   focus: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, borderRadius: RADIUS.rowInCard, borderWidth: SPACE.xxs, borderColor: COLOR.focusRing },
   group: { gap: SPACE.sm },

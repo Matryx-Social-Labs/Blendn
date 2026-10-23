@@ -35,11 +35,15 @@ import { TabBar } from '../components/ds/TabBar'
 import { BanterRow } from '../components/banter/BanterParts'
 import { SceneCTA, sceneCtaLabel } from '../components/scene/SceneSections'
 import { NAVIGATOR_ROUTES, TextSizeBoundary } from '../components/TextSizeBoundary'
-import { MAX_FONT_SCALE } from '../lib/design/tokens'
+import { MAX_FONT_SCALE, SPACE } from '../lib/design/tokens'
 import { ChatHeader } from '../components/chat/ChatHeader'
 import { MatchOpenerCard, NudgeLine, RevealLine, SayHi } from '../components/chat/DmParts'
 import { RevealBar } from '../components/ds/RevealBar'
-import { TextField } from '../components/ds/TextField'
+import { TextArea, TextField } from '../components/ds/TextField'
+import { Composer } from '../components/ds/Composer'
+import { SettingsGroup, SettingsRow } from '../components/ds/SettingsRow'
+import { LegalLine } from '../components/LegalLine'
+import { KeyboardPage } from '../components/onboarding/KeyboardPage'
 /* eslint-enable import/first */
 
 /** iOS AX XXXL: body 53 pt over 17. */
@@ -198,6 +202,68 @@ describe('at AX XXXL (fontScale 3.1)', () => {
     expect(uncapped(screen.toJSON())).toEqual([])
   })
 
+  it('every composer’s typed text stops at its cap (RC drive 3 D-B: "draft for eli only" drew at 53 pt): the chat bar at the control cap, the Board’s post at the body cap', async () => {
+    // The DM, the room and a crew or Blend room are one Composer; the Board writes in a TextArea.
+    await render(
+      <View>
+        <Composer value={'x'.repeat(950)} onChangeText={jest.fn()} onSend={jest.fn()} testID="c" />
+        <Composer value="" onChangeText={jest.fn()} onSend={jest.fn()} state="ratelimited" countdown="0:12" />
+        <Composer value="" onChangeText={jest.fn()} onSend={jest.fn()} state="failed" onRetry={jest.fn()} />
+        <TextArea label="Your post" value="Driving over at 8" onChangeText={jest.fn()} limit={500} />
+      </View>
+    )
+    for (const field of screen.getAllByLabelText('Message')) expect(field.props.maxFontSizeMultiplier).toBe(CONTROL_FONT_CAP)
+    expect(screen.getByLabelText('Your post').props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.body)
+    expect(screen.getByText('50 left').props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.caption)
+    expect(uncapped(screen.toJSON())).toEqual([])
+  })
+
+  it('the sign-up dock: the Terms line stops at the caption cap (D-C: five lines of 36 pt, most of the screen)', async () => {
+    await render(<LegalLine lead="By creating an account you" />)
+    expect(screen.getByText(/By creating an account you/).props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.caption)
+    expect(uncapped(screen.toJSON())).toEqual([])
+  })
+
+  it('a form page at rest: the dock is in the flow under the scroll, so the scroll’s bottom inset is the dock’s whole height and the last field scrolls clear of it (D-C)', async () => {
+    await render(
+      <KeyboardPage dock={<LegalLine lead="By creating an account you" />} dockProps={{ glass: false, keyboardUp: false, testID: 'dock' }} scrollProps={{ testID: 'scroll' }}>
+        <TextField label="AGE" value="" onChangeText={jest.fn()} />
+      </KeyboardPage>
+    )
+    const scroll = screen.getByTestId('scroll')
+    const frame = screen.getByTestId('keyboard-page-dock-frame')
+    // One column, the scroll then the dock: the scroll's frame ends where the dock begins.
+    const column = frame.parent as NonNullable<typeof frame.parent>
+    expect(column).toContainElement(scroll)
+    expect(column.children[column.children.length - 1]).toBe(frame)
+    expect(StyleSheet.flatten(column.props.style).flexDirection ?? 'column').toBe('column')
+    for (const box of [frame, screen.getByTestId('dock')]) expect(StyleSheet.flatten(box.props.style)?.position).not.toBe('absolute')
+    expect(StyleSheet.flatten(scroll.props.style).flex).toBe(1)
+  })
+
+  it('a Settings switch row stacks: the text at the card’s width, the switch under it; the title and hint at their caps (D-D)', async () => {
+    const hint = 'On: friends at the same event see you under Friends here, with your name and photo, and can message you.'
+    await render(
+      <SettingsGroup title="PRIVACY" testID="g">
+        <SettingsRow icon="users" title="Friends can see I’m here" hint={hint} trail="switch" value={false} onValueChange={jest.fn()} busy testID="row" />
+        <SettingsRow icon="users" title="Show me online" trail="switch" value onValueChange={jest.fn()} testID="row2" />
+      </SettingsGroup>
+    )
+    const row = StyleSheet.flatten(screen.getByTestId('row').props.style)
+    expect(row.flexDirection).toBe('column')
+    expect(StyleSheet.flatten(screen.getByTestId('row-text').props.style)).toMatchObject({ alignSelf: 'stretch' })
+    expect(StyleSheet.flatten(screen.getByTestId('row-text').props.style).flex).toBeUndefined()
+    // The spinner stays beside the switch, in one trail under the text.
+    const hidden = { includeHiddenElements: true }
+    expect(screen.getByTestId('row-trail', hidden)).toContainElement(screen.getByTestId('row-spinner', hidden))
+    expect(screen.getByTestId('row-trail', hidden)).toContainElement(screen.getByTestId('row-toggle', hidden))
+    expect(screen.getByText('Friends can see I’m here').props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.bodyStrong)
+    expect(screen.getByText(hint).props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.meta)
+    // The hairline starts at the stacked text's edge, not past a glyph that is now above it.
+    expect(StyleSheet.flatten(screen.getByTestId('g-hairline', hidden).props.style).marginLeft).toBe(SPACE.lg)
+    expect(uncapped(screen.toJSON())).toEqual([])
+  })
+
   it('Going’s empty and failed states scroll, so the action is never under the tab bar', () => {
     const src = readFileSync(join(__dirname, '..', 'app', '(tabs)', 'going.tsx'), 'utf8')
     for (const id of ['going-empty', 'going-failed']) {
@@ -206,6 +272,15 @@ describe('at AX XXXL (fontScale 3.1)', () => {
       expect(opened).toBeGreaterThan(src.lastIndexOf('<StateScreen', at) - 200)
       expect(src.indexOf('</ScrollView>', at)).toBeGreaterThan(at)
     }
+  })
+})
+
+describe('below the accessibility sizes', () => {
+  it('a Settings switch row stays side by side (fontScale 1.35, iOS xxxLarge)', async () => {
+    await atScale(1.35)
+    await render(<SettingsRow icon="users" title="Friends can see I’m here" trail="switch" value={false} onValueChange={jest.fn()} testID="row" />)
+    expect(StyleSheet.flatten(screen.getByTestId('row').props.style).flexDirection).toBe('row')
+    expect(StyleSheet.flatten(screen.getByTestId('row-text').props.style).flex).toBe(1)
   })
 })
 
