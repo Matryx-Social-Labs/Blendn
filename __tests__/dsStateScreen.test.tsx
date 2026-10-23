@@ -111,7 +111,8 @@ describe('<StateScreen gutter> (Going’s empty state: the frame’s left 24 / r
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'app', '(tabs)', 'going.tsx'), 'utf8') as string
     expect(src.match(/gutter\n\s*testID="going-(empty|failed)"/g)).toHaveLength(2)
-    expect(src).toMatch(/stateBlock: \{ marginTop: SPACE\.xxxl \* 2 \}/)
+    // The 96 pt is the scroll's top padding since the states scroll at the accessibility sizes (RC drive D2).
+    expect(src).toMatch(/stateBlock: \{ paddingTop: SPACE\.xxxl \* 2,/)
   })
 })
 
