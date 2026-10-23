@@ -36,8 +36,15 @@ const mockAuth = { user: { id: 'u_me' } }
 jest.mock('../lib/useAuth', () => ({ useAuth: () => mockAuth }))
 // The screen tells a waiting check-in it has gone (lib/checkIn.ts); its storage is native.
 jest.mock('../lib/roomVisibilityStorage', () => ({}))
-const mockClosingForLink = { value: false }
-jest.mock('../lib/pendingRoute', () => ({ isClosingForLink: () => mockClosingForLink.value }))
+// The link-closing signal as lib/pendingRoute gives it; `mockCloseForLink()` is a link closing the modals.
+const mockLinkClosers = new Set<() => void>()
+const mockCloseForLink = () => [...mockLinkClosers].forEach((listener) => listener())
+jest.mock('../lib/pendingRoute', () => ({
+  onClosingForLink: (listener: () => void) => {
+    mockLinkClosers.add(listener)
+    return () => mockLinkClosers.delete(listener)
+  },
+}))
 jest.mock('../lib/apiClient', () => ({
   apiClient: { getProfile: jest.fn(), setMatchPreferences: jest.fn() },
 }))
@@ -55,7 +62,6 @@ const api = apiClient as jest.Mocked<typeof apiClient>
 
 beforeEach(() => {
   jest.clearAllMocks()
-  mockClosingForLink.value = false
   for (const k of Object.keys(mockParams)) delete mockParams[k]
   Object.assign(mockParams, { eventId: 'e1', revealed: '0', askIntent: '1' })
   api.getProfile.mockResolvedValue({
@@ -184,7 +190,10 @@ it('closed by the person it says "closed"; closed for a link it says "abandoned"
 
   void untilIntentAnswered().then((o) => outcomes.push(o))
   const byLink = await render(<EventPreferences />)
-  mockClosingForLink.value = true
+  // Told before the screen goes (RC drive 6): settled then, and the unmount's "closed" after it changes nothing.
+  mockCloseForLink()
+  await Promise.resolve()
+  expect(outcomes).toEqual(['closed', 'abandoned'])
   await byLink.unmount()
   await Promise.resolve()
 

@@ -8,6 +8,7 @@ import { revealPromptText, revealReadiness } from './reveal'
 import { forgetRoster } from './rosterMemory'
 import { PUBLIC_CHECKIN_WARNING, shouldWarnBeforePublicCheckIn } from './roomVisibility'
 import { hasSeenPublicCheckInWarning, markPublicCheckInWarningSeen } from './roomVisibilityStorage'
+import { onClosingForLink } from './pendingRoute'
 
 /**
  * Checking in and out, once.
@@ -133,8 +134,8 @@ export async function submitCheckIn(
 
 /**
  * How the "Why do you go out?" screen went. `closed`: saved, or dismissed by the person (×, back): the room comes next.
- * `abandoned`: taken down by something else — a link or a tap closing it to go elsewhere (lib/pendingRoute
- * `dismissModals`), or a newer check-in asking again: the room must not be pushed over where they went (review MED-2).
+ * `abandoned`: taken down by something else — a link or a tap closing it to go elsewhere, or a newer check-in asking
+ * again: the room must not be pushed over where they went (review MED-2, RC drive 6).
  */
 export type IntentOutcome = 'closed' | 'abandoned'
 
@@ -144,18 +145,27 @@ let intentClosed: ((outcome: IntentOutcome) => void) | null = null
  * Settles when the "Why do you go out?" screen asked after a check-in has
  * gone, saved or dismissed: the check-in waits for it before the room shows
  * (Flow 4 Tonight #14: the pour, then the sheet, then the Room).
+ *
+ * While it waits it listens for a link closing the modals (`onClosingForLink`), and settles `abandoned` right then,
+ * before the screen unmounts: the screen's unmount says `closed` only when nothing has settled it first.
  */
 export function untilIntentAnswered(): Promise<IntentOutcome> {
   intentClosed?.('abandoned')
   return new Promise((resolve) => {
-    intentClosed = resolve
+    let off = () => {}
+    const settle = (outcome: IntentOutcome) => {
+      off()
+      if (intentClosed === settle) intentClosed = null
+      resolve(outcome)
+    }
+    intentClosed = settle
+    off = onClosingForLink(() => settle('abandoned'))
   })
 }
 
-/** The intent screen calls this as it goes. */
+/** The intent screen calls this as it goes: `closed`, unless a link or a newer check-in settled the wait first. */
 export function intentAnswered(outcome: IntentOutcome = 'closed'): void {
   intentClosed?.(outcome)
-  intentClosed = null
 }
 
 /** "Why do you go out?" — the preferences screen with the intent leading. */

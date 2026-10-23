@@ -19,8 +19,15 @@ jest.mock('react-native-safe-area-context', () => ({
 jest.mock('../lib/apiClient', () => ({ apiClient: { getFriends: jest.fn() } }))
 jest.mock('../lib/crewsApi', () => ({ crewsApi: { create: jest.fn(), crew: jest.fn() } }))
 jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { id: 'u-me' } }) }))
-const mockClosingForLink = { value: false }
-jest.mock('../lib/pendingRoute', () => ({ isClosingForLink: () => mockClosingForLink.value }))
+// The link-closing signal as lib/pendingRoute gives it; `mockCloseForLink()` is a link closing the modals.
+const mockLinkClosers = new Set<() => void>()
+const mockCloseForLink = () => [...mockLinkClosers].forEach((listener) => listener())
+jest.mock('../lib/pendingRoute', () => ({
+  onClosingForLink: (listener: () => void) => {
+    mockLinkClosers.add(listener)
+    return () => mockLinkClosers.delete(listener)
+  },
+}))
 
 import { router } from 'expo-router'
 import NewCrewScreen from '../app/crews/new'
@@ -36,7 +43,6 @@ const friend = (userId: string, name: string) => ({ userId, name, photo: null, s
 
 beforeEach(() => {
   jest.clearAllMocks()
-  mockClosingForLink.value = false
   setDraft(crewDraftThread('u-me'), '')
   crews.create.mockReset()
   crews.crew.mockReset()
@@ -400,9 +406,8 @@ describe('a link that closes the sheet keeps what was typed (review LOW)', () =>
     await toFriends('Nebula')
     await waitFor(() => screen.getByRole('checkbox', { name: 'Ask Priya' }))
     await fireEvent.press(screen.getByRole('checkbox', { name: 'Ask Priya' }))
-    mockClosingForLink.value = true
+    await act(async () => mockCloseForLink())
     await screen.unmount()
-    mockClosingForLink.value = false
 
     await render(<NewCrewScreen />)
     expect(nameField().props.value).toBe('Nebula')
@@ -413,9 +418,8 @@ describe('a link that closes the sheet keeps what was typed (review LOW)', () =>
   it('it is given back once: closed by the person after that, the next open is empty', async () => {
     await render(<NewCrewScreen />)
     await name('Nebula')
-    mockClosingForLink.value = true
+    await act(async () => mockCloseForLink())
     await screen.unmount()
-    mockClosingForLink.value = false
     await render(<NewCrewScreen />)
     expect(nameField().props.value).toBe('Nebula')
     await screen.unmount()
@@ -431,7 +435,7 @@ describe('a link that closes the sheet keeps what was typed (review LOW)', () =>
     expect(draftOf(crewDraftThread('u-me'))).toBe('')
 
     await render(<NewCrewScreen />)
-    mockClosingForLink.value = true
+    await act(async () => mockCloseForLink())
     await screen.unmount()
     expect(draftOf(crewDraftThread('u-me'))).toBe('')
   })

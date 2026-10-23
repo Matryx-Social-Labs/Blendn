@@ -30,7 +30,7 @@ import { useReducedMotion } from '../../lib/motion'
 import { HueProvider } from '../../components/ds/shared'
 import { RouteModal } from '../../components/system/RouteModal'
 import { crewDraftThread, draftOf, setDraft } from '../../lib/chatOutbox'
-import { isClosingForLink } from '../../lib/pendingRoute'
+import { onClosingForLink } from '../../lib/pendingRoute'
 import { useAuth } from '../../lib/useAuth'
 import { useLatest } from '../../lib/useLatest'
 
@@ -99,14 +99,16 @@ function NewCrewScreenContent() {
   const [made, setMade] = useState<Made | null>(null)
   /** The stand-in emblem for the preview: the server draws the real one, from its own seed, when the crew is made. */
   const [previewSeed] = useState(() => `preview-${Math.random().toString(36).slice(2)}`)
-  // Closed by a link before the crew was made: what was typed is kept for next time. Closed by the person: let go.
+  // A link closing this sheet before the crew was made: what was typed is kept for next time, told before anything
+  // unmounts (`onClosingForLink`). Closed by the person: let go.
   const form = useLatest({ draft: { name, bio, choice, tags, openToSolo, keepAnonymous, picked } as CrewDraft, made: made !== null })
   useEffect(
-    () => () => {
-      const { draft, made: wasMade } = form.current
-      const typed = draft.name.trim() || draft.bio.trim() || draft.tags.length || draft.picked.length
-      if (isClosingForLink() && !wasMade && typed) setDraft(draftThread, JSON.stringify(draft))
-    },
+    () =>
+      onClosingForLink(() => {
+        const { draft, made: wasMade } = form.current
+        const typed = draft.name.trim() || draft.bio.trim() || draft.tags.length || draft.picked.length
+        if (!wasMade && typed) setDraft(draftThread, JSON.stringify(draft))
+      }),
     [draftThread, form],
   )
   /** One create at a time: `sending` lags a fast second tap by a render. */

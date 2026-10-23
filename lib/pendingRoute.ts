@@ -100,7 +100,8 @@ export function setLinkNavigator(next: LinkNavigator | null): void {
   linkNavigator = next
 }
 
-let closingForLink = false
+/** Told before a link closes the modals (`onClosingForLink`). */
+const linkClosers = new Set<() => void>()
 
 /** How long a link waits for a modal's hold (`holdLinks`) before it closes the modal anyway. */
 export const LINK_HOLD_MAX_MS = 30_000
@@ -142,11 +143,18 @@ function linkHoldsReleased(): Promise<void> {
 }
 
 /**
- * Whether the screens going now are going because a link closed them (`dismissModals`), not because the person closed
- * them: a screen that hands an answer on as it unmounts (the check-in's intent question) tells the two apart with it.
+ * Be told, synchronously, the moment a link is about to close the modals (`dismissModals`), before the pop is dispatched
+ * and before any screen unmounts. For what must know a link closed it, not the person: the check-in's intent question
+ * (abandoned, so its room is not pushed over the link) and Make a crew (its draft kept). Returns the unsubscribe.
+ *
+ * It replaced a flag read in the closing screen's unmount (RC drive 6): the flag was cleared on the pop's first state
+ * event, before the screen unmounted, so the check-in read "closed" and pushed the room over the link.
  */
-export function isClosingForLink(): boolean {
-  return closingForLink
+export function onClosingForLink(listener: () => void): () => void {
+  linkClosers.add(listener)
+  return () => {
+    linkClosers.delete(listener)
+  }
 }
 
 /** How long a link waits for the modal it closed to leave the navigation state, if the state never says so. */
@@ -186,10 +194,10 @@ function popModals(): Promise<void> {
         const done = () => {
           off()
           clearTimeout(timer)
-          closingForLink = false
           resolve()
         }
-        closingForLink = true
+        // Told first: by the time anything unmounts, whoever needed to know a link did this already does.
+        ;[...linkClosers].forEach((listener) => listener())
         navigator.dispatch({ type: 'POP', payload: { count: routes.length - lowest }, target: key })
       })
     }

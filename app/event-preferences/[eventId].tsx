@@ -17,7 +17,6 @@ import { fadeInFast } from '../../components/motion/presence'
 import { useToast } from '../../components/Toast'
 import { apiClient } from '../../lib/apiClient'
 import { intentAnswered } from '../../lib/checkIn'
-import { isClosingForLink } from '../../lib/pendingRoute'
 import { COLOR, SPACE, SPRING } from '../../lib/design/tokens'
 import { toggleIntent } from '../../lib/intents'
 import { Logger } from '../../lib/logger'
@@ -92,8 +91,9 @@ function EventPreferencesContent() {
    * leads, and the answer is saved as the default in the same write.
    */
   const askIntent = askIntentParam === '1'
-  // A check-in waits for this question before its room shows (lib/checkIn.ts); one closed for a link does not go on to it.
-  useEffect(() => (askIntent ? () => intentAnswered(isClosingForLink() ? 'abandoned' : 'closed') : undefined), [askIntent])
+  // A check-in waits for this question before its room shows (lib/checkIn.ts). Closed for a link, the wait has already
+  // settled `abandoned` before this unmounts; this says `closed` only for the person's own way out (save, ×, back).
+  useEffect(() => (askIntent ? () => intentAnswered('closed') : undefined), [askIntent])
   const { showToast } = useToast()
   const { user } = useAuth()
   const bar = useTopBarOverlay()
