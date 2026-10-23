@@ -83,7 +83,7 @@ jest.mock('expo-linear-gradient', () => {
 })
 
 /* eslint-disable import/first */
-import { isClosingForLink, openWhenReady, ROOT_MODAL_ROUTES } from '../lib/pendingRoute'
+import { holdLinks, isClosingForLink, openWhenReady, ROOT_MODAL_ROUTES } from '../lib/pendingRoute'
 import { scrubEvent, Sentry } from '../lib/sentry'
 /* eslint-enable import/first */
 
@@ -235,6 +235,20 @@ describe('Manage over the paywall (RC drive 5)', () => {
 
       expect(unmountSaw).toEqual([true])
       expect(isClosingForLink()).toBe(false)
+    })
+
+    it('a link held by the paywall (a purchase in flight) waits, then closes it and goes once released', async () => {
+      const r = await mountApp()
+      await act(async () => router.push('/plus'))
+      await settle()
+      const release = holdLinks()
+
+      await link('/plus-manage')
+      expect(r.routes()).toEqual(['(tabs)/events', 'plus'])
+
+      await act(async () => release())
+      await settle()
+      expect(r.routes()).toEqual(['(tabs)/events', 'plus-manage'])
     })
 
     it('with nothing modal up, a link closes nothing', async () => {

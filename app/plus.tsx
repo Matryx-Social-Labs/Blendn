@@ -38,6 +38,7 @@ import { useAuth } from '../lib/useAuth'
 import { notePaywallClosed, notePaywallEvent } from '../lib/paywall'
 import { useTopBarState } from '../lib/useTopBarState'
 import { RouteModal } from '../components/system/RouteModal'
+import { holdLinks } from '../lib/pendingRoute'
 
 type Phase = 'idle' | 'confirming' | 'pending' | 'slow' | 'done'
 
@@ -86,6 +87,8 @@ function PlusScreenContent() {
   const [offers, setOffers] = useState<PlusOffer[] | null | undefined>(undefined)
   const [buyable, setBuyable] = useState(false)
   const [busy, setBusy] = useState<'buy' | 'restore' | null>(null)
+  // A link or a tap that arrives mid-purchase or mid-restore waits for it, rather than closing the page under the store.
+  useEffect(() => (busy ? holdLinks() : undefined), [busy])
   const [phase, setPhase] = useState<Phase>('idle')
   const [picked, setPicked] = useState<string | null>(null)
   /** What Restore found, in the dock until the next tap: a toast alone is gone in three seconds. */

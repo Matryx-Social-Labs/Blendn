@@ -54,6 +54,7 @@ import { apiClient } from '../lib/apiClient'
 import { subscribePaywallClosed } from '../lib/paywall'
 import { buyPackage, canBuyAs, loadPlusOffers, purchasesAvailable, restore } from '../lib/purchases'
 import { showSheet } from '../lib/sheet'
+import { dismissModals, LINK_HOLD_MAX_MS } from '../lib/pendingRoute'
 /* eslint-enable import/first */
 
 const monthly = { pkg: { identifier: '$rc_monthly', product: { price: 199, pricePerMonth: 199, pricePerMonthString: '₹199' } }, title: 'Blendn+ · Monthly', length: '1 month, renews monthly', price: '₹199.00' }
@@ -165,6 +166,67 @@ it('buys the package that is picked, not the first', async () => {
   await act(async () => { fireEvent.press(plan('night_pass')) })
   await act(async () => { fireEvent.press(button(NIGHT_CTA)) })
   expect(buyPackage).toHaveBeenCalledWith(nightPass.pkg, 'u1')
+})
+
+describe('a link that arrives mid-purchase or mid-restore waits for it (review LOW: never close the page under the store)', () => {
+  /** Whether a link's dismissal has gone ahead (lib/pendingRoute `dismissModals`, the one every link and tap awaits). */
+  const linkWent = () => {
+    const went = { value: false }
+    void dismissModals().then(() => {
+      went.value = true
+    })
+    return went
+  }
+
+  it('a purchase holds it until the store answers', async () => {
+    let answer: (v: unknown) => void = () => {}
+    ;(buyPackage as jest.Mock).mockReturnValue(new Promise((r) => { answer = r }))
+    await mount()
+    await act(async () => { fireEvent.press(plan('night_pass')) })
+    await act(async () => { fireEvent.press(button(NIGHT_CTA)) })
+
+    const went = linkWent()
+    await act(async () => { await Promise.resolve() })
+    expect(went.value).toBe(false)
+
+    await act(async () => { answer({ kind: 'cancelled' }) })
+    expect(went.value).toBe(true)
+  })
+
+  it('a restore holds it too', async () => {
+    let land: (v: unknown) => void = () => {}
+    ;(restore as jest.Mock).mockReturnValue(new Promise((r) => { land = r }))
+    await mount()
+    await act(async () => { fireEvent.press(button('Restore purchases')) })
+
+    const went = linkWent()
+    await act(async () => { await Promise.resolve() })
+    expect(went.value).toBe(false)
+
+    await act(async () => { land({ kind: 'nothing' }) })
+    expect(went.value).toBe(true)
+  })
+
+  it('but not forever: after LINK_HOLD_MAX_MS the link goes anyway', async () => {
+    jest.useFakeTimers()
+    ;(buyPackage as jest.Mock).mockReturnValue(new Promise(() => {}))
+    await mount()
+    await act(async () => { fireEvent.press(plan('night_pass')) })
+    await act(async () => { fireEvent.press(button(NIGHT_CTA)) })
+
+    const went = linkWent()
+    await act(async () => { jest.advanceTimersByTime(LINK_HOLD_MAX_MS - 1) })
+    expect(went.value).toBe(false)
+    await act(async () => { jest.advanceTimersByTime(1) })
+    expect(went.value).toBe(true)
+  })
+
+  it('with nothing in flight it does not wait', async () => {
+    await mount()
+    const went = linkWent()
+    await act(async () => { await Promise.resolve() })
+    expect(went.value).toBe(true)
+  })
 })
 
 it('a cancelled purchase changes nothing and asks nothing', async () => {

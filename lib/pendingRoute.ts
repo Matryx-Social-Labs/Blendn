@@ -102,6 +102,45 @@ export function setLinkNavigator(next: LinkNavigator | null): void {
 
 let closingForLink = false
 
+/** How long a link waits for a modal's hold (`holdLinks`) before it closes the modal anyway. */
+export const LINK_HOLD_MAX_MS = 30_000
+let holds = 0
+let released: (() => void)[] = []
+
+/**
+ * Hold incoming links off the modal while something in it must finish (a purchase or a restore in flight on the
+ * paywall). Returns the release; idempotent. A link that arrives meanwhile waits for the last release, or
+ * `LINK_HOLD_MAX_MS`, whichever comes first.
+ */
+export function holdLinks(): () => void {
+  holds += 1
+  let done = false
+  return () => {
+    if (done) return
+    done = true
+    holds -= 1
+    if (holds > 0) return
+    const waiting = released
+    released = []
+    waiting.forEach((resolve) => resolve())
+  }
+}
+
+function linkHoldsReleased(): Promise<void> {
+  if (holds === 0) return Promise.resolve()
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      released = released.filter((r) => r !== settle)
+      resolve()
+    }, LINK_HOLD_MAX_MS)
+    const settle = () => {
+      clearTimeout(timer)
+      resolve()
+    }
+    released = [...released, settle]
+  })
+}
+
 /**
  * Whether the screens going now are going because a link closed them (`dismissModals`), not because the person closed
  * them: a screen that hands an answer on as it unmounts (the check-in's intent question) tells the two apart with it.
@@ -119,12 +158,20 @@ const DISMISS_FALLBACK_MS = 1000
  * stack lays it out as part of the modal, a modal's own hold on the screen (`RouteModal`) stays up under it, and closing
  * the modal later takes the linked screen with it.
  *
+ * Not while a modal is in the middle of something that must not be cut off (a purchase or a restore on the paywall:
+ * `holdLinks`): the link waits for it to settle, at most `LINK_HOLD_MAX_MS`, then closes it and goes.
+ *
  * Every route from the lowest modal up is popped, in one action on the stack that holds them. Resolves once the state
  * has taken it: a link's own navigation dispatched in the same tick was lost under the pop (measured in
- * `__tests__/plusManageOverPlus.test.tsx`), so `+native-intent` and `openWhenReady` both wait for it. Resolves at once when nothing modal is up, or before the navigator is ready (a cold start's
- * link has nothing to close).
+ * `__tests__/plusManageOverPlus.test.tsx`), so `+native-intent` and `openWhenReady` both wait for it. Resolves at once
+ * when nothing modal is up, or before the navigator is ready (a cold start's link has nothing to close).
  */
-export function dismissModals(): Promise<void> {
+export async function dismissModals(): Promise<void> {
+  await linkHoldsReleased()
+  return popModals()
+}
+
+function popModals(): Promise<void> {
   const navigator = linkNavigator
   if (!navigator?.isReady()) return Promise.resolve()
   // Down the focused chain to the stack that holds them (the container wraps the root stack in a route of its own).
