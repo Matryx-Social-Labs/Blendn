@@ -131,23 +131,30 @@ export async function submitCheckIn(
   }
 }
 
-let intentClosed: (() => void) | null = null
+/**
+ * How the "Why do you go out?" screen went. `closed`: saved, or dismissed by the person (×, back): the room comes next.
+ * `abandoned`: taken down by something else — a link or a tap closing it to go elsewhere (lib/pendingRoute
+ * `dismissModals`), or a newer check-in asking again: the room must not be pushed over where they went (review MED-2).
+ */
+export type IntentOutcome = 'closed' | 'abandoned'
+
+let intentClosed: ((outcome: IntentOutcome) => void) | null = null
 
 /**
  * Settles when the "Why do you go out?" screen asked after a check-in has
  * gone, saved or dismissed: the check-in waits for it before the room shows
  * (Flow 4 Tonight #14: the pour, then the sheet, then the Room).
  */
-export function untilIntentAnswered(): Promise<void> {
-  intentClosed?.()
+export function untilIntentAnswered(): Promise<IntentOutcome> {
+  intentClosed?.('abandoned')
   return new Promise((resolve) => {
     intentClosed = resolve
   })
 }
 
 /** The intent screen calls this as it goes. */
-export function intentAnswered(): void {
-  intentClosed?.()
+export function intentAnswered(outcome: IntentOutcome = 'closed'): void {
+  intentClosed?.(outcome)
   intentClosed = null
 }
 

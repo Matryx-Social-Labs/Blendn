@@ -36,6 +36,8 @@ const mockAuth = { user: { id: 'u_me' } }
 jest.mock('../lib/useAuth', () => ({ useAuth: () => mockAuth }))
 // The screen tells a waiting check-in it has gone (lib/checkIn.ts); its storage is native.
 jest.mock('../lib/roomVisibilityStorage', () => ({}))
+const mockClosingForLink = { value: false }
+jest.mock('../lib/pendingRoute', () => ({ isClosingForLink: () => mockClosingForLink.value }))
 jest.mock('../lib/apiClient', () => ({
   apiClient: { getProfile: jest.fn(), setMatchPreferences: jest.fn() },
 }))
@@ -53,6 +55,7 @@ const api = apiClient as jest.Mocked<typeof apiClient>
 
 beforeEach(() => {
   jest.clearAllMocks()
+  mockClosingForLink.value = false
   for (const k of Object.keys(mockParams)) delete mockParams[k]
   Object.assign(mockParams, { eventId: 'e1', revealed: '0', askIntent: '1' })
   api.getProfile.mockResolvedValue({
@@ -170,6 +173,28 @@ it('tells a waiting check-in when the first-door question goes, so the room come
   await view.unmount()
   await Promise.resolve()
   expect(answered).toHaveBeenCalledTimes(1)
+})
+
+it('closed by the person it says "closed"; closed for a link it says "abandoned", and the check-in stops (review MED-2)', async () => {
+  const outcomes: string[] = []
+  void untilIntentAnswered().then((o) => outcomes.push(o))
+  const byPerson = await render(<EventPreferences />)
+  await byPerson.unmount()
+  await Promise.resolve()
+
+  void untilIntentAnswered().then((o) => outcomes.push(o))
+  const byLink = await render(<EventPreferences />)
+  mockClosingForLink.value = true
+  await byLink.unmount()
+  await Promise.resolve()
+
+  expect(outcomes).toEqual(['closed', 'abandoned'])
+})
+
+it('a newer wait supersedes an older one as abandoned: the older check-in never pushes its room', async () => {
+  const first = untilIntentAnswered()
+  void untilIntentAnswered()
+  await expect(first).resolves.toBe('abandoned')
 })
 
 describe('the redesigned cards', () => {

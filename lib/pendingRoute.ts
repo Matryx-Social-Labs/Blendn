@@ -100,6 +100,16 @@ export function setLinkNavigator(next: LinkNavigator | null): void {
   linkNavigator = next
 }
 
+let closingForLink = false
+
+/**
+ * Whether the screens going now are going because a link closed them (`dismissModals`), not because the person closed
+ * them: a screen that hands an answer on as it unmounts (the check-in's intent question) tells the two apart with it.
+ */
+export function isClosingForLink(): boolean {
+  return closingForLink
+}
+
 /** How long a link waits for the modal it closed to leave the navigation state, if the state never says so. */
 const DISMISS_FALLBACK_MS = 1000
 
@@ -130,8 +140,10 @@ export function dismissModals(): Promise<void> {
         const done = () => {
           off()
           clearTimeout(timer)
+          closingForLink = false
           resolve()
         }
+        closingForLink = true
         navigator.dispatch({ type: 'POP', payload: { count: routes.length - lowest }, target: key })
       })
     }

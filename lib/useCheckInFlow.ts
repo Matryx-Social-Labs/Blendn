@@ -301,7 +301,8 @@ export function useCheckInFlow({
           if (trayShown) await afterSheetDismissed()
           const answered = untilIntentAnswered()
           router.push(askIntentRoute(eventId))
-          await answered
+          // Closed for a link (or asked again): they went elsewhere, so the room is not pushed over it. Still checked in.
+          if ((await answered) === 'abandoned') return 'checkedIn'
         }
         await onEnterRoom?.()
         return 'checkedIn'

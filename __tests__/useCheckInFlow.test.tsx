@@ -156,6 +156,18 @@ describe('a check-in', () => {
     expect(props.onEnterRoom).toHaveBeenCalledTimes(1)
   })
 
+  it('a question closed for a link (abandoned) does not go on to the room: they went elsewhere (review MED-2)', async () => {
+    const { done } = await checkIn(fresh({ askIntent: true }))
+    await fireEvent.press(screen.getByTestId('pour-skip', HIDDEN))
+    await advance(DURATION.base)
+    expect(router.push).toHaveBeenCalledWith(askIntentRoute('e1'))
+
+    await act(async () => intentAnswered('abandoned'))
+
+    expect(await done).toBe('checkedIn')
+    expect(props.onEnterRoom).not.toHaveBeenCalled()
+  })
+
   it('offers the reveal after the pour has cleared, then the intent, then the room', async () => {
     offer.mockResolvedValue({ title: 'Show who you are?', message: 'm', confirm: 'Show me', cancel: 'Not now' })
     const { done } = await checkIn(fresh({ revealSuggestion: true, askIntent: true }))

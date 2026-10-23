@@ -82,7 +82,7 @@ jest.mock('expo-linear-gradient', () => {
 })
 
 /* eslint-disable import/first */
-import { openWhenReady, ROOT_MODAL_ROUTES } from '../lib/pendingRoute'
+import { isClosingForLink, openWhenReady, ROOT_MODAL_ROUTES } from '../lib/pendingRoute'
 import { scrubEvent, Sentry } from '../lib/sentry'
 /* eslint-enable import/first */
 
@@ -90,6 +90,12 @@ import { scrubEvent, Sentry } from '../lib/sentry'
 let deliverLink: ((event: { url: string }) => Promise<void> | void) | null = null
 
 const Stub = () => <View />
+/** What the intent question's unmount saw: whether a link was closing it (`isClosingForLink`). */
+const unmountSaw: boolean[] = []
+function IntentQuestion() {
+  React.useEffect(() => () => void unmountSaw.push(isClosingForLink()), [])
+  return <View />
+}
 const mockInvite = { broken: false }
 function InviteScreen() {
   if (mockInvite.broken) throw new Error('invite failed on /f/abc123')
@@ -117,6 +123,7 @@ async function mountApp() {
       'plus-manage': require('../app/plus-manage').default,
       settings: Stub,
       'f/[token]': InviteScreen,
+      'event-preferences/[eventId]': IntentQuestion,
       '+native-intent': require('../app/+native-intent'),
     },
     { initialUrl: '/events' },
@@ -215,6 +222,18 @@ describe('Manage over the paywall (RC drive 5)', () => {
       // Settings presented the paywall: it stays, and the link opens over it (drive 5's next link was this one).
       expect(r.routes()).toEqual(['(tabs)/events', 'settings', '(tabs)/profile'])
       expect(r.pathname()).toBe('/profile')
+    })
+
+    it('the intent question closed for a link knows it was a link, while it unmounts (review MED-2)', async () => {
+      unmountSaw.length = 0
+      await mountApp()
+      await act(async () => router.push('/event-preferences/e1?askIntent=1'))
+      await settle()
+
+      await link('/profile')
+
+      expect(unmountSaw).toEqual([true])
+      expect(isClosingForLink()).toBe(false)
     })
 
     it('with nothing modal up, a link closes nothing', async () => {
