@@ -617,7 +617,7 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
       if (!ios) dismissed.current?.()
     },
   })
-  const watch = useTurnWatch(gate, mounted, onClose)
+  const watch = useTurnWatch(gate, mounted, { onGiveUp: onClose })
   /*
    * Asked for and closed before it ever reached the screen (it waited, or iOS refused it): it has "left" all the same,
    * so a chain that waits on `onDismissed` (the next card, the next step) still runs.

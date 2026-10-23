@@ -113,7 +113,7 @@ export function MomentStage({ label, scrimAlpha, scrim, orbs, orbsOpacity, orbsO
   const orbStyle = useAnimatedStyle(() => ({ opacity: orbsOpacity ? orbsOpacity.get() : 1 }))
   const ink = reduceTransparency && scrimAlpha > 0 ? COLOR.ink : tint(COLOR.ink, scrimAlpha)
   // One Modal on screen at a time on iOS (lib/modalTurn); refused for good, the moment is skipped.
-  const turn = useQueuedModal(modal, onSkip)
+  const turn = useQueuedModal(modal, { onGiveUp: onSkip })
 
   const stage = (
     <View

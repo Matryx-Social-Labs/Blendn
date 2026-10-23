@@ -8,7 +8,7 @@
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { Platform } from 'react-native'
+import { AppState, Platform } from 'react-native'
 
 import { OverflowMenu } from '../components/crews/OverflowMenu'
 import { RouteModal } from '../components/system/RouteModal'
@@ -18,6 +18,8 @@ import { afterSheetDismissed, HANDOFF_MS } from '../lib/sheetDismissed'
 
 /** Modals whose onShow iOS never sends (refused): every other Modal says it is shown as it is drawn. */
 const mockRefused = new Set<string>()
+/** Modals that fade in: onShow comes this long after they are drawn. */
+const mockFadeMs = new Map<string, number>()
 jest.mock('react-native/Libraries/Modal/Modal', () => {
   const React = require('react')
   const Base = jest.requireActual('@react-native/jest-preset/jest/mocks/Modal').default
@@ -26,7 +28,11 @@ jest.mock('react-native/Libraries/Modal/Modal', () => {
     onShow.current = props.onShow
     const up = props.visible !== false
     React.useEffect(() => {
-      if (up && !mockRefused.has(props.testID ?? '')) onShow.current?.()
+      if (!up || mockRefused.has(props.testID ?? '')) return
+      const fade = mockFadeMs.get(props.testID ?? '')
+      if (fade === undefined) return void onShow.current?.()
+      const timer = setTimeout(() => onShow.current?.(), fade)
+      return () => clearTimeout(timer)
     }, [up, props.testID])
     return React.createElement(Base, props)
   }
@@ -62,6 +68,7 @@ beforeEach(() => {
   Object.defineProperty(Platform, 'OS', { value: 'ios', configurable: true })
   resetModalTurns()
   mockRefused.clear()
+  mockFadeMs.clear()
   jest.useFakeTimers()
 })
 afterEach(() => jest.useRealTimers())
@@ -212,5 +219,47 @@ describe('a router modal (the paywall, Make a crew) holds the screen while it is
     // Closed: the sheet under it opens.
     await view.rerender(<Sheet visible onClose={() => {}} title="Checked out" testID="root" />)
     expect(shown('root')).toBe(true)
+  })
+})
+
+describe('MED-A: no false refusals', () => {
+  it('a Modal that fades in has its fade added: onShow at 700 ms is not a refusal', async () => {
+    mockFadeMs.set('menu-modal', 700)
+    await render(<OverflowMenu visible onClose={() => {}} items={[]} testID="menu" />)
+    await tick(600)
+    expect(shown('menu')).toBe(true)
+    await tick(400)
+    await tick(2000)
+    expect(shown('menu')).toBe(true)
+  })
+
+  it('a watchdog that fires late (a JS stall) looks once more before it counts', async () => {
+    mockRefused.add('a-modal')
+    await render(<Sheet visible onClose={() => {}} title="A" testID="a" />)
+    // The timer comes 2 s late.
+    const real = Date.now
+    const spy = jest.spyOn(Date, 'now').mockImplementation(() => real() + 2000)
+    await tick(500)
+    spy.mockRestore()
+    expect(shown('a')).toBe(true)
+    // On time the second time: refused.
+    await tick(600)
+    expect(shown('a')).toBe(false)
+  })
+
+  it('nothing counts while the app is in the background', async () => {
+    mockRefused.add('a-modal')
+    const state = Object.getOwnPropertyDescriptor(AppState, 'currentState')
+    Object.defineProperty(AppState, 'currentState', { value: 'background', configurable: true })
+    try {
+      await render(<Sheet visible onClose={() => {}} title="A" testID="a" />)
+      await settle(4)
+      expect(shown('a')).toBe(true)
+    } finally {
+      if (state) Object.defineProperty(AppState, 'currentState', state)
+      else Object.defineProperty(AppState, 'currentState', { value: 'active', configurable: true })
+    }
+    await settle(1)
+    expect(shown('a')).toBe(false)
   })
 })

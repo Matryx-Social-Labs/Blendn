@@ -14,7 +14,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import type { FeedMediaItem } from '../../lib/feedMedia'
-import { useQueuedModal } from '../../lib/modalTurn'
+import { MODAL_FADE_MS, useQueuedModal } from '../../lib/modalTurn'
 import { IconButton } from '../ds/IconButton'
 import { ScrimPill, monoCaption } from '../ds/MonoFamily'
 import { useBoldText } from '../ds/shared'
@@ -81,7 +81,7 @@ export function SceneLightbox({
   const listRef = useRef<FlatList<FeedMediaItem>>(null)
 
   // One Modal on screen at a time on iOS (lib/modalTurn).
-  const turn = useQueuedModal(visible, onClose)
+  const turn = useQueuedModal(visible, { onGiveUp: onClose, animationMs: MODAL_FADE_MS })
   const onShow = useCallback(() => {
     setIndex(initialIndex)
     setZoomed(false)

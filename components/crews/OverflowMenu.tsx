@@ -2,7 +2,7 @@ import { Modal, Platform, Pressable, StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { barCircleBottom } from '../../lib/barGeometry'
-import { useQueuedModal } from '../../lib/modalTurn'
+import { MODAL_FADE_MS, useQueuedModal } from '../../lib/modalTurn'
 import { COLOR, SPACE } from '../../lib/design/tokens'
 import { tint } from '../../lib/theme'
 import { ContextMenu, type MenuItem } from '../ds/ContextMenu'
@@ -22,7 +22,7 @@ const MENU_GAP = Platform.OS === 'android' ? SPACE.xxs : SPACE.xs + SPACE.xxs
 export function OverflowMenu({ visible, items, onClose, testID = 'menu' }: { visible: boolean; items: MenuItem[]; onClose: () => void; testID?: string }) {
   const insets = useSafeAreaInsets()
   // One Modal on screen at a time on iOS (lib/modalTurn): the sheet an item opens waits for this menu to have gone.
-  const turn = useQueuedModal(visible, onClose)
+  const turn = useQueuedModal(visible, { onGiveUp: onClose, animationMs: MODAL_FADE_MS })
   return (
     <Modal
       visible={turn.visible}

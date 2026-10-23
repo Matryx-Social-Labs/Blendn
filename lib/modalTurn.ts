@@ -1,6 +1,6 @@
 import { useFocusEffect } from 'expo-router'
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { Platform } from 'react-native'
+import { AppState, Platform } from 'react-native'
 
 import { Logger } from './logger'
 import { useLatest } from './useLatest'
@@ -85,8 +85,16 @@ export function resetModalTurns(): void {
 /** Inside a Modal or a router modal: a Modal drawn here presents from it, so it does not wait for the screen. */
 export const PresentsHere = createContext(false)
 
-/** iOS says a Modal is on screen with `onShow`; one that has not said so by now was refused. */
+/**
+ * iOS says a Modal is on screen with `onShow`; one that has not said so by now was refused. The clock starts as React
+ * draws it, before the native mount, so a Modal that fades in (`animationType="fade"`) adds its fade: iOS sends onShow
+ * at the end of it (review MED-A).
+ */
 export const SHOW_WATCHDOG_MS = 500
+/** React Native's own Modal fade, with room to spare: what a fading Modal adds to the watchdog. */
+export const MODAL_FADE_MS = 400
+/** A watchdog that fires this much past its time was held up (a JS stall), not refused: it looks once more. */
+const LATE_FIRE_MS = 250
 /** iOS answers a dismissal with `onDismiss`; if it never does, the next in line goes after this. */
 export const MODAL_GONE_FALLBACK_MS = 600
 /** A refused Modal asks again this soon after it was taken down, and this many times in all. */
@@ -116,7 +124,7 @@ export function useTurnGate(wanted: boolean) {
  * goes, for its own exit). Returns `refused` (draw the Modal off: iOS refused it) and the Modal's `onShow`/`onDismiss`.
  * `onGiveUp`: refused `MAX_REFUSALS` times; the owner should close it.
  */
-export function useTurnWatch(gate: TurnGate, modalUp: boolean, onGiveUp?: () => void) {
+export function useTurnWatch(gate: TurnGate, modalUp: boolean, { onGiveUp, animationMs = 0 }: { onGiveUp?: () => void; animationMs?: number } = {}) {
   const { turn, queued, wanted, setBackoff } = gate
   const shown = useRef(false)
   const presented = useRef(false)
@@ -133,11 +141,27 @@ export function useTurnWatch(gate: TurnGate, modalUp: boolean, onGiveUp?: () => 
     if (!modalUp) shown.current = false
   }, [modalUp, refused])
 
-  // The watchdog: drawn, and iOS has not said it is on screen.
+  /*
+   * The watchdog: drawn, and iOS has not said it is on screen. Not a strike: a timer that fired late (a JS stall can
+   * put it after onShow's delivery) looks once more; and nothing counts while the app is not in the foreground.
+   */
   useEffect(() => {
     if (!queued || !modalUp || refused || shown.current) return
-    const timer = setTimeout(() => {
+    const budget = SHOW_WATCHDOG_MS + animationMs
+    let timer: ReturnType<typeof setTimeout>
+    let lookedAgain = false
+    let armedAt = Date.now()
+    const arm = () => {
+      armedAt = Date.now()
+      timer = setTimeout(fire, budget)
+    }
+    const fire = () => {
       if (shown.current) return
+      if (!lookedAgain && Date.now() - armedAt > budget + LATE_FIRE_MS) {
+        lookedAgain = true
+        return arm()
+      }
+      if (AppState.currentState === 'background' || AppState.currentState === 'inactive') return arm()
       refusals.current += 1
       Logger.warn('navigation', 'iOS did not present a modal; taking it down', { refusals: refusals.current })
       presented.current = false
@@ -148,9 +172,10 @@ export function useTurnWatch(gate: TurnGate, modalUp: boolean, onGiveUp?: () => 
         Logger.error('navigation', 'a modal iOS kept refusing was dropped', { refusals: refusals.current })
         giveUp.current?.()
       }
-    }, SHOW_WATCHDOG_MS)
+    }
+    arm()
     return () => clearTimeout(timer)
-  }, [queued, modalUp, refused, turn, setBackoff, giveUp])
+  }, [queued, modalUp, refused, turn, setBackoff, giveUp, animationMs])
 
   // Refused and taken down: ask again, unless it was dropped.
   useEffect(() => {
@@ -196,9 +221,9 @@ export function useTurnWatch(gate: TurnGate, modalUp: boolean, onGiveUp?: () => 
 }
 
 /** A plain Modal (no exit of its own) that takes its turn: pass `visible`, `onShow` and `onDismiss` to it. */
-export function useQueuedModal(wanted: boolean, onGiveUp?: () => void) {
+export function useQueuedModal(wanted: boolean, options: { onGiveUp?: () => void; animationMs?: number } = {}) {
   const gate = useTurnGate(wanted)
-  const watch = useTurnWatch(gate, gate.allowed, onGiveUp)
+  const watch = useTurnWatch(gate, gate.allowed, options)
   return { visible: gate.allowed && !watch.refused, onShow: watch.onShow, onDismiss: watch.onDismiss }
 }
 
