@@ -1,4 +1,4 @@
-import { router, Stack, useFocusEffect } from 'expo-router'
+import { router, useFocusEffect } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -112,8 +112,6 @@ function ManageContent() {
 
   return (
     <View style={styles.container}>
-      {/* Its own header is the design's TopBar; the route is not listed in the root layout, so it says so itself. */}
-      <Stack.Screen options={{ headerShown: false }} />
       <ScrollView
         contentContainerStyle={[styles.content, { paddingTop: bar.contentTop, paddingBottom: insets.bottom + SPACE.xl }]}
         scrollIndicatorInsets={{ top: bar.indicatorTop }}

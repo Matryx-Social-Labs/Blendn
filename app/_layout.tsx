@@ -746,6 +746,13 @@ function RootLayout() {
         name="plus"
         options={{ headerShown: false, presentation: 'fullScreenModal', animation: reduceMotion ? 'fade' : Platform.OS === 'ios' ? 'default' : 'slide_from_bottom' }}
       />
+      {/*
+        Manage (Settings › Blend'n+). Declared here, not by the screen: it said `<Stack.Screen options={{ headerShown: false }} />`
+        itself, a new object every render. From the tabs that settled; over the paywall (a modal, which makes the stack lay
+        out every route above it as one too) each `setOptions` re-rendered it into the next, and "Maximum update depth
+        exceeded" took the app down to the root boundary (RC drive 5; `__tests__/plusManageOverPlus.test.tsx`).
+      */}
+      <Stack.Screen name="plus-manage" options={{ headerShown: false }} />
       <Stack.Screen name="f/[token]" options={{ headerShown: false, presentation: 'modal', animation: reduceMotion ? 'fade' : 'slide_from_bottom' }} />
           </Stack>
           {/*
