@@ -11,6 +11,8 @@ jest.mock('expo-location', () => ({
   requestForegroundPermissionsAsync: jest.fn(),
   getForegroundPermissionsAsync: jest.fn(),
   getCurrentPositionAsync: jest.fn(),
+  getLastKnownPositionAsync: jest.fn(),
+  hasServicesEnabledAsync: jest.fn(),
   Accuracy: { Balanced: 3 },
 }))
 jest.mock('../lib/api', () => ({ getEvents: jest.fn() }))
@@ -48,6 +50,9 @@ beforeEach(() => {
   mockLocation.requestForegroundPermissionsAsync.mockResolvedValue({ status: 'granted' } as never)
   mockLocation.getForegroundPermissionsAsync.mockResolvedValue({ status: 'granted' } as never)
   mockLocation.getCurrentPositionAsync.mockResolvedValue({ coords: { latitude: 12.97, longitude: 77.6 } } as never)
+  // A first open with nothing cached: the fix has to be asked for.
+  mockLocation.getLastKnownPositionAsync.mockResolvedValue(null)
+  mockLocation.hasServicesEnabledAsync.mockResolvedValue(true)
 })
 
 const open = async () => {
@@ -80,15 +85,59 @@ it('denied: says why, and Open Settings goes to the settings', async () => {
   expect(open_).toHaveBeenCalled()
 })
 
-it('permission but no fix: "Location unavailable" with Try again, not an empty city', async () => {
-  mockLocation.getCurrentPositionAsync.mockRejectedValue(new Error('no fix'))
-  await open()
-  expect(await screen.findByText('Location unavailable')).toBeTruthy()
-  expect(screen.queryByText('No nearby events')).toBeNull()
+it('permission but no fix by the deadline: "Location unavailable" with Try again, not an empty city', async () => {
+  jest.useFakeTimers()
+  try {
+    mockLocation.getCurrentPositionAsync.mockRejectedValue(new Error('no fix'))
+    await open()
+    for (let i = 0; i < 20; i++) await act(async () => jest.advanceTimersByTime(1_000))
+    expect(screen.getByText('Location unavailable')).toBeTruthy()
+    expect(screen.queryByText('No nearby events')).toBeNull()
+  } finally {
+    jest.useRealTimers()
+  }
   mockLocation.getCurrentPositionAsync.mockResolvedValue({ coords: { latitude: 12.97, longitude: 77.6 } } as never)
   events.mockResolvedValue({ data: [ev('a', 'Alpha Night', 12.98)], error: null })
   await fireEvent.press(screen.getByRole('button', { name: 'Try again' }))
   await waitFor(() => expect(screen.getByRole('button', { name: /Alpha Night/ })).toBeTruthy())
+})
+
+it('a first ask refused while the phone is still looking keeps the loading rows, and the fix that follows lists (drive 4 D-10)', async () => {
+  jest.useFakeTimers()
+  try {
+    // Arrange: nothing cached; iOS refuses the first ask ("location unknown"), the second has a fix.
+    mockLocation.getCurrentPositionAsync
+      .mockRejectedValueOnce(Object.assign(new Error('Location unknown'), { code: 'E_LOCATION_UNAVAILABLE' }))
+      .mockResolvedValue({ coords: { latitude: 12.97, longitude: 77.6 } } as never)
+    events.mockResolvedValue({ data: [ev('a', 'Alpha Night', 12.98)], error: null })
+
+    // Act
+    await open()
+
+    // Assert: still loading, never the error, then the list.
+    expect(screen.getByTestId('nearby-skeleton')).toBeTruthy()
+    expect(screen.queryByText('Location unavailable')).toBeNull()
+    for (let i = 0; i < 3; i++) await act(async () => jest.advanceTimersByTime(1_000))
+    expect(screen.queryByText('Location unavailable')).toBeNull()
+    expect(screen.getByRole('button', { name: /Alpha Night/ })).toBeTruthy()
+  } finally {
+    jest.useRealTimers()
+  }
+})
+
+it('a recent fix the phone already has is used at once', async () => {
+  mockLocation.getLastKnownPositionAsync.mockResolvedValue({ coords: { latitude: 12.97, longitude: 77.6 }, timestamp: Date.now() } as never)
+  events.mockResolvedValue({ data: [ev('a', 'Alpha Night', 12.98)], error: null })
+  await open()
+  expect(await screen.findByRole('button', { name: /Alpha Night/ })).toBeTruthy()
+  expect(mockLocation.getCurrentPositionAsync).not.toHaveBeenCalled()
+})
+
+it('Location Services off is said at once, not after the deadline', async () => {
+  mockLocation.hasServicesEnabledAsync.mockResolvedValue(false)
+  await open()
+  expect(await screen.findByText('Location unavailable')).toBeTruthy()
+  expect(mockLocation.getCurrentPositionAsync).not.toHaveBeenCalled()
 })
 
 it('a fix that never comes is "Location unavailable" after 15 s, not a skeleton for ever', async () => {

@@ -86,6 +86,51 @@ export function firstGoodFix(
   })
 }
 
+/** A list sorted by distance takes a fix this old: a few minutes' walk does not reorder a city's events. */
+export const ROUGH_FIX_MAX_AGE_MS = 5 * 60_000
+/** A fix refused before the deadline is asked again this soon. */
+const ROUGH_FIX_RETRY_MS = 1_000
+
+const timedOutError = () => Object.assign(new Error('Location timed out'), { code: 'E_LOCATION_TIMEOUT' })
+
+/** `work`, or a timeout at `ms`: `getCurrentPositionAsync` has no deadline of its own. */
+function withDeadline<T>(work: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(timedOutError()), ms)
+  })
+  return Promise.race([work, deadline]).finally(() => clearTimeout(timer))
+}
+
+/**
+ * Where you are, roughly, for a list sorted by distance (Nearby): the phone's last fix if it is recent, else a new one,
+ * asked again until the deadline when it is refused early. Rejects only when Location Services are off, or at the
+ * deadline.
+ *
+ * A first ask with nothing cached is refused at once on iOS (CoreLocation's "location unknown": it is still looking),
+ * and Nearby said "Location unavailable" over a fix that came a second later (RC drive 4 D-10). That refusal is not
+ * the answer; the deadline is.
+ */
+export async function roughFix(deadlineMs: number = LOCATION_FIX_TIMEOUT_MS): Promise<Location.LocationObject> {
+  const last = await Promise.resolve()
+    .then(() => Location.getLastKnownPositionAsync({ maxAge: ROUGH_FIX_MAX_AGE_MS }))
+    .catch(() => null)
+  if (last) return last
+  const services = await Promise.resolve()
+    .then(() => Location.hasServicesEnabledAsync())
+    .catch(() => true)
+  if (!services) throw Object.assign(new Error('Location services are off'), { code: 'E_LOCATION_SERVICES_DISABLED' })
+  const deadline = Date.now() + deadlineMs
+  for (;;) {
+    try {
+      return await withDeadline(Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }), Math.max(0, deadline - Date.now()))
+    } catch (error) {
+      if (deadline - Date.now() <= ROUGH_FIX_RETRY_MS) throw error
+      await new Promise((resolve) => setTimeout(resolve, ROUGH_FIX_RETRY_MS))
+    }
+  }
+}
+
 /**
  * The fix asked for when the pass showed, so the hold does not start one cold.
  * Pending or done, the hold reuses it rather than asking a second time.
