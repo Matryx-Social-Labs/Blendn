@@ -12,7 +12,7 @@ import { Text } from 'react-native'
 import { act, cleanup, fireEvent, renderRouter, screen } from 'expo-router/testing-library'
 import { router, Stack } from 'expo-router'
 
-jest.mock('../lib/sentry', () => ({ Sentry: { captureException: jest.fn() } }))
+jest.mock('../lib/sentry', () => ({ ...jest.requireActual('../lib/sentry'), Sentry: { captureException: jest.fn() } }))
 jest.mock('../lib/useAuth', () => ({ getCurrentUser: async () => null }))
 // The router test harness stubs Reanimated, which has no Reduce Motion hook; the crash screen's buttons read it.
 jest.mock('../lib/motion', () => ({ ...jest.requireActual('../lib/motion'), useReducedMotion: () => false }))

@@ -16,6 +16,9 @@
  * through expo-linking's `url` event and `+native-intent`. Negative controls: `redirectSystemPath` returning the path
  * without `dismissModals` fails the two link-over-a-modal tests; `openWhenReady` without it fails the tap test. Popping
  * and returning the path in the same tick (not waiting for the state) failed the first link test: the link was lost.
+ *
+ * And what a crash report carries (security review): the route's pattern, never its path. Negative controls: the root
+ * boundary given `route={pathname}` fails the /f/abc123 test; `scrubReportText` returning its input fails all three.
  */
 import React from 'react'
 import { readFileSync, readdirSync, statSync } from 'fs'
@@ -50,6 +53,7 @@ jest.mock('../lib/notifications', () => ({
 }))
 jest.mock('../lib/socketClient', () => ({ initSocketWithAppState: jest.fn(), cleanup: jest.fn(), disconnect: jest.fn() }))
 jest.mock('../lib/sentry', () => ({
+  ...jest.requireActual('../lib/sentry'),
   initSentry: jest.fn(),
   Sentry: { wrap: (c: unknown) => c, captureException: jest.fn(), captureMessage: jest.fn(), addBreadcrumb: jest.fn() },
 }))
@@ -58,7 +62,14 @@ jest.mock('../lib/pushDecline', () => ({ hasDeclinedPush: jest.fn(async () => fa
 jest.mock('../lib/onboardingAssets', () => ({ ONBOARDING_IMAGES: [], prefetchOnboardingImages: jest.fn() }))
 jest.mock('../components/PresenceMonitor', () => ({ PresenceMonitor: () => null }))
 jest.mock('../components/LiveAtVenue', () => ({ LiveAtVenue: () => null }))
-jest.mock('../components/SheetHost', () => ({ SheetHost: () => null }))
+// Throws on demand: something outside every screen's own boundary, for the root's.
+const mockHost = { broken: false }
+jest.mock('../components/SheetHost', () => ({
+  SheetHost: () => {
+    if (mockHost.broken) throw new Error('host failed on /f/abc123')
+    return null
+  },
+}))
 jest.mock('../components/ds/CoachMarkHost', () => ({ CoachMarkHost: () => null }))
 jest.mock('../components/ds/Orbs', () => ({ Orbs: () => null }))
 jest.mock('../components/ds/Loader', () => ({ Spinner: () => null }))
@@ -71,14 +82,19 @@ jest.mock('expo-linear-gradient', () => {
 })
 
 /* eslint-disable import/first */
-import { Sentry } from '../lib/sentry'
 import { openWhenReady, ROOT_MODAL_ROUTES } from '../lib/pendingRoute'
+import { scrubEvent, Sentry } from '../lib/sentry'
 /* eslint-enable import/first */
 
 /** An incoming link, as iOS delivers it to the running app (expo-router's `subscribe` listens on expo-linking). */
 let deliverLink: ((event: { url: string }) => Promise<void> | void) | null = null
 
 const Stub = () => <View />
+const mockInvite = { broken: false }
+function InviteScreen() {
+  if (mockInvite.broken) throw new Error('invite failed on /f/abc123')
+  return <View />
+}
 const settle = async () => {
   await act(async () => {
     jest.advanceTimersByTime(1000)
@@ -100,6 +116,7 @@ async function mountApp() {
       plus: require('../app/plus').default,
       'plus-manage': require('../app/plus-manage').default,
       settings: Stub,
+      'f/[token]': InviteScreen,
       '+native-intent': require('../app/+native-intent'),
     },
     { initialUrl: '/events' },
@@ -116,6 +133,8 @@ describe('Manage over the paywall (RC drive 5)', () => {
   beforeEach(() => {
     errors = []
     deliverLink = null
+    mockHost.broken = false
+    mockInvite.broken = false
     // The module object itself: an `import * as` would be a copy, and the spy would never reach expo-router.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     jest.spyOn(require('expo-linking'), 'addEventListener').mockImplementation(((_type: string, listener: (event: { url: string }) => void) => {
@@ -229,5 +248,50 @@ describe('Manage over the paywall (RC drive 5)', () => {
       .filter((block) => /presentation:\s*'(modal|fullScreenModal|transparentModal|containedModal|containedTransparentModal|formSheet|pageSheet)'/.test(block))
       .map((block) => /name="([^"]+)"/.exec(block)?.[1])
     expect([...ROOT_MODAL_ROUTES].sort()).toEqual(modal.sort())
+  })
+
+  describe('a crash report names the route, never the path (security review: a path carries invite tokens and ids)', () => {
+    /** What leaves for Sentry: the event built from the exception and its context, through the app's `beforeSend`. */
+    const sent = () =>
+      (Sentry.captureException as jest.Mock).mock.calls.map(([error, context]) =>
+        JSON.stringify(scrubEvent({ exception: { values: [{ type: error.name, value: error.message }] }, ...context })),
+      )
+    const logged = () => errors.filter((line) => line.startsWith('[error-boundary]'))
+
+    it('the root boundary on /f/abc123 reports /f/[token], and abc123 is nowhere in it', async () => {
+      await mountApp()
+      mockHost.broken = true
+      await act(async () => router.push('/f/abc123'))
+      await settle()
+
+      // The harness remounts the root after the navigator goes down, into the still-broken host: a second report, from
+      // wherever it landed. What matters is what each one carries.
+      expect((Sentry.captureException as jest.Mock).mock.calls[0][1].tags.route).toBe('/f/[token]')
+      expect(sent().join()).not.toContain('abc123')
+      expect(logged().length).toBeGreaterThan(0)
+      expect(logged().join()).not.toContain('abc123')
+    })
+
+    it("a screen's own boundary reports its route's name, f/[token]", async () => {
+      await mountApp()
+      mockInvite.broken = true
+      await act(async () => router.push('/f/abc123'))
+      await settle()
+
+      expect((Sentry.captureException as jest.Mock).mock.calls[0][1].tags.route).toBe('f/[token]')
+      expect(sent().join()).not.toContain('abc123')
+      expect(logged().join()).not.toContain('abc123')
+    })
+
+    it('scrubs an exception message, an event message and a request URL on the way out', () => {
+      const id = '0b8e6c1e-3d2a-4f7b-9c1d-2a3b4c5d6e7f'
+      const out = scrubEvent({
+        message: `room ${id}`,
+        request: { url: `https://x/api/mobile/events/${id}/board` },
+        exception: { values: [{ value: `no conversation ${id} for /f/tok_9Z?x=1` }] },
+      })
+      expect(JSON.stringify(out)).not.toMatch(new RegExp(`${id}|tok_9Z`))
+      expect(out.exception?.values?.[0].value).toBe('no conversation :id for /f/:token?x=1')
+    })
   })
 })

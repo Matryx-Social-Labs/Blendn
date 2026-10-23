@@ -2,7 +2,7 @@ import React, { Component, ErrorInfo, ReactNode } from 'react'
 import { Linking, StyleSheet, Text, View } from 'react-native'
 import Animated from 'react-native-reanimated'
 import { COLOR, TYPE } from '../lib/design/tokens'
-import { Sentry } from '../lib/sentry'
+import { scrubReportText, Sentry } from '../lib/sentry'
 import { SUPPORT_EMAIL, supportMailto } from '../lib/support'
 import { monoCaption } from './ds/MonoFamily'
 import { StateScreen } from './ds/StateScreen'
@@ -14,10 +14,15 @@ interface Props {
   /** `errorId` is the one this screen shows and puts in the support email. */
   onError?: (error: Error, errorInfo: ErrorInfo, errorId: string) => void
   /**
-   * Where it is: the route's name for one screen's boundary, the pathname for the root's. Reported with the error, and a
-   * different one clears it — somebody who went somewhere else is not shown the last place's crash.
+   * Which route it is, as a pattern (`f/[token]`, `/private-chat/[conversationId]`), never a concrete path: it goes into the
+   * report, and a path carries invite tokens and conversation ids.
    */
   route?: string
+  /**
+   * Where it is now (the root's pathname): a different one clears it, so somebody who went somewhere else is not shown the
+   * last place's crash. Compared here only; never reported.
+   */
+  resetKey?: string
   /** A way out of a screen that keeps failing ("Go back"), where there is somewhere to go back to. */
   onLeave?: () => void
 }
@@ -26,7 +31,7 @@ interface State {
   hasError: boolean
   error: Error | null
   errorId: string | null
-  /** When it was caught: the route change that comes with the crash itself is not somewhere new (`componentDidUpdate`). */
+  /** When it was caught: the `resetKey` change that comes with the crash itself is not somewhere new (`componentDidUpdate`). */
   caughtAt: number
   /** No mail app answered, so the address is shown to copy instead. */
   showAddress: boolean
@@ -82,13 +87,15 @@ export class ErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     const errorId = this.state.errorId ?? newErrorId()
     const route = this.props.route ?? 'unknown'
+    // The exception's message goes as its value, scrubbed on the way out (`scrubEvent`, lib/sentry): not copied here.
     Sentry.captureException(error, {
       // The id the crash screen shows and puts in the support email.
       tags: { context: 'error-boundary', error_id: errorId, route },
-      extra: { message: error.message, componentStack: errorInfo.componentStack },
+      extra: { componentStack: errorInfo.componentStack },
     })
-    // Read on a device with no Sentry (a local release build): the unified log carries console.error.
-    console.error(`[error-boundary] ${errorId} at ${route}: ${error.name}: ${error.message}\n${errorInfo.componentStack ?? ''}`)
+    // Read on a device with no Sentry (a local release build): the unified log carries console.error. Sentry keeps console
+    // lines as breadcrumbs too, so it is scrubbed like the report.
+    console.error(`[error-boundary] ${errorId} at ${route}: ${error.name}: ${scrubReportText(error.message)}\n${errorInfo.componentStack ?? ''}`)
 
     this.setState({ error, errorId })
     this.props.onError?.(error, errorInfo, errorId)
@@ -96,7 +103,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   // Somewhere else now: what failed back there is not this place's to show.
   componentDidUpdate(prev: Props) {
-    if (this.state.hasError && prev.route !== this.props.route && Date.now() - this.state.caughtAt > CRASH_SETTLE_MS) this.resetErrorBoundary()
+    if (this.state.hasError && prev.resetKey !== this.props.resetKey && Date.now() - this.state.caughtAt > CRASH_SETTLE_MS) this.resetErrorBoundary()
   }
 
   // Draws the children again: they were unmounted for the fallback, so this is a fresh mount, not the broken tree.

@@ -4,8 +4,9 @@
  * the id as selectable text, because this sits above the toast layer. Nothing you saved is lost, and the raw message is
  * for development builds.
  *
- * Since RC drive 5: it reports itself once, with its route; somewhere else clears it; Go back where it can. Negative
- * controls: without the route check in `componentDidUpdate`, "a different route draws the children again" fails;
+ * Since RC drive 5: it reports itself once, with its route's pattern; somewhere else (`resetKey`) clears it; Go back where
+ * it can. Negative controls: without the `resetKey` check in `componentDidUpdate`, "a different route draws the children
+ * again" fails;
  * without `CRASH_SETTLE_MS`, "not the route change that came with the crash itself" fails.
  */
 import React from 'react'
@@ -15,14 +16,16 @@ import { Linking, Text } from 'react-native'
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }))
 jest.mock('../components/onboarding/Backdrop', () => ({ Backdrop: () => null, ORB_LEVEL: { form: 0.6 } }))
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() } }))
-jest.mock('../lib/sentry', () => ({ Sentry: { captureException: jest.fn() } }))
+jest.mock('../lib/sentry', () => ({ ...jest.requireActual('../lib/sentry'), Sentry: { captureException: jest.fn() } }))
 jest.mock('../lib/useAuth', () => ({ getCurrentUser: jest.fn().mockResolvedValue({ id: 'u_me' }) }))
 jest.mock('../lib/haptics', () => ({ H: { primary: jest.fn(), error: jest.fn(), destructive: jest.fn() } }))
 
+/* eslint-disable import/first */
 import { ErrorBoundary } from '../components/ErrorBoundary'
 import { H } from '../lib/haptics'
 import { Sentry } from '../lib/sentry'
 import { SUPPORT_EMAIL } from '../lib/support'
+/* eslint-enable import/first */
 
 let shouldThrow = true
 let mounts = 0
@@ -77,7 +80,7 @@ it('Try again plays H.primary on press-in and mounts the children afresh', async
   expect(mounts).toBe(1)
 })
 
-it('reports once, as the exception, with where it happened and what it said', async () => {
+it('reports once, as the exception, with the route it happened on', async () => {
   const onError = jest.fn()
   await render(
     <ErrorBoundary route="plus-manage" onError={onError}>
@@ -88,13 +91,13 @@ it('reports once, as the exception, with where it happened and what it said', as
   const [error, context] = (Sentry.captureException as jest.Mock).mock.calls[0]
   expect(error).toBeInstanceOf(Error)
   expect(context.tags).toEqual({ context: 'error-boundary', error_id: onError.mock.calls[0][2], route: 'plus-manage' })
-  expect(context.extra.message).toBe('boom: a stack-trace fragment')
+  expect(error.message).toBe('boom: a stack-trace fragment')
   expect(context.extra.componentStack).toContain('ErrorBoundary')
 })
 
 describe('somewhere else clears it', () => {
-  const at = (route: string) => (
-    <ErrorBoundary route={route}>
+  const at = (path: string) => (
+    <ErrorBoundary route="/somewhere/[id]" resetKey={path}>
       <Bomb />
     </ErrorBoundary>
   )

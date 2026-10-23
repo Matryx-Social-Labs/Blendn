@@ -1,5 +1,5 @@
 import { Asset } from 'expo-asset';
-import { router, Stack, useNavigationContainerRef, usePathname, type Href } from "expo-router";
+import { router, Stack, useNavigationContainerRef, usePathname, useSegments, type Href } from "expo-router";
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigationReady } from '../lib/useNavigationReady';
@@ -85,6 +85,8 @@ function RootLayout() {
   // The server no longer serves this build: one screen over everything, with the store button (Flow 15 15.14).
   const updateRequired = useUpdateRequired();
   const pathname = usePathname();
+  // The route as a pattern (`/f/[token]`), for the crash report: the pathname itself carries tokens and ids.
+  const segments = useSegments();
   // The paywall never arrives by itself over onboarding, a check-in or a chat (lib/paywall.ts).
   useEffect(() => notePathname(pathname), [pathname]);
   const lastRedirectRef = useRef<string | null>(null);
@@ -535,9 +537,9 @@ function RootLayout() {
   return (
     /*
       The last resort: every screen has its own boundary (`rootTextSizeLayout`, `textSizeLayout`), so this one catches what
-      is outside them (the tab bar, the hosts). It reports itself, and going somewhere else clears it.
+      is outside them (the tab bar, the hosts). It reports the route's pattern, and going somewhere else clears it.
     */
-    <ErrorBoundary route={pathname}>
+    <ErrorBoundary route={`/${segments.join('/')}`} resetKey={pathname}>
       {/*
         Outermost, so every screen and the toast layer sit inside it. Without
         it, a `GestureDetector` anywhere in the app silently does nothing.
