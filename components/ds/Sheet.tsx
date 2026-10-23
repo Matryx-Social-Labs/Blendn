@@ -26,7 +26,7 @@ import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { notifySheetDismissed } from '../../lib/sheetDismissed'
 import { OPACITY, tint } from '../../lib/theme'
 import { Button, type ButtonKind, type ButtonProps } from './Button'
-import { CONTROL_FONT_CAP, font, GroundProvider, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast } from './shared'
+import { CONTROL_FONT_CAP, font, GroundProvider, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast, useLargeText } from './shared'
 
 export type Detent = 'short' | 'medium' | 'tall'
 
@@ -575,6 +575,74 @@ export function Sheet({ visible, onClose, title, headerAction, headerNote, body,
     headDrag.withTestId(`${testID}-head-drag`)
   }
   const hasHead = !!(icon || title || headerAction || headerNote || body)
+  const largeText = useLargeText()
+  const iconEl =
+    icon ? (
+      <View
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        style={[styles.well, { backgroundColor: android ? COLOR.surfaceSunken : MATERIAL.fillOnGlass }]}
+      >
+        <Icon name={icon} />
+      </View>
+    ) : null
+  const titleEl =
+    title || headerAction || headerNote ? (
+      <View style={styles.titleRow}>
+        {title ? (
+          <Text ref={titleRef} accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.title, styles.titleText]}>
+            {title}
+          </Text>
+        ) : (
+          <View style={styles.titleText} />
+        )}
+        {headerNote ? (
+          <View
+            accessible
+            accessibilityLabel={headerNote.label ?? `${headerNote.lead ?? ''}${headerNote.text}`}
+            testID={testID && `${testID}-note`}
+            style={styles.note}
+          >
+            {headerNote.lead ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.title]}>{headerNote.lead}</Text> : null}
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{headerNote.text}</Text>
+          </View>
+        ) : null}
+        {headerAction ? (
+          <Pressable
+            testID={testID && `${testID}-header-action`}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: !!headerAction.disabled }}
+            disabled={headerAction.disabled}
+            hitSlop={(minTarget() - TYPE.meta.lineHeight) / 2}
+            onPress={headerAction.onPress}
+            style={headerAction.disabled && { opacity: OPACITY.disabled }}
+          >
+            <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.title]}>{headerAction.label}</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    ) : null
+  const bodyEl =
+    body ? (
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{body}</Text>
+    ) : null
+  /*
+   * The icon and title row stay put above the scroll, and the body and content scroll under them (review MEDIUM-2: "Clear
+   * all", a step's "1 of 3" and "Write a post" over the keyboard had scrolled away). At the accessibility sizes a plain
+   * header scrolls with its content instead: there "Sign out?" and its body were taller than the sheet (RC drive 3 D-E). A
+   * row with an action or a note stays put at every size; its title stops at its cap.
+   */
+  const pinHead = !!(headerAction || headerNote) || (!largeText && !!(icon || title))
+  const scrollHead = pinHead ? (
+    bodyEl
+  ) : hasHead ? (
+    <>
+      {iconEl}
+      {titleEl}
+      {bodyEl}
+    </>
+  ) : null
+  const scrollsFromTop = hasHead && !pinHead
   // Once the modal is on screen: iOS presents it a frame after mount and drops a focus sent earlier.
   const focusTitle = () => {
     const target = titleRef.current ?? focusRef?.current
@@ -643,23 +711,31 @@ export function Sheet({ visible, onClose, title, headerAction, headerNote, body,
                 contrast && IC_HAIRLINE,
               ]}
             >
-              {/* The grip stays above the scroll: a sheet scrolled down to its actions can still be dragged away. */}
+              {/* The grip (and a pinned title row) stays above the scroll: a sheet scrolled down to its actions can still be dragged away. */}
               <GestureDetector gesture={drag}>
-                <View testID={testID && `${testID}-grip`} style={[styles.grip, overflowing && { height: minTarget() }]}>
-                  {dismissible ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Dismiss"
-                      onPress={requestClose}
-                      hitSlop={{ bottom: minTarget() - SPACE.xl }}
-                      style={styles.handleHit}
-                    >
-                      <View testID={testID && `${testID}-handle`} style={[styles.handle, handle]} />
-                    </Pressable>
+                <View>
+                  <View testID={testID && `${testID}-grip`} style={[styles.grip, overflowing && { height: minTarget() }]}>
+                    {dismissible ? (
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Dismiss"
+                        onPress={requestClose}
+                        hitSlop={{ bottom: minTarget() - SPACE.xl }}
+                        style={styles.handleHit}
+                      >
+                        <View testID={testID && `${testID}-handle`} style={[styles.handle, handle]} />
+                      </Pressable>
+                    ) : null}
+                  </View>
+                  {pinHead ? (
+                    <View testID={testID && `${testID}-pinned`} style={styles.head}>
+                      {iconEl}
+                      {titleEl}
+                    </View>
                   ) : null}
                 </View>
               </GestureDetector>
-              {hasHead || children ? (
+              {scrollHead || children ? (
                 /*
                  * The title, the body and the children scroll as one under the cap; the actions below it stay put. With only
                  * `children` inside, a header taller than the cap (AX XXXL: "Sign out?" and its body) pushed Cancel and Sign
@@ -681,7 +757,8 @@ export function Sheet({ visible, onClose, title, headerAction, headerNote, body,
                   scrollEventThrottle={16}
                   testID={testID && `${testID}-content`}
                   style={styles.content}
-                  contentContainerStyle={styles.contentInner}
+                  // Under a pinned title, or with no header at all, the content keeps its 12 pt from what is above it (review L8).
+                  contentContainerStyle={[styles.contentInner, !scrollsFromTop && styles.contentBelow]}
                   keyboardShouldPersistTaps="handled"
                   // Capped with more below, by the keyboard or by its own height: say so, and let the hand scroll it on both
                   // platforms. Make a crew stranded a section label at the fold over the dock with nothing to say it went on
@@ -693,57 +770,9 @@ export function Sheet({ visible, onClose, title, headerAction, headerNote, body,
                   scrollEnabled={overflowing}
                   bounces={false}
                 >
-                  {hasHead ? (
+                  {scrollHead ? (
                     <GestureDetector gesture={headDrag}>
-                      <View style={styles.head}>
-                        {icon ? (
-                          <View
-                            accessibilityElementsHidden
-                            importantForAccessibility="no-hide-descendants"
-                            style={[styles.well, { backgroundColor: android ? COLOR.surfaceSunken : MATERIAL.fillOnGlass }]}
-                          >
-                            <Icon name={icon} />
-                          </View>
-                        ) : null}
-                        {title || headerAction || headerNote ? (
-                          <View style={styles.titleRow}>
-                            {title ? (
-                              <Text ref={titleRef} accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.title, styles.titleText]}>
-                                {title}
-                              </Text>
-                            ) : (
-                              <View style={styles.titleText} />
-                            )}
-                            {headerNote ? (
-                              <View
-                                accessible
-                                accessibilityLabel={headerNote.label ?? `${headerNote.lead ?? ''}${headerNote.text}`}
-                                testID={testID && `${testID}-note`}
-                                style={styles.note}
-                              >
-                                {headerNote.lead ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.title]}>{headerNote.lead}</Text> : null}
-                                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{headerNote.text}</Text>
-                              </View>
-                            ) : null}
-                            {headerAction ? (
-                              <Pressable
-                                testID={testID && `${testID}-header-action`}
-                                accessibilityRole="button"
-                                accessibilityState={{ disabled: !!headerAction.disabled }}
-                                disabled={headerAction.disabled}
-                                hitSlop={(minTarget() - TYPE.meta.lineHeight) / 2}
-                                onPress={headerAction.onPress}
-                                style={headerAction.disabled && { opacity: OPACITY.disabled }}
-                              >
-                                <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.title]}>{headerAction.label}</Text>
-                              </Pressable>
-                            ) : null}
-                          </View>
-                        ) : null}
-                        {body ? (
-                          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{body}</Text>
-                        ) : null}
-                      </View>
+                      <View style={styles.head}>{scrollHead}</View>
                     </GestureDetector>
                   ) : null}
                   <GroundProvider value={android ? 'surface' : 'glass'}>{children}</GroundProvider>
@@ -812,5 +841,6 @@ const styles = StyleSheet.create({
   actions: { gap: SPACE.sm, paddingTop: SPACE.md },
   content: { flexGrow: 0, flexShrink: 1 },
   contentInner: { gap: SPACE.md },
+  contentBelow: { paddingTop: SPACE.md },
   pinned: { marginTop: 'auto' },
 })

@@ -410,6 +410,57 @@ describe('an overflowing sheet still drags by its header (review HIGH-1: only th
   })
 })
 
+describe('what scrolls and what stays (review MEDIUM-2, L8)', () => {
+  const hidden = { includeHiddenElements: true }
+  const inner = () => StyleSheet.flatten(screen.getByTestId('s-content', hidden).props.contentContainerStyle) ?? {}
+
+  it('a title row with an action or a note stays put above the scroll; the body and the content scroll under it', async () => {
+    const { Text } = jest.requireActual('react-native')
+    await render(signOut({ headerAction: { label: 'Clear all', onPress: jest.fn() }, children: <Text>Form</Text> }))
+    const pinned = screen.getByTestId('s-pinned', hidden)
+    const content = screen.getByTestId('s-content', hidden)
+    expect(within(pinned).getByText('Sign out?', hidden)).toBeTruthy()
+    expect(within(pinned).getByText('Clear all', hidden)).toBeTruthy()
+    expect(within(content).queryByText('Clear all', hidden)).toBeNull()
+    expect(within(content).getByText(/sign in again/, hidden)).toBeTruthy()
+    expect(within(content).getByText('Form', hidden)).toBeTruthy()
+    // 12 under the pinned row, as the header's gap was.
+    expect(inner().paddingTop).toBe(12)
+  })
+
+  it('so does a step note ("1 of 3")', async () => {
+    await render(signOut({ headerNote: { lead: '1', text: ' of 3' } }))
+    expect(within(screen.getByTestId('s-pinned', hidden)).getByTestId('s-note', hidden)).toBeTruthy()
+  })
+
+  it('below the accessibility sizes a plain title stays put too ("Write a post" over the keyboard)', async () => {
+    const { Text } = jest.requireActual('react-native')
+    const window = Dimensions.get('window')
+    await act(async () => Dimensions.set({ window: { ...window, fontScale: 1 }, screen: { ...window, fontScale: 1 } }))
+    try {
+      await render(signOut({ children: <Text>Form</Text> }))
+      expect(within(screen.getByTestId('s-pinned', hidden)).getByText('Sign out?', hidden)).toBeTruthy()
+      expect(within(screen.getByTestId('s-content', hidden)).getByText(/sign in again/, hidden)).toBeTruthy()
+    } finally {
+      await act(async () => Dimensions.set({ window, screen: window }))
+    }
+  })
+
+  it('at the accessibility sizes (the jest preset is 2x) a plain title scrolls with its content, from the grip down', async () => {
+    const { Text } = jest.requireActual('react-native')
+    await render(signOut({ children: <Text>Form</Text> }))
+    expect(screen.queryByTestId('s-pinned', hidden)).toBeNull()
+    expect(within(screen.getByTestId('s-content', hidden)).getByText('Sign out?', hidden)).toBeTruthy()
+    expect(inner().paddingTop).toBeUndefined()
+  })
+
+  it('a sheet with no header keeps 12 pt between the grip and its content (it had moved up)', async () => {
+    const { Text } = jest.requireActual('react-native')
+    await render(<Sheet visible onClose={jest.fn()} testID="s">{<Text>Card</Text>}</Sheet>)
+    expect(inner().paddingTop).toBe(12)
+  })
+})
+
 describe('the field being typed in, scrolled into view (drive 3: the stepper peeked under the box)', () => {
   it('scrolls to the end when the whole field still shows: the row after it comes fully into view, never a sliver', () => {
     // Viewport 200 over 320 of content; the text box at 120–220, the stepper row after it to 320.
