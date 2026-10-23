@@ -165,7 +165,7 @@ describe('the Going tab sections', () => {
       'day:Tomorrow',
       'g:b',
       'g:c',
-      'day:Sep 30',
+      'day:30 Sep',
       'g:d',
     ])
   })
