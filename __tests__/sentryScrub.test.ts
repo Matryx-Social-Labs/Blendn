@@ -10,6 +10,7 @@
  *
  * Review HIGH-1 / MED-1: every string at any key. Controls: `scrubTransaction` without the span `data` line fails the
  * traced-fetch and span tests; `scrubEvent` without `extra` fails the traced-fetch, logger-details and depth tests.
+ * Keys (security review): scrubbing values only fails the keys test; dropping `freeKey` loses a value and fails it too.
  */
 const mockInit = jest.fn()
 jest.mock('@sentry/react-native', () => ({
@@ -128,5 +129,17 @@ describe('every string, at any key (review HIGH-1, MED-1)', () => {
     const out = beforeSend({ extra: { loop } })
     expect(raw(out)).toEqual([])
     expect(JSON.stringify(out)).toContain('[scrubbed: too deep]')
+  })
+
+  it('keys too: an object keyed by two uuids and an invite path keeps every value, and no raw key', () => {
+    const { beforeSend } = hooks()
+    const other = '1c9d7f2e-4b3a-4e8c-8d2f-3a4b5c6d7e8f'
+    const out = beforeSend({
+      extra: { byEvent: { [ID]: 'first', [other]: 'second', [`/friends/invite/${INVITE}`]: 'third', plain: 'fourth' } },
+    }) as { extra: { byEvent: Record<string, string> } }
+    expect(leaks(out)).toEqual([])
+    expect(JSON.stringify(out)).not.toContain(other)
+    expect(Object.values(out.extra.byEvent).sort()).toEqual(['first', 'fourth', 'second', 'third'])
+    expect(Object.keys(out.extra.byEvent).sort()).toEqual(['/friends/invite/:token', ':id', ':id#2', 'plain'])
   })
 })

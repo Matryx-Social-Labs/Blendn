@@ -67,7 +67,7 @@ export function scrubReportText(text: string): string {
 const SCRUB_DEPTH = 6
 
 /**
- * Every string in a value, at any key, scrubbed: span data, contexts, extras and breadcrumb data are not ours to list.
+ * Every string in a value, at any key, scrubbed, and every key with it: span data, contexts, extras and breadcrumb data are not ours to list.
  * Sentry's traced fetch alone writes `url`, `http.url` and `http.query` (search terms, tokens). Below `SCRUB_DEPTH`, or
  * in a cycle, the rest is dropped rather than sent unread.
  */
@@ -76,7 +76,18 @@ export function scrubDeep(value: unknown, depth = 0): unknown {
   if (value === null || typeof value !== 'object') return value
   if (depth >= SCRUB_DEPTH) return '[scrubbed: too deep]'
   if (Array.isArray(value)) return value.map((item) => scrubDeep(item, depth + 1))
-  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, scrubDeep(item, depth + 1)]))
+  // Keys too: a map keyed by event id, a URL or an invite path is as telling as its values.
+  const out: Record<string, unknown> = {}
+  for (const [key, item] of Object.entries(value)) out[freeKey(out, scrubReportText(key))] = scrubDeep(item, depth + 1)
+  return out
+}
+
+/** Two keys the same once scrubbed (two uuids are both `:id`) both stay: the second is `:id#2`, the third `:id#3`… */
+function freeKey(taken: Record<string, unknown>, key: string): string {
+  if (!(key in taken)) return key
+  let n = 2
+  while (`${key}#${n}` in taken) n += 1
+  return `${key}#${n}`
 }
 
 const deep = <T,>(value: T): T => scrubDeep(value) as T
