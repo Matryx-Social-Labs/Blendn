@@ -18,7 +18,7 @@ import { apiClient } from '../lib/apiClient'
 import { readStoredCity } from '../lib/cityStorage'
 import { COLOR, RADIUS, SPACE, STAGGER } from '../lib/design/tokens'
 import { getDistanceKm } from '../lib/geo'
-import { roughFix } from '../lib/locationFix'
+import { isAbortedFix, roughFix, type FixAsk } from '../lib/locationFix'
 import { mergeEventPage, pageHasMore } from '../lib/pulseFeed'
 import { getOptimizedImageUrl } from '../lib/photoUtils'
 import { homeCardProps } from '../lib/pulse'
@@ -38,6 +38,8 @@ const SKELETON_ROWS = 6
 /** A page of the list: the server's nearest first, asked for again as the reader reaches the end (a city can hold hundreds). */
 const PAGE_SIZE = 50
 const MINUTE_MS = 60_000
+/** A location ask that was abandoned for a newer one: its answer is nobody's. */
+const SUPERSEDED = Symbol('superseded')
 
 type Row = BlendnEvent & { _distance: number }
 
@@ -94,16 +96,19 @@ export default function NearbyEventsScreen() {
     listRevealedRef.current = showList
   }, [showList])
 
+  /** The fix being looked for: abandoned when the screen goes or a second Try again starts another (review LOW-4). */
+  const fixAsk = useRef<FixAsk | null>(null)
   useEffect(() => {
     return () => {
       mountedRef.current = false
+      if (fixAsk.current) fixAsk.current.aborted = true
     }
   }, [])
 
   // This and `loadEvents` set state only in their callbacks, once a request has
   // settled, so the effect below can start them.
   const getLocation = useCallback(
-    () =>
+    (): Promise<{ latitude: number; longitude: number } | null | typeof SUPERSEDED> =>
       Location.requestForegroundPermissionsAsync()
         .then(async ({ status }) => {
           if (status !== 'granted') {
@@ -113,13 +118,18 @@ export default function NearbyEventsScreen() {
           setLocationDenied(false)
           try {
             // The skeleton while it looks; "Location unavailable" only when services are off or nothing came in 15 s (D-10).
-            const position = await roughFix()
+            if (fixAsk.current) fixAsk.current.aborted = true
+            const ask: FixAsk = { aborted: false }
+            fixAsk.current = ask
+            const position = await roughFix(undefined, ask)
             const coords = { latitude: position.coords.latitude, longitude: position.coords.longitude }
             setUserLocation(coords)
             locationRef.current = coords
             setLocationFailed(false)
             return coords
-          } catch {
+          } catch (error) {
+            // Abandoned: another ask (or nobody) is waiting now; this one says nothing.
+            if (isAbortedFix(error)) return SUPERSEDED
             setLocationFailed(true)
             return null
           }
@@ -132,9 +142,14 @@ export default function NearbyEventsScreen() {
   )
 
   const loadEvents = useCallback(
-    (force = false) =>
-      Promise.resolve(locationRef.current || getLocation())
+    (force = false) => {
+      let superseded = false
+      return Promise.resolve(locationRef.current || getLocation())
         .then(async (coords) => {
+          if (coords === SUPERSEDED) {
+            superseded = true
+            return
+          }
           if (!coords) {
             setEvents([])
             return
@@ -174,8 +189,9 @@ export default function NearbyEventsScreen() {
           if (mountedRef.current) setLoadFailed(true)
         })
         .finally(() => {
-          if (mountedRef.current) setLoading(false)
-        }),
+          if (mountedRef.current && !superseded) setLoading(false)
+        })
+    },
     [getLocation]
   )
 

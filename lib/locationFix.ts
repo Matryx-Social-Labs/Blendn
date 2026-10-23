@@ -111,7 +111,12 @@ function withDeadline<T>(work: Promise<T>, ms: number): Promise<T> {
  * and Nearby said "Location unavailable" over a fix that came a second later (RC drive 4 D-10). That refusal is not
  * the answer; the deadline is.
  */
-export async function roughFix(deadlineMs: number = LOCATION_FIX_TIMEOUT_MS): Promise<Location.LocationObject> {
+/** Set `aborted` to stop a `roughFix` that nobody waits for any more (the screen left, a second Try again). */
+export type FixAsk = { aborted: boolean }
+export const isAbortedFix = (error: unknown) => (error as { code?: string } | null)?.code === 'E_LOCATION_ABORTED'
+const abortedError = () => Object.assign(new Error('Location ask abandoned'), { code: 'E_LOCATION_ABORTED' })
+
+export async function roughFix(deadlineMs: number = LOCATION_FIX_TIMEOUT_MS, ask: FixAsk = { aborted: false }): Promise<Location.LocationObject> {
   const last = await Promise.resolve()
     .then(() => Location.getLastKnownPositionAsync({ maxAge: ROUGH_FIX_MAX_AGE_MS }))
     .catch(() => null)
@@ -122,9 +127,11 @@ export async function roughFix(deadlineMs: number = LOCATION_FIX_TIMEOUT_MS): Pr
   if (!services) throw Object.assign(new Error('Location services are off'), { code: 'E_LOCATION_SERVICES_DISABLED' })
   const deadline = Date.now() + deadlineMs
   for (;;) {
+    if (ask.aborted) throw abortedError()
     try {
       return await withDeadline(Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }), Math.max(0, deadline - Date.now()))
     } catch (error) {
+      if (ask.aborted) throw abortedError()
       if (deadline - Date.now() <= ROUGH_FIX_RETRY_MS) throw error
       await new Promise((resolve) => setTimeout(resolve, ROUGH_FIX_RETRY_MS))
     }

@@ -125,6 +125,21 @@ it('a first ask refused while the phone is still looking keeps the loading rows,
   }
 })
 
+it('leaving while it still looks stops the asking (review LOW-4)', async () => {
+  jest.useFakeTimers()
+  try {
+    mockLocation.getCurrentPositionAsync.mockRejectedValue(Object.assign(new Error('Location unknown'), { code: 'E_LOCATION_UNAVAILABLE' }))
+    await open()
+    await act(async () => jest.advanceTimersByTime(1_000))
+    const asked = mockLocation.getCurrentPositionAsync.mock.calls.length
+    await screen.unmount()
+    for (let i = 0; i < 5; i++) await act(async () => jest.advanceTimersByTime(1_000))
+    expect(mockLocation.getCurrentPositionAsync.mock.calls.length).toBe(asked)
+  } finally {
+    jest.useRealTimers()
+  }
+})
+
 it('a recent fix the phone already has is used at once', async () => {
   mockLocation.getLastKnownPositionAsync.mockResolvedValue({ coords: { latitude: 12.97, longitude: 77.6 }, timestamp: Date.now() } as never)
   events.mockResolvedValue({ data: [ev('a', 'Alpha Night', 12.98)], error: null })
