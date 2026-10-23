@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode, type Ref } from 'react'
 import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, TextInput, View, type TextInputProps } from 'react-native'
 
 import { Icon } from '../ui/Icon'
-import { COLOR, FONT_FAMILY, ICON, MATERIAL, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, MATERIAL, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { OPACITY } from '../../lib/theme'
 import { monoCaption } from './MonoFamily'
 import { CONTROL_FONT_CAP, font, minTarget, useBoldText, useIncreaseContrast } from './shared'
@@ -31,7 +31,12 @@ function joinRefs(own: { current: TextInput | null }, theirs?: Ref<TextInput>) {
 
 /** The label above a field: Geist Mono, uppercase, textSecondary (white under Increase Contrast), 4 pt in like the field's text (`inputs.js textField`). Every label has this one inset. */
 export function FieldLabel({ text, bold, contrast }: { text: string; bold: boolean; contrast: boolean }) {
-  return <Text style={[font('label', bold), styles.label, { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{text}</Text>
+  // A field's name grows to its role's cap (MAX_FONT_SCALE.label): uncapped, EMAIL drew at 3.1x over a 1.3x input (RC drive 2 D-8).
+  return (
+    <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.label, { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>
+      {text}
+    </Text>
+  )
 }
 
 /**

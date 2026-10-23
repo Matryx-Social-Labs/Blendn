@@ -36,6 +36,10 @@ import { BanterRow } from '../components/banter/BanterParts'
 import { SceneCTA, sceneCtaLabel } from '../components/scene/SceneSections'
 import { NAVIGATOR_ROUTES, TextSizeBoundary } from '../components/TextSizeBoundary'
 import { MAX_FONT_SCALE } from '../lib/design/tokens'
+import { ChatHeader } from '../components/chat/ChatHeader'
+import { MatchOpenerCard, NudgeLine, RevealLine, SayHi } from '../components/chat/DmParts'
+import { RevealBar } from '../components/ds/RevealBar'
+import { TextField } from '../components/ds/TextField'
 /* eslint-enable import/first */
 
 /** iOS AX XXXL: body 53 pt over 17. */
@@ -65,6 +69,20 @@ function clipped(tree: Node | Node[] | null): string[] {
     kids(n).forEach((c) => walk(c, boxed))
   }
   ;(Array.isArray(tree) ? tree : tree ? [tree] : []).forEach((n) => walk(n, false))
+  return found
+}
+
+/** Every Text with no cap at all: at AX XXXL it draws at 3.1x, past every role's MAX_FONT_SCALE. */
+function uncapped(tree: Node | Node[] | null): string[] {
+  const found: string[] = []
+  const walk = (n: Node) => {
+    if (n.type === 'Text') {
+      if (!n.props.maxFontSizeMultiplier) found.push(JSON.stringify(n.children))
+      return
+    }
+    kids(n).forEach(walk)
+  }
+  ;(Array.isArray(tree) ? tree : tree ? [tree] : []).forEach(walk)
   return found
 }
 
@@ -143,6 +161,41 @@ describe('at AX XXXL (fontScale 3.1)', () => {
     }
     expect(screen.getByText('Going').props.maxFontSizeMultiplier).toBe(CONTROL_FONT_CAP)
     expect(clipped(screen.toJSON())).toEqual([])
+  })
+
+  it('the DM (RC drive 2 D-3): the header’s reveal line stops at the control cap in its fixed capsule; the opener, Say hi and the nudge wrap at their caps', async () => {
+    const face = { kind: 'creature', pseudonym: 'Tumbling Moose' } as never
+    await render(
+      <View>
+        <ChatHeader
+          title="Tumbling Moose"
+          leading={<View />}
+          subtitle={<RevealLine seen={false} text="You’re both anonymous here" />}
+          onBack={jest.fn()}
+          onMore={jest.fn()}
+          moreLabel="More"
+        />
+        <MatchOpenerCard you={face} them={face} title="You both said yes." body="Say something about the night." />
+        <SayHi line="Say hi to Tumbling Moose." onPress={jest.fn()} />
+        <NudgeLine text="Tumbling Moose asked to know who you are" />
+      </View>
+    )
+    expect(screen.getByText('You’re both anonymous here').props.maxFontSizeMultiplier).toBe(CONTROL_FONT_CAP)
+    expect(screen.getByText('You both said yes.').props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.heading)
+    expect(screen.getByText('Say hi to Tumbling Moose.').props.numberOfLines).toBeUndefined()
+    expect(clipped(screen.toJSON())).toEqual([])
+    expect(uncapped(screen.toJSON())).toEqual([])
+  })
+
+  it('the DM’s reveal bar and a form field’s name stop at their caps (D-3, D-8: EMAIL drew at 3.1x over a 1.3x input; now its label cap)', async () => {
+    await render(
+      <View>
+        <RevealBar you={{ name: 'Asha', face: { kind: 'creature', pseudonym: 'Tumbling Moose' } as never }} them={{ name: 'Tumbling Moose', face: { kind: 'creature', pseudonym: 'Tumbling Moose' } as never }} state="youOnly" />
+        <TextField label="EMAIL" value="" onChangeText={jest.fn()} />
+      </View>
+    )
+    expect(screen.getByText('EMAIL').props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.label)
+    expect(uncapped(screen.toJSON())).toEqual([])
   })
 
   it('Going’s empty and failed states scroll, so the action is never under the tab bar', () => {

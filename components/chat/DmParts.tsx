@@ -4,7 +4,7 @@ import { StyleSheet, Text, View } from 'react-native'
 import Animated, { FadeOut } from 'react-native-reanimated'
 
 import { revealConfirmation } from '../../lib/conversationReveal'
-import { COLOR, DURATION, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, DURATION, ICON, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
 import type { PrivateMessage } from '../../lib/directThread'
 import { clockTime } from '../../lib/time'
 import { Avatar } from '../ds/Avatar'
@@ -13,7 +13,7 @@ import { ChatBubble } from '../ds/ChatBubble'
 import type { Rect } from '../ds/chatShared'
 import type { Face } from '../ds/Facepile'
 import type { Receipt } from '../ds/ReceiptMark'
-import { font, useBoldText } from '../ds/shared'
+import { CONTROL_FONT_CAP, font, useBoldText } from '../ds/shared'
 import { Sheet } from '../ds/Sheet'
 import { TextField } from '../ds/TextField'
 import { Icon } from '../ui/Icon'
@@ -39,10 +39,10 @@ export function MatchOpenerCard({ you, them, title, body }: { you: Face; them: F
           <Avatar size={OPENER_FACE} ring={COLOR.surface} {...them} />
         </View>
       </View>
-      <Text accessibilityRole="header" style={[font('heading', bold), styles.ink, styles.centre]}>
+      <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold), styles.ink, styles.centre]}>
         {title}
       </Text>
-      <Text style={[font('meta', bold), styles.secondary, styles.centre]}>{body}</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.centre]}>{body}</Text>
     </View>
   )
 }
@@ -52,7 +52,7 @@ export function SayHi({ line, onPress }: { line: string | null; onPress: () => v
   const bold = useBoldText()
   return (
     <Animated.View exiting={FadeOut.duration(DURATION.quick)} style={styles.sayHi}>
-      {line ? <Text style={[font('meta', bold), styles.secondary]}>{line}</Text> : null}
+      {line ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>{line}</Text> : null}
       <Button kind="lit" size="md" icon="hand" label="Say hi" onPress={onPress} accessibilityHint="Sends “Hey 👋”" testID="dm-say-hi" />
     </Animated.View>
   )
@@ -96,7 +96,7 @@ export function PhotoPreviewSheet({
     >
       {uri || shownFor ? <Image source={{ uri: (uri || shownFor) as string }} contentFit="cover" style={styles.preview} accessibilityLabel="The photo you picked" /> : null}
       <TextField value={caption} onChangeText={setCaption} placeholder="Add a caption" />
-      <Text style={[font('meta', bold), styles.secondary]}>Re-encoded on your phone before upload: no location data leaves it.</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>Re-encoded on your phone before upload: no location data leaves it.</Text>
     </Sheet>
   )
 }
@@ -107,7 +107,8 @@ export function RevealLine({ seen, text }: { seen: boolean; text: string }) {
   return (
     <>
       <Icon name={seen ? 'eye' : 'eye-off'} size={ICON.inline} color={COLOR.textSecondary} />
-      <Text numberOfLines={1} style={[font('meta', bold), styles.secondary, styles.shrink]}>
+      {/* In the header's capsule, a box of fixed height: it stops at the control cap, as the name above it does (RC drive 2 D-3). */}
+      <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary, styles.shrink]}>
         {text}
       </Text>
     </>
@@ -117,7 +118,7 @@ export function RevealLine({ seen, text }: { seen: boolean; text: string }) {
 /** "{name} asked to know who you are", under the bar (Flow 5 DM #02). */
 export function NudgeLine({ text }: { text: string }) {
   const bold = useBoldText()
-  return <Text style={[font('meta', bold), styles.ink, styles.centre]}>{text}</Text>
+  return <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink, styles.centre]}>{text}</Text>
 }
 
 /**

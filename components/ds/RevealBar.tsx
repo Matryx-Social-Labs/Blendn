@@ -2,7 +2,7 @@ import { StyleSheet, Text, View } from 'react-native'
 
 import { Icon } from '../ui/Icon'
 import { Material } from '../ui/Material'
-import { COLOR, ICON, MATERIAL, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, ICON, MATERIAL, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { Avatar } from './Avatar'
 import { Button } from './Button'
@@ -89,7 +89,7 @@ export function RevealBar({
         {side(them, them.name, themSeen)}
       </View>
       {state === 'youOnly' ? (
-        <Text style={[font('meta', bold), styles.secondary]}>They can see you. They’ll decide in their own time.</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>They can see you. They’ll decide in their own time.</Text>
       ) : state === 'both' ? (
         <View testID={testID && `${testID}-both`} style={styles.both}>
           <View style={styles.bothLine}>

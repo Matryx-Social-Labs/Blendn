@@ -9,7 +9,7 @@ import React from 'react'
 import { AccessibilityInfo, Platform, StyleSheet, TextInput } from 'react-native'
 
 import { TextArea, TextField } from '../components/ds/TextField'
-import { COLOR, FONT_FAMILY, MATERIAL, RADIUS, SIZE, SPACE } from '../lib/design/tokens'
+import { COLOR, FONT_FAMILY, MATERIAL, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { OPACITY } from '../lib/theme'
 
@@ -137,10 +137,10 @@ describe('<TextField>', () => {
     expect(input().props.accessibilityHint).toBe('4 of 32 characters')
   })
 
-  it('caps the value at 1.3× inside the fixed 56 pt; the label scales freely', async () => {
+  it('caps the value at 1.3× inside the fixed 56 pt; the label grows to its role’s cap, never past it (RC drive 2 D-8)', async () => {
     await render(field())
     expect(input().props.maxFontSizeMultiplier).toBe(1.3)
-    expect(screen.getByText('Email').props.maxFontSizeMultiplier).toBeUndefined()
+    expect(screen.getByText('Email').props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.label)
   })
 
   it('previewState focused draws the focus ring with no keyboard', async () => {
