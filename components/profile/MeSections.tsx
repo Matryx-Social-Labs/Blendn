@@ -65,7 +65,7 @@ export function MeIdentity({
           {age ? (
             <>
               {', '}
-              <Text style={[font('display', bold, FONT_FAMILY.mono[700]), styles.age]}>{age}</Text>
+              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('display', bold, FONT_FAMILY.mono[700]), styles.age]}>{age}</Text>
             </>
           ) : null}
         </Text>

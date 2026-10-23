@@ -11,7 +11,7 @@ import ScalePress from '../components/motion/ScalePress'
 import { useToast } from '../components/Toast'
 import { GradientFill } from '../components/ui/GradientFill'
 import { Icon } from '../components/ui/Icon'
-import { COLOR, ICON, PRESS, RADIUS, SPACE } from '../lib/design/tokens'
+import { COLOR, ICON, MAX_FONT_SCALE, PRESS, RADIUS, SPACE } from '../lib/design/tokens'
 import { copyText } from '../lib/copyText'
 import { BLENDN_LINKS, openInApp } from '../lib/links'
 import { MAP_CREDITS } from '../lib/mapStyleEmber'
@@ -65,7 +65,7 @@ export default function AboutScreen() {
         </View>
 
         <View style={styles.lockup}>
-          <Text accessibilityRole="header" style={[font('display', bold), styles.name]}>
+          <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.display} style={[font('display', bold), styles.name]}>
             Blend’n
           </Text>
           <ScalePress

@@ -12,7 +12,7 @@ import { CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast }
 import { Icon } from '../ui/Icon'
 import { Material } from '../ui/Material'
 import { useToastDock } from '../toastDock'
-import { COLOR, MATERIAL, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
+import { COLOR, MATERIAL, MAX_FONT_SCALE, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { OPACITY } from '../../lib/theme'
 import type { ctaParts, PlusFeature } from '../../lib/plus'
 
@@ -187,7 +187,7 @@ export function PlusHero() {
   return (
     <View style={styles.hero}>
       <PlusMark size={HERO_MARK} />
-      <Text accessibilityRole="header" style={[font('display', bold), styles.ink, styles.centre]}>
+      <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.display} style={[font('display', bold), styles.ink, styles.centre]}>
         Blend’n+
       </Text>
       <Text style={[font('body', bold), styles.secondary, styles.centre]}>More of the night, none of the creepy stuff.</Text>

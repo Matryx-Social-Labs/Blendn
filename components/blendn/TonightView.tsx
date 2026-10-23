@@ -3,7 +3,7 @@ import { Linking, Pressable, StyleSheet, Text, useWindowDimensions, View } from 
 import { GestureDetector } from 'react-native-gesture-handler'
 import Animated from 'react-native-reanimated'
 
-import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { distanceText } from '../../lib/placesPane'
 import { clockTime, startsLabel } from '../../lib/roomMoments'
 import type { TonightEvent, TonightLocation } from '../../lib/useTonight'
@@ -178,7 +178,7 @@ export function TonightView({
         >
           <View style={styles.head} onLayout={(e) => setHeadHeight(Math.ceil(e.nativeEvent.layout.height))}>
             <View style={styles.titleRow}>
-              <Text accessibilityRole="header" style={[font('display', bold), styles.ink]}>
+              <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.display} style={[font('display', bold), styles.ink]}>
                 Tonight
               </Text>
               {list.length > 0 ? (

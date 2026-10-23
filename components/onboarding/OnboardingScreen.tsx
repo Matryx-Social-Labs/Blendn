@@ -8,10 +8,10 @@ import { KeyboardPage } from './KeyboardPage'
 import { Button } from '../ds/Button'
 import { IconButton } from '../ds/IconButton'
 import { ProgressBar } from '../ds/ProgressBar'
-import { font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from '../ds/shared'
+import { CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from '../ds/shared'
 import { Icon } from '../ui/Icon'
 import { Material } from '../ui/Material'
-import { COLOR, FONT_FAMILY, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, MAX_FONT_SCALE, SIZE, SPACE } from '../../lib/design/tokens'
 import { useKeyboardShown } from '../../lib/keyboard'
 import { ONBOARDING_STEPS, progress, stepIndex, type OnboardingStep } from '../../lib/onboarding'
 
@@ -105,7 +105,8 @@ export function OnboardingScreen({
             <IconButton icon={android ? 'arrow-left' : 'chevron-left'} accessibilityLabel="Back" onPress={onBack} testID="onboarding-back" />
           ) : null}
           {step ? (
-            <Text testID="onboarding-step" style={[styles.stepLabel, styles.step]}>
+            // Bar chrome in a row the circle's height: it stops where a control does (RC drive 5: 40 pt under the back circle).
+            <Text testID="onboarding-step" maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[styles.stepLabel, styles.step]}>
               {`Step ${stepIndex(step) + 1} of ${ONBOARDING_STEPS.length}`}
             </Text>
           ) : null}
@@ -148,11 +149,16 @@ export function OnboardingScreen({
         }
       >
         <View style={styles.headline}>
-          <Text style={[font('display', bold), styles.title]} accessibilityRole="header">
+          {/* The display cap is what keeps the longest headline word on one line ("journe / y", "prefer / ences": RC drive 5). */}
+          <Text testID="onboarding-title" maxFontSizeMultiplier={MAX_FONT_SCALE.display} style={[font('display', bold), styles.title]} accessibilityRole="header">
             {title}
             {titleAccent ? <Text>{titleAccent}</Text> : null}
           </Text>
-          {subtitle ? <Text style={[font('body', bold), styles.subtitle]}>{subtitle}</Text> : null}
+          {subtitle ? (
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.subtitle]}>
+              {subtitle}
+            </Text>
+          ) : null}
         </View>
 
         {children ? (

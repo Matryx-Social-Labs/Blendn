@@ -219,7 +219,7 @@ export const TYPE = {
 /** How far each role may grow with the phone’s text size. */
 export const MAX_FONT_SCALE = {
   moment: 1.3,
-  display: 2,
+  display: 1.5,
   title: 2,
   heading: 2,
   button: 2,

@@ -21,7 +21,7 @@ import { OfflineBanner, useOffline } from '../../components/OfflineBanner'
 import { SkeletonBlock, SkeletonCircle } from '../../components/Skeleton'
 import { useToast } from '../../components/Toast'
 import { apiClient, type PeerRatingIssue } from '../../lib/apiClient'
-import { COLOR, DURATION, EASING, RADIUS, RISE, SPACE, SPRING } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, MAX_FONT_SCALE, RADIUS, RISE, SPACE, SPRING } from '../../lib/design/tokens'
 import { Logger } from '../../lib/logger'
 import { askAboutNight, ratePeople, type RatePerson } from '../../lib/ratePeople'
 import { rateRefusal } from '../../lib/rateRefusal'
@@ -407,7 +407,7 @@ function RatePeersContent() {
           {done ? (
             <Animated.View key="done" style={styles.layer} entering={entering}>
               <View style={styles.centred}>
-                <Text accessibilityRole="header" style={[font('display', bold), styles.ink, styles.centreText]}>
+                <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.display} style={[font('display', bold), styles.ink, styles.centreText]}>
                   {sent > 0 ? 'Thanks' : ratedBefore ? 'You rated this night' : nothingToRate ? 'Nothing to rate' : 'All done'}
                 </Text>
                 {/*

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
 import { Icon } from '../ui/Icon'
-import { COLOR, FONT_FAMILY, ICON, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { PresenceDot } from './MonoFamily'
 import { Sheet, type SheetAction } from './Sheet'
@@ -142,11 +142,11 @@ export function SessionSheet({
         <View style={styles.count}>
           <PresenceDot kind="live" size={DOT} />
           {!time ? (
-            <Text style={[font('display', bold), styles.ink]}>Live</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.display} style={[font('display', bold), styles.ink]}>Live</Text>
           ) : time.kind === 'stay' ? (
-            <Text style={[font('display', bold), styles.ink]}>Staying</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.display} style={[font('display', bold), styles.ink]}>Staying</Text>
           ) : (
-            <Text style={[font('numericDisplay', bold, FONT_FAMILY.mono[700]), styles.ink, styles.tabular]}>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.numericDisplay} style={[font('numericDisplay', bold, FONT_FAMILY.mono[700]), styles.ink, styles.tabular]}>
               {time.kind === 'minutes' ? String(time.left) : time.clock}
             </Text>
           )}
