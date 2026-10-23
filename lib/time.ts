@@ -33,9 +33,28 @@ export function calendarDate(
  * The year, month (0–11) and day in a named zone; the phone's own date if this engine cannot (no ICU, an unknown zone).
  * By part, not by splitting a formatted string: no engine promises en-CA's "YYYY-MM-DD" (review L5).
  */
+/**
+ * One formatter per zone and use, built once: a Pulse of hundreds of rows asked for thousands per render (each
+ * `groupByDay` row reads its date, weekday and day key), and building one is the costly part, on Hermes most of all.
+ * The set of zones in a list is small, so the cache stays small.
+ */
+const formatters = new Map<string, Intl.DateTimeFormat>()
+function formatter(key: 'date' | 'clock', timeZone: string): Intl.DateTimeFormat {
+  const id = `${key}|${timeZone}`
+  let f = formatters.get(id)
+  if (!f) {
+    f =
+      key === 'date'
+        ? new Intl.DateTimeFormat('en-US', { timeZone, year: 'numeric', month: 'numeric', day: 'numeric' })
+        : new Intl.DateTimeFormat('en-GB', { hour: 'numeric', minute: 'numeric', hourCycle: 'h23', timeZone })
+    formatters.set(id, f)
+  }
+  return f
+}
+
 export function zonedDate(d: Date, timeZone: string): [number, number, number] {
   try {
-    const parts = new Intl.DateTimeFormat('en-US', { timeZone, year: 'numeric', month: 'numeric', day: 'numeric' }).formatToParts(d)
+    const parts = formatter('date', timeZone).formatToParts(d)
     const part = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((p) => p.type === type)?.value)
     const [y, m, day] = [part('year'), part('month'), part('day')]
     if ([y, m, day].every(Number.isFinite)) return [y, m - 1, day]
@@ -95,7 +114,7 @@ export function dayKeyIn(d: Date, timeZone?: string): string {
 /** The hour (0–23) and minute in a named zone; the phone's own clock if this engine cannot (no ICU). */
 function zonedClock(d: Date, timeZone: string): [number, number] {
   try {
-    const [h, m] = new Intl.DateTimeFormat('en-GB', { hour: 'numeric', minute: 'numeric', hourCycle: 'h23', timeZone })
+    const [h, m] = formatter('clock', timeZone)
       .format(d)
       .split(':')
       .map(Number)

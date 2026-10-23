@@ -46,3 +46,27 @@ it('with no zone known (an older server), the phone’s time as before', () => {
   expect(timeLabel(START)).toBe('5:30 AM')
   expect(cardTime({ start_time: START, end_time: END }, NOW)).toBe('Sat · 5:30 AM')
 })
+
+it('500 Pulse rows in two zones build a handful of formatters, not thousands (review: large data)', () => {
+  const Real = Intl.DateTimeFormat
+  let built = 0
+  const spy = jest.spyOn(Intl, 'DateTimeFormat').mockImplementation(((...args: ConstructorParameters<typeof Intl.DateTimeFormat>) => {
+    built += 1
+    return new Real(...args)
+  }) as never)
+  try {
+    jest.isolateModules(() => {
+      const { groupByDay: group } = require('../lib/pulse') as typeof import('../lib/pulse')
+      const rows = Array.from({ length: 500 }, (_, i) => ({
+        start_time: new Date(Date.parse(START) + i * 3_600_000).toISOString(),
+        timezone: i % 2 ? IST : 'Europe/London',
+      }))
+      group(rows, new Date(NOW))
+      group(rows, new Date(NOW))
+    })
+  } finally {
+    spy.mockRestore()
+  }
+  // A date and a clock formatter per zone at most.
+  expect(built).toBeLessThanOrEqual(4)
+})
