@@ -289,6 +289,33 @@ describe('an end the socket missed', () => {
     expect(isUp('Still here?')).toBe(false)
   })
 
+  it('the night’s prompt spent, a window the read finds over is still said: the toast, not silence (drive 4 D-8)', async () => {
+    // Arrange: tonight's one prompt was already asked.
+    await markLivePrompted('u1', 'day-1')
+    active(at(5))
+    await mount()
+
+    // Act: the phone missed live:ended; the next read finds the window gone.
+    jest.setSystemTime(NOW + 6 * 60_000)
+    notLive()
+    await readsAgain()
+
+    // Assert
+    expect(isUp('Still here?')).toBe(false)
+    expect(mockShowToast).toHaveBeenCalledWith("You’re no longer live at The Humming Tree.", 'info')
+  })
+
+  it('the socket and the read that follows it say one end once', async () => {
+    await markLivePrompted('u1', 'day-1')
+    active(at(5))
+    await mount()
+    jest.setSystemTime(NOW + 6 * 60_000)
+    // live:ended, then the re-read it triggers finds the same window over.
+    await endWith('expired')
+    await readsAgain()
+    expect(mockShowToast).toHaveBeenCalledTimes(1)
+  })
+
   it('not for a window that had not run out (you left, or it was ended early), nor for "stay"', async () => {
     active(at(30))
     await mount()

@@ -128,6 +128,10 @@ export function LiveAtVenue() {
     let retry: ReturnType<typeof setTimeout> | null = null
     /** The last window a read showed: if the next read finds nobody live and that one has run out, the end was missed (backgrounded). */
     let last: ActiveLive | null = null
+    /** Windows whose end has been said (the prompt or the toast), by day and end: the socket and the read after it say it once. */
+    const said = new Set<string>()
+    /** A window's key: the venue day and its end, as the last read showed it. None when no read had: nothing to say twice. */
+    const windowOf = (eventId: string, expiresAt: string | null | undefined) => (expiresAt ? `${eventId}|${expiresAt}` : null)
     /**
      * A window ran out at `eventId`: ask "Still here?" (or say the room closed), once. Told by the server's `live:ended`
      * and, if the socket was away, by the read that finds the window gone. Only a window this phone started has a place
@@ -147,6 +151,19 @@ export function LiveAtVenue() {
       if (!cancelled) setEnded({ kind: reset ? 'reset' : 'ended', venueDayId: eventId, venueId: here.venueId, venueName: here.venueName, visible: true, firstGoLive, opensAt: reset && resetHour !== null ? opensAtWords(resetHour) : undefined })
       if (userId && !reset) void markLivePrompted(userId, eventId)
       return { asked: true, reset, inRoom }
+    }
+    /**
+     * The end, said once: "Still here?" the first time a night (by design, PLACEHOLDER_SCREENS §11 "Once a night"), and
+     * after that the toast "You're no longer live at ‹place›." — whether the socket told this phone or a read found it.
+     * A read used to say nothing at all for a window it found over after the night's one prompt (RC drive 4 D-8).
+     */
+    const sayEnded = async (eventId: string, reason: string, remembered: LiveSession | null, window: string | null) => {
+      if (window && said.has(window)) return
+      if (window) said.add(window)
+      const asked = await askEnded(eventId, reason, remembered)
+      if (asked.asked || cancelled) return
+      const message = liveEndedMessage(reason, nameRef.current ?? remembered?.venueName ?? null)
+      if (message && !(asked.reset && asked.inRoom)) showToast(message, 'info')
     }
     const read = async () => {
       const mine = ++seq
@@ -180,7 +197,7 @@ export function LiveAtVenue() {
         }
         // The window ran out while the socket was away: `live:ended` never came, and the read is what finds out.
         if (!next && before && !before.stay && before.expiresAt && Date.parse(before.expiresAt) <= serverNow()) {
-          void askEnded(before.venueDayId, 'expired', remembered)
+          void sayEnded(before.venueDayId, 'expired', remembered, windowOf(before.venueDayId, before.expiresAt))
         }
         // Live again (an extension, here or elsewhere): "your live time is up" says something false. A read that
         // still shows the window that just ended (it lands beside the end) is not that.
@@ -196,11 +213,8 @@ export function LiveAtVenue() {
     const offCheckIn = subscribeCheckInChanged(() => void read())
     const offEnded = subscribeToLiveEnded((data) => {
       void (async () => {
-        const asked = await askEnded(data.eventId, data.reason, await readLiveSession(userId))
-        if (!asked.asked) {
-          const message = liveEndedMessage(data.reason, nameRef.current)
-          if (message && !(asked.reset && asked.inRoom)) showToast(message, 'info')
-        }
+        const window = windowOf(data.eventId, last?.venueDayId === data.eventId ? last.expiresAt : null)
+        await sayEnded(data.eventId, data.reason, await readLiveSession(userId), window)
         // The tab bar and every cached "are you in" read; this re-reads too, through the listener.
         checkInChanged(data.eventId)
       })()
