@@ -369,7 +369,8 @@ export function useBanterInbox({ requestsOnly = false }: { requestsOnly?: boolea
       const rooms = roomsFrom(result.data)
 
       if (!Array.isArray(rooms)) {
-        Logger.warn('chat', 'Unexpected group chat payload shape', { data: result.data })
+        // The shape only: the payload is room names, message text and who sent it (review MED-1).
+        Logger.warn('chat', 'Unexpected group chat payload shape', { type: typeof result.data, isArray: Array.isArray(result.data) })
         return false
       }
 

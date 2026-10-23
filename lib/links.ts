@@ -3,6 +3,7 @@ import * as WebBrowser from 'expo-web-browser'
 import { COMMUNITY_GUIDELINES_URL } from './communityGuidelines'
 import { COLOR } from './design/tokens'
 import { Logger } from './logger'
+import { hostOf } from './urlHost'
 import { holdTurnWhile } from './modalTurn'
 
 /**
@@ -34,7 +35,8 @@ export const BLENDN_LINKS = {
  */
 export async function openInApp(url: string): Promise<void> {
   if (!isOurPage(url)) {
-    Logger.warn('general', 'Refused to open a page that is not ours in the in-app browser', { url })
+    // Its host only: a link that arrives from data is anyone's string, and its path or query can carry anything.
+    Logger.warn('general', 'Refused to open a page that is not ours in the in-app browser', { host: hostOf(url) })
     throw new Error('Not one of our pages')
   }
   // Holds the screen while the browser is up: a sheet that comes due under it waits (lib/modalTurn).

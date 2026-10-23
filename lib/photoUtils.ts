@@ -396,7 +396,8 @@ const uploadToTigris = async (
     if (!result) return { success: false, error: 'Upload failed' }
 
     if (result.status < 200 || result.status >= 300) {
-      Logger.error('profile', 'Tigris upload error', { status: result.status, body: result.body })
+      // The status only: the storage service's body can echo the signed URL it refused (review MED-1).
+      Logger.error('profile', 'Tigris upload error', { status: result.status })
       return { success: false, error: `Upload failed with status ${result.status}` }
     }
 
@@ -498,7 +499,7 @@ export const cachePhoto = async (url: string): Promise<string | null> => {
       return localPath
     }
   } catch (error) {
-    Logger.error('profile', 'photoUtils: Cache error', { error, url })
+    Logger.error('profile', 'photoUtils: Cache error', { error })
   }
   
   return null

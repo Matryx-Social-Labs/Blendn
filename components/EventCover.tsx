@@ -3,6 +3,7 @@ import { Image as ExpoImage } from 'expo-image'
 import { Image, StyleSheet, View } from 'react-native'
 
 import { Logger } from '../lib/logger'
+import { hostOf } from '../lib/urlHost'
 import { COLOR, RADIUS } from '../lib/design/tokens'
 
 // Optically centred (the ink's centroid at the canvas centre): a box-centred monogram reads left.
@@ -59,7 +60,7 @@ export function EventCover({ uri, height, radius = RADIUS.rowInCard, retry = 0 }
           onError={() => {
             // Said out loud: a host that starts refusing the app (SCRUM-285) is
             // otherwise a screen of quiet placeholders.
-            Logger.warn('general', 'Event cover failed to load', { uri })
+            Logger.warn('general', 'Event cover failed to load', { host: hostOf(uri) })
             setFailedAttempt(attempt)
           }}
           style={StyleSheet.absoluteFill}

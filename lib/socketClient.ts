@@ -8,6 +8,7 @@ import { AppState, AppStateStatus } from "react-native"
 import { apiClient, TokenStorage } from "./apiClient"
 import { markDomainsDirty } from "./liveSyncState"
 import { Logger } from "./logger"
+import { hostOf } from "./urlHost"
 import { Sentry } from "./sentry"
 import { endedByOf, type SessionEndReason } from "./sessionEnd"
 import { buildAuthPayload } from "./socketAuth"
@@ -518,7 +519,7 @@ export async function connect(opts: { force?: boolean } = {}): Promise<boolean> 
               ? detail.description.message
               : detail.description,
           transport: socket?.io?.engine?.transport?.name,
-          url: SOCKET_URL,
+          host: hostOf(SOCKET_URL),
         })
         isConnecting = false
         emitConnectionStatus({

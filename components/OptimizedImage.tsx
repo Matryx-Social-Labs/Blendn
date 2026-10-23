@@ -182,9 +182,9 @@ export const OptimizedImage = memo<OptimizedImageProps>(({
                 handleHighQualityLoad()
               }}
               onError={(e) => {
+                // Neither the URL (a person's photo) nor the event (it repeats the URL): that it failed is the line.
                 Logger.error('general', 'Image onError triggered', {
-                  url: highQualityUrl,
-                  event: JSON.stringify(e as Record<string, unknown>)
+                  hasUrl: Boolean(highQualityUrl),
                 })
                 handleError(e)
               }}

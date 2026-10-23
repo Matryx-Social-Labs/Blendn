@@ -338,7 +338,7 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
                 setPhotos((prev) => adoptStoredUrls(prev, saved.photos))
                 // Delete from storage in background
                 deletePhoto(photo.url).catch((error) => {
-                  Logger.error('profile', 'PhotoManager: Delete photo error', { error, url: photo.url })
+                  Logger.error('profile', 'PhotoManager: Delete photo error', { error })
                 })
                 Logger.info('profile', 'PhotoManager: Photo removed', { userId, url: photo.url })
               } catch (error) {

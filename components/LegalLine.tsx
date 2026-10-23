@@ -19,7 +19,8 @@ const NBSP = '\u00A0'
 export function LegalLine({ lead, style }: { lead: string; style?: StyleProp<TextStyle> }) {
   const bold = useBoldText()
   const open = (url: string) => {
-    openInApp(url).catch((error) => Logger.warn('auth', 'Could not open a legal link', { url, error }))
+    // `page` is one of our own legal pages (a constant), never a link from data.
+    openInApp(url).catch((error) => Logger.warn('auth', 'Could not open a legal link', { page: url, error }))
   }
   return (
     <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.legal, style]}>
