@@ -5,7 +5,7 @@ import { Icon } from '../ui/Icon'
 import { COLOR, FONT_FAMILY, ICON, MATERIAL, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { OPACITY } from '../../lib/theme'
 import { monoCaption } from './MonoFamily'
-import { CONTROL_FONT_CAP, font, minTarget, useBoldText, useIncreaseContrast } from './shared'
+import { CONTROL_FONT_CAP, font, minTarget, useBoldText, useIncreaseContrast, useLargeText } from './shared'
 
 /*
  * One field everywhere (ROUND3 B4, the R3 ruling): the sign-in form's solid
@@ -284,6 +284,7 @@ export function TextArea({
   const input = useRef<TextInput>(null)
   const near = limit !== undefined && limit - measure(value) < COUNTER_WARN_AT
   const over = limit !== undefined && measure(value) > limit
+  const large = useLargeText()
 
   let counter: ReactNode = null
   if (limit !== undefined) {
@@ -297,7 +298,9 @@ export function TextArea({
   return (
     <View testID={testID} style={[styles.field, disabled && { opacity: OPACITY.disabled }]}>
       {label || counter ? (
-        <View style={[styles.labelRow, styles.spread]}>
+        // At the accessibility sizes the counter goes under the label; beside it, the label wraps rather than push the
+        // counter off the edge ("A LINE ABOUT THE CREW 0/14" was clipped at AX XXXL, RC drive 5 D-3).
+        <View testID={testID && `${testID}-label-row`} style={[styles.labelRow, large ? styles.stacked : styles.spread]}>
           {label ? <FieldLabel text={label} bold={bold} contrast={contrast} /> : <View />}
           {counter}
         </View>
@@ -339,7 +342,9 @@ export function TextArea({
 
 const styles = StyleSheet.create({
   field: { gap: SPACE.sm },
-  label: { paddingLeft: SPACE.xs },
+  label: { paddingLeft: SPACE.xs, flexShrink: 1 },
+  /** The counter under the label, at its end, as the field's own counter sits. */
+  stacked: { gap: SPACE.xxs, alignItems: 'flex-end' },
   labelRow: { paddingRight: SPACE.xs },
   spread: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
   box: {

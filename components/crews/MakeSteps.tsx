@@ -2,7 +2,7 @@ import { useRef } from 'react'
 import { FlatList, Platform, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native'
 import Animated from 'react-native-reanimated'
 
-import { COLOR, FONT_FAMILY, ICON, MATERIAL, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, MATERIAL, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
 import { CONSENT_LINE, CREW_BIO_MAX, CREW_MAX_MEMBERS, CREW_MAX_TAGS, CREW_NAME_MAX, CREW_TAGS, KEEP_ANONYMOUS_LABEL } from '../../lib/crews'
 import { INTENT_CHOICES, type IntentChoice } from '../../lib/crewsScreens'
 import type { Friend } from '../../lib/friends'
@@ -229,7 +229,10 @@ export function FriendsStep({ friends, picked, onToggle, onRetry, none = NO_FRIE
   const listHeight = Array.isArray(friends) ? Math.min(friends.length * FRIEND_ROW + (paging && (paging.loadingMore || paging.moreFailed) ? FRIEND_ROW : 0), Math.round(windowHeight * LIST_SHARE)) : 0
   return (
     <>
-      <Text style={[font('body', bold), { color: secondary }]}>Friends only. The count says how many, never who was skipped.</Text>
+      {/* The meta role and its cap: uncapped body text filled 55% of the screen at AX XXXL and left one row (RC drive 5 D-3). */}
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: secondary }]} testID="make-friends-note">
+        Friends only. The count says how many, never who was skipped.
+      </Text>
       {search && (search.offered || search.query) ? (
         <SearchField
           value={search.query}

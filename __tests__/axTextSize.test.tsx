@@ -119,6 +119,19 @@ describe('at AX XXXL (fontScale 3.1)', () => {
     expect(Dimensions.get('window').fontScale).toBe(AX_XXXL)
   })
 
+  it('Make a crew (drive 5 D-3): a field label and its counter stack, so "0/14" is never clipped; the step-2 note is capped', async () => {
+    await render(<TextArea label="A line about the crew" value="" onChangeText={() => {}} limit={140} testID="bio" />)
+    const label = screen.getByText('A line about the crew')
+    const row = StyleSheet.flatten(screen.getByTestId('bio-label-row').props.style)
+    expect(row.flexDirection).not.toBe('row')
+    expect(row.alignItems).toBe('flex-end')
+    expect(StyleSheet.flatten(label.props.style).flexShrink).toBe(1)
+    await screen.unmount()
+    const { FriendsStep } = require('../components/crews/MakeSteps')
+    await render(<FriendsStep friends={[]} picked={[]} onToggle={() => {}} onRetry={() => {}} />)
+    expect(screen.getByTestId('make-friends-note').props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.meta)
+  })
+
   it('a section heading (Me: "Finish your profile") wraps in full at its cap, never "Finish your pro…"', async () => {
     await render(<SectionHeader title="Finish your profile" testID="h" />)
     const title = screen.getByText('Finish your profile')
@@ -411,6 +424,12 @@ describe('the Banner: as it was beside its action, hung from the first line once
 })
 
 describe('an ordinary phone at an ordinary size keeps text and its trailing piece side by side (review MEDIUM-4)', () => {
+  it('a field label and its counter stay on one row below the AX sizes', async () => {
+    await act(async () => Dimensions.set({ window: { ...window, fontScale: 1 }, screen: { ...window, fontScale: 1 } }))
+    await render(<TextArea label="A line about the crew" value="" onChangeText={() => {}} limit={140} testID="bio" />)
+    expect(StyleSheet.flatten(screen.getByTestId('bio-label-row').props.style).flexDirection).toBe('row')
+  })
+
   const at = (width: number, fontScale: number) => act(async () => Dimensions.set({ window: { ...window, width, fontScale }, screen: { ...window, width, fontScale } }))
   const hidden = { includeHiddenElements: true }
   const basis = (id: string) => StyleSheet.flatten(screen.getByTestId(id, hidden).props.style).flexBasis
