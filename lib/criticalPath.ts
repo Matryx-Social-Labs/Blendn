@@ -7,7 +7,7 @@
  * frees our await, never the queue.
  *
  * So sign-in, sign-up, the launch's session restore, a token refresh and sign-out's server half run "on the critical path",
- * and a permission read (`lib/pushPermission`) waits until none is running and `PAINT_GRACE_MS` has passed since the last
+ * and a permission read (`lib/pushStatus`, `readPushPermission`) waits until none is running and `PAINT_GRACE_MS` has passed since the last
  * ended: the session is in the keychain and the first screen has painted before the queue is risked.
  *
  * ponytail: the grace is a fixed delay standing in for "the first screen painted"; a paint signal from the root layout is

@@ -23,7 +23,7 @@ export function TextSizeBoundary({ children }: { children: ReactNode }) {
 
 /**
  * The root stack's routes that are navigators themselves: their screens carry their own boundary, and wrapping the
- * navigator would remount it (and reset it) on a text-size change. `__tests__/textSizeBoundary.test.tsx` checks this
+ * navigator would remount it (and reset it) on a text-size change. `__tests__/axTextSize.test.tsx` checks this
  * against the `_layout.tsx` files under `app/`.
  */
 export const NAVIGATOR_ROUTES: readonly string[] = ['(tabs)', 'chat', 'private-chat', 'onboarding', 'preview']
