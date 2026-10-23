@@ -114,10 +114,10 @@ describe('<FriendsHere>', () => {
     expect(screen.getByRole('button', { name: 'Message Asha Menon' }).props.accessibilityState?.disabled).toBeFalsy()
   })
 
-  it('a very long name stays one line and keeps its Message', async () => {
+  it('a very long name takes at most two lines and keeps its Message (one line read "Aarav …" at 360 dp and 1.3: RC drive 5)', async () => {
     const long = { userId: 'x', name: 'Karthik Subramaniam Venkataraman', photo: null }
     await draw({ friends: [long], total: 1 })
-    expect(screen.getByText(long.name).props.numberOfLines).toBe(1)
+    expect(screen.getByText(long.name).props.numberOfLines).toBe(2)
     expect(screen.getByRole('button', { name: `Message ${long.name}` })).toBeTruthy()
   })
 

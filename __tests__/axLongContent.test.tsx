@@ -10,10 +10,13 @@ import { Dimensions, StyleSheet } from 'react-native'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('expo-router', () => ({ router: { push: jest.fn(), back: jest.fn() } }))
+jest.mock('../lib/apiClient', () => ({ apiClient: {} }))
 
 /* eslint-disable import/first */
 import { OnboardingScreen } from '../components/onboarding/OnboardingScreen'
 import { BringSomeoneRow } from '../components/share/BringSomeoneRow'
+import { RequestCard } from '../components/banter/BanterParts'
+import { NAME_LINES_ALONE, PersonRow, PERSON_ROW_HEIGHT } from '../components/friends/PersonRow'
 import { CONTROL_FONT_CAP } from '../components/ds/shared'
 import { MAX_FONT_SCALE, SPACE, TYPE } from '../lib/design/tokens'
 /* eslint-enable import/first */
@@ -99,3 +102,43 @@ describe('the Scene’s "Bring someone?" (AX XXXL: one letter a line beside What
     expect(flat('bring-text')).toMatchObject({ flexBasis: 0, minWidth: 0 })
   })
 })
+
+describe('a request card at AX XXXL (Banter, Requests: "Arn…", "Bh…" at 61 pt)', () => {
+  const card = () =>
+    render(<RequestCard face={null} name="Arnav Sharma" note="Hi! We were at the same screening." time="9h" onAccept={jest.fn()} onDecline={jest.fn()} onMore={jest.fn()} testID="req" />)
+
+  it('the name and the note grow to their caps and double their lines; the time stops at a control’s cap', async () => {
+    await at(402, 3.1)
+    await card()
+    const name = screen.getByText('Arnav Sharma', hidden)
+    expect(name.props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.bodyStrong)
+    expect(name.props.numberOfLines).toBe(2)
+    const note = screen.getByText('Hi! We were at the same screening.', hidden)
+    expect(note.props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.meta)
+    expect(note.props.numberOfLines).toBe(4)
+    expect(screen.getByText('9h', hidden).props.maxFontSizeMultiplier).toBe(CONTROL_FONT_CAP)
+  })
+
+  it('below the accessibility sizes it is one line and two, as before', async () => {
+    await at(402, 1)
+    await card()
+    expect(screen.getByText('Arnav Sharma', hidden).props.numberOfLines).toBe(1)
+    expect(screen.getByText('Hi! We were at the same screening.', hidden).props.numberOfLines).toBe(2)
+  })
+})
+
+describe('a person row (Friends here at 360 dp and 1.3: "Aarav …" beside Message)', () => {
+  const person = { userId: 'u1', name: 'Aarav Sharma', photo: null }
+
+  it('a name with no line under it may take two lines, and two lines at its cap fit the fixed row', async () => {
+    await render(<PersonRow person={person as never} trailing={null} />)
+    expect(screen.getByTestId('person-name', hidden).props.numberOfLines).toBe(NAME_LINES_ALONE)
+    expect(NAME_LINES_ALONE * TYPE.bodyStrong.lineHeight * CONTROL_FONT_CAP).toBeLessThanOrEqual(PERSON_ROW_HEIGHT)
+  })
+
+  it('with a line under it the name keeps one line, so the row’s height holds', async () => {
+    await render(<PersonRow person={person as never} detail="Requested" />)
+    expect(screen.getByTestId('person-name', hidden).props.numberOfLines).toBe(1)
+  })
+})
+

@@ -77,9 +77,9 @@ describe('message requests', () => {
     expect(SCREEN()).toContain('<RequestRow')
   })
 
-  it('show the note verbatim, in two lines (ROUND3 C11)', () => {
+  it('show the note verbatim, in two lines (four at the accessibility sizes: RC drive 5) (ROUND3 C11)', () => {
     expect(REQUEST_ROW()).toContain('note={r.initial_message?.trim() ||')
-    expect(PARTS()).toMatch(/numberOfLines=\{2\}[^>]*>\s*\{note\}/)
+    expect(PARTS()).toMatch(/numberOfLines=\{largeText \? 4 : 2\}[^>]*>\s*\{note\}/)
   })
 
   it('put Decline before Accept, at 48, and hold both while one is in flight', () => {

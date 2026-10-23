@@ -250,6 +250,7 @@ export function RequestCard({
   onMore = useBanterPress(onMore)
   onOpen = useBanterPress(onOpen)
   const bold = useBoldText()
+  const largeText = useLargeText()
   return (
     <View testID={testID} style={styles.request}>
       <View style={styles.requestHead}>
@@ -263,15 +264,22 @@ export function RequestCard({
         >
           {face}
           <View style={styles.grow}>
-            <Text numberOfLines={1} style={[font('bodyStrong', bold), styles.ink]}>
+            {/*
+              Reading text, as a Banter row's (D2): each grows to its role's cap and, at the accessibility sizes, doubles its lines
+              rather than cut the name to "Arn…" (RC drive 5: uncapped, the name was 61 pt on one line).
+            */}
+            <Text numberOfLines={largeText ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>
               {name}
             </Text>
-            <Text numberOfLines={2} style={[font('meta', bold), styles.secondary]}>
+            <Text numberOfLines={largeText ? 4 : 2} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
               {note}
             </Text>
           </View>
         </Pressable>
-        <Text style={[monoCaption(bold), styles.tertiary]}>{time}</Text>
+        {/* The time is a tag beside the row's control, as the Banter row's: it stops where a control does. */}
+        <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[monoCaption(bold), styles.tertiary]}>
+          {time}
+        </Text>
         {onMore ? <IconButton icon="ellipsis" accessibilityLabel={`More options for the request from ${name}`} onPress={onMore} testID={testID && `${testID}-more`} /> : null}
       </View>
       <View style={styles.requestActions}>
@@ -299,7 +307,11 @@ export function RequestCard({
           testID={testID && `${testID}-accept`}
         />
       </View>
-      {foot ? <Text style={[font('meta', bold), styles.secondary]}>{foot}</Text> : null}
+      {foot ? (
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
+          {foot}
+        </Text>
+      ) : null}
     </View>
   )
 }

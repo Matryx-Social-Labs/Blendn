@@ -175,10 +175,10 @@ describe('See all friends here', () => {
     expect(screen.getByText('1,204')).toBeTruthy()
   })
 
-  it('a long name stays on one line next to its Message', async () => {
+  it('a long name takes at most two lines (the row has no line under it) next to its Message', async () => {
     mockGet.mockResolvedValue(page([friend('Karthik Subramaniam Venkataraman', 1)], 1))
     await open()
-    expect(screen.getByText('Karthik Subramaniam Venkataraman').props.numberOfLines).toBe(1)
+    expect(screen.getByText('Karthik Subramaniam Venkataraman').props.numberOfLines).toBe(2)
     expect(screen.getByRole('button', { name: 'Message Karthik Subramaniam Venkataraman' })).toBeTruthy()
   })
 })

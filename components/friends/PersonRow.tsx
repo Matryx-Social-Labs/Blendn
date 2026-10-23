@@ -16,6 +16,8 @@ const AVATAR = 48
 /** Exported for the lists that window these rows (`getItemLayout`). */
 export const PERSON_ROW_HEIGHT = SIZE.primary + SPACE.sm
 const ROW = PERSON_ROW_HEIGHT
+/** A name with no line under it may wrap once. */
+export const NAME_LINES_ALONE = 2
 
 /**
  * One person on a friend surface (Flow 6 `personRow`): a 48 pt photo, the name in 500 17/24, a line under it, and whatever the screen
@@ -52,7 +54,16 @@ export function PersonRow({
     <>
       <PersonAvatar person={person} />
       <View style={styles.text}>
-        <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold, FONT_FAMILY.brand[500]), styles.ink]}>
+        {/*
+          With no line under it the name may take that line's place: two lines at its cap fit the fixed row (2 x 31.2 in 64).
+          Beside Message on a 360 dp phone at 1.3 it had about 77 dp, one line, and read "Aarav …" (RC drive 5).
+        */}
+        <Text
+          testID="person-name"
+          numberOfLines={line ? 1 : NAME_LINES_ALONE}
+          maxFontSizeMultiplier={CONTROL_FONT_CAP}
+          style={[font('bodyStrong', bold, FONT_FAMILY.brand[500]), styles.ink]}
+        >
           {person.name}
         </Text>
         {line ? (
