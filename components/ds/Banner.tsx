@@ -4,7 +4,7 @@ import { AccessibilityInfo, Platform, StyleSheet, Text, useWindowDimensions, Vie
 import { Icon, type IconName } from '../ui/Icon'
 import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
 import { Button } from './Button'
-import { CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from './shared'
+import { CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast, useMinMeasure } from './shared'
 
 export type BannerKind = 'offline' | 'paused' | 'info' | 'visibility' | 'error'
 
@@ -47,7 +47,9 @@ export type BannerProps = {
  * the action. A system banner is announced politely when it appears; the
  * VisibilityBanner is read in place. On `info` and `visibility` the action is a `lit` Button in the screen's hue; on offline, paused
  * and error it is `secondary` (`LIT_KINDS`). Text scales freely; past 1.3× the action
- * wraps under the sentence. Increase Contrast adds the 50% hairline.
+ * wraps under the sentence, and below it too whenever the sentence beside it would be narrower than its measure
+ * (`useMinMeasure`: 360 dp at 1.3 drew "You're / anony / mous" beside Show who I am, RC drive 3). Increase Contrast adds the
+ * 50% hairline.
  */
 export function Banner({ kind, text, mono, icon, action, busy = false, testID }: BannerProps) {
   const bold = useBoldText()
@@ -55,6 +57,7 @@ export function Banner({ kind, text, mono, icon, action, busy = false, testID }:
   const { fontScale } = useWindowDimensions()
   const announced = kind !== 'visibility'
   const wrapped = fontScale > CONTROL_FONT_CAP
+  const measure = useMinMeasure('meta')
 
   // The mono part is read with the sentence the first time; a count that ticks beneath it (a wait: 0:52) never re-announces.
   const monoNow = useRef(mono)
@@ -69,24 +72,31 @@ export function Banner({ kind, text, mono, icon, action, busy = false, testID }:
     <View
       testID={testID}
       accessibilityRole={kind === 'error' ? 'alert' : undefined}
-      style={[styles.banner, { backgroundColor: LOOK[kind].fill }, contrast && IC_HAIRLINE, wrapped && styles.wrapped]}
+      style={[styles.banner, { backgroundColor: LOOK[kind].fill }, contrast && IC_HAIRLINE]}
     >
       <Icon name={icon ?? LOOK[kind].icon} size={ICON.control} />
-      <Text accessibilityLiveRegion={kind === 'error' ? 'assertive' : announced ? 'polite' : 'none'} style={[font('meta', bold), styles.text]}>
-        {mono ? (
-          <>
-            {text}
-            <Text style={font('meta', bold, FONT_FAMILY.mono[500])}>{` ${mono}`}</Text>
-          </>
-        ) : (
-          text
-        )}
-      </Text>
-      {action ? (
-        <View style={wrapped ? styles.under : undefined}>
-          <Button kind={LIT_KINDS.has(kind) ? 'lit' : 'secondary'} size="sm" icon={action.icon} label={action.label} loading={busy} onPress={action.onPress} testID={testID && `${testID}-action`} />
-        </View>
-      ) : null}
+      {/* The sentence and its action in a row that wraps: the action goes under the sentence rather than squeeze it. */}
+      <View testID={testID && `${testID}-body`} style={styles.body}>
+        <Text
+          testID={testID && `${testID}-text`}
+          accessibilityLiveRegion={kind === 'error' ? 'assertive' : announced ? 'polite' : 'none'}
+          style={[font('meta', bold), styles.text, { flexBasis: measure }]}
+        >
+          {mono ? (
+            <>
+              {text}
+              <Text style={font('meta', bold, FONT_FAMILY.mono[500])}>{` ${mono}`}</Text>
+            </>
+          ) : (
+            text
+          )}
+        </Text>
+        {action ? (
+          <View testID={testID && `${testID}-slot`} style={wrapped ? styles.under : undefined}>
+            <Button kind={LIT_KINDS.has(kind) ? 'lit' : 'secondary'} size="sm" icon={action.icon} label={action.label} loading={busy} onPress={action.onPress} testID={testID && `${testID}-action`} />
+          </View>
+        ) : null}
+      </View>
     </View>
   )
 }
@@ -147,7 +157,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: SPACE.md,
   },
-  wrapped: { flexWrap: 'wrap' },
-  text: { flex: 1, color: COLOR.textPrimary },
-  under: { flexBasis: '100%', paddingLeft: ICON.control + SPACE.md },
+  body: { flex: 1, minWidth: 0, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: SPACE.md },
+  text: { flexGrow: 1, flexShrink: 1, color: COLOR.textPrimary },
+  under: { flexBasis: '100%' },
 })

@@ -14,6 +14,7 @@ import { getByGestureTestId } from 'react-native-gesture-handler/jest-utils'
 import type { ReactTestRendererJSON } from 'react-test-renderer'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
+jest.mock('expo-router', () => ({ router: { push: jest.fn() } }))
 jest.mock('react-native-maps', () => ({ __esModule: true, default: () => null, Marker: () => null }))
 jest.mock('expo-glass-effect', () => {
   const { View: V } = jest.requireActual('react-native')
@@ -46,6 +47,8 @@ import { SettingsGroup, SettingsRow } from '../components/ds/SettingsRow'
 import { LegalLine } from '../components/LegalLine'
 import { KeyboardPage } from '../components/onboarding/KeyboardPage'
 import { Sheet } from '../components/ds/Sheet'
+import { VisibilityBanner } from '../components/ds/Banner'
+import { MakeCrewRow } from '../components/friends/MakeCrewRow'
 /* eslint-enable import/first */
 
 /** iOS AX XXXL: body 53 pt over 17. */
@@ -323,6 +326,44 @@ describe('at AX XXXL (fontScale 3.1)', () => {
       expect(opened).toBeGreaterThan(src.lastIndexOf('<StateScreen', at) - 200)
       expect(src.indexOf('</ScrollView>', at)).toBeGreaterThan(at)
     }
+  })
+})
+
+describe('a 360 dp phone at font scale 1.3 (Android, RC drive 3: text one word per line beside a trailing piece)', () => {
+  const at360 = () => act(async () => Dimensions.set({ window: { ...window, width: 360, fontScale: 1.3 }, screen: { ...window, width: 360, fontScale: 1.3 } }))
+  const hidden = { includeHiddenElements: true }
+  const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id, hidden).props.style)
+  beforeEach(at360)
+
+  it('the room’s anonymity banner: the sentence keeps six ems of measure, and Show who I am wraps under it rather than squeeze it ("You’re / anony / mous")', async () => {
+    await render(<VisibilityBanner state="anon" onAction={jest.fn()} testID="b" />)
+    const body = screen.getByTestId('b-body', hidden)
+    expect(StyleSheet.flatten(body.props.style)).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap' })
+    // The sentence's basis is its measure at the scale it is drawn (6 em of meta at 1.3), never zero; it grows into the rest.
+    expect(flat('b-text')).toMatchObject({ flexBasis: Math.round(6 * 14 * 1.3), flexGrow: 1 })
+    expect(flat('b-text').flex).toBeUndefined()
+    // The action is in that wrapping row, not a fixed column beside it.
+    expect(body).toContainElement(screen.getByTestId('b-action', hidden))
+  })
+
+  it('Friends’ Make a crew row: the title keeps its measure, and "from your friends" wraps under it ("Make / a / crew")', async () => {
+    await render(
+      <SettingsGroup>
+        <MakeCrewRow />
+      </SettingsGroup>
+    )
+    const body = screen.getByTestId('make-crew-row-body', hidden)
+    expect(StyleSheet.flatten(body.props.style)).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap' })
+    expect(flat('make-crew-row-text')).toMatchObject({ flexBasis: Math.round(6 * 17 * 1.3), flexGrow: 1 })
+    expect(flat('make-crew-row-text').flex).toBeUndefined()
+    expect(body).toContainElement(screen.getByTestId('make-crew-row-accessory', hidden))
+    expect(flat('make-crew-row-accessory').flexShrink).toBe(1)
+  })
+
+  it('a row with no accessory is laid out as before: the text fills, no wrapping row', async () => {
+    await render(<SettingsRow icon="bell" title="Notifications" trail="chevron" onPress={jest.fn()} testID="n" />)
+    expect(screen.queryByTestId('n-body', hidden)).toBeNull()
+    expect(flat('n-text').flex).toBe(1)
   })
 })
 

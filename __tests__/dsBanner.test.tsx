@@ -100,14 +100,15 @@ describe('<Banner>', () => {
     expect(flat('b').borderColor).toBe(MATERIAL.hairlineIncreaseContrast)
   })
 
-  it('past 1.3× text the action wraps under the sentence', async () => {
+  it('past 1.3× text the action wraps under the sentence (and, below it, whenever the sentence would lose its measure: axTextSize)', async () => {
     // The React Native jest preset starts at fontScale 2.
     const window = Dimensions.get('window')
     Dimensions.set({ window: { ...window, fontScale: 1 } })
     await render(<Banner kind="info" text="Dating is on." action={{ label: 'Change', onPress: jest.fn() }} testID="b" />)
-    expect(flat('b').flexWrap).toBeUndefined()
+    expect(flat('b-body').flexWrap).toBe('wrap')
+    expect(flat('b-slot')?.flexBasis).toBeUndefined()
     await act(async () => Dimensions.set({ window: { ...window, fontScale: 2 } }))
-    expect(flat('b').flexWrap).toBe('wrap')
+    expect(flat('b-slot').flexBasis).toBe('100%')
     await act(async () => Dimensions.set({ window }))
   })
 })

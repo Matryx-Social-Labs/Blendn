@@ -7,7 +7,7 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { AccessibilityInfo, I18nManager, Platform, useWindowDimensions, type AccessibilityChangeEventName, type ViewStyle } from 'react-native'
 
-import { COLOR, DURATION, EASING, FONT_FAMILY, MATERIAL, REDUCE_MOTION, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, MATERIAL, MAX_FONT_SCALE, REDUCE_MOTION, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { tint } from '../../lib/theme'
 
 /**
@@ -32,6 +32,20 @@ export const AX_FONT_SCALE = 1.5
 /** The phone is at an accessibility text size: clamped lines open up, and layouts that sit side by side may stack. */
 export function useLargeText(): boolean {
   return useWindowDimensions().fontScale >= AX_FONT_SCALE
+}
+
+/** The narrowest a line of text may be made beside a trailing piece, in ems of its role: about a dozen characters. */
+export const MIN_MEASURE_EM = 6
+
+/**
+ * A text column's flex basis beside a trailing piece (a button, a "from your friends"), at the scale it is drawn: the two sit
+ * in a row that wraps, so when the text's measure and the piece do not both fit, the piece moves under the text instead of
+ * squeezing it. With `flex: 1` (a zero basis) beside a piece that never shrinks, 360 dp at 1.3 left the text one word per
+ * line ("You're / anony / mous", "Make / a / crew": RC drive 3).
+ */
+export function useMinMeasure(role: keyof typeof TYPE, cap: number = MAX_FONT_SCALE[role]): number {
+  const { fontScale } = useWindowDimensions()
+  return Math.round(MIN_MEASURE_EM * TYPE[role].fontSize * Math.min(fontScale, cap))
 }
 
 /** A spinner replaces a label only after this grace: a quick answer never flashes one (motion #45). */

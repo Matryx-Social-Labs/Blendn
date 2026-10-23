@@ -9,7 +9,7 @@ import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
 import { OPACITY, tint } from '../../lib/theme'
 import { Spinner } from './Loader'
-import { font, IC_HAIRLINE, LIGHT, PRESSED_WASH, useBoldText, useIncreaseContrast, useLargeText, useSelection } from './shared'
+import { font, IC_HAIRLINE, LIGHT, PRESSED_WASH, useBoldText, useIncreaseContrast, useLargeText, useMinMeasure, useSelection } from './shared'
 import { Toggle } from './Toggle'
 
 export type SettingsTrail = 'switch' | 'chevron' | 'external' | 'none'
@@ -124,6 +124,9 @@ export function SettingsRow({
 
   const isSwitch = trail === 'switch'
   const stacked = useLargeText() && isSwitch
+  const measure = useMinMeasure('bodyStrong')
+  // Text and an accessory share a row that wraps: past the text's measure the accessory goes under it (`useMinMeasure`).
+  const beside = !!accessory && !stacked
   const ink = destructive ? COLOR.destructive : COLOR.textPrimary
   const press = isSwitch
     ? () => {
@@ -132,6 +135,23 @@ export function SettingsRow({
       }
     : onPress
   const external = trail === 'external' ? `, ${opens}` : ''
+  const words = (
+    <View testID={testID && `${testID}-text`} style={stacked ? styles.textStacked : beside ? [styles.textBeside, { flexBasis: measure }] : styles.text}>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), { color: ink }]}>
+        {title}
+      </Text>
+      {hint ? (
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: error ? COLOR.destructive : COLOR.textSecondary }]}>
+          {hint}
+        </Text>
+      ) : null}
+    </View>
+  )
+  const extra = accessory ? (
+    <View testID={testID && `${testID}-accessory`} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.accessory}>
+      {accessory}
+    </View>
+  ) : null
 
   return (
     <Pressable
@@ -159,21 +179,17 @@ export function SettingsRow({
     >
       {leading ??
         (icon ? isSwitch ? <SwitchTile testID={testID && `${testID}-tile`} icon={icon} on={value} /> : <Icon name={icon} size={ICON.control} color={ink} /> : null)}
-      <View testID={testID && `${testID}-text`} style={stacked ? styles.textStacked : styles.text}>
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), { color: ink }]}>
-          {title}
-        </Text>
-        {hint ? (
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: error ? COLOR.destructive : COLOR.textSecondary }]}>
-            {hint}
-          </Text>
-        ) : null}
-      </View>
-      {accessory ? (
-        <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.accessory}>
-          {accessory}
+      {beside ? (
+        <View testID={testID && `${testID}-body`} style={styles.body}>
+          {words}
+          {extra}
         </View>
-      ) : null}
+      ) : (
+        <>
+          {words}
+          {extra}
+        </>
+      )}
       {busy && !isSwitch ? <Spinner testID={testID && `${testID}-spinner`} size={18} /> : null}
       {isSwitch ? (
         // The spinner and the switch are one trail, so stacked they stay side by side under the text.
@@ -257,7 +273,10 @@ const styles = StyleSheet.create({
   /** No `flex: 1` in a column of auto height: its zero basis would collapse the text. */
   textStacked: { alignSelf: 'stretch', gap: SPACE.xxs },
   trail: { flexDirection: 'row', alignItems: 'center', gap: SPACE.lg },
-  accessory: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
+  accessory: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, flexShrink: 1 },
+  /** The text and its accessory: a row that wraps, so the accessory goes under the text rather than squeeze it (RC drive 3, "Make / a / crew"). */
+  body: { flex: 1, minWidth: 0, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: SPACE.lg, rowGap: SPACE.xxs },
+  textBeside: { flexGrow: 1, flexShrink: 1, minWidth: 0, gap: SPACE.xxs },
   focus: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, borderRadius: RADIUS.rowInCard, borderWidth: SPACE.xxs, borderColor: COLOR.focusRing },
   group: { gap: SPACE.sm },
   label: { color: COLOR.textSecondary, paddingLeft: SPACE.lg },
