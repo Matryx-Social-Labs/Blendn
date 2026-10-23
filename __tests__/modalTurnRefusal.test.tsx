@@ -47,8 +47,18 @@ jest.mock('expo-linear-gradient', () => {
   const { View } = jest.requireActual('react-native')
   return { LinearGradient: (props: object) => <View {...props} /> }
 })
+/** The router modal's transitionEnd listeners (its screen sliding away). */
+const mockTransitionEnd: Array<() => void> = []
+const mockNavigation = {
+  addListener: (_event: string, cb: () => void) => {
+    mockTransitionEnd.push(cb)
+    return () => {}
+  },
+}
 // A router modal is focused while it is mounted here.
 jest.mock('expo-router', () => ({
+  // A router modal releases the screen on its transitionEnd (components/system/RouteModal).
+  useNavigation: () => mockNavigation,
   useFocusEffect: (effect: () => void | (() => void)) => {
     const { useEffect } = require('react')
     useEffect(effect, [effect])
@@ -247,8 +257,24 @@ describe('a router modal (the paywall, Make a crew) holds the screen while it is
     )
     expect(shown('own')).toBe(true)
     expect(shown('root')).toBe(false)
-    // Closed: the sheet under it opens.
+    // Closed: still sliding away, it holds the screen until its transition has ended (review LOW), then the sheet opens.
+    mockTransitionEnd.length = 0
     await view.rerender(<Sheet visible onClose={() => {}} title="Checked out" testID="root" />)
+    expect(shown('root')).toBe(false)
+    await act(async () => mockTransitionEnd.forEach((f) => f()))
+    expect(shown('root')).toBe(true)
+  })
+
+  it('if transitionEnd never comes, the screen is given up after the fallback', async () => {
+    const view = await render(
+      <>
+        <RouteModal>{null}</RouteModal>
+        <Sheet visible onClose={() => {}} title="Checked out" testID="root" />
+      </>
+    )
+    await view.rerender(<Sheet visible onClose={() => {}} title="Checked out" testID="root" />)
+    expect(shown('root')).toBe(false)
+    await tick(800)
     expect(shown('root')).toBe(true)
   })
 })

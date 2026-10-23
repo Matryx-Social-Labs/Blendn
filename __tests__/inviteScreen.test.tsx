@@ -13,6 +13,8 @@ jest.mock('expo-router', () => ({
   useLocalSearchParams: () => ({ token: 'abcdefghijklmnopqrstuv' }),
   useIsFocused: () => true,
   // The screen's own focus effect, run by hand: a test says when Edit profile has handed the screen back.
+  // A router modal releases the screen on its transitionEnd (components/system/RouteModal): no navigator here.
+  useNavigation: () => undefined,
   useFocusEffect: (effect: () => void) => {
     mockFocus = effect
   },
