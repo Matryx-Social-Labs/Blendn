@@ -5,7 +5,7 @@
  * (`YYYY-MM-DD`) and whether it was called off (`cancelled`, and `cancelledAt` beside it). `dayNumber` is null when every day is
  * cancelled. Absent from a server that does not send it: no strip, which is what the Scene drew before.
  */
-import { calendarDate, clockTime, MONTHS, WEEKDAYS } from './time'
+import { calendarDate, clockTime, MONTHS, WEEKDAYS, zonedDate } from './time'
 
 export interface EventDay {
   date: string
@@ -49,12 +49,9 @@ export function parseEventDays(d: { days?: unknown; dayCount?: unknown; dayNumbe
  * phone is. A zone this engine does not know falls back to the phone's date.
  */
 export function eventToday(timeZone: string | undefined, now: number = Date.now()): string {
-  try {
-    return new Intl.DateTimeFormat('en-CA', { timeZone }).format(now)
-  } catch {
-    const d = new Date(now)
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-  }
+  const d = new Date(now)
+  const [y, m, day] = timeZone ? zonedDate(d, timeZone) : [d.getFullYear(), d.getMonth(), d.getDate()]
+  return `${y}-${String(m + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
 
 /** The listed day that `dayNumber` names, or null when that day is outside the window (or no day is running). */

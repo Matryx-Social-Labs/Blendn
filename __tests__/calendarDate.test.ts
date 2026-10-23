@@ -15,6 +15,7 @@ import { plusStatusLine } from '../lib/plus'
 import { shortDate } from '../lib/plusManage'
 import { muteLabel } from '../lib/roomMembership'
 import { calendarDate } from '../lib/time'
+import { eventToday } from '../lib/eventDays'
 /* eslint-enable import/first */
 
 const NOW = new Date(2026, 9, 23, 15, 0).getTime()
@@ -39,6 +40,23 @@ describe('calendarDate', () => {
     // 20:00 UTC on the 29th is 01:30 on the 30th in Kolkata.
     expect(calendarDate('2026-09-29T20:00:00Z', { weekday: true, now: NOW, timeZone: 'Asia/Kolkata' })).toBe('Wed 30 Sep')
     expect(calendarDate('2026-09-29T20:00:00Z', { weekday: true, now: NOW, timeZone: 'America/Los_Angeles' })).toBe('Tue 29 Sep')
+  })
+})
+
+describe('a zone read by part (review L5: en-CA "YYYY-MM-DD" was split on "-")', () => {
+  it('holds when an engine formats the date some other way: only the parts are read', () => {
+    const Real = Intl.DateTimeFormat
+    const spy = jest.spyOn(Intl, 'DateTimeFormat').mockImplementation(((locales?: string | string[], options?: Intl.DateTimeFormatOptions) => {
+      const real = new Real(locales, options)
+      // An engine whose en-CA (or any) string is not ISO: a split on "-" would read nonsense from it.
+      return { format: () => '30/9/2026', formatToParts: (d: Date) => real.formatToParts(d) }
+    }) as never)
+    try {
+      expect(calendarDate('2026-09-29T20:00:00Z', { weekday: true, now: NOW, timeZone: 'Asia/Kolkata' })).toBe('Wed 30 Sep')
+      expect(eventToday('Asia/Kolkata', Date.parse('2026-09-29T20:00:00Z'))).toBe('2026-09-30')
+    } finally {
+      spy.mockRestore()
+    }
   })
 })
 

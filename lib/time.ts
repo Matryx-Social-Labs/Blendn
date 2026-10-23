@@ -29,11 +29,15 @@ export function calendarDate(
   return `${weekday ? `${WEEKDAYS[dow]} ` : ''}${day} ${MONTHS[m]}${showYear ? ` ${y}` : ''}`
 }
 
-/** The year, month (0–11) and day in a named zone; the phone's own date if this engine cannot (no ICU, an unknown zone). */
-function zonedDate(d: Date, timeZone: string): [number, number, number] {
+/**
+ * The year, month (0–11) and day in a named zone; the phone's own date if this engine cannot (no ICU, an unknown zone).
+ * By part, not by splitting a formatted string: no engine promises en-CA's "YYYY-MM-DD" (review L5).
+ */
+export function zonedDate(d: Date, timeZone: string): [number, number, number] {
   try {
-    // en-CA formats a date as YYYY-MM-DD.
-    const [y, m, day] = new Intl.DateTimeFormat('en-CA', { timeZone }).format(d).split('-').map(Number)
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone, year: 'numeric', month: 'numeric', day: 'numeric' }).formatToParts(d)
+    const part = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((p) => p.type === type)?.value)
+    const [y, m, day] = [part('year'), part('month'), part('day')]
     if ([y, m, day].every(Number.isFinite)) return [y, m - 1, day]
   } catch {
     // Falls through to the local date.
