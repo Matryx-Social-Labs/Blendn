@@ -31,8 +31,13 @@ export function roomOpensAt(startTime: string | null | undefined): number | null
  * start is unknown): the header goes back to its count with no ceremony.
  */
 export function opensInLabel(startTime: string | null | undefined, now: number): string | null {
-  const opensAt = roomOpensAt(startTime)
-  if (opensAt === null || now >= opensAt) return null
+  return opensInLabelAt(roomOpensAt(startTime), now)
+}
+
+/** The same label from the opening itself: the server's `opensAt` on a NOT_OPEN_YET refusal (epoch ms or ISO). */
+export function opensInLabelAt(opensAtValue: number | string | null | undefined, now: number): string | null {
+  const opensAt = typeof opensAtValue === 'string' ? Date.parse(opensAtValue) : opensAtValue
+  if (opensAt == null || Number.isNaN(opensAt) || now >= opensAt) return null
   const minutes = Math.ceil((opensAt - now) / MINUTE)
   if (minutes >= DAY / MINUTE) {
     const days = Math.floor(minutes / (DAY / MINUTE))
@@ -53,4 +58,11 @@ export function opensInSpoken(label: string): string {
     .replace(/(\d+)d/, (_, n) => `${n} ${n === '1' ? 'day' : 'days'}`)
     .replace(/(\d+)h/, (_, n) => `${n} ${n === '1' ? 'hour' : 'hours'}`)
     .replace(/(\d+)m/, (_, n) => `${n} ${n === '1' ? 'minute' : 'minutes'}`)
+}
+
+/** The server's refusal of an event's room before it opens, to someone entitled (RSVP'd or saved): its `opensAt`. */
+export const NOT_OPEN_YET = 'NOT_OPEN_YET'
+export function notOpenYetAt(result: { success?: boolean; reasonCode?: string; opensAt?: string } | null | undefined): string | null {
+  if (!result || result.success || result.reasonCode !== NOT_OPEN_YET) return null
+  return typeof result.opensAt === 'string' && !Number.isNaN(Date.parse(result.opensAt)) ? result.opensAt : null
 }

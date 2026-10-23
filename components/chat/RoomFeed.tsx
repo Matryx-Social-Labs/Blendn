@@ -19,6 +19,7 @@ import { GoneCard } from '../system/GoneCard'
 import type { PollRefusal } from '../../lib/chatPoll'
 import { RoomPoll } from './RoomPoll'
 import { chatHeaderBottom } from './ChatHeader'
+import { opensInSpoken } from '../../lib/preEventRoom'
 
 export type RowHandlers = {
   menu: (m: RoomMessage, anchor: Rect) => void
@@ -153,6 +154,8 @@ export type Outside =
   | { kind: 'not_live'; reason?: string | null; venueName?: string | null; dayEndsAt?: string | null }
   | { kind: 'left' }
   | { kind: 'out' }
+  /** An event's room before it opens, to someone entitled: the server's NOT_OPEN_YET and its `opensAt` (D-7). */
+  | { kind: 'notopen'; opensAt: string }
 
 /**
  * The room, for somebody not in it (Flow 5 #25–26, R2-D2 room states): it
@@ -167,6 +170,9 @@ export function RoomOutside({
   onRejoin,
   onGoLive,
   onBack,
+  opensIn = null,
+  opening = false,
+  onOpenRoom,
 }: {
   outside: Outside
   /** A crew's or a Blend's room, told apart from an event's: their wording has no event to check in at. */
@@ -175,6 +181,10 @@ export function RoomOutside({
   onRejoin: () => void
   onGoLive: () => void
   onBack: () => void
+  /** `notopen`: how long until it opens ("2d 4h", ticking); null once it has, when "Open the room" asks again. */
+  opensIn?: string | null
+  opening?: boolean
+  onOpenRoom?: () => void
 }) {
   const insets = useSafeAreaInsets()
   const back = [{ label: 'Back', kind: 'secondary' as const, onPress: onBack }]
@@ -210,6 +220,27 @@ export function RoomOutside({
           body={outside.event ? 'The event ended or was taken down. Nothing you wrote has gone anywhere.' : 'Nothing you wrote has gone anywhere.'}
           actions={back}
           testID="room-gone"
+        />
+      )
+    case 'notopen':
+      // The header counts down in Geist Mono (OpensLine); this says it in words, which a screen reader reads as words.
+      return opensIn ? (
+        <StateScreen
+          variant="screen"
+          icon="clock"
+          title="Not open yet"
+          body={`The room opens in ${opensInSpoken(opensIn)}. An event’s room opens 24 hours before it starts.`}
+          actions={back}
+          testID="room-not-open"
+        />
+      ) : (
+        <StateScreen
+          variant="screen"
+          icon="door-open"
+          title="The room is open"
+          body="It opened 24 hours before the event starts."
+          actions={[{ label: 'Open the room', kind: 'lit', onPress: () => onOpenRoom?.(), loading: opening }]}
+          testID="room-now-open"
         />
       )
     case 'not_live': {

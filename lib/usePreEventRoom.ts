@@ -1,4 +1,4 @@
-import { opensInLabel } from './preEventRoom'
+import { opensInLabel, opensInLabelAt } from './preEventRoom'
 import { serverOffset } from './serverClock'
 import { useNow } from './useNow'
 
@@ -14,4 +14,10 @@ const NEVER = 24 * 60 * MINUTE
 export function usePreEventRoom(startTime: string | null | undefined): string | null {
   const now = useNow(startTime ? MINUTE : NEVER)
   return opensInLabel(startTime, now + serverOffset())
+}
+
+/** The same countdown to the server's own `opensAt` (a NOT_OPEN_YET refusal); null once it has passed, or with none. */
+export function useOpensAt(opensAt: string | null): string | null {
+  const now = useNow(opensAt ? MINUTE : NEVER)
+  return opensInLabelAt(opensAt, now + serverOffset())
 }

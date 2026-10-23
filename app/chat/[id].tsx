@@ -33,8 +33,8 @@ import { contactWarning } from '../../lib/contactWarning'
 import { copyText, linkSheet, notSentSheet } from '../../lib/chatSheets'
 import { idParam, nameParam } from '../../lib/routeParams'
 import { subscribeCheckInChanged } from '../../lib/checkIn'
-import { opensInSpoken } from '../../lib/preEventRoom'
-import { usePreEventRoom } from '../../lib/usePreEventRoom'
+import { notOpenYetAt, opensInSpoken } from '../../lib/preEventRoom'
+import { useOpensAt, usePreEventRoom } from '../../lib/usePreEventRoom'
 import { newClientId } from '../../lib/clientId'
 import { BLEND_CLOSED_LINE, defaultRoomName, roomClosedLine, roomKindParam } from '../../lib/crews'
 import { COLOR, SIZE, SPACE } from '../../lib/design/tokens'
@@ -105,6 +105,12 @@ const stamp = (m: { created_at: string }) => Date.parse(m.created_at) || 0
  * or name opens their card. The composer says why it can't post, in the
  * server's words. Crew chats and Blend rooms are this screen too (`kind`).
  */
+/** A route's `opensAt` if it is an instant still to come; a countdown is never drawn from anything else. */
+const futureInstant = (value: unknown): string | null => {
+  const at = typeof value === 'string' ? Date.parse(value) : NaN
+  return Number.isFinite(at) && at > Date.now() ? new Date(at).toISOString() : null
+}
+
 /** A send only this phone holds: refused ("Not sent") or waiting for a connection. */
 const isPendingSend = (m: Message) => !!(m.failed || m.waiting)
 
@@ -155,6 +161,13 @@ function GroupChatInner() {
    * Banter agree; `outOfRoom` is history refused as a non-member.
    */
   const [outOfRoom, setOutOfRoom] = useState(false)
+  /*
+   * An event's room before it opens, to someone entitled (RSVP'd or saved): the server's `opensAt` on its NOT_OPEN_YET
+   * refusal (D-7). The opener may hand it over (the Room's chat button) so the countdown is there from the first frame;
+   * the server's answer below is what holds it. Never an error, and never shown to someone the server only refused.
+   */
+  const [notOpen, setNotOpen] = useState<string | null>(() => futureInstant(params.opensAt))
+  const [opening, setOpening] = useState(false)
   /* A place's room after your Go Live there ended (`NOT_LIVE`): going live again is the way back. */
   const [notLive, setNotLive] = useState(false)
   const notLiveRef = useLatest(notLive)
@@ -200,7 +213,9 @@ function GroupChatInner() {
           ? { kind: 'gone', event: eventKnown }
           : notLive
             ? { kind: 'not_live', reason: endedReason, venueName: roomInfo.title ?? null, dayEndsAt: roomInfo.dayEndsAt ?? null }
-            : left
+            : notOpen
+              ? { kind: 'notopen', opensAt: notOpen }
+              : left
               ? { kind: 'left' }
               : outOfRoom
                 ? { kind: 'out' }
@@ -223,12 +238,17 @@ function GroupChatInner() {
   const hereCount = useHereCount(roomInfo)
   /* A day before doors the room is served but not open: its header counts down, its composer says so (Flow 15 #8). */
   const opensIn = usePreEventRoom(eventRoom ? roomInfo.startTime : null)
+  /* The server's own opening, when it refused the room as not open yet: the same countdown (D-7). */
+  const notOpenIn = useOpensAt(notOpen)
+  const countingDown = opensIn ?? notOpenIn
   /* The room opening is said aloud, once, as the countdown ends (iOS: nothing else announces it). */
   const wasClosed = useRef(false)
   useEffect(() => {
-    if (wasClosed.current && !opensIn && Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility('The room is open')
-    wasClosed.current = !!opensIn
-  }, [opensIn])
+    if (wasClosed.current && !countingDown && Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility('The room is open')
+    wasClosed.current = !!countingDown
+  }, [countingDown])
+  /** The event this room is, to ask its own door (`GET /events/:id/chat`), which knows when it opens. */
+  const roomEventId = eventRoom ? (roomInfo.eventId ?? idParam(params.eventId)) : null
   const { showToast } = useToast()
 
   /* The long-press, a sender's card, your reaction's flight (#36, 5.1, #37). */
@@ -629,6 +649,54 @@ function GroupChatInner() {
 
   /* A Go Live ended: only this room's re-reads, and answers NOT_LIVE (L2). */
   const loadMessagesRef = useLatest(loadMessages)
+  /**
+   * Refused as not in the room: an event's room asks its own door once, which joins someone entitled inside the window,
+   * says when it opens before it (NOT_OPEN_YET), or refuses as before (an older server's bare 403 included).
+   */
+  const askedDoor = useRef(false)
+  const askEventDoor = async (): Promise<'joined' | 'notopen' | 'out'> => {
+    if (!roomEventId) return 'out'
+    const door = await apiClient.getEventChat(roomEventId).catch(() => null)
+    const at = notOpenYetAt(door)
+    if (at) {
+      setNotOpen(at)
+      return 'notopen'
+    }
+    if (door?.success) {
+      setNotOpen(null)
+      markRoomJoined(roomId)
+      rejoinChatSocket(roomId)
+      return 'joined'
+    }
+    return 'out'
+  }
+  // Once per open, as soon as the event is known (the row may land after the refusal): a door that joins you is read
+  // again; one that says "not yet" is the countdown; anything else leaves "You're not in this room" as it was.
+  useEffect(() => {
+    if (!outOfRoom || !roomEventId || askedDoor.current) return
+    askedDoor.current = true
+    void askEventDoor().then((answer) => {
+      if (answer === 'out') return
+      setOutOfRoom(false)
+      if (answer === 'joined') void loadMessagesRef.current(true)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [outOfRoom, roomEventId])
+  /* "Open the room", once the countdown has ended: the door again, then the room. */
+  const openRoom = async () => {
+    if (opening) return
+    setOpening(true)
+    const answer = await askEventDoor()
+    setOpening(false)
+    if (answer === 'joined') {
+      setOutOfRoom(false)
+      setLoading(true)
+      void loadMessages(true)
+    } else if (answer === 'out') {
+      setNotOpen(null)
+      setOutOfRoom(true)
+    }
+  }
   /*
    * A block made anywhere (Room info's card, a profile) takes that person out of what this feed already holds: the
    * loaded pages are dropped (only what this phone has not sent yet stays) and the newest page is read again, which
@@ -829,7 +897,17 @@ function GroupChatInner() {
       <Grain />
       <KeyboardFrame>
         {outside ? (
-          <RoomOutside outside={outside} roomKind={roomKind} rejoining={rejoining} onRejoin={() => void rejoin()} onGoLive={goLiveAgain} onBack={goBack} />
+          <RoomOutside
+            outside={outside}
+            roomKind={roomKind}
+            rejoining={rejoining}
+            onRejoin={() => void rejoin()}
+            onGoLive={goLiveAgain}
+            onBack={goBack}
+            opensIn={notOpenIn}
+            opening={opening}
+            onOpenRoom={() => void openRoom()}
+          />
         ) : (
           <>
             <FlatList
@@ -955,7 +1033,7 @@ function GroupChatInner() {
         title={blendRoom.title ?? name}
         muted={muted}
         leading={blendRoom.leading ?? <RoomCover uri={eventImage} />}
-        subtitle={outside ? null : (blendRoom.subtitle ?? subtitle)}
+        subtitle={outside?.kind === 'notopen' ? (notOpenIn ? <OpensLine label={notOpenIn} spoken={opensInSpoken(notOpenIn)} count={null} /> : null) : outside ? null : (blendRoom.subtitle ?? subtitle)}
         onBack={goBack}
         moreLabel={blendRoom.blend ? 'More' : 'Room info'}
         onMore={() =>

@@ -651,6 +651,8 @@ export interface ApiResponse<T = unknown> {
    * the rejoin (`rejoinChatGroup`) without a second lookup.
    */
   chatGroupId?: string
+  /** When an event's room opens: `GET /events/:eventId/chat` answers NOT_OPEN_YET (reasonCode) with it, to someone entitled. */
+  opensAt?: string
   /**
    * The event a refusal hands off to. Go Live answers `EVENT_LIVE_HERE` with
    * it (`POST /venues/:venueId/live`): check in to that event instead.
@@ -1515,6 +1517,7 @@ class ApiClientClass {
           ? parsed.retryAfter
           : Number(response.headers.get('Retry-After')) || undefined,
         ...(typeof parsed.chatGroupId === 'string' ? { chatGroupId: parsed.chatGroupId } : {}),
+        ...(typeof parsed.opensAt === 'string' ? { opensAt: parsed.opensAt } : {}),
         ...(typeof parsed.eventId === 'string' ? { eventId: parsed.eventId } : {}),
         ...(typeof parsed.field === 'string' ? { field: parsed.field } : {}),
         error: this.buildErrorMessage(response, parsed, endpoint),

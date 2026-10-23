@@ -40,6 +40,7 @@ jest.mock('../lib/apiClient', () => ({
     sendChatMessage: jest.fn(),
     reactToChatMessage: jest.fn(),
     rejoinChatGroup: jest.fn(),
+    getEventChat: jest.fn(),
   },
 }))
 jest.mock('../lib/socketClient', () => {
@@ -384,5 +385,53 @@ describe('a jump from one open room to another (RC drive 2 D-E)', () => {
     await view.unmount()
     expect(draftOf(roomThread('g1', 'u-a'))).toBe('only for g1')
     expect(draftOf(roomThread('g2', 'u-a'))).toBe('crew’s own')
+  })
+})
+
+describe('an event’s room before it opens (D-7: NOT_OPEN_YET)', () => {
+  const HOUR = 3_600_000
+  const notMember = { success: false, errorCode: 'FORBIDDEN', error: 'You are not a member of this chat group' }
+  const notYet = (ms: number) => ({ success: false, errorCode: 'CHAT_CLOSED', reasonCode: 'NOT_OPEN_YET', error: 'This chat opens 24 hours before the event starts.', opensAt: new Date(Date.now() + ms).toISOString(), chatGroupId: 'g1' })
+
+  beforeEach(() => jest.useFakeTimers({ now: Date.parse('2026-10-20T10:00:00.000Z'), doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate', 'clearImmediate'] }))
+  afterEach(() => jest.useRealTimers())
+
+  it('someone going, before the window: the countdown to the server’s opensAt, never an error', async () => {
+    api.getChatMessages.mockResolvedValue(notMember as never)
+    api.getEventChat.mockResolvedValue(notYet(52 * HOUR) as never)
+    await open()
+    expect(api.getEventChat).toHaveBeenCalledWith('e1')
+    expect(screen.getByText('Not open yet')).toBeTruthy()
+    expect(screen.getByText(/The room opens in 2 days 4 hours\./)).toBeTruthy()
+    expect(screen.getByLabelText('Opens in 2 days 4 hours')).toBeTruthy()
+    expect(screen.queryByText(/not in this room/)).toBeNull()
+    expect(screen.queryByText(/Couldn’t load/)).toBeNull()
+  })
+
+  it('it ticks down, and at zero "Open the room" asks the door again and opens it', async () => {
+    api.getChatMessages.mockResolvedValueOnce(notMember as never)
+    api.getEventChat.mockResolvedValueOnce(notYet(90_000) as never)
+    await open()
+    expect(screen.getByLabelText('Opens in 2 minutes')).toBeTruthy()
+    await act(async () => jest.advanceTimersByTime(60_000))
+    expect(screen.getByLabelText('Opens in 1 minute')).toBeTruthy()
+    await act(async () => jest.advanceTimersByTime(60_000))
+    expect(screen.getByText('The room is open')).toBeTruthy()
+
+    // The window is open: the door joins, the room reads.
+    api.getEventChat.mockResolvedValue({ success: true, data: { chatGroupId: 'g1' } } as never)
+    api.getChatMessages.mockResolvedValue(page([theirs]) as never)
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Open the room' })))
+    await flush()
+    expect(screen.getByText('Anyone near the stage?')).toBeTruthy()
+  })
+
+  it('someone the server only refused (not going, or an older server’s bare 403): no countdown, as before', async () => {
+    api.getChatMessages.mockResolvedValue(notMember as never)
+    api.getEventChat.mockResolvedValue({ success: false, errorCode: 'FORBIDDEN', error: 'RSVP to this event to join the chat' } as never)
+    await open()
+    expect(screen.getByText('You’re not in this room')).toBeTruthy()
+    expect(screen.queryByText('Not open yet')).toBeNull()
+    expect(screen.queryByLabelText(/^Opens in/)).toBeNull()
   })
 })
