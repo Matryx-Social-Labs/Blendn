@@ -533,15 +533,11 @@ function RootLayout() {
   if (!fontsReady) return null;
 
   return (
-    <ErrorBoundary
-      onError={(error, errorInfo, errorId) => {
-        Sentry.captureException(error, {
-          // The id the crash screen shows and puts in the support email.
-          tags: { context: 'root-error-boundary', error_id: errorId },
-          extra: { componentStack: errorInfo.componentStack },
-        })
-      }}
-    >
+    /*
+      The last resort: every screen has its own boundary (`rootTextSizeLayout`, `textSizeLayout`), so this one catches what
+      is outside them (the tab bar, the hosts). It reports itself, and going somewhere else clears it.
+    */
+    <ErrorBoundary route={pathname}>
       {/*
         Outermost, so every screen and the toast layer sit inside it. Without
         it, a `GestureDetector` anywhere in the app silently does nothing.

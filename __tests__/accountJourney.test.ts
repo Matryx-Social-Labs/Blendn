@@ -46,8 +46,8 @@ describe('the crash screen', () => {
 
   it('contacts support for real, with the error id', () => {
     expect(src).toContain('supportMailto({ subject: "Blend’n crashed", userId: user?.id, errorId: this.state.errorId })')
-    // The same id goes to Sentry, so the email and the report can be matched.
-    expect(read('app/_layout.tsx')).toContain("tags: { context: 'root-error-boundary', error_id: errorId }")
+    // The same id goes to Sentry, so the email and the report can be matched (every boundary reports itself, with its route).
+    expect(src).toContain("tags: { context: 'error-boundary', error_id: errorId, route }")
   })
 
   it('keeps Try again', () => {

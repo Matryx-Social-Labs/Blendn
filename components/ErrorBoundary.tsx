@@ -2,9 +2,8 @@ import React, { Component, ErrorInfo, ReactNode } from 'react'
 import { Linking, StyleSheet, Text, View } from 'react-native'
 import Animated from 'react-native-reanimated'
 import { COLOR, TYPE } from '../lib/design/tokens'
-import { Logger } from '../lib/logger'
+import { Sentry } from '../lib/sentry'
 import { SUPPORT_EMAIL, supportMailto } from '../lib/support'
-import { getCurrentUser } from '../lib/useAuth'
 import { monoCaption } from './ds/MonoFamily'
 import { StateScreen } from './ds/StateScreen'
 import { stateScreenIn } from './motion/presence'
@@ -14,14 +13,39 @@ interface Props {
   children: ReactNode
   /** `errorId` is the one this screen shows and puts in the support email. */
   onError?: (error: Error, errorInfo: ErrorInfo, errorId: string) => void
+  /**
+   * Where it is: the route's name for one screen's boundary, the pathname for the root's. Reported with the error, and a
+   * different one clears it — somebody who went somewhere else is not shown the last place's crash.
+   */
+  route?: string
+  /** A way out of a screen that keeps failing ("Go back"), where there is somewhere to go back to. */
+  onLeave?: () => void
 }
 
 interface State {
   hasError: boolean
   error: Error | null
   errorId: string | null
+  /** When it was caught: the route change that comes with the crash itself is not somewhere new (`componentDidUpdate`). */
+  caughtAt: number
   /** No mail app answered, so the address is shown to copy instead. */
   showAddress: boolean
+}
+
+/**
+ * A route change this soon after the crash came with it, not from somebody going elsewhere: the root boundary unmounts the
+ * navigator, and its state going moves the pathname at once. Clearing on that would remount straight into the same
+ * crash, over and over.
+ */
+// ponytail: a time window, not a cause; a crash that settles slower than this could retry once per navigation.
+const CRASH_SETTLE_MS = 1000
+
+const CLEAR: State = {
+  hasError: false,
+  error: null,
+  errorId: null,
+  caughtAt: 0,
+  showAddress: false,
 }
 
 /**
@@ -37,12 +61,7 @@ export class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props)
 
-    this.state = {
-      hasError: false,
-      error: null,
-      errorId: null,
-      showAddress: false,
-    }
+    this.state = CLEAR
   }
 
   static getDerivedStateFromError(error: Error): Partial<State> {
@@ -51,41 +70,38 @@ export class ErrorBoundary extends Component<Props, State> {
       hasError: true,
       error,
       errorId: newErrorId(),
+      caughtAt: Date.now(),
     }
   }
 
+  /*
+   * One report per crash: the exception itself (so Sentry has its stack), where it happened and what it said. RC drive 5's
+   * had no route, went out twice (a message from the logger, the exception from the root layout), and from a local
+   * release build went nowhere: it has no Sentry DSN.
+   */
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     const errorId = this.state.errorId ?? newErrorId()
-    // Log the error with structured logging
-    Logger.error('general', 'React Error Boundary caught an error', {
-      errorId,
-      error: {
-        name: error.name,
-        message: error.message,
-        stack: error.stack
-      },
-      errorInfo: {
-        componentStack: errorInfo.componentStack
-      },
-      timestamp: new Date().toISOString()
+    const route = this.props.route ?? 'unknown'
+    Sentry.captureException(error, {
+      // The id the crash screen shows and puts in the support email.
+      tags: { context: 'error-boundary', error_id: errorId, route },
+      extra: { message: error.message, componentStack: errorInfo.componentStack },
     })
+    // Read on a device with no Sentry (a local release build): the unified log carries console.error.
+    console.error(`[error-boundary] ${errorId} at ${route}: ${error.name}: ${error.message}\n${errorInfo.componentStack ?? ''}`)
 
-    this.setState({
-      error,
-      errorId,
-    })
-
-    // Call custom error handler if provided
+    this.setState({ error, errorId })
     this.props.onError?.(error, errorInfo, errorId)
   }
 
+  // Somewhere else now: what failed back there is not this place's to show.
+  componentDidUpdate(prev: Props) {
+    if (this.state.hasError && prev.route !== this.props.route && Date.now() - this.state.caughtAt > CRASH_SETTLE_MS) this.resetErrorBoundary()
+  }
+
+  // Draws the children again: they were unmounted for the fallback, so this is a fresh mount, not the broken tree.
   resetErrorBoundary = () => {
-    this.setState({
-      hasError: false,
-      error: null,
-      errorId: null,
-      showAddress: false,
-    })
+    this.setState(CLEAR)
   }
 
   /*
@@ -95,6 +111,10 @@ export class ErrorBoundary extends Component<Props, State> {
    * disappears the moment you go to copy it.
    */
   contactSupport = async () => {
+    // Required here, not at the top: every screen's boundary would otherwise load the API client with it, and a boundary
+    // must not depend on the code it guards against. (`import()` is not transformed for jest here.)
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getCurrentUser } = require('../lib/useAuth') as typeof import('../lib/useAuth')
     const user = await getCurrentUser().catch(() => null)
     const url = supportMailto({ subject: "Blend’n crashed", userId: user?.id, errorId: this.state.errorId })
     Linking.openURL(url).catch(() => {
@@ -117,6 +137,8 @@ export class ErrorBoundary extends Component<Props, State> {
             // Try again is the screen's one primary (H.primary); Contact support is a text action that plays nothing.
             actions={[
               { label: 'Try again', onPress: this.resetErrorBoundary },
+              // A screen that fails again on Try again is not a dead end: a modal has no back gesture.
+              ...(this.props.onLeave ? [{ label: 'Go back', kind: 'secondary' as const, onPress: this.props.onLeave }] : []),
               { label: 'Contact support', kind: 'tertiary', onPress: () => void this.contactSupport() },
             ]}
             foot={

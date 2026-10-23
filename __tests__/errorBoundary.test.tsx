@@ -3,22 +3,33 @@
  * Contact support as a text action that opens a mailto carrying the error id, and — with no mail app — the address and
  * the id as selectable text, because this sits above the toast layer. Nothing you saved is lost, and the raw message is
  * for development builds.
+ *
+ * Since RC drive 5: it reports itself once, with its route; somewhere else clears it; Go back where it can. Negative
+ * controls: without the route check in `componentDidUpdate`, "a different route draws the children again" fails;
+ * without `CRASH_SETTLE_MS`, "not the route change that came with the crash itself" fails.
  */
+import React from 'react'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
 import { Linking, Text } from 'react-native'
 
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }))
 jest.mock('../components/onboarding/Backdrop', () => ({ Backdrop: () => null, ORB_LEVEL: { form: 0.6 } }))
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() } }))
+jest.mock('../lib/sentry', () => ({ Sentry: { captureException: jest.fn() } }))
 jest.mock('../lib/useAuth', () => ({ getCurrentUser: jest.fn().mockResolvedValue({ id: 'u_me' }) }))
 jest.mock('../lib/haptics', () => ({ H: { primary: jest.fn(), error: jest.fn(), destructive: jest.fn() } }))
 
 import { ErrorBoundary } from '../components/ErrorBoundary'
 import { H } from '../lib/haptics'
+import { Sentry } from '../lib/sentry'
 import { SUPPORT_EMAIL } from '../lib/support'
 
 let shouldThrow = true
+let mounts = 0
 function Bomb() {
+  React.useEffect(() => {
+    mounts += 1
+  }, [])
   if (shouldThrow) throw new Error('boom: a stack-trace fragment')
   return <Text>fine</Text>
 }
@@ -32,6 +43,7 @@ const mount = (onError = jest.fn()) =>
 
 beforeEach(() => {
   shouldThrow = true
+  mounts = 0
   jest.clearAllMocks()
   jest.spyOn(console, 'error').mockImplementation(() => {})
 })
@@ -53,7 +65,7 @@ it('has Try again (the one primary) and Contact support (a text action)', async 
   expect(screen.getByRole('button', { name: 'Contact support' })).toBeTruthy()
 })
 
-it('Try again plays H.primary on press-in and renders the children again', async () => {
+it('Try again plays H.primary on press-in and mounts the children afresh', async () => {
   await mount()
   shouldThrow = false
   const again = screen.getByRole('button', { name: 'Try again' })
@@ -61,6 +73,77 @@ it('Try again plays H.primary on press-in and renders the children again', async
   expect(H.primary).toHaveBeenCalledTimes(1)
   fireEvent.press(again)
   expect(await screen.findByText('fine')).toBeTruthy()
+  // A new mount, not the tree that threw: its mount effect ran (it never had, while it threw).
+  expect(mounts).toBe(1)
+})
+
+it('reports once, as the exception, with where it happened and what it said', async () => {
+  const onError = jest.fn()
+  await render(
+    <ErrorBoundary route="plus-manage" onError={onError}>
+      <Bomb />
+    </ErrorBoundary>
+  )
+  expect(Sentry.captureException).toHaveBeenCalledTimes(1)
+  const [error, context] = (Sentry.captureException as jest.Mock).mock.calls[0]
+  expect(error).toBeInstanceOf(Error)
+  expect(context.tags).toEqual({ context: 'error-boundary', error_id: onError.mock.calls[0][2], route: 'plus-manage' })
+  expect(context.extra.message).toBe('boom: a stack-trace fragment')
+  expect(context.extra.componentStack).toContain('ErrorBoundary')
+})
+
+describe('somewhere else clears it', () => {
+  const at = (route: string) => (
+    <ErrorBoundary route={route}>
+      <Bomb />
+    </ErrorBoundary>
+  )
+  // The clock the boundary reads to tell the crash's own route change from somebody going elsewhere.
+  let now = 0
+  beforeEach(() => {
+    now = 1_000_000
+    jest.spyOn(Date, 'now').mockImplementation(() => now)
+  })
+
+  it('a different route draws the children again', async () => {
+    const view = await render(at('/plus-manage'))
+    expect(screen.getByText('Something went wrong')).toBeTruthy()
+    shouldThrow = false
+    now += 2000
+    await view.rerender(at('/profile'))
+    expect(screen.getByText('fine')).toBeTruthy()
+  })
+
+  it('but not the route change that came with the crash itself (no remount into the same crash)', async () => {
+    const view = await render(at('/plus-manage'))
+    await view.rerender(at('/'))
+    expect(screen.getByText('Something went wrong')).toBeTruthy()
+    expect(Sentry.captureException).toHaveBeenCalledTimes(1)
+  })
+
+  it('the same route keeps it', async () => {
+    const view = await render(at('/plus-manage'))
+    shouldThrow = false
+    now += 2000
+    await view.rerender(at('/plus-manage'))
+    expect(screen.getByText('Something went wrong')).toBeTruthy()
+  })
+})
+
+it('Go back where there is somewhere to go back to', async () => {
+  const onLeave = jest.fn()
+  await render(
+    <ErrorBoundary onLeave={onLeave}>
+      <Bomb />
+    </ErrorBoundary>
+  )
+  fireEvent.press(screen.getByRole('button', { name: 'Go back' }))
+  expect(onLeave).toHaveBeenCalledTimes(1)
+})
+
+it('no Go back where there is nowhere to go', async () => {
+  await mount()
+  expect(screen.queryByRole('button', { name: 'Go back' })).toBeNull()
 })
 
 it('Contact support plays nothing and opens a mailto with the account and the error id', async () => {

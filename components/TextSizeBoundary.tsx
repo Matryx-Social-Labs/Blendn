@@ -1,6 +1,8 @@
 import { Fragment, type ReactElement, type ReactNode } from 'react'
 import { Platform, useWindowDimensions } from 'react-native'
 
+import { ErrorBoundary } from './ErrorBoundary'
+
 /**
  * Text laid out afresh when the phone's text size changes while the app is open (RC drive D2).
  *
@@ -33,13 +35,28 @@ export function TextSizeBoundary({ children }: { children: ReactNode }) {
  */
 export const NAVIGATOR_ROUTES: readonly string[] = ['(tabs)', 'chat', 'private-chat', 'onboarding', 'preview']
 
-/** A nested navigator's `screenLayout`: each of its screens inside a `TextSizeBoundary`. */
-export function textSizeLayout({ children }: { children: ReactElement }): ReactElement {
-  return <TextSizeBoundary>{children}</TextSizeBoundary>
+type ScreenLayoutProps = {
+  children: ReactElement
+  route: { name: string }
+  navigation: { canGoBack: () => boolean; goBack: () => void }
+}
+
+/**
+ * A nested navigator's `screenLayout`: each of its screens inside a `TextSizeBoundary`, and inside its own `ErrorBoundary`
+ * (RC drive 5). One screen that throws shows the crash screen where it was, with Go back where there is somewhere to go:
+ * the navigator stays up, and the back gesture, the tabs and the next link all still work. With only the root's boundary,
+ * one bad screen took the navigator down with it and the app was stuck until it was relaunched.
+ */
+export function textSizeLayout({ children, route, navigation }: ScreenLayoutProps): ReactElement {
+  return (
+    <ErrorBoundary route={route.name} onLeave={navigation.canGoBack() ? () => navigation.goBack() : undefined}>
+      <TextSizeBoundary>{children}</TextSizeBoundary>
+    </ErrorBoundary>
+  )
 }
 
 /** The root stack's: the same, except for the routes that are navigators (`NAVIGATOR_ROUTES`), which wrap their own. */
-export function rootTextSizeLayout({ children, route }: { children: ReactElement; route: { name: string } }): ReactElement {
-  if (NAVIGATOR_ROUTES.includes(route.name)) return children
-  return <TextSizeBoundary>{children}</TextSizeBoundary>
+export function rootTextSizeLayout(props: ScreenLayoutProps): ReactElement {
+  if (NAVIGATOR_ROUTES.includes(props.route.name)) return props.children
+  return textSizeLayout(props)
 }
