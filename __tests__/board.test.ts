@@ -341,7 +341,8 @@ describe('crash reports never pair a person with a board', () => {
   it('is wired into every place Sentry sends a URL', () => {
     const sentry = readFileSync(join(__dirname, '..', 'lib/sentry.ts'), 'utf8')
     for (const hook of ['beforeBreadcrumb', 'beforeSend', 'beforeSendTransaction']) expect(sentry).toContain(hook)
-    expect(sentry.match(/scrubBoardUrl\(/g)?.length).toBeGreaterThanOrEqual(4)
+    // Through the one scrubber every hook uses (`scrubReportText`); `__tests__/sentryScrub.test.ts` drives the hooks.
+    expect(sentry).toContain('return scrubBoardUrl(text)')
   })
 })
 

@@ -32,50 +32,105 @@ export function initSentry() {
       Sentry.reactNativeTracingIntegration({ traceFetch: true }),
     ],
 
-    // Board URLs name the event, the post and the request; a report carries
-    // the user's id. Together they say who asked whom (lib/board.ts). Fetch
-    // breadcrumbs, the event's request and traced fetch spans all carry them.
-    beforeBreadcrumb: (breadcrumb) => {
-      const scrubbed = breadcrumb.message ? { ...breadcrumb, message: scrubReportText(breadcrumb.message) } : breadcrumb
-      return typeof scrubbed.data?.url === 'string'
-        ? { ...scrubbed, data: { ...scrubbed.data, url: scrubBoardUrl(scrubbed.data.url) } }
-        : scrubbed
-    },
+    // A report carries the user's id; a URL or a message can carry who they asked, an invite anyone can use, a room.
+    // Every string a report sends that could hold one goes through `scrubReportText` (below).
+    beforeBreadcrumb: (breadcrumb) => scrubBreadcrumb(breadcrumb),
     beforeSend: (event) => scrubEvent(event),
-    beforeSendTransaction: (event) => ({
-      ...event,
-      spans: event.spans?.map((span) => ({
-        ...span,
-        description: span.description ? scrubBoardUrl(span.description) : span.description,
-        data: typeof span.data?.url === 'string' ? { ...span.data, url: scrubBoardUrl(span.data.url) } : span.data,
-      })),
-    }),
+    beforeSendTransaction: (event) => scrubTransaction(event),
   })
 }
 
-/** An invite link's token, wherever it is written: `/f/<token>` is a friend invite anyone holding it can use. */
-const INVITE_TOKEN = /\/f\/[^/?#\s'"]+/g
+/** The app's invite links (`/f/<token>`) and the API's (`/friends/invite/<token>`): anyone holding one can use it. */
+const APP_INVITE = /\/f\/[^/?#\s'"]+/g
+const API_INVITE = /\/friends\/invite\/[^/?#\s'"]+/g
+/** A query parameter whose name says it is a secret: `token`, `access_token`, `code`, `api_key`, `X-Amz-Signature`… */
+const SECRET_PARAM = /([?&][^=&#\s]*(?:token|code|key|signature)=)[^&#\s'"]*/gi
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi
 
 /**
- * Text bound for a crash report, with what identifies somebody taken out: invite tokens, and the ids (a conversation, a
- * room, an event, a board post) a path or a message can carry. An error's message is free text; the screen that threw
- * may have put its route in it.
+ * Any text bound for a crash report — a URL, a message, a console line — with what identifies somebody taken out:
+ * board ids (`scrubBoardUrl`, as before), invite tokens in the app's links and the API's, secret-looking query
+ * parameters, and every uuid (a conversation, a room, an event, a person). The one scrubber: every hook below uses it.
  */
 export function scrubReportText(text: string): string {
-  return text.replace(INVITE_TOKEN, '/f/:token').replace(UUID, ':id')
+  return scrubBoardUrl(text)
+    .replace(API_INVITE, '/friends/invite/:token')
+    .replace(APP_INVITE, '/f/:token')
+    .replace(SECRET_PARAM, '$1:token')
+    .replace(UUID, ':id')
 }
 
-type ScrubbableEvent = { request?: { url?: string }; message?: string; exception?: { values?: { value?: string }[] } }
+const scrubMaybe = <T,>(value: T): T => (typeof value === 'string' ? (scrubReportText(value) as T) : value)
 
-/** A report as it leaves: its request URL (board ids), its message and every exception's message scrubbed. */
+/** A console argument: a string scrubbed, anything else written out first and scrubbed (an object can hold a URL). */
+function scrubArgument(value: unknown): unknown {
+  if (typeof value === 'string') return scrubReportText(value)
+  if (value === null || typeof value !== 'object') return value
+  try {
+    return scrubReportText(JSON.stringify(value))
+  } catch {
+    return '[unserialisable]'
+  }
+}
+
+type ScrubbableBreadcrumb = { message?: string; data?: { [key: string]: unknown } }
+
+/** A breadcrumb: its message, the URL of a fetch, both ends of a navigation, and a console call's arguments. */
+export function scrubBreadcrumb<B extends ScrubbableBreadcrumb>(breadcrumb: B): B {
+  const { data } = breadcrumb
+  return {
+    ...breadcrumb,
+    ...(breadcrumb.message ? { message: scrubReportText(breadcrumb.message) } : {}),
+    ...(data
+      ? {
+          data: {
+            ...data,
+            ...('url' in data ? { url: scrubMaybe(data.url) } : {}),
+            ...('to' in data ? { to: scrubMaybe(data.to) } : {}),
+            ...('from' in data ? { from: scrubMaybe(data.from) } : {}),
+            ...(Array.isArray(data.arguments) ? { arguments: data.arguments.map(scrubArgument) } : {}),
+          },
+        }
+      : {}),
+  }
+}
+
+type ScrubbableEvent = {
+  request?: { url?: string }
+  message?: string
+  transaction?: string
+  exception?: { values?: { value?: string }[] }
+  breadcrumbs?: ScrubbableBreadcrumb[]
+}
+
+/** A report as it leaves: its request URL, its message, its transaction name, every exception's message and breadcrumb. */
 export function scrubEvent<E extends ScrubbableEvent>(event: E): E {
   return {
     ...event,
-    ...(event.request?.url ? { request: { ...event.request, url: scrubBoardUrl(event.request.url) } } : {}),
+    ...(event.request?.url ? { request: { ...event.request, url: scrubReportText(event.request.url) } } : {}),
     ...(event.message ? { message: scrubReportText(event.message) } : {}),
+    ...(event.transaction ? { transaction: scrubReportText(event.transaction) } : {}),
     ...(event.exception?.values
       ? { exception: { ...event.exception, values: event.exception.values.map((v) => (v.value ? { ...v, value: scrubReportText(v.value) } : v)) } }
+      : {}),
+    ...(event.breadcrumbs ? { breadcrumbs: event.breadcrumbs.map(scrubBreadcrumb) } : {}),
+  }
+}
+
+type ScrubbableTransaction = ScrubbableEvent & { spans?: { description?: string; data?: { [key: string]: unknown } }[] }
+
+/** A transaction: everything an event has, and every span's description and URL (traced fetches name their URL). */
+export function scrubTransaction<T extends ScrubbableTransaction>(event: T): T {
+  return {
+    ...scrubEvent(event),
+    ...(event.spans
+      ? {
+          spans: event.spans.map((span) => ({
+            ...span,
+            ...(span.description ? { description: scrubReportText(span.description) } : {}),
+            ...(span.data && 'url' in span.data ? { data: { ...span.data, url: scrubMaybe(span.data.url) } } : {}),
+          })),
+        }
       : {}),
   }
 }
