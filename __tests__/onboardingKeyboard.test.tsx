@@ -16,7 +16,7 @@ jest.mock('react-native-safe-area-context', () => ({
 /* eslint-disable import/first */
 import { TextField } from '../components/ds/TextField'
 import { OnboardingScreen } from '../components/onboarding/OnboardingScreen'
-import { bottomOffsetFor, HINT_ROOM, MIN_FIELD } from '../components/onboarding/KeyboardPage'
+import { bottomOffsetFor, EXTRA_SCROLL_ROOM, HINT_ROOM, MIN_FIELD } from '../components/onboarding/KeyboardPage'
 /* eslint-enable import/first */
 
 /** Every keyboard-controller listener, by event: more than one hook listens for the same one. */
@@ -95,6 +95,29 @@ describe('the page follows the keyboard through react-native-keyboard-controller
       fireEvent(screen.getByTestId('onboarding-dock'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 390, height: 140 } } })
     })
     expect(screen.getByTestId('onboarding-scroll').props.bottomOffset).toBe(140 + HINT_ROOM)
+  })
+
+  it('the last field can rise clear of the dock and its hint’s room: the scroll has room under it beyond the keyboard (RC drive D4)', async () => {
+    await render(
+      <OnboardingScreen step="basics" title="The basics" ctaLabel="Continue" onContinue={jest.fn()}>
+        <TextField label="Name" value="" onChangeText={() => {}} />
+      </OnboardingScreen>
+    )
+    expect(screen.getByTestId('onboarding-scroll').props.extraKeyboardSpace).toBe(EXTRA_SCROLL_ROOM)
+    /*
+     * The geometry, over the keyboard's top edge. The scroll ends at the dock's top at rest; padded by the keyboard and
+     * EXTRA_SCROLL_ROOM, the content's end (the last field, then the page's bottom padding) rises at most to
+     * dockRest + contentPadding + EXTRA_SCROLL_ROOM. bottomOffset wants the field at dockUp + HINT_ROOM.
+     * Sign-up on an iPhone 17 (dock 121 at rest, 83 over the keyboard), on an SE / Android (no home-indicator room: 4 pt
+     * between them), and at AX sizes (a taller dock), with sign-in's bottom padding (SPACE.xl).
+     */
+    const contentPadding = 24
+    for (const [dockRest, dockUp] of [[121, 83], [92, 88], [180, 142]]) {
+      const reachable = dockRest + contentPadding + EXTRA_SCROLL_ROOM
+      expect(reachable).toBeGreaterThanOrEqual(dockUp + HINT_ROOM)
+      // Without the extra room the SE fell 44 pt short: the field’s error sat under the dock.
+      if (dockRest - dockUp < HINT_ROOM - contentPadding) expect(dockRest + contentPadding).toBeLessThan(dockUp + HINT_ROOM)
+    }
   })
 
   it('the dock sits in the keyboard-sticky view, so it rides the keyboard frame by frame, interactive dismiss included', async () => {

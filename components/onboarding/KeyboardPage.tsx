@@ -22,6 +22,19 @@ export function bottomOffsetFor(dockHeight: number, scrollHeight: number): numbe
   return scrollHeight > 0 ? Math.max(0, Math.min(wanted, scrollHeight - MIN_FIELD)) : wanted
 }
 
+/**
+ * Scroll room added under the content while the keyboard is up (RC drive D4).
+ *
+ * The library pads the scroll by the keyboard's height and nothing else, and the scroll ends at the dock's top AT REST.
+ * With the keyboard up the dock rides on it, so the furthest the content's end can rise is the rest dock's top, above the
+ * keyboard: the last field can come up only to `dockRest + contentPadding` over the keyboard, while `bottomOffset` asks for
+ * `dockUp + HINT_ROOM`. Short by `dockUp - dockRest + HINT_ROOM - contentPadding`: 10 pt on an iPhone 17 (the dock drops
+ * 38 pt of home-indicator room over the keyboard), 44 pt where there is none (an SE, Android), so the last field's hint (its
+ * error) sat under the dock and the scroll could not move it. `dockUp <= dockRest` always (`Dock` only drops room over the
+ * keyboard), so `HINT_ROOM` is enough on every phone.
+ */
+export const EXTRA_SCROLL_ROOM = HINT_ROOM
+
 type DockProps = Omit<ComponentProps<typeof Dock>, 'children' | 'onHeight'>
 
 /**
@@ -70,6 +83,7 @@ export function KeyboardPage({
         keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         showsVerticalScrollIndicator={false}
         bottomOffset={bottomOffsetFor(dockHeight, scrollHeight)}
+        extraKeyboardSpace={EXTRA_SCROLL_ROOM}
         {...scrollProps}
       >
         {children}
