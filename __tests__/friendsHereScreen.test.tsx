@@ -13,14 +13,15 @@ const mockGet = jest.fn()
 const mockOpen = jest.fn()
 const mockBack = jest.fn()
 const mockPush = jest.fn()
+let mockParams: Record<string, string | undefined> = { eventId: 'e1' }
 jest.mock('../lib/apiClient', () => ({
   apiClient: { getFriendsHere: (...a: unknown[]) => mockGet(...a), openFriendConversation: (...a: unknown[]) => mockOpen(...a) },
 }))
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn() } }))
 jest.mock('../lib/socketClient', () => ({}))
 jest.mock('expo-router', () => ({
-  router: { back: (...a: unknown[]) => mockBack(...a), push: (...a: unknown[]) => mockPush(...a) },
-  useLocalSearchParams: () => ({ eventId: 'e1' }),
+  router: { back: (...a: unknown[]) => mockBack(...a), push: (...a: unknown[]) => mockPush(...a), canGoBack: () => true },
+  useLocalSearchParams: () => mockParams,
 }))
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('expo-linear-gradient', () => {
@@ -41,6 +42,7 @@ beforeEach(() => {
   mockBack.mockReset()
   mockPush.mockReset()
   mockToast.mockReset()
+  mockParams = { eventId: 'e1' }
 })
 afterEach(() => jest.useRealTimers())
 
@@ -131,6 +133,15 @@ describe('See all friends here', () => {
     })
     expect(mockBack).not.toHaveBeenCalled()
     expect(screen.getByText('Asha Menon')).toBeTruthy()
+  })
+
+  it('a link that names no event says it does not work, with Back, never skeleton rows for ever (drive 4 D-11)', async () => {
+    mockParams = {}
+    await open()
+    expect(screen.getByText('This link doesn’t work')).toBeTruthy()
+    expect(mockGet).not.toHaveBeenCalled()
+    await fireEvent.press(screen.getByRole('button', { name: 'Back' }))
+    expect(mockBack).toHaveBeenCalled()
   })
 
   it('a failed read offers Try again', async () => {

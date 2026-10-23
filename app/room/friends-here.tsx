@@ -15,6 +15,7 @@ import { useToast } from '../../components/Toast'
 import { COLOR, FONT_FAMILY, SPACE } from '../../lib/design/tokens'
 import { groupedCount, useMessageFriend } from '../../lib/friendsHere'
 import { SEARCH_MAX, FRIEND_ROW_HEIGHT, layoutOf, useFriendsHereList, withLetters, type FriendsListItem } from '../../lib/friendsHereList'
+import { idParam } from '../../lib/routeParams'
 import { useTopBarState } from '../../lib/useTopBarState'
 
 /**
@@ -29,15 +30,18 @@ import { useTopBarState } from '../../lib/useTopBarState'
  * ellipsis; Message never moves. Nothing here plays a haptic.
  */
 function FriendsHereScreenContent() {
-  const { eventId } = useLocalSearchParams<{ eventId?: string }>()
+  // A link that names no event (or not one the server could have made) has no list to wait for (RC drive 4 D-11).
+  const eventId = idParam(useLocalSearchParams().eventId)
   const insets = useSafeAreaInsets()
   const bar = useTopBarState()
   const bold = useBoldText()
   const offline = useOffline()
   const { showToast } = useToast()
-  const list = useFriendsHereList(eventId || null)
+  const list = useFriendsHereList(eventId)
   const chat = useMessageFriend(useCallback((text: string) => showToast(text, 'error'), [showToast]))
 
+  // Opened by a link with nothing under it, Back is the Pulse.
+  const goBack = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)/events'))
   const rows = withLetters(list.friends)
   const stickyHeaderIndices = rows.flatMap((r, i) => (r.kind === 'letter' ? [i] : []))
   const layout = layoutOf(rows)
@@ -74,8 +78,15 @@ function FriendsHereScreenContent() {
       />
     )
 
-  const body =
-    list.status === 'loading' ? (
+  const body = !eventId ? (
+    <StateScreen
+      icon="link-2-off"
+      title="This link doesn’t work"
+      body="It doesn’t lead to a room."
+      gutter
+      testID="friends-here-broken-link"
+    />
+  ) : list.status === 'loading' ? (
       <PersonRowSkeleton />
     ) : list.status === 'error' ? (
       <StateScreen
@@ -113,7 +124,8 @@ function FriendsHereScreenContent() {
   return (
     <View style={styles.container}>
       {/* ponytail: a DS gap. TopBar's title and sub are plain strings, so the count is not in Geist Mono beside the title as the frame draws it. */}
-      <TopBar title="Friends here" sub={list.total > 0 ? groupedCount(list.total) : undefined} state={bar.state} onBack={() => router.back()} testID="friends-here-top" />
+      <TopBar title="Friends here" sub={list.total > 0 ? groupedCount(list.total) : undefined} state={bar.state} onBack={goBack} testID="friends-here-top" />
+      {eventId ? (
       <View style={styles.search}>
         <SearchField
           value={list.query}
@@ -127,6 +139,7 @@ function FriendsHereScreenContent() {
           testID="friends-here-search"
         />
       </View>
+      ) : null}
       {body}
     </View>
   )
