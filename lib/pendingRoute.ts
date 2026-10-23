@@ -25,8 +25,8 @@ let pending: Href | null = null
 
 export function openWhenReady(target: Href): void {
   if (ready) {
-    void dismissModals()
-    router.push(target)
+    // As a link does (`+native-intent`): the modal is gone before the push, not only queued ahead of it.
+    void dismissModals().then(() => router.push(target))
     return
   }
   pending = target
@@ -121,8 +121,7 @@ const DISMISS_FALLBACK_MS = 1000
  *
  * Every route from the lowest modal up is popped, in one action on the stack that holds them. Resolves once the state
  * has taken it: a link's own navigation dispatched in the same tick was lost under the pop (measured in
- * `__tests__/plusManageOverPlus.test.tsx`), so `+native-intent` waits; `openWhenReady`'s push is queued by the router
- * and runs after it anyway. Resolves at once when nothing modal is up, or before the navigator is ready (a cold start's
+ * `__tests__/plusManageOverPlus.test.tsx`), so `+native-intent` and `openWhenReady` both wait for it. Resolves at once when nothing modal is up, or before the navigator is ready (a cold start's
  * link has nothing to close).
  */
 export function dismissModals(): Promise<void> {

@@ -14,8 +14,9 @@
  * And what a link or a notification tap does while a modal route is up: the modal closes, and the link opens over what
  * presented it (`dismissModals`, lib/pendingRoute). Links are delivered the way iOS delivers them to the running app,
  * through expo-linking's `url` event and `+native-intent`. Negative controls: `redirectSystemPath` returning the path
- * without `dismissModals` fails the two link-over-a-modal tests; `openWhenReady` without it fails the tap test. Popping
- * and returning the path in the same tick (not waiting for the state) failed the first link test: the link was lost.
+ * without `dismissModals` fails the two link-over-a-modal tests; `openWhenReady` without it, or pushing without waiting for
+ * it, fails the tap test. Popping and returning the path in the same tick (not waiting for the state) failed the first
+ * link test: the link was lost.
  *
  * And what a crash report carries (security review): the route's pattern, never its path. Negative controls: the root
  * boundary given `route={pathname}` fails the /f/abc123 test; `scrubReportText` returning its input fails all three.
@@ -251,9 +252,17 @@ describe('Manage over the paywall (RC drive 5)', () => {
       await act(async () => router.push('/plus'))
       await settle()
 
+      // What the state held when the push was made: it waits for the paywall to have left, as a link does.
+      let atPush: string[] | undefined
+      const push = router.push
+      jest.spyOn(router, 'push').mockImplementation((...args) => {
+        atPush = r.routes()
+        return push(...args)
+      })
       await act(async () => openWhenReady('/plus-manage'))
       await settle()
 
+      expect(atPush).toEqual(['(tabs)/events'])
       expect(r.routes()).toEqual(['(tabs)/events', 'plus-manage'])
     })
   })

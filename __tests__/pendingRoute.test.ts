@@ -34,9 +34,10 @@ describe('openWhenReady', () => {
     expect(takePendingRoute()).toBe('/(tabs)/events')
   })
 
-  it('pushes straight away once ready', () => {
+  it('pushes straight away once ready (once any modal is closed: none here, so on the next tick)', async () => {
     setRouteReady(true)
     openWhenReady('/(tabs)/chat')
+    await Promise.resolve()
     expect(mockPush).toHaveBeenCalledWith('/(tabs)/chat')
     expect(takePendingRoute()).toBeNull()
   })
