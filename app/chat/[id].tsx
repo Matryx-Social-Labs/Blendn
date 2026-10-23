@@ -27,7 +27,7 @@ import { useToast } from '../../components/Toast'
 import { apiClient, type ChatReaction } from '../../lib/apiClient'
 import { LINKS_LINE, refusalPlace, runPlace } from '../../lib/chatFeed'
 import { emitChatListUpdate } from '../../lib/chatListUpdates'
-import { draftOf, failedOf, keepFailed, roomThread, setDraft } from '../../lib/chatOutbox'
+import { failedOf, keepFailed, roomThread, useThreadDraft } from '../../lib/chatOutbox'
 import { CHAT_REACTIONS } from '../../lib/chatReactions'
 import { contactWarning } from '../../lib/contactWarning'
 import { copyText, linkSheet, notSentSheet } from '../../lib/chatSheets'
@@ -131,7 +131,7 @@ function GroupChatInner() {
   const [messages, setMessages] = useState<Message[]>(() => failedOf<Message>(thread))
   // Read by a refresh to decide whether the older-page cursor moves (lib/mergeNewestPage).
   const messagesRef = useLatest(messages)
-  const [newMessage, setNewMessage] = useState(() => draftOf(thread))
+  const [newMessage, setNewMessage] = useThreadDraft(thread)
   const [loading, setLoading] = useState(true)
   /* The in-flight guard against a double tap landing before `setNewMessage('')` flushes. */
   const sendInFlightRef = useRef(false)
@@ -354,9 +354,6 @@ function GroupChatInner() {
     }
   }, [messages, messagesCacheKey, thread])
 
-  // The composer's text stays with the thread when you leave it (the Banter's "Draft ·", R3-D5 5.8).
-  const draftRef = useLatest(newMessage)
-  useEffect(() => () => setDraft(thread, draftRef.current), [thread, draftRef])
 
   // Follows the signed-in user once the room can load (adjusted in render).
   if (chatRoomId && authUser && !authLoading && currentUser !== authUser) setCurrentUser(authUser)
@@ -1018,12 +1015,14 @@ const styles = StyleSheet.create({
  * `ScreenProfiler` is the children untouched in production — see its header.
  */
 export default function GroupChat() {
-  if (!idParam(useLocalSearchParams().id)) return <BrokenLink />
+  const id = idParam(useLocalSearchParams().id)
+  if (!id) return <BrokenLink />
   // Rose world: a room is people together, as Banter and its DMs are; its sheets inherit it.
   return (
     <HueProvider value="rose">
       <ScreenProfiler id="event-chat">
-        <GroupChatInner />
+        {/* Keyed by the room (RC drive 2 D-E): a link from one open room to another never carries this one's draft or state. */}
+        <GroupChatInner key={id} />
       </ScreenProfiler>
     </HueProvider>
   )

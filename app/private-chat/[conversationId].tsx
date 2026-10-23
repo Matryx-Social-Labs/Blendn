@@ -31,7 +31,7 @@ import { apiClient } from '../../lib/apiClient'
 import { scheduleIconBadgeRefresh } from '../../lib/appBadge'
 import { runPlace } from '../../lib/chatFeed'
 import { emitChatListUpdate } from '../../lib/chatListUpdates'
-import { dmThread, draftOf, failedOf, keepFailed, setDraft } from '../../lib/chatOutbox'
+import { dmThread, failedOf, keepFailed, useThreadDraft } from '../../lib/chatOutbox'
 import { copyText, linkSheet, notSentSheet } from '../../lib/chatSheets'
 import { idParam, nameParam } from '../../lib/routeParams'
 import { newClientId } from '../../lib/clientId'
@@ -121,10 +121,9 @@ function PrivateChatInner() {
   const [ended, setEnded] = useState(false)
   /*
    * A suggested opener (the match moment's "Try …") fills the composer once; nothing sends until you do. What you typed
-   * wins over it (Opus review M4): it is kept on unmount, and a remount (a text-size change) put the opener back
-   * over your edits.
+   * wins over it (Opus review M4): it is stored as you type, so a remount (a text-size change) shows your edits.
    */
-  const [newMessage, setNewMessage] = useState(() => draftOf(thread) || draftParam(draft))
+  const [newMessage, setNewMessage] = useThreadDraft(thread, draftParam(draft))
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
   // The message the next send replies to (SCRUM-409).
@@ -370,10 +369,8 @@ function PrivateChatInner() {
     }
   }, [messages, myId, conversationId, conversation])
 
-  // This phone's unsent messages stay where the thread (and the Banter) can find them; the draft too.
+  // This phone's unsent messages stay where the thread (and the Banter) can find them; the draft is kept as it is typed.
   useEffect(() => keepFailed(thread, messages.filter((m) => m.failed || m.waiting)), [messages, thread])
-  const draftRef = useLatest(newMessage)
-  useEffect(() => () => setDraft(thread, draftRef.current), [thread, draftRef])
 
   const subscribeToMessages = useCallback(() => {
     if (!conversationId) return () => {}
@@ -976,11 +973,13 @@ const styles = StyleSheet.create({
  * sheets light in it.
  */
 export default function PrivateChat() {
-  if (!idParam(useLocalSearchParams().conversationId)) return <BrokenLink />
+  const id = idParam(useLocalSearchParams().conversationId)
+  if (!id) return <BrokenLink />
   return (
     <ScreenProfiler id="dm">
       <HueProvider value="rose">
-        <PrivateChatInner />
+        {/* Keyed by the conversation (RC drive 2 D-E): a link from one open DM to another is a new thread, not this one's state. */}
+        <PrivateChatInner key={id} />
       </HueProvider>
     </ScreenProfiler>
   )

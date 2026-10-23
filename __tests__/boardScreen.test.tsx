@@ -878,3 +878,17 @@ describe('a block removes a person from every page already loaded (safety)', () 
     expect(screen.queryByText(olderHeron.body)).toBeNull()
   })
 })
+
+describe('a jump from one board to another (RC drive 2 D-E)', () => {
+  it('opens the next board on an empty composer: a draft never posts to another event', async () => {
+    api.getBoard.mockResolvedValue(board([]))
+    const view = await render(<BoardRoute />)
+    await fireEvent.press(await screen.findByLabelText('Write a post'))
+    await fireEvent.changeText(screen.getByLabelText('Your post'), 'For e1 only')
+    // A link to another event's board, on the same screen instance.
+    mockParams.eventId = 'e2'
+    await view.rerender(<BoardRoute />)
+    await screen.findByText("Nobody’s posted yet")
+    expect(screen.queryByDisplayValue('For e1 only')).toBeNull()
+  })
+})

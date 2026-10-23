@@ -394,3 +394,21 @@ describe('a conversation that fails to load (r7 M10)', () => {
     expect(screen.getByTestId('dm-composer')).toBeTruthy()
   })
 })
+
+describe('a jump from one open DM to another (RC drive 2 D-E, privacy)', () => {
+  it('never saves DM 1’s text as DM 2’s draft, and DM 2 shows its own', async () => {
+    const { draftOf, setDraft } = jest.requireActual('../lib/chatOutbox') as typeof import('../lib/chatOutbox')
+    setDraft(dmThread('c2', 'u-a'), 'kai’s own')
+    const view = await render(<PrivateChat />)
+    await flush()
+    await act(async () => fireEvent.changeText(screen.getByLabelText('Message'), 'only for zoe'))
+    // A push or deep link: the same screen instance, a new conversationId (router.push / replace).
+    mockParams = { conversationId: 'c2' }
+    await view.rerender(<PrivateChat />)
+    await flush()
+    expect(screen.getByLabelText('Message').props.value).toBe('kai’s own')
+    await view.unmount()
+    expect(draftOf(dmThread('c1', 'u-a'))).toBe('only for zoe')
+    expect(draftOf(dmThread('c2', 'u-a'))).toBe('kai’s own')
+  })
+})

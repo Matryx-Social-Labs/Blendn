@@ -59,10 +59,12 @@ import { useTopBarOverlay } from '../../lib/useTopBarState'
  * cannot reach a board whose safety half has not shipped.
  */
 export default function BoardRoute() {
+  const { eventId } = useLocalSearchParams<{ eventId: string }>()
   if (!BOARD_ENABLED) return <Redirect href="/(tabs)/events" />
   return (
     <HueProvider value="rose">
-      <BoardScreen />
+      {/* Keyed by the event (RC drive 2 D-E): a link from one board to another never posts this one's draft there. */}
+      <BoardScreen key={eventId} />
     </HueProvider>
   )
 }

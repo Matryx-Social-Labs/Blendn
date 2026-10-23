@@ -325,3 +325,18 @@ describe('the composer rides the keyboard', () => {
     expect(within(frame).getByTestId('room-composer')).toBeTruthy()
   })
 })
+
+describe('a jump from one open room to another (RC drive 2 D-E)', () => {
+  it('never saves room 1’s text as room 2’s draft, and room 2 shows its own', async () => {
+    const { draftOf, setDraft } = jest.requireActual('../lib/chatOutbox') as typeof import('../lib/chatOutbox')
+    setDraft(roomThread('g2', 'u-a'), 'crew’s own')
+    const view = await render(<GroupChat />)
+    await act(async () => fireEvent.changeText(screen.getByLabelText('Message'), 'only for g1'))
+    mockParams = { id: 'g2' }
+    await view.rerender(<GroupChat />)
+    expect(screen.getByLabelText('Message').props.value).toBe('crew’s own')
+    await view.unmount()
+    expect(draftOf(roomThread('g1', 'u-a'))).toBe('only for g1')
+    expect(draftOf(roomThread('g2', 'u-a'))).toBe('crew’s own')
+  })
+})
