@@ -139,6 +139,7 @@ describe('<ShareSheet>', () => {
   it('a venue and an invite', async () => {
     await render(sheet({ share: { kind: 'venue', name: 'Toit', typeLabel: 'Brewery', area: 'Indiranagar', url: 'https://www.blendn.app/v/9c1e' } }))
     expect(screen.getByText('Brewery · Indiranagar')).toBeTruthy()
+    await screen.unmount() // one sheet on screen at a time (lib/modalTurn): the first goes before the next
     await render(sheet({ share: { kind: 'invite', url: 'https://www.blendn.app/f/abc' } }))
     expect(screen.getByText('Your invite to Blend’n')).toBeTruthy()
     expect(screen.getByText('A link only you can send · no name on the card')).toBeTruthy()

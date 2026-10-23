@@ -244,8 +244,9 @@ function NewCrewScreenContent() {
             </Animated.View>
           </>
         )}
+        {/* Inside the form's sheet, so iOS presents it from that sheet's Modal: a sibling waits for the form to close (lib/modalTurn). */}
+        <CrewRefusalSheet refusal={refusal} onClose={() => setRefusal(null)} />
       </Sheet>
-      <CrewRefusalSheet refusal={refusal} onClose={() => setRefusal(null)} />
     </>
   )
 }

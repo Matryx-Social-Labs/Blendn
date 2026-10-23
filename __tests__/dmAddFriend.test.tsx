@@ -470,6 +470,8 @@ it('revealing yourself re-reads the conversation, so Add friend appears once the
   expect(api.getConversation).toHaveBeenCalledTimes(2)
 
   await act(async () => fireEvent.press(screen.getByLabelText('Conversation options')))
+  // One sheet on screen at a time (lib/modalTurn): the options rise once the reveal sheet has gone (the fallback here).
+  for (let i = 0; i < 2; i++) await act(async () => new Promise((r) => setTimeout(r, 700)))
   await flush()
   expect(sheet().getByLabelText('Add friend')).toBeTruthy()
 })

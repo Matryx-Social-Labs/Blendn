@@ -108,6 +108,7 @@ describe('<ExpiryPrompt>', () => {
     await render(<ExpiryPrompt kind="reset" visible venue="Toit" opensAt="5" onDone={jest.fn()} />)
     expect(screen.getByText(/Tomorrow’s opens at 5\./)).toBeTruthy()
     expect(screen.queryByText(/opens at 6/)).toBeNull()
+    await screen.unmount() // one sheet on screen at a time (lib/modalTurn): the first goes before the next
     await render(<ExpiryPrompt kind="reset" visible venue="Toit" opensAt="noon" onDone={jest.fn()} />)
     expect(screen.getByText(/Tomorrow’s opens at noon\./)).toBeTruthy()
   })

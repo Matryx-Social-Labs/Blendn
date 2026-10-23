@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ComponentRef, type ReactNode, type RefObject } from 'react'
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ComponentRef, type ReactNode, type RefObject } from 'react'
 import {
   AccessibilityInfo,
   Keyboard,
@@ -21,6 +21,7 @@ import { Icon, type IconName } from '../ui/Icon'
 import { Material } from '../ui/Material'
 import { COLOR, DURATION, EASING, FONT_FAMILY, MATERIAL, MAX_FONT_SCALE, RADIUS, SIZE, SPACE, SPRING, TYPE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
+import { releaseTurn, requestTurn, useHoldsTurn, type Turn } from '../../lib/modalTurn'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { notifySheetDismissed } from '../../lib/sheetDismissed'
 import { OPACITY, tint } from '../../lib/theme'
@@ -38,6 +39,10 @@ const DISMISS_FRACTION = 0.3
 const FLING_VELOCITY = 800
 /** Above the top detent the sheet follows the finger at half speed. ponytail: #18's pull resistance; the brief names none for sheets. */
 const RUBBER_BAND = 0.5
+/** iOS answers a dismissal with `onDismiss`; if it never does, the next sheet in line opens after this. As `afterSheetDismissed`'s fallback. */
+const MODAL_GONE_FALLBACK_MS = 600
+/** Inside a sheet's Modal: a sheet drawn there presents from it, so it does not wait for the screen (`lib/modalTurn.ts`). */
+const InSheet = createContext(false)
 /** Android's scrim (§13); iOS uses `COLOR.backdrop`, 60%. */
 const ANDROID_SCRIM = 0.5
 const HANDLE = { ios: { width: 36, height: 5 }, android: { width: 32, height: 4 } } as const
@@ -513,8 +518,24 @@ function useSheetMotion({
  * ponytail: focus is not handed back to the opener on close (the opener
  * knows what it was); the material does not grow more opaque near full height.
  */
-export function Sheet({ visible, onClose, title, headerAction, headerNote, body, icon, actions = [], detents, children, dismissible = true, focusRef, onDismissed, testID }: SheetProps) {
+export function Sheet({ visible: wanted, onClose, title, headerAction, headerNote, body, icon, actions = [], detents, children, dismissible = true, focusRef, onDismissed, testID }: SheetProps) {
   const android = Platform.OS === 'android'
+  /*
+   * One sheet's Modal at a time on iOS (`lib/modalTurn.ts`, RC drive 4 D-9): asked for, `visible` waits for the screen
+   * to be free, and gives it back once the Modal has gone. A sheet inside another's Modal is drawn as asked (it presents
+   * from that Modal), and so is every sheet on Android, which presents a Modal over another.
+   */
+  const nested = useContext(InSheet)
+  const queued = !android && !nested
+  const [turn] = useState<Turn>(() => ({}))
+  const holds = useHoldsTurn(turn)
+  const visible = wanted && (!queued || holds)
+  const wantedNow = useRef(wanted)
+  useEffect(() => {
+    wantedNow.current = wanted
+    if (wanted && queued) requestTurn(turn)
+  }, [wanted, queued, turn])
+  useEffect(() => () => releaseTurn(turn), [turn])
   const insets = useSafeAreaInsets()
   const window = useWindowDimensions()
   const bold = useBoldText()
@@ -607,6 +628,27 @@ export function Sheet({ visible, onClose, title, headerAction, headerNote, body,
       if (!ios) dismissed.current?.()
     },
   })
+  /*
+   * Given back once the Modal is gone: at once on Android (it has unmounted), on iOS at `onDismiss`, or after the
+   * fallback if iOS never says. A sheet that never reached the screen gives it back at once.
+   */
+  const presented = useRef(false)
+  useEffect(() => {
+    if (mounted) presented.current = true
+  }, [mounted])
+  useEffect(() => {
+    if (!queued || wanted || mounted) return
+    if (!ios || !presented.current) {
+      presented.current = false
+      releaseTurn(turn)
+      return
+    }
+    const timer = setTimeout(() => {
+      presented.current = false
+      releaseTurn(turn)
+    }, MODAL_GONE_FALLBACK_MS)
+    return () => clearTimeout(timer)
+  }, [queued, wanted, mounted, ios, turn])
   if (testID) {
     drag.withTestId(`${testID}-drag`)
     headDrag.withTestId(`${testID}-head-drag`)
@@ -719,10 +761,13 @@ export function Sheet({ visible, onClose, title, headerAction, headerNote, body,
           ? () => {
               dismissed.current?.()
               notifySheetDismissed()
+              presented.current = false
+              if (!wantedNow.current) releaseTurn(turn)
             }
           : undefined
       }
     >
+      <InSheet.Provider value>
       {/* A Modal is its own native root: gestures inside it need their own root view. */}
       <GestureHandlerRootView
         testID={testID && `${testID}-root`}
@@ -851,6 +896,7 @@ export function Sheet({ visible, onClose, title, headerAction, headerNote, body,
           </Animated.View>
         </View>
       </GestureHandlerRootView>
+      </InSheet.Provider>
     </Modal>
   )
 }

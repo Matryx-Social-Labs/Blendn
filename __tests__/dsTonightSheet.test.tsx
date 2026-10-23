@@ -75,6 +75,7 @@ describe('<TonightSheet>', () => {
     await fireEvent.press(go)
     expect(primary).toHaveBeenCalledTimes(1)
     expect(onContinue).toHaveBeenCalledTimes(1)
+    await screen.unmount() // one sheet on screen at a time (lib/modalTurn): the first goes before the next
     await render(sheet({ pick: 'monthly' }))
     expect(screen.getByRole('button', { name: 'Continue — ₹199' })).toBeTruthy()
   })
@@ -86,6 +87,7 @@ describe('<TonightSheet>', () => {
     await fireEvent.press(screen.getByRole('button', { name: 'Go live for 1 hour — free' }))
     expect(onFree).toHaveBeenCalledTimes(1)
     expect(primary).toHaveBeenCalledTimes(1)
+    await screen.unmount() // one sheet on screen at a time (lib/modalTurn): the first goes before the next
     await render(sheet({ trigger: 'night' }))
     await fireEvent(screen.getByRole('button', { name: 'Not now' }), 'pressIn')
     expect(primary).toHaveBeenCalledTimes(1)
@@ -100,6 +102,7 @@ describe('<TonightSheet>', () => {
   it('cancelled and failed say nothing was charged; failed offers Try again', async () => {
     await render(sheet({ status: 'cancelled' }))
     expect(screen.getByText('Nothing was charged.')).toBeTruthy()
+    await screen.unmount() // one sheet on screen at a time (lib/modalTurn): the first goes before the next
     await render(sheet({ status: 'failed' }))
     expect(screen.getByText('The store couldn’t complete it. Nothing was charged.')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Try again — ₹49' })).toBeTruthy()
@@ -136,6 +139,7 @@ describe('<TonightSheet>', () => {
     await render(sheet({ pick: 'monthly', legal }))
     expect(screen.getByTestId('tonight-legal').props.children).toBe(legal)
     expect(screen.queryByText('Prices include GST.')).toBeNull()
+    await screen.unmount() // one sheet on screen at a time (lib/modalTurn): the first goes before the next
     await render(sheet({ pick: 'night', legal }))
     expect(screen.getByText('Night Pass is a one-off. Prices include GST.')).toBeTruthy()
   })

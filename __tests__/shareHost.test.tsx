@@ -47,6 +47,11 @@ const INVITE = { kind: 'invite' as const, url: 'https://www.blendn.app/f/abc' }
 
 const wait = (ms: number) => act(async () => { await new Promise((r) => setTimeout(r, ms)) })
 const settle = () => wait(40)
+/** The tray's exit, then the one-sheet-at-a-time fallback that hands the screen on when no onDismiss comes: each starts when the last has rendered. */
+const storyRises = async () => {
+  await wait(700)
+  await wait(700)
+}
 /** Opens the tray; `went` is the promise `openShare` returned, which settles when it closes. */
 const open = async (target: Parameters<typeof openShare>[0]) => {
   let went!: Promise<boolean>
@@ -162,7 +167,8 @@ describe('Instagram Story', () => {
     await render(<ShareHost />)
     const { went } = await open(EVENT)
     await press('Instagram Story')
-    await wait(700)
+    // The tray leaves, then gives up the screen (lib/modalTurn): the test renderer sends no onDismiss, so on the fallback.
+    await storyRises()
     expect(screen.getByText('Share to your Story')).toBeTruthy()
     expect(screen.getByRole('switch', { name: /Say I’m going/ }).props.accessibilityState.checked).toBe(false)
     await fireEvent.press(screen.getByRole('button', { name: 'Share to Instagram' }))
@@ -177,7 +183,7 @@ describe('Instagram Story', () => {
     await render(<ShareHost />)
     const { went } = await open(EVENT)
     await press('Instagram Story')
-    await wait(700)
+    await storyRises()
     await press('Not now')
     expect(mockShareStory).not.toHaveBeenCalled()
     await expect(went).resolves.toBe(false)

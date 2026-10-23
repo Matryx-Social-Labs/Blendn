@@ -124,6 +124,8 @@ it('Mute opens the four choices; Leave is apart and asks first', async () => {
   for (const label of ['For 1 hour', 'For 8 hours', 'Until tomorrow', 'Until I turn it back on']) expect(screen.getByText(label)).toBeTruthy()
   await act(async () => fireEvent.press(screen.getByLabelText('Cancel')))
   await act(async () => fireEvent.press(screen.getByTestId('info-leave')))
+  // One sheet on screen at a time (lib/modalTurn): Leave rises once Mute has gone, here on the fallback (no onDismiss in tests).
+  for (let i = 0; i < 2; i++) await act(async () => new Promise((r) => setTimeout(r, 700)))
   expect(screen.getByText('Leave this room?')).toBeTruthy()
   expect(api.leaveChatGroup).not.toHaveBeenCalled()
 })

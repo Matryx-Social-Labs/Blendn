@@ -82,8 +82,10 @@ describe('the Pulse filter sheet', () => {
     const { onChange } = await draw({ draft: { when: 'today' } })
     await act(async () => fireEvent.press(screen.getByTestId('pulse-filter-sheet-header-action')))
     expect(onChange).toHaveBeenCalledWith(NO_FILTERS)
+    // One sheet on screen at a time (lib/modalTurn): the first goes before the second is drawn.
+    await screen.unmount()
     await draw()
-    expect(screen.getAllByTestId('pulse-filter-sheet-header-action').at(-1)?.props.accessibilityState).toMatchObject({ disabled: true })
+    expect(screen.getByTestId('pulse-filter-sheet-header-action').props.accessibilityState).toMatchObject({ disabled: true })
   })
 })
 

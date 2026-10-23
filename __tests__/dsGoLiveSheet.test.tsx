@@ -66,6 +66,7 @@ describe('<GoLiveSheet>', () => {
     await render(sheet())
     expect(screen.getByLabelText('Hold to go live')).toBeTruthy()
     ;(AccessibilityInfo.isScreenReaderEnabled as jest.Mock).mockResolvedValue(true)
+    await screen.unmount() // one sheet on screen at a time (lib/modalTurn): the first goes before the next
     await render(sheet())
     await act(async () => {})
     expect(screen.getByRole('button', { name: 'Go live at Toit for 45 minutes as Night Cat' })).toBeTruthy()
@@ -157,6 +158,7 @@ describe('<GoLiveSheet>', () => {
     await render(sheet({ refusal: 'other', refusalTitle: 'Finish your profile first', refusalMessage: 'Finish onboarding.' }))
     expect(screen.getByRole('header', { name: 'Finish your profile first' })).toBeTruthy()
     expect(screen.getByText('Finish onboarding.')).toBeTruthy()
+    await screen.unmount() // one sheet on screen at a time (lib/modalTurn): the first goes before the next
     await render(sheet({ refusal: 'eventOn' }))
     expect(screen.getByRole('header', { name: 'An event is on here' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Check in to the event' })).toBeTruthy()
