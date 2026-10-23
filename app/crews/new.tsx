@@ -28,6 +28,7 @@ import { SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
 import { HueProvider } from '../../components/ds/shared'
+import { RouteModal } from '../../components/system/RouteModal'
 
 const BIO_TOO_LONG = 'A crew bio is at most 140 characters'
 
@@ -258,7 +259,9 @@ const styles = StyleSheet.create({ step: { gap: SPACE.md } })
 export default function NewCrewScreen() {
   return (
     <HueProvider value="rose">
-      <NewCrewScreenContent />
+      <RouteModal>
+        <NewCrewScreenContent />
+      </RouteModal>
     </HueProvider>
   )
 }

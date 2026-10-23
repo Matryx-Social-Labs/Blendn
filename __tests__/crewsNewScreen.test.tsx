@@ -7,6 +7,8 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-
 import { StyleSheet } from 'react-native'
 
 jest.mock('expo-router', () => ({
+  // A router modal holds the screen while focused (components/system/RouteModal): here it is focused while mounted.
+  useFocusEffect: (effect: () => void | (() => void)) => require('react').useEffect(effect, [effect]),
   router: { back: jest.fn(), push: jest.fn(), replace: jest.fn() },
 }))
 jest.mock('react-native-safe-area-context', () => ({

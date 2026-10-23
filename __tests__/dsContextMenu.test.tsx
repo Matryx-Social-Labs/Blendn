@@ -241,6 +241,7 @@ describe('<LongPressMenu>', () => {
       expect(style().transform[0].translateY).toBeLessThanOrEqual(8)
       expect(style().opacity).toBeLessThan(1)
       reduceMotion.mockReturnValue(true)
+      await screen.unmount() // one Modal on screen at a time (lib/modalTurn): the first goes before the next
       const rm = await render(menu())
       await rm.rerender(menu({ visible: false }))
       await act(async () => jest.advanceTimersByTime(150))

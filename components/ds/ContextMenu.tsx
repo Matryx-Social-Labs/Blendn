@@ -9,6 +9,7 @@ import { Material } from '../ui/Material'
 import type { ChatReaction } from '../../lib/chatReactions'
 import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, MATERIAL, PRESS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
+import { useTurnGate, useTurnWatch } from '../../lib/modalTurn'
 import { tint } from '../../lib/theme'
 import type { Rect } from './chatShared'
 import { ReactionBar, reactionBarWidth } from './ReactionBar'
@@ -186,10 +187,13 @@ export function LongPressMenu({ visible, anchor, side, items, reactions, onClose
    */
   const [kept, setKept] = useState(anchor)
   if (anchor && anchor !== kept) setKept(anchor)
-  const shown = visible && !!anchor
+  // One Modal on screen at a time on iOS (lib/modalTurn): asked for, it waits for the screen, like the Sheet.
+  const gate = useTurnGate(visible && !!anchor)
+  const shown = gate.allowed
   // The Modal stays up for the exit and goes after it (state adjusted in render), like the Sheet.
   const [mounted, setMounted] = useState(shown)
   if (shown && !mounted) setMounted(true)
+  const turn = useTurnWatch(gate, mounted, onClose)
   // Each open starts from this menu's own estimate, not the last one's measure (state adjusted in render).
   const [openedFor, setOpenedFor] = useState(shown)
   if (shown !== openedFor) {
@@ -253,13 +257,17 @@ export function LongPressMenu({ visible, anchor, side, items, reactions, onClose
   return (
     <Modal
       testID={testID && `${testID}-modal`}
-      visible={mounted}
+      visible={mounted && !turn.refused}
       transparent
       animationType="none"
       statusBarTranslucent
       navigationBarTranslucent
       onRequestClose={onClose}
-      onDismiss={dismissed}
+      onShow={turn.onShow}
+      onDismiss={() => {
+        turn.onDismiss()
+        dismissed()
+      }}
     >
       {/* A Modal is its own native root: the bar's scrub needs its own root view. */}
       <GestureHandlerRootView style={styles.fill}>

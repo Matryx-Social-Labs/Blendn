@@ -36,6 +36,7 @@ import { buyPackage, canBuyAs, loadPlusOffers, purchasesAvailable, restore, type
 import { useAuth } from '../lib/useAuth'
 import { notePaywallClosed, notePaywallEvent } from '../lib/paywall'
 import { useTopBarState } from '../lib/useTopBarState'
+import { RouteModal } from '../components/system/RouteModal'
 
 type Phase = 'idle' | 'confirming' | 'pending' | 'slow' | 'done'
 
@@ -377,7 +378,9 @@ function PlusScreenContent() {
 export default function PlusScreen() {
   return (
     <HueProvider value="violet">
-      <PlusScreenContent />
+      <RouteModal>
+        <PlusScreenContent />
+      </RouteModal>
     </HueProvider>
   )
 }

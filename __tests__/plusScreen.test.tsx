@@ -14,6 +14,8 @@ jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
 )
 jest.mock('expo-router', () => ({
+  // A router modal holds the screen while focused (components/system/RouteModal): here it is focused while mounted.
+  useFocusEffect: (effect: () => void | (() => void)) => require('react').useEffect(effect, [effect]),
   router: { push: jest.fn(), back: jest.fn(), replace: jest.fn(), canGoBack: () => true },
   useLocalSearchParams: () => ({ trigger: mockTrigger.value }),
 }))

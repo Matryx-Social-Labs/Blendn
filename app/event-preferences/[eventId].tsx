@@ -22,6 +22,7 @@ import { toggleIntent } from '../../lib/intents'
 import { Logger } from '../../lib/logger'
 import { revealReadiness, type RevealReadiness } from '../../lib/reveal'
 import { useAuth } from '../../lib/useAuth'
+import { RouteModal } from '../../components/system/RouteModal'
 
 /**
  * Why you are here tonight, and whether people can see who you are (Flow 3 `prefs`).
@@ -361,7 +362,9 @@ const styles = StyleSheet.create({
 export default function EventPreferences() {
   return (
     <HueProvider value="violet">
-      <EventPreferencesContent />
+      <RouteModal>
+        <EventPreferencesContent />
+      </RouteModal>
     </HueProvider>
   )
 }

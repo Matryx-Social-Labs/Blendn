@@ -44,19 +44,30 @@ describe('afterSheetDismissed', () => {
     await expect(afterSheetDismissed(10_000)).resolves.toBeUndefined()
   })
 
-  it('on iOS, not before the fallback when no tray says it has gone', async () => {
+  it('on iOS, while a Modal holds the screen and does not say it has gone: not before the fallback', async () => {
     jest.useFakeTimers()
     try {
       Platform.OS = 'ios'
+      const { requestTurn, resetModalTurns } = require('../lib/modalTurn')
+      resetModalTurns()
+      requestTurn({})
       let done = false
       void afterSheetDismissed(600).then(() => { done = true })
       await jest.advanceTimersByTimeAsync(599)
       expect(done).toBe(false)
       await jest.advanceTimersByTimeAsync(1)
       expect(done).toBe(true)
+      resetModalTurns()
     } finally {
       jest.useRealTimers()
     }
+  })
+
+  it('on iOS with nothing on screen to wait for: at once (lib/modalTurn)', async () => {
+    Platform.OS = 'ios'
+    require('../lib/modalTurn').resetModalTurns()
+    await expect(afterSheetDismissed(10_000)).resolves.toBeUndefined()
+    require('../lib/modalTurn').resetModalTurns()
   })
 })
 

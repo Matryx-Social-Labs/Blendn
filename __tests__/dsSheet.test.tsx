@@ -154,9 +154,11 @@ describe('<Sheet>', () => {
     const spies = Object.keys(H).map((k) => jest.spyOn(H, k as keyof typeof H).mockImplementation(() => {}))
     await render(signOut())
     expect(screen.getByRole('header', { name: 'Sign out?' })).toBeTruthy()
-    // Not before the modal is on screen: iOS presents it a frame later and drops an early focus.
-    expect(focus).not.toHaveBeenCalled()
+    // On the Modal's onShow, not before: iOS presents it a frame later and drops an early focus. (The test Modal says it
+    // is shown as it is drawn, as a phone does: jest.setup.js.)
+    expect(focus).toHaveBeenCalledTimes(1)
     await fireEvent(screen.getByTestId('s-modal'), 'show')
+    expect(focus).toHaveBeenCalledTimes(2)
     expect(focus).toHaveBeenCalledWith(expect.anything(), 'focus')
     for (const spy of spies) expect(spy).not.toHaveBeenCalled()
   })

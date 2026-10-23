@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { scheduleOnRN } from 'react-native-worklets'
 
 import { COLOR, SPACE, SPRING } from '../../lib/design/tokens'
+import { useQueuedModal } from '../../lib/modalTurn'
 import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
 import { clampOffset, clampZoom, coverScale, cropRect, maxOffset, maxZoomFor, pinchOffset, type Size } from '../../lib/photoCrop'
@@ -320,8 +321,17 @@ export function RepositionHost() {
   const photo = usePendingReposition()
   const reduceMotion = useReducedMotion()
   useEffect(() => mountRepositionHost(), [])
+  // One Modal on screen at a time on iOS (lib/modalTurn); refused for good, it is a cancel.
+  const turn = useQueuedModal(!!photo, () => settleReposition({ kind: 'cancel' }))
   return (
-    <Modal visible={!!photo} animationType={reduceMotion ? 'none' : 'fade'} statusBarTranslucent onRequestClose={() => settleReposition({ kind: 'cancel' })}>
+    <Modal
+      visible={turn.visible}
+      animationType={reduceMotion ? 'none' : 'fade'}
+      statusBarTranslucent
+      onRequestClose={() => settleReposition({ kind: 'cancel' })}
+      onShow={turn.onShow}
+      onDismiss={turn.onDismiss}
+    >
       {photo ? (
         <Reposition
           key={photo.uri}

@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { scheduleOnRN } from 'react-native-worklets'
 
 import { COLOR, EASING, FONT_FAMILY, MATERIAL, RADIUS, SPACE, SPRING } from '../../lib/design/tokens'
+import { useQueuedModal } from '../../lib/modalTurn'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { Avatar } from './Avatar'
 import { avatarOf, BUBBLE, timeFont, type ChatPerson, type Rect } from './chatShared'
@@ -193,15 +194,19 @@ export function ImageViewer({ visible, uri, sender, time, onClose, onMore, from,
   }))
   const shown = chrome || screenReader
 
+  // One Modal on screen at a time on iOS (lib/modalTurn).
+  const turn = useQueuedModal(visible, onClose)
   return (
     <Modal
       testID={testID && `${testID}-modal`}
-      visible={visible}
+      visible={turn.visible}
       transparent
       animationType="none"
       statusBarTranslucent
       navigationBarTranslucent
       onRequestClose={onClose}
+      onShow={turn.onShow}
+      onDismiss={turn.onDismiss}
     >
       <GestureHandlerRootView style={styles.fill}>
         <View style={styles.fill} accessibilityViewIsModal onAccessibilityEscape={onClose}>

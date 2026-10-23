@@ -139,6 +139,7 @@ describe('<MomentMatch> · It’s mutual (#11, ROUND3 D · 4.4)', () => {
     await advance(1)
     expect(screen.getByTestId('m-actions', HIDDEN).props.pointerEvents).toBe('box-none')
     screenReader.mockResolvedValue(true)
+    await screen.unmount() // one Modal on screen at a time (lib/modalTurn): the first goes before the next
     await render(match().el)
     await act(async () => {})
     expect(screen.getByTestId('m-actions', HIDDEN).props.pointerEvents).toBe('box-none')

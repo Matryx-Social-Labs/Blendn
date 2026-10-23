@@ -12,6 +12,7 @@ import { monoCaption, ScrimPill } from '../ds/MonoFamily'
 import { useBoldText } from '../ds/shared'
 import { ZoomableImage } from '../motion/ZoomableImage'
 import { COLOR, EASING, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
+import { useQueuedModal } from '../../lib/modalTurn'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 
 /** A drag past 140 pt, or a fling past 900 pt/s, dismisses: the DS ImageViewer's numbers. */
@@ -122,15 +123,19 @@ export function PhotoViewer({ photos, initialIndex = 0, visible, onClose, from, 
 
   const counter = counterOf(index, photos.length)
 
+  // One Modal on screen at a time on iOS (lib/modalTurn).
+  const turn = useQueuedModal(visible, onClose)
   return (
     <Modal
       testID={testID && `${testID}-modal`}
-      visible={visible}
+      visible={turn.visible}
       transparent
       animationType="none"
       statusBarTranslucent
       navigationBarTranslucent
       onRequestClose={onClose}
+      onShow={turn.onShow}
+      onDismiss={turn.onDismiss}
     >
       <GestureHandlerRootView style={styles.fill}>
         <View style={styles.fill} accessibilityViewIsModal onAccessibilityEscape={onClose}>

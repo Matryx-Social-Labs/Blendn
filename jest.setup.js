@@ -48,3 +48,21 @@ jest.mock('react-native-keyboard-controller', () => require('react-native-keyboa
 // AsyncStorage is native. Screens that only reach it through `lib/pushAsk` (a like, an RSVP) should load without each
 // test mocking it; a test that cares mocks it itself and wins.
 jest.mock('@react-native-async-storage/async-storage', () => require('@react-native-async-storage/async-storage/jest/async-storage-mock'))
+
+// iOS and Android call a Modal's `onShow` once it is on screen; React Native's test Modal never does. The Modal turn
+// (lib/modalTurn) takes a Modal that never says so for one iOS refused, so here it says so as it is drawn, as a phone
+// does. A test that wants a refusal mocks the Modal itself (`__tests__/sheetOneAtATime.test.tsx`).
+jest.mock('react-native/Libraries/Modal/Modal', () => {
+  const React = require('react')
+  const Base = jest.requireActual('@react-native/jest-preset/jest/mocks/Modal').default
+  function Modal(props) {
+    const onShow = React.useRef(props.onShow)
+    onShow.current = props.onShow
+    const shown = props.visible !== false
+    React.useEffect(() => {
+      if (shown) onShow.current?.()
+    }, [shown])
+    return React.createElement(Base, props)
+  }
+  return { __esModule: true, default: Modal }
+})

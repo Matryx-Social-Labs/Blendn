@@ -5,7 +5,11 @@
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
 
-jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: jest.fn(), replace: jest.fn() } }))
+jest.mock('expo-router', () => ({
+  // A router modal holds the screen while focused (components/system/RouteModal): here it is focused while mounted.
+  useFocusEffect: (effect: () => void | (() => void)) => require('react').useEffect(effect, [effect]),
+  router: { back: jest.fn(), push: jest.fn(), replace: jest.fn() },
+}))
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }))
 jest.mock('../lib/apiClient', () => ({ apiClient: { getFriends: jest.fn() } }))
 jest.mock('../lib/crewsApi', () => ({ crewsApi: { create: jest.fn(), crew: jest.fn() } }))

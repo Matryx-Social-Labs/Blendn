@@ -20,6 +20,7 @@ import { friendRefusal, type FriendRefusal } from '../../lib/friendRefusal'
 import { inviteCta, inviteLine, type FriendPerson, type FriendState } from '../../lib/friends'
 import { askFriendsSeeMe, useStillHere } from '../../lib/friendsSeeMeAsk'
 import { isGone } from '../../lib/loadFailure'
+import { RouteModal } from '../../components/system/RouteModal'
 
 /** Flow 6 `invite`: the face is 160. */
 const FACE = 160
@@ -44,7 +45,7 @@ const SKELETON = { title: 40, line: 20 } as const
  * somebody their friend's link is dead because the train went into a tunnel
  * sends them off to ask for a new one they don't need.
  */
-export default function InviteScreen() {
+function InviteScreen() {
   const bold = useBoldText()
   const { token } = useLocalSearchParams<{ token: string }>()
   const { showToast } = useToast()
@@ -228,3 +229,12 @@ const styles = StyleSheet.create({
   line: { color: COLOR.textSecondary, textAlign: 'center' },
   footer: { paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.lg, gap: SPACE.sm },
 })
+
+/** A router modal: it holds the screen while it is up, and its sheets present from it (lib/modalTurn). */
+export default function InviteRoute() {
+  return (
+    <RouteModal>
+      <InviteScreen />
+    </RouteModal>
+  )
+}

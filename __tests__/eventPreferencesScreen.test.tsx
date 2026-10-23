@@ -17,6 +17,8 @@ jest.mock('../lib/logger', () => ({
 }))
 const mockParams: Record<string, string> = {}
 jest.mock('expo-router', () => ({
+  // A router modal holds the screen while focused (components/system/RouteModal): here it is focused while mounted.
+  useFocusEffect: (effect: () => void | (() => void)) => require('react').useEffect(effect, [effect]),
   router: { back: jest.fn(), push: jest.fn(), replace: jest.fn(), canGoBack: jest.fn(() => true) },
   useLocalSearchParams: () => mockParams,
 }))
