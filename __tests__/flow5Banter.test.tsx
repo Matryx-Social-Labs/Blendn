@@ -281,13 +281,18 @@ it('a checkout drops the Live now hero at once, not a minute and a tab switch la
   await open()
   expect(screen.getByTestId('banter-live-g-live')).toBeTruthy()
 
-  // Act: you check out; the server's row says so.
+  // Act: you check out; the server's row says so. A checkout announces itself more than once: one read (review LOW).
   serve({ rooms: [{ ...liveRoom, isCheckedIn: false }, pastRoom] })
-  await act(async () => mockCheckInChanged.forEach((f) => f()))
+  const reads = api.getChatGroups.mock.calls.length
+  await act(async () => {
+    for (let i = 0; i < 3; i++) mockCheckInChanged.forEach((f) => f())
+  })
+  await act(async () => new Promise((r) => setTimeout(r, 350)))
   await flush()
 
-  // Assert: read again past every cache, and no hero.
-  expect(api.forgetChatGroups).toHaveBeenCalled()
+  // Assert: read again once, past every cache, and no hero.
+  expect(api.getChatGroups.mock.calls.length - reads).toBe(1)
+  expect(api.forgetChatGroups).toHaveBeenCalledTimes(1)
   expect(api.getChatGroups).toHaveBeenLastCalledWith(expect.objectContaining({ force: true }))
   expect(screen.queryByTestId('banter-live-g-live')).toBeNull()
 })

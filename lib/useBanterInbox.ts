@@ -221,6 +221,9 @@ const CHAT_BACKGROUND_REFRESH_THROTTLE_MS = 15 * 1000
  * `requestsOnly`: the "See all" requests screen reads and answers the same requests through this hook and nothing else:
  * no rooms, no conversations, no sockets for them.
  */
+/** Check-in changes that come together are read as one (`reloadForCheckIn`). */
+const CHECK_IN_RELOAD_DEBOUNCE_MS = 300
+
 export function useBanterInbox({ requestsOnly = false }: { requestsOnly?: boolean } = {}) {
   const { user, loading: authLoading } = useAuth()
   const { showToast } = useToast()
@@ -655,7 +658,19 @@ export function useBanterInbox({ requestsOnly = false }: { requestsOnly?: boolea
   })
   useEffect(() => {
     if (!user || requestsOnly) return
-    return subscribeCheckInChanged(() => reloadForCheckIn.current())
+    // Trailing, 300 ms: a checkout announces itself more than once (the check-out call, live:ended, the re-read).
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const off = subscribeCheckInChanged(() => {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => {
+        timer = null
+        reloadForCheckIn.current()
+      }, CHECK_IN_RELOAD_DEBOUNCE_MS)
+    })
+    return () => {
+      off()
+      if (timer) clearTimeout(timer)
+    }
   }, [user, requestsOnly, reloadForCheckIn])
 
   // Real-time private message updates via Socket.io
