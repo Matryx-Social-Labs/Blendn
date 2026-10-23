@@ -183,7 +183,8 @@ function PrivateChatInner() {
     }
   }, [conversationId, conversation, revealAttempt])
 
-  // Their reveal as it lands, so Add friend turns on without leaving the thread. `useLiveSync` below covers pushes that are off.
+  // Their reveal as it lands, so Add friend turns on without leaving the thread: the socket's `private:revealed` (below), this
+  // push, and `useLiveSync` for a socket that was down.
   useEffect(() => {
     const sub = Notifications.addNotificationReceivedListener((n) => {
       const data = n.request.content.data
@@ -397,7 +398,9 @@ function PrivateChatInner() {
       if (data.readBy === myId) return
       setMessages((prev) => prev.map((m) => (data.messageIds.includes(m.id) ? { ...m, isRead: true } : m)))
     }
-    const u1 = subscribeToConversation(conversation, { onMessage, onTyping, onRead })
+    // Their reveal as it lands (RC drive D3): the conversation is re-read, so "You can both see each other" appears in place.
+    const onRevealed = () => setRevealAttempt((x) => x + 1)
+    const u1 = subscribeToConversation(conversation, { onMessage, onTyping, onRead, onRevealed })
     // ✓✓ delivered as their app gets them (SCRUM-408).
     const u2 = subscribeToDelivered((d) => {
       if (d.conversationId !== conversation) return

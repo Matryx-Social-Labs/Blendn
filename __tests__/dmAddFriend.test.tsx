@@ -29,10 +29,14 @@ jest.mock('../lib/apiClient', () => ({
     sendFriendRequest: jest.fn(),
   },
 }))
+const mockConversationHandlers: { onRevealed?: (d: { conversationId: string }) => void }[] = []
 jest.mock('../lib/socketClient', () => {
   const noop = () => () => {}
   return {
-    subscribeToConversation: noop,
+    subscribeToConversation: (_id: string, h: (typeof mockConversationHandlers)[number]) => {
+      mockConversationHandlers.push(h)
+      return () => mockConversationHandlers.splice(mockConversationHandlers.indexOf(h), 1)
+    },
     subscribeToDelivered: noop,
     startPrivateTyping: jest.fn(),
     stopPrivateTyping: jest.fn(),
@@ -385,6 +389,19 @@ describe('their reveal, live', () => {
     await push(data)
     await flush()
     expect(api.getConversation).toHaveBeenCalledTimes(1)
+  })
+
+  it('their reveal over the socket (`private:revealed`, RC drive D3) re-reads it, and the card appears in place', async () => {
+    api.getConversation.mockResolvedValueOnce({ success: true, data: theyOnly } as never)
+    api.getConversation.mockResolvedValue(withFriend({ state: 'none', canAdd: true }))
+    await render(<PrivateChat />)
+    await flush()
+    expect(screen.queryByTestId('dm-reveal-friend')).toBeNull()
+    await act(async () => mockConversationHandlers.forEach((h) => h.onRevealed?.({ conversationId: 'c1' })))
+    await flush()
+    expect(api.getConversation).toHaveBeenCalledTimes(2)
+    expect(within(screen.getByTestId('dm-reveal')).getByText('You can both see each other')).toBeTruthy()
+    expect(screen.getByTestId('dm-reveal-friend')).toBeTruthy()
   })
 
   it('a sync (pushes off) re-reads it too', async () => {

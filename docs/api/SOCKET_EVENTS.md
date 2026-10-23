@@ -179,6 +179,7 @@ already know each other's ids.
 | `private:typing` | `conversation:{id}` | `{ conversationId, userId, userName }` |
 | `private:read` | `conversation:{id}` | `{ conversationId, userId }` |
 | `private:delivered` | `conversation:{id}` | `{ conversationId, messageIds }`. The recipient's app has these messages (✓✓ delivered). Sent whatever the read-receipt setting |
+| `private:revealed` | the other participant (server branch `feat/reveal-socket`, in progress) | `{ conversationId }`. They revealed in this conversation. Names nothing: the open DM re-reads `GET /conversations/:id`, so the `both` card appears in place (RC drive D3). The client routes it by `conversationId`, so either the conversation's room or `user:{id}` reaches it |
 
 ### User Events (room: `user:{userId}`)
 

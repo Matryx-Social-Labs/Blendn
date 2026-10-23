@@ -133,6 +133,11 @@ export interface ServerToClientEvents {
   }) => void
   /** These messages reached the other person's app: ✓✓ delivered (SCRUM-408). */
   "private:delivered": (data: { conversationId: string; messageIds: string[] }) => void
+  /**
+   * The other person revealed in this conversation (blendn-admin `feat/reveal-socket`, RC drive D3). Names nothing: the DM
+   * re-reads the conversation, which is what says who can see whom.
+   */
+  "private:revealed": (data: { conversationId: string }) => void
   // Moderation events
   /** `moderation` + `userId` arrive on a moderation hide, so the sender can keep a placeholder. */
   "chat:messageDeleted": (data: { chatGroupId: string; messageId: string; moderation?: boolean; userId?: string }) => void
@@ -227,6 +232,7 @@ type ChatMemberMutedCallback = (data: ServerToClientEvents["chat:memberMuted"] e
 type PrivateMessageCallback = (data: ServerToClientEvents["private:message"] extends (data: infer D) => void ? D : never) => void
 type PrivateTypingCallback = (data: ServerToClientEvents["private:typing"] extends (data: infer D) => void ? D : never) => void
 type PrivateReadCallback = (data: ServerToClientEvents["private:read"] extends (data: infer D) => void ? D : never) => void
+type PrivateRevealedCallback = (data: ServerToClientEvents["private:revealed"] extends (data: infer D) => void ? D : never) => void
 type RoomMatchCallback = (data: ServerToClientEvents["room:match"] extends (data: infer D) => void ? D : never) => void
 type RoomWaveCallback = (data: ServerToClientEvents["room:wave"] extends (data: infer D) => void ? D : never) => void
 type EventCancelledCallback = (data: ServerToClientEvents["event:cancelled"] extends (data: infer D) => void ? D : never) => void
@@ -323,6 +329,7 @@ export interface ConversationHandlers {
   onMessage?: PrivateMessageCallback
   onTyping?: PrivateTypingCallback
   onRead?: PrivateReadCallback
+  onRevealed?: PrivateRevealedCallback
 }
 const conversationSubscriptions = new Map<string, Set<ConversationHandlers>>()
 const userSubscriptions = new Map<string, Set<PrivateMessageCallback>>()
@@ -801,6 +808,12 @@ function setupSocketHandlers(sock: TypedSocket): void {
 
   sock.on("private:delivered", (data) => {
     deliveredSubscriptions.forEach((cb) => cb(data))
+  })
+
+  /* Keyed by the payload, so it reaches the open DM whichever room the server sends it to (the conversation's, or yours). */
+  sock.on("private:revealed", (data) => {
+    if (typeof data?.conversationId !== "string") return
+    conversationSubscriptions.get(data.conversationId)?.forEach((h) => h.onRevealed?.(data))
   })
 }
 
