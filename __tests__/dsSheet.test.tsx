@@ -469,6 +469,14 @@ describe('an overflowing sheet still drags by its header (review HIGH-1: only th
     expect(flat('s-grip').height).toBeGreaterThanOrEqual(44)
   })
 
+  it('under a pinned title row the grip stays 24: the row drags with it, and the scroll keeps the room (review R4)', async () => {
+    const { Text } = jest.requireActual('react-native')
+    await render(signOut({ headerAction: { label: 'Clear all', onPress: jest.fn() }, children: <Text>Form</Text> }))
+    await overflow()
+    expect(screen.getByTestId('s-pinned', hidden)).toBeTruthy()
+    expect(flat('s-grip').height).toBe(24)
+  })
+
   it('a sheet that fits drags by its header both ways, as before', async () => {
     await render(signOut())
     const head = getByGestureTestId('s-head-drag').config

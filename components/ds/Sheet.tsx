@@ -753,7 +753,7 @@ export function Sheet({ visible, onClose, title, headerAction, headerNote, body,
               {/* The grip (and a pinned title row) stays above the scroll: a sheet scrolled down to its actions can still be dragged away. */}
               <GestureDetector gesture={drag}>
                 <View>
-                  <View testID={testID && `${testID}-grip`} style={[styles.grip, overflowing && { height: minTarget() }]}>
+                  <View testID={testID && `${testID}-grip`} style={[styles.grip, overflowing && !pinHead && { height: minTarget() }]}>
                     {dismissible ? (
                       <Pressable
                         accessibilityRole="button"
