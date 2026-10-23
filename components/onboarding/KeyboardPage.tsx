@@ -3,6 +3,7 @@ import { Platform, StyleSheet, View, type LayoutChangeEvent, type ScrollViewProp
 import { KeyboardAwareScrollView, KeyboardEvents, KeyboardStickyView, type KeyboardAwareScrollViewRef } from 'react-native-keyboard-controller'
 
 import { Dock } from '../ds/Dock'
+import { useKeyboardGone } from '../../lib/keyboard'
 
 /** Room kept under the focused field for its hint (two or three lines of small print), over the dock. */
 export const HINT_ROOM = 72
@@ -63,6 +64,8 @@ export function KeyboardPage({
   const [dockHeight, setDockHeight] = useState(0)
   const [scrollHeight, setScrollHeight] = useState(0)
   const scroll = useRef<KeyboardAwareScrollViewRef>(null)
+  // The Strong Password sheet closes without the hide the library listens for (RC drive 2 D-4): the page rests then.
+  const keyboardGone = useKeyboardGone()
   /*
    * Belt and braces for the system's Strong Password sheet: it takes first responder as the keyboard grows, and the
    * library's own follow needs the focused input it tracks. Once the keyboard has landed, ask it to look again.
@@ -82,13 +85,14 @@ export function KeyboardPage({
         // Drag the form down to put the keyboard away, as in Messages.
         keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         showsVerticalScrollIndicator={false}
+        enabled={!keyboardGone}
         bottomOffset={bottomOffsetFor(dockHeight, scrollHeight)}
         extraKeyboardSpace={EXTRA_SCROLL_ROOM}
         {...scrollProps}
       >
         {children}
       </KeyboardAwareScrollView>
-      <KeyboardStickyView testID="keyboard-page-dock-frame">
+      <KeyboardStickyView testID="keyboard-page-dock-frame" enabled={!keyboardGone}>
         <Dock {...dockProps} onHeight={setDockHeight}>
           {dock}
         </Dock>
