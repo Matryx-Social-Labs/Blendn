@@ -656,7 +656,10 @@ function GroupChatInner() {
   const askedDoor = useRef(false)
   const askEventDoor = async (): Promise<'joined' | 'notopen' | 'out'> => {
     if (!roomEventId) return 'out'
-    const door = await apiClient.getEventChat(roomEventId).catch(() => null)
+    // A door that cannot be read is "not in this room", as before.
+    const door = await Promise.resolve()
+      .then(() => apiClient.getEventChat(roomEventId))
+      .catch(() => null)
     const at = notOpenYetAt(door)
     if (at) {
       setNotOpen(at)
