@@ -291,7 +291,7 @@ describe('Manage over the paywall (RC drive 5)', () => {
         exception: { values: [{ value: `no conversation ${id} for /f/tok_9Z?x=1` }] },
       })
       expect(JSON.stringify(out)).not.toMatch(new RegExp(`${id}|tok_9Z`))
-      expect(out.exception?.values?.[0].value).toBe('no conversation :id for /f/:token?x=1')
+      expect(out.exception?.values?.[0].value).toBe('no conversation :id for /f/:token?x=:redacted')
     })
   })
 })

@@ -43,83 +43,89 @@ export function initSentry() {
 /** The app's invite links (`/f/<token>`) and the API's (`/friends/invite/<token>`): anyone holding one can use it. */
 const APP_INVITE = /\/f\/[^/?#\s'"]+/g
 const API_INVITE = /\/friends\/invite\/[^/?#\s'"]+/g
-/** A query parameter whose name says it is a secret: `token`, `access_token`, `code`, `api_key`, `X-Amz-Signature`… */
-const SECRET_PARAM = /([?&][^=&#\s]*(?:token|code|key|signature)=)[^&#\s'"]*/gi
+/**
+ * Every query parameter's value: a search term is somebody's words, and `token`, `code`, `key`, `signature` are secrets.
+ * The names stay (they say what the request was).
+ */
+const QUERY_VALUE = /([?&][^=&#\s'"]+=)[^&#\s'"]*/g
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi
 
 /**
  * Any text bound for a crash report — a URL, a message, a console line — with what identifies somebody taken out:
- * board ids (`scrubBoardUrl`, as before), invite tokens in the app's links and the API's, secret-looking query
- * parameters, and every uuid (a conversation, a room, an event, a person). The one scrubber: every hook below uses it.
+ * board ids (`scrubBoardUrl`, as before), invite tokens in the app's links and the API's, every query parameter's value,
+ * and every uuid (a conversation, a room, an event, a person). The one scrubber: every hook below uses it.
  */
 export function scrubReportText(text: string): string {
   return scrubBoardUrl(text)
     .replace(API_INVITE, '/friends/invite/:token')
     .replace(APP_INVITE, '/f/:token')
-    .replace(SECRET_PARAM, '$1:token')
+    .replace(QUERY_VALUE, '$1:redacted')
     .replace(UUID, ':id')
 }
 
-const scrubMaybe = <T,>(value: T): T => (typeof value === 'string' ? (scrubReportText(value) as T) : value)
+/** How deep `scrubDeep` goes: further down than any report nests (span data, contexts, a logged object), not forever. */
+const SCRUB_DEPTH = 6
 
-/** A console argument: a string scrubbed, anything else written out first and scrubbed (an object can hold a URL). */
-function scrubArgument(value: unknown): unknown {
+/**
+ * Every string in a value, at any key, scrubbed: span data, contexts, extras and breadcrumb data are not ours to list.
+ * Sentry's traced fetch alone writes `url`, `http.url` and `http.query` (search terms, tokens). Below `SCRUB_DEPTH`, or
+ * in a cycle, the rest is dropped rather than sent unread.
+ */
+export function scrubDeep(value: unknown, depth = 0): unknown {
   if (typeof value === 'string') return scrubReportText(value)
   if (value === null || typeof value !== 'object') return value
-  try {
-    return scrubReportText(JSON.stringify(value))
-  } catch {
-    return '[unserialisable]'
-  }
+  if (depth >= SCRUB_DEPTH) return '[scrubbed: too deep]'
+  if (Array.isArray(value)) return value.map((item) => scrubDeep(item, depth + 1))
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, scrubDeep(item, depth + 1)]))
 }
+
+const deep = <T,>(value: T): T => scrubDeep(value) as T
 
 type ScrubbableBreadcrumb = { message?: string; data?: { [key: string]: unknown } }
 
-/** A breadcrumb: its message, the URL of a fetch, both ends of a navigation, and a console call's arguments. */
+/** A breadcrumb: its message, and every string in its data (a fetch's URL, a navigation's ends, console arguments). */
 export function scrubBreadcrumb<B extends ScrubbableBreadcrumb>(breadcrumb: B): B {
-  const { data } = breadcrumb
   return {
     ...breadcrumb,
     ...(breadcrumb.message ? { message: scrubReportText(breadcrumb.message) } : {}),
-    ...(data
-      ? {
-          data: {
-            ...data,
-            ...('url' in data ? { url: scrubMaybe(data.url) } : {}),
-            ...('to' in data ? { to: scrubMaybe(data.to) } : {}),
-            ...('from' in data ? { from: scrubMaybe(data.from) } : {}),
-            ...(Array.isArray(data.arguments) ? { arguments: data.arguments.map(scrubArgument) } : {}),
-          },
-        }
-      : {}),
+    ...(breadcrumb.data ? { data: deep(breadcrumb.data) } : {}),
   }
 }
 
 type ScrubbableEvent = {
-  request?: { url?: string }
+  request?: object
   message?: string
   transaction?: string
   exception?: { values?: { value?: string }[] }
   breadcrumbs?: ScrubbableBreadcrumb[]
+  extra?: object
+  contexts?: object
+  tags?: object
 }
 
-/** A report as it leaves: its request URL, its message, its transaction name, every exception's message and breadcrumb. */
+/**
+ * A report as it leaves: its message, transaction name and every exception's message; every string in its request,
+ * extras (the logger's details), contexts (a transaction's trace data) and tags; and every breadcrumb.
+ */
 export function scrubEvent<E extends ScrubbableEvent>(event: E): E {
   return {
     ...event,
-    ...(event.request?.url ? { request: { ...event.request, url: scrubReportText(event.request.url) } } : {}),
+    ...(event.request ? { request: deep(event.request) } : {}),
     ...(event.message ? { message: scrubReportText(event.message) } : {}),
     ...(event.transaction ? { transaction: scrubReportText(event.transaction) } : {}),
     ...(event.exception?.values
       ? { exception: { ...event.exception, values: event.exception.values.map((v) => (v.value ? { ...v, value: scrubReportText(v.value) } : v)) } }
       : {}),
     ...(event.breadcrumbs ? { breadcrumbs: event.breadcrumbs.map(scrubBreadcrumb) } : {}),
+    ...(event.extra ? { extra: deep(event.extra) } : {}),
+    ...(event.contexts ? { contexts: deep(event.contexts) } : {}),
+    ...(event.tags ? { tags: deep(event.tags) } : {}),
   }
 }
 
-type ScrubbableTransaction = ScrubbableEvent & { spans?: { description?: string; data?: { [key: string]: unknown } }[] }
+type ScrubbableTransaction = ScrubbableEvent & { spans?: { description?: string; data?: object }[] }
 
-/** A transaction: everything an event has, and every span's description and URL (traced fetches name their URL). */
+/** A transaction: everything an event has, and every span's description and every string in its data. */
 export function scrubTransaction<T extends ScrubbableTransaction>(event: T): T {
   return {
     ...scrubEvent(event),
@@ -128,7 +134,7 @@ export function scrubTransaction<T extends ScrubbableTransaction>(event: T): T {
           spans: event.spans.map((span) => ({
             ...span,
             ...(span.description ? { description: scrubReportText(span.description) } : {}),
-            ...(span.data && 'url' in span.data ? { data: { ...span.data, url: scrubMaybe(span.data.url) } } : {}),
+            ...(span.data ? { data: deep(span.data) } : {}),
           })),
         }
       : {}),

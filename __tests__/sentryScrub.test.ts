@@ -7,6 +7,9 @@
  * Negative controls: `scrubReportText` returning its input fails all three; `scrubBreadcrumb` without its `arguments`
  * line fails the event and breadcrumb tests (console arguments); `scrubEvent` without `transaction` fails the event and
  * transaction tests.
+ *
+ * Review HIGH-1 / MED-1: every string at any key. Controls: `scrubTransaction` without the span `data` line fails the
+ * traced-fetch and span tests; `scrubEvent` without `extra` fails the traced-fetch, logger-details and depth tests.
  */
 const mockInit = jest.fn()
 jest.mock('@sentry/react-native', () => ({
@@ -52,7 +55,7 @@ it('an event: its request, message, transaction, exception and breadcrumbs', () 
     breadcrumbs: [{ category: 'console', message: `opened ${URL_}`, data: { arguments: ['opened', URL_] } }],
   })
   expect(leaks(out)).toEqual([])
-  expect(JSON.stringify(out)).toContain('/friends/invite/:token?token=:token')
+  expect(JSON.stringify(out)).toContain('/friends/invite/:token?token=:redacted')
   expect(JSON.stringify(out)).toContain('/private-chat/:id')
 })
 
@@ -68,7 +71,7 @@ it('a breadcrumb as it is recorded: a fetch, a navigation, and a console call wi
   for (const crumb of [fetch, navigation, console]) expect(leaks(crumb)).toEqual([])
   // What is not a secret stays as it was.
   expect(fetch).toMatchObject({ data: { method: 'GET', status_code: 200 } })
-  expect(console).toMatchObject({ data: { logger: 'console', arguments: [expect.any(String), expect.any(String), 42, null] } })
+  expect(console).toMatchObject({ data: { logger: 'console', arguments: [expect.any(String), { url: expect.any(String), room: ':id' }, 42, null] } })
 })
 
 it('a transaction: its name and every span, a board fetch among them', () => {
@@ -81,4 +84,49 @@ it('a transaction: its name and every span, a board fetch among them', () => {
     ],
   })
   expect(leaks(out)).toEqual([])
+})
+
+describe('every string, at any key (review HIGH-1, MED-1)', () => {
+  // As Sentry 7.11's traced fetch writes a span (`getFetchSpanAttributes`): `url`, `http.url`, `http.query`.
+  const traced = 'https://api.blendn.app/api/mobile/friends/invite/abc?q=secret'
+  const raw = (value: object) => ['/invite/abc', 'secret'].filter((r) => JSON.stringify(value).includes(r))
+
+  it('a traced fetch to /friends/invite/abc?q=secret leaves neither value anywhere in the transaction', () => {
+    const { beforeSendTransaction } = hooks()
+    const out = beforeSendTransaction({
+      transaction: 'GET /friends/invite/abc',
+      contexts: { trace: { op: 'http.client', data: { url: traced, 'http.query': '?q=secret', nested: { deeper: [traced] } } } },
+      extra: { request: { url: traced } },
+      spans: [
+        {
+          description: `GET ${traced}`,
+          data: { url: traced, 'http.url': traced, 'http.query': '?q=secret', 'http.method': 'GET', 'server.address': 'api.blendn.app' },
+        },
+      ],
+    })
+    expect(raw(out)).toEqual([])
+    // What is not a value stays: the method, the host, the parameter's name.
+    expect(JSON.stringify(out)).toContain('"http.method":"GET"')
+    expect(JSON.stringify(out)).toContain('"http.query":"?q=:redacted"')
+  })
+
+  it("the logger's details (extra), contexts and breadcrumb data, at any depth, on an error event", () => {
+    const { beforeSend } = hooks()
+    const out = beforeSend({
+      extra: { message: 'failed', details: { body: { link: traced, ids: [ID] } } },
+      contexts: { app: { last: `/f/${LINK}` } },
+      breadcrumbs: [{ category: 'api', data: { response: { url: traced, room: ID } } }],
+    })
+    expect(raw(out)).toEqual([])
+    expect(leaks(out)).toEqual([])
+  })
+
+  it('stops at a bounded depth, and a cycle ends there instead of recursing forever', () => {
+    const { beforeSend } = hooks()
+    const loop: { self?: unknown; url: string } = { url: traced }
+    loop.self = loop
+    const out = beforeSend({ extra: { loop } })
+    expect(raw(out)).toEqual([])
+    expect(JSON.stringify(out)).toContain('[scrubbed: too deep]')
+  })
 })
