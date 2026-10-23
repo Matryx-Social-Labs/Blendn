@@ -30,6 +30,12 @@ describe('the time on a card', () => {
     expect(cardTime(ev({ start_time: at(21, 0, 4), end_time: at(23, 0, 4) }), NOW)).toMatch(/^Sat · 9 PM$/)
     expect(cardTime(ev({ start_time: at(21, 0, 12), end_time: at(23, 0, 12) }), NOW)).toBe('Sun 1 Nov · 9 PM')
   })
+
+  it('carries no year across New Year: the slot is one line (review L6)', () => {
+    const lateDec = new Date(2026, 11, 22, 12).getTime()
+    const jan = (d: number) => new Date(2027, 0, d, 21).toISOString()
+    expect(cardTime(ev({ start_time: jan(2), end_time: jan(3) }), lateDec)).toBe('Sat 2 Jan · 9 PM')
+  })
 })
 
 describe('what a compact card draws', () => {

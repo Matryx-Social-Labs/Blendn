@@ -30,11 +30,19 @@ describe('the status line', () => {
   it('says nothing without Plus; names the product and when it ends', () => {
     expect(plusStatusLine(null)).toBeNull()
     expect(plusStatusLine(inactive.data as never)).toBeNull()
-    expect(plusStatusLine(active.data as never)).toMatch(/^Blend’n\+ until 10 Nov( 2026)?$/)
-    // A pass shows its day as well as its time: passes stack, and the hour alone could be any day's (review LOW).
-    expect(plusStatusLine({ active: true, gated: true, product: 'night_pass', source: 'grant', expiresAt: '2026-10-11T00:30:00.000Z' })).toMatch(
-      /^Night Pass until 1[01] Oct( 2026)?, \d{1,2}(:\d{2})? [AP]M$/
-    )
+    // The phone's own day and clock (local times), on 23 Oct 2026: the year only when it is not this one (review L6).
+    jest.useFakeTimers({ now: new Date(2026, 9, 23, 12) })
+    try {
+      const local = (...p: [number, number, number, number, number?]) => new Date(...p).toISOString()
+      expect(plusStatusLine({ ...active.data, expiresAt: local(2026, 10, 10, 15) } as never)).toBe('Blend’n+ until 10 Nov')
+      expect(plusStatusLine({ ...active.data, expiresAt: local(2027, 9, 23, 15) } as never)).toBe('Blend’n+ until 23 Oct 2027')
+      // A pass shows its day as well as its time: passes stack, and the hour alone could be any day's (review LOW).
+      expect(plusStatusLine({ active: true, gated: true, product: 'night_pass', source: 'grant', expiresAt: local(2026, 9, 24, 4, 30) })).toBe(
+        'Night Pass until 24 Oct, 4:30 AM'
+      )
+    } finally {
+      jest.useRealTimers()
+    }
     expect(plusStatusLine({ active: true, gated: true, product: 'plus', source: 'grant', expiresAt: null })).toBe('You have Blend’n+')
   })
 })

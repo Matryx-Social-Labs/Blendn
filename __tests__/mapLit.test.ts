@@ -310,6 +310,8 @@ describe('chips above the roofs', () => {
     // Fri 9 Oct 14:30Z is 8 PM in India, whatever the phone's zone.
     expect(chipLine({ kind: 'event', live: false, startsAt: '2026-10-09T14:30:00Z', bucket: null }, now)).toBe('Fri · 8 PM')
     expect(chipLine({ kind: 'event', live: false, startsAt: 'garbage', bucket: null }, now)).toBe('')
+    // Past six days, the date; never the year, even across New Year (review L6): the line is a pin's width.
+    expect(chipLine({ kind: 'event', live: false, startsAt: '2027-01-02T14:30:00Z', bucket: null }, Date.UTC(2026, 11, 22, 6))).toBe('Sat 2 Jan · 8 PM')
     expect(chipLine({ kind: 'venue', live: true, startsAt: null, bucket: '10-19' }, now)).toBe('10–19 live')
     expect(chipLine({ kind: 'venue', live: false, startsAt: null, bucket: 'quiet' }, now)).toBe('')
   })

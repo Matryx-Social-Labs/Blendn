@@ -382,7 +382,8 @@ function startLabel(startsAt: string | null, now: number, forSpeech: boolean): s
   const start = startsAt ? new Date(startsAt) : null
   if (!start || Number.isNaN(start.getTime())) return null
   const far = start.getTime() - now > WEEKDAY_ONLY_MS
-  const day = calendarDate(start, { weekday: far ? true : 'only', now, timeZone: EVENT_TIME_ZONE })
+  // No year: the chip's line is a pin's width, and an event a year off is not on the map (review L6).
+  const day = calendarDate(start, { weekday: far ? true : 'only', year: false, timeZone: EVENT_TIME_ZONE })
   const time = clockTime(start, EVENT_TIME_ZONE)
   return forSpeech ? `${day} ${time}` : `${day} · ${time}`
 }

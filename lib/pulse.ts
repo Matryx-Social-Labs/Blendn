@@ -155,7 +155,8 @@ export function cardTime(event: SessionSource, now: number): string {
   const days = calendarDaysBetween(new Date(now), start)
   if (days <= 0) return clock
   if (days < 7) return `${WEEKDAYS[start.getDay()]} · ${clock}`
-  return `${calendarDate(start, { weekday: true, now })} · ${clock}`
+  // No year, even across New Year: a card's time is one line in a fixed slot, and the weekday already says which (review L6).
+  return `${calendarDate(start, { weekday: true, year: false })} · ${clock}`
 }
 
 /** A count a card may print: five and up (`printable`); a small number of people is not said. */

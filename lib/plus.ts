@@ -54,8 +54,8 @@ export const PLUS_COMING_SOON: readonly PlusFeature[] = [
 const dateOf = (iso: string) => calendarDate(iso)
 
 /**
- * "Blendn+ until 10 Nov 2026" / "Night Pass until 11 Oct 2026, 4:30 AM" — or
- * null when there is nothing to say. A pass shows its day too: passes stack,
+ * "Blend’n+ until 10 Nov", "Blend’n+ until 23 Oct 2027" / "Night Pass until 11 Oct, 4:30 AM" (`calendarDate`: the
+ * year only when it is not this one) — or null when there is nothing to say. A pass shows its day too: passes stack,
  * and "until 4:30 AM" could be tomorrow's or the day after's.
  */
 export function plusStatusLine(status: PlusStatus | null | undefined): string | null {
