@@ -36,6 +36,9 @@ export function useLargeText(): boolean {
 
 /** The narrowest a line of text may be made beside a trailing piece, in ems of its role: about a dozen characters. */
 export const MIN_MEASURE_EM = 6
+/** Below this width (dp), or past this font scale, a line beside a trailing piece can run short; above and below, it never does. */
+export const ROOMY_WIDTH = 375
+export const ROOMY_FONT_SCALE = 1.15
 
 /**
  * A text column's flex basis beside a trailing piece (a button, a "from your friends"), at the scale it is drawn: the two sit
@@ -44,7 +47,10 @@ export const MIN_MEASURE_EM = 6
  * line ("You're / anony / mous", "Make / a / crew": RC drive 3).
  */
 export function useMinMeasure(role: keyof typeof TYPE, cap: number = MAX_FONT_SCALE[role]): number {
-  const { fontScale } = useWindowDimensions()
+  const { fontScale, width } = useWindowDimensions()
+  // A phone of ordinary width at an ordinary size always has the room: a zero basis keeps the row side by side, as it was. Six
+  // ems there left ~5 pt to spare at 390, so Bold Text would have dropped "from your friends" under its title (review MEDIUM-4).
+  if (width >= ROOMY_WIDTH && fontScale <= ROOMY_FONT_SCALE) return 0
   return Math.round(MIN_MEASURE_EM * TYPE[role].fontSize * Math.min(fontScale, cap))
 }
 

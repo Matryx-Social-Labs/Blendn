@@ -9,7 +9,7 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react-n
 import { readFileSync, readdirSync, existsSync } from 'fs'
 import { join } from 'path'
 import React, { useEffect } from 'react'
-import { Dimensions, Platform, StyleSheet, Text, View } from 'react-native'
+import { AccessibilityInfo, Dimensions, Platform, StyleSheet, Text, View } from 'react-native'
 import { getByGestureTestId } from 'react-native-gesture-handler/jest-utils'
 import type { ReactTestRendererJSON } from 'react-test-renderer'
 
@@ -363,6 +363,49 @@ describe('a 360 dp phone at font scale 1.3 (Android, RC drive 3: text one word p
     await render(<SettingsRow icon="bell" title="Notifications" trail="chevron" onPress={jest.fn()} testID="n" />)
     expect(screen.queryByTestId('n-body', hidden)).toBeNull()
     expect(flat('n-text').flex).toBe(1)
+  })
+})
+
+describe('an ordinary phone at an ordinary size keeps text and its trailing piece side by side (review MEDIUM-4)', () => {
+  const at = (width: number, fontScale: number) => act(async () => Dimensions.set({ window: { ...window, width, fontScale }, screen: { ...window, width, fontScale } }))
+  const hidden = { includeHiddenElements: true }
+  const basis = (id: string) => StyleSheet.flatten(screen.getByTestId(id, hidden).props.style).flexBasis
+  const crewRow = () => (
+    <SettingsGroup>
+      <MakeCrewRow />
+    </SettingsGroup>
+  )
+
+  it('390 dp at 1.0: no measure, so nothing wraps (six ems left ~5 pt to spare there)', async () => {
+    await at(390, 1)
+    await render(crewRow())
+    expect(basis('make-crew-row-text')).toBe(0)
+    await render(<VisibilityBanner state="anon" onAction={jest.fn()} testID="b" />)
+    expect(basis('b-text')).toBe(0)
+  })
+
+  it('390 dp at 1.0 with Bold Text: still no measure (the wider bold words did not push "from your friends" under)', async () => {
+    // Swapped, not spied: the preset's own mock has no implementation to restore to.
+    const original = AccessibilityInfo.isBoldTextEnabled
+    AccessibilityInfo.isBoldTextEnabled = () => Promise.resolve(true)
+    try {
+      await at(390, 1)
+      await render(crewRow())
+      await act(async () => {})
+      expect(StyleSheet.flatten(screen.getByText('Make a crew').props.style).fontFamily).toMatch(/Bold|700/)
+      expect(basis('make-crew-row-text')).toBe(0)
+    } finally {
+      AccessibilityInfo.isBoldTextEnabled = original
+    }
+  })
+
+  it('360 dp at 1.3, and a narrow phone at 1.0, take the measure', async () => {
+    await at(360, 1.3)
+    await render(crewRow())
+    expect(basis('make-crew-row-text')).toBe(Math.round(6 * 17 * 1.3))
+    await at(360, 1)
+    await render(crewRow())
+    expect(basis('make-crew-row-text')).toBe(6 * 17)
   })
 })
 
