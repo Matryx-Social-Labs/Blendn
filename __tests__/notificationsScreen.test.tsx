@@ -74,6 +74,7 @@ import { navigateFromNotificationData } from '../lib/notifications'
 import { H } from '../lib/haptics'
 import { closeSheet } from '../lib/sheet'
 import { ANSWER_DEADLINE_MS, DONE_DWELL_MS } from '../lib/useNotificationFeed'
+import { forgetPushPermission } from '../lib/pushStatus'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
 const permissions = Notifications.getPermissionsAsync as jest.Mock
@@ -117,6 +118,8 @@ const Screen = () => (
 )
 
 beforeEach(async () => {
+  // The permission is read once a session (RC drive D1): each test is a new one.
+  forgetPushPermission()
   jest.clearAllMocks()
   await AsyncStorage.clear()
   for (const k of Object.keys(mockParams)) delete mockParams[k]

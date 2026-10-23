@@ -28,6 +28,7 @@ import { reasonOf, SESSION_END_CODES } from './sessionEnd'
 import { appVersionNumber } from './appVersion'
 import { isUpdateRefusal, markUpdateRequired } from './updateRequired'
 import { markSessionExpired, markSessionStarted } from './sessionEvents'
+import { onCriticalPath } from './criticalPath'
 import { noteServerDate } from './serverClock'
 import { getPushTokenRef, setPushTokenRef } from './pushTokenRef'
 import type { ChatReaction } from './chatReactions'
@@ -252,6 +253,17 @@ export const TIMED_OUT = Symbol('timed out')
  */
 const withinDeadline = <T,>(work: Promise<T>): Promise<T | typeof TIMED_OUT> => settleWithin<T | typeof TIMED_OUT>(work, REQUEST_TIMEOUT_MS, TIMED_OUT)
 
+/** Bumped by every stored sign-in: a background sign-out compares it before clearing the keychain (`signOut`). */
+let signInGeneration = 0
+
+/*
+ * Why the reads stay on SecureStore's async API (RC drive D1). expo-secure-store's async functions have no `.runOnQueue`, so
+ * they share Expo's one serial `AsyncFunctionQueue` with every module, the notification-permission read included. Its sync
+ * API (`getItem` / `setItem`, native `getValueWithKeySync`) runs on the JS thread and never touches that queue: the one
+ * supported way off it, without patching the module. Not taken: a keychain call on the JS thread freezes the UI for as long
+ * as `securityd` takes, which trades a stuck sign-out for a frozen app, and there is no sync delete. The queue is protected
+ * instead: permission reads wait for the critical path (`lib/criticalPath`), are made once and bounded (`lib/pushStatus`).
+ */
 // Token Storage
 class TokenStorage {
   private static async secureGet(key: string): Promise<string | null> {
@@ -1649,7 +1661,8 @@ class ApiClientClass {
      * A refresh that hung kept `refreshPromise` set, and every later 401 joined the dead promise for good. Timed out it is
      * 'failed' and the promise is released (below); the work, if it ever lands, still stores what the server sent.
      */
-    const p: Promise<RefreshOutcome> = settleWithin(work, REFRESH_DEADLINE_MS, 'failed')
+    // On the critical path (D1): no notification-permission read is queued ahead of the token write.
+    const p: Promise<RefreshOutcome> = onCriticalPath(() => settleWithin(work, REFRESH_DEADLINE_MS, 'failed'))
 
     refreshPromise = p
 
@@ -1739,6 +1752,8 @@ class ApiClientClass {
   /** Store the tokens and user of a successful sign-in or sign-up. */
   private async keepSession(result: ApiResponse<AuthResult>): Promise<ApiResponse<AuthResult>> {
     if (result.success && result.data) {
+      // A sign-out still finishing in the background must not clear what this stores (`signOut`).
+      signInGeneration += 1
       await TokenStorage.setTokens(result.data.accessToken, result.data.refreshToken)
       await TokenStorage.setUser(result.data.user)
     }
@@ -1848,7 +1863,8 @@ class ApiClientClass {
     })
 
     if (result.success) {
-      await TokenStorage.clearAll()
+      // Bounded like sign-out's (D1): a keychain stuck behind another native call clears when it frees.
+      await withinDeadline(TokenStorage.clearAll())
       requestQueue.clear()
       // Same reason as signOut(): the response cache is not per user, and a
       // stale entry is served before it is corrected. Deletion is the more
@@ -1902,6 +1918,27 @@ class ApiClientClass {
    * the server did not confirm. The clear is bounded too: a keychain that is stuck clears when it frees, the app moves on.
    */
   async signOut(revokeAll: boolean = false): Promise<ApiResponse<void>> {
+    /*
+     * The app is signed out before this answers (`useAuth.signOut`, RC drive D1), so somebody can sign in again while it
+     * runs. The keychain clear below is for this session only: once a new one has stored its tokens, it is skipped.
+     */
+    const generation = signInGeneration
+    /*
+     * Drop the cached responses and the queued requests now, not after the server answers.
+     *
+     * `clearResponseCache` had no callers, so after signing out the map still
+     * held the previous user's response bodies -- their conversations, their
+     * matches, their profile -- in memory, keyed by endpoint. The next person to
+     * use the device signs in, hits the same endpoint, and `getCached` returns
+     * whatever is under that key.
+     *
+     * The TTL is not a defence: an expired entry is served as stale-while-
+     * revalidate rather than dropped, so it is returned first and corrected
+     * afterwards. Same shape as the push tokens above -- state that outlives the
+     * session it belongs to. The POST below is a direct request, outside the queue.
+     */
+    requestQueue.clear()
+    this.clearResponseCache()
     const refreshToken = await withinDeadline(TokenStorage.getRefreshToken())
     const result: ApiResponse<void> =
       refreshToken === TIMED_OUT && !revokeAll
@@ -1914,25 +1951,10 @@ class ApiClientClass {
             }),
           })
 
-    setPushTokenRef(null)
-    await withinDeadline(TokenStorage.clearAll())
-    requestQueue.clear()
-    /*
-     * Drop the cached responses too.
-     *
-     * `clearResponseCache` had no callers, so after signing out the map still
-     * held the previous user's response bodies -- their conversations, their
-     * matches, their profile -- in memory, keyed by endpoint. The next person to
-     * use the device signs in, hits the same endpoint, and `getCached` returns
-     * whatever is under that key.
-     *
-     * The TTL is not a defence: an expired entry is served as stale-while-
-     * revalidate rather than dropped, so it is returned first and corrected
-     * afterwards. Same shape as the push tokens above -- state that outlives the
-     * session it belongs to.
-     */
-    this.clearResponseCache()
-
+    if (generation === signInGeneration) {
+      setPushTokenRef(null)
+      await withinDeadline(TokenStorage.clearAll())
+    }
     return result
   }
 

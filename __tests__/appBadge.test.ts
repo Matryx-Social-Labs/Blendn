@@ -16,8 +16,11 @@ jest.mock('../lib/logger', () => ({ Logger: { warn: (...a: unknown[]) => mockWar
 
 import * as Notifications from 'expo-notifications'
 import { refreshAppIconBadge, scheduleIconBadgeRefresh, setAppIconBadge } from '../lib/appBadge'
+import { forgetPushPermission } from '../lib/pushStatus'
 
 beforeEach(() => {
+  // The permission is read once a session (RC drive D1): each test is a new one.
+  forgetPushPermission()
   jest.clearAllMocks()
   mockGetPermissions.mockResolvedValue({ status: 'granted', canAskAgain: true, ios: { allowsBadge: true } })
   mockSetBadge.mockResolvedValue(true)

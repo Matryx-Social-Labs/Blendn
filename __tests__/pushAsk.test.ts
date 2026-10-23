@@ -19,8 +19,11 @@ import { initializePushNotifications } from '../lib/notifications'
 import { ASK_COPY, askPushInContext } from '../lib/pushAsk'
 import { clearPushDeclined, hasDeclinedPush, markPushDeclined } from '../lib/pushDecline'
 import { showSheet, type ActionSheet } from '../lib/sheet'
+import { forgetPushPermission } from '../lib/pushStatus'
 
 beforeEach(async () => {
+  // The permission is read once a session (RC drive D1): each test is a new one.
+  forgetPushPermission()
   jest.clearAllMocks()
   await AsyncStorage.clear()
   ;(hasDeclinedPush as jest.Mock).mockReset().mockResolvedValue(false)
@@ -53,6 +56,8 @@ describe('askPushInContext', () => {
     mockPerm.mockResolvedValue(perm)
     expect(await askPushInContext('rsvp')).toBe(false)
     expect(showSheet).not.toHaveBeenCalled()
+    // The phone's answer changes (read again in a later session, or on the return from its Settings).
+    forgetPushPermission()
     mockPerm.mockResolvedValue({ status: 'undetermined', canAskAgain: true })
     expect(await askPushInContext('rsvp')).toBe(true)
   })

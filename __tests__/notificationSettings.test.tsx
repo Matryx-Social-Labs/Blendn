@@ -32,6 +32,7 @@ import { openChannelSettings } from '../lib/channelSettings'
 import { parsePrefs } from '../lib/notificationPrefs'
 import { closeSheet } from '../lib/sheet'
 import { View } from 'react-native'
+import { forgetPushPermission } from '../lib/pushStatus'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
 const permissions = Notifications.getPermissionsAsync as jest.Mock
@@ -45,6 +46,8 @@ const Screen = () => (
 /** The server's answers by path: offers on, per-kind preferences per test. */
 let kinds: unknown = { success: false, errorCode: 'NOT_FOUND' }
 beforeEach(() => {
+  // The permission is read once a session (RC drive D1): each test is a new one.
+  forgetPushPermission()
   jest.clearAllMocks()
   kinds = { success: false, errorCode: 'NOT_FOUND' }
   api.getProfile.mockResolvedValue({ success: true, data: { profile: { push_enabled: true } } } as never)

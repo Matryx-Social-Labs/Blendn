@@ -40,7 +40,7 @@ it('sign-in remembers the method it used, and clearing the session forgets it (s
   expect(src.match(/rememberAuthMethod\('password'\)/g)).toHaveLength(2)
   expect(src).toContain("rememberAuthMethod('google')")
   expect(src).toContain("rememberAuthMethod('apple')")
-  expect(src.slice(src.indexOf('const clearAuthState'), src.indexOf('const clearAuthState') + 200)).toContain('forgetAuthMethod()')
+  expect(src.slice(src.indexOf('const resetLocalSession'), src.indexOf('const resetLocalSession') + 200)).toContain('forgetAuthMethod()')
 })
 
 describe('useAuthMethod (SCRUM-742: the server answers for the account)', () => {

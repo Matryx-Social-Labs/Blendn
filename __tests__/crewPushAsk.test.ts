@@ -9,8 +9,13 @@ import { askCrewPush, CREW_PUSH_TITLE } from '../lib/crewPushAsk'
 import { initializePushNotifications } from '../lib/notifications'
 import { clearPushDeclined } from '../lib/pushDecline'
 import { showSheet, type ActionSheet } from '../lib/sheet'
+import { forgetPushPermission } from '../lib/pushStatus'
 
-beforeEach(() => jest.clearAllMocks())
+beforeEach(() => {
+  jest.clearAllMocks()
+  // The permission is read once a session (RC drive D1): each test is a new one.
+  forgetPushPermission()
+})
 
 describe('asking about pushes after joining a crew', () => {
   it('asks a phone that has not been asked, in the design’s words', async () => {

@@ -1,21 +1,16 @@
-import * as Notifications from 'expo-notifications'
-
 import { initializePushNotifications } from './notifications'
 import { clearPushDeclined } from './pushDecline'
+import { readPushPermission } from './pushStatus'
 import { showSheet } from './sheet'
 
 /** Flow 9's ask, the moment it earns its place: you just joined, and "We're here" is a push. */
 export const CREW_PUSH_TITLE = 'Want to know when your crew’s here?'
 export const CREW_PUSH_BODY = 'We’ll tell you when someone from your crew arrives. No names, and no place, in the push.'
 
-/** Whether the phone can still be asked: it has not said yes or no yet. */
+/** Whether the phone can still be asked: it has not said yes or no yet. A phone that will not say is not asked. */
 export async function mayAskForPush(): Promise<boolean> {
-  try {
-    const { status, canAskAgain } = await Notifications.getPermissionsAsync()
-    return status === 'undetermined' && canAskAgain
-  } catch {
-    return false
-  }
+  const permission = await readPushPermission()
+  return permission !== 'unavailable' && permission.status === 'undetermined' && permission.canAskAgain
 }
 
 /**

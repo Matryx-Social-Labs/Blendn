@@ -6,6 +6,7 @@ import { SettingsTray } from '../../components/onboarding/SettingsTray'
 import { NotificationIllustration } from '../../components/onboarding/PermissionIllustration'
 import { askOsPermission } from '../../lib/onboarding'
 import { clearPushDeclined, markPushDeclined } from '../../lib/pushDecline'
+import { notePushPermission, readPushPermission } from '../../lib/pushStatus'
 import { useAuth } from '../../lib/useAuth'
 import { useOnboarding } from '../../lib/useOnboarding'
 
@@ -43,8 +44,16 @@ export default function NotificationsScreen() {
   const ask = async () => {
     setAsking(true)
     const { granted, blocked } = await askOsPermission(
-      () => Notifications.getPermissionsAsync(),
-      async () => (await Notifications.requestPermissionsAsync()).granted
+      // The bounded read (D1). One that did not answer goes straight to the OS dialog, which does not hold the queue.
+      async () => {
+        const p = await readPushPermission({ fresh: true })
+        return p === 'unavailable' ? { granted: false, canAskAgain: true } : p
+      },
+      async () => {
+        const answer = await Notifications.requestPermissionsAsync()
+        notePushPermission(answer)
+        return answer.granted
+      }
     )
     setAsking(false)
 

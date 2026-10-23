@@ -35,8 +35,11 @@ export async function setAppIconBadge(n: number | null): Promise<void> {
     const Notifications = require('expo-notifications') as typeof import('expo-notifications')
     // Zero is a clear, which needs no permission: it is what sign-out does, and it asks the phone nothing.
     if (n > 0) {
-      const { status, ios } = await Notifications.getPermissionsAsync()
-      if (status !== 'granted' || ios?.allowsBadge === false) return
+      // The session's one bounded read (`readPushPermission`, D1), never `getPermissionsAsync` itself.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { readPushPermission } = require('./pushStatus') as typeof import('./pushStatus')
+      const permission = await readPushPermission()
+      if (permission === 'unavailable' || permission.status !== 'granted' || permission.ios?.allowsBadge === false) return
     }
     await Notifications.setBadgeCountAsync(n)
   } catch (error) {

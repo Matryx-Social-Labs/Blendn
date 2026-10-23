@@ -46,14 +46,17 @@ export function signOutSheet({ signOut, showToast }: { signOut: SignOut; showToa
         label: 'Sign out',
         variant: 'primary',
         pressHaptic: () => H.primary(),
+        /*
+         * Not held on the server (RC drive D1): `signOut` clears this phone before its first await and the guard routes to
+         * the entry screen, so the sheet closes now. The server's answer arrives later, as the toast.
+         */
         run: async () => {
-          try {
-            const result = await signOut()
-            if (!result.success) showToast(SIGNED_OUT_UNCONFIRMED, 'info')
-            return { ok: true }
-          } catch {
-            return { ok: false, error: 'Couldn’t sign out. Try again.' }
-          }
+          void signOut()
+            .then((result) => {
+              if (!result.success) showToast(SIGNED_OUT_UNCONFIRMED, 'info')
+            })
+            .catch(() => showToast(SIGNED_OUT_UNCONFIRMED, 'info'))
+          return { ok: true }
         },
       },
       { label: 'Cancel', cancel: true },

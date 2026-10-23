@@ -3,7 +3,7 @@ import { AppState } from 'react-native'
 import { apiClient, AuthUser, TokenStorage } from './apiClient'
 import { setAppIconBadge } from './appBadge'
 import { forgetAuthMethod, rememberAuthMethod } from './authMethod'
-import { REQUEST_TIMEOUT_MS, settleWithin } from './fetchTimeout'
+import { onCriticalPath } from './criticalPath'
 import { Logger } from './logger'
 import { outageFrom, type Outage } from './outage'
 import { syncPurchasesUser } from './purchases'
@@ -137,8 +137,9 @@ const initializeAuth = async (): Promise<AuthState> => {
   isInitializing = true
   Logger.info('auth', 'Initializing auth system...')
 
-  // Create a promise that other callers can await
-  initializationPromise = (async (): Promise<AuthState> => {
+  // Create a promise that other callers can await. On the critical path (D1): the keychain reads and the stored user go
+  // ahead of any notification-permission read.
+  initializationPromise = onCriticalPath(async (): Promise<AuthState> => {
     // Start in loading state
     updateAuthState({ loading: true })
 
@@ -217,7 +218,7 @@ const initializeAuth = async (): Promise<AuthState> => {
       isInitializing = false
       return globalAuthState
     }
-  })()
+  })
 
   return initializationPromise
 }
@@ -270,11 +271,12 @@ const keepStoredSession = async () => {
   })
 }
 
-// Clear auth state
-// The token clear is bounded (SCRUM-733): a keychain that does not answer must not keep somebody in a session they asked
-// to leave. The removal still lands when it frees; the app's own state is cleared now.
-const clearAuthState = async () => {
-  await settleWithin(TokenStorage.clearAll(), REQUEST_TIMEOUT_MS, undefined)
+/**
+ * Everything this phone holds for the session in memory, cleared at once: signed out, and the root layout routes to the
+ * entry screen. Never waits on a native call (SCRUM-733, RC drive D1): the keychain shares one native queue with every Expo
+ * module, and a call stuck there would keep somebody in a session they asked to leave. The keychain is the caller's.
+ */
+const resetLocalSession = () => {
   void forgetAuthMethod()
   // The icon's number was the last account's: the next person to open the app on this phone does not inherit it.
   void setAppIconBadge(0)
@@ -301,6 +303,8 @@ const clearAuthState = async () => {
    * the auth path does.
    */
   void import('./goLive').then((m) => m.clearLiveSession()).catch(() => {})
+  // The next account's session reads the phone's permission afresh (`readPushPermission`).
+  void import('./pushStatus').then((m) => m.forgetPushPermission()).catch(() => {})
   updateAuthState({
     session: null,
     user: null,
@@ -312,6 +316,15 @@ const clearAuthState = async () => {
     isNewAccount: false,
     unreachable: false,
   })
+}
+
+/**
+ * Signed out here, then the keychain. Its deletes are queued now, so a sign-in after this writes after them; the app does
+ * not wait for them (D1): a keychain stuck behind another native call clears when it frees.
+ */
+const clearAuthState = async () => {
+  resetLocalSession()
+  void TokenStorage.clearAll().catch(() => {})
 }
 
 // apiClient clears tokens on a failed background refresh (e.g. a 401 whose
@@ -406,7 +419,7 @@ export const signInWithGoogle = async (
     Logger.info('auth', 'Signing in with Google...')
     updateAuthState({ loading: true })
 
-    const result = await apiClient.signInWithGoogle(idToken, deviceInfo)
+    const result = await onCriticalPath(() => apiClient.signInWithGoogle(idToken, deviceInfo))
 
     if (result.success && result.data) {
       const { user, isNewUser } = result.data
@@ -448,7 +461,7 @@ export const signInWithApple = async (
     Logger.info('auth', 'Signing in with Apple...')
     updateAuthState({ loading: true })
 
-    const result = await apiClient.signInWithApple(identityToken, fullName, deviceInfo)
+    const result = await onCriticalPath(() => apiClient.signInWithApple(identityToken, fullName, deviceInfo))
 
     if (result.success && result.data) {
       const { user, isNewUser } = result.data
@@ -490,7 +503,7 @@ export const signInWithEmail = async (
     Logger.info('auth', 'Signing in with email...')
     updateAuthState({ loading: true })
 
-    const result = await apiClient.signInWithEmail(email, password, deviceInfo)
+    const result = await onCriticalPath(() => apiClient.signInWithEmail(email, password, deviceInfo))
 
     if (result.success && result.data) {
       const { user } = result.data
@@ -542,7 +555,7 @@ export const signUp = async (
     Logger.info('auth', 'Signing up...')
     updateAuthState({ loading: true })
 
-    const result = await apiClient.signUp(email, password, name, deviceInfo, age)
+    const result = await onCriticalPath(() => apiClient.signUp(email, password, name, deviceInfo, age))
 
     if (result.success && result.data) {
       const { user } = result.data
@@ -586,14 +599,24 @@ export const signUp = async (
  * Settings' "Failed to sign out" branch could never fire. Offline, the
  * refresh token stayed valid and the push token stayed registered, and the
  * screen said nothing.
+ *
+ * The order is the fix for RC drive D1. The server half starts first, so its
+ * refresh-token read is queued before anything is cleared; then this phone is
+ * signed out at once and the root layout routes to the entry screen. Nothing
+ * the person sees waits on the keychain, which shares one native queue with
+ * every Expo module: a call stuck there held sign-out for minutes. The server
+ * half clears the keychain when it is done (`apiClient.signOut`); the promise
+ * this returns settles with it, for the toast that says the server did not
+ * confirm.
  */
 export const signOut = async (
   revokeAll: boolean = false
 ): Promise<{ success: boolean; error?: string }> => {
+  Logger.info('auth', 'Signing out...')
+  const server = onCriticalPath(() => apiClient.signOut(revokeAll))
+  resetLocalSession()
   try {
-    Logger.info('auth', 'Signing out...')
-    const result = await apiClient.signOut(revokeAll)
-    await clearAuthState()
+    const result = await server
     if (!result.success) {
       Logger.warn('auth', 'Signed out locally; the server did not confirm', { error: result.error })
       return { success: false, error: result.error }
@@ -602,7 +625,7 @@ export const signOut = async (
     return { success: true }
   } catch (error) {
     Logger.error('auth', 'Sign out exception', { error })
-    await clearAuthState()
+    void TokenStorage.clearAll().catch(() => {})
     return { success: false, error: error instanceof Error ? error.message : 'Sign out failed' }
   }
 }
