@@ -20,6 +20,7 @@ import {
 } from '../../lib/crewsScreens'
 import { COLOR, DURATION, FONT_FAMILY, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
+import { useKeyboardShown } from '../../lib/keyboard'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { closesLine } from '../../lib/crews'
 import { markRoomLeft } from '../../lib/roomMembership'
@@ -154,6 +155,12 @@ export function useBlendRoom(blendId: string | null, top: number): BlendRoomChro
 
   const shown = !!blend
   const coach = useCoachMark('blend_first_open', { ready: shown })
+  /*
+   * The bar sits over the feed, above the composer; with the keyboard up the card made it taller than the room left, and
+   * it covered the composer and the contact warning (RC drive 4 D-1). Typing, the card steps aside (not spent: it is
+   * back when the keyboard goes down), and the sides alone stay.
+   */
+  const typing = useKeyboardShown()
 
   if (!blendId || !blend) {
     /*
@@ -281,7 +288,7 @@ export function useBlendRoom(blendId: string | null, top: number): BlendRoomChro
           {closing}
         </Text>
       ) : null}
-      {coach.visible ? (
+      {coach.visible && !typing ? (
         // "Got it" and Leave take it away with a fade (200 under Reduce Motion); the feed's top inset follows its height a frame later.
         <Animated.View style={styles.card} testID="blend-first-open" exiting={cardOut}>
           <View style={styles.well}>

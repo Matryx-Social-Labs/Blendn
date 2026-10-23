@@ -31,6 +31,9 @@ jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { id: mockUserId } 
 const mockToast = jest.fn()
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockToast }) }))
 let mockCoachVisible = false
+// The keyboard, up or down: react-native-keyboard-controller's own events are not driven here.
+let mockKeyboardUp = false
+jest.mock('../lib/keyboard', () => ({ ...jest.requireActual('../lib/keyboard'), useKeyboardShown: () => mockKeyboardUp }))
 jest.mock('../lib/coachMarks', () => ({
   useCoachMark: () => ({ visible: mockCoachVisible }),
   markCoachUsed: jest.fn(),
@@ -124,6 +127,7 @@ beforeEach(() => {
   for (const k of Object.keys(mockParams)) delete mockParams[k]
   mockParams.blendId = 'b1'
   mockCoachVisible = false
+  mockKeyboardUp = false
   mockUserId = `me-${++accounts}`
   api.getEvent.mockResolvedValue({ success: true, data: { venueName: 'Toit' } } as never)
 })
@@ -391,6 +395,28 @@ describe('around the room', () => {
     serve(blend())
     await open()
     expect(screen.getByTestId('blend-first-open').props.exiting).toBeDefined()
+  })
+
+  it('typing, the card steps aside so the composer and the contact warning show; it is back, unspent, when the keyboard goes (D-1)', async () => {
+    // Arrange: a first open, the card on screen.
+    mockCoachVisible = true
+    serve(blend())
+    await open()
+    expect(screen.getByTestId('blend-first-open')).toBeTruthy()
+
+    // Act: the composer is focused and the keyboard comes up.
+    mockKeyboardUp = true
+    await screen.rerender(<Room />)
+
+    // Assert: no card over the room, and it was not spent.
+    expect(screen.queryByTestId('blend-first-open')).toBeNull()
+    expect(screen.getByTestId('blend-mine')).toBeTruthy()
+    expect(markCoachUsed).not.toHaveBeenCalled()
+
+    // Act: the keyboard goes down.
+    mockKeyboardUp = false
+    await screen.rerender(<Room />)
+    expect(screen.getByTestId('blend-first-open')).toBeTruthy()
   })
 
   it('no card once it has been seen', async () => {
