@@ -254,6 +254,21 @@ describe('a token refresh in flight across a sign-out (Opus review H1)', () => {
     await jest.advanceTimersByTimeAsync(20_000)
   })
 
+  it('the launch’s signed-out marker ends it too: a refresh in flight stores nothing over its clear (re-review L2)', async () => {
+    const { read, release } = await refreshHeldInFlight()
+    // The phone was signed out and its deletes never landed: the launch finds the marker and clears the keychain itself.
+    const { TokenStorage } = require('../lib/apiClient') as typeof import('../lib/apiClient')
+    TokenStorage.markSignedOut()
+    expect((await auth.reinitializeAuth()).user).toBeNull()
+    expect(mockSecure.has(ACCESS)).toBe(false)
+    release()
+    await read
+    await jest.advanceTimersByTimeAsync(0)
+    expect(mockSecure.has(ACCESS)).toBe(false)
+    expect(mockSecure.has(REFRESH)).toBe(false)
+    await jest.advanceTimersByTimeAsync(20_000)
+  })
+
   it('never overwrites the account signed in after it', async () => {
     const { read, release } = await refreshHeldInFlight()
     await auth.signOut()

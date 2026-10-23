@@ -266,8 +266,11 @@ const withinDeadline = <T,>(work: Promise<T>): Promise<T | typeof TIMED_OUT> => 
  * next launch, or overwrite the next account's).
  */
 let sessionEpoch = 0
-/** A session begins, or the last one ends. */
-const nextSession = (): number => ++sessionEpoch
+/**
+ * A session begins, or the last one ends. Exported for the launch's signed-out marker (`useAuth.initializeAuth`), which
+ * clears the keychain outside this module (re-review L2).
+ */
+export const nextSession = (): number => ++sessionEpoch
 
 /*
  * Why the reads stay on SecureStore's async API (RC drive D1). expo-secure-store's async functions have no `.runOnQueue`, so

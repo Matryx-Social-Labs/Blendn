@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { AppState } from 'react-native'
-import { apiClient, AuthUser, TokenStorage } from './apiClient'
+import { apiClient, AuthUser, nextSession, TokenStorage } from './apiClient'
 import { setAppIconBadge } from './appBadge'
 import { forgetAuthMethod, rememberAuthMethod } from './authMethod'
 import { onCriticalPath } from './criticalPath'
@@ -157,6 +157,8 @@ const initializeAuth = async (): Promise<AuthState> => {
        */
       if (await TokenStorage.signedOutHere()) {
         Logger.info('auth', 'Signed out on this phone; not restoring the keychain session')
+        // Its own ending: a refresh still in flight for that session stores nothing over the clear (H1, re-review L2).
+        nextSession()
         const cleared = await settleWithin(TokenStorage.clearAll().then(() => true), REQUEST_TIMEOUT_MS, false)
         if (cleared) await TokenStorage.forgetSignedOut()
         updateAuthState({ session: null, user: null, loading: false, initialized: true, unreachable: false })
