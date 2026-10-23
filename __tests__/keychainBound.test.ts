@@ -105,6 +105,31 @@ it('a keychain write that never finishes does not hold the refresh: its tokens g
   expect(mockExpired).not.toHaveBeenCalled()
 })
 
+it('a refresh whose fetch never answers is released at its deadline: the next 401 starts its own (review L1)', async () => {
+  let refreshes = 0
+  global.fetch = jest.fn((url: RequestInfo | URL) => {
+    if (String(url).endsWith('/auth/refresh')) {
+      refreshes += 1
+      // The server took the request and never answered: only REFRESH_DEADLINE_MS stands between this and forever.
+      return new Promise<Response>(() => {})
+    }
+    return Promise.resolve(json(401, { success: false }))
+  }) as typeof fetch
+  const first = apiClient.getSession()
+  await jest.advanceTimersByTimeAsync(REFRESH_DEADLINE_MS)
+  // Released, as a failed refresh: a transport problem, never a sign-out.
+  await expect(first).resolves.toEqual({ success: false, error: TIMEOUT_MESSAGE })
+  expect(refreshes).toBe(1)
+  expect(mockExpired).not.toHaveBeenCalled()
+
+  // The next 401 starts a refresh of its own; joined to the hung one, it would never send.
+  const second = apiClient.getSession()
+  await jest.advanceTimersByTimeAsync(0)
+  expect(refreshes).toBe(2)
+  await jest.advanceTimersByTimeAsync(REFRESH_DEADLINE_MS)
+  await expect(second).resolves.toEqual({ success: false, error: TIMEOUT_MESSAGE })
+})
+
 it('a slow keychain leaves a breadcrumb; a quick one says nothing', async () => {
   const warn = Logger.warn as jest.Mock
   warn.mockClear()
