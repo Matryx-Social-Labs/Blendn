@@ -164,8 +164,9 @@ describe('what the router is handed for each screen a link could name', () => {
     ['forgot-password: email', 'blendn://forgot-password?email=victim@example.com', '/forgot-password'],
     ['the Scene: title, cover, description', `https://www.blendn.app/event/${ID}?title=Free&cover=https://attacker.example/x.jpg&description=hi`, `/event/${ID}`],
     ['the venue page: km', `https://www.blendn.app/v/${ID}?km=0.1`, `/venue/${ID}`],
-  ])('%s', (_name, link, route) => {
-    expect(via(link)).toBe(route)
+  ])('%s', async (_name, link, route) => {
+    // With the app open it waits for any modal route to close first (`dismissModals`), so it answers a promise.
+    await expect(via(link)).resolves.toBe(route)
     expect(via(link, true)).toBe(route)
   })
 })
