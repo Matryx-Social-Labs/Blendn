@@ -74,7 +74,7 @@ import { StyleSheet } from 'react-native'
 import PrivateChat from '../app/private-chat/[conversationId]'
 import { SheetHost } from '../components/SheetHost'
 import { apiClient } from '../lib/apiClient'
-import { clearOutbox } from '../lib/chatOutbox'
+import { clearOutbox, dmThread, setDraft } from '../lib/chatOutbox'
 import { COLOR } from '../lib/design/tokens'
 import { closeSheet } from '../lib/sheet'
 /* eslint-enable import/first */
@@ -359,6 +359,31 @@ describe('the card in the thread, once you can both see each other', () => {
     await act(async () => fireEvent.press(screen.getByLabelText('Conversation options')))
     await flush()
     expect(sheet().getByLabelText('Add friend')).toBeTruthy()
+  })
+})
+
+describe('the composer across a remount (a text-size change, Opus review M4)', () => {
+  afterEach(() => {
+    mockParams = { conversationId: 'c1' }
+    clearOutbox()
+  })
+
+  it('what you typed wins over the suggested opener the route carries', async () => {
+    api.getConversation.mockResolvedValue({ success: true, data: revealed } as never)
+    mockParams = { conversationId: 'c1', draft: 'Try: what brought you here?' }
+    setDraft(dmThread('c1', 'u-a'), 'my own words, half typed')
+    await render(<PrivateChat />)
+    await flush()
+    expect(screen.getByDisplayValue('my own words, half typed')).toBeTruthy()
+    expect(screen.queryByDisplayValue('Try: what brought you here?')).toBeNull()
+  })
+
+  it('with nothing typed, the opener still fills it', async () => {
+    api.getConversation.mockResolvedValue({ success: true, data: revealed } as never)
+    mockParams = { conversationId: 'c1', draft: 'Try: what brought you here?' }
+    await render(<PrivateChat />)
+    await flush()
+    expect(screen.getByDisplayValue('Try: what brought you here?')).toBeTruthy()
   })
 })
 

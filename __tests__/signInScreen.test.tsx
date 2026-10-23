@@ -24,7 +24,7 @@ jest.mock('../lib/logger', () => ({ Logger: { info: jest.fn(), warn: jest.fn(), 
 jest.mock('../components/friends/PendingInvite', () => ({ PendingInvite: () => null }))
 
 import { router, useLocalSearchParams } from 'expo-router'
-import SignIn from '../app/sign-in'
+import SignIn, { heldForm } from '../app/sign-in'
 
 let error: jest.SpyInstance
 beforeEach(() => {
@@ -34,6 +34,26 @@ beforeEach(() => {
   jest.spyOn(H, 'primary').mockImplementation(() => {})
   jest.spyOn(H, 'select').mockImplementation(() => {})
   ;(useLocalSearchParams as jest.Mock).mockReturnValue({})
+  // Each test is a fresh form: what one typed is held across a remount (M4), not across tests.
+  Object.assign(heldForm, { mode: 'signin', email: '', name: '', age: '' })
+})
+
+describe('a remount (a text-size change re-lays the screen out, Opus review M4)', () => {
+  it('keeps the mode and what was typed, never the password', async () => {
+    const first = await render(<SignIn />)
+    await createAccount()
+    await type('sign-in-name', 'Asha')
+    await type('sign-in-email', 'asha@example.com')
+    await type('sign-in-password', 'correct horse battery')
+    await type('sign-in-age', '27')
+    await first.unmount()
+    await render(<SignIn />)
+    expect(screen.getByRole('tab', { name: 'Create account' }).props.accessibilityState).toMatchObject({ selected: true })
+    expect(screen.getByDisplayValue('Asha')).toBeTruthy()
+    expect(screen.getByDisplayValue('asha@example.com')).toBeTruthy()
+    expect(screen.getByDisplayValue('27')).toBeTruthy()
+    expect(screen.queryByDisplayValue('correct horse battery')).toBeNull()
+  })
 })
 afterEach(() => jest.useRealTimers())
 

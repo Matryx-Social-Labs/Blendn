@@ -49,7 +49,7 @@ const adoptStoredUrls = (list: ProfilePhoto[], stored?: string[]): ProfilePhoto[
  *
  * One photo write at a time (SCRUM-497). A new tile carries its upload's URL until the add's write returns the sealed copy the server
  * keeps — it deletes the upload. Reordering and Remove stayed live meanwhile, so a quick drag re-sent the upload ("That photo did not
- * finish uploading"), and a failed write put back a grid that still held it. The ref refuses a second write even within one frame;
+ * finish uploading"), and a failed write put back a grid that still held it. `photoWrites` refuses a second write even within one frame;
  * `busy` is what the tiles show.
  *
  * A photo on its way is a tile with a progress bar; one that did not get there is a tile with Retry (it keeps the file). A photo
@@ -57,6 +57,20 @@ const adoptStoredUrls = (list: ProfilePhoto[], stored?: string[]): ProfilePhoto[
  * of what is written (it has no URL), and tapping it adds a different photo in its place. Taking down the main photo says what the main
  * photo is now, and where to write if it was a mistake (Flow 6 · 6.3).
  */
+/**
+ * The account whose photo write is in flight, outside any one PhotoManager (Opus review M4). A remount (a text-size change,
+ * `TextSizeBoundary`) starts a new instance while the old one's upload is still out; with the guard in a ref the new one
+ * could start a second write over it. `photoWriteEnded` tells a remounted instance to read the grid the old one wrote.
+ */
+const photoWrites = new Set<string>()
+const photoWriteEnded = new Set<(userId: string) => void>()
+const photoWriteOpen = (userId: string) => photoWrites.has(userId)
+const beginPhotoWrite = (userId: string) => void photoWrites.add(userId)
+function endPhotoWrite(userId: string): void {
+  photoWrites.delete(userId)
+  photoWriteEnded.forEach((fn) => fn(userId))
+}
+
 export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: PhotoManagerProps) {
   const [photos, setPhotos] = useState<ProfilePhoto[]>([])
   const [loading, setLoading] = useState(true)
@@ -66,11 +80,13 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
   const [pulled, setPulled] = useState<PulledPhoto[]>([])
   // Which pulled tile the Add in flight came from: its notice goes once the replacement is on the profile, however many tries (Retry) that takes.
   const replacing = useRef<PulledPhoto | null>(null)
+  // Mounted while an earlier instance's write is still out: busy until it ends, then the grid is read again.
+  const [inherited, setInherited] = useState(() => photoWrites.has(userId))
   const [uploading, setUploading] = useState(false)
-  const writing = useRef(false)
+
   const addedCount = useRef(0)
   const [saving, setSaving] = useState(false)
-  const busy = uploading || saving
+  const busy = uploading || saving || inherited
   const { showToast } = useToast()
   const bold = useBoldText()
   const { width: windowWidth } = useWindowDimensions()
@@ -124,6 +140,22 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
     loadPhotos().catch((error) => Logger.error('profile', 'PhotoManager: Load photos error', { error, userId }))
   }, [loadPhotos, userId])
 
+  // The earlier instance's write ended: what it wrote is on the server, so read it (M4).
+  useEffect(() => {
+    if (!inherited) return
+    const ended = (who: string) => {
+      if (who !== userId) return
+      setInherited(false)
+      loadPhotos().catch((error) => Logger.error('profile', 'PhotoManager: Load photos error', { error, userId }))
+    }
+    photoWriteEnded.add(ended)
+    // It may have ended between this render and this effect.
+    if (!photoWrites.has(userId)) queueMicrotask(() => ended(userId))
+    return () => {
+      photoWriteEnded.delete(ended)
+    }
+  }, [inherited, loadPhotos, userId])
+
   /**
    * The add's write: the upload held its URL, and THIS is the write that puts it on the profile. `reorderPhotos` reports failure by
    * returning false, never by throwing; ignoring it logged "Photo added" for a tile that was gone on the next load.
@@ -165,8 +197,8 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
       showToast(`You can have up to ${maxPhotos} photos.`, 'info')
       return
     }
-    if (writing.current) return
-    writing.current = true
+    if (photoWriteOpen(userId)) return
+    beginPhotoWrite(userId)
     setUploading(true)
     AccessibilityInfo.announceForAccessibility('Uploading photo')
     try {
@@ -194,15 +226,15 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
       Logger.error('profile', 'PhotoManager: Add photo error', { error, userId })
       upFailed()
     } finally {
-      writing.current = false
+      endPhotoWrite(userId)
       setUploading(false)
     }
   }
 
   /** Retry on a tile that did not upload: the same file, to the same slot. */
   const handleRetry = async () => {
-    if (!pending || writing.current) return
-    writing.current = true
+    if (!pending || photoWriteOpen(userId)) return
+    beginPhotoWrite(userId)
     setUploading(true)
     setPending({ ...pending, state: 'uploading', progress: 0 })
     try {
@@ -213,7 +245,7 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
       Logger.error('profile', 'PhotoManager: Retry upload error', { error, userId })
       upFailed()
     } finally {
-      writing.current = false
+      endPhotoWrite(userId)
       setUploading(false)
     }
   }
@@ -226,8 +258,8 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
    */
   const commitOrder = useCallback(
     async (reorderedPhotos: ProfilePhoto[]) => {
-      if (writing.current) return
-      writing.current = true
+      if (photoWriteOpen(userId)) return
+      beginPhotoWrite(userId)
       setSaving(true)
       setPhotos(reorderedPhotos.map((p, i) => ({ ...p, order: i, isPrimary: i === 0 })))
       try {
@@ -240,7 +272,7 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
         H.success()
         setPhotos((prev) => adoptStoredUrls(prev, saved.photos))
       } finally {
-        writing.current = false
+        endPhotoWrite(userId)
         setSaving(false)
       }
     },
@@ -253,7 +285,7 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
       if (slots.length !== photos.length || !reordered(slots)) return
       // A write is already in flight (an upload landed under the finger): the drop is not queued behind it, the tiles go home, and
       // the person drags again once it has settled. Dragging is off while one is open, so this is only a lift that began before it.
-      if (writing.current) {
+      if (photoWriteOpen(userId)) {
         positions.set(photos.map((_, i) => i))
         return
       }
@@ -274,7 +306,7 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
 
   const handleRemovePhoto = useCallback(
     (photoIndex: number) => {
-      if (writing.current) return
+      if (photoWriteOpen(userId)) return
       const photo = photos[photoIndex]
       // The app's one sheet, like every other "are you sure" (lib/sheet.ts).
       showSheet({
@@ -287,8 +319,8 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
             label: 'Remove photo',
             variant: 'destructive',
             then: async () => {
-              if (writing.current) return
-              writing.current = true
+              if (photoWriteOpen(userId)) return
+              beginPhotoWrite(userId)
               setSaving(true)
               try {
                 // Remove from state immediately for better UX
@@ -316,7 +348,7 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
                 setLoading(true)
                 void loadPhotos()
               } finally {
-                writing.current = false
+                endPhotoWrite(userId)
                 setSaving(false)
               }
             },
@@ -440,7 +472,7 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
           <View key={`pulled-${notice.pulledAt ?? k}`} style={slotRect(taken + k)}>
             <PulledFace
               onReplace={() => {
-                if (writing.current) return
+                if (photoWriteOpen(userId)) return
                 replacing.current = notice
                 void handleAddPhoto()
               }}

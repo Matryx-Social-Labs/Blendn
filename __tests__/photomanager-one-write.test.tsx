@@ -184,3 +184,37 @@ it('Remove lets go of the grid when its write ends: refused, then held', async (
   await waitFor(() => expect(screen.getAllByLabelText(/^Photo \d of 1/)).toHaveLength(1))
   expect(screen.getByLabelText('Add photo').props.accessibilityState).toMatchObject({ disabled: false })
 })
+
+describe('a remount while a photo is uploading (a text-size change, Opus review M4)', () => {
+  it('the new instance cannot start a second write, and reads the grid once the first one has landed', async () => {
+    let finishUpload!: (v: { success: true; url: string }) => void
+    pu.selectAndUploadPhoto.mockImplementationOnce(() => new Promise((r) => (finishUpload = r)))
+    pu.reorderPhotos.mockResolvedValue({ ok: true, photos: [A, SEALED] })
+    const first = await render(<PhotoManager userId="u-remount" />)
+    await screen.findByLabelText('Add photo')
+    await fireEvent.press(screen.getByLabelText('Add photo'))
+    await waitFor(() => expect(pu.selectAndUploadPhoto).toHaveBeenCalledTimes(1))
+
+    // The text size changes: the screen is remounted while the upload is still out.
+    await first.unmount()
+    await render(<PhotoManager userId="u-remount" />)
+    await screen.findByLabelText('Add photo')
+    await fireEvent.press(screen.getByLabelText('Add photo'))
+    expect(pu.selectAndUploadPhoto).toHaveBeenCalledTimes(1)
+
+    // The first upload lands and is written; the remounted grid reads it back.
+    const loadsBefore = pu.loadUserPhotos.mock.calls.length
+    pu.loadUserPhotos.mockResolvedValue([
+      { id: 'u_0', url: A, order: 0, isPrimary: true },
+      { id: 'u_1', url: SEALED, order: 1, isPrimary: false },
+    ])
+    await act(async () => finishUpload({ success: true, url: UPLOAD }))
+    await waitFor(() => expect(pu.loadUserPhotos.mock.calls.length).toBeGreaterThan(loadsBefore))
+    await screen.findByLabelText('Photo 2 of 2')
+    expect(pu.reorderPhotos).toHaveBeenCalledTimes(1)
+    // And it is free again.
+    pu.selectAndUploadPhoto.mockResolvedValueOnce({ success: false, cancelled: true } as never)
+    await fireEvent.press(screen.getByLabelText('Add photo'))
+    expect(pu.selectAndUploadPhoto).toHaveBeenCalledTimes(2)
+  })
+})
