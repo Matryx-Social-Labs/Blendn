@@ -320,3 +320,24 @@ describe('MED-A: no false refusals', () => {
     expect(shown('a')).toBe(false)
   })
 })
+
+describe('afterSheetDismissed leaves no stale waiter (review LOW)', () => {
+  it('resolved on the fallback before it reached the front, it leaves the line: the sheet behind it is not held up', async () => {
+    // A holds the screen and never says it has gone.
+    const view = await render(<Sheet visible onClose={() => {}} title="A" testID="a" />)
+    void afterSheetDismissed(600)
+    await tick(600)
+    // A closes; B asks. Nobody stale ahead of B.
+    await view.rerender(
+      <>
+        <Sheet visible={false} onClose={() => {}} title="A" testID="a" />
+        <Sheet visible onClose={() => {}} title="B" testID="b" />
+      </>
+    )
+    // A's exit, then its fallback: the moment A gives the screen up, B has it (a stale waiter would hold it 600 ms more).
+    await tick(300)
+    await tick(650)
+    await tick(50)
+    expect(shown('b')).toBe(true)
+  })
+})

@@ -26,6 +26,12 @@ export function afterSheetDismissed(fallbackMs = 600): Promise<void> {
       settled = true
       dismissWaiters.delete(done)
       clearTimeout(timer)
+      // Resolved before it reached the front (the fallback, or an onDismiss heard first): it leaves the line, rather
+      // than turn up later as a stale waiter holding the screen for nobody (review LOW).
+      if (!holding) {
+        offTurns()
+        releaseTurn(waiter)
+      }
       resolve()
     }
     // Its turn: what the caller presents next is next; it lets go when that asks, or after the hand-off.
