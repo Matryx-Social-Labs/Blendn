@@ -253,8 +253,15 @@ export const TIMED_OUT = Symbol('timed out')
  */
 const withinDeadline = <T,>(work: Promise<T>): Promise<T | typeof TIMED_OUT> => settleWithin<T | typeof TIMED_OUT>(work, REQUEST_TIMEOUT_MS, TIMED_OUT)
 
-/** Bumped by every stored sign-in: a background sign-out compares it before clearing the keychain (`signOut`). */
-let signInGeneration = 0
+/**
+ * Which session the keychain holds: bumped by a stored sign-in (`keepSession`) and by every way out (`signOut`,
+ * `signOutEverywhere`, `deleteAccount`). Work that started in one session never writes into the next (Opus review H1): a
+ * refresh in flight across a sign-out does not store the rotated tokens (which would sign the old account back in on the
+ * next launch, or overwrite the next account's).
+ */
+let sessionEpoch = 0
+/** A session begins, or the last one ends. */
+const nextSession = (): number => ++sessionEpoch
 
 /*
  * Why the reads stay on SecureStore's async API (RC drive D1). expo-secure-store's async functions have no `.runOnQueue`, so
@@ -1595,6 +1602,8 @@ class ApiClientClass {
 
     // Store promise BEFORE any await so concurrent callers see it immediately.
     const started = Date.now()
+    // The session this refresh is for: once it has ended (a sign-out, another sign-in), what it gets is not stored (H1).
+    const epoch = sessionEpoch
     const work: Promise<RefreshOutcome> = (async () => {
       try {
         const refreshToken = await withinDeadline(TokenStorage.getRefreshToken())
@@ -1646,6 +1655,11 @@ class ApiClientClass {
         const data: ApiResponse<{ accessToken: string; refreshToken: string }> = JSON.parse(raw)
 
         if (data.success && data.data) {
+          if (epoch !== sessionEpoch) {
+            // The session it was for is over: storing these would sign that account back in. Not a refusal either.
+            Logger.info('api', 'refresh:stale', { reason: 'session ended while it was in flight' })
+            return 'failed'
+          }
           await TokenStorage.setTokens(data.data.accessToken, data.data.refreshToken)
           return 'ok'
         }
@@ -1752,8 +1766,8 @@ class ApiClientClass {
   /** Store the tokens and user of a successful sign-in or sign-up. */
   private async keepSession(result: ApiResponse<AuthResult>): Promise<ApiResponse<AuthResult>> {
     if (result.success && result.data) {
-      // A sign-out still finishing in the background must not take this session's push token (`signOut`).
-      signInGeneration += 1
+      // A new session: a refresh still in flight from the last one does not store over it (H1).
+      nextSession()
       // Nothing cached, or still in flight, from before this sign-in is served to it.
       this.clearResponseCache()
       await TokenStorage.setTokens(result.data.accessToken, result.data.refreshToken)
@@ -1865,6 +1879,7 @@ class ApiClientClass {
     })
 
     if (result.success) {
+      nextSession()
       // Bounded like sign-out's (D1): a keychain stuck behind another native call clears when it frees.
       await withinDeadline(TokenStorage.clearAll())
       requestQueue.clear()
@@ -1906,6 +1921,7 @@ class ApiClientClass {
       body: JSON.stringify({ pushToken: getPushTokenRef() ?? undefined }),
     })
     if (!result.success) return result
+    nextSession()
     setPushTokenRef(null)
     await TokenStorage.clearAll()
     requestQueue.clear()
@@ -1927,7 +1943,7 @@ class ApiClientClass {
    * end every session, not this one) and the result says the server did not confirm.
    */
   async signOut(revokeAll: boolean = false): Promise<ApiResponse<void>> {
-    const generation = signInGeneration
+    const generation = nextSession()
     /*
      * Drop the cached responses and the queued requests now. `clearResponseCache` also stops a read already in flight
      * from refilling the cache with this account's data for the next one (its epoch).
@@ -1950,7 +1966,7 @@ class ApiClientClass {
       result = await this.postSignOut(accessToken, named, pushToken)
     }
     // Not a newer session's push token (one signed in while this was out).
-    if (generation === signInGeneration) setPushTokenRef(null)
+    if (generation === sessionEpoch) setPushTokenRef(null)
     await cleared
     return result
   }

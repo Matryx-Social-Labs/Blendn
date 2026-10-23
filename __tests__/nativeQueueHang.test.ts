@@ -61,11 +61,17 @@ let session = 1
 let signOutPosts: { bearer: string | null; body: Record<string, unknown> }[] = []
 /** The access token the server takes as expired (a 401), once. */
 let mockExpiredAccess: string | null = null
+/** Access tokens the server answers 401 to (expired). */
+const mockExpired = new Set<string>()
+/** The next token refresh waits for this before it answers (one-shot). */
+let mockHoldRefresh: Promise<void> | null = null
 /** Held reads of `/api/mobile/thing`: the test answers them as whoever it likes. */
 const heldThings: ((who: string) => void)[] = []
 beforeEach(() => {
   signOutPosts = []
   mockExpiredAccess = null
+  mockExpired.clear()
+  mockHoldRefresh = null
   mockLog.length = 0
   signedOutOnServer = 0
   jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'] })
@@ -73,6 +79,9 @@ beforeEach(() => {
     const u = String(url)
     const bearer = (init?.headers as Record<string, string> | undefined)?.Authorization?.replace('Bearer ', '') ?? null
     if (u.endsWith('/auth/refresh')) {
+      const hold = mockHoldRefresh
+      mockHoldRefresh = null
+      if (hold) await hold
       const n = session++
       return json(200, { success: true, data: { accessToken: `access-${n}`, refreshToken: `refresh-${n}` } })
     }
@@ -84,7 +93,7 @@ beforeEach(() => {
       const n = session++
       return json(200, { success: true, data: { user: USER, accessToken: `access-${n}`, refreshToken: `refresh-${n}` } })
     }
-    if (u.endsWith('/auth/session')) return json(200, { success: true, data: USER })
+    if (u.endsWith('/auth/session')) return bearer && mockExpired.has(bearer) ? json(401, { success: false }) : json(200, { success: true, data: USER })
     if (u.endsWith('/auth/signout')) {
       signOutPosts.push({ bearer, body: JSON.parse(String(init?.body ?? '{}')) })
       if (bearer && bearer === mockExpiredAccess) return json(401, { success: false })
@@ -182,6 +191,45 @@ describe('sign-out clears the keychain before it tells the server (security revi
     heldThings.shift()?.('B')
     await expect(asB).resolves.toMatchObject({ data: { who: 'B' } })
     await auth.signOut()
+  })
+})
+
+describe('a token refresh in flight across a sign-out (Opus review H1)', () => {
+  /** A 401 starts a refresh that reads the refresh token, sends its POST, and is held there. */
+  async function refreshHeldInFlight() {
+    await auth.signInWithEmail('a@b.c', 'pw')
+    mockExpired.add(String(mockSecure.get(ACCESS)))
+    let release = () => {}
+    mockHoldRefresh = new Promise<void>((resolve) => (release = resolve))
+    const read = apiClient.getSession()
+    await jest.advanceTimersByTimeAsync(0)
+    return { read, release: () => release() }
+  }
+
+  it('never stores what it gets: the next launch does not sign the old account back in', async () => {
+    const { read, release } = await refreshHeldInFlight()
+    await auth.signOut()
+    release()
+    await read
+    await jest.advanceTimersByTimeAsync(0)
+    expect(mockSecure.has(ACCESS)).toBe(false)
+    expect(mockSecure.has(REFRESH)).toBe(false)
+    expect((await auth.reinitializeAuth()).user).toBeNull()
+    await jest.advanceTimersByTimeAsync(20_000)
+  })
+
+  it('never overwrites the account signed in after it', async () => {
+    const { read, release } = await refreshHeldInFlight()
+    await auth.signOut()
+    await auth.signInWithEmail('b@b.c', 'pw')
+    const b = { access: mockSecure.get(ACCESS), refresh: mockSecure.get(REFRESH) }
+    release()
+    await read
+    await jest.advanceTimersByTimeAsync(0)
+    expect(mockSecure.get(ACCESS)).toBe(b.access)
+    expect(mockSecure.get(REFRESH)).toBe(b.refresh)
+    await auth.signOut()
+    await jest.advanceTimersByTimeAsync(20_000)
   })
 })
 
