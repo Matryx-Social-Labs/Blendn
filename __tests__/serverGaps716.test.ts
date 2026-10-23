@@ -264,7 +264,9 @@ it('the room chat says the same sentence when it was the suspension that closed 
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const src = require('fs').readFileSync(require('path').join(__dirname, '../components/blendn/BlendnScreen.tsx'), 'utf8') as string
   expect(src).toContain('gone = isOrganiserSuspended(r)')
-  expect(src).toContain("say(gone ? NO_LONGER_AVAILABLE.line : 'The chat for this event is not open yet.')")
+  // The suspension's sentence first; then, not open yet, when it opens (D-7) or the old line from an older server.
+  expect(src).toContain('say(gone ? NO_LONGER_AVAILABLE.line : opensIn ?')
+  expect(src).toContain("'The chat for this event is not open yet.'")
 })
 
 describe('how the change was long ago, said aloud', () => {
