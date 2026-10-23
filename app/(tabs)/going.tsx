@@ -1,7 +1,7 @@
 import { ScreenProfiler } from '../../lib/perf'
 import { router, useFocusEffect, useScrollToTop } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { AppState, FlatList, Pressable, StyleSheet, Text, View } from 'react-native'
+import { AppState, FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import Animated, { Easing, FadeIn, FadeOut, LinearTransition, useReducedMotion } from 'react-native-reanimated'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { EventCover } from '../../components/EventCover'
@@ -52,7 +52,7 @@ import {
 } from '../../lib/savedEvents'
 import { HAPPENING_NOW, featuredDateLabel, nextUpLabel, placeLabel, timeLabel } from '../../lib/pulse'
 import { liveWindow, sessionOver } from '../../lib/eventSession'
-import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { OPACITY } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
 import { DURATION, EASING, SPRING } from '../../lib/motion'
@@ -700,7 +700,7 @@ function GoingScreenInner() {
         now dead-end on whatever happened to be underneath.
       */}
       <View style={styles.headerRow}>
-        <Text accessibilityRole="header" style={[font('display', bold), styles.ink]}>Going</Text>
+        <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.display} style={[font('display', bold), styles.ink]}>Going</Text>
       </View>
       {/* Flow 15 #16: reads stay, and the screen says what it is showing. */}
       <View style={styles.inset}>
@@ -723,7 +723,7 @@ function GoingScreenInner() {
         // The banner above is the state: not "couldn't load", not "nothing here yet".
         <View />
       ) : items.length === 0 && loadFailed ? (
-        <View style={styles.stateBlock}>
+        <ScrollView style={styles.stateScroll} contentContainerStyle={styles.stateBlock}>
         <StateScreen
           icon="cloud-off"
           title="Couldn’t load your events"
@@ -740,9 +740,9 @@ function GoingScreenInner() {
           gutter
           testID="going-failed"
         />
-        </View>
+        </ScrollView>
       ) : items.length === 0 ? (
-        <View style={styles.stateBlock}>
+        <ScrollView style={styles.stateScroll} contentContainerStyle={styles.stateBlock}>
         <StateScreen
           icon="calendar"
           title="Nothing here yet"
@@ -751,7 +751,7 @@ function GoingScreenInner() {
           gutter
           testID="going-empty"
         />
-        </View>
+        </ScrollView>
       ) : (
         /*
          * The list fades up over the skeleton's place as one piece, instead of
@@ -1035,7 +1035,12 @@ const styles = StyleSheet.create({
   list: { flex: 1 },
   inset: { marginHorizontal: SPACE.gutter },
   // Flow 3 `going` empty: the title at 124, the state at 260: 96 under the title's own 40 pt line and its 24 pt top.
-  stateBlock: { marginTop: SPACE.xxxl * 2 },
+  /*
+   * The empty and failed states scroll: at the accessibility sizes the title, the paragraph and the action outgrow the
+   * screen, and the action ("Browse events") sat under the tab bar, out of reach (RC drive D2).
+   */
+  stateScroll: { flex: 1 },
+  stateBlock: { paddingTop: SPACE.xxxl * 2, paddingBottom: TAB_BAR_CLEARANCE + SPACE.xl },
   // flow4.js going `dayH`: 8 above a heading after a row's own 4, 12 under it before the next row's 4.
   heading: { marginTop: SPACE.md, marginBottom: SPACE.sm },
   // The card's 20 below it, then the heading's 8.

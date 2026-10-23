@@ -6,7 +6,7 @@ import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import Animated, { Easing, FadeOut, withTiming } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
 import { OPACITY } from '../../lib/theme'
 import { clockTime } from '../../lib/time'
@@ -17,7 +17,7 @@ import { IconButton } from '../ds/IconButton'
 import { Orbs } from '../ds/Orbs'
 import { Badge, monoCaption, PresenceDot, ScrimPill, TimeBadge } from '../ds/MonoFamily'
 import { RollingNumber } from '../ds/RollingNumber'
-import { CONTROL_FONT_CAP, font, useBoldText } from '../ds/shared'
+import { CONTROL_FONT_CAP, font, useBoldText, useLargeText } from '../ds/shared'
 import { Icon, type IconName } from '../ui/Icon'
 import { Material } from '../ui/Material'
 import { glassContentsIn, glassRiseIn } from '../motion/presence'
@@ -362,6 +362,7 @@ export function BanterRow({
 }) {
   onPress = useBanterPress(onPress)
   const bold = useBoldText()
+  const largeText = useLargeText()
   const reduceMotion = useReducedMotion()
   return (
     <Pressable
@@ -376,12 +377,16 @@ export function BanterRow({
       <RowAvatar face={face} />
       <View style={styles.rowText}>
         <View style={styles.inline}>
-          <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold), styles.ink, styles.shrink]}>
+          {/*
+            Reading text, not a control (D2): it grows to its cap like the line under it, and at the accessibility sizes takes
+            two lines rather than one word. Capped at 1.3 it read smaller than its own preview ("Crashing…" over a 1.3× title).
+          */}
+          <Text numberOfLines={largeText ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink, styles.shrink]}>
             {title}
           </Text>
           {muted ? <Icon name="bell-off" size={ICON.inline} color={COLOR.textSecondary} /> : null}
         </View>
-        <Line line={line} unread={unread} />
+        <Line line={line} unread={unread} lines={largeText ? 2 : 1} />
       </View>
       <View style={styles.rowEnd}>
         <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[monoCaption(bold), unread ? styles.ink : styles.tertiary]}>
@@ -423,7 +428,8 @@ export function rowLabel(title: string, line: RowLine, time: string, unread: boo
   return [title, muted ? 'muted' : null, said, time, unread ? 'unread' : null].filter(Boolean).join(', ')
 }
 
-function Line({ line, unread }: { line: RowLine; unread: boolean }) {
+/** A row's second line: one line, or two at the accessibility sizes (`lines`), at the reading cap; it never clips. */
+function Line({ line, unread, lines }: { line: RowLine; unread: boolean; lines: number }) {
   const bold = useBoldText()
   if (line.kind === 'chip') {
     return (
@@ -440,7 +446,7 @@ function Line({ line, unread }: { line: RowLine; unread: boolean }) {
     return (
       <View style={styles.inline}>
         <Icon name="circle-alert" size={ICON.inline} color={COLOR.destructive} />
-        <Text numberOfLines={1} style={[font('meta', bold), styles.ink]}>
+        <Text numberOfLines={lines} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink]}>
           Not sent · Tap to retry
         </Text>
       </View>
@@ -448,14 +454,18 @@ function Line({ line, unread }: { line: RowLine; unread: boolean }) {
   }
   if (line.kind === 'draft') {
     return (
-      <Text numberOfLines={1} style={[font('meta', bold), styles.secondary]}>
+      <Text numberOfLines={lines} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
         <Text style={font('meta', bold, FONT_FAMILY.brand[500])}>Draft · </Text>
         {line.text}
       </Text>
     )
   }
   return (
-    <Text numberOfLines={1} style={[font('meta', bold, unread ? FONT_FAMILY.brand[500] : undefined), unread ? styles.ink : styles.secondary]}>
+    <Text
+      numberOfLines={lines}
+      maxFontSizeMultiplier={MAX_FONT_SCALE.meta}
+      style={[font('meta', bold, unread ? FONT_FAMILY.brand[500] : undefined), unread ? styles.ink : styles.secondary]}
+    >
       {line.text}
     </Text>
   )

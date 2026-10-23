@@ -1,10 +1,10 @@
 import { useState, type ReactNode } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 
-import { COLOR, FONT_FAMILY, RADIUS, SPACE, TYPE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, MAX_FONT_SCALE, RADIUS, SPACE, TYPE } from '../../lib/design/tokens'
 import { OPACITY } from '../../lib/theme'
 import { PresenceDot } from './MonoFamily'
-import { CONTROL_FONT_CAP, focusRing, font, minTarget, useBoldText, useSelection } from './shared'
+import { CONTROL_FONT_CAP, focusRing, font, minTarget, useBoldText, useLargeText, useSelection } from './shared'
 
 /** The lit count's capsule, as `Badge` at size 22. */
 const CAPSULE = 22
@@ -54,6 +54,7 @@ export function SectionHeader({
   testID?: string
 }) {
   const bold = useBoldText()
+  const largeText = useLargeText()
   const sel = useSelection()
   const [focused, setFocused] = useState(false)
   const slop = (minTarget() - TYPE.meta.lineHeight) / 2
@@ -68,7 +69,8 @@ export function SectionHeader({
               <PresenceDot kind="live" testID={testID && `${testID}-live`} />
             </View>
           ) : null}
-          <Text numberOfLines={2} style={[font('heading', bold), styles.title]}>
+          {/* A heading stops at its cap and, at the accessibility sizes, wraps in full ("Finish your pro…" at AX XXXL, D2). */}
+          <Text numberOfLines={largeText ? undefined : 2} maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold), styles.title]}>
             {title}
           </Text>
           {count != null && countStyle === 'lit' ? (
@@ -79,8 +81,8 @@ export function SectionHeader({
             </View>
           ) : count != null ? (
             <>
-              <Text style={[font('heading', bold), styles.muted]}>·</Text>
-              <Text style={[font('heading', bold, FONT_FAMILY.mono[700]), styles.muted, styles.tabular]}>{grouped(count)}</Text>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold), styles.muted]}>·</Text>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold, FONT_FAMILY.mono[700]), styles.muted, styles.tabular]}>{grouped(count)}</Text>
             </>
           ) : null}
         </View>

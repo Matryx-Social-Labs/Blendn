@@ -163,7 +163,8 @@ export function SceneHero({
           {title}
         </Text>
         {place ? (
-          <Text numberOfLines={1} style={[font('meta', bold), styles.ink]}>
+          // Over the photograph, in a hero of fixed height: capped like the title (D2).
+          <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.ink]}>
             {place}
           </Text>
         ) : null}

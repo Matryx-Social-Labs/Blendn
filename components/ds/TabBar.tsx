@@ -123,6 +123,12 @@ export function TabBar({ selected, onSelect, disc, mePhoto, discRef, testID = 't
           accessibilityRole="tab"
           accessibilityLabel={label}
           accessibilityState={{ selected: on }}
+          /*
+           * The label is capped at CONTROL_FONT_CAP, as UIKit's own tab bar is; at the accessibility sizes a long-press shows
+           * the large content viewer (the glyph and the name, big), as it does there (D2). iOS only; a no-op on Android.
+           */
+          accessibilityShowsLargeContentViewer
+          accessibilityLargeContentTitle={label}
           style={styles.tab}
         >
           {key === 'me' && mePhoto ? (

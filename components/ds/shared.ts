@@ -5,7 +5,7 @@
  * the page it comes from, rather than as a literal in a component).
  */
 import { createContext, useContext, useEffect, useState } from 'react'
-import { AccessibilityInfo, I18nManager, Platform, type AccessibilityChangeEventName, type ViewStyle } from 'react-native'
+import { AccessibilityInfo, I18nManager, Platform, useWindowDimensions, type AccessibilityChangeEventName, type ViewStyle } from 'react-native'
 
 import { COLOR, DURATION, EASING, FONT_FAMILY, MATERIAL, REDUCE_MOTION, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { tint } from '../../lib/theme'
@@ -17,6 +17,22 @@ import { tint } from '../../lib/theme'
  * reading-text cap.
  */
 export const CONTROL_FONT_CAP = 1.3
+
+/**
+ * The accessibility text sizes start here (RC drive D2): iOS's largest standard size is 1.35× body (xxxLarge, 23 pt), its
+ * first accessibility size 1.65× (AX Medium, 28 pt), up to 3.1× (AX XXXL, 53 pt).
+ *
+ * The rule per role, past it: reading text (body, meta, a row's lines) keeps growing to its `MAX_FONT_SCALE` and WRAPS: a
+ * one- or two-line clamp is lifted (`useLargeText`), and a row's height is a `minHeight`, never a `height`. Headings and page
+ * titles stop at their `MAX_FONT_SCALE`. Controls and tab labels stop at `CONTROL_FONT_CAP`, and the tab bar offers the large
+ * content viewer instead.
+ */
+export const AX_FONT_SCALE = 1.5
+
+/** The phone is at an accessibility text size: clamped lines open up, and layouts that sit side by side may stack. */
+export function useLargeText(): boolean {
+  return useWindowDimensions().fontScale >= AX_FONT_SCALE
+}
 
 /** A spinner replaces a label only after this grace: a quick answer never flashes one (motion #45). */
 export const SPINNER_GRACE_MS = 300

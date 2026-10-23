@@ -4,7 +4,7 @@ import { Platform, StyleSheet, Text, View, type StyleProp, type ViewStyle } from
 import ScalePress from '../motion/ScalePress'
 import { Icon, type IconName } from '../ui/Icon'
 import { COLOR, FONT_FAMILY, ICON, PRESS, RADIUS, SPACE } from '../../lib/design/tokens'
-import { font, IC_HAIRLINE, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
+import { font, IC_HAIRLINE, PRESSED_WASH, useBoldText, useIncreaseContrast, useLargeText } from './shared'
 
 /** The tile's floor (the page); it grows with its text, nothing is capped. */
 const TILE_HEIGHT = 76
@@ -36,6 +36,7 @@ export type AmenityTileProps = {
 export function AmenityTile({ label, value, mono = false, icon, onPress, testID, style }: AmenityTileProps) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
+  const largeText = useLargeText()
   const android = Platform.OS === 'android'
   const ink = contrast ? COLOR.textPrimary : COLOR.textTertiary
   const body = (
@@ -51,7 +52,8 @@ export function AmenityTile({ label, value, mono = false, icon, onPress, testID,
       {mono ? (
         <Text style={[font('bodyStrong', bold, FONT_FAMILY.mono[500]), styles.value, styles.tabular]}>{value}</Text>
       ) : (
-        <Text numberOfLines={1} style={[font('bodyStrong', bold), styles.value]}>
+        // One line, or up to three at the accessibility sizes: the tile's height is a minimum and grows (D2).
+        <Text numberOfLines={largeText ? 3 : 1} style={[font('bodyStrong', bold), styles.value]}>
           {value}
         </Text>
       )}
@@ -88,12 +90,14 @@ export function AmenityTile({ label, value, mono = false, icon, onPress, testID,
  */
 export function AmenityGrid({ tiles, testID }: { tiles: AmenityTileProps[]; testID?: string }) {
   const [open, setOpen] = useState(false)
+  // 1-up at the accessibility sizes: a half-width tile holds a word or two of AX type (D2).
+  const cell = useLargeText() ? styles.cellFull : styles.cell
   const folded = !open && tiles.length >= FOLD_AT
   const shown = folded ? tiles.slice(0, SHOWN_FOLDED) : tiles
   return (
     <View testID={testID} style={styles.grid}>
       {shown.map((t, i) => (
-        <AmenityTile key={`${i}-${t.label}-${t.value}`} testID={testID && `${testID}-${i}`} {...t} style={styles.cell} />
+        <AmenityTile key={`${i}-${t.label}-${t.value}`} testID={testID && `${testID}-${i}`} {...t} style={cell} />
       ))}
       {folded ? (
         <AmenityTile
@@ -101,7 +105,7 @@ export function AmenityGrid({ tiles, testID }: { tiles: AmenityTileProps[]; test
           value={`+${tiles.length - SHOWN_FOLDED} more`}
           onPress={() => setOpen(true)}
           testID={testID && `${testID}-more`}
-          style={styles.cell}
+          style={cell}
         />
       ) : null}
     </View>
@@ -123,4 +127,5 @@ const styles = StyleSheet.create({
   tabular: { fontVariant: ['tabular-nums'] },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.md },
   cell: { flexGrow: 1, flexBasis: '40%' },
+  cellFull: { flexGrow: 1, flexBasis: '100%' },
 })

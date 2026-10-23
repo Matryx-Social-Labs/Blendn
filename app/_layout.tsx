@@ -6,6 +6,7 @@ import { Appearance, BackHandler, Platform, StyleSheet, View } from 'react-nativ
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { StatusBar } from 'expo-status-bar';
+import { rootTextSizeLayout } from '../components/TextSizeBoundary';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { ToastProvider } from '../components/Toast';
 import {
@@ -540,6 +541,8 @@ function RootLayout() {
           <StatusBar style="light" />
           {/* No launch animation (owner, 2026-10-21): the static native splash hands straight to the first screen. */}
           <Stack
+            // Each screen laid out afresh when the text size changes (RC drive D2); nested navigators wrap their own.
+            screenLayout={rootTextSizeLayout}
             screenOptions={{
               // Every pushed screen sits on the same flat surface as the root.
               // This was `#000000`, so a push revealed a different black than

@@ -2,6 +2,7 @@ import { Stack } from 'expo-router'
 import { Platform } from 'react-native'
 
 import { HueProvider } from '../../components/ds/shared'
+import { textSizeLayout } from '../../components/TextSizeBoundary'
 import { COLOR } from '../../lib/design/tokens'
 
 /**
@@ -27,6 +28,8 @@ export default function OnboardingLayout() {
   return (
     <HueProvider value="violet">
       <Stack
+        // Laid out afresh when the text size changes (RC drive D2).
+        screenLayout={textSizeLayout}
         screenOptions={{
           headerShown: false,
           gestureEnabled: true,

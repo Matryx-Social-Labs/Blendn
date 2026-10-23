@@ -6,6 +6,7 @@ import { AppState, Easing, Platform, StyleSheet, View } from 'react-native'
 import { BlendnScreen } from '../../components/blendn/BlendnScreen'
 import { InAppBanner } from '../../components/ds/InAppBanner'
 import { TabBar, type Tab } from '../../components/ds/TabBar'
+import { TextSizeBoundary, textSizeLayout } from '../../components/TextSizeBoundary'
 import { useCoachMarkSpot } from '../../components/ds/CoachMarkHost'
 import { ForegroundBanners } from '../../components/notifications/ForegroundBanners'
 import { markCoachUsed, useCoachMark } from '../../lib/coachMarks'
@@ -324,6 +325,8 @@ export default function TabLayout() {
       importantForAccessibility={blendnOpen ? 'no-hide-descendants' : 'auto'}
     >
     <Tabs
+      // Each tab, and the bar, laid out afresh when the text size changes (RC drive D2).
+      screenLayout={textSizeLayout}
       screenOptions={{
         headerShown: false,
         tabBarShowLabel: false,
@@ -358,7 +361,11 @@ export default function TabLayout() {
           backgroundColor: 'transparent',
         },
       }}
-      tabBar={(props) => <BlendnTabBar {...props} />}
+      tabBar={(props) => (
+        <TextSizeBoundary>
+          <BlendnTabBar {...props} />
+        </TextSizeBoundary>
+      )}
     >
       <Tabs.Screen name="events" options={{ title: 'Pulse' }} />
       <Tabs.Screen name="going" options={{ title: 'Going' }} />

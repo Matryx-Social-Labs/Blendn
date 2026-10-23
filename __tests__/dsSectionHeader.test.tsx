@@ -6,13 +6,19 @@
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { AccessibilityInfo, Platform, StyleSheet, Text } from 'react-native'
+import { AccessibilityInfo, Dimensions, Platform, StyleSheet, Text } from 'react-native'
 
 import { HueProvider, SELECTION } from '../components/ds/shared'
 import { SectionHeader } from '../components/ds/SectionHeader'
 import { COLOR, FONT_FAMILY, SIZE, TYPE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { OPACITY } from '../lib/theme'
+
+// The jest preset starts at fontScale 2, an accessibility size (AX_FONT_SCALE): these tests are the default size's layout.
+// The accessibility sizes are __tests__/axTextSize.test.tsx's.
+const defaultWindow = Dimensions.get('window')
+beforeEach(() => Dimensions.set({ window: { ...defaultWindow, fontScale: 1 }, screen: { ...defaultWindow, fontScale: 1 } }))
+afterAll(() => Dimensions.set({ window: defaultWindow, screen: defaultWindow }))
 
 const style = (t: string) => StyleSheet.flatten(screen.getByText(t, { includeHiddenElements: true }).props.style)
 const on = (os: 'ios' | 'android') => Object.defineProperty(Platform, 'OS', { value: os, configurable: true })

@@ -1,0 +1,195 @@
+/**
+ * RC drive D2: the accessibility text sizes (AX XXXL, fontScale 3.1) on the screens the drive caught, and a live change of
+ * the text size.
+ *
+ * The rule (`AX_FONT_SCALE`, components/ds/shared.ts): reading text grows to its cap and wraps; nothing that grows sits in a
+ * box of fixed height; controls and tab labels stop at CONTROL_FONT_CAP.
+ */
+import { act, render, screen } from '@testing-library/react-native'
+import { readFileSync, readdirSync, existsSync } from 'fs'
+import { join } from 'path'
+import React, { useEffect } from 'react'
+import { Dimensions, StyleSheet, Text, View } from 'react-native'
+import type { ReactTestRendererJSON } from 'react-test-renderer'
+
+jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
+jest.mock('react-native-maps', () => ({ __esModule: true, default: () => null, Marker: () => null }))
+jest.mock('expo-glass-effect', () => {
+  const { View: V } = jest.requireActual('react-native')
+  return { GlassView: (props: object) => <V {...props} />, isGlassEffectAPIAvailable: jest.fn(() => true), isLiquidGlassAvailable: jest.fn(() => true) }
+})
+jest.mock('expo-blur', () => {
+  const { View: V } = jest.requireActual('react-native')
+  return { BlurView: (props: object) => <V {...props} /> }
+})
+jest.mock('expo-linear-gradient', () => {
+  const { View: V } = jest.requireActual('react-native')
+  return { LinearGradient: (props: object) => <V {...props} /> }
+})
+
+/* eslint-disable import/first */
+import { AmenityGrid } from '../components/ds/AmenityTile'
+import { SectionHeader } from '../components/ds/SectionHeader'
+import { AX_FONT_SCALE, CONTROL_FONT_CAP } from '../components/ds/shared'
+import { TabBar } from '../components/ds/TabBar'
+import { BanterRow } from '../components/banter/BanterParts'
+import { SceneCTA, sceneCtaLabel } from '../components/scene/SceneSections'
+import { NAVIGATOR_ROUTES, TextSizeBoundary } from '../components/TextSizeBoundary'
+import { MAX_FONT_SCALE } from '../lib/design/tokens'
+/* eslint-enable import/first */
+
+/** iOS AX XXXL: body 53 pt over 17. */
+const AX_XXXL = 3.1
+const window = Dimensions.get('window')
+const atScale = (fontScale: number) => act(async () => Dimensions.set({ window: { ...window, fontScale }, screen: { ...window, fontScale } }))
+afterEach(() => Dimensions.set({ window: { ...window, fontScale: 2 }, screen: { ...window, fontScale: 2 } }))
+
+type Node = ReactTestRendererJSON
+const kids = (n: Node): Node[] => (n.children ?? []).filter((c): c is Node => typeof c === 'object')
+
+/**
+ * Every Text the scale reaches (no cap, or a cap above CONTROL_FONT_CAP) that sits inside a box of fixed `height`: at
+ * AX XXXL its glyphs outgrow the box and are sliced. A `minHeight` grows; a `height` does not.
+ */
+function clipped(tree: Node | Node[] | null): string[] {
+  const found: string[] = []
+  const walk = (n: Node, fixed: boolean) => {
+    const style = StyleSheet.flatten(n.props.style as never) as { height?: unknown } | undefined
+    const boxed = fixed || typeof style?.height === 'number'
+    if (n.type === 'Text') {
+      const cap = n.props.maxFontSizeMultiplier as number | undefined
+      const grows = cap === undefined || cap === 0 || cap > CONTROL_FONT_CAP
+      if (boxed && grows) found.push(JSON.stringify(n.children))
+      return
+    }
+    kids(n).forEach((c) => walk(c, boxed))
+  }
+  ;(Array.isArray(tree) ? tree : tree ? [tree] : []).forEach((n) => walk(n, false))
+  return found
+}
+
+/** Reading text clamped to a single line at AX sizes: a word and an ellipsis ("Finish your pro…"). */
+function oneLiners(tree: Node | Node[] | null, ignoreCapped = true): string[] {
+  const found: string[] = []
+  const walk = (n: Node) => {
+    if (n.type === 'Text') {
+      const cap = n.props.maxFontSizeMultiplier as number | undefined
+      if (ignoreCapped && cap !== undefined && cap <= CONTROL_FONT_CAP) return
+      if (n.props.numberOfLines === 1) found.push(JSON.stringify(n.children))
+      return
+    }
+    kids(n).forEach(walk)
+  }
+  ;(Array.isArray(tree) ? tree : tree ? [tree] : []).forEach(walk)
+  return found
+}
+
+describe('at AX XXXL (fontScale 3.1)', () => {
+  beforeEach(() => atScale(AX_XXXL))
+
+  it('is past AX_FONT_SCALE, and the jest scale is what the components read', () => {
+    expect(AX_XXXL).toBeGreaterThan(AX_FONT_SCALE)
+    expect(Dimensions.get('window').fontScale).toBe(AX_XXXL)
+  })
+
+  it('a section heading (Me: "Finish your profile") wraps in full at its cap, never "Finish your pro…"', async () => {
+    await render(<SectionHeader title="Finish your profile" testID="h" />)
+    const title = screen.getByText('Finish your profile')
+    expect(title.props.numberOfLines).toBeUndefined()
+    expect(title.props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.heading)
+    expect(clipped(screen.toJSON())).toEqual([])
+  })
+
+  it('a Banter row (Past rooms) takes two lines for its title and its line, at the reading cap, and grows', async () => {
+    await render(
+      <BanterRow
+        face={{ kind: 'room', cover: null } as never}
+        title="Bengaluru Design Festival 2026"
+        line={{ kind: 'text', text: 'Crashing the after party at the bandstand' } as never}
+        time="Sat"
+        unread={false}
+        testID="row"
+      />
+    )
+    const title = screen.getByText('Bengaluru Design Festival 2026')
+    const line = screen.getByText('Crashing the after party at the bandstand')
+    expect(title.props.numberOfLines).toBe(2)
+    expect(line.props.numberOfLines).toBe(2)
+    // The title never reads smaller than the line under it.
+    expect(title.props.maxFontSizeMultiplier).toBeGreaterThanOrEqual(line.props.maxFontSizeMultiplier)
+    expect(clipped(screen.toJSON())).toEqual([])
+    expect(StyleSheet.flatten(screen.getByTestId('row').props.style).height).toBeUndefined()
+  })
+
+  it('the Scene’s fact tiles go 1-up and wrap their value; no text in a fixed box', async () => {
+    await render(<AmenityGrid tiles={[{ label: 'WHERE', value: 'Bangalore Palace Grounds, Gate 4' }, { label: 'PRICE', value: 'Free' }]} testID="g" />)
+    expect(screen.getByText('Bangalore Palace Grounds, Gate 4').props.numberOfLines).toBe(3)
+    expect(StyleSheet.flatten(screen.getByTestId('g-0').props.style).flexBasis).toBe('100%')
+    expect(clipped(screen.toJSON())).toEqual([])
+    expect(oneLiners(screen.toJSON())).toEqual([])
+  })
+
+  it('the Scene’s Go button: its label stops at the control cap (the pill is summed into SCENE_CTA_HEIGHT, a constant)', async () => {
+    await render(<SceneCTA state="rsvp" onPress={jest.fn()} />)
+    expect(screen.getByText(sceneCtaLabel('rsvp')).props.maxFontSizeMultiplier).toBe(CONTROL_FONT_CAP)
+    expect(clipped(screen.toJSON())).toEqual([])
+  })
+
+  it('the tab bar: labels at the control cap, and the large content viewer on every tab', async () => {
+    await render(<TabBar selected="me" onSelect={jest.fn()} disc={{ target: { state: 'idle', eventId: null, badge: 0 }, onPress: jest.fn() }} testID="tabs" />)
+    for (const tab of screen.getAllByRole('tab')) {
+      expect(tab.props.accessibilityShowsLargeContentViewer).toBe(true)
+      expect(tab.props.accessibilityLargeContentTitle).toBe(tab.props.accessibilityLabel)
+    }
+    expect(screen.getByText('Going').props.maxFontSizeMultiplier).toBe(CONTROL_FONT_CAP)
+    expect(clipped(screen.toJSON())).toEqual([])
+  })
+
+  it('Going’s empty and failed states scroll, so the action is never under the tab bar', () => {
+    const src = readFileSync(join(__dirname, '..', 'app', '(tabs)', 'going.tsx'), 'utf8')
+    for (const id of ['going-empty', 'going-failed']) {
+      const at = src.indexOf(`testID="${id}"`)
+      const opened = src.lastIndexOf('<ScrollView style={styles.stateScroll}', at)
+      expect(opened).toBeGreaterThan(src.lastIndexOf('<StateScreen', at) - 200)
+      expect(src.indexOf('</ScrollView>', at)).toBeGreaterThan(at)
+    }
+  })
+})
+
+describe('a live change of the text size (React Native does not re-measure mounted text)', () => {
+  it('remounts what a TextSizeBoundary holds when fontScale changes, and only then', async () => {
+    let mounts = 0
+    const Probe = () => {
+      useEffect(() => {
+        mounts += 1
+      }, [])
+      return <Text>probe</Text>
+    }
+    await atScale(1)
+    await render(
+      <View>
+        <TextSizeBoundary>
+          <Probe />
+        </TextSizeBoundary>
+      </View>
+    )
+    expect(mounts).toBe(1)
+    await atScale(1)
+    expect(mounts).toBe(1)
+    await atScale(AX_XXXL)
+    expect(mounts).toBe(2)
+  })
+
+  it('every navigator carries it on its screens, and the root skips exactly the routes that are navigators', () => {
+    const app = join(__dirname, '..', 'app')
+    const nested = readdirSync(app, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && existsSync(join(app, d.name, '_layout.tsx')))
+      .map((d) => d.name)
+    expect([...nested].sort()).toEqual([...NAVIGATOR_ROUTES].sort())
+    for (const dir of nested) expect(readFileSync(join(app, dir, '_layout.tsx'), 'utf8')).toMatch(/screenLayout=\{textSizeLayout\}/)
+    const root = readFileSync(join(app, '_layout.tsx'), 'utf8')
+    expect(root).toMatch(/screenLayout=\{rootTextSizeLayout\}/)
+    // The tab bar is no screen: it carries its own.
+    expect(readFileSync(join(app, '(tabs)', '_layout.tsx'), 'utf8')).toMatch(/<TextSizeBoundary>\s*<BlendnTabBar/)
+  })
+})

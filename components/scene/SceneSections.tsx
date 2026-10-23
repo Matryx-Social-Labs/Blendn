@@ -426,7 +426,8 @@ export function SceneCTA({
             entering={reduceMotion ? changeFade : ctaLabelIn}
             exiting={reduceMotion ? ctaFadeOut : ctaLabelOut}
             style={[note ? [font('meta', bold, FONT_FAMILY.mono[500]), styles.ctaNote] : styles.ctaLabel, styles.ctaInk]}
-            maxFontSizeMultiplier={note ? CONTROL_FONT_CAP : undefined}
+            // A control's label in a fixed pill: the control cap, note or not (the Go label at AX XXXL, D2).
+            maxFontSizeMultiplier={CONTROL_FONT_CAP}
             numberOfLines={note ? 2 : 1}
           >
             {note ?? sceneCtaLabel(state, alone)}
