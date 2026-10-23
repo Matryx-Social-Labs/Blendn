@@ -3,7 +3,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { Pressable, ScrollView, StyleSheet, View, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native'
 
 import type { FeedMediaItem } from '../../lib/feedMedia'
-import { COLOR, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, MATERIAL, RADIUS, SPACE } from '../../lib/design/tokens'
+import { useReduceTransparency } from '../ds/shared'
 import { tint } from '../../lib/theme'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { useReducedMotion } from 'react-native-reanimated'
@@ -66,6 +67,7 @@ export function SceneHeroMedia({
   const [index, setIndex] = useState(0)
   const [manual, setManual] = useState(false)
   const reduceMotion = useReducedMotion()
+  const reduceTransparency = useReduceTransparency()
   const scrollRef = useRef<ScrollView>(null)
 
   // `index` in a ref as well, so the timer can read the current page without
@@ -229,7 +231,11 @@ export function SceneHeroMedia({
       </ScrollView>
 
       {playlist.length > 1 ? (
-        <View testID="scene-hero-dots" style={styles.dots} pointerEvents="none">
+        <View
+          testID="scene-hero-dots"
+          style={[styles.dots, { backgroundColor: reduceTransparency ? MATERIAL.scrimPillReduceTransparency : MATERIAL.scrimPill }]}
+          pointerEvents="none"
+        >
           {playlist.map((_, i) => (
             <View key={i} style={[styles.dot, i === index && styles.dotActive]} />
           ))}
@@ -247,12 +253,19 @@ const styles = StyleSheet.create({
    * The image's bottom-right corner, in the band under the caption (`HERO_CAPTION_FOOT`): a fixed height above the
    * bottom landed on the words whenever the title took two lines or the pills wrapped.
    */
+  /*
+   * On the scrim pill (`MATERIAL.scrimPill`, as the image viewer's foot): the dots were faint over a bright photo (RC drive 2,
+   * LOW). Offset by its padding, so the dots themselves sit where they did, in the band under the caption.
+   */
   dots: {
     position: 'absolute',
-    bottom: SPACE.lg,
-    right: SPACE.gutter,
+    bottom: SPACE.lg - SPACE.xs,
+    right: SPACE.gutter - SPACE.sm,
     flexDirection: 'row',
     gap: SPACE.sm,
+    paddingVertical: SPACE.xs,
+    paddingHorizontal: SPACE.sm,
+    borderRadius: RADIUS.capsule,
   },
   dot: {
     width: 6,

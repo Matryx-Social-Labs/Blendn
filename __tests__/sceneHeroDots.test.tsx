@@ -4,7 +4,9 @@
  */
 import { render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { StyleSheet } from 'react-native'
+import { AccessibilityInfo, StyleSheet } from 'react-native'
+
+import { MATERIAL, SPACE } from '../lib/design/tokens'
 
 import { HERO_CAPTION_FOOT, SceneHeroMedia } from '../components/scene/SceneHeroMedia'
 
@@ -22,5 +24,19 @@ it('rides the bottom-right corner inside the band under the caption', async () =
   expect(dots.position).toBe('absolute')
   expect(dots.right).toBeGreaterThan(0)
   expect(dots.bottom).toBeGreaterThan(0)
-  expect(dots.bottom + dotHeight).toBeLessThan(HERO_CAPTION_FOOT)
+  // The pill included: it stays in the band.
+  expect(dots.bottom + dotHeight + SPACE.xs * 2).toBeLessThan(HERO_CAPTION_FOOT)
+})
+
+it('sits on the scrim pill, so the dots read over a bright photo; denser with Reduce Transparency (RC drive 2 LOW)', async () => {
+  const playlist = [
+    { kind: 'image' as const, url: 'https://x.test/a.jpg' },
+    { kind: 'image' as const, url: 'https://x.test/b.jpg' },
+  ]
+  await render(<SceneHeroMedia playlist={playlist} width={393} height={420} />)
+  expect(StyleSheet.flatten(screen.getByTestId('scene-hero-dots').props.style)).toMatchObject({ backgroundColor: MATERIAL.scrimPill })
+  await screen.unmount()
+  jest.spyOn(AccessibilityInfo, 'isReduceTransparencyEnabled').mockResolvedValue(true)
+  await render(<SceneHeroMedia playlist={playlist} width={393} height={420} />)
+  expect(StyleSheet.flatten((await screen.findByTestId('scene-hero-dots')).props.style).backgroundColor).toBe(MATERIAL.scrimPillReduceTransparency)
 })
