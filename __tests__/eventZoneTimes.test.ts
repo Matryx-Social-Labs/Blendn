@@ -28,9 +28,10 @@ it('the phone really is in Berlin here (the device clock reads 5:30 AM)', () => 
 })
 
 it('cards, Going rows and headings say the event’s own time and day', () => {
-  expect(timeLabel(START, IST)).toBe('9 AM')
-  expect(cardTime({ start_time: START, end_time: END, timezone: IST }, NOW)).toBe('9 AM')
-  expect(nextUpLabel(START, END, new Date(NOW), IST)).toBe('Today · 9 AM')
+  // Named, because it is not the phone's zone (review LOW).
+  expect(timeLabel(START, IST)).toBe('9 AM IST')
+  expect(cardTime({ start_time: START, end_time: END, timezone: IST }, NOW)).toBe('9 AM IST')
+  expect(nextUpLabel(START, END, new Date(NOW), IST)).toBe('Today · 9 AM IST')
   expect(featuredDateLabel(START, new Date(NOW), IST)).toBe('Today')
   expect(dayGroupLabel(START, new Date(NOW), IST)).toEqual({ title: 'Today', weekday: 'Saturday' })
   expect(groupByDay([{ start_time: START, timezone: IST }], new Date(NOW))[0].title).toBe('Today')
@@ -39,7 +40,7 @@ it('cards, Going rows and headings say the event’s own time and day', () => {
 it('the share card and a moved time say it in the event’s zone too', () => {
   expect(dateParts(START, IST)).toMatchObject({ dateText: 'Sat 24 Oct, 9 AM', date: { day: 'SAT', num: '24', month: 'OCT', time: '9:00 AM' } })
   const lines = changeLines({ fields: ['time'], from: { startTime: '2026-10-24T02:30:00.000Z' } } as never, { start_time: START, end_time: END, venue_name: '', address: '', timezone: IST }, NOW)
-  expect(lines[0]).toMatchObject({ was: '8 AM', now: '9 AM' })
+  expect(lines[0]).toMatchObject({ was: '8 AM IST', now: '9 AM IST' })
 })
 
 it('with no zone known (an older server), the phone’s time as before', () => {
@@ -82,4 +83,11 @@ it('a mixed-zone list never draws one day’s heading twice (review LOW)', () =>
   // One heading a day, in calendar order; each day keeps the list's order.
   expect(groups.map((g) => g.key)).toEqual(['2026-9-24', '2026-9-25'])
   expect(groups[1].items.map((r) => r.id)).toEqual(['a', 'c'])
+})
+
+it('an event in the phone’s own zone is never named (review LOW)', () => {
+  expect(timeLabel(START, 'Europe/Berlin')).toBe('5:30 AM')
+  expect(cardTime({ start_time: START, end_time: END, timezone: 'Europe/Berlin' }, NOW)).toBe('Sat · 5:30 AM')
+  // Another name for the same clock at that moment is not a different zone either.
+  expect(timeLabel(START, 'Europe/Paris')).toBe('5:30 AM')
 })

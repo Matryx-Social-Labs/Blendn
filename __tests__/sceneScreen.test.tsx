@@ -281,7 +281,8 @@ describe('the days of a run (Flow 3 · 3.2, #724 window)', () => {
       api.getEvent.mockResolvedValue(detail({ timezone: ZONE, startTime: start, days: [day(0, { startTime: start })], dayCount: 1, daysFrom: 1, dayNumber: 1 }) as never)
       await open()
       const tile = await screen.findByTestId('scene-tile-doors')
-      expect(tile.props.accessibilityLabel).toBe(`DOORS, ${clockTime(start, ZONE)}`)
+      // The event's clock, named because the phone is elsewhere: "9 AM IST".
+      expect(tile.props.accessibilityLabel).toBe(`DOORS, ${clockTime(start, ZONE)} IST`)
       expect(clockTime(start, ZONE)).not.toBe(clockTime(start))
     } finally {
       process.env.TZ = zone

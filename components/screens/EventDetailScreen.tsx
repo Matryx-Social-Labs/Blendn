@@ -78,7 +78,7 @@ import {
 import { clipFirst, feedPlaylist } from '../../lib/feedMedia'
 import { highlightEntities } from '../../lib/entityHighlight'
 import { doorWords, heroPillLabel, pillWords } from '../../lib/scarcity'
-import { clockTime } from '../../lib/roomMoments'
+import { eventClock } from '../../lib/time'
 import { useAuth } from '../../lib/useAuth'
 import { printable } from '../../lib/pulseSections'
 import { useNow } from '../../lib/useNow'
@@ -1026,7 +1026,7 @@ export default function EventDetail() {
       // TODAY, not DOORS: "DOORS: Day 2 of 2" read as a time for the doors (RC drive 2 D-9).
       ? [{ label: 'TODAY', value: dayWords, mono: true, testID: 'scene-tile-doors' }]
       : heroStart
-        ? [{ label: doorsLabel, value: clockTime(new Date(heroStart).getTime(), event?.timezone), mono: true, testID: 'scene-tile-doors' }]
+        ? [{ label: doorsLabel, value: eventClock(new Date(heroStart).getTime(), event?.timezone), mono: true, testID: 'scene-tile-doors' }]
         : []),
     ...(event?.venue_name
       ? [{ label: 'WHERE', value: [event.venue_name, event.city].filter(Boolean).join(', '), onPress: openInMaps, testID: 'scene-tile-where' }]

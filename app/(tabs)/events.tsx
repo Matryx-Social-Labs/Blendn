@@ -99,7 +99,7 @@ import { useMinimumVisible } from '../../lib/useMinimumVisible'
 import { useAuth } from '../../lib/useAuth'
 import { markCoachUsed, useCoachMark } from '../../lib/coachMarks'
 import { useCoachMarkSpot } from '../../components/ds/CoachMarkHost'
-import { clockTime } from '../../lib/roomMoments'
+import { eventClock } from '../../lib/time'
 
 /*
  * One shared definition, in `lib/api.ts`, derived from the API mapping itself.
@@ -1498,7 +1498,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
           event={event}
           title={card.title}
           // Under its day's heading a row needs only its clock; a running event says so.
-          time={onNow(event) ? 'Live' : clockTime(Date.parse(live.start_time), event.timezone)}
+          time={onNow(event) ? 'Live' : eventClock(Date.parse(live.start_time), event.timezone)}
           venue={card.venue}
           distance={card.distance}
           cover={card.cover}

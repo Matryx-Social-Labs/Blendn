@@ -9,8 +9,7 @@
 import { liveWindow, type SessionSource } from './eventSession'
 import { isLiveNow, printable } from './pulseSections'
 import { distanceText } from './placesPane'
-import { clockTime } from './roomMoments'
-import { calendarDate, calendarDaysBetween, dayKeyIn, hourIn, weekdayIn, WEEKDAYS, WEEKDAYS_LONG } from './time'
+import { calendarDate, calendarDaysBetween, dayKeyIn, eventClock, hourIn, weekdayIn, WEEKDAYS, WEEKDAYS_LONG } from './time'
 
 /**
  * The heading over one day of the Upcoming list: "Today" / "Thursday".
@@ -81,7 +80,7 @@ export function groupByDay<T extends { start_time: string; timezone?: string | n
  * In the event's own zone when it is given, as the Scene's day line says it: a Berlin phone read an IST hackathon's 9 AM
  * doors as 4:30 AM (RC drive 5 D-4). The phone's zone only for a time with no event zone.
  */
-export const timeLabel = (startTime: string, timeZone?: string | null): string => clockTime(startTime, timeZone ?? undefined)
+export const timeLabel = (startTime: string, timeZone?: string | null): string => eventClock(startTime, timeZone)
 
 /**
  * The date on a featured card.
@@ -170,7 +169,8 @@ export function cardTime(event: SessionSource & { timezone?: string | null }, no
   if (Number.isNaN(start.getTime())) return ''
   // The event's own zone (RC drive 5 D-4).
   const zone = event.timezone ?? undefined
-  const clock = clockTime(start.getTime(), zone)
+  // Named when the event's zone is not the phone's: "9 AM IST" (review LOW).
+  const clock = eventClock(start.getTime(), zone)
   const days = calendarDaysBetween(new Date(now), start, zone)
   if (days <= 0) return clock
   if (days < 7) return `${WEEKDAYS[weekdayIn(start, zone)]} · ${clock}`

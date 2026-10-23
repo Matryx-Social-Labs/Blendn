@@ -93,6 +93,56 @@ export function weekdayIn(d: Date, timeZone?: string): number {
   return new Date(Date.UTC(y, m, day)).getUTCDay()
 }
 
+/** Short zone names, one formatter per (locale, zone): "IST" is only en-IN's, "CEST" en-GB's, "PDT" en-US's. */
+const ZONE_NAME_LOCALES = ['en-GB', 'en-IN', 'en-US'] as const
+const zoneNameFormatters = new Map<string, Intl.DateTimeFormat>()
+function zoneName(d: Date, timeZone: string): string {
+  let fallback = ''
+  for (const locale of ZONE_NAME_LOCALES) {
+    try {
+      const id = `${locale}|${timeZone}`
+      let f = zoneNameFormatters.get(id)
+      if (!f) {
+        f = new Intl.DateTimeFormat(locale, { timeZone, timeZoneName: 'short' })
+        zoneNameFormatters.set(id, f)
+      }
+      const name = f.formatToParts(d).find((p) => p.type === 'timeZoneName')?.value ?? ''
+      if (name && !/^(GMT|UTC)[+-]/.test(name)) return name
+      fallback ||= name
+    } catch {
+      return fallback
+    }
+  }
+  return fallback
+}
+
+/** Minutes ahead of UTC at `d` in `timeZone`. */
+function offsetIn(d: Date, timeZone: string): number {
+  const [y, m, day] = zonedDate(d, timeZone)
+  const [h, min] = zonedClock(d, timeZone)
+  return Math.round((Date.UTC(y, m, day, h, min) - Math.floor(d.getTime() / 60_000) * 60_000) / 60_000)
+}
+
+/**
+ * " IST": the event's zone after its time, when it is not the phone's (review LOW, after RC drive 5 D-4: a Berlin
+ * phone reading an IST night's "9 AM" should know it is Bengaluru's 9 AM). Nothing when the phone keeps the same time
+ * at that moment, or with no zone known.
+ */
+export function zoneSuffix(time: string | number | Date, timeZone?: string | null): string {
+  if (!timeZone) return ''
+  const d = new Date(time)
+  if (Number.isNaN(d.getTime())) return ''
+  if (offsetIn(d, timeZone) === -d.getTimezoneOffset()) return ''
+  const name = zoneName(d, timeZone)
+  return name ? ` ${name}` : ''
+}
+
+/** An event's clock in its own zone, named when it is not the phone's: "9 AM", or "9 AM IST" on a Berlin phone. */
+export function eventClock(time: string | number | Date, timeZone?: string | null): string {
+  const clock = clockTime(time, timeZone ?? undefined)
+  return clock ? `${clock}${zoneSuffix(time, timeZone)}` : ''
+}
+
 /** The hour (0–23) of `d` in `timeZone`, or the phone's. */
 export function hourIn(d: Date, timeZone?: string): number {
   return clockIn(d, timeZone)[0]
