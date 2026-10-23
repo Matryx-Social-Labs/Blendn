@@ -92,7 +92,7 @@ export function Banner({ kind, text, mono, icon, action, busy = false, testID }:
           testID={testID && `${testID}-text`}
           accessibilityLiveRegion={kind === 'error' ? 'assertive' : announced ? 'polite' : 'none'}
           onLayout={(e) => setTextHeight(e.nativeEvent.layout.height)}
-          style={[font('meta', bold), styles.text, { flexBasis: measure }]}
+          style={[font('meta', bold), styles.text, measure]}
         >
           {mono ? (
             <>

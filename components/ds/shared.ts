@@ -41,18 +41,24 @@ export const ROOMY_WIDTH = 375
 export const ROOMY_FONT_SCALE = 1.15
 
 /**
- * A text column's flex basis beside a trailing piece (a button, a "from your friends"), at the scale it is drawn: the two sit
- * in a row that wraps, so when the text's measure and the piece do not both fit, the piece moves under the text instead of
- * squeezing it. With `flex: 1` (a zero basis) beside a piece that never shrinks, 360 dp at 1.3 left the text one word per
- * line ("You're / anony / mous", "Make / a / crew": RC drive 3).
+ * A text column's measure beside a trailing piece (a button, a "from your friends"), at the scale it is drawn, as the style
+ * that holds it: the two sit in a row that wraps, so when the text's measure and the piece do not both fit, the piece moves
+ * under the text instead of squeezing it. With `flex: 1` (a zero basis) beside a piece that never shrinks, 360 dp at 1.3 left
+ * the text one word per line ("You're / anony / mous", "Make / a / crew": RC drive 3).
+ *
+ * Both a basis and a minimum, because the basis alone is not always read: when the text is the row's only child that can
+ * both grow and shrink, Yoga sets its basis to 0 without looking at the style (`computeFlexBasisForChildren`, its
+ * single-flex-child shortcut), the line never breaks, and the text is squeezed anyway. That is what the Banner did on a
+ * 360 dp Android phone at 1.3 (RC drive 5): its action never shrinks. SettingsRow's accessory shrinks, so it never took the
+ * shortcut. A minimum is read on every path.
  */
-export function useMinMeasure(role: keyof typeof TYPE, cap: number = MAX_FONT_SCALE[role]): number {
+export function useMinMeasure(role: keyof typeof TYPE, cap: number = MAX_FONT_SCALE[role]): { flexBasis: number; minWidth: number } {
   const { fontScale, width } = useWindowDimensions()
   // A phone of ordinary width at an ordinary size always has the room: a zero basis keeps the row side by side, as it was. Six
   // ems there left ~5 pt to spare at 390, so Bold Text would have dropped "from your friends" under its title (review MEDIUM-4).
   // Exclusive: 375 dp (an iPhone SE or mini) is where the squeeze starts, so it takes the measure (review R7).
-  if (width > ROOMY_WIDTH && fontScale <= ROOMY_FONT_SCALE) return 0
-  return Math.round(MIN_MEASURE_EM * TYPE[role].fontSize * Math.min(fontScale, cap))
+  const measure = width > ROOMY_WIDTH && fontScale <= ROOMY_FONT_SCALE ? 0 : Math.round(MIN_MEASURE_EM * TYPE[role].fontSize * Math.min(fontScale, cap))
+  return { flexBasis: measure, minWidth: measure }
 }
 
 /** A spinner replaces a label only after this grace: a quick answer never flashes one (motion #45). */

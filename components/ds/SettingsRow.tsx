@@ -136,7 +136,7 @@ export function SettingsRow({
     : onPress
   const external = trail === 'external' ? `, ${opens}` : ''
   const words = (
-    <View testID={testID && `${testID}-text`} style={stacked ? styles.textStacked : beside ? [styles.textBeside, { flexBasis: measure }] : styles.text}>
+    <View testID={testID && `${testID}-text`} style={stacked ? styles.textStacked : beside ? [styles.textBeside, measure] : styles.text}>
       <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), { color: ink }]}>
         {title}
       </Text>

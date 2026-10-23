@@ -353,6 +353,10 @@ describe('a 360 dp phone at font scale 1.3 (Android, RC drive 3: text one word p
     expect(StyleSheet.flatten(body.props.style)).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap' })
     // The sentence's basis is its measure at the scale it is drawn (6 em of meta at 1.3), never zero; it grows into the rest.
     expect(flat('b-text')).toMatchObject({ flexBasis: Math.round(6 * 14 * 1.3), flexGrow: 1 })
+    // And as a minimum: the sentence is the body's one child that grows and shrinks (the action never shrinks), so Yoga's
+    // single-flex-child shortcut sets its basis to 0 on a device and the basis alone never broke the line (RC drive 5).
+    expect(flat('b-text').minWidth).toBe(Math.round(6 * 14 * 1.3))
+    expect(flat('b-slot')?.flexShrink).toBeUndefined()
     expect(flat('b-text').flex).toBeUndefined()
     // The action is in that wrapping row, not a fixed column beside it.
     expect(body).toContainElement(screen.getByTestId('b-action', hidden))
@@ -366,7 +370,7 @@ describe('a 360 dp phone at font scale 1.3 (Android, RC drive 3: text one word p
     )
     const body = screen.getByTestId('make-crew-row-body', hidden)
     expect(StyleSheet.flatten(body.props.style)).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap' })
-    expect(flat('make-crew-row-text')).toMatchObject({ flexBasis: Math.round(6 * 17 * 1.3), flexGrow: 1 })
+    expect(flat('make-crew-row-text')).toMatchObject({ flexBasis: Math.round(6 * 17 * 1.3), minWidth: Math.round(6 * 17 * 1.3), flexGrow: 1 })
     expect(flat('make-crew-row-text').flex).toBeUndefined()
     expect(body).toContainElement(screen.getByTestId('make-crew-row-accessory', hidden))
     expect(flat('make-crew-row-accessory').flexShrink).toBe(1)
@@ -445,6 +449,7 @@ describe('an ordinary phone at an ordinary size keeps text and its trailing piec
     expect(basis('make-crew-row-text')).toBe(0)
     await render(<VisibilityBanner state="anon" onAction={jest.fn()} testID="b" />)
     expect(basis('b-text')).toBe(0)
+    expect(StyleSheet.flatten(screen.getByTestId('b-text', hidden).props.style).minWidth).toBe(0)
   })
 
   it('390 dp at 1.0 with Bold Text: still no measure (the wider bold words did not push "from your friends" under)', async () => {
