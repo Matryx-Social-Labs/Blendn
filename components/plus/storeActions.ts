@@ -18,8 +18,11 @@ export function showStoreError(message: string, manageIt: boolean | undefined, o
     kind: 'actions',
     hue: 'violet',
     icon: 'circle-alert',
-    title: manageIt ? 'Already purchased' : 'The purchase didn’t go through',
+    title: storeErrorTitle(manageIt),
     message,
     actions: manageIt ? [{ label: 'Manage subscription', then: onManage }, { label: 'Close', cancel: true }] : [{ label: 'Close', cancel: true }],
   })
 }
+
+/** The store error's title: "already bought" points at Manage subscription; anything else did not go through. */
+export const storeErrorTitle = (manageIt: boolean | undefined) => (manageIt ? 'Already purchased' : 'The purchase didn’t go through')

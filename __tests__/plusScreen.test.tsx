@@ -51,7 +51,7 @@ import PlusScreen from '../app/plus'
 import { apiClient } from '../lib/apiClient'
 import { subscribePaywallClosed } from '../lib/paywall'
 import { buyPackage, canBuyAs, loadPlusOffers, purchasesAvailable, restore } from '../lib/purchases'
-import { showSheet, type ActionSheet } from '../lib/sheet'
+import { showSheet } from '../lib/sheet'
 /* eslint-enable import/first */
 
 const monthly = { pkg: { identifier: '$rc_monthly', product: { price: 199, pricePerMonth: 199, pricePerMonthString: '₹199' } }, title: 'Blendn+ · Monthly', length: '1 month, renews monthly', price: '₹199.00' }
@@ -467,22 +467,27 @@ describe('the wait and the store', () => {
     say.mockRestore()
   })
 
-  it('"already bought" is a tray that points at Manage subscription', async () => {
+  // Drawn by the paywall itself, inside its RouteModal (review MED-C): the root sheet waits behind the paywall's hold.
+  const storeError = () => within(screen.getByTestId('plus-store-error-modal', { includeHiddenElements: true }))
+
+  it('"already bought" is a tray on the paywall that points at Manage subscription', async () => {
     ;(buyPackage as jest.Mock).mockResolvedValue({ kind: 'failed', message: 'You already have this. See it under Manage subscription.', manage: true })
     await mount()
     await act(async () => { fireEvent.press(button(MONTHLY_CTA)) })
-    const tray = (showSheet as jest.Mock).mock.calls[0][0] as ActionSheet
-    expect(tray).toMatchObject({ title: 'Already purchased', message: 'You already have this. See it under Manage subscription.' })
-    expect(tray.actions.map((a) => a.label)).toEqual(['Manage subscription', 'Close'])
+    expect(showSheet).not.toHaveBeenCalled()
+    expect(storeError().getByText('Already purchased')).toBeTruthy()
+    expect(storeError().getByText('You already have this. See it under Manage subscription.')).toBeTruthy()
+    expect(storeError().getByRole('button', { name: 'Manage subscription' })).toBeTruthy()
+    expect(storeError().getByRole('button', { name: 'Close' })).toBeTruthy()
   })
 
-  it('any other store error is a tray with its own words and only a way out', async () => {
+  it('any other store error is a tray on the paywall with its own words and only a way out', async () => {
     ;(buyPackage as jest.Mock).mockResolvedValue({ kind: 'failed', message: 'No connection to the store. Check your connection and try again.' })
     await mount()
     await act(async () => { fireEvent.press(button(MONTHLY_CTA)) })
-    const tray = (showSheet as jest.Mock).mock.calls[0][0] as ActionSheet
-    expect(tray).toMatchObject({ title: 'The purchase didn’t go through', message: 'No connection to the store. Check your connection and try again.' })
-    expect(tray.actions.map((a) => a.label)).toEqual(['Close'])
+    expect(storeError().getByText('The purchase didn’t go through')).toBeTruthy()
+    expect(storeError().getByText('No connection to the store. Check your connection and try again.')).toBeTruthy()
+    expect(storeError().queryByRole('button', { name: 'Manage subscription' })).toBeNull()
   })
 
   it('tells the expiry prompt it has closed', async () => {

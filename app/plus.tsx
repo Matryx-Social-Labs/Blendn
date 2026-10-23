@@ -11,7 +11,8 @@ import { Grain } from '../components/ds/Grain'
 import { NightPassRow, PlanCard, PlanList } from '../components/ds/PlanCard'
 import { HueProvider } from '../components/ds/shared'
 import { StateScreen } from '../components/ds/StateScreen'
-import { openStoreSubscriptions, showStoreError } from '../components/plus/storeActions'
+import { openStoreSubscriptions } from '../components/plus/storeActions'
+import { StoreErrorSheet, type StoreError } from '../components/plus/StoreErrorSheet'
 import { PlusActions, PlusFooter, PlusHeader, PlusHeading, PlusHero, PlusNote, useHeaderHeight, WhatYouGet } from '../components/plus/PlusSections'
 import { useToast } from '../components/Toast'
 import { apiClient } from '../lib/apiClient'
@@ -167,6 +168,8 @@ function PlusScreenContent() {
     }
   }
 
+  /** A purchase the store refused, in its words (review MED-C: drawn by this page, not the root sheet). */
+  const [storeError, setStoreError] = useState<StoreError | null>(null)
   const open = (url: string) => openInApp(url).catch(() => showToast("That page didn’t open. Try again.", 'error'))
   const manage = () => void openStoreSubscriptions(() => showToast("That page didn’t open. Try again.", 'error'))
 
@@ -181,7 +184,7 @@ function PlusScreenContent() {
       if (!mounted.current) return
       if (result.kind === 'cancelled') return
       if (result.kind === 'failed') {
-        showStoreError(result.message, result.manage, manage)
+        setStoreError({ message: result.message, manage: result.manage })
         say(result.message)
         return
       }
@@ -370,6 +373,8 @@ function PlusScreenContent() {
           onManage={() => manage()}
         />
       ) : null}
+      {/* Drawn here, so it presents from the paywall (inside its RouteModal): the root sheet would wait behind it. */}
+      <StoreErrorSheet error={storeError} onClose={() => setStoreError(null)} onManage={manage} />
     </View>
   )
 }
