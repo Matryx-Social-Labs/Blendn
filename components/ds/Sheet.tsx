@@ -272,10 +272,13 @@ function useSheetMotion({
   visibleHeight,
   insetTop,
   headScrolls,
+  headAtTop,
 }: {
   visible: boolean
-  /** The header is in a scroll that has more than fits: the scroll owns the pan there, so only the grip drags the sheet. */
+  /** The header is in a scroll that has more than fits: the header drags the sheet only as a pull down from the scroll's top. */
   headScrolls: boolean
+  /** That scroll is at its top (offset 0). */
+  headAtTop: boolean
   /** Lowest first. */
   heights: number[]
   /** How far the foot is raised onto the keyboard (`sheetFrame`); eased in step with it. */
@@ -401,11 +404,11 @@ function useSheetMotion({
       height.set(withSpring((levels ?? [natural.get()])[at.get()], SPRING.fling))
     }, DRAG_CLOSE_ASK_MS)
   }, [requestClose, levels, offset, height, at, natural, flingV])
-  // One drag, on two surfaces: the grip, always; the header, while its scroll has nothing to scroll.
-  const pan = (enabled: boolean) =>
-    Gesture.Pan()
+  // One drag, on two surfaces: the grip, always; the header too, which in a scroll that has more is a pull down from its top.
+  // `downOnly`: it starts on a pull down, and a push up (the scroll's) fails it at once.
+  const pan = (enabled: boolean, downOnly = false) =>
+    (downOnly ? Gesture.Pan().activeOffsetY(SPACE.sm).failOffsetY(-SPACE.sm) : Gesture.Pan().activeOffsetY([-SPACE.sm, SPACE.sm]))
       .enabled(enabled)
-      .activeOffsetY([-SPACE.sm, SPACE.sm])
       .onUpdate((e) => {
         const stops = levels ?? [natural.get()]
         const max = stops[stops.length - 1]
@@ -430,8 +433,9 @@ function useSheetMotion({
   // The compiler reads `dragClose` (it checks `visibleRef` inside a timer, never in render) as a ref read during render.
   // eslint-disable-next-line react-hooks/refs
   const drag = pan(canDrag)
+  // In a scroll with more, only a pull down from its top: the title kept dragging the sheet before it scrolled (review HIGH-1).
   // eslint-disable-next-line react-hooks/refs
-  const headDrag = pan(canDrag && !headScrolls)
+  const headDrag = pan(canDrag && (!headScrolls || headAtTop), headScrolls)
 
   // `marginBottom` is the one thing that lifts the sheet over the keyboard; a detent sheet's height is what is left above it, at this frame's lift.
   const placeStyle = useAnimatedStyle(() => {
@@ -501,6 +505,8 @@ export function Sheet({ visible, onClose, title, headerAction, headerNote, body,
   const contentSize = useRef(0)
   const handScrolled = useRef(false)
   const [overflowing, setOverflowing] = useState(false)
+  /** The scroll is at its top: a pull down on the header there drags the sheet. */
+  const [atTop, setAtTop] = useState(true)
   const measureOverflow = () => setOverflowing(contentSize.current > contentHeight.current + 1)
   useEffect(() => {
     if (overflowing) content.current?.flashScrollIndicators()
@@ -559,6 +565,7 @@ export function Sheet({ visible, onClose, title, headerAction, headerNote, body,
     visibleHeight,
     insetTop: insets.top,
     headScrolls: overflowing,
+    headAtTop: atTop,
     onGone: () => {
       if (!ios) dismissed.current?.()
     },
@@ -638,7 +645,7 @@ export function Sheet({ visible, onClose, title, headerAction, headerNote, body,
             >
               {/* The grip stays above the scroll: a sheet scrolled down to its actions can still be dragged away. */}
               <GestureDetector gesture={drag}>
-                <View style={styles.grip}>
+                <View testID={testID && `${testID}-grip`} style={[styles.grip, overflowing && { height: minTarget() }]}>
                   {dismissible ? (
                     <Pressable
                       accessibilityRole="button"
@@ -670,6 +677,8 @@ export function Sheet({ visible, onClose, title, headerAction, headerNote, body,
                     measureOverflow()
                   }}
                   onScrollBeginDrag={() => (handScrolled.current = true)}
+                  onScroll={(e) => setAtTop(e.nativeEvent.contentOffset.y <= 0)}
+                  scrollEventThrottle={16}
                   testID={testID && `${testID}-content`}
                   style={styles.content}
                   contentContainerStyle={styles.contentInner}
@@ -772,7 +781,10 @@ const styles = StyleSheet.create({
     borderTopRightRadius: RADIUS.sheet,
     paddingHorizontal: SPACE.gutter,
   },
-  /** The handle's strip (the head's old top padding), so the handle is inside the drag's bounds (Android checks them). */
+  /**
+   * The handle's strip (the head's old top padding), so the handle is inside the drag's bounds (Android checks them). A full
+   * target while the sheet scrolls, when the header drags only from the scroll's top.
+   */
   grip: { height: SPACE.xl },
   head: { gap: SPACE.md },
   handleHit: {

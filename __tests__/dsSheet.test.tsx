@@ -361,6 +361,55 @@ describe('the cap (drive 2: the composer slid under the status bar with the keyb
   })
 })
 
+describe('an overflowing sheet still drags by its header (review HIGH-1: only the 24 pt grip did)', () => {
+  const hidden = { includeHiddenElements: true }
+  const overflow = async () => {
+    const scroll = screen.getByTestId('s-content', hidden)
+    await act(async () => fireEvent(scroll, 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 393, height: 300 } } }))
+    await act(async () => fireEvent(scroll, 'contentSizeChange', 393, 900))
+  }
+  const scrollTo = (y: number) =>
+    act(async () => fireEvent(screen.getByTestId('s-content', hidden), 'scroll', { nativeEvent: { contentOffset: { x: 0, y } } }))
+
+  it('at the scroll’s top the header drags, as a pull down only: a push up fails it and is the scroll’s', async () => {
+    const { Text } = jest.requireActual('react-native')
+    await render(signOut({ children: <Text>Form</Text> }))
+    await overflow()
+    const head = getByGestureTestId('s-head-drag').config
+    expect(head.enabled).toBe(true)
+    expect(head.activeOffsetYEnd).toBe(8)
+    expect(head.activeOffsetYStart).toBeUndefined()
+    expect(head.failOffsetYStart).toBe(-8)
+  })
+
+  it('scrolled down, the header is the scroll’s; back at the top it drags again', async () => {
+    const { Text } = jest.requireActual('react-native')
+    await render(signOut({ children: <Text>Form</Text> }))
+    await overflow()
+    await scrollTo(120)
+    expect(getByGestureTestId('s-head-drag').config.enabled).toBe(false)
+    expect(getByGestureTestId('s-drag').config.enabled).toBe(true)
+    await scrollTo(0)
+    expect(getByGestureTestId('s-head-drag').config.enabled).toBe(true)
+  })
+
+  it('the grip is a full target while it scrolls, and the 24 pt strip when it does not', async () => {
+    const { Text } = jest.requireActual('react-native')
+    await render(signOut({ children: <Text>Form</Text> }))
+    expect(flat('s-grip').height).toBe(24)
+    await overflow()
+    expect(flat('s-grip').height).toBeGreaterThanOrEqual(44)
+  })
+
+  it('a sheet that fits drags by its header both ways, as before', async () => {
+    await render(signOut())
+    const head = getByGestureTestId('s-head-drag').config
+    expect(head.enabled).toBe(true)
+    expect([head.activeOffsetYStart, head.activeOffsetYEnd]).toEqual([-8, 8])
+    expect(head.failOffsetYStart).toBeUndefined()
+  })
+})
+
 describe('the field being typed in, scrolled into view (drive 3: the stepper peeked under the box)', () => {
   it('scrolls to the end when the whole field still shows: the row after it comes fully into view, never a sliver', () => {
     // Viewport 200 over 320 of content; the text box at 120–220, the stepper row after it to 320.

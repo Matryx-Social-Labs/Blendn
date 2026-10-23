@@ -301,11 +301,10 @@ describe('at AX XXXL (fontScale 3.1)', () => {
     expect(StyleSheet.flatten(scroll.props.style)).toMatchObject({ flexShrink: 1 })
     expect(screen.getByText(title, hidden).props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.title)
     expect(screen.getByText(body, hidden).props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.body)
-    // Taller than the cap: it scrolls, and the header's drag gives way to it; the grip still drags.
+    // Taller than the cap: it scrolls; the grip still drags (dsSheet pins the header's pull from the top).
     await act(async () => fireEvent(scroll, 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 393, height: 500 } } }))
     await act(async () => fireEvent(scroll, 'contentSizeChange', 393, 1400))
     expect(screen.getByTestId('s-content', hidden).props.scrollEnabled).toBe(true)
-    expect(getByGestureTestId('s-head-drag').config.enabled).toBe(false)
     expect(getByGestureTestId('s-drag').config.enabled).toBe(true)
   })
 
