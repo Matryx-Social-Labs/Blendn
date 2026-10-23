@@ -6,7 +6,10 @@
  * Modelled faithfully here: SecureStore and the permission read share one FIFO queue, and the permission read never
  * answers. The real auth client, the real permission reader, a scripted server.
  */
-jest.mock('@react-native-async-storage/async-storage', () => require('@react-native-async-storage/async-storage/jest/async-storage-mock'))
+jest.mock('@react-native-async-storage/async-storage', () => ({
+  __esModule: true,
+  default: require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
+}))
 jest.mock('react-native', () => ({ Platform: { OS: 'ios' }, AppState: { addEventListener: () => ({ remove: () => {} }), currentState: 'active' } }))
 jest.mock('../lib/logger', () => ({ Logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() } }))
 jest.mock('../lib/sentry', () => ({ Sentry: { setUser: jest.fn() } }))
@@ -46,6 +49,8 @@ const auth = require('../lib/useAuth') as typeof import('../lib/useAuth')
 const { forgetPushPermission, readPushPermission, PERMISSION_READ_MS } = require('../lib/pushStatus') as typeof import('../lib/pushStatus')
 const { setAppIconBadge } = require('../lib/appBadge') as typeof import('../lib/appBadge')
 const { PAINT_GRACE_MS } = require('../lib/criticalPath') as typeof import('../lib/criticalPath')
+const { getPushTokenRef, setPushTokenRef } = require('../lib/pushTokenRef') as typeof import('../lib/pushTokenRef')
+const { consumeSessionEnd } = require('../lib/sessionEvents') as typeof import('../lib/sessionEvents')
 /* eslint-enable @typescript-eslint/no-require-imports */
 
 const ACCESS = 'blendn_access_token'
@@ -85,6 +90,7 @@ beforeEach(() => {
       const n = session++
       return json(200, { success: true, data: { accessToken: `access-${n}`, refreshToken: `refresh-${n}` } })
     }
+    if (u.includes('/api/mobile/notifications/token')) return bearer ? json(200, { success: true }) : json(401, { success: false, error: 'Invalid or expired token' })
     if (u.endsWith('/api/mobile/thing')) {
       const who = await new Promise<string>((resolve) => heldThings.push(resolve))
       return json(200, { success: true, data: { who } })
@@ -231,6 +237,21 @@ describe('a token refresh in flight across a sign-out (Opus review H1)', () => {
     await auth.signOut()
     await jest.advanceTimersByTimeAsync(20_000)
   })
+})
+
+it('a sign-out the person chose never comes back as "You were signed out" (Opus review M1)', async () => {
+  await auth.signInWithEmail('a@b.c', 'pw')
+  setPushTokenRef('ExponentPushToken[a]')
+  const leaving = auth.signOut()
+  // Taken before any await: the root layout's push-token removal on the signed-out route finds nothing to remove.
+  expect(getPushTokenRef()).toBeNull()
+  await expect(leaving).resolves.toEqual({ success: true })
+  expect(signOutPosts[0].body.pushToken).toBe('ExponentPushToken[a]')
+  // Any authed request after it (the old path: the push-token DELETE) is refused without a session, and ends none.
+  await expect(apiClient.removePushToken('ExponentPushToken[a]')).resolves.toMatchObject({ success: false })
+  await jest.advanceTimersByTimeAsync(0)
+  // The next cold launch: no notice.
+  await expect(consumeSessionEnd()).resolves.toBeNull()
 })
 
 it('signs in, reads the token and signs out with a permission read that never answers, and the read waits for the session', async () => {

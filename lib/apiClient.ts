@@ -1184,6 +1184,8 @@ export type RefreshOutcome = 'ok' | 'rejected' | 'failed'
  */
 /** What a request that failed for no reason we can name says to a person. */
 const GENERIC_FAILURE_MESSAGE = 'Something went wrong. Try again.'
+/** An authed request with no session behind it (signed out, or the session it was made in has ended). */
+const NOT_SIGNED_IN_MESSAGE = 'You’re not signed in.'
 
 export const REFRESH_RETRY_DELAYS_MS = [2000, 5000, 10000] as const
 /** The whole refresh: the keychain read and the fetch, each on the fetch deadline. */
@@ -1488,12 +1490,16 @@ class ApiClientClass {
       ...(options.headers as Record<string, string>),
     }
 
+    // The session this request was made in, and whether it carried a token at all (M1): see the 401 below.
+    const epoch = sessionEpoch
+    let sentToken = false
     if (requireAuth) {
       const accessToken = await withinDeadline(TokenStorage.getAccessToken())
       // The keychain did not answer: a transport-shaped failure, tried again on the next call. Never sent unauthenticated.
       if (accessToken === TIMED_OUT) return { success: false, error: TIMEOUT_MESSAGE }
       if (accessToken) {
         headers['Authorization'] = `Bearer ${accessToken}`
+        sentToken = true
       }
     }
 
@@ -1521,6 +1527,12 @@ class ApiClientClass {
 
         // Handle 401 - try to refresh token
         if (response.status === 401 && requireAuth) {
+          /*
+           * Not this request's session to refresh or to end (Opus review M1): it ended while the request was out (a sign-out
+           * the person chose, another sign-in), or the request carried no token because nobody is signed in. Either way a
+           * refusal here is not a session the server ended, and must never write "You were signed out".
+           */
+          if (epoch !== sessionEpoch || !sentToken) return { success: false, error: NOT_SIGNED_IN_MESSAGE }
           const refreshed = await this.refreshTokens()
           if (refreshed === 'ok') {
             const newAccessToken = await withinDeadline(TokenStorage.getAccessToken())
@@ -1943,14 +1955,20 @@ class ApiClientClass {
    * end every session, not this one) and the result says the server did not confirm.
    */
   async signOut(revokeAll: boolean = false): Promise<ApiResponse<void>> {
-    const generation = nextSession()
+    nextSession()
+    /*
+     * The push token rides in the POST, and nothing else may use it (Opus review M1): the root layout's sign-out
+     * `removePushTokenFromProfile` ran with the ref still set, 401'd with no token, and its refresh found none, so a sign-out
+     * the person chose came back as "You were signed out". Taken now, before any await.
+     */
+    const pushToken = getPushTokenRef() ?? undefined
+    setPushTokenRef(null)
     /*
      * Drop the cached responses and the queued requests now. `clearResponseCache` also stops a read already in flight
      * from refilling the cache with this account's data for the next one (its epoch).
      */
     requestQueue.clear()
     this.clearResponseCache()
-    const pushToken = getPushTokenRef() ?? undefined
     const accessRead = withinDeadline(TokenStorage.getAccessToken())
     const refreshRead = withinDeadline(TokenStorage.getRefreshToken())
     const cleared = withinDeadline(TokenStorage.clearAll())
@@ -1965,8 +1983,6 @@ class ApiClientClass {
       const named = revokeAll || refreshToken === TIMED_OUT ? null : refreshToken
       result = await this.postSignOut(accessToken, named, pushToken)
     }
-    // Not a newer session's push token (one signed in while this was out).
-    if (generation === sessionEpoch) setPushTokenRef(null)
     await cleared
     return result
   }
