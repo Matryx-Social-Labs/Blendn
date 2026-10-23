@@ -9,7 +9,7 @@ import { apiClient, TokenStorage } from './apiClient'
 import { bannerPresentation, isOnNotificationsScreen } from './inAppBanners'
 import { Logger } from './logger'
 import { setPushTokenRef, getPushTokenRef } from './pushTokenRef'
-import { notePushPermission, readPushPermission } from './pushStatus'
+import { notePushPermission, readPushPermission, whenPermissionReadable } from './pushStatus'
 
 /**
  * The conversation or room on screen, spelled the way the server spells a
@@ -188,7 +188,9 @@ export async function registerForPushNotificationsAsync(
     const existing = await readPushPermission()
     // The read did not answer (D1): the native queue is stuck, and asking or registering would only queue behind it.
     if (existing === 'unavailable') {
-      Logger.warn('notifications', 'Push permission unavailable; not registering this session')
+      Logger.warn('notifications', 'Push permission unavailable; registering when it answers')
+      // When it does answer (M3), register then. Never with the OS dialog: a prompt minutes later, out of context, is not one.
+      whenPermissionReadable('register', () => void initializePushNotifications({ prompt: false }))
       return null
     }
     const existingStatus = existing.status

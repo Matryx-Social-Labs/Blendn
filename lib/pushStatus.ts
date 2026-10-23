@@ -15,6 +15,18 @@ export type PushPermission = Notifications.NotificationPermissionsStatus | 'unav
 let known: Notifications.NotificationPermissionsStatus | null = null
 let stuck = false
 let reading: Promise<PushPermission> | null = null
+/** What waits for a stuck read to answer late (Opus review M3): a push registration that was skipped for it. */
+const onReadable = new Map<string, () => void>()
+
+/**
+ * Run `fn` once the stuck permission read answers (M3). One slow read (over PERMISSION_READ_MS) used to leave push
+ * unregistered for the whole run, though the phone answered a moment later.
+ */
+export function whenPermissionReadable(key: string, fn: () => void): void {
+  if (!stuck) return
+  // Keyed, so a second skip waits for the same one run, not two.
+  onReadable.set(key, fn)
+}
 
 /**
  * The one place the app reads the notification permission: every caller goes through here (RC drive D1).
@@ -46,6 +58,9 @@ export function readPushPermission({ fresh = false }: { fresh?: boolean } = {}):
     call.then((late) => {
       stuck = false
       known = late
+      const waiting = [...onReadable.values()]
+      onReadable.clear()
+      waiting.forEach((fn) => fn())
     }, () => {
       stuck = false
     })
@@ -79,10 +94,10 @@ export function forgetPushPermission(): void {
  */
 export type OsPush = 'granted' | 'askable' | 'blocked'
 
-export async function readOsPush({ fresh = false }: { fresh?: boolean } = {}): Promise<OsPush> {
+/** The phone's answer, or `null` when it did not give one (a read that timed out or failed): unknown, never "off" (M3). */
+export async function readOsPush({ fresh = false }: { fresh?: boolean } = {}): Promise<OsPush | null> {
   const permission = await readPushPermission({ fresh })
-  // Unknown reads as askable: the switch then behaves as it always did.
-  if (permission === 'unavailable') return 'askable'
+  if (permission === 'unavailable') return null
   if (permission.status === 'granted') return 'granted'
   return permission.canAskAgain ? 'askable' : 'blocked'
 }
@@ -97,8 +112,10 @@ export function useOsPush(): { os: OsPush; known: boolean; refresh: () => Promis
   const [os, setOs] = useState<OsPush>('askable')
   const [known, setKnown] = useState(false)
   const read = useCallback(async (fresh: boolean) => {
-    setOs(await readOsPush({ fresh }))
-    setKnown(true)
+    const answer = await readOsPush({ fresh })
+    // No answer is not an answer: `known` stays false, so nothing says "off" with a Turn on that cannot work (M3).
+    setKnown(answer !== null)
+    if (answer !== null) setOs(answer)
   }, [])
   const refresh = useCallback(() => read(true), [read])
   useEffect(() => {
