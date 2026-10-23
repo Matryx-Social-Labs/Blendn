@@ -530,6 +530,37 @@ describe('what scrolls and what stays (review MEDIUM-2, L8)', () => {
     expect(inner().paddingTop).toBeUndefined()
   })
 
+  it('under a pinned row the scroll keeps a floor of two targets, or its content if less (review R5)', async () => {
+    const { Text } = jest.requireActual('react-native')
+    await render(signOut({ headerAction: { label: 'Clear all', onPress: jest.fn() }, children: <Text>Form</Text> }))
+    const scroll = screen.getByTestId('s-content', hidden)
+    await act(async () => fireEvent(scroll, 'contentSizeChange', 393, 600))
+    expect(flat('s-content').minHeight).toBe(88)
+    await act(async () => fireEvent(scroll, 'contentSizeChange', 393, 40))
+    expect(flat('s-content').minHeight).toBe(40)
+  })
+
+  it('at the accessibility sizes with the keyboard up nothing is pinned: the floor could not be kept (review R5)', async () => {
+    const { Text } = jest.requireActual('react-native')
+    const { Keyboard } = require('react-native')
+    const handlers: Record<string, (e?: { endCoordinates: { height: number; screenY: number } }) => void> = {}
+    const spy = jest.spyOn(Keyboard, 'addListener').mockImplementation(((event: string, fn: (e?: { endCoordinates: { height: number; screenY: number } }) => void) => {
+      handlers[event] = fn
+      return { remove: () => {} }
+    }) as never)
+    try {
+      // The jest preset's fontScale is 2: the accessibility sizes.
+      await render(signOut({ headerAction: { label: 'Clear all', onPress: jest.fn() }, children: <Text>Form</Text> }))
+      expect(screen.getByTestId('s-pinned', hidden)).toBeTruthy()
+      const h = Dimensions.get('window').height
+      await act(async () => handlers.keyboardWillShow({ endCoordinates: { height: 300, screenY: h - 300 } }))
+      expect(screen.queryByTestId('s-pinned', hidden)).toBeNull()
+      expect(within(screen.getByTestId('s-content', hidden)).getByText('Clear all', hidden)).toBeTruthy()
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
   it('a sheet with no header keeps 12 pt between the grip and its content (it had moved up)', async () => {
     const { Text } = jest.requireActual('react-native')
     await render(<Sheet visible onClose={jest.fn()} testID="s">{<Text>Card</Text>}</Sheet>)

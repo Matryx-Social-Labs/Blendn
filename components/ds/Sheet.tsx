@@ -260,6 +260,9 @@ export type SheetProps = {
   testID?: string
 }
 
+/** Under a pinned header the scroll is never shorter than this many touch targets (or its content, if less). */
+const SCROLL_FLOOR_TARGETS = 2
+
 /** How long a drag-dismiss waits for the owner's answer before it springs back to where it was (a JS round trip to `visible`). */
 const DRAG_CLOSE_ASK_MS = 32
 
@@ -540,6 +543,8 @@ export function Sheet({ visible, onClose, title, headerAction, headerNote, body,
   const contentSize = useRef(0)
   const handScrolled = useRef(false)
   const [overflowing, setOverflowing] = useState(false)
+  /** The scroll's content height, for its floor under a pinned header. */
+  const [contentTall, setContentTall] = useState(0)
   const measureOverflow = () => setOverflowing(contentSize.current > contentHeight.current + 1)
   useEffect(() => {
     if (overflowing) content.current?.flashScrollIndicators()
@@ -671,7 +676,9 @@ export function Sheet({ visible, onClose, title, headerAction, headerNote, body,
    * header scrolls with its content instead: there "Sign out?" and its body were taller than the sheet (RC drive 3 D-E). A
    * row with an action or a note stays put at every size; its title stops at its cap.
    */
-  const pinHead = !!(headerAction || headerNote) || (!largeText && !!(icon || title))
+  // Unless the scroll under it would be left less than its floor: at the accessibility sizes with the keyboard up, the header
+  // scrolls too, so the field being typed in is never squeezed out (review R5).
+  const pinHead = (!!(headerAction || headerNote) || (!largeText && !!(icon || title))) && !(largeText && keyboardUp)
   const scrollHead = pinHead ? (
     bodyEl
   ) : hasHead ? (
@@ -790,6 +797,7 @@ export function Sheet({ visible, onClose, title, headerAction, headerNote, body,
                     }}
                     onContentSizeChange={(_w, h) => {
                       contentSize.current = h
+                      setContentTall(h)
                       measureOverflow()
                     }}
                     onScrollBeginDrag={() => (handScrolled.current = true)}
@@ -798,7 +806,9 @@ export function Sheet({ visible, onClose, title, headerAction, headerNote, body,
                     // No Android overscroll glow under a pull that is the sheet's (review R1).
                     overScrollMode={overflowing ? 'never' : 'auto'}
                     testID={testID && `${testID}-content`}
-                    style={styles.content}
+                    // Under a pinned header the scroll keeps a floor (its content, up to two targets): pinned rows never squeeze
+                    // the form to nothing (review R5).
+                    style={[styles.content, pinHead && { minHeight: Math.min(contentTall, SCROLL_FLOOR_TARGETS * minTarget()) }]}
                     // Under a pinned title, or with no header at all, the content keeps its 12 pt from what is above it (review L8).
                     contentContainerStyle={[styles.contentInner, !scrollsFromTop && styles.contentBelow]}
                     keyboardShouldPersistTaps="handled"
