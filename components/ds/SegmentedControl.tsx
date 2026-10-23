@@ -230,8 +230,13 @@ export function SegmentedControl({
   const onLayout = (e: LayoutChangeEvent) => {
     segmentWidth.set(Math.max(1, (e.nativeEvent.layout.width - SPACE.xs * 2) / n))
   }
-  // A pair's labels may take two lines: its track grows with them at large text (`minHeight`), where a plain control stays 48.
-  const trackStyle: ViewStyle = { backgroundColor: trackFill(ground), ...(pair ? { height: undefined, minHeight: SIZE.control } : null) }
+  /*
+   * Wherever a label may take two lines (a pair; every control on Android) the track grows with it (`minHeight`); a plain
+   * control on iOS keeps one line and stays 48. Android's two lines in the fixed 48 sliced "Create account" in half at
+   * 360 dp and font scale 1.3 (RC drive 2 D-6).
+   */
+  const wraps = pair || android
+  const trackStyle: ViewStyle = { backgroundColor: trackFill(ground), ...(wraps ? { height: undefined, minHeight: SIZE.control } : null) }
   const dividerStyle = { opacity: selected === null ? 1 : 0, transition: DIVIDER_FADE } as unknown as ViewStyle
 
   return (

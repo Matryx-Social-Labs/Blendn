@@ -131,6 +131,13 @@ describe('<SegmentedControl>', () => {
     expect(screen.getByText('Sign in').props.numberOfLines).toBe(2)
   })
 
+  it('on Android the track grows with a two-line label instead of slicing it (RC drive 2 D-6: "Create account" at 360 dp, 1.3)', async () => {
+    on('android')
+    await draw()
+    expect(flat('s')).toMatchObject({ minHeight: SIZE.control })
+    expect(flat('s').height).toBeUndefined()
+  })
+
   it('focused draws the ring', async () => {
     await draw({ previewState: 'focused' })
     expect(screen.getByTestId('s-focus')).toBeTruthy()
