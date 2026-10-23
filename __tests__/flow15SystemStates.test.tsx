@@ -257,8 +257,9 @@ describe('rate-limited reads (#15)', () => {
     try {
       const done = jest.fn()
       await render(<RateLimitedBanner seconds={3} onDone={done} testID="rl" />)
-      expect(screen.getByText(/Slow down — try again in a minute/)).toBeTruthy()
-      expect(screen.getByText(/0:03/)).toBeTruthy()
+      // The words and the clock are one sentence, and the words never name a time of their own (drive 4 D-9b).
+      expect(screen.getByText('Slow down — try again in 0:03')).toBeTruthy()
+      expect(screen.queryByText(/a minute/)).toBeNull()
       expect(screen.queryByText(/connection/i)).toBeNull()
       await act(async () => {
         jest.advanceTimersByTime(1000)

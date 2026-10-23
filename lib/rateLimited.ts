@@ -1,11 +1,15 @@
 /**
- * "Slow down — try again in a minute" (Flow 15 #15): a read the server refused with a 429. The wait is the server's
+ * "Slow down — try again in 0:17" (Flow 15 #15): a read the server refused with a 429. The wait is the server's
  * (`retryAfter`, seconds); it is never "check your connection", because the connection is fine.
  */
 export const RATE_LIMITED_CODE = 'RATE_LIMITED'
-/** When the server names no wait: the minute the sentence promises. */
+/** When the server names no wait: a minute. */
 export const DEFAULT_WAIT_S = 60
-export const RATE_LIMITED_TEXT = 'Slow down — try again in a minute'
+/**
+ * The banner's words, which its Geist Mono clock finishes ("… try again in 0:17"). It said "in a minute" beside a clock
+ * reading 0:17 (RC drive 4 D-9b): the clock is the server's real wait, so the words leave the time to it.
+ */
+export const RATE_LIMITED_TEXT = 'Slow down — try again in'
 
 export const isRateLimited = (result: { errorCode?: string } | null | undefined): boolean => result?.errorCode === RATE_LIMITED_CODE
 
