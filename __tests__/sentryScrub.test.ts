@@ -143,3 +143,7 @@ describe('every string, at any key (review HIGH-1, MED-1)', () => {
     expect(Object.keys(out.extra.byEvent).sort()).toEqual(['/friends/invite/:token', ':id', ':id#2', 'plain'])
   })
 })
+
+it('iOS native network breadcrumbs are off: a native crash would send them unscrubbed', () => {
+  expect(hooks()).toMatchObject({ enableNetworkBreadcrumbs: false })
+})

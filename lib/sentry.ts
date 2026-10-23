@@ -4,6 +4,8 @@ import { scrubBoardUrl } from './board'
 
 const dsn = process.env.EXPO_PUBLIC_SENTRY_DSN
 
+const NATIVE_ONLY: Record<string, unknown> = { enableNetworkBreadcrumbs: false }
+
 export function initSentry() {
   if (!dsn) {
     if (__DEV__) {
@@ -22,6 +24,12 @@ export function initSentry() {
     // addresses and other PII to every event regardless of that, undoing
     // the minimal-PII intent already established there.
     sendDefaultPii: false,
+    // Off: sentry-cocoa records its own breadcrumb for every request (path and query) and
+    // sends them with a native crash through its own beforeSend, which never reaches the
+    // scrubbing below, so invite tokens and search terms would leave raw (SCRUM-776). The
+    // JS fetch breadcrumbs stay, scrubbed. Read natively by SentryOptions initWithDict; the
+    // JS options type does not list it, hence the spread.
+    ...NATIVE_ONLY,
     // Since SDK 56 the global `fetch` is `expo/fetch`, which does not go
     // through XHR. The Sentry defaults instrument only XHR on mobile (RN's old
     // fetch was built on it), so without these every apiClient call would drop
