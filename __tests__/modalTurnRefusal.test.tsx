@@ -306,21 +306,43 @@ describe('MED-A: no false refusals', () => {
     expect(shown('a')).toBe(false)
   })
 
-  it('nothing counts while the app is in the background', async () => {
+  it('nothing counts while the app is in the background, and it looks again when the app is active, not on a timer', async () => {
     mockRefused.add('a-modal')
     const state = Object.getOwnPropertyDescriptor(AppState, 'currentState')
+    const woken: ((next: string) => void)[] = []
+    const listen = jest.spyOn(AppState, 'addEventListener').mockImplementation(((_type: string, cb: (next: string) => void) => {
+      woken.push(cb)
+      return { remove: () => {} }
+    }) as never)
     Object.defineProperty(AppState, 'currentState', { value: 'background', configurable: true })
     try {
       await render(<Sheet visible onClose={() => {}} title="A" testID="a" />)
       await settle(4)
       expect(shown('a')).toBe(true)
+      // Waiting for the app, not polling: one listener, however long it waits.
+      expect(woken).toHaveLength(1)
+      Object.defineProperty(AppState, 'currentState', { value: 'active', configurable: true })
+      await act(async () => woken.forEach((f) => f('active')))
+      await settle(1)
+      expect(shown('a')).toBe(false)
     } finally {
+      listen.mockRestore()
       if (state) Object.defineProperty(AppState, 'currentState', state)
       else Object.defineProperty(AppState, 'currentState', { value: 'active', configurable: true })
     }
-    await settle(1)
-    expect(shown('a')).toBe(false)
   })
+
+  it('a long refusal is logged at the 1st, 2nd, 4th, 8th… refusal, not every time (review LOW)', async () => {
+    const { Logger } = require('../lib/logger')
+    ;(Logger.warn as jest.Mock).mockClear()
+    mockRefused.add('a-modal')
+    await render(<Sheet visible onClose={() => {}} title="A" testID="a" />)
+    await settle(20)
+    const refusals = (Logger.warn as jest.Mock).mock.calls.map((c) => c[2].refusals)
+    expect(refusals.length).toBeGreaterThan(2)
+    expect(refusals.every((n: number) => (n & (n - 1)) === 0)).toBe(true)
+  })
+
 })
 
 describe('afterSheetDismissed leaves no stale waiter (review LOW)', () => {

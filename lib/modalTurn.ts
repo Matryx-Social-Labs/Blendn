@@ -100,6 +100,7 @@ export const SHOW_WATCHDOG_MS = 500
 export const MODAL_FADE_MS = 400
 /** A watchdog that fires this much past its time was held up (a JS stall), not refused: it looks once more. */
 const LATE_FIRE_MS = 250
+const isPowerOfTwo = (n: number) => n > 0 && (n & (n - 1)) === 0
 /** iOS answers a dismissal with `onDismiss`; if it never does, the next in line goes after this. */
 export const MODAL_GONE_FALLBACK_MS = 600
 /**
@@ -168,16 +169,31 @@ export function useTurnWatch(gate: TurnGate, modalUp: boolean, { animationMs = 0
         lookedAgain = true
         return arm()
       }
-      if (AppState.currentState === 'background' || AppState.currentState === 'inactive') return arm()
+      // In the background nothing counts: it looks again once the app is active, not on a timer (review LOW).
+      if (AppState.currentState === 'background' || AppState.currentState === 'inactive') {
+        waking?.remove()
+        waking = AppState.addEventListener('change', (next) => {
+          if (next !== 'active') return
+          waking?.remove()
+          waking = null
+          arm()
+        })
+        return
+      }
       refusals.current += 1
-      Logger.warn('navigation', 'iOS did not present a modal; taking it down', { refusals: refusals.current })
+      // The 1st, 2nd, 4th, 8th…: a Modal refused while it waits a long time is one line in the log, not hundreds.
+      if (isPowerOfTwo(refusals.current)) Logger.warn('navigation', 'iOS did not present a modal; taking it down', { refusals: refusals.current })
       presented.current = false
       setRefused(true)
       setBackoff(true)
       releaseTurn(turn)
     }
+    let waking: { remove: () => void } | null = null
     arm()
-    return () => clearTimeout(timer)
+    return () => {
+      clearTimeout(timer)
+      waking?.remove()
+    }
   }, [queued, modalUp, refused, turn, setBackoff, animationMs])
 
   // Refused and taken down: ask again, backing off, while it is wanted.
