@@ -5,6 +5,7 @@
  * empty, failed and ended states.
  */
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native'
+import { FlatList } from 'react-native'
 
 let mockParams: Record<string, string> = { conversationId: 'c1' }
 jest.mock('@react-native-async-storage/async-storage', () =>
@@ -274,6 +275,25 @@ describe('the thread’s states', () => {
     await act(async () => fireEvent.press(screen.getByLabelText(/Say hi/)))
     await flush()
     expect(api.sendPrivateMessage).toHaveBeenCalledWith('c1', expect.objectContaining({ text: 'Hey 👋' }))
+  })
+
+  // RC drive 3 D-A: at AX XXXL the opener and Say hi outgrow the frame, and following the end hid the opener's top under the
+  // reveal bar on open. An empty thread opens at its start; a thread with a message still follows its end.
+  it.each([
+    ['empty: opens at its start (the opener), not pinned to its end', [], 0],
+    ['with a message: follows its end', [theirs], 1],
+  ])('%s', async (_name, messages, calls) => {
+    const scrollToEnd = jest.fn()
+    const responder = jest.spyOn(FlatList.prototype, 'getScrollResponder').mockReturnValue({ scrollToEnd } as never)
+    try {
+      api.getConversationMessages.mockResolvedValue(page(messages) as never)
+      await open()
+      scrollToEnd.mockClear()
+      await act(async () => fireEvent(screen.getByTestId('dm-feed'), 'contentSizeChange', 393, 1400))
+      expect(scrollToEnd).toHaveBeenCalledTimes(calls)
+    } finally {
+      responder.mockRestore()
+    }
   })
 
   it('a read that fails says so and offers to try again', async () => {

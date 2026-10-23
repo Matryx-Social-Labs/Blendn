@@ -715,6 +715,13 @@ function PrivateChatInner() {
   const barSpace = panelOpen ? barHeight : 0
   const dockBottom = keyboardUp ? SPACE.sm : Math.max(insets.bottom, SPACE.lg)
   const lock = composer.lock
+  const feed = loading && !messages.length ? [] : chatItems
+  /*
+   * An empty thread is not followed to its end: there is no newest message to keep in view, and at AX XXXL the opener and
+   * Say hi outgrow the frame, so pinning the end hid the opener's faces and "You both said" under the reveal bar on open
+   * (RC drive 3 D-A). It opens at its start; the first message (Say hi included) follows the end as before.
+   */
+  const followFeed = feed.length ? follow.onContentSizeChange : undefined
 
   return (
     <View style={styles.screen}>
@@ -736,7 +743,7 @@ function PrivateChatInner() {
             <FlatList
               ref={flatListRef}
               testID="dm-feed"
-              data={loading && !messages.length ? [] : chatItems}
+              data={feed}
               keyExtractor={(item) => item.id}
               renderItem={renderChatItem}
               style={[styles.fill, chatFeedFrame(insets.top).style]}
@@ -791,7 +798,7 @@ function PrivateChatInner() {
                   <SayHi line={emptyThreadLine(reveal?.displayName, nameParam(otherUserName) ?? null)} onPress={() => void send('Hey 👋')} />
                 )
               }
-              onContentSizeChange={follow.onContentSizeChange}
+              onContentSizeChange={followFeed}
               onScrollToIndexFailed={(info) => {
                 // Not measured yet: get close by the average row, then land on it.
                 flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false })
