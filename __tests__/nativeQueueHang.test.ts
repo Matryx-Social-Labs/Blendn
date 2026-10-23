@@ -199,6 +199,15 @@ describe('sign-out clears the keychain before it tells the server (security revi
     expect(mockSecure.has(REFRESH)).toBe(false)
   })
 
+  it('signOut(true) with an expired access token refreshes too, and names no refresh token (L2)', async () => {
+    await auth.signInWithEmail('a@b.c', 'pw')
+    mockExpiredAccess = mockSecure.get(ACCESS) ?? null
+    await expect(auth.signOut(true)).resolves.toEqual({ success: true })
+    expect(signOutPosts).toHaveLength(2)
+    expect(signOutPosts[1].bearer).not.toBe(mockExpiredAccess)
+    expect(signOutPosts.every((p) => p.body.refreshToken === undefined)).toBe(true)
+  })
+
   it('a read in flight across sign-out does not hand the last account’s answer to the next', async () => {
     await auth.signInWithEmail('a@b.c', 'pw')
     const asA = apiClient.cachedRequest<{ who: string }>('/api/mobile/thing', 60_000)

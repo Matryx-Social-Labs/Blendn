@@ -2013,15 +2013,19 @@ class ApiClientClass {
       // Nothing stored: there is no session here for the server to end.
       result = { success: true }
     } else {
-      const named = revokeAll || refreshToken === TIMED_OUT ? null : refreshToken
-      result = await this.postSignOut(accessToken, named, pushToken)
+      const held = refreshToken === TIMED_OUT ? null : refreshToken
+      // Everywhere names no refresh token (the server then ends every session), but an expired access token still refreshes with it (L2).
+      result = await this.postSignOut(accessToken, held, !revokeAll, pushToken)
     }
     await cleared
     return result
   }
 
-  /** `POST /auth/signout` with tokens already read: an expired access token is refreshed once with `refreshToken`, unstored. */
-  private async postSignOut(accessToken: string, refreshToken: string | null, pushToken: string | undefined): Promise<ApiResponse<void>> {
+  /**
+   * `POST /auth/signout` with tokens already read: an expired access token is refreshed once with `refreshToken`, unstored.
+   * `name`: the body names the refresh token (this session only); off for sign out everywhere, which still refreshes with it.
+   */
+  private async postSignOut(accessToken: string, refreshToken: string | null, name: boolean, pushToken: string | undefined): Promise<ApiResponse<void>> {
     const endpoint = '/api/mobile/auth/signout'
     const send = (access: string, refresh: string | null) =>
       fetchWithTimeout(`${this.baseUrl}${endpoint}`, {
@@ -2032,7 +2036,7 @@ class ApiClientClass {
           ...CHANNEL_SET_HEADER,
           Authorization: `Bearer ${access}`,
         },
-        body: JSON.stringify({ refreshToken: refresh ?? undefined, pushToken }),
+        body: JSON.stringify({ refreshToken: name ? refresh ?? undefined : undefined, pushToken }),
       })
     try {
       let { response, body } = await send(accessToken, refreshToken)
