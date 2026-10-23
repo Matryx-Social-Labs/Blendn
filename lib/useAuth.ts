@@ -600,14 +600,14 @@ export const signUp = async (
  * refresh token stayed valid and the push token stayed registered, and the
  * screen said nothing.
  *
- * The order is the fix for RC drive D1. The server half starts first, so its
- * refresh-token read is queued before anything is cleared; then this phone is
- * signed out at once and the root layout routes to the entry screen. Nothing
- * the person sees waits on the keychain, which shares one native queue with
- * every Expo module: a call stuck there held sign-out for minutes. The server
- * half clears the keychain when it is done (`apiClient.signOut`); the promise
- * this returns settles with it, for the toast that says the server did not
- * confirm.
+ * The order is the fix for RC drive D1. The server half starts first: it
+ * queues the token reads and then the keychain deletes before it touches the
+ * network (`apiClient.signOut`), so an app killed mid-POST relaunches signed
+ * out. Then this phone is signed out at once and the root layout routes to the
+ * entry screen. Nothing the person sees waits on the keychain, which shares
+ * one native queue with every Expo module: a call stuck there held sign-out
+ * for minutes. The promise this returns settles with the server, for the
+ * toast that says it did not confirm.
  */
 export const signOut = async (
   revokeAll: boolean = false

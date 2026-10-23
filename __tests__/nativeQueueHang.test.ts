@@ -57,18 +57,37 @@ let signedOutOnServer = 0
 /** Holds the sign-out POST until the test lets it answer. */
 let mockHoldSignOut: Promise<void> | null = null
 let session = 1
+/** What each sign-out POST carried: its bearer and its body. */
+let signOutPosts: { bearer: string | null; body: Record<string, unknown> }[] = []
+/** The access token the server takes as expired (a 401), once. */
+let mockExpiredAccess: string | null = null
+/** Held reads of `/api/mobile/thing`: the test answers them as whoever it likes. */
+const heldThings: ((who: string) => void)[] = []
 beforeEach(() => {
+  signOutPosts = []
+  mockExpiredAccess = null
   mockLog.length = 0
   signedOutOnServer = 0
   jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'] })
-  global.fetch = jest.fn(async (url: RequestInfo | URL) => {
+  global.fetch = jest.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
     const u = String(url)
+    const bearer = (init?.headers as Record<string, string> | undefined)?.Authorization?.replace('Bearer ', '') ?? null
+    if (u.endsWith('/auth/refresh')) {
+      const n = session++
+      return json(200, { success: true, data: { accessToken: `access-${n}`, refreshToken: `refresh-${n}` } })
+    }
+    if (u.endsWith('/api/mobile/thing')) {
+      const who = await new Promise<string>((resolve) => heldThings.push(resolve))
+      return json(200, { success: true, data: { who } })
+    }
     if (u.endsWith('/auth/signin')) {
       const n = session++
       return json(200, { success: true, data: { user: USER, accessToken: `access-${n}`, refreshToken: `refresh-${n}` } })
     }
     if (u.endsWith('/auth/session')) return json(200, { success: true, data: USER })
     if (u.endsWith('/auth/signout')) {
+      signOutPosts.push({ bearer, body: JSON.parse(String(init?.body ?? '{}')) })
+      if (bearer && bearer === mockExpiredAccess) return json(401, { success: false })
       if (mockHoldSignOut) await mockHoldSignOut
       signedOutOnServer += 1
       return json(200, { success: true })
@@ -105,6 +124,65 @@ it('a sign-out still waiting on the server does not clear the session signed in 
   expect(mockSecure.get(ACCESS)).toBe(stored)
   expect((await auth.getCurrentUser())?.id).toBe(USER.id)
   await auth.signOut()
+})
+
+describe('sign-out clears the keychain before it tells the server (security review of D1)', () => {
+  it('an app killed during the POST relaunches signed out', async () => {
+    await auth.signInWithEmail('a@b.c', 'pw')
+    const stored = mockSecure.get(REFRESH)
+    let answer = () => {}
+    mockHoldSignOut = new Promise<void>((resolve) => (answer = resolve))
+    const leaving = auth.signOut()
+    await jest.advanceTimersByTimeAsync(0)
+    // The POST is out and has not answered: this is where the app is killed.
+    expect(signOutPosts).toHaveLength(1)
+    // It still carried this session's tokens: the reads were queued ahead of the deletes.
+    expect(signOutPosts[0].body.refreshToken).toBe(stored)
+    expect(signOutPosts[0].bearer).toBe(`access-${String(stored).split('-')[1]}`)
+    expect(mockSecure.has(ACCESS)).toBe(false)
+    expect(mockSecure.has(REFRESH)).toBe(false)
+    expect(mockSecure.has('blendn_user')).toBe(false)
+    // The relaunch: the launch's restore finds nothing to restore.
+    const relaunched = await auth.reinitializeAuth()
+    expect(relaunched.user).toBeNull()
+    mockHoldSignOut = null
+    answer()
+    await expect(leaving).resolves.toEqual({ success: true })
+  })
+
+  it('an expired access token is refreshed with the tokens it read, ends the rotated session, and stores nothing', async () => {
+    await auth.signInWithEmail('a@b.c', 'pw')
+    mockExpiredAccess = mockSecure.get(ACCESS) ?? null
+    await expect(auth.signOut()).resolves.toEqual({ success: true })
+    expect(signOutPosts).toHaveLength(2)
+    expect(signOutPosts[1].bearer).not.toBe(mockExpiredAccess)
+    // The refresh rotated the refresh token: the second POST names the new one.
+    expect(signOutPosts[1].body.refreshToken).toMatch(/^refresh-/)
+    expect(signOutPosts[1].body.refreshToken).not.toBe(signOutPosts[0].body.refreshToken)
+    expect(mockSecure.has(ACCESS)).toBe(false)
+    expect(mockSecure.has(REFRESH)).toBe(false)
+  })
+
+  it('a read in flight across sign-out does not hand the last account’s answer to the next', async () => {
+    await auth.signInWithEmail('a@b.c', 'pw')
+    const asA = apiClient.cachedRequest<{ who: string }>('/api/mobile/thing', 60_000)
+    await jest.advanceTimersByTimeAsync(0)
+    await auth.signOut()
+    await auth.signInWithEmail('b@b.c', 'pw')
+    // A's read lands after B signed in.
+    heldThings.shift()?.('A')
+    await expect(asA).resolves.toMatchObject({ data: { who: 'A' } })
+    const asB = apiClient.cachedRequest<{ who: string }>('/api/mobile/thing', 60_000)
+    let settled: unknown = null
+    void asB.then((r) => (settled = r))
+    await jest.advanceTimersByTimeAsync(1000)
+    expect(settled).toBeNull()
+    // Not served from the cache: B's own read goes to the server.
+    expect(heldThings).toHaveLength(1)
+    heldThings.shift()?.('B')
+    await expect(asB).resolves.toMatchObject({ data: { who: 'B' } })
+    await auth.signOut()
+  })
 })
 
 it('signs in, reads the token and signs out with a permission read that never answers, and the read waits for the session', async () => {

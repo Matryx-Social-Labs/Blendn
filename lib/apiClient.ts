@@ -1752,8 +1752,10 @@ class ApiClientClass {
   /** Store the tokens and user of a successful sign-in or sign-up. */
   private async keepSession(result: ApiResponse<AuthResult>): Promise<ApiResponse<AuthResult>> {
     if (result.success && result.data) {
-      // A sign-out still finishing in the background must not clear what this stores (`signOut`).
+      // A sign-out still finishing in the background must not take this session's push token (`signOut`).
       signInGeneration += 1
+      // Nothing cached, or still in flight, from before this sign-in is served to it.
+      this.clearResponseCache()
       await TokenStorage.setTokens(result.data.accessToken, result.data.refreshToken)
       await TokenStorage.setUser(result.data.user)
     }
@@ -1913,49 +1915,88 @@ class ApiClientClass {
 
   /**
    * Sign out: always finishes, and always clears this phone (SCRUM-733: a restored session spun for minutes on a keychain
-   * read before the POST, and the sheet could not be left). The refresh-token read is bounded; when the keychain does not
-   * answer, the server is not asked (without the token, the POST would end every session, not this one) and the result says
-   * the server did not confirm. The clear is bounded too: a keychain that is stuck clears when it frees, the app moves on.
+   * read before the POST, and the sheet could not be left).
+   *
+   * The keychain is read and cleared FIRST, then the server is told (RC drive D1 security review). SecureStore runs its
+   * calls in the order they are made, so queuing the two token reads and then the deletes in one go means the reads still
+   * get the tokens, and the deletes are queued before the network is touched: an app killed during the POST relaunches
+   * signed out, never back into the session the person left. A sign-in after this queues its writes after the deletes, so
+   * it is never wiped. The POST carries the tokens it read (a 401 refreshes with them, unstored).
+   *
+   * Each read is bounded. When the refresh token does not come back, the server is not asked (without it, the POST would
+   * end every session, not this one) and the result says the server did not confirm.
    */
   async signOut(revokeAll: boolean = false): Promise<ApiResponse<void>> {
-    /*
-     * The app is signed out before this answers (`useAuth.signOut`, RC drive D1), so somebody can sign in again while it
-     * runs. The keychain clear below is for this session only: once a new one has stored its tokens, it is skipped.
-     */
     const generation = signInGeneration
     /*
-     * Drop the cached responses and the queued requests now, not after the server answers.
-     *
-     * `clearResponseCache` had no callers, so after signing out the map still
-     * held the previous user's response bodies -- their conversations, their
-     * matches, their profile -- in memory, keyed by endpoint. The next person to
-     * use the device signs in, hits the same endpoint, and `getCached` returns
-     * whatever is under that key.
-     *
-     * The TTL is not a defence: an expired entry is served as stale-while-
-     * revalidate rather than dropped, so it is returned first and corrected
-     * afterwards. Same shape as the push tokens above -- state that outlives the
-     * session it belongs to. The POST below is a direct request, outside the queue.
+     * Drop the cached responses and the queued requests now. `clearResponseCache` also stops a read already in flight
+     * from refilling the cache with this account's data for the next one (its epoch).
      */
     requestQueue.clear()
     this.clearResponseCache()
-    const refreshToken = await withinDeadline(TokenStorage.getRefreshToken())
-    const result: ApiResponse<void> =
-      refreshToken === TIMED_OUT && !revokeAll
-        ? { success: false, error: TIMEOUT_MESSAGE }
-        : await this.request<void>('/api/mobile/auth/signout', {
-            method: 'POST',
-            body: JSON.stringify({
-              refreshToken: revokeAll || refreshToken === TIMED_OUT ? undefined : refreshToken,
-              pushToken: getPushTokenRef() ?? undefined,
-            }),
-          })
-
-    if (generation === signInGeneration) {
-      setPushTokenRef(null)
-      await withinDeadline(TokenStorage.clearAll())
+    const pushToken = getPushTokenRef() ?? undefined
+    const accessRead = withinDeadline(TokenStorage.getAccessToken())
+    const refreshRead = withinDeadline(TokenStorage.getRefreshToken())
+    const cleared = withinDeadline(TokenStorage.clearAll())
+    const [accessToken, refreshToken] = await Promise.all([accessRead, refreshRead])
+    let result: ApiResponse<void>
+    if ((refreshToken === TIMED_OUT && !revokeAll) || accessToken === TIMED_OUT) {
+      result = { success: false, error: TIMEOUT_MESSAGE }
+    } else if (!accessToken) {
+      // Nothing stored: there is no session here for the server to end.
+      result = { success: true }
+    } else {
+      const named = revokeAll || refreshToken === TIMED_OUT ? null : refreshToken
+      result = await this.postSignOut(accessToken, named, pushToken)
     }
+    // Not a newer session's push token (one signed in while this was out).
+    if (generation === signInGeneration) setPushTokenRef(null)
+    await cleared
     return result
+  }
+
+  /** `POST /auth/signout` with tokens already read: an expired access token is refreshed once with `refreshToken`, unstored. */
+  private async postSignOut(accessToken: string, refreshToken: string | null, pushToken: string | undefined): Promise<ApiResponse<void>> {
+    const endpoint = '/api/mobile/auth/signout'
+    const send = (access: string, refresh: string | null) =>
+      fetchWithTimeout(`${this.baseUrl}${endpoint}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(Platform.OS !== 'web' ? { 'X-App-Version': appVersionNumber() } : {}),
+          ...CHANNEL_SET_HEADER,
+          Authorization: `Bearer ${access}`,
+        },
+        body: JSON.stringify({ refreshToken: refresh ?? undefined, pushToken }),
+      })
+    try {
+      let { response, body } = await send(accessToken, refreshToken)
+      if (response.status === 401 && refreshToken) {
+        const fresh = await this.refreshUnstored(refreshToken)
+        // The refresh rotated the token: the one to end now is the new one.
+        if (fresh) ({ response, body } = await send(fresh.accessToken, fresh.refreshToken))
+      }
+      return await this.parseResponse<void>(response, body, endpoint)
+    } catch (error) {
+      if (isTimeoutError(error)) return { success: false, error: TIMEOUT_MESSAGE }
+      return { success: false, error: GENERIC_FAILURE_MESSAGE }
+    }
+  }
+
+  /** A refresh whose tokens are only for the caller: never stored, never the shared `refreshTokens`. */
+  private async refreshUnstored(refreshToken: string): Promise<{ accessToken: string; refreshToken: string } | null> {
+    try {
+      const { response, body } = await fetchWithTimeout(`${this.baseUrl}/api/mobile/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...CHANNEL_SET_HEADER },
+        body: JSON.stringify({ refreshToken }),
+      })
+      if (!response.ok) return null
+      const data = JSON.parse(body) as ApiResponse<{ accessToken: string; refreshToken: string }>
+      return data.success && data.data ? data.data : null
+    } catch {
+      return null
+    }
   }
 
   async getSession(): Promise<ApiResponse<AuthUser>> {
@@ -3671,6 +3712,8 @@ class ApiClientClass {
   }
 
   clearResponseCache() {
+    // A read that started before the clear (another account's, at sign-out) must not refill the cache after it.
+    this.cacheEpoch++
     this.responseCache.clear()
     this.inFlight.clear()
     Logger.info('api', 'Response cache cleared')
