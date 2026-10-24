@@ -5,7 +5,8 @@
  * empty, failed and ended states.
  */
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native'
-import { FlatList } from 'react-native'
+import { chatHeaderBottom } from '../components/chat/ChatHeader'
+import { FlatList, StyleSheet } from 'react-native'
 
 let mockParams: Record<string, string> = { conversationId: 'c1' }
 jest.mock('@react-native-async-storage/async-storage', () =>
@@ -178,10 +179,23 @@ describe('the reveal bar', () => {
   })
 })
 
+describe('the reveal strip is not over the thread (TG-04, RC audit C6)', () => {
+  it('the feed’s window starts under the strip’s measured height, so the match card is never behind it', async () => {
+    await open()
+    const H = 260
+    await act(async () => fireEvent(screen.getByTestId('dm-reveal-strip'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 360, height: H } } }))
+    const window = StyleSheet.flatten(screen.getByTestId('dm-feed').props.style)
+    expect(window.marginTop).toBeGreaterThanOrEqual(chatHeaderBottom(0) + H)
+  })
+})
+
 describe('the reveal panel folds away (drive: it stayed over the thread on Android)', () => {
   const feed = () => screen.getByTestId('dm-feed')
   const touch = () => act(async () => fireEvent(feed(), 'touchEnd'))
-  const padding = () => (screen.getByTestId('dm-feed').props.contentContainerStyle as { paddingTop?: number }[]).flat().map((x) => x?.paddingTop).find((x) => x !== undefined)
+  // Where the first message starts: the window's top (under the strip, TG-04) plus the content's padding.
+  const padding = () =>
+    (StyleSheet.flatten(feed().props.style).marginTop as number) +
+    ((feed().props.contentContainerStyle as { paddingTop?: number }[]).flat().map((x) => x?.paddingTop).find((x) => x !== undefined) ?? 0)
 
   it('a touch on the thread folds it, and the feed gives its room back', async () => {
     await open()

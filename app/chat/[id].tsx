@@ -942,8 +942,8 @@ function GroupChatInner() {
               data={loading && !messages.length ? [] : chatItems}
               renderItem={renderChatItem}
               keyExtractor={(item) => (item.kind === 'separator' ? item.id : item.message_id)}
-              style={[styles.fill, chatFeedFrame(insets.top).style]}
-              contentContainerStyle={[styles.listContent, { paddingTop: chatFeedFrame(insets.top, blendRoom.barSpace).paddingTop, paddingBottom: dockHeight + dockBottom + SPACE.md }]}
+              style={[styles.fill, chatFeedFrame(insets.top, blendRoom.barSpace).style]}
+              contentContainerStyle={[styles.listContent, { paddingTop: chatFeedFrame(insets.top).paddingTop, paddingBottom: dockHeight + dockBottom + SPACE.md }]}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode={KEYBOARD_DISMISS}

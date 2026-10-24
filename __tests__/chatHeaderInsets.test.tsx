@@ -29,8 +29,11 @@ it('the feed’s window starts at the capsule’s bottom edge, its first message
   // In the window: the list's top plus its padding is the capsule's bottom edge plus the gap.
   expect(frame.style.marginTop + frame.paddingTop).toBe(chatHeaderBottom(INSET_TOP))
   expect(chatHeaderBottom(INSET_TOP)).toBe(INSET_TOP + 2 + SIZE.input + SPACE.md)
-  // The DM's reveal bar adds its own height under the capsule.
-  expect(chatFeedFrame(INSET_TOP, 120).paddingTop).toBe(frame.paddingTop + 120)
+  // A strip pinned under the capsule (the DM's reveal bar, a Blend's sides) moves the window's top under it, so nothing
+  // the feed holds scrolls behind it (TG-04): the strip starts at chatHeaderBottom and is 120 tall.
+  const under = chatFeedFrame(INSET_TOP, 120)
+  expect(under.style.marginTop).toBe(chatHeaderBottom(INSET_TOP) + 120)
+  expect(under.paddingTop).toBe(frame.paddingTop)
 })
 
 describe('the capsule is the Flow 5 builder’s (flow5.js header): 56 on iOS, 60 on Android, 28 round', () => {

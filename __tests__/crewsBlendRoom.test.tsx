@@ -6,6 +6,9 @@
  * does not offer yet.
  */
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native'
+import { CONTROL_FONT_CAP } from '../components/ds/shared'
+import { MAX_FONT_SCALE } from '../lib/design/tokens'
+import { AX_XXXL, atScale, resetScale, textNodes } from './helpers/togetherAx'
 
 const mockParams: Record<string, string> = {}
 jest.mock('expo-router', () => ({
@@ -475,5 +478,20 @@ describe('around the room', () => {
       finish({ success: true, data: { blocked: true } })
       await first
     })
+  })
+})
+
+describe('at AX XXXL (TG-04, RC audit C3)', () => {
+  beforeEach(() => atScale(AX_XXXL))
+  afterEach(resetScale)
+
+  it('the header line stops at the control cap in its fixed capsule; the strip’s own lines and the first-open card at their roles', async () => {
+    mockCoachVisible = true
+    serve(blend())
+    await open()
+    const line = screen.getByText('5 people · Closes in 9h')
+    expect(line.props.maxFontSizeMultiplier).toBe(CONTROL_FONT_CAP)
+    const card = textNodes(screen.toJSON() as never).filter((n) => JSON.stringify(n.children).includes('Blend with Crew Five ·'))
+    expect(card.map((n) => n.props.maxFontSizeMultiplier)).toEqual([MAX_FONT_SCALE.heading])
   })
 })
