@@ -139,3 +139,28 @@ describe('no Alert.alert in the UI', () => {
     expect(offenders).toEqual([])
   })
 })
+
+describe('the Photos header (D-M7: "PHOTOS1 of 6 · saved as you go" touched at 360 dp and 1.3)', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { Dimensions, StyleSheet } = require('react-native') as typeof import('react-native')
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { SPACE } = require('../lib/design/tokens') as typeof import('../lib/design/tokens')
+  const window = Dimensions.get('window')
+  const at = (width: number, fontScale: number) => act(async () => Dimensions.set({ window: { ...window, width, fontScale }, screen: { ...window, width, fontScale } }))
+  afterEach(() => Dimensions.set({ window, screen: window }))
+  const header = () => StyleSheet.flatten(screen.getByTestId('photos-header', { includeHiddenElements: true }).props.style)
+
+  it('at 360 dp and 1.3: a gap, a row that wraps, a label that shrinks; the counter reads "n of max"', async () => {
+    await at(360, 1.3)
+    await mount(1, 6)
+    expect(header()).toMatchObject({ flexDirection: 'row', gap: SPACE.sm, flexWrap: 'wrap' })
+    expect(StyleSheet.flatten(screen.getByText('Photos').props.style).flexShrink).toBe(1)
+    expect(screen.getByText(/^1 of 6/)).toBeTruthy()
+  })
+
+  it('at AX XXXL the counter stacks under the label', async () => {
+    await at(402, 3.571)
+    await mount(1, 6)
+    expect(header().flexDirection).not.toBe('row')
+  })
+})

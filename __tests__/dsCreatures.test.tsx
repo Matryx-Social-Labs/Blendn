@@ -213,6 +213,14 @@ describe('<VenuePlate>', () => {
     expect(await glyphOf('restaurant', 120)).toBe(await icon('utensils', 48))
   })
 
+  it('glyph={false} draws the two colours alone (Going-out hand-off 3: a plate behind its own words)', async () => {
+    await render(<VenuePlate type="cafe" size={120} glyph={false} />)
+    expect(StyleSheet.flatten(tree().props.style as object)).toMatchObject({ backgroundColor: VENUE_PLATES.cafe[0] })
+    expect(all(tree(), 'RNSVGSvgView')).toHaveLength(0)
+    await render(<VenuePlate type="cafe" size={120} />)
+    expect(all(tree(), 'RNSVGSvgView')).toHaveLength(1)
+  })
+
   /** The second colour: the half of the plate past its 135° split. */
   const half = () => (tree().children as Node[])[0]
 

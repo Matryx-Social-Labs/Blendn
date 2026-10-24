@@ -2,9 +2,9 @@ import { StyleSheet, Text, View } from 'react-native'
 
 import { Avatar } from '../ds/Avatar'
 import { Spinner } from '../ds/Loader'
-import { font, useBoldText, useIncreaseContrast } from '../ds/shared'
+import { CONTROL_FONT_CAP, font, useBoldText, useIncreaseContrast, useLargeText } from '../ds/shared'
 import { Icon } from '../ui/Icon'
-import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { tint } from '../../lib/theme'
 
 /** Flow 6 `add`: the link pill is 48 tall on the card's 20 pt padding. */
@@ -14,11 +14,23 @@ const FACE = 56
 const PILL_ALPHA = 0.45
 const PILL_EDGE_ALPHA = 0.3
 
+/** The token's tail shown, enough to tell two links apart. */
+const TAIL = 6
+
+/**
+ * The link's short form for the pill (A9: the raw URL broke mid-token over two lines): the host and the token's last six,
+ * "blendn.app/…qrstuv". Copy and Share carry the whole URL; a screen reader hears it whole. Any other shape is shown whole.
+ */
+export function shortInviteLink(url: string): string {
+  const parts = /^https?:\/\/(?:www\.)?([^/]+)\/f\/([^/?#]+)/.exec(url)
+  return parts ? `${parts[1]}/…${parts[2].slice(-TAIL)}` : url.replace(/^https?:\/\//, '')
+}
+
 /**
  * Your invite link, shown as what it is: a link (Flow 6 `add`, Flow 2 friends 01 · 02 · 03). A `surface` card at radius 32: your face
- * and name and "on Blend’n" above, and the link in a pill beneath, in Geist Mono and selectable.
+ * and name and "on Blend’n" above, and the link's short form in a pill beneath, in Geist Mono (Copy and Share carry it whole).
  *
- * Shown in full rather than hidden behind the Share button, so it is plain what is being handed out, and that it is the only
+ * Shown (in short) rather than hidden behind the Share button, so it is plain what is being handed out, and that it is the only
  * way anybody can reach you, since there is no search. Sharing goes through the OS sheet, which already offers Copy,
  * Messages, WhatsApp, Instagram and the rest. A failure keeps the card's height and says so in a sentence, with the primary
  * becoming Try again.
@@ -42,6 +54,7 @@ export function InviteLinkCard({
 }) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
+  const largeText = useLargeText()
   const who = name?.trim() || null
   return (
     <View testID="invite-link-card" style={[styles.card, contrast ? styles.cardContrast : styles.cardEdge]}>
@@ -49,10 +62,13 @@ export function InviteLinkCard({
         <View style={styles.who}>
           {photo ? <Avatar kind="photo" uri={photo} size={FACE} /> : <Avatar kind="creature" pseudonym={who} size={FACE} />}
           <View style={styles.whoText}>
-            <Text numberOfLines={1} style={[font('heading', bold), styles.ink]}>
+            {/* Your name grows to the heading cap and takes two lines at the AX sizes; the line under it stops at meta's (D-LM10). */}
+            <Text numberOfLines={largeText ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold), styles.ink]}>
               {who}
             </Text>
-            <Text style={[font('meta', bold), styles.onBlendn]}>on Blend’n</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.onBlendn]}>
+              on Blend’n
+            </Text>
           </View>
         </View>
       ) : null}
@@ -62,18 +78,19 @@ export function InviteLinkCard({
             <Icon name="link" size={ICON.inline} color={COLOR.textPrimary} />
             <Text
               testID="invite-link-url"
-              selectable
+              accessibilityLabel={`Your link, ${url.replace(/^https?:\/\//, '')}`}
               style={[font('body', bold, FONT_FAMILY.mono[500]), styles.url]}
-              numberOfLines={2}
-              maxFontSizeMultiplier={1.3}
+              numberOfLines={1}
+              ellipsizeMode="middle"
+              maxFontSizeMultiplier={CONTROL_FONT_CAP}
             >
-              {url.replace(/^https:\/\//, '')}
+              {shortInviteLink(url)}
             </Text>
           </>
         ) : failed ? (
           <>
             <Icon name="circle-alert" size={ICON.control} color={COLOR.destructive} />
-            <Text accessibilityRole="alert" style={[font('meta', bold), styles.message]}>
+            <Text accessibilityRole="alert" maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.message]}>
               Your link didn’t load. Check your connection and try again.
             </Text>
           </>
@@ -86,14 +103,18 @@ export function InviteLinkCard({
             style={styles.loading}
           >
             <Spinner size={20} />
-            <Text style={[font('meta', bold), styles.muted]}>Getting your link</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.muted]}>
+              Getting your link
+            </Text>
           </View>
         )}
       </View>
       {url && shared ? (
         <View style={styles.sharedRow}>
           <Icon name="circle-check" size={ICON.inline} color={COLOR.live} />
-          <Text style={[font('meta', bold), styles.muted]}>Shared. Anyone with the link can ask to be your friend.</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.muted, styles.shrink]}>
+            Shared. Anyone with the link can ask to be your friend.
+          </Text>
         </View>
       ) : null}
     </View>
@@ -126,4 +147,5 @@ const styles = StyleSheet.create({
   message: { flex: 1, color: COLOR.textPrimary },
   loading: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
   muted: { color: COLOR.textSecondary },
+  shrink: { flexShrink: 1 },
 })

@@ -6,11 +6,12 @@
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { AccessibilityInfo, StyleSheet } from 'react-native'
+import { AccessibilityInfo, Dimensions, StyleSheet } from 'react-native'
 
 import { GlyphWell, StateScreen } from '../components/ds/StateScreen'
-import { COLOR, MATERIAL, TYPE } from '../lib/design/tokens'
+import { COLOR, MATERIAL, MAX_FONT_SCALE, TYPE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
+import { AX_XXXL, uncapped } from './helpers/ax'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('expo-linear-gradient', () => {
@@ -119,4 +120,38 @@ describe('<StateScreen gutter> (Going’s empty state: the frame’s left 24 / r
 it('balances the title’s wrap on Android, so a two-line title never leaves one word alone', async () => {
   await render(<StateScreen icon="users" title="Meet other crews" body="x" />)
   expect(screen.getByRole('header', { name: 'Meet other crews' }).props.textBreakStrategy).toBe('balanced')
+})
+
+describe('at AX XXXL (A21, A25: the title and body pushed the actions off the screen)', () => {
+  const window = Dimensions.get('window')
+  beforeEach(() => act(async () => Dimensions.set({ window: { ...window, fontScale: AX_XXXL }, screen: { ...window, fontScale: AX_XXXL } })))
+  afterEach(() => Dimensions.set({ window, screen: window }))
+  const actions = [{ label: 'Try again', onPress: jest.fn() }]
+
+  it('a whole screen: the title at the title cap, the body, its link and the note at their role caps; the actions render', async () => {
+    await render(
+      <StateScreen
+        variant="screen"
+        icon="wifi-off"
+        title="You’re offline"
+        body="Check your connection, or read the help page."
+        bodyLink={{ text: 'help page', onPress: jest.fn() }}
+        note="Last synced 9:41 PM"
+        actions={actions}
+        testID="s"
+      />
+    )
+    expect(screen.getByText('You’re offline').props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.title)
+    expect(screen.getByText(/Check your connection/).props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.body)
+    expect(screen.getByText('Last synced 9:41 PM').props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.meta)
+    expect(uncapped(screen.toJSON())).toEqual([])
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
+  })
+
+  it('inline, and with a mono note: every line capped at its role', async () => {
+    await render(<StateScreen icon="users" title="Nobody here yet" body="When friends check in, they show here." note="ref 8f2c-41aa" noteMono actions={actions} />)
+    expect(screen.getByText('Nobody here yet').props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.bodyStrong)
+    expect(screen.getByText('ref 8f2c-41aa').props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.caption)
+    expect(uncapped(screen.toJSON())).toEqual([])
+  })
 })

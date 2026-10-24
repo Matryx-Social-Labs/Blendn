@@ -20,22 +20,48 @@ import { CONTROL_FONT_CAP, font, useBoldText, useIncreaseContrast } from './shar
 export const monoCaption = (bold: boolean) => ({ ...font('caption', bold, FONT_FAMILY.mono[500]), fontVariant: ['tabular-nums' as const] })
 
 /**
- * Mono runs divided by " · " ("Sun · 3:30 PM"): the middot and its two spaces are set in the brand face, as the frames draw
- * them, so punctuation does not take a full mono cell each and read as "Sun  ·  3:30 PM". Inside a mono `Text`; the digits stay mono.
+ * A mono run's separators in the brand face: the " · " divider ("Sun · 3:30 PM") and every plain space ("1:12 PM",
+ * "Oct 2026"). A mono space is a full cell, so set in Geist Mono they read double-spaced: "Sun  ·  3:30  PM" (C16, C17,
+ * D-L1). Inside a mono `Text`; the digits and words between them stay mono.
+ *
+ * `struck` (a cancelled night) strikes each run between the dividers and never the divider itself, which a strike
+ * turns into a dash: "Sun - 2:30 PM" (B-S16). The `Text` around it must not be struck.
  */
-export function MonoRun({ text }: { text: string }) {
+export function MonoRun({ text, struck = false }: { text: string; struck?: boolean }) {
   return (
     <>
-      {text.split(DIVIDER).map((part, i) => (
-        <Fragment key={i}>
-          {i > 0 ? <Text style={styles.divider}>{DIVIDER}</Text> : null}
-          {part}
-        </Fragment>
-      ))}
+      {text.split(DIVIDER).map((part, i) =>
+        // `split` with a group keeps the dividers at the odd indices.
+        i % 2 ? (
+          <Text key={i} style={styles.divider}>
+            {part}
+          </Text>
+        ) : struck && part ? (
+          <Text key={i} style={styles.struck}>
+            {spaced(part)}
+          </Text>
+        ) : (
+          <Fragment key={i}>{spaced(part)}</Fragment>
+        )
+      )}
     </>
   )
 }
-const DIVIDER = ' · '
+const DIVIDER = /( · )/
+const SPACE_RUN = /( )/
+
+/** A run's plain spaces in the brand face, the words between them left as they are. */
+function spaced(run: string) {
+  return run.split(SPACE_RUN).map((part, i) =>
+    i % 2 ? (
+      <Text key={i} style={styles.divider}>
+        {part}
+      </Text>
+    ) : (
+      part
+    )
+  )
+}
 
 /** A count's horizontal padding: 5 in the 18 pt pill, 8 in the 22. */
 const BADGE_PAD = { 18: SPACE.xs, 22: SPACE.sm } as const
@@ -168,14 +194,23 @@ export function LivePill({ text, testID }: { text: string; testID?: string }) {
 }
 
 /** "Live" with the dot, or a time or countdown in Geist Mono tabular ("9 PM", "In 25 min"). */
-export function TimeBadge({ when, testID }: { when: string; testID?: string }) {
+export function TimeBadge({
+  when,
+  struck = false,
+  testID,
+}: {
+  when: string
+  /** A cancelled night: the time is struck, never the middot (B-S16). */
+  struck?: boolean
+  testID?: string
+}) {
   const bold = useBoldText()
   const live = when === 'Live'
   return (
     <ScrimPill testID={testID}>
       {live ? <PresenceDot kind="live" testID={testID && `${testID}-dot`} /> : null}
       <Text style={[live ? font('caption', bold) : monoCaption(bold), styles.ink]} maxFontSizeMultiplier={CONTROL_FONT_CAP}>
-        {live ? when : <MonoRun text={when} />}
+        {live ? when : <MonoRun text={when} struck={struck} />}
       </Text>
     </ScrimPill>
   )
@@ -223,6 +258,7 @@ export function Price({
 
 const styles = StyleSheet.create({
   divider: { fontFamily: FONT_FAMILY.brand[500] },
+  struck: { textDecorationLine: 'line-through', textDecorationColor: COLOR.textSecondary },
   ring: { padding: SPACE.badgeRing, borderRadius: RADIUS.capsule },
   badge: { borderRadius: RADIUS.capsule, backgroundColor: COLOR.textPrimary, alignItems: 'center', justifyContent: 'center' },
   badgeText: { color: COLOR.ink, fontVariant: ['tabular-nums'] },

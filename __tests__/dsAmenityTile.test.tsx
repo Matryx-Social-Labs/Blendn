@@ -80,7 +80,15 @@ describe('<AmenityGrid>', () => {
     await render(<AmenityGrid tiles={tiles(8)} />)
     expect(screen.getByText('Amenity 5')).toBeTruthy()
     expect(screen.queryByText('Amenity 6')).toBeNull()
-    await fireEvent.press(screen.getByRole('button', { name: 'AND MORE, +3 more' }))
+    await fireEvent.press(screen.getByRole('button', { name: 'MORE, +3' }))
     expect(screen.getByText('Amenity 8')).toBeTruthy()
+  })
+
+  it('the fold says "more" once: the label MORE over the count "+3" in Geist Mono (B-S13)', async () => {
+    await render(<AmenityGrid tiles={tiles(8)} testID="g" />)
+    expect(screen.getByText('MORE')).toBeTruthy()
+    const count = screen.getByText('+3')
+    expect(StyleSheet.flatten(count.props.style).fontFamily).toBe(FONT_FAMILY.mono[500])
+    expect(screen.queryByText(/more/)).toBeNull()
   })
 })

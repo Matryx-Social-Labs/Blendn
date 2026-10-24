@@ -19,8 +19,10 @@ import { RequestCard } from '../components/banter/BanterParts'
 import { NAME_LINES_ALONE, PersonRow, PERSON_ROW_HEIGHT } from '../components/friends/PersonRow'
 import { InviteRow } from '../components/crews/InviteRow'
 import { RegularOn } from '../components/offer/OfferSections'
+import { ArrivalBanner } from '../components/share/ArrivalBanner'
 import { CONTROL_FONT_CAP } from '../components/ds/shared'
 import { MAX_FONT_SCALE, SPACE, TYPE } from '../lib/design/tokens'
+import { AX_XXXL } from './helpers/ax'
 /* eslint-enable import/first */
 
 const window = Dimensions.get('window')
@@ -43,7 +45,7 @@ describe('display headlines never break inside a word', () => {
   })
 
   it('the onboarding frame: the headline stops at the display cap, the bar’s "Step n of 8" at a control’s, the subtitle at body’s', async () => {
-    await at(402, 3.1)
+    await at(402, AX_XXXL)
     await render(<OnboardingScreen step="preferences" title="Your " titleAccent="preferences" subtitle="Who you’d like to meet." ctaLabel="Continue" onContinue={jest.fn()} />)
     expect(screen.getByTestId('onboarding-title', hidden).props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.display)
     expect(screen.getByTestId('onboarding-step', hidden).props.maxFontSizeMultiplier).toBe(CONTROL_FONT_CAP)
@@ -85,10 +87,10 @@ describe('the Scene’s "Bring someone?" (AX XXXL: one letter a line beside What
   const row = () => render(<BringSomeoneRow eventTitle="Premier League Screening" onWhatsApp={jest.fn()} onShare={jest.fn()} testID="bring" />)
 
   it('the words keep their measure and the controls wrap under them', async () => {
-    await at(402, 3.1)
+    await at(402, AX_XXXL)
     await row()
     expect(flat('bring')).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap' })
-    expect(flat('bring-text')).toMatchObject({ flexGrow: 1, flexBasis: measureOf('bodyStrong', 3.1), minWidth: measureOf('bodyStrong', 3.1) })
+    expect(flat('bring-text')).toMatchObject({ flexGrow: 1, flexBasis: measureOf('bodyStrong', AX_XXXL), minWidth: measureOf('bodyStrong', AX_XXXL) })
     expect(flat('bring-text').flex).toBeUndefined()
     expect(screen.getByTestId('bring-controls', hidden)).toContainElement(screen.getByTestId('bring-share', hidden))
     expect(screen.getByText('Bring someone?', hidden).props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.bodyStrong)
@@ -110,7 +112,7 @@ describe('a request card at AX XXXL (Banter, Requests: "Arn…", "Bh…" at 61 p
     render(<RequestCard face={null} name="Arnav Sharma" note="Hi! We were at the same screening." time="9h" onAccept={jest.fn()} onDecline={jest.fn()} onMore={jest.fn()} testID="req" />)
 
   it('the name and the note grow to their caps and double their lines; the time stops at a control’s cap', async () => {
-    await at(402, 3.1)
+    await at(402, AX_XXXL)
     await card()
     const name = screen.getByText('Arnav Sharma', hidden)
     expect(name.props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.bodyStrong)
@@ -132,15 +134,18 @@ describe('a request card at AX XXXL (Banter, Requests: "Arn…", "Bh…" at 61 p
 describe('a person row (Friends here at 360 dp and 1.3: "Aarav …" beside Message)', () => {
   const person = { userId: 'u1', name: 'Aarav Sharma', photo: null }
 
-  it('a name with no line under it may take two lines, and two lines at its cap fit the fixed row', async () => {
+  it('a name with no line under it may take two lines, and at the default size two lines fit the row', async () => {
     await render(<PersonRow person={person as never} trailing={null} />)
     expect(screen.getByTestId('person-name', hidden).props.numberOfLines).toBe(NAME_LINES_ALONE)
-    expect(NAME_LINES_ALONE * TYPE.bodyStrong.lineHeight * CONTROL_FONT_CAP).toBeLessThanOrEqual(PERSON_ROW_HEIGHT)
+    expect(NAME_LINES_ALONE * TYPE.bodyStrong.lineHeight).toBeLessThanOrEqual(PERSON_ROW_HEIGHT)
   })
 
-  it('with a line under it the name keeps one line, so the row’s height holds', async () => {
+  it('with a line under it the name keeps one line below the AX sizes; the row is a minimum, so a longer line grows it (DS-05)', async () => {
+    await at(360, 1.3)
     await render(<PersonRow person={person as never} detail="Requested" />)
     expect(screen.getByTestId('person-name', hidden).props.numberOfLines).toBe(1)
+    expect(flat('person-row')).toMatchObject({ minHeight: PERSON_ROW_HEIGHT })
+    expect(flat('person-row').height).toBeUndefined()
   })
 })
 
@@ -148,10 +153,10 @@ describe('the same squeeze, swept: a sentence beside one action keeps its measur
   const invite = { id: 'i1', crewId: 'c1', name: 'The Usual Suspects', invitedBy: 'Aisha', invitedAt: new Date().toISOString(), emblemSeed: 'x', size: 6 } as never
 
   it('Crews › an invite, at AX XXXL beside See invite', async () => {
-    await at(402, 3.1)
+    await at(402, AX_XXXL)
     await render(<InviteRow row={{ invite, lapsed: false }} onSee={jest.fn()} />)
     expect(flat('invite-row-body')).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap' })
-    expect(flat('invite-row-text')).toMatchObject({ flexGrow: 1, minWidth: measureOf('bodyStrong', 3.1), flexBasis: measureOf('bodyStrong', 3.1) })
+    expect(flat('invite-row-text')).toMatchObject({ flexGrow: 1, minWidth: measureOf('bodyStrong', AX_XXXL), flexBasis: measureOf('bodyStrong', AX_XXXL) })
     expect(screen.getByText('Aisha invited you to The Usual Suspects', hidden).props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.bodyStrong)
   })
 
@@ -161,5 +166,26 @@ describe('the same squeeze, swept: a sentence beside one action keeps its measur
     expect(flat('regular-on-body')).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap' })
     expect(flat('regular-on-text')).toMatchObject({ flexGrow: 1, minWidth: measureOf('bodyStrong', 1.3) })
     expect(flat('regular-on-text').flex).toBeUndefined()
+  })
+})
+
+describe('the arrival banner (P3: two lines held to one each beside Open and ×)', () => {
+  const banner = () => render(<ArrivalBanner title="Neon Nights at the Bandstand" meta="Sat 4 Oct, 9 PM · Toit Brewpub" onOpen={jest.fn()} onDismiss={jest.fn()} testID="arrival" />)
+
+  it('at 360 dp and 1.3 the sentence keeps its measure and Open and × wrap under it', async () => {
+    await at(360, 1.3)
+    await banner()
+    expect(flat('arrival-body')).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap' })
+    expect(flat('arrival-text')).toMatchObject({ flexGrow: 1, minWidth: measureOf('meta', 1.3), flexBasis: measureOf('meta', 1.3) })
+    expect(flat('arrival-text').flex).toBeUndefined()
+    expect(screen.getByTestId('arrival-body', hidden)).toContainElement(screen.getByTestId('arrival-open', hidden))
+    // Two single lines, as the frame draws them: the measure is what gives them room.
+    expect(screen.getByText('You were sent Neon Nights at the Bandstand', hidden).props.numberOfLines).toBe(1)
+  })
+
+  it('402 dp at 1.0 is laid out as before: one row', async () => {
+    await at(402, 1)
+    await banner()
+    expect(flat('arrival-text')).toMatchObject({ flexBasis: 0, minWidth: 0 })
   })
 })

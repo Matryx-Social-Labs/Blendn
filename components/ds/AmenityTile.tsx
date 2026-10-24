@@ -86,7 +86,7 @@ export function AmenityTile({ label, value, mono = false, icon, onPress, testID,
 
 /**
  * Tiles 2-up with 12 pt gutters; a lone last tile takes the full width. Seven
- * or more show the first five and a "+N more" tile, which expands in place.
+ * or more show the first five and a "MORE · +N" tile, which expands in place.
  */
 export function AmenityGrid({ tiles, testID }: { tiles: AmenityTileProps[]; testID?: string }) {
   const [open, setOpen] = useState(false)
@@ -101,8 +101,10 @@ export function AmenityGrid({ tiles, testID }: { tiles: AmenityTileProps[]; test
       ))}
       {folded ? (
         <AmenityTile
-          label="AND MORE"
-          value={`+${tiles.length - SHOWN_FOLDED} more`}
+          // "More" once: the label names it, the value is the count (B-S13: "AND MORE · +5 more").
+          label="MORE"
+          value={`+${tiles.length - SHOWN_FOLDED}`}
+          mono
           onPress={() => setOpen(true)}
           testID={testID && `${testID}-more`}
           style={cell}

@@ -5,16 +5,21 @@ import { Platform, StyleSheet, Text, View } from 'react-native'
 import ScalePress from '../motion/ScalePress'
 import { COLOR, MATERIAL, PRESS, RADIUS, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
-import { OPACITY, tint } from '../../lib/theme'
+import { OPACITY } from '../../lib/theme'
+import { PhotoScrim } from '../ui/GradientFill'
 import { CheckDisc } from './RadioCard'
 import { CONTROL_FONT_CAP, focusRing, font, useBoldText, useIncreaseContrast, useSelection } from './shared'
 
 /** The tile is fixed at 112 pt (the page); its word caps at 1.3× inside it. */
 const TILE_HEIGHT = 112
-/** The word sits 14 pt in and 12 up, on a scrim from clear at 30% to 78% ink at the foot. */
+/**
+ * The word sits 14 pt in and 12 up, on a scrim from clear at 30% to 78% ink at the foot: the DS PhotoScrim over the
+ * lower 70%, a LinearGradient that draws on every architecture (A35: the CSS `experimental_backgroundImage` it was, the
+ * audit did not see).
+ */
 const WORD_INSET = { left: SPACE.md + SPACE.xxs, bottom: SPACE.md }
 const SCRIM_FOOT_ALPHA = 0.78
-const SCRIM = `linear-gradient(180deg, ${tint(COLOR.ink, 0)} 30%, ${tint(COLOR.ink, SCRIM_FOOT_ALPHA)} 100%)`
+const SCRIM_TOP = '30%'
 /** The selected ring sits outside the tile, so the photo keeps its full frame. */
 const RING_OUT = SPACE.xxs
 
@@ -69,7 +74,7 @@ export function LookingForCard({ label, image, selected = false, onPress, disabl
       >
         <View testID={testID && `${testID}-tile`} style={styles.tile}>
           <Image source={image} contentFit="cover" style={StyleSheet.absoluteFill} accessible={false} />
-          <View testID={testID && `${testID}-scrim`} style={[StyleSheet.absoluteFill, { experimental_backgroundImage: SCRIM }]} />
+          <PhotoScrim testID={testID && `${testID}-scrim`} foot={SCRIM_FOOT_ALPHA} style={styles.scrim} />
           <Text style={[font('button', bold), styles.word]} maxFontSizeMultiplier={CONTROL_FONT_CAP} numberOfLines={1}>
             {label}
           </Text>
@@ -91,6 +96,7 @@ const styles = StyleSheet.create({
   slot: { flex: 1 },
   pressedIos: { transform: [{ scale: PRESS.scale }] },
   tile: { height: TILE_HEIGHT, borderRadius: RADIUS.sheet, overflow: 'hidden', backgroundColor: COLOR.surface },
+  scrim: { position: 'absolute', top: SCRIM_TOP, bottom: 0, left: 0, right: 0 },
   word: { position: 'absolute', ...WORD_INSET, right: WORD_INSET.left, color: COLOR.textPrimary },
   edge: { borderRadius: RADIUS.sheet },
   contrast: { borderWidth: 1, borderColor: MATERIAL.hairlineIncreaseContrast },

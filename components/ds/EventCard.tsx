@@ -12,8 +12,9 @@ import { COLOR, FONT_FAMILY, ICON, PRESS, RADIUS, SIZE, SPACE } from '../../lib/
 import { Icon } from '../ui/Icon'
 import { VenuePlate } from './VenuePlate'
 import { PROMOTED_LABEL } from '../../lib/pulseSections'
+import { categoryGlyph } from '../../lib/categoryGlyph'
 import { MonoRun, ScrimPill, TimeBadge } from './MonoFamily'
-import { CONTROL_FONT_CAP, focusRing, font, IC_HAIRLINE, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
+import { CONTROL_FONT_CAP, focusRing, font, IC_HAIRLINE, PRESSED_WASH, useBoldText, useIncreaseContrast, useSelection } from './shared'
 
 export type EventCardKind = 'hero' | 'compact' | 'row'
 
@@ -41,6 +42,11 @@ export type EventCardProps = {
    * night (Going › Past). A type it has no plate for draws the bar's.
    */
   plate?: string
+  /**
+   * The event's category slug ("music"): with no cover, the card draws the category plate (`CategoryPlate`) instead of an
+   * empty box (D8). A cover always wins, and a row's `plate` (a place) wins over it.
+   */
+  category?: string
   /** The card goes nowhere (a visit whose place the server has not named): it is read, not offered as a button. */
   inert?: boolean
   /** The one sentence a screen reader hears, when the card's words are not the usual title, time and "at {venue}" (a visit). */
@@ -66,6 +72,7 @@ export type EventCardProps = {
 const DEFAULT_SIZE: Record<'hero' | 'compact', ViewStyle> = { hero: { height: 300 }, compact: { width: 240, height: 170 } }
 /** The scrim covers the lower 62% of the photo (the page). */
 const SCRIM_HEIGHT = '62%'
+/** A row's height at one line of title; a two-line title grows it (a minimum, never a box). */
 const ROW_HEIGHT = 64
 /**
  * The distance column: 64 at least, so the rows' thumbs line up at the default size, and sized to its words past that
@@ -118,7 +125,7 @@ export function eventLabel({
  * on the card and the scrim 20% deeper.
  */
 export function EventCard(props: EventCardProps) {
-  const { kind, title, time, venue, distance, lead, going, here, promoted, cover, plate, saved, onPress, onPressIn, onLongPress, previewState, testID, style } = props
+  const { kind, title, time, venue, distance, lead, going, here, promoted, cover, plate, category, saved, onPress, onPressIn, onLongPress, previewState, testID, style } = props
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const android = Platform.OS === 'android'
@@ -171,10 +178,12 @@ export function EventCard(props: EventCardProps) {
               <Image source={{ uri: cover }} recyclingKey={cover} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} />
             ) : plate ? (
               <VenuePlate type={plate} />
+            ) : category ? (
+              <CategoryPlate category={category} size={SIZE.primary} testID={testID && `${testID}-plate`} />
             ) : null}
           </View>
           <View style={styles.rowText}>
-            <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold), styles.ink]}>
+            <Text numberOfLines={2} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold), styles.ink]}>
               {title}
             </Text>
             {/* The venue gives way to a long name; the time, the thing the row is for, never does. */}
@@ -219,7 +228,11 @@ export function EventCard(props: EventCardProps) {
         {...a11y}
         style={[styles.card, { borderRadius: radius }]}
       >
-        {cover ? <Image source={{ uri: cover }} recyclingKey={cover} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} /> : null}
+        {cover ? (
+          <Image source={{ uri: cover }} recyclingKey={cover} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} />
+        ) : category ? (
+          <CategoryPlate category={category} testID={testID && `${testID}-plate`} />
+        ) : null}
         <PhotoScrim testID={testID && `${testID}-scrim`} contrast={contrast} style={styles.scrim} />
         <View style={styles.pills}>
           <TimeBadge when={time} />
@@ -272,6 +285,30 @@ export function EventCard(props: EventCardProps) {
   )
 }
 
+/** The plate's glyph at 40% of its box (of 120 when it fills one), as a venue plate's. */
+const PLATE_GLYPH_SHARE = 0.4
+const PLATE_FILL_BASIS = 120
+
+/**
+ * An event's art when it has no cover (D8): its category's glyph in the screen's hue light (`sel.glyph`) on the hue's fill
+ * (`sel.fill`), filling its parent. A category with no glyph (`categoryGlyph`) draws the fill alone: no glyph is invented.
+ * Decorative: the title beside it is what is read out.
+ */
+export function CategoryPlate({ category, size, testID }: { category: string; size?: number; testID?: string }) {
+  const sel = useSelection()
+  const glyph = categoryGlyph(category)
+  return (
+    <View
+      testID={testID}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      style={[StyleSheet.absoluteFill, styles.plate, { backgroundColor: sel.fill }]}
+    >
+      {glyph ? <Icon name={glyph} size={Math.round((size ?? PLATE_FILL_BASIS) * PLATE_GLYPH_SHARE)} color={sel.glyph} /> : null}
+    </View>
+  )
+}
+
 function Ring({ radius, testID }: { radius: number; testID?: string }) {
   return (
     <>
@@ -306,7 +343,8 @@ const styles = StyleSheet.create({
   secondary: { color: COLOR.textSecondary },
   tabular: { fontVariant: ['tabular-nums'] },
   wash: { backgroundColor: PRESSED_WASH.android },
-  row: { height: ROW_HEIGHT, flexDirection: 'row', alignItems: 'center', gap: SPACE.md, borderRadius: RADIUS.rowInCard },
+  plate: { alignItems: 'center', justifyContent: 'center' },
+  row: { minHeight: ROW_HEIGHT, paddingVertical: SPACE.xs, flexDirection: 'row', alignItems: 'center', gap: SPACE.md, borderRadius: RADIUS.rowInCard },
   rowPressed: { backgroundColor: PRESSED_WASH.ios },
   lead: { minWidth: LEAD_WIDTH, maxWidth: LEAD_MAX, flexShrink: 0, color: COLOR.textPrimary, fontVariant: ['tabular-nums'] },
   thumb: { width: SIZE.primary, height: SIZE.primary, borderRadius: RADIUS.thumb, overflow: 'hidden', backgroundColor: COLOR.surface },

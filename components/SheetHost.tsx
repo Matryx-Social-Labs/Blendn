@@ -19,6 +19,7 @@ const NOTE_MAX = 500
 const KIND: Record<NonNullable<SheetAction['variant']>, ButtonKind> = {
   primary: 'lit',
   secondary: 'secondary',
+  tertiary: 'tertiary',
   destructive: 'destructive',
 }
 const kindOf = (action: SheetAction): ButtonKind => ('cancel' in action ? 'tertiary' : KIND[action.variant ?? 'secondary'])

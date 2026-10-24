@@ -42,7 +42,8 @@ export type SheetOutcome =
 
 export type SheetAction = {
   label: string
-  variant?: 'primary' | 'secondary' | 'destructive'
+  /** `tertiary`: a quiet text action beside the sheet's real choices ("What's kept"), drawn as Cancel is. */
+  variant?: 'primary' | 'secondary' | 'tertiary' | 'destructive'
   /** A row's glyph, in a `rows` sheet (the DM's options). */
   icon?: IconName
   /** A state, not an action ("Requested"): the row is drawn quiet and does nothing. */

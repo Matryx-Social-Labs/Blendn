@@ -9,7 +9,7 @@
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { AccessibilityInfo, StyleSheet } from 'react-native'
+import { AccessibilityInfo, Dimensions, StyleSheet } from 'react-native'
 import { State } from 'react-native-gesture-handler'
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils'
 
@@ -17,8 +17,10 @@ import * as Reanimated from 'react-native-reanimated'
 
 import { ChatBubble, PRESS_DELAY_MS, type ChatBubbleProps } from '../components/ds/ChatBubble'
 import { avatarOf, emojiOnly, linkHost, linkParts, replyOffset } from '../components/ds/chatShared'
-import { COLOR, MATERIAL } from '../lib/design/tokens'
+import { COLOR, FONT_FAMILY, MATERIAL } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
+import { CONTROL_FONT_CAP } from '../components/ds/shared'
+import { AX_XXXL, uncapped } from './helpers/ax'
 
 jest.mock('react-native-reanimated', () => {
   const actual = jest.requireActual('react-native-reanimated')
@@ -383,5 +385,26 @@ describe('the press squash waits for a touch that stays (audit L2: bubbles flick
     // The release is a plain spring to 1 (it replaces the pending delayed squash), never delayed itself.
     const delays = withDelay.mock.calls.map(([ms]) => ms)
     expect(delays).toEqual([120])
+  })
+})
+
+describe('the bubble’s time (DS-09 C16, DS-18 C31)', () => {
+  it('sets "1:12 PM" with its space in the brand face', async () => {
+    await render(bubble({ time: '1:12 PM' }))
+    const time = screen.getByText('1:12 PM', { includeHiddenElements: true })
+    const space = time.children.find((c) => typeof c !== 'string' && c.props.children === ' ') as unknown as { props: { style: { fontFamily?: string } } }
+    expect(StyleSheet.flatten(space.props.style).fontFamily).toBe(FONT_FAMILY.brand[500])
+  })
+
+  it('stops at the control cap, a tag as Banter’s time is; at AX XXXL nothing on a bubble is uncapped (C31)', async () => {
+    const window = Dimensions.get('window')
+    try {
+      await act(async () => Dimensions.set({ window: { ...window, fontScale: AX_XXXL }, screen: { ...window, fontScale: AX_XXXL } }))
+      await render(bubble({ time: '1:12 PM' }))
+      expect(screen.getByText('1:12 PM', { includeHiddenElements: true }).props.maxFontSizeMultiplier).toBe(CONTROL_FONT_CAP)
+      expect(uncapped(screen.toJSON())).toEqual([])
+    } finally {
+      Dimensions.set({ window, screen: window })
+    }
   })
 })

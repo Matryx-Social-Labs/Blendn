@@ -16,7 +16,8 @@ import Animated, {
 import { scheduleOnRN } from 'react-native-worklets'
 
 import { Icon } from '../ui/Icon'
-import { COLOR, EASING, ICON, PRESS, RADIUS, SIZE, SPACE, SPRING, TYPE } from '../../lib/design/tokens'
+import { COLOR, EASING, ICON, MAX_FONT_SCALE, PRESS, RADIUS, SIZE, SPACE, SPRING, TYPE } from '../../lib/design/tokens'
+import { MonoRun } from './MonoFamily'
 import { H } from '../../lib/haptics'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { tint } from '../../lib/theme'
@@ -26,7 +27,7 @@ import { avatarOf, BUBBLE, emojiOnly, linkHost, linkParts, reactionName, REPLY_S
 import { ReactionPill } from './ReactionBar'
 import { RECEIPT_WORD, ReceiptMark, type Receipt } from './ReceiptMark'
 import { ReplyPreview } from './ReplyPreview'
-import { focusRing, font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast } from './shared'
+import { CONTROL_FONT_CAP, focusRing, font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast } from './shared'
 
 /** #36: the hold that opens the menu. */
 const HOLD_MS = 400
@@ -242,7 +243,7 @@ function ChatBubbleBase(props: ChatBubbleProps) {
               hitSlop={{ top: (minTarget() - TYPE.meta.lineHeight) / 2, bottom: (minTarget() - TYPE.meta.lineHeight) / 2 }}
               style={indent}
             >
-              <Text numberOfLines={1} style={[font('meta', bold), styles.secondary]}>
+              <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
                 {sender.name}
               </Text>
             </Pressable>
@@ -389,12 +390,16 @@ function Message({
           {photo.progress !== undefined ? <UploadRing progress={photo.progress} /> : null}
         </View>
       ) : (
-        <Text style={[emoji ? EMOJI_ONLY_TYPE : font('body', bold), removed ? styles.removedText : styles.primary]}>
+        <Text
+          // Reading text grows to body's cap; a 32 pt emoji-only message is already large, so it stops at display's.
+          maxFontSizeMultiplier={emoji ? MAX_FONT_SCALE.display : MAX_FONT_SCALE.body}
+          style={[emoji ? EMOJI_ONLY_TYPE : font('body', bold), removed ? styles.removedText : styles.primary]}
+        >
           {removed
             ? content
             : parts.map(({ text: words, url }, i) =>
                 url ? (
-                  <Text key={i} onPress={() => onLinkPress?.(url)} style={styles.link}>
+                  <Text key={i} onPress={() => onLinkPress?.(url)} maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={styles.link}>
                     {words}
                   </Text>
                 ) : (
@@ -486,7 +491,7 @@ function Under({
           style={[styles.meta, indent]}
         >
           <Icon name="circle-alert" size={ICON.inline} color={COLOR.destructive} />
-          <Text style={[font('caption', bold), styles.destructive]}>{typeof failed === 'string' ? failed : 'Not sent · Tap to retry'}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.destructive]}>{typeof failed === 'string' ? failed : 'Not sent · Tap to retry'}</Text>
         </Pressable>
       ) : null}
       {last && !failed ? (
@@ -495,11 +500,16 @@ function Under({
           {waiting ? (
             <>
               <Icon name="clock" size={ICON.inline} color={COLOR.textTertiary} />
-              <Text style={[font('caption', bold), styles.tertiary]}>Waiting for connection</Text>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.tertiary]}>
+                Waiting for connection
+              </Text>
             </>
           ) : (
             <>
-              <Text style={timeFont(bold)}>{time}</Text>
+              {/* A tag, as Banter's time: it stops where a control does (C31). */}
+              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={timeFont(bold)}>
+                <MonoRun text={time} />
+              </Text>
               {mine && surface === 'dm' && receipt ? <ReceiptMark state={receipt} /> : null}
             </>
           )}

@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 
 import { Icon } from '../ui/Icon'
 import { Material } from '../ui/Material'
@@ -7,7 +7,7 @@ import { H } from '../../lib/haptics'
 import { Avatar } from './Avatar'
 import { Button } from './Button'
 import type { Face } from './Facepile'
-import { CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from './shared'
+import { CONTROL_FONT_CAP, font, IC_HAIRLINE, ROOMY_WIDTH, useBoldText, useIncreaseContrast } from './shared'
 
 /** None revealed, you only, they only, or you asked them; at both the bar is gone, unless there is a friend to add (`both`). */
 export type RevealState = 'none' | 'youOnly' | 'theyOnly' | 'asked' | 'both'
@@ -54,17 +54,25 @@ export function RevealBar({
 }) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
+  // At 360 dp each side had about 90 dp: "You · Aarav" cut to "You · Aa…" (C26). Narrow, "You" stacks over your name.
+  const narrow = useWindowDimensions().width <= ROOMY_WIDTH
   const youSeen = state === 'youOnly' || state === 'both'
   const themSeen = state === 'theyOnly' || state === 'both'
   const quiet = contrast ? COLOR.textPrimary : COLOR.textSecondary
   const seenWord = (seen: boolean) => (seen ? 'seen' : 'anonymous')
 
-  const side = (who: RevealSide, label: string, seen: boolean) => (
+  const side = (who: RevealSide, mine: boolean, seen: boolean) => (
     <View style={styles.side}>
       <Avatar size={SIDE_FACE} {...who.face} />
       <View style={styles.sideText}>
-        <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), styles.ink]}>
-          {label}
+        {mine && narrow ? (
+          <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), styles.ink]}>
+            You
+          </Text>
+        ) : null}
+        {/* Each name may take two lines rather than be cut to a few letters (C26, C27). */}
+        <Text numberOfLines={2} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), styles.ink]}>
+          {mine && !narrow ? `You · ${who.name}` : who.name}
         </Text>
         <View style={styles.eye}>
           <Icon name={seen ? 'eye' : 'eye-off'} size={ICON.inline} color={quiet} />
@@ -84,9 +92,9 @@ export function RevealBar({
         accessibilityLabel={`You, ${you.name}, ${seenWord(youSeen)}. ${them.name}, ${seenWord(themSeen)}.`}
         style={styles.sides}
       >
-        {side(you, `You · ${you.name}`, youSeen)}
+        {side(you, true, youSeen)}
         <Icon name="arrow-left-right" size={ICON.inline} color={COLOR.textSecondary} />
-        {side(them, them.name, themSeen)}
+        {side(them, false, themSeen)}
       </View>
       {state === 'youOnly' ? (
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>They can see you. They’ll decide in their own time.</Text>

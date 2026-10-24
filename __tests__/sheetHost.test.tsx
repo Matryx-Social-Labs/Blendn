@@ -137,3 +137,21 @@ describe('a reason sheet', () => {
     expect(run).toHaveBeenCalledWith('other', 'kept sending links')
   })
 })
+
+it('a tertiary action is drawn as Cancel is, not as the secondary (You hand-off 6: "What’s kept")', async () => {
+  await render(<SheetHost />)
+  await act(async () =>
+    showSheet({
+      kind: 'actions',
+      title: 'Delete your account?',
+      actions: [
+        { label: 'What’s kept', variant: 'tertiary', then: jest.fn() },
+        { label: 'Keep it', variant: 'secondary', then: jest.fn() },
+        { label: 'Cancel', cancel: true },
+      ],
+    })
+  )
+  const look = (name: string) => StyleSheet.flatten(screen.getByRole('button', { name }).props.style)
+  expect(look('What’s kept')).toEqual(look('Cancel'))
+  expect(look('What’s kept')).not.toEqual(look('Keep it'))
+})

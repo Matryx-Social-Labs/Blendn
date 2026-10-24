@@ -2,8 +2,8 @@
  * Worst-case data on the profile surfaces (break-ui): a name that will not break, no photos, nine photos, counts past the column,
  * thirty interests, a bio at its limit. Each renders, keeps its labels, and truncates where the frame truncates.
  */
-import { render, screen } from '@testing-library/react-native'
-import { StyleSheet, Text } from 'react-native'
+import { act, render, screen } from '@testing-library/react-native'
+import { Dimensions, StyleSheet, Text } from 'react-native'
 
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 59, bottom: 34, left: 0, right: 0 }) }))
 jest.mock('../components/OptimizedImage', () => ({ OptimizedImage: () => null }))
@@ -65,11 +65,14 @@ it('thirty interests, a 500-character bio and a long education all render', asyn
   expect(screen.getByLabelText(`education, ${LONG}`)).toBeTruthy()
 })
 
-it('a friend with a long name and no photo keeps its row to one line', async () => {
+it('a friend with a long name and no photo keeps its name to one line below the AX sizes (at them it takes two: DS-05)', async () => {
+  const window = Dimensions.get('window')
+  await act(async () => Dimensions.set({ window: { ...window, fontScale: 1 }, screen: { ...window, fontScale: 1 } }))
   await render(<PersonRow person={{ userId: 'u', name: LONG, photo: null }} detail="Friends since " detailMono="Mar 2026" onPress={jest.fn()} chevron />)
   expect(screen.getByText(LONG).props.numberOfLines).toBe(1)
   // No photo: the name's creature, a disc of its own (the initial on `surface` vanished into a card of the same colour).
   expect(screen.getByTestId('person-creature', { includeHiddenElements: true })).toBeTruthy()
+  Dimensions.set({ window, screen: window })
 })
 
 it('a small button in a row is centred on it, not pinned to its top', async () => {
@@ -78,9 +81,10 @@ it('a small button in a row is centred on it, not pinned to its top', async () =
   expect(StyleSheet.flatten(holder?.props.style).alignSelf).toBe('center')
 })
 
-it('M6: a person row is exactly one row tall (the lists that window it place rows by index), and a long name does not change that', async () => {
+it('M6, as DS-05 amends it: a person row is one row tall at least, never a fixed box; lists window it by index only at the default size (usePersonRowsFixed)', async () => {
   const { PERSON_ROW_HEIGHT } = require('../components/friends/PersonRow') as typeof import('../components/friends/PersonRow')
   await render(<PersonRow person={{ userId: 'u', name: 'Venkataramanan-Subramanian-Iyer-Krishnamurthy-Bhattacharya', photo: null }} detail="Friends since " detailMono="Mar 2026" onPress={jest.fn()} />)
-  const row = screen.getByRole('button')
-  expect(StyleSheet.flatten(row.props.style).height).toBe(PERSON_ROW_HEIGHT)
+  const row = StyleSheet.flatten(screen.getByRole('button').props.style)
+  expect(row.minHeight).toBe(PERSON_ROW_HEIGHT)
+  expect(row.height).toBeUndefined()
 })

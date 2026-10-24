@@ -1,10 +1,10 @@
 import { Image } from 'expo-image'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 
 import { COLOR, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
 import { tint } from '../../lib/theme'
 import { Spinner } from '../ds/Loader'
-import { CONTROL_FONT_CAP, font, IC_HAIRLINE, minTarget, PRESSED_WASH, useBoldText, useIncreaseContrast } from '../ds/shared'
+import { CONTROL_FONT_CAP, font, IC_HAIRLINE, minTarget, PRESSED_WASH, ROOMY_FONT_SCALE, useBoldText, useIncreaseContrast } from '../ds/shared'
 import { Icon } from '../ui/Icon'
 
 /*
@@ -61,6 +61,9 @@ export function PhotoFace({
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const slop = Math.max(0, (minTarget() - REMOVE) / 2)
+  // Past the roomy scale "Main" and the × met in the top band of a 150 pt tile (D-M8): Main goes to the bottom-left, above
+  // the blurred note when there is one.
+  const low = useWindowDimensions().fontScale > ROOMY_FONT_SCALE
   return (
     <View style={tile.base}>
       <Image
@@ -83,14 +86,14 @@ export function PhotoFace({
         style={StyleSheet.absoluteFill}
       />
       {main ? (
-        <View pointerEvents="none" style={styles.main}>
+        <View testID="tile-main" pointerEvents="none" style={[styles.main, low ? (blurred ? styles.mainAboveNote : styles.mainLow) : styles.mainTop]}>
           <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), styles.mainText]}>
             Main
           </Text>
         </View>
       ) : null}
       {blurred ? (
-        <View pointerEvents="none" style={styles.blurNote}>
+        <View testID="tile-blur-note" pointerEvents="none" style={styles.blurNote}>
           <Icon name="eye-off" size={ICON.inline} color={COLOR.textPrimary} />
           <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), tile.ink]}>
             Blurred for others
@@ -212,7 +215,10 @@ export function AddFace({ onPress, disabled, busy, label, accessible = true }: {
 }
 
 const styles = StyleSheet.create({
-  main: { position: 'absolute', left: SPACE.sm, top: SPACE.sm, height: SPACE.xl, paddingHorizontal: SPACE.sm, borderRadius: RADIUS.capsule, backgroundColor: COLOR.textPrimary, justifyContent: 'center' },
+  main: { position: 'absolute', left: SPACE.sm, height: SPACE.xl, paddingHorizontal: SPACE.sm, borderRadius: RADIUS.capsule, backgroundColor: COLOR.textPrimary, justifyContent: 'center' },
+  mainTop: { top: SPACE.sm },
+  mainLow: { bottom: SPACE.sm },
+  mainAboveNote: { bottom: SPACE.sm + SPACE.xl + SPACE.xs },
   mainText: { color: COLOR.ink },
   blurNote: { position: 'absolute', left: SPACE.sm, bottom: SPACE.sm, flexDirection: 'row', alignItems: 'center', gap: SPACE.xs, height: SPACE.xl, paddingHorizontal: SPACE.sm, borderRadius: RADIUS.capsule, backgroundColor: COLOR.scrim },
   remove: {

@@ -20,7 +20,8 @@ export const CONTROL_FONT_CAP = 1.3
 
 /**
  * The accessibility text sizes start here (RC drive D2): iOS's largest standard size is 1.35× body (xxxLarge, 23 pt), its
- * first accessibility size 1.65× (AX Medium, 28 pt), up to 3.1× (AX XXXL, 53 pt).
+ * first accessibility size 1.65× (AX Medium, 28 pt), up to AX XXXL. React Native scales every text by the category's own
+ * multiplier, and AX XXXL's is 3.571 (`RCTAccessibilityManager.mm`), not body's 53/17: the harness renders at 3.571.
  *
  * The rule per role, past it: reading text (body, meta, a row's lines) keeps growing to its `MAX_FONT_SCALE` and WRAPS: a
  * one- or two-line clamp is lifted (`useLargeText`), and a row's height is a `minHeight`, never a `height`. Headings and page

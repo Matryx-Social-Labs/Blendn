@@ -4,7 +4,7 @@ import Animated from 'react-native-reanimated'
 
 import { Glyph } from '../ui/Glyph'
 import { Icon, type IconName } from '../ui/Icon'
-import { COLOR, ICON, MATERIAL, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, MATERIAL, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
 import { OPACITY, tint } from '../../lib/theme'
@@ -235,7 +235,7 @@ export function SettingsGroup({
   return (
     <View testID={testID} style={[styles.group, danger && styles.dangerRoom]}>
       {title ? (
-        <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.label, contrast && styles.labelContrast]}>
+        <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold, FONT_FAMILY.brand[700]), styles.label, contrast && styles.labelContrast]}>
           {title}
         </Text>
       ) : null}

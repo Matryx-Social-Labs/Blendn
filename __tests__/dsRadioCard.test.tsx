@@ -137,7 +137,8 @@ describe('<LookingForCard>', () => {
   it('is a 112 pt photo tile, radius 24, the word on a scrim', async () => {
     await render(tile())
     expect(flat('l-tile')).toMatchObject({ height: 112, borderRadius: RADIUS.sheet, overflow: 'hidden' })
-    expect(flat('l-scrim').experimental_backgroundImage).toContain('linear-gradient')
+    // The DS PhotoScrim, over the lower 70% (DS-21: the CSS background image was not seen on the device).
+    expect(flat('l-scrim')).toMatchObject({ position: 'absolute', top: '30%' })
     expect(screen.getByText('Friendship').props.maxFontSizeMultiplier).toBe(1.3)
   })
 

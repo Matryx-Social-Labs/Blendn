@@ -7,10 +7,13 @@
  */
 import { fireEvent, render, screen, within } from '@testing-library/react-native'
 import React from 'react'
-import { StyleSheet } from 'react-native'
+import { act } from '@testing-library/react-native'
+import { Dimensions, StyleSheet } from 'react-native'
 
 import { RevealSheet, RevealSide } from '../components/ds/RevealSheet'
 import { H } from '../lib/haptics'
+import { MAX_FONT_SCALE } from '../lib/design/tokens'
+import { AX_XXXL, uncapped } from './helpers/ax'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('react-native-reanimated', () => {
@@ -96,11 +99,15 @@ describe('<RevealSide>', () => {
 describe('<RevealSide> headers (audit D3)', () => {
   const orbit = { kind: 'crew' as const, name: 'Midnight Vinyl Collective Bengaluru', emblemSeed: 'orbit' }
 
-  it('the name and the status are two Texts of their own, one line each: a long name never pushes the status out', async () => {
+  it('the name and the status are two Texts of their own: a long name wraps on its own and never pushes the status out', async () => {
+    const window = Dimensions.get('window')
+    await act(async () => Dimensions.set({ window: { ...window, fontScale: 1 }, screen: { ...window, fontScale: 1 } }))
     await render(<RevealSide side={orbit} people={PEOPLE.slice(0, 2)} testID="r" />)
+    Dimensions.set({ window, screen: window })
     const name = screen.getByText(orbit.name)
     const status = screen.getByText('2 on tonight’s names')
-    expect(name.props.numberOfLines).toBe(1)
+    // The name may take two lines (C28: a crew name cut to a few letters at AX); the status keeps its own line.
+    expect(name.props.numberOfLines).toBe(2)
     expect(status.props.numberOfLines).toBe(1)
     expect(name).not.toBe(status)
     // Neither is nested in the other.
@@ -136,5 +143,40 @@ describe('<RevealSide> headers (audit D3)', () => {
     expect(slot).not.toBeNull()
     // Its parent row holds the tiles too.
     expect(within(slot!.parent!).getAllByTestId(/^r-tile-/, { includeHiddenElements: true })).toHaveLength(2)
+  })
+})
+
+describe('<RevealSide> at scale (Together hand-off 1: the strip was half the screen at AX; "+1" wrapped under the faces)', () => {
+  const orbit = { kind: 'crew' as const, name: 'Midnight Vinyl Collective Bengaluru', emblemSeed: 'orbit' }
+  const hidden = { includeHiddenElements: true }
+  const many = Array.from({ length: 7 }, (_, i) => ({ pseudonym: `Person ${i}`, photo: null }))
+
+  it('at AX XXXL every line stops at its role’s cap; the name and the status take two lines', async () => {
+    const window = Dimensions.get('window')
+    try {
+      await act(async () => Dimensions.set({ window: { ...window, fontScale: AX_XXXL }, screen: { ...window, fontScale: AX_XXXL } }))
+      await render(<RevealSide side={orbit} people={PEOPLE} mine onReveal={jest.fn()} testID="r" />)
+      expect(screen.getByText(orbit.name).props).toMatchObject({ maxFontSizeMultiplier: MAX_FONT_SCALE.meta, numberOfLines: 2 })
+      expect(screen.getByText('4 on tonight’s names').props).toMatchObject({ maxFontSizeMultiplier: MAX_FONT_SCALE.meta, numberOfLines: 2 })
+      expect(uncapped(screen.toJSON())).toEqual([])
+    } finally {
+      Dimensions.set({ window, screen: window })
+    }
+  })
+
+  it('the faces never wrap: past four, the rest fold into the "+N" tile in the same row', async () => {
+    await render(<RevealSide side={orbit} people={many} testID="r" />)
+    expect(screen.getAllByTestId(/^r-tile-/, hidden)).toHaveLength(4)
+    expect(screen.getByText('+3', hidden)).toBeTruthy()
+    const row = screen.getByTestId('r-tile-0', hidden).parent!
+    expect(StyleSheet.flatten(row.props.style).flexWrap ?? 'nowrap').toBe('nowrap')
+    expect(row).toContainElement(screen.getByTestId('r-more', hidden))
+  })
+
+  it('after a reveal the extra revealed faces fold in with the kept ones: one "+N"', async () => {
+    const after = many.map((p, i) => ({ ...p, photo: i < 6 ? `https://example.com/${i}.jpg` : null }))
+    await render(<RevealSide side={orbit} people={after} testID="r" />)
+    expect(screen.getAllByTestId(/^r-tile-/, hidden)).toHaveLength(4)
+    expect(screen.getByText('+3', hidden)).toBeTruthy()
   })
 })

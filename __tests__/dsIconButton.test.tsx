@@ -9,7 +9,7 @@ import { AccessibilityInfo, Platform, StyleSheet } from 'react-native'
 import * as Reanimated from 'react-native-reanimated'
 
 import { IconButton } from '../components/ds/IconButton'
-import { HueProvider } from '../components/ds/shared'
+import { GroundProvider, HueProvider } from '../components/ds/shared'
 import { COLOR, MATERIAL, RADIUS, SIZE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { OPACITY } from '../lib/theme'
@@ -160,5 +160,36 @@ describe('the pop (DS #15)', () => {
     await render(<IconButton icon="heart" accessibilityLabel="Like" testID="i" />)
     expect(spring).not.toHaveBeenCalled()
     spring.mockRestore()
+  })
+})
+
+describe('on a surface card (C20: the request card’s "…" showed no disc on iOS: control glass over an opaque card)', () => {
+  const hidden = { includeHiddenElements: true }
+
+  it.each(['ios', 'android'] as const)('%s: a solid disc in the card’s chip tone, not glass', async (os) => {
+    Object.defineProperty(Platform, 'OS', { value: os, configurable: true })
+    try {
+      await render(
+        <GroundProvider value="surface">
+          <IconButton icon="ellipsis" accessibilityLabel="More" onPress={jest.fn()} testID="i" />
+        </GroundProvider>
+      )
+      expect(StyleSheet.flatten(screen.getByTestId('i-disc', hidden).props.style).backgroundColor).toBe(COLOR.surfaceSunken)
+      expect(screen.queryByTestId('glass', hidden)).toBeNull()
+    } finally {
+      Object.defineProperty(Platform, 'OS', { value: 'ios', configurable: true })
+    }
+  })
+
+  it('on the page it is glass, as before; selected on a card it is lit, as before', async () => {
+    await render(<IconButton icon="ellipsis" accessibilityLabel="More" onPress={jest.fn()} testID="i" />)
+    expect(screen.queryByTestId('i-disc', hidden)).toBeNull()
+    await render(
+      <GroundProvider value="surface">
+        <IconButton icon="bookmark" accessibilityLabel="Saved" selected onPress={jest.fn()} testID="i" />
+      </GroundProvider>
+    )
+    expect(screen.getByTestId('i-selected', hidden)).toBeTruthy()
+    expect(screen.queryByTestId('i-disc', hidden)).toBeNull()
   })
 })

@@ -10,7 +10,7 @@ import { AccessibilityInfo, Dimensions, StyleSheet, Text } from 'react-native'
 
 import { SettingsGroup, SettingsRow } from '../components/ds/SettingsRow'
 import { HueProvider, PRESSED_WASH, SELECTION } from '../components/ds/shared'
-import { COLOR, ICON, MATERIAL, RADIUS, SPACE } from '../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, MATERIAL, RADIUS, SPACE, TYPE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { OPACITY } from '../lib/theme'
 
@@ -226,5 +226,18 @@ describe('a leading mark and an accessory (Flow 6: Crews, Friend requests)', () 
     expect(screen.getByLabelText('Crews, 2, 1 invite waiting').props.accessibilityRole).toBe('button')
     // The accessory is decorative: the label carries it.
     expect(screen.getByTestId('count', { includeHiddenElements: true }).parent?.props.accessibilityElementsHidden).toBe(true)
+  })
+})
+
+describe('the group label is words, so it is set in the brand face, not Geist Mono (DS-09, D-L26: "DANGER  ZONE")', () => {
+  it('Satoshi in the label role (uppercase, tracked), not mono', async () => {
+    await render(
+      <SettingsGroup title="Danger zone" danger>
+        <SettingsRow icon="trash" title="Delete account" trail="chevron" onPress={jest.fn()} />
+      </SettingsGroup>
+    )
+    const label = StyleSheet.flatten(screen.getByRole('header', { name: 'Danger zone' }).props.style)
+    expect(label.fontFamily).toBe(FONT_FAMILY.brand[700])
+    expect(label).toMatchObject({ textTransform: 'uppercase', fontSize: TYPE.label.fontSize })
   })
 })

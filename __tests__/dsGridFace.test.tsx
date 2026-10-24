@@ -16,13 +16,13 @@ const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id, { include
 const query = (id: string) => screen.queryByTestId(id, { includeHiddenElements: true })
 const PRIYA = { face: { kind: 'creature', pseudonym: 'Cosmic Panda' } as const, name: 'Cosmic Panda', reason: 'Both into vinyl', width: 110 }
 
-it('the face is the column less 16; name and reason one line each, capped at 1.3×', async () => {
+it('the face is the column less 16; the name one line, the reason up to two (B-R7: it truncated at every size), both capped at 1.3×', async () => {
   await render(<GridFace {...PRIYA} testID="g" />)
   expect(flat('g-face')).toMatchObject({ width: 94, height: 94 })
   const name = screen.getByText('Cosmic Panda', { includeHiddenElements: true })
   const reason = screen.getByText('Both into vinyl', { includeHiddenElements: true })
   expect(name.props).toMatchObject({ numberOfLines: 1, maxFontSizeMultiplier: 1.3 })
-  expect(reason.props).toMatchObject({ numberOfLines: 1, maxFontSizeMultiplier: 1.3 })
+  expect(reason.props).toMatchObject({ numberOfLines: 2, maxFontSizeMultiplier: 1.3 })
   expect(StyleSheet.flatten(reason.props.style)).toMatchObject({ fontSize: TYPE.caption.fontSize, color: COLOR.textSecondary })
 })
 

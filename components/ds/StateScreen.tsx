@@ -3,7 +3,7 @@ import { AccessibilityInfo, ScrollView, StyleSheet, Text, useWindowDimensions, V
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Icon, type IconName } from '../ui/Icon'
-import { COLOR, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
 import { Button, type ButtonKind, type ButtonProps } from './Button'
 import { monoCaption } from './MonoFamily'
 import { font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from './shared'
@@ -111,11 +111,18 @@ export function StateScreen({ icon, title, body, bodyLink, lead, note, noteMono 
         <GlyphWell icon={icon} size={variant} testID={testID && `${testID}-well`} />
       )}
       {/* Inline, the state sits in a list or under a section heading, so its title is a step below both (r7 M5: 24 pt bold read louder than the page). */}
-      <Text accessibilityRole="header" textBreakStrategy="balanced" lineBreakStrategyIOS="standard" style={[font(screen ? 'title' : 'bodyStrong', bold), styles.title]}>
+      {/* Every line stops at its role's cap, so at AX XXXL the actions under it stay on the screen (A21, A25). */}
+      <Text
+        accessibilityRole="header"
+        textBreakStrategy="balanced"
+        lineBreakStrategyIOS="standard"
+        maxFontSizeMultiplier={MAX_FONT_SCALE[screen ? 'title' : 'bodyStrong']}
+        style={[font(screen ? 'title' : 'bodyStrong', bold), styles.title]}
+      >
         {title}
       </Text>
       {body ? (
-        <Text style={[font('body', bold), styles.center, { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.center, { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>
           <BodyWithLink body={body} link={bodyLink} />
         </Text>
       ) : null}
@@ -123,6 +130,7 @@ export function StateScreen({ icon, title, body, bodyLink, lead, note, noteMono 
         <Text
           numberOfLines={noteMono ? 2 : undefined}
           ellipsizeMode={noteMono ? 'middle' : undefined}
+          maxFontSizeMultiplier={MAX_FONT_SCALE[noteMono ? 'caption' : 'meta']}
           style={[noteMono ? monoCaption(bold) : font('meta', bold), styles.center, { color: contrast ? COLOR.textSecondary : COLOR.textTertiary }]}
         >
           {note}
@@ -164,7 +172,7 @@ function BodyWithLink({ body, link }: { body: string; link?: StateScreenProps['b
   return (
     <>
       {body.slice(0, at)}
-      <Text accessibilityRole="link" onPress={link.onPress} style={styles.link}>
+      <Text accessibilityRole="link" onPress={link.onPress} maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={styles.link}>
         {link.text}
       </Text>
       {body.slice(at + link.text.length)}
