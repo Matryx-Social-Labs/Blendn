@@ -39,6 +39,7 @@ import {
   type InFlight,
   type Pin,
   type PinQuery,
+  compassBelow,
 } from '../../lib/homeMap'
 import { Logger } from '../../lib/logger'
 import {
@@ -529,6 +530,8 @@ export const HomeMap = memo(function HomeMap({
         // Off: the credit is ours to show (`MapCredit`, About › Map data), so no (i) sits on the map.
         attribution={false}
         compass={false}
+        // Its default corner is the bell's (R6-7): under the top bar instead.
+        compassPosition={compassBelow(topChrome)}
         onRegionDidChange={onRegionDidChange}
         onDidFinishLoadingMap={onLoaded}
         // Each frame drawn with every tile loaded; the hook makes it one pass per new view or new pins.

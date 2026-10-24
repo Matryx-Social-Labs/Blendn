@@ -14,6 +14,7 @@ import { liveWindow } from './eventSession'
 import type { LiveNow } from './home'
 import { footprintKey, nearestTo, type LitPlace } from './mapLit'
 import { buildingHeights, featureIdOf } from './mapStyleEmber'
+import { SPACE } from './design/tokens'
 import { MAP_THEME } from './mapTheme'
 
 /** The server's bound on `radius` for `/events` and `/venues`, in km. */
@@ -437,4 +438,13 @@ export function shouldFollowFix(
   if (touched) return false
   if (!last) return true
   return getDistanceKm(last.latitude, last.longitude, next.latitude, next.longitude) > FOLLOW_FIX_KM
+}
+
+/**
+ * Where MapLibre's compass sits: under the top bar, never under its bell (R6-7). `compass={false}` hides it, yet iOS still
+ * lays it out in its default top-right corner, which is the bell's: ui-check read the two overlapping at 76%. The app has
+ * no north control of its own, so the compass stays MapLibre's, clear of the chrome whenever it is drawn.
+ */
+export function compassBelow(topChrome: number): { top: number; right: number } {
+  return { top: topChrome + SPACE.sm, right: SPACE.lg }
 }

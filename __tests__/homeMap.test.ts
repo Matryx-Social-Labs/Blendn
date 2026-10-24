@@ -23,6 +23,7 @@ import {
   tiltedZoom,
   viewportQuery,
   visibleCentreY,
+  compassBelow,
 } from '../lib/homeMap'
 import { drawerSnapPoints } from '../lib/home'
 import { glowRadius } from '../lib/mapLit'
@@ -567,5 +568,19 @@ describe('the map and the fix (step 2 drive)', () => {
     expect(shouldFollowFix(live, { latitude: 12.96721, longitude: 77.58551 }, false)).toBe(false)
     // Once the person has moved the map, it is theirs.
     expect(shouldFollowFix(cached, live, true)).toBe(false)
+  })
+})
+
+describe('the compass stays clear of the bell (R6-7)', () => {
+  it('sits under the top bar, never in its corner', () => {
+    // The bell is a 44 pt circle inside the bar; the bar ends at topChrome.
+    const topChrome = 59 + 56
+    const at = compassBelow(topChrome)
+    expect(at.top).toBeGreaterThan(topChrome)
+    expect(at).not.toHaveProperty('bottom')
+  })
+
+  it('the home map places it there', () => {
+    expect(component).toContain('compassPosition={compassBelow(topChrome)}')
   })
 })
