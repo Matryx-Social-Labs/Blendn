@@ -262,7 +262,7 @@ export function goingItems(
 }
 
 /**
- * The nights the server kept behind Blendn+ (`lockedCount`), as one row after
+ * The nights the server kept behind Blend'n+ (`lockedCount`), as one row after
  * Past — under a Past heading of its own when none of the 3 shown has ended.
  */
 export function withLockedNights(items: GoingItem[], lockedCount: number | null | undefined): GoingItem[] {
@@ -272,7 +272,7 @@ export function withLockedNights(items: GoingItem[], lockedCount: number | null 
 }
 
 export function lockedNightsLabel(count: number): string {
-  return `${count} more night${count === 1 ? '' : 's'} with Blendn+`
+  return `${count} more night${count === 1 ? '' : 's'} with Blend’n+`
 }
 
 /**

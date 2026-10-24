@@ -316,3 +316,54 @@ describe('the row\'s ⋯ and the visit\'s art', () => {
     expect(src).toContain("plate={visit.venueType ?? 'bar'}")
   })
 })
+
+describe('Next up, the rows and the lock (GO-14, audit C11/C13/C14)', () => {
+  const rows = [
+    { ...upcoming('a', { title: 'QA Scale coming up on a long night out' }), rsvpStatus: 'going' },
+    { ...upcoming('b', { startTime: new Date(Date.now() + 86_400_000 * 9).toISOString(), endTime: new Date(Date.now() + 86_400_000 * 9 + 7_200_000).toISOString() }), rsvpStatus: 'going' },
+  ]
+  type Node = { type: string; props: Record<string, unknown>; children: (Node | string)[] | null }
+  const uncapped = (n: Node, found: string[] = []): string[] => {
+    if (n.type === 'Text') return n.props.maxFontSizeMultiplier ? found : [...found, JSON.stringify(n.children)]
+    return (n.children ?? []).reduce<string[]>((acc, c) => (typeof c === 'object' ? uncapped(c, acc) : acc), found)
+  }
+
+  it('Next up stops every line at its role (jest’s window is at 2, an accessibility size), and its title takes two lines', async () => {
+    api.getMyRsvps.mockResolvedValue({ success: true, data: { events: rows, pagination: page(1, 2, false) } } as never)
+    await open()
+    await screen.findByText('QA Scale coming up on a long night out')
+    const find = (n: Node | Node[] | null, id: string): Node | null => {
+      if (!n) return null
+      if (Array.isArray(n)) return n.map((c) => find(c, id)).find(Boolean) ?? null
+      if (n.props?.testID === id) return n
+      return find((n.children ?? []).filter((c): c is Node => typeof c === 'object'), id)
+    }
+    const hero = find(screen.toJSON() as never, 'going-next')
+    expect(hero).not.toBeNull()
+    expect(uncapped(hero as Node)).toEqual([])
+    expect(screen.getByText('QA Scale coming up on a long night out').props.numberOfLines).toBe(2)
+  })
+
+  it('Directions is the world’s lit action: the one positive action on the card (Direction C)', async () => {
+    api.getMyRsvps.mockResolvedValue({ success: true, data: { events: rows, pagination: page(1, 2, false) } } as never)
+    await open()
+    expect(await screen.findByTestId('going-directions')).toBeTruthy()
+  })
+
+  it('a row past today carries its own day, since headings are by week now', async () => {
+    api.getMyRsvps.mockResolvedValue({ success: true, data: { events: rows, pagination: page(1, 2, false) } } as never)
+    await open()
+    const row = await screen.findByLabelText(/^Event b/)
+    expect(row.props.accessibilityLabel).toMatch(/, \d+ [A-Z][a-z]{2} · /)
+  })
+
+  it('the lock is Plus’s: violet, and spelt Blend’n+', async () => {
+    api.getMyAttendance.mockResolvedValue({ success: true, data: { events: [], pagination: page(1, 0, false), lockedCount: 45 } } as never)
+    await open()
+    const lock = await screen.findByLabelText('45 more nights with Blend’n+')
+    expect(lock.props.accessibilityHint).toBe('Opens Blend’n+')
+    const { COLOR } = require('../lib/design/tokens')
+    const { StyleSheet } = require('react-native')
+    expect(StyleSheet.flatten(lock.props.style).backgroundColor).toBe(COLOR.selectionVioletFill)
+  })
+})
