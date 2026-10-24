@@ -48,7 +48,7 @@ jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShow
 
 import * as Notifications from 'expo-notifications'
 import { router } from 'expo-router'
-import SettingsScreen from '../app/settings'
+import SettingsScreen, { ONLINE_STATUS_HINT } from '../app/settings'
 import { SheetHost } from '../components/SheetHost'
 import { closeSheet } from '../lib/sheet'
 import { H } from '../lib/haptics'
@@ -345,6 +345,14 @@ it('each switch sends its own column, and only that', async () => {
   await waitFor(() => expect(friends().props.accessibilityState.disabled).toBe(false))
   fireEvent.press(friends())
   await waitFor(() => expect(api.updateProfile).toHaveBeenCalledWith('u_me', { friends_see_me_in_rooms: true }))
+})
+
+// D-L24: the sub names what the switch does now. Negative control: the static "Off: …" sub fails the On half.
+it('"Show online status" says what On means while it is on', async () => {
+  api.getProfile.mockResolvedValue({ success: true, data: { profile: { push_enabled: true, show_online: true } } } as never)
+  await render(<Screen />)
+  const labels = () => screen.queryAllByRole('switch', { includeHiddenElements: true }).map((n) => String(n.props.accessibilityLabel))
+  await waitFor(() => expect(labels()).toContain(`Show online status, ${ONLINE_STATUS_HINT.on}`))
 })
 
 it('opens About and Contact support', async () => {

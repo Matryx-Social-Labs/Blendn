@@ -172,6 +172,7 @@ function BlockedUsersContent() {
       />
     ) : (
       <StateScreen
+        testID="blocked-empty"
         icon="shield-check"
         title="No blocked users"
         body="People you block show up here, and you can unblock them any time."
@@ -237,7 +238,8 @@ const styles = StyleSheet.create({
   centred: { alignSelf: 'center' },
   container: { flex: 1, backgroundColor: COLOR.ink },
   listContent: { paddingHorizontal: SPACE.gutter, paddingVertical: SPACE.sm },
-  emptyList: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: SPACE.gutter },
+  // Top-aligned, as Muted rooms' (D-L11): one empty state, one placement.
+  emptyList: { flexGrow: 1, paddingHorizontal: SPACE.gutter },
   moreFailed: { alignItems: 'center', paddingVertical: SPACE.lg },
   moreFailedText: { color: COLOR.textTertiary },
   skeletonRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, paddingVertical: SPACE.md },

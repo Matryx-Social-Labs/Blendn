@@ -3,6 +3,7 @@
  * long list is virtualised. 0, 1, a handful, hundreds.
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
+import { StyleSheet } from 'react-native'
 
 jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: jest.fn() } }))
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 59, bottom: 34, left: 0, right: 0 }) }))
@@ -20,10 +21,13 @@ const ok = (list: unknown[], nextCursor: string | null = null) => ({ ok: true, p
 
 beforeEach(() => mockFetch.mockReset())
 
-it('nobody blocked says so', async () => {
+it('nobody blocked says so, top-aligned as Muted rooms is (D-L11)', async () => {
   mockFetch.mockResolvedValue(ok([]))
   await render(<BlockedUsers />)
   expect(await screen.findByText('No blocked users')).toBeTruthy()
+  // Negative control: the centred empty list (`justifyContent: 'center'`) fails this.
+  const list = screen.getByTestId('blocked-users-list')
+  expect(StyleSheet.flatten(list.props.contentContainerStyle).justifyContent).toBeUndefined()
 })
 
 it('a failed read says it did not load, never "no blocked users"', async () => {

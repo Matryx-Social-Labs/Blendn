@@ -481,7 +481,8 @@ function SettingsScreenContent() {
 
         <SettingsGroup title="Privacy">
           {/* What it does, in the row: the switch was a promise for a year (SCRUM-141). */}
-          {preferenceRow('showOnlineStatus', 'eye', 'Show online status', 'Off: you’re counted at events but not listed to other people there.')}
+          {/* D-L24: the sub names what the switch does now, on or off. */}
+          {preferenceRow('showOnlineStatus', 'eye', 'Show online status', ONLINE_STATUS_HINT[preferences.showOnlineStatus ? 'on' : 'off'])}
           {preferenceRow('shareReadReceipts', 'check-check', 'Read receipts')}
           {preferenceRow('locationSharing', 'navigation', 'Share location for nearby events')}
           {preferenceRow('friendsSeeMe', 'users', "Friends can see I’m here", "On: friends at the same event see you under Friends here, with your name and photo, and can message you. Off: you don’t show up for friends at events at all.")}
@@ -585,6 +586,13 @@ const styles = StyleSheet.create({
 })
 
 /** Violet world: one hue on this screen (`HueProvider`). */
+
+/** What "Show online status" does in the state it is in (D-L24): the sub said only what Off meant while the switch was On. */
+export const ONLINE_STATUS_HINT = {
+  on: 'On: people at the same event see you listed there.',
+  off: 'Off: you’re counted at events but not listed to other people there.',
+} as const
+
 export default function SettingsScreen() {
   return (
     <HueProvider value="violet">

@@ -70,3 +70,8 @@ describe('the list and the marks say the same words', () => {
     expect(COACH_TIPS.map((t) => t.id).sort()).toEqual(ids.sort())
   })
 })
+
+// D-L13: when a tip shows, said as a person would, never as a developer's condition. Negative control: the old lines fail it.
+it('says when each tip shows in plain outcomes', () => {
+  for (const tip of COACH_TIPS) expect(tip.when).not.toMatch(/on screen|it changes because|one is live|The first time/)
+})
