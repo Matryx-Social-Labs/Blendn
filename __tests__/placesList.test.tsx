@@ -8,7 +8,7 @@
  */
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native'
 import React from 'react'
-import { Platform } from 'react-native'
+import { Platform, StyleSheet } from 'react-native'
 
 import type { VenueListItem } from '../lib/apiClient'
 
@@ -26,6 +26,7 @@ jest.mock('../lib/offers', () => ({ offersApi: { prefs: jest.fn() } }))
 /* eslint-disable import/first */
 import { router } from 'expo-router'
 import { PlacesList } from '../components/home/PlacesList'
+import { TAB_BAR_CLEARANCE } from '../app/(tabs)/_layout'
 import type { HomeBrowse } from '../components/home/HomeShell'
 import { apiClient } from '../lib/apiClient'
 import { offersApi } from '../lib/offers'
@@ -558,6 +559,9 @@ describe('loading, failing, empty', () => {
     getVenues.mockResolvedValue(page([]))
     await mount()
     expect(screen.getByText('Couldn’t load places')).toBeTruthy()
+    // GO-08 (A24): offline the way back is Try again, never a location ask; and the list clears the floating tab bar.
+    expect(screen.queryByText(/Turn on location/)).toBeNull()
+    expect(StyleSheet.flatten(screen.getByTestId('places-list').props.contentContainerStyle).paddingBottom).toBeGreaterThanOrEqual(TAB_BAR_CLEARANCE)
     expect(screen.getByText('Check your connection and try again.')).toBeTruthy()
     serve([venue('a', { liveNow: '5-9' })])
     await act(async () => {

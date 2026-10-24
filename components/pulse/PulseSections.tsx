@@ -412,7 +412,9 @@ export const SectionStack = memo(function SectionStack({
       push(key, <TonightSection section={section} now={now} withDistance={withDistance} coachRef={at('tonight')} {...handlers} onSeeAll={() => goSeeAll('tonight')} />)
     } else if (key === 'nearby') {
       if (section) push(key, <NearbySection section={section} now={now} coachRef={at('nearby')} {...handlers} onSeeAll={() => goSeeAll('nearby')} />)
-      else if (askForLocation) push(key, <NearbyLocationCard denied={askForLocation.denied} onAsk={askForLocation.onAsk} />)
+      // Only in a feed that has something on: with nothing loaded the page's own state (failed, empty) is the answer, and
+      // "Turn on location" under "Couldn't load events" was the wrong way back from offline (audit A24).
+      else if (askForLocation && sections.length > 0) push(key, <NearbyLocationCard denied={askForLocation.denied} onAsk={askForLocation.onAsk} />)
     } else if (key === 'forYou' && section) {
       push(key, <ForYouSection section={section} now={now} withDistance={withDistance} coachRef={at('forYou')} {...handlers} onSeeAll={() => goSeeAll('forYou', { categorySlug: section.interest?.slug ?? '' })} />)
     } else if (key === 'weekend' && section) {
