@@ -204,19 +204,22 @@ export const isGate = (message: string, errorCode?: string | null): boolean => r
  */
 export const leavingClosesCrew = (crew: Pick<Crew, 'size'>): boolean => crew.size <= 2
 
-/** "Leave Nebula?" with the body for a crew that would carry on, or close. */
-export function leaveSheet(crew: Pick<Crew, 'name' | 'size'>): { title: string; message: string; action: string } {
-  return leavingClosesCrew(crew)
-    ? {
-        title: `Leave ${crew.name}?`,
-        message: 'Leaving will close the crew — there’ll be one of you left.',
-        action: 'Leave and close the crew',
-      }
-    : {
-        title: `Leave ${crew.name}?`,
-        message: 'You leave the crew and its chat. Nobody is told you left; the crew just has one fewer.',
-        action: 'Leave crew',
-      }
+/**
+ * "Leave Nebula?" with the body for a crew that would carry on, or close. The owner's words say where the crew goes:
+ * the server hands it to the active member who has been in it longest (admin lib/crews/crews.ts `removeFromCrew`,
+ * `settleLocked`). Not named here: the client cannot tell who is active, and members kept apart are off its list.
+ */
+export function leaveSheet(crew: Pick<Crew, 'name' | 'size'> & { you?: Crew['you'] }): { title: string; message: string; action: string } {
+  const title = `Leave ${crew.name}?`
+  if (leavingClosesCrew(crew)) return { title, message: 'Leaving will close the crew — there’ll be one of you left.', action: 'Leave and close the crew' }
+  if (crew.you?.role === 'owner') {
+    return {
+      title,
+      message: 'You leave the crew and its chat. It passes to whoever has been in it longest, who can then edit it and invite people.',
+      action: 'Leave crew',
+    }
+  }
+  return { title, message: 'You leave the crew and its chat. Nobody is told you left; the crew just has one fewer.', action: 'Leave crew' }
 }
 
 /** "Remove Rohan from Nebula?" and what it does. */

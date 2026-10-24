@@ -172,6 +172,16 @@ describe('leaving and removing', () => {
     expect(leaveSheet({ name: 'Nebula', size: 4 }).message).toContain('Nobody is told you left')
   })
 
+  // Drive 7 (YOU-14, D-L16): an owner leaving gave no consequence. Negative control: the member's words fail it.
+  it('an owner leaving a crew that carries on is told where it goes', () => {
+    const owner = { name: 'Nebula', size: 4, you: { role: 'owner' as const, keepMeAnonymous: false } }
+    expect(leaveSheet(owner).message).toBe('You leave the crew and its chat. It passes to whoever has been in it longest, who can then edit it and invite people.')
+    expect(leaveSheet(owner).action).toBe('Leave crew')
+    // A crew of two closes, owner or not.
+    expect(leaveSheet({ ...owner, size: 2 }).action).toBe('Leave and close the crew')
+    expect(leaveSheet({ ...owner, you: { role: 'member', keepMeAnonymous: false } }).message).toContain('Nobody is told you left')
+  })
+
   it('removing a member names them, and says they are not told who did it', () => {
     expect(removeSheet({ name: 'Nebula' }, 'Rohan')).toEqual({
       title: 'Remove Rohan from Nebula?',
