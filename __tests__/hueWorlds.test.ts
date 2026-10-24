@@ -102,17 +102,11 @@ describe('one hue per screen', () => {
 
 /*
  * D31 (D-L19): the brand orbs (ember + violet) put a second and third hue on a rose or violet screen. A world screen draws
- * none; `moment` orbs stay for moments. `ORBS_LEFT` are other packages' screens in the final fix round, and each must still
- * need its place: once its owner removes the orbs, the second test fails until the entry goes.
+ * none; `moment` orbs stay for moments. The post-merge pass took the last four off (chat, chat-info, private-chat,
+ * crews/invite), so there is no pending list: every rose and violet screen is held to it.
  */
 describe('no brand orbs on a world screen', () => {
-  const ORBS_LEFT = new Set(['app/chat/[id].tsx', 'app/chat-info/[id].tsx', 'app/private-chat/[conversationId].tsx', 'app/crews/invite/[crewId].tsx'])
-  const withBrandOrbs = () => [...ROSE, ...VIOLET].filter((file) => /<Orbs\s+set="brand"/.test(read(file)))
   it('none on a rose or violet screen', () => {
-    expect(withBrandOrbs().filter((file) => !ORBS_LEFT.has(file))).toEqual([])
-  })
-  it('the screens left to other packages still need their place on the list', () => {
-    const found = new Set(withBrandOrbs())
-    expect([...ORBS_LEFT].filter((file) => !found.has(file))).toEqual([])
+    expect([...ROSE, ...VIOLET].filter((file) => /<Orbs\s+set="brand"/.test(read(file)))).toEqual([])
   })
 })

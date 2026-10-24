@@ -294,9 +294,9 @@ const PLATE_FILL_BASIS = 120
  * (`sel.fill`), filling its parent. A category with no glyph (`categoryGlyph`) draws the fill alone: no glyph is invented.
  * Decorative: the title beside it is what is read out.
  */
-export function CategoryPlate({ category, size, testID }: { category: string; size?: number; testID?: string }) {
+export function CategoryPlate({ category, size, testID }: { category?: string; size?: number; testID?: string }) {
   const sel = useSelection()
-  const glyph = categoryGlyph(category)
+  const glyph = category ? categoryGlyph(category) : undefined
   return (
     <View
       testID={testID}

@@ -9,7 +9,6 @@ import { Button } from '../../../components/ds/Button'
 import { Chip } from '../../../components/ds/Chip'
 import { CrewEmblem } from '../../../components/ds/CrewEmblem'
 import { Grain } from '../../../components/ds/Grain'
-import { Orbs } from '../../../components/ds/Orbs'
 import { font, HueProvider, IC_HAIRLINE, useBoldText, useIncreaseContrast } from '../../../components/ds/shared'
 import { StateScreen } from '../../../components/ds/StateScreen'
 import { Toggle } from '../../../components/ds/Toggle'
@@ -94,7 +93,6 @@ function CrewInviteScreenContent() {
   if (load.kind !== 'ready') {
     return (
       <View style={styles.container}>
-        <Orbs set="brand" />
         <Grain />
         <TopBar title="Crew invite" onBack={() => router.back()} testID="invite-top" />
         <View style={styles.state}>
@@ -176,7 +174,6 @@ function CrewInviteScreenContent() {
   const secondary = contrast ? COLOR.textPrimary : COLOR.textSecondary
   return (
     <View style={styles.container}>
-      <Orbs set="brand" />
       <Grain />
       <TopBar title="Crew invite" onBack={() => router.back()} testID="invite-top" />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>

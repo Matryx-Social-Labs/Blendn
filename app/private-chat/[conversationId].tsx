@@ -19,7 +19,6 @@ import { LongPressMenu, type MenuItem } from '../../components/ds/ContextMenu'
 import type { Face } from '../../components/ds/Facepile'
 import { Grain } from '../../components/ds/Grain'
 import { ImageViewer } from '../../components/ds/ImageViewer'
-import { Orbs } from '../../components/ds/Orbs'
 import { RevealBar } from '../../components/ds/RevealBar'
 import { HueProvider } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
@@ -725,7 +724,6 @@ function PrivateChatInner() {
 
   return (
     <View style={styles.screen}>
-      <Orbs set="brand" paused={keyboardUp} />
       <Grain />
       <KeyboardFrame>
         {ended ? (

@@ -18,7 +18,6 @@ import { Composer } from '../../components/ds/Composer'
 import { LongPressMenu, placeLongPress, type MenuItem } from '../../components/ds/ContextMenu'
 import { Grain } from '../../components/ds/Grain'
 import { HueProvider } from '../../components/ds/shared'
-import { Orbs } from '../../components/ds/Orbs'
 import { REACTION_CELL, reactionBarWidth } from '../../components/ds/ReactionBar'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { TypingIndicator } from '../../components/ds/TypingIndicator'
@@ -940,7 +939,6 @@ function GroupChatInner() {
 
   return (
     <View style={styles.screen}>
-      <Orbs set="brand" paused={keyboardUp} />
       <Grain />
       <KeyboardFrame>
         {outside ? (

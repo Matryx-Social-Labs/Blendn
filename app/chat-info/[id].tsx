@@ -16,7 +16,7 @@ import { SectionHeader } from '../../components/ds/SectionHeader'
 import { SettingsGroup, SettingsRow } from '../../components/ds/SettingsRow'
 import { CONTROL_FONT_CAP, font, HueProvider, useBoldText } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
-import { Orbs } from '../../components/ds/Orbs'
+import { CategoryPlate } from '../../components/ds/EventCard'
 import { Icon } from '../../components/ui/Icon'
 import { PhotoScrim, StatusScrim } from '../../components/ui/GradientFill'
 import { apiClient } from '../../lib/apiClient'
@@ -230,13 +230,11 @@ function ChatInfoInner() {
   const header = (
     <View testID="info-header" onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}>
       <View testID="info-hero" style={styles.hero}>
-        {/* No cover is the brand orbs on ink, as the Scene draws it (r7 M6): never a flat grey band ending on a hard edge. */}
+        {/* No cover is the plate in the room's hue (D8, D31): never a flat grey band (r7 M6), never the brand orbs' second hue. */}
         {cover ? (
           <Image source={{ uri: cover }} contentFit="cover" style={StyleSheet.absoluteFill} accessible={false} />
         ) : (
-          <View testID="info-hero-orbs" style={StyleSheet.absoluteFill}>
-            <Orbs set="brand" />
-          </View>
+          <CategoryPlate testID="info-hero-plate" />
         )}
         <StatusScrim style={styles.headScrim} />
         <PhotoScrim style={styles.scrim} />
