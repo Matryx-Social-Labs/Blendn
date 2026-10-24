@@ -94,9 +94,12 @@ function CrewStripRow({ crew, onTell, testID }: { crew: StripCrew; onTell: (id: 
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>
             {`Crew ${crew.name} `}
             <Text style={{ color: COLOR.textSecondary }}>·</Text>{' '}
-            <Text style={[font('bodyStrong', bold, FONT_FAMILY.mono[500]), styles.tabular]}>
-              {here >= crew.size ? 'everyone' : `${here} of ${crew.size}`}
-            </Text>
+            {/* Mono is for figures: "3 of 5" is, "everyone" is a word in the body face (rc7 D12: the wide mono word orphaned "in"). */}
+            {here >= crew.size ? (
+              'everyone'
+            ) : (
+              <Text style={[font('bodyStrong', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{`${here} of ${crew.size}`}</Text>
+            )}
             {' in'}
           </Text>
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{sub}</Text>
