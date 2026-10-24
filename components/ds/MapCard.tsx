@@ -93,19 +93,20 @@ export function MapCard({
             <MapPin kind="you" testID={testID && `${testID}-you`} />
           </View>
         ) : null}
-        <View style={styles.pill} pointerEvents="none">
+        {/* One row: the pill first, the address taking what is left, so at 1.3× / 360 dp they never overlap (rc7 D5). */}
+        <View testID={testID && `${testID}-foot`} style={styles.foot} pointerEvents="none">
           <ScrimPill>
             <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), styles.ink]}>
               {pill}
             </Text>
           </ScrimPill>
+          {/* One line, ended with "…": two lines bottom-anchored were clipped mid-word on Android (r7 L4); the card above has it in full. */}
+          {address ? (
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} numberOfLines={1} ellipsizeMode="tail" style={[font('caption', bold), styles.ink, styles.address]}>
+              {address}
+            </Text>
+          ) : null}
         </View>
-        {/* One line, ended with "…": two lines bottom-anchored were clipped mid-word on Android (r7 L4); the card above has it in full. */}
-        {address ? (
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} numberOfLines={1} ellipsizeMode="tail" style={[font('caption', bold), styles.ink, styles.address]}>
-            {address}
-          </Text>
-        ) : null}
         {contrast ? <View testID={testID && `${testID}-contrast`} pointerEvents="none" style={[StyleSheet.absoluteFill, IC_HAIRLINE, styles.radius]} /> : null}
       </ScalePress>
       {focused || previewState === 'focused'
@@ -235,8 +236,8 @@ const styles = StyleSheet.create({
   venueDot: { width: VENUE_PIN.dot, height: VENUE_PIN.dot, borderRadius: RADIUS.capsule, backgroundColor: COLOR.brandOrange },
   at: { position: 'absolute', width: 0, height: 0, alignItems: 'center', justifyContent: 'center' },
   ringed: { position: 'absolute', borderRadius: RADIUS.capsule },
-  pill: { position: 'absolute', left: SPACE.md, bottom: SPACE.md },
-  address: { position: 'absolute', right: SPACE.md, bottom: SPACE.md, maxWidth: '50%', textAlign: 'right' },
+  foot: { position: 'absolute', left: SPACE.md, right: SPACE.md, bottom: SPACE.md, flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
+  address: { flex: 1, textAlign: 'right' },
   ink: { color: COLOR.textPrimary },
   tabular: { fontVariant: ['tabular-nums'] },
   cluster: {

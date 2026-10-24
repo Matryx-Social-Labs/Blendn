@@ -54,6 +54,14 @@ describe('<MapCard>', () => {
     expect(screen.getByText('12th Main, Indiranagar', { includeHiddenElements: true }).props.numberOfLines).toBe(1)
   })
 
+  it('the pill and the address share one bottom row, the address taking what is left: no overlap at 1.3× / 360 (rc7 D5)', async () => {
+    await render(<MapCard venue="Toit" address="8, Allied Grande Plaza, Koramangala" testID="m" />)
+    expect(StyleSheet.flatten(screen.getByTestId('m-foot', { includeHiddenElements: true }).props.style)).toMatchObject({ position: 'absolute', flexDirection: 'row' })
+    const address = StyleSheet.flatten(screen.getByText('8, Allied Grande Plaza, Koramangala', { includeHiddenElements: true }).props.style)
+    expect(address).toMatchObject({ flex: 1, textAlign: 'right' })
+    expect(address.position).toBeUndefined()
+  })
+
   it('focused rings it; Increase Contrast adds the 50% hairline', async () => {
     await render(<MapCard venue="Toit" previewState="focused" testID="m" />)
     expect(query('m-focus')).toBeTruthy()
