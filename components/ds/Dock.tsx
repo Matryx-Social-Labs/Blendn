@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -39,7 +39,7 @@ export function Dock({
   floating?: boolean
   /** The 32 pt top corner (the entry screens'); a floating dock is straight. */
   round?: boolean
-  /** The dock's height as laid out: the page scrolls clear of it. */
+  /** What the dock covers of the page: its height as laid out, and the solid tier's fade above it. The page scrolls clear of it. */
   onHeight?: (height: number) => void
   children: ReactNode
   testID?: string
@@ -58,10 +58,14 @@ export function Dock({
     round && styles.round,
     { gap, paddingBottom: keyboard ? SPACE.md : insets.bottom + SPACE.lg },
   ]
-  const onLayout = (e: { nativeEvent: { layout: { height: number } } }) => {
-    setHeight(e.nativeEvent.layout.height)
-    onHeight?.(e.nativeEvent.layout.height)
-  }
+  const onLayout = (e: { nativeEvent: { layout: { height: number } } }) => setHeight(e.nativeEvent.layout.height)
+  // The fade is drawn over the page above the bar, so a page padded by the bar alone ended under it: the Scene's last
+  // rows (a short run's struck-through day strip) stayed behind the fade at the foot of the scroll (RC 7). Reported
+  // after the tier is known, which can be after layout (Reduce Transparency is read async).
+  const fadeAbove = glass && solid && floating ? DOCK_FADE : 0
+  useEffect(() => {
+    if (height > 0) onHeight?.(height + fadeAbove)
+  }, [height, fadeAbove, onHeight])
 
   if (!glass) {
     return (
@@ -79,11 +83,14 @@ export function Dock({
   )
 }
 
+/** The solid tier's fade above a floating dock. */
+export const DOCK_FADE = SPACE.xxxl
+
 const styles = StyleSheet.create({
   dock: { paddingTop: SPACE.lg, paddingHorizontal: SPACE.gutter },
   floating: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   /** The fade sits above the bar's top edge, outside its box. */
   unclipped: { overflow: 'visible' },
-  fade: { position: 'absolute', left: 0, right: 0, bottom: '100%', height: SPACE.xxxl },
+  fade: { position: 'absolute', left: 0, right: 0, bottom: '100%', height: DOCK_FADE },
   round: { borderTopLeftRadius: RADIUS.card, borderTopRightRadius: RADIUS.card },
 })
