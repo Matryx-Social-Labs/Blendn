@@ -49,7 +49,8 @@ type SetChipProps = {
  * other, so a set of thirty never animates (or even renders) as one.
  */
 const SetChip = memo(function SetChip({ itemKey, onToggle, on, ...rest }: SetChipProps) {
-  return <Chip {...rest} selected={on} onPress={() => onToggle(itemKey)} />
+  // A set wraps, so a long label may take a second line rather than be cut (Chip `lines`).
+  return <Chip {...rest} lines={2} selected={on} onPress={() => onToggle(itemKey)} />
 })
 
 export type ChipSetProps = {

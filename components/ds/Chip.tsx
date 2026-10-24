@@ -103,6 +103,11 @@ export type ChipProps = {
   variant?: ChipVariant
   /** Read-only only: what it is read as, when that is more than the label ("Jazz, shared"). */
   accessibilityLabel?: string
+  /**
+   * `2`: a long label takes a second line in a chip that grows, rather than be cut ("Sales & Business Development" at
+   * 360 dp and 1.3). For chips in a wrapping set (ChipSet); a chip in a fixed row (a header's city) keeps one line.
+   */
+  lines?: 1 | 2
   /** The design gallery only: draws a transient state with no finger or keyboard. */
   previewState?: 'pressed' | 'focused'
   testID?: string
@@ -138,6 +143,7 @@ export function Chip({
   shared = false,
   variant = 'default',
   accessibilityLabel,
+  lines = 1,
   previewState,
   testID,
 }: ChipProps) {
@@ -202,7 +208,8 @@ export function Chip({
       <Text
         style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.label, { color: ink }]}
         maxFontSizeMultiplier={CONTROL_FONT_CAP}
-        numberOfLines={1}
+        // Past its lines it ends in an ellipsis; it is read whole either way (the label is the accessibility label).
+        numberOfLines={lines}
       >
         {label}
       </Text>
@@ -313,7 +320,9 @@ const styles = StyleSheet.create({
   label: { flexShrink: 1 },
   pressedIos: { transform: [{ scale: PRESS.scale }] },
   chip: {
-    height: SIZE.tag,
+    // A minimum: one line is the 32 pt capsule; a two-line label (`lines`) grows it (shared.ts: a height is a minimum).
+    minHeight: SIZE.tag,
+    paddingVertical: SPACE.xs,
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',

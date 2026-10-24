@@ -283,3 +283,8 @@ describe('the label and its counter (D-M6: "LANGUAGES YOU SPEAK0 of 5", the 5 pa
     expect(screen.getByText('2 chosen').props.maxFontSizeMultiplier).toBe(CONTROL_FONT_CAP)
   })
 })
+
+it('a set’s chips may take two lines (You hand-off 3)', async () => {
+  await draw({ items: [{ key: 's', label: 'Sales & Business Development' }] })
+  expect(screen.getByText('Sales & Business Development').props.numberOfLines).toBe(2)
+})

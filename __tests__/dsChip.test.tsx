@@ -33,7 +33,8 @@ const draw = (props: Partial<React.ComponentProps<typeof Chip>> = {}) =>
 describe('<Chip>', () => {
   it('off: a 32 pt surface capsule with a 0.5 pt hairline and white type', async () => {
     await draw()
-    expect(flat('c')).toMatchObject({ height: SIZE.tag, borderRadius: RADIUS.capsule, backgroundColor: COLOR.surface })
+    expect(flat('c')).toMatchObject({ minHeight: SIZE.tag, borderRadius: RADIUS.capsule, backgroundColor: COLOR.surface })
+    expect(flat('c').height).toBeUndefined()
     expect(flat('c-edge')).toMatchObject({ borderWidth: 0.5, borderColor: COLOR.hairline })
     expect(StyleSheet.flatten(screen.getByText('Live music').props.style).color).toBe(COLOR.textPrimary)
   })
@@ -366,5 +367,23 @@ describe('the ground the chip sits on', () => {
     )
     expect(flat('c').backgroundColor).toBe(COLOR.surfaceSunken)
     expect(flat('c-light').backgroundColor).toBe(COLOR.selectionEmberFill)
+  })
+})
+
+describe('a long label (You hand-off 3: "Sales & Business Development" cut off at 360 dp and 1.3)', () => {
+  const LONG = 'Sales & Business Development'
+
+  it('alone it keeps one line, ellipsized, and is read whole', async () => {
+    await render(<Chip label={LONG} onPress={jest.fn()} testID="c" />)
+    expect(screen.getByText(LONG).props.numberOfLines).toBe(1)
+    expect(screen.getByRole('button', { name: LONG })).toBeTruthy()
+  })
+
+  it('lines={2} (a ChipSet’s chip) takes up to two lines in a chip that grows (a minimum height), and is read whole', async () => {
+    await render(<Chip label={LONG} lines={2} onPress={jest.fn()} testID="c" />)
+    expect(screen.getByText(LONG).props).toMatchObject({ numberOfLines: 2, maxFontSizeMultiplier: 1.3 })
+    expect(flat('c').minHeight).toBe(SIZE.tag)
+    expect(flat('c').height).toBeUndefined()
+    expect(screen.getByRole('button', { name: LONG })).toBeTruthy()
   })
 })
