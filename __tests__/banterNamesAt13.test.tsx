@@ -39,11 +39,12 @@ describe('names take two lines from 1.2 (rc7 D10)', () => {
 
 describe('a Blend’s closing time wraps as one piece (rc7 D13)', () => {
   it('unbroken turns the clock’s spaces into no-break spaces', () => {
-    expect(unbroken('5:50 AM')).toBe('5:50 AM')
+    expect(unbroken('5:50 AM')).toBe('5:50\u00A0AM')
   })
 
   it('the Blend card says the time with no break inside it', async () => {
     await render(<BlendLiveCard title="RC7 Crew G × RC4 Crew Y" seeds={[null, null]} closesAt="2026-10-24T05:50:00" unread={0} onPress={jest.fn()} />)
-    expect(screen.getByText('5:50 AM', { includeHiddenElements: true })).toBeTruthy()
+    // Raw text: the default normalizer folds a no-break space into a space, and would pass the broken line too.
+    expect(screen.getByText('5:50\u00A0AM', { includeHiddenElements: true, normalizer: (text) => text })).toBeTruthy()
   })
 })
