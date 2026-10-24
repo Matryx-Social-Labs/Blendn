@@ -47,6 +47,14 @@ jest.mock('react-native-maps', () => {
 })
 jest.mock('../lib/sheet', () => ({ showSheet: jest.fn() }))
 jest.mock('../lib/checkIn', () => ({ subscribeCheckInChanged: () => () => {} }))
+// Each glyph names itself, so a test can say which one a control draws.
+jest.mock('../components/ui/Icon', () => {
+  const { View } = jest.requireActual('react-native')
+  return { ...jest.requireActual('../components/ui/Icon'), Icon: ({ name }: { name: string }) => <View testID={`icon-${name}`} /> }
+})
+// The phone's last fix, for WHERE's distance; null is no fix (never an ask).
+const mockLastFix = jest.fn()
+jest.mock('expo-location', () => ({ ...jest.requireActual('expo-location'), getLastKnownPositionAsync: (...a: unknown[]) => mockLastFix(...a) }))
 
 /* eslint-disable import/first */
 import { router as mockRouter } from 'expo-router'
@@ -90,6 +98,7 @@ const detail = (over: Record<string, unknown> = {}, status: Record<string, unkno
 
 beforeEach(() => {
   jest.clearAllMocks()
+  mockLastFix.mockResolvedValue({ coords: { latitude: 12.92, longitude: 77.6 } })
   mockCached.mockReturnValue(null)
   markOnline()
 })
@@ -367,14 +376,51 @@ it('a dropped connection is "Couldn’t load this event" with Try again, which a
   expect(await screen.findByText('The experience')).toBeTruthy()
 })
 
-it('draws the four facts as tiles: Doors, Where, Going and Door, and Where opens the map', async () => {
+it('draws the four facts as tiles: Doors, Where (how far), Going and Door, and Where opens the map', async () => {
   api.getEvent.mockResolvedValue(detail() as never)
   await open()
   expect(await screen.findByTestId('scene-tile-doors')).toBeTruthy()
   expect(screen.getByTestId('scene-tile-crowd').props.accessibilityLabel).toBe('GOING, 42')
   expect(screen.getByTestId('scene-tile-door').props.accessibilityLabel).toBe('ENTRY, 18+')
+  // Never the venue again (the hero and the Location card say it): how far, from the last fix (D16).
+  expect(screen.getByTestId('scene-tile-where').props.accessibilityLabel).toBe('WHERE, 2.2km away')
   await fireEvent.press(screen.getByTestId('scene-tile-where'))
   expect(openInMaps).toHaveBeenCalled()
+})
+
+describe('one word per state, and only facts the page does not already say (TG-05)', () => {
+  it('no fix: no WHERE tile, never the venue name a third time', async () => {
+    mockLastFix.mockResolvedValue(null)
+    api.getEvent.mockResolvedValue(detail() as never)
+    await open()
+    await screen.findByTestId('scene-tile-doors')
+    expect(screen.queryByTestId('scene-tile-where')).toBeNull()
+  })
+
+  it('cancelled: no people tile and no people section (never "GOING 29" under "Your RSVP is released")', async () => {
+    api.getEvent.mockResolvedValue(detail({ status: 'cancelled' }, { rsvpStatus: 'going' }) as never)
+    await open()
+    await screen.findByTestId('scene-cancelled')
+    expect(screen.queryByTestId('scene-tile-crowd')).toBeNull()
+    expect(screen.queryByTestId('scene-attendees')).toBeNull()
+  })
+
+  it('live: "Here now" in the tile and the section alike, with one count', async () => {
+    api.getEvent.mockResolvedValue(detail({ startTime: hours(-1), endTime: hours(2), stats: { rsvpCount: 516, favoriteCount: 0, checkInCount: 483 } }) as never)
+    await open()
+    expect((await screen.findByTestId('scene-tile-crowd')).props.accessibilityLabel).toBe('HERE NOW, 483')
+    expect(within(screen.getByTestId('scene-attendees')).getByRole('header', { name: 'Here now, 483' })).toBeTruthy()
+  })
+
+  it('past: "Went", and Rate who you met carries the star, not the live glyph', async () => {
+    api.getEvent.mockResolvedValue(detail({ startTime: hours(-6), endTime: hours(-3), stats: { rsvpCount: 30, favoriteCount: 0, checkInCount: 21 } }, { checkInStatus: 'checked_out' }) as never)
+    await open()
+    expect((await screen.findByTestId('scene-tile-crowd')).props.accessibilityLabel).toBe('WENT, 21')
+    expect(within(screen.getByTestId('scene-attendees')).getByRole('header', { name: 'Went, 21' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Rate who you met/ })).toBeTruthy()
+    expect(screen.queryAllByTestId('icon-star', { includeHiddenElements: true }).length).toBeGreaterThan(0)
+    expect(screen.queryAllByTestId('icon-radio', { includeHiddenElements: true })).toHaveLength(0)
+  })
 })
 
 it('says the age floor and the door in the Door tile and an age pill above 18', async () => {
@@ -506,7 +552,7 @@ describe('no people count under five is printed (the Pulse\'s rule)', () => {
     await open()
     await screen.findByTestId('scene-attendees')
     expect(screen.queryByTestId('scene-tile-crowd')).toBeNull()
-    expect(within(screen.getByTestId('scene-attendees')).getByRole('header', { name: 'Attendees' })).toBeTruthy()
+    expect(within(screen.getByTestId('scene-attendees')).getByRole('header', { name: 'Going' })).toBeTruthy()
     expect(screen.getByTestId('scene-attendees')).not.toHaveTextContent(/\d/)
   })
 

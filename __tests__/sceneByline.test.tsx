@@ -26,9 +26,9 @@ describe('attendees', () => {
     await render(<SceneAttendees count={12} seed="e1" label="Going" />)
     expect(screen.getByRole('header', { name: 'Going, 12' })).toBeTruthy()
   })
-  it('under five is the bare heading "Attendees": no number, no stack', async () => {
+  it('under five is the bare heading in the state’s word: no number, no stack', async () => {
     await render(<SceneAttendees count={4} seed="e1" label="Going" />)
-    expect(screen.getByRole('header', { name: 'Attendees' })).toBeTruthy()
+    expect(screen.getByRole('header', { name: 'Going' })).toBeTruthy()
     expect(screen.getByTestId('scene-attendees')).not.toHaveTextContent(/\d/)
   })
 })

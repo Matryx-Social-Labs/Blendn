@@ -18,7 +18,6 @@ import type { DetailBlock } from '../../lib/eventDetails'
 import type { FeedMediaItem } from '../../lib/feedMedia'
 import { Avatar } from '../ds/Avatar'
 import { Spinner } from '../ds/Loader'
-import { RollingNumber } from '../ds/RollingNumber'
 import { SectionHeader } from '../ds/SectionHeader'
 import { CONTROL_FONT_CAP, font, useBoldText, useLargeText } from '../ds/shared'
 import ScalePress from '../motion/ScalePress'
@@ -116,7 +115,8 @@ export function SceneByline({ host, hereNow }: { host?: string | null; hereNow?:
 }
 
 /**
- * Attendees: a heading, the count rolling beside it, and a stack of creatures (kept from before the redesign).
+ * Who is there: a heading in the state's one word ("Going", "Here now", "Went") with its inline count, and a stack of
+ * creatures (kept from before the redesign).
  *
  * ## The faces are not coming back
  *
@@ -129,24 +129,22 @@ export function SceneByline({ host, hereNow }: { host?: string | null; hereNow?:
  * The heading is a prop because the number means two different things either side of the doors: who said they are coming,
  * then who turned up.
  */
-export function SceneAttendees({ count, seed, label = 'Attendees' }: { count: number; seed: string; label?: string }) {
+export function SceneAttendees({ count, seed, label }: { count: number; seed: string; label: string }) {
   const bold = useBoldText()
   // Under five the number is not printed (the Pulse's rule), and neither is a stack that would count it: just the heading.
   const printed = printable(count)
   if (printed === null) {
     return (
       <View style={styles.attendeesSection} testID="scene-attendees">
-        <SectionHeader title="Attendees" />
+        <SectionHeader title={label} />
       </View>
     )
   }
   const { shown, remainder } = avatarStack(printed)
   return (
     <View style={styles.attendeesSection} testID="scene-attendees">
-      <View accessible accessibilityRole="header" accessibilityLabel={`${label}, ${printed}`} style={styles.attendees}>
-        <SectionHeader title={label} />
-        <RollingNumber value={printed} role="numericDisplay" color={COLOR.textSecondary} />
-      </View>
+      {/* The section's inline count ("Here now · 483"), on the title's baseline: never a 40 pt number 18 px above it (B-S13). */}
+      <SectionHeader title={label} count={printed} />
       {shown > 0 ? (
         <View style={styles.stack} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
           {Array.from({ length: shown }, (_, i) => (
@@ -633,7 +631,6 @@ const styles = StyleSheet.create({
   bylineLive: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   liveDot: { width: SPACE.sm, height: SPACE.sm, borderRadius: RADIUS.capsule, backgroundColor: COLOR.live },
   attendeesSection: { gap: SPACE.lg },
-  attendees: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
   stack: { flexDirection: 'row', alignItems: 'center' },
   overlap: { marginLeft: -SPACE.lg },
   more: { width: AVATAR, height: AVATAR, borderRadius: RADIUS.capsule, borderWidth: SPACE.xxs, borderColor: COLOR.ink, backgroundColor: COLOR.surfaceSunken, alignItems: 'center', justifyContent: 'center' },
