@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native'
+import { StyleSheet, Text, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native'
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated'
 
 import ScalePress from '../motion/ScalePress'
-import { COLOR, RADIUS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
+import { COLOR, ICON, RADIUS, SIZE, SPACE, SPRING, TYPE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
 import { PresenceDot } from './MonoFamily'
 import { spoken, type SegmentBadge } from './SegmentedControl'
-import { CONTROL_FONT_CAP, focusRing, font, useBoldText, useSelection } from './shared'
+import { CONTROL_FONT_CAP, focusRing, font, ROOMY_FONT_SCALE, ROOMY_WIDTH, useBoldText, useSelection } from './shared'
 
 type Place = { x: number; w: number }
 
@@ -33,6 +33,18 @@ export type TitleTabsProps = {
  * `settle`; moving left, the reverse. It is drawn in the hue's edge colour, flat, with no glow. Reduce Motion jumps it; a
  * relayout (text size, a longer city) re-places it without a spring. `H.select` plays once, on a change.
  */
+/**
+ * The room a trailing city chip keeps on a narrow phone or at a large size (A15: "Bengal…" on every 360 dp Pulse): ten
+ * characters of its label (Satoshi 500 in `meta`, about half an em each, at the control cap) and the chip's own chrome
+ * (its two paddings, the pin and the gap). The tab words give way to it first, shrinking to fit.
+ * ponytail: an average advance, not a measured label; a label of 10 wide letters still truncates by a letter.
+ */
+const TRAILING_CHARS = 10
+const CHAR_EM = 0.5
+const CHIP_CHROME = 2 * SPACE.md + ICON.inline + SPACE.sm
+/** The smallest the tab words shrink to before they truncate. */
+const WORDS_MIN_SCALE = 0.75
+
 export function TitleTabs({ items, selected, onChange, badges, trailing, testID }: TitleTabsProps) {
   const reduceMotion = useReducedMotion()
   const bold = useBoldText()
@@ -72,15 +84,19 @@ export function TitleTabs({ items, selected, onChange, badges, trailing, testID 
     })
   }
 
+  const { width, fontScale } = useWindowDimensions()
+  const compact = width <= ROOMY_WIDTH || fontScale > ROOMY_FONT_SCALE
+  const trailingRoom = compact ? Math.round(TRAILING_CHARS * CHAR_EM * TYPE.meta.fontSize * Math.min(fontScale, CONTROL_FONT_CAP)) + CHIP_CHROME : 0
+
   return (
     <View testID={testID} accessibilityRole="tablist" style={styles.row}>
-      <View style={styles.words}>
+      <View testID={testID && `${testID}-words`} style={[styles.words, { gap: compact ? SPACE.lg : SPACE.xl }]}>
         {items.map((item, i) => {
           const on = i === selected
           const badge = badges?.[i] ?? null
           return (
             // Measured here, not on the pressable: a position inside its own parent is always 0.
-            <View key={item} testID={testID && `${testID}-${i}-place`} onLayout={measure(i)}>
+            <View key={item} testID={testID && `${testID}-${i}-place`} onLayout={measure(i)} style={styles.place}>
               <ScalePress
                 testID={testID && `${testID}-${i}`}
                 haptic={false}
@@ -98,9 +114,11 @@ export function TitleTabs({ items, selected, onChange, badges, trailing, testID 
                 style={styles.word}
               >
                 <Text
-                  style={[font('title', bold), { color: on ? COLOR.textPrimary : COLOR.textTertiary }]}
+                  style={[font('title', bold), styles.shrink, { color: on ? COLOR.textPrimary : COLOR.textTertiary }]}
                   maxFontSizeMultiplier={CONTROL_FONT_CAP}
                   numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={WORDS_MIN_SCALE}
                 >
                   {item}
                 </Text>
@@ -123,16 +141,22 @@ export function TitleTabs({ items, selected, onChange, badges, trailing, testID 
           style={[styles.underline, { backgroundColor: sel.edge, opacity: place ? 1 : 0 }, underline]}
         />
       </View>
-      {/* The words keep their width; a long city truncates inside the chip rather than pushing the row wider. */}
-      {trailing ? <View style={styles.trailing}>{trailing}</View> : null}
+      {/* Narrow or large, the chip keeps ten characters' room and the words give way; past that the city truncates inside the chip. */}
+      {trailing ? (
+        <View testID={testID && `${testID}-trailing`} style={[styles.trailing, { minWidth: trailingRoom }]}>
+          {trailing}
+        </View>
+      ) : null}
     </View>
   )
 }
 
 const styles = StyleSheet.create({
   row: { height: SIZE.control, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.md },
-  words: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xl, flexShrink: 0 },
-  trailing: { flexShrink: 1, minWidth: 0 },
-  word: { height: SIZE.control, flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
+  words: { flexDirection: 'row', alignItems: 'center', flexShrink: 1, minWidth: 0 },
+  trailing: { flexShrink: 1, alignItems: 'flex-end' },
+  place: { flexShrink: 1, minWidth: 0 },
+  shrink: { flexShrink: 1 },
+  word: { height: SIZE.control, flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, flexShrink: 1 },
   underline: { position: 'absolute', bottom: SPACE.xxs, height: SPACE.xs, borderRadius: RADIUS.capsule },
 })

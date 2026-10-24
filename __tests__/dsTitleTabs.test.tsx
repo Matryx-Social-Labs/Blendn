@@ -4,12 +4,12 @@
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { StyleSheet, Text } from 'react-native'
+import { Dimensions, StyleSheet, Text } from 'react-native'
 import * as Reanimated from 'react-native-reanimated'
 
 import { HueProvider } from '../components/ds/shared'
 import { TitleTabs } from '../components/ds/TitleTabs'
-import { COLOR, SIZE, SPRING } from '../lib/design/tokens'
+import { COLOR, SIZE, SPACE, SPRING } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 
 jest.mock('react-native-reanimated', () => ({ ...jest.requireActual('react-native-reanimated'), __esModule: true, useReducedMotion: jest.fn(() => false) }))
@@ -163,5 +163,29 @@ describe('the underline', () => {
     await measured()
     await layout('t-0-place', 0, 120)
     expect(spring).not.toHaveBeenCalled()
+  })
+})
+
+describe('a narrow phone or a large size (A15: the city pill cut to "Bengal…" on every 360 dp Pulse)', () => {
+  const window = Dimensions.get('window')
+  const at = (width: number, fontScale: number) => act(async () => Dimensions.set({ window: { ...window, width, fontScale }, screen: { ...window, width, fontScale } }))
+  afterEach(() => Dimensions.set({ window, screen: window }))
+
+  it('at 360 dp and 1.3 the tab gap drops to SPACE.lg, the pill keeps ten characters’ room, and the words give way first', async () => {
+    await at(360, 1.3)
+    await draw({ trailing: <Text>Bengaluru</Text> })
+    expect(flat('t-words')).toMatchObject({ gap: SPACE.lg, flexShrink: 1 })
+    const trailing = flat('t-trailing')
+    expect(trailing.minWidth).toBeGreaterThan(0)
+    expect(trailing.alignItems).toBe('flex-end')
+    // The words shrink to fit (never below 75%) before the pill truncates.
+    expect(screen.getByText('Events').props).toMatchObject({ numberOfLines: 1, adjustsFontSizeToFit: true, minimumFontScale: 0.75 })
+  })
+
+  it('a roomy phone at the default size is laid out as before', async () => {
+    await at(402, 1)
+    await draw({ trailing: <Text>Bengaluru</Text> })
+    expect(flat('t-words').gap).toBe(SPACE.xl)
+    expect(flat('t-trailing').minWidth).toBe(0)
   })
 })
