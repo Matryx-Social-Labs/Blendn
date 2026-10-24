@@ -175,7 +175,7 @@ export function EventCard(props: EventCardProps) {
         >
           {leading ? (
             <Text testID={testID && `${testID}-lead`} numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold, FONT_FAMILY.mono[700]), styles.lead]}>
-              {distance}
+              <MonoRun text={distance} />
             </Text>
           ) : null}
           <View testID={testID && `${testID}-thumb`} style={styles.thumb}>

@@ -119,7 +119,9 @@ function MetaLine({ parts, distance }: { parts: (string | null)[]; distance: str
       {distance ? (
         <>
           {lead ? ' · ' : ''}
-          <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{distance}</Text>
+          <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>
+            <MonoRun text={distance} />
+          </Text>
         </>
       ) : null}
     </Text>

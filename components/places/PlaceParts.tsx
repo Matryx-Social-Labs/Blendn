@@ -2,7 +2,7 @@ import { memo } from 'react'
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { Banner } from '../ds/Banner'
-import { Badge } from '../ds/MonoFamily'
+import { Badge, MonoRun } from '../ds/MonoFamily'
 import { CONTROL_FONT_CAP, font, PRESSED_WASH, useBoldText } from '../ds/shared'
 import { VenuePlate } from '../ds/VenuePlate'
 import { Icon } from '../ui/Icon'
@@ -30,7 +30,9 @@ function TypeLine({ venue, area = false, small = false }: { venue: VenueListItem
       {distance ? (
         <>
           {lead ? ' · ' : ''}
-          <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular, small && styles.quietMono]}>{distance}</Text>
+          <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular, small && styles.quietMono]}>
+            <MonoRun text={distance} />
+          </Text>
         </>
       ) : null}
     </Text>

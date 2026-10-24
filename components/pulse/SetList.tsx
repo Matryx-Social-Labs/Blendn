@@ -4,6 +4,7 @@ import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from
 
 import { measureAnchor } from '../ds/anchor'
 import type { Rect } from '../ds/chatShared'
+import { MonoRun } from '../ds/MonoFamily'
 import { font, PRESSED_WASH, useBoldText } from '../ds/shared'
 import type { BlendnEvent } from '../../lib/api'
 import { COLOR, FONT_FAMILY, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
@@ -128,7 +129,9 @@ const Row = memo(function Row({ event, withDistance, stacked, onPress, onPressIn
           {distance ? (
             <>
               {event.venue_name ? ' · ' : ''}
-              <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{distance}</Text>
+              <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>
+                <MonoRun text={distance} />
+              </Text>
             </>
           ) : null}
           {going ? (
