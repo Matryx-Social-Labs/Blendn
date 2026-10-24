@@ -225,7 +225,7 @@ export default function SignIn() {
     }
   }
 
-  /* Docked: the primary is one thumb away; over the keyboard it rides on glass, at rest it is only the button on the page. */
+  /* Docked: the primary is one thumb away; over the keyboard it rides on glass with Forgot, at rest it is the button on the page. */
   const dock = (
     <>
       {/* A refusal plays its H.error within the press (the button's `refused`), so the press-in is silent: one haptic, not two. */}
@@ -237,7 +237,8 @@ export default function SignIn() {
         pressHaptic={false}
         testID="sign-in-primary"
       />
-      {!keyboardUp && !isSignup ? (
+      {/* With the keyboard up too: the way out of a forgotten password rides with the primary, never under the keys (A29). */}
+      {!isSignup ? (
         <View style={styles.forgot}>
           <Button
             label="Forgot your password?"
@@ -373,7 +374,9 @@ export default function SignIn() {
                 value={age}
                 onChangeText={edit('age', (value) => setAge(value.replace(/[^0-9]/g, '').slice(0, AGE_DIGITS)))}
                 error={fieldErrors.age}
-                placeholder="18 or over"
+                // A number, not a yes: "18 or over" read as a box to confirm (A31). The rule is the hint under it.
+                placeholder="Your age"
+                hint="You need to be 18 or over to join."
                 keyboardType="number-pad"
                 returnKeyType="go"
                 onSubmitEditing={() => void submit()}
