@@ -22,14 +22,13 @@ import { crewsThatMayLikePeople, crewMessage, type BlendRef, type CrewsAtEvent }
 import { crewsApi } from '../../lib/crewsApi'
 import { COLOR, DURATION, EASING, FONT_FAMILY, MATERIAL, PRESS, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import type { TrayButton, TrayExtra } from '../../lib/locationFix'
-import { Logger } from '../../lib/logger'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { overlapOf } from '../../lib/overlapLine'
 import { useRoomCancelled } from '../../lib/useRoomCancelled'
 import { useFriendsHere, useMessageFriend } from '../../lib/friendsHere'
 import { useOffline } from '../OfflineBanner'
 import { everyoneHead, meetNext, reasonLine, reasonLines } from '../../lib/roomMoments'
-import { markRoomLeft } from '../../lib/roomMembership'
+import { eventRoomDoor } from '../../lib/eventRoomDoor'
 import { roomRecap, type RoomRecap as Recap } from '../../lib/roomRecap'
 import { bannerState } from '../../lib/roomVisibility'
 import { newestWave, useRoomWaves, wavedAtYouLabel, waveShown } from '../../lib/roomWaves'
@@ -66,11 +65,8 @@ import { RoomView } from './RoomView'
 import { TonightView } from './TonightView'
 import { WaveToast } from './WaveToast'
 import { markCoachUsed, useCoachMark } from '../../lib/coachMarks'
-import { isOrganiserSuspended, NO_LONGER_AVAILABLE } from '../../lib/noLongerAvailable'
 import { parseBadges } from '../../lib/profileBadges'
 import { useCoachMarkSpot } from '../ds/CoachMarkHost'
-import { serverOffset } from '../../lib/serverClock'
-import { notOpenYetAt, opensInLabelAt, opensInSpoken } from '../../lib/preEventRoom'
 
 /** Under the top bar's 44 pt circles: Flow 4 sets the title 70 below the safe area (124 on a 54 pt status bar). */
 const TOP_CHROME = SIZE.circleButton + SPACE.lg + SPACE.xxs
@@ -735,37 +731,19 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
 
   // --- the room chat ----------------------------------------------------------
   const openChat = useCallback(async () => {
-    let id = chatGroupId
-    let gone = false
-    /** Not open yet, for someone going or saved (D-7): the room's countdown, never an error. */
-    let opensAt: string | null = null
-    if (!id && eventId) {
-      try {
-        const r = await apiClient.getEventChat(eventId)
-        gone = isOrganiserSuspended(r)
-        opensAt = notOpenYetAt(r)
-        if (opensAt && r.chatGroupId) {
-          router.push({ pathname: '/chat/[id]', params: { id: r.chatGroupId, roomName: eventTitle || 'Event chat', eventTitle, eventId, opensAt } as never })
-          return
-        }
-        id = (r.success && (r.data?.chatGroupId ?? r.data?.id)) || null
-        // Left it: the chat opens on "You left this room" and its Rejoin.
-        if (!id && r.errorCode === 'LEFT_ROOM' && r.chatGroupId) {
-          markRoomLeft(r.chatGroupId)
-          id = r.chatGroupId
-        }
-      } catch (e) {
-        Logger.warn('chat', 'room chat lookup failed', { error: e })
-      }
-    }
-    if (!id) {
-      // With no room to open yet, when it opens is still said, not "not open" alone.
-      const opensIn = opensAt ? opensInLabelAt(opensAt, Date.now() + serverOffset()) : null
-      say(gone ? NO_LONGER_AVAILABLE.line : opensIn ? `The room opens in ${opensInSpoken(opensIn)}.` : 'The chat for this event is not open yet.')
+    if (!chatGroupId && eventId) {
+      // Not open yet, for someone going or saved (D-7): the room's countdown, never an error (`eventRoomDoor`).
+      const door = await eventRoomDoor(eventId, eventTitle)
+      if (door.kind === 'say') say(door.line)
+      // A push, not a replace: the room is an overlay under the stack, so the chat lands on top and Back returns here.
+      else router.push({ pathname: '/chat/[id]', params: door.params } as never)
       return
     }
-    // A push, not a replace: the room is an overlay under the stack, so the chat lands on top and Back returns here.
-    router.push({ pathname: '/chat/[id]', params: { id: String(id), roomName: eventTitle || 'Event chat', eventTitle } as never })
+    if (!chatGroupId) {
+      say('The chat for this event is not open yet.')
+      return
+    }
+    router.push({ pathname: '/chat/[id]', params: { id: String(chatGroupId), roomName: eventTitle || 'Event chat', eventTitle } as never })
   }, [chatGroupId, eventId, eventTitle, say])
 
   // --- waves to you (SCRUM-630); a blocked or reported person's are dropped at the source (`ignoreWavesFrom`) ---

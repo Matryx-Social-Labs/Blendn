@@ -89,3 +89,18 @@ export function subtree(tree: Tree, testID: string): Node | null {
 export function textNodes(tree: Tree): Node[] {
   return roots(tree).flatMap((n) => (n.type === 'Text' ? [n, ...textNodes(kids(n))] : textNodes(kids(n))))
 }
+
+const faceOf = (n: Node) => (StyleSheet.flatten(n.props.style as never) as { fontFamily?: string } | undefined)?.fontFamily
+
+/**
+ * The faces of the spaces inside the Geist Mono run that says `needle` ("1.2 km", "24 Oct 9 PM"): through MonoRun each
+ * is the brand face; set bare, a mono run has no space nodes at all (a full cell each: "1.2  km", DS-09). `null` when no
+ * mono text says it.
+ */
+export function monoRunSpaces(tree: Tree, needle: string, mono: string): string[] | null {
+  const run = textNodes(tree).find((n) => faceOf(n) === mono && JSON.stringify(n.children).includes(needle.split(' ')[0]))
+  if (!run) return null
+  return kids(run)
+    .filter((c) => JSON.stringify(c.children) === '[" "]')
+    .map((c) => faceOf(c) ?? '')
+}

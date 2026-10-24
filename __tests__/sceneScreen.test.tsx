@@ -24,6 +24,7 @@ jest.mock('../lib/apiClient', () => ({
     toggleInterest: jest.fn(),
     rsvpToEvent: jest.fn(),
     cancelRsvp: jest.fn(),
+    getEventChat: jest.fn(),
   },
 }))
 jest.mock('../lib/socketClient', () => ({
@@ -575,3 +576,83 @@ describe('a night with no picture draws its category plate', () => {
     expect(JSON.stringify(plate)).toContain('music-2')
   })
 })
+
+describe('the room’s countdown is the Scene’s (R6-5)', () => {
+  // A night two days out: its room opens a day before, at start − 24 h.
+  const start = new Date(Date.now() + 48 * 3_600_000)
+  start.setMinutes(0, 0, 0)
+  const opens = new Date(start.getTime() - 24 * 3_600_000)
+
+  it('to somebody going, before the room opens: "Room opens", then the day and the time it opens', async () => {
+    api.getEvent.mockResolvedValue(detail({ startTime: start.toISOString(), endTime: new Date(start.getTime() + 3 * 3_600_000).toISOString() }, { rsvpStatus: 'going' }) as never)
+    await open()
+    const line = await screen.findByTestId('scene-room-opens')
+    const words = within(line).getByTestId('scene-room-opens-text')
+    // "Room opens Sat 24 Oct 9 PM": day first, the app's one clock, set through MonoRun (no double-width spaces).
+    const day = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][opens.getDay()]
+    const month = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][opens.getMonth()]
+    const year = opens.getFullYear() !== new Date().getFullYear() ? ` ${opens.getFullYear()}` : ''
+    expect(textOf(words)).toBe(`Room opens ${day} ${opens.getDate()} ${month}${year} ${clockTime(opens)}`)
+    expect(within(line).queryByTestId('scene-room-opens-action')).toBeNull()
+  })
+
+  const twoDaysOut = () => ({ startTime: start.toISOString(), endTime: new Date(start.getTime() + 3 * 3_600_000).toISOString() })
+
+  it('saved counts as going', async () => {
+    api.getEvent.mockResolvedValue(detail(twoDaysOut(), { isFavorited: true }) as never)
+    await open()
+    expect(await screen.findByTestId('scene-room-opens')).toBeTruthy()
+  })
+
+  it('neither going nor saved: no line', async () => {
+    api.getEvent.mockResolvedValue(detail(twoDaysOut()) as never)
+    await open()
+    await screen.findByTestId('scene-tiles')
+    expect(screen.queryByTestId('scene-room-opens')).toBeNull()
+    expect(screen.queryByTestId('scene-room-open')).toBeNull()
+  })
+
+  it('a cancelled night: no line', async () => {
+    api.getEvent.mockResolvedValue(detail({ ...twoDaysOut(), status: 'cancelled' }, { rsvpStatus: 'going' }) as never)
+    await open()
+    await screen.findByTestId('scene-cancelled')
+    expect(screen.queryByTestId('scene-room-opens')).toBeNull()
+  })
+
+  it('inside the day before: "The room is open", and Open the room opens it', async () => {
+    // The default night starts in 3 hours: its room is open.
+    api.getEvent.mockResolvedValue(detail({}, { rsvpStatus: 'going' }) as never)
+    api.getEventChat.mockResolvedValue({ success: true, data: { chatGroupId: 'g1' } } as never)
+    await open()
+    const line = await screen.findByTestId('scene-room-open')
+    expect(within(line).getByText('The room is open')).toBeTruthy()
+    await fireEvent.press(within(line).getByRole('button', { name: 'Open the room' }))
+    await waitFor(() =>
+      expect(mockRouter.push).toHaveBeenCalledWith({ pathname: '/chat/[id]', params: { id: 'g1', roomName: 'Vinyl Night', eventTitle: 'Vinyl Night' } })
+    )
+    expect(api.getEventChat).toHaveBeenCalledWith('e1')
+  })
+
+  it('ticks over from the countdown to the open room on its own', async () => {
+    jest.useFakeTimers({ now: Date.now() })
+    try {
+      // Opens in 90 seconds.
+      const soon = new Date(Date.now() + 24 * 3_600_000 + 90_000)
+      api.getEvent.mockResolvedValue(detail({ startTime: soon.toISOString(), endTime: new Date(soon.getTime() + 3_600_000).toISOString() }, { rsvpStatus: 'going' }) as never)
+      await open()
+      expect(await screen.findByTestId('scene-room-opens')).toBeTruthy()
+      await act(async () => {
+        jest.advanceTimersByTime(2 * 60_000)
+      })
+      expect(screen.getByTestId('scene-room-open')).toBeTruthy()
+      expect(screen.queryByTestId('scene-room-opens')).toBeNull()
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+})
+
+/** A host node's words, spans and all. */
+function textOf(node: { children: (string | { children: unknown[] })[] }): string {
+  return node.children.map((c) => (typeof c === 'string' ? c : textOf(c as never))).join('')
+}

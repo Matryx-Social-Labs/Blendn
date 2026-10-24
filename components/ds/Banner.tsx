@@ -4,6 +4,7 @@ import { AccessibilityInfo, Platform, StyleSheet, Text, useWindowDimensions, Vie
 import { Icon, type IconName } from '../ui/Icon'
 import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE, TYPE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { Button } from './Button'
+import { MonoRun } from './MonoFamily'
 import { CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast, useMinMeasure } from './shared'
 
 export type BannerKind = 'offline' | 'paused' | 'info' | 'visibility' | 'error'
@@ -96,8 +97,11 @@ export function Banner({ kind, text, mono, icon, action, busy = false, testID }:
         >
           {mono ? (
             <>
-              {text}
-              <Text style={font('meta', bold, FONT_FAMILY.mono[500])}>{` ${mono}`}</Text>
+              {`${text} `}
+              {/* Through MonoRun: a Geist Mono space is a full cell, so "24 Oct 9 PM" set plain reads double-spaced (DS-09). */}
+              <Text style={font('meta', bold, FONT_FAMILY.mono[500])}>
+                <MonoRun text={mono} />
+              </Text>
             </>
           ) : (
             text

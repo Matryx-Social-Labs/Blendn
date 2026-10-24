@@ -78,7 +78,10 @@ import {
 import { clipFirst, feedPlaylist } from '../../lib/feedMedia'
 import { highlightEntities } from '../../lib/entityHighlight'
 import { doorWords, heroPillLabel, pillWords } from '../../lib/scarcity'
-import { eventClock } from '../../lib/time'
+import { calendarDate, eventClock } from '../../lib/time'
+import { eventRoomDoor } from '../../lib/eventRoomDoor'
+import { roomOpensAt } from '../../lib/preEventRoom'
+import { usePreEventRoom } from '../../lib/usePreEventRoom'
 import { useAuth } from '../../lib/useAuth'
 import { printable } from '../../lib/pulseSections'
 import { useNow } from '../../lib/useNow'
@@ -783,6 +786,13 @@ export default function EventDetail() {
   const isEnded = useClockPassed(liveEnd !== null && Number.isFinite(liveEnd) ? liveEnd : null)
   // Explained with the CTA below; read here, above the early return, because it is a hook.
   const hasStarted = useClockPassed(live ? new Date(live.start_time).getTime() : null, true)
+  /*
+   * The pre-event room's countdown is the Scene's (R6-5): the room opens a day before the run's first doors (the server's
+   * `chatOpensAt`, start − 24 h), and somebody going or saved is told when, then that it is open, with the way in.
+   * "Opens in" ticks once a minute and is null once the room is open; the line is drawn below.
+   */
+  const roomOpensIn = usePreEventRoom(event?.start_time)
+  const [roomOpening, setRoomOpening] = useState(false)
   const isLive = hasStarted && !isEnded
   /** WHERE says how far, never the venue again (the hero and the Location card do): dropped when no fix is known (D16). */
   const away = useDistanceAway(event?.latitude, event?.longitude)
@@ -1049,6 +1059,25 @@ export default function EventDetail() {
    * the banner's, so it is no line here.
    */
   const heardOfIt = (rsvpStatus !== null && rsvpStatus !== 'not_going') || userInterested
+  // Before the doors, to somebody going or saved: "Room opens Sat 24 Oct 9 PM", then "The room is open" and Open the room.
+  const roomOpens = roomOpensAt(event?.start_time)
+  const roomLine =
+    event && !cancelled && !hasStarted && roomOpens !== null && (rsvpStatus === 'going' || userInterested)
+      ? roomOpensIn
+        ? { open: false as const, when: `${calendarDate(roomOpens, { weekday: true, timeZone: event.timezone, now })} ${eventClock(roomOpens, event.timezone)}` }
+        : { open: true as const }
+      : null
+  const openRoom = async () => {
+    if (!event || roomOpening) return
+    setRoomOpening(true)
+    try {
+      const door = await eventRoomDoor(String(id), event.title)
+      if (door.kind === 'say') showToast(door.line)
+      else router.push({ pathname: '/chat/[id]', params: door.params } as never)
+    } finally {
+      setRoomOpening(false)
+    }
+  }
   const changeRows = event?.change && heardOfIt ? changeLines(event.change, event, now) : []
   const tiles: AmenityTileProps[] = [
     ...(dayWords
@@ -1122,6 +1151,22 @@ export default function EventDetail() {
           <OfflineBanner text="Offline. Showing what you had." testID="scene-offline" />
           {cancelled ? <Banner kind="offline" text="Cancelled. The organiser called this one off. Your RSVP is released." testID="scene-cancelled" /> : null}
           {waitlisted && !cancelled ? <Banner kind="paused" text="On the waitlist. You’ll be first in line in the order you joined." testID="scene-waitlisted" /> : null}
+          {/* Keyed by state, so the tick-over is a new banner: announced (iOS) and read (Android's live region) as news. */}
+          {roomLine ? (
+            roomLine.open ? (
+              <Banner
+                key="room-open"
+                kind="info"
+                icon="door-open"
+                text="The room is open"
+                action={{ label: 'Open the room', onPress: () => void openRoom() }}
+                busy={roomOpening}
+                testID="scene-room-open"
+              />
+            ) : (
+              <Banner key="room-opens" kind="info" icon="clock" text="Room opens" mono={roomLine.when} testID="scene-room-opens" />
+            )
+          ) : null}
 
           {onFirstLoad ? (
             <View testID="scene-skeleton" accessibilityLabel="Loading the event" accessibilityState={{ busy: true }} style={styles.skeleton}>

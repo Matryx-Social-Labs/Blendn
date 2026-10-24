@@ -12,6 +12,7 @@ import { Banner, VisibilityBanner } from '../components/ds/Banner'
 import { HueProvider, SELECTION } from '../components/ds/shared'
 import { COLOR, FONT_FAMILY, MATERIAL, RADIUS } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
+import { monoRunSpaces } from './helpers/ax'
 
 const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id).props.style)
 
@@ -35,6 +36,11 @@ describe('<Banner>', () => {
     await render(<Banner kind="offline" text="Offline. Showing what loaded last at" mono="9:41 PM" testID="b" />)
     expect(screen.getByText('9:41 PM', { exact: false }).props.style).toMatchObject({ fontFamily: FONT_FAMILY.mono[500] })
     expect(announce).toHaveBeenCalledWith('Offline. Showing what loaded last at 9:41 PM')
+  })
+
+  it('sets the mono run through MonoRun: its spaces in the brand face, never a full Geist Mono cell (R6-5, DS-09)', async () => {
+    await render(<Banner kind="info" icon="clock" text="Room opens" mono="Sat 24 Oct 9 PM" testID="b" />)
+    expect(monoRunSpaces(screen.toJSON() as never, 'Sat 24 Oct 9 PM', FONT_FAMILY.mono[500])).toEqual(Array(4).fill(FONT_FAMILY.brand[500]))
   })
 
   it('is announced politely when it arrives, and plays no haptic', async () => {

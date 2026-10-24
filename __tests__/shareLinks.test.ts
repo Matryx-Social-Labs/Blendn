@@ -170,3 +170,22 @@ describe('what the router is handed for each screen a link could name', () => {
     expect(via(link, true)).toBe(route)
   })
 })
+
+describe('a room link keeps its countdown (R6-5)', () => {
+  const OPENS = '2026-10-25T15:30:00.000Z'
+  it('keeps a checked eventId and opensAt on /chat/<id>, and nothing else', () => {
+    expect(nativeIntentPath(`blendn://chat/abc?eventId=${ID}&opensAt=${OPENS}&roomName=Support&draft=x`)).toBe(
+      `/chat/abc?eventId=${ID}&opensAt=${encodeURIComponent(OPENS)}`
+    )
+    expect(nativeIntentPath(`https://www.blendn.app/chat/abc?opensAt=${encodeURIComponent(OPENS)}#x`)).toBe(`/chat/abc?opensAt=${encodeURIComponent(OPENS)}`)
+  })
+
+  it('drops a param that is not what it claims, a repeat, and the query of any other path', () => {
+    expect(nativeIntentPath('blendn://chat/abc?eventId=a%2Fb&opensAt=soon')).toBe('/chat/abc')
+    expect(nativeIntentPath(`blendn://chat/abc?eventId=${ID}&eventId=other`)).toBe(`/chat/abc?eventId=${ID}`)
+    expect(nativeIntentPath(`blendn://chat/a%2Fb?eventId=${ID}`)).toBe('/chat/a%2Fb')
+    expect(nativeIntentPath(`blendn://chat/abc/more?eventId=${ID}`)).toBe('/chat/abc/more')
+    expect(nativeIntentPath(`blendn://private-chat/abc?eventId=${ID}&opensAt=${OPENS}`)).toBe('/private-chat/abc')
+    expect(nativeIntentPath(`https://evil.example/chat/abc?eventId=${ID}`)).toBe('/')
+  })
+})

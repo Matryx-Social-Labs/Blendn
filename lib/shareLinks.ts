@@ -103,7 +103,7 @@ const KEEPS_ITS_QUERY: readonly RegExp[] = [/^exp\+blendn:\/\/expo-development-c
 
 /**
  * The path the router gets for an incoming system URL (`redirectSystemPath`). Fail closed: every external URL loses its
- * query and fragment, so no screen can be handed a param by a link (a DM's `draft` and `otherUserName`, sign-in's
+ * query and fragment (but a room link's checked `eventId` and `opensAt`, `chatQuery`), so no screen can be handed a param by a link (a DM's `draft` and `otherUserName`, sign-in's
  * `notice`, forgot-password's `email`, the Scene's title and cover). A link to an event, a venue or an invite is rebuilt
  * from its validated id (`/e/` and `/v/` have no screen of their own and become the event's and the venue's); an https
  * link on another host goes to the root; any other path keeps only its own segments.
@@ -114,7 +114,34 @@ export function nativeIntentPath(path: string): string {
   const n = normalise(path)
   if (n.host !== null && !OUR_HOSTS.has(n.host)) return '/'
   const target = targetOf(n)
-  return target ? routeFor(target) : `/${n.segments.join('/')}`
+  return target ? routeFor(target) : `/${n.segments.join('/')}${chatQuery(n.segments, path)}`
+}
+
+/**
+ * The one query a link keeps (R6-5): a room link (`/chat/<id>`) keeps `eventId` and `opensAt`, so a room that has not opened
+ * yet counts down to the server's own time. Both are checked here (an id's shape, an instant that parses) and again by the
+ * chat, which uses `opensAt` only when the link names the event and drops it when the server's door says otherwise. Nothing
+ * else: a room's name and title come from the server, never from a link.
+ */
+const CHAT_LINK_PARAMS: Readonly<Record<string, (value: string) => boolean>> = {
+  eventId: (v) => SEGMENT.test(v),
+  opensAt: (v) => Number.isFinite(Date.parse(v)),
+}
+function chatQuery(segments: string[], path: string): string {
+  if (segments.length !== 2 || segments[0].toLowerCase() !== 'chat' || !SEGMENT.test(segments[1])) return ''
+  const query = path.split('#', 1)[0].split('?')[1] ?? ''
+  const kept: string[] = []
+  for (const pair of query.split('&')) {
+    const [key, raw = ''] = pair.split('=')
+    let value: string
+    try {
+      value = decodeURIComponent(raw.replace(/\+/g, ' '))
+    } catch {
+      continue
+    }
+    if (CHAT_LINK_PARAMS[key]?.(value) && !kept.some((k) => k.startsWith(`${key}=`))) kept.push(`${key}=${encodeURIComponent(value)}`)
+  }
+  return kept.length ? `?${kept.join('&')}` : ''
 }
 
 /* -------------------------------------------------------------------------- */

@@ -94,7 +94,7 @@ describe('the rebuilt room kept what the old Grid had', () => {
      * again when that answer was "not open", as you tap into the chat.
      */
     expect(USE_ROOM()).toContain('chatResolvedForRef.current === eventId')
-    expect(SCREEN()).toMatch(/if \(!id && eventId\) \{[\s\S]{0,80}apiClient\.getEventChat\(eventId\)/)
+    expect(SCREEN()).toMatch(/if \(!chatGroupId && eventId\) \{[\s\S]{0,160}eventRoomDoor\(eventId/)
   })
 
   it('never sends a filter to the server', () => {
