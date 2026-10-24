@@ -3,8 +3,8 @@
  * string literals, template parts and JSX text are read through the TypeScript parser, so comments (where the old spelling is
  * harmless shorthand) never count.
  *
- * `OTHER_PACKAGES` lists files the final fix round gives to other packages (DS-13, TG-13, GO-14) that still carry the old
- * spelling. Each entry must still need it: once its owner fixes the file, the second test fails until the entry goes.
+ * The other packages' files (DS-13 GoLiveSheet, TG-13 useGoLive, GO-14 savedEvents and Going) are fixed and merged, so
+ * there is no pending list: every file is held to it.
  */
 import fs from 'fs'
 import path from 'path'
@@ -13,13 +13,6 @@ import ts from 'typescript'
 const ROOT = path.join(__dirname, '..')
 const DIRS = ['app', 'components', 'lib']
 const WRONG = /Blendn\+/
-
-const OTHER_PACKAGES = new Set([
-  'components/ds/GoLiveSheet.tsx', // P-DS, DS-13
-  'lib/useGoLive.ts', // P-TOG, TG-13
-  'lib/savedEvents.ts', // P-OUT, GO-14
-  'app/(tabs)/going.tsx', // P-OUT, GO-14 (the locked row's hint)
-])
 
 function sources(dir: string): string[] {
   return fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true }).flatMap((entry) => {
@@ -45,12 +38,7 @@ const offenders = () => DIRS.flatMap(sources).filter((rel) => stringsIn(rel).som
 
 describe('the brand is spelled Blend’n+', () => {
   it('in every string under app/, components/ and lib/', () => {
-    expect(offenders().filter((rel) => !OTHER_PACKAGES.has(rel))).toEqual([])
-  })
-
-  it('the files left to other packages still need their place on the list', () => {
-    const found = new Set(offenders())
-    expect([...OTHER_PACKAGES].filter((rel) => !found.has(rel))).toEqual([])
+    expect(offenders()).toEqual([])
   })
 
   it('reads strings, not comments', () => {
