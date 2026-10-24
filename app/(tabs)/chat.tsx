@@ -41,7 +41,7 @@ import { apiClient } from '../../lib/apiClient'
 import { refreshAppIconBadge } from '../../lib/appBadge'
 import { BOARD_ENABLED } from '../../lib/board'
 import { dmThread, outboxLine, roomThread, useOutbox, type Thread } from '../../lib/chatOutbox'
-import { crewRoomTitle, type CrewRoomRow } from '../../lib/crews'
+import { crewLikeLine, crewRoomTitle, type CrewRoomRow } from '../../lib/crews'
 import { COLOR, DURATION, EASING, SPACE, SPRING, STAGGER } from '../../lib/design/tokens'
 import { matchRowPreview } from '../../lib/matchOpener'
 import { ScreenProfiler } from '../../lib/perf'
@@ -210,7 +210,9 @@ function ChatInner() {
       .filter((r) => r.kind === 'crew' && !membership.left.has(r.id))
       .map((r): Row => {
         const last = r.lastMessage
-        const text = last?.content.trim() ? previewWithSender(last.content, { fromMe: last.user.id === user?.id, name: last.user.name ?? undefined }) : 'No messages yet'
+        const fromMe = last?.user.id === user?.id
+        const like = last ? crewLikeLine(last.content, fromMe ? 'You' : (last.user.name ?? 'Someone')) : null
+        const text = like ?? (last?.content.trim() ? previewWithSender(last.content, { fromMe, name: last.user.name ?? undefined }) : 'No messages yet')
         return {
           key: `c:${r.id}`,
           title: r.name,

@@ -4,6 +4,7 @@ import Animated, { FadeOut } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { broadcastParts } from '../../lib/chatFeed'
+import { crewLikeLine } from '../../lib/crews'
 import { goneKindFor } from '../../lib/chatGone'
 import { liveEndedState } from '../../lib/chatLiveEnded'
 import { markSeed } from '../../lib/pseudonymAvatar'
@@ -84,6 +85,9 @@ export const RoomMessageRow = memo(function RoomMessageRow({
   handlers: RowHandlers
 }) {
   if (item.sender_id === 'system') return <SystemLine text={item.message_text} />
+  // A crew like is the room saying who did what, never somebody's bubble (your own drew as yours, TG-10).
+  const like = item.message_type === 'system' ? crewLikeLine(item.message_text, mine ? 'You' : item.sender_name) : null
+  if (like) return <SystemLine text={like} testID={`system-${item.message_id}`} />
   /*
    * A poll is the organiser's question. With its poll id on the message (SV8) it is the poll, answerable, as
    * <PollBubble>; until the server names it, the room says it as a notice, never as somebody's bubble.

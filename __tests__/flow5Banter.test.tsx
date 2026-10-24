@@ -614,3 +614,12 @@ describe('the branded pull to refresh (#18)', () => {
     expect(api.getChatGroups).not.toHaveBeenCalled()
   })
 })
+
+it('a crew like is the crew chat’s preview as words, never "You: liked …" (TG-10)', async () => {
+  serve()
+  const crewRoom = { id: 'c-1', kind: 'crew', name: 'Crew Five', unreadCount: 0, lastMessageAt: at, lastMessage: { content: 'liked Crew Nebula for the crew', createdAt: at, user: { id: 'u-a', name: 'Asha' } } }
+  api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [liveRoom], rooms: [crewRoom] } } as never)
+  await open()
+  expect(await screen.findByText('You liked Crew Nebula for the crew')).toBeTruthy()
+  expect(screen.queryByText(/You: liked/)).toBeNull()
+})
