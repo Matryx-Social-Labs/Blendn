@@ -17,7 +17,7 @@ import { IconButton } from '../ds/IconButton'
 import { Orbs } from '../ds/Orbs'
 import { Badge, monoCaption, PresenceDot, ScrimPill, TimeBadge } from '../ds/MonoFamily'
 import { RollingNumber } from '../ds/RollingNumber'
-import { CONTROL_FONT_CAP, font, useBoldText, useLargeText } from '../ds/shared'
+import { CONTROL_FONT_CAP, font, useBoldText, useLargeText, useSelection } from '../ds/shared'
 import { Icon, type IconName } from '../ui/Icon'
 import { Material } from '../ui/Material'
 import { glassContentsIn, glassRiseIn } from '../motion/presence'
@@ -280,9 +280,7 @@ export function RequestCard({
           </View>
         </Pressable>
         {/* The time is a tag beside the row's control, as the Banter row's: it stops where a control does. */}
-        <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[monoCaption(bold), styles.tertiary]}>
-          {time}
-        </Text>
+        <TimeTag time={time} />
         {onMore ? <IconButton icon="ellipsis" accessibilityLabel={`More options for the request from ${name}`} onPress={onMore} testID={testID && `${testID}-more`} /> : null}
       </View>
       <View style={styles.requestActions}>
@@ -378,6 +376,7 @@ export function BanterRow({
   onPress = useBanterPress(onPress)
   const bold = useBoldText()
   const largeText = useLargeText()
+  const sel = useSelection()
   const reduceMotion = useReducedMotion()
   return (
     <Pressable
@@ -404,18 +403,39 @@ export function BanterRow({
         <Line line={line} unread={unread} lines={largeText ? 2 : 1} />
       </View>
       <View style={styles.rowEnd}>
-        <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[monoCaption(bold), unread ? styles.ink : styles.tertiary]}>
-          {time}
-        </Text>
+        <TimeTag time={time} ink={unread} />
         <View style={styles.dotSlot}>
           {unread ? (
             <Animated.View entering={reduceMotion ? undefined : dotIn} exiting={reduceMotion ? undefined : FadeOut.duration(DURATION.quick)}>
-              <PresenceDot kind="unread" />
+              {/* The world's light, as Notifications draws it (D28): white is for counts. */}
+              <PresenceDot kind="unread" color={sel.glyph} testID={testID && `${testID}-dot`} />
             </Animated.View>
           ) : null}
         </View>
       </View>
     </Pressable>
+  )
+}
+
+/**
+ * A row's time, a tag beside its control (it stops at the control cap): a word in the sans ("Yesterday", "Tue", "now",
+ * "Oct"), a run with digits in Geist Mono ("10h", "4"), so one column never sets "Yesterday" in mono beside a sans "7h"
+ * and no space takes a mono cell (RC audit C17, C16).
+ */
+export function TimeTag({ time, ink = false }: { time: string; ink?: boolean }) {
+  const bold = useBoldText()
+  return (
+    <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), ink ? styles.ink : styles.tertiary]}>
+      {time.split(/(\s+)/).map((part, i) =>
+        /\d/.test(part) ? (
+          <Text key={i} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={monoCaption(bold)}>
+            {part}
+          </Text>
+        ) : (
+          part
+        )
+      )}
+    </Text>
   )
 }
 

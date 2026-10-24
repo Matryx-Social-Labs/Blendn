@@ -68,7 +68,7 @@ type Row = {
 }
 
 type Item =
-  | { type: 'heading'; key: string; title: string; markAll?: boolean }
+  | { type: 'heading'; key: string; title: string }
   | { type: 'row'; key: string; row: Row; index: number }
   /** People's own "Show more people": a page of conversations lands mid-list, so it is asked for, never arriving under a reader. */
   | { type: 'more'; key: string }
@@ -296,16 +296,17 @@ function ChatInner() {
   // Only for the whole list: a search narrows what is loaded, and says so, not what the server has.
   const morePeople = inbox.hasMorePeople && !trimmed
   const items = useMemo<Item[]>(() => {
-    const sections: [string, Row[], boolean][] = [
-      ['Crews', match(crewRows), false],
-      ['People', match(peopleRows), true],
-      ['Past rooms', match(pastRows), false],
+    // Mark all read is the header's control only, as the Flow 5 frame draws it (D29): the People link said it twice.
+    const sections: [string, Row[]][] = [
+      ['Crews', match(crewRows)],
+      ['People', match(peopleRows)],
+      ['Past rooms', match(pastRows)],
     ]
     const out: Item[] = []
     let index = 0
-    for (const [title, rows, markAll] of sections) {
+    for (const [title, rows] of sections) {
       if (!rows.length) continue
-      out.push({ type: 'heading', key: `h:${title}`, title, markAll })
+      out.push({ type: 'heading', key: `h:${title}`, title })
       for (const row of rows) out.push({ type: 'row', key: row.key, row, index: index++ })
       if (title === 'People' && morePeople) out.push({ type: 'more', key: 'more:people' })
     }
@@ -348,7 +349,6 @@ function ChatInner() {
         <View style={styles.heading}>
           <SectionHeader
             title={item.title}
-            action={item.markAll && hasUnread ? { label: 'Mark all read', onPress: pressGuard(() => void inbox.handleMarkAllRead()) } : undefined}
             testID={`banter-${item.title.toLowerCase().replace(' ', '-')}`}
           />
         </View>

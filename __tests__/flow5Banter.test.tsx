@@ -401,8 +401,10 @@ describe('the app icon follows what the Banter reads (badgeCount counts unread c
   it('Mark all read re-reads the icon once the server has it', async () => {
     api.markAllConversationsRead.mockResolvedValue({ success: true, data: { marked: 1 } } as never)
     await open()
+    // One control for the action: the header's, as the frame draws it; the People heading carries no second link (D29).
+    expect(screen.queryByText('Mark all read')).toBeNull()
     await act(async () => {
-      fireEvent.press(screen.getByText('Mark all read'))
+      fireEvent.press(screen.getByTestId('banter-mark-all'))
     })
     await flush()
     expect(api.markAllConversationsRead).toHaveBeenCalled()
@@ -413,7 +415,7 @@ describe('the app icon follows what the Banter reads (badgeCount counts unread c
     api.markAllConversationsRead.mockResolvedValue({ success: false, error: 'no' } as never)
     await open()
     await act(async () => {
-      fireEvent.press(screen.getByText('Mark all read'))
+      fireEvent.press(screen.getByTestId('banter-mark-all'))
     })
     await flush()
     expect(mockRefreshBadge).not.toHaveBeenCalled()

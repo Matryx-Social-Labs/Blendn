@@ -4,10 +4,11 @@
  */
 import { render, screen } from '@testing-library/react-native'
 import React from 'react'
+import { StyleSheet } from 'react-native'
 
-import { BlendLiveCard, LiveHero } from '../components/banter/BanterParts'
-import { CONTROL_FONT_CAP } from '../components/ds/shared'
-import { MAX_FONT_SCALE } from '../lib/design/tokens'
+import { BanterRow, BlendLiveCard, LiveHero } from '../components/banter/BanterParts'
+import { CONTROL_FONT_CAP, HueProvider } from '../components/ds/shared'
+import { COLOR, FONT_FAMILY, MAX_FONT_SCALE } from '../lib/design/tokens'
 import { AX_XXXL, atScale, clipped, resetScale, textNodes, uncapped } from './helpers/togetherAx'
 
 jest.mock('expo-linear-gradient', () => {
@@ -53,5 +54,29 @@ describe('at AX XXXL (TG-03)', () => {
     const time = textNodes(screen.toJSON() as never).filter((n) => JSON.stringify(n.props.style).includes('GeistMono'))
     expect(time.length).toBeGreaterThan(0)
     for (const t of time) expect(t.props.maxFontSizeMultiplier).toBe(CONTROL_FONT_CAP)
+  })
+})
+
+describe('the Banter list’s rows (TG-12)', () => {
+  const row = (time: string, unread = true) => (
+    <HueProvider value="rose">
+      <BanterRow face={{ kind: 'room', cover: null }} title="Vinyl Night" line={{ kind: 'text', text: 'see you there' }} time={time} unread={unread} testID="r" />
+    </HueProvider>
+  )
+  const faceOf = (node: { props: { style: unknown } }) => (StyleSheet.flatten(node.props.style as never) as { fontFamily?: string }).fontFamily
+
+  it('an unread dot is the world’s rose, never white (white is for counts)', async () => {
+    await render(row('7h'))
+    expect(StyleSheet.flatten(screen.getByTestId('r-dot', { includeHiddenElements: true }).props.style).backgroundColor).toBe(COLOR.selectionRoseGlyph)
+  })
+
+  it('a word is in the sans and digits are in Geist Mono, so one column never mixes faces in a word', async () => {
+    await render(row('Yesterday'))
+    expect(faceOf(screen.getByText('Yesterday'))).not.toBe(FONT_FAMILY.mono[500])
+    await render(row('10h'))
+    expect(faceOf(screen.getByText('10h'))).toBe(FONT_FAMILY.mono[500])
+    await render(row('4 Oct'))
+    expect(faceOf(screen.getByText('4'))).toBe(FONT_FAMILY.mono[500])
+    expect(textNodes(screen.toJSON() as never).every((n) => n.props.maxFontSizeMultiplier === CONTROL_FONT_CAP || n.props.maxFontSizeMultiplier === MAX_FONT_SCALE.bodyStrong || n.props.maxFontSizeMultiplier === MAX_FONT_SCALE.meta)).toBe(true)
   })
 })
