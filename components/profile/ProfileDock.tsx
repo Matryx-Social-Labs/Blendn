@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { COLOR, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { useToastDock } from '../toastDock'
 import { PhotoScrim } from '../ui/GradientFill'
 import { font, useBoldText } from '../ds/shared'
@@ -58,7 +58,8 @@ export function ProfileDock({
       */}
       <PhotoScrim testID={testID && `${testID}-fade`} foot={1} pointerEvents="none" style={[styles.fade, { bottom: height, height: DOCK_FADE }]} />
       <View testID={testID && `${testID}-foot`} style={[styles.stack, { paddingTop: SPACE.sm, paddingBottom: insets.bottom + SPACE.lg }]}>
-        {note ? <Text style={[font('meta', bold), styles.note]}>{note}</Text> : null}
+        {/* Capped at the meta role (D-LM12): uncapped at AX the note took half the screen over the sections. */}
+        {note ? <Text style={[font('meta', bold), styles.note]} maxFontSizeMultiplier={MAX_FONT_SCALE.meta}>{note}</Text> : null}
         <View testID={testID && `${testID}-tray`} style={[styles.tray, lead ? styles.stacked : null]}>
           {lead}
           {lead ? <View style={styles.row}>{children}</View> : children}

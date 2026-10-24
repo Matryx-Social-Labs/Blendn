@@ -43,11 +43,14 @@ describe('the screen never re-decides the identity gate', () => {
     expect(src).not.toContain('Not available')
     expect(src).not.toContain('Hidden')
     expect(src).not.toContain('Private')
-    // Each section is conditional on its own field.
-    expect(src).toContain('{profile?.bio ? (')
-    // Each detail sits in its fold block (r7 M2), still behind its own field.
-    expect(src).toMatch(/\{profile\?\.occupation \? \(\s*<FoldBlock id="occupation"[^>]*>\s*<ProfileDetail label="OCCUPATION"/)
-    expect(src).toMatch(/\{profile\?\.education \? \(\s*<FoldBlock id="education"[^>]*>\s*<ProfileDetail label="EDUCATION"/)
+    // The one body (`ProfileBody`, D26): each section is conditional on its own field, and each block sits in its fold block (r7 M2).
+    const body = SECTIONS()
+    expect(src).toContain('<ProfileBody')
+    expect(src).toContain('onBlockTop={onBlockTop}')
+    expect(body).toContain("if (facts.bio) {")
+    expect(body).toContain("if (facts.occupation) blocks.push({ id: 'occupation', node: <ProfileDetail label=\"OCCUPATION\"")
+    expect(body).toContain("if (facts.education) blocks.push({ id: 'education', node: <ProfileDetail label=\"EDUCATION\"")
+    expect(body).toContain('<FoldBlock key={id} id={id} onTop={onBlockTop}>')
   })
 
   it('says out loud that an unrevealed profile is working as intended', () => {
@@ -119,7 +122,7 @@ describe('the hero pager advances by itself until the first swipe', () => {
   it('does not repeat the hero’s first photo in the gallery', () => {
     // The hero already cycles all of them; repeating the first would show the
     // same picture twice on one screen.
-    expect(SCREEN()).toContain('photos={photos.slice(1)}')
+    expect(SECTIONS()).toContain('photos={facts.photos.slice(1)}')
   })
 })
 

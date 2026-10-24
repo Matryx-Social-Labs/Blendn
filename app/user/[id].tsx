@@ -19,11 +19,11 @@ import { ProfileBar } from '../../components/profile/ProfileBar'
 import { DOCK_FADE, dockClearance, ProfileDock } from '../../components/profile/ProfileDock'
 import { heroHeightFor, ProfileHeroStage } from '../../components/profile/ProfileHeroStage'
 import { BadgeRow } from '../../components/profile/MeBadges'
-import { ProfileBio, ProfileDetail, ProfileGallery, ProfileInterests, ProfileSection, SECTION_GAP } from '../../components/profile/ProfileSections'
+import { FoldBlock, PROFILE_EMPTY, ProfileBody, SECTION_GAP } from '../../components/profile/ProfileSections'
 import { Glyph } from '../../components/ui/Glyph'
 import { Icon } from '../../components/ui/Icon'
 import { apiClient, type UserProfileData } from '../../lib/apiClient'
-import { COLOR, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, ICON, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
 import { likeRefusal } from '../../lib/likeRefusal'
 import { heroFoldHeight } from '../../lib/profileFold'
 import { interestNames } from '../../lib/meProfile'
@@ -605,7 +605,6 @@ function UserProfileInner() {
   const heroSubtitle = [profile?.workField, profile?.location].filter(Boolean).join(' · ') || null
 
   const columnWidth = Math.floor((windowWidth - SPACE.gutter * 2 - SPACE.sm) / 2)
-  const sharedCount = profile?.sharedInterests?.length ?? 0
   const showDock = !loading && !!profile && ctaMode !== 'self'
   const heroHeight = heroFoldHeight({
     width: windowWidth,
@@ -658,6 +657,17 @@ function UserProfileInner() {
             />
 
             <View style={styles.canvas}>
+              {ctaMode === 'self' ? (
+                // D-LM4: your own page, said so, with the way to change it (it read as a stranger's).
+                <FoldBlock id="self" onTop={onBlockTop}>
+                  <View testID="profile-self" style={styles.self}>
+                    <Text style={[font('meta', bold), styles.selfText]} maxFontSizeMultiplier={MAX_FONT_SCALE.meta}>
+                      {SELF_PREVIEW}
+                    </Text>
+                    <Button kind="lit" size="md" icon="pen-line" label="Edit" onPress={() => router.push('/edit-profile')} testID="profile-self-edit" />
+                  </View>
+                </FoldBlock>
+              ) : null}
               {!revealed ? (
                 /*
                  * Said plainly rather than left as a screen that looks half-loaded. The absence IS the product working, and a
@@ -671,74 +681,23 @@ function UserProfileInner() {
                 </FoldBlock>
               ) : null}
 
-              {profile?.bio ? (
-                <FoldBlock id="bio" onTop={onBlockTop}>
-                  <ProfileSection title="About">
-                    <ProfileBio text={profile.bio} />
-                  </ProfileSection>
-                </FoldBlock>
-              ) : null}
-
-              {badges.length > 0 ? (
-                <FoldBlock id="badges" onTop={onBlockTop}>
-                  <ProfileSection title="Badges" testID="profile-badges">
-                    <BadgeRow badges={badges} />
-                  </ProfileSection>
-                </FoldBlock>
-              ) : null}
-
-              {profile?.interests && profile.interests.length > 0 ? (
-                <FoldBlock id="interests" onTop={onBlockTop}>
-                  <ProfileSection title="Interests" trailing={sharedCount > 0 ? `${sharedCount} shared` : null}>
-                    <ProfileInterests interests={profile.interests} sharedInterests={profile.sharedInterests} />
-                  </ProfileSection>
-                </FoldBlock>
-              ) : null}
-
-              {/*
-                Occupation and education. Asymmetric by design -- a filled card
-                and a ruled block -- which is what stops two adjacent facts
-                reading as a table. Either can be absent; both are behind the
-                identity gate.
-              */}
-              {profile?.about ? (
-                <FoldBlock id="about" onTop={onBlockTop}>
-                  <ProfileDetail label="ABOUT" value={profile.about} variant="ruled" />
-                </FoldBlock>
-              ) : null}
-
-              {profile?.occupation ? (
-                <FoldBlock id="occupation" onTop={onBlockTop}>
-                  <ProfileDetail label="OCCUPATION" value={profile.occupation} />
-                </FoldBlock>
-              ) : null}
-              {profile?.education ? (
-                <FoldBlock id="education" onTop={onBlockTop}>
-                  <ProfileDetail label="EDUCATION" value={profile.education} variant="ruled" />
-                </FoldBlock>
-              ) : null}
-
-              {/*
-                The gallery is the photos beyond the hero's. The hero already
-                cycles all of them, so repeating the first here would show the
-                same picture twice on one screen.
-              */}
-              {photos.length > 1 ? (
-                <FoldBlock id="photos" onTop={onBlockTop}>
-                  <ProfileSection title="Photos" trailing={`${photos.length} photos`}>
-                    <ProfileGallery
-                      photos={photos.slice(1)}
-                      columnWidth={columnWidth}
-                      /*
-                       * `+1` because the gallery is `photos.slice(1)` -- the hero
-                       * already cycles the first one. Without the offset every
-                       * tap opened the photo before the one you touched.
-                       */
-                      onPressPhoto={(i, from) => setViewer({ index: i + 1, from })}
-                    />
-                  </ProfileSection>
-                </FoldBlock>
-              ) : null}
+              <ProfileBody
+                facts={{
+                  bio: profile?.bio,
+                  interests: profile?.interests,
+                  sharedInterests: profile?.sharedInterests,
+                  about: profile?.about,
+                  occupation: profile?.occupation,
+                  education: profile?.education,
+                  photos,
+                }}
+                badges={badges.length > 0 ? <BadgeRow badges={badges} /> : null}
+                columnWidth={columnWidth}
+                onPressPhoto={(i, from) => setViewer({ index: i, from })}
+                onBlockTop={onBlockTop}
+                // Unrevealed, the note above already says why there is little here.
+                empty={revealed ? PROFILE_EMPTY : null}
+              />
             </View>
           </>
         )}
@@ -854,11 +813,8 @@ function UserProfileInner() {
   )
 }
 
-/** A block of the canvas that tells the page where it starts, and forgets it when it goes (r7 M2's fold). */
-function FoldBlock({ id, onTop, children }: { id: string; onTop: (id: string, top: number | null) => void; children: React.ReactNode }) {
-  useEffect(() => () => onTop(id, null), [id, onTop])
-  return <View testID={`profile-fold-${id}`} onLayout={(e) => onTop(id, e.nativeEvent.layout.y)}>{children}</View>
-}
+/** D-LM4: the line over your own profile, seen as others see it. */
+export const SELF_PREVIEW = 'How others see you'
 
 /** Flow 6 `user` 01: the note an unrevealed profile carries above its sections. */
 export const stillAnonymous = (name: string) => `${name} hasn’t revealed who they are yet. Connect, talk, and either of you can reveal when you want to.`
@@ -887,6 +843,8 @@ const styles = StyleSheet.create({
   skeletonLines: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.xl, gap: SPACE.md },
   note: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, borderRadius: RADIUS.rowInCard, backgroundColor: COLOR.surface, paddingVertical: SPACE.md, paddingHorizontal: SPACE.lg },
   noteText: { flex: 1, color: COLOR.textPrimary },
+  self: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.md },
+  selfText: { flexShrink: 1, color: COLOR.textSecondary },
   flex: { flex: 1 },
 })
 

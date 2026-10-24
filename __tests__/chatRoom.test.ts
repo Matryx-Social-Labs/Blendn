@@ -260,8 +260,8 @@ describe('a photo you can tap actually opens', () => {
 
   it('offsets the index past the hero photo', () => {
     // The gallery is `photos.slice(1)`, so without `+1` every tap opened the
-    // photo before the one you touched.
-    expect(codeOnly(read('app/user/[id].tsx'))).toContain('index: i + 1')
+    // photo before the one you touched. The body is shared (`ProfileBody`, D26), so the offset lives there.
+    expect(codeOnly(read('components/profile/ProfileSections.tsx'))).toContain('onPressPhoto(i + 1, from)')
   })
 })
 

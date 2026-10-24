@@ -66,7 +66,10 @@ jest.mock('../components/profile/ProfileSections', () => {
   const React = require('react')
   const { Text, View } = require('react-native')
   const stub = (label: string) => (p: { title?: string }) => React.createElement(Text, null, p.title ?? label)
+  // The real `ProfileBody` (the one body both profile pages draw, D26) over the stubbed pieces is not possible across a module
+  // boundary, so the real module is kept and only its leaf pieces below stand in where a test reads them.
   return {
+    ...jest.requireActual('../components/profile/ProfileSections'),
     SECTION_GAP: 28,
     ProfileSection: (p: { title: string; children: unknown }) => React.createElement(View, null, React.createElement(Text, null, p.title), p.children),
     ProfileBio: stub('bio'),
@@ -79,7 +82,9 @@ jest.mock('../components/profile/ProfileSections', () => {
 import { router } from 'expo-router'
 import { apiClient } from '../lib/apiClient'
 import { showUserSafetyActions } from '../lib/safetyUtils'
-import UserProfile, { stillAnonymous } from '../app/user/[id]'
+import UserProfile, { SELF_PREVIEW, stillAnonymous } from '../app/user/[id]'
+import { PROFILE_EMPTY } from '../components/profile/ProfileSections'
+import { MAX_FONT_SCALE } from '../lib/design/tokens'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
 const BEN = { id: 'rh_ben', name: 'Ben', photos: ['https://cdn/ben.jpg'], bio: 'Hi', identityVisible: true }
@@ -368,7 +373,7 @@ describe('identity fails closed (the server’s `identityVisible`, nothing else)
     await render(<UserProfile />)
 
     expect(await screen.findByText('Ben, 29')).toBeTruthy()
-    expect(screen.getByText('bio')).toBeTruthy()
+    expect(screen.getByText('Hi')).toBeTruthy()
   })
 })
 
@@ -485,5 +490,36 @@ describe('their badges', () => {
     await screen.findByText('Cleo')
     await act(async () => answerBen({ success: true, data: { ...BEN, connection, badges: NIGHTS } }))
     expect(screen.queryByLabelText(/^Badge:/)).toBeNull()
+  })
+})
+
+/*
+ * D-M12 / D-LM4 / D-LM12: a revealed profile with nothing filled in says so (it was a black void above the dock); your own
+ * page says it is how others see you, with Edit; the dock's note is capped at the meta role.
+ * Negative control: without `ProfileBody`'s empty line, the self line or the note's cap, these fail.
+ */
+describe('one profile body', () => {
+  it('a revealed profile with no sections says "Nothing here yet", and the dock note is capped', async () => {
+    mockParams = { id: 'u_ben' }
+    api.getPublicProfile.mockResolvedValue({ success: true, data: { ...BEN, bio: '', photos: [], connection: { conversationId: 'c1', request: null } } })
+    await render(<UserProfile />)
+    expect(await screen.findByText(PROFILE_EMPTY)).toBeTruthy()
+    expect(screen.getByText('You can message each other.').props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.meta)
+  })
+
+  it('an unrevealed profile lets its note explain the absence: no "Nothing here yet"', async () => {
+    api.getPublicProfile.mockResolvedValue({ success: true, data: { id: 'rh_ben', identityVisible: false } })
+    await render(<UserProfile />)
+    expect(await screen.findByText(/hasn’t revealed who they are yet/)).toBeTruthy()
+    expect(screen.queryByText(PROFILE_EMPTY)).toBeNull()
+  })
+
+  it('your own profile says it is how others see you, with Edit', async () => {
+    mockParams = { id: 'u_me' }
+    api.getPublicProfile.mockResolvedValue({ success: true, data: { ...BEN, id: 'u_me', isOwnProfile: true } })
+    await render(<UserProfile />)
+    expect(await screen.findByText(SELF_PREVIEW)).toBeTruthy()
+    fireEvent.press(screen.getByTestId('profile-self-edit'))
+    expect(router.push).toHaveBeenCalledWith('/edit-profile')
   })
 })

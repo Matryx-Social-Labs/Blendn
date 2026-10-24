@@ -1,7 +1,7 @@
-import { useRef, type ReactNode } from 'react'
+import { Fragment, useEffect, useRef, type ReactNode } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
-import { COLOR, FONT_FAMILY, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
 import type { Rect } from '../ds/chatShared'
 import { InterestChip } from '../ds/Chip'
 import { SectionHeader, type SectionAction } from '../ds/SectionHeader'
@@ -75,7 +75,7 @@ export function ProfileBio({ text }: { text: string }) {
  * Their interests as read-only chips, 8 pt apart. One they share with you is outlined (`shared`), which marks the most useful
  * thing on the screen: the reason you might talk to them. Any number, any length: a wrapping row, not the frame's fixed five.
  */
-export function ProfileInterests({ interests, sharedInterests }: { interests: string[]; sharedInterests?: string[] }) {
+export function ProfileInterests({ interests, sharedInterests }: { interests: readonly string[]; sharedInterests?: readonly string[] }) {
   const shared = new Set((sharedInterests ?? []).map((s) => s.toLowerCase()))
   return (
     <View style={styles.chips}>
@@ -107,7 +107,7 @@ export function ProfileGallery({
   columnWidth,
   onPressPhoto,
 }: {
-  photos: string[]
+  photos: readonly string[]
   columnWidth: number
   onPressPhoto?: (index: number, from: Rect | null) => void
 }) {
@@ -140,6 +140,111 @@ export function ProfileGallery({
         </View>
       ))}
     </View>
+  )
+}
+
+/** What a profile body may know about a person; a missing fact draws nothing. */
+export interface ProfileFacts {
+  bio?: string | null
+  interests?: readonly string[]
+  sharedInterests?: readonly string[]
+  /** "Speaks Malayalam · From Kerala · Leo ♌" (`aboutLine`). */
+  about?: string | null
+  occupation?: string | null
+  education?: string | null
+  photos: readonly string[]
+}
+
+/** D-M12 / D-M13: what a revealed profile with no sections says, instead of a black void above the dock. */
+export const PROFILE_EMPTY = 'Nothing here yet'
+
+/** A block of the canvas that tells the page where it starts, and forgets it when it goes (r7 M2's fold). */
+export function FoldBlock({ id, onTop, children }: { id: string; onTop: (id: string, top: number | null) => void; children: ReactNode }) {
+  useEffect(() => () => onTop(id, null), [id, onTop])
+  return <View testID={`profile-fold-${id}`} onLayout={(e) => onTop(id, e.nativeEvent.layout.y)}>{children}</View>
+}
+
+/**
+ * One profile body for one person (D26): About, Badges, Interests, the about line, Occupation, Education and the gallery, in
+ * that order, on `/user/[id]` and `/friends/[userId]` alike. `empty` is said when there is nothing to draw (null: say nothing,
+ * as an unrevealed profile whose note already explains the absence). `onBlockTop` hands each block's top to the page's fold.
+ */
+export function ProfileBody({
+  facts,
+  badges,
+  columnWidth,
+  onPressPhoto,
+  onBlockTop,
+  empty = PROFILE_EMPTY,
+}: {
+  facts: ProfileFacts
+  /** The badges row, when there are badges to show. */
+  badges?: ReactNode
+  columnWidth: number
+  onPressPhoto: (index: number, from: Rect | null) => void
+  onBlockTop?: (id: string, top: number | null) => void
+  empty?: string | null
+}) {
+  const bold = useBoldText()
+  const interests = facts.interests ?? []
+  const sharedCount = facts.sharedInterests?.length ?? 0
+  const blocks: { id: string; node: ReactNode }[] = []
+  if (facts.bio) {
+    blocks.push({
+      id: 'bio',
+      node: (
+        <ProfileSection title="About">
+          <ProfileBio text={facts.bio} />
+        </ProfileSection>
+      ),
+    })
+  }
+  if (badges) blocks.push({ id: 'badges', node: <ProfileSection title="Badges" testID="profile-badges">{badges}</ProfileSection> })
+  if (interests.length > 0) {
+    blocks.push({
+      id: 'interests',
+      node: (
+        <ProfileSection title="Interests" trailing={sharedCount > 0 ? `${sharedCount} shared` : null}>
+          <ProfileInterests interests={interests} sharedInterests={facts.sharedInterests} />
+        </ProfileSection>
+      ),
+    })
+  }
+  // Occupation and education: a filled card and a ruled block, so two adjacent facts never read as a table.
+  if (facts.about) blocks.push({ id: 'about', node: <ProfileDetail label="ABOUT" value={facts.about} variant="ruled" /> })
+  if (facts.occupation) blocks.push({ id: 'occupation', node: <ProfileDetail label="OCCUPATION" value={facts.occupation} /> })
+  if (facts.education) blocks.push({ id: 'education', node: <ProfileDetail label="EDUCATION" value={facts.education} variant="ruled" /> })
+  // The photos beyond the hero's, which already cycles the first; `+ 1` keeps the viewer on the photo that was tapped.
+  if (facts.photos.length > 1) {
+    blocks.push({
+      id: 'photos',
+      node: (
+        <ProfileSection title="Photos" trailing={`${facts.photos.length} photos`}>
+          <ProfileGallery photos={facts.photos.slice(1)} columnWidth={columnWidth} onPressPhoto={(i, from) => onPressPhoto(i + 1, from)} />
+        </ProfileSection>
+      ),
+    })
+  }
+
+  if (!blocks.length) {
+    return empty ? (
+      <Text testID="profile-empty" style={[font('meta', bold), styles.muted]} maxFontSizeMultiplier={MAX_FONT_SCALE.meta}>
+        {empty}
+      </Text>
+    ) : null
+  }
+  return (
+    <>
+      {blocks.map(({ id, node }) =>
+        onBlockTop ? (
+          <FoldBlock key={id} id={id} onTop={onBlockTop}>
+            {node}
+          </FoldBlock>
+        ) : (
+          <Fragment key={id}>{node}</Fragment>
+        )
+      )}
+    </>
   )
 }
 
