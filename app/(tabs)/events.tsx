@@ -27,6 +27,7 @@ import { SectionReveal } from '../../components/pulse/Rail'
 import { EventCard } from '../../components/ds/EventCard'
 import { MoreRow } from '../../components/pulse/MoreRow'
 import { DayHeading } from '../../components/ds/DayHeading'
+import { CONTROL_FONT_CAP } from '../../components/ds/shared'
 import { PULSE_HEADER_HEIGHT, PulseSearch } from '../../components/pulse/PulseHeader'
 import { PulseBanners } from '../../components/pulse/PulseBanners'
 import { CityPicker } from '../../components/pulse/CityPicker'
@@ -1694,7 +1695,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       */}
       {isNarrowed && events.length > 0 ? (
         <View style={styles.resultsLabel}>
-          <Text style={styles.resultsLabelText} accessibilityRole="header">
+          <Text style={styles.resultsLabelText} accessibilityRole="header" maxFontSizeMultiplier={CONTROL_FONT_CAP}>
             <Text style={styles.resultsCount}>{events.length}</Text>
             {` ${events.length === 1 ? 'event' : 'events'}${selectedCity ? ` · ${selectedCity}` : ''}`}
           </Text>

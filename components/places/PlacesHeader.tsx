@@ -68,7 +68,7 @@ export const PlacesSearch = memo(function PlacesSearch({
     <View style={styles.searchWrap}>
       <View style={styles.searchRow}>
         <View style={styles.search}>
-          <SearchField value={query} onChangeText={setQuery} placeholder="Search places or areas" busy={searching} testID="places-search" />
+          <SearchField value={query} onChangeText={setQuery} placeholder="Search places" busy={searching} testID="places-search" />
         </View>
         <View>
           <IconButton icon="sliders-horizontal" accessibilityLabel="Filters" accessibilityHint={filterCount ? `${filterCount} applied` : undefined} onPress={onPressFilter} testID="places-filter" />

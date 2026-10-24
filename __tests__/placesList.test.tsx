@@ -543,6 +543,14 @@ describe('the header stays while a kind is chosen', () => {
   })
 })
 
+describe('the search at 360 dp and 1.3 (GO-16, A39)', () => {
+  it('its placeholder is short enough not to be cut: "Search places"', async () => {
+    serve([venue('a')])
+    await mount()
+    expect(screen.getByTestId('places-search-input').props.placeholder).toBe('Search places')
+  })
+})
+
 describe('loading, failing, empty', () => {
   it('loading: the real header and search, then static blocks at the new sections’ geometry', async () => {
     getVenues.mockReturnValue(new Promise(() => {}))
