@@ -31,9 +31,10 @@ describe('reasonLine', () => {
   })
 
   it('then plans, then history, in the Grid card order', () => {
-    expect(reasonLine({ sharedPlans: 2, sharedEvents: 3 }, NOW)).toBe('Going to 2 more together')
-    expect(reasonLine({ sharedEvents: 3, interests: ['Jazz'] }, NOW)).toBe('Both at 3 nights before')
-    expect(reasonLine({ sharedEvents: 1 }, NOW)).toBe('Both at 1 night before')
+    expect(reasonLine({ sharedPlans: 2, sharedEvents: 3 }, NOW)).toBe('2 plans in common')
+    expect(reasonLine({ sharedPlans: 1 }, NOW)).toBe('1 plan in common')
+    expect(reasonLine({ sharedEvents: 3, interests: ['Jazz'] }, NOW)).toBe('Both at 3 nights')
+    expect(reasonLine({ sharedEvents: 1 }, NOW)).toBe('Both at 1 night')
   })
 
   it('never claims two people met', () => {
@@ -79,8 +80,11 @@ describe('reasonLine', () => {
       reasonLine({ sharedWorkField: true, workField: 'Architecture and urban planning' }, NOW),
     ]
     for (const line of lines) expect(line.length).toBeLessThanOrEqual(REASON_MAX)
-    expect(reasonLine({ sharedPlans: 12 }, NOW)).toBe('Both going to 12 more')
-    expect(reasonLine({ interests: ['Classical and Carnatic'] }, NOW)).toBe('1 shared · Classical an…')
+    // Under every face at 360 dp (RC audit B-R7): the longest fixed line, the same words as the overlap line.
+    expect(REASON_MAX).toBeLessThanOrEqual('Both open to dating'.length)
+    expect(reasonLine({ sharedPlans: 12 }, NOW)).toBe('12 plans in common')
+    expect(reasonLine({ sharedEvents: 99 }, NOW)).toBe('Both at 99 nights')
+    expect(reasonLine({ interests: ['Classical and Carnatic'] }, NOW)).toBe('1 shared · Classic…')
   })
 
   it('ignores blank interest names rather than printing an empty label', () => {
