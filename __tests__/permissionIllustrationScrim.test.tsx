@@ -23,11 +23,12 @@ it('fades clear to the sunken surface with the DS fade, then is solid under the 
   await render(<LocationIllustration city="Bengaluru" />)
   const fade = screen.getByTestId('location-scrim-fade', HIDDEN)
   expect(fade.props.colors).toEqual([tint(COLOR.surfaceSunken, 0), COLOR.surfaceSunken])
-  const [fadeFlex, solid] = [StyleSheet.flatten(fade.props.style).flex, screen.getByTestId('location-scrim', HIDDEN).children[1]]
-  expect(StyleSheet.flatten((solid as { props: { style: unknown } }).props.style as never)).toMatchObject({ backgroundColor: COLOR.surfaceSunken })
+  const styleOf = (node: unknown) => StyleSheet.flatten((node as { props: { style?: object } }).props.style) as { flex?: number; backgroundColor?: string }
+  const solid = styleOf(screen.getByTestId('location-scrim', HIDDEN).children[1])
+  expect(solid.backgroundColor).toBe(COLOR.surfaceSunken)
   // Fading over 60%, solid over 40%: the frame's 0% → 60% stop.
-  const solidFlex = StyleSheet.flatten((solid as { props: { style: unknown } }).props.style as never).flex as number
-  expect(fadeFlex / (fadeFlex + solidFlex)).toBeCloseTo(0.6)
+  const fadeFlex = styleOf(fade).flex as number
+  expect(fadeFlex / (fadeFlex + (solid.flex as number))).toBeCloseTo(0.6)
   expect(JSON.stringify(screen.toJSON())).not.toContain('linear-gradient')
   expect(screen.getByText('NEAR YOU · BENGALURU', HIDDEN)).toBeTruthy()
 })
