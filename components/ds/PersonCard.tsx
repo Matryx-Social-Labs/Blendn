@@ -176,7 +176,9 @@ export function PersonCardContent({
   const presence =
     variant === 'was' ? 'Was here' : variant === 'pre' ? 'Going' : variant === 'here' || (here && variant !== 'thin') ? 'Here now' : null
   const heading = [name, age, line, presence?.toLowerCase()].filter((p) => p != null && p !== '').join(', ')
-  const showReasons = !thin && variant !== 'pre' && !!person.reasons?.length
+  // The panel never opens on the reason already under the name (B-R13): the server's top reason is both.
+  const panelReasons = person.reasons?.[0] === person.reason ? (person.reasons?.slice(1) ?? []) : (person.reasons ?? [])
+  const showReasons = !thin && variant !== 'pre' && panelReasons.length > 0
   const note =
     variant === 'pre'
       ? PRE_EVENT
@@ -250,7 +252,7 @@ export function PersonCardContent({
 
       {showReasons ? (
         <View testID={id('reasons')} style={[styles.reasons, { backgroundColor: panel }]}>
-          {person.reasons!.map((r) => (
+          {panelReasons.map((r) => (
             <View key={r} style={styles.reason}>
               <Icon name="check" size={ICON.inline} color={COLOR.textSecondary} />
               <Text style={[font('body', bold), styles.ink, styles.shrink]}>{r}</Text>

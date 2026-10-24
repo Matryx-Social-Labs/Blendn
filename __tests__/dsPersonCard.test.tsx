@@ -90,6 +90,19 @@ describe('a · here now', () => {
     expect(text('Techno')).toBeTruthy()
   })
 
+  it('the reason under the name is not said again as the panel’s first row (B-R13)', async () => {
+    await draw()
+    expect(screen.getAllByText('Both open to dating', { includeHiddenElements: true })).toHaveLength(1)
+    expect(text('Both at 3 nights before')).toBeTruthy()
+  })
+
+  it('a panel whose only reason is the one under the name is not drawn; a different first reason stays', async () => {
+    await draw({ person: { ...PRIYA, reasons: ['Both open to dating'] } })
+    expect(query('p-reasons')).toBeNull()
+    await draw({ person: { ...PRIYA, reasons: ['Both at 3 nights before', 'Both open to dating'] } })
+    expect(screen.getAllByText('Both open to dating', { includeHiddenElements: true })).toHaveLength(2)
+  })
+
   it('Like (the gradient primary) · Wave · Message · ⋯, the consequence, View profile', async () => {
     await draw()
     const like = screen.getByRole('button', { name: 'Like' })
