@@ -120,6 +120,22 @@ describe('opening it', () => {
     expect(apiClient.logPaywallEvent).toHaveBeenCalledWith('shown', 'go_live_expiry')
   })
 
+  // D2 (drive 7, Going-out): the sheet said no tax at all; the page said GST under any currency. Negative control: without
+  // `tax` on the sheet, the rupee case fails.
+  const priced = (code: string) => OFFERS.map((o) => ({ ...o, pkg: { ...o.pkg, product: { ...o.pkg.product, currencyCode: code } } }))
+  it('says "Prices include GST." under rupee prices', async () => {
+    ;(loadPlusOffers as jest.Mock).mockResolvedValue(priced('INR'))
+    await openSheet()
+    expect(screen.getByText(/Prices include GST\./)).toBeTruthy()
+  })
+
+  it('says nothing about tax under any other currency', async () => {
+    ;(loadPlusOffers as jest.Mock).mockResolvedValue(priced('USD'))
+    await openSheet()
+    expect(screen.getByRole('header', { name: 'Stay live while you’re here' })).toBeTruthy()
+    expect(screen.queryByText(/GST/)).toBeNull()
+  })
+
   it('in a launch season it never opens: a toast says why', async () => {
     ;(apiClient.getMyPlus as jest.Mock).mockResolvedValue({ success: true, data: { active: false, gated: false, product: null, source: null, expiresAt: null } })
     await openSheet()

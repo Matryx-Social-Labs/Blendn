@@ -9,7 +9,7 @@ import { apiClient } from '../../lib/apiClient'
 import { BLENDN_LINKS, openInApp } from '../../lib/links'
 import { notePaywallClosed, notePaywallEvent, registerTonightHost, type TonightRequest } from '../../lib/paywall'
 import { goesLiveWhenUnlocked, isGenericFailure, paywallTriggerFor, purchasedToast, tonightOffers } from '../../lib/tonight'
-import { waitForPlus } from '../../lib/plus'
+import { taxLine, waitForPlus } from '../../lib/plus'
 import { buyPackage, canBuyAs, loadPlusOffers, restore, type PlusOffer, type RestoreOutcome } from '../../lib/purchases'
 import { afterSheetDismissed } from '../../lib/sheetDismissed'
 import { useAuth } from '../../lib/useAuth'
@@ -222,6 +222,8 @@ export function TonightHost() {
         trigger={request.trigger}
         venue={request.venue}
         prices={{ night: prices.night.price, monthly: prices.monthly.price }}
+        // GST only when both prices are in rupees (D2): the store states tax per storefront otherwise.
+        tax={taxLine([prices.night, prices.monthly])}
         pick={pick}
         onPick={setPick}
         onContinue={() => void buy()}
