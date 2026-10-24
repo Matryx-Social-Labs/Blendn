@@ -90,7 +90,7 @@ describe('a pinned row inside the drawer is as opaque as the drawer (rc7 D3)', (
     const ground = screen.getByTestId('sticky-search-ground', { includeHiddenElements: true })
     expect(StyleSheet.flatten(ground.props.style)).toMatchObject({ position: 'absolute', backgroundColor: SOLID.sheet })
     // The same ink wash as the drawer, so the row matches it at every snap: opaque at full.
-    const ink = ground.children[0] as { props: { style: unknown } }
+    const ink = ground.children[0] as unknown as { props: { style: unknown } }
     expect(StyleSheet.flatten(ink.props.style)).toMatchObject({ backgroundColor: tint(COLOR.ink, 0.96), opacity: 1 })
   })
 
