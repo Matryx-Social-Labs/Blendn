@@ -17,7 +17,7 @@ import { PresenceDot, TimeBadge } from '../../components/ds/MonoFamily'
 import { SectionHeader } from '../../components/ds/SectionHeader'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { Button } from '../../components/ds/Button'
-import { CONTROL_FONT_CAP, font, HueProvider, minTarget, useBoldText, useSelection } from '../../components/ds/shared'
+import { CONTROL_FONT_CAP, font, minTarget, SELECTION, useBoldText } from '../../components/ds/shared'
 import { Icon, type IconName } from '../../components/ui/Icon'
 import { Toast, type ToastKind } from '../../components/ds/Toast'
 import { apiClient } from '../../lib/apiClient'
@@ -595,12 +595,8 @@ function GoingScreenInner() {
 
     if (item.kind === 'locked') {
       // A tap on something that says Blendn+: the Tonight sheet for the earlier nights always opens (trigger `recap`); bought, the nights are read again.
-      // Plus is violet (owner's ruling): the lock is Plus's, lit in its hue whatever world it sits in (audit C13).
-      return (
-        <HueProvider value="violet">
-          <LockedNights count={item.count} onPress={() => void openTonight({ trigger: 'night', venue: '', onUnlocked: () => reloadRef.current() }, { userInitiated: true })} />
-        </HueProvider>
-      )
+      // Plus is violet (owner's ruling): the lock is Plus's, in its selection colours on an ember screen (audit C13).
+      return <LockedNights count={item.count} onPress={() => void openTonight({ trigger: 'night', venue: '', onUnlocked: () => reloadRef.current() }, { userInitiated: true })} />
     }
 
     if (item.kind === 'past' && item.row.visit) {
@@ -816,10 +812,13 @@ function rowWhen(start: string, timeZone?: string | null): string {
   return day === 'Today' || !day ? time : `${day} · ${time}`
 }
 
-/** "{n} more nights with Blend'n+": Plus's door, in Plus's violet (the selection fill and its edge). */
+/**
+ * "{n} more nights with Blend'n+": Plus's door, in Plus's violet (its selection fill, edge and glyph). Named, not provided:
+ * the screen stays one ember world (hueWorlds), and the card is Plus's mark inside it, as a Plus badge would be.
+ */
 function LockedNights({ count, onPress }: { count: number; onPress: () => void }) {
   const bold = useBoldText()
-  const sel = useSelection()
+  const sel = SELECTION.violet
   const label = lockedNightsLabel(count)
   return (
     <ScalePress

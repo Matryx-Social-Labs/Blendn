@@ -155,10 +155,9 @@ export function groupByWeek<T extends { start_time: string; timezone?: string | 
   return [...byKey.values()].sort((a, b) => a.rank - b.rank).map(({ key, title, items: rows }) => ({ key, title, items: rows }))
 }
 
-const monthTitle = (y: number, m: number, thisYear: number): string => {
-  const name = new Date(Date.UTC(y, m, 1)).toLocaleString('en-GB', { month: 'long', timeZone: 'UTC' })
-  return y === thisYear ? name : `${name} ${y}`
-}
+/** A month's heading, in words: the app has one date formatter (`calendarDate`), and it writes no month alone. */
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+const monthTitle = (y: number, m: number, thisYear: number): string => (y === thisYear ? MONTH_NAMES[m] : `${MONTH_NAMES[m]} ${y}`)
 
 /** What the screen knows of a section's pages: the server's total, whether more are to be had, and what a request is doing. */
 export interface SectionPaging {
