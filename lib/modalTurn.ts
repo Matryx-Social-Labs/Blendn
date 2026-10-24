@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, us
 import { AppState, Platform } from 'react-native'
 
 import { Logger } from './logger'
-import { onClosingForLink } from './pendingRoute'
+import { onClosingForLink } from './linkClosers'
 import { useLatest } from './useLatest'
 
 /**

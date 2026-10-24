@@ -30,7 +30,7 @@ import { useReducedMotion } from '../../lib/motion'
 import { HueProvider } from '../../components/ds/shared'
 import { RouteModal } from '../../components/system/RouteModal'
 import { crewDraftThread, draftOf, setDraft } from '../../lib/chatOutbox'
-import { onClosingForLink } from '../../lib/pendingRoute'
+import { onClosingForLink } from '../../lib/linkClosers'
 import { useAuth } from '../../lib/useAuth'
 import { useLatest } from '../../lib/useLatest'
 

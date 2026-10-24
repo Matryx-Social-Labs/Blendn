@@ -39,7 +39,7 @@ jest.mock('../lib/roomVisibilityStorage', () => ({}))
 // The link-closing signal as lib/pendingRoute gives it; `mockCloseForLink()` is a link closing the modals.
 const mockLinkClosers = new Set<() => void>()
 const mockCloseForLink = () => [...mockLinkClosers].forEach((listener) => listener())
-jest.mock('../lib/pendingRoute', () => ({
+jest.mock('../lib/linkClosers', () => ({
   onClosingForLink: (listener: () => void) => {
     mockLinkClosers.add(listener)
     return () => mockLinkClosers.delete(listener)

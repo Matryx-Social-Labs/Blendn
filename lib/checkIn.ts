@@ -8,7 +8,7 @@ import { revealPromptText, revealReadiness } from './reveal'
 import { forgetRoster } from './rosterMemory'
 import { PUBLIC_CHECKIN_WARNING, shouldWarnBeforePublicCheckIn } from './roomVisibility'
 import { hasSeenPublicCheckInWarning, markPublicCheckInWarningSeen } from './roomVisibilityStorage'
-import { onClosingForLink } from './pendingRoute'
+import { onClosingForLink } from './linkClosers'
 
 /**
  * Checking in and out, once.
