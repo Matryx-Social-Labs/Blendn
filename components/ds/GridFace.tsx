@@ -31,7 +31,7 @@ export type GridFaceProps = {
   name: string
   /** One reason ("Both into vinyl"); "Was here" replaces it when they've left. */
   reason: string
-  /** Matching v2's sentence (Flow 14 · 14.1), in place of the reason: two lines under the name. Absent: the one-line reason. */
+  /** Matching v2's sentence (Flow 14 · 14.1), in place of the reason. Either takes up to two lines under the name. */
   overlap?: string | null
   /** The column's width; the face is 16 less. */
   width: number
@@ -65,7 +65,7 @@ export type GridFaceProps = {
  * and `H.like` (Flow 4 Room). An arrival enters on `M.snap` (#25), a wave from
  * them rings the face (#51).
  * Read "{name}, {reason}, here now", then "liked" or "matched"; "{name}, was
- * here". Name and reason cap at 1.3×, one line each; the face scales with the
+ * here". Name and reason cap at 1.3×, the name one line and the reason two (B-R7); the face scales with the
  * column, not the text. Increase Contrast: the reason in white.
  */
 export function GridFace({
@@ -139,7 +139,7 @@ export function GridFace({
             {name}
           </Text>
           <Text
-            numberOfLines={here && overlap ? 2 : 1}
+            numberOfLines={here ? 2 : 1}
             maxFontSizeMultiplier={CONTROL_FONT_CAP}
             style={[font('caption', bold), styles.center, { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}
           >
