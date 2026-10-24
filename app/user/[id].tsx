@@ -1,7 +1,7 @@
 import { H } from '../../lib/haptics'
 import { ScreenProfiler } from '../../lib/perf'
 import { router, useLocalSearchParams } from 'expo-router'
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { StyleSheet, Text, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native'
 import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -9,7 +9,7 @@ import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import { MomentMatch } from '../../components/ds/MomentMatch'
 import { Button } from '../../components/ds/Button'
 import type { Rect } from '../../components/ds/chatShared'
-import { font, HueProvider, useBoldText, useSelection } from '../../components/ds/shared'
+import { font, HueProvider, useBoldText, useSelection, type Hue } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { useToast } from '../../components/Toast'
 import { ConnectSheet } from '../../components/grid/ConnectSheet'
@@ -147,6 +147,8 @@ function UserProfileInner() {
   /* A mutual like made here, for the match moment. */
   const [match, setMatch] = useState<{ conversationId: string; you: string | null } | null>(null)
   const [ctaMode, setCtaMode] = useState<ProfileCtaMode>('connect')
+  const markSelf = useContext(MarkSelf)
+  useEffect(() => markSelf(ctaMode === 'self'), [ctaMode, markSelf])
   const [ctaMessage, setCtaMessage] = useState<string>('')
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [liked, setLiked] = useState(false)
@@ -861,11 +863,24 @@ function UserProfileContent() {
   )
 }
 
-/** Rose world: one hue on this screen (`HueProvider`). */
+/** Your own page tells the screen once it knows (a room handle is only resolved by the load). */
+const MarkSelf = createContext<(self: boolean) => void>(() => {})
+
+/** The world: somebody else's page is rose (people); your own is violet (you), as Me's Edit profile is (rc7 D11). */
+export const profileHue = (own: boolean): Hue => (own ? 'violet' : 'rose')
+
+/** One hue on this screen (`HueProvider`): rose, or violet when it is yours. */
 export default function UserProfile() {
+  const { id } = useLocalSearchParams<{ id?: string }>()
+  const { user } = useAuth()
+  const [self, setSelf] = useState(false)
+  // Known at once when the route has your real id; a room handle of yours is known when the load says so.
+  const own = self || (!!id && !!user?.id && String(id) === String(user.id))
   return (
-    <HueProvider value="rose">
-      <UserProfileContent />
+    <HueProvider value={profileHue(own)}>
+      <MarkSelf.Provider value={setSelf}>
+        <UserProfileContent />
+      </MarkSelf.Provider>
     </HueProvider>
   )
 }

@@ -84,7 +84,7 @@ import { apiClient } from '../lib/apiClient'
 import { showUserSafetyActions } from '../lib/safetyUtils'
 import UserProfile, { SELF_PREVIEW, stillAnonymous } from '../app/user/[id]'
 import { PROFILE_EMPTY } from '../components/profile/ProfileSections'
-import { MAX_FONT_SCALE } from '../lib/design/tokens'
+import { COLOR, MAX_FONT_SCALE } from '../lib/design/tokens'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
 const BEN = { id: 'rh_ben', name: 'Ben', photos: ['https://cdn/ben.jpg'], bio: 'Hi', identityVisible: true }
@@ -521,5 +521,15 @@ describe('one profile body', () => {
     expect(await screen.findByText(SELF_PREVIEW)).toBeTruthy()
     fireEvent.press(screen.getByTestId('profile-self-edit'))
     expect(router.push).toHaveBeenCalledWith('/edit-profile')
+  })
+
+  it('your own profile is the violet world (you), not rose: its Edit is lit violet (rc7 D11)', async () => {
+    mockParams = { id: 'u_me' }
+    api.getPublicProfile.mockResolvedValue({ success: true, data: { ...BEN, id: 'u_me', isOwnProfile: true } })
+    await render(<UserProfile />)
+    await screen.findByText(SELF_PREVIEW)
+    const fills = JSON.stringify(screen.toJSON())
+    expect(fills).toContain(COLOR.selectionVioletFill)
+    expect(fills).not.toContain(COLOR.selectionRoseFill)
   })
 })
