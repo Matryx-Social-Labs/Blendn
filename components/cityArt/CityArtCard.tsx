@@ -41,7 +41,7 @@ interface CardProps {
   /** The server's spelling, shown as-is — it is what the list is keyed by. */
   city: string
   art: CityArtInfo
-  /** What the city holds, from `cityCountLabel`: "12 events", or "1206 places" for a city with no events. */
+  /** What the city holds, from `cityCountLabel`: "12 events", or "1,206 places" for a city with no events. */
   countLabel: string
   active: boolean
   /** The device is in this city. */

@@ -48,8 +48,9 @@ export function NotificationIllustration() {
               <Text style={[font('caption', bold), styles.app]}>Blend’n</Text>
               <Text style={[monoCaption(bold), styles.when]}>Just now</Text>
             </View>
-            <Text style={[font('button', bold), styles.bannerTitle]}>New Spark Nearby</Text>
-            <Text style={[font('meta', bold), styles.bannerBody]}>Someone active is ready to connect!</Text>
+            {/* Plain words, as a real push reads (audit A34): no Title Case, no exclamation mark. */}
+            <Text style={[font('button', bold), styles.bannerTitle]}>Someone’s around</Text>
+            <Text style={[font('meta', bold), styles.bannerBody]}>A person you’d get on with just checked in.</Text>
           </View>
           <Icon name="zap" size={ICON.control} color={COLOR.textPrimary} />
         </View>

@@ -12,7 +12,7 @@ import { StyleSheet } from 'react-native'
 import { LookingForCard } from '../components/ds/LookingForCard'
 import { ProgressBar } from '../components/ds/ProgressBar'
 import { HueProvider, type Hue } from '../components/ds/shared'
-import { LocationIllustration } from '../components/onboarding/PermissionIllustration'
+import { LocationIllustration, NotificationIllustration } from '../components/onboarding/PermissionIllustration'
 import { PhotoTile } from '../components/onboarding/PhotoTile'
 import { COLOR } from '../lib/design/tokens'
 
@@ -74,5 +74,14 @@ describe('in the violet world', () => {
     expect(flat('p-fill').backgroundColor).toBe(COLOR.brandViolet)
     expect(flat('l-ring').borderColor).toBe(COLOR.brandViolet)
     expect(flat('l-check').backgroundColor).toBe(COLOR.selectionVioletGlyph)
+  })
+})
+
+describe('the push preview (GO-11, A34)', () => {
+  it('reads as a real notification in plain words: no Title Case, no exclamation mark', async () => {
+    await render(<NotificationIllustration />)
+    expect(screen.getByText('Someone’s around', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByText('A person you’d get on with just checked in.', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.queryByText(/!/, { includeHiddenElements: true })).toBeNull()
   })
 })

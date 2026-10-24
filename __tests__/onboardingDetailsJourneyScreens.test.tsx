@@ -62,6 +62,12 @@ describe('details', () => {
     expect(screen.getByTestId('onboarding-bio-input').props.value).toBe('Ask me about… ')
   })
 
+  it('the prompts rail fades at its edge rather than clipping a chip mid-word (GO-11, A13)', async () => {
+    mockCategories.mockResolvedValue(tree(2))
+    await render(<DetailsScreen />)
+    expect(screen.getByTestId('onboarding-prompts-fade', { includeHiddenElements: true })).toBeTruthy()
+  })
+
   it('a prompt with no room left is dimmed and does nothing', async () => {
     mockCategories.mockResolvedValue(tree(2))
     await render(<DetailsScreen />)
