@@ -3,7 +3,7 @@ import React from 'react'
 
 import { SceneAttendees, SceneByline } from '../components/scene/SceneSections'
 import { MAX_FONT_SCALE } from '../lib/design/tokens'
-import { AX_XXXL, atScale, resetScale, uncapped } from './helpers/togetherAx'
+import { AX_XXXL, atScale, resetScale, uncapped } from './helpers/ax'
 
 jest.mock('react-native-maps', () => ({ __esModule: true, default: () => null, Marker: () => null }))
 

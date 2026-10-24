@@ -9,7 +9,7 @@ import { StyleSheet } from 'react-native'
 import { BanterRow, BlendLiveCard, LiveHero } from '../components/banter/BanterParts'
 import { CONTROL_FONT_CAP, HueProvider } from '../components/ds/shared'
 import { COLOR, FONT_FAMILY, MAX_FONT_SCALE } from '../lib/design/tokens'
-import { AX_XXXL, atScale, clipped, resetScale, textNodes, uncapped } from './helpers/togetherAx'
+import { AX_XXXL, atScale, clipped, resetScale, textNodes, uncapped } from './helpers/ax'
 
 jest.mock('expo-linear-gradient', () => {
   const { View } = jest.requireActual('react-native')

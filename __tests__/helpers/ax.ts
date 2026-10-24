@@ -5,12 +5,19 @@
  * `UIContentSizeCategoryAccessibilityExtraExtraExtraLarge: @3.571`), not body's 53/17 (3.1): RN scales every text by the
  * category's multiplier, so the screen draws at 3.571 (FIX-ROUND-FINAL DS-01).
  */
-import { StyleSheet } from 'react-native'
+import { act } from '@testing-library/react-native'
+import { Dimensions, StyleSheet } from 'react-native'
 import type { ReactTestRendererJSON } from 'react-test-renderer'
 
 import { CONTROL_FONT_CAP } from '../../components/ds/shared'
 
 export const AX_XXXL = 3.571
+
+const window = Dimensions.get('window')
+/** The text size (and, given, the width) every component reads from `Dimensions`. */
+export const atScale = (fontScale: number, width = window.width) =>
+  act(async () => Dimensions.set({ window: { ...window, width, fontScale }, screen: { ...window, width, fontScale } }))
+export const resetScale = () => Dimensions.set({ window, screen: window })
 
 type Node = ReactTestRendererJSON
 type Tree = Node | Node[] | null
@@ -66,4 +73,19 @@ export function oneLiners(tree: Tree, ignoreCapped = true): string[] {
   }
   roots(tree).forEach(walk)
   return found
+}
+
+/** The rendered node with this testID, to scope a check to what a screen owns (not the DS components inside it). */
+export function subtree(tree: Tree, testID: string): Node | null {
+  for (const n of roots(tree)) {
+    if (n.props.testID === testID) return n
+    const found = subtree(kids(n), testID)
+    if (found) return found
+  }
+  return null
+}
+
+/** Every rendered Text node, nested ones included. */
+export function textNodes(tree: Tree): Node[] {
+  return roots(tree).flatMap((n) => (n.type === 'Text' ? [n, ...textNodes(kids(n))] : textNodes(kids(n))))
 }

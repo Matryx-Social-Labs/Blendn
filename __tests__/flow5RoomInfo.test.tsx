@@ -4,7 +4,7 @@
  * read, the muted hero, and the Mute and Leave sheets.
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
-import { AX_XXXL, atScale, clipped, resetScale, subtree, uncapped } from './helpers/togetherAx'
+import { AX_XXXL, atScale, clipped, resetScale, subtree, uncapped } from './helpers/ax'
 import { MAX_FONT_SCALE } from '../lib/design/tokens'
 
 let mockParams: Record<string, string> = { id: 'g1' }

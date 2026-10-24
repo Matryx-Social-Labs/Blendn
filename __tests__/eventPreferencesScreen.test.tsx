@@ -11,7 +11,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import { AX_XXXL, atScale, resetScale, textNodes } from './helpers/togetherAx'
+import { AX_XXXL, atScale, resetScale, textNodes } from './helpers/ax'
 import { MAX_FONT_SCALE } from '../lib/design/tokens'
 
 jest.mock('../lib/logger', () => ({
