@@ -93,9 +93,21 @@ describe('Nights out chooses its state (Me 04 · 05 · 06)', () => {
     expect(nightsView('ready', [], 0, null).kind).toBe('first')
   })
   it('reads the total as the shown nights plus the locked ones', () => {
-    expect(nightsCounts({ pagination: { totalCount: 3 }, lockedCount: 45 })).toEqual({ locked: 45, total: 48 })
-    expect(nightsCounts({ lockedCount: 2 })).toEqual({ locked: 2, total: null })
-    expect(nightsCounts(null)).toEqual({ locked: 0, total: null })
+    expect(nightsCounts({ pagination: { totalCount: 3 }, lockedCount: 45 })).toEqual({ locked: 45, total: 48, running: 0 })
+    expect(nightsCounts({ lockedCount: 2 })).toEqual({ locked: 2, total: null, running: 0 })
+    expect(nightsCounts(null)).toEqual({ locked: 0, total: null, running: 0 })
+  })
+  // RC 7, account d: "4 NIGHTS" over one tile and "1 night out", because 3 nights were still going (S-1 lists them).
+  it('counts the listed nights that have not ended, which the grid leaves out', () => {
+    const NOW = Date.parse('2026-10-24T12:00:00.000Z')
+    const events = [
+      { end_time: '2026-10-24T18:00:00.000Z' },
+      { end_time: '2026-10-25T02:00:00.000Z' },
+      { end_time: '2026-10-24T12:00:00.000Z' },
+      { end_time: '2026-10-23T22:00:00.000Z' },
+    ]
+    expect(nightsCounts({ pagination: { totalCount: 4 }, lockedCount: 0, events }, NOW)).toEqual({ locked: 0, total: 4, running: 3 })
+    expect(nightsView('ready', [night(1)], 0, 4, 3)).toMatchObject({ kind: 'tiles', running: 3, locked: 0 })
   })
   it('labels a night the way the tile reads', () => {
     expect(nightLabel(new Date(2025, 9, 3, 20).toISOString())).toBe('Fri 3 Oct')
@@ -156,6 +168,23 @@ describe('Nights out chooses its state (Me 04 · 05 · 06)', () => {
     expect(screen.getByText('43 more nights with Blend’n+')).toBeTruthy()
     fireEvent.press(screen.getByText(NIGHTS_HELD.action))
     expect(onUnlock).toHaveBeenCalledTimes(1)
+  })
+  it('says the nights still running beside the ended tiles, so the section adds up to the stat (RC 7)', async () => {
+    await render(
+      <NightsOut status="ready" events={[night(1)]} total={4} runningCount={3} onOpenEvent={jest.fn()} onSeeAll={jest.fn()} onRetry={jest.fn()} onFirstNight={jest.fn()} />
+    )
+    expect(screen.getAllByLabelText(/^Night \d/)).toHaveLength(1)
+    expect(screen.getByTestId('nights-running').props.children).toBe('3 nights still running · they land here once they end')
+    expect(NIGHTS_HELD.running(1)).toBe('1 night still running · it lands here once it ends')
+  })
+  it('Me hands Nights out the running count from the same response as the stat (pinned at its source)', () => {
+    const source = require('fs').readFileSync(require('path').join(__dirname, '../app/(tabs)/profile.tsx'), 'utf8') as string
+    expect(source).toMatch(/attended=\{nightCounts\.total \?\? stats\.eventsAttended\}/)
+    expect(source).toMatch(/runningCount=\{nightCounts\.running/)
+  })
+  it('says nothing more when every night has ended', async () => {
+    await render(<NightsOut status="ready" events={[night(1)]} total={1} onOpenEvent={jest.fn()} onSeeAll={jest.fn()} onRetry={jest.fn()} onFirstNight={jest.fn()} />)
+    expect(screen.queryByTestId('nights-running')).toBeNull()
   })
   it('draws at most six tiles', async () => {
     await draw('ready', [1, 2, 3, 4, 5, 6, 7, 8].map(night))

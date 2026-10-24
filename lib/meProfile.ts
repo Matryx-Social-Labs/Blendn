@@ -203,18 +203,28 @@ export type NightsView =
   | { kind: 'failed' }
   | { kind: 'locked'; total: number }
   | { kind: 'pending'; total: number }
-  /** `locked`: the older nights kept behind Blend'n+, said under the tiles (S-1: a free account sees its latest 3 ended). */
-  | { kind: 'tiles'; failed: boolean; nights: number; locked: number }
+  /**
+   * `locked`: the older nights kept behind Blend'n+, said under the tiles (S-1: a free account sees its latest 3 ended).
+   * `running`: nights the count has that the grid doesn't yet, because they haven't ended (RC 7: "4 NIGHTS" over one tile).
+   */
+  | { kind: 'tiles'; failed: boolean; nights: number; locked: number; running: number }
 
 export function nightsView(
   status: NightsStatus,
   rows: readonly { id: string; start_time: string }[],
   lockedCount: number = 0,
   total: number | null = null,
+  running: number = 0,
   now: Date = new Date()
 ): NightsView {
   if (rows.length > 0) {
-    return { kind: 'tiles', failed: status === 'failed', nights: nightsGrid(rows as { id: string; start_time: string }[], now).nights, locked: Math.max(0, lockedCount) }
+    return {
+      kind: 'tiles',
+      failed: status === 'failed',
+      nights: nightsGrid(rows as { id: string; start_time: string }[], now).nights,
+      locked: Math.max(0, lockedCount),
+      running: Math.max(0, running),
+    }
   }
   if (status === 'loading') return { kind: 'loading' }
   if (status === 'failed') return { kind: 'failed' }
@@ -223,16 +233,26 @@ export function nightsView(
   return count > 0 ? { kind: 'pending', total: count } : { kind: 'first' }
 }
 
-/** What `/me/attendance` says beyond its rows: the nights kept behind Blend'n+, and every night (the shown ones plus those). */
+/**
+ * What `/me/attendance` says beyond its rows: the nights kept behind Blend'n+, every night (the shown ones plus those), and
+ * the nights it lists that haven't ended (S-1 lists them; the grid keeps ended ones only, `pastEventRows`).
+ */
 export interface NightsCounts {
   locked: number
   /** Null from a server that sends no pagination. */
   total: number | null
+  /** Listed nights still going: in `total`, not yet on the grid. */
+  running: number
 }
 
-export function nightsCounts(payload: { pagination?: { totalCount: number }; lockedCount?: number } | null | undefined): NightsCounts {
+export function nightsCounts(
+  payload: { pagination?: { totalCount: number }; lockedCount?: number; events?: readonly { end_time: string }[] } | null | undefined,
+  now: number = Date.now()
+): NightsCounts {
   const locked = Math.max(0, payload?.lockedCount ?? 0)
   // `totalCount` is the nights the list may show (the server's `visible`); the locked ones are on top of it.
   const shown = payload?.pagination?.totalCount
-  return { locked, total: typeof shown === 'number' ? shown + locked : null }
+  // The complement of `pastEventRows`' "ended": an end not before now (the newest nights, so always on the first page).
+  const running = (payload?.events ?? []).filter((e) => !(new Date(e.end_time).getTime() < now)).length
+  return { locked, total: typeof shown === 'number' ? shown + locked : null, running }
 }

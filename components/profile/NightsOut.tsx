@@ -30,13 +30,16 @@ export const NIGHTS_FAILED = { withTiles: 'Your nights didn’t load. Showing wh
 export const nightsLine = (nights: number) => `${nights} ${nights === 1 ? 'night' : 'nights'} out in the last ${NIGHTS_WEEKS} weeks`
 
 const nightsCount = (n: number) => `${n.toLocaleString('en-US')} ${n === 1 ? 'night' : 'nights'}`
+const landsOnceEnded = (n: number) => `${n === 1 ? 'it lands' : 'they land'} here once ${n === 1 ? 'it ends' : 'they end'}`
 
 /** D-H1: a count above 0 with nothing the list may show yet. Never "your first night". */
 export const NIGHTS_HELD = {
   locked: (total: number) => `${nightsCount(total)} · the older ones are with Blend’n+`,
   /** Under the tiles: the server's admin S-1 contract, the latest 3 ended nights shown and the rest counted. */
   more: (locked: number) => `${locked.toLocaleString('en-US')} more ${locked === 1 ? 'night' : 'nights'} with Blend’n+`,
-  pending: (total: number) => `${nightsCount(total)} · ${total === 1 ? 'it lands' : 'they land'} here once ${total === 1 ? 'it ends' : 'they end'}`,
+  pending: (total: number) => `${nightsCount(total)} · ${landsOnceEnded(total)}`,
+  /** Beside the ended tiles: the count's nights the grid doesn't draw yet, so the stat and the section add up (RC 7). */
+  running: (n: number) => `${nightsCount(n)} still running · ${landsOnceEnded(n)}`,
   action: 'See Blend’n+',
 } as const
 
@@ -55,6 +58,7 @@ export function NightsOut({
   onFirstNight,
   lockedCount = 0,
   total = null,
+  runningCount = 0,
   onUnlock,
 }: {
   status: NightsStatus
@@ -70,12 +74,14 @@ export function NightsOut({
   lockedCount?: number
   /** Every night you have, the locked ones included; null when the server didn't say. */
   total?: number | null
+  /** Nights in `total` that haven't ended, so aren't tiles yet (`nightsCounts().running`). */
+  runningCount?: number
   /** What "See Blend'n+" does when nights are locked. */
   onUnlock?: () => void
 }) {
   const bold = useBoldText()
   const { width } = useWindowDimensions()
-  const view = nightsView(status, events, lockedCount, total)
+  const view = nightsView(status, events, lockedCount, total, runningCount)
   // Three across, two 8 pt gaps between them, inside the screen's gutters.
   const cell = { width: Math.floor((width - SPACE.gutter * 2 - SPACE.sm * (COLUMNS - 1)) / COLUMNS) }
 
@@ -132,6 +138,11 @@ export function NightsOut({
               </View>
             ))}
           </View>
+          {view.running > 0 ? (
+            <Text testID="nights-running" style={[font('meta', bold), styles.muted]} maxFontSizeMultiplier={MAX_FONT_SCALE.meta}>
+              {NIGHTS_HELD.running(view.running)}
+            </Text>
+          ) : null}
           {view.locked > 0 ? (
             <View testID="nights-more" style={styles.held}>
               <Text style={[font('meta', bold), styles.muted]} maxFontSizeMultiplier={MAX_FONT_SCALE.meta}>

@@ -100,7 +100,7 @@ function ProfileInner() {
   // Empty until it loads; a failure keeps what was last good (Nights out says so, with Try again).
   const [attended, setAttended] = useState<PastEventRow[]>([])
   // The nights behind the list: locked with Blend'n+ and the true total (D-H1). Null total until `/me/attendance` answers.
-  const [nightCounts, setNightCounts] = useState<NightsCounts>({ locked: 0, total: null })
+  const [nightCounts, setNightCounts] = useState<NightsCounts>({ locked: 0, total: null, running: 0 })
   const [nightsStatus, setNightsStatus] = useState<NightsStatus>('loading')
   const [nightsRetrying, setNightsRetrying] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -511,6 +511,7 @@ function ProfileInner() {
             onFirstNight={openWhatsOn}
             lockedCount={nightCounts.locked}
             total={nightCounts.total}
+            runningCount={nightCounts.running ?? 0}
             onUnlock={unlockNights}
           />
         </FadeInUp>
