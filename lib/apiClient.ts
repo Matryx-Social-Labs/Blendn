@@ -42,6 +42,13 @@ const REQUESTS_SWR_TTL = 30 * 1000
 const CHECKINS_SWR_TTL = 30 * 1000
 const CATEGORIES_SWR_TTL = 10 * 60 * 1000
 const PARTICIPANTS_SWR_TTL = 30 * 1000
+/**
+ * The oldest a cached answer is still shown while a fresh one is fetched. The cache is in memory for the app's life and an
+ * expired entry was served at any age: a room's roster read hours earlier came back once as the room's people (rc7: iOS
+ * Room info listed only the organiser of a room of 426, on an app left running through the drive). Past this, a read
+ * waits for the server.
+ */
+export const SWR_STALE_LIMIT_MS = 5 * 60 * 1000
 
 if (!API_BASE_URL) {
   throw new Error(
@@ -1322,11 +1329,11 @@ class ApiClientClass {
     return `${method}:${requireAuth ? 'auth' : 'anon'}:${endpoint}:${body}`
   }
 
-  private getCached<T>(key: string): { data: ApiResponse<T>; isFresh: boolean } | null {
+  private getCached<T>(key: string): { data: ApiResponse<T>; isFresh: boolean; tooOld: boolean } | null {
     const entry = this.responseCache.get(key)
     if (!entry) return null
     const age = Date.now() - entry.timestamp
-    return { data: entry.data as ApiResponse<T>, isFresh: age < entry.ttl }
+    return { data: entry.data as ApiResponse<T>, isFresh: age < entry.ttl, tooOld: age > SWR_STALE_LIMIT_MS }
   }
 
   /**
@@ -1833,7 +1840,8 @@ class ApiClientClass {
     const key = this.buildRequestKey(endpoint, {}, true)
     const cached = this.getCached<T>(key)
 
-    if (cached) {
+    // Too old to show even for a moment: asked again and awaited, as if never cached (`SWR_STALE_LIMIT_MS`).
+    if (cached && !cached.tooOld) {
       if (!cached.isFresh) this.refreshCacheInBackground<T>(endpoint, key, ttl)
       return cached.data
     }
