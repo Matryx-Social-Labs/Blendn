@@ -9,7 +9,7 @@ import { SearchField } from '../../components/ds/SearchField'
 import { HueProvider, font, useBoldText } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { TopBar } from '../../components/ds/TopBar'
-import { PersonRow, PersonRowSkeleton } from '../../components/friends/PersonRow'
+import { PersonRow, PersonRowSkeleton, usePersonRowsFixed } from '../../components/friends/PersonRow'
 import { useOffline } from '../../components/OfflineBanner'
 import { useToast } from '../../components/Toast'
 import { COLOR, FONT_FAMILY, SPACE } from '../../lib/design/tokens'
@@ -45,6 +45,8 @@ function FriendsHereScreenContent() {
   const rows = withLetters(list.friends)
   const stickyHeaderIndices = rows.flatMap((r, i) => (r.kind === 'letter' ? [i] : []))
   const layout = layoutOf(rows)
+  // Rows are exactly 64 only at the default size; past it they grow (DS-05) and indexing by 64 would misplace them.
+  const fixedRows = usePersonRowsFixed()
   // total is the unfiltered count: clearing a search that matched nobody is an empty list on its way back, not an empty room.
   const none = list.status === 'ready' && !list.query.trim() && !list.searching && list.total === 0 && list.friends.length === 0
 
@@ -103,7 +105,7 @@ function FriendsHereScreenContent() {
         data={rows}
         keyExtractor={(r) => r.key}
         renderItem={renderItem}
-        getItemLayout={(_, index) => layout[index]}
+        getItemLayout={fixedRows ? (_, index) => layout[index] : undefined}
         stickyHeaderIndices={stickyHeaderIndices}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"

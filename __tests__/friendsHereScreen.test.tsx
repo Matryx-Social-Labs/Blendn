@@ -8,6 +8,10 @@ import React from 'react'
 
 import FriendsHereScreen from '../app/room/friends-here'
 import { FRIEND_ROW_HEIGHT, LETTER_HEIGHT, SEARCH_DEBOUNCE_MS } from '../lib/friendsHereList'
+import { atScale, resetScale } from './helpers/ax'
+
+// React Native's jest preset reads fontScale 2; a test that windows by index sets the default size itself.
+afterEach(resetScale)
 
 const mockGet = jest.fn()
 const mockOpen = jest.fn()
@@ -64,13 +68,26 @@ describe('See all friends here', () => {
     expect(screen.getByLabelText('D')).toBeTruthy()
   })
 
-  it('is one virtualised list with sticky letters and exact row heights', async () => {
+  it('is one virtualised list with sticky letters and exact row heights (at the default text size)', async () => {
     mockGet.mockResolvedValue(page([friend('Aarav', 1), friend('Dev', 2)], 2))
+    await atScale(1)
     await open()
     const list = screen.getByTestId('friends-here-list')
     expect(list.props.stickyHeaderIndices).toEqual([0, 2])
     expect(list.props.getItemLayout(null, 1)).toEqual({ length: FRIEND_ROW_HEIGHT, offset: LETTER_HEIGHT, index: 1 })
     expect(list.props.getItemLayout(null, 2)).toEqual({ length: LETTER_HEIGHT, offset: LETTER_HEIGHT + FRIEND_ROW_HEIGHT, index: 2 })
+  })
+
+  // DS-05: past the default size rows grow; an index layout would misplace them. Negative control: ungated, this fails.
+  it('at a larger text size the list measures its rows instead of indexing them', async () => {
+    mockGet.mockResolvedValue(page([friend('Aarav', 1), friend('Dev', 2)], 2))
+    await atScale(2)
+    try {
+      await open()
+      expect(screen.getByTestId('friends-here-list').props.getItemLayout).toBeUndefined()
+    } finally {
+      resetScale()
+    }
   })
 
   it('opens the friend chat from a row, by real id', async () => {

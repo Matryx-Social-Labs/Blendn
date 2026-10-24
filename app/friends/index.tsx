@@ -8,7 +8,7 @@ import { StateScreen } from '../../components/ds/StateScreen'
 import { TopBar } from '../../components/ds/TopBar'
 import { OfflineStrip, useOffline } from '../../components/profile/OfflineStrip'
 import { PagedFooter } from '../../components/friends/PagedFooter'
-import { PersonRow, PersonRowSkeleton, PERSON_ROW_HEIGHT } from '../../components/friends/PersonRow'
+import { PersonRow, PersonRowSkeleton, PERSON_ROW_HEIGHT, usePersonRowsFixed } from '../../components/friends/PersonRow'
 import { MakeCrewRow } from '../../components/friends/MakeCrewRow'
 import { SettingsGroup } from '../../components/ds/SettingsRow'
 import { RequestsRow } from '../../components/friends/RequestsRow'
@@ -113,6 +113,8 @@ function FriendsScreenContent() {
   const searched = list.searched !== null
   const items = useMemo(() => friendItems(list.friends, !searched && list.allTotal >= SECTIONS_FROM), [list.friends, list.allTotal, searched])
   const offsets = useMemo(() => itemOffsets(items), [items])
+  // Rows are exactly 64 only at the default size; past it they grow (DS-05) and indexing by 64 would misplace them.
+  const fixedRows = usePersonRowsFixed()
   const empty = failed ? (
     <StateScreen
       icon="cloud-off"
@@ -190,7 +192,7 @@ function FriendsScreenContent() {
             data={items}
             keyExtractor={(item) => item.key}
             renderItem={({ item }) => (item.kind === 'head' ? <SectionHead title={item.title} /> : <FriendRow friend={item.friend} />)}
-            getItemLayout={(_data, index) => ({ length: items[index]?.kind === 'head' ? SECTION_HEAD : PERSON_ROW_HEIGHT, offset: offsets[index] ?? 0, index })}
+            getItemLayout={fixedRows ? (_data, index) => ({ length: items[index]?.kind === 'head' ? SECTION_HEAD : PERSON_ROW_HEIGHT, offset: offsets[index] ?? 0, index }) : undefined}
             // The heads stick under the bar; `ListHeaderComponent` (when drawn) is index 0 to the list, so they shift by one.
             stickyHeaderIndices={items.flatMap((item, i) => (item.kind === 'head' ? [i + (list.friends.length && header ? 1 : 0)] : []))}
             onEndReachedThreshold={1.5}

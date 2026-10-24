@@ -12,6 +12,10 @@ import type { Friend } from '../lib/friends'
 import { SIZE } from '../lib/design/tokens'
 import { noteFriendGone, takeFriendsGone } from '../lib/friendsGone'
 import { PERSON_ROW_HEIGHT } from '../components/friends/PersonRow'
+import { atScale, resetScale } from './helpers/ax'
+
+// React Native's jest preset reads fontScale 2; a test that windows by index sets the default size itself.
+afterEach(resetScale)
 
 const mockPush = jest.fn()
 const mockGetFriends = jest.fn()
@@ -149,6 +153,7 @@ describe('101 friends', () => {
 
 describe('1,000 friends', () => {
   it('ten pages by cursor, each row exactly one fixed height, and the whole count under the title', async () => {
+    await atScale(1)
     for (let p = 0; p < 10; p++) mockGetFriends.mockResolvedValueOnce(page(friends(100, p * 100), 1000, p < 9 ? `c${p + 1}` : null))
     await open()
     expect(screen.getByText('1,000')).toBeTruthy()
@@ -163,12 +168,26 @@ describe('1,000 friends', () => {
   })
 
   it('is a windowed FlatList: a small first render and a window of seven screens, never every row', async () => {
+    await atScale(1)
     mockGetFriends.mockResolvedValueOnce(page(friends(100), 1000, 'c1'))
     await open()
     expect(list().props.initialNumToRender).toBeLessThanOrEqual(12)
     expect(list().props.windowSize).toBeLessThanOrEqual(7)
     expect(list().props.getItemLayout).toEqual(expect.any(Function))
     expect(list().props.onEndReached).toEqual(expect.any(Function))
+  })
+
+  // DS-05: past the default size a row grows, so indexing by 64 would misplace every row below a tall one. Negative
+  // control: an ungated getItemLayout fails this.
+  it('windows by index only at the default text size; at a larger size the list measures its rows', async () => {
+    mockGetFriends.mockResolvedValueOnce(page(friends(100), 1000, 'c1'))
+    await atScale(2)
+    try {
+      await open()
+      expect(list().props.getItemLayout).toBeUndefined()
+    } finally {
+      resetScale()
+    }
   })
 
   it('a page that repeats a friend does not draw them twice', async () => {
