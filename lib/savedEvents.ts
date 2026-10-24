@@ -40,6 +40,17 @@ export interface SavedEventRow {
   changed?: ChangedField[]
   /** The event's IANA zone: its times are said in it, not the phone's (RC drive 5 D-4). Absent from an older server. */
   timezone?: string
+  /** The event's first category's slug ("music"): with no cover, its row draws the category plate (D8). */
+  category?: string
+}
+
+/** A list route's categories, as the favourites route sends them (`{ id, name, slug, icon }`); only the slug is read. */
+type ListCategories = { slug?: string | null }[] | null
+
+/** The first category's slug, or nothing: a row with none draws as before. */
+const categoryOf = (categories: ListCategories | undefined): { category?: string } => {
+  const slug = Array.isArray(categories) ? categories[0]?.slug : null
+  return typeof slug === 'string' && slug ? { category: slug } : {}
 }
 
 export interface SavedEventsPayload {
@@ -64,6 +75,8 @@ export interface SavedEventsPayload {
     changedFields?: ChangedField[] | null
     /** Both list routes send it (`/me/rsvps`, `/users/:id/favorites`). */
     timezone?: string | null
+    /** The favourites route sends it; `/me/rsvps` not yet (server need). */
+    categories?: ListCategories
   }[]
   pagination?: { page: number; totalCount: number; hasMore: boolean; nextCursor?: string | null }
 }
@@ -85,6 +98,7 @@ export function savedEventRows(data: SavedEventsPayload | undefined | null): Sav
     status: e.status,
     changed: Array.isArray(e.changedFields) ? e.changedFields.filter((f) => f === 'time' || f === 'venue') : [],
     ...(typeof e.timezone === 'string' && e.timezone ? { timezone: e.timezone } : {}),
+    ...categoryOf(e.categories),
   }))
 }
 
@@ -132,6 +146,8 @@ export interface AttendancePayload {
     attendedAt: string
     /** The event's IANA zone (admin #749): its day is said in it. Absent from an older server: the phone's. */
     timezone?: string | null
+    /** Read under the list routes' name when the attendance route sends it (not yet: server need). */
+    categories?: ListCategories
     /** `venue_day` is a visit to a place you went live at; its `title` is bookkeeping, its `venue_name` the place (blendn-admin D-6). */
     kind?: 'event' | 'venue_day'
     /**
@@ -167,6 +183,8 @@ export interface PastEventRow {
   timezone?: string
   /** A visit to a place you went live at, not an event: it reads "Live here · 28 Sep" under the place's name. */
   visit?: { attendedAt: string; stayMinutes: number | null; venueId: string | null; venueType: string | null }
+  /** The first category's slug, as `SavedEventRow.category`. */
+  category?: string
 }
 
 /** "40m", "1h 40m", "2h": how long a visit lasted, or null when the server did not say. */
@@ -199,6 +217,7 @@ export function pastEventRows(
       end_time: e.end_time,
       cover_image_url: e.cover_image_url,
       ...(typeof e.timezone === 'string' && e.timezone ? { timezone: e.timezone } : {}),
+      ...categoryOf(e.categories),
       ...(e.kind === 'venue_day' && {
         visit: { attendedAt: e.attendedAt || e.start_time, stayMinutes: e.stay_minutes ?? null, venueId: e.venue_id ?? null, venueType: e.venue_type ?? null },
       }),

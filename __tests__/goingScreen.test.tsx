@@ -367,3 +367,16 @@ describe('Next up, the rows and the lock (GO-14, audit C11/C13/C14)', () => {
     expect(StyleSheet.flatten(lock.props.style).backgroundColor).toBe(COLOR.selectionVioletFill)
   })
 })
+
+describe('the category plate (GO-14, DS-12 wiring, audit C10)', () => {
+  it('a row and the Next up hero with no cover draw their category plate, not an empty box', async () => {
+    const rows = [
+      { ...upcoming('a', { categories: [{ slug: 'music' }] }), rsvpStatus: 'going' },
+      { ...upcoming('b', { categories: [{ slug: 'music' }] }), rsvpStatus: 'going' },
+    ]
+    api.getMyRsvps.mockResolvedValue({ success: true, data: { events: rows, pagination: page(1, 2, false) } } as never)
+    await open()
+    expect(await screen.findByTestId('event-cover-plate', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getAllByTestId('going-row-b-plate', { includeHiddenElements: true })).toHaveLength(1)
+  })
+})

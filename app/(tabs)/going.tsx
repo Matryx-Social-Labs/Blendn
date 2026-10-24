@@ -474,7 +474,7 @@ function GoingScreenInner() {
             accessibilityHint="Opens the event"
           >
             <View style={styles.heroPhoto}>
-              <EventCover uri={row.cover_image_url} height={HERO_PHOTO} radius={RADIUS.mediaInCard} retry={refreshCount} />
+              <EventCover uri={row.cover_image_url} height={HERO_PHOTO} radius={RADIUS.mediaInCard} retry={refreshCount} category={row.category} />
               {live ? (
                 <View style={styles.heroBadge}>
                   <TimeBadge when="Live" />
@@ -575,6 +575,8 @@ function GoingScreenInner() {
         <GoingRow
           title={row.title}
           cover={row.cover_image_url}
+          category={row.category}
+          testID={`going-row-${row.id}`}
           retry={refreshCount}
           // Today's day of a multi-day run. The headings are by week (D30), so a row past today names its own day.
           time={rowWhen(liveWindow(row).start_time, row.timezone)}
@@ -627,6 +629,7 @@ function GoingScreenInner() {
         <GoingRow
           title={row.title}
           cover={row.cover_image_url}
+          category={row.category}
           retry={refreshCount}
           time={featuredDateLabel(row.start_time, new Date(), row.timezone)}
           venue={placeLabel(row)}
@@ -659,6 +662,7 @@ function GoingScreenInner() {
         <GoingRow
           title={row.title}
           cover={row.cover_image_url}
+          category={row.category}
           retry={refreshCount}
           time={`${featuredDateLabel(row.start_time, new Date(), row.timezone)} · ${timeLabel(row.start_time, row.timezone)}`}
           venue={placeLabel(row)}
@@ -895,6 +899,7 @@ function GoingRow({
   title,
   cover,
   plate,
+  category,
   label,
   inert,
   retry,
@@ -903,11 +908,15 @@ function GoingRow({
   onPress,
   onLongPress,
   trailing,
+  testID,
 }: {
   title: string
   cover?: string | null
   /** A place's type art in place of a cover (a visit). */
   plate?: string
+  /** The event's category: with no cover, its plate (DS-12, D8), never an empty box. */
+  category?: string
+  testID?: string
   label?: string
   inert?: boolean
   retry: number
@@ -920,7 +929,7 @@ function GoingRow({
 }) {
   return (
     <View style={[styles.inset, styles.row]}>
-      <EventCard key={retry} kind="row" title={title} cover={cover} plate={plate} label={label} inert={inert} time={time} venue={venue ?? ''} onPress={onPress} onLongPress={onLongPress ? () => onLongPress() : undefined} style={styles.shrink} />
+      <EventCard key={retry} kind="row" title={title} cover={cover} plate={plate} category={category} testID={testID} label={label} inert={inert} time={time} venue={venue ?? ''} onPress={onPress} onLongPress={onLongPress ? () => onLongPress() : undefined} style={styles.shrink} />
       {trailing ? <View style={styles.trailing}>{trailing}</View> : null}
     </View>
   )

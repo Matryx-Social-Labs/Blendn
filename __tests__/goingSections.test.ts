@@ -2,7 +2,7 @@ import { readFileSync } from 'fs'
 import { join } from 'path'
 
 import { failedSections, goingSections, isLiveNow, newFailure } from '../lib/goingSections'
-import type { RsvpEventRow, SavedEventRow } from '../lib/savedEvents'
+import { pastEventRows, savedEventRows, type RsvpEventRow, type SavedEventRow } from '../lib/savedEvents'
 
 /** Local wall-clock times, so the day headings match the machine running the test. */
 const local = (d: number, h: number, m = 0) => new Date(2026, 8, d, h, m).toISOString()
@@ -246,5 +246,19 @@ describe('goingSections: by week, not by day (GO-14, D30, audit C15)', () => {
   it('a later month says its year only when it is not this one', () => {
     const rows = [rsvp('hero', at(8, 29, 20), ends(8, 29, 20)), rsvp('jan', new Date(2027, 0, 8, 20).toISOString(), new Date(2027, 0, 8, 22).toISOString())]
     expect(labels(goingSections(rows, [], [], NOW))).toEqual(['n:hero', 'day:January 2027', 'g:jan'])
+  })
+})
+
+describe('a row’s category, for the plate when it has no cover (GO-14, DS-12 hand-off, audit C10)', () => {
+  const base = { id: 'e', title: 'E', startTime: local(30, 20), endTime: local(30, 23), status: 'published' as const }
+
+  it('is the first category’s slug the list route sends, and absent when it sends none', () => {
+    expect(savedEventRows({ events: [{ ...base, categories: [{ slug: 'music' }, { slug: 'art' }] }] })[0].category).toBe('music')
+    expect(savedEventRows({ events: [base] })[0]).not.toHaveProperty('category')
+  })
+
+  it('Past reads it under the same name', () => {
+    const night = { id: 'p', title: 'P', cover_image_url: null, start_time: local(1, 20), end_time: local(1, 23), venue_name: null, city: null, attendedAt: local(1, 20), categories: [{ slug: 'comedy' }] }
+    expect(pastEventRows([night], new Date(2026, 8, 29).getTime())[0].category).toBe('comedy')
   })
 })
