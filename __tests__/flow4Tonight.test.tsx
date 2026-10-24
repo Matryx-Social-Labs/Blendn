@@ -205,3 +205,9 @@ describe('the pass (#06, #07)', () => {
     expect(screen.queryByText('Tell your crew', HIDDEN)).toBeNull()
   })
 })
+
+describe('a Tonight event with no cover (rc7 ruling 5)', () => {
+  it('hands its category to the card, so the plate carries the category glyph', () => {
+    expect(deckEvent(event('a', { photo: null, category: 'music' }), Date.now())).toMatchObject({ cover: null, category: 'music' })
+  })
+})

@@ -47,6 +47,8 @@ export interface TonightEvent {
   tasteMatchCount: number | null
   /** RSVPs, for the card's "N going" pill (Flow 4 Tonight #06); null until the detail answers (the list carries none). */
   goingCount: number | null
+  /** The event's category slug, for its plate when it has no cover (rc7 ruling 5); absent from an older server. */
+  category?: string
 }
 
 /** What Tonight can say about your location (Flow 4 Tonight #10, R3-D4 4.7). */
@@ -125,6 +127,7 @@ function toTonight(
     tasteMatchCount: null,
     // The list's `goingCount` (RSVPs), the same number as the detail's `stats.rsvpCount`; under five it is not said.
     goingCount: printable(e.going_count),
+    category: e.category_group || undefined,
   }
 }
 

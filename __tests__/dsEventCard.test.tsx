@@ -12,7 +12,7 @@ import { AccessibilityInfo, Platform, StyleSheet } from 'react-native'
 import { EventCard } from '../components/ds/EventCard'
 import { PHOTO_SCRIM } from '../components/ui/GradientFill'
 import { HueProvider, PRESSED_WASH } from '../components/ds/shared'
-import { COLOR, FONT_FAMILY, MATERIAL, RADIUS, TYPE } from '../lib/design/tokens'
+import { COLOR, FONT_FAMILY, MATERIAL, PALETTE_GLYPH, RADIUS, TYPE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { tint } from '../lib/theme'
 
@@ -214,15 +214,16 @@ describe('inert: a card with nowhere to go', () => {
   })
 })
 
-describe('the category plate (D8: no empty box in a populated row)', () => {
+describe('the event plate (D8, rc7 ruling 5: one no-cover look, the venue plate’s, at every size)', () => {
   const hidden = { includeHiddenElements: true }
   const NO_COVER = { ...VINYL, cover: null }
+  const half = (id: string) => StyleSheet.flatten((screen.getByTestId(id, hidden).children[0] as unknown as { props: { style: object } }).props.style) as { backgroundColor?: string }
 
-  it('a row with no cover draws its category: the glyph in the hue’s light on the hue’s fill', async () => {
+  it('a row with no cover draws its category glyph at 70% white on the world’s duotone (fill split with flare)', async () => {
     await render(<EventCard kind="row" {...NO_COVER} category="music" testID="e" />)
     expect(flat('e-plate')).toMatchObject({ backgroundColor: COLOR.selectionEmberFill })
-    const glyph = screen.getByTestId('icon-music-2', hidden)
-    expect(glyph.props.color).toBe(COLOR.selectionEmberGlyph)
+    expect(half('e-plate').backgroundColor).toBe(COLOR.selectionEmberFlare)
+    expect(screen.getByTestId('icon-music-2', hidden).props.color).toBe(PALETTE_GLYPH.plate)
     expect(screen.getByTestId('e-plate', hidden).props.accessibilityElementsHidden).toBe(true)
   })
 
@@ -233,13 +234,18 @@ describe('the category plate (D8: no empty box in a populated row)', () => {
       </HueProvider>
     )
     expect(flat('e-plate').backgroundColor).toBe(COLOR.selectionRoseFill)
-    expect(screen.getByTestId('icon-music-2', hidden).props.color).toBe(COLOR.selectionRoseGlyph)
+    expect(half('e-plate').backgroundColor).toBe(COLOR.selectionRoseFlare)
   })
 
-  it('a category with no glyph draws the fill alone; a cover always wins; a venue plate wins over a category', async () => {
+  it('a category with no glyph, or none at all, still draws a glyph: a calendar, never a blank plate', async () => {
     await render(<EventCard kind="row" {...NO_COVER} category="something-new" testID="e" />)
+    expect(screen.getByTestId('icon-calendar', hidden)).toBeTruthy()
+    await render(<EventCard kind="hero" {...NO_COVER} testID="e" />)
     expect(flat('e-plate').backgroundColor).toBe(COLOR.selectionEmberFill)
-    expect(screen.queryAllByTestId(/^icon-/, hidden)).toEqual([])
+    expect(screen.getByTestId('icon-calendar', hidden)).toBeTruthy()
+  })
+
+  it('a cover always wins; a venue plate wins over a category', async () => {
     await render(<EventCard kind="row" {...VINYL} category="music" testID="e" />)
     expect(screen.queryByTestId('e-plate', hidden)).toBeNull()
     await render(<EventCard kind="row" {...NO_COVER} plate="cafe" category="music" testID="e" />)
@@ -252,10 +258,5 @@ describe('the category plate (D8: no empty box in a populated row)', () => {
       expect(flat('e-plate').backgroundColor).toBe(COLOR.selectionEmberFill)
       expect(screen.getByTestId('icon-moon', hidden)).toBeTruthy()
     }
-  })
-
-  it('with no category, a coverless row is as it was', async () => {
-    await render(<EventCard kind="row" {...NO_COVER} testID="e" />)
-    expect(screen.queryByTestId('e-plate', hidden)).toBeNull()
   })
 })

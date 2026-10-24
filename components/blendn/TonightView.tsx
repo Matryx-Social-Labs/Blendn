@@ -47,6 +47,7 @@ export function deckEvent(e: TonightEvent, now: number): DeckEvent {
     distance: distanceText(e.distanceKm) ?? undefined,
     going: e.goingCount ?? undefined,
     cover: e.photo,
+    category: e.category,
     // The event's clock, named when its zone is not the phone's: "9 PM IST" on a Berlin phone (R6-4).
     saved: e.going && startsToday(e.startsAt, now, e.timeZone) ? eventClock(e.startsAt, e.timeZone) : undefined,
   }

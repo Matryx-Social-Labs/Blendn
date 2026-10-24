@@ -56,20 +56,47 @@ export function VenuePlate({
   testID?: string
 }) {
   const plate: PlateType = Object.hasOwn(PLATE_COLOURS, type) ? (type as PlateType) : 'bar'
-  const [a, b] = PLATE_COLOURS[plate]
+  return (
+    <Plate
+      colours={PLATE_COLOURS[plate]}
+      icon={glyph ? VENUE_PLATE_GLYPHS[plate] : undefined}
+      square={size}
+      radius={radius ?? (size ? Math.round(size * RADIUS_SHARE) : 0)}
+      testID={testID}
+    />
+  )
+}
+
+/**
+ * The plate itself: two colours split on the diagonal and an outline glyph at 70% white, its glyph at 40% of the box (of
+ * 120 when it fills its parent). A venue's (`VenuePlate`) and an event's with no cover (`CategoryPlate`) are this one
+ * look. `square` draws a square of that size; without it the plate fills its parent. Decorative.
+ */
+export function Plate({
+  colours: [a, b],
+  icon,
+  square,
+  glyphBasis,
+  radius = 0,
+  testID,
+}: {
+  colours: readonly [string, string]
+  icon?: IconName
+  square?: number
+  /** The box the glyph is sized from, where the plate fills a parent of a known size. Default `square`, else 120. */
+  glyphBasis?: number
+  radius?: number
+  testID?: string
+}) {
   return (
     <View
       testID={testID}
-      style={[
-        size ? { width: size, height: size } : StyleSheet.absoluteFill,
-        styles.plate,
-        { borderRadius: radius ?? (size ? Math.round(size * RADIUS_SHARE) : 0), backgroundColor: a },
-      ]}
+      style={[square ? { width: square, height: square } : StyleSheet.absoluteFill, styles.plate, { borderRadius: radius, backgroundColor: a }]}
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
     >
       <View style={[styles.secondHalf, { backgroundColor: b }]} />
-      {glyph ? <Icon name={VENUE_PLATE_GLYPHS[plate]} size={Math.round((size ?? FILL_BASIS) * GLYPH_SHARE)} color={PALETTE_GLYPH.plate} /> : null}
+      {icon ? <Icon name={icon} size={Math.round((glyphBasis ?? square ?? FILL_BASIS) * GLYPH_SHARE)} color={PALETTE_GLYPH.plate} /> : null}
     </View>
   )
 }

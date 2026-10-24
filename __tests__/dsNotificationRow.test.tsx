@@ -323,3 +323,15 @@ describe('foundations C, part 2: the row in its world', () => {
     expect(primary).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('an event with no cover (rc7 ruling 5)', () => {
+  it('draws the event plate in the screen’s hue, never a blank square', async () => {
+    await render(
+      <HueProvider value="rose">
+        <NotificationRow visual={{ type: 'event', cover: null, badge: 'clock' }} title="Open mic starts soon" context="Open mic" />
+      </HueProvider>
+    )
+    const plate = screen.getByTestId('notification-event-plate', { includeHiddenElements: true })
+    expect(StyleSheet.flatten(plate.props.style).backgroundColor).toBe(COLOR.selectionRoseFill)
+  })
+})

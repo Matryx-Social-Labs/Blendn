@@ -9,8 +9,8 @@ import type { Rect } from './chatShared'
 import ScalePress from '../motion/ScalePress'
 import { PhotoScrim } from '../ui/GradientFill'
 import { COLOR, FONT_FAMILY, ICON, PRESS, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
-import { Icon } from '../ui/Icon'
-import { VenuePlate } from './VenuePlate'
+import { Icon, type IconName } from '../ui/Icon'
+import { Plate, VenuePlate } from './VenuePlate'
 import { printable, PROMOTED_LABEL } from '../../lib/pulseSections'
 import { categoryGlyph } from '../../lib/categoryGlyph'
 import { MonoRun, ScrimPill, TimeBadge } from './MonoFamily'
@@ -188,9 +188,9 @@ export function EventCard(props: EventCardProps) {
               <Image source={{ uri: cover }} recyclingKey={cover} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} />
             ) : plate ? (
               <VenuePlate type={plate} />
-            ) : category ? (
+            ) : (
               <CategoryPlate category={category} size={SIZE.primary} testID={testID && `${testID}-plate`} />
-            ) : null}
+            )}
           </View>
           <View style={styles.rowText}>
             <Text numberOfLines={2} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold), styles.ink]}>
@@ -252,9 +252,9 @@ export function EventCard(props: EventCardProps) {
       >
         {cover ? (
           <Image source={{ uri: cover }} recyclingKey={cover} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} />
-        ) : category ? (
+        ) : (
           <CategoryPlate category={category} testID={testID && `${testID}-plate`} />
-        ) : null}
+        )}
         <PhotoScrim testID={testID && `${testID}-scrim`} contrast={contrast} foot={scrimFoot} style={styles.scrim} />
         <View style={styles.pills}>
           <TimeBadge when={time} />
@@ -307,28 +307,18 @@ export function EventCard(props: EventCardProps) {
   )
 }
 
-/** The plate's glyph at 40% of its box (of 120 when it fills one), as a venue plate's. */
-const PLATE_GLYPH_SHARE = 0.4
-const PLATE_FILL_BASIS = 120
+/** The glyph an event's plate carries: its category's, and a calendar for a category with none (one look, never a blank plate). */
+export const eventPlateGlyph = (category?: string): IconName => (category ? categoryGlyph(category) : undefined) ?? 'calendar'
 
 /**
- * An event's art when it has no cover (D8): its category's glyph in the screen's hue light (`sel.glyph`) on the hue's fill
- * (`sel.fill`), filling its parent. A category with no glyph (`categoryGlyph`) draws the fill alone: no glyph is invented.
- * Decorative: the title beside it is what is read out.
+ * An event's art when it has no cover (D8, rc7 ruling 5): the venue plate's look, the event's category glyph at 70% white on
+ * the world's duotone (the hue's selection fill split with its flare), filling its parent. Every no-cover event draws this,
+ * at every size: the Scene hero, Tonight's card, a Going or Notifications thumb, Rate, chat info. `size` is the box the
+ * glyph is sized from. Decorative: the title beside it is what is read out.
  */
 export function CategoryPlate({ category, size, testID }: { category?: string; size?: number; testID?: string }) {
   const sel = useSelection()
-  const glyph = category ? categoryGlyph(category) : undefined
-  return (
-    <View
-      testID={testID}
-      accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants"
-      style={[StyleSheet.absoluteFill, styles.plate, { backgroundColor: sel.fill }]}
-    >
-      {glyph ? <Icon name={glyph} size={Math.round((size ?? PLATE_FILL_BASIS) * PLATE_GLYPH_SHARE)} color={sel.glyph} /> : null}
-    </View>
-  )
+  return <Plate colours={[sel.fill, sel.flare]} icon={eventPlateGlyph(category)} glyphBasis={size} testID={testID} />
 }
 
 function Ring({ radius, testID }: { radius: number; testID?: string }) {
@@ -365,7 +355,6 @@ const styles = StyleSheet.create({
   secondary: { color: COLOR.textSecondary },
   tabular: { fontVariant: ['tabular-nums'] },
   wash: { backgroundColor: PRESSED_WASH.android },
-  plate: { alignItems: 'center', justifyContent: 'center' },
   row: { minHeight: ROW_HEIGHT, paddingVertical: SPACE.xs, flexDirection: 'row', alignItems: 'center', gap: SPACE.md, borderRadius: RADIUS.rowInCard },
   rowPressed: { backgroundColor: PRESSED_WASH.ios },
   lead: { minWidth: LEAD_WIDTH, maxWidth: LEAD_MAX, flexShrink: 0, color: COLOR.textPrimary, fontVariant: ['tabular-nums'] },

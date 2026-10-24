@@ -29,12 +29,11 @@ describe('the optical box', () => {
 })
 
 describe('the PNG marks', () => {
-  it('the splash and the event cover use the optically centred PNG', () => {
+  it('the splash uses the optically centred PNG (the event cover draws the plate since rc7 ruling 5)', () => {
     const app = JSON.parse(fs.readFileSync(path.join(ROOT, 'app.json'), 'utf8'))
     const splash = app.expo.plugins.find((p: unknown) => Array.isArray(p) && p[0] === 'expo-splash-screen')[1]
     expect(splash.image).toBe('./assets/logo/monogram-gradient-centred.png')
     expect(splash.dark.image).toBe('./assets/logo/monogram-gradient-centred.png')
-    expect(fs.readFileSync(path.join(ROOT, 'components/EventCover.tsx'), 'utf8')).toMatch(/monogram-gradient-centred\.png/)
   })
 })
 

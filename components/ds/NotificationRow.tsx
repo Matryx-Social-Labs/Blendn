@@ -12,6 +12,7 @@ import { Avatar } from './Avatar'
 import { Button, ROW_ACTION_HEIGHT } from './Button'
 import { Creature, creatureFor } from './Creature'
 import { CrewEmblem } from './CrewEmblem'
+import { CategoryPlate } from './EventCard'
 import { Badge, PresenceDot } from './MonoFamily'
 import { announceOutcome, font, PRESSED_WASH, useBoldText, useIncreaseContrast, useSelection } from './shared'
 
@@ -29,7 +30,7 @@ export type NotificationVisualSpec =
   | { type: 'creature'; pseudonym: string }
   | { type: 'glyph'; icon: IconName }
   | { type: 'emblem'; seed: string }
-  | { type: 'event'; cover?: string | null; badge: IconName; cancelled?: boolean }
+  | { type: 'event'; cover?: string | null; badge: IconName; cancelled?: boolean; category?: string }
   | { type: 'stack'; people: readonly StackPerson[]; extra?: number }
 
 /** Flow 9 `visual`, as shares of the visual's side: a tile's corner, a stack's faces and their step, up to three. */
@@ -95,7 +96,11 @@ export function NotificationVisual({
       {visual.type === 'event' ? (
         <>
           <View style={[box, styles.cover, { borderRadius: corner }, visual.cancelled && styles.cancelled]}>
-            {visual.cover ? <Image source={{ uri: visual.cover }} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} /> : null}
+            {visual.cover ? (
+              <Image source={{ uri: visual.cover }} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} />
+            ) : (
+              <CategoryPlate category={visual.category} size={size} testID="notification-event-plate" />
+            )}
           </View>
           <View style={[styles.eventBadge, { borderColor: ground }]}>
             <Icon name={visual.badge} size={EVENT_BADGE_GLYPH} />

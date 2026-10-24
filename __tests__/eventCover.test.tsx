@@ -57,17 +57,13 @@ describe('EventCover', () => {
     expect(await screen.findByTestId('event-cover-image')).toBeTruthy()
   })
 
-  it('keeps the mark to the same share of a small box, a list row thumb (SCRUM-480)', async () => {
-    const markWidth = () =>
-      StyleSheet.flatten(screen.getByTestId('event-cover-mark').props.style).width
-    const { rerender } = await render(<EventCover uri={null} height={180} />)
-    expect(markWidth()).toBe(72)
-    await rerender(<EventCover uri={null} height={96} />)
-    expect(markWidth()).toBe(38)
-    // And never larger than it is on the card.
-    await rerender(<EventCover uri={null} height={240} />)
-    expect(markWidth()).toBe(72)
+  it('with no picture and no category draws the plate with a calendar, not the faint logo (rc7 ruling 5)', async () => {
+    await render(<EventCover uri={null} height={96} />)
+    expect(StyleSheet.flatten(screen.getByTestId('event-cover-plate', { includeHiddenElements: true }).props.style).backgroundColor).toBe(COLOR.selectionEmberFill)
+    expect(screen.getByTestId('icon-calendar', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.queryByTestId('event-cover-mark', { includeHiddenElements: true })).toBeNull()
   })
+
 })
 
 describe('EventCover with a category (D8)', () => {
