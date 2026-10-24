@@ -174,7 +174,7 @@ describe('a mono run divided by middots', () => {
       screen
         .getByText(text)
         .children.filter((c) => typeof c !== 'string' && c.props.children === ' ')
-        .map((c) => StyleSheet.flatten((c as unknown as { props: { style: object } }).props.style).fontFamily)
+        .map((c) => (StyleSheet.flatten((c as unknown as { props: { style: object } }).props.style) as { fontFamily?: string }).fontFamily)
     await render(
       <Text style={{ fontFamily: FONT_FAMILY.mono[500] }}>
         <MonoRun text="1:12 PM" />

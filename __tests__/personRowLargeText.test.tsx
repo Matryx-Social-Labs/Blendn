@@ -130,7 +130,7 @@ describe('PersonRow’s mono date (DS-09, D-L1: "Friends since Oct  2026")', () 
     await render(<PersonRow person={person} detail="Friends since " detailMono="Oct 2026" />)
     const mono = screen.getByText('Oct 2026', hidden)
     expect(StyleSheet.flatten(mono.props.style).fontFamily).toBe(FONT_FAMILY.mono[500])
-    const space = mono.children.find((c) => typeof c !== 'string' && c.props.children === ' ') as unknown as { props: { style: object } }
+    const space = mono.children.find((c) => typeof c !== 'string' && c.props.children === ' ') as unknown as { props: { style: { fontFamily?: string } } }
     expect(StyleSheet.flatten(space.props.style).fontFamily).toBe(FONT_FAMILY.brand[500])
   })
 })

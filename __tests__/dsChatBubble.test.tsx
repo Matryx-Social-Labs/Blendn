@@ -392,7 +392,7 @@ describe('the bubble’s time (DS-09 C16, DS-18 C31)', () => {
   it('sets "1:12 PM" with its space in the brand face', async () => {
     await render(bubble({ time: '1:12 PM' }))
     const time = screen.getByText('1:12 PM', { includeHiddenElements: true })
-    const space = time.children.find((c) => typeof c !== 'string' && c.props.children === ' ') as unknown as { props: { style: object } }
+    const space = time.children.find((c) => typeof c !== 'string' && c.props.children === ' ') as unknown as { props: { style: { fontFamily?: string } } }
     expect(StyleSheet.flatten(space.props.style).fontFamily).toBe(FONT_FAMILY.brand[500])
   })
 
