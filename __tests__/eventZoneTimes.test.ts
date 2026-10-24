@@ -5,16 +5,19 @@
 import { cardTime, dayGroupLabel, featuredDateLabel, groupByDay, nextUpLabel, timeLabel } from '../lib/pulse'
 import { dateParts } from '../lib/shareEvent'
 import { changeLines } from '../lib/eventChange'
-import { clockTime } from '../lib/time'
+import { clockTime, refreshPhoneZone } from '../lib/time'
 
 const IST = 'Asia/Kolkata'
 const previousZone = process.env.TZ
 beforeAll(() => {
   // The phone is in Berlin.
   process.env.TZ = 'Europe/Berlin'
+  // lib/time reads the phone's zone from the OS, not per call: tell it the phone moved.
+  refreshPhoneZone()
 })
 afterAll(() => {
   process.env.TZ = previousZone
+  refreshPhoneZone()
 })
 
 // Sat 24 Oct 2026, 9:00 AM in Bengaluru = 05:30 in Berlin (CEST).

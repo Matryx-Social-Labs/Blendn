@@ -65,7 +65,7 @@ import { openInMaps } from '../lib/openInMaps'
 import { showEventReportOptions } from '../lib/safetyUtils'
 import { showSheet } from '../lib/sheet'
 import { markOffline, markOnline } from '../lib/networkStatus'
-import { clockTime } from '../lib/time'
+import { clockTime, refreshPhoneZone } from '../lib/time'
 import { MAX_FONT_SCALE } from '../lib/design/tokens'
 /* eslint-enable import/first */
 
@@ -288,6 +288,7 @@ describe('the days of a run (Flow 3 · 3.2, #724 window)', () => {
   it('the DOORS tile is the event’s own clock, not the phone’s: a Berlin phone, an IST night (drive 5 D-4)', async () => {
     const zone = process.env.TZ
     process.env.TZ = 'Europe/Berlin'
+    refreshPhoneZone()
     try {
       const start = hours(3)
       api.getEvent.mockResolvedValue(detail({ timezone: ZONE, startTime: start, days: [day(0, { startTime: start })], dayCount: 1, daysFrom: 1, dayNumber: 1 }) as never)
@@ -298,6 +299,7 @@ describe('the days of a run (Flow 3 · 3.2, #724 window)', () => {
       expect(clockTime(start, ZONE)).not.toBe(clockTime(start))
     } finally {
       process.env.TZ = zone
+      refreshPhoneZone()
     }
   })
 

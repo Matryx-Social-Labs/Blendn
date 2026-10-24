@@ -66,3 +66,13 @@ jest.mock('react-native/Libraries/Modal/Modal', () => {
   }
   return { __esModule: true, default: Modal }
 })
+
+// The OS's time zone: expo-localization's native `getCalendars`, which `lib/time` reads for every "phone's time" (never
+// the engine's default, which Hermes caches). Under Jest it is `process.env.TZ` — Jest does not pass an assignment of it
+// to the engine — so a test moves the phone with `process.env.TZ = …` then `refreshPhoneZone()`; unset, the engine's.
+globalThis.expo = globalThis.expo ?? {}
+globalThis.expo.modules = globalThis.expo.modules ?? {}
+globalThis.expo.modules.ExpoLocalization = {
+  getCalendars: () => [{ calendar: 'gregory', timeZone: process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone, uses24hourClock: false, firstWeekday: 1 }],
+  getLocales: () => [{ languageTag: 'en-US', languageCode: 'en', regionCode: 'US', textDirection: 'ltr' }],
+}

@@ -14,6 +14,7 @@ import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg'
 
 import { COLOR, DURATION } from '../../lib/design/tokens'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
+import { hourIn } from '../../lib/time'
 import { useIncreaseContrast } from './shared'
 
 /** `brand`: landing, onboarding, the Blend'n overlay, Recap. `feed`: about half strength, top only, behind a header. `moment`: the L4 moments. */
@@ -59,7 +60,7 @@ const LATE_UNTIL = 6
 
 /** Which time-of-night set the clock asks for. */
 export function orbTime(date: Date): OrbTime {
-  const h = date.getHours()
+  const h = hourIn(date)
   if (h >= NIGHT_FROM || h < LATE_FROM) return 'night'
   return h < LATE_UNTIL ? 'late' : 'early'
 }

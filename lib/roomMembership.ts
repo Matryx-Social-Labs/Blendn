@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react'
 
 import type { RoomMute } from './apiClient'
-import { calendarDate, clockTime } from './time'
+import { calendarDate, calendarDaysBetween, clockTime, dateIn, instantIn } from './time'
 
 /**
  * Your own standing in a room: whether you muted it, and whether you left it.
@@ -52,10 +52,8 @@ export function muteUntil(option: MuteOption, now: Date = new Date()): string | 
     case '8h':
       return new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString()
     case 'tomorrow': {
-      const at = new Date(now)
-      at.setDate(at.getDate() + 1)
-      at.setHours(TOMORROW_HOUR, 0, 0, 0)
-      return at.toISOString()
+      const [y, m, day] = dateIn(now)
+      return new Date(instantIn(y, m, day + 1, TOMORROW_HOUR)).toISOString()
     }
     case 'always':
       return null
@@ -78,9 +76,6 @@ export function isMuted(mute: RoomMute | null | undefined, now: Date = new Date(
   return !Number.isNaN(at) && at > now.getTime()
 }
 
-const sameDay = (a: Date, b: Date) =>
-  a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
-
 /**
  * The line under "Mute notifications": when it ends, in words.
  * Null when the room is not muted.
@@ -90,10 +85,9 @@ export function muteLabel(mute: RoomMute | null | undefined, now: Date = new Dat
   if (!mute?.until) return 'Muted until you turn it back on'
   const at = new Date(mute.until)
   const time = clockTime(at)
-  if (sameDay(at, now)) return `Muted until ${time}`
-  const tomorrow = new Date(now)
-  tomorrow.setDate(tomorrow.getDate() + 1)
-  if (sameDay(at, tomorrow)) return `Muted until tomorrow, ${time}`
+  const days = calendarDaysBetween(now, at)
+  if (days === 0) return `Muted until ${time}`
+  if (days === 1) return `Muted until tomorrow, ${time}`
   return `Muted until ${calendarDate(at, { weekday: true, now })}`
 }
 

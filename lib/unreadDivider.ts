@@ -1,4 +1,4 @@
-import { calendarDate } from './time'
+import { calendarDate, calendarDaysBetween, dayKeyIn } from './time'
 
 /**
  * "N unread messages", right above the first one you have not read (SCRUM-406).
@@ -35,11 +35,9 @@ export interface DaySeparator {
 /** "Today", "Yesterday", or "4 Mar" (with the year when it is not this one). */
 const dayLabel = (d: Date) => {
   const today = new Date()
-  const yesterday = new Date(); yesterday.setDate(today.getDate() - 1)
-  const same = (a: Date, b: Date) =>
-    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
-  if (same(d, today)) return 'Today'
-  if (same(d, yesterday)) return 'Yesterday'
+  const days = calendarDaysBetween(d, today)
+  if (days === 0) return 'Today'
+  if (days === 1) return 'Yesterday'
   return calendarDate(d, { now: today })
 }
 
@@ -52,7 +50,7 @@ export function withDaySeparators<M extends object>(
   let lastDay: string | null = null
   for (const m of messages) {
     const d = new Date(createdAt(m))
-    const day = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
+    const day = dayKeyIn(d)
     if (day !== lastDay) { items.push({ kind: 'separator', id: `sep-${day}`, label: dayLabel(d) }); lastDay = day }
     items.push({ kind: 'message', ...m })
   }

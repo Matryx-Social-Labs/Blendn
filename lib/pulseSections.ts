@@ -13,6 +13,7 @@
 
 import { liveWindow, sessionOver, type SessionSource } from './eventSession'
 import { fnv1a } from './pseudonymAvatar'
+import { dateIn, hourIn, instantIn, MONTHS, weekdayIn, WEEKDAYS } from './time'
 
 /* -------------------------------------------------------------------------- */
 /* Owner defaults, pending the owner's answers: one line each to change.      */
@@ -117,18 +118,18 @@ function endOf(e: SessionSource): number {
 /** Started and not over. */
 export const isLiveNow = (e: SessionSource, now: number) => startOf(e) <= now && now < endOf(e)
 
-/** Today 06:00 if it is before 06:00, else tomorrow 06:00, local. */
-export function nextDayReset(now: number, resetHour: number = DAY_RESET_HOUR): number {
-  const d = new Date(now)
-  const today = new Date(d.getFullYear(), d.getMonth(), d.getDate(), resetHour).getTime()
-  return now < today ? today : new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, resetHour).getTime()
+/** Today 06:00 if it is before 06:00, else tomorrow 06:00, in `timeZone` (an event's own), or the phone's. */
+export function nextDayReset(now: number, resetHour: number = DAY_RESET_HOUR, timeZone?: string): number {
+  const [y, m, day] = dateIn(new Date(now), timeZone)
+  const today = instantIn(y, m, day, resetHour, 0, timeZone)
+  return now < today ? today : instantIn(y, m, day + 1, resetHour, 0, timeZone)
 }
 
-/** The local date as 'YYYY-MM-DD'. */
+/** The phone's date as 'YYYY-MM-DD'. */
 export function seedDateOf(now: number): string {
-  const d = new Date(now)
+  const [y, m, day] = dateIn(new Date(now))
   const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+  return `${y}-${p(m + 1)}-${p(day)}`
 }
 
 /**
@@ -138,25 +139,25 @@ export function seedDateOf(now: number): string {
  */
 export function weekendWindow(now: number): { startDate: string; endDate: string; skip: boolean; label: string } {
   const d = new Date(now)
-  const toFriday = (5 - d.getDay() + 7) % 7
+  const dow = weekdayIn(d)
+  const [y, m, day] = dateIn(d)
+  const toFriday = (5 - dow + 7) % 7
   // Sat and Sun are inside this weekend, so the Friday is behind them.
-  const fridayOffset = d.getDay() === 6 ? -1 : d.getDay() === 0 ? -2 : toFriday
-  const friday = new Date(d.getFullYear(), d.getMonth(), d.getDate() + fridayOffset, 17, 0, 0, 0)
-  const sunday = new Date(friday.getFullYear(), friday.getMonth(), friday.getDate() + 2, 23, 59, 59, 999)
-  const skip = d.getDay() === WEEKEND_SKIP_FROM.day && d.getHours() >= WEEKEND_SKIP_FROM.hour
-  const saturday = new Date(friday.getFullYear(), friday.getMonth(), friday.getDate() + 1)
-  return { startDate: friday.toISOString(), endDate: sunday.toISOString(), skip, label: weekendLabel(saturday, sunday) }
+  const fridayOffset = dow === 6 ? -1 : dow === 0 ? -2 : toFriday
+  const friday = instantIn(y, m, day + fridayOffset, 17)
+  const sunday = instantIn(y, m, day + fridayOffset + 2, 23, 59) + 59_999
+  const skip = dow === WEEKEND_SKIP_FROM.day && hourIn(d) >= WEEKEND_SKIP_FROM.hour
+  const saturday = new Date(instantIn(y, m, day + fridayOffset + 1))
+  return { startDate: new Date(friday).toISOString(), endDate: new Date(sunday).toISOString(), skip, label: weekendLabel(saturday, new Date(sunday)) }
 }
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-/** "Sat 24 – Sun 25 Oct" (the month once when it is shared). */
+/** "Sat 24 – Sun 25 Oct" (the month once when it is shared), the days as the phone has them. */
 export function weekendLabel(saturday: Date, sunday: Date): string {
-  const a = `${WEEKDAYS[saturday.getDay()]} ${saturday.getDate()}`
-  const b = `${WEEKDAYS[sunday.getDay()]} ${sunday.getDate()}`
-  return saturday.getMonth() === sunday.getMonth()
-    ? `${a} – ${b} ${MONTHS[sunday.getMonth()]}`
-    : `${a} ${MONTHS[saturday.getMonth()]} – ${b} ${MONTHS[sunday.getMonth()]}`
+  const [, satMonth, satDay] = dateIn(saturday)
+  const [, sunMonth, sunDay] = dateIn(sunday)
+  const a = `${WEEKDAYS[weekdayIn(saturday)]} ${satDay}`
+  const b = `${WEEKDAYS[weekdayIn(sunday)]} ${sunDay}`
+  return satMonth === sunMonth ? `${a} – ${b} ${MONTHS[sunMonth]}` : `${a} ${MONTHS[satMonth]} – ${b} ${MONTHS[sunMonth]}`
 }
 
 /* -------------------------------------------------------------------------- */

@@ -8,16 +8,13 @@
  * phones is not one design.
  */
 
-import { calendarDate, WEEKDAYS } from '../../lib/time'
+import { calendarDate, calendarDaysBetween, weekdayIn, WEEKDAYS } from '../../lib/time'
 
 const MINUTE = 60 * 1000
 const HOUR = 60 * MINUTE
 
-const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
-
-/** Whole calendar days between `then` and `now` — 0 today, 1 yesterday. */
-const calendarDaysAgo = (then: Date, now: Date) =>
-  Math.round((startOfDay(now) - startOfDay(then)) / (24 * HOUR))
+/** Whole calendar days between `then` and `now` on the phone — 0 today, 1 yesterday. */
+const calendarDaysAgo = (then: Date, now: Date) => calendarDaysBetween(then, now)
 
 const toDate = (time: string | number | Date | null | undefined): Date | null => {
   if (time === null || time === undefined || time === '' || time === 0) return null
@@ -44,7 +41,7 @@ export function inboxTimeLabel(
   const days = calendarDaysAgo(then, now)
   if (days <= 0) return `${Math.floor(diff / HOUR)}h`
   if (days === 1) return 'Yesterday'
-  if (days < 7) return WEEKDAYS[then.getDay()]
+  if (days < 7) return WEEKDAYS[weekdayIn(then)]
   return calendarDate(then, { now })
 }
 

@@ -7,7 +7,7 @@
  * value that is missing drops its part rather than printing a placeholder.
  */
 
-import { calendarDate, MONTHS } from './time'
+import { calendarDate, dateIn, dayKeyIn, instantIn, MONTHS, startOfDayIn, weekdayIn } from './time'
 
 /** Interest names from a profile payload: plain strings, or `{ id, name, slug, icon }` objects. */
 export const interestNames = (raw: unknown): string[] =>
@@ -28,13 +28,19 @@ function memberDate(memberSince: string | null | undefined): Date | null {
 /** "Joined Mar 2025", or null when the date is missing or unreadable. */
 export function joinedLabel(memberSince: string | null | undefined): string | null {
   const d = memberDate(memberSince)
-  return d ? `Joined ${MONTHS[d.getMonth()]} ${d.getFullYear()}` : null
+  return d ? `Joined ${monthYear(d)}` : null
 }
 
 /** "Mar 2025": the date alone, for the screen that draws it in Geist Mono. */
 export function joinedDate(memberSince: string | null | undefined): string | null {
   const d = memberDate(memberSince)
-  return d ? `${MONTHS[d.getMonth()]} ${d.getFullYear()}` : null
+  return d ? monthYear(d) : null
+}
+
+/** "Mar 2025", on the phone's calendar. */
+function monthYear(d: Date): string {
+  const [y, m] = dateIn(d)
+  return `${MONTHS[m]} ${y}`
 }
 
 /** "Bengaluru · Joined Mar 2025", dropping whichever part is missing. */
@@ -80,16 +86,13 @@ export const NIGHTS_WEEKS = 12
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
-/** Local midnight of the Monday on or before `d`. */
-function mondayOf(d: Date): Date {
-  const m = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-  m.setDate(m.getDate() - ((m.getDay() + 6) % 7))
-  return m
+/** The phone's midnight of the Monday on or before `d`, `days` on (negative for back). */
+function mondayOf(d: Date, days = 0): Date {
+  const [y, m, day] = dateIn(d)
+  return new Date(instantIn(y, m, day - ((weekdayIn(d) + 6) % 7) + days))
 }
 
-function dayKey(d: Date): string {
-  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
-}
+const dayKey = (d: Date): string => dayKeyIn(d)
 
 export interface NightCell {
   /** Local midnight of the day. */
@@ -128,9 +131,7 @@ export function nightsGrid(
     byDay.set(k, [...(byDay.get(k) ?? []), e.id])
   }
 
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const first = mondayOf(now)
-  first.setDate(first.getDate() - (NIGHTS_WEEKS - 1) * 7)
+  const today = startOfDayIn(now)
 
   const weeks: NightCell[][] = []
   const monthLabels: (string | null)[] = []
@@ -139,11 +140,12 @@ export function nightsGrid(
     const week: NightCell[] = []
     let label: string | null = null
     for (let d = 0; d < 7; d++) {
-      const date = new Date(first.getFullYear(), first.getMonth(), first.getDate() + w * 7 + d)
-      const future = date.getTime() > today.getTime()
+      const date = mondayOf(now, (w - (NIGHTS_WEEKS - 1)) * 7 + d)
+      const future = date.getTime() > today
       const eventIds = future ? [] : byDay.get(dayKey(date)) ?? []
       if (eventIds.length) nights++
-      if ((w === 0 && d === 0) || date.getDate() === 1) label = MONTHS[date.getMonth()].toUpperCase()
+      const [, month, dayOfMonth] = dateIn(date)
+      if ((w === 0 && d === 0) || dayOfMonth === 1) label = MONTHS[month].toUpperCase()
       week.push({ date, eventIds, future })
     }
     weeks.push(week)
@@ -164,7 +166,9 @@ export function agoLabel(startTime: string, now: Date = new Date()): string {
   if (weeks <= 0) return 'THIS WEEK'
   if (weeks === 1) return 'LAST WEEK'
   if (weeks < 8) return `${weeks} WEEKS AGO`
-  const months = (now.getFullYear() - start.getFullYear()) * 12 + now.getMonth() - start.getMonth()
+  const [nowY, nowM] = dateIn(now)
+  const [startY, startM] = dateIn(start)
+  const months = (nowY - startY) * 12 + nowM - startM
   if (months < 12) return `${months} MONTHS AGO`
   return months < 24 ? 'LAST YEAR' : `${Math.floor(months / 12)} YEARS AGO`
 }

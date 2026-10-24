@@ -15,7 +15,7 @@
  * the API client.
  */
 
-import { MONTHS } from './time'
+import { dateIn, MONTHS } from './time'
 
 export type FriendState = 'self' | 'friends' | 'requested' | 'incoming' | 'none'
 
@@ -138,7 +138,8 @@ export function friendsSinceParts(iso: string): { words: string; date: string | 
 export function friendsSinceLabel(iso: string): string {
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return 'Friends'
-  return `Friends since ${MONTHS[date.getMonth()]} ${date.getFullYear()}`
+  const [y, m] = dateIn(date)
+  return `Friends since ${MONTHS[m]} ${y}`
 }
 
 /**

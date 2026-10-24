@@ -20,6 +20,7 @@ import {
   type CrewIntent,
   type CrewInvite,
 } from './crews'
+import { clockIn } from './time'
 
 /* -------------------------------------------------------------------------- */
 /* Invites                                                                    */
@@ -249,8 +250,7 @@ export function closingSoon(closesAt: string, now: number = Date.now()): boolean
 export function clockOf(iso: string): string | null {
   const at = new Date(iso)
   if (Number.isNaN(at.getTime())) return null
-  const hours = at.getHours()
-  const minutes = at.getMinutes()
+  const [hours, minutes] = clockIn(at)
   return `${hours % 12 || 12}${minutes ? `:${String(minutes).padStart(2, '0')}` : ''} ${hours < 12 ? 'am' : 'pm'}`
 }
 

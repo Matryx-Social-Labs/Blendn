@@ -1,6 +1,6 @@
 import type { PlusStatus as ManageStatus } from '../components/ds/ManageStatusRow'
 import type { PlusStatus } from './plus'
-import { calendarDate, clockTime } from './time'
+import { calendarDate, calendarDaysBetween, clockTime } from './time'
 
 /**
  * Manage (Settings › Blend'n+, Flow 12 · 12.3): what is true about the person's
@@ -36,8 +36,7 @@ function passEnd(iso: string, now: number): string | null {
   const at = new Date(iso)
   if (Number.isNaN(at.getTime())) return null
   const time = clockTime(at)
-  const midnight = (ms: number) => new Date(new Date(ms).getFullYear(), new Date(ms).getMonth(), new Date(ms).getDate()).getTime()
-  const days = Math.round((midnight(at.getTime()) - midnight(now)) / 86_400_000)
+  const days = calendarDaysBetween(new Date(now), at)
   if (days === 0) return `${time} today`
   if (days === 1) return `${time} tomorrow`
   return `${shortDate(iso, now)}, ${time}`

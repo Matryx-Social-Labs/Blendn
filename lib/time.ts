@@ -1,3 +1,5 @@
+import { requireOptionalNativeModule } from 'expo'
+
 /**
  * Fixed English short names, for labels that must not change shape with the
  * device's locale or ICU build ("Sept" in en-GB on one engine, "Sep" on another).
@@ -5,6 +7,59 @@
 export const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 export const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 export const WEEKDAYS_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+
+/*
+ * The phone's zone, as the OS says it, passed by name to every formatter that means "the phone's time". Never the
+ * engine's default: Hermes reads the zone once and keeps it, so a running Android app said the old zone after a change
+ * in Settings › Date & time until it was relaunched (RC 7: "6:30 PM IST" on a phone in IST, the Pulse's Tonight in Los
+ * Angeles' day), and clearing our own formatters could not reach Hermes' cache. expo-localization's `getCalendars` asks
+ * the OS each time; it is re-read on AppState active (`app/_layout.tsx`), since a zone is changed in Settings, which the
+ * app comes back from.
+ *
+ * The native module optionally, not through `expo-localization`'s entry, which throws on a binary built before it: a
+ * bundle swapped into an older build keeps the engine's zone (the behaviour before) instead of dying at launch.
+ */
+type Localization = { getCalendars(): { timeZone?: string | null }[] }
+const localization = requireOptionalNativeModule<Localization>('ExpoLocalization')
+
+function deviceZone(): string {
+  try {
+    const zone = localization?.getCalendars()[0]?.timeZone
+    if (zone) return zone
+  } catch {
+    // The OS did not say: the engine's zone is all there is.
+  }
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone ?? ''
+  } catch {
+    return ''
+  }
+}
+let phoneZone = deviceZone()
+const phoneZoneListeners = new Set<() => void>()
+
+/** The phone's IANA zone, or undefined when nothing can say it. */
+export const phoneTimeZone = (): string | undefined => phoneZone || undefined
+
+/** Minutes ahead of UTC on the phone at `d`. */
+function phoneOffset(d: Date): number {
+  return phoneZone ? offsetIn(d, phoneZone) : -d.getTimezoneOffset()
+}
+
+/** Re-reads the phone's zone; when it moved, tells the listeners and answers true. Formatters are keyed by zone, so none is stale. */
+export function refreshPhoneZone(): boolean {
+  const next = deviceZone()
+  if (next === phoneZone) return false
+  phoneZone = next
+  phoneZoneListeners.forEach((listener) => listener())
+  return true
+}
+
+/** Called after the phone's zone moved (`refreshPhoneZone`); returns the unsubscribe. */
+export function subscribePhoneZone(listener: () => void): () => void {
+  phoneZoneListeners.add(listener)
+  return () => phoneZoneListeners.delete(listener)
+}
 
 /**
  * A calendar date in the app's one grammar, as the clock has one (`clockTime`): "24 Oct", "Sat 24 Oct" with `weekday`, "Sat"
@@ -21,11 +76,11 @@ export function calendarDate(
   if (time === null || time === undefined || time === '') return ''
   const d = new Date(time)
   if (Number.isNaN(d.getTime())) return ''
-  const [y, m, day] = timeZone ? zonedDate(d, timeZone) : [d.getFullYear(), d.getMonth(), d.getDate()]
+  const [y, m, day] = dateIn(d, timeZone)
   // The weekday of that calendar date, wherever it is: a UTC date has no zone to shift it.
   const dow = new Date(Date.UTC(y, m, day)).getUTCDay()
   if (weekday === 'only') return WEEKDAYS[dow]
-  const showYear = year ?? y !== new Date(now).getFullYear()
+  const showYear = year ?? y !== dateIn(new Date(now), timeZone)[0]
   return `${weekday ? `${WEEKDAYS[dow]} ` : ''}${day} ${MONTHS[m]}${showYear ? ` ${y}` : ''}`
 }
 
@@ -73,7 +128,7 @@ export function zonedDate(d: Date, timeZone: string): [number, number, number] {
 export function clockTime(time: string | number | Date, timeZone?: string): string {
   const d = new Date(time)
   if (Number.isNaN(d.getTime())) return ''
-  const [h, m] = timeZone ? zonedClock(d, timeZone) : [d.getHours(), d.getMinutes()]
+  const [h, m] = clockIn(d, timeZone)
   return `${h % 12 || 12}${m ? `:${String(m).padStart(2, '0')}` : ''} ${h < 12 ? 'AM' : 'PM'}`
 }
 
@@ -160,7 +215,7 @@ export function zoneSuffix(time: string | number | Date, timeZone?: string | nul
   if (!timeZone) return ''
   const d = new Date(time)
   if (Number.isNaN(d.getTime())) return ''
-  if (offsetIn(d, timeZone) === -d.getTimezoneOffset()) return ''
+  if (offsetIn(d, timeZone) === phoneOffset(d)) return ''
   const name = zoneName(d, timeZone)
   return name ? ` ${name}` : ''
 }
@@ -178,11 +233,34 @@ export function hourIn(d: Date, timeZone?: string): number {
 
 /** The hour (0–23) and minute of `d` in `timeZone`, or the phone's. */
 export function clockIn(d: Date, timeZone?: string): [number, number] {
-  return timeZone ? zonedClock(d, timeZone) : [d.getHours(), d.getMinutes()]
+  const zone = timeZone || phoneZone
+  return zone ? zonedClock(d, zone) : [d.getHours(), d.getMinutes()]
 }
 
 /** The calendar date [year, month 0–11, day] of `d` in `timeZone`, or the phone's. */
-export const dateIn = (d: Date, timeZone?: string): [number, number, number] => (timeZone ? zonedDate(d, timeZone) : [d.getFullYear(), d.getMonth(), d.getDate()])
+export function dateIn(d: Date, timeZone?: string): [number, number, number] {
+  const zone = timeZone || phoneZone
+  return zone ? zonedDate(d, zone) : [d.getFullYear(), d.getMonth(), d.getDate()]
+}
+
+/**
+ * The instant a wall clock reads `y-m-day h:min` in `timeZone`, or the phone's: `new Date(y, m, day, h, min)` without
+ * the engine's cached zone. Parts may overflow (`day + 1`, `day - 7`) as `Date.UTC` allows. Twice, for an hour a clock
+ * change moved; a wall time a spring-forward skipped lands an hour on, as `new Date` does.
+ */
+export function instantIn(y: number, m: number, day: number, h = 0, min = 0, timeZone?: string): number {
+  const zone = timeZone || phoneZone
+  if (!zone) return new Date(y, m, day, h, min).getTime()
+  const wall = Date.UTC(y, m, day, h, min)
+  const first = wall - offsetIn(new Date(wall), zone) * 60_000
+  return wall - offsetIn(new Date(first), zone) * 60_000
+}
+
+/** Midnight at the start of `d`'s day in `timeZone`, or the phone's. */
+export function startOfDayIn(d: Date | number, timeZone?: string): number {
+  const [y, m, day] = dateIn(new Date(d), timeZone)
+  return instantIn(y, m, day, 0, 0, timeZone)
+}
 
 /** A calendar key ("2026-9-24") of `d` in `timeZone`, or the phone's: what a day heading groups by. */
 export function dayKeyIn(d: Date, timeZone?: string): string {
@@ -201,39 +279,4 @@ function zonedClock(d: Date, timeZone: string): [number, number] {
     // Falls through to the local clock.
   }
   return [d.getHours(), d.getMinutes()]
-}
-
-/*
- * The phone's zone can move under a running app (a flight, a manual change in Settings). The app would keep saying the
- * old one until relaunch (R6-7, Android): a moved zone drops every cached formatter and tells the clocks (`useNow`) to
- * re-render. Read on AppState active (`app/_layout.tsx`); JS has no time-zone-changed event of its own without a native
- * module, and a zone is only changed in Settings, from which the app comes back active.
- */
-function phoneZoneNow(): string {
-  let name = ''
-  try {
-    name = Intl.DateTimeFormat().resolvedOptions().timeZone ?? ''
-  } catch {
-    // No ICU: the offset alone says it moved.
-  }
-  return `${name}|${new Date().getTimezoneOffset()}`
-}
-let phoneZone = phoneZoneNow()
-const phoneZoneListeners = new Set<() => void>()
-
-/** Re-reads the phone's zone; when it moved, clears the formatter caches, tells the listeners and answers true. */
-export function refreshPhoneZone(): boolean {
-  const next = phoneZoneNow()
-  if (next === phoneZone) return false
-  phoneZone = next
-  formatters.clear()
-  zoneNameFormatters.clear()
-  phoneZoneListeners.forEach((listener) => listener())
-  return true
-}
-
-/** Called after the phone's zone moved (`refreshPhoneZone`); returns the unsubscribe. */
-export function subscribePhoneZone(listener: () => void): () => void {
-  phoneZoneListeners.add(listener)
-  return () => phoneZoneListeners.delete(listener)
 }

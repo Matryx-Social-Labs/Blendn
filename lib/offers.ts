@@ -1,5 +1,5 @@
 import { apiClient, type ApiResponse } from './apiClient'
-import { calendarDate, clockTime, WEEKDAYS_LONG } from './time'
+import { calendarDate, clockTime, weekdayIn, WEEKDAYS_LONG } from './time'
 
 /*
  * Offers from the places you keep going back to, and the door pass (step 12;
@@ -219,7 +219,7 @@ export function passView(
 }
 
 /** "ENDED SUNDAY": the day the offer ran out, for an ended pass. */
-export const endedLabel = (endsAt: string) => `ENDED ${WEEKDAYS_LONG[new Date(endsAt).getDay()]?.toUpperCase() ?? ''}`.trim()
+export const endedLabel = (endsAt: string) => `ENDED ${WEEKDAYS_LONG[weekdayIn(new Date(endsAt))]?.toUpperCase() ?? ''}`.trim()
 
 /** "until Wed 15 Oct": how long the offer runs (the pass itself is for today). */
 export const validUntil = (endsAt: string) => `until ${calendarDate(endsAt, { weekday: true })}`

@@ -1,7 +1,7 @@
 import type { NotificationVisualSpec, StackPerson } from '../components/ds/NotificationRow'
 import type { IconName } from '../components/ui/Icon'
 import type { NotificationItem, NotificationKind } from './notificationFormat'
-import { calendarDate, WEEKDAYS } from './time'
+import { calendarDate, weekdayIn, WEEKDAYS } from './time'
 
 /**
  * What a notification becomes on the Notifications screen (Flow 9 · 9.2, 9.3).
@@ -148,7 +148,7 @@ export function notificationWhen(createdAt: string, now: number = Date.now()): s
   if (hours < 24) return `${hours} h ago`
   const days = Math.floor((now - ms) / DAY_MS)
   if (days < 2) return 'Yesterday'
-  if (days < 7) return WEEKDAYS[then.getDay()]
+  if (days < 7) return WEEKDAYS[weekdayIn(then)]
   return calendarDate(then, { now })
 }
 

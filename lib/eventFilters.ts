@@ -17,6 +17,8 @@
  * and picking "Any distance" removes it rather than setting it large.
  */
 
+import { dateIn, instantIn, startOfDayIn, weekdayIn } from './time'
+
 export const WHEN_OPTIONS = ['any', 'today', 'weekend', 'week'] as const
 export type When = (typeof WHEN_OPTIONS)[number]
 
@@ -61,17 +63,20 @@ export function hasActiveFilters(f: EventFilters): boolean {
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
-const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0)
-const endOfDay = (d: Date) =>
-  new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999)
+const startOfDay = (d: Date) => new Date(startOfDayIn(d))
+/** The last millisecond of `d`'s day on the phone: the next day's midnight, less one. */
+const endOfDay = (d: Date) => {
+  const [y, m, day] = dateIn(d)
+  return new Date(instantIn(y, m, day + 1) - 1)
+}
 
 /**
  * "This weekend" and friends, as an actual pair of instants.
  *
  * ## Local days, not UTC ones
  *
- * Built from `getFullYear`/`getMonth`/`getDate`, so a day boundary is the one
- * the person is standing in. Using UTC would put "Today" in Bengaluru at
+ * Built from the phone's own date (`dateIn`, the zone the OS says, not the engine's
+ * cached one), so a day boundary is the one the person is standing in. Using UTC would put "Today" in Bengaluru at
  * 05:30 local, and every late-night event — which is most of them here — would
  * land in the wrong bucket. Nightlife is exactly the category where this is
  * least forgivable.
@@ -104,7 +109,7 @@ export function whenToRange(
   }
 
   // Weekend. 0 = Sunday, 6 = Saturday.
-  const day = now.getDay()
+  const day = weekdayIn(now)
   if (day === 0) {
     return { startDate: now.toISOString(), endDate: endOfDay(now).toISOString() }
   }

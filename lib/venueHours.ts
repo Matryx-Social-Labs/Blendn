@@ -1,4 +1,5 @@
 import { clockTime } from './roomMoments'
+import { clockIn, instantIn } from './time'
 
 /**
  * One reading of "is it open", in the venue's own day, for every surface that says it: the venue page's Open tile and
@@ -23,7 +24,7 @@ function wallClock(hhmm: string): { minutes: number; text: string } | null {
   const m = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(hhmm.trim())
   if (!m) return null
   const [h, min] = [Number(m[1]), Number(m[2])]
-  return { minutes: h * 60 + min, text: clockTime(new Date(2000, 0, 1, h, min).getTime()) }
+  return { minutes: h * 60 + min, text: clockTime(instantIn(2000, 0, 1, h, min)) }
 }
 
 export function venueDayState(
@@ -38,8 +39,8 @@ export function venueDayState(
   const pastMidnight = close.minutes <= open.minutes
   const resetMinutes = resetHour === null ? (pastMidnight ? close.minutes : 0) : resetHour * 60
   const rel = (m: number) => (m - resetMinutes + DAY_MIN) % DAY_MIN
-  const d = new Date(now)
-  const at = rel(d.getHours() * 60 + d.getMinutes())
+  const [h, min] = clockIn(new Date(now))
+  const at = rel(h * 60 + min)
   const opens = rel(open.minutes)
   const closes = rel(close.minutes) <= opens ? rel(close.minutes) + DAY_MIN : rel(close.minutes)
   if (at < opens) return { state: 'opens', time: open.text }

@@ -157,8 +157,8 @@ describe('one formatter', () => {
   })
 
   it('Intl.DateTimeFormat only where it computes a zone’s clock or date, never to write one', () => {
-    // time.ts: the clock and the date in a zone; eventDays.ts: an event's today; cityArt.ts: the hour for the city art.
-    const allowed = ['lib/time.ts', 'lib/eventDays.ts', 'lib/cityArt.ts']
+    // time.ts: the clock and the date in a zone. An event's today (eventDays.ts) and the city art's hour (cityArt.ts) ask it.
+    const allowed = ['lib/time.ts']
     const users = files.filter((f) => /Intl\.DateTimeFormat\(/.test(read(f))).map((f) => path.relative(ROOT, f))
     expect(users.filter((f) => !allowed.includes(f))).toEqual([])
   })

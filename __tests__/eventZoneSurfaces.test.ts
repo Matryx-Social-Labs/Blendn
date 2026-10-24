@@ -9,6 +9,7 @@ import { featuredDateLabel } from '../lib/pulse'
 import { nightLabel } from '../lib/meProfile'
 import { startsLabel } from '../lib/roomMoments'
 import { pastEventRows } from '../lib/savedEvents'
+import { refreshPhoneZone } from '../lib/time'
 import { timeRange, upcomingRows } from '../lib/venuePage'
 
 jest.mock('../lib/apiClient', () => ({ apiClient: {} }))
@@ -17,9 +18,12 @@ const NY = 'America/New_York'
 const previousZone = process.env.TZ
 beforeAll(() => {
   process.env.TZ = 'Europe/Berlin'
+  // lib/time reads the phone's zone from the OS, not per call: tell it the phone moved.
+  refreshPhoneZone()
 })
 afterAll(() => {
   process.env.TZ = previousZone
+  refreshPhoneZone()
 })
 
 // Sat 24 Oct 2026, 7:30 PM in New York = Sun 25 Oct, 01:30 in Berlin.

@@ -1,5 +1,6 @@
 import { liveWindow, type EventSession } from './eventSession'
 import { getDistanceMetres } from './geo'
+import { dayKeyIn } from './time'
 
 /**
  * What the Blend'n button in the middle of the bar is currently offering.
@@ -279,13 +280,7 @@ export function pickTodayEvents(
       const live = liveWindow(e)
       const start = new Date(live.start_time)
       if (Number.isNaN(start.getTime())) return false
-      if (
-        start.getFullYear() !== today.getFullYear() ||
-        start.getMonth() !== today.getMonth() ||
-        start.getDate() !== today.getDate()
-      ) {
-        return false
-      }
+      if (dayKeyIn(start) !== dayKeyIn(today)) return false
       const end = live.end_time ? new Date(live.end_time).getTime() : NaN
       return Number.isFinite(end) ? end >= now : true
     })

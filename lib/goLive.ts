@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 
 import { CHECK_IN_CODES } from './checkInRefusal'
 import { Logger } from './logger'
+import { hourIn } from './time'
 
 /**
  * Go Live at a place (plan v2 step 5): the windows, the countdown, the expiry
@@ -290,7 +291,7 @@ export const ownGoLiveWithin = (ms: number): boolean => Date.now() - lastOwnGoLi
 /** The local hour a venue day resets at, from the day's own end (`dayEndsAt`); null until the active check-in has said it. */
 export function resetHourOf(session: Pick<LiveSession, 'dayEndsAt'> | null | undefined): number | null {
   const at = session?.dayEndsAt ? new Date(session.dayEndsAt) : null
-  return at && !Number.isNaN(at.getTime()) ? at.getHours() : null
+  return at && !Number.isNaN(at.getTime()) ? hourIn(at) : null
 }
 
 /** "6", "noon", "1 pm": when tomorrow's room opens, as the room's own sentence says it ("Tomorrow's opens at 6."). */

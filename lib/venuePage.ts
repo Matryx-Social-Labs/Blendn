@@ -25,7 +25,7 @@ import { venueDayState } from './venueHours'
 /** A restaurant reuses the café's pair (owner's ruling on A87), as `VenuePlate` does. */
 const PLATE_PAIRS: Record<PlateKey, readonly [string, string]> = { ...VENUE_PLATES, restaurant: VENUE_PLATES.cafe }
 import { clockTime } from './roomMoments'
-import { calendarDate, zoneSuffix } from './time'
+import { calendarDate, clockIn, weekdayIn, zoneSuffix } from './time'
 
 const MINUTE_MS = 60_000
 /** The expiry window: the last five minutes read as mm:ss and offer Extend. */
@@ -34,8 +34,8 @@ export const ENDING_MS = 5 * MINUTE_MS
 const pad = (n: number) => String(n).padStart(2, '0')
 /** "21:50", 24-hour, in the phone's local time (Flow 11 draws every live time this way). */
 export const clock24 = (ms: number) => {
-  const d = new Date(ms)
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`
+  const [h, m] = clockIn(new Date(ms))
+  return `${pad(h)}:${pad(m)}`
 }
 
 /** The hero: tonight's cover when there is one (the only artwork a venue has), else the type's plate. */
@@ -63,7 +63,7 @@ const validReset = (hour: number | null | undefined): number | null => (typeof h
  */
 export function tonightOpening(hours: VenueDetail['venue']['hours'], dayResetHour: number | null | undefined, now: number): { opensAt: string; closesAt: string } | null {
   if (!Array.isArray(hours)) return null
-  const weekday = new Date(now - (validReset(dayResetHour) ?? 0) * HOUR_MS).getDay()
+  const weekday = weekdayIn(new Date(now - (validReset(dayResetHour) ?? 0) * HOUR_MS))
   const rows = hours.filter((h) => h && h.day === weekday && typeof h.open === 'string' && typeof h.close === 'string')
   if (rows.length === 0) return null
   const latest = rows.reduce((a, b) => (b.open > a.open ? b : a))

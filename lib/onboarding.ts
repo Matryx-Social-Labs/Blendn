@@ -18,6 +18,7 @@
  */
 
 import { PROFILE_LIMITS } from './profileLimits'
+import { dateIn } from './time'
 
 /** One step, in order. The key is what gets stored, so it outlives a reorder. */
 export const ONBOARDING_STEPS = [
@@ -582,9 +583,10 @@ export function isUnder18(dateOfBirth: string | undefined, now: Date = new Date(
   if (!dateOfBirth) return true
   const dob = new Date(dateOfBirth)
   if (Number.isNaN(dob.getTime())) return true
-  let years = now.getFullYear() - dob.getFullYear()
-  const beforeBirthday =
-    now.getMonth() < dob.getMonth() || (now.getMonth() === dob.getMonth() && now.getDate() < dob.getDate())
+  const [nowY, nowM, nowD] = dateIn(now)
+  const [dobY, dobM, dobD] = dateIn(dob)
+  let years = nowY - dobY
+  const beforeBirthday = nowM < dobM || (nowM === dobM && nowD < dobD)
   if (beforeBirthday) years -= 1
   return years < 18
 }
