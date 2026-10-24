@@ -1,5 +1,5 @@
 import React from 'react'
-import { render, screen } from '@testing-library/react-native'
+import { act, render, screen } from '@testing-library/react-native'
 import { Platform, StyleSheet, Text } from 'react-native'
 
 /**
@@ -12,7 +12,15 @@ jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 59, bottom: 34, left: 0, right: 0 }),
 }))
 
+const mockCrew = jest.fn()
+jest.mock('../lib/crewsApi', () => ({ crewsApi: { crew: (id: string) => mockCrew(id) } }))
+jest.mock('../components/ds/CrewEmblem', () => {
+  const { View } = jest.requireActual('react-native')
+  return { CrewEmblem: ({ seed }: { seed: string }) => <View testID={`emblem-${seed}`} /> }
+})
+
 /* eslint-disable import/first */
+import { CrewRoomFace } from '../components/chat/ChatParts'
 import { ChatHeader, chatFeedFrame, chatHeaderBottom } from '../components/chat/ChatHeader'
 import { RADIUS, SIZE, SPACE } from '../lib/design/tokens'
 /* eslint-enable import/first */
@@ -54,5 +62,22 @@ describe('the capsule is the Flow 5 builder’s (flow5.js header): 56 on iOS, 60
     expect(capsule()).toMatchObject({ height: 60, borderRadius: RADIUS.button })
     expect(chatFeedFrame(INSET_TOP).style.marginTop).toBe(INSET_TOP + 2 + 60)
     expect(chatHeaderBottom(INSET_TOP)).toBe(INSET_TOP + 2 + 60 + SPACE.md)
+  })
+})
+
+describe('a crew chat’s header face (TG-17, RC audit C23)', () => {
+  it('is the crew’s own emblem once the crew answers, never the generic people glyph', async () => {
+    mockCrew.mockResolvedValue({ success: true, data: { emblemSeed: 'seed-nebula' } })
+    await render(<CrewRoomFace crewId="c1" />)
+    await act(async () => {})
+    expect(mockCrew).toHaveBeenCalledWith('c1')
+    expect(screen.getByTestId('emblem-seed-nebula')).toBeTruthy()
+  })
+
+  it('a crew that does not answer keeps the room’s square', async () => {
+    mockCrew.mockResolvedValue({ success: false, errorCode: 'NOT_FOUND' })
+    await render(<CrewRoomFace crewId="c1" />)
+    await act(async () => {})
+    expect(screen.queryByTestId(/^emblem-/)).toBeNull()
   })
 })

@@ -7,7 +7,7 @@ import { useBlendRoom } from '../../components/crews/BlendRoom'
 import { ChatHeader, chatFeedFrame, chatHeaderBottom, OpensLine, SubtitleText } from '../../components/chat/ChatHeader'
 import { BrokenLink } from '../../components/chat/BrokenLink'
 import { KeyboardFrame } from '../../components/chat/KeyboardFrame'
-import { CountLine, FeedSkeleton, JustMutedLine, LoadOlder, NewestChip, ReactionFlight, RoomCover, type Flight } from '../../components/chat/ChatParts'
+import { CountLine, CrewRoomFace, FeedSkeleton, JustMutedLine, LoadOlder, NewestChip, ReactionFlight, RoomCover, type Flight } from '../../components/chat/ChatParts'
 import { RoomGuidelinesBanner } from '../../components/chat/RoomGuidelinesBanner'
 import { RoomMessageRow, RoomOutside, senderOf, type Outside, type RowHandlers } from '../../components/chat/RoomFeed'
 import { SenderCard, type Sender } from '../../components/chat/SenderCard'
@@ -1058,7 +1058,7 @@ function GroupChatInner() {
         testID="room-header"
         title={blendRoom.title ?? name}
         muted={muted}
-        leading={blendRoom.leading ?? <RoomCover uri={eventImage} />}
+        leading={blendRoom.leading ?? (roomKind === 'crew' ? <CrewRoomFace crewId={crewIdParam ?? null} /> : <RoomCover uri={eventImage} />)}
         subtitle={outside?.kind === 'notopen' ? (notOpenIn ? <OpensLine label={notOpenIn} spoken={opensInSpoken(notOpenIn)} count={null} /> : null) : outside ? null : (blendRoom.subtitle ?? subtitle)}
         onBack={goBack}
         moreLabel={blendRoom.blend ? 'More' : 'Room info'}

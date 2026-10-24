@@ -1,12 +1,14 @@
 import { Image } from 'expo-image'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
 
 import { COLOR, EASING, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
+import { crewsApi } from '../../lib/crewsApi'
 import { BUBBLE } from '../ds/chatShared'
+import { CrewEmblem } from '../ds/CrewEmblem'
 import { PresenceDot } from '../ds/MonoFamily'
 import { CONTROL_FONT_CAP, font, minTarget, useBoldText } from '../ds/shared'
 import { glassContentsIn, glassRiseIn, popOut } from '../motion/presence'
@@ -28,6 +30,25 @@ export function RoomCover({ uri, size = HEADER_FACE, radius = RADIUS.thumb }: { 
       <Icon name="users" size={ICON.control} color={COLOR.textSecondary} />
     </View>
   )
+}
+
+/**
+ * A crew chat's header face: the crew's own emblem, as the Banter row and the Blend draw it (TG-17, RC audit C23), read
+ * from the crew (`GET /crews/:id`); the room's square until it answers, or when it does not.
+ */
+export function CrewRoomFace({ crewId }: { crewId: string | null }) {
+  const [seed, setSeed] = useState<{ crewId: string; seed: string } | null>(null)
+  useEffect(() => {
+    if (!crewId) return
+    let live = true
+    void crewsApi.crew(crewId).then((r) => {
+      if (live && r.success && r.data?.emblemSeed) setSeed({ crewId, seed: r.data.emblemSeed })
+    })
+    return () => {
+      live = false
+    }
+  }, [crewId])
+  return seed && seed.crewId === crewId ? <CrewEmblem seed={seed.seed} size={HEADER_FACE} /> : <RoomCover />
 }
 
 /** The room header's line: a still live dot, the count in Geist Mono, "in the room". */
