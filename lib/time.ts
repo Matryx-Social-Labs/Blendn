@@ -1,5 +1,3 @@
-import { requireOptionalNativeModule } from 'expo'
-
 /**
  * Fixed English short names, for labels that must not change shape with the
  * device's locale or ICU build ("Sept" in en-GB on one engine, "Sep" on another).
@@ -16,15 +14,18 @@ export const WEEKDAYS_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thurs
  * the OS each time; it is re-read on AppState active (`app/_layout.tsx`), since a zone is changed in Settings, which the
  * app comes back from.
  *
- * The native module optionally, not through `expo-localization`'s entry, which throws on a binary built before it: a
- * bundle swapped into an older build keeps the engine's zone (the behaviour before) instead of dying at launch.
+ * The native module as Expo installs it (`globalThis.expo.modules`, where `requireOptionalNativeModule` looks first), read
+ * when asked: not expo-localization's entry, which throws at import on a binary built before it, so a bundle swapped into
+ * an older build keeps the engine's zone (the behaviour before) instead of dying at launch; and no import of `expo`,
+ * whose entry drags expo-asset and expo-constants into every module that tells the time.
  */
 type Localization = { getCalendars(): { timeZone?: string | null }[] }
-const localization = requireOptionalNativeModule<Localization>('ExpoLocalization')
+const localization = (): Localization | undefined =>
+  (globalThis as { expo?: { modules?: { ExpoLocalization?: Localization } } }).expo?.modules?.ExpoLocalization
 
 function deviceZone(): string {
   try {
-    const zone = localization?.getCalendars()[0]?.timeZone
+    const zone = localization()?.getCalendars()[0]?.timeZone
     if (zone) return zone
   } catch {
     // The OS did not say: the engine's zone is all there is.

@@ -17,13 +17,14 @@ import { useNow } from '../lib/useNow'
 type Time = typeof import('../lib/time')
 type Sections = typeof import('../lib/pulseSections')
 
-/** What the OS says: the native module's `getCalendars`, as Android and iOS answer it. */
-let mockOsZone = 'America/Los_Angeles'
-jest.mock('expo', () => ({
-  ...jest.requireActual('expo'),
-  requireOptionalNativeModule: (name: string) =>
-    name === 'ExpoLocalization' ? { getCalendars: () => [{ calendar: 'gregory', timeZone: mockOsZone, uses24hourClock: false, firstWeekday: 1 }] } : null,
-}))
+/** What the OS says: the native module's `getCalendars` (jest.setup.js answers it from `process.env.TZ`, which Jest never passes to the engine). */
+const previousZone = process.env.TZ
+const osSays = (zone: string) => {
+  process.env.TZ = zone
+}
+afterAll(() => {
+  process.env.TZ = previousZone
+})
 
 /** Fresh modules: the phone's zone and the listeners are module state. */
 function fresh(): { time: Time; sections: Sections } {
@@ -42,7 +43,7 @@ const IST = 'Asia/Kolkata'
 const START = '2026-10-24T13:00:00.000Z'
 
 beforeEach(() => {
-  mockOsZone = 'America/Los_Angeles'
+  osSays('America/Los_Angeles')
 })
 
 it('reads the phone’s zone from the OS, not the engine', () => {
@@ -59,14 +60,14 @@ it('a zone that did not move is not news; one that did tells the listeners', () 
   expect(time.refreshPhoneZone()).toBe(false)
   expect(heard).not.toHaveBeenCalled()
 
-  mockOsZone = IST
+  osSays(IST)
   expect(time.refreshPhoneZone()).toBe(true)
   expect(heard).toHaveBeenCalledTimes(1)
   // Not news twice.
   expect(time.refreshPhoneZone()).toBe(false)
 
   unsubscribe()
-  mockOsZone = 'America/Toronto'
+  osSays('America/Toronto')
   expect(time.refreshPhoneZone()).toBe(true)
   expect(heard).toHaveBeenCalledTimes(1)
 })
@@ -78,7 +79,7 @@ it('after the OS moves the phone to IST, an IST night loses its zone name and ev
   expect(time.clockTime(START)).toBe('6 AM')
   expect(time.dayKeyIn(new Date('2026-10-24T03:00:00.000Z'))).toBe('2026-9-23')
 
-  mockOsZone = IST
+  osSays(IST)
   time.refreshPhoneZone()
   // No relaunch: the same module now says the phone is in IST.
   expect(time.eventClock(START, IST)).toBe('6:30 PM')
@@ -99,7 +100,7 @@ it('a screen re-renders with the new zone the moment the phone moves, with no re
   await render(createElement(Probe))
   expect(screen.getByTestId('clock').props.children).toBe('6:30 PM IST')
 
-  mockOsZone = IST
+  osSays(IST)
   await act(async () => {
     time.refreshPhoneZone()
   })
@@ -111,7 +112,7 @@ it('the Pulse’s phone-day helpers follow the move: the weekend label and the d
   // Fri 23 Oct, 8:00 PM in Los Angeles = Sat 24 Oct, 8:30 AM in Bengaluru.
   const now = Date.parse('2026-10-24T03:00:00.000Z')
   expect(sections.seedDateOf(now)).toBe('2026-10-23')
-  mockOsZone = IST
+  osSays(IST)
   time.refreshPhoneZone()
   expect(sections.seedDateOf(now)).toBe('2026-10-24')
   // Saturday in IST: this weekend is today and tomorrow, Friday 17:00 IST onwards.
@@ -122,9 +123,15 @@ it('the Pulse’s phone-day helpers follow the move: the weekend label and the d
 })
 
 it('the phone’s zone falls back to the engine’s when the OS has no answer (a binary without the module)', () => {
-  mockOsZone = ''
-  const { time } = fresh()
-  expect(time.phoneTimeZone()).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone)
+  const modules = (globalThis as unknown as { expo: { modules: Record<string, unknown> } }).expo.modules
+  const native = modules.ExpoLocalization
+  delete modules.ExpoLocalization
+  try {
+    const { time } = fresh()
+    expect(time.phoneTimeZone()).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone)
+  } finally {
+    modules.ExpoLocalization = native
+  }
 })
 
 describe('nothing reads the engine’s zone (RC 7)', () => {
