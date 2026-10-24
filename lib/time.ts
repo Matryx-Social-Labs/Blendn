@@ -202,3 +202,38 @@ function zonedClock(d: Date, timeZone: string): [number, number] {
   }
   return [d.getHours(), d.getMinutes()]
 }
+
+/*
+ * The phone's zone can move under a running app (a flight, a manual change in Settings). The app would keep saying the
+ * old one until relaunch (R6-7, Android): a moved zone drops every cached formatter and tells the clocks (`useNow`) to
+ * re-render. Read on AppState active (`app/_layout.tsx`); JS has no time-zone-changed event of its own without a native
+ * module, and a zone is only changed in Settings, from which the app comes back active.
+ */
+function phoneZoneNow(): string {
+  let name = ''
+  try {
+    name = Intl.DateTimeFormat().resolvedOptions().timeZone ?? ''
+  } catch {
+    // No ICU: the offset alone says it moved.
+  }
+  return `${name}|${new Date().getTimezoneOffset()}`
+}
+let phoneZone = phoneZoneNow()
+const phoneZoneListeners = new Set<() => void>()
+
+/** Re-reads the phone's zone; when it moved, clears the formatter caches, tells the listeners and answers true. */
+export function refreshPhoneZone(): boolean {
+  const next = phoneZoneNow()
+  if (next === phoneZone) return false
+  phoneZone = next
+  formatters.clear()
+  zoneNameFormatters.clear()
+  phoneZoneListeners.forEach((listener) => listener())
+  return true
+}
+
+/** Called after the phone's zone moved (`refreshPhoneZone`); returns the unsubscribe. */
+export function subscribePhoneZone(listener: () => void): () => void {
+  phoneZoneListeners.add(listener)
+  return () => phoneZoneListeners.delete(listener)
+}

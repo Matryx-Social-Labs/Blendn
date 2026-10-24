@@ -3,7 +3,7 @@ import { router, Stack, useNavigationContainerRef, usePathname, useSegments, typ
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigationReady } from '../lib/useNavigationReady';
-import { Appearance, BackHandler, Platform, StyleSheet, View } from 'react-native';
+import { Appearance, AppState, BackHandler, Platform, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { StatusBar } from 'expo-status-bar';
@@ -18,6 +18,7 @@ import {
 import { initSocketWithAppState, cleanup as cleanupSocket, disconnect as disconnectSocket } from '../lib/socketClient';
 import { ONBOARDING_ROUTES, mayParticipate, resumeStep } from '../lib/onboarding';
 import { useReducedMotion } from '../lib/motion';
+import { refreshPhoneZone } from '../lib/time';
 import { openWhenReady, setLinkNavigator, setRouteReady, takePendingRoute } from '../lib/pendingRoute';
 import { readOnboarding } from '../lib/onboardingStorage';
 import { hasDeclinedPush } from '../lib/pushDecline';
@@ -210,6 +211,14 @@ function RootLayout() {
     return () => {
       responseListener?.remove?.();
     };
+  }, []);
+
+  // The phone's zone may have moved while the app was away (R6-7): re-read it on the way back.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') refreshPhoneZone();
+    });
+    return () => sub.remove();
   }, []);
 
   // Socket connection management
