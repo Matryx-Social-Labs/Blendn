@@ -181,6 +181,12 @@ describe('what the router is handed for each screen a link could name', () => {
 
 describe('a room link keeps its countdown (R6-5)', () => {
   const OPENS = '2026-10-25T15:30:00.000Z'
+  it('keeps a crew’s or a Blend’s kind and id on /chat/<id>, checked, so the room is not read as an event’s (rc7)', () => {
+    expect(nativeIntentPath('blendn:///chat/abc?kind=blend&blendId=b_1&roomName=Hi')).toBe('/chat/abc?kind=blend&blendId=b_1')
+    expect(nativeIntentPath('blendn://chat/abc?kind=crew&crewId=c1')).toBe('/chat/abc?kind=crew&crewId=c1')
+    expect(nativeIntentPath('blendn://chat/abc?kind=event&blendId=a%2Fb')).toBe('/chat/abc')
+  })
+
   it('keeps a checked eventId and opensAt on /chat/<id>, and nothing else', () => {
     expect(nativeIntentPath(`blendn://chat/abc?eventId=${ID}&opensAt=${OPENS}&roomName=Support&draft=x`)).toBe(
       `/chat/abc?eventId=${ID}&opensAt=${encodeURIComponent(OPENS)}`

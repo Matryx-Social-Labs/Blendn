@@ -119,13 +119,21 @@ export function nativeIntentPath(path: string): string {
 
 /**
  * The one query a link keeps (R6-5): a room link (`/chat/<id>`) keeps `eventId` and `opensAt`, so a room that has not opened
- * yet counts down to the server's own time. Both are checked here (an id's shape, an instant that parses) and again by the
+ * yet counts down to the server's own time, and a crew's or a Blend's `kind` with its `crewId` or `blendId` (rc7). Both are checked here (an id's shape, an instant that parses) and again by the
  * chat, which uses `opensAt` only when the link names the event and drops it when the server's door says otherwise. Nothing
  * else: a room's name and title come from the server, never from a link.
  */
 const CHAT_LINK_PARAMS: Readonly<Record<string, (value: string) => boolean>> = {
   eventId: (v) => SEGMENT.test(v),
   opensAt: (v) => Number.isFinite(Date.parse(v)),
+  /*
+   * A crew's or a Blend's room says so (rc7: a Blend's room opened by link read "Event chat", because its kind was dropped
+   * here). Presentation only, and only your own: the room still asks the server, and a Blend's chrome comes from your own
+   * Blends list by this id, never from the link.
+   */
+  kind: (v) => v === 'crew' || v === 'blend',
+  crewId: (v) => SEGMENT.test(v),
+  blendId: (v) => SEGMENT.test(v),
 }
 function chatQuery(segments: string[], path: string): string {
   if (segments.length !== 2 || segments[0].toLowerCase() !== 'chat' || !SEGMENT.test(segments[1])) return ''

@@ -47,7 +47,7 @@ import { Text, View } from 'react-native'
 import { useBlendRoom } from '../components/crews/BlendRoom'
 import { apiClient } from '../lib/apiClient'
 import { markCoachUsed } from '../lib/coachMarks'
-import type { Blend, BlendSide } from '../lib/crews'
+import { blendTitle, type Blend, type BlendSide } from '../lib/crews'
 import { crewsApi } from '../lib/crewsApi'
 import { markRoomLeft } from '../lib/roomMembership'
 import { noteServerDate } from '../lib/serverClock'
@@ -306,6 +306,15 @@ describe('closing and closed', () => {
     await render(<Room />)
     await waitFor(() => expect(crews.blends).toHaveBeenCalled())
     expect(screen.queryByTestId('blend-mine')).toBeNull()
+  })
+
+  it('one that has closed keeps its name for the header, never the "Event chat" fallback (rc7)', async () => {
+    const closed = blend({ closesAt: new Date(Date.now() - 1000).toISOString() })
+    serve(closed)
+    await render(<Room />)
+    await waitFor(() => expect(crews.blends).toHaveBeenCalled())
+    expect(await screen.findByText(blendTitle(closed, mockUserId))).toBeTruthy()
+    expect(blendTitle(closed, mockUserId)).toMatch(/^Blend with /)
   })
 
   it('a Blend that was listed and then is not (a block across the sides refuses your door) is gone for you, and its chrome goes', async () => {

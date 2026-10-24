@@ -175,7 +175,8 @@ export function useBlendRoom(blendId: string | null, top: number): BlendRoomChro
         <Banner kind="info" text="This Blend didn’t load" action={{ label: 'Try again', onPress: () => void reload() }} testID="blend-unreadable" />
       </View>
     ) : null
-    return { blend: null, gone, title: null, leading: null, subtitle: null, bar, barSpace: bar ? height : 0, overlays: null, openMenu: () => {} }
+    // A Blend you were in and that has closed keeps its name in the header ("Blend with Crew Y"), never "Event chat" (rc7).
+    return { blend: null, gone, title: listed ? blendTitle(listed, myId) : null, leading: null, subtitle: null, bar, barSpace: bar ? height : 0, overlays: null, openMenu: () => {} }
   }
 
   const { mine, theirs } = blendSides(blend, myId)
