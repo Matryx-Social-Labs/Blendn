@@ -74,7 +74,10 @@ describe('at AX XXXL (fontScale 3.571)', () => {
     const label = screen.getByText('A line about the crew')
     const row = StyleSheet.flatten(screen.getByTestId('bio-label-row').props.style)
     expect(row.flexDirection).not.toBe('row')
-    expect(row.alignItems).toBe('flex-end')
+    // The label keeps the start, as every other field's does; only the counter goes to the end (rc7 D6).
+    expect(row.alignItems).toBeUndefined()
+    const counter = screen.getByTestId('bio-label-row').children[1] as unknown as { props: { style: object } }
+    expect(StyleSheet.flatten(counter.props.style)).toMatchObject({ alignSelf: 'flex-end' })
     expect(StyleSheet.flatten(label.props.style).flexShrink).toBe(1)
     await screen.unmount()
     const { FriendsStep } = require('../components/crews/MakeSteps')

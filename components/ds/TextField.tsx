@@ -55,7 +55,8 @@ export function FieldHeader({ label, counter, testID }: { label?: ReactNode; cou
   return (
     <View testID={testID} style={[styles.labelRow, large ? styles.stacked : styles.spread]}>
       {typeof label === 'string' ? <FieldLabel text={label} bold={bold} contrast={contrast} /> : (label ?? <View />)}
-      {counter}
+      {/* Stacked, the label keeps the start like every other field's and only the counter goes to the end (rc7 D6). */}
+      {large && counter ? <View style={styles.counterEnd}>{counter}</View> : counter}
     </View>
   )
 }
@@ -357,7 +358,8 @@ const styles = StyleSheet.create({
   field: { gap: SPACE.sm },
   label: { paddingLeft: SPACE.xs, flexShrink: 1 },
   /** The counter under the label, at its end, as the field's own counter sits. */
-  stacked: { gap: SPACE.xxs, alignItems: 'flex-end' },
+  stacked: { gap: SPACE.xxs },
+  counterEnd: { alignSelf: 'flex-end' },
   labelRow: { paddingRight: SPACE.xs },
   spread: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'baseline', gap: SPACE.sm },
   box: {
