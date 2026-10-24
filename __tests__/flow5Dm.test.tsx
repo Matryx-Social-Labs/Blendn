@@ -167,14 +167,14 @@ describe('the reveal bar', () => {
   it('you revealed: they can see you, and there is nothing to press', async () => {
     api.getConversation.mockResolvedValue({ success: true, data: { ...anonymous, youRevealed: true } } as never)
     await open()
-    expect(screen.getByText('They can see your name. You can’t see theirs yet.')).toBeTruthy()
+    expect(screen.getByText('They see you · you don’t see them')).toBeTruthy()
     expect(screen.queryByLabelText('Show them who you are')).toBeNull()
   })
 
   it('both revealed: no bar, and the line says so', async () => {
     api.getConversation.mockResolvedValue({ success: true, data: named } as never)
     await open()
-    expect(screen.getByText('You can both see each other')).toBeTruthy()
+    expect(screen.getByText('You see each other')).toBeTruthy()
     expect(screen.queryByLabelText('Show them who you are')).toBeNull()
   })
 })

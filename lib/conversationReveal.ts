@@ -61,19 +61,22 @@ export function revealPanelKey(view: Pick<RevealView, 'bar' | 'nudge'> | null): 
   return view?.bar ? `${view.bar}:${view.nudge ?? ''}` : null
 }
 
+/** The header's line under the name: short enough for one line beside the face at 360 (TG-17, C25), each side said once. */
+export const REVEAL_LINE_MAX = 33
+
 export function revealView(state: ConversationRevealState, askedHere = false, friendOffered = false): RevealView {
   if (!state.pseudonymous) return { bar: null, line: null, nudge: null }
   if (state.youRevealed && state.theyRevealed) {
     // Both can see each other: the bar is gone for good, unless the server offers to add them as a friend (SCRUM-750), which is the one
     // thing left to say. It goes again once asked.
-    return { bar: friendOffered ? 'both' : null, line: { seen: true, text: 'You can both see each other' }, nudge: null }
+    return { bar: friendOffered ? 'both' : null, line: { seen: true, text: 'You see each other' }, nudge: null }
   }
   // Being asked is the only signal the other person can send: surfaced, never a demand, never counted.
   const nudge = !state.youRevealed && state.revealRequested ? `${state.displayName} asked to know who you are` : null
-  if (state.youRevealed) return { bar: 'youOnly', line: { seen: false, text: 'They can see your name. You can’t see theirs yet.' }, nudge: null }
-  if (state.theyRevealed) return { bar: 'theyOnly', line: { seen: false, text: 'You can see their name. They can’t see yours.' }, nudge }
+  if (state.youRevealed) return { bar: 'youOnly', line: { seen: false, text: 'They see you · you don’t see them' }, nudge: null }
+  if (state.theyRevealed) return { bar: 'theyOnly', line: { seen: false, text: 'You see them · they don’t see you' }, nudge }
   return askedHere
-    ? { bar: 'asked', line: { seen: false, text: 'You’re both anonymous here · asked' }, nudge }
+    ? { bar: 'asked', line: { seen: false, text: 'You’re both anonymous · asked' }, nudge }
     : { bar: 'none', line: { seen: false, text: 'You’re both anonymous here' }, nudge }
 }
 

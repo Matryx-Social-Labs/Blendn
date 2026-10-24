@@ -5,6 +5,7 @@ import {
   revealView,
   type ConversationRevealState,
   revealPanelKey,
+  REVEAL_LINE_MAX,
 } from '../lib/conversationReveal'
 
 /*
@@ -29,7 +30,7 @@ describe('revealView (Flow 5 DM #01–#05)', () => {
   it('both revealed: no bar, unless the server offers Add friend, which keeps the bar as `both`', () => {
     const both = state({ youRevealed: true, theyRevealed: true })
     expect(revealView(both).bar).toBeNull()
-    expect(revealView(both, false, true)).toEqual({ bar: 'both', line: { seen: true, text: 'You can both see each other' }, nudge: null })
+    expect(revealView(both, false, true)).toEqual({ bar: 'both', line: { seen: true, text: 'You see each other' }, nudge: null })
   })
 
   it('an offer changes nothing before you have both revealed, or for a conversation that was never pseudonymous', () => {
@@ -48,7 +49,7 @@ describe('revealView (Flow 5 DM #01–#05)', () => {
   })
 
   it('once you ask, the Asked state — never a declined one', () => {
-    expect(revealView(state(), true)).toEqual({ bar: 'asked', line: { seen: false, text: 'You’re both anonymous here · asked' }, nudge: null })
+    expect(revealView(state(), true)).toEqual({ bar: 'asked', line: { seen: false, text: 'You’re both anonymous · asked' }, nudge: null })
   })
 
   it('surfaces that they asked, without making it a demand', () => {
@@ -59,13 +60,13 @@ describe('revealView (Flow 5 DM #01–#05)', () => {
 
   it('they revealed, you have not: Show them, and their side seen', () => {
     expect(revealView(state({ theyRevealed: true })).bar).toBe('theyOnly')
-    expect(revealView(state({ theyRevealed: true })).line?.text).toBe('You can see their name. They can’t see yours.')
+    expect(revealView(state({ theyRevealed: true })).line?.text).toBe('You see them · they don’t see you')
   })
 
   it('you revealed, they have not: no button, they decide', () => {
     const v = revealView(state({ youRevealed: true, revealRequested: true }))
     expect(v.bar).toBe('youOnly')
-    expect(v.line?.text).toBe('They can see your name. You can’t see theirs yet.')
+    expect(v.line?.text).toBe('They see you · you don’t see them')
     // Nothing left for you to answer.
     expect(v.nudge).toBeNull()
   })
@@ -73,7 +74,7 @@ describe('revealView (Flow 5 DM #01–#05)', () => {
   it('both revealed: the bar goes for good and the line says so', () => {
     expect(revealView(state({ youRevealed: true, theyRevealed: true }))).toEqual({
       bar: null,
-      line: { seen: true, text: 'You can both see each other' },
+      line: { seen: true, text: 'You see each other' },
       nudge: null,
     })
   })
@@ -175,4 +176,17 @@ describe('the reveal panel’s key (what a fold is remembered against)', () => {
     expect(revealPanelKey({ bar: 'none', nudge: null })).not.toBe(revealPanelKey({ bar: 'asked', nudge: null }))
     expect(revealPanelKey({ bar: 'none', nudge: null })).not.toBe(revealPanelKey({ bar: 'none', nudge: 'x' }))
   })
+})
+
+// TG-17 (C25): the header's line truncated beside the face. Negative control: the old sentences (up to 49) fail.
+it('every header line fits the header: short, each side said once', () => {
+  const base = { pseudonymous: true, youRevealed: false, theyRevealed: false, revealRequested: false, displayName: 'Plover' }
+  const lines = [
+    revealView({ ...base }),
+    revealView({ ...base }, true),
+    revealView({ ...base, youRevealed: true }),
+    revealView({ ...base, theyRevealed: true }),
+    revealView({ ...base, youRevealed: true, theyRevealed: true }),
+  ].map((v) => v.line?.text ?? '')
+  for (const line of lines) expect(line.length).toBeLessThanOrEqual(REVEAL_LINE_MAX)
 })
