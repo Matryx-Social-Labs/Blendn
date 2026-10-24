@@ -261,7 +261,10 @@ describe('the label and its counter (D-M6: "LANGUAGES YOU SPEAK0 of 5", the 5 pa
     await at(402, AX_XXXL)
     await draw({ label: 'Languages you speak', max: 5 })
     expect(header().flexDirection).not.toBe('row')
-    expect(header().alignItems).toBe('flex-end')
+    // The label keeps the start; only the counter goes to the end (rc7 D6: labels sat flush right at AX).
+    expect(header().alignItems).toBeUndefined()
+    const counter = screen.getByTestId('s-header', { includeHiddenElements: true }).children[1] as unknown as { props: { style: object } }
+    expect(StyleSheet.flatten(counter.props.style)).toMatchObject({ alignSelf: 'flex-end' })
     expect(uncapped(screen.toJSON())).toEqual([])
   })
 
