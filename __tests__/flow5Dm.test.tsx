@@ -179,6 +179,21 @@ describe('the reveal bar', () => {
   })
 })
 
+// C30 (DS-17's caller half): "Message Mika Sengupta-Rao" wrapped the placeholder to two lines. A real name is its
+// first name; a pseudonym is whole, never "Message Arctic". Negative control: the full name fails the first case.
+describe('the composer’s placeholder', () => {
+  it('a real name: the first name only', async () => {
+    api.getConversation.mockResolvedValue({ success: true, data: { ...named, otherUser: { ...named.otherUser, name: 'Mika Sengupta-Rao' } } } as never)
+    await open()
+    expect(screen.getByPlaceholderText('Message Mika')).toBeTruthy()
+  })
+
+  it('a pseudonym: whole', async () => {
+    await open()
+    expect(screen.getByPlaceholderText('Message Arctic Falcon')).toBeTruthy()
+  })
+})
+
 describe('the reveal strip is not over the thread (TG-04, RC audit C6)', () => {
   it('the feed’s window starts under the strip’s measured height, so the match card is never behind it', async () => {
     await open()

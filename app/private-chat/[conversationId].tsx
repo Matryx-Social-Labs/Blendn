@@ -80,6 +80,7 @@ import { useComposerLock } from '../../lib/useComposerLock'
 import { scrollListToEnd, useFollowEnd } from '../../lib/useFollowEnd'
 import { useLatest } from '../../lib/useLatest'
 import { useLiveSync } from '../../lib/useLiveSync'
+import { firstNameOf } from '../../lib/friendsHere'
 import { isOffline, useWaitingSends } from '../../lib/useWaitingSends'
 import { userMessage } from '../../lib/userMessage'
 
@@ -211,8 +212,9 @@ function PrivateChatInner() {
 
   // Their profile, only once they are a name to you: an accepted request, or a match who revealed.
   const profileId = otherId || idParam(otherUserId) || undefined
+  const theirRealName = !!reveal && (reveal.pseudonymous === false || reveal.theyRevealed)
   const openProfile =
-    reveal && (reveal.pseudonymous === false || reveal.theyRevealed) && profileId
+    theirRealName && profileId
       ? () => router.push({ pathname: '/user/[id]', params: { id: String(profileId) } } as never)
       : undefined
   // Nobody is called "Chat" (r7 M10: a failed thread titled itself "Chat" and offered "Message Chat"): with no name yet, the
@@ -838,7 +840,8 @@ function PrivateChatInner() {
                   warning={contactWarning(newMessage, 'dm')}
                   reply={replyingTo ? { name: replyingTo.senderId === myId ? 'yourself' : name, text: quoteText(quoteFrom(replyingTo)) } : null}
                   onCancelReply={() => setReplyingTo(null)}
-                  placeholder={`Message ${name}`}
+                  // A real name by its first name, so the placeholder holds one line (C30); a pseudonym is whole ("Arctic Falcon").
+                  placeholder={`Message ${theirRealName ? firstNameOf(name) : name}`}
                   onAttach={photosAllowed ? () => void attach() : undefined}
                   onFocus={() => setTimeout(() => scrollToBottom(false), 120)}
                 />
