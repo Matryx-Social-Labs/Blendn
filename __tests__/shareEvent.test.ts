@@ -87,3 +87,10 @@ describe('the message that goes with the link', () => {
     expect(venueTarget({ id: ID, name: 'Toit', venueTypeLabel: 'Brewery', city: null })).toMatchObject({ area: '' })
   })
 })
+
+// D24 (C38): a shared place says what a guest reads. Negative control: the raw `venueTypeLabel` fails.
+it('venueTarget names a place of type other "Venue", and keeps every other type’s label', () => {
+  const venue = { id: 'v1', name: 'Hall 3', venueType: 'other', venueTypeLabel: 'Something else', city: 'Bengaluru' }
+  expect(venueTarget(venue)).toMatchObject({ typeLabel: 'Venue' })
+  expect(venueTarget({ ...venue, venueType: 'brewery', venueTypeLabel: 'Brewery' })).toMatchObject({ typeLabel: 'Brewery' })
+})

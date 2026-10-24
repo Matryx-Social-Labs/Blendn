@@ -1,6 +1,7 @@
 import type { ShareEvent } from '../components/ds/LinkPreviewCard'
 import type { ShareTarget } from '../components/ds/ShareSheet'
 import { inviteMessage } from './friends'
+import { guestTypeLabel } from './placesPane'
 import { clockTime } from './roomMoments'
 import { eventLink, shareability, venueLink } from './shareLinks'
 import { calendarDate, clockIn, dateIn, MONTHS, weekdayIn, WEEKDAYS } from './time'
@@ -94,6 +95,7 @@ export function shareUrl(target: ShareTarget): string | undefined {
   return target.kind === 'event' ? target.event.url : target.url
 }
 
-export function venueTarget(venue: { id: string; name: string; venueTypeLabel: string; city: string | null }): ShareTarget {
-  return { kind: 'venue', name: venue.name, typeLabel: venue.venueTypeLabel, area: venue.city ?? '', url: venueLink(venue.id) }
+/** A place to share: its type as a guest reads it ("Venue", never the organiser's "Something else": D24). */
+export function venueTarget(venue: { id: string; name: string; venueType?: string | null; venueTypeLabel: string; city: string | null }): ShareTarget {
+  return { kind: 'venue', name: venue.name, typeLabel: guestTypeLabel(venue), area: venue.city ?? '', url: venueLink(venue.id) }
 }

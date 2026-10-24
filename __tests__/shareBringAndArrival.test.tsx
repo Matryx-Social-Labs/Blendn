@@ -122,6 +122,13 @@ describe('what the banner says', () => {
     expect(JSON.stringify(lookup)).not.toContain('Toit')
   })
 
+  // D24 (C38): the organiser's "Something else" never reaches a guest. Negative control: the raw label fails.
+  it('a venue of type other reads "Venue" in the banner, never the organiser’s word', async () => {
+    mockGetVenue.mockResolvedValue({ success: true, data: { venue: { id: 'v1', name: 'Hall 3', venueType: 'other', venueTypeLabel: 'Something else', city: 'Indiranagar' } } })
+    const lookup = await lookUpArrival({ kind: 'venue', id: 'v1' })
+    expect(lookup).toMatchObject({ status: 'ready', details: { meta: 'Venue · Indiranagar' } })
+  })
+
   it('says nothing for an event that is gone, private or a draft, and asks again later when it could not ask', async () => {
     mockGetEvent.mockResolvedValue({ success: false, errorCode: 'NOT_FOUND' })
     await expect(lookUpArrival({ kind: 'event', id: ID })).resolves.toEqual({ status: 'gone' })

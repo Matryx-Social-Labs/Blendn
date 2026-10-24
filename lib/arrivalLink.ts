@@ -7,6 +7,7 @@ import { apiClient } from './apiClient'
 import { dateParts } from './shareEvent'
 import { parseLink, routeFor, type LinkTarget } from './shareLinks'
 import { isGone } from './loadFailure'
+import { guestTypeLabel } from './placesPane'
 import { Logger } from './logger'
 
 /**
@@ -63,7 +64,7 @@ export async function lookUpArrival(target: LinkTarget): Promise<ArrivalLookup> 
     if (isGone(result)) return { status: 'gone' }
     if (!result.success || !result.data) return { status: 'retry' }
     const v = result.data.venue
-    return { status: 'ready', details: { title: v.name, meta: [v.venueTypeLabel, v.city].filter(Boolean).join(' · '), cover: null, route: routeFor(target) } }
+    return { status: 'ready', details: { title: v.name, meta: [guestTypeLabel(v), v.city].filter(Boolean).join(' · '), cover: null, route: routeFor(target) } }
   } catch (error) {
     Logger.warn('general', 'arrival:lookup:failed', { error })
     return { status: 'retry' }
