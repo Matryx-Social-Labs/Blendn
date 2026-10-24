@@ -49,6 +49,8 @@ const SIGN_SYSTEMS: readonly SignSystem[] = ['western', 'rashi']
 const SIGN_SYSTEM_LABELS = ['Western', 'My rashi instead'] as const
 /** Home states drawn before "+n more"; a chosen one beyond them stays drawn. */
 const HOME_STATES_SHOWN = 9
+/** Languages fold like Home state, after the same nine (D-L9); a picked one is always shown (`foldedItems`). */
+export const LANGUAGES_SHOWN = HOME_STATES_SHOWN
 
 /**
  * Languages, home state, your sign and this-or-that — matching v2's "about
@@ -307,6 +309,9 @@ function EditAboutYouScreenContent() {
                       selection="multi"
                       selected={form.languages}
                       max={options.maxLanguages}
+                      // Folds like Home state (D-L9): 21 chips unfolded made a long page.
+                      foldAfter={LANGUAGES_SHOWN}
+                      foldNoun="languages"
                       // At the cap the rest dim and say why, instead of a tap that does nothing.
                       capHint={`Up to ${NUMBER_WORDS[options.maxLanguages] ?? options.maxLanguages}`}
                       onToggle={(slug) => {
@@ -366,7 +371,7 @@ function EditAboutYouScreenContent() {
                 <SettingsRow
                   icon="sparkles"
                   title="Show my sign"
-                  hint={'Your sign shows next to your age. A fun line on cards — "Both Leos ♌" — never used to match you.'}
+                  hint="Your sign shows next to your age. A fun line on cards — “Both Leos ♌” — never used to match you."
                   trail="switch"
                   value={signOn}
                   onValueChange={toggleSign}

@@ -47,6 +47,8 @@ interface UserProfile {
 }
 
 const AGE_DIGITS = 3
+/** D20 (D-M14): the free occupation field, named for what it is and who sees it; the matching chip is "What do you do?". */
+export const JOB_TITLE_LABEL = 'Job title · shown once you reveal'
 
 /**
  * Everything the form edits, as one comparable string.
@@ -597,11 +599,12 @@ function EditProfileContent() {
                   error={overCap.location}
                   limit={counterLimit(location, PROFILE_LIMITS.location)}
                   measure={serverLength}
-                  placeholder="City, State"
+                  placeholder="Area, city"
                   testID="edit-profile-location"
                 />
+                {/* D20: "What do you do?" above is the matching chip, seen before a reveal; this is the free title, seen after one. */}
                 <TextField
-                  label="Occupation"
+                  label={JOB_TITLE_LABEL}
                   value={occupation}
                   onChangeText={setOccupation}
                   error={overCap.occupation}
@@ -617,7 +620,7 @@ function EditProfileContent() {
                   error={overCap.education}
                   limit={counterLimit(education, PROFILE_LIMITS.education)}
                   measure={serverLength}
-                  placeholder="e.g. University of California"
+                  placeholder="e.g. Christ University"
                   testID="edit-profile-education"
                 />
                 <TextField
@@ -648,7 +651,7 @@ function EditProfileContent() {
                 limit={PROFILE_LIMITS.bio}
                 measure={serverLength}
                 error={overCap.bio}
-                placeholder="Tell people about yourself..."
+                placeholder="Tell people about yourself…"
                 testID="edit-profile-bio"
               />
             )}

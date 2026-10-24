@@ -47,7 +47,8 @@ jest.mock('../lib/apiClient', () => ({
 }))
 
 /* eslint-disable import/first */
-import EditProfile from '../app/edit-profile'
+import EditProfile, { JOB_TITLE_LABEL } from '../app/edit-profile'
+import { WORK_FIELD_HINT } from '../components/profile/MatchingFields'
 import { apiClient } from '../lib/apiClient'
 /* eslint-enable import/first */
 
@@ -286,4 +287,16 @@ it('a card’s label starts on its sets’ labels’ edge, and the about-you row
   // FieldLabel's 4 pt inset, the one every set label inside the card has.
   expect(StyleSheet.flatten(screen.getByRole('header', { name: 'You and matching' }).props.style).paddingLeft).toBe(SPACE.xs)
   expect(screen.getByText('Languages, home & more')).toBeTruthy()
+})
+
+// D20 / D-L6: the free field says it is the job title and when it shows; placeholders fit an India-first app.
+// Negative control: the old "Occupation" label or the US placeholders fail it.
+it('names the job title and who sees it, with placeholders that fit here', async () => {
+  await render(<EditProfile />)
+  await screen.findByDisplayValue('Sam')
+  expect(screen.getByText(JOB_TITLE_LABEL)).toBeTruthy()
+  expect(screen.getByText(WORK_FIELD_HINT)).toBeTruthy()
+  expect(screen.getByPlaceholderText('Area, city')).toBeTruthy()
+  expect(screen.getByPlaceholderText('e.g. Christ University')).toBeTruthy()
+  expect(screen.getByPlaceholderText('Tell people about yourself…')).toBeTruthy()
 })

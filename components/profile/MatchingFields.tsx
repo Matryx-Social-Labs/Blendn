@@ -110,6 +110,9 @@ export interface MatchingFieldsProps {
   workFieldsRetrying?: boolean
 }
 
+/** D20 (D-M14): the matching chip is seen before a reveal; the free "Job title" field is seen after one. */
+export const WORK_FIELD_HINT = 'On your card, even before you reveal.'
+
 /** Edit profile · 04: the failure line under the heading, in the frame's words. */
 export const WORK_FIELDS_FAILED = 'Couldn’t load fields of work. Try again.'
 
@@ -234,6 +237,8 @@ export function MatchingFields({
         ) : (
           <ChipSet
             label="WHAT DO YOU DO?"
+            // D20: who sees it, beside the job title below, which shows only once you reveal.
+            hint={WORK_FIELD_HINT}
             items={workFields.map((f) => ({ key: f.slug, label: f.label }))}
             selection="single"
             selected={workField ? [workField] : []}

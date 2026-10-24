@@ -41,7 +41,7 @@ jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockToas
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() } }))
 
 import { router } from 'expo-router'
-import EditAboutYouScreen from '../app/edit-about-you'
+import EditAboutYouScreen, { LANGUAGES_SHOWN } from '../app/edit-about-you'
 import { apiClient, ProfileCache } from '../lib/apiClient'
 import { COLOR } from '../lib/design/tokens'
 
@@ -592,5 +592,17 @@ describe('a partly saved profile (the sweep §4): the sentence goes under the fi
     await tap('Goa')
     await save()
     expect(scrollTo).toHaveBeenCalledTimes(1)
+  })
+})
+
+// D-L9: Languages fold like Home state; D-L5: curly quotes. Negative control: the unfolded list (no `foldAfter`) fails it.
+describe('Languages fold like Home state', () => {
+  it('shows nine, then "+n more languages", and the sign hint uses curly quotes', async () => {
+    const many = Array.from({ length: 21 }, (_, i) => ({ slug: `l${i}`, label: `Language ${i}` }))
+    api.getProfileOptions.mockResolvedValue({ success: true, data: { ...OPTIONS, languages: many } })
+    await open()
+    expect(screen.queryByText('Language 9')).toBeNull()
+    expect(screen.getByLabelText(`${21 - LANGUAGES_SHOWN} more languages`)).toBeTruthy()
+    expect(screen.getByText(/“Both Leos ♌”/)).toBeTruthy()
   })
 })
