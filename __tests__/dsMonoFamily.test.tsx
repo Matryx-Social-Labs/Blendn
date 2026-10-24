@@ -190,4 +190,13 @@ describe('a mono run divided by middots', () => {
     // The digits and words stay in the mono run: only separators are pulled out.
     expect(screen.getByText('Sat 24 Oct · 9 PM').children.filter((c) => typeof c === 'string')).toEqual(['Sat', '24', 'Oct', '9', 'PM'])
   })
+  it('a struck badge (a cancelled night) strikes the time, not the middot between (B-S16: "Sun - 2:30 PM")', async () => {
+    await render(<TimeBadge when="Sun · 2:30 PM" struck testID="tb" />)
+    const hidden = { includeHiddenElements: true }
+    const divider = screen.getByText(' · ', hidden)
+    expect(StyleSheet.flatten(divider.props.style).textDecorationLine).toBeUndefined()
+    for (const part of [/^Sun$/, /^2:30 PM$/]) expect(StyleSheet.flatten(screen.getByText(part, hidden).props.style).textDecorationLine).toBe('line-through')
+    // The badge's own line is not struck, so the strike never runs through the divider by inheritance.
+    expect(StyleSheet.flatten(screen.getByText('Sun · 2:30 PM', hidden).props.style).textDecorationLine).toBeUndefined()
+  })
 })
