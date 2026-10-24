@@ -1,9 +1,11 @@
 import { StyleSheet, Text, View } from 'react-native'
 
-import { COLOR, FONT_FAMILY, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
 import type { FriendRequest } from '../../lib/friends'
 import { Button } from '../ds/Button'
-import { CONTROL_FONT_CAP, font, useBoldText } from '../ds/shared'
+import { inboxTimeLabel } from '../banter/inbox'
+import { monoCaption } from '../ds/MonoFamily'
+import { CONTROL_FONT_CAP, font, useBoldText, useLargeText } from '../ds/shared'
 import { SkeletonBlock } from '../Skeleton'
 import { PersonAvatar } from './PersonRow'
 
@@ -29,19 +31,29 @@ export function IncomingRequestRow({
   onRespond: (action: 'accept' | 'dismiss') => void
 }) {
   const bold = useBoldText()
+  const largeText = useLargeText()
   const { person } = request
+  // How long they have waited (D-LM2), as Banter's request card says it: "3h", "Tue"; a count in mono, a day-word in the sans.
+  const age = inboxTimeLabel(request.createdAt)
   return (
     <View style={styles.card}>
       <View style={styles.who}>
         <PersonAvatar person={person} />
         <View style={styles.text}>
-          <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold, FONT_FAMILY.brand[500]), styles.ink]}>
+          {/* fc5eb48's request card: the name and the line grow to their caps and double their lines at the AX sizes (D-M5). */}
+          <Text numberOfLines={largeText ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold, FONT_FAMILY.brand[500]), styles.ink]}>
             {person.name}
           </Text>
-          <Text numberOfLines={2} style={[font('meta', bold), styles.muted]}>
+          <Text numberOfLines={largeText ? 4 : 2} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.muted]}>
             {REQUEST_LINE}
           </Text>
         </View>
+        {age ? (
+          // A tag beside the row, as the Banter row's time: it stops where a control does.
+          <Text testID="request-age" maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[/\d/.test(age) ? monoCaption(bold) : font('caption', bold), styles.tertiary]}>
+            {age}
+          </Text>
+        ) : null}
       </View>
       <View style={styles.actions}>
         <Button
@@ -90,4 +102,5 @@ const styles = StyleSheet.create({
   action: { flex: 1 },
   ink: { color: COLOR.textPrimary },
   muted: { color: COLOR.textSecondary },
+  tertiary: { color: COLOR.textTertiary, alignSelf: 'flex-start' },
 })

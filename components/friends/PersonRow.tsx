@@ -1,10 +1,10 @@
 import { ReactNode } from 'react'
-import { StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 
-import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import type { FriendPerson } from '../../lib/friends'
 import { Avatar } from '../ds/Avatar'
-import { CONTROL_FONT_CAP, font, useBoldText, useIncreaseContrast } from '../ds/shared'
+import { font, useBoldText, useIncreaseContrast, useLargeText } from '../ds/shared'
 import ScalePress from '../motion/ScalePress'
 import { OptimizedImage } from '../OptimizedImage'
 import { SkeletonCircle, SkeletonLine } from '../Skeleton'
@@ -12,12 +12,20 @@ import { Icon } from '../ui/Icon'
 
 /** The avatar's box and its decode hint, one number so they cannot drift (Flow 6 `personRow`: 48). */
 const AVATAR = 48
-/** The row's height: the frame's 64. */
-/** Exported for the lists that window these rows (`getItemLayout`). */
+/** The row's height at the default text size: the frame's 64. A minimum: past the default size a row can grow. */
 export const PERSON_ROW_HEIGHT = SIZE.primary + SPACE.sm
 const ROW = PERSON_ROW_HEIGHT
 /** A name with no line under it may wrap once. */
 export const NAME_LINES_ALONE = 2
+
+/**
+ * Whether every row is exactly `PERSON_ROW_HEIGHT`, so a list may window them by index (`getItemLayout`). Only at the
+ * default text size: past it the name and the line under it grow to their caps and wrap (DS-05), and the row with them.
+ * A list passes `getItemLayout` only while this is true.
+ */
+export function usePersonRowsFixed(): boolean {
+  return useWindowDimensions().fontScale <= 1
+}
 
 /**
  * One person on a friend surface (Flow 6 `personRow`): a 48 pt photo, the name in 500 17/24, a line under it, and whatever the screen
@@ -49,25 +57,28 @@ export function PersonRow({
 }) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
+  const largeText = useLargeText()
   const line = [detail, detailMono, detailTail].filter(Boolean).join('')
   const body = (
     <>
       <PersonAvatar person={person} />
       <View style={styles.text}>
         {/*
-          With no line under it the name may take that line's place: two lines at its cap fit the fixed row (2 x 31.2 in 64).
-          Beside Message on a 360 dp phone at 1.3 it had about 77 dp, one line, and read "Aarav …" (RC drive 5).
+          Reading text, as Banter's request card (fc5eb48): the name grows to its role's cap and the line under it to meta's,
+          and at the accessibility sizes each doubles its lines, so the name never stops at the control cap on one line while
+          the line under it grows past it (D-M5). With no line under it the name may take that line's place. The row's height
+          is a minimum, so nothing is cut (P5: the line truncated at 360 dp and 1.3).
         */}
         <Text
           testID="person-name"
-          numberOfLines={line ? 1 : NAME_LINES_ALONE}
-          maxFontSizeMultiplier={CONTROL_FONT_CAP}
+          numberOfLines={line && !largeText ? 1 : NAME_LINES_ALONE}
+          maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong}
           style={[font('bodyStrong', bold, FONT_FAMILY.brand[500]), styles.ink]}
         >
           {person.name}
         </Text>
         {line ? (
-          <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.muted]}>
+          <Text testID="person-detail" numberOfLines={largeText ? 4 : 2} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.muted]}>
             {detail}
             {detailMono ? <Text style={font('meta', bold, FONT_FAMILY.mono[500])}>{detailMono}</Text> : null}
             {detailTail}
@@ -92,11 +103,14 @@ export function PersonRow({
       accessibilityRole="button"
       accessibilityLabel={line ? `${person.name}, ${line}` : person.name}
       style={styles.row}
+      testID="person-row"
     >
       {body}
     </ScalePress>
   ) : (
-    <View style={styles.row}>{body}</View>
+    <View testID="person-row" style={styles.row}>
+      {body}
+    </View>
   )
 }
 
@@ -121,7 +135,7 @@ export function PersonRowSkeleton() {
   return (
     <View testID="person-skeleton" style={styles.skeleton} accessibilityLabel="Loading" accessibilityState={{ busy: true }}>
       {[50, 60, 70, 80].map((width) => (
-        <View key={width} style={styles.row}>
+        <View key={width} style={styles.skeletonRow}>
           <SkeletonCircle width={AVATAR} />
           <View style={styles.skeletonText}>
             <SkeletonLine width={`${width}%`} />
@@ -136,8 +150,9 @@ export function PersonRowSkeleton() {
 const styles = StyleSheet.create({
   skeleton: { paddingHorizontal: SPACE.gutter },
   skeletonText: { flex: 1, gap: SPACE.sm },
-  // Fixed, not a minimum: the lists that window these rows place any row from its index (`getItemLayout`). The name and the line are capped and one line each.
-  row: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, height: ROW },
+  // A minimum (shared.ts): at the default size every row is exactly this, which is when a list may window them (`usePersonRowsFixed`).
+  row: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, minHeight: ROW },
+  skeletonRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, height: ROW },
   avatar: { width: AVATAR, height: AVATAR, borderRadius: RADIUS.capsule },
   chevron: { marginRight: SPACE.lg },
   text: { flex: 1, minWidth: 0 },

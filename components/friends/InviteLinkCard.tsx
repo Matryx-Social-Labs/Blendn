@@ -2,9 +2,9 @@ import { StyleSheet, Text, View } from 'react-native'
 
 import { Avatar } from '../ds/Avatar'
 import { Spinner } from '../ds/Loader'
-import { font, useBoldText, useIncreaseContrast } from '../ds/shared'
+import { CONTROL_FONT_CAP, font, useBoldText, useIncreaseContrast, useLargeText } from '../ds/shared'
 import { Icon } from '../ui/Icon'
-import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { tint } from '../../lib/theme'
 
 /** Flow 6 `add`: the link pill is 48 tall on the card's 20 pt padding. */
@@ -42,6 +42,7 @@ export function InviteLinkCard({
 }) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
+  const largeText = useLargeText()
   const who = name?.trim() || null
   return (
     <View testID="invite-link-card" style={[styles.card, contrast ? styles.cardContrast : styles.cardEdge]}>
@@ -49,10 +50,13 @@ export function InviteLinkCard({
         <View style={styles.who}>
           {photo ? <Avatar kind="photo" uri={photo} size={FACE} /> : <Avatar kind="creature" pseudonym={who} size={FACE} />}
           <View style={styles.whoText}>
-            <Text numberOfLines={1} style={[font('heading', bold), styles.ink]}>
+            {/* Your name grows to the heading cap and takes two lines at the AX sizes; the line under it stops at meta's (D-LM10). */}
+            <Text numberOfLines={largeText ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold), styles.ink]}>
               {who}
             </Text>
-            <Text style={[font('meta', bold), styles.onBlendn]}>on Blend’n</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.onBlendn]}>
+              on Blend’n
+            </Text>
           </View>
         </View>
       ) : null}
@@ -65,7 +69,7 @@ export function InviteLinkCard({
               selectable
               style={[font('body', bold, FONT_FAMILY.mono[500]), styles.url]}
               numberOfLines={2}
-              maxFontSizeMultiplier={1.3}
+              maxFontSizeMultiplier={CONTROL_FONT_CAP}
             >
               {url.replace(/^https:\/\//, '')}
             </Text>
@@ -73,7 +77,7 @@ export function InviteLinkCard({
         ) : failed ? (
           <>
             <Icon name="circle-alert" size={ICON.control} color={COLOR.destructive} />
-            <Text accessibilityRole="alert" style={[font('meta', bold), styles.message]}>
+            <Text accessibilityRole="alert" maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.message]}>
               Your link didn’t load. Check your connection and try again.
             </Text>
           </>
@@ -86,14 +90,18 @@ export function InviteLinkCard({
             style={styles.loading}
           >
             <Spinner size={20} />
-            <Text style={[font('meta', bold), styles.muted]}>Getting your link</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.muted]}>
+              Getting your link
+            </Text>
           </View>
         )}
       </View>
       {url && shared ? (
         <View style={styles.sharedRow}>
           <Icon name="circle-check" size={ICON.inline} color={COLOR.live} />
-          <Text style={[font('meta', bold), styles.muted]}>Shared. Anyone with the link can ask to be your friend.</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.muted, styles.shrink]}>
+            Shared. Anyone with the link can ask to be your friend.
+          </Text>
         </View>
       ) : null}
     </View>
@@ -126,4 +134,5 @@ const styles = StyleSheet.create({
   message: { flex: 1, color: COLOR.textPrimary },
   loading: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
   muted: { color: COLOR.textSecondary },
+  shrink: { flexShrink: 1 },
 })

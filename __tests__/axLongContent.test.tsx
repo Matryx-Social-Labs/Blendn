@@ -133,15 +133,18 @@ describe('a request card at AX XXXL (Banter, Requests: "Arn…", "Bh…" at 61 p
 describe('a person row (Friends here at 360 dp and 1.3: "Aarav …" beside Message)', () => {
   const person = { userId: 'u1', name: 'Aarav Sharma', photo: null }
 
-  it('a name with no line under it may take two lines, and two lines at its cap fit the fixed row', async () => {
+  it('a name with no line under it may take two lines, and at the default size two lines fit the row', async () => {
     await render(<PersonRow person={person as never} trailing={null} />)
     expect(screen.getByTestId('person-name', hidden).props.numberOfLines).toBe(NAME_LINES_ALONE)
-    expect(NAME_LINES_ALONE * TYPE.bodyStrong.lineHeight * CONTROL_FONT_CAP).toBeLessThanOrEqual(PERSON_ROW_HEIGHT)
+    expect(NAME_LINES_ALONE * TYPE.bodyStrong.lineHeight).toBeLessThanOrEqual(PERSON_ROW_HEIGHT)
   })
 
-  it('with a line under it the name keeps one line, so the row’s height holds', async () => {
+  it('with a line under it the name keeps one line below the AX sizes; the row is a minimum, so a longer line grows it (DS-05)', async () => {
+    await at(360, 1.3)
     await render(<PersonRow person={person as never} detail="Requested" />)
     expect(screen.getByTestId('person-name', hidden).props.numberOfLines).toBe(1)
+    expect(flat('person-row')).toMatchObject({ minHeight: PERSON_ROW_HEIGHT })
+    expect(flat('person-row').height).toBeUndefined()
   })
 })
 
