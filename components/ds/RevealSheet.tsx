@@ -4,7 +4,7 @@ import { StyleSheet, Text, View } from 'react-native'
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated'
 
 import { Icon } from '../ui/Icon'
-import { COLOR, EASING, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE, STAGGER } from '../../lib/design/tokens'
+import { COLOR, EASING, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE, STAGGER } from '../../lib/design/tokens'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { tint } from '../../lib/theme'
 import { Avatar } from './Avatar'
@@ -13,7 +13,7 @@ import { Creature, creatureFor } from './Creature'
 import { CrewEmblem } from './CrewEmblem'
 import { monoCaption } from './MonoFamily'
 import { Sheet } from './Sheet'
-import { CONTROL_FONT_CAP, font, useBoldText, useIncreaseContrast } from './shared'
+import { CONTROL_FONT_CAP, font, useBoldText, useIncreaseContrast, useLargeText } from './shared'
 
 /**
  * The only confirmed action in crews (guidelines/components/RevealSheet.html,
@@ -83,6 +83,8 @@ const PILL_EDGE = 0.14
 const SIDE_RADIUS = 20
 // design-exception: the side row pads 10 vertically, off the SPACE scale
 const SIDE_PAD = 10
+/** Faces shown on a side before the rest fold into "+N": four and the tile fit the narrowest side at 360 dp. */
+const MAX_TILES = 4
 // design-exception: the side row's tiles sit 6 apart, off the SPACE scale
 const TILE_GAP = 6
 
@@ -138,17 +140,26 @@ export function RevealSide({
     (revealed.length
       ? `${revealed.length} revealed · ${kept} keep${kept === 1 ? 's' : ''} it private`
       : `${people.length} on tonight’s names`)
-  const tiles = revealed.length ? revealed : people
+  const all = revealed.length ? revealed : people
+  // The faces never wrap: past MAX_TILES the rest fold into the one "+N" tile, which stays in the row beside them.
+  const tiles = all.slice(0, MAX_TILES)
+  const overflow = all.length - tiles.length
+  const foldedKept = kept + overflow
+  const before = Math.max(count ?? 0, people.length) - tiles.length
+  const largeText = useLargeText()
   return (
     <View testID={testID} style={styles.side}>
       {side.kind === 'crew' ? <CrewEmblem seed={side.emblemSeed} size={FACE} /> : <Avatar kind="creature" pseudonym={side.pseudonym} size={FACE} />}
       <View style={styles.fill}>
-        {/* Two Texts, one line each: a long name truncates on its own line and never pushes the status out (audit D3). */}
+        {/*
+          Two Texts of their own, so a long name never pushes the status out (audit D3). Both stop at meta's cap; the name
+          may take two lines and, at the AX sizes, the status too, so the strip stays a strip (C28).
+        */}
         <View accessible accessibilityLabel={`${side.name}, ${status}`} style={styles.words}>
-          <Text numberOfLines={1} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>
+          <Text numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>
             {side.name}
           </Text>
-          <Text numberOfLines={1} style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>
+          <Text numberOfLines={largeText ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>
             {status}
           </Text>
         </View>
@@ -157,14 +168,14 @@ export function RevealSide({
             {tiles.map((p, i) => (
               <Tile key={p.pseudonym} person={p} order={i} testID={testID && `${testID}-tile-${i}`} />
             ))}
-            {revealed.length && kept ? (
+            {revealed.length && foldedKept ? (
               <View style={[styles.tile, styles.kept]}>
-                <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[monoCaption(bold), { color: COLOR.textSecondary }]}>{`+${kept}`}</Text>
+                <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[monoCaption(bold), { color: COLOR.textSecondary }]}>{`+${foldedKept}`}</Text>
               </View>
             ) : null}
-            {!revealed.length && count !== undefined && count > tiles.length ? (
+            {!revealed.length && before > 0 ? (
               <View testID={testID && `${testID}-more`} style={[styles.tile, styles.kept]}>
-                <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[monoCaption(bold), { color: COLOR.textSecondary }]}>{`+${count - tiles.length}`}</Text>
+                <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[monoCaption(bold), { color: COLOR.textSecondary }]}>{`+${before}`}</Text>
               </View>
             ) : null}
           </View>
@@ -230,10 +241,10 @@ const styles = StyleSheet.create({
   },
   fill: { flex: 1, gap: TILE_GAP },
   words: { gap: SPACE.xxs },
-  // The tiles wrap among themselves; the Reveal button / Revealed pill rides the same row at the far edge.
+  // The tiles never wrap (the "+N" folds the rest); the Reveal button / Revealed pill rides the same row at the far edge.
   tilesRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   action: { marginLeft: 'auto' },
-  tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: TILE_GAP, flexShrink: 1 },
+  tiles: { flexDirection: 'row', gap: TILE_GAP, flexShrink: 1 },
   tile: { width: TILE, height: TILE },
   photo: { borderRadius: TILE_CORNER, overflow: 'hidden' },
   kept: { borderRadius: TILE_CORNER, backgroundColor: COLOR.surfaceRaised, alignItems: 'center', justifyContent: 'center' },
