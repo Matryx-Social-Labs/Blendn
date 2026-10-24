@@ -5,6 +5,7 @@ import { DiscMark } from '../ds/DiscMark'
 import { Orbs } from '../ds/Orbs'
 import { font, useBoldText, useSelection } from '../ds/shared'
 import { monoCaption } from '../ds/MonoFamily'
+import { SolidBarFade } from '../ui/GradientFill'
 import { Icon } from '../ui/Icon'
 import FadeInUp from '../motion/FadeInUp'
 import { COLOR, ICON, RADIUS, RISE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
@@ -119,6 +120,14 @@ export function LocationIllustration({ city, notice = false }: { city?: string |
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.youTag]}>You</Text>
       </View>
       <View style={styles.footer}>
+        {/*
+          The scrim: clear to the sunken surface over its top 60%, then solid under the words. The DS fade (a
+          LinearGradient, drawn on every architecture) and a solid block, not a CSS `linear-gradient` (DS-21, A35).
+        */}
+        <View testID="location-scrim" pointerEvents="none" style={StyleSheet.absoluteFill}>
+          <SolidBarFade testID="location-scrim-fade" color={COLOR.surfaceSunken} style={styles.scrimFade} />
+          <View style={styles.scrimSolid} />
+        </View>
         <View style={styles.footerRow}>
           <Icon name="map-pin" size={ICON.inline} color={COLOR.textPrimary} />
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.footerLabel]}>{city ? `NEAR YOU · ${city.toUpperCase()}` : 'NEAR YOU'}</Text>
@@ -129,7 +138,9 @@ export function LocationIllustration({ city, notice = false }: { city?: string |
   )
 }
 
-const SCRIM_FOOT = `linear-gradient(180deg, ${COLOR.surfaceSunken}00 0%, ${COLOR.surfaceSunken} 60%)`
+/** The scrim fades over its top 60% and is solid below (the frame's 0% → 60% stop). */
+const SCRIM_FADE = 3
+const SCRIM_SOLID = 2
 
 const styles = StyleSheet.create({
   card: { borderRadius: RADIUS.card, backgroundColor: COLOR.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: COLOR.hairline, overflow: 'hidden' },
@@ -159,7 +170,9 @@ const styles = StyleSheet.create({
   you: { position: 'absolute', left: '50%', top: '50%', marginLeft: -YOU_SIZE / 2, marginTop: -YOU_SIZE / 2, width: YOU_SIZE, alignItems: 'center', gap: SPACE.xs },
   youRing: { width: YOU_SIZE, height: YOU_SIZE, borderRadius: RADIUS.capsule, alignItems: 'center', justifyContent: 'center' },
   youTag: { color: COLOR.textPrimary, backgroundColor: COLOR.ink, paddingHorizontal: SPACE.sm, borderRadius: RADIUS.capsule, overflow: 'hidden' },
-  footer: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingTop: SPACE.xxxl, paddingHorizontal: SPACE.lg, paddingBottom: SPACE.lg, gap: SPACE.xs, experimental_backgroundImage: SCRIM_FOOT },
+  footer: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingTop: SPACE.xxxl, paddingHorizontal: SPACE.lg, paddingBottom: SPACE.lg, gap: SPACE.xs },
+  scrimFade: { flex: SCRIM_FADE },
+  scrimSolid: { flex: SCRIM_SOLID, backgroundColor: COLOR.surfaceSunken },
   footerRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   footerLabel: { color: COLOR.textPrimary },
   footerBody: { color: COLOR.textSecondary },
