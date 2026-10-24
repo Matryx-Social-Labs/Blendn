@@ -1,12 +1,19 @@
 import { useEffect, useRef, useState, type ComponentProps, type ReactNode } from 'react'
-import { Platform, StyleSheet, View, type LayoutChangeEvent, type ScrollViewProps } from 'react-native'
+import { Platform, StyleSheet, useWindowDimensions, View, type LayoutChangeEvent, type ScrollViewProps } from 'react-native'
 import { KeyboardAwareScrollView, KeyboardEvents, KeyboardStickyView, type KeyboardAwareScrollViewRef } from 'react-native-keyboard-controller'
 
 import { Dock } from '../ds/Dock'
+import { MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { useKeyboardGone } from '../../lib/keyboard'
 
-/** Room kept under the focused field for its hint (two or three lines of small print), over the dock. */
+/** Room kept under the focused field for its hint (two or three lines of small print), over the dock, at the default size. */
 export const HINT_ROOM = 72
+
+/**
+ * The hint's room at this text size: the hint is meta print, so it grows with the font scale up to meta's cap. A fixed 72
+ * left sign-up's age hint under the dock at AX ("You need to be 18 or over to join." lost its last line, rc7 D9).
+ */
+export const hintRoomFor = (fontScale: number) => Math.round(HINT_ROOM * Math.min(Math.max(fontScale, 1), MAX_FONT_SCALE.meta))
 
 /**
  * The least of the scroll a focused field may keep to itself: at the largest type the dock and the hint's room can
@@ -18,8 +25,8 @@ export const MIN_FIELD = 64
  * How far above the keyboard the focused field is kept: the dock's height and the hint's room, but never so much that
  * less than `MIN_FIELD` of the scroll is left to the field. Unmeasured (0), nothing to clamp against.
  */
-export function bottomOffsetFor(dockHeight: number, scrollHeight: number): number {
-  const wanted = dockHeight + HINT_ROOM
+export function bottomOffsetFor(dockHeight: number, scrollHeight: number, hintRoom: number = HINT_ROOM): number {
+  const wanted = dockHeight + hintRoom
   return scrollHeight > 0 ? Math.max(0, Math.min(wanted, scrollHeight - MIN_FIELD)) : wanted
 }
 
@@ -75,6 +82,8 @@ export function KeyboardPage({
     return () => sub.remove()
   }, [])
   const onLayout = (e: LayoutChangeEvent) => setScrollHeight(e.nativeEvent.layout.height)
+  // The hint's room, and the scroll room that lets the last field's hint reach it (EXTRA_SCROLL_ROOM's reasoning, scaled).
+  const hintRoom = hintRoomFor(useWindowDimensions().fontScale)
   return (
     <View style={styles.fill}>
       <KeyboardAwareScrollView
@@ -86,8 +95,8 @@ export function KeyboardPage({
         keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         showsVerticalScrollIndicator={false}
         enabled={!keyboardGone}
-        bottomOffset={bottomOffsetFor(dockHeight, scrollHeight)}
-        extraKeyboardSpace={EXTRA_SCROLL_ROOM}
+        bottomOffset={bottomOffsetFor(dockHeight, scrollHeight, hintRoom)}
+        extraKeyboardSpace={EXTRA_SCROLL_ROOM - HINT_ROOM + hintRoom}
         {...scrollProps}
       >
         {children}

@@ -16,7 +16,8 @@ jest.mock('react-native-safe-area-context', () => ({
 /* eslint-disable import/first */
 import { TextField } from '../components/ds/TextField'
 import { OnboardingScreen } from '../components/onboarding/OnboardingScreen'
-import { bottomOffsetFor, EXTRA_SCROLL_ROOM, HINT_ROOM, MIN_FIELD } from '../components/onboarding/KeyboardPage'
+import { bottomOffsetFor, EXTRA_SCROLL_ROOM, HINT_ROOM, hintRoomFor, MIN_FIELD } from '../components/onboarding/KeyboardPage'
+import { atScale, AX_XXXL, resetScale } from './helpers/ax'
 /* eslint-enable import/first */
 
 /** Every keyboard-controller listener, by event: more than one hook listens for the same one. */
@@ -85,6 +86,8 @@ describe('the page follows the keyboard through react-native-keyboard-controller
   const read = (rel: string) => readFileSync(join(__dirname, '..', rel), 'utf8')
 
   it('the scroll clears the focused field of the dock and the hint under it: bottomOffset is the dock’s height plus the hint’s room', async () => {
+    // At the default text size (jest's window says 2): the room grows with the type (rc7 D9, below).
+    await atScale(1)
     await render(
       <OnboardingScreen step="basics" title="The basics" ctaLabel="Continue" onContinue={jest.fn()}>
         <TextField label="Name" value="" onChangeText={() => {}} />
@@ -98,6 +101,8 @@ describe('the page follows the keyboard through react-native-keyboard-controller
   })
 
   it('the last field can rise clear of the dock and its hint’s room: the scroll has room under it beyond the keyboard (RC drive D4)', async () => {
+    // At the default text size (jest's window says 2): the room grows with the type (rc7 D9, below).
+    await atScale(1)
     await render(
       <OnboardingScreen step="basics" title="The basics" ctaLabel="Continue" onContinue={jest.fn()}>
         <TextField label="Name" value="" onChangeText={() => {}} />
@@ -193,3 +198,25 @@ describe('bottomOffset at large type', () => {
     expect(screen.getByTestId('onboarding-scroll').props.bottomOffset).toBe(640 - MIN_FIELD)
   })
 })
+
+describe('the hint’s room grows with the text (rc7 D9: the age hint under the dock at AX)', () => {
+  it('is 72 at the default size, scales with the font, and stops at meta’s cap', () => {
+    expect(hintRoomFor(1)).toBe(HINT_ROOM)
+    expect(hintRoomFor(0.85)).toBe(HINT_ROOM)
+    expect(hintRoomFor(1.5)).toBe(108)
+    expect(hintRoomFor(3.1)).toBe(HINT_ROOM * 2)
+  })
+
+  it('the page keeps the dock plus the scaled room under the focused field, with the scroll room to reach it', async () => {
+    await atScale(AX_XXXL)
+    await render(
+      <OnboardingScreen step="basics" title="The basics" ctaLabel="Continue" onContinue={jest.fn()}>
+        <TextField label="Name" value="" onChangeText={() => {}} />
+      </OnboardingScreen>
+    )
+    expect(screen.getByTestId('onboarding-scroll').props.bottomOffset).toBe(HINT_ROOM * 2)
+    expect(screen.getByTestId('onboarding-scroll').props.extraKeyboardSpace).toBe(EXTRA_SCROLL_ROOM + HINT_ROOM)
+  })
+})
+
+afterEach(() => resetScale())
