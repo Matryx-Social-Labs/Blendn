@@ -57,8 +57,10 @@ it('says a dead link does not work, and nothing about why', async () => {
   await render(<InviteScreen />)
   await screen.findByText('This link doesn’t work')
   expect(screen.getByText('Ask the person who sent it for a new one.')).toBeTruthy()
-  // No action to take on a link that does not work.
+  // No action on the link itself; but not a dead end (D-LM9): Add friends, lit, goes to your own link. Negative control: no action fails it.
   expect(screen.queryByText('Send friend request')).toBeNull()
+  fireEvent.press(screen.getByText('Add friends'))
+  expect(router.replace).toHaveBeenCalledWith('/friends/add')
 })
 
 it('calls a link that failed to load a failed load, not a dead link, and tries again', async () => {
