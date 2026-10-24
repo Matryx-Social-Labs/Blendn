@@ -221,6 +221,9 @@ export function zoneSuffix(time: string | number | Date, timeZone?: string | nul
   return name ? ` ${name}` : ''
 }
 
+/** A clock that wraps as one piece: its spaces no-break, so "5:50 AM" never leaves "AM" alone on the next line (rc7 D13). */
+export const unbroken = (clock: string) => clock.replace(/ /g, '\u00A0')
+
 /** An event's clock in its own zone, named when it is not the phone's: "9 AM", or "9 AM IST" on a Berlin phone. */
 export function eventClock(time: string | number | Date, timeZone?: string | null): string {
   const clock = clockTime(time, timeZone ?? undefined)

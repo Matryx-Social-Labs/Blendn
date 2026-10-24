@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
 import { OPACITY } from '../../lib/theme'
-import { clockTime } from '../../lib/time'
+import { clockTime, unbroken } from '../../lib/time'
 import { Avatar } from '../ds/Avatar'
 import { Button } from '../ds/Button'
 import { CrewEmblem } from '../ds/CrewEmblem'
@@ -180,8 +180,8 @@ export function BlendLiveCard({
   const bold = useBoldText()
   const twoLines = useTwoLineNames()
   const reduceMotion = useReducedMotion()
-  // "4 AM": a Blend's closing hour, the app's one clock.
-  const closes = closesAt ? clockTime(closesAt) : null
+  // "4 AM": a Blend's closing hour, the app's one clock, kept in one piece when the line wraps (rc7 D13).
+  const closes = closesAt ? unbroken(clockTime(closesAt)) : null
   return (
     <Pressable
       onPress={onPress}
