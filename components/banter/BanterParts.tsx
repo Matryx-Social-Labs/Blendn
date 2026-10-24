@@ -17,7 +17,7 @@ import { IconButton } from '../ds/IconButton'
 import { CategoryPlate } from '../ds/EventCard'
 import { Badge, monoCaption, MonoRun, PresenceDot, ScrimPill, TimeBadge } from '../ds/MonoFamily'
 import { RollingNumber } from '../ds/RollingNumber'
-import { CONTROL_FONT_CAP, font, GroundProvider, useBoldText, useLargeText, useSelection } from '../ds/shared'
+import { CONTROL_FONT_CAP, font, GroundProvider, useBoldText, useLargeText, useSelection, useTwoLineNames } from '../ds/shared'
 import { Icon, type IconName } from '../ui/Icon'
 import { Material } from '../ui/Material'
 import { glassContentsIn, glassRiseIn } from '../motion/presence'
@@ -108,6 +108,7 @@ export function LiveHero({
   onPress = useBanterPress(onPress)
   const bold = useBoldText()
   const largeText = useLargeText()
+  const twoLines = useTwoLineNames()
   const reduceMotion = useReducedMotion()
   return (
     <Pressable
@@ -139,7 +140,7 @@ export function LiveHero({
       ) : null}
       <View style={styles.heroFoot}>
         <View style={styles.grow}>
-          <Text numberOfLines={largeText ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold), styles.ink]}>
+          <Text numberOfLines={twoLines ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold), styles.ink]}>
             {title}
           </Text>
           {line ? (
@@ -177,7 +178,7 @@ export function BlendLiveCard({
 }) {
   onPress = useBanterPress(onPress)
   const bold = useBoldText()
-  const largeText = useLargeText()
+  const twoLines = useTwoLineNames()
   const reduceMotion = useReducedMotion()
   // "4 AM": a Blend's closing hour, the app's one clock.
   const closes = closesAt ? clockTime(closesAt) : null
@@ -190,7 +191,7 @@ export function BlendLiveCard({
     >
       <PairEmblem seeds={seeds} ring={COLOR.surface} />
       <View style={styles.grow}>
-        <Text numberOfLines={largeText ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>
+        <Text numberOfLines={twoLines ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>
           {title}
         </Text>
         <View style={styles.inline}>
@@ -252,6 +253,7 @@ export function RequestCard({
   onOpen = useBanterPress(onOpen)
   const bold = useBoldText()
   const largeText = useLargeText()
+  const twoLines = useTwoLineNames()
   return (
     // The card is a surface: its "…" draws the solid disc in the card's chip tone, not glass with nothing to refract (C20).
     <GroundProvider value="surface">
@@ -271,7 +273,7 @@ export function RequestCard({
                 Reading text, as a Banter row's (D2): each grows to its role's cap and, at the accessibility sizes, doubles its lines
                 rather than cut the name to "Arn…" (RC drive 5: uncapped, the name was 61 pt on one line).
               */}
-              <Text numberOfLines={largeText ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>
+              <Text numberOfLines={twoLines ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>
                 {name}
               </Text>
               <Text numberOfLines={largeText ? 4 : 2} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
@@ -377,6 +379,7 @@ export function BanterRow({
   onPress = useBanterPress(onPress)
   const bold = useBoldText()
   const largeText = useLargeText()
+  const twoLines = useTwoLineNames()
   const sel = useSelection()
   const reduceMotion = useReducedMotion()
   return (
@@ -396,7 +399,7 @@ export function BanterRow({
             Reading text, not a control (D2): it grows to its cap like the line under it, and at the accessibility sizes takes
             two lines rather than one word. Capped at 1.3 it read smaller than its own preview ("Crashing…" over a 1.3× title).
           */}
-          <Text numberOfLines={largeText ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink, styles.shrink]}>
+          <Text numberOfLines={twoLines ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink, styles.shrink]}>
             {title}
           </Text>
           {muted ? <Icon name="bell-off" size={ICON.inline} color={COLOR.textSecondary} /> : null}

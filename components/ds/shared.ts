@@ -35,6 +35,17 @@ export function useLargeText(): boolean {
   return useWindowDimensions().fontScale >= AX_FONT_SCALE
 }
 
+/**
+ * From this font scale a name or title beside a fixed trailing column (a time, a ⋯, a count) takes two lines rather than be
+ * cut to a few letters. The AX flag (1.5) came too late: at Android's 1.3 request rows read "Arnav G…" (rc7 D10).
+ */
+export const TWO_LINE_NAMES_FROM = 1.2
+
+/** Whether a name beside a fixed trailing column may take two lines at this text size. */
+export function useTwoLineNames(): boolean {
+  return useWindowDimensions().fontScale >= TWO_LINE_NAMES_FROM
+}
+
 /** The narrowest a line of text may be made beside a trailing piece, in ems of its role: about a dozen characters. */
 export const MIN_MEASURE_EM = 6
 /** At or below this width (dp), or past this font scale, a line beside a trailing piece can run short; wider and smaller, it never does. */
