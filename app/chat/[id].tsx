@@ -7,7 +7,8 @@ import { useBlendRoom } from '../../components/crews/BlendRoom'
 import { ChatHeader, chatFeedFrame, chatHeaderBottom, OpensLine, SubtitleText } from '../../components/chat/ChatHeader'
 import { BrokenLink } from '../../components/chat/BrokenLink'
 import { KeyboardFrame } from '../../components/chat/KeyboardFrame'
-import { CountLine, CrewRoomFace, FeedSkeleton, JustMutedLine, LoadOlder, NewestChip, ReactionFlight, RoomCover, type Flight } from '../../components/chat/ChatParts'
+import { CountLine, FeedSkeleton, HEADER_FACE, JustMutedLine, LoadOlder, NewestChip, ReactionFlight, RoomCover, type Flight } from '../../components/chat/ChatParts'
+import { CrewEmblem } from '../../components/ds/CrewEmblem'
 import { RoomGuidelinesBanner } from '../../components/chat/RoomGuidelinesBanner'
 import { RoomMessageRow, RoomOutside, senderOf, type Outside, type RowHandlers } from '../../components/chat/RoomFeed'
 import { SenderCard, type Sender } from '../../components/chat/SenderCard'
@@ -37,6 +38,7 @@ import { notOpenYetAt, opensInSpoken } from '../../lib/preEventRoom'
 import { useOpensAt, usePreEventRoom } from '../../lib/usePreEventRoom'
 import { newClientId } from '../../lib/clientId'
 import { BLEND_CLOSED_LINE, defaultRoomName, roomClosedLine, roomKindParam } from '../../lib/crews'
+import { crewsApi } from '../../lib/crewsApi'
 import { COLOR, SIZE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useKeyboardShown } from '../../lib/keyboard'
@@ -110,6 +112,25 @@ const stamp = (m: { created_at: string }) => Date.parse(m.created_at) || 0
 const futureInstant = (value: unknown): string | null => {
   const at = typeof value === 'string' ? Date.parse(value) : NaN
   return Number.isFinite(at) && at > Date.now() ? new Date(at).toISOString() : null
+}
+
+/**
+ * A crew chat's header face: the crew's own emblem, as the Banter row and the Blend draw it (TG-17, RC audit C23), read
+ * from the crew (`GET /crews/:id`); the room's square until it answers, or when it does not.
+ */
+function CrewRoomFace({ crewId }: { crewId: string | null }) {
+  const [seed, setSeed] = useState<{ crewId: string; seed: string } | null>(null)
+  useEffect(() => {
+    if (!crewId) return
+    let live = true
+    void crewsApi.crew(crewId).then((r) => {
+      if (live && r.success && r.data?.emblemSeed) setSeed({ crewId, seed: r.data.emblemSeed })
+    })
+    return () => {
+      live = false
+    }
+  }, [crewId])
+  return seed && seed.crewId === crewId ? <CrewEmblem seed={seed.seed} size={HEADER_FACE} testID="room-crew-emblem" /> : <RoomCover />
 }
 
 /** A send only this phone holds: refused ("Not sent") or waiting for a connection. */

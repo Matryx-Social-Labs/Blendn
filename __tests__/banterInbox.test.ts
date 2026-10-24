@@ -62,9 +62,9 @@ describe('one inbox, not two tabs', () => {
 
   it('groups into Crews, People and Past rooms under one heading system', () => {
     const src = SCREEN()
-    expect(src).toContain("['Crews', match(crewRows), false]")
-    expect(src).toContain("['People', match(peopleRows), true]")
-    expect(src).toContain("['Past rooms', match(pastRows), false]")
+    expect(src).toContain("['Crews', match(crewRows)]")
+    expect(src).toContain("['People', match(peopleRows)]")
+    expect(src).toContain("['Past rooms', match(pastRows)]")
     expect(src).toContain('<SectionHeader')
   })
 })
@@ -162,13 +162,15 @@ describe('a row is one height, read or unread', () => {
   it("reserves the unread dot’s slot on every row", () => {
     const parts = PARTS()
     expect(parts).toContain('<View style={styles.dotSlot}>')
-    expect(parts).toContain('<PresenceDot kind="unread" />')
+    // In the world's rose (D28, TG-12): white is for counts.
+    expect(parts).toContain('<PresenceDot kind="unread" color={sel.glyph}')
   })
 
   it('marks unread in three changes: the line white and medium, the time white, the dot', () => {
     const parts = PARTS()
     expect(parts).toContain('unread ? FONT_FAMILY.brand[500] : undefined), unread ? styles.ink : styles.secondary')
-    expect(parts).toContain('unread ? styles.ink : styles.tertiary')
+    expect(parts).toContain('<TimeTag time={time} ink={unread} />')
+    expect(parts).toContain('ink ? styles.ink : styles.tertiary')
   })
 })
 
@@ -217,7 +219,8 @@ describe('what the API already sends is read', () => {
   it('offers Mark all read for DMs only — no endpoint marks a room read', () => {
     const src = SCREEN()
     expect(src).toContain('const hasUnread = personalChats.some((c) => c.unread_count > 0)')
-    expect(src).toContain("action={item.markAll && hasUnread ? { label: 'Mark all read'")
+    // The header's control only (D29, TG-12): the People heading's link said it twice.
+    expect(src).not.toContain("label: 'Mark all read'")
     expect(src).toContain('canMarkAll={hasUnread}')
   })
 
