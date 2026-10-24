@@ -1,12 +1,13 @@
 /** The 1 to 5 scale (Flow 3 `scale`): five equal 48 pt pills, digits in mono, the ends named, the chosen one lit in the hue. */
-import { fireEvent, render, screen } from '@testing-library/react-native'
+import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { StyleSheet } from 'react-native'
+import { Dimensions, StyleSheet } from 'react-native'
 
-import { HueProvider } from '../components/ds/shared'
+import { CONTROL_FONT_CAP, HueProvider } from '../components/ds/shared'
 import { ScaleSteps } from '../components/ds/ScaleSteps'
-import { COLOR, SIZE } from '../lib/design/tokens'
+import { COLOR, SIZE, SPACE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
+import { AX_XXXL, clipped, uncapped } from './helpers/ax'
 
 const draw = (props: Partial<React.ComponentProps<typeof ScaleSteps>> = {}) =>
   render(
@@ -53,4 +54,26 @@ it('a press chooses, with the selection haptic; disabled does neither', async ()
   await draw({ onChoose, disabled: true })
   await fireEvent.press(screen.getByTestId('s-3'))
   expect(onChoose).toHaveBeenCalledTimes(1)
+})
+
+describe('at AX XXXL (B-S1: the two anchors ran into each other)', () => {
+  const window = Dimensions.get('window')
+  afterEach(() => Dimensions.set({ window, screen: window }))
+
+  it('the anchors label a control: capped at its cap, each at most half the row with a gap, the high one right-aligned; they may wrap', async () => {
+    await act(async () => Dimensions.set({ window: { ...window, fontScale: AX_XXXL }, screen: { ...window, fontScale: AX_XXXL } }))
+    await draw({ low: 'Not for me at all', high: 'Best night in ages' })
+    const low = screen.getByText('Not for me at all', { includeHiddenElements: true })
+    const high = screen.getByText('Best night in ages', { includeHiddenElements: true })
+    for (const end of [low, high]) {
+      expect(end.props.maxFontSizeMultiplier).toBe(CONTROL_FONT_CAP)
+      expect(end.props.numberOfLines).toBeUndefined()
+      expect(StyleSheet.flatten(end.props.style)).toMatchObject({ flexShrink: 1, maxWidth: '50%' })
+    }
+    expect(StyleSheet.flatten(high.props.style).textAlign).toBe('right')
+    expect(StyleSheet.flatten(low.props.style).textAlign ?? 'left').toBe('left')
+    expect(StyleSheet.flatten(low.parent?.props.style)).toMatchObject({ gap: SPACE.sm, justifyContent: 'space-between' })
+    expect(uncapped(screen.toJSON())).toEqual([])
+    expect(clipped(screen.toJSON())).toEqual([])
+  })
 })

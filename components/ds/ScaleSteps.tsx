@@ -75,8 +75,13 @@ export function ScaleSteps({
         })}
       </View>
       <View style={styles.ends} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
-        <Text style={[font('meta', bold), styles.end]}>{low}</Text>
-        <Text style={[font('meta', bold), styles.end]}>{high}</Text>
+        {/* They label a control, so they stop at its cap; each takes at most half the row and wraps rather than meet the other (B-S1). */}
+        <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.end]}>
+          {low}
+        </Text>
+        <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.end, styles.endHigh]}>
+          {high}
+        </Text>
       </View>
     </View>
   )
@@ -93,6 +98,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   digit: { color: COLOR.textPrimary, fontVariant: ['tabular-nums'] },
-  ends: { flexDirection: 'row', justifyContent: 'space-between' },
-  end: { color: COLOR.textTertiary },
+  ends: { flexDirection: 'row', justifyContent: 'space-between', gap: SPACE.sm },
+  end: { color: COLOR.textTertiary, flexShrink: 1, maxWidth: '50%' },
+  endHigh: { textAlign: 'right' },
 })
