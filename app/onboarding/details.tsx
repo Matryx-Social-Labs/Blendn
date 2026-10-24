@@ -9,11 +9,11 @@ import { font, useBoldText } from '../../components/ds/shared'
 import { MAX_INTERESTS } from '../../components/InterestPicker'
 import { ListLoadState, type ListStatus } from '../../components/onboarding/ListLoadState'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
+import { SolidBarFade } from '../../components/ui/GradientFill'
 import { apiClient } from '../../lib/apiClient'
 import { toPickerTree, type CategoryGroup, type CategoryNode } from '../../lib/categories'
 import { COLOR, SPACE } from '../../lib/design/tokens'
 import { Logger } from '../../lib/logger'
-import { tint } from '../../lib/theme'
 import { bioWithPrompt, promptFits } from '../../lib/onboarding'
 import { useOnboarding } from '../../lib/useOnboarding'
 import { overCapMessage, PROFILE_LIMITS, serverLength } from '../../lib/profileLimits'
@@ -174,8 +174,9 @@ export default function DetailsScreen() {
                 />
               ))}
             </ScrollView>
+            {/* The rails' sideways fade: a LinearGradient, which draws on every architecture (a CSS gradient did not: A35). */}
             {Platform.OS === 'ios' ? (
-              <View testID="onboarding-prompts-fade" pointerEvents="none" style={styles.promptsFade} />
+              <SolidBarFade testID="onboarding-prompts-fade" color={COLOR.ink} toward="right" pointerEvents="none" style={styles.promptsFade} />
             ) : null}
           </View>
         </View>
@@ -217,12 +218,11 @@ export default function DetailsScreen() {
 }
 
 /** The rail's end, clear to the page's ink. */
-const PROMPTS_FADE = `linear-gradient(90deg, ${tint(COLOR.ink, 0)} 0%, ${COLOR.ink} 100%)`
 
 const styles = StyleSheet.create({
   bio: { gap: SPACE.md },
   prompts: { gap: SPACE.sm, paddingRight: SPACE.xxxl },
-  promptsFade: { position: 'absolute', top: 0, bottom: 0, right: 0, width: SPACE.xxxl, experimental_backgroundImage: PROMPTS_FADE },
+  promptsFade: { position: 'absolute', top: 0, bottom: 0, right: 0, width: SPACE.xxxl },
   interests: { gap: SPACE.lg },
   interestsHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
   heading: { color: COLOR.textPrimary },

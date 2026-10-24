@@ -12,6 +12,10 @@ const mockCategories = jest.fn()
 const mockWorkFields = jest.fn()
 jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: jest.fn(), replace: jest.fn() } }))
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
+jest.mock('expo-linear-gradient', () => {
+  const { View } = jest.requireActual('react-native')
+  return { LinearGradient: (props: object) => <View {...props} /> }
+})
 jest.mock('../lib/useOnboarding', () => ({
   useOnboarding: () => ({ draft: mockDraft, loaded: true, saving: false, commit: mockCommit, skip: jest.fn(), goBack: jest.fn() }),
 }))
@@ -20,6 +24,8 @@ jest.mock('../lib/logger', () => ({ Logger: { info: jest.fn(), warn: jest.fn(), 
 
 import DetailsScreen from '../app/onboarding/details'
 import JourneyScreen from '../app/onboarding/journey'
+import { COLOR } from '../lib/design/tokens'
+import { tint } from '../lib/theme'
 
 const primary = () => screen.getByTestId('onboarding-primary')
 beforeEach(() => {
@@ -65,7 +71,12 @@ describe('details', () => {
   it('the prompts rail fades at its edge rather than clipping a chip mid-word (GO-11, A13)', async () => {
     mockCategories.mockResolvedValue(tree(2))
     await render(<DetailsScreen />)
-    expect(screen.getByTestId('onboarding-prompts-fade', { includeHiddenElements: true })).toBeTruthy()
+    const fade = screen.getByTestId('onboarding-prompts-fade', { includeHiddenElements: true })
+    // The DS sideways fade (a LinearGradient, every architecture), clear to ink toward the right; no CSS gradient.
+    // Negative control: the old View with `experimental_backgroundImage` has no `colors` and fails.
+    expect(fade.props.colors).toEqual([tint(COLOR.ink, 0), COLOR.ink])
+    expect(fade.props.end).toEqual({ x: 1, y: 0.5 })
+    expect(JSON.stringify(screen.toJSON())).not.toContain('linear-gradient')
   })
 
   it('a prompt with no room left is dimmed and does nothing', async () => {
