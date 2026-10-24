@@ -1,5 +1,7 @@
-import { render, screen } from "@testing-library/react-native"
+import { act, render, screen } from "@testing-library/react-native"
+import { Dimensions, StyleSheet } from "react-native"
 import { CityArtCard } from "../components/cityArt/CityArtCard"
+import { CONTROL_FONT_CAP } from "../components/ds/shared"
 import { buildScene } from "../components/cityArt/scenes"
 import { SCENE_PALETTES, cityArtFor, timeOfDay, type CityArtKey, type TimeOfDay } from "../lib/cityArt"
 
@@ -106,5 +108,43 @@ describe("drawableCityArt", () => {
       const { drawableCityArt } = require("../components/cityArt/drawable")
       expect(drawableCityArt("Bangalore")?.key).toBe("blr")
     })
+  })
+})
+
+describe("CityArtCard at AX XXXL (GO-03, audit A4/A5)", () => {
+  const AX_XXXL = 3.571
+  const window = Dimensions.get("window")
+  const atScale = (fontScale: number) => act(async () => Dimensions.set({ window: { ...window, fontScale }, screen: { ...window, fontScale } }))
+  afterEach(() => atScale(2))
+
+  type Node = { type: string; props: Record<string, unknown>; children: (Node | string)[] | null }
+  /** Text the scale reaches past CONTROL_FONT_CAP inside a box of fixed `height`: it is sliced. */
+  function clipped(n: Node | null, fixed = false, found: string[] = []): string[] {
+    if (!n) return found
+    const style = StyleSheet.flatten(n.props.style) as { height?: unknown } | undefined
+    const boxed = fixed || typeof style?.height === "number"
+    if (n.type === "Text") {
+      const cap = n.props.maxFontSizeMultiplier as number | undefined
+      if (boxed && (!cap || cap > CONTROL_FONT_CAP)) found.push(JSON.stringify(n.children))
+      return found
+    }
+    ;(n.children ?? []).forEach((c) => typeof c === "object" && clipped(c, boxed, found))
+    return found
+  }
+
+  it("caps its labels at CONTROL_FONT_CAP and grows (minHeight), so nothing is sliced", async () => {
+    await atScale(AX_XXXL)
+    await render(<CityArtCard city="Bengaluru" art={cityArtFor("Bengaluru")!} countLabel="1,362 places" active here onPress={() => {}} />)
+    expect(clipped(screen.toJSON() as never)).toEqual([])
+    for (const text of ["Bengaluru", "You’re here"]) expect(screen.getByText(text).props.maxFontSizeMultiplier).toBe(CONTROL_FONT_CAP)
+    const art = StyleSheet.flatten(screen.getByTestId("city-art-frame").props.style)
+    expect(art.height).toBeUndefined()
+    expect(art.minHeight).toBeGreaterThan(0)
+  })
+
+  it("sets the label in the flow over a scrim, not pinned over the skyline", async () => {
+    await render(<CityArtCard city="Bengaluru" art={cityArtFor("Bengaluru")!} countLabel="26 events" active={false} here={false} onPress={() => {}} />)
+    expect(StyleSheet.flatten(screen.getByTestId("city-art-label").props.style).position).not.toBe("absolute")
+    expect(screen.getByTestId("city-art-scrim")).toBeTruthy()
   })
 })

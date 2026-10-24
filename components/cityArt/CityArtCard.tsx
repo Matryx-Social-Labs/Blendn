@@ -12,23 +12,28 @@
  */
 import React, { useState } from 'react'
 import { StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native'
-import { SCENE_PALETTES, type CityArtInfo } from '../../lib/cityArt'
+import { type CityArtInfo } from '../../lib/cityArt'
 import { COLOR, RADIUS, SPACE } from '../../lib/design/tokens'
 import { CheckDisc } from '../ds/RadioCard'
-import { font, useBoldText, useSelection } from '../ds/shared'
+import { CONTROL_FONT_CAP, font, useBoldText, useSelection } from '../ds/shared'
 import ScalePress from '../motion/ScalePress'
+import { PhotoScrim } from '../ui/GradientFill'
 import { CityScene, useSceneTime } from './CityScene'
 
-function useWidth() {
-  const [width, setWidth] = useState(0)
+function useSize() {
+  const [size, setSize] = useState({ width: 0, height: 0 })
   const onLayout = (e: LayoutChangeEvent) => {
-    const w = Math.round(e.nativeEvent.layout.width)
-    setWidth((prev) => (prev === w ? prev : w))
+    const width = Math.round(e.nativeEvent.layout.width)
+    const height = Math.round(e.nativeEvent.layout.height)
+    setSize((prev) => (prev.width === width && prev.height === height ? prev : { width, height }))
   }
-  return [width, onLayout] as const
+  return [size, onLayout] as const
 }
 
-/** The skyline card is 140 tall (Flow 3 `city`); the banner takes its own height from the caller. */
+/**
+ * The skyline card is 140 tall (Flow 3 `city`) at rest, and grows when its label does: a minimum, never a height (the
+ * row rule, components/ds/shared.ts). The banner takes its own height from the caller.
+ */
 const CARD_HEIGHT = 140
 const PILL_HEIGHT = 28
 
@@ -52,9 +57,8 @@ interface CardProps {
 export function CityArtCard({ city, art, countLabel, active, here, onPress }: CardProps) {
   const bold = useBoldText()
   const sel = useSelection()
-  const [width, onLayout] = useWidth()
+  const [{ width, height }, onLayout] = useSize()
   const tod = useSceneTime(art.timeZone)
-  const ink = SCENE_PALETTES[tod].ink
 
   return (
     <ScalePress
@@ -66,20 +70,31 @@ export function CityArtCard({ city, art, countLabel, active, here, onPress }: Ca
       accessibilityState={{ selected: active }}
       accessibilityLabel={`${city}${here ? ', your current location' : ''}, ${countLabel}`}
     >
-      <View style={styles.art} onLayout={onLayout}>
-        <CityScene city={art.key} width={width} height={CARD_HEIGHT} tod={tod} />
-        <View style={styles.label} pointerEvents="none">
-          <Text style={[font('heading', bold), { color: ink }]} numberOfLines={1}>
+      <View testID="city-art-frame" style={styles.art} onLayout={onLayout}>
+        {/* The scene fills whatever the label leaves it, drawn at the card's measured size (it keeps its ground, CityScene). */}
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          <CityScene city={art.key} width={width} height={Math.max(height, CARD_HEIGHT)} tod={tod} />
+        </View>
+        {/*
+         * The label sits in the flow at the foot, over a scrim: the skyline is busiest at its foot, and over a day sky the
+         * scene's own ink read under the towers (audit A5). White on the scrim reads at every time of day. Capped at
+         * CONTROL_FONT_CAP: the card is a control (a picker row), and the card grows rather than slicing it (A4).
+         */}
+        <View testID="city-art-label" style={styles.label} pointerEvents="none">
+          <PhotoScrim testID="city-art-scrim" style={StyleSheet.absoluteFill} />
+          <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('heading', bold), styles.onScrim]} numberOfLines={1}>
             {city}
           </Text>
           {/* The script line is system-drawn: neither app family carries Kannada or Devanagari. */}
-          <Text style={[font('meta', bold), styles.script, { color: ink }]} numberOfLines={1}>
+          <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.script, styles.onScrim]} numberOfLines={2}>
             {[art.script, countLabel].join(' · ')}
           </Text>
         </View>
         {here ? (
           <View style={[styles.here, active && styles.hereBesideCheck]}>
-            <Text style={[font('caption', bold), styles.onWhite]}>You’re here</Text>
+            <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), styles.onWhite]}>
+              You’re here
+            </Text>
           </View>
         ) : null}
         <CheckDisc selected={active} testID="city-art-check" />
@@ -91,7 +106,7 @@ export function CityArtCard({ city, art, countLabel, active, here, onPress }: Ca
 
 /** The scene alone, cropped to a strip: sky gives way before the street does. */
 export function CityArtBanner({ art, height }: { art: CityArtInfo; height: number }) {
-  const [width, onLayout] = useWidth()
+  const [{ width }, onLayout] = useSize()
   return (
     <View style={[styles.banner, { height }]} onLayout={onLayout}>
       <CityScene city={art.key} width={width} height={height} />
@@ -99,19 +114,21 @@ export function CityArtBanner({ art, height }: { art: CityArtInfo; height: numbe
   )
 }
 
-/** The city's name in its own script sits a step behind the English name, over the art. */
+/** The city's name in its own script sits a step behind the English name, over the art (white at 75% on the scrim's foot: 9:1). */
 const SCRIPT_OPACITY = 0.75
 
 const styles = StyleSheet.create({
   card: { borderRadius: RADIUS.mediaInCard, overflow: 'hidden', backgroundColor: COLOR.surface, marginBottom: SPACE.md },
-  art: { width: '100%', height: CARD_HEIGHT },
-  label: { position: 'absolute', left: SPACE.lg, bottom: SPACE.md, right: SPACE.xxxl, gap: SPACE.xxs },
+  art: { width: '100%', minHeight: CARD_HEIGHT, justifyContent: 'flex-end' },
+  // The scrim's clear head runs up into the sky; the right inset clears the check disc and the pill's column.
+  label: { paddingLeft: SPACE.lg, paddingRight: SPACE.xxxl, paddingTop: SPACE.xxl, paddingBottom: SPACE.md, gap: SPACE.xxs },
+  onScrim: { color: COLOR.textPrimary },
   script: { fontFamily: undefined, opacity: SCRIPT_OPACITY },
   here: {
     position: 'absolute',
     right: SPACE.md,
     top: SPACE.md,
-    height: PILL_HEIGHT,
+    minHeight: PILL_HEIGHT,
     justifyContent: 'center',
     paddingHorizontal: SPACE.md,
     borderRadius: RADIUS.capsule,
