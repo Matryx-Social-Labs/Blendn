@@ -11,7 +11,7 @@ import { SectionReveal } from '../pulse/Rail'
 import { KindGrid, LiveSection, NearSection, OpenSection } from '../places/PlaceCards'
 import { PlacesFilterSheet } from '../places/PlacesFilterSheet'
 import { PlacesSearch, PlacesTitle } from '../places/PlacesHeader'
-import { StickyBar, STICKY_BAR_AFTER } from '../pulse/StickyBar'
+import { StickyBar, STICKY_BAR_AFTER, StickyScrolled } from '../pulse/StickyBar'
 import { QuietFold, QuietRow, RefreshFailed } from '../places/PlaceParts'
 import { PlacesSkeleton } from '../places/PlacesSkeleton'
 import { SectionHeader } from '../ds/SectionHeader'
@@ -300,7 +300,7 @@ export function PlacesList({
           )
         case 'search':
           return (
-            <StickyBar scrolled={barOn}>
+            <StickyBar>
               <PlacesSearch
                 onSearch={setSearch}
                 searching={searching && state.status === 'loading'}
@@ -390,7 +390,7 @@ export function PlacesList({
       }
     },
     [
-      city, openCityPicker, stat, searching, state.status, state.readAt, state.refreshFailed, state.rateLimit, rateLimitDone, filters, offline, now, term, whatsOn, typeLabel, barOn,
+      city, openCityPicker, stat, searching, state.status, state.readAt, state.refreshFailed, state.rateLimit, rateLimitDone, filters, offline, now, term, whatsOn, typeLabel,
       chooseKind, refresh, requestLocation, onShowNearOnMap, toggleFold, seeAllLive, seeAllOpen, openFilters, clearFilter,
     ]
   )
@@ -434,7 +434,7 @@ export function PlacesList({
   )
 
   return (
-    <>
+    <StickyScrolled.Provider value={barOn}>
       <Animated.FlatList
         ref={listRef}
         data={rows}
@@ -475,7 +475,7 @@ export function PlacesList({
         }}
         countFor={countFor}
       />
-    </>
+    </StickyScrolled.Provider>
   )
 }
 
