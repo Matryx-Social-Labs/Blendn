@@ -243,3 +243,28 @@ describe('the bar over a form that scrolls under it (#30)', () => {
     await waitFor(() => expect(screen.queryByTestId('rate-bar-bar')).toBeNull())
   })
 })
+
+describe('the night has its art, and a held Submit says why (TG-08)', () => {
+  it('the night step draws the cover above its question, its title balanced so it never widows', async () => {
+    loads()
+    api.getEvent.mockResolvedValue({ success: true, data: { title: 'QA Scale night 1', coverImageUrl: 'https://cdn.blendn.app/c.jpg' } } as never)
+    await view()
+    const title = await screen.findByRole('header', { name: 'How was QA Scale night 1?' })
+    expect(title.props.textBreakStrategy).toBe('balanced')
+    expect(title.props.lineBreakStrategyIOS).toBe('standard')
+    const uris = JSON.stringify(screen.toJSON())
+    expect(uris).toContain('https://cdn.blendn.app/c.jpg')
+  })
+
+  it('a person: "Pick a number to send" shows while Submit is held, and goes once a number is picked', async () => {
+    loads()
+    await view()
+    await fireEvent.press(await screen.findByRole('button', { name: 'Skip to the people' }))
+    await screen.findByText('Night Cat')
+    expect(screen.getByRole('button', { name: 'Submit' }).props.accessibilityState).toMatchObject({ disabled: true })
+    expect(screen.getByTestId('rate-hint')).toHaveTextContent('Pick a number to send')
+    await fireEvent.press(screen.getByLabelText(/^Meeting Night Cat: 4 out of 5/))
+    expect(screen.queryByTestId('rate-hint')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Submit' }).props.accessibilityState).not.toMatchObject({ disabled: true })
+  })
+})

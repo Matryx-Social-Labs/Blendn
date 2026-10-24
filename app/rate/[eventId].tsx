@@ -15,7 +15,8 @@ import { RadioCard } from '../../components/ds/RadioCard'
 import { SectionHeader } from '../../components/ds/SectionHeader'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { TextArea } from '../../components/ds/TextField'
-import { font, HueProvider, useBoldText } from '../../components/ds/shared'
+import { CONTROL_FONT_CAP, font, HueProvider, useBoldText } from '../../components/ds/shared'
+import { EventCover } from '../../components/EventCover'
 import { fadeInFast } from '../../components/motion/presence'
 import { OfflineBanner, useOffline } from '../../components/OfflineBanner'
 import { SkeletonBlock, SkeletonCircle } from '../../components/Skeleton'
@@ -121,6 +122,8 @@ const FACE = 112
 /** The note's box: two lines of text and its padding, not the 160 pt of a long answer. */
 const NOTE_HEIGHT = 112
 const NOTE_LIMIT = 500
+/** The night's art above its question: a band, not a hero (the question is the point of the step). */
+const NIGHT_ART_HEIGHT = 160
 /** The server's `max(500)` counts UTF-16 units. A field never truncates (the counter and Submit refuse instead). */
 const noteLength = (value: string) => value.length
 
@@ -136,6 +139,8 @@ type Load =
       kind: 'ready'
       people: RatePerson[]
       title: string | null
+      /** The night's cover, drawn above its question (TG-08); null draws no art until the DS category plate lands. */
+      cover: string | null
       /** Whether to ask about the night: not if it was already rated. */
       askEvent: boolean
       /** You rated this night already (here, or on another launch): said so, rather than "Nothing to rate". */
@@ -232,7 +237,8 @@ function RatePeersContent() {
         const askEvent = askAboutNight(own, event?.data?.userStatus?.userRating)
         const rated = !!own?.data?.ratedAt || isNightRated(id)
         if (rated) markNightRated(id)
-        setLoad({ kind: 'ready', people, title: event?.data?.title ?? null, askEvent: askEvent && !rated, rated })
+        const cover = event?.data?.coverImageUrl ?? event?.data?.cover_image_url ?? null
+        setLoad({ kind: 'ready', people, title: event?.data?.title ?? null, cover, askEvent: askEvent && !rated, rated })
         setIndex(askEvent ? -1 : 0)
       })
       .catch((e) => {
@@ -415,7 +421,7 @@ function RatePeersContent() {
                   nobody to rate, this used to say "You can rate people you
                   matched with…" under "All done", which read as a refusal.
                 */}
-                <Text style={[font('body', bold), styles.secondary, styles.centreText]}>
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.secondary, styles.centreText]}>
                   {sent > 0 || ratedBefore
                     ? 'This is only ever seen by us. Nobody you rated will know.'
                     : nothingToRate
@@ -428,12 +434,21 @@ function RatePeersContent() {
             <Animated.View key="night" style={styles.layer} entering={entering} exiting={fadeOutStage}>
               <ScrollView contentContainerStyle={[styles.scroll, scrollPad]} scrollIndicatorInsets={{ top: bar.indicatorTop }} {...bar.scrollProps}>
                 {offlineNote}
-                <Text style={[font('label', bold), styles.secondary]}>THE NIGHT</Text>
-                {/* `title`, not `display`: an event's name can run long, and 34pt wrapped to five lines. */}
-                <Text accessibilityRole="header" numberOfLines={3} maxFontSizeMultiplier={1.4} style={[font('title', bold), styles.ink]}>
+                {/* The night itself above its question, so the step is about something you can see (B-S11). */}
+                {load.cover ? <EventCover uri={load.cover} height={NIGHT_ART_HEIGHT} radius={RADIUS.sheet} /> : null}
+                <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('label', bold), styles.secondary]}>THE NIGHT</Text>
+                {/* `title`, not `display`: an event's name can run long, and 34pt wrapped to five lines. Balanced, so no widow. */}
+                <Text
+                  accessibilityRole="header"
+                  numberOfLines={3}
+                  maxFontSizeMultiplier={1.4}
+                  textBreakStrategy="balanced"
+                  lineBreakStrategyIOS="standard"
+                  style={[font('title', bold), styles.ink]}
+                >
                   How was {load.title || 'it'}?
                 </Text>
-                <Text style={[font('meta', bold), styles.secondary]}>One tap. It helps whoever puts on the next one.</Text>
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>One tap. It helps whoever puts on the next one.</Text>
                 <Scale
                   value={eventRating}
                   onChoose={(n) => void rateNight(n)}
@@ -475,16 +490,22 @@ function RatePeersContent() {
                   ) : (
                     <Avatar kind="creature" pseudonym={person.name} size={FACE} label={person.name} />
                   )}
-                  <Text accessibilityRole="header" numberOfLines={2} style={[font('title', bold), styles.ink, styles.centreText]}>
+                  <Text accessibilityRole="header" numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.ink, styles.centreText]}>
                     {person.name}
                   </Text>
-                  <Text style={[font('meta', bold), styles.secondary, styles.centreText]}>
+                  <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.centreText]}>
                     Only we see this. They will never know you rated them, or what you said.
                   </Text>
                 </View>
 
                 <SectionHeader title="How was meeting them?" />
                 <Scale value={rating} onChoose={chooseRating} low="Not for me" high="Would meet again" subject={`Meeting ${person.name}`} />
+                {/* Submit stays gated on a number (D14), and says why, rather than a disabled button that can't. */}
+                {rating === null ? (
+                  <Text testID="rate-hint" maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
+                    Pick a number to send
+                  </Text>
+                ) : null}
 
                 <SectionHeader title="Did anything go wrong?" />
                 <Animated.View layout={glide} style={styles.issues} accessibilityRole="radiogroup">
@@ -493,7 +514,7 @@ function RatePeersContent() {
                   ))}
                   {/* Faded, not popped: it lands mid-form, under the finger's eye line. */}
                   {issue === 'harassment' && (
-                    <Animated.Text style={[font('meta', bold), styles.warning]} entering={fadeInFast}>
+                    <Animated.Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.warning]} entering={fadeInFast}>
                       This goes straight to our moderation team, not into any score. Someone will read it.
                     </Animated.Text>
                   )}
