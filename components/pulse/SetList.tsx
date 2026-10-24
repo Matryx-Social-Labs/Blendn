@@ -10,6 +10,7 @@ import { COLOR, FONT_FAMILY, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/des
 import { liveWindow } from '../../lib/eventSession'
 import { distanceText } from '../../lib/placesPane'
 import { clockTime } from '../../lib/roomMoments'
+import { eventClock, zoneSuffix } from '../../lib/time'
 import { H } from '../../lib/haptics'
 import { printable } from '../../lib/pulseSections'
 
@@ -30,11 +31,15 @@ const NODE = 9
 /** From this font scale the row stacks: the time on its own line above the title, no thumb (the AX frame). */
 export const STACK_AT_FONT_SCALE = 1.5
 
-/** "10:00" and "PM", for the time over its meridiem. */
-export function splitClock(ms: number, timeZone?: string): { time: string; meridiem: string } {
-  const match = /^(\d{1,2})(?::(\d{2}))? (AM|PM)$/.exec(clockTime(ms, timeZone))
-  if (!match) return { time: clockTime(ms, timeZone), meridiem: '' }
-  return { time: `${match[1]}:${match[2] ?? '00'}`, meridiem: match[3] }
+/**
+ * "10:00" and "PM", for the time over its meridiem; "PM IST" when the event's zone is not the phone's (the zone-name rule,
+ * `eventClock`), so a Berlin phone never reads an IST night's clock as its own (R6-4).
+ */
+export function splitClock(ms: number, timeZone?: string | null): { time: string; meridiem: string } {
+  const zone = timeZone ?? undefined
+  const match = /^(\d{1,2})(?::(\d{2}))? (AM|PM)$/.exec(clockTime(ms, zone))
+  if (!match) return { time: clockTime(ms, zone), meridiem: '' }
+  return { time: `${match[1]}:${match[2] ?? '00'}`, meridiem: `${match[3]}${zoneSuffix(ms, timeZone)}` }
 }
 
 /** What a row is read as: "10 PM. Techno in the Tunnel, at Kitty Ko, 2.9 km, 64 going". */
@@ -42,7 +47,7 @@ export function setRowLabel(event: BlendnEvent, withDistance: boolean): string {
   const start = Date.parse(liveWindow(event).start_time)
   const going = printable(event.going_count)
   return [
-    clockTime(start, event.timezone),
+    eventClock(start, event.timezone),
     [event.title, event.venue_name ? `at ${event.venue_name}` : null, withDistance ? distanceText(event.distance) : null, going ? `${going} going` : null]
       .filter(Boolean)
       .join(', '),

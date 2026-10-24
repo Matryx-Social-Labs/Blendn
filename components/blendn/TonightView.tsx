@@ -5,7 +5,8 @@ import Animated from 'react-native-reanimated'
 
 import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { distanceText } from '../../lib/placesPane'
-import { clockTime, startsLabel } from '../../lib/roomMoments'
+import { startsLabel } from '../../lib/roomMoments'
+import { calendarDaysBetween, eventClock } from '../../lib/time'
 import type { TonightEvent, TonightLocation } from '../../lib/useTonight'
 import { Banner } from '../ds/Banner'
 import type { PourFrame as PassFrame } from '../ds/MomentPour'
@@ -32,11 +33,9 @@ const STATE_TOP = SPACE.xxxl + SPACE.xl
 /** Below this a card stops reading as a card; the page scrolls instead. */
 const MIN_CARD = 280
 
-/** Today, by the phone's clock: the "You're going · 9 PM" ribbon is for tonight only (Flow 4 Tonight #05). */
-function startsToday(iso: string, now: number) {
-  const d = new Date(iso)
-  const today = new Date(now)
-  return d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth() && d.getDate() === today.getDate()
+/** Today where the event is: the "You're going · 9 PM" ribbon is for tonight only (Flow 4 Tonight #05), its night (R6-4). */
+function startsToday(iso: string, now: number, timeZone?: string | null) {
+  return calendarDaysBetween(new Date(now), new Date(iso), timeZone ?? undefined) === 0
 }
 
 /** A Tonight event as the deck's hero card: "In 25 min", "9 going", "at {venue} · 1.2 km", the saved ribbon. */
@@ -48,7 +47,8 @@ export function deckEvent(e: TonightEvent, now: number): DeckEvent {
     distance: distanceText(e.distanceKm) ?? undefined,
     going: e.goingCount ?? undefined,
     cover: e.photo,
-    saved: e.going && startsToday(e.startsAt, now) ? clockTime(new Date(e.startsAt).getTime()) : undefined,
+    // The event's clock, named when its zone is not the phone's: "9 PM IST" on a Berlin phone (R6-4).
+    saved: e.going && startsToday(e.startsAt, now, e.timeZone) ? eventClock(e.startsAt, e.timeZone) : undefined,
   }
 }
 

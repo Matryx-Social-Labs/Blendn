@@ -34,6 +34,8 @@ export interface TonightEvent {
   photo: string | null
   startsAt: string
   endsAt: string
+  /** The event's own zone (IANA): its clock and its day are said there, not in the phone's (R6-4). */
+  timeZone?: string | null
   distanceKm: number | null
   /** Inside now: the room preview's count when it answered, else the feed's. */
   hereCount: number
@@ -112,6 +114,7 @@ function toTonight(
     photo: e.cover_image_url,
     startsAt: live.start_time,
     endsAt: live.end_time ?? e.end_time,
+    timeZone: e.timezone,
     distanceKm,
     // Inside now (the Room's rule), never everybody who came; 0 from an older server.
     hereCount: e.here_count ?? 0,

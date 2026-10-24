@@ -91,3 +91,24 @@ it('an event in the phone’s own zone is never named (review LOW)', () => {
   // Another name for the same clock at that moment is not a different zone either.
   expect(timeLabel(START, 'Europe/Paris')).toBe('5:30 AM')
 })
+
+describe('Tonight’s deck and set list say the event’s zone (R6-4)', () => {
+  // Late imports: these modules pull React Native, which the date helpers above do not need.
+  const { deckEvent } = require('../components/blendn/TonightView') as typeof import('../components/blendn/TonightView')
+  const { setRowLabel, splitClock } = require('../components/pulse/SetList') as typeof import('../components/pulse/SetList')
+  const tonight = (o: object) =>
+    ({ id: 'a', title: 'Hack night', venue: 'Toit', photo: null, startsAt: START, endsAt: END, distanceKm: null, hereCount: 0, capacity: null, going: true, tasteMatchCount: null, goingCount: null, ...o }) as never
+
+  it('the deck’s “You’re going” ribbon is the event’s clock, named, on the event’s day', () => {
+    // 01:30 Saturday in Bengaluru: the night is today there, though it is still Friday in Berlin.
+    expect(deckEvent(tonight({ timeZone: IST }), NOW).saved).toBe('9 AM IST')
+    // The badge too (more than an hour out: the clock).
+    expect(deckEvent(tonight({ timeZone: IST }), NOW).time).toBe('9 AM IST')
+  })
+
+  it('the set list’s rail and its spoken row', () => {
+    const e = { id: 'a', title: 'Hack night', venue_name: 'Toit', start_time: START, end_time: END, timezone: IST } as never
+    expect(splitClock(Date.parse(START), IST)).toEqual({ time: '9:00', meridiem: 'AM IST' })
+    expect(setRowLabel(e, false)).toBe('9 AM IST. Hack night, at Toit')
+  })
+})
