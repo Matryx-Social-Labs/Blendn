@@ -6,7 +6,7 @@ import { render, screen } from '@testing-library/react-native'
 import React from 'react'
 import { StyleSheet } from 'react-native'
 
-import { BanterRow, BlendLiveCard, LiveHero } from '../components/banter/BanterParts'
+import { BanterRow, BlendLiveCard, LiveHero, RequestCard } from '../components/banter/BanterParts'
 import { CONTROL_FONT_CAP, HueProvider } from '../components/ds/shared'
 import { COLOR, FONT_FAMILY, MAX_FONT_SCALE } from '../lib/design/tokens'
 import { AX_XXXL, atScale, clipped, resetScale, textNodes, uncapped } from './helpers/ax'
@@ -81,4 +81,14 @@ describe('the Banter list’s rows (TG-12)', () => {
     expect(faceOf(screen.getByText('4'))).toBe(FONT_FAMILY.mono[500])
     expect(textNodes(screen.toJSON() as never).every((n) => n.props.maxFontSizeMultiplier === CONTROL_FONT_CAP || n.props.maxFontSizeMultiplier === MAX_FONT_SCALE.bodyStrong || n.props.maxFontSizeMultiplier === MAX_FONT_SCALE.meta)).toBe(true)
   })
+})
+
+// C20 (DS hand-off): the request card is a surface, so its "…" is the solid disc in the card's chip tone; glass over an
+// opaque card drew no disc on iOS. Negative control: without the card's GroundProvider, there is no disc.
+it('a request card’s "…" draws the solid disc on its surface', async () => {
+  await render(
+    <RequestCard face={null} name="Asha" note="Hi" time="2m" onAccept={() => {}} onDecline={() => {}} onMore={() => {}} testID="rq" />,
+  )
+  const disc = screen.getByTestId('rq-more-disc', { includeHiddenElements: true })
+  expect(StyleSheet.flatten(disc.props.style).backgroundColor).toBe(COLOR.surfaceSunken)
 })

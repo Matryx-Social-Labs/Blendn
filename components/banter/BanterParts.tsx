@@ -17,7 +17,7 @@ import { IconButton } from '../ds/IconButton'
 import { CategoryPlate } from '../ds/EventCard'
 import { Badge, monoCaption, PresenceDot, ScrimPill, TimeBadge } from '../ds/MonoFamily'
 import { RollingNumber } from '../ds/RollingNumber'
-import { CONTROL_FONT_CAP, font, useBoldText, useLargeText, useSelection } from '../ds/shared'
+import { CONTROL_FONT_CAP, font, GroundProvider, useBoldText, useLargeText, useSelection } from '../ds/shared'
 import { Icon, type IconName } from '../ui/Icon'
 import { Material } from '../ui/Material'
 import { glassContentsIn, glassRiseIn } from '../motion/presence'
@@ -253,65 +253,68 @@ export function RequestCard({
   const bold = useBoldText()
   const largeText = useLargeText()
   return (
-    <View testID={testID} style={styles.request}>
-      <View style={styles.requestHead}>
-        <Pressable
-          onPress={onOpen}
-          disabled={!onOpen}
-          accessibilityRole={onOpen ? 'button' : 'text'}
-          accessibilityLabel={`${name}. ${note}`}
-          accessibilityHint={onOpen ? 'Opens their profile' : undefined}
-          style={styles.requestWho}
-        >
-          {face}
-          <View style={styles.grow}>
-            {/*
-              Reading text, as a Banter row's (D2): each grows to its role's cap and, at the accessibility sizes, doubles its lines
-              rather than cut the name to "Arn…" (RC drive 5: uncapped, the name was 61 pt on one line).
-            */}
-            <Text numberOfLines={largeText ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>
-              {name}
-            </Text>
-            <Text numberOfLines={largeText ? 4 : 2} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
-              {note}
-            </Text>
-          </View>
-        </Pressable>
-        {/* The time is a tag beside the row's control, as the Banter row's: it stops where a control does. */}
-        <TimeTag time={time} />
-        {onMore ? <IconButton icon="ellipsis" accessibilityLabel={`More options for the request from ${name}`} onPress={onMore} testID={testID && `${testID}-more`} /> : null}
+    // The card is a surface: its "…" draws the solid disc in the card's chip tone, not glass with nothing to refract (C20).
+    <GroundProvider value="surface">
+      <View testID={testID} style={styles.request}>
+        <View style={styles.requestHead}>
+          <Pressable
+            onPress={onOpen}
+            disabled={!onOpen}
+            accessibilityRole={onOpen ? 'button' : 'text'}
+            accessibilityLabel={`${name}. ${note}`}
+            accessibilityHint={onOpen ? 'Opens their profile' : undefined}
+            style={styles.requestWho}
+          >
+            {face}
+            <View style={styles.grow}>
+              {/*
+                Reading text, as a Banter row's (D2): each grows to its role's cap and, at the accessibility sizes, doubles its lines
+                rather than cut the name to "Arn…" (RC drive 5: uncapped, the name was 61 pt on one line).
+              */}
+              <Text numberOfLines={largeText ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>
+                {name}
+              </Text>
+              <Text numberOfLines={largeText ? 4 : 2} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
+                {note}
+              </Text>
+            </View>
+          </Pressable>
+          {/* The time is a tag beside the row's control, as the Banter row's: it stops where a control does. */}
+          <TimeTag time={time} />
+          {onMore ? <IconButton icon="ellipsis" accessibilityLabel={`More options for the request from ${name}`} onPress={onMore} testID={testID && `${testID}-more`} /> : null}
+        </View>
+        <View style={styles.requestActions}>
+          <Button
+            kind="secondary"
+            size="md"
+            label="Decline"
+            accessibilityLabel={`Decline the ${accept === 'Join' ? 'invite to' : 'request from'} ${name}`}
+            disabled={pending}
+            onPress={onDecline}
+            style={styles.grow}
+            testID={testID && `${testID}-decline`}
+          />
+          {/* Its H.success comes with the server's answer (Flow 5 #05), so no press haptic. */}
+          <Button
+            kind="lit"
+            size="md"
+            icon={accept === 'Join' ? 'users' : 'user-check'}
+            label={accept}
+            accessibilityLabel={accept === 'Join' ? `Join ${name}` : `Accept the request from ${name}`}
+            loading={pending}
+            pressHaptic={false}
+            onPress={onAccept}
+            style={styles.grow}
+            testID={testID && `${testID}-accept`}
+          />
+        </View>
+        {foot ? (
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
+            {foot}
+          </Text>
+        ) : null}
       </View>
-      <View style={styles.requestActions}>
-        <Button
-          kind="secondary"
-          size="md"
-          label="Decline"
-          accessibilityLabel={`Decline the ${accept === 'Join' ? 'invite to' : 'request from'} ${name}`}
-          disabled={pending}
-          onPress={onDecline}
-          style={styles.grow}
-          testID={testID && `${testID}-decline`}
-        />
-        {/* Its H.success comes with the server's answer (Flow 5 #05), so no press haptic. */}
-        <Button
-          kind="lit"
-          size="md"
-          icon={accept === 'Join' ? 'users' : 'user-check'}
-          label={accept}
-          accessibilityLabel={accept === 'Join' ? `Join ${name}` : `Accept the request from ${name}`}
-          loading={pending}
-          pressHaptic={false}
-          onPress={onAccept}
-          style={styles.grow}
-          testID={testID && `${testID}-accept`}
-        />
-      </View>
-      {foot ? (
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
-          {foot}
-        </Text>
-      ) : null}
-    </View>
+    </GroundProvider>
   )
 }
 
