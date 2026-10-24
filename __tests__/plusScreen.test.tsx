@@ -99,7 +99,7 @@ it('lists the store\'s packages at the store\'s prices, says what Plus is, and l
   await mount()
   expect(plan('$rc_monthly').props.accessibilityLabel).toBe('Monthly, 199.00 rupees a month')
   expect(screen.getAllByText('₹199.00', { includeHiddenElements: true }).length).toBeGreaterThanOrEqual(1)
-  expect(plan('night_pass').props.accessibilityLabel).toBe('Just tonight, 49.00 rupees, 24 hours · doesn’t renew')
+  expect(plan('night_pass').props.accessibilityLabel).toBe('Night Pass, 49.00 rupees, 24 hours · doesn’t renew')
   expect(screen.getAllByText('₹49.00', { includeHiddenElements: true }).length).toBeGreaterThanOrEqual(1)
   expect(screen.getByText('Stay live while you’re there')).toBeTruthy()
   expect(screen.getByText('Never for sale, on any plan')).toBeTruthy()
@@ -112,7 +112,7 @@ it('lists the store\'s packages at the store\'s prices, says what Plus is, and l
 it('a yearly row carries the store-computed savings under its name', async () => {
   ;(loadPlusOffers as jest.Mock).mockResolvedValue([monthly, yearly, nightPass])
   await mount()
-  expect(plan('$rc_annual').props.accessibilityLabel).toBe('Yearly, 1,499.00 rupees a year, About ₹125 a month · Save 37%')
+  expect(plan('$rc_annual').props.accessibilityLabel).toBe('Yearly, 1,499.00 rupees a year, About ₹125 a month · Save\u00A037%')
 })
 
 it('Monthly is picked first, the Night Pass is set apart, and the dock carries the picked price', async () => {
@@ -129,12 +129,12 @@ it('Monthly is picked first, the Night Pass is set apart, and the dock carries t
   expect(button('Start Blend’n+ — ₹1,499.00 / year')).toBeTruthy()
 })
 
-it('draws the two Coming soon rows without a tap', async () => {
+// D22 (App Review 3.1.2): sell what exists. Negative control: the old "Coming soon" rows fail it.
+it('lists the shipped features only, and names the rest once in a quiet On the way line', async () => {
   await mount()
-  expect(screen.getByLabelText('Partner perks. At places that run them. Coming soon')).toBeTruthy()
-  expect(screen.getByLabelText(/^Crew extras\..*Coming soon$/)).toBeTruthy()
-  expect(screen.getByLabelText('Cosmetics. Looks for your disc and creature. Coming soon')).toBeTruthy()
-  expect(screen.getAllByText('Coming soon')).toHaveLength(3)
+  expect(screen.queryByText('Coming soon')).toBeNull()
+  expect(screen.queryByLabelText(/^Partner perks\./)).toBeNull()
+  expect(screen.getByText('On the way: partner perks, cosmetics and crew extras.')).toBeTruthy()
 })
 
 it('never buys while RevenueCat is not this account: the plans and the button are off and say so', async () => {
@@ -424,6 +424,21 @@ describe('prices and the server, honestly', () => {
     await mount()
     expect(screen.getByLabelText('Loading prices')).toBeTruthy()
     expect(screen.queryByTestId('plan-$rc_monthly')).toBeNull()
+    // The dock's button holds busy (its spinner shows after the grace), never a bare dead button. Negative control: `buying={busy === 'buy'}` fails this.
+    expect(screen.getByRole('button', { name: 'Start Blend’n+' }).props.accessibilityState).toMatchObject({ busy: true })
+  })
+
+  // D2: the footer states GST only for rupee prices. Negative control: the old LEGAL ending in GST fails the USD half.
+  it('the footer says prices include GST only when every price is in rupees', async () => {
+    const inr = (o: typeof monthly) => ({ ...o, pkg: { ...o.pkg, product: { ...o.pkg.product, currencyCode: 'INR' } } })
+    ;(loadPlusOffers as jest.Mock).mockResolvedValue([inr(monthly), inr(nightPass)])
+    await mount()
+    expect(screen.getByText(/Prices include GST\.$/)).toBeTruthy()
+    await screen.unmount()
+    ;(loadPlusOffers as jest.Mock).mockResolvedValue([monthly, nightPass].map((o) => ({ ...o, pkg: { ...o.pkg, product: { ...o.pkg.product, currencyCode: 'USD' } } })))
+    await mount()
+    expect(screen.getByText(/renew automatically/)).toBeTruthy()
+    expect(screen.queryByText(/GST/)).toBeNull()
   })
 
   it('"Couldn\'t load prices" with Try again, which asks again', async () => {

@@ -39,7 +39,7 @@ export type PlanCardProps = {
  * `planRow`, ROUND3 G2): a 22 pt ring, the name, one sub line, the price in
  * Geist Mono. No "most popular", no strike-through, no countdown. The four
  * packages are Monthly, 3 months (never "Quarterly"), Yearly and the Night
- * Pass; the caller holds which is picked (Monthly on the page, Just tonight in
+ * Pass; the caller holds which is picked (Monthly on the page, the Night Pass in
  * the Tonight sheet).
  *
  * A radio for a screen reader: "Monthly, 199 rupees a month, selected".
@@ -102,7 +102,7 @@ export function RadioRing({ selected, testID }: { selected: boolean; testID?: st
 
 /** The Night Pass row: a one-off, 24 hours from purchase, and another adds 24 more (G2). Never "until 6 am". */
 export function NightPassRow(props: Omit<PlanCardProps, 'name' | 'sub' | 'per'>) {
-  return <PlanCard name="Just tonight" sub="24 hours · doesn’t renew" {...props} />
+  return <PlanCard name="Night Pass" sub="24 hours · doesn’t renew" {...props} />
 }
 
 /**

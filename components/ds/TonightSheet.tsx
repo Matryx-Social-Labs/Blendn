@@ -82,6 +82,7 @@ export function TonightSheet({
   status = 'idle',
   store,
   legal,
+  tax = null,
   restoring = false,
 }: {
   visible: boolean
@@ -105,10 +106,11 @@ export function TonightSheet({
   store: 'ios' | 'android'
   /**
    * The store's wording for what renews and how to cancel (App Store 3.1.2 / Play), shown where a subscription is
-   * the pick: it stands in place of "Prices include GST." because it ends with it. The Night Pass is a one-off and
-   * says so.
+   * the pick. The Night Pass is a one-off and says so.
    */
   legal?: string
+  /** "Prices include GST." only when every price is in rupees (`taxLine`, D2); null (the default) states no tax. */
+  tax?: string | null
   /** Restore purchases is on its way: the link says so and holds. */
   restoring?: boolean
 }) {
@@ -124,7 +126,7 @@ export function TonightSheet({
     ['Privacy', onPrivacy],
     [restoring ? 'Restoring…' : 'Restore purchases', restoring ? () => {} : onRestore],
   ]
-  const terms = pick === 'monthly' && legal ? legal : pick === 'night' ? 'Night Pass is a one-off. Prices include GST.' : 'Prices include GST.'
+  const terms = [pick === 'monthly' ? legal : pick === 'night' ? 'Night Pass is a one-off.' : null, tax].filter(Boolean).join(' ')
   const header = useRef<ComponentRef<typeof View>>(null)
 
   return (
@@ -178,9 +180,11 @@ export function TonightSheet({
       </View>
       <View style={styles.foot}>
         <Button kind="tertiary" size="sm" label="See all plans" onPress={onSeeAll} style={styles.centred} />
-        <Text testID="tonight-legal" style={[font('meta', bold), styles.legalText, { color: quiet }]}>
-          {terms}
-        </Text>
+        {terms ? (
+          <Text testID="tonight-legal" style={[font('meta', bold), styles.legalText, { color: quiet }]}>
+            {terms}
+          </Text>
+        ) : null}
         <View style={styles.legal}>
           {links.map(([label, onPress], i) => (
             <View key={label} style={styles.legal}>

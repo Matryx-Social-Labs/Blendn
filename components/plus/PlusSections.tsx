@@ -212,38 +212,39 @@ export function PlusHeading({ children }: { children: string }) {
 }
 
 /**
- * "What you get" (Flow 12 `GETS`, R3-G): outlined rows on `surface`. The live
- * ones are what the server serves today; the rest keep their place with a
- * "Coming soon" tag in `textSecondary` — static, no tap, no sheet.
+ * "What you get" (Flow 12 `GETS`, R3-G, D22): outlined rows on `surface`, what the server serves today and nothing else (App
+ * Review 3.1.2: sell what exists). What is promised but not built is one quiet line under the list, never a row of its own.
  */
 export function WhatYouGet({ features, comingSoon }: { features: readonly PlusFeature[]; comingSoon: readonly PlusFeature[] }) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
-  const rows = [...features.map((f) => ({ ...f, soon: false })), ...comingSoon.map((f) => ({ ...f, soon: true }))]
   return (
     <View style={styles.section}>
       <PlusHeading>What you get</PlusHeading>
       <View testID="plus-gets" style={[styles.list, contrast && IC_HAIRLINE]}>
-        {rows.map((row, i) => (
+        {features.map((row, i) => (
           <Fragment key={row.title}>
             {i ? <View style={styles.hairline} /> : null}
-            <View
-              accessible
-              accessibilityLabel={`${row.title}. ${row.detail}${row.soon ? '. Coming soon' : ''}`}
-              style={styles.feature}
-            >
-              <Icon name={row.icon} size={FEATURE_ICON} color={row.soon ? COLOR.textSecondary : COLOR.textPrimary} />
+            <View accessible accessibilityLabel={`${row.title}. ${row.detail}`} style={styles.feature}>
+              <Icon name={row.icon} size={FEATURE_ICON} color={COLOR.textPrimary} />
               <View style={styles.fill}>
-                <Text style={[font('bodyStrong', bold), row.soon ? styles.secondary : styles.ink]}>{row.title}</Text>
+                <Text style={[font('bodyStrong', bold), styles.ink]}>{row.title}</Text>
                 <Text style={[font('meta', bold), styles.secondary]}>{row.detail}</Text>
               </View>
-              {row.soon ? <Text style={[font('meta', bold), styles.secondary]}>Coming soon</Text> : null}
             </View>
           </Fragment>
         ))}
       </View>
+      {comingSoon.length ? <PlusNote text={onTheWay(comingSoon)} /> : null}
     </View>
   )
+}
+
+/** "On the way: partner perks, cosmetics and crew extras." */
+export function onTheWay(features: readonly PlusFeature[]): string {
+  const names = features.map((f) => f.title.charAt(0).toLowerCase() + f.title.slice(1))
+  const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0]
+  return `On the way: ${list}.`
 }
 
 /** One footer link: meta text on a 44 / 48 target. `link` opens a page; `button` does something. */
@@ -272,6 +273,7 @@ function FooterLink({ label, role, onPress, disabled = false, busy = false }: { 
  */
 export function PlusFooter({
   forSale,
+  tax = null,
   restoreDisabled,
   restoring,
   onTerms,
@@ -280,6 +282,8 @@ export function PlusFooter({
   onManage,
 }: {
   forSale: boolean
+  /** "Prices include GST." when every price is in rupees (`taxLine`, D2); null states no tax. */
+  tax?: string | null
   restoreDisabled: boolean
   restoring: boolean
   onTerms: () => void
@@ -296,7 +300,7 @@ export function PlusFooter({
   ] as const
   return (
     <View style={styles.footer}>
-      {forSale ? <Text style={[font('meta', bold), styles.tertiary]}>{LEGAL[Platform.OS === 'android' ? 'android' : 'ios']}</Text> : null}
+      {forSale ? <Text style={[font('meta', bold), styles.tertiary]}>{[LEGAL[Platform.OS === 'android' ? 'android' : 'ios'], tax].filter(Boolean).join(' ')}</Text> : null}
       <View style={styles.links}>
         {links.map((link, i) => (
           <Fragment key={link.label}>
@@ -314,9 +318,9 @@ export function PlusFooter({
 }
 
 export const LEGAL = {
-  ios: 'Payment is charged to your Apple Account at confirmation. Subscriptions renew automatically unless cancelled at least 24 hours before the end of the current period; manage or cancel in Settings › Apple Account › Subscriptions. Night Pass is a one-off. Prices include GST.',
+  ios: 'Payment is charged to your Apple Account at confirmation. Subscriptions renew automatically unless cancelled at least 24 hours before the end of the current period; manage or cancel in Settings › Apple Account › Subscriptions. Night Pass is a one-off.',
   android:
-    'Payment is charged to your Google Play account at confirmation. Subscriptions renew automatically unless cancelled before the end of the current period; cancel anytime in Google Play › Payments & subscriptions. Night Pass is a one-off. Prices include GST.',
+    'Payment is charged to your Google Play account at confirmation. Subscriptions renew automatically unless cancelled before the end of the current period; cancel anytime in Google Play › Payments & subscriptions. Night Pass is a one-off.',
 } as const
 
 const styles = StyleSheet.create({

@@ -51,9 +51,11 @@ describe('<PlanCard>', () => {
 })
 
 describe('<NightPassRow>', () => {
-  it('Just tonight · 24 hours · doesn’t renew; never “until 6 am”', async () => {
+  // D3: one product, one name. Negative control: the row named "Just tonight" fails this.
+  it('Night Pass · 24 hours · doesn’t renew; never “Just tonight”, never “until 6 am”', async () => {
     await render(<NightPassRow price="₹49" onPress={jest.fn()} testID="n" />)
-    expect(screen.getByText('Just tonight')).toBeTruthy()
+    expect(screen.getByText('Night Pass')).toBeTruthy()
+    expect(screen.queryByText('Just tonight')).toBeNull()
     expect(screen.getByText('24 hours · doesn’t renew')).toBeTruthy()
     expect(screen.queryByText(/6 am/)).toBeNull()
   })

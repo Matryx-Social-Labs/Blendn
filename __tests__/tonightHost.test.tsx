@@ -192,14 +192,15 @@ describe('the way on that costs nothing', () => {
 describe('the store’s terms (App Store 3.1.2 / Play)', () => {
   it('the monthly pick shows renewal and cancellation on the sheet that sells it; the Night Pass says it is a one-off', async () => {
     await openSheet()
-    expect(screen.getByTestId('tonight-legal').props.children).toBe('Night Pass is a one-off. Prices include GST.')
+    // No currency on these offers, and the host passes no `tax` yet: no GST sentence (D2).
+    expect(screen.getByTestId('tonight-legal').props.children).toBe('Night Pass is a one-off.')
     await act(async () => {
       fireEvent.press(screen.getAllByRole('radio')[1])
     })
     const terms = String(screen.getByTestId('tonight-legal').props.children)
     expect(terms).toMatch(/renew automatically/)
     expect(terms).toMatch(/cancel/i)
-    expect(terms).toMatch(/Prices include GST\.$/)
+    expect(terms).not.toMatch(/GST/)
   })
 })
 
