@@ -141,6 +141,19 @@ describe('a row from the stored push, which names nobody', () => {
   })
 })
 
+// C34: a takedown of your post is told with the moderation shield, not the generic bell. Negative control: no GLYPH entry fails it.
+describe('a post of yours taken down', () => {
+  it('draws the shield glyph', () => {
+    const row = rowFor(item({ id: 'm', kind: 'board_post_removed' as NotificationItem['kind'], title: 'Your post was taken down' }), NOW)
+    expect(row.visual).toEqual({ type: 'glyph', icon: 'shield' })
+  })
+})
+
+// C32: a match tells which match it was when the server names the counterpart the reader may see (S-2's `display.context`).
+it('a match reads the server’s context, the pseudonym this reader may see', () => {
+  expect(rowFor(item({ id: 'p', kind: 'match', display: { context: 'Plover · 2 min ago' } }), NOW).context).toBe('Plover · 2 min ago')
+})
+
 describe('a row with what the server resolved for the reader', () => {
   it('uses its title, context and visual', () => {
     const row = rowFor(
