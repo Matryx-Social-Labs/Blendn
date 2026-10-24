@@ -107,6 +107,7 @@ export function LiveHero({
 }) {
   onPress = useBanterPress(onPress)
   const bold = useBoldText()
+  const largeText = useLargeText()
   const reduceMotion = useReducedMotion()
   return (
     <Pressable
@@ -140,21 +141,21 @@ export function LiveHero({
       ) : null}
       <View style={styles.heroFoot}>
         <View style={styles.grow}>
-          <Text numberOfLines={1} style={[font('heading', bold), styles.ink]}>
+          <Text numberOfLines={largeText ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold), styles.ink]}>
             {title}
           </Text>
           {line ? (
-            <Text numberOfLines={1} style={[font('meta', bold), styles.ink]}>
+            <Text numberOfLines={largeText ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink]}>
               {line}
             </Text>
           ) : null}
         </View>
         {here ? (
-          <Text style={[font('meta', bold), styles.ink]}>You’re here</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink]}>You’re here</Text>
         ) : count ? (
           <View style={styles.heroCount}>
             <RollingNumber value={count} role="title" />
-            <Text style={[font('caption', bold), styles.ink]}>in the room</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.ink]}>in the room</Text>
           </View>
         ) : null}
       </View>
@@ -178,6 +179,7 @@ export function BlendLiveCard({
 }) {
   onPress = useBanterPress(onPress)
   const bold = useBoldText()
+  const largeText = useLargeText()
   const reduceMotion = useReducedMotion()
   // "4 AM": a Blend's closing hour, the app's one clock.
   const closes = closesAt ? clockTime(closesAt) : null
@@ -190,14 +192,15 @@ export function BlendLiveCard({
     >
       <PairEmblem seeds={seeds} ring={COLOR.surface} />
       <View style={styles.grow}>
-        <Text numberOfLines={1} style={[font('bodyStrong', bold), styles.ink]}>
+        <Text numberOfLines={largeText ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>
           {title}
         </Text>
         <View style={styles.inline}>
           <PresenceDot kind="live" />
-          <Text style={[font('meta', bold), styles.secondary]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.shrink]}>
             {closes ? 'Open now · closes ' : 'Open now'}
-            {closes ? <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.ink]}>{closes}</Text> : null}
+            {/* The close time is a tag: it stops at the control cap, so "4 AM" never outgrows its line (TG-03). */}
+            {closes ? <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.ink]}>{closes}</Text> : null}
           </Text>
         </View>
       </View>
@@ -467,7 +470,7 @@ function Line({ line, unread, lines }: { line: RowLine; unread: boolean; lines: 
   if (line.kind === 'draft') {
     return (
       <Text numberOfLines={lines} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
-        <Text style={font('meta', bold, FONT_FAMILY.brand[500])}>Draft · </Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={font('meta', bold, FONT_FAMILY.brand[500])}>Draft · </Text>
         {line.text}
       </Text>
     )
@@ -553,7 +556,7 @@ export function NewAbovePill({ top, onPress }: { top: number; onPress: () => voi
         <Material role="control" style={styles.newPill}>
           <Animated.View entering={glassContentsIn} style={styles.newPillContents}>
             <Icon name="arrow-up" size={ICON.inline} />
-            <Text style={[font('caption', bold), styles.ink]}>New</Text>
+            <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), styles.ink]}>New</Text>
           </Animated.View>
         </Material>
       </Pressable>
@@ -584,15 +587,16 @@ const styles = StyleSheet.create({
   pressed: { opacity: OPACITY.pressed },
   inline: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs },
   centre: { alignItems: 'center', justifyContent: 'center' },
-  hero: { height: HERO_HEIGHT, borderRadius: RADIUS.sheet, overflow: 'hidden', backgroundColor: COLOR.ink },
+  // A floor, not a height: at AX the title takes two lines and the foot grows the card (TG-03).
+  hero: { minHeight: HERO_HEIGHT, borderRadius: RADIUS.sheet, overflow: 'hidden', backgroundColor: COLOR.ink, justifyContent: 'flex-end' },
   heroScrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '80%' },
   heroTop: { position: 'absolute', left: SPACE.md, top: SPACE.md, flexDirection: 'row', gap: SPACE.xs },
   heroBadge: { position: 'absolute', right: SPACE.lg, top: SPACE.md },
+  // In the flow, under the Live badge's row (its top, the tag, a gap), so a grown title pushes the card down, never under the badge.
   heroFoot: {
-    position: 'absolute',
-    left: SPACE.lg,
-    right: SPACE.lg,
-    bottom: SPACE.md,
+    marginTop: SPACE.md + SIZE.tag + SPACE.sm,
+    marginHorizontal: SPACE.lg,
+    marginBottom: SPACE.md,
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: SPACE.md,
