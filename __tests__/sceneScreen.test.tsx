@@ -562,3 +562,14 @@ describe('no people count under five is printed (the Pulse\'s rule)', () => {
     expect((await screen.findByTestId('scene-tile-crowd')).props.accessibilityLabel).toBe('GOING, 5')
   })
 })
+
+// TG-06 (B-S3, D8): the screen hands the hero its category's slug. Negative control: without `category={…}` the plate
+// draws the fill alone and `music-2` is missing.
+describe('a night with no picture draws its category plate', () => {
+  it('passes the first category’s slug to the hero', async () => {
+    api.getEvent.mockResolvedValue(detail({ coverImageUrl: null, categories: [{ id: 'c1', name: 'Music', slug: 'music' }] }) as never)
+    await open()
+    const plate = await screen.findByTestId('scene-hero-plate', { includeHiddenElements: true })
+    expect(JSON.stringify(plate)).toContain('music-2')
+  })
+})

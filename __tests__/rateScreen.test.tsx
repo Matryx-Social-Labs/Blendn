@@ -256,6 +256,16 @@ describe('the night has its art, and a held Submit says why (TG-08)', () => {
     expect(uris).toContain('https://cdn.blendn.app/c.jpg')
   })
 
+  // TG-06. Negative control: with the old `load.cover ? … : null`, the step draws no art and the plate is missing.
+  it('a night with no cover still has its art: the category plate', async () => {
+    loads()
+    api.getEvent.mockResolvedValue({ success: true, data: { title: 'QA Scale night 1', categories: [{ id: 'c', name: 'Comedy', slug: 'comedy' }] } } as never)
+    await view()
+    await screen.findByRole('header', { name: 'How was QA Scale night 1?' })
+    expect(screen.getByTestId('event-cover-plate', { includeHiddenElements: true })).toBeTruthy()
+    expect(JSON.stringify(screen.toJSON())).toContain('mic-vocal')
+  })
+
   it('a person: "Pick a number to send" shows while Submit is held, and goes once a number is picked', async () => {
     loads()
     await view()

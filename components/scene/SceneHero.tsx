@@ -8,7 +8,7 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated'
 
-import { Orbs } from '../ds/Orbs'
+import { CategoryPlate } from '../ds/EventCard'
 import { ScrimPill, TimeBadge, monoCaption } from '../ds/MonoFamily'
 import { CONTROL_FONT_CAP, font, useBoldText } from '../ds/shared'
 import { PhotoScrim, StatusScrim } from '../ui/GradientFill'
@@ -21,10 +21,10 @@ import { HERO_CAPTION_FOOT, SceneHeroMedia } from './SceneHeroMedia'
  * status bar, the head scrim that lets the clock and the circles read over any photo, and the foot scrim that carries the
  * words: the time badge and the pills, the title, then "at {venue}, {area}".
  *
- * ## No cover is the brand orbs, not a grey box
+ * ## No cover is the category plate, not a grey box
  *
- * An event with nothing to show is the page's ink with the brand orbs drawn on it (frame 22 · 22-O). The words sit on it
- * exactly as they sit on a photograph.
+ * An event with nothing to show draws its category plate (D8, DS-12): the category's glyph on the screen's hue fill, or
+ * the fill alone when the category has no glyph. The words sit on it exactly as they sit on a photograph.
  *
  * ## Pills say only what can be defended
  *
@@ -59,6 +59,7 @@ export function SceneHero({
   struck = false,
   pills = [],
   place,
+  category,
   onPressMedia,
   scrollY,
 }: {
@@ -79,6 +80,8 @@ export function SceneHero({
   pills?: ScenePill[]
   /** "at Toit, Indiranagar". */
   place: string
+  /** The event's first category's slug ("music"): with no picture, its plate (TG-06, D8). */
+  category?: string
   /** Opens the lightbox at the item currently shown. */
   onPressMedia?: (index: number) => void
   scrollY?: SharedValue<number>
@@ -115,9 +118,7 @@ export function SceneHero({
           ) : source ? (
             <Image source={source} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" transition={200} accessible={false} />
           ) : (
-            <View testID="scene-hero-orbs" style={StyleSheet.absoluteFill}>
-              <Orbs set="brand" />
-            </View>
+            <CategoryPlate category={category} size={h} testID="scene-hero-plate" />
           )}
         </Animated.View>
         {/* Nothing here may take a touch: these cover the media the hero swipes and opens. */}

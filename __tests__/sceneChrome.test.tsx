@@ -115,11 +115,16 @@ describe('SceneHero', () => {
     expect(screen.getByTestId('scene-hero-foot')).toBeTruthy()
   })
 
-  it('draws the brand orbs where there is no cover, not a grey box', async () => {
+  // TG-06 (B-S3, D8). Negative control: the old orbs branch has no `scene-hero-plate`, so the first two expects fail.
+  it('draws its category plate where there is no cover, not a grey box and not the brand orbs', async () => {
+    await render(hero({ source: undefined, category: 'music' }))
+    expect(screen.getByTestId('scene-hero-plate', { includeHiddenElements: true })).toBeTruthy()
+    expect(JSON.stringify(screen.toJSON())).toContain('music-2')
+    // No category: the hue's fill alone, still never an empty box.
     await render(hero({ source: undefined }))
-    expect(screen.getByTestId('scene-hero-orbs')).toBeTruthy()
-    await render(hero())
-    expect(screen.queryByTestId('scene-hero-orbs')).toBeNull()
+    expect(screen.getByTestId('scene-hero-plate', { includeHiddenElements: true })).toBeTruthy()
+    await render(hero({ category: 'music' }))
+    expect(screen.queryByTestId('scene-hero-plate', { includeHiddenElements: true })).toBeNull()
   })
 
   it('a cancelled event: the date struck through and a white Cancelled pill', async () => {

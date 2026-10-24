@@ -139,8 +139,10 @@ type Load =
       kind: 'ready'
       people: RatePerson[]
       title: string | null
-      /** The night's cover, drawn above its question (TG-08); null draws no art until the DS category plate lands. */
+      /** The night's cover, drawn above its question (TG-08); with none, its category plate (TG-06). */
       cover: string | null
+      /** The night's first category's slug, for the plate when it has no cover. */
+      category?: string
       /** Whether to ask about the night: not if it was already rated. */
       askEvent: boolean
       /** You rated this night already (here, or on another launch): said so, rather than "Nothing to rate". */
@@ -238,7 +240,8 @@ function RatePeersContent() {
         const rated = !!own?.data?.ratedAt || isNightRated(id)
         if (rated) markNightRated(id)
         const cover = event?.data?.coverImageUrl ?? event?.data?.cover_image_url ?? null
-        setLoad({ kind: 'ready', people, title: event?.data?.title ?? null, cover, askEvent: askEvent && !rated, rated })
+        const category = event?.data?.categories?.[0]?.slug || undefined
+        setLoad({ kind: 'ready', people, title: event?.data?.title ?? null, cover, category, askEvent: askEvent && !rated, rated })
         setIndex(askEvent ? -1 : 0)
       })
       .catch((e) => {
@@ -435,7 +438,8 @@ function RatePeersContent() {
               <ScrollView contentContainerStyle={[styles.scroll, scrollPad]} scrollIndicatorInsets={{ top: bar.indicatorTop }} {...bar.scrollProps}>
                 {offlineNote}
                 {/* The night itself above its question, so the step is about something you can see (B-S11). */}
-                {load.cover ? <EventCover uri={load.cover} height={NIGHT_ART_HEIGHT} radius={RADIUS.sheet} /> : null}
+                {/* No cover: the category plate (TG-06, D8); with no category either, EventCover's mark. Never no art. */}
+                <EventCover uri={load.cover} height={NIGHT_ART_HEIGHT} radius={RADIUS.sheet} category={load.category} />
                 <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('label', bold), styles.secondary]}>THE NIGHT</Text>
                 {/* `title`, not `display`: an event's name can run long, and 34pt wrapped to five lines. Balanced, so no widow. */}
                 <Text

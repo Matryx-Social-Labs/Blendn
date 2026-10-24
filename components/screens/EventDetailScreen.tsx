@@ -165,6 +165,8 @@ interface EventDetailData {
   days?: EventDays | null
   timezone?: string
   category: string
+  /** The first category's slug ("music"), for the hero's plate when there is no picture (TG-06). */
+  category_slug?: string
   max_capacity: number
   current_capacity: number
   cover_image_url: string
@@ -350,6 +352,7 @@ export default function EventDetail() {
       days: parseEventDays(d),
       timezone: d.timezone,
       category: d.categories?.[0]?.name || '',
+      category_slug: d.categories?.[0]?.slug || undefined,
       max_capacity: d.maxCapacity || d.max_capacity || 0,
       current_capacity: d.currentCapacity || d.current_capacity || 0,
       cover_image_url: d.coverImageUrl || d.cover_image_url || '',
@@ -1104,6 +1107,7 @@ export default function EventDetail() {
                 struck={cancelled}
                 pills={pills}
                 place={place}
+                category={event?.category_slug}
                 onPressMedia={(i) => setLightbox(i)}
                 scrollY={scrollY}
               />
