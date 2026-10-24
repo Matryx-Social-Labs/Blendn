@@ -2,7 +2,7 @@ import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import Animated, { withSpring, withTiming } from 'react-native-reanimated'
 
 import { Icon } from '../ui/Icon'
-import { COLOR, ICON, MATERIAL, RADIUS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
+import { COLOR, ICON, MATERIAL, MAX_FONT_SCALE, RADIUS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
 import { ACHIEVEMENT, AchievementBadge, type AchievementKind } from './AchievementBadge'
@@ -106,8 +106,13 @@ export function CrewCard({
             <CountTicks size={crew.size} here={here} />
           </View>
           <View style={styles.text}>
-            <Text style={[font(compact ? 'heading' : 'title', bold), styles.ink, onMore ? styles.clearMore : null]}>{crew.name}</Text>
-            <Text style={[font('meta', bold), { color: detail }]}>
+            <Text
+              maxFontSizeMultiplier={MAX_FONT_SCALE[compact ? 'heading' : 'title']}
+              style={[font(compact ? 'heading' : 'title', bold), styles.ink, onMore ? styles.clearMore : null]}
+            >
+              {crew.name}
+            </Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: detail }]}>
               {here ? `Crew of ${crew.size} · ${here} here now` : `Crew of ${crew.size}`}
             </Text>
             {crew.bio ? (
@@ -229,10 +234,13 @@ export function CrewRow({
     >
       <CrewEmblem seed={emblemSeed} size={EMBLEM.row} />
       <View style={styles.text}>
-        <Text numberOfLines={1} style={[font('bodyStrong', bold), styles.ink]}>
+        {/* A 32-character name takes two lines rather than "The Midnight Vin…"; the row's height is a minimum. */}
+        <Text numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>
           {name}
         </Text>
-        <Text style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{line}</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>
+          {line}
+        </Text>
       </View>
       {badge ? (
         <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
