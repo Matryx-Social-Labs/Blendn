@@ -1,6 +1,6 @@
 /**
  * The Scene's chrome and hero (Flow 3 `scene`): back plus three media circles with the ⋯ holding Report; the glass
- * bar that mounts at 8 pt of scroll; the hero's pills and words; no cover is the brand orbs.
+ * bar that mounts at 8 pt of scroll; the hero's pills and words; no cover is the category plate; the day strip.
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
@@ -9,6 +9,7 @@ import { getAnimatedStyle, makeMutable } from 'react-native-reanimated'
 
 import { SceneBar, sceneBarTitleSpan } from '../components/scene/SceneBar'
 import { SceneHero } from '../components/scene/SceneHero'
+import { SceneDayStrip, dayStripOffset } from '../components/scene/SceneChange'
 import { H } from '../lib/haptics'
 
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 47, bottom: 34, left: 0, right: 0 }) }))
@@ -139,5 +140,32 @@ describe('SceneHero', () => {
   it('shows the live badge as the DS TimeBadge', async () => {
     await render(hero({ when: 'Live' }))
     expect(screen.getByTestId('scene-when-dot', { includeHiddenElements: true })).toBeTruthy()
+  })
+})
+
+/*
+ * TG-07 (B-S8, D18): the day strip opened on an offset between two chips near the end of a run (initialScrollIndex clamps
+ * to the end), so its first chip was cut mid-word. Negative control: `first * slot` (the old offset) fails the end case.
+ */
+describe('the day strip opens on a whole chip, and fades at its edge', () => {
+  const SLOT = 72 + 8 // DAY_WIDTH + SPACE.sm
+
+  it('opens on the day before the current one when the list can reach it', () => {
+    expect(dayStripOffset(3, 31, 350)).toBe(3 * SLOT)
+  })
+
+  it('near the end, opens on the furthest whole chip the list reaches, never between two', () => {
+    // 6 chips, 470 wide content, 350 viewport: the list reaches 120, which is 1 whole chip (80) and part of the next.
+    const offset = dayStripOffset(4, 6, 350)
+    expect(offset % SLOT).toBe(0)
+    expect(offset).toBe(SLOT)
+    expect(dayStripOffset(0, 6, 350)).toBe(0)
+  })
+
+  it('snaps by chip and draws the edge fade over a scrolling strip', async () => {
+    const days = Array.from({ length: 8 }, (_, i) => ({ date: `2026-10-${String(10 + i)}`, cancelled: false, startTime: '', endTime: '', cancelledAt: null }))
+    await render(<SceneDayStrip days={{ days, dayCount: 8, daysFrom: 1, dayNumber: 7 } as never} today testID="strip" />)
+    expect(screen.getByTestId('strip').props.snapToInterval).toBe(SLOT)
+    expect(screen.getByTestId('strip-fade', { includeHiddenElements: true })).toBeTruthy()
   })
 })

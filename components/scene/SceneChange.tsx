@@ -1,10 +1,12 @@
-import { FlatList, StyleSheet, Text, View } from 'react-native'
+import { useRef } from 'react'
+import { FlatList, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native'
 
 import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
 import { dayLabel, type EventDays } from '../../lib/eventDays'
 import type { ChangeLine } from '../../lib/eventChange'
 import { notificationWhen } from '../../lib/notificationRows'
 import { CONTROL_FONT_CAP, font, useBoldText, useSelection } from '../ds/shared'
+import { SolidBarFade } from '../ui/GradientFill'
 import { Icon } from '../ui/Icon'
 
 /** "2 h ago" as it is said: lowercase, in words ("2 hours ago", "just now"). */
@@ -75,25 +77,51 @@ export function SceneDayStrip({ days, today, testID }: { days: EventDays; today:
       </View>
     )
   }
+  return <DayRail chips={chips} days={days} today={today} testID={testID} />
+}
+
+/**
+ * Where a scrolling strip opens: on the day before the current one, at a chip's edge. Near the end of the run the list
+ * cannot scroll that far and `initialScrollIndex` clamped to the end, an offset between two chips, so the first chip was cut
+ * mid-word (B-S8). The offset is the furthest whole chip the list can reach instead; the right edge's fade takes the cut.
+ */
+export function dayStripOffset(first: number, count: number, width: number): number {
+  const slot = DAY_WIDTH + SPACE.sm
+  const reach = Math.max(0, count * slot - SPACE.sm - width)
+  return Math.min(first, Math.floor(reach / slot)) * slot
+}
+
+function DayRail({ chips, days, today, testID }: { chips: Chip[]; days: EventDays; today: boolean; testID?: string }) {
+  const list = useRef<FlatList<Chip>>(null)
   const current = Math.max(0, chips.findIndex((c) => c.n === days.dayNumber))
   const first = Math.max(0, current - 1)
   const slot = DAY_WIDTH + SPACE.sm
+  const settle = (e: LayoutChangeEvent) => list.current?.scrollToOffset({ offset: dayStripOffset(first, chips.length, e.nativeEvent.layout.width), animated: false })
   return (
-    <FlatList
-      testID={testID}
-      horizontal
-      data={chips}
-      keyExtractor={(c) => c.date}
-      renderItem={({ item }) => <DayChip chip={item} days={days} today={today} />}
-      getItemLayout={(_, index) => ({ length: slot, offset: slot * index, index })}
-      initialScrollIndex={first}
-      initialNumToRender={STRIP_FIRST}
-      maxToRenderPerBatch={STRIP_FIRST}
-      windowSize={STRIP_WINDOW}
-      ItemSeparatorComponent={Gap}
-      showsHorizontalScrollIndicator={false}
-      accessibilityLabel={`Days ${days.daysFrom} to ${days.daysFrom + chips.length - 1} of ${days.dayCount}`}
-    />
+    <View>
+      <FlatList
+        ref={list}
+        testID={testID}
+        horizontal
+        data={chips}
+        keyExtractor={(c) => c.date}
+        renderItem={({ item }) => <DayChip chip={item} days={days} today={today} />}
+        getItemLayout={(_, index) => ({ length: slot, offset: slot * index, index })}
+        initialScrollIndex={first}
+        onLayout={settle}
+        // A fling lands on a chip's edge, never mid-word.
+        snapToInterval={slot}
+        decelerationRate="fast"
+        initialNumToRender={STRIP_FIRST}
+        maxToRenderPerBatch={STRIP_FIRST}
+        windowSize={STRIP_WINDOW}
+        ItemSeparatorComponent={Gap}
+        showsHorizontalScrollIndicator={false}
+        accessibilityLabel={`Days ${days.daysFrom} to ${days.daysFrom + chips.length - 1} of ${days.dayCount}`}
+      />
+      {/* The rails' edge fade (the onboarding prompts rail's): a chip cut by the edge dissolves into the page. */}
+      <SolidBarFade testID={testID && `${testID}-fade`} color={COLOR.ink} toward="right" pointerEvents="none" style={styles.fade} />
+    </View>
   )
 }
 
@@ -140,4 +168,5 @@ const styles = StyleSheet.create({
   ink: { color: COLOR.textPrimary },
   sub: { color: COLOR.textSecondary },
   struck: { textDecorationLine: 'line-through' },
+  fade: { position: 'absolute', top: 0, bottom: 0, right: 0, width: SPACE.xxxl },
 })
