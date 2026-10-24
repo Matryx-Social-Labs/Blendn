@@ -63,7 +63,7 @@ describe('the Banter list’s rows (TG-12)', () => {
       <BanterRow face={{ kind: 'room', cover: null }} title="Vinyl Night" line={{ kind: 'text', text: 'see you there' }} time={time} unread={unread} testID="r" />
     </HueProvider>
   )
-  const faceOf = (node: { props: { style: unknown } }) => (StyleSheet.flatten(node.props.style as never) as { fontFamily?: string }).fontFamily
+  const faceOf = (node: { props: Record<string, unknown> }) => (StyleSheet.flatten(node.props.style as never) as { fontFamily?: string }).fontFamily
 
   it('an unread dot is the world’s rose, never white (white is for counts)', async () => {
     await render(row('7h'))

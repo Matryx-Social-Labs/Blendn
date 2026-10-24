@@ -7,6 +7,8 @@ import Animated, { useReducedMotion } from 'react-native-reanimated'
 import { PageFooter } from '../../components/chat/PageFooter'
 import { Button } from '../../components/ds/Button'
 import { font, HueProvider, useBoldText } from '../../components/ds/shared'
+import { ChipSet, type ChipItem } from '../../components/ds/ChipSet'
+import { SectionHeader } from '../../components/ds/SectionHeader'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { TopBar } from '../../components/ds/TopBar'
 import {
@@ -69,6 +71,20 @@ export default function BoardRoute() {
   )
 }
 
+type BoardFilter = 'offer' | 'seeking'
+/** The two kinds people come to a board for, in the cards' own words (`BoardPostCard`). */
+const FILTERS: readonly ChipItem[] = [
+  { key: 'offer', label: 'Offering' },
+  { key: 'seeking', label: 'Looking' },
+]
+/** Under this many posts the whole board is a glance: no filter to learn. */
+const FILTER_FROM = 10
+/** The board's own count, from its first page's pagination; null from an older server. */
+const totalOf = (body: unknown): number | null => {
+  const n = (body as { pagination?: { totalCount?: unknown } } | null)?.pagination?.totalCount
+  return typeof n === 'number' && Number.isFinite(n) && n >= 0 ? n : null
+}
+
 type Load =
   | { kind: 'loading' }
   | { kind: 'ready'; posts: BoardPostView[] }
@@ -127,6 +143,10 @@ export function BoardScreen() {
    * Nothing to ask until the server sends a cursor: an older server's board is the one page it always was.
    */
   const [cursor, setCursor] = useState<string | null>(null)
+  /** How many posts the board has, the server's count (TG-15): what the list can show is a page of them. */
+  const [total, setTotal] = useState<number | null>(null)
+  /** Offering or Looking only, or every post: over the loaded pages, which keep loading as the end nears. */
+  const [kindFilter, setKindFilter] = useState<BoardFilter | null>(null)
   const [moreState, setMoreState] = useState<'idle' | 'loading' | 'failed'>('idle')
   const older = useRef<BoardPostView[]>([])
   const moreBusy = useRef(false)
@@ -190,6 +210,7 @@ export function BoardScreen() {
       const onPage = new Set(listed.map((p) => p.id))
       older.current = older.current.filter((p) => !onPage.has(p.id) && !removed.current.has(p.id))
       if (!older.current.length) setCursor(cursorOf(board.data))
+      setTotal(totalOf(board.data))
       // Nothing, then something (#47): what arrives rises in once; a poll that finds more does not.
       const was = loadRef.current
       if (was.kind === 'ready' && !was.posts.length && listed.length) {
@@ -270,7 +291,8 @@ export function BoardScreen() {
     }
   }, [fetchBoard])
 
-  const posts = useMemo(() => (load.kind === 'ready' ? sortBoardPosts(load.posts) : []), [load])
+  const allPosts = useMemo(() => (load.kind === 'ready' ? sortBoardPosts(load.posts) : []), [load])
+  const posts = useMemo(() => (kindFilter ? allPosts.filter((p) => p.kind === kindFilter) : allPosts), [allPosts, kindFilter])
 
   /* The next page as the end comes near: one at a time, appended once, and never after a refusal until it is asked again. */
   const loadMore = useCallback(async () => {
@@ -475,8 +497,19 @@ export function BoardScreen() {
       {refreshFailed && load.kind === 'ready' ? (
         <Text style={[font('meta', bold), styles.secondary, styles.centre]}>The board didn’t refresh. Pull down to try again.</Text>
       ) : null}
-      {load.kind === 'ready' && load.posts.length > 0 && !posts.some((p) => p.mine) ? (
+      {load.kind === 'ready' && load.posts.length > 0 && !allPosts.some((p) => p.mine) ? (
         <Button label="Write a post" onPress={() => setComposing(true)} />
+      ) : null}
+      {/* A busy board (120 posts) says how many, and can be narrowed to what you came for (B-R10). */}
+      {total !== null && total > 0 ? <SectionHeader title="Posts" count={total} testID="board-count" /> : null}
+      {total !== null && total >= FILTER_FROM ? (
+        <ChipSet
+          items={FILTERS}
+          selection="single"
+          selected={kindFilter ? [kindFilter] : []}
+          onToggle={(key) => setKindFilter((now) => (now === key ? null : (key as BoardFilter)))}
+          testID="board-filter"
+        />
       ) : null}
     </View>
   )
@@ -526,16 +559,27 @@ export function BoardScreen() {
         extraData={askFor}
         ListHeaderComponent={header}
         ListEmptyComponent={
-          // #47: the first post is why this leaves: it fades over `quick` with an 8 pt drop as the card rises in.
-          <Animated.View exiting={emptyOut(reduceMotion)}>
+          kindFilter && allPosts.length > 0 ? (
+            // Narrowed to nothing: the board is not empty, so it never says "Nobody's posted yet".
             <StateScreen
-              icon="message-square-dashed"
-              title="Nobody’s posted yet"
-              body="Say what you’re looking for, and people on their way will see it."
-              actions={[{ label: 'Write a post', onPress: () => setComposing(true) }]}
-              testID="board-empty"
+              icon="search"
+              title={kindFilter === 'offer' ? 'Nobody’s offering yet' : 'Nobody’s looking yet'}
+              body="Loaded so far. More come as you scroll the whole board."
+              actions={[{ label: 'Show every post', kind: 'secondary', onPress: () => setKindFilter(null) }]}
+              testID="board-filter-empty"
             />
-          </Animated.View>
+          ) : (
+            // #47: the first post is why this leaves: it fades over `quick` with an 8 pt drop as the card rises in.
+            <Animated.View exiting={emptyOut(reduceMotion)}>
+              <StateScreen
+                icon="message-square-dashed"
+                title="Nobody’s posted yet"
+                body="Say what you’re looking for, and people on their way will see it."
+                actions={[{ label: 'Write a post', onPress: () => setComposing(true) }]}
+                testID="board-empty"
+              />
+            </Animated.View>
+          )
         }
         ListFooterComponent={
           <PageFooter loading={moreState === 'loading'} failed={moreState === 'failed'} onRetry={() => void loadMore()} what="posts" testID="board-more-failed" />
