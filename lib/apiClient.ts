@@ -32,6 +32,7 @@ import { onCriticalPath } from './criticalPath'
 import { noteServerDate } from './serverClock'
 import { getPushTokenRef, setPushTokenRef } from './pushTokenRef'
 import type { ChatReaction } from './chatReactions'
+import { SEARCH_TOO_SHORT, searchTermOf } from './searchTerm'
 
 // API Configuration
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL
@@ -220,7 +221,9 @@ const requestQueue = new RequestQueue()
 /** `?a=1&b=2` from the fields that are set, or '' when none are. */
 function toQuery(params: object = {}): string {
   const searchParams = new URLSearchParams()
-  for (const [key, value] of Object.entries(params)) {
+  for (const [key, raw] of Object.entries(params)) {
+    // A `search` the server would refuse (under 2 characters, admin #751) is no search: never sent (`searchTermOf`).
+    const value = key === 'search' ? searchTermOf(typeof raw === 'string' ? raw : null) : raw
     if (value === undefined || value === null) continue
     // A position never leaves in a URL at more than ~110 m (`lib/coordinates.ts`): the server logs query strings.
     searchParams.append(key, (key === 'lat' || key === 'lon') && typeof value === 'number' ? String(roundCoordinate(value)) : String(value))
@@ -2161,10 +2164,15 @@ class ApiClientClass {
     featured?: boolean
   }, options?: { force?: boolean }): Promise<ApiResponse<EventsListResponse>> {
     const endpoint = `/api/mobile/events${toQuery(params)}`
-    if (options?.force) {
-      return this.queuedRequest<EventsListResponse>(endpoint)
+    const result = options?.force
+      ? await this.queuedRequest<EventsListResponse>(endpoint)
+      : await this.cachedRequest<EventsListResponse>(endpoint, EVENTS_LIST_SWR_TTL)
+    // A search the server still found too short (its count and ours disagreed) is no search, never an error state: the
+    // normal list, asked again without it.
+    if (!result.success && result.reasonCode === SEARCH_TOO_SHORT && params?.search !== undefined) {
+      return this.getEvents({ ...params, search: undefined }, options)
     }
-    return this.cachedRequest<EventsListResponse>(endpoint, EVENTS_LIST_SWR_TTL)
+    return result
   }
 
   /**

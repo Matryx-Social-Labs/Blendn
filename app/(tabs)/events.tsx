@@ -39,6 +39,7 @@ import { TAB_BAR_CLEARANCE, tabBarTop } from './_layout'
 import { FilterSheet, type CategoryOption } from '../../components/pulse/FilterControl'
 import { HomeShell, type HomeBrowse } from '../../components/home/HomeShell'
 import { DRAWER_HEADER_HEIGHT } from '../../lib/home'
+import { searchTermOf } from '../../lib/searchTerm'
 import { showSheet } from '../../lib/sheet'
 import { useToast } from '../../components/Toast'
 import { Skeleton } from '../../components/Skeleton'
@@ -457,15 +458,17 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     setSearchInput(next)
     // No wait when clearing. Emptying the box is a request to see the normal
     // screen again, and making somebody watch a spinner for a third of a second
-    // to get back to where they started reads as the app being slow.
-    if (next.trim().length === 0) setSearchTerm('')
+    // to get back to where they started reads as the app being slow. One
+    // letter is the same: the server refuses a search under 2 characters
+    // (admin #751), so the list is the normal one until there are two.
+    if (searchTermOf(next) === null) setSearchTerm('')
   }, [])
 
   useEffect(() => {
-    const trimmed = searchInput.trim()
+    const term = searchTermOf(searchInput)
     // Clearing has already happened, with no wait, in `changeSearchInput`.
-    if (trimmed.length === 0) return
-    const id = setTimeout(() => setSearchTerm(trimmed), 350)
+    if (term === null) return
+    const id = setTimeout(() => setSearchTerm(term), 350)
     return () => clearTimeout(id)
   }, [searchInput])
 

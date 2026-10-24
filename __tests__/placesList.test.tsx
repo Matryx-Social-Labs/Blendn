@@ -493,6 +493,24 @@ describe('search', () => {
     }
   })
 
+  it('one letter is no search: the normal list, never a flat "no places match" (the server refuses under 2, admin #751)', async () => {
+    jest.useFakeTimers()
+    try {
+      serve([venue('a', { liveNow: '5-9' })])
+      await mount()
+      await act(async () => {
+        fireEvent.changeText(screen.getByTestId('places-search-input'), ' t ')
+        jest.advanceTimersByTime(300)
+        await Promise.resolve()
+      })
+      expect(listCalls().some(([q]) => q.search)).toBe(false)
+      expect(screen.queryByTestId('places-results-header')).toBeNull()
+      expect(screen.getByTestId('place-tile-a')).toBeTruthy()
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
   it('a search that matches nothing says so', async () => {
     jest.useFakeTimers()
     try {

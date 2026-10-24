@@ -3,6 +3,7 @@ import { AccessibilityInfo, Platform, Pressable, StyleSheet, TextInput, type Tex
 
 import { Icon } from '../ui/Icon'
 import { COLOR, ICON, MATERIAL, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { SEARCH_MAX } from '../../lib/searchTerm'
 import { OPACITY } from '../../lib/theme'
 import { Spinner } from './Loader'
 import { FieldBorder } from './TextField'
@@ -83,6 +84,8 @@ export function SearchField({
         <Icon name="search" size={ICON.control} color={active ? COLOR.textPrimary : COLOR.textSecondary} />
       )}
       <TextInput
+        // A search is at most 100 characters (the server's bound, admin #751); a caller may ask for less.
+        maxLength={SEARCH_MAX}
         {...rest}
         ref={input}
         testID={testID && `${testID}-input`}

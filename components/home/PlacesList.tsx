@@ -16,6 +16,7 @@ import { QuietFold, QuietRow, RefreshFailed } from '../places/PlaceParts'
 import { PlacesSkeleton } from '../places/PlacesSkeleton'
 import { SectionHeader } from '../ds/SectionHeader'
 import { apiClient, type VenueListItem } from '../../lib/apiClient'
+import { searchTermOf } from '../../lib/searchTerm'
 import { SPACE, SPRING } from '../../lib/design/tokens'
 import { roundCoordinate } from '../../lib/coordinates'
 import { Logger } from '../../lib/logger'
@@ -106,12 +107,14 @@ export function PlacesList({
     if (filters.venueType) setQuietOpen(true)
   }
   const [search, setSearch] = useState('')
-  const searching = search.trim().length > 0
+  // Under 2 characters is no search (the server's floor, admin #751): the normal list.
+  const term = searchTermOf(search)
+  const searching = term !== null
   // To ~100 m, as the key is: a GPS jitter is not a new request.
   const lat = location ? roundCoordinate(location.latitude) : undefined
   const lon = location ? roundCoordinate(location.longitude) : undefined
   const hasFix = lat !== undefined
-  const key = placesKey(city, location, venueType, searching ? search.trim() : null, radiusKm)
+  const key = placesKey(city, location, venueType, term, radiusKm)
   const [state, dispatch] = useReducer(placesReducer, key, initialPlaces)
   const [refreshing, setRefreshing] = useState(false)
   const inFlight = useRef(false)
@@ -136,7 +139,7 @@ export function PlacesList({
             sortBy: hasFix ? 'distance' : 'name',
             venueType: venueType ?? undefined,
             order: 'live',
-            search: searching ? search.trim() : undefined,
+            search: term ?? undefined,
             radius: hasFix && radiusKm !== null ? radiusKm : undefined,
           },
           // Never a cached page, for any page: with live-first ordering a venue moves up the order between
@@ -163,7 +166,7 @@ export function PlacesList({
         dispatch({ type: 'failed', key, page })
       }
     },
-    [key, city, lat, lon, hasFix, venueType, search, searching, radiusKm]
+    [key, city, lat, lon, hasFix, venueType, term, radiusKm]
   )
 
   /*
@@ -366,7 +369,7 @@ export function PlacesList({
           return (
             <View style={styles.state} testID="places-empty">
               {item.reason === 'search' ? (
-                <StateScreen icon="search" title={`No places match “${search.trim()}”`} body="Try another name or area." />
+                <StateScreen icon="search" title={`No places match “${term}”`} body="Try another name or area." />
               ) : item.reason === 'filters' ? (
                 <StateScreen
                   icon="sliders-horizontal"
@@ -387,7 +390,7 @@ export function PlacesList({
       }
     },
     [
-      city, openCityPicker, stat, searching, state.status, state.readAt, state.refreshFailed, state.rateLimit, rateLimitDone, filters, offline, now, search, whatsOn, typeLabel, barOn,
+      city, openCityPicker, stat, searching, state.status, state.readAt, state.refreshFailed, state.rateLimit, rateLimitDone, filters, offline, now, term, whatsOn, typeLabel, barOn,
       chooseKind, refresh, requestLocation, onShowNearOnMap, toggleFold, seeAllLive, seeAllOpen, openFilters, clearFilter,
     ]
   )
