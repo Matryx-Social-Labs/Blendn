@@ -97,9 +97,9 @@ export const NIGHT_PASS_ID = 'night_pass'
 
 /** The packages the paywall sells, in this order. Anything else in the offering is not shown. */
 export const PLUS_PACKAGES = [
-  { id: '$rc_monthly', title: 'Blendn+ · Monthly', length: '1 month, renews monthly' },
-  { id: '$rc_three_month', title: 'Blendn+ · 3 months', length: '3 months, renews every 3 months' },
-  { id: '$rc_annual', title: 'Blendn+ · Yearly', length: '1 year, renews yearly' },
+  { id: '$rc_monthly', title: 'Blend’n+ · Monthly', length: '1 month, renews monthly' },
+  { id: '$rc_three_month', title: 'Blend’n+ · 3 months', length: '3 months, renews every 3 months' },
+  { id: '$rc_annual', title: 'Blend’n+ · Yearly', length: '1 year, renews yearly' },
   { id: NIGHT_PASS_ID, title: 'Night Pass · 24 hours', length: '24 hours, does not renew' },
 ] as const
 

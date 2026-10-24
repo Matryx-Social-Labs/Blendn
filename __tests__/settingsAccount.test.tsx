@@ -265,7 +265,7 @@ describe('Delete account', () => {
     api.getMyPlus.mockResolvedValue({ success: true, data: plusStatus({ active: true, source }) } as never)
     await openTray()
     expect(
-      await screen.findByText(`Cancel Blendn+ in your ${store} subscriptions first. Deleting your account doesn’t cancel it.`)
+      await screen.findByText(`Cancel Blend’n+ in your ${store} subscriptions first. Deleting your account doesn’t cancel it.`)
     ).toBeTruthy()
     fireEvent.press(screen.getByRole('button', { name: 'Manage subscription' }))
     await waitFor(() => expect(opened).toHaveBeenCalledWith(expect.stringMatching(/^https:\/\/(apps\.apple\.com|play\.google\.com)\//)))
@@ -289,7 +289,7 @@ describe('Blendn+ row (review H2)', () => {
     api.getMyPlus.mockResolvedValue({ success: true, data: plusStatus({ gated: false }) } as never)
     await render(<Screen />)
     fireEvent.press(await screen.findByRole('button', { name: /^Blend’n\+, Free during launch in your city/ }))
-    expect(await screen.findByText('Blendn+ is free here for now')).toBeTruthy()
+    expect(await screen.findByText('Blend’n+ is free here for now')).toBeTruthy()
     expect(router.push).not.toHaveBeenCalled()
   })
 

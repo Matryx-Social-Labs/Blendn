@@ -324,7 +324,7 @@ function SettingsScreenContent() {
         // A running store subscription keeps billing after the account is gone: say so first (review H1).
         content: storePlus ? (
           <Text accessibilityLiveRegion="polite" style={[font('bodyStrong', bold), { color: COLOR.textPrimary }]}>
-            {`Cancel Blendn+ in your ${store} subscriptions first. Deleting your account doesn’t cancel it.`}
+            {`Cancel Blend’n+ in your ${store} subscriptions first. Deleting your account doesn’t cancel it.`}
           </Text>
         ) : undefined,
         onDismiss: () => {
