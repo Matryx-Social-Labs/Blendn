@@ -308,6 +308,26 @@ describe('the kinds', () => {
     await waitFor(() => expect(listCalls().at(-1)?.[0]).toMatchObject({ venueType: undefined }))
   })
 
+  it('choosing a kind opens the fold, so the list under its count is not read as empty (GO-07, A23)', async () => {
+    serve([venue('a', { liveNow: '5-9' }), venue('c', { name: 'Koshy’s' })])
+    await mount()
+    expect(screen.queryByTestId('place-quiet-c')).toBeNull()
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('places-kind-cafe'))
+    })
+    await waitFor(() => expect(screen.getByTestId('place-quiet-c')).toBeTruthy())
+    expect(screen.getByTestId('places-quiet-fold').props.accessibilityState).toMatchObject({ expanded: true })
+  })
+
+  it('a quiet row leads its line with the area, so rows of one chain can be told apart (A40)', async () => {
+    serve([venue('c', { name: '1522 The Pub', area: 'Koramangala', venueTypeLabel: 'Pub' })])
+    await mount()
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('places-quiet-fold'))
+    })
+    expect(screen.getByText(/^Koramangala · Pub/)).toBeTruthy()
+  })
+
   it('a kind with nothing in this city says so and keeps the chip to clear it', async () => {
     serve([venue('a', { liveNow: '5-9' })])
     await mount()

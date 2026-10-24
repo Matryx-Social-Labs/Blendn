@@ -3,13 +3,13 @@ import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { Banner } from '../ds/Banner'
 import { Badge } from '../ds/MonoFamily'
-import { font, PRESSED_WASH, useBoldText } from '../ds/shared'
+import { CONTROL_FONT_CAP, font, PRESSED_WASH, useBoldText } from '../ds/shared'
 import { VenuePlate } from '../ds/VenuePlate'
 import { Icon } from '../ui/Icon'
 import type { VenueListItem } from '../../lib/apiClient'
 import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
-import { bucketLabel, distanceText, moreLine, placeArea, placeLabel, plateFor } from '../../lib/placesPane'
+import { bucketLabel, distanceText, foldNoun, moreLine, placeArea, placeLabel, plateFor, type PlaceTypeFilter } from '../../lib/placesPane'
 import { openPlace } from './openPlace'
 
 /** The quiet row: 56 tall, a 40 thumb. */
@@ -22,7 +22,8 @@ const QUIET_THUMB_RADIUS = 10
 function TypeLine({ venue, area = false, small = false }: { venue: VenueListItem; area?: boolean; small?: boolean }) {
   const bold = useBoldText()
   const distance = distanceText(venue.distance)
-  const lead = [venue.venueTypeLabel, area ? placeArea(venue) : null].filter(Boolean).join(' · ')
+  // A row that carries the area leads with it: five "The Pub" rows are told apart by where they are (audit A40).
+  const lead = (area ? [placeArea(venue), venue.venueTypeLabel] : [venue.venueTypeLabel]).filter(Boolean).join(' · ')
   return (
     <Text numberOfLines={1} style={[font('meta', bold), styles.secondary, small && styles.quietMeta]}>
       {lead}
@@ -37,9 +38,24 @@ function TypeLine({ venue, area = false, small = false }: { venue: VenueListItem
 }
 
 /** The quiet places, folded behind one line with a count; it unfolds in place. */
-export function QuietFold({ count, more, open, nearest, onPress }: { count: number; more: boolean; open: boolean; nearest: boolean; onPress: () => void }) {
+export function QuietFold({
+  count,
+  more,
+  open,
+  nearest,
+  placeKind = null,
+  onPress,
+}: {
+  count: number
+  more: boolean
+  open: boolean
+  nearest: boolean
+  placeKind?: PlaceTypeFilter
+  onPress: () => void
+}) {
   const bold = useBoldText()
-  const line = moreLine(count, more)
+  const line = moreLine(count, more, placeKind)
+  const figure = line.slice(0, line.indexOf(' more '))
   const order = nearest ? 'Nearest first' : 'A–Z'
   return (
     <View style={[styles.gutter, styles.foldGap]}>
@@ -56,12 +72,14 @@ export function QuietFold({ count, more, open, nearest, onPress }: { count: numb
         accessibilityState={{ expanded: open }}
         style={styles.fold}
       >
-        <Text style={[font('body', bold), styles.ink]}>
-          <Text style={[font('body', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{`${count}${more ? '+' : ''}`}</Text>
-          {count === 1 && !more ? ' more place' : ' more places'}
+        <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('body', bold), styles.ink, styles.foldLine]}>
+          <Text style={[font('body', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{figure}</Text>
+          {` more ${foldNoun(count, more, placeKind)}`}
         </Text>
         <View style={styles.foldEnd}>
-          <Text style={[font('meta', bold), styles.secondary]}>{order}</Text>
+          <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary]}>
+            {order}
+          </Text>
           <Icon name={open ? 'chevron-up' : 'chevron-down'} size={ICON.control} color={COLOR.textSecondary} />
         </View>
       </Pressable>
@@ -115,8 +133,10 @@ const styles = StyleSheet.create({
   rowText: { flex: 1, minWidth: 0 },
   quietRow: { height: QUIET_ROW, flexDirection: 'row', alignItems: 'center', gap: SPACE.md, marginBottom: SPACE.xs },
   pressed: { backgroundColor: PRESSED_WASH.ios },
+  foldLine: { flexShrink: 1 },
   fold: {
-    height: SIZE.control,
+    minHeight: SIZE.control,
+    gap: SPACE.sm,
     borderRadius: RADIUS.rowInCard,
     backgroundColor: COLOR.surface,
     flexDirection: 'row',

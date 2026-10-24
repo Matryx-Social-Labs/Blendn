@@ -164,15 +164,34 @@ export function nearLabel(venue: VenueListItem, n: number): string {
   return `${n} of ${NEAR_COUNT} nearest. ${where}`
 }
 
+const thousands = (n: number) => n.toLocaleString('en-US')
+
 /** "3 places" / "1 place". */
 export const placesCount = (n: number) => `${n} ${n === 1 ? 'place' : 'places'}`
 
+/** What a kind's places are called in a count: one, many. */
+const KIND_NOUNS: Record<NonNullable<PlaceTypeFilter>, readonly [string, string]> = {
+  pub_bar: ['bar', 'bars'],
+  brewery: ['brewery', 'breweries'],
+  nightclub: ['club', 'clubs'],
+  live_music_venue: ['live music venue', 'live music venues'],
+  lounge_rooftop: ['rooftop', 'rooftops'],
+  cafe: ['café', 'cafés'],
+}
+
+/** "place" / "cafés": the noun for `count` of a kind (or of places). */
+export function foldNoun(count: number, more: boolean, kind: PlaceTypeFilter = null): string {
+  const [one, many] = (kind && KIND_NOUNS[kind]) || ['place', 'places']
+  return count === 1 && !more ? one : many
+}
+
 /**
- * The fold's line: "N more places". The list is paged: while there are pages left, the number is what has
- * been read so far, so it says "N+" rather than a total it does not know.
+ * The fold's line: "753 more cafés". With the server's total the count is the truth (`placeRows` takes what is shown
+ * above the fold from it); without one, the list is paged, and while there are pages left the number is what has been
+ * read so far, so it says "N+" rather than a total it does not know (audit A22: "30+ more places" under "783 CAFÉS").
  */
-export function moreLine(count: number, more: boolean): string {
-  return `${count}${more ? '+' : ''} more ${count === 1 && !more ? 'place' : 'places'}`
+export function moreLine(count: number, more: boolean, kind: PlaceTypeFilter = null): string {
+  return `${thousands(count)}${more ? '+' : ''} more ${foldNoun(count, more, kind)}`
 }
 
 /** "5–9 live" for a bucket the row prints; null below 5 and for a viewer the server tells nothing. */
@@ -272,7 +291,6 @@ export function nearPins(venues: readonly VenueListItem[]): NearPin[] {
   return pins
 }
 
-const thousands = (n: number) => n.toLocaleString('en-US')
 
 /**
  * The stat line under the title (B1, B8): "6,422 places · 4 live · 31 open tonight". `total` is the server's
@@ -323,7 +341,7 @@ export type PlaceRow =
   | { kind: 'near'; key: 'near'; venues: VenueListItem[]; hasFix: boolean }
   | { kind: 'areas'; key: 'areas'; areas: PlaceAreaSummary[] }
   | { kind: 'kinds'; key: 'kinds' }
-  | { kind: 'fold'; key: 'fold'; count: number; more: boolean; open: boolean; nearest: boolean }
+  | { kind: 'fold'; key: 'fold'; count: number; more: boolean; open: boolean; nearest: boolean; placeKind: PlaceTypeFilter }
   | { kind: 'quiet'; key: string; venue: VenueListItem }
   | { kind: 'label'; key: 'label'; text: string }
   | { kind: 'skeleton'; key: 'skeleton' }
@@ -345,6 +363,8 @@ export type PlaceView = {
   rateLimited?: boolean
   /** The top areas, from §C5 (not read yet): drawn only when `SHOW_AREA_SECTION` and there are two or more. */
   areas?: readonly PlaceAreaSummary[]
+  /** The server's count of everything the list matches (`totalCount`); null until it has said. */
+  total?: number | null
 }
 
 /**
@@ -388,7 +408,12 @@ export function placeRows(view: PlaceView): PlaceRow[] {
     rows.push({ kind: 'kinds', key: 'kinds' })
   }
   if (strata.quiet.length) {
-    rows.push({ kind: 'fold', key: 'fold', count: strata.quiet.length, more, open: quietOpen, nearest: hasFix })
+    // With the server's total the fold says how many are left under it: the total less Live now and Open tonight. A
+    // total under what has been read is not one to repeat (as `upcomingCount`): then what was read, "+" while paging.
+    const total = view.total ?? null
+    const told = total !== null && total >= all.length
+    const count = told ? total - strata.live.length - strata.open.length : strata.quiet.length
+    rows.push({ kind: 'fold', key: 'fold', count, more: told ? false : more, open: quietOpen, nearest: hasFix, placeKind: venueType })
     if (quietOpen) for (const venue of strata.quiet) rows.push({ kind: 'quiet', key: `quiet:${venue.id}`, venue })
   }
   return rows
