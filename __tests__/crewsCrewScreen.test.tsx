@@ -90,6 +90,14 @@ describe('the page', () => {
     expect(screen.getByLabelText('Leave crew')).toBeTruthy()
   })
 
+  // D-L14: the owner's Edit crew lists the fields it edits, not a setting. Negative control: the old hint fails it.
+  it('the owner’s Edit crew says what it edits: name, bio, vibe', async () => {
+    crews.crew.mockResolvedValue({ success: true, data: crew('owner') })
+    await render(<CrewScreen />)
+    await waitFor(() => screen.getByText('Edit crew'))
+    expect(screen.getByText('Name, bio, vibe')).toBeTruthy()
+  })
+
   it('a member has no Edit crew and no ⋯ on anyone', async () => {
     crews.crew.mockResolvedValue({ success: true, data: crew('member') })
     await render(<CrewScreen />)

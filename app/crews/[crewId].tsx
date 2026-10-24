@@ -333,7 +333,8 @@ function CrewScreenContent() {
               <SettingsRow
                 icon="pencil"
                 title="Edit crew"
-                hint="Name, bio, vibe, Room for one more"
+                // The fields it edits (D-L14); "Room for one more" is a setting, not a field.
+                hint="Name, bio, vibe"
                 trail="chevron"
                 onPress={() => {
                   setEditError(null)
