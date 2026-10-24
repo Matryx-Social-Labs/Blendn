@@ -123,3 +123,14 @@ describe('RevealBar (C26, C27)', () => {
     expect(screen.getByText('You · Aarav Venkataraman', hidden).props.numberOfLines).toBe(2)
   })
 })
+
+describe('PersonRow’s mono date (DS-09, D-L1: "Friends since Oct  2026")', () => {
+  it('sets the space inside "Oct 2026" in the brand face; the month and year stay mono', async () => {
+    await at(402, 1)
+    await render(<PersonRow person={person} detail="Friends since " detailMono="Oct 2026" />)
+    const mono = screen.getByText('Oct 2026', hidden)
+    expect(StyleSheet.flatten(mono.props.style).fontFamily).toBe(FONT_FAMILY.mono[500])
+    const space = mono.children.find((c) => typeof c !== 'string' && c.props.children === ' ') as unknown as { props: { style: object } }
+    expect(StyleSheet.flatten(space.props.style).fontFamily).toBe(FONT_FAMILY.brand[500])
+  })
+})

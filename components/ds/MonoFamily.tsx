@@ -20,22 +20,27 @@ import { CONTROL_FONT_CAP, font, useBoldText, useIncreaseContrast } from './shar
 export const monoCaption = (bold: boolean) => ({ ...font('caption', bold, FONT_FAMILY.mono[500]), fontVariant: ['tabular-nums' as const] })
 
 /**
- * Mono runs divided by " · " ("Sun · 3:30 PM"): the middot and its two spaces are set in the brand face, as the frames draw
- * them, so punctuation does not take a full mono cell each and read as "Sun  ·  3:30 PM". Inside a mono `Text`; the digits stay mono.
+ * A mono run's separators in the brand face: the " · " divider ("Sun · 3:30 PM") and every plain space ("1:12 PM",
+ * "Oct 2026"). A mono space is a full cell, so set in Geist Mono they read double-spaced: "Sun  ·  3:30  PM" (C16, C17,
+ * D-L1). Inside a mono `Text`; the digits and words between them stay mono.
  */
 export function MonoRun({ text }: { text: string }) {
   return (
     <>
-      {text.split(DIVIDER).map((part, i) => (
-        <Fragment key={i}>
-          {i > 0 ? <Text style={styles.divider}>{DIVIDER}</Text> : null}
-          {part}
-        </Fragment>
-      ))}
+      {text.split(SEPARATOR).map((part, i) =>
+        // `split` with a group keeps the separators at the odd indices.
+        i % 2 ? (
+          <Text key={i} style={styles.divider}>
+            {part}
+          </Text>
+        ) : (
+          <Fragment key={i}>{part}</Fragment>
+        )
+      )}
     </>
   )
 }
-const DIVIDER = ' · '
+const SEPARATOR = /( · | )/
 
 /** A count's horizontal padding: 5 in the 18 pt pill, 8 in the 22. */
 const BADGE_PAD = { 18: SPACE.xs, 22: SPACE.sm } as const

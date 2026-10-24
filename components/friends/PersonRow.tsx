@@ -4,6 +4,7 @@ import { StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import type { FriendPerson } from '../../lib/friends'
 import { Avatar } from '../ds/Avatar'
+import { MonoRun } from '../ds/MonoFamily'
 import { font, useBoldText, useIncreaseContrast, useLargeText } from '../ds/shared'
 import ScalePress from '../motion/ScalePress'
 import { OptimizedImage } from '../OptimizedImage'
@@ -80,7 +81,11 @@ export function PersonRow({
         {line ? (
           <Text testID="person-detail" numberOfLines={largeText ? 4 : 2} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.muted]}>
             {detail}
-            {detailMono ? <Text style={font('meta', bold, FONT_FAMILY.mono[500])}>{detailMono}</Text> : null}
+            {detailMono ? (
+              <Text style={font('meta', bold, FONT_FAMILY.mono[500])}>
+                <MonoRun text={detailMono} />
+              </Text>
+            ) : null}
             {detailTail}
           </Text>
         ) : null}

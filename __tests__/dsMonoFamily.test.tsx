@@ -168,4 +168,26 @@ describe('a mono run divided by middots', () => {
     await render(<TimeBadge when="Live" testID="tb" />)
     expect(screen.getByText('Live')).toBeTruthy()
   })
+
+  it('sets every plain space in the brand face too, so "1:12 PM" and "Oct 2026" do not read double-spaced (C16, C17, D-L1)', async () => {
+    const spacesIn = (text: string) =>
+      screen
+        .getByText(text)
+        .children.filter((c) => typeof c !== 'string' && c.props.children === ' ')
+        .map((c) => StyleSheet.flatten((c as unknown as { props: { style: object } }).props.style).fontFamily)
+    await render(
+      <Text style={{ fontFamily: FONT_FAMILY.mono[500] }}>
+        <MonoRun text="1:12 PM" />
+      </Text>,
+    )
+    expect(spacesIn('1:12 PM')).toEqual([FONT_FAMILY.brand[500]])
+    await render(
+      <Text style={{ fontFamily: FONT_FAMILY.mono[500] }}>
+        <MonoRun text="Sat 24 Oct · 9 PM" />
+      </Text>,
+    )
+    expect(spacesIn('Sat 24 Oct · 9 PM')).toEqual([FONT_FAMILY.brand[500], FONT_FAMILY.brand[500], FONT_FAMILY.brand[500]])
+    // The digits and words stay in the mono run: only separators are pulled out.
+    expect(screen.getByText('Sat 24 Oct · 9 PM').children.filter((c) => typeof c === 'string')).toEqual(['Sat', '24', 'Oct', '9', 'PM'])
+  })
 })

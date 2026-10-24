@@ -17,6 +17,7 @@ import { scheduleOnRN } from 'react-native-worklets'
 
 import { Icon } from '../ui/Icon'
 import { COLOR, EASING, ICON, PRESS, RADIUS, SIZE, SPACE, SPRING, TYPE } from '../../lib/design/tokens'
+import { MonoRun } from './MonoFamily'
 import { H } from '../../lib/haptics'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { tint } from '../../lib/theme'
@@ -499,7 +500,9 @@ function Under({
             </>
           ) : (
             <>
-              <Text style={timeFont(bold)}>{time}</Text>
+              <Text style={timeFont(bold)}>
+                <MonoRun text={time} />
+              </Text>
               {mine && surface === 'dm' && receipt ? <ReceiptMark state={receipt} /> : null}
             </>
           )}
