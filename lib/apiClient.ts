@@ -25,6 +25,24 @@ import { msUntilExpiry, REFRESH_SKEW_MS } from './socketAuth'
 import { getPushTokenRef, setPushTokenRef } from './pushTokenRef'
 import type { ChatReaction } from './chatReactions'
 
+/**
+ * The binary's own version (`lib/support.ts`): an OTA update does not change
+ * what the store build can do. Read lazily: a test without the native module
+ * gets null and sends no header, as installed builds before this one did.
+ */
+let appVersionRead: string | null | undefined
+function appVersion(): string | null {
+  if (appVersionRead === undefined) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      appVersionRead = (require('expo-application') as typeof import('expo-application')).nativeApplicationVersion ?? null
+    } catch {
+      appVersionRead = null
+    }
+  }
+  return appVersionRead
+}
+
 // API Configuration
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL
 const EVENTS_LIST_SWR_TTL = 60 * 1000
@@ -1324,6 +1342,8 @@ class ApiClientClass {
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
+      // Which build is asking: the server's version gates (426, upload sizes) read it.
+      ...(appVersion() ? { 'X-App-Version': appVersion() as string } : {}),
       ...(options.headers as Record<string, string>),
     }
 
@@ -2362,13 +2382,15 @@ class ApiClientClass {
   async getPresignedUploadUrl(
     filename: string,
     contentType: string,
-    folder: 'profile' | 'chat' | 'events' = 'profile'
+    folder: 'profile' | 'chat' | 'events' = 'profile',
+    /** Bytes the PUT will carry: signed into the URL, so the upload cannot be larger. */
+    size?: number
   ): Promise<ApiResponse<{ uploadUrl: string; publicUrl: string; key?: string }>> {
     return this.queuedRequest<{ uploadUrl: string; publicUrl: string; key?: string }>(
       '/api/mobile/uploads/presigned-url',
       {
         method: 'POST',
-        body: JSON.stringify({ filename, contentType, folder }),
+        body: JSON.stringify({ filename, contentType, folder, size }),
       },
       true,
       3

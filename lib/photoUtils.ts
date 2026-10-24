@@ -330,7 +330,7 @@ export const uploadChatPhoto = async (
   try {
     const processed = await processImage(uri)
     if (!processed) return { ok: false, error: PHOTO_DID_NOT_FINISH }
-    const presigned = await apiClient.getPresignedUploadUrl(`chat_${Date.now()}.jpg`, 'image/jpeg', 'chat')
+    const presigned = await apiClient.getPresignedUploadUrl(`chat_${Date.now()}.jpg`, 'image/jpeg', 'chat', await fileSize(processed))
     if (!presigned.success || !presigned.data) return { ok: false, error: presigned.error || PHOTO_DID_NOT_FINISH }
     const task = FileSystem.createUploadTask(
       presigned.data.uploadUrl,
@@ -349,6 +349,16 @@ export const uploadChatPhoto = async (
   }
 }
 
+/** The file's size in bytes, for the upload URL; undefined when the platform cannot say. */
+const fileSize = async (uri: string): Promise<number | undefined> => {
+  try {
+    const info = await FileSystem.getInfoAsync(uri)
+    return info.exists && typeof info.size === 'number' ? info.size : undefined
+  } catch {
+    return undefined
+  }
+}
+
 /**
  * Upload to Tigris via presigned URL
  */
@@ -359,7 +369,7 @@ const uploadToTigris = async (
 ): Promise<PhotoUploadResult> => {
   try {
     // Get presigned URL from admin backend
-    const presignedResult = await apiClient.getPresignedUploadUrl(fileName, 'image/jpeg', folder)
+    const presignedResult = await apiClient.getPresignedUploadUrl(fileName, 'image/jpeg', folder, await fileSize(uri))
 
     if (!presignedResult.success || !presignedResult.data) {
       return {
