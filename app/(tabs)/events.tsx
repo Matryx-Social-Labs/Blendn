@@ -12,6 +12,7 @@ import {
   RefreshControl,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -84,7 +85,7 @@ import {
 } from '../../lib/pulseSections'
 import { useNow } from '../../lib/useNow'
 import { usePullToRefresh } from '../../lib/usePullToRefresh'
-import { COLOR, FONT_FAMILY, RADIUS, SPACE, STAGGER, TYPE as DESIGN_TYPE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, MAX_FONT_SCALE, RADIUS, SPACE, STAGGER, TYPE as DESIGN_TYPE } from '../../lib/design/tokens'
 import { mergeEventPage, pageHasMore, pulseEmptyCopy, pulseEmptyKind } from '../../lib/pulseFeed'
 import { type PeekAction } from '../../lib/pulsePeek'
 import { putSceneSeed } from '../../lib/sceneSeed'
@@ -152,6 +153,13 @@ const MAIN_PADDING_BOTTOM = 128
  */
 const PULSE_COACH = 'events_preview_hint'
 const PULSE_COACH_TEXT = 'Hold an event to save, share or preview it.'
+
+/**
+ * Room between the first card and the tip: the next section's margin and its heading line, so the tip sits under that
+ * heading, never over it. Over it, the heading was hidden and its "See all" floated beside the bubble (rc7 D15).
+ */
+export const coachClearsNextHeader = (fontScale: number) =>
+  SPACE.xxl + Math.round(DESIGN_TYPE.heading.lineHeight * Math.min(Math.max(fontScale, 1), MAX_FONT_SCALE.heading))
 
 /** The hole's corner radius: the card the mark names (a hero, a compact card, or a row). */
 const coachRadius = (section: PulseSectionKey | null) =>
@@ -1547,6 +1555,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
    * tab bar -- and with none of this screen's sheets open. The bell's sheet is
    * the shell's and is not counted; it covers the page while it is up anyway.
    */
+  const { fontScale } = useWindowDimensions()
   const coach = useCoachMark(PULSE_COACH, {
     ready:
       full &&
@@ -1570,6 +1579,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     target: coachTarget,
     text: PULSE_COACH_TEXT,
     place: 'below',
+    gap: coachClearsNextHeader(fontScale),
     radius: coachRadius(firstSection),
     onDismiss: coach.dismiss,
     onLost: coach.lose,

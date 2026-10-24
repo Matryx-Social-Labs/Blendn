@@ -14,7 +14,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native'
 import React from 'react'
-import { StyleSheet } from 'react-native'
+import { Dimensions, StyleSheet } from 'react-native'
 
 let mockUser: { id: string } | null = null
 let mockFocused = true
@@ -151,7 +151,7 @@ jest.mock('../lib/useAuth', () => ({
 }))
 
 /* eslint-disable import/first */
-import Events from '../app/(tabs)/events'
+import Events, { coachClearsNextHeader } from '../app/(tabs)/events'
 import { CoachMarkHost, spotlightMeasure } from '../components/ds/CoachMarkHost'
 import { getEvents } from '../lib/api'
 /* eslint-enable import/first */
@@ -244,11 +244,14 @@ describe('the Pulse’s coach mark', () => {
     await mount()
     expect(within(screen.getByTestId('coach-mark-host')).getByTestId('pulse-coach-mark')).toBeTruthy()
     expect(measuredNode?.props.children.props.title).toBe('Event e1')
-    // Caret up, at the card above it; the tip starts under the hole (200 + 300 + the 8 pad + the 8 gap).
+    // Caret up, at the card above it; the tip starts under the hole (200 + 300 + the 8 pad + the 8 gap), and under the next
+    // section's heading, so it never hides that heading and leaves its "See all" floating (rc7 D15).
     expect(StyleSheet.flatten(screen.getByTestId('pulse-coach-mark-caret').props.style)).toMatchObject({ top: -6 })
     let tip = screen.getByTestId('pulse-coach-mark').parent
     while (tip && StyleSheet.flatten(tip.props.style)?.position !== 'absolute') tip = tip.parent
-    expect(StyleSheet.flatten(tip!.props.style)).toMatchObject({ top: 516 })
+    const clears = coachClearsNextHeader(Dimensions.get('window').fontScale)
+    expect(clears).toBeGreaterThan(0)
+    expect(StyleSheet.flatten(tip!.props.style)).toMatchObject({ top: 516 + clears })
     // Four dim rects, none over the card.
     expect(screen.getAllByTestId(/^coach-mark-dim-/, { includeHiddenElements: true })).toHaveLength(4)
   })
@@ -383,5 +386,13 @@ describe('the save heart beside each Everything-else row (kept)', () => {
     expect(mockShowToast).toHaveBeenCalledWith("Couldn’t save this event. Try again.", 'error', { haptic: 'error' })
     // Rolled back: still offering Save, not "Saved".
     expect(screen.getByRole('button', { name: 'Save Event u2' })).toBeTruthy()
+  })
+})
+
+describe('the tip clears the next section’s heading (rc7 D15)', () => {
+  it('is the section margin plus the heading line, growing with the text to the heading’s cap', () => {
+    const { SPACE, TYPE } = jest.requireActual('../lib/design/tokens')
+    expect(coachClearsNextHeader(1)).toBe(SPACE.xxl + TYPE.heading.lineHeight)
+    expect(coachClearsNextHeader(5)).toBe(SPACE.xxl + TYPE.heading.lineHeight * 2)
   })
 })
