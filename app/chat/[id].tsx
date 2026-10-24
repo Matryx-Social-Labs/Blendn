@@ -53,6 +53,7 @@ import { toggleReaction, withMine } from '../../lib/reactions'
 import { isMuted, markRoomJoined, markRoomLeft, roomSubtitle, useRoomMembership, useRoomMute } from '../../lib/roomMembership'
 import { isSpeech, isTemp, roomMessageFromSocket, roomMessagesFrom, type RoomMessage as Message } from '../../lib/roomMessages'
 import { useHereCount, useRoomRow, type RoomRow } from '../../lib/roomRow'
+import { roomLockedIn } from '../../lib/roomState'
 import { blockStep, messageReportStep } from '../../lib/safetyUtils'
 import { sendOutcome } from '../../lib/sendOutcome'
 import { showSheet } from '../../lib/sheet'
@@ -248,6 +249,21 @@ function GroupChatInner() {
     if (wasClosed.current && !countingDown && Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility('The room is open')
     wasClosed.current = !!countingDown
   }, [countingDown])
+  /*
+   * A room the organiser locked opens read-only (TG-02): its row in the Banter's list says so (`status`, the same cached
+   * read as `useRoomRow`). Before, the lock was learnt only from a send it refused, so it opened with a live composer.
+   */
+  const applyLock = composer.apply
+  useEffect(() => {
+    if (!chatRoomId) return
+    let live = true
+    void apiClient.getChatGroups().then((result) => {
+      if (live && result.success && roomLockedIn(result.data, roomId)) applyLock('CHAT_LOCKED')
+    })
+    return () => {
+      live = false
+    }
+  }, [chatRoomId, roomId, applyLock])
   /** The event this room is, to ask its own door (`GET /events/:id/chat`), which knows when it opens. */
   const roomEventId = eventRoom ? (roomInfo.eventId ?? idParam(params.eventId)) : null
   const { showToast } = useToast()
