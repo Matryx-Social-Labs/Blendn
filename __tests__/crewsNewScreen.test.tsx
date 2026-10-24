@@ -161,6 +161,16 @@ describe('step 1 · name and vibe', () => {
     }
   })
 
+  it('"Here for" is chips, each the width of its word: Friendship is chosen, never a third of a row it breaks in (R6-6)', async () => {
+    await render(<NewCrewScreen />)
+    expect(screen.queryByTestId('make-intent-0')).toBeNull()
+    const friendship = screen.getByTestId('make-intent-friendship')
+    expect(friendship.props.accessibilityState).toMatchObject({ selected: true })
+    await fireEvent.press(screen.getByTestId('make-intent-dating'))
+    expect(screen.getByTestId('make-intent-dating').props.accessibilityState).toMatchObject({ selected: true })
+    expect(screen.getByTestId('make-intent-friendship').props.accessibilityState).toMatchObject({ selected: false })
+  })
+
   it('draws the card as strangers will see it as you type', async () => {
     await render(<NewCrewScreen />)
     expect(screen.getByText('As strangers will see it')).toBeTruthy()

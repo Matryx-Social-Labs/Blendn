@@ -15,7 +15,6 @@ import { ChipSet } from '../ds/ChipSet'
 import { CrewCard } from '../ds/CrewCard'
 import { CrewEmblem, EMBLEM_PALETTES, emblemFor } from '../ds/CrewEmblem'
 import { CONTROL_FONT_CAP, font, minTarget, quickTransition, useBoldText, useIncreaseContrast, useSelection } from '../ds/shared'
-import { SegmentedControl } from '../ds/SegmentedControl'
 import { FieldLabel, TextArea, TextField } from '../ds/TextField'
 import { Toggle } from '../ds/Toggle'
 import { Glyph } from '../ui/Glyph'
@@ -115,27 +114,18 @@ export function NameStep(p: NameStepProps) {
         <View style={styles.labelRow}>
           <FieldLabel text="Here for" bold={bold} contrast={contrast} />
         </View>
-        {p.choice === null ? (
-          // An intent the picker has no segment for (Edit crew): nothing is picked for the person.
-          <ChipSet
-            items={INTENT_CHOICES.map((c) => ({
-              key: c.value,
-              label: c.label,
-            }))}
-            selection="single"
-            selected={[]}
-            onToggle={(key) => p.onChoice(key as IntentChoice)}
-            testID="make-intent"
-          />
-        ) : (
-          <SegmentedControl
-            semantics="radio"
-            items={INTENT_CHOICES.map((c) => c.label)}
-            selected={INTENT_CHOICES.findIndex((c) => c.value === p.choice)}
-            onChange={(i) => p.onChoice(INTENT_CHOICES[i].value)}
-            testID="make-intent"
-          />
-        )}
+        {/*
+          Chips, each the width of its word: "Friendship" in a third of a 360 dp segmented control at Android's 1.3 broke
+          mid-word (R6-6). A set wraps to a second row rather than squeeze a word; an intent the picker has no chip for
+          (Edit crew) picks nothing.
+        */}
+        <ChipSet
+          items={INTENT_CHOICES.map((c) => ({ key: c.value, label: c.label }))}
+          selection="single"
+          selected={p.choice ? [p.choice] : []}
+          onToggle={(key) => p.onChoice(key as IntentChoice)}
+          testID="make-intent"
+        />
       </View>
       <ChipSet
         label="Tags"

@@ -136,6 +136,17 @@ describe('row · lead="distance"', () => {
     expect(lead).toMatchObject({ minWidth: 64, maxWidth: 96, flexShrink: 0 })
   })
 
+  it('beside the column the venue has its own line, so the time never squeezes it to "…" (R6-6, 360 dp at 1.3)', async () => {
+    await render(<EventCard kind="row" lead="distance" {...VINYL} venue="Toit Brewpub, Indiranagar" testID="e" />)
+    const venue = screen.getByTestId('e-venue', { includeHiddenElements: true })
+    expect(venue.props).toMatchObject({ numberOfLines: 1, children: 'Toit Brewpub, Indiranagar' })
+    expect(StyleSheet.flatten(venue.props.style).flexShrink ?? 0).toBe(0)
+    // The time line is the time alone: no venue run, no dot to share it with.
+    expect(screen.queryByText('·', { includeHiddenElements: true })).toBeNull()
+    expect(screen.getByText('9 PM', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByText('Vinyl Night', { includeHiddenElements: true }).props.numberOfLines).toBe(2)
+  })
+
   it('draws no column when the row has no distance, and leaves the default row alone', async () => {
     await render(<EventCard kind="row" lead="distance" {...VINYL} distance={undefined} testID="e" />)
     expect(screen.queryByTestId('e-lead')).toBeNull()
