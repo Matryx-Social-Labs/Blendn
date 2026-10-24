@@ -93,11 +93,31 @@ export function weekdayIn(d: Date, timeZone?: string): number {
   return new Date(Date.UTC(y, m, day)).getUTCDay()
 }
 
+/**
+ * The zones we serve, named the same on every engine (R6-1): Hermes on iOS calls Asia/Kolkata "GMT" in every locale, which
+ * names a different time. Canada's are the generic names ("ET"), true either side of a clock change.
+ */
+const ZONE_ABBREVIATIONS: Readonly<Record<string, string>> = {
+  'Asia/Kolkata': 'IST',
+  'Asia/Calcutta': 'IST',
+  'America/Toronto': 'ET',
+  'America/Montreal': 'ET',
+  'America/Winnipeg': 'CT',
+  'America/Regina': 'CT',
+  'America/Edmonton': 'MT',
+  'America/Vancouver': 'PT',
+  'America/Halifax': 'AT',
+  'America/St_Johns': 'NT',
+  UTC: 'UTC',
+  'Etc/UTC': 'UTC',
+}
+
 /** Short zone names, one formatter per (locale, zone): "IST" is only en-IN's, "CEST" en-GB's, "PDT" en-US's. */
 const ZONE_NAME_LOCALES = ['en-GB', 'en-IN', 'en-US'] as const
 const zoneNameFormatters = new Map<string, Intl.DateTimeFormat>()
 function zoneName(d: Date, timeZone: string): string {
-  let fallback = ''
+  const known = ZONE_ABBREVIATIONS[timeZone]
+  if (known) return known
   for (const locale of ZONE_NAME_LOCALES) {
     try {
       const id = `${locale}|${timeZone}`
@@ -107,13 +127,21 @@ function zoneName(d: Date, timeZone: string): string {
         zoneNameFormatters.set(id, f)
       }
       const name = f.formatToParts(d).find((p) => p.type === 'timeZoneName')?.value ?? ''
-      if (name && !/^(GMT|UTC)[+-]/.test(name)) return name
-      fallback ||= name
+      // "GMT" and "GMT+5:30" are not names: the engine had none (Hermes iOS says "GMT" for IST). The offset says it instead.
+      if (name && !/^(GMT|UTC)/.test(name)) return name
     } catch {
-      return fallback
+      break
     }
   }
-  return fallback
+  return offsetName(offsetIn(d, timeZone))
+}
+
+/** "GMT+5:30", "GMT-3", and "GMT" only at offset 0. */
+function offsetName(minutes: number): string {
+  if (minutes === 0) return 'GMT'
+  const abs = Math.abs(minutes)
+  const m = abs % 60
+  return `GMT${minutes < 0 ? '-' : '+'}${Math.floor(abs / 60)}${m ? `:${String(m).padStart(2, '0')}` : ''}`
 }
 
 /** Minutes ahead of UTC at `d` in `timeZone`. */
