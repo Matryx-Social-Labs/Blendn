@@ -100,8 +100,8 @@ function NotificationSettingsContent() {
                 />
               ) : null
             )}
-            {/* One offers row on both platforms: the account's switch. Android's offers channel is in the phone's settings with the rest. */}
-            <OffersFromPlacesRow key="offers" />
+            {/* One offers row on both platforms, once a place has regulars on (D21): the account's switch, held while push can't arrive. */}
+            <OffersFromPlacesRow key="offers" pushOff={masterOff || phoneBlocks} />
           </SettingsGroup>
         </View>
         {/* Frame 04: the rooms you silenced, each opening its info. A few here; the rest on their own screen. */}
