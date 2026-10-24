@@ -9,6 +9,8 @@ import React from 'react'
 import { AccessibilityInfo } from 'react-native'
 
 import { RoomCancelled } from '../components/blendn/RoomCancelled'
+import { HueProvider } from '../components/ds/shared'
+import { COLOR } from '../lib/design/tokens'
 import { useRoomCancelled } from '../lib/useRoomCancelled'
 
 let pushCancelled: (d: { eventId: string }) => void = () => {}
@@ -23,6 +25,8 @@ jest.mock('../lib/socketClient', () => ({
 }))
 jest.mock('../lib/checkIn', () => ({ checkInChanged: (...a: unknown[]) => mockChanged(...a) }))
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
+const mockOrbs = jest.fn((_: { tint?: string }) => null)
+jest.mock('../components/ds/Orbs', () => ({ Orbs: (props: { tint?: string }) => mockOrbs(props) }))
 
 const EVENT = { id: 'e1', title: 'Vinyl Night' }
 beforeEach(() => mockChanged.mockClear())
@@ -110,4 +114,16 @@ describe('<RoomCancelled>', () => {
     await render(<RoomCancelled title="The Extraordinarily Long Named Night of Many Many Words and Sounds" onSeeTonight={jest.fn()} onClose={jest.fn()} />)
     expect(screen.getByRole('button', { name: 'Close' })).toBeTruthy()
   })
+})
+
+// D31: the overlay is rose, and the brand set put ember and violet under it. Negative control: without `tint` this fails.
+it('its orbs are the overlay’s hue, never the brand set’s', async () => {
+  mockOrbs.mockClear()
+  await render(
+    <HueProvider value="rose">
+      <RoomCancelled title="Vinyl Night" onSeeTonight={jest.fn()} onClose={jest.fn()} testID="rc" />
+    </HueProvider>,
+  )
+  expect(mockOrbs).toHaveBeenCalled()
+  expect(mockOrbs.mock.calls.every(([props]) => props.tint === COLOR.brandRose)).toBe(true)
 })

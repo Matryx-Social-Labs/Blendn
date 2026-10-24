@@ -9,7 +9,8 @@ import { makeMutable } from 'react-native-reanimated'
 const INSET_TOP = 59
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: INSET_TOP, bottom: 34, left: 0, right: 0 }) }))
 jest.mock('../components/profile/PhotoStack', () => ({ PhotoStack: () => null }))
-jest.mock('../components/ds/Orbs', () => ({ Orbs: () => null }))
+const mockOrbs = jest.fn((_: { tint?: string }) => null)
+jest.mock('../components/ds/Orbs', () => ({ Orbs: (props: { tint?: string }) => mockOrbs(props) }))
 jest.mock('../components/motion/ZoomableImage', () => ({ ZoomableImage: () => null }))
 
 /* eslint-disable import/first */
@@ -17,7 +18,8 @@ import { PhotoViewer } from '../components/profile/PhotoViewer'
 import { ProfileBar } from '../components/profile/ProfileBar'
 import { MeIdentity } from '../components/profile/MeSections'
 import { ProfileHeroStage } from '../components/profile/ProfileHeroStage'
-import { SIZE, SPACE } from '../lib/design/tokens'
+import { HueProvider } from '../components/ds/shared'
+import { COLOR, SIZE, SPACE } from '../lib/design/tokens'
 import { dismissModals } from '../lib/pendingRoute'
 /* eslint-enable import/first */
 
@@ -37,6 +39,14 @@ describe('the hero stage', () => {
     await render(stage({ anonymous: true }))
     expect(screen.getByTestId('hero-creature')).toBeTruthy()
     expect(screen.getByText('Anonymous until you both reveal')).toBeTruthy()
+  })
+
+  // D31: a profile is rose, and the brand set put ember and violet behind the creature. Negative control: no `tint` fails.
+  it('the creature’s orbs are the screen’s hue, never the brand set’s', async () => {
+    mockOrbs.mockClear()
+    await render(<HueProvider value="rose">{stage()}</HueProvider>)
+    expect(mockOrbs).toHaveBeenCalled()
+    expect(mockOrbs.mock.calls.every(([props]) => props.tint === COLOR.brandRose)).toBe(true)
   })
 
   it('draws the creature without the note for a friend with no photos', async () => {

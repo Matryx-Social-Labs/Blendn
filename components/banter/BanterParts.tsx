@@ -14,7 +14,7 @@ import { Avatar } from '../ds/Avatar'
 import { Button } from '../ds/Button'
 import { CrewEmblem } from '../ds/CrewEmblem'
 import { IconButton } from '../ds/IconButton'
-import { Orbs } from '../ds/Orbs'
+import { CategoryPlate } from '../ds/EventCard'
 import { Badge, monoCaption, PresenceDot, ScrimPill, TimeBadge } from '../ds/MonoFamily'
 import { RollingNumber } from '../ds/RollingNumber'
 import { CONTROL_FONT_CAP, font, useBoldText, useLargeText, useSelection } from '../ds/shared'
@@ -117,13 +117,11 @@ export function LiveHero({
       accessibilityLabel={[title, 'live', here ? 'You’re here' : count ? `${count} in the room` : null, unread ? `${unread} new` : null, line].filter(Boolean).join(', ')}
       style={({ pressed }) => [styles.hero, pressed && styles.pressed]}
     >
-      {/* No cover is the brand orbs, still, as the Scene and Room info draw it (r7 M6): never a flat grey card. */}
+      {/* No cover is the plate in the Banter's hue, as the Scene and Room info draw it (D8, D31): never a flat grey card. */}
       {coverUrl ? (
         <Image source={{ uri: coverUrl }} recyclingKey={coverUrl} contentFit="cover" style={StyleSheet.absoluteFill} accessible={false} />
       ) : (
-        <View testID={testID && `${testID}-orbs`} style={StyleSheet.absoluteFill}>
-          <Orbs set="brand" paused />
-        </View>
+        <CategoryPlate testID={testID && `${testID}-plate`} />
       )}
       <PhotoScrim style={styles.heroScrim} />
       <View style={styles.heroTop}>

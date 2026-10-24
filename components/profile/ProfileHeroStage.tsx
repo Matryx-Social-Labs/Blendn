@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Avatar } from '../ds/Avatar'
 import { ScrimPill } from '../ds/MonoFamily'
 import { Orbs } from '../ds/Orbs'
-import { CONTROL_FONT_CAP, font, useBoldText, useIncreaseContrast } from '../ds/shared'
+import { CONTROL_FONT_CAP, font, useBoldText, useIncreaseContrast, useSelection } from '../ds/shared'
 import { PhotoScrim, StatusScrim } from '../ui/GradientFill'
 import { Icon } from '../ui/Icon'
 import { COLOR, FONT_FAMILY, ICON, SIZE, SPACE } from '../../lib/design/tokens'
@@ -77,6 +77,7 @@ export function ProfileHeroStage({ width, height: fitted, scrollY, photos, blurr
   const insets = useSafeAreaInsets()
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
+  const sel = useSelection()
   const height = fitted ?? heroHeightFor(width)
   const [page, setPage] = useState(0)
   const circle = Platform.OS === 'android' ? SIZE.circleButtonAndroid : SIZE.circleButton
@@ -113,7 +114,8 @@ export function ProfileHeroStage({ width, height: fitted, scrollY, photos, blurr
         />
       ) : (
         <View testID="hero-creature" style={StyleSheet.absoluteFill}>
-          <Orbs set="brand" />
+          {/* The profile's hue (rose), not the brand set's ember and violet (D31): one hue per screen. */}
+          <Orbs set="brand" tint={sel.edge} />
           <View style={[styles.creature, { top: height / 2 - CREATURE_ABOVE_MIDDLE }]}>
             <Avatar kind="creature" pseudonym={seed} size={CREATURE} ring={tint(COLOR.textPrimary, RING_ALPHA)} />
             {anonymous ? (

@@ -11,6 +11,7 @@ import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { COLOR, DURATION, RADIUS, SPACE } from "../../lib/design/tokens";
 import { Grain } from "../ds/Grain";
 import { Orbs } from "../ds/Orbs";
+import { useSelection } from "../ds/shared";
 import { StateScreen } from "../ds/StateScreen";
 
 /** The card sits 30% down, as the frame draws it (260 pt on an 874 pt screen). */
@@ -37,6 +38,7 @@ export function RoomCancelled({
   testID?: string;
 }) {
   const { height } = useWindowDimensions();
+  const sel = useSelection();
   const said = `${title} was cancelled`;
   useEffect(() => {
     // Unsolicited: heard once, politely, as it arrives.
@@ -53,7 +55,8 @@ export function RoomCancelled({
       entering={FadeIn.duration(DURATION.base)}
       exiting={FadeOut.duration(DURATION.quick)}
     >
-      <Orbs set="brand" />
+      {/* The overlay's hue, not the brand set's ember and violet (D31): one hue per screen. */}
+      <Orbs set="brand" tint={sel.edge} testID={testID && `${testID}-orbs`} />
       <Grain />
       {/* A scroll, so a long title at the largest type never clips the actions: the card still sits where the frame puts it. */}
       <ScrollView

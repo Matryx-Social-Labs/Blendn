@@ -21,14 +21,16 @@ const card = (coverUrl: string | null) => (
   <LiveHero title="Vinyl Night" coverUrl={coverUrl} count={12} line={null} unread={0} muted={false} onPress={() => {}} testID="h" />
 )
 
-it('no cover: the brand orbs', async () => {
-  await render(card(null))
-  expect(screen.getByTestId('h-orbs', { includeHiddenElements: true })).toBeTruthy()
+// D8, D31: the Banter is rose, and the brand orbs put ember and violet under it. Negative control: the orbs fail this.
+it('no cover: the plate in the Banter’s hue, never the brand orbs', async () => {
+  await render(<HueProvider value="rose">{card(null)}</HueProvider>)
+  const plate = screen.getByTestId('h-plate', { includeHiddenElements: true })
+  expect(StyleSheet.flatten(plate.props.style).backgroundColor).toBe(COLOR.selectionRoseFill)
 })
 
-it('a cover: the photograph, no orbs', async () => {
+it('a cover: the photograph, no plate', async () => {
   await render(card('https://x/y.jpg'))
-  expect(screen.queryByTestId('h-orbs', { includeHiddenElements: true })).toBeNull()
+  expect(screen.queryByTestId('h-plate', { includeHiddenElements: true })).toBeNull()
 })
 
 describe('at AX XXXL (TG-03)', () => {
