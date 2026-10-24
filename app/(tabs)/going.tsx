@@ -13,7 +13,7 @@ import { Spinner } from '../../components/ds/Loader'
 import FadeInUp from '../../components/motion/FadeInUp'
 import ScalePress from '../../components/motion/ScalePress'
 import { EventCard } from '../../components/ds/EventCard'
-import { PresenceDot, TimeBadge } from '../../components/ds/MonoFamily'
+import { MonoRun, PresenceDot, TimeBadge } from '../../components/ds/MonoFamily'
 import { SectionHeader } from '../../components/ds/SectionHeader'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { Button } from '../../components/ds/Button'
@@ -857,7 +857,11 @@ function NextUpWhen({ when, live }: { when: string; live: boolean }) {
     // Wraps rather than losing the time, the one fact the card is for (audit C11: "Tomorrow •…" at AX).
     <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.secondary]}>
       {cut === -1 ? when : `${when.slice(0, cut)} · `}
-      {cut === -1 ? null : <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.ink, styles.tabular]}>{when.slice(cut + 3)}</Text>}
+      {cut === -1 ? null : (
+        <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.ink, styles.tabular]}>
+          <MonoRun text={when.slice(cut + 3)} />
+        </Text>
+      )}
     </Text>
   )
 }

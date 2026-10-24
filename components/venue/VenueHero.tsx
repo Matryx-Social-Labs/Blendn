@@ -1,7 +1,7 @@
 import { Image } from 'expo-image'
 import { Animated, StyleSheet, Text, View } from 'react-native'
 
-import { LivePill } from '../ds/MonoFamily'
+import { LivePill, MonoRun } from '../ds/MonoFamily'
 import { CONTROL_FONT_CAP, font, useBoldText, useLargeText } from '../ds/shared'
 import { VenuePlate } from '../ds/VenuePlate'
 import { PhotoScrim, StatusScrim } from '../ui/GradientFill'
@@ -38,7 +38,9 @@ function YouAreLivePill({ live, onZero }: { live: VenueDetail['live']; onZero: (
         {time ? (
           <>
             {' · '}
-            <Text style={[font('caption', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{timeWords(time)}</Text>
+            <Text style={[font('caption', bold, FONT_FAMILY.mono[500]), styles.tabular]}>
+              <MonoRun text={timeWords(time)} />
+            </Text>
           </>
         ) : null}
       </Text>

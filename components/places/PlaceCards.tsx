@@ -5,7 +5,7 @@ import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from '
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg'
 
 import ScalePress from '../motion/ScalePress'
-import { LivePill } from '../ds/MonoFamily'
+import { LivePill, MonoRun } from '../ds/MonoFamily'
 import { font, PRESSED_WASH, useBoldText } from '../ds/shared'
 import { VenuePlate } from '../ds/VenuePlate'
 import { LocationAskCard } from '../pulse/LocationAskCard'
@@ -174,13 +174,17 @@ export const OpenCard = memo(function OpenCard({ venue, now }: { venue: VenueLis
         <MetaLine parts={[guestTypeLabel(venue), placeArea(venue)]} distance={distanceText(venue.distance)} />
         {tonight ? (
           <Text numberOfLines={1} style={[font('meta', bold), styles.ink]}>
-            <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{tonight.when}</Text>
+            <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>
+              <MonoRun text={tonight.when} />
+            </Text>
             {` · ${tonight.title}`}
           </Text>
         ) : hours ? (
           <Text numberOfLines={1} style={[font('meta', bold), styles.ink]}>
             {`${hours.lead} `}
-            <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{hours.time}</Text>
+            <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>
+              <MonoRun text={hours.time} />
+            </Text>
           </Text>
         ) : null}
       </View>

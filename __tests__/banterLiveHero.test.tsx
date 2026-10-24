@@ -77,9 +77,14 @@ describe('the Banter list’s rows (TG-12)', () => {
     expect(faceOf(screen.getByText('Yesterday'))).not.toBe(FONT_FAMILY.mono[500])
     await render(row('10h'))
     expect(faceOf(screen.getByText('10h'))).toBe(FONT_FAMILY.mono[500])
+    // One mono run through MonoRun (DS-09): the digits and the month mono, the space in the brand face, never "4  Oct".
     await render(row('4 Oct'))
-    expect(faceOf(screen.getByText('4'))).toBe(FONT_FAMILY.mono[500])
-    expect(textNodes(screen.toJSON() as never).every((n) => n.props.maxFontSizeMultiplier === CONTROL_FONT_CAP || n.props.maxFontSizeMultiplier === MAX_FONT_SCALE.bodyStrong || n.props.maxFontSizeMultiplier === MAX_FONT_SCALE.meta)).toBe(true)
+    const date = screen.getByText('4 Oct')
+    expect(faceOf(date)).toBe(FONT_FAMILY.mono[500])
+    expect(date.props.maxFontSizeMultiplier).toBe(CONTROL_FONT_CAP)
+    const space = textNodes(screen.toJSON() as never).find((n) => JSON.stringify(n.children) === '[" "]')
+    expect(space && faceOf(space as never)).toBe(FONT_FAMILY.brand[500])
+    expect(uncapped(screen.toJSON() as never)).toEqual([])
   })
 })
 

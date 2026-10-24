@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Button } from '../ds/Button'
-import { PresenceDot } from '../ds/MonoFamily'
+import { MonoRun, PresenceDot } from '../ds/MonoFamily'
 import { font, IC_HAIRLINE, PRESSED_WASH, useBoldText, useIncreaseContrast } from '../ds/shared'
 import { Icon } from '../ui/Icon'
 import { Material } from '../ui/Material'
@@ -54,7 +54,9 @@ function LivePill({ name, live, onZero, onPress }: { name: string; live: VenueDe
             {time.kind === 'stay' ? (
               'staying'
             ) : (
-              <Text style={[font('meta', bold, FONT_FAMILY.mono[ending ? 700 : 500]), styles.tabular]}>{time.kind === 'minutes' ? time.left : time.clock}</Text>
+              <Text style={[font('meta', bold, FONT_FAMILY.mono[ending ? 700 : 500]), styles.tabular]}>
+                <MonoRun text={String(time.kind === 'minutes' ? time.left : time.clock)} />
+              </Text>
             )}
             {time.kind === 'minutes' ? ' min' : ''}
           </>

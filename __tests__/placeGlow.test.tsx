@@ -5,6 +5,7 @@
  */
 import { act, render, screen } from '@testing-library/react-native'
 import React from 'react'
+import { StyleSheet } from 'react-native'
 
 import type { VenueListItem } from '../lib/apiClient'
 
@@ -13,8 +14,9 @@ jest.mock('expo-router', () => ({ router: { push: jest.fn() } }))
 jest.mock('../lib/motion', () => ({ ...jest.requireActual('../lib/motion'), useReducedMotion: () => mockReduce }))
 
 /* eslint-disable import/first */
-import { LiveTile } from '../components/places/PlaceCards'
-import { DURATION } from '../lib/design/tokens'
+import { LiveTile, OpenCard } from '../components/places/PlaceCards'
+import { DURATION, FONT_FAMILY } from '../lib/design/tokens'
+import { textNodes } from './helpers/ax'
 /* eslint-enable import/first */
 
 const HIDDEN = { includeHiddenElements: true }
@@ -75,4 +77,22 @@ describe('the glow', () => {
     })
     expect(screen.queryByTestId(/place-glow-/, HIDDEN)).toBeNull()
   })
+})
+
+/*
+ * DS-09 hand-off (Going-out's mono times): "9 PM" set whole in Geist Mono read "9  PM", a full cell for the space. The
+ * Open tonight card's time goes through MonoRun, so its space is the brand face. Negative control: the bare string has
+ * no brand-face space node.
+ */
+it('an Open tonight card sets its time in Geist Mono with the space in the brand face', async () => {
+  const now = new Date(2026, 9, 24, 18, 0).getTime()
+  const start = new Date(2026, 9, 24, 21, 0).toISOString()
+  const end = new Date(2026, 9, 24, 23, 59).toISOString()
+  await render(<OpenCard venue={{ ...venue(null as never), nextEvent: { id: 'e1', title: 'Vinyl Night', startTime: start, endTime: end, coverImageUrl: null } as never }} now={now} />)
+  const face = (n: { props: { style?: unknown } }) => (StyleSheet.flatten(n.props.style as never) as { fontFamily?: string } | undefined)?.fontFamily
+  const nodes = textNodes(screen.toJSON() as never)
+  const time = nodes.find((n) => face(n) === FONT_FAMILY.mono[500] && JSON.stringify(n.children).includes('PM'))
+  expect(time).toBeTruthy()
+  const space = (time!.children ?? []).find((c) => typeof c === 'object' && JSON.stringify((c as { children: unknown }).children) === '[" "]')
+  expect(space && face(space as never)).toBe(FONT_FAMILY.brand[500])
 })

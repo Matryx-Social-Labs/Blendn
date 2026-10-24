@@ -15,7 +15,7 @@ import { Button } from '../ds/Button'
 import { CrewEmblem } from '../ds/CrewEmblem'
 import { IconButton } from '../ds/IconButton'
 import { CategoryPlate } from '../ds/EventCard'
-import { Badge, monoCaption, PresenceDot, ScrimPill, TimeBadge } from '../ds/MonoFamily'
+import { Badge, monoCaption, MonoRun, PresenceDot, ScrimPill, TimeBadge } from '../ds/MonoFamily'
 import { RollingNumber } from '../ds/RollingNumber'
 import { CONTROL_FONT_CAP, font, GroundProvider, useBoldText, useLargeText, useSelection } from '../ds/shared'
 import { Icon, type IconName } from '../ui/Icon'
@@ -426,16 +426,10 @@ export function BanterRow({
 export function TimeTag({ time, ink = false }: { time: string; ink?: boolean }) {
   const bold = useBoldText()
   return (
-    <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), ink ? styles.ink : styles.tertiary]}>
-      {time.split(/(\s+)/).map((part, i) =>
-        /\d/.test(part) ? (
-          <Text key={i} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={monoCaption(bold)}>
-            {part}
-          </Text>
-        ) : (
-          part
-        )
-      )}
+    // A time with digits is Geist Mono, its spaces in the brand face (`MonoRun`, DS-09: "1:12 PM" never reads
+    // double-spaced); a word ("Yesterday") is the sans.
+    <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[/\d/.test(time) ? monoCaption(bold) : font('caption', bold), ink ? styles.ink : styles.tertiary]}>
+      {/\d/.test(time) ? <MonoRun text={time} /> : time}
     </Text>
   )
 }
