@@ -625,3 +625,18 @@ it('a crew like is the crew chat’s preview as words, never "You: liked …" (T
   expect(await screen.findByText('You liked Crew Nebula for the crew')).toBeTruthy()
   expect(screen.queryByText(/You: liked/)).toBeNull()
 })
+
+// S-7: the server says which message is the room's (`lastMessage.type`). Negative control: with the word match alone,
+// the typed person's message below reads "You liked …" and the system line keeps "You:".
+it('reads the room’s own line from lastMessage.type: system has no "You:", a person typing the words is a person', async () => {
+  serve()
+  const room = (id: string, content: string, type: string) => ({ id, kind: 'crew', name: `Crew ${id}`, unreadCount: 0, lastMessageAt: at, lastMessage: { content, type, createdAt: at, user: { id: 'u-a', name: 'Asha' } } })
+  api.getChatGroups.mockResolvedValue({
+    success: true,
+    data: { groups: [liveRoom], rooms: [room('c-1', 'liked Crew Nebula for the crew', 'system'), room('c-2', 'Crew Two is on the board', 'system'), room('c-3', 'liked Lot S9 for the crew', 'text')] },
+  } as never)
+  await open()
+  expect(await screen.findByText('You liked Crew Nebula for the crew')).toBeTruthy()
+  expect(screen.getByText('Crew Two is on the board')).toBeTruthy()
+  expect(screen.getByText('You: liked Lot S9 for the crew')).toBeTruthy()
+})

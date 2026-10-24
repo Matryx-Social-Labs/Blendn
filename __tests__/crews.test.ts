@@ -19,6 +19,7 @@ import {
   crewMessage,
   crewRoomTitle,
   crewRoomsFrom,
+  systemPreview,
   crewsThatMayLikePeople,
   friendsToInvite,
   defaultRoomName,
@@ -423,5 +424,24 @@ describe('crew pushes land where they mean something, and name nobody', () => {
       params: { id: 'g1', kind: 'blend', blendId: 'b1' },
     })
     expect(notificationTarget({ type: 'blend' })).toBe('/(tabs)/chat')
+  })
+})
+
+describe('systemPreview (TG-10, S-7)', () => {
+  const last = (content: string, type?: string) => ({ content, ...(type ? { type } : null), user: { id: 'u', name: 'Rohan' } })
+  it('a system like names who; any other system line is its words; a person’s message is null', () => {
+    expect(systemPreview(last('liked Crew Nebula for the crew', 'system'), 'You')).toBe('You liked Crew Nebula for the crew')
+    expect(systemPreview(last('The Blend closed', 'system'), 'Rohan')).toBe('The Blend closed')
+    expect(systemPreview(last('liked Crew Nebula for the crew', 'text'), 'You')).toBeNull()
+  })
+  it('a server with no type falls back to the like’s words', () => {
+    expect(systemPreview(last('liked Two for the crew'), 'Rohan')).toBe('Rohan liked Two for the crew')
+    expect(systemPreview(last('hello'), 'Rohan')).toBeNull()
+    expect(systemPreview(null, 'You')).toBeNull()
+  })
+  it('crewRoomsFrom keeps the type when the server sends one', () => {
+    const rows = crewRoomsFrom({ rooms: [{ id: 'r', kind: 'crew', lastMessage: { content: 'x', type: 'system', user: { id: 'u' } } }] })
+    expect(rows[0].lastMessage?.type).toBe('system')
+    expect(crewRoomsFrom({ rooms: [{ id: 'r', kind: 'crew', lastMessage: { content: 'x', user: { id: 'u' } } }] })[0].lastMessage).not.toHaveProperty('type')
   })
 })

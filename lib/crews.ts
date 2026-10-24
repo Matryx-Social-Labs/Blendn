@@ -300,6 +300,19 @@ export function crewLikeLine(text: string, who: string): string | null {
   return /^liked .+ for the crew$/.test(text.trim()) ? `${who} ${text.trim()}` : null
 }
 
+/**
+ * A crew room's Banter preview when its last message is the room speaking, not a person (TG-10, S-7): "You liked Crew
+ * Nebula for the crew", never "You: liked …". Read from `lastMessage.type`: `system` is the room's (a like names who; any
+ * other system line is its words alone), anything else is a person's message and null. A server that sends no `type`
+ * falls back to matching the like's words. Null: preview it as a person's message.
+ */
+export function systemPreview(last: CrewRoomRow['lastMessage'], who: string): string | null {
+  if (!last) return null
+  if (last.type === undefined) return crewLikeLine(last.content, who)
+  if (last.type !== 'system') return null
+  return crewLikeLine(last.content, who) ?? (last.content.trim() || null)
+}
+
 /** A room kind from a route param, or null for an event's room. */
 export function roomKindParam(value: unknown): 'crew' | 'blend' | null {
   return value === 'crew' || value === 'blend' ? value : null
@@ -454,8 +467,11 @@ export interface CrewRoomRow {
   closesAt: string | null
   unreadCount: number
   lastMessageAt: string | null
-  /** Named as the room names people: a crewmate's first name, a Blend's pseudonyms. */
-  lastMessage: { content: string; user: { id: string; name: string | null } } | null
+  /**
+   * Named as the room names people: a crewmate's first name, a Blend's pseudonyms. `type` is the message's kind
+   * (admin S-7: `system` is the room speaking, a crew like); absent from a server that does not send it.
+   */
+  lastMessage: { content: string; type?: string; user: { id: string; name: string | null } } | null
   mute: unknown
 }
 
@@ -483,7 +499,11 @@ export function crewRoomsFrom(payload: unknown): CrewRoomRow[] {
         lastMessageAt: typeof r.lastMessageAt === 'string' ? r.lastMessageAt : null,
         lastMessage:
           last && typeof last.content === 'string'
-            ? { content: last.content, user: { id: String(last.user?.id ?? ''), name: last.user?.name ?? null } }
+            ? {
+                content: last.content,
+                ...(typeof last.type === 'string' ? { type: last.type } : null),
+                user: { id: String(last.user?.id ?? ''), name: last.user?.name ?? null },
+              }
             : null,
         mute: r.mute,
       },
