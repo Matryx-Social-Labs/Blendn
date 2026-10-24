@@ -630,15 +630,16 @@ function GoingScreenInner() {
           time={featuredDateLabel(row.start_time, new Date(), row.timezone)}
           venue={placeLabel(row)}
           onPress={() => openEvent(row.id)}
-          trailing={
-            isNightRated(row.id) ? (
-              <RowNote text="Rated" />
-            ) : (
-            <TextAction
-              label="Rate who you met"
-              accessibilityLabel={`Rate who you met at ${row.title}`}
-              onPress={() => router.push({ pathname: '/rate/[eventId]', params: { eventId: row.id } as any })}
-            />
+          trailing={isNightRated(row.id) ? <RowNote text="Rated" /> : undefined}
+          // Its own line under the meta, at the text's edge: beside the row it squeezed the title to "Screening: Arsena…" (rc7 D14).
+          below={
+            isNightRated(row.id) ? undefined : (
+              <TextAction
+                label="Rate who you met"
+                accessibilityLabel={`Rate who you met at ${row.title}`}
+                onPress={() => router.push({ pathname: '/rate/[eventId]', params: { eventId: row.id } as any })}
+                testID={`going-past-rate-${row.id}`}
+              />
             )
           }
         />
@@ -911,6 +912,7 @@ function GoingRow({
   onPress,
   onLongPress,
   trailing,
+  below,
   testID,
 }: {
   title: string
@@ -929,20 +931,30 @@ function GoingRow({
   /** The row's actions, also the screen reader's "Quick actions" (the EventCard plays `H.longPress` as the hold completes). */
   onLongPress?: () => void
   trailing?: ReactNode
+  /** An action on its own line under the row, at the text's edge: a text action too long to sit beside the title. */
+  below?: ReactNode
 }) {
-  return (
+  const row = (
     <View style={[styles.inset, styles.row]}>
       <EventCard key={retry} kind="row" title={title} cover={cover} plate={plate} category={category} testID={testID} label={label} inert={inert} time={time} venue={venue ?? ''} onPress={onPress} onLongPress={onLongPress ? () => onLongPress() : undefined} style={styles.shrink} />
       {trailing ? <View style={styles.trailing}>{trailing}</View> : null}
     </View>
   )
+  if (!below) return row
+  return (
+    <View>
+      {row}
+      <View style={[styles.inset, styles.below]}>{below}</View>
+    </View>
+  )
 }
 
 /** A row's text action ("Rate who you met"): 700 14 white, reached at 44. */
-function TextAction({ label, accessibilityLabel, onPress }: { label: string; accessibilityLabel: string; onPress: () => void }) {
+function TextAction({ label, accessibilityLabel, onPress, testID }: { label: string; accessibilityLabel: string; onPress: () => void; testID?: string }) {
   const bold = useBoldText()
   return (
     <Pressable
+      testID={testID}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
@@ -1085,6 +1097,8 @@ const styles = StyleSheet.create({
   pressed: { opacity: OPACITY.pressed },
   list: { flex: 1 },
   inset: { marginHorizontal: SPACE.gutter },
+  /** Under the row's text: past its 56 pt thumb and the row's gap, so it starts where the title does. */
+  below: { paddingLeft: SIZE.primary + SPACE.md, paddingBottom: SPACE.sm, alignItems: 'flex-start' },
   // Flow 3 `going` empty: the title at 124, the state at 260: 96 under the title's own 40 pt line and its 24 pt top.
   /*
    * The empty and failed states scroll: at the accessibility sizes the title, the paragraph and the action outgrow the

@@ -122,4 +122,11 @@ describe("the Going tab’s way in to peer rating", () => {
     expect(past).toMatch(/pathname: '\/rate\/\[eventId\]', params: \{ eventId: row\.id \}/)
     expect(past).toMatch(/accessibilityLabel=\{`Rate who you met at \$\{row\.title\}`\}/)
   })
+
+  it('puts it on its own line under the row, not beside the title it squeezed (rc7 D14)', () => {
+    const past = GOING.slice(GOING.indexOf("item.kind === 'past'"), GOING.indexOf('// Saved.'))
+    expect(past.indexOf('below={')).toBeGreaterThan(-1)
+    expect(past.indexOf('below={')).toBeLessThan(past.indexOf('label="Rate who you met"'))
+    expect(past).not.toMatch(/trailing=\{[^}]*Rate who you met/)
+  })
 })
