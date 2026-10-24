@@ -6,11 +6,16 @@
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { AccessibilityInfo, Platform, StyleSheet } from 'react-native'
+import { AccessibilityInfo, Dimensions, Platform, StyleSheet } from 'react-native'
 
 import { TopBar } from '../components/ds/TopBar'
-import { COLOR, FONT_FAMILY, MATERIAL, TYPE } from '../lib/design/tokens'
+import { COLOR, FONT_FAMILY, MATERIAL, MAX_FONT_SCALE, TYPE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
+import { AX_XXXL, uncapped } from './helpers/ax'
+
+const window = Dimensions.get('window')
+const atScale = (fontScale: number) => act(async () => Dimensions.set({ window: { ...window, fontScale }, screen: { ...window, fontScale } }))
+afterEach(() => Dimensions.set({ window, screen: window }))
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('expo-glass-effect', () => {
@@ -130,14 +135,34 @@ describe('<TopBar>', () => {
     expect(screen.getByRole('button', { name: 'Save' }).props.accessibilityState).toMatchObject({ busy: true })
   })
 
-  it('a sub line under the title scales freely; the title caps at 1.3× and truncates', async () => {
+  it('the title caps at 1.3× and truncates; the sub line stops at the meta cap in two lines, so it never runs under the content (B-R4, C4, P2)', async () => {
     await draw({ title: 'Nebula', sub: '4 people · 2 here now' })
     const title = screen.getByText('Nebula')
     expect(title.props.maxFontSizeMultiplier).toBe(1.3)
     expect(title.props.numberOfLines).toBe(1)
     const sub = screen.getByText('4 people · 2 here now')
-    expect(sub.props.maxFontSizeMultiplier).toBeUndefined()
+    expect(sub.props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.meta)
+    expect(sub.props.numberOfLines).toBe(2)
     expect(StyleSheet.flatten(sub.props.style).color).toBe(COLOR.textSecondary)
+  })
+
+  it('the sub’s leading count is set in Geist Mono, the words after it in the sans ("60 waiting")', async () => {
+    await draw({ title: 'Requests', sub: '60 waiting' })
+    expect(StyleSheet.flatten(screen.getByText('60').props.style)).toMatchObject({ fontFamily: FONT_FAMILY.mono[500], fontVariant: ['tabular-nums'] })
+    expect(StyleSheet.flatten(screen.getByText('60 waiting').props.style).fontFamily).toBe(TYPE.meta.fontFamily)
+    await draw({ title: 'Friends', sub: '1,002 friends' })
+    expect(screen.getByText('1,002')).toBeTruthy()
+    // No count, no mono run: the line is one string. A count must be a whole word ("90s Night" is a title).
+    for (const sub of ['Offering and looking', '90s Night']) {
+      await draw({ title: 'Board', sub })
+      expect(screen.getByText(sub).children.every((c) => typeof c === 'string')).toBe(true)
+    }
+  })
+
+  it('at AX XXXL nothing in the bar is uncapped', async () => {
+    await atScale(AX_XXXL)
+    await draw({ title: 'Requests', sub: '60 waiting', progress: '2 of 5', actions: [{ icon: 'search', label: 'Search', onPress: jest.fn() }] })
+    expect(uncapped(screen.toJSON())).toEqual([])
   })
 
   it('Increase Contrast: the 50% hairline under the scrolled bar', async () => {

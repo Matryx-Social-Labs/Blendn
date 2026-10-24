@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { type IconName } from '../ui/Icon'
 import { Material } from '../ui/Material'
 import { BAR_BOTTOM, barTop } from '../../lib/barGeometry'
-import { COLOR, FONT_FAMILY, MATERIAL, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, MATERIAL, MAX_FONT_SCALE, SIZE, SPACE } from '../../lib/design/tokens'
 import { Button } from './Button'
 import { IconButton } from './IconButton'
 import { CONTROL_FONT_CAP, font, useBoldText, useIncreaseContrast } from './shared'
@@ -16,7 +16,7 @@ export type TopBarState = 'rest' | 'scrolled' | 'condensed'
 export type TopBarProps = {
   /** Omitted on a screen that draws only its circle (Event preferences: the ✕, no heading). */
   title?: string
-  /** A line under the title ("4 people · 2 here now"). */
+  /** A line under the title ("4 people · 2 here now", "60 waiting"): a leading count is set in Geist Mono. */
   sub?: string
   /** The screen decides from its scroll offset. */
   state?: TopBarState
@@ -45,7 +45,8 @@ export type TopBarProps = {
  * The bar is mounted, not faded in: glass never fades (§5.2 rule 6, as the P0
  * toast and sheet), so Reduce Motion has nothing to change. Back is silent;
  * Save plays `H.primary`. The title caps at 1.3× in the fixed bar and
- * truncates; the sub line scales freely. Reduce Transparency: the solid bar
+ * truncates; the sub line stops at the meta cap in two lines, so at AX XXXL it
+ * never runs down over the content (B-R4, C4). Reduce Transparency: the solid bar
  * (through <Material>). Increase Contrast: the 50% hairline under the bar
  * (the circles draw their own).
  *
@@ -85,7 +86,7 @@ export function TopBar({ title, sub, state = 'rest', onBack, close = false, acti
               >
                 {title}
               </Text>
-              {sub ? <Text style={[font('meta', bold), styles.sub]}>{sub}</Text> : null}
+              {sub ? <SubLine text={sub} bold={bold} /> : null}
             </>
           )}
         </View>
@@ -122,6 +123,19 @@ export function TopBar({ title, sub, state = 'rest', onBack, close = false, acti
   )
 }
 
+/** A leading count ("60", "1,002"): the number in Geist Mono, the words after it in the sans. A whole word only, so an event title like "90s Night" stays in the sans. */
+const LEADING_COUNT = /^[\d,]+(?=\s|$)/
+
+function SubLine({ text, bold }: { text: string; bold: boolean }) {
+  const count = LEADING_COUNT.exec(text)?.[0]
+  return (
+    <Text numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.sub]}>
+      {count ? <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{count}</Text> : null}
+      {count ? text.slice(count.length) : text}
+    </Text>
+  )
+}
+
 const styles = StyleSheet.create({
   header: { paddingHorizontal: SPACE.lg },
   roomBelow: { paddingBottom: BAR_BOTTOM },
@@ -129,6 +143,7 @@ const styles = StyleSheet.create({
   titles: { flex: 1, minWidth: 0 },
   ink: { color: COLOR.textPrimary },
   sub: { color: COLOR.textSecondary },
+  tabular: { fontVariant: ['tabular-nums'] },
   right: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   condensed: { position: 'absolute', justifyContent: 'center' },
   centre: { textAlign: 'center' },
