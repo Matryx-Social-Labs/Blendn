@@ -55,10 +55,19 @@ export function PageWash({ color, ...rest }: ViewProps & { color: string }) {
   return <LinearGradient {...rest} colors={[COLOR.ink, tint(color, PAGE_WASH.alpha), COLOR.ink]} locations={[0, PAGE_WASH.leadIn, 1]} />
 }
 
+/** A sideways fade's ends, from clear to the colour at the named edge. */
+const SIDEWAYS = {
+  right: { start: { x: 0, y: 0.5 }, end: { x: 1, y: 0.5 } },
+  left: { start: { x: 1, y: 0.5 }, end: { x: 0, y: 0.5 } },
+} as const
+
 /**
  * The fade above an opaque bar (r7 L7): the page's content dissolves into the bar's own colour over `height` instead of
  * meeting it on a hard edge. Only where the bar is solid; glass shows what is under it and needs none.
+ *
+ * `toward="right"` / `"left"`: the same fade sideways, at a horizontal rail's edge (the onboarding prompts rail), so a
+ * chip cut by the edge dissolves into the page instead.
  */
-export function SolidBarFade({ color, ...rest }: ViewProps & { color: string }) {
-  return <LinearGradient {...rest} colors={[tint(color, 0), color]} />
+export function SolidBarFade({ color, toward = 'bottom', ...rest }: ViewProps & { color: string; toward?: 'bottom' | keyof typeof SIDEWAYS }) {
+  return <LinearGradient {...rest} colors={[tint(color, 0), color]} {...(toward === 'bottom' ? null : SIDEWAYS[toward])} />
 }
