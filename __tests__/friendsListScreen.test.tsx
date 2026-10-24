@@ -9,7 +9,8 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native'
 
 import FriendsScreen, { friendItems, type FriendItem } from '../app/friends'
 import type { Friend } from '../lib/friends'
-import { SIZE } from '../lib/design/tokens'
+import { StyleSheet } from 'react-native'
+import { COLOR, SIZE } from '../lib/design/tokens'
 import { noteFriendGone, takeFriendsGone } from '../lib/friendsGone'
 import { PERSON_ROW_HEIGHT } from '../components/friends/PersonRow'
 import { atScale, resetScale } from './helpers/ax'
@@ -185,6 +186,28 @@ describe('1,000 friends', () => {
     try {
       await open()
       expect(list().props.getItemLayout).toBeUndefined()
+    } finally {
+      resetScale()
+    }
+  })
+
+  // rc7: at AX "Recently added" outgrew its fixed 32 pt head and touched the first row; at 1× the head stays the fixed
+  // size getItemLayout counts on. Every head is a `-bar` for the visual checker, on solid ink.
+  it('a head is the fixed size at 1×, grows with its text at a larger size, and is always opaque and named a bar', async () => {
+    const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id, { includeHiddenElements: true }).props.style)
+    mockGetFriends.mockResolvedValueOnce(page(friends(100), 1000, 'c1'))
+    await atScale(1)
+    await open()
+    expect(flat('friends-head-recently-added-bar')).toMatchObject({ height: SIZE.tag, backgroundColor: COLOR.ink })
+    await screen.unmount()
+    mockGetFriends.mockResolvedValueOnce(page(friends(100), 1000, 'c1'))
+    await atScale(2)
+    try {
+      await open()
+      const head = flat('friends-head-recently-added-bar')
+      expect(head.height).toBeUndefined()
+      expect(head).toMatchObject({ minHeight: SIZE.tag, backgroundColor: COLOR.ink })
+      expect(flat('friends-head-f-bar').backgroundColor).toBe(COLOR.ink)
     } finally {
       resetScale()
     }

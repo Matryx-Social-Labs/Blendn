@@ -48,3 +48,21 @@ describe('a Blend’s closing time wraps as one piece (rc7 D13)', () => {
     expect(screen.getByText('5:50\u00A0AM', { includeHiddenElements: true, normalizer: (text) => text })).toBeTruthy()
   })
 })
+
+describe('the Banter bar at Android 1.3 (rc7 first pass: rows "drawn through" the title)', () => {
+  it('is the solid bar on Android, so rows scrolling up are cut at its edge, and it is named `-bar` for the checker', async () => {
+    const { Platform, StyleSheet } = jest.requireActual('react-native')
+    const { SOLID } = jest.requireActual('../components/ui/Material')
+    const { BanterHeader } = jest.requireActual('../components/banter/BanterParts')
+    const os = Platform.OS
+    Object.defineProperty(Platform, 'OS', { value: 'android', configurable: true })
+    try {
+      await atScale(1.3, 360)
+      await render(<BanterHeader bell={null} searching={false} onSearch={jest.fn()} canMarkAll={false} onMarkAll={jest.fn()} />)
+      const bar = StyleSheet.flatten(screen.getByTestId('banter-bar', { includeHiddenElements: true }).props.style)
+      expect(bar.backgroundColor).toBe(SOLID.bar)
+    } finally {
+      Object.defineProperty(Platform, 'OS', { value: os, configurable: true })
+    }
+  })
+})

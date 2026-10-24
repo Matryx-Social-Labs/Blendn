@@ -191,7 +191,7 @@ function FriendsScreenContent() {
             testID="friends-list"
             data={items}
             keyExtractor={(item) => item.key}
-            renderItem={({ item }) => (item.kind === 'head' ? <SectionHead title={item.title} /> : <FriendRow friend={item.friend} />)}
+            renderItem={({ item }) => (item.kind === 'head' ? <SectionHead title={item.title} fixed={fixedRows} /> : <FriendRow friend={item.friend} />)}
             getItemLayout={fixedRows ? (_data, index) => ({ length: items[index]?.kind === 'head' ? SECTION_HEAD : PERSON_ROW_HEIGHT, offset: offsets[index] ?? 0, index }) : undefined}
             // The heads stick under the bar; `ListHeaderComponent` (when drawn) is index 0 to the list, so they shift by one.
             stickyHeaderIndices={items.flatMap((item, i) => (item.kind === 'head' ? [i + (list.friends.length && header ? 1 : 0)] : []))}
@@ -216,11 +216,16 @@ function FriendsScreenContent() {
   )
 }
 
-/** A section's head, sticky over the rows: on solid ink, so a row never shows through it. */
-function SectionHead({ title }: { title: string }) {
+/**
+ * A section's head, sticky over the rows: on solid ink, so a row never shows through it. `-bar`, so the visual checker reads
+ * a row passing under it as the design (rc7: "A" over "Arnav Nair"). At the default size it is the fixed `SECTION_HEAD` the
+ * list's `getItemLayout` counts on; at larger text its 1.3× words outgrew that box and touched the first row ("Recently
+ * added" at AX, rc7), so it grows with them.
+ */
+function SectionHead({ title, fixed }: { title: string; fixed: boolean }) {
   const bold = useBoldText()
   return (
-    <View style={styles.head}>
+    <View testID={`friends-head-${title === '#' ? 'other' : title.replace(/\s+/g, '-').toLowerCase()}-bar`} style={[styles.head, fixed ? styles.headFixed : styles.headGrows]}>
       <Text accessibilityRole="header" numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold), styles.headText]}>
         {title}
       </Text>
@@ -250,7 +255,9 @@ const styles = StyleSheet.create({
   // The frame's column: the request card and Make a crew stand 8 apart, and the first friend 8 under them.
   rows: { gap: SPACE.sm, paddingBottom: SPACE.sm, paddingHorizontal: 0 },
   search: { paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.sm },
-  head: { height: SECTION_HEAD, justifyContent: 'center', backgroundColor: COLOR.ink },
+  head: { justifyContent: 'center', backgroundColor: COLOR.ink },
+  headFixed: { height: SECTION_HEAD },
+  headGrows: { minHeight: SECTION_HEAD, paddingVertical: SPACE.sm },
   headText: { color: COLOR.textSecondary },
   offline: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.xs, paddingBottom: SPACE.sm },
 })

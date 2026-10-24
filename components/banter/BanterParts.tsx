@@ -59,7 +59,8 @@ export function BanterHeader({
   const android = Platform.OS === 'android'
   return (
     // The height is the one the list below is laid out from (`banterHeaderHeight`), so it cannot drift from it.
-    <Material role="bar" style={[styles.header, { paddingTop: barTop(insets.top), height: banterHeaderHeight(insets.top, android) }]}>
+    // `-bar`: the visual checker reads rows scrolling under it as the design, not an overlap (rc7: "Farah Shah" over "Banter").
+    <Material role="bar" testID="banter-bar" style={[styles.header, { paddingTop: barTop(insets.top), height: banterHeaderHeight(insets.top, android) }]}>
       <Text accessibilityRole="header" numberOfLines={1} maxFontSizeMultiplier={titleScaleCap(android)} style={[font('display', bold), styles.ink, styles.grow]}>
         Banter
       </Text>
