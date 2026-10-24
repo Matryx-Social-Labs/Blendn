@@ -75,6 +75,8 @@ export interface SectionEvent extends SessionSource {
   is_featured?: boolean
   /** The server's placement (BUILD-SPEC C1), when it sends one. */
   featured?: { kind: 'promoted' | 'editorial'; rank: number; by?: string | null } | null
+  /** The event's own IANA zone (admin #749): its night is its city's, not the phone's. */
+  timezone?: string | null
 }
 
 export type PulseSection<E extends SectionEvent = SectionEvent> = {
@@ -124,6 +126,14 @@ export function nextDayReset(now: number, resetHour: number = DAY_RESET_HOUR, ti
   const today = instantIn(y, m, day, resetHour, 0, timeZone)
   return now < today ? today : instantIn(y, m, day + 1, resetHour, 0, timeZone)
 }
+
+/**
+ * Tonight, as the event's own city has it (as `nextUpLabel` says "Tonight" in the event's zone): it starts later than
+ * now and before that city's next 06:00. A Los Angeles phone at 4:39 AM reads an IST 6:30 PM start as tonight in
+ * Bengaluru; the phone's 6 AM, an hour off, dropped the section (RC 7, Android). The phone's zone for an event with none.
+ */
+export const isTonight = (e: SectionEvent, now: number): boolean =>
+  startOf(e) > now && startOf(e) < nextDayReset(now, DAY_RESET_HOUR, e.timezone ?? undefined)
 
 /** The phone's date as 'YYYY-MM-DD'. */
 export function seedDateOf(now: number): string {
@@ -227,9 +237,8 @@ export function pulseSections<E extends SectionEvent>(input: PulseSectionsInput<
       const picked = featuredPick(fresh(unique([...(input.featured ?? []), ...page])), now, seedDate)
       if (picked.length) take('featured', picked, FEATURED_CAP)
     } else if (key === 'tonight') {
-      const cut = nextDayReset(now)
       const tonight = fresh(page)
-        .filter((e) => startOf(e) > now && startOf(e) < cut)
+        .filter((e) => isTonight(e, now))
         .sort(byStart)
       if (tonight.length) take('tonight', tonight, TONIGHT_LIMIT)
     } else if (key === 'nearby') {

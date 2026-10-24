@@ -20,6 +20,7 @@ import {
   weekendWindow,
   type SectionEvent,
 } from '../lib/pulseSections'
+import { refreshPhoneZone } from '../lib/time'
 
 /** Tuesday 21 Oct 2026, 19:00 local. */
 const NOW = new Date(2026, 9, 20, 19, 0).getTime()
@@ -137,6 +138,46 @@ describe('Tonight', () => {
 
   it('is absent with nothing tonight', () => {
     expect(keys([ev('t', 12, {}, 1)])).not.toContain('tonight')
+  })
+
+  describe('in the event’s own city, not the phone’s (RC 7: a Los Angeles phone lost the section)', () => {
+    const IST = 'Asia/Kolkata'
+    const phone = process.env.TZ
+    beforeAll(() => {
+      process.env.TZ = 'America/Los_Angeles'
+      refreshPhoneZone()
+    })
+    afterAll(() => {
+      process.env.TZ = phone
+      refreshPhoneZone()
+    })
+    // Sat 24 Oct 2026, 4:39 AM in Los Angeles = 5:09 PM in Bengaluru.
+    const laMorning = Date.parse('2026-10-24T11:39:00.000Z')
+    const istEvent = (id: string, iso: string): E => ({ id, start_time: iso, end_time: new Date(Date.parse(iso) + 3 * 3_600_000).toISOString(), timezone: IST })
+    const run = (page: E[]) =>
+      pulseSections<E>({ page, weekend: null, forYou: null, now: laMorning, hasFix: false, seedDate: seedDateOf(laMorning) }).find((x) => x.key === 'tonight')
+
+    it('IST nights tonight in Bengaluru are Tonight, though the phone’s 06:00 is an hour off', () => {
+      // 6:30 PM and 8:30 PM IST tonight, 1 AM IST (still tonight, before Bengaluru's 06:00), and tomorrow's 6:30 PM IST.
+      const page = [
+        istEvent('six-thirty', '2026-10-24T13:00:00.000Z'),
+        istEvent('eight-thirty', '2026-10-24T15:00:00.000Z'),
+        istEvent('one-am', '2026-10-24T19:30:00.000Z'),
+        istEvent('tomorrow', '2026-10-25T13:00:00.000Z'),
+      ]
+      expect(run(page)?.events.map((e) => e.id)).toEqual(['six-thirty', 'eight-thirty', 'one-am'])
+    })
+
+    it('the cut-off is the event city’s 06:00', () => {
+      expect(nextDayReset(laMorning, DAY_RESET_HOUR, IST)).toBe(Date.parse('2026-10-25T00:30:00.000Z'))
+      // The phone's own: Los Angeles' 06:00 today, which an IST 6:30 PM start is past.
+      expect(nextDayReset(laMorning)).toBe(Date.parse('2026-10-24T13:00:00.000Z'))
+    })
+
+    it('an event with no zone (an older server) keeps the phone’s night', () => {
+      const page = [{ ...istEvent('no-zone', '2026-10-24T13:00:00.000Z'), timezone: null }]
+      expect(run(page)).toBeUndefined()
+    })
   })
 })
 
