@@ -427,14 +427,16 @@ function sideName(side: BlendSide): string {
 }
 
 /**
- * The room's header (flow10b.js `blendRoom`): "Blend with Crew Orbit" between
- * two crews, "Blend with Nebula" when you are one person.
+ * One Blend, one name, on every surface: "Blend with {their side}" (TG-11). The other side's name as its people gave it:
+ * the frame's "Crew " before a crew's name doubled real ones ("Blend with Crew RC4 Crew Y") and differed from the Banter's
+ * "Blend with RC4 Crew Y" (RC audit C24).
  */
+export const blendWith = (theirName: string) => `Blend with ${theirName}`
+
+/** The room's header (flow10b.js `blendRoom`) and the Banter's card: `blendWith` the other side. */
 export function blendTitle(blend: Blend, myId: string | null | undefined): string {
-  const { mine, theirs } = blendSides(blend, myId)
-  if (!theirs) return 'Your Blend'
-  const crewToCrew = mine?.kind === 'crew' && theirs.kind === 'crew'
-  return `Blend with ${crewToCrew ? 'Crew ' : ''}${sideName(theirs)}`
+  const { theirs } = blendSides(blend, myId)
+  return theirs ? blendWith(sideName(theirs)) : 'Your Blend'
 }
 
 /* -------------------------------------------------------------------------- */

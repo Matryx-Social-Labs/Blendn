@@ -120,7 +120,7 @@ const serve = (...blends: Blend[]) => crews.blends.mockResolvedValue({ success: 
 const sheetOf = () => (showSheet as jest.Mock).mock.calls.at(-1)[0] as ActionSheet
 const open = async () => {
   await render(<Room />)
-  await waitFor(() => screen.getByText('Blend with Crew Five'))
+  await waitFor(() => screen.getByText('Blend with Five'))
 }
 
 beforeEach(() => {
@@ -139,7 +139,7 @@ describe('an open Blend', () => {
   it('names both sides, yours first, with how many are on tonight’s names', async () => {
     serve(blend({ sides: [mineCrew(), theirCrew({ revealed: 0, keptPrivate: 0, people: [theirCrew().people[0], { ...theirCrew().people[1], name: null, photo: null }] })] }))
     await open()
-    expect(screen.getByText('5 people · Closes in 9h')).toBeTruthy()
+    expect(screen.getByText('Closes in 9h · 5 people')).toBeTruthy()
     expect(screen.getByLabelText('Two, 3 on tonight’s names')).toBeTruthy()
     expect(screen.getByLabelText('Five, 2 on tonight’s names')).toBeTruthy()
     expect(screen.getAllByTestId(/^blend-(mine|theirs)$/).map((n) => n.props.testID)).toEqual(['blend-mine', 'blend-theirs'])
@@ -362,7 +362,7 @@ describe('closing and closed', () => {
     expect(screen.queryByTestId('gone')).toBeNull()
     serve(blend())
     await fireEvent.press(screen.getByText('Try again'))
-    await waitFor(() => screen.getByText('Blend with Crew Five'))
+    await waitFor(() => screen.getByText('Blend with Five'))
     expect(screen.queryByText('This Blend didn’t load')).toBeNull()
   })
 
@@ -375,10 +375,10 @@ describe('closing and closed', () => {
 })
 
 describe('around the room', () => {
-  it('the header takes both emblems and the clock in Geist Mono beside the head-count', async () => {
+  it('the header takes both emblems and the clock in Geist Mono first, before the head-count (TG-11: at 360 it is what survives)', async () => {
     serve(blend())
     await open()
-    expect(screen.getByText(/^5 people · /)).toBeTruthy()
+    expect(screen.getByText(/^Closes in 9h · 5 people$/)).toBeTruthy()
     expect(screen.getByText('Closes in 9h')).toBeTruthy()
   })
 
@@ -386,7 +386,7 @@ describe('around the room', () => {
     mockCoachVisible = true
     serve(blend())
     await open()
-    expect(screen.getByText('Blend with Crew Five · 5 people')).toBeTruthy()
+    expect(screen.getByText('Blend with Five · 5 people')).toBeTruthy()
     await waitFor(() => screen.getByText(/Made at Toit · closes \d{1,2}(:\d\d)? (am|pm)\. Everyone here is on tonight’s names until they reveal\./))
     // The buttons are the 48 pt size.
     await fireEvent.press(screen.getByLabelText('Got it'))
@@ -489,9 +489,9 @@ describe('at AX XXXL (TG-04, RC audit C3)', () => {
     mockCoachVisible = true
     serve(blend())
     await open()
-    const line = screen.getByText('5 people · Closes in 9h')
+    const line = screen.getByText('Closes in 9h · 5 people')
     expect(line.props.maxFontSizeMultiplier).toBe(CONTROL_FONT_CAP)
-    const card = textNodes(screen.toJSON() as never).filter((n) => JSON.stringify(n.children).includes('Blend with Crew Five ·'))
+    const card = textNodes(screen.toJSON() as never).filter((n) => JSON.stringify(n.children).includes('Blend with Five ·'))
     expect(card.map((n) => n.props.maxFontSizeMultiplier)).toEqual([MAX_FONT_SCALE.heading])
   })
 })

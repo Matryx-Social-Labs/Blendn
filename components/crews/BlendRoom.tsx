@@ -74,15 +74,16 @@ function BlendPair({ mine, theirs }: { mine: BlendSide | null; theirs: BlendSide
   )
 }
 
-/** "7 people · Closes in 9h": the clock in Geist Mono, white (flow10b.js `blendRoom`). */
+/** "Closes in 9h · 7 people": the clock first, in Geist Mono, white (flow10b.js `blendRoom`). */
 function BlendSubtitle({ blend, now }: { blend: Blend; now: number }) {
   const bold = useBoldText()
   const closes = closesLine(blend.closesAt, now)
   return (
     // In the header's fixed capsule: the control cap, as the room's own line (`SubtitleText`), so it never outgrows it (TG-04).
     <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary]}>
-      {`${peopleLine(blend)}${closes ? ' · ' : ''}`}
+      {/* The clock first: at 360 the line truncates, and the close time is what it must not lose (TG-11, RC audit C24). */}
       {closes ? <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.ink]}>{closes}</Text> : null}
+      {`${closes ? ' · ' : ''}${peopleLine(blend)}`}
     </Text>
   )
 }

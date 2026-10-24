@@ -21,6 +21,7 @@ const like = (over: Partial<RoomMessage> = {}): RoomMessage => ({
   sender_name: 'Rohan',
   message_text: 'liked Crew Nebula for the crew',
   message_type: 'system',
+  reply_to_message_id: null,
   created_at: '2026-10-24T19:00:00.000Z',
   ...over,
 })

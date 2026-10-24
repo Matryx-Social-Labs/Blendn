@@ -41,7 +41,7 @@ import { apiClient } from '../../lib/apiClient'
 import { refreshAppIconBadge } from '../../lib/appBadge'
 import { BOARD_ENABLED } from '../../lib/board'
 import { dmThread, outboxLine, roomThread, useOutbox, type Thread } from '../../lib/chatOutbox'
-import { crewLikeLine, crewRoomTitle, type CrewRoomRow } from '../../lib/crews'
+import { blendWith, crewLikeLine, crewRoomTitle, type CrewRoomRow } from '../../lib/crews'
 import { COLOR, DURATION, EASING, SPACE, SPRING, STAGGER } from '../../lib/design/tokens'
 import { matchRowPreview } from '../../lib/matchOpener'
 import { ScreenProfiler } from '../../lib/perf'
@@ -438,7 +438,7 @@ function ChatInner() {
             return (
               <BlendLiveCard
                 key={r.id}
-                title={sides?.theirName ? `Blend with ${sides.theirName}` : crewRoomTitle(r)}
+                title={sides?.theirName ? blendWith(sides.theirName) : crewRoomTitle(r)}
                 seeds={[sides?.mineSeed ?? null, sides?.theirSeed ?? null]}
                 closesAt={sides?.closesAt ?? r.closesAt}
                 unread={r.unreadCount}
