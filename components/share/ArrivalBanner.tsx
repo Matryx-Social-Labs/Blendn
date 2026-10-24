@@ -7,7 +7,7 @@ import { Icon } from '../ui/Icon'
 import { COLOR, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { Button } from '../ds/Button'
-import { CONTROL_FONT_CAP, font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast } from '../ds/shared'
+import { CONTROL_FONT_CAP, font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast, useMinMeasure } from '../ds/shared'
 import { bannerFadeIn, bannerIn, bannerOut } from '../motion/presence'
 
 /** The cover's side: the frame's 48. */
@@ -42,6 +42,8 @@ export function ArrivalBanner({
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const reduceMotion = useReducedMotion()
+  // The Banner's pattern (P3): the sentence keeps six ems and Open and × wrap under it, rather than hold it to a sliver.
+  const measure = useMinMeasure('meta', CONTROL_FONT_CAP)
   const said = `You were sent ${title}`
 
   useEffect(() => {
@@ -59,36 +61,40 @@ export function ArrivalBanner({
       <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.cover}>
         {cover ? <Image testID={testID && `${testID}-cover`} source={{ uri: cover }} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} /> : <Icon name="map-pin" size={ICON.control} color={COLOR.textSecondary} />}
       </View>
-      <View style={styles.text}>
-        <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold), styles.ink]}>
-          {said}
-        </Text>
-        {meta ? (
-          <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>
-            {meta}
+      <View testID={testID && `${testID}-body`} style={styles.body}>
+        <View testID={testID && `${testID}-text`} style={[styles.text, measure]}>
+          <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold), styles.ink]}>
+            {said}
           </Text>
-        ) : null}
+          {meta ? (
+            <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>
+              {meta}
+            </Text>
+          ) : null}
+        </View>
+        <View style={styles.controls}>
+          <Button
+            kind="lit"
+            size="sm"
+            label="Open"
+            accessibilityLabel={`Open ${title}`}
+            pressHaptic={H.primary}
+            onPress={onOpen}
+            style={styles.control}
+            testID={testID && `${testID}-open`}
+          />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss"
+            hitSlop={(minTarget() - ICON.inline) / 2}
+            onPress={onDismiss}
+            style={styles.control}
+            testID={testID && `${testID}-dismiss`}
+          >
+            <Icon name="x" size={ICON.inline} color={COLOR.textTertiary} />
+          </Pressable>
+        </View>
       </View>
-      <Button
-        kind="lit"
-        size="sm"
-        label="Open"
-        accessibilityLabel={`Open ${title}`}
-        pressHaptic={H.primary}
-        onPress={onOpen}
-        style={styles.control}
-        testID={testID && `${testID}-open`}
-      />
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Dismiss"
-        hitSlop={(minTarget() - ICON.inline) / 2}
-        onPress={onDismiss}
-        style={styles.control}
-        testID={testID && `${testID}-dismiss`}
-      >
-        <Icon name="x" size={ICON.inline} color={COLOR.textTertiary} />
-      </Pressable>
     </Animated.View>
   )
 }
@@ -104,7 +110,9 @@ const styles = StyleSheet.create({
     backgroundColor: COLOR.surface,
   },
   cover: { width: COVER, height: COVER, borderRadius: RADIUS.thumb, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', backgroundColor: COLOR.surfaceRaised },
-  text: { flex: 1, flexShrink: 1 },
+  body: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: SPACE.md },
+  text: { flexGrow: 1, flexShrink: 1 },
+  controls: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
   control: { alignSelf: 'center' },
   ink: { color: COLOR.textPrimary },
 })

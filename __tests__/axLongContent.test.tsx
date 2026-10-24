@@ -19,6 +19,7 @@ import { RequestCard } from '../components/banter/BanterParts'
 import { NAME_LINES_ALONE, PersonRow, PERSON_ROW_HEIGHT } from '../components/friends/PersonRow'
 import { InviteRow } from '../components/crews/InviteRow'
 import { RegularOn } from '../components/offer/OfferSections'
+import { ArrivalBanner } from '../components/share/ArrivalBanner'
 import { CONTROL_FONT_CAP } from '../components/ds/shared'
 import { MAX_FONT_SCALE, SPACE, TYPE } from '../lib/design/tokens'
 import { AX_XXXL } from './helpers/ax'
@@ -165,5 +166,26 @@ describe('the same squeeze, swept: a sentence beside one action keeps its measur
     expect(flat('regular-on-body')).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap' })
     expect(flat('regular-on-text')).toMatchObject({ flexGrow: 1, minWidth: measureOf('bodyStrong', 1.3) })
     expect(flat('regular-on-text').flex).toBeUndefined()
+  })
+})
+
+describe('the arrival banner (P3: two lines held to one each beside Open and ×)', () => {
+  const banner = () => render(<ArrivalBanner title="Neon Nights at the Bandstand" meta="Sat 4 Oct, 9 PM · Toit Brewpub" onOpen={jest.fn()} onDismiss={jest.fn()} testID="arrival" />)
+
+  it('at 360 dp and 1.3 the sentence keeps its measure and Open and × wrap under it', async () => {
+    await at(360, 1.3)
+    await banner()
+    expect(flat('arrival-body')).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap' })
+    expect(flat('arrival-text')).toMatchObject({ flexGrow: 1, minWidth: measureOf('meta', 1.3), flexBasis: measureOf('meta', 1.3) })
+    expect(flat('arrival-text').flex).toBeUndefined()
+    expect(screen.getByTestId('arrival-body', hidden)).toContainElement(screen.getByTestId('arrival-open', hidden))
+    // Two single lines, as the frame draws them: the measure is what gives them room.
+    expect(screen.getByText('You were sent Neon Nights at the Bandstand', hidden).props.numberOfLines).toBe(1)
+  })
+
+  it('402 dp at 1.0 is laid out as before: one row', async () => {
+    await at(402, 1)
+    await banner()
+    expect(flat('arrival-text')).toMatchObject({ flexBasis: 0, minWidth: 0 })
   })
 })
