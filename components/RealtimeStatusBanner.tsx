@@ -28,6 +28,8 @@ interface RealtimeStatusBannerProps {
    * suppresses the socket half, not the banner.
    */
   showSocketIssues?: boolean
+  /** A full error state with its own Try again is on screen: the banner says what is wrong and offers no second one (rc7 D4). */
+  withoutRetry?: boolean
 }
 
 /** How long the socket may be down before the banner says so. */
@@ -37,6 +39,7 @@ export default function RealtimeStatusBanner({
   status,
   style,
   showSocketIssues = true,
+  withoutRetry = false,
 }: RealtimeStatusBannerProps) {
   const networkState = useSyncExternalStore<NetworkState>(subscribeNetworkState, getNetworkState)
   const [retrying, setRetrying] = useState(false)
@@ -100,7 +103,7 @@ export default function RealtimeStatusBanner({
       {kind === 'offline' ? <Banner kind="offline" text={OFFLINE} /> : null}
       {kind === 'deleted' ? <Banner kind="offline" icon="user-x" text={DELETED} testID="realtime-deleted" /> : null}
       {kind === 'reconnecting' ? <Banner kind="paused" text={RECONNECTING} testID="realtime-reconnecting" /> : null}
-      {kind === 'paused' ? <Banner kind="paused" text={PAUSED} action={{ label: 'Try again', onPress: handleRetry }} /> : null}
+      {kind === 'paused' ? <Banner kind="paused" text={PAUSED} action={withoutRetry ? undefined : { label: 'Try again', onPress: handleRetry }} /> : null}
     </Animated.View>
   )
 }

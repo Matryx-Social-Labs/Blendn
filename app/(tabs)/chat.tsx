@@ -404,6 +404,8 @@ function ChatInner() {
   const invites = crews.invites
   const requestsTotal = Math.max(inbox.requestsTotal ?? 0, incomingRequests.length)
   const shownRequests = incomingRequests.slice(0, REQUESTS_PREVIEW)
+  // The list's own "Couldn’t load your chats" is up (the empty list's failed state): its Try again is the one.
+  const failedState = inbox.listFailed && !inbox.loading && !trimmed && shown.length === 0
   const hasHeaderContent = liveRooms.length + blendRooms.length + incomingRequests.length + invites.length + boardCount > 0
 
   const header = (
@@ -589,7 +591,7 @@ function ChatInner() {
       </BanterPressGuard.Provider>
       {pull.indicator}
 
-      <RealtimeStatusBanner status={inbox.socketStatus} style={{ ...styles.banner, top: listTop - SPACE.sm }} />
+      <RealtimeStatusBanner status={inbox.socketStatus} withoutRetry={failedState} style={{ ...styles.banner, top: listTop - SPACE.sm }} />
       {newAbove ? (
         <NewAbovePill
           top={listTop}

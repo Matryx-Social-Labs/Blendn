@@ -49,6 +49,9 @@ export type StateAction = {
   accessibilityLabel?: string
 }
 
+/** An action's kind when the caller names none: the first is the lit recovery, the rest stay quiet (rc7 D4). */
+export const stateActionKind = (index: number): ButtonKind => (index === 0 ? 'lit' : 'secondary')
+
 export type StateScreenProps = {
   icon: IconName
   title: string
@@ -64,11 +67,14 @@ export type StateScreenProps = {
   note?: string
   /** The note is a path or an address (Flow 15 not found): Geist Mono, truncated in the middle so both ends show. */
   noteMono?: boolean
-  /** Top to bottom in the fixed order. `kind` defaults to `primary`. */
+  /**
+   * Top to bottom in the fixed order. `kind` defaults to `lit` for the first (a state's recovery is a positive action inside
+   * the screen's world, PLAN-buttons L3) and `secondary` for the rest. A screen whose one CTA this is says `primary`.
+   */
   actions?: StateAction[]
   /** Under the actions, in the dock (`screen` only): the crash screen's error id, the line that says where to write. */
   foot?: ReactNode
-  /** The primary action is in flight. */
+  /** The first action is in flight. */
   busy?: boolean
   /** `inline` in a list or card; `screen` fills it, with the actions docked at the bottom. */
   variant?: 'inline' | 'screen'
@@ -138,10 +144,11 @@ export function StateScreen({ icon, title, body, bodyLink, lead, note, noteMono 
       ) : null}
     </View>
   )
+  const kinds = actions.map((a, i) => a.kind ?? stateActionKind(i))
   // A lit action is never 56 pt (the primary's): a state with one stacks all of its actions at 48.
-  const actionSize = actions.some((a) => a.kind === 'lit') ? 'md' : undefined
-  const buttons = actions.map(({ kind = 'primary', loading, ...action }) => (
-    <Button key={action.label} kind={kind} size={actionSize} loading={loading || (busy && kind === 'primary')} {...action} />
+  const actionSize = kinds.includes('lit') ? 'md' : undefined
+  const buttons = actions.map(({ kind: _kind, loading, ...action }, i) => (
+    <Button key={action.label} kind={kinds[i]} size={actionSize} loading={loading || (busy && i === 0)} {...action} />
   ))
 
   if (!screen) {

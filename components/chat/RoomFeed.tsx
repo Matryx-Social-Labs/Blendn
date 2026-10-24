@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { broadcastParts } from '../../lib/chatFeed'
 import { crewLikeLine } from '../../lib/crews'
 import { goneKindFor } from '../../lib/chatGone'
-import { liveEndedState } from '../../lib/chatLiveEnded'
+import { liveEndedState, type LiveEndedAction } from '../../lib/chatLiveEnded'
 import { markSeed } from '../../lib/pseudonymAvatar'
 import { DURATION, SPACE } from '../../lib/design/tokens'
 import { isTemp, type RoomMessage } from '../../lib/roomMessages'
@@ -15,6 +15,7 @@ import { BroadcastNotice } from '../ds/BroadcastNotice'
 import { ChatBubble, type BubbleReaction } from '../ds/ChatBubble'
 import type { Rect } from '../ds/chatShared'
 import { StateScreen } from '../ds/StateScreen'
+import type { ButtonKind } from '../ds/Button'
 import { SystemLine, SystemNotice } from '../ds/SystemNotice'
 import { GoneCard } from '../system/GoneCard'
 import type { PollRefusal } from '../../lib/chatPoll'
@@ -44,6 +45,9 @@ export const senderOf = (m: Pick<RoomMessage, 'sender_name' | 'sender_id'>, room
 })
 
 /** The six the server accepts, as the bubble draws them: counts, never who. */
+/** A room that is no longer live: Go live again is the screen's one CTA (gradient), See what's on is lit, Back is quiet. */
+const NOT_LIVE_KIND: Record<LiveEndedAction, ButtonKind> = { goLive: 'primary', seeWhatsOn: 'lit', back: 'secondary' }
+
 const bubbleReactions = (r: RoomMessage['reactions']): BubbleReaction[] => (r ?? []).map((x) => ({ emoji: x.emoji, count: x.count, mine: !!x.mine }))
 
 /**
@@ -255,7 +259,7 @@ export function RoomOutside({
           icon={state.icon}
           title={state.title}
           body={state.body}
-          actions={[{ label: state.action.label, onPress: state.action.kind === 'back' ? onBack : onGoLive }]}
+          actions={[{ label: state.action.label, kind: NOT_LIVE_KIND[state.action.kind], onPress: state.action.kind === 'back' ? onBack : onGoLive }]}
           testID="room-not-live"
         />
       )

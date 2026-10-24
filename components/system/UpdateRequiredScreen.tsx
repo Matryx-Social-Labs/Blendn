@@ -15,7 +15,7 @@ export function UpdateRequiredScreen() {
       icon="download"
       title="Update Blend’n to keep going"
       body="This version can’t talk to Blend’n any more. The update takes about a minute and keeps you signed in."
-      actions={[{ label: store.label, onPress: () => void Linking.openURL(store.url).catch(() => {}) }]}
+      actions={[{ label: store.label, kind: 'primary', onPress: () => void Linking.openURL(store.url).catch(() => {}) }]}
       testID="update-required"
     />
   )

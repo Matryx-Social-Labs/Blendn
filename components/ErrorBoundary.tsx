@@ -148,7 +148,7 @@ export class ErrorBoundary extends Component<Props, State> {
             body="This screen stopped working. Nothing you saved is lost. Try again, and if it keeps happening, tell us."
             // Try again is the screen's one primary (H.primary); Contact support is a text action that plays nothing.
             actions={[
-              { label: 'Try again', onPress: this.resetErrorBoundary },
+              { label: 'Try again', kind: 'primary', onPress: this.resetErrorBoundary },
               // A screen that fails again on Try again is not a dead end: a modal has no back gesture.
               ...(this.props.onLeave ? [{ label: 'Go back', kind: 'secondary' as const, onPress: this.props.onLeave }] : []),
               { label: 'Contact support', kind: 'tertiary', onPress: () => void this.contactSupport() },

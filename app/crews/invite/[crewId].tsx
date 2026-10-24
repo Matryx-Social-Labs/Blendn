@@ -113,7 +113,7 @@ function CrewInviteScreenContent() {
               icon="mail-x"
               title={NOT_OPEN}
               body="Invites last 14 days. Ask your friend to invite you again."
-              actions={[{ label: 'Back to Crews', onPress: () => router.back() }]}
+              actions={[{ label: 'Back to Crews', kind: 'secondary', onPress: () => router.back() }]}
               testID="invite-not-open"
             />
           )}

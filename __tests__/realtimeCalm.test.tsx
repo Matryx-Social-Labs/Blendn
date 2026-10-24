@@ -98,3 +98,14 @@ describe('reconnecting (Flow 7 pieces 03)', () => {
     expect(realtimeBannerKind({ offline: false, socketIssue: true, reconnecting: true })).toBe('reconnecting')
   })
 })
+
+describe('beside a full error state (rc7 D4)', () => {
+  it('the paused banner offers no second Try again when the screen has its own', async () => {
+    await render(<RealtimeStatusBanner status={status('disconnected')} withoutRetry />)
+    await act(async () => {
+      jest.advanceTimersByTime(3100)
+    })
+    expect(screen.getByText('Updates paused. Trying to reconnect.')).toBeTruthy()
+    expect(screen.queryByText('Try again')).toBeNull()
+  })
+})

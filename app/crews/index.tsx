@@ -157,7 +157,7 @@ function CrewsScreenContent() {
           icon="users"
           title="Go out together. Meet other crews."
           body="Make a crew from your friends. When two of you are at the same night, the Room shows you as one."
-          actions={[{ label: 'Make a crew', onPress: openNew }]}
+          actions={[{ label: 'Make a crew', kind: 'primary', onPress: openNew }]}
           testID="crews-empty"
         />
       </Animated.View>
