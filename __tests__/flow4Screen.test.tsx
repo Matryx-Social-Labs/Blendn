@@ -66,11 +66,13 @@ jest.mock('../lib/networkStatus', () => ({ getNetworkState: () => 'online', subs
 jest.mock('../lib/crewsApi', () => ({
   crewsApi: { crewsAt: jest.fn(), myCrews: jest.fn(), openToCrews: jest.fn(), here: jest.fn(), likeCrew: jest.fn(), likePersonAsCrew: jest.fn(), report: jest.fn() },
 }))
+const mockScrollY = jest.requireActual('react-native-reanimated').makeMutable(0)
 jest.mock('../components/blendn/RoomStage', () => {
   const { forwardRef } = jest.requireActual('react')
   return {
     RoomStage: forwardRef(({ children }: { children: React.ReactNode }, _ref: unknown) => children),
     useStageScroll: () => ({ onScroll: undefined, native: {}, scrollEventThrottle: 16 }),
+    useStage: () => ({ scrollY: mockScrollY, pan: {} }),
   }
 })
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn() }) }))
@@ -479,5 +481,26 @@ describe('the event cancelled while you are inside (R4)', () => {
     await drawRoom()
     await emit('someone-else')
     expect(screen.queryByText('Vinyl Night was cancelled')).toBeNull()
+  })
+})
+
+describe('the floating bar (TG-01)', () => {
+  afterEach(() => mockScrollY.set(0))
+
+  it('takes the bar glass once the page scrolls, and drops it back at the top', async () => {
+    await drawRoom()
+    expect(screen.queryByTestId('blendn-bar')).toBeNull()
+    await act(async () => mockScrollY.set(120))
+    expect(screen.getByTestId('blendn-bar')).toBeTruthy()
+    await act(async () => mockScrollY.set(0))
+    expect(screen.queryByTestId('blendn-bar')).toBeNull()
+  })
+
+  it('Increase Contrast draws the hairline under it', async () => {
+    jest.spyOn(AccessibilityInfo, 'isHighTextContrastEnabled').mockResolvedValue(true)
+    jest.spyOn(AccessibilityInfo, 'isDarkerSystemColorsEnabled').mockResolvedValue(true)
+    await drawRoom()
+    await act(async () => mockScrollY.set(120))
+    expect(screen.getByTestId('blendn-bar-contrast')).toBeTruthy()
   })
 })
