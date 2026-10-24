@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native'
 
-import { COLOR, SPACE } from '../../lib/design/tokens'
+import { COLOR, MAX_FONT_SCALE, SPACE } from '../../lib/design/tokens'
 import type { Crew } from '../../lib/crews'
 import { intentLine } from '../../lib/crewsScreens'
 import { Chip } from '../ds/Chip'
@@ -24,16 +24,25 @@ export function CrewHead({ crew }: { crew: Pick<Crew, 'name' | 'bio' | 'tags' | 
   return (
     <View style={styles.head}>
       <CrewEmblem seed={crew.emblemSeed} size={EMBLEM} />
-      <Text accessibilityRole="header" style={[font('title', bold), styles.ink, styles.centre]}>
+      {/* At its roles' caps (YOU-06, D-L15): at AX XXXL an uncapped name and bio pushed the members off the screen. */}
+      <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.ink, styles.centre]}>
         {crew.name}
       </Text>
-      {crew.bio ? <Text style={[font('body', bold), styles.centre, { color: secondary }]}>{crew.bio}</Text> : null}
+      {crew.bio ? (
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('body', bold), styles.centre, { color: secondary }]}>
+          {crew.bio}
+        </Text>
+      ) : null}
       {crew.tags.length || intent ? (
         <View style={styles.meta}>
           {crew.tags.map((t) => (
             <Chip key={t.slug} label={t.label} variant="outline" />
           ))}
-          {intent ? <Text style={[font('meta', bold), { color: secondary }]}>{intent}</Text> : null}
+          {intent ? (
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: secondary }]}>
+              {intent}
+            </Text>
+          ) : null}
         </View>
       ) : null}
     </View>
