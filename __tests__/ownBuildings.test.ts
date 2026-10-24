@@ -183,6 +183,8 @@ describe('the credits (review H2; the owner, 2026-10-15: no (i) on the map)', ()
     for (const c of credits) expect(c.href).toMatch(/^https:\/\//)
     expect(MAP_CREDITS.openStreetMap.licence).toBe('ODbL')
     expect(MAP_CREDITS.googleOpenBuildings.licence).toBe('CC BY 4.0')
+    // Drive 7: Microsoft's footprints are ODbL and the credit did not say so. Negative control: without it, this fails.
+    expect(MAP_CREDITS.microsoft.licence).toBe('ODbL')
     // Our buildings' credits are entries of the one list, not copies of it.
     for (const c of OWN_BUILDINGS_CREDITS) expect(credits).toContain(c)
   })
