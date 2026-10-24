@@ -40,7 +40,9 @@ const mockToast = jest.fn()
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockToast }) }))
 
 import { router } from 'expo-router'
-import CrewsScreen from '../app/crews/index'
+import CrewsScreen, { FOOTNOTE } from '../app/crews/index'
+import { StyleSheet } from 'react-native'
+import { MAX_FONT_SCALE, SPACE } from '../lib/design/tokens'
 import InviteScreen from '../app/crews/invite/[crewId]'
 import { CONSENT_LINE, KEEP_ANONYMOUS_LABEL, type Crew, type CrewInvite } from '../lib/crews'
 import { crewsApi } from '../lib/crewsApi'
@@ -100,10 +102,23 @@ describe('Crews', () => {
     await waitFor(() => screen.getByLabelText('Nebula, Crew of 4'))
     expect(screen.getByLabelText('Orbit, Crew of 6')).toBeTruthy()
     expect(screen.getByLabelText('Your crews, 2')).toBeTruthy()
-    expect(screen.getByText(/Who’s where shows once you’ve checked in/)).toBeTruthy()
+    expect(screen.getByText(FOOTNOTE)).toBeTruthy()
     expect(screen.getByTestId('crews-make')).toBeTruthy()
     await fireEvent.press(screen.getByLabelText('Nebula, Crew of 4'))
     expect(router.push).toHaveBeenCalledWith({ pathname: '/crews/[crewId]', params: { crewId: 'c-nebula' } })
+  })
+
+  // D-M11: the footnote is capped, and the list clears the dock it measured. Negative control: the fixed `SIZE.primary` padding fails it.
+  it('the footnote is capped and never runs under the docked button, however tall it draws', async () => {
+    api.myCrews.mockResolvedValue(list([crew()], []))
+    await render(<CrewsScreen />)
+    await waitFor(() => screen.getByTestId('crews-footnote'))
+    expect(screen.getByTestId('crews-footnote').props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.meta)
+    await act(async () => {
+      fireEvent(screen.getByTestId('crews-dock'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 342, height: 120 } } })
+    })
+    const pad = StyleSheet.flatten(screen.getByTestId('crews-scroll').props.contentContainerStyle).paddingBottom
+    expect(pad).toBeGreaterThanOrEqual(120 + SPACE.xl * 2)
   })
 
   it('a crew of one is forming and says it starts when someone joins', async () => {

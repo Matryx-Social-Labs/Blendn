@@ -1,7 +1,7 @@
 import { playsArrival } from '../../lib/backFromBackground'
 import { barCircleBottom } from '../../lib/barGeometry'
 import { ScreenProfiler } from '../../lib/perf'
-import { router, useFocusEffect, useIsFocused, useScrollToTop } from 'expo-router'
+import { router, useFocusEffect, useScrollToTop } from 'expo-router'
 import React, { useCallback, useMemo, useState } from 'react'
 import { Platform, StyleSheet, Text, View } from 'react-native'
 import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated'
@@ -9,7 +9,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { scheduleOnRN } from 'react-native-worklets'
 import { Button } from '../../components/ds/Button'
 import { Grain } from '../../components/ds/Grain'
-import { Orbs } from '../../components/ds/Orbs'
 import { PresenceDot } from '../../components/ds/MonoFamily'
 import { CONTROL_FONT_CAP, font, HueProvider, useBoldText } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
@@ -35,7 +34,8 @@ import type { Crew } from '../../lib/crews'
 import { COLOR, SPACE, STAGGER } from '../../lib/design/tokens'
 import type { Badge } from '../../lib/aboutYou'
 import { Logger } from '../../lib/logger'
-import { interestNames, profileGaps, type NightsStatus } from '../../lib/meProfile'
+import { interestNames, nightsCounts, profileGaps, type NightsCounts, type NightsStatus } from '../../lib/meProfile'
+import { openTonight } from '../../lib/paywall'
 import { mainWasPulled, pulledPhotos, type PulledPhoto } from '../../lib/photoStates'
 import { parseBadges } from '../../lib/profileBadges'
 import { unseenPulled } from '../../lib/pulledNotices'
@@ -93,13 +93,14 @@ function ProfileInner() {
   const { user, loading: authLoading } = useAuth()
   const insets = useSafeAreaInsets()
   const bold = useBoldText()
-  const focused = useIsFocused()
   const offline = useOffline()
   const [profile, setProfile] = useState<UserProfileViewModel | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   // Empty until it loads; a failure keeps what was last good (Nights out says so, with Try again).
   const [attended, setAttended] = useState<PastEventRow[]>([])
+  // The nights behind the list: locked with Blend'n+ and the true total (D-H1). Null total until `/me/attendance` answers.
+  const [nightCounts, setNightCounts] = useState<NightsCounts>({ locked: 0, total: null })
   const [nightsStatus, setNightsStatus] = useState<NightsStatus>('loading')
   const [nightsRetrying, setNightsRetrying] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -207,9 +208,10 @@ function ProfileInner() {
      * single failed fetch (a cold start racing the token, a 429) used to
      * leave the section missing until you left the tab and came back.
      */
-    const cached = queryCache.get<PastEventRow[]>(cacheKey)
+    const cached = queryCache.get<{ rows: PastEventRow[]; counts: NightsCounts }>(cacheKey)
     if (cached) {
-      setAttended(cached)
+      setAttended(cached.rows)
+      setNightCounts(cached.counts)
       setNightsStatus('ready')
     }
 
@@ -218,9 +220,11 @@ function ProfileInner() {
         const result = await apiClient.getMyAttendance(ATTENDANCE_LIMIT)
         if (result.success && result.data) {
           const rows = pastEventRows(result.data.events)
+          const counts = nightsCounts(result.data)
           setAttended(rows)
+          setNightCounts(counts)
           setNightsStatus('ready')
-          queryCache.set(cacheKey, rows, ATTENDANCE_CACHE_TTL)
+          queryCache.set(cacheKey, { rows, counts }, ATTENDANCE_CACHE_TTL)
           return
         }
         Logger.debug('profile', 'Failed to load attendance', { error: result.error, attempt })
@@ -232,6 +236,9 @@ function ProfileInner() {
     }
     setNightsStatus('failed')
   }, [user])
+
+  // The nights kept behind Blend'n+: the same Tonight sheet Going's locked row opens (trigger `recap`); bought, they're read again.
+  const unlockNights = () => void openTonight({ trigger: 'night', venue: '', onUnlocked: () => void loadRecent() }, { userInitiated: true })
 
   const retryNights = () => {
     setNightsRetrying(true)
@@ -478,7 +485,7 @@ function ProfileInner() {
         {stats ? (
           <FadeInUp {...next()}>
             <StatsCard
-              attended={stats.eventsAttended}
+              attended={nightCounts.total ?? stats.eventsAttended}
               saved={stats.eventsFavorited}
               friends={friendsCount}
               hosted={stats.eventsOrganized}
@@ -502,6 +509,9 @@ function ProfileInner() {
             onRetry={retryNights}
             retrying={nightsRetrying}
             onFirstNight={openWhatsOn}
+            lockedCount={nightCounts.locked}
+            total={nightCounts.total}
+            onUnlock={unlockNights}
           />
         </FadeInUp>
 
@@ -534,7 +544,6 @@ function ProfileInner() {
 
   return (
     <View style={styles.screen}>
-      <Orbs set="brand" paused={!focused} />
       <Grain />
       {/* First in the tree for the focus order; it draws over the scroll by zIndex. */}
       {chrome}

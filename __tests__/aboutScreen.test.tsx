@@ -104,3 +104,11 @@ it('keeps a licence whole when a map-data row wraps: "(CC BY 4.0)" has non-break
   await render(<AboutScreen />)
   expect(screen.getByText('Google Open Buildings (CC BY 4.0)')).toBeTruthy()
 })
+
+// D-M10: the wordmark never breaks "Blend’ / n" at AX. Negative control: without `numberOfLines={1}` it fails.
+it('sets the wordmark on one line, shrunk to fit', async () => {
+  await render(<AboutScreen />)
+  const mark = screen.getByTestId('about-wordmark')
+  expect(mark.props.numberOfLines).toBe(1)
+  expect(mark.props.adjustsFontSizeToFit).toBe(true)
+})

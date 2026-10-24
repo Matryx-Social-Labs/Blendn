@@ -80,6 +80,13 @@ describe('step 1 · name and vibe', () => {
     expect(screen.getByText('Room for one more')).toBeTruthy()
   })
 
+  // D-L17: no outlined "Tags" placeholder in the preview; it read as a chip to tap. Negative control: `['Tags']` fails it.
+  it('the preview draws no placeholder tag before one is picked', async () => {
+    await render(<NewCrewScreen />)
+    // The field's own label is the one "Tags" on screen.
+    expect(screen.getAllByText('Tags', { includeHiddenElements: true })).toHaveLength(1)
+  })
+
   it('a name under two characters is refused where it stands, in the design’s words, and Next stays', async () => {
     await render(<NewCrewScreen />)
     await name('N')

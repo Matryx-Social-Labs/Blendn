@@ -12,13 +12,13 @@ jest.mock('../components/OptimizedImage', () => ({ OptimizedImage: () => null })
 /* eslint-disable import/first */
 import { ToastDockContext } from '../components/toastDock'
 import { Banner } from '../components/ds/Banner'
-import { NightsOut, nightsLine, FIRST_NIGHT, NIGHTS_FAILED } from '../components/profile/NightsOut'
+import { NightsOut, nightsLine, FIRST_NIGHT, NIGHTS_FAILED, NIGHTS_HELD } from '../components/profile/NightsOut'
 import { BAR_GLASS_AT, BAR_TITLE_SWAP, barStateAt } from '../components/profile/ProfileBar'
 import { dockClearance, ProfileDock } from '../components/profile/ProfileDock'
 import { HERO_STRETCH_MAX, heroHeightFor, stretchScale } from '../components/profile/ProfileHeroStage'
 import { nextPage } from '../components/profile/ProfileHeroPager'
 import { counterOf, pageAt } from '../components/profile/PhotoViewer'
-import { nightLabel, nightsView } from '../lib/meProfile'
+import { nightLabel, nightsCounts, nightsView } from '../lib/meProfile'
 import { compactCount, STAT_MAX } from '../components/profile/MeSections'
 import { COLOR, SIZE, SPACE } from '../lib/design/tokens'
 import { tint } from '../lib/theme'
@@ -72,10 +72,30 @@ describe('Nights out chooses its state (Me 04 · 05 · 06)', () => {
     expect(nightsView('ready', []).kind).toBe('first')
   })
   it('keeps the last good tiles when a refresh failed', () => {
-    expect(nightsView('failed', [night(1)])).toMatchObject({ kind: 'tiles', failed: true })
+    expect(nightsView('failed', [night(1)])).toMatchObject({ kind: 'tiles', failed: true, locked: 0 })
   })
   it('says a failure with nothing to show without tiles', () => {
     expect(nightsView('failed', []).kind).toBe('failed')
+  })
+  // D-H1: "48 NIGHTS" over "Your first night isn't written yet". The free 3 can be nights still going, which the list hides.
+  it('never says "first night" under a count above 0: locked nights say Blend\'n+', () => {
+    expect(nightsView('ready', [], 45, 48)).toEqual({ kind: 'locked', total: 48 })
+  })
+  it('never says "first night" under a count above 0: nights still going say they land later', () => {
+    expect(nightsView('ready', [], 0, 2)).toEqual({ kind: 'pending', total: 2 })
+  })
+  // Admin S-1 (fixed): a free account sees its latest 3 ended nights; the rest are `lockedCount`, said under the tiles.
+  it('carries the locked nights with the tiles', () => {
+    expect(nightsView('ready', [night(1), night(2), night(3)], 43, 48)).toMatchObject({ kind: 'tiles', locked: 43 })
+  })
+  it('is the first night only when the count is 0, or unknown', () => {
+    expect(nightsView('ready', [], 0, 0).kind).toBe('first')
+    expect(nightsView('ready', [], 0, null).kind).toBe('first')
+  })
+  it('reads the total as the shown nights plus the locked ones', () => {
+    expect(nightsCounts({ pagination: { totalCount: 3 }, lockedCount: 45 })).toEqual({ locked: 45, total: 48 })
+    expect(nightsCounts({ lockedCount: 2 })).toEqual({ locked: 2, total: null })
+    expect(nightsCounts(null)).toEqual({ locked: 0, total: null })
   })
   it('labels a night the way the tile reads', () => {
     expect(nightLabel(new Date(2025, 9, 3, 20).toISOString())).toBe('Fri 3 Oct')
@@ -109,6 +129,33 @@ describe('Nights out chooses its state (Me 04 · 05 · 06)', () => {
     expect(screen.getByTestId('nights-grid')).toBeTruthy()
     fireEvent.press(screen.getByText('Try again'))
     expect(onRetry).toHaveBeenCalledTimes(1)
+  })
+  it('renders the locked count with a lit See Blend\'n+, never the first-night card', async () => {
+    const onUnlock = jest.fn()
+    await render(
+      <NightsOut status="ready" events={[]} lockedCount={1045} total={1048} onUnlock={onUnlock} onOpenEvent={jest.fn()} onSeeAll={jest.fn()} onRetry={jest.fn()} onFirstNight={jest.fn()} />
+    )
+    expect(screen.queryByText(FIRST_NIGHT.title)).toBeNull()
+    expect(screen.getByText(NIGHTS_HELD.locked(1048))).toBeTruthy()
+    expect(NIGHTS_HELD.locked(1048)).toBe('1,048 nights · the older ones are with Blend’n+')
+    fireEvent.press(screen.getByText(NIGHTS_HELD.action))
+    expect(onUnlock).toHaveBeenCalledTimes(1)
+  })
+  it('renders nights still going without the first-night card or a Blend\'n+ button', async () => {
+    await render(<NightsOut status="ready" events={[]} total={1} onOpenEvent={jest.fn()} onSeeAll={jest.fn()} onRetry={jest.fn()} onFirstNight={jest.fn()} />)
+    expect(screen.queryByText(FIRST_NIGHT.title)).toBeNull()
+    expect(screen.getByText('1 night · it lands here once it ends')).toBeTruthy()
+    expect(screen.queryByText(NIGHTS_HELD.action)).toBeNull()
+  })
+  it('says the locked nights under the tiles, with a lit See Blend\'n+', async () => {
+    const onUnlock = jest.fn()
+    await render(
+      <NightsOut status="ready" events={[night(1), night(2), night(3)]} lockedCount={43} total={48} onUnlock={onUnlock} onOpenEvent={jest.fn()} onSeeAll={jest.fn()} onRetry={jest.fn()} onFirstNight={jest.fn()} />
+    )
+    expect(screen.getByTestId('nights-grid')).toBeTruthy()
+    expect(screen.getByText('43 more nights with Blend’n+')).toBeTruthy()
+    fireEvent.press(screen.getByText(NIGHTS_HELD.action))
+    expect(onUnlock).toHaveBeenCalledTimes(1)
   })
   it('draws at most six tiles', async () => {
     await draw('ready', [1, 2, 3, 4, 5, 6, 7, 8].map(night))

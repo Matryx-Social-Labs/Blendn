@@ -52,6 +52,12 @@ it('huge counts stay four digits in the stats card, and say the true number', as
   expect(screen.getByLabelText('0 Saved')).toBeTruthy()
 })
 
+// D-L2: "1002" ran to the card's edge; grouped it reads at a glance. Negative control: without `grouping` there is no comma.
+it('a four-digit count is grouped in the stats card: 1,002', async () => {
+  await render(<StatsCard attended={1002} saved={0} friends={null} hosted={0} onGoing={jest.fn()} onFriends={jest.fn()} />)
+  expect(screen.getAllByText(',', { includeHiddenElements: true })).toHaveLength(1)
+})
+
 it('thirty interests, a 500-character bio and a long education all render', async () => {
   const interests = Array.from({ length: 30 }, (_, i) => `Interest number ${i}`)
   await render(

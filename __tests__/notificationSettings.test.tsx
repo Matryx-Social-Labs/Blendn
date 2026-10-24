@@ -26,6 +26,7 @@ jest.mock('../lib/haptics', () => ({ H: { toggle: jest.fn(), error: jest.fn(), p
 
 import * as Notifications from 'expo-notifications'
 import NotificationSettingsScreen from '../app/notification-settings'
+import { OFFERS_PUSH_OFF } from '../components/notifications/OffersFromPlacesRow'
 import { SheetHost } from '../components/SheetHost'
 import { apiClient } from '../lib/apiClient'
 import { openChannelSettings } from '../lib/channelSettings'
@@ -45,7 +46,10 @@ const Screen = () => (
 
 /** The server's answers by path: offers on, per-kind preferences per test. */
 let kinds: unknown = { success: false, errorCode: 'NOT_FOUND' }
+/** `/me/offers`: a place has regulars on for this person, unless a test says not (D21). */
+let offers: unknown = { success: true, data: { enabled: true, regulars: { active: true } } }
 beforeEach(() => {
+  offers = { success: true, data: { enabled: true, regulars: { active: true } } }
   // The permission is read once a session (RC drive D1): each test is a new one.
   forgetPushPermission()
   jest.clearAllMocks()
@@ -57,7 +61,7 @@ beforeEach(() => {
     if (url.includes('notification-preferences')) {
       return Promise.resolve(init?.method === 'PUT' ? { success: true, data: { matches: false, crew: true, night: true } } : kinds)
     }
-    return Promise.resolve({ success: true, data: { enabled: true } })
+    return Promise.resolve(init?.method === 'PUT' ? { success: true, data: { enabled: true } } : offers)
   })
 })
 afterEach(async () => {
@@ -190,6 +194,26 @@ describe('openChannelSettings', () => {
     await openChannelSettings('crew')
     expect(open).toHaveBeenCalled()
     Platform.OS = original
+  })
+})
+
+// D21 (D-M4, D-LM13): no control for a feature that doesn't exist; no live switch for offers that can't arrive.
+// Negative control: the row as it was (always drawn, live with push off) fails both.
+describe('Offers from places, while regulars are deferred', () => {
+  it('is not drawn until the server says a place has regulars on for this person', async () => {
+    offers = { success: true, data: { enabled: true } }
+    await render(<Screen />)
+    await screen.findByRole('switch', { name: /^Push notifications/ })
+    await act(async () => {})
+    expect(screen.queryByText('Offers from places')).toBeNull()
+  })
+
+  it('with push off it is off, held, and says why', async () => {
+    api.getProfile.mockResolvedValue({ success: true, data: { profile: { push_enabled: false } } } as never)
+    await render(<Screen />)
+    const row = await screen.findByRole('switch', { name: /^Offers from places/ })
+    expect(row.props.accessibilityState).toMatchObject({ disabled: true, checked: false })
+    expect(screen.getByText(OFFERS_PUSH_OFF)).toBeTruthy()
   })
 })
 

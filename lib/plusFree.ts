@@ -8,7 +8,7 @@ export const PLUS_FREE_SHEET: Sheet = {
   kind: 'actions',
   hue: 'violet',
   icon: 'sparkles',
-  title: 'Blendn+ is free here for now',
+  title: 'Blend’n+ is free here for now',
   message: "During launch in your city, staying live while you’re here and your full night history are everyone’s. There’s nothing to buy.",
   actions: [{ label: 'Got it', variant: 'primary', then: () => {} }],
 }

@@ -159,7 +159,14 @@ function InviteScreen() {
 
         <View style={styles.body}>
           {dead ? (
-            <StateScreen icon="link-2-off" title="This link doesn’t work" body="Ask the person who sent it for a new one." testID="invite-dead" />
+            // D-LM9: not a dead end. Your own link is one tap away, as well as the ×.
+            <StateScreen
+              icon="link-2-off"
+              title="This link doesn’t work"
+              body="Ask the person who sent it for a new one."
+              actions={[{ label: 'Add friends', kind: 'lit', onPress: () => router.replace('/friends/add') }]}
+              testID="invite-dead"
+            />
           ) : refusal ? (
             <FriendRefusalScreen key={refusal.n} refusal={refusal.why} onFinishProfile={finishProfile} onRetry={() => void retry()} onClose={close} retrying={retrying} />
           ) : failed && !person ? (

@@ -39,7 +39,7 @@ jest.mock('../components/OptimizedImage', () => {
 })
 
 import { apiClient } from '../lib/apiClient'
-import FriendRequestsScreen from '../app/friends/requests'
+import FriendRequestsScreen, { requestsWaiting } from '../app/friends/requests'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
 const BEN = { id: 'req-ben', person: { userId: 'u_ben', name: 'Ben', photo: null }, createdAt: '2026-09-27T20:00:00Z' }
@@ -69,4 +69,15 @@ it('does not call a failed load "No requests"', async () => {
   api.getFriendRequests.mockResolvedValueOnce({ success: true, data: { incoming: [BEN], outgoing: [] } })
   fireEvent.press(screen.getByText('Try again'))
   expect(await screen.findByLabelText('Accept Ben')).toBeTruthy()
+})
+
+// D-LM2: the title says how many are waiting, the server's count, not the rows loaded. Negative control: no `sub` fails it.
+it('says how many are waiting under the title: the server’s count, not the page', async () => {
+  api.getFriendRequests.mockResolvedValue({
+    success: true,
+    data: { incoming: [BEN], outgoing: [], pagination: { incoming: { totalCount: 60, hasMore: true, nextCursor: 'c1' }, outgoing: { totalCount: 0 } } },
+  } as never)
+  await render(<FriendRequestsScreen />)
+  expect(await screen.findByText('60 waiting')).toBeTruthy()
+  expect(requestsWaiting(1204)).toBe('1,204 waiting')
 })

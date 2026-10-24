@@ -6,7 +6,6 @@ import { Banner } from '../components/ds/Banner'
 import { Spinner } from '../components/ds/Loader'
 import { ManageStatusRow } from '../components/ds/ManageStatusRow'
 import { NeverForSalePanel } from '../components/ds/NeverForSalePanel'
-import { Orbs } from '../components/ds/Orbs'
 import { Grain } from '../components/ds/Grain'
 import { NightPassRow, PlanCard, PlanList } from '../components/ds/PlanCard'
 import { HueProvider } from '../components/ds/shared'
@@ -29,6 +28,7 @@ import {
   planSubline,
   PLUS_COMING_SOON,
   PLUS_FEATURES,
+  taxLine,
   waitForPlus,
   type PlusStatus,
 } from '../lib/plus'
@@ -323,7 +323,6 @@ function PlusScreenContent() {
 
   return (
     <View style={styles.screen}>
-      <Orbs set="brand" />
       <Grain />
       {/* First in the tree for the focus order (it draws over the scroll by zIndex). */}
       <PlusHeader done={finished} onClose={close} state={bar.state === 'rest' ? 'rest' : 'scrolled'} />
@@ -354,6 +353,7 @@ function PlusScreenContent() {
         {/* Restore and Manage stay even when the status could not be read: they do not depend on it. */}
         <PlusFooter
           forSale={forSale}
+          tax={taxLine(offers)}
           restoreDisabled={!buyable || busy !== null}
           restoring={busy === 'restore'}
           onTerms={() => void open(BLENDN_LINKS.terms)}
@@ -371,7 +371,8 @@ function PlusScreenContent() {
           action={launch ? 'launch' : managing ? 'manage' : forSale ? 'buy' : 'none'}
           cta={ctaParts(pick)}
           disabled={locked || !pick}
-          buying={busy === 'buy'}
+          // While the store prices load the button holds with a spinner (after the grace), never a bare dead button.
+          buying={busy === 'buy' || (forSale && offers === undefined)}
           onBuy={() => pick && void buy(pick)}
           onManage={() => manage()}
         />

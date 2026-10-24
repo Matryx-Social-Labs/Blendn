@@ -48,7 +48,7 @@ jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShow
 
 import * as Notifications from 'expo-notifications'
 import { router } from 'expo-router'
-import SettingsScreen from '../app/settings'
+import SettingsScreen, { ONLINE_STATUS_HINT } from '../app/settings'
 import { SheetHost } from '../components/SheetHost'
 import { closeSheet } from '../lib/sheet'
 import { H } from '../lib/haptics'
@@ -265,7 +265,7 @@ describe('Delete account', () => {
     api.getMyPlus.mockResolvedValue({ success: true, data: plusStatus({ active: true, source }) } as never)
     await openTray()
     expect(
-      await screen.findByText(`Cancel Blendn+ in your ${store} subscriptions first. Deleting your account doesn’t cancel it.`)
+      await screen.findByText(`Cancel Blend’n+ in your ${store} subscriptions first. Deleting your account doesn’t cancel it.`)
     ).toBeTruthy()
     fireEvent.press(screen.getByRole('button', { name: 'Manage subscription' }))
     await waitFor(() => expect(opened).toHaveBeenCalledWith(expect.stringMatching(/^https:\/\/(apps\.apple\.com|play\.google\.com)\//)))
@@ -289,14 +289,14 @@ describe('Blendn+ row (review H2)', () => {
     api.getMyPlus.mockResolvedValue({ success: true, data: plusStatus({ gated: false }) } as never)
     await render(<Screen />)
     fireEvent.press(await screen.findByRole('button', { name: /^Blend’n\+, Free during launch in your city/ }))
-    expect(await screen.findByText('Blendn+ is free here for now')).toBeTruthy()
+    expect(await screen.findByText('Blend’n+ is free here for now')).toBeTruthy()
     expect(router.push).not.toHaveBeenCalled()
   })
 
   it('where it is sold, opens the paywall', async () => {
     await render(<Screen />)
     await waitFor(() => expect(api.getMyPlus).toHaveBeenCalled())
-    fireEvent.press(await screen.findByRole('button', { name: /^Blend’n\+, Not subscribed/ }))
+    fireEvent.press(await screen.findByRole('button', { name: /^Blend’n\+, See plans/ }))
     await waitFor(() => expect(router.push).toHaveBeenCalledWith(expect.objectContaining({ pathname: '/plus' })))
   })
 })
@@ -345,6 +345,14 @@ it('each switch sends its own column, and only that', async () => {
   await waitFor(() => expect(friends().props.accessibilityState.disabled).toBe(false))
   fireEvent.press(friends())
   await waitFor(() => expect(api.updateProfile).toHaveBeenCalledWith('u_me', { friends_see_me_in_rooms: true }))
+})
+
+// D-L24: the sub names what the switch does now. Negative control: the static "Off: …" sub fails the On half.
+it('"Show online status" says what On means while it is on', async () => {
+  api.getProfile.mockResolvedValue({ success: true, data: { profile: { push_enabled: true, show_online: true } } } as never)
+  await render(<Screen />)
+  const labels = () => screen.queryAllByRole('switch', { includeHiddenElements: true }).map((n) => String(n.props.accessibilityLabel))
+  await waitFor(() => expect(labels()).toContain(`Show online status, ${ONLINE_STATUS_HINT.on}`))
 })
 
 it('opens About and Contact support', async () => {

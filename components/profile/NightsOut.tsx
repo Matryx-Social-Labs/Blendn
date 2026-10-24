@@ -1,7 +1,7 @@
 import { StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 
 import { nightLabel, nightsView, NIGHT_TILES, NIGHTS_WEEKS, type NightsStatus } from '../../lib/meProfile'
-import { COLOR, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
 import { Banner } from '../ds/Banner'
 import { Button } from '../ds/Button'
 import { font, useBoldText } from '../ds/shared'
@@ -29,6 +29,17 @@ export const NIGHTS_FAILED = { withTiles: 'Your nights didn’t load. Showing wh
 /** `n nights out in the last 12 weeks`, in one voice for the line and the screen reader. */
 export const nightsLine = (nights: number) => `${nights} ${nights === 1 ? 'night' : 'nights'} out in the last ${NIGHTS_WEEKS} weeks`
 
+const nightsCount = (n: number) => `${n.toLocaleString('en-US')} ${n === 1 ? 'night' : 'nights'}`
+
+/** D-H1: a count above 0 with nothing the list may show yet. Never "your first night". */
+export const NIGHTS_HELD = {
+  locked: (total: number) => `${nightsCount(total)} · the older ones are with Blend’n+`,
+  /** Under the tiles: the server's admin S-1 contract, the latest 3 ended nights shown and the rest counted. */
+  more: (locked: number) => `${locked.toLocaleString('en-US')} more ${locked === 1 ? 'night' : 'nights'} with Blend’n+`,
+  pending: (total: number) => `${nightsCount(total)} · ${total === 1 ? 'it lands' : 'they land'} here once ${total === 1 ? 'it ends' : 'they end'}`,
+  action: 'See Blend’n+',
+} as const
+
 /**
  * Nights out on Me (Flow 6 `me` 01 · 04 · 05 · 06): the section heading with See all, the count in a line, and the six latest
  * nights as a grid of three. Loading is that grid as skeletons at the tiles' own size; a refresh that failed keeps the last good
@@ -42,6 +53,9 @@ export function NightsOut({
   onRetry,
   retrying = false,
   onFirstNight,
+  lockedCount = 0,
+  total = null,
+  onUnlock,
 }: {
   status: NightsStatus
   /** Past events you attended, newest first (`pastEventRows`). */
@@ -52,10 +66,16 @@ export function NightsOut({
   retrying?: boolean
   /** What the first-night card's button does (open what's on). */
   onFirstNight: () => void
+  /** Nights the server kept behind Blend'n+ (`/me/attendance` `lockedCount`). */
+  lockedCount?: number
+  /** Every night you have, the locked ones included; null when the server didn't say. */
+  total?: number | null
+  /** What "See Blend'n+" does when nights are locked. */
+  onUnlock?: () => void
 }) {
   const bold = useBoldText()
   const { width } = useWindowDimensions()
-  const view = nightsView(status, events)
+  const view = nightsView(status, events, lockedCount, total)
   // Three across, two 8 pt gaps between them, inside the screen's gutters.
   const cell = { width: Math.floor((width - SPACE.gutter * 2 - SPACE.sm * (COLUMNS - 1)) / COLUMNS) }
 
@@ -93,6 +113,15 @@ export function NightsOut({
         />
       ) : null}
 
+      {view.kind === 'locked' || view.kind === 'pending' ? (
+        <View testID={`nights-${view.kind}`} style={styles.held}>
+          <Text style={[font('meta', bold), styles.muted]} maxFontSizeMultiplier={MAX_FONT_SCALE.meta}>
+            {view.kind === 'locked' ? NIGHTS_HELD.locked(view.total) : NIGHTS_HELD.pending(view.total)}
+          </Text>
+          {view.kind === 'locked' && onUnlock ? <Button kind="lit" size="md" label={NIGHTS_HELD.action} onPress={onUnlock} /> : null}
+        </View>
+      ) : null}
+
       {view.kind === 'tiles' ? (
         <>
           {view.nights > 0 ? <Text style={[font('meta', bold), styles.muted]}>{nightsLine(view.nights)}</Text> : null}
@@ -103,6 +132,14 @@ export function NightsOut({
               </View>
             ))}
           </View>
+          {view.locked > 0 ? (
+            <View testID="nights-more" style={styles.held}>
+              <Text style={[font('meta', bold), styles.muted]} maxFontSizeMultiplier={MAX_FONT_SCALE.meta}>
+                {NIGHTS_HELD.more(view.locked)}
+              </Text>
+              {onUnlock ? <Button kind="lit" size="md" label={NIGHTS_HELD.action} onPress={onUnlock} /> : null}
+            </View>
+          ) : null}
         </>
       ) : null}
     </ProfileSection>
@@ -112,6 +149,7 @@ export function NightsOut({
 const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
   first: { borderRadius: RADIUS.mediaInCard, backgroundColor: COLOR.surfaceSunken, padding: FIRST_PAD, gap: SPACE.sm },
+  held: { gap: SPACE.sm, alignItems: 'flex-start' },
   firstAction: { alignSelf: 'stretch', marginTop: SPACE.sm },
   ink: { color: COLOR.textPrimary },
   muted: { color: COLOR.textSecondary },

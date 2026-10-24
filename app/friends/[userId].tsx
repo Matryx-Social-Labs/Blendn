@@ -11,7 +11,7 @@ import { PhotoViewer } from '../../components/profile/PhotoViewer'
 import { ProfileBar } from '../../components/profile/ProfileBar'
 import { dockClearance, ProfileDock } from '../../components/profile/ProfileDock'
 import { heroHeightFor, ProfileHeroStage } from '../../components/profile/ProfileHeroStage'
-import { ProfileBio, ProfileDetail, ProfileGallery, ProfileInterests, ProfileSection, SECTION_GAP } from '../../components/profile/ProfileSections'
+import { ProfileBody, SECTION_GAP } from '../../components/profile/ProfileSections'
 import type { Rect } from '../../components/ds/chatShared'
 import { SkeletonBlock } from '../../components/Skeleton'
 import { useToast } from '../../components/Toast'
@@ -20,8 +20,8 @@ import { COLOR, FONT_FAMILY, SPACE } from '../../lib/design/tokens'
 import { friendsSinceParts, type FriendProfile } from '../../lib/friends'
 import { noteFriendGone } from '../../lib/friendsGone'
 import { isGone } from '../../lib/loadFailure'
-import { showUserSafetyActions } from '../../lib/safetyUtils'
-import { showSheet } from '../../lib/sheet'
+import { blockStep, userReportStep } from '../../lib/safetyUtils'
+import { showSheet, type Sheet } from '../../lib/sheet'
 
 /**
  * A friend's profile — opened from the friends list, never from a room.
@@ -32,8 +32,8 @@ import { showSheet } from '../../lib/sheet'
  * turned on "Friends can see who I am in rooms".
  *
  * Message opens (or finds) a DM that needs no shared event. Unfriend is quiet:
- * nobody is told, and the DM stays. Report or block is in the corner, as on
- * every profile.
+ * nobody is told, and the DM stays. Remove friend, Block and Report are in the
+ * corner's menu. The body is `/user/[id]`'s (`ProfileBody`), plus Friends since.
  */
 function FriendProfileScreenContent() {
   const { userId } = useLocalSearchParams<{ userId: string }>()
@@ -113,25 +113,41 @@ function FriendProfileScreenContent() {
    * every other "are you sure" on a person lives (block, report, leave). A
    * refusal stays in the sheet and turns the button into Try again.
    */
-  const confirmUnfriend = () => {
+  const unfriendStep = (who: FriendProfile): Sheet => ({
+    kind: 'actions',
+    hue: 'rose',
+    title: `Remove ${who.name}?`,
+    message: "They won’t be told. Your messages stay, and you can add each other again later.",
+    actions: [
+      {
+        label: 'Remove friend',
+        variant: 'destructive',
+        run: async () => {
+          const result = await apiClient.removeFriend(who.userId)
+          if (!result.success) return { ok: false, error: "That didn’t go through. Try again." }
+          noteFriendGone(who.userId)
+          router.back()
+          return { ok: true, toast: `${who.name} is no longer a friend` }
+        },
+      },
+      { label: 'Cancel', cancel: true },
+    ],
+  })
+
+  /*
+   * The corner's one menu (D26): Remove friend (destructive, confirmed) with Block and Report, the same steps every profile's
+   * sheet takes. Remove friend used to float under the sections, where at AX it peeked under the Message dock (D-L31).
+   */
+  const openMore = () => {
     if (!friend) return
     showSheet({
       kind: 'actions',
       hue: 'rose',
-      title: `Remove ${friend.name}?`,
-      message: "They won’t be told. Your messages stay, and you can add each other again later.",
+      title: friend.name,
       actions: [
-        {
-          label: 'Remove friend',
-          variant: 'destructive',
-          run: async () => {
-            const result = await apiClient.removeFriend(friend.userId)
-            if (!result.success) return { ok: false, error: "That didn’t go through. Try again." }
-            noteFriendGone(friend.userId)
-            router.back()
-            return { ok: true, toast: `${friend.name} is no longer a friend` }
-          },
-        },
+        { label: 'Remove friend', variant: 'destructive', next: () => unfriendStep(friend) },
+        { label: 'Block', variant: 'destructive', next: () => blockStep(friend.name, friend.userId, back) },
+        { label: 'Report', next: () => userReportStep(friend.name, friend.userId) },
         { label: 'Cancel', cancel: true },
       ],
     })
@@ -193,7 +209,7 @@ function FriendProfileScreenContent() {
         title={friend.name}
         overPhoto
         onBack={back}
-        actions={[{ icon: 'ellipsis', label: 'Report or block', onPress: () => showUserSafetyActions(friend.name, friend.userId, back) }]}
+        actions={[{ icon: 'ellipsis', label: 'More', onPress: openMore }]}
       />
       <Animated.ScrollView
         testID="friend-scroll"
@@ -220,47 +236,24 @@ function FriendProfileScreenContent() {
             {since.date ? <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.sinceDate]}>{since.date}</Text> : null}
           </Text>
 
-          {friend.bio ? (
-            <ProfileSection title="About">
-              <ProfileBio text={friend.bio} />
-            </ProfileSection>
-          ) : null}
-
-          {friend.interests.length > 0 ? (
-            <ProfileSection title="Interests">
-              <ProfileInterests interests={friend.interests.map((i) => i.name)} />
-            </ProfileSection>
-          ) : null}
-
-          {friend.occupation ? <ProfileDetail label="OCCUPATION" value={friend.occupation} /> : null}
-          {friend.education ? <ProfileDetail label="EDUCATION" value={friend.education} variant="ruled" /> : null}
-
-          {friend.photos.length > 1 ? (
-            <ProfileSection title="Photos" trailing={`${friend.photos.length} photos`}>
-              {/*
-                The photos beyond the hero's: the hero already cycles the first,
-                so it is not repeated here. `+ 1` keeps the viewer on the
-                photo that was tapped.
-              */}
-              <ProfileGallery photos={friend.photos.slice(1)} columnWidth={columnWidth} onPressPhoto={(i, from) => setViewer({ index: i + 1, from })} />
-            </ProfileSection>
-          ) : null}
-
-          <Button
-            kind="tertiary"
-            muted
-            label="Remove friend"
-            accessibilityLabel={`Remove friend ${friend.name}`}
-            onPress={confirmUnfriend}
-            style={styles.remove}
-            testID="friend-remove"
+          {/* The same body `/user/[id]` draws for this person (D26): one person, one page. */}
+          <ProfileBody
+            facts={{
+              bio: friend.bio,
+              interests: friend.interests.map((i) => i.name),
+              occupation: friend.occupation,
+              education: friend.education,
+              photos: friend.photos,
+            }}
+            columnWidth={columnWidth}
+            onPressPhoto={(i, from) => setViewer({ index: i, from })}
           />
         </View>
       </Animated.ScrollView>
 
-      {/* Message, where the thumb is: the page's one primary (Flow 6 `friend`, docked as the profile's tray is). */}
+      {/* Message, where the thumb is: a positive action inside the rose world is lit (D1, PLAN-buttons), as on `/user/[id]`. */}
       <ProfileDock testID="friend-dock" onHeight={setDockHeight}>
-        <Button kind="primary" icon="message-circle" label="Message" loading={opening} onPress={() => void message()} style={styles.flex} testID="friend-message" />
+        <Button kind="lit" size="md" icon="message-circle" label="Message" loading={opening} onPress={() => void message()} style={styles.flex} testID="friend-message" />
       </ProfileDock>
 
       <PhotoViewer
@@ -282,7 +275,6 @@ const styles = StyleSheet.create({
   canvas: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.sm, gap: SECTION_GAP },
   since: { color: COLOR.textSecondary },
   sinceDate: { color: COLOR.textPrimary },
-  remove: { alignSelf: 'center' },
   flex: { flex: 1 },
 })
 

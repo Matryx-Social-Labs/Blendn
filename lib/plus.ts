@@ -36,14 +36,14 @@ export type PlusFeature = { icon: IconName; title: string; detail: string }
  * What Blendn+ is — what exists today, never anything on the never-sold list
  * (plan v2 §9.3). Partner perks and crew extras join this list when they are
  * built (SCRUM-584), not before: nothing is sold that cannot be used. Until
- * then they are the page's two "Coming soon" rows (`PLUS_COMING_SOON`).
+ * then they are the page's one "On the way" line (`PLUS_COMING_SOON`, D22).
  */
 export const PLUS_FEATURES: readonly PlusFeature[] = [
   { icon: 'radio', title: 'Stay live while you’re there', detail: 'Past the free window, up to 4 hours' },
   { icon: 'history', title: 'Your full night history', detail: 'Beyond the last 3 nights' },
 ]
 
-/** Promised in the design, not served yet: drawn with a "Coming soon" tag, no tap, no sheet (R3-G). */
+/** Promised in the design, not served yet: named once, in the "On the way" line under What you get (D22), never as a row. */
 export const PLUS_COMING_SOON: readonly PlusFeature[] = [
   { icon: 'gift', title: 'Partner perks', detail: 'At places that run them' },
   { icon: 'sparkles', title: 'Cosmetics', detail: 'Looks for your disc and creature' },
@@ -176,7 +176,25 @@ export function planSubline(offer: PlusOffer, offers: readonly PlusOffer[]): str
   if (!each) return null
   const monthly = offers.find((o) => o.pkg.identifier === '$rc_monthly')?.pkg.product.price
   const saved = monthly && perMonth ? Math.round((1 - perMonth / monthly) * 100) : 0
-  return `About ${each} a month${saved > 0 ? ` · Save ${saved}%` : ''}`
+  // A non-breaking pair: "Save" never ends a line with its number on the next.
+  return `About ${each} a month${saved > 0 ? ` · Save\u00A0${saved}%` : ''}`
+}
+
+/** D2: the tax sentence, only when every price on the screen is in rupees. The store's own sheet states tax per storefront. */
+export const GST_LINE = 'Prices include GST.'
+
+export function taxLine(offers: readonly PlusOffer[] | null | undefined): string | null {
+  if (!offers?.length) return null
+  return offers.every((o) => o.pkg.product.currencyCode === 'INR') ? GST_LINE : null
+}
+
+/** D4: what the store's subscriptions page can do. The App Store has no pause; Google Play does. */
+export const storeManageHint = (store: 'ios' | 'android'): string =>
+  store === 'android' ? 'Change plan, pause or cancel · one tap' : 'Change plan or cancel · one tap'
+
+/** D4: a granted Blend'n+ has no store row, only this. */
+export function grantManageLine(expiresAt: string | null | undefined): string {
+  return `Free ${expiresAt ? `until ${dateOf(expiresAt)}` : 'for now'} · nothing to manage`
 }
 
 /** The row for a subscription package; null for the Night Pass (its own row) or a package we do not name. */

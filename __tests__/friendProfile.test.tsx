@@ -35,7 +35,10 @@ jest.mock('../components/profile/ProfileSections', () => {
   const React = require('react')
   const { Text, View } = require('react-native')
   const stub = (label: string) => (p: { title?: string }) => React.createElement(Text, null, p.title ?? label)
+  // The real `ProfileBody` (the one body both profile pages draw, D26) over the stubbed pieces is not possible across a module
+  // boundary, so the real module is kept and only its leaf pieces below stand in where a test reads them.
   return {
+    ...jest.requireActual('../components/profile/ProfileSections'),
     SECTION_GAP: 28,
     ProfileSection: (p: { title: string; children: unknown }) => React.createElement(View, null, React.createElement(Text, null, p.title), p.children),
     ProfileBio: stub('bio'),
@@ -47,9 +50,10 @@ jest.mock('../components/profile/ProfileSections', () => {
 
 import { router } from 'expo-router'
 import { apiClient } from '../lib/apiClient'
-import { COLOR } from '../lib/design/tokens'
 import { showSheet } from '../lib/sheet'
 import FriendProfileScreen from '../app/friends/[userId]'
+import { PROFILE_EMPTY } from '../components/profile/ProfileSections'
+import { SELECTION } from '../components/ds/shared'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
 const BEN = {
@@ -91,19 +95,18 @@ it('opens a DM when there is none', async () => {
   )
 })
 
-/** Runs the confirmation sheet's "Remove friend", as a tap on it would. */
-const runRemove = async () => {
-  const sheet = (showSheet as jest.Mock).mock.calls[0][0]
-  const remove = sheet.actions.find((a: { label: string }) => a.label === 'Remove friend')
-  return remove.run()
-}
+/** The corner menu's sheet, its "Remove friend" step, and that step's confirmation, as taps on them would. */
+const menu = () => (showSheet as jest.Mock).mock.calls[0][0]
+const confirmSheet = () => menu().actions.find((a: { label: string }) => a.label === 'Remove friend').next()
+const runRemove = async () => confirmSheet().actions.find((a: { label: string }) => a.label === 'Remove friend').run()
 
 it('asks in the app’s sheet, and stays on the profile saying so when removing fails', async () => {
   api.getFriend.mockResolvedValue({ success: true, data: BEN })
   api.removeFriend.mockResolvedValue({ success: false, error: 'nope' })
   await render(<FriendProfileScreen />)
-  fireEvent.press(await screen.findByLabelText('Remove friend Ben'))
-  expect(showSheet).toHaveBeenCalledWith(expect.objectContaining({ title: 'Remove Ben?' }))
+  fireEvent.press(await screen.findByLabelText('More'))
+  expect(showSheet).toHaveBeenCalledWith(expect.objectContaining({ title: 'Ben' }))
+  expect(confirmSheet()).toMatchObject({ title: 'Remove Ben?' })
   // The sheet keeps the refusal and turns the button into Try again.
   await expect(runRemove()).resolves.toEqual({ ok: false, error: "That didn’t go through. Try again." })
   expect(api.removeFriend).toHaveBeenCalledWith('u_ben')
@@ -114,7 +117,7 @@ it('leaves once the server agreed', async () => {
   api.getFriend.mockResolvedValue({ success: true, data: BEN })
   api.removeFriend.mockResolvedValue({ success: true, data: {} } as never)
   await render(<FriendProfileScreen />)
-  fireEvent.press(await screen.findByLabelText('Remove friend Ben'))
+  fireEvent.press(await screen.findByLabelText('More'))
   await expect(runRemove()).resolves.toMatchObject({ ok: true })
   expect(router.back).toHaveBeenCalled()
 })
@@ -123,7 +126,9 @@ it('does not repeat the hero’s first photo in the gallery', async () => {
   api.getFriend.mockResolvedValue({ success: true, data: { ...BEN, photos: ['a', 'b', 'c'] } })
   await render(<FriendProfileScreen />)
   // The hero cycles 'a'; the gallery is the rest.
-  expect(await screen.findByText('gallery: b,c')).toBeTruthy()
+  expect(await screen.findByLabelText('Photo 1 of 2')).toBeTruthy()
+  expect(screen.getByLabelText('Photo 2 of 2')).toBeTruthy()
+  expect(screen.queryByLabelText(/of 3$/)).toBeNull()
 })
 
 it('says plainly when they are no longer a friend', async () => {
@@ -146,9 +151,18 @@ it('does not call a failed load an unfriending, and tries again', async () => {
   expect(await screen.findByText('Ben, 31')).toBeTruthy()
 })
 
-it('sets "Remove friend" in textSecondary, as the frame does, not in the page’s white', async () => {
+/*
+ * D26 / D1 (D-M13, D-M15, D-L31): one friend, one page. Message is the rose-lit action `/user/[id]` draws, Remove friend is in the
+ * corner's menu with Block and Report (it floated under the sections and peeked under the dock at AX), and a friend with nothing
+ * filled in says so rather than leaving a void. Negative control: the gradient Message, or the floating Remove, fails this.
+ */
+it('Message is lit, Remove friend is in the corner menu, and an empty profile says so', async () => {
   api.getFriend.mockResolvedValue({ success: true, data: BEN })
   await render(<FriendProfileScreen />)
-  await screen.findByLabelText('Remove friend Ben')
-  expect(StyleSheet.flatten(screen.getByText('Remove friend').props.style).color).toBe(COLOR.textSecondary)
+  await screen.findByTestId('friend-message')
+  expect(StyleSheet.flatten(screen.getByTestId('friend-message').props.style).backgroundColor).toBe(SELECTION.rose.fill)
+  expect(screen.queryByText('Remove friend')).toBeNull()
+  expect(screen.getByText(PROFILE_EMPTY)).toBeTruthy()
+  fireEvent.press(screen.getByLabelText('More'))
+  expect(menu().actions.map((a: { label: string }) => a.label)).toEqual(['Remove friend', 'Block', 'Report', 'Cancel'])
 })

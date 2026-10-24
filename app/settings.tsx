@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { router, useFocusEffect } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Linking, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Linking, Platform, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
 import Animated, { LinearTransition, useReducedMotion } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Banner } from '../components/ds/Banner'
@@ -28,7 +28,9 @@ import { Logger } from '../lib/logger'
 import { useAuth, refreshAuthUser, signOut, signOutEverywhere, deleteAccount } from '../lib/useAuth'
 import { notificationsHint, useMutedRooms } from '../lib/mutedRooms'
 import { openPaywall } from '../lib/paywall'
-import { plusStatusLine, usePlusStatus, type PlusStatus } from '../lib/plus'
+import { usePlusStatus, type PlusStatus } from '../lib/plus'
+import { plusRowLine } from '../lib/mePlus'
+import { useMonthlyPrice } from '../lib/useMonthlyPrice'
 import { manageSubscriptionUrl } from '../lib/purchases'
 
 /** The banner's sentence when the profile could not be read (Flow 7 frame 06). */
@@ -322,7 +324,7 @@ function SettingsScreenContent() {
         // A running store subscription keeps billing after the account is gone: say so first (review H1).
         content: storePlus ? (
           <Text accessibilityLiveRegion="polite" style={[font('bodyStrong', bold), { color: COLOR.textPrimary }]}>
-            {`Cancel Blendn+ in your ${store} subscriptions first. Deleting your account doesn’t cancel it.`}
+            {`Cancel Blend’n+ in your ${store} subscriptions first. Deleting your account doesn’t cancel it.`}
           </Text>
         ) : undefined,
         onDismiss: () => {
@@ -426,8 +428,11 @@ function SettingsScreenContent() {
   }
 
   // The paywall, asked for: no cooldown (step 11, trigger `profile`). Free during launch where you go out: a row that says so and sells nothing (review H2).
-  const plusIsFree = plus && !plus.gated && !plus.active
-  const plusHint = plusIsFree ? 'Free during launch in your city' : (plusStatusLine(plus) ?? 'Not subscribed')
+  // The same line as Me's row (D23, `plusRowLine`): one account, one sentence on both.
+  const plusPrice = useMonthlyPrice(!!plus && !plus.active && plus.gated)
+  const plusLine = plusRowLine(plus, plusPrice, Platform.OS === 'android' ? 'android' : 'ios')
+  const plusIsFree = plusLine.free
+  const plusHint = plusLine.hint ?? undefined
 
   /** The Account card (R4.1 7.1): who is signed in, how, and the ways out. A Google or Apple account has no password to change. */
   const email = user?.email
@@ -476,7 +481,8 @@ function SettingsScreenContent() {
 
         <SettingsGroup title="Privacy">
           {/* What it does, in the row: the switch was a promise for a year (SCRUM-141). */}
-          {preferenceRow('showOnlineStatus', 'eye', 'Show online status', 'Off: you’re counted at events but not listed to other people there.')}
+          {/* D-L24: the sub names what the switch does now, on or off. */}
+          {preferenceRow('showOnlineStatus', 'eye', 'Show online status', ONLINE_STATUS_HINT[preferences.showOnlineStatus ? 'on' : 'off'])}
           {preferenceRow('shareReadReceipts', 'check-check', 'Read receipts')}
           {preferenceRow('locationSharing', 'navigation', 'Share location for nearby events')}
           {preferenceRow('friendsSeeMe', 'users', "Friends can see I’m here", "On: friends at the same event see you under Friends here, with your name and photo, and can message you. Off: you don’t show up for friends at events at all.")}
@@ -580,6 +586,13 @@ const styles = StyleSheet.create({
 })
 
 /** Violet world: one hue on this screen (`HueProvider`). */
+
+/** What "Show online status" does in the state it is in (D-L24): the sub said only what Off meant while the switch was On. */
+export const ONLINE_STATUS_HINT = {
+  on: 'On: people at the same event see you listed there.',
+  off: 'Off: you’re counted at events but not listed to other people there.',
+} as const
+
 export default function SettingsScreen() {
   return (
     <HueProvider value="violet">

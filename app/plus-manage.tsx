@@ -14,7 +14,7 @@ import { openStoreSubscriptions } from '../components/plus/storeActions'
 import { useToast } from '../components/Toast'
 import { apiClient } from '../lib/apiClient'
 import { COLOR, SPACE } from '../lib/design/tokens'
-import { planRowFor, waitForPlus, type PlusStatus } from '../lib/plus'
+import { grantManageLine, planRowFor, storeManageHint, waitForPlus, type PlusStatus } from '../lib/plus'
 import { manageCard, startsAgain } from '../lib/plusManage'
 import { canBuyAs, loadPlusOffers, restore, type PlusOffer, type RestoreOutcome } from '../lib/purchases'
 import { useAuth } from '../lib/useAuth'
@@ -108,6 +108,8 @@ function ManageContent() {
   }
 
   const start = () => router.push({ pathname: '/plus', params: { trigger: 'profile' } } as never)
+  // A gift of ours (D4): no store holds it, so no store row and no word about cancelling in one.
+  const granted = status?.source === 'grant'
   const storeName = card?.store === 'android' ? 'Google Play' : card?.store === 'ios' ? 'the App Store' : 'the store'
 
   return (
@@ -133,16 +135,23 @@ function ManageContent() {
         ) : card ? (
           <>
             <ManageStatusRow status={card.status} sentence={card.sentence} store={card.store} onFix={manage} testID="plus-manage-status" />
+            {granted ? (
+              <Text testID="plus-manage-grant" style={[font('meta', bold), styles.grant]}>
+                {grantManageLine(status?.expiresAt)}
+              </Text>
+            ) : null}
             <SettingsGroup>
-              <SettingsRow
-                icon="external-link"
-                title={`Manage in ${storeName}`}
-                hint="Change plan, pause or cancel · one tap"
-                trail="external"
-                opens={`opens ${storeName}`}
-                onPress={manage}
-                testID="plus-manage-store"
-              />
+              {granted ? null : (
+                <SettingsRow
+                  icon="credit-card"
+                  title={`Manage in ${storeName}`}
+                  hint={storeManageHint(card.store)}
+                  trail="external"
+                  opens={`opens ${storeName}`}
+                  onPress={manage}
+                  testID="plus-manage-store"
+                />
+              )}
               <SettingsRow icon="rotate-ccw" title="Restore purchases" trail="chevron" busy={restoring} disabled={restoring} onPress={() => void restoreAll()} testID="plus-manage-restore" />
             </SettingsGroup>
             {card.status === 'launch' ? (
@@ -157,7 +166,7 @@ function ManageContent() {
                 testID="plus-manage-start"
               />
             ) : null}
-            <Text style={[font('meta', bold), styles.foot]}>{FOOT}</Text>
+            {granted ? null : <Text style={[font('meta', bold), styles.foot]}>{FOOT}</Text>}
           </>
         ) : null}
       </ScrollView>
@@ -182,4 +191,5 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: SPACE.gutter, gap: SPACE.xl },
   loading: { height: SPACE.xxxl + SPACE.xl, alignItems: 'center', justifyContent: 'center' },
   foot: { color: COLOR.textTertiary, paddingHorizontal: SPACE.md },
+  grant: { color: COLOR.textSecondary, paddingHorizontal: SPACE.md },
 })

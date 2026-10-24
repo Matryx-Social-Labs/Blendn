@@ -139,9 +139,9 @@ describe('what is sold', () => {
       pkg('$rc_three_month', '₹499.00'),
     ])
     expect(offers.map((o) => [o.title, o.length, o.price])).toEqual([
-      ['Blendn+ · Monthly', '1 month, renews monthly', '₹199.00'],
-      ['Blendn+ · 3 months', '3 months, renews every 3 months', '₹499.00'],
-      ['Blendn+ · Yearly', '1 year, renews yearly', '₹1,499.00'],
+      ['Blend’n+ · Monthly', '1 month, renews monthly', '₹199.00'],
+      ['Blend’n+ · 3 months', '3 months, renews every 3 months', '₹499.00'],
+      ['Blend’n+ · Yearly', '1 year, renews yearly', '₹1,499.00'],
       ['Night Pass · 24 hours', '24 hours, does not renew', '₹49.00'],
     ])
   })

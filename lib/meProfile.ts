@@ -187,15 +187,48 @@ export type NightsStatus = 'loading' | 'ready' | 'failed'
  * the tiles with a notice and Try again when a refresh failed (it keeps the last good list), and an invitation, never a grid,
  * for someone with no night yet. A load that failed with nothing to show says so and offers Try again, without tiles. Pure, so the
  * choice between them is testable.
+ *
+ * "No night yet" is the count's word, never the list's (D-H1): a free account sees its latest 3 nights and `lockedCount` more
+ * are with Blend'n+, and those 3 can be nights that haven't ended (the list keeps ended ones only). So an empty list under a
+ * count above 0 is `locked` when the server kept nights back, `pending` when the nights it has are still going, and `first`
+ * only when the count is 0 (or unknown, from a server that sends none).
  */
 export type NightsView =
   | { kind: 'loading' }
   | { kind: 'first' }
   | { kind: 'failed' }
-  | { kind: 'tiles'; failed: boolean; nights: number }
+  | { kind: 'locked'; total: number }
+  | { kind: 'pending'; total: number }
+  /** `locked`: the older nights kept behind Blend'n+, said under the tiles (S-1: a free account sees its latest 3 ended). */
+  | { kind: 'tiles'; failed: boolean; nights: number; locked: number }
 
-export function nightsView(status: NightsStatus, rows: readonly { id: string; start_time: string }[], now: Date = new Date()): NightsView {
-  if (rows.length > 0) return { kind: 'tiles', failed: status === 'failed', nights: nightsGrid(rows as { id: string; start_time: string }[], now).nights }
+export function nightsView(
+  status: NightsStatus,
+  rows: readonly { id: string; start_time: string }[],
+  lockedCount: number = 0,
+  total: number | null = null,
+  now: Date = new Date()
+): NightsView {
+  if (rows.length > 0) {
+    return { kind: 'tiles', failed: status === 'failed', nights: nightsGrid(rows as { id: string; start_time: string }[], now).nights, locked: Math.max(0, lockedCount) }
+  }
   if (status === 'loading') return { kind: 'loading' }
-  return status === 'failed' ? { kind: 'failed' } : { kind: 'first' }
+  if (status === 'failed') return { kind: 'failed' }
+  const count = Math.max(total ?? 0, lockedCount)
+  if (lockedCount > 0) return { kind: 'locked', total: count }
+  return count > 0 ? { kind: 'pending', total: count } : { kind: 'first' }
+}
+
+/** What `/me/attendance` says beyond its rows: the nights kept behind Blend'n+, and every night (the shown ones plus those). */
+export interface NightsCounts {
+  locked: number
+  /** Null from a server that sends no pagination. */
+  total: number | null
+}
+
+export function nightsCounts(payload: { pagination?: { totalCount: number }; lockedCount?: number } | null | undefined): NightsCounts {
+  const locked = Math.max(0, payload?.lockedCount ?? 0)
+  // `totalCount` is the nights the list may show (the server's `visible`); the locked ones are on top of it.
+  const shown = payload?.pagination?.totalCount
+  return { locked, total: typeof shown === 'number' ? shown + locked : null }
 }

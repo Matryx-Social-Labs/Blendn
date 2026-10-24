@@ -1,6 +1,6 @@
 import { router, useFocusEffect } from 'expo-router'
-import { useCallback, useState } from 'react'
-import { FlatList, StyleSheet, View } from 'react-native'
+import { useCallback, useMemo, useState } from 'react'
+import { FlatList, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { SearchField } from '../../components/ds/SearchField'
@@ -15,12 +15,62 @@ import { RequestsRow } from '../../components/friends/RequestsRow'
 import { friendsSinceParts, type Friend } from '../../lib/friends'
 import { groupedCount } from '../../lib/friendsHere'
 import { FRIEND_SEARCH_MAX, FRIENDS_PAGE } from '../../lib/friendsPaging'
-import { COLOR, SPACE } from '../../lib/design/tokens'
+import { COLOR, SIZE, SPACE } from '../../lib/design/tokens'
 import { useFriendRequests } from '../../lib/useFriendRequests'
 import { useFriendsList } from '../../lib/useFriendsList'
 import { usePullToRefresh } from '../../lib/usePullToRefresh'
 import { useTopBarState } from '../../lib/useTopBarState'
-import { HueProvider } from '../../components/ds/shared'
+import { CONTROL_FONT_CAP, font, HueProvider, useBoldText } from '../../components/ds/shared'
+
+/** D7: "Recently added" holds this many (the server's newest first). */
+export const RECENTLY_ADDED = 5
+/** Below this many friends the list is a screenful and visibly all of itself: no sections. */
+export const SECTIONS_FROM = 12
+/** A section's head: one capped line on a fixed height, so the list keeps `getItemLayout`. */
+const SECTION_HEAD = SIZE.tag
+
+export type FriendItem = { kind: 'head'; key: string; title: string } | { kind: 'friend'; key: string; friend: Friend }
+
+/** "A" for Aarav and Ábhi; "#" for a name that starts with no Latin letter. */
+const letterOf = (name: string): string => {
+  const c = name.trim().normalize('NFD').charAt(0).toUpperCase()
+  return c >= 'A' && c <= 'Z' ? c : '#'
+}
+
+/**
+ * D7 (D-LM1): the loaded friends as "Recently added" (the server's newest, up to `RECENTLY_ADDED`), then A–Z under a head
+ * per letter, "#" last. Built from the pages read so far: a later page adds names into the letters it belongs to. A search,
+ * or a list short enough to be visibly all of itself, is one plain run.
+ */
+export function friendItems(friends: readonly Friend[], sectioned: boolean): FriendItem[] {
+  const row = (prefix: string) => (friend: Friend): FriendItem => ({ kind: 'friend', key: `${prefix}${friend.userId}`, friend })
+  if (!sectioned) return friends.map(row(''))
+  const sorted = [...friends].sort((a, b) => {
+    const [la, lb] = [letterOf(a.name), letterOf(b.name)]
+    if ((la === '#') !== (lb === '#')) return la === '#' ? 1 : -1
+    return a.name.localeCompare(b.name, 'en', { sensitivity: 'base' })
+  })
+  const items: FriendItem[] = [{ kind: 'head', key: 'h:recent', title: 'Recently added' }, ...friends.slice(0, RECENTLY_ADDED).map(row('r:'))]
+  let letter = ''
+  for (const friend of sorted) {
+    const next = letterOf(friend.name)
+    if (next !== letter) items.push({ kind: 'head', key: `h:${next}`, title: next })
+    letter = next
+    items.push(row('a:')(friend))
+  }
+  return items
+}
+
+/** Each item's length and offset, for `getItemLayout`: heads are `SECTION_HEAD`, rows `PERSON_ROW_HEIGHT`. */
+export function itemOffsets(items: readonly FriendItem[]): number[] {
+  const offsets: number[] = []
+  let at = 0
+  for (const item of items) {
+    offsets.push(at)
+    at += item.kind === 'head' ? SECTION_HEAD : PERSON_ROW_HEIGHT
+  }
+  return offsets
+}
 
 /**
  * Your friends — the list the count on the Me tab opens.
@@ -30,8 +80,8 @@ import { HueProvider } from '../../components/ds/shared'
  * Requests waiting on you sit above the list, when there are any, and Make a
  * crew from the list once there is anybody to make one with.
  *
- * Read a page at a time by the server's cursor and windowed (fixed 64 pt rows, `getItemLayout`), so a thousand friends
- * cost a screenful. The count under the title is the server's whole list, drawn once it is more than one page: a short
+ * Read a page at a time by the server's cursor and windowed (fixed 64 pt rows and 32 pt sticky heads, `getItemLayout`), so a
+ * thousand friends cost a screenful. Past a screenful the list is sectioned: Recently added, then A–Z (`friendItems`). The count under the title is the server's whole list, drawn once it is more than one page: a short
  * list is visibly all of itself.
  */
 function FriendsScreenContent() {
@@ -61,6 +111,8 @@ function FriendsScreenContent() {
   const failed = list.status === 'failed'
 
   const searched = list.searched !== null
+  const items = useMemo(() => friendItems(list.friends, !searched && list.allTotal >= SECTIONS_FROM), [list.friends, list.allTotal, searched])
+  const offsets = useMemo(() => itemOffsets(items), [items])
   const empty = failed ? (
     <StateScreen
       icon="cloud-off"
@@ -135,10 +187,12 @@ function FriendsScreenContent() {
         <View style={styles.flex}>
           <FlatList
             testID="friends-list"
-            data={list.friends}
-            keyExtractor={(f) => f.userId}
-            renderItem={({ item }) => <FriendRow friend={item} />}
-            getItemLayout={(_data, index) => ({ length: PERSON_ROW_HEIGHT, offset: PERSON_ROW_HEIGHT * index, index })}
+            data={items}
+            keyExtractor={(item) => item.key}
+            renderItem={({ item }) => (item.kind === 'head' ? <SectionHead title={item.title} /> : <FriendRow friend={item.friend} />)}
+            getItemLayout={(_data, index) => ({ length: items[index]?.kind === 'head' ? SECTION_HEAD : PERSON_ROW_HEIGHT, offset: offsets[index] ?? 0, index })}
+            // The heads stick under the bar; `ListHeaderComponent` (when drawn) is index 0 to the list, so they shift by one.
+            stickyHeaderIndices={items.flatMap((item, i) => (item.kind === 'head' ? [i + (list.friends.length && header ? 1 : 0)] : []))}
             onEndReachedThreshold={1.5}
             onEndReached={() => void list.loadMore()}
             initialNumToRender={12}
@@ -156,6 +210,18 @@ function FriendsScreenContent() {
           {pull.indicator}
         </View>
       )}
+    </View>
+  )
+}
+
+/** A section's head, sticky over the rows: on solid ink, so a row never shows through it. */
+function SectionHead({ title }: { title: string }) {
+  const bold = useBoldText()
+  return (
+    <View style={styles.head}>
+      <Text accessibilityRole="header" numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold), styles.headText]}>
+        {title}
+      </Text>
     </View>
   )
 }
@@ -182,6 +248,8 @@ const styles = StyleSheet.create({
   // The frame's column: the request card and Make a crew stand 8 apart, and the first friend 8 under them.
   rows: { gap: SPACE.sm, paddingBottom: SPACE.sm, paddingHorizontal: 0 },
   search: { paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.sm },
+  head: { height: SECTION_HEAD, justifyContent: 'center', backgroundColor: COLOR.ink },
+  headText: { color: COLOR.textSecondary },
   offline: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.xs, paddingBottom: SPACE.sm },
 })
 

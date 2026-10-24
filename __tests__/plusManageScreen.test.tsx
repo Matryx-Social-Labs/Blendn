@@ -80,12 +80,34 @@ describe('an active subscription', () => {
     expect(loadPlusOffers).not.toHaveBeenCalled()
   })
 
+  // D4: the App Store has no pause. Negative control: the old "Change plan, pause or cancel" hint fails this.
+  it('the App Store row offers what the App Store can do: no pause; Google Play keeps it', async () => {
+    await mount(status({}))
+    expect(screen.getByText('Change plan or cancel · one tap')).toBeTruthy()
+    expect(screen.queryByText(/pause/)).toBeNull()
+    await screen.unmount()
+    await mount(status({ source: 'google' }))
+    expect(screen.getByText('Change plan, pause or cancel · one tap')).toBeTruthy()
+  })
+
   it('Manage opens the store’s own page', async () => {
     const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(true)
     await mount(status({}))
     await act(async () => { fireEvent.press(screen.getByRole('link', { name: /Manage in the App Store/ })) })
     expect(open).toHaveBeenCalledWith('https://apps.apple.com/account/subscriptions')
     open.mockRestore()
+  })
+})
+
+// D4: a gift of ours is in no store. Negative control: drawing the store row for every card fails this.
+describe('a granted Blend’n+', () => {
+  it('has no store row and no word about cancelling: "Free until {date} · nothing to manage", and Restore stays', async () => {
+    await mount(status({ source: 'grant', expiresAt: '2027-10-23T12:00:00' }))
+    expect(screen.queryByTestId('plus-manage-store')).toBeNull()
+    expect(screen.queryByRole('link', { name: /Manage in/ })).toBeNull()
+    expect(screen.getByTestId('plus-manage-grant').props.children).toBe('Free until 23 Oct 2027 · nothing to manage')
+    expect(screen.queryByText(/Cancelling is one tap/)).toBeNull()
+    expect(screen.getByRole('button', { name: /Restore purchases/ })).toBeTruthy()
   })
 })
 

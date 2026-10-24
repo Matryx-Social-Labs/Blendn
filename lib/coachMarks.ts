@@ -148,10 +148,10 @@ export function useCoachMark(id: CoachMarkId, { ready }: { ready: boolean }) {
  * `app/offer/[id].tsx`, `components/crews/BlendRoom.tsx`); `__tests__/tipsScreen.test.tsx` fails when one drifts from this list.
  */
 export const COACH_TIPS: readonly { id: CoachMarkId; screen: string; when: string; text: string }[] = [
-  { id: 'events_preview_hint', screen: 'The Pulse', when: 'The first event card is on screen', text: 'Hold an event to save, share or preview it.' },
+  { id: 'events_preview_hint', screen: 'The Pulse', when: 'When you first see an event', text: 'Hold an event to save, share or preview it.' },
   // The mark names the place you are at; here it is the same sentence for any place.
-  { id: 'centre_button_checkin', screen: 'The centre button', when: 'The first time it changes because you can check in', text: 'You’re at the venue. Tap the button, then hold to check in.' },
-  { id: 'room_reveal', screen: 'The Room', when: 'The first time you’re in a Room', text: 'People here can’t see your name or photo until you choose to show them. You decide, per event.' },
-  { id: 'door_pass', screen: 'A door pass', when: 'The first time one is live', text: 'Show this to the staff. They type the code and tap Redeemed. It works once, today.' },
-  { id: 'blend_first_open', screen: 'A Blend', when: 'The first time you open one', text: 'Everyone here is on tonight’s names until they reveal.' },
+  { id: 'centre_button_checkin', screen: 'The centre button', when: 'When you first arrive somewhere you can check in', text: 'You’re at the venue. Tap the button, then hold to check in.' },
+  { id: 'room_reveal', screen: 'The Room', when: 'Your first time in a Room', text: 'People here can’t see your name or photo until you choose to show them. You decide, per event.' },
+  { id: 'door_pass', screen: 'A door pass', when: 'When you first have a pass to show', text: 'Show this to the staff. They type the code and tap Redeemed. It works once, today.' },
+  { id: 'blend_first_open', screen: 'A Blend', when: 'The first Blend you open', text: 'Everyone here is on tonight’s names until they reveal.' },
 ]

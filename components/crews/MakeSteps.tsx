@@ -13,7 +13,7 @@ import { FRIEND_SEARCH_MAX } from '../../lib/friendsPaging'
 import { Avatar } from '../ds/Avatar'
 import { ChipSet } from '../ds/ChipSet'
 import { CrewCard } from '../ds/CrewCard'
-import { CrewEmblem } from '../ds/CrewEmblem'
+import { CrewEmblem, EMBLEM_PALETTES, emblemFor } from '../ds/CrewEmblem'
 import { CONTROL_FONT_CAP, font, minTarget, quickTransition, useBoldText, useIncreaseContrast, useSelection } from '../ds/shared'
 import { SegmentedControl } from '../ds/SegmentedControl'
 import { FieldLabel, TextArea, TextField } from '../ds/TextField'
@@ -57,6 +57,25 @@ export type NameStepProps = {
   /** The stand-in emblem: the server draws the real one, from its own seed, when the crew is made. */
   previewSeed: string
   intentText: string
+}
+
+/** The rose palette (hue 350), the people world's: a new crew's stand-in emblem is drawn in it (D-L17). */
+const ROSE_PALETTE = EMBLEM_PALETTES.length - 1
+/** How far `previewEmblemSeed` looks: one in twelve lands on a palette, so this is never reached in practice. */
+const SEED_TRIES = 240
+
+/**
+ * The emblem the preview draws. A new crew's seed (`preview-…`, from Make a crew) is a stand-in until the server draws the
+ * real one, and was any of twelve palettes, an off-hue blue on a rose screen; it is walked to the first variant on the rose
+ * palette, so it is stable for the seed and in the screen's hue. A made crew's own seed (Edit crew) is drawn as it is.
+ */
+export function previewEmblemSeed(seed: string): string {
+  if (!seed.startsWith('preview-')) return seed
+  for (let i = 0; i < SEED_TRIES; i++) {
+    const next = `${seed}:${i}`
+    if (emblemFor(next).palette === ROSE_PALETTE) return next
+  }
+  return seed
 }
 
 /** Step 1 · Name and vibe, with the live preview of the card as strangers see it. */
@@ -144,11 +163,12 @@ export function NameStep(p: NameStepProps) {
           onSheet
           crew={{
             name: p.name.trim() || 'Crew name',
-            emblemSeed: p.previewSeed,
+            emblemSeed: previewEmblemSeed(p.previewSeed),
             size: 1,
             here: 0,
             bio: p.bio.trim() || 'A line about the crew',
-            tags: labels.length ? labels : ['Tags'],
+            // No placeholder chip: an outlined "Tags" read as something to tap (D-L17).
+            tags: labels,
             intent: p.intentText,
           }}
         />
@@ -330,7 +350,7 @@ export function ConsentStep({ name, summary, previewSeed, keepAnonymous, onKeepA
         </View>
       </View>
       <View style={styles.summary} accessible accessibilityLabel={`${name}, ${summary}`}>
-        <CrewEmblem seed={previewSeed} size={56} />
+        <CrewEmblem seed={previewEmblemSeed(previewSeed)} size={56} />
         <View style={styles.fill}>
           <Text style={[font('bodyStrong', bold), styles.ink]}>{name}</Text>
           <Text style={[font('meta', bold), { color: secondary }]}>{summary}</Text>

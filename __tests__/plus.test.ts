@@ -13,6 +13,10 @@ import {
   planSubline,
   defaultPick,
   dockMode,
+  GST_LINE,
+  grantManageLine,
+  storeManageHint,
+  taxLine,
   PLUS_COMING_SOON,
   PLUS_FEATURES,
   PLUS_POLL_EVERY_MS,
@@ -108,9 +112,25 @@ describe('the page\'s own rules', () => {
   const monthly = offer('$rc_monthly', '₹199.00')
   const night = offer('night_pass', '₹49.00')
 
-  it('what is promised but not served is only ever a Coming soon row, never a live feature', () => {
+  it('what is promised but not served is only ever the On the way line, never a live feature', () => {
     expect(PLUS_COMING_SOON.map((f) => f.title)).toEqual(['Partner perks', 'Cosmetics', 'Crew extras'])
     expect(PLUS_FEATURES.map((f) => f.title).join(' ')).not.toMatch(/perks|crew/i)
+  })
+
+  // D2. Negative control: a GST line for any currency (the old hard-coded footer) fails the USD and mixed cases.
+  it('states GST only when every offer is priced in rupees', () => {
+    const priced = (currencyCode: string) => ({ pkg: { identifier: 'x', product: { currencyCode } }, title: '', length: '', price: '' }) as never
+    expect(taxLine([priced('INR'), priced('INR')])).toBe(GST_LINE)
+    expect(taxLine([priced('USD')])).toBeNull()
+    expect(taxLine([priced('INR'), priced('CAD')])).toBeNull()
+    expect(taxLine([])).toBeNull()
+    expect(taxLine(null)).toBeNull()
+  })
+
+  it('says what each store can do, and that a grant has nothing to manage (D4)', () => {
+    expect(storeManageHint('ios')).toBe('Change plan or cancel · one tap')
+    expect(storeManageHint('android')).toBe('Change plan, pause or cancel · one tap')
+    expect(grantManageLine(null)).toBe('Free for now · nothing to manage')
   })
 
   it('savings are the store’s own numbers: the monthly equivalent and the percent against Monthly; none for Monthly', () => {
@@ -121,8 +141,8 @@ describe('the page\'s own rules', () => {
     const y = sub('$rc_annual', 1499, 124.92, '₹125')
     const all = [m, q, y]
     expect(planSubline(m, all)).toBeNull()
-    expect(planSubline(q, all)).toBe('About ₹166 a month · Save 16%')
-    expect(planSubline(y, all)).toBe('About ₹125 a month · Save 37%')
+    expect(planSubline(q, all)).toBe('About ₹166 a month · Save\u00A016%')
+    expect(planSubline(y, all)).toBe('About ₹125 a month · Save\u00A037%')
     // The store does not say it saves: no "Save".
     expect(planSubline(sub('$rc_three_month', 600, 200, '₹200'), all)).toBe('About ₹200 a month')
     // No monthly figure from the store: no line at all.

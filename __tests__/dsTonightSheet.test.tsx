@@ -58,7 +58,7 @@ describe('<TonightSheet>', () => {
     expect(screen.getByRole('header', { name: 'Stay live while you’re here' })).toBeTruthy()
     expect(screen.getByText('Up to 4 hours at Toit tonight, carried on while your phone sees you inside.')).toBeTruthy()
     const radios = screen.getAllByRole('radio')
-    expect(radios[0].props.accessibilityLabel).toBe('Just tonight, 49 rupees, 24 hours · doesn’t renew')
+    expect(radios[0].props.accessibilityLabel).toBe('Night Pass, 49 rupees, 24 hours · doesn’t renew')
     expect(radios[0].props.accessibilityState).toMatchObject({ checked: true })
     expect(radios[1].props.accessibilityLabel).toBe('Blend’n+ monthly, 199 rupees a month')
   })
@@ -122,12 +122,19 @@ describe('<TonightSheet>', () => {
     expect(onPick).not.toHaveBeenCalled()
   })
 
-  it('See all plans, and the GST line', async () => {
+  it('See all plans, and the GST line when the caller says the prices are in rupees', async () => {
     const onSeeAll = jest.fn()
-    await render(sheet({ onSeeAll }))
+    await render(sheet({ onSeeAll, tax: 'Prices include GST.' }))
     await fireEvent.press(screen.getByRole('button', { name: 'See all plans' }))
     expect(onSeeAll).toHaveBeenCalledTimes(1)
     expect(screen.getByText('Night Pass is a one-off. Prices include GST.')).toBeTruthy()
+  })
+
+  // D2: never state a tax we can't verify. Negative control: the sheet's old hard-coded GST line fails this.
+  it('states no tax when the caller gives none (a USD storefront)', async () => {
+    await render(sheet({ pick: 'night' }))
+    expect(screen.getByTestId('tonight-legal').props.children).toBe('Night Pass is a one-off.')
+    expect(screen.queryByText(/GST/)).toBeNull()
   })
 
   /**
@@ -135,17 +142,16 @@ describe('<TonightSheet>', () => {
    * Negative control: always rendering the GST line fails "the monthly pick carries the store's terms".
    */
   it('the monthly pick carries the store’s renewal and cancellation terms in place of the GST line; the Night Pass says it is a one-off', async () => {
-    const legal = 'Payment is charged to your Apple Account at confirmation. Subscriptions renew automatically unless cancelled at least 24 hours before the end of the current period. Night Pass is a one-off. Prices include GST.'
-    await render(sheet({ pick: 'monthly', legal }))
-    expect(screen.getByTestId('tonight-legal').props.children).toBe(legal)
-    expect(screen.queryByText('Prices include GST.')).toBeNull()
+    const legal = 'Payment is charged to your Apple Account at confirmation. Subscriptions renew automatically unless cancelled at least 24 hours before the end of the current period. Night Pass is a one-off.'
+    await render(sheet({ pick: 'monthly', legal, tax: 'Prices include GST.' }))
+    expect(screen.getByTestId('tonight-legal').props.children).toBe(`${legal} Prices include GST.`)
     await screen.unmount() // one sheet on screen at a time (lib/modalTurn): the first goes before the next
-    await render(sheet({ pick: 'night', legal }))
+    await render(sheet({ pick: 'night', legal, tax: 'Prices include GST.' }))
     expect(screen.getByText('Night Pass is a one-off. Prices include GST.')).toBeTruthy()
   })
 
-  it('without the store’s wording the monthly pick still says prices include GST', async () => {
-    await render(sheet({ pick: 'monthly' }))
+  it('without the store’s wording the monthly pick says only the tax it was given', async () => {
+    await render(sheet({ pick: 'monthly', tax: 'Prices include GST.' }))
     expect(screen.getByText('Prices include GST.')).toBeTruthy()
   })
 

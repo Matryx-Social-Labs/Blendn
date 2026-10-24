@@ -68,7 +68,10 @@ jest.mock('../components/profile/ProfileSections', () => {
   const React = require('react')
   const { Text, View } = require('react-native')
   const stub = (label: string) => (p: { title?: string }) => React.createElement(Text, null, p.title ?? label)
+  // The real `ProfileBody` (the one body both profile pages draw, D26) over the stubbed pieces is not possible across a module
+  // boundary, so the real module is kept and only its leaf pieces below stand in where a test reads them.
   return {
+    ...jest.requireActual('../components/profile/ProfileSections'),
     SECTION_GAP: 28,
     ProfileSection: (p: { title: string; children: unknown }) => React.createElement(View, null, React.createElement(Text, null, p.title), p.children),
     ProfileBio: stub('bio'),
