@@ -69,7 +69,8 @@ beforeEach(() => {
   api.getMyPlus.mockResolvedValue({ success: true, data: plusStatus() } as never)
   permissions.mockResolvedValue({ status: 'granted', canAskAgain: true })
   ;(api.queuedRequest as jest.Mock).mockImplementation((_url: string, init?: RequestInit) =>
-    Promise.resolve({ success: true, data: { enabled: init?.method === 'PUT' ? JSON.parse(String(init.body)).enabled : true } })
+    // A place has regulars on for this person: the row is drawn only then (D21, YOU-04).
+    Promise.resolve({ success: true, data: init?.method === 'PUT' ? { enabled: JSON.parse(String(init.body)).enabled } : { enabled: true, regulars: { active: true } } })
   )
 })
 
