@@ -8,7 +8,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
 import { AccessibilityInfo, Dimensions, Platform, StyleSheet, Text } from 'react-native'
 
-import { HueProvider, SELECTION } from '../components/ds/shared'
+import { CONTROL_FONT_CAP, HueProvider, SELECTION } from '../components/ds/shared'
 import { SectionHeader } from '../components/ds/SectionHeader'
 import { COLOR, FONT_FAMILY, SIZE, TYPE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
@@ -150,4 +150,9 @@ it('Bold Text steps the title to 900 and the action to 900', async () => {
   await act(async () => {})
   expect(style('Tonight').fontFamily).toBe(FONT_FAMILY.brand[900])
   expect(style('See all').fontFamily).toBe(FONT_FAMILY.brand[900])
+})
+
+it('the action is a control: it stops at the control cap, so "Nights out" and "See all" never run together at AX (You hand-off 1)', async () => {
+  await render(<SectionHeader title="Nights out" action={{ label: 'See all', onPress: jest.fn() }} />)
+  expect(screen.getByText('See all').props.maxFontSizeMultiplier).toBe(CONTROL_FONT_CAP)
 })

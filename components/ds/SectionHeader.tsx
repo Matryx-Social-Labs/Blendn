@@ -102,7 +102,9 @@ export function SectionHeader({
                   accessibilityState={{ disabled: !!action.busy, busy: !!action.busy }}
                   style={[styles.actionBox, { minWidth: minTarget() }, action.busy && styles.busy]}
                 >
-                  <Text style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.action]}>{action.label}</Text>
+                  <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.action]}>
+                    {action.label}
+                  </Text>
                 </Pressable>
                 {focused
                   ? focusRing(RADIUS.thumb).map((ring, i) => (
