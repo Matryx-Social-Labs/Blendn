@@ -1,5 +1,5 @@
 /**
- * RC drive D2: the accessibility text sizes (AX XXXL, fontScale 3.1) on the screens the drive caught, and a live change of
+ * RC drive D2: the accessibility text sizes (AX XXXL, fontScale 3.571: React Native's own multiplier) on the screens the drive caught, and a live change of
  * the text size.
  *
  * The rule (`AX_FONT_SCALE`, components/ds/shared.ts): reading text grows to its cap and wraps; nothing that grows sits in a
@@ -11,7 +11,6 @@ import { join } from 'path'
 import React, { useEffect } from 'react'
 import { AccessibilityInfo, Dimensions, Platform, StyleSheet, Text, View } from 'react-native'
 import { getByGestureTestId } from 'react-native-gesture-handler/jest-utils'
-import type { ReactTestRendererJSON } from 'react-test-renderer'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('expo-router', () => ({ router: { push: jest.fn() } }))
@@ -49,74 +48,25 @@ import { KeyboardPage } from '../components/onboarding/KeyboardPage'
 import { Sheet } from '../components/ds/Sheet'
 import { VisibilityBanner } from '../components/ds/Banner'
 import { MakeCrewRow } from '../components/friends/MakeCrewRow'
+import { AX_XXXL, clipped, oneLiners, uncapped } from './helpers/ax'
 /* eslint-enable import/first */
 
-/** iOS AX XXXL: body 53 pt over 17. */
-const AX_XXXL = 3.1
 const window = Dimensions.get('window')
 const atScale = (fontScale: number) => act(async () => Dimensions.set({ window: { ...window, fontScale }, screen: { ...window, fontScale } }))
 afterEach(() => Dimensions.set({ window: { ...window, fontScale: 2 }, screen: { ...window, fontScale: 2 } }))
 
-type Node = ReactTestRendererJSON
-const kids = (n: Node): Node[] => (n.children ?? []).filter((c): c is Node => typeof c === 'object')
-
-/**
- * Every Text the scale reaches (no cap, or a cap above CONTROL_FONT_CAP) that sits inside a box of fixed `height`: at
- * AX XXXL its glyphs outgrow the box and are sliced. A `minHeight` grows; a `height` does not.
- */
-function clipped(tree: Node | Node[] | null): string[] {
-  const found: string[] = []
-  const walk = (n: Node, fixed: boolean) => {
-    const style = StyleSheet.flatten(n.props.style as never) as { height?: unknown } | undefined
-    const boxed = fixed || typeof style?.height === 'number'
-    if (n.type === 'Text') {
-      const cap = n.props.maxFontSizeMultiplier as number | undefined
-      const grows = cap === undefined || cap === 0 || cap > CONTROL_FONT_CAP
-      if (boxed && grows) found.push(JSON.stringify(n.children))
-      return
-    }
-    kids(n).forEach((c) => walk(c, boxed))
-  }
-  ;(Array.isArray(tree) ? tree : tree ? [tree] : []).forEach((n) => walk(n, false))
-  return found
-}
-
-/** Every Text with no cap at all: at AX XXXL it draws at 3.1x, past every role's MAX_FONT_SCALE. */
-function uncapped(tree: Node | Node[] | null): string[] {
-  const found: string[] = []
-  const walk = (n: Node) => {
-    if (n.type === 'Text') {
-      if (!n.props.maxFontSizeMultiplier) found.push(JSON.stringify(n.children))
-      return
-    }
-    kids(n).forEach(walk)
-  }
-  ;(Array.isArray(tree) ? tree : tree ? [tree] : []).forEach(walk)
-  return found
-}
-
-/** Reading text clamped to a single line at AX sizes: a word and an ellipsis ("Finish your pro…"). */
-function oneLiners(tree: Node | Node[] | null, ignoreCapped = true): string[] {
-  const found: string[] = []
-  const walk = (n: Node) => {
-    if (n.type === 'Text') {
-      const cap = n.props.maxFontSizeMultiplier as number | undefined
-      if (ignoreCapped && cap !== undefined && cap <= CONTROL_FONT_CAP) return
-      if (n.props.numberOfLines === 1) found.push(JSON.stringify(n.children))
-      return
-    }
-    kids(n).forEach(walk)
-  }
-  ;(Array.isArray(tree) ? tree : tree ? [tree] : []).forEach(walk)
-  return found
-}
-
-describe('at AX XXXL (fontScale 3.1)', () => {
+describe('at AX XXXL (fontScale 3.571)', () => {
   beforeEach(() => atScale(AX_XXXL))
 
   it('is past AX_FONT_SCALE, and the jest scale is what the components read', () => {
     expect(AX_XXXL).toBeGreaterThan(AX_FONT_SCALE)
     expect(Dimensions.get('window').fontScale).toBe(AX_XXXL)
+  })
+
+  it('is React Native’s own multiplier for AX XXXL, read from its source (3.571, not body’s 53/17 = 3.1)', () => {
+    const mm = readFileSync(require.resolve('react-native/React/CoreModules/RCTAccessibilityManager.mm'), 'utf8')
+    const native = mm.match(/UIContentSizeCategoryAccessibilityExtraExtraExtraLarge\s*:\s*@([\d.]+)/)
+    expect(Number(native?.[1])).toBe(AX_XXXL)
   })
 
   it('Make a crew (drive 5 D-3): a field label and its counter stack, so "0/14" is never clipped; the step-2 note is capped', async () => {
@@ -209,7 +159,7 @@ describe('at AX XXXL (fontScale 3.1)', () => {
     expect(uncapped(screen.toJSON())).toEqual([])
   })
 
-  it('the DM’s reveal bar and a form field’s name stop at their caps (D-3, D-8: EMAIL drew at 3.1x over a 1.3x input; now its label cap)', async () => {
+  it('the DM’s reveal bar and a form field’s name stop at their caps (D-3, D-8: EMAIL drew at 3.571x over a 1.3x input; now its label cap)', async () => {
     await render(
       <View>
         <RevealBar you={{ name: 'Asha', face: { kind: 'creature', pseudonym: 'Tumbling Moose' } as never }} them={{ name: 'Tumbling Moose', face: { kind: 'creature', pseudonym: 'Tumbling Moose' } as never }} state="youOnly" />

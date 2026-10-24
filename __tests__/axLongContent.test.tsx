@@ -21,6 +21,7 @@ import { InviteRow } from '../components/crews/InviteRow'
 import { RegularOn } from '../components/offer/OfferSections'
 import { CONTROL_FONT_CAP } from '../components/ds/shared'
 import { MAX_FONT_SCALE, SPACE, TYPE } from '../lib/design/tokens'
+import { AX_XXXL } from './helpers/ax'
 /* eslint-enable import/first */
 
 const window = Dimensions.get('window')
@@ -43,7 +44,7 @@ describe('display headlines never break inside a word', () => {
   })
 
   it('the onboarding frame: the headline stops at the display cap, the bar’s "Step n of 8" at a control’s, the subtitle at body’s', async () => {
-    await at(402, 3.1)
+    await at(402, AX_XXXL)
     await render(<OnboardingScreen step="preferences" title="Your " titleAccent="preferences" subtitle="Who you’d like to meet." ctaLabel="Continue" onContinue={jest.fn()} />)
     expect(screen.getByTestId('onboarding-title', hidden).props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.display)
     expect(screen.getByTestId('onboarding-step', hidden).props.maxFontSizeMultiplier).toBe(CONTROL_FONT_CAP)
@@ -85,10 +86,10 @@ describe('the Scene’s "Bring someone?" (AX XXXL: one letter a line beside What
   const row = () => render(<BringSomeoneRow eventTitle="Premier League Screening" onWhatsApp={jest.fn()} onShare={jest.fn()} testID="bring" />)
 
   it('the words keep their measure and the controls wrap under them', async () => {
-    await at(402, 3.1)
+    await at(402, AX_XXXL)
     await row()
     expect(flat('bring')).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap' })
-    expect(flat('bring-text')).toMatchObject({ flexGrow: 1, flexBasis: measureOf('bodyStrong', 3.1), minWidth: measureOf('bodyStrong', 3.1) })
+    expect(flat('bring-text')).toMatchObject({ flexGrow: 1, flexBasis: measureOf('bodyStrong', AX_XXXL), minWidth: measureOf('bodyStrong', AX_XXXL) })
     expect(flat('bring-text').flex).toBeUndefined()
     expect(screen.getByTestId('bring-controls', hidden)).toContainElement(screen.getByTestId('bring-share', hidden))
     expect(screen.getByText('Bring someone?', hidden).props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.bodyStrong)
@@ -110,7 +111,7 @@ describe('a request card at AX XXXL (Banter, Requests: "Arn…", "Bh…" at 61 p
     render(<RequestCard face={null} name="Arnav Sharma" note="Hi! We were at the same screening." time="9h" onAccept={jest.fn()} onDecline={jest.fn()} onMore={jest.fn()} testID="req" />)
 
   it('the name and the note grow to their caps and double their lines; the time stops at a control’s cap', async () => {
-    await at(402, 3.1)
+    await at(402, AX_XXXL)
     await card()
     const name = screen.getByText('Arnav Sharma', hidden)
     expect(name.props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.bodyStrong)
@@ -148,10 +149,10 @@ describe('the same squeeze, swept: a sentence beside one action keeps its measur
   const invite = { id: 'i1', crewId: 'c1', name: 'The Usual Suspects', invitedBy: 'Aisha', invitedAt: new Date().toISOString(), emblemSeed: 'x', size: 6 } as never
 
   it('Crews › an invite, at AX XXXL beside See invite', async () => {
-    await at(402, 3.1)
+    await at(402, AX_XXXL)
     await render(<InviteRow row={{ invite, lapsed: false }} onSee={jest.fn()} />)
     expect(flat('invite-row-body')).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap' })
-    expect(flat('invite-row-text')).toMatchObject({ flexGrow: 1, minWidth: measureOf('bodyStrong', 3.1), flexBasis: measureOf('bodyStrong', 3.1) })
+    expect(flat('invite-row-text')).toMatchObject({ flexGrow: 1, minWidth: measureOf('bodyStrong', AX_XXXL), flexBasis: measureOf('bodyStrong', AX_XXXL) })
     expect(screen.getByText('Aisha invited you to The Usual Suspects', hidden).props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.bodyStrong)
   })
 
