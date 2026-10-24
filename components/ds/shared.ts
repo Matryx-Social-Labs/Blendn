@@ -249,3 +249,10 @@ export function pourStyles(slideMs: number, fadeMs: number, curve: readonly numb
 
 /** The hue's light as a chip, a settings tile or a switch's glyph tile takes it: in over `base` on `entrance`, back over `quick`. */
 export const LIGHT = pourStyles(DURATION.base, DURATION.quick, EASING.entrance)
+
+/**
+ * An Android scroll's edge fade at its end and none at its start. RN 0.86's scroll views draw the start's fade at a constant
+ * strength (`ReactScrollView#getTopFadingEdgeStrength`), scrolled or not, so a bare number dimmed the first row at rest
+ * (rc7 D7).
+ */
+export const FADE_END_ONLY = { start: 0, end: SPACE.xxxl }

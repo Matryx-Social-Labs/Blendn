@@ -8,6 +8,7 @@ import React from 'react'
 import { Dimensions, Platform } from 'react-native'
 
 import { BoardComposer } from '../components/board/BoardSections'
+import { SPACE } from '../lib/design/tokens'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('react-native-reanimated', () => {
@@ -87,7 +88,8 @@ describe('the Board composer over the keyboard', () => {
     await act(async () => fireEvent(scroll(), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 393, height: 190 } } }))
     await act(async () => fireEvent(scroll(), 'contentSizeChange', 393, 400))
     expect(scroll().props.showsVerticalScrollIndicator).toBe(true)
-    expect(scroll().props.fadingEdgeLength).toBeGreaterThan(0)
+    // The end fades, never the start: Android draws the start's fade at rest too, dimming the first row (rc7 D7).
+    expect(scroll().props.fadingEdgeLength).toEqual({ start: 0, end: SPACE.xxxl })
     await act(async () => fireEvent(scroll(), 'contentSizeChange', 393, 190))
     expect(scroll().props.showsVerticalScrollIndicator).toBe(false)
     expect(scroll().props.fadingEdgeLength).toBe(0)

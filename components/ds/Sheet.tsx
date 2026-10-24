@@ -26,7 +26,7 @@ import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { notifySheetDismissed } from '../../lib/sheetDismissed'
 import { OPACITY, tint } from '../../lib/theme'
 import { Button, type ButtonKind, type ButtonProps } from './Button'
-import { CONTROL_FONT_CAP, font, GroundProvider, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast, useLargeText } from './shared'
+import { CONTROL_FONT_CAP, FADE_END_ONLY, font, GroundProvider, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast, useLargeText } from './shared'
 
 export type Detent = 'short' | 'medium' | 'tall'
 
@@ -854,7 +854,8 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
                     // (r7 L6): Android keeps the bar and fades the edge; iOS flashes its indicator once when it overflows.
                     showsVerticalScrollIndicator={overflowing}
                     persistentScrollbar={overflowing}
-                    fadingEdgeLength={overflowing ? SPACE.xxxl : 0}
+                    // The end only (FADE_END_ONLY): a fade at the start dimmed the first row at rest (rc7 D7).
+                    fadingEdgeLength={overflowing ? FADE_END_ONLY : 0}
                     nestedScrollEnabled
                     scrollEnabled={overflowing}
                     bounces={false}

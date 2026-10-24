@@ -5,7 +5,7 @@ import { Chip } from '../../components/ds/Chip'
 import { ChipSet } from '../../components/ds/ChipSet'
 import { monoCaption } from '../../components/ds/MonoFamily'
 import { TextArea } from '../../components/ds/TextField'
-import { font, useBoldText } from '../../components/ds/shared'
+import { FADE_END_ONLY, font, useBoldText } from '../../components/ds/shared'
 import { MAX_INTERESTS } from '../../components/InterestPicker'
 import { ListLoadState, type ListStatus } from '../../components/onboarding/ListLoadState'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
@@ -160,7 +160,7 @@ export default function DetailsScreen() {
               horizontal
               showsHorizontalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
-              fadingEdgeLength={SPACE.xxxl}
+              fadingEdgeLength={FADE_END_ONLY}
               contentContainerStyle={styles.prompts}
             >
               {BIO_PROMPTS.map((prompt) => (
