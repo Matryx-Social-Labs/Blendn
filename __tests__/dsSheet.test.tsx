@@ -506,6 +506,14 @@ describe('what scrolls and what stays (review MEDIUM-2, L8)', () => {
     expect(inner().paddingTop).toBe(12)
   })
 
+  // D-L17 (Make a crew): the indicator drew over the fields' right edge. Negative control: without the bleed both fail.
+  it('the scroll spans the gutter and its content takes it back, so the indicator draws in the margin', async () => {
+    const { SPACE } = jest.requireActual('../lib/design/tokens')
+    await render(signOut())
+    expect(StyleSheet.flatten(screen.getByTestId('s-content', hidden).props.style).marginHorizontal).toBe(-SPACE.gutter)
+    expect(inner().paddingHorizontal).toBe(SPACE.gutter)
+  })
+
   it('so does a step note ("1 of 3")', async () => {
     await render(signOut({ headerNote: { lead: '1', text: ' of 3' } }))
     expect(within(screen.getByTestId('s-pinned', hidden)).getByTestId('s-note', hidden)).toBeTruthy()

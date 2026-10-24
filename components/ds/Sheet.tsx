@@ -930,8 +930,12 @@ const styles = StyleSheet.create({
   note: { flexDirection: 'row', flexShrink: 1, minWidth: 0, justifyContent: 'flex-end' },
   title: { color: COLOR.textPrimary },
   actions: { gap: SPACE.sm, paddingTop: SPACE.md },
-  content: { flexGrow: 0, flexShrink: 1 },
-  contentInner: { gap: SPACE.md },
+  /*
+   * The scroll runs into the sheet's gutter and its content takes the gutter back, so a scrolling sheet's indicator draws
+   * in the margin, never over the right edge of its fields (Make a crew, D-L17). The content's measure is unchanged.
+   */
+  content: { flexGrow: 0, flexShrink: 1, marginHorizontal: -SPACE.gutter },
+  contentInner: { gap: SPACE.md, paddingHorizontal: SPACE.gutter },
   contentBelow: { paddingTop: SPACE.md },
   pinned: { marginTop: 'auto' },
 })
