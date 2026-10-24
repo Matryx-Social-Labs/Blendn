@@ -119,7 +119,12 @@ describe('Change your password', () => {
     api.forgotPassword.mockResolvedValue({ success: true } as never)
     await render(<Screen />)
     await open()
-    expect(screen.getByText('We’ll email a link to sam@example.com. Reset links work once, and for an hour.')).toBeTruthy()
+    expect(screen.getByText('We’ll email a link to this address. Reset links work once, and for an hour.')).toBeTruthy()
+    // D-L13: the address on its own line, never broken mid-way. Negative control: inside the sentence it has no line.
+    const address = screen.getByTestId('password-sheet-email')
+    expect(address).toHaveTextContent('sam@example.com')
+    expect(address.props.numberOfLines).toBe(1)
+    expect(address.props.adjustsFontSizeToFit).toBe(true)
     fireEvent.press(screen.getByRole('button', { name: 'Send link' }))
     await waitFor(() => expect(api.forgotPassword).toHaveBeenCalledWith('sam@example.com'))
     await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Check sam@example.com for the link', 'info'))

@@ -1,4 +1,7 @@
-import { Linking } from 'react-native'
+import { Linking, StyleSheet, Text } from 'react-native'
+
+import { monoValue, useBoldText } from '../components/ds/shared'
+import { COLOR, MAX_FONT_SCALE } from './design/tokens'
 
 import { H } from './haptics'
 import type { Sheet } from './sheet'
@@ -117,7 +120,8 @@ export function passwordLinkSheet({
     hue: 'violet',
     icon: 'key-round',
     title: 'Change your password?',
-    message: `We’ll email a link to ${email}. Reset links work once, and for an hour.`,
+    message: 'We’ll email a link to this address. Reset links work once, and for an hour.',
+    content: <AddressLine email={email} />,
     actions: [
       {
         label: 'Send link',
@@ -137,3 +141,15 @@ export function passwordLinkSheet({
     ],
   }
 }
+
+/** The address on its own line, shrunk to fit: one broken mid-way inside a sentence can't be read back (D-L13, as Support). */
+function AddressLine({ email }: { email: string }) {
+  const bold = useBoldText()
+  return (
+    <Text testID="password-sheet-email" numberOfLines={1} adjustsFontSizeToFit maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[monoValue(bold), styles.address]}>
+      {email}
+    </Text>
+  )
+}
+
+const styles = StyleSheet.create({ address: { color: COLOR.textPrimary } })
