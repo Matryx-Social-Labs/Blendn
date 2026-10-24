@@ -192,8 +192,8 @@ describe('"stay" refused as Blendn+\'s (PLUS_REQUIRED) — the paywall, through 
     const again = await run({ stay: true })
     expect(router.push).not.toHaveBeenCalled()
     const [title, , buttons] = again.showTray.mock.calls[0]
-    expect(title).toBe('Staying live is part of Blendn+')
-    const see = (buttons as { label: string; onPress: () => void }[]).find((b) => b.label === 'See Blendn+')
+    expect(title).toBe('Staying live is part of Blend’n+')
+    const see = (buttons as { label: string; onPress: () => void }[]).find((b) => b.label === 'See Blend’n+')
     await act(async () => { see?.onPress(); await Promise.resolve() })
     expect(router.push).toHaveBeenCalledWith({ pathname: '/plus', params: { trigger: 'go_live_expiry' } })
   })
@@ -230,7 +230,7 @@ describe('"stay" refused as Blendn+\'s with the Tonight sheet drawn — it opens
     const again = await run({ stay: true })
     expect(host).not.toHaveBeenCalled()
     const buttons = again.showTray.mock.calls[0][2] as { label: string; onPress: () => void }[]
-    await act(async () => { buttons.find((b) => b.label === 'See Blendn+')?.onPress(); await Promise.resolve() })
+    await act(async () => { buttons.find((b) => b.label === 'See Blend’n+')?.onPress(); await Promise.resolve() })
     expect(host).toHaveBeenCalledWith(expect.objectContaining({ trigger: 'stay' }))
   })
 })

@@ -122,8 +122,8 @@ describe('a refused Go Live on screen (PL-CU01)', () => {
     const seePlus = jest.fn()
     showGoLiveRefusal(goLiveRefusal('PLUS_REQUIRED', 'Staying live is part of Blendn+.'), place, { showTray, closeTray: jest.fn(), seePlus })
     const [title, , buttons] = showTray.mock.calls[0]
-    expect(title).toBe('Staying live is part of Blendn+')
-    ;(buttons as { label: string; onPress: () => void }[]).find((b) => b.label === 'See Blendn+')?.onPress()
+    expect(title).toBe('Staying live is part of Blend’n+')
+    ;(buttons as { label: string; onPress: () => void }[]).find((b) => b.label === 'See Blend’n+')?.onPress()
     expect(seePlus).toHaveBeenCalledTimes(1)
   })
 })

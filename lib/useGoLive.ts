@@ -17,7 +17,7 @@ import { openTonight } from './paywall'
 /**
  * Going live at a place, from wherever the button is: the place screen's Go
  * Live sheet and the expiry prompt's "Extend" and "Stay". A "stay" refused as
- * Blendn+'s (`PLUS_REQUIRED`) opens the Tonight sheet through the paywall's
+ * Blend’n+'s (`PLUS_REQUIRED`) opens the Tonight sheet through the paywall's
  * policy (`lib/paywall.ts`). Where you are comes through the
  * check-in's own gates (`lib/locationFix.ts`); the answer is read by its code
  * (`goLiveRefusal`). The trays are the caller's.
@@ -55,18 +55,18 @@ export function useGoLiveBusy(): boolean {
 }
 
 /**
- * "Stay" is Blendn+'s here (`PLUS_REQUIRED`) and the paywall's policy said not
+ * "Stay" is Blend’n+'s here (`PLUS_REQUIRED`) and the paywall's policy said not
  * now (it came by itself once tonight, or you are in a chat): the reason, the
  * free way on, and the paywall on a tap — a tap always opens it.
  */
 export function showPlusRefusal(showTray: ShowTray, closeTray: () => void, seePlus?: () => void) {
   showTray(
-    'Staying live is part of Blendn+',
+    'Staying live is part of Blend’n+',
     'Pick a time instead — you can extend it for free before it ends.',
     [
       { label: 'OK', kind: 'tertiary', onPress: closeTray },
       ...(seePlus
-        ? [{ label: 'See Blendn+', variant: 'primary' as const, kind: 'lit' as const, onPress: () => { closeTray(); seePlus() } }]
+        ? [{ label: 'See Blend’n+', variant: 'primary' as const, kind: 'lit' as const, onPress: () => { closeTray(); seePlus() } }]
         : []),
     ]
   )
@@ -152,7 +152,7 @@ export function useGoLive({
   closeTray: () => void
   onLive?: (result: GoLiveResult) => void
   /**
-   * "Stay" was refused as Blendn+'s. Given, the caller decides what comes
+   * "Stay" was refused as Blend’n+'s. Given, the caller decides what comes
    * after (the expiry prompt comes back without Stay, so the free Extend is
    * still there); `paywallOpened` says whether the paywall is now on screen.
    */
@@ -204,7 +204,7 @@ export function useGoLive({
       const stayOffer = { trigger: 'stay' as const, venue: place.name, onFree: () => void goLive({ minutes: 60 }), onUnlocked: () => void goLive({ stay: true }) }
       const seePlus = () => void openTonight(stayOffer, { userInitiated: true })
       if (refusal.kind === 'plus') {
-        // "Stay" is Blendn+'s in this city: the paywall, if its policy lets it come now (step 11) —
+        // "Stay" is Blend’n+'s in this city: the paywall, if its policy lets it come now (step 11) —
         // once the tray has finished leaving (iOS will not present over a dismissing modal).
         closeTray()
         await afterSheetDismissed()
