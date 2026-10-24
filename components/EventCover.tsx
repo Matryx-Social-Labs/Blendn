@@ -5,6 +5,7 @@ import { Image, StyleSheet, View } from 'react-native'
 import { Logger } from '../lib/logger'
 import { hostOf } from '../lib/urlHost'
 import { COLOR, RADIUS } from '../lib/design/tokens'
+import { CategoryPlate } from './ds/EventCard'
 
 // Optically centred (the ink's centroid at the canvas centre): a box-centred monogram reads left.
 const monogram = require('../assets/logo/monogram-gradient-centred.png')
@@ -20,6 +21,8 @@ interface EventCoverProps {
    * loads afresh — with no frame of stale placeholder in between.
    */
   retry?: number
+  /** The event's category slug: with no picture, its category plate (D8) instead of the faint logo. */
+  category?: string
 }
 
 /**
@@ -34,7 +37,7 @@ interface EventCoverProps {
  * Nothing is drawn on the picture any more — the words sit under it — so there
  * is no darkening layer either.
  */
-export function EventCover({ uri, height, radius = RADIUS.rowInCard, retry = 0 }: EventCoverProps) {
+export function EventCover({ uri, height, radius = RADIUS.rowInCard, retry = 0, category }: EventCoverProps) {
   const attempt = `${uri}#${retry}`
   const [failedAttempt, setFailedAttempt] = useState<string | null>(null)
 
@@ -72,6 +75,14 @@ export function EventCover({ uri, height, radius = RADIUS.rowInCard, retry = 0 }
     )
   }
 
+  if (category) {
+    return (
+      <View testID="event-cover-placeholder" style={[styles.placeholder, corners, { height }]}>
+        <CategoryPlate category={category} size={height} testID="event-cover-plate" />
+      </View>
+    )
+  }
+
   return (
     <View testID="event-cover-placeholder" style={[styles.placeholder, corners, { height }]}>
       <Image
@@ -95,6 +106,7 @@ const styles = StyleSheet.create({
   frame: { width: '100%', backgroundColor: COLOR.surface, overflow: 'hidden' },
   placeholder: {
     width: '100%',
+    overflow: 'hidden',
     backgroundColor: COLOR.surface,
     alignItems: 'center',
     justifyContent: 'center',

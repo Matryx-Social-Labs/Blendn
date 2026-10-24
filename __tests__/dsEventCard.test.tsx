@@ -11,7 +11,7 @@ import { AccessibilityInfo, Platform, StyleSheet } from 'react-native'
 
 import { EventCard } from '../components/ds/EventCard'
 import { PHOTO_SCRIM } from '../components/ui/GradientFill'
-import { PRESSED_WASH } from '../components/ds/shared'
+import { HueProvider, PRESSED_WASH } from '../components/ds/shared'
 import { COLOR, FONT_FAMILY, MATERIAL, RADIUS, TYPE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { tint } from '../lib/theme'
@@ -19,6 +19,10 @@ import { tint } from '../lib/theme'
 jest.mock('../components/ds/anchor', () => ({
   measureAnchor: (_node: unknown, then: (r: { x: number; y: number; width: number; height: number }) => void) => then({ x: 24, y: 300, width: 240, height: 170 }),
 }))
+jest.mock('../components/ui/Icon', () => {
+  const { View } = jest.requireActual('react-native')
+  return { Icon: ({ name, size, color }: { name: string; size: number; color: string }) => <View testID={`icon-${name}`} size={size} color={color} /> }
+})
 jest.mock('expo-linear-gradient', () => {
   const { View } = jest.requireActual('react-native')
   return { LinearGradient: (props: object) => <View {...props} testID="scrim" /> }
@@ -154,12 +158,14 @@ describe('row', () => {
     expect(StyleSheet.flatten(time.props.style).flexShrink ?? 0).toBe(0)
   })
 
-  it('a 64 pt row: the 56 pt thumb at radius 8, the title on one line, venue · distance · the time in Geist Mono', async () => {
+  it('a row of 64 pt at least: the 56 pt thumb at radius 8, the title on two lines, venue · distance · the time in Geist Mono', async () => {
     await render(<EventCard kind="row" {...VINYL} testID="e" />)
-    expect(flat('e').height).toBe(64)
+    // A two-line title grows the row: its height is a minimum, never a box (shared.ts).
+    expect(flat('e')).toMatchObject({ minHeight: 64 })
+    expect(flat('e').height).toBeUndefined()
     expect(flat('e-thumb')).toMatchObject({ width: 56, height: 56, borderRadius: RADIUS.thumb })
     const title = screen.getByText('Vinyl Night', { includeHiddenElements: true })
-    expect(title.props).toMatchObject({ numberOfLines: 1, maxFontSizeMultiplier: 1.3 })
+    expect(title.props).toMatchObject({ numberOfLines: 2, maxFontSizeMultiplier: 1.3 })
     expect(style('9 PM')).toMatchObject({ fontFamily: FONT_FAMILY.mono[500], fontVariant: ['tabular-nums'] })
     expect(screen.getByRole('button', { name: 'Vinyl Night, 9 PM, at Toit, 1.2 km, 42 going' })).toBeTruthy()
   })
@@ -182,7 +188,53 @@ describe('inert: a card with nowhere to go', () => {
       expect(card.props.accessibilityRole).toBe('text')
       await fireEvent.press(card)
       expect(onPress).not.toHaveBeenCalled()
-      unmount()
+      await unmount()
     }
+  })
+})
+
+describe('the category plate (D8: no empty box in a populated row)', () => {
+  const hidden = { includeHiddenElements: true }
+  const NO_COVER = { ...VINYL, cover: null }
+
+  it('a row with no cover draws its category: the glyph in the hue’s light on the hue’s fill', async () => {
+    await render(<EventCard kind="row" {...NO_COVER} category="music" testID="e" />)
+    expect(flat('e-plate')).toMatchObject({ backgroundColor: COLOR.selectionEmberFill })
+    const glyph = screen.getByTestId('icon-music-2', hidden)
+    expect(glyph.props.color).toBe(COLOR.selectionEmberGlyph)
+    expect(screen.getByTestId('e-plate', hidden).props.accessibilityElementsHidden).toBe(true)
+  })
+
+  it('in the screen’s hue: rose together', async () => {
+    await render(
+      <HueProvider value="rose">
+        <EventCard kind="row" {...NO_COVER} category="music" testID="e" />
+      </HueProvider>
+    )
+    expect(flat('e-plate').backgroundColor).toBe(COLOR.selectionRoseFill)
+    expect(screen.getByTestId('icon-music-2', hidden).props.color).toBe(COLOR.selectionRoseGlyph)
+  })
+
+  it('a category with no glyph draws the fill alone; a cover always wins; a venue plate wins over a category', async () => {
+    await render(<EventCard kind="row" {...NO_COVER} category="something-new" testID="e" />)
+    expect(flat('e-plate').backgroundColor).toBe(COLOR.selectionEmberFill)
+    expect(screen.queryAllByTestId(/^icon-/, hidden)).toEqual([])
+    await render(<EventCard kind="row" {...VINYL} category="music" testID="e" />)
+    expect(screen.queryByTestId('e-plate', hidden)).toBeNull()
+    await render(<EventCard kind="row" {...NO_COVER} plate="cafe" category="music" testID="e" />)
+    expect(screen.queryByTestId('e-plate', hidden)).toBeNull()
+  })
+
+  it('hero and compact with no cover draw it under the scrim', async () => {
+    for (const kind of ['hero', 'compact'] as const) {
+      await render(<EventCard kind={kind} {...NO_COVER} category="nightlife" testID="e" />)
+      expect(flat('e-plate').backgroundColor).toBe(COLOR.selectionEmberFill)
+      expect(screen.getByTestId('icon-moon', hidden)).toBeTruthy()
+    }
+  })
+
+  it('with no category, a coverless row is as it was', async () => {
+    await render(<EventCard kind="row" {...NO_COVER} testID="e" />)
+    expect(screen.queryByTestId('e-plate', hidden)).toBeNull()
   })
 })
