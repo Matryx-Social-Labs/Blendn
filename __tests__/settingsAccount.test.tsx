@@ -296,7 +296,7 @@ describe('Blendn+ row (review H2)', () => {
   it('where it is sold, opens the paywall', async () => {
     await render(<Screen />)
     await waitFor(() => expect(api.getMyPlus).toHaveBeenCalled())
-    fireEvent.press(await screen.findByRole('button', { name: /^Blend’n\+, Not subscribed/ }))
+    fireEvent.press(await screen.findByRole('button', { name: /^Blend’n\+, See plans/ }))
     await waitFor(() => expect(router.push).toHaveBeenCalledWith(expect.objectContaining({ pathname: '/plus' })))
   })
 })

@@ -2,7 +2,7 @@ import { Platform } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import { useCallback } from 'react'
 
-import { mePlusLine } from '../../lib/mePlus'
+import { plusRowLine } from '../../lib/mePlus'
 import { openPaywall } from '../../lib/paywall'
 import { usePlusStatus } from '../../lib/plus'
 import { PLUS_FREE_SHEET } from '../../lib/plusFree'
@@ -22,7 +22,7 @@ export function MePlusRow() {
   // Back from Manage or the paywall: where you stand is read again.
   useFocusEffect(useCallback(() => refresh(), [refresh]))
   const price = useMonthlyPrice(!!status && !status.active && status.gated)
-  const line = mePlusLine(status, price, DEVICE)
+  const line = plusRowLine(status, price, DEVICE)
   return (
     <SettingsGroup>
       <SettingsRow

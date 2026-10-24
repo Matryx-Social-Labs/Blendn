@@ -216,7 +216,7 @@ describe('what GET /profiles/:you adds (blendn-admin #716): badges and photos ta
     it('says Blend’n+ with the store’s price when you have not got it; one tap goes to the paywall as asked for', async () => {
       await mount({ success: true, data: { profile: { badges } } })
       await screen.findByTestId('me-plus-row')
-      expect(await screen.findByText('₹199 a month')).toBeTruthy()
+      expect(await screen.findByText('from ₹199 a month')).toBeTruthy()
       await fireEvent.press(screen.getByTestId('me-plus-row'))
       expect(mockOpenPaywall).toHaveBeenCalledWith('profile', { userInitiated: true })
     })
