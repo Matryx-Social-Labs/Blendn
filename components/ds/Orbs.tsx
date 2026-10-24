@@ -129,6 +129,11 @@ export type OrbsProps = {
   time?: OrbTime
   /** Hold the drift: the keyboard is up, the list is scrolling under glass, a chat is open, the screen is not focused. */
   paused?: boolean
+  /**
+   * Draw every orb in this one colour, keeping the set's places and alphas: a world screen's glow in its own hue (TG-14,
+   * one hue per screen), where the set's ember and violet would put a second and third under the screen's controls.
+   */
+  tint?: string
   testID?: string
 }
 
@@ -153,7 +158,7 @@ export type OrbsProps = {
  * ponytail: Low Power Mode is not read (no installed module reports it); the
  * screen can pass `paused` once one is.
  */
-export function Orbs({ set, time: pinned, paused = false, testID }: OrbsProps) {
+export function Orbs({ set, time: pinned, paused = false, tint, testID }: OrbsProps) {
   const android = Platform.OS === 'android'
   const reduceMotion = useReducedMotion()
   const contrast = useIncreaseContrast()
@@ -186,7 +191,7 @@ export function Orbs({ set, time: pinned, paused = false, testID }: OrbsProps) {
         style={[StyleSheet.absoluteFill, current ? shown.nowStyle : shown.beforeStyle]}
       >
         {ORB_SETS[set][time].map((o, i) => (
-          <OrbView key={i} orb={o} box={box} alpha={o.alpha * (contrast ? CONTRAST_SCALE : 1)} style={i ? styleB : styleA} testID={current && testID ? `${testID}-${i}` : undefined} />
+          <OrbView key={i} orb={tint ? { ...o, color: tint } : o} box={box} alpha={o.alpha * (contrast ? CONTRAST_SCALE : 1)} style={i ? styleB : styleA} testID={current && testID ? `${testID}-${i}` : undefined} />
         ))}
       </Animated.View>
     ) : null

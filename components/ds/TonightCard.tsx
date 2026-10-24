@@ -12,6 +12,9 @@ import { EventCard, eventLabel, type EventCardProps } from './EventCard'
 
 export type DeckEvent = Omit<EventCardProps, 'kind' | 'onPress' | 'previewState' | 'testID' | 'style'>
 
+/** Tonight's cards are photographs at their brightest under the Room's glow: the scrim meets solid ink at the foot (TG-14). */
+export const TONIGHT_SCRIM_FOOT = 1
+
 /** The two back-cards (the page): rotated −5° and 4°, shifted, scaled from their foot. */
 const FAN = [
   { rotate: -5, dx: -16, dy: 14, scale: 0.9 },
@@ -168,7 +171,7 @@ export function TonightCard({
           >
             <View testID={testID && `${testID}-top`} style={styles.outline}>
               <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-                <EventCard kind="hero" {...event} onPress={() => onOpen(index)} previewState={previewState} style={{ width, height }} testID={testID && `${testID}-card`} />
+                <EventCard kind="hero" {...event} scrimFoot={TONIGHT_SCRIM_FOOT} onPress={() => onOpen(index)} previewState={previewState} style={{ width, height }} testID={testID && `${testID}-card`} />
               </View>
             </View>
           </Animated.View>

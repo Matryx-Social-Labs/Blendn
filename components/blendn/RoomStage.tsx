@@ -20,6 +20,7 @@ import { scheduleOnRN } from 'react-native-worklets'
 import { COLOR, EASING, RADIUS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
 import { Grain } from '../ds/Grain'
 import { Orbs } from '../ds/Orbs'
+import { useSelection } from '../ds/shared'
 import { GradientFill } from '../ui/GradientFill'
 
 /** Past this, a slow drag closes. */
@@ -116,6 +117,7 @@ export const RoomStage = React.forwardRef<{ close(): void }, {
 }>(function RoomStage({ onClosed, children }, ref) {
   const { width, height } = useWindowDimensions()
   const insets = useSafeAreaInsets()
+  const sel = useSelection()
   const reduceMotion = useReducedMotion()
   const origin = centreButtonOrigin(width, height, insets.bottom)
   // Big enough to cover the farthest corner from the button.
@@ -226,9 +228,9 @@ export const RoomStage = React.forwardRef<{ close(): void }, {
         </Animated.View>
         <GestureDetector gesture={pan}>
           <Animated.View style={[styles.page, pageStyle]}>
-            {/* L0: the brand orbs and the grain behind Tonight and the Room (Flow 4). */}
+            {/* L0: the orbs and the grain behind Tonight and the Room (Flow 4), the glow in the screen's hue (TG-14, B-R8). */}
             <View style={StyleSheet.absoluteFill} pointerEvents="none">
-              <Orbs set="brand" />
+              <Orbs set="brand" tint={sel.edge} testID="stage-orbs" />
               <Grain />
             </View>
             {children}

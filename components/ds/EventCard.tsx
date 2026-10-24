@@ -63,6 +63,11 @@ export type EventCardProps = {
   onLongPress?: (anchor: Rect) => void
   /** The design gallery only: draws a transient state with no finger or keyboard. */
   previewState?: 'pressed' | 'focused'
+  /**
+   * `hero` only: the scrim's foot, where it must carry words over any photograph (`PhotoScrim`'s `foot`; 0.88 by default).
+   * Tonight's deck sets it to solid ink, so a bright cover never thins the words (TG-14, B-R9).
+   */
+  scrimFoot?: number
   testID?: string
   /** Size and placement (hero and compact take their width and height from here); never the look. */
   style?: StyleProp<ViewStyle>
@@ -125,7 +130,7 @@ export function eventLabel({
  * on the card and the scrim 20% deeper.
  */
 export function EventCard(props: EventCardProps) {
-  const { kind, title, time, venue, distance, lead, going, here, promoted, cover, plate, category, saved, onPress, onPressIn, onLongPress, previewState, testID, style } = props
+  const { kind, title, time, venue, distance, lead, going, here, promoted, cover, plate, category, saved, onPress, onPressIn, onLongPress, previewState, scrimFoot, testID, style } = props
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const android = Platform.OS === 'android'
@@ -233,7 +238,7 @@ export function EventCard(props: EventCardProps) {
         ) : category ? (
           <CategoryPlate category={category} testID={testID && `${testID}-plate`} />
         ) : null}
-        <PhotoScrim testID={testID && `${testID}-scrim`} contrast={contrast} style={styles.scrim} />
+        <PhotoScrim testID={testID && `${testID}-scrim`} contrast={contrast} foot={scrimFoot} style={styles.scrim} />
         <View style={styles.pills}>
           <TimeBadge when={time} />
           {here ? (
