@@ -4,6 +4,8 @@
  * read, the muted hero, and the Mute and Leave sheets.
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
+import { AX_XXXL, atScale, clipped, resetScale, subtree, uncapped } from './helpers/togetherAx'
+import { MAX_FONT_SCALE } from '../lib/design/tokens'
 
 let mockParams: Record<string, string> = { id: 'g1' }
 jest.mock('@react-native-async-storage/async-storage', () =>
@@ -325,4 +327,21 @@ it('lists its rows by fixed layout once the header is measured, and not before (
   const third = layout(null, 2)
   expect(first.offset).toBe(700)
   expect(third.offset - first.offset).toBe(2 * first.length)
+})
+
+describe('at AX XXXL (TG-03)', () => {
+  beforeEach(() => atScale(AX_XXXL))
+  afterEach(resetScale)
+
+  it('a 483-person room with a long name: the title and its count line stop at their caps, and the hero grows', async () => {
+    const title = 'The Very Long Saturday Night Vinyl and Natural Wine Social at the Old Brewery'
+    api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [{ ...eventRow, name: title, event: { ...eventRow.event, title } }] } } as never)
+    api.getChatParticipants.mockResolvedValue({ ...crowd, data: { ...crowd.data, totalCount: 483 } } as never)
+    await open()
+    const hero = subtree(screen.toJSON() as never, 'info-hero')
+    expect(uncapped(hero)).toEqual([])
+    expect(clipped(hero)).toEqual([])
+    expect(screen.getByRole('header', { name: title }).props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.title)
+    expect(uncapped(subtree(screen.toJSON() as never, 'info-leave'))).toEqual([])
+  })
 })

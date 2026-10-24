@@ -118,11 +118,13 @@ jest.mock('../components/blendn/TonightView', () => {
     },
   }
 })
+const mockScrollY = jest.requireActual('react-native-reanimated').makeMutable(0)
 jest.mock('../components/blendn/RoomStage', () => {
   const { forwardRef } = jest.requireActual('react')
   return {
     RoomStage: forwardRef(({ children }: { children: React.ReactNode }, _ref: unknown) => children),
     useStageScroll: () => ({ onScroll: undefined, native: {}, scrollEventThrottle: 16 }),
+    useStage: () => ({ scrollY: mockScrollY, pan: {} }),
   }
 })
 jest.mock('../components/blendn/RoomSections', () => ({

@@ -18,7 +18,7 @@ import {
   revealRemembered,
   sideShape,
 } from '../../lib/crewsScreens'
-import { COLOR, DURATION, FONT_FAMILY, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, DURATION, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useKeyboardShown } from '../../lib/keyboard'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
@@ -34,7 +34,7 @@ import { Button } from '../ds/Button'
 import { Creature, creatureFor } from '../ds/Creature'
 import { CrewEmblem, EMBLEM_SQUIRCLE } from '../ds/CrewEmblem'
 import { RevealSheet, RevealSide } from '../ds/RevealSheet'
-import { font, useBoldText } from '../ds/shared'
+import { CONTROL_FONT_CAP, font, useBoldText } from '../ds/shared'
 import { Icon } from '../ui/Icon'
 import { useToast } from '../Toast'
 import { OverflowMenu } from './OverflowMenu'
@@ -74,14 +74,16 @@ function BlendPair({ mine, theirs }: { mine: BlendSide | null; theirs: BlendSide
   )
 }
 
-/** "7 people · Closes in 9h": the clock in Geist Mono, white (flow10b.js `blendRoom`). */
+/** "Closes in 9h · 7 people": the clock first, in Geist Mono, white (flow10b.js `blendRoom`). */
 function BlendSubtitle({ blend, now }: { blend: Blend; now: number }) {
   const bold = useBoldText()
   const closes = closesLine(blend.closesAt, now)
   return (
-    <Text numberOfLines={1} style={[font('meta', bold), styles.secondary]}>
-      {`${peopleLine(blend)}${closes ? ' · ' : ''}`}
-      {closes ? <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.ink]}>{closes}</Text> : null}
+    // In the header's fixed capsule: the control cap, as the room's own line (`SubtitleText`), so it never outgrows it (TG-04).
+    <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary]}>
+      {/* The clock first: at 360 the line truncates, and the close time is what it must not lose (TG-11, RC audit C24). */}
+      {closes ? <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.ink]}>{closes}</Text> : null}
+      {`${closes ? ' · ' : ''}${peopleLine(blend)}`}
     </Text>
   )
 }
@@ -284,7 +286,7 @@ export function useBlendRoom(blendId: string | null, top: number): BlendRoomChro
       ) : null}
       {theirShape ? <RevealSide testID="blend-theirs" side={theirShape.side} people={theirShape.people} count={theirs?.count} /> : null}
       {closing ? (
-        <Text accessibilityLiveRegion="polite" style={[font('meta', bold), styles.quiet]}>
+        <Text accessibilityLiveRegion="polite" maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.quiet]}>
           {closing}
         </Text>
       ) : null}
@@ -294,10 +296,10 @@ export function useBlendRoom(blendId: string | null, top: number): BlendRoomChro
           <View style={styles.well}>
             <Icon name="users" size={ICON.nav} />
           </View>
-          <Text accessibilityRole="header" style={[font('heading', bold), styles.ink]}>
+          <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold), styles.ink]}>
             {`${title} · ${peopleLine(blend)}`}
           </Text>
-          <Text style={[font('body', bold), styles.secondary]}>{blendWelcome(blend.closesAt, venue)}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.secondary]}>{blendWelcome(blend.closesAt, venue)}</Text>
           <View style={styles.cardActions}>
             <Button kind="lit" size="md" label="Got it" pressHaptic={false} onPress={() => markCoachUsed('blend_first_open')} style={styles.flex} />
             <Button kind="secondary" size="md" label="Leave" onPress={leave} style={styles.flex} />

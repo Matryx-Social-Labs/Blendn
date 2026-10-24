@@ -251,6 +251,15 @@ describe('a send the server refuses', () => {
   })
 })
 
+it('TG-02: a room the organiser locked opens read-only, before any send', async () => {
+  api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [{ ...eventRow, status: 'locked' }] } } as never)
+  await open()
+  expect(screen.getByLabelText('Read only. The organiser locked posting in this room.')).toBeTruthy()
+  expect(screen.queryByLabelText('Message')).toBeNull()
+  expect(screen.queryByLabelText('Send')).toBeNull()
+  expect(api.sendChatMessage).not.toHaveBeenCalled()
+})
+
 describe('a room that will not take a send again (drive 4 D-6)', () => {
   it.each([
     ['CHAT_LOCKED', 'This chat has been locked by the organiser'],

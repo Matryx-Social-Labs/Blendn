@@ -159,7 +159,7 @@ export function SceneHero({
           )}
         </View>
         {/* Capped at 1.2: React Native clips a glyph to its line box, and over a photograph that is two rows of sliced letters. */}
-        <Text numberOfLines={2} maxFontSizeMultiplier={1.2} style={[font('title', bold), styles.ink]}>
+        <Text numberOfLines={2} maxFontSizeMultiplier={1.2} textBreakStrategy="balanced" lineBreakStrategyIOS="standard" style={[font('title', bold), styles.ink]}>
           {title}
         </Text>
         {place ? (

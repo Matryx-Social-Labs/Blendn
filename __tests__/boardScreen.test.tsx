@@ -5,7 +5,7 @@
  * on the screen in the server's words, a 409 drawn as a state that never tells
  * a decline, and the guards that keep one tap one request.
  */
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native'
 import { AccessibilityInfo } from 'react-native'
 
 const mockParams: Record<string, string> = {}
@@ -890,5 +890,32 @@ describe('a jump from one board to another (RC drive 2 D-E)', () => {
     await view.rerender(<BoardRoute />)
     await screen.findByText("Nobody’s posted yet")
     expect(screen.queryByDisplayValue('For e1 only')).toBeNull()
+  })
+})
+
+describe('a busy board (TG-15, 120 posts)', () => {
+  const many = (n: number) =>
+    Array.from({ length: n }, (_, i) => (i % 3 === 0 ? { ...OFFER, id: `o${i}`, author: `Offer ${i}` } : { ...SEEKING, id: `s${i}`, author: `Seek ${i}` }))
+  const page = (posts: BoardPost[], totalCount: number) => ({ success: true, data: { posts, pagination: { hasMore: true, nextCursor: 'c1', totalCount } } })
+
+  it('says how many the board has (the server’s count, not the page’s), and Offering / Looking narrow it', async () => {
+    api.getBoard.mockResolvedValue(page(many(30), 120) as never)
+    await render(<BoardScreen />)
+    expect(await screen.findByRole('header', { name: 'Posts, 120' })).toBeTruthy()
+    const filter = screen.getByTestId('board-filter')
+    await fireEvent.press(within(filter).getByText('Offering'))
+    const listed = () => screen.getByTestId('board-list').props.data as BoardPost[]
+    expect(listed()).toHaveLength(10)
+    expect(listed().every((p) => p.kind === 'offer')).toBe(true)
+    // The same chip again is every post.
+    await fireEvent.press(within(filter).getByText('Offering'))
+    expect(listed()).toHaveLength(30)
+  })
+
+  it('a handful of posts: the count, and no filter to learn', async () => {
+    api.getBoard.mockResolvedValue(page([OFFER, SEEKING], 2) as never)
+    await render(<BoardScreen />)
+    expect(await screen.findByRole('header', { name: 'Posts, 2' })).toBeTruthy()
+    expect(screen.queryByTestId('board-filter')).toBeNull()
   })
 })

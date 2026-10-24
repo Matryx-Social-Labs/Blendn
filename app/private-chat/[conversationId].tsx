@@ -746,8 +746,8 @@ function PrivateChatInner() {
               data={feed}
               keyExtractor={(item) => item.id}
               renderItem={renderChatItem}
-              style={[styles.fill, chatFeedFrame(insets.top).style]}
-              contentContainerStyle={[styles.listContent, { paddingTop: chatFeedFrame(insets.top, barSpace).paddingTop, paddingBottom: dockHeight + dockBottom + SPACE.md }]}
+              style={[styles.fill, chatFeedFrame(insets.top, barSpace).style]}
+              contentContainerStyle={[styles.listContent, { paddingTop: chatFeedFrame(insets.top).paddingTop, paddingBottom: dockHeight + dockBottom + SPACE.md }]}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode={KEYBOARD_DISMISS}
@@ -872,6 +872,7 @@ function PrivateChatInner() {
           key={view.bar}
           entering={revealIn}
           exiting={revealOut}
+          testID="dm-reveal-strip"
           onLayout={(e) => setBarHeight(e.nativeEvent.layout.height)}
           style={[styles.reveal, { top }]}
         >

@@ -84,6 +84,9 @@ import { printable } from '../../lib/pulseSections'
 import { useNow } from '../../lib/useNow'
 import { forgetEventDetailCache, getEventDetailCache, setEventDetailCache } from '../../lib/eventDetailCache'
 import { claimUrlFrom } from '../../lib/claimLink'
+import * as Location from 'expo-location'
+import { formatDistance, getDistanceKm } from '../../lib/geo'
+import { ROUGH_FIX_MAX_AGE_MS } from '../../lib/locationFix'
 
 /*
  * What the Scene says in the app's one Sheet (lib/sheet.ts, drawn by SheetHost on the DS Sheet), in the frame's words.
@@ -116,6 +119,28 @@ function useClockPassed(ms: number | null, inclusive = false): boolean {
   return useSyncExternalStore(NO_CLOCK_SUBSCRIPTION, () =>
     ms === null ? false : inclusive ? ms <= Date.now() : ms < Date.now()
   )
+}
+
+/**
+ * How far the event is from the phone's last fix ("2.4km away"), when one is recent and location is already allowed. It
+ * never asks: a Scene is read in bed as often as on the street, and no fix is simply no WHERE tile.
+ */
+function useDistanceAway(latitude?: number, longitude?: number): string | null {
+  const [km, setKm] = useState<number | null>(null)
+  useEffect(() => {
+    // 0,0 is an unset coordinate in this schema, not the Gulf of Guinea.
+    if (!latitude || !longitude) return
+    let live = true
+    Location.getLastKnownPositionAsync({ maxAge: ROUGH_FIX_MAX_AGE_MS })
+      .then((fix) => {
+        if (live && fix) setKm(getDistanceKm(fix.coords.latitude, fix.coords.longitude, latitude, longitude))
+      })
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [latitude, longitude])
+  return formatDistance(km)
 }
 
 interface EventDetailData {
@@ -756,6 +781,8 @@ export default function EventDetail() {
   // Explained with the CTA below; read here, above the early return, because it is a hook.
   const hasStarted = useClockPassed(live ? new Date(live.start_time).getTime() : null, true)
   const isLive = hasStarted && !isEnded
+  /** WHERE says how far, never the venue again (the hero and the Location card do): dropped when no fix is known (D16). */
+  const away = useDistanceAway(event?.latitude, event?.longitude)
 
   /*
    * "N here now", from the room itself while the event runs. Re-read when the
@@ -941,17 +968,14 @@ export default function EventDetail() {
   const cancelled = event?.status === 'cancelled'
   const waitlisted = rsvpStatus === 'waitlisted'
 
-  /** The fourth fact: who, now or after the doors, is there. Before them: who said they are coming. */
-  const crowd = isEnded
-    ? { label: 'ATTENDED', count: checkInCount }
-    : isLive
-      ? { label: 'HERE NOW', count: hereNow ?? detailHere ?? checkInCount }
-      : { label: goingCount > 0 ? 'GOING' : 'INTERESTED', count: goingCount || interestCount }
-
-  // The count means two things either side of the doors: who said they are coming (RSVPs, else saves), then who turned up.
-  const attendeeBlock = hasStarted
-    ? { label: 'Attendees', count: checkInCount }
-    : { label: goingCount > 0 ? 'Going' : 'Interested', count: goingCount || interestCount }
+  /*
+   * Who is there, one word per state, the same in the tile and the section (D17, TG-05): "Going" before the doors (saves,
+   * "Interested", when nobody has RSVP'd), "Here now" while it runs, "Went" after. A cancelled night has nobody to count:
+   * neither is drawn, never "GOING 29" under "Your RSVP is released".
+   */
+  const crowdWord = isEnded ? 'Went' : isLive ? 'Here now' : goingCount > 0 ? 'Going' : 'Interested'
+  const crowdCount = isEnded ? checkInCount : isLive ? (hereNow ?? detailHere ?? checkInCount) : goingCount || interestCount
+  const attendeeBlock = cancelled ? { label: crowdWord, count: 0 } : { label: crowdWord, count: crowdCount }
 
   const ctaState: SceneCTAState = cancelled
     ? 'cancelled'
@@ -963,10 +987,12 @@ export default function EventDetail() {
           ? rsvpCtaState(rsvpStatus)
           : 'join'
 
-  // "I'm going" carries no glyph; "You're going" carries the check (A78).
+  // "I'm going" carries no glyph; "You're going" carries the check (A78). Rating a past night is a star, never the live glyph.
   const ctaIcon: IconName | null =
     ctaState === 'ended'
       ? 'arrow-up-right'
+      : ctaState === 'rate'
+        ? 'star'
       : ctaState === 'rsvpd'
         ? 'check'
         : ctaState === 'waitlisted'
@@ -1028,10 +1054,8 @@ export default function EventDetail() {
       : heroStart
         ? [{ label: doorsLabel, value: eventClock(new Date(heroStart).getTime(), event?.timezone), mono: true, testID: 'scene-tile-doors' }]
         : []),
-    ...(event?.venue_name
-      ? [{ label: 'WHERE', value: [event.venue_name, event.city].filter(Boolean).join(', '), onPress: openInMaps, testID: 'scene-tile-where' }]
-      : []),
-    ...(printable(crowd.count) !== null ? [{ label: crowd.label, value: String(crowd.count), mono: true, testID: 'scene-tile-crowd' }] : []),
+    ...(away ? [{ label: 'WHERE', value: away, onPress: openInMaps, testID: 'scene-tile-where' }] : []),
+    ...(!cancelled && printable(crowdCount) !== null ? [{ label: crowdWord.toUpperCase(), value: String(crowdCount), mono: true, testID: 'scene-tile-crowd' }] : []),
     { label: 'ENTRY', value: door, testID: 'scene-tile-door' },
     ...amenities.map((a) => ({ label: a.title.toUpperCase(), value: a.subtitle || 'Included', testID: `scene-tile-${a.id}` })),
   ]

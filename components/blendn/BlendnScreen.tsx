@@ -1,8 +1,18 @@
-import { barTop } from '../../lib/barGeometry'
+import { barHeight, barTop } from '../../lib/barGeometry'
 import { router } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BackHandler, StyleSheet, Text, View } from 'react-native'
-import Animated, { Easing, FadeIn, FadeInUp, FadeOut, ReduceMotion, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
+import { BackHandler, Platform, StyleSheet, Text, View } from 'react-native'
+import Animated, {
+  Easing,
+  FadeIn,
+  FadeInUp,
+  FadeOut,
+  ReduceMotion,
+  useAnimatedReaction,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { scheduleOnRN } from 'react-native-worklets'
 
@@ -10,7 +20,7 @@ import { apiClient } from '../../lib/apiClient'
 import { blendnClosed, isLiveHint, openPass, takePendingPerson, useDoor, usePendingPerson } from '../../lib/blendnOverlay'
 import { crewsThatMayLikePeople, crewMessage, type BlendRef, type CrewsAtEvent } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
-import { COLOR, DURATION, EASING, FONT_FAMILY, PRESS, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, MATERIAL, PRESS, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import type { TrayButton, TrayExtra } from '../../lib/locationFix'
 import { Logger } from '../../lib/logger'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
@@ -42,15 +52,16 @@ import { MomentPour, ORBS_LIFT_MS, type PourFrame } from '../ds/MomentPour'
 import { MomentRecap } from '../ds/MomentRecap'
 import { PersonCard, type PersonVariant } from '../ds/PersonCard'
 import { Sheet } from '../ds/Sheet'
-import { CONTROL_FONT_CAP, font, HueProvider, minTarget, useBoldText } from '../ds/shared'
+import { CONTROL_FONT_CAP, font, HueProvider, minTarget, useBoldText, useIncreaseContrast } from '../ds/shared'
 import { Toast, type ToastKind } from '../ds/Toast'
 import { ConnectSheet } from '../grid/ConnectSheet'
 import ScalePress from '../motion/ScalePress'
+import { Material } from '../ui/Material'
 import { CrewsFoot, CrewsHead, PeopleCrewStrip, RoomCrewCard } from './RoomCrews'
 import { faceOf, RoomSkeleton, useNow } from './RoomSections'
 import { FriendsHere } from './FriendsHere'
 import { RoomCancelled } from './RoomCancelled'
-import { RoomStage } from './RoomStage'
+import { RoomStage, useStage } from './RoomStage'
 import { RoomView } from './RoomView'
 import { TonightView } from './TonightView'
 import { WaveToast } from './WaveToast'
@@ -159,8 +170,26 @@ export function BlendnScreen() {
   )
 }
 
+/**
+ * Whether the page under the floating bar has scrolled off its top (Tonight's list or the Room's): the stage's own offset,
+ * mirrored into state only as it crosses 0, so a scroll re-renders nothing else.
+ */
+function useScrolledPast(): boolean {
+  const { scrollY } = useStage()
+  const [scrolled, setScrolled] = useState(false)
+  useAnimatedReaction(
+    () => scrollY.get() > 0,
+    (now, before) => {
+      if (now !== before) scheduleOnRN(setScrolled, now)
+    }
+  )
+  return scrolled
+}
+
 function BlendnContent({ onClose }: { onClose: () => void }) {
   const insets = useSafeAreaInsets()
+  const scrolled = useScrolledPast()
+  const contrast = useIncreaseContrast()
   const reduceMotion = useReducedMotion()
   const bold = useBoldText()
   const room = useRoom()
@@ -931,6 +960,17 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
       ) : null}
 
       {/* The bar floats over every mode, so closing is always in the same place (the Recap draws its own). */}
+      {/*
+       * Scrolled, the bar glass sits behind the floating chrome from the screen's top, as TopBar's `scrolled` does (TG-01):
+       * without it, the faces and the hero ran under the close, Check out and the status bar. Mounted, not faded: glass
+       * never fades (§5.2 rule 6), so Reduce Motion has nothing to change. Increase Contrast adds the hairline.
+       */}
+      {mode === 'ended' || !scrolled ? null : (
+        <View testID="blendn-bar" pointerEvents="none" style={[styles.barGlass, { height: barHeight(insets.top, Platform.OS === 'android') }]}>
+          <Material role="bar" style={StyleSheet.absoluteFill} />
+          {contrast ? <View testID="blendn-bar-contrast" style={styles.contrast} /> : null}
+        </View>
+      )}
       {mode === 'ended' ? null : (
         <View style={[styles.topBar, { top: barTop(insets.top) }]} pointerEvents="box-none">
           <IconButton icon="chevron-down" accessibilityLabel="Close Blend’n" onPress={onClose} testID="blendn-close" />
@@ -1142,6 +1182,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   topActions: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
+  barGlass: { position: 'absolute', top: 0, left: 0, right: 0 },
+  contrast: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 1, backgroundColor: MATERIAL.hairlineIncreaseContrast },
   checkOut: {
     height: SIZE.tag,
     paddingHorizontal: SPACE.md,

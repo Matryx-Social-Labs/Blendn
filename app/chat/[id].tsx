@@ -7,7 +7,8 @@ import { useBlendRoom } from '../../components/crews/BlendRoom'
 import { ChatHeader, chatFeedFrame, chatHeaderBottom, OpensLine, SubtitleText } from '../../components/chat/ChatHeader'
 import { BrokenLink } from '../../components/chat/BrokenLink'
 import { KeyboardFrame } from '../../components/chat/KeyboardFrame'
-import { CountLine, FeedSkeleton, JustMutedLine, LoadOlder, NewestChip, ReactionFlight, RoomCover, type Flight } from '../../components/chat/ChatParts'
+import { CountLine, FeedSkeleton, HEADER_FACE, JustMutedLine, LoadOlder, NewestChip, ReactionFlight, RoomCover, type Flight } from '../../components/chat/ChatParts'
+import { CrewEmblem } from '../../components/ds/CrewEmblem'
 import { RoomGuidelinesBanner } from '../../components/chat/RoomGuidelinesBanner'
 import { RoomMessageRow, RoomOutside, senderOf, type Outside, type RowHandlers } from '../../components/chat/RoomFeed'
 import { SenderCard, type Sender } from '../../components/chat/SenderCard'
@@ -37,6 +38,7 @@ import { notOpenYetAt, opensInSpoken } from '../../lib/preEventRoom'
 import { useOpensAt, usePreEventRoom } from '../../lib/usePreEventRoom'
 import { newClientId } from '../../lib/clientId'
 import { BLEND_CLOSED_LINE, defaultRoomName, roomClosedLine, roomKindParam } from '../../lib/crews'
+import { crewsApi } from '../../lib/crewsApi'
 import { COLOR, SIZE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useKeyboardShown } from '../../lib/keyboard'
@@ -53,6 +55,7 @@ import { toggleReaction, withMine } from '../../lib/reactions'
 import { isMuted, markRoomJoined, markRoomLeft, roomSubtitle, useRoomMembership, useRoomMute } from '../../lib/roomMembership'
 import { isSpeech, isTemp, roomMessageFromSocket, roomMessagesFrom, type RoomMessage as Message } from '../../lib/roomMessages'
 import { useHereCount, useRoomRow, type RoomRow } from '../../lib/roomRow'
+import { roomLockedIn } from '../../lib/roomState'
 import { blockStep, messageReportStep } from '../../lib/safetyUtils'
 import { sendOutcome } from '../../lib/sendOutcome'
 import { showSheet } from '../../lib/sheet'
@@ -109,6 +112,25 @@ const stamp = (m: { created_at: string }) => Date.parse(m.created_at) || 0
 const futureInstant = (value: unknown): string | null => {
   const at = typeof value === 'string' ? Date.parse(value) : NaN
   return Number.isFinite(at) && at > Date.now() ? new Date(at).toISOString() : null
+}
+
+/**
+ * A crew chat's header face: the crew's own emblem, as the Banter row and the Blend draw it (TG-17, RC audit C23), read
+ * from the crew (`GET /crews/:id`); the room's square until it answers, or when it does not.
+ */
+function CrewRoomFace({ crewId }: { crewId: string | null }) {
+  const [seed, setSeed] = useState<{ crewId: string; seed: string } | null>(null)
+  useEffect(() => {
+    if (!crewId) return
+    let live = true
+    void crewsApi.crew(crewId).then((r) => {
+      if (live && r.success && r.data?.emblemSeed) setSeed({ crewId, seed: r.data.emblemSeed })
+    })
+    return () => {
+      live = false
+    }
+  }, [crewId])
+  return seed && seed.crewId === crewId ? <CrewEmblem seed={seed.seed} size={HEADER_FACE} testID="room-crew-emblem" /> : <RoomCover />
 }
 
 /** A send only this phone holds: refused ("Not sent") or waiting for a connection. */
@@ -248,6 +270,21 @@ function GroupChatInner() {
     if (wasClosed.current && !countingDown && Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility('The room is open')
     wasClosed.current = !!countingDown
   }, [countingDown])
+  /*
+   * A room the organiser locked opens read-only (TG-02): its row in the Banter's list says so (`status`, the same cached
+   * read as `useRoomRow`). Before, the lock was learnt only from a send it refused, so it opened with a live composer.
+   */
+  const applyLock = composer.apply
+  useEffect(() => {
+    if (!chatRoomId) return
+    let live = true
+    void apiClient.getChatGroups().then((result) => {
+      if (live && result.success && roomLockedIn(result.data, roomId)) applyLock('CHAT_LOCKED')
+    })
+    return () => {
+      live = false
+    }
+  }, [chatRoomId, roomId, applyLock])
   /** The event this room is, to ask its own door (`GET /events/:id/chat`), which knows when it opens. */
   const roomEventId = eventRoom ? (roomInfo.eventId ?? idParam(params.eventId)) : null
   const { showToast } = useToast()
@@ -926,8 +963,8 @@ function GroupChatInner() {
               data={loading && !messages.length ? [] : chatItems}
               renderItem={renderChatItem}
               keyExtractor={(item) => (item.kind === 'separator' ? item.id : item.message_id)}
-              style={[styles.fill, chatFeedFrame(insets.top).style]}
-              contentContainerStyle={[styles.listContent, { paddingTop: chatFeedFrame(insets.top, blendRoom.barSpace).paddingTop, paddingBottom: dockHeight + dockBottom + SPACE.md }]}
+              style={[styles.fill, chatFeedFrame(insets.top, blendRoom.barSpace).style]}
+              contentContainerStyle={[styles.listContent, { paddingTop: chatFeedFrame(insets.top).paddingTop, paddingBottom: dockHeight + dockBottom + SPACE.md }]}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode={KEYBOARD_DISMISS}
@@ -1042,7 +1079,7 @@ function GroupChatInner() {
         testID="room-header"
         title={blendRoom.title ?? name}
         muted={muted}
-        leading={blendRoom.leading ?? <RoomCover uri={eventImage} />}
+        leading={blendRoom.leading ?? (roomKind === 'crew' ? <CrewRoomFace crewId={crewIdParam ?? null} /> : <RoomCover uri={eventImage} />)}
         subtitle={outside?.kind === 'notopen' ? (notOpenIn ? <OpensLine label={notOpenIn} spoken={opensInSpoken(notOpenIn)} count={null} /> : null) : outside ? null : (blendRoom.subtitle ?? subtitle)}
         onBack={goBack}
         moreLabel={blendRoom.blend ? 'More' : 'Room info'}

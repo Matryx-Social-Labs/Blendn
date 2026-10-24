@@ -12,12 +12,12 @@ import { Orbs } from '../../components/ds/Orbs'
 import { RadioCard } from '../../components/ds/RadioCard'
 import { SectionHeader } from '../../components/ds/SectionHeader'
 import { SettingsRow } from '../../components/ds/SettingsRow'
-import { font, HueProvider, useBoldText } from '../../components/ds/shared'
+import { CONTROL_FONT_CAP, font, HueProvider, useBoldText } from '../../components/ds/shared'
 import { fadeInFast } from '../../components/motion/presence'
 import { useToast } from '../../components/Toast'
 import { apiClient } from '../../lib/apiClient'
 import { intentAnswered } from '../../lib/checkIn'
-import { COLOR, SPACE, SPRING } from '../../lib/design/tokens'
+import { COLOR, MAX_FONT_SCALE, SPACE, SPRING } from '../../lib/design/tokens'
 import { toggleIntent } from '../../lib/intents'
 import { Logger } from '../../lib/logger'
 import { revealReadiness, type RevealReadiness } from '../../lib/reveal'
@@ -229,10 +229,10 @@ function EventPreferencesContent() {
         />
       ) : (
         <View style={styles.headline}>
-          <Text accessibilityRole="header" style={[font('title', bold), styles.ink]}>
+          <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.ink]}>
             Can people see who you are?
           </Text>
-          <Text style={[font('meta', bold), styles.secondary]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
             By default you appear as a made-up name, and people see what you have in common rather than who you are. Turning this on shows your real name and photo to people in this room.
           </Text>
         </View>
@@ -276,10 +276,10 @@ function EventPreferencesContent() {
     <View style={styles.section}>
       {askIntent ? (
         <View style={styles.headline}>
-          <Text accessibilityRole="header" style={[font('title', bold), styles.ink]}>
+          <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.ink]}>
             Why do you go out?
           </Text>
-          <Text style={[font('meta', bold), styles.secondary]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
             It shapes who you’re introduced to. We’ll remember this for future events; change it any time from your profile.
           </Text>
         </View>
@@ -290,7 +290,7 @@ function EventPreferencesContent() {
       {justHere ? (
         <>
           {/* Exclusive of the cards above: choosing it clears them, so it stands apart. */}
-          <Text accessibilityElementsHidden importantForAccessibility="no" style={[font('label', bold), styles.or]}>
+          <Text accessibilityElementsHidden importantForAccessibility="no" maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('label', bold), styles.or]}>
             OR
           </Text>
           {intentOption(justHere)}

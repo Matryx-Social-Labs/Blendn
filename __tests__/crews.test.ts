@@ -12,6 +12,7 @@ import {
   CREW_REPORT_REASONS,
   blendSides,
   blendTitle,
+  blendWith,
   closesLine,
   consentBody,
   createCrewBody,
@@ -238,8 +239,9 @@ describe('a Blend’s sides', () => {
     }
     expect(blendSides(blend, 'me').mine?.name).toBe('Two')
     expect(blendSides(blend, 'me').theirs?.name).toBe('Five')
-    // Two crews: "Crew" before the other's name, as the room's header is drawn.
-    expect(blendTitle(blend, 'me')).toBe('Blend with Crew Five')
+    // One name on every surface (TG-11): the other side's name as given, never "Crew " before it.
+    expect(blendTitle(blend, 'me')).toBe('Blend with Five')
+    expect(blendTitle({ ...blend, sides: [blend.sides[0], { ...blend.sides[1], name: 'RC4 Crew Y' }] }, 'me')).toBe(blendWith('RC4 Crew Y'))
   })
 
   it('one person’s side is named by their first name once revealed, else their pseudonym; a solo person is not "Crew"', () => {

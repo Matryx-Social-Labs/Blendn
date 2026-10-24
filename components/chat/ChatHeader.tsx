@@ -46,11 +46,16 @@ export function chatHeaderBottom(insetTop: number) {
  * Flow 5 room and DM frames draw it (the feed at 124 under a capsule ending at
  * 112) — nothing passes behind the status bar or in the strip around the
  * capsule (drive 2: a sender's name read between the clock and the header).
- * The first message sits the frames' 12 below it. `extra`: what sits under the
- * capsule before the first message (the DM's reveal bar).
+ * The first message sits the frames' 12 below it. `extra`: a strip pinned
+ * under the capsule (the DM's reveal bar, a Blend's sides), at
+ * `chatHeaderBottom`, measured: the window starts under it, so nothing the
+ * feed holds is ever behind it (TG-04). As the content's top padding it was
+ * only room at rest, and a feed that follows its end scrolled the match card
+ * and the empty state up behind the opaque strip (RC audit C3, C6).
  */
 export function chatFeedFrame(insetTop: number, extra = 0) {
-  return { style: { marginTop: capsuleTop(insetTop) + chatCapsuleHeight() }, paddingTop: SPACE.md + extra }
+  const strip = extra > 0 ? SPACE.md + extra : 0
+  return { style: { marginTop: capsuleTop(insetTop) + chatCapsuleHeight() + strip }, paddingTop: SPACE.md }
 }
 
 /**

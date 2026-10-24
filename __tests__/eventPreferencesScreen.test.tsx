@@ -8,9 +8,11 @@
  * "is it a button, and does it say what is chosen" is what a screen reader
  * gets, and a grep for the prop would pass on the wrong element.
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
 import { readFileSync } from 'fs'
 import { join } from 'path'
+import { AX_XXXL, atScale, resetScale, textNodes } from './helpers/togetherAx'
+import { MAX_FONT_SCALE } from '../lib/design/tokens'
 
 jest.mock('../lib/logger', () => ({
   Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() },
@@ -292,5 +294,21 @@ describe('opened cold, with nothing behind it', () => {
     await fireEvent.press(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(router.replace).toHaveBeenCalledWith({ pathname: '/event/[id]', params: { id: 'e1' } }))
     expect(router.back).not.toHaveBeenCalled()
+  })
+})
+
+describe('at AX XXXL (TG-03)', () => {
+  beforeEach(() => atScale(AX_XXXL))
+  afterEach(resetScale)
+
+  it.each([['1'], ['0']])('askIntent=%s: the screen’s own titles and their lines stop at their caps', async (askIntent) => {
+    mockParams.askIntent = askIntent
+    await render(<EventPreferences />)
+    await act(async () => {})
+    const owned = textNodes(screen.toJSON() as never).filter((n) => n.props.accessibilityRole === 'header')
+    expect(owned.length).toBeGreaterThan(0)
+    for (const h of owned) expect(h.props.maxFontSizeMultiplier).toBeLessThanOrEqual(MAX_FONT_SCALE.title)
+    const src = readFileSync(join(__dirname, '..', 'app', 'event-preferences', '[eventId].tsx'), 'utf8')
+    expect(src.match(/<Text(?![^>]*maxFontSizeMultiplier)[^>]*>/g) ?? []).toEqual([])
   })
 })

@@ -18,14 +18,13 @@ import type { DetailBlock } from '../../lib/eventDetails'
 import type { FeedMediaItem } from '../../lib/feedMedia'
 import { Avatar } from '../ds/Avatar'
 import { Spinner } from '../ds/Loader'
-import { RollingNumber } from '../ds/RollingNumber'
 import { SectionHeader } from '../ds/SectionHeader'
-import { CONTROL_FONT_CAP, font, useBoldText } from '../ds/shared'
+import { CONTROL_FONT_CAP, font, useBoldText, useLargeText } from '../ds/shared'
 import ScalePress from '../motion/ScalePress'
 import { fadeInFast, popIn } from '../motion/presence'
 import { GradientFill } from '../ui/GradientFill'
 import { Icon } from '../ui/Icon'
-import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, MATERIAL, RADIUS, RISE, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, MATERIAL, MAX_FONT_SCALE, RADIUS, RISE, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { DARK_MAP_STYLE, LOCATION_CARD_DELTA } from '../../lib/mapStyle'
 import { printable } from '../../lib/pulseSections'
 import { avatarStack } from '../../lib/pseudonymAvatar'
@@ -93,6 +92,7 @@ export const MAP_HEIGHT = 256
  */
 export function SceneByline({ host, hereNow }: { host?: string | null; hereNow?: number | null }) {
   const bold = useBoldText()
+  const largeText = useLargeText()
   // Under five is not printed, the Pulse's rule: "3 here now" names whoever they are.
   const here = printable(hereNow)
   const live = here !== null
@@ -100,14 +100,14 @@ export function SceneByline({ host, hereNow }: { host?: string | null; hereNow?:
   return (
     <View style={styles.byline} testID="scene-byline">
       {host ? (
-        <Text numberOfLines={1} style={[font('meta', bold), styles.secondary]}>
-          By <Text style={styles.ink}>{host}</Text>
+        <Text numberOfLines={largeText ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
+          By <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={styles.ink}>{host}</Text>
         </Text>
       ) : null}
       {live ? (
         <View style={styles.bylineLive} accessible accessibilityLabel={`${here} people here now`}>
           <View style={styles.liveDot} />
-          <Text style={[font('meta', bold), styles.secondary]}>{here} here now</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>{here} here now</Text>
         </View>
       ) : null}
     </View>
@@ -115,7 +115,8 @@ export function SceneByline({ host, hereNow }: { host?: string | null; hereNow?:
 }
 
 /**
- * Attendees: a heading, the count rolling beside it, and a stack of creatures (kept from before the redesign).
+ * Who is there: a heading in the state's one word ("Going", "Here now", "Went") with its inline count, and a stack of
+ * creatures (kept from before the redesign).
  *
  * ## The faces are not coming back
  *
@@ -128,24 +129,22 @@ export function SceneByline({ host, hereNow }: { host?: string | null; hereNow?:
  * The heading is a prop because the number means two different things either side of the doors: who said they are coming,
  * then who turned up.
  */
-export function SceneAttendees({ count, seed, label = 'Attendees' }: { count: number; seed: string; label?: string }) {
+export function SceneAttendees({ count, seed, label }: { count: number; seed: string; label: string }) {
   const bold = useBoldText()
   // Under five the number is not printed (the Pulse's rule), and neither is a stack that would count it: just the heading.
   const printed = printable(count)
   if (printed === null) {
     return (
       <View style={styles.attendeesSection} testID="scene-attendees">
-        <SectionHeader title="Attendees" />
+        <SectionHeader title={label} />
       </View>
     )
   }
   const { shown, remainder } = avatarStack(printed)
   return (
     <View style={styles.attendeesSection} testID="scene-attendees">
-      <View accessible accessibilityRole="header" accessibilityLabel={`${label}, ${printed}`} style={styles.attendees}>
-        <SectionHeader title={label} />
-        <RollingNumber value={printed} role="numericDisplay" color={COLOR.textSecondary} />
-      </View>
+      {/* The section's inline count ("Here now · 483"), on the title's baseline: never a 40 pt number 18 px above it (B-S13). */}
+      <SectionHeader title={label} count={printed} />
       {shown > 0 ? (
         <View style={styles.stack} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
           {Array.from({ length: shown }, (_, i) => (
@@ -155,7 +154,7 @@ export function SceneAttendees({ count, seed, label = 'Attendees' }: { count: nu
           ))}
           {remainder > 0 ? (
             <View style={[styles.more, styles.overlap]}>
-              <Text style={[font('bodyStrong', bold, FONT_FAMILY.mono[700]), styles.ink]}>+{remainder}</Text>
+              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold, FONT_FAMILY.mono[700]), styles.ink]}>+{remainder}</Text>
             </View>
           ) : null}
         </View>
@@ -210,11 +209,11 @@ export function SceneLocationCard({ venue, area, map }: { venue: string; area: s
   return (
     <View style={styles.locationCard} testID="scene-location">
       <View style={styles.cardBody}>
-        <Text style={[font('label', bold), styles.secondary]}>LOCATION</Text>
-        <Text style={[font('bodyStrong', bold), styles.ink]}>{venue}</Text>
+        <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('label', bold), styles.secondary]}>LOCATION</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>{venue}</Text>
         <View style={styles.addressRow}>
           <Icon name="map-pin" size={ICON.inline} color={COLOR.textSecondary} />
-          <Text numberOfLines={2} style={[font('meta', bold), styles.secondary, styles.shrink]}>
+          <Text numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.shrink]}>
             {area}
           </Text>
         </View>
@@ -232,11 +231,11 @@ export function SceneLocationCard({ venue, area, map }: { venue: string; area: s
  */
 export function SceneBody({ children }: { children: React.ReactNode }) {
   const bold = useBoldText()
-  return <Text style={[font('body', bold), styles.secondary]}>{children}</Text>
+  return <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.secondary]}>{children}</Text>
 }
 
 export function SceneBodyAccent({ children }: { children: string }) {
-  return <Text style={styles.ink}>{children}</Text>
+  return <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={styles.ink}>{children}</Text>
 }
 
 /**
@@ -473,8 +472,8 @@ export function SceneDetails({ blocks }: { blocks: readonly DetailBlock[] }) {
             <View style={styles.detailPairs}>
               {block.pairs.map((p) => (
                 <View key={p.label} style={styles.detailPair}>
-                  <Text style={styles.detailPairLabel}>{p.label}</Text>
-                  <Text style={styles.detailPairValue}>{p.value}</Text>
+                  <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={styles.detailPairLabel}>{p.label}</Text>
+                  <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={styles.detailPairValue}>{p.value}</Text>
                 </View>
               ))}
             </View>
@@ -507,7 +506,7 @@ export function SceneDetails({ blocks }: { blocks: readonly DetailBlock[] }) {
                     style={styles.detailQuestionButton}
                   >
                     <View style={styles.detailQuestionRow}>
-                      <Text style={styles.detailQuestionText}>{item.question}</Text>
+                      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={styles.detailQuestionText}>{item.question}</Text>
                       <Animated.View
                         style={{
                           transform: [{ rotate: isOpen ? '180deg' : '0deg' }],
@@ -521,7 +520,7 @@ export function SceneDetails({ blocks }: { blocks: readonly DetailBlock[] }) {
                     </View>
                   </ScalePress>
                     {isOpen ? (
-                      <Animated.Text entering={fadeInFast} style={styles.detailAnswer}>
+                      <Animated.Text entering={fadeInFast} maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={styles.detailAnswer}>
                         {item.answer}
                       </Animated.Text>
                     ) : null}
@@ -632,7 +631,6 @@ const styles = StyleSheet.create({
   bylineLive: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   liveDot: { width: SPACE.sm, height: SPACE.sm, borderRadius: RADIUS.capsule, backgroundColor: COLOR.live },
   attendeesSection: { gap: SPACE.lg },
-  attendees: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
   stack: { flexDirection: 'row', alignItems: 'center' },
   overlap: { marginLeft: -SPACE.lg },
   more: { width: AVATAR, height: AVATAR, borderRadius: RADIUS.capsule, borderWidth: SPACE.xxs, borderColor: COLOR.ink, backgroundColor: COLOR.surfaceSunken, alignItems: 'center', justifyContent: 'center' },

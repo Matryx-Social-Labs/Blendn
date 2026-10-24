@@ -193,6 +193,17 @@ describe('a warning before contact details (C2, 5.10)', () => {
     expect(screen.queryByTestId('room-composer-warning')).toBeNull()
   })
 
+  it('a crew room’s header is the crew’s own emblem, read from the crew (TG-17, RC audit C23)', async () => {
+    mockParams = { id: 'g1', kind: 'crew', crewId: 'c1' }
+    ;(apiClient.queuedRequest as jest.Mock).mockImplementation(async (url: string) =>
+      url.endsWith('/api/mobile/crews/c1') ? { success: true, data: { crewId: 'c1', emblemSeed: 'seed-nebula' } } : { success: false, errorCode: 'NOT_FOUND', error: 'Not found' }
+    )
+    await render(<GroupChat />)
+    await flush()
+    expect(screen.getByTestId('room-crew-emblem', { includeHiddenElements: true })).toBeTruthy()
+    ;(apiClient.queuedRequest as jest.Mock).mockResolvedValue({ success: false, errorCode: 'NOT_FOUND', error: 'Not found' })
+  })
+
   it('a crew room says its own sentence', async () => {
     mockParams = { id: 'g1', kind: 'crew', crewId: 'c1' }
     await render(<GroupChat />)

@@ -401,8 +401,10 @@ describe('the app icon follows what the Banter reads (badgeCount counts unread c
   it('Mark all read re-reads the icon once the server has it', async () => {
     api.markAllConversationsRead.mockResolvedValue({ success: true, data: { marked: 1 } } as never)
     await open()
+    // One control for the action: the header's, as the frame draws it; the People heading carries no second link (D29).
+    expect(screen.queryByText('Mark all read')).toBeNull()
     await act(async () => {
-      fireEvent.press(screen.getByText('Mark all read'))
+      fireEvent.press(screen.getByTestId('banter-mark-all'))
     })
     await flush()
     expect(api.markAllConversationsRead).toHaveBeenCalled()
@@ -413,7 +415,7 @@ describe('the app icon follows what the Banter reads (badgeCount counts unread c
     api.markAllConversationsRead.mockResolvedValue({ success: false, error: 'no' } as never)
     await open()
     await act(async () => {
-      fireEvent.press(screen.getByText('Mark all read'))
+      fireEvent.press(screen.getByTestId('banter-mark-all'))
     })
     await flush()
     expect(mockRefreshBadge).not.toHaveBeenCalled()
@@ -613,4 +615,13 @@ describe('the branded pull to refresh (#18)', () => {
     await pull(-20)
     expect(api.getChatGroups).not.toHaveBeenCalled()
   })
+})
+
+it('a crew like is the crew chat’s preview as words, never "You: liked …" (TG-10)', async () => {
+  serve()
+  const crewRoom = { id: 'c-1', kind: 'crew', name: 'Crew Five', unreadCount: 0, lastMessageAt: at, lastMessage: { content: 'liked Crew Nebula for the crew', createdAt: at, user: { id: 'u-a', name: 'Asha' } } }
+  api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [liveRoom], rooms: [crewRoom] } } as never)
+  await open()
+  expect(await screen.findByText('You liked Crew Nebula for the crew')).toBeTruthy()
+  expect(screen.queryByText(/You: liked/)).toBeNull()
 })

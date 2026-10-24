@@ -13,8 +13,12 @@
 import { fnv1a } from './pseudonymAvatar'
 import { clockTime, eventClock } from './time'
 
-/** A reason line has to fit under a face in a three-column grid. */
-export const REASON_MAX = 24
+/**
+ * A reason line has to fit under a face in a three-column grid: at 24 almost every one was cut ("Both at 1 night bef…",
+ * RC audit B-R7). 19 is the longest fixed sentence, "Both open to dating", which is the same words as the card's overlap
+ * line (`lib/overlapLine.ts`); counts take their short phrasing well under it.
+ */
+export const REASON_MAX = 19
 
 /** "Just walked in" for this long after a check-in. */
 export const JUST_ARRIVED_MS = 10 * 60_000
@@ -43,11 +47,6 @@ export interface ReasonSource {
  */
 function fit(text: string, max = REASON_MAX): string {
   return text.length <= max ? text : `${text.slice(0, max - 1).trimEnd()}…`
-}
-
-/** The long phrasing when it fits, else the short one, else cut. */
-function shortest(long: string, short: string): string {
-  return long.length <= REASON_MAX ? long : fit(short)
 }
 
 /**
@@ -86,17 +85,13 @@ export function reasonLines(p: ReasonSource & { overlaps?: readonly { text: stri
 export function reasonLine(p: ReasonSource, now: number = Date.now()): string {
   if (p.sharedIntents?.includes('dating')) return 'Both open to dating'
 
-  // Counts get a shorter phrasing rather than an ellipsis once they reach two
-  // digits: "Going to 12 more togeth…" cuts the only word that explains it.
+  // Counts take the short phrasing, which fits at every count a person has: an ellipsis would cut the only word that
+  // explains it ("Going to 12 more togeth…").
   const plans = p.sharedPlans ?? 0
-  if (plans > 0) return shortest(`Going to ${plans} more together`, `Both going to ${plans} more`)
+  if (plans > 0) return fit(`${plans} ${plans === 1 ? 'plan' : 'plans'} in common`)
 
   const history = p.sharedEvents ?? 0
-  if (history > 0) {
-    return history === 1
-      ? 'Both at 1 night before'
-      : shortest(`Both at ${history} nights before`, `Both at ${history} nights`)
-  }
+  if (history > 0) return fit(`Both at ${history} ${history === 1 ? 'night' : 'nights'}`)
 
   const interests = (p.interests ?? []).filter((s) => s.trim().length > 0)
   if (interests.length > 0) {

@@ -290,6 +290,16 @@ export function defaultRoomName(kind: 'crew' | 'blend' | null): string {
   return kind === 'crew' ? 'Crew chat' : kind === 'blend' ? 'Your Blend' : 'Event chat'
 }
 
+/**
+ * A crew like said in the liker's crew chat (admin lib/crews/like.ts `sayInCrew`): a `system` message whose words are the
+ * predicate, "liked Crew Nebula for the crew", and whose sender is the liker. The room names who: "You liked …" or "Rohan
+ * liked …", a centred line and a Banter preview with no "You:" (TG-10). Null for anything else.
+ * ponytail: matched on the words, as the Banter's last message carries no `type` yet (S-7); read the kind once it does.
+ */
+export function crewLikeLine(text: string, who: string): string | null {
+  return /^liked .+ for the crew$/.test(text.trim()) ? `${who} ${text.trim()}` : null
+}
+
 /** A room kind from a route param, or null for an event's room. */
 export function roomKindParam(value: unknown): 'crew' | 'blend' | null {
   return value === 'crew' || value === 'blend' ? value : null
@@ -417,14 +427,16 @@ function sideName(side: BlendSide): string {
 }
 
 /**
- * The room's header (flow10b.js `blendRoom`): "Blend with Crew Orbit" between
- * two crews, "Blend with Nebula" when you are one person.
+ * One Blend, one name, on every surface: "Blend with {their side}" (TG-11). The other side's name as its people gave it:
+ * the frame's "Crew " before a crew's name doubled real ones ("Blend with Crew RC4 Crew Y") and differed from the Banter's
+ * "Blend with RC4 Crew Y" (RC audit C24).
  */
+export const blendWith = (theirName: string) => `Blend with ${theirName}`
+
+/** The room's header (flow10b.js `blendRoom`) and the Banter's card: `blendWith` the other side. */
 export function blendTitle(blend: Blend, myId: string | null | undefined): string {
-  const { mine, theirs } = blendSides(blend, myId)
-  if (!theirs) return 'Your Blend'
-  const crewToCrew = mine?.kind === 'crew' && theirs.kind === 'crew'
-  return `Blend with ${crewToCrew ? 'Crew ' : ''}${sideName(theirs)}`
+  const { theirs } = blendSides(blend, myId)
+  return theirs ? blendWith(sideName(theirs)) : 'Your Blend'
 }
 
 /* -------------------------------------------------------------------------- */

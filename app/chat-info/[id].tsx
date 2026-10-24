@@ -14,14 +14,14 @@ import { IconButton } from '../../components/ds/IconButton'
 import { ScrimPill, TimeBadge } from '../../components/ds/MonoFamily'
 import { SectionHeader } from '../../components/ds/SectionHeader'
 import { SettingsGroup, SettingsRow } from '../../components/ds/SettingsRow'
-import { font, HueProvider, useBoldText } from '../../components/ds/shared'
+import { CONTROL_FONT_CAP, font, HueProvider, useBoldText } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { Orbs } from '../../components/ds/Orbs'
 import { Icon } from '../../components/ui/Icon'
 import { PhotoScrim, StatusScrim } from '../../components/ui/GradientFill'
 import { apiClient } from '../../lib/apiClient'
 import { COMMUNITY_GUIDELINES_URL } from '../../lib/communityGuidelines'
-import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE, TYPE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SPACE, TYPE } from '../../lib/design/tokens'
 import { liveNowWord } from '../../lib/home'
 import { openInApp } from '../../lib/links'
 import { printable } from '../../lib/pulseSections'
@@ -247,19 +247,19 @@ function ChatInfoInner() {
               {muted ? (
                 <ScrimPill testID="info-muted">
                   <Icon name="bell-off" size={ICON.inline} />
-                  <Text style={[font('caption', bold), styles.ink]}>{muteLabel(mute)}</Text>
+                  <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), styles.ink]}>{muteLabel(mute)}</Text>
                 </ScrimPill>
               ) : null}
             </View>
           ) : null}
-          <Text accessibilityRole="header" numberOfLines={2} style={[font('title', bold), styles.ink]}>
+          <Text accessibilityRole="header" numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.ink]}>
             {title}
           </Text>
           {count || (eventTitle && eventTitle !== title) ? (
-            <Text style={[font('meta', bold), styles.ink]}>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink]}>
               {count ? (
                 <>
-                  <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{count}</Text> in the room
+                  <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{count}</Text> in the room
                 </>
               ) : null}
               {count && eventTitle && eventTitle !== title ? ' · ' : ''}
@@ -343,8 +343,8 @@ function ChatInfoInner() {
       >
         <Icon name="log-out" size={ICON.control} />
         <View style={styles.leaveText}>
-          <Text style={[font('bodyStrong', bold), styles.ink]}>Leave room</Text>
-          <Text style={[font('meta', bold), styles.secondary]}>{leaveHint}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>Leave room</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>{leaveHint}</Text>
         </View>
       </Pressable>
     </View>
@@ -459,7 +459,8 @@ const MemberCell = memo(function MemberCell({
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: COLOR.ink },
-  hero: { height: HERO_HEIGHT, backgroundColor: COLOR.ink, overflow: 'hidden', justifyContent: 'flex-end' },
+  // A floor, not a height: at AX the title and its line grow, and the hero grows with them (TG-03).
+  hero: { minHeight: HERO_HEIGHT, backgroundColor: COLOR.ink, overflow: 'hidden', justifyContent: 'flex-end' },
   scrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '66%' },
   heroText: { paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.xl, gap: SPACE.sm },
   badges: { flexDirection: 'row', gap: SPACE.sm },
