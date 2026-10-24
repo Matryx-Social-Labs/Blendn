@@ -19,7 +19,7 @@ import { useToastDock } from '../../components/toastDock'
 import { type Crew, type CrewInvite } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
 import { crewRowSub, inviteRows } from '../../lib/crewsScreens'
-import { COLOR, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
 import { ONBOARDING_ROUTES } from '../../lib/onboarding'
 import { useTopBarState } from '../../lib/useTopBarState'
@@ -39,7 +39,8 @@ const DOCK_GAP = SPACE.xl
 const FIRST_ITEM_MS = 600
 /** Three rows of the card, so the list does not jump when it lands. */
 const SKELETON_ROWS = 3
-const FOOTNOTE = 'Who’s where shows once you’ve checked in at a night. Crews live here and in the Banter.'
+/** D-L18: what the footnote means, in one plain sentence. */
+export const FOOTNOTE = 'Where your crew is shows once you’ve checked in somewhere.'
 
 /**
  * Your crews, and the invites waiting for you (Flow 10 · 10.1).
@@ -56,6 +57,8 @@ function CrewsScreenContent() {
   const [refreshing, setRefreshing] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [moreFailed, setMoreFailed] = useState(false)
+  // The docked button's measured height: at the accessibility sizes it is taller than `SIZE.primary`, and the footnote ran under it (D-M11).
+  const [dockHeight, setDockHeight] = useState<number>(SIZE.primary)
   // The list fades in over its skeleton only if one was drawn (a wait under 300 ms shows no skeleton).
   const arrive = useSkeletonCrossfade(load.kind === 'loading')
   const reduceMotion = useReducedMotion()
@@ -198,7 +201,9 @@ function CrewsScreenContent() {
                 />
               ))}
             </RowsCard>
-            <Text style={[font('meta', bold), styles.footnote]}>{FOOTNOTE}</Text>
+            <Text style={[font('meta', bold), styles.footnote]} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} testID="crews-footnote">
+              {FOOTNOTE}
+            </Text>
           </View>
         ) : null}
       </Animated.View>
@@ -208,7 +213,7 @@ function CrewsScreenContent() {
   // The dock is a crew screen's one action once there is a list to put a crew in.
   const docked = load.kind === 'ready' && (load.crews.length > 0 || load.invites.length > 0)
   // The Android snackbar stands above the docked button (the toast adds the bottom inset itself).
-  useToastDock(docked ? SIZE.primary + DOCK_GAP : 0)
+  useToastDock(docked ? dockHeight + DOCK_GAP : 0)
 
   return (
     <View style={styles.container}>
@@ -219,7 +224,7 @@ function CrewsScreenContent() {
         contentContainerStyle={[
           styles.content,
           load.kind === 'ready' ? null : styles.centred,
-          docked && { paddingBottom: SIZE.primary + DOCK_GAP * 2 + insets.bottom },
+          docked && { paddingBottom: dockHeight + DOCK_GAP * 2 + insets.bottom },
         ]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLOR.textSecondary} />}
         showsVerticalScrollIndicator={false}
@@ -227,7 +232,7 @@ function CrewsScreenContent() {
         {body}
       </ScrollView>
       {docked ? (
-        <View pointerEvents="box-none" style={[styles.dock, { bottom: insets.bottom + DOCK_GAP }]}>
+        <View pointerEvents="box-none" style={[styles.dock, { bottom: insets.bottom + DOCK_GAP }]} onLayout={(e) => setDockHeight(e.nativeEvent.layout.height)} testID="crews-dock">
           <Button label="Make a crew" icon="plus" onPress={openNew} testID="crews-make" />
         </View>
       ) : null}

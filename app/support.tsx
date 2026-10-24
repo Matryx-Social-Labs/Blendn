@@ -4,12 +4,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Button } from '../components/ds/Button'
 import { SettingsGroup, SettingsRow } from '../components/ds/SettingsRow'
-import { font, monoValue, useBoldText } from '../components/ds/shared'
+import { font, monoValue, useBoldText, useLargeText } from '../components/ds/shared'
 import { TopBar } from '../components/ds/TopBar'
 import ScalePress from '../components/motion/ScalePress'
 import { useToast } from '../components/Toast'
 import { Icon, type IconName } from '../components/ui/Icon'
-import { COLOR, ICON, PRESS, RADIUS, SIZE, SPACE } from '../lib/design/tokens'
+import { COLOR, ICON, MAX_FONT_SCALE, PRESS, RADIUS, SIZE, SPACE } from '../lib/design/tokens'
 import { copyText } from '../lib/copyText'
 import { BLENDN_LINKS, openInApp } from '../lib/links'
 import { appVersionLabel, platformParts, shortAccountId, SUPPORT_EMAIL, supportMailto } from '../lib/support'
@@ -29,6 +29,8 @@ export default function SupportScreen() {
   const bar = useTopBarOverlay()
   const insets = useSafeAreaInsets()
   const bold = useBoldText()
+  // D-M9: at the accessibility sizes a row's label and value no longer fit side by side; the label went. They stack.
+  const largeText = useLargeText()
 
   const email = () =>
     Linking.openURL(supportMailto({ subject: "Blend’n support", userId: user?.id })).catch(() =>
@@ -54,7 +56,7 @@ export default function SupportScreen() {
         scrollIndicatorInsets={{ top: bar.indicatorTop }}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={[font('body', bold), styles.ink]}>
+        <Text style={[font('body', bold), styles.ink]} maxFontSizeMultiplier={MAX_FONT_SCALE.body}>
           Tell us what happened and we’ll write back by email. Your draft includes these details so we don’t have to ask:
         </Text>
 
@@ -62,10 +64,16 @@ export default function SupportScreen() {
           {details.map((row, i) => (
             <View key={row.name}>
               {i ? <View style={styles.hairline} /> : null}
-              <View accessible accessibilityLabel={`${row.name}, ${row.value}`} style={styles.detail}>
+              <View accessible accessibilityLabel={`${row.name}, ${row.value}`} style={styles.detail} testID={`support-detail-${i}`}>
                 <Icon name={row.icon} size={ICON.control} />
-                <Text style={[font('bodyStrong', bold), styles.name]}>{row.name}</Text>
-                <Text style={[monoValue(bold), styles.value]}>{row.value}</Text>
+                <View style={largeText ? styles.stacked : styles.inline}>
+                  <Text style={[font('bodyStrong', bold), styles.name]} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong}>
+                    {row.name}
+                  </Text>
+                  <Text style={[monoValue(bold), styles.value]} maxFontSizeMultiplier={MAX_FONT_SCALE.meta}>
+                    {row.value}
+                  </Text>
+                </View>
               </View>
             </View>
           ))}
@@ -82,7 +90,10 @@ export default function SupportScreen() {
           style={styles.address}
           testID="support-address"
         >
-          <Text style={[monoValue(bold), styles.addressText]}>{SUPPORT_EMAIL}</Text>
+          {/* One line, shrunk to fit: an address broken mid-way can't be read back (D-L13). */}
+          <Text style={[monoValue(bold), styles.addressText]} numberOfLines={1} adjustsFontSizeToFit>
+            {SUPPORT_EMAIL}
+          </Text>
           <Icon name="copy" size={ICON.inline} color={COLOR.textTertiary} />
         </ScalePress>
 
@@ -90,7 +101,7 @@ export default function SupportScreen() {
           <SettingsRow icon="circle-question-mark" title="Help centre" hint="Answers to the common questions" trail="external" onPress={() => void openHelp()} />
         </SettingsGroup>
 
-        <Text style={[font('meta', bold), styles.foot]}>Nothing is sent until you press Send in your mail app.</Text>
+        <Text style={[font('meta', bold), styles.foot]} maxFontSizeMultiplier={MAX_FONT_SCALE.meta}>Nothing is sent until you press Send in your mail app.</Text>
       </ScrollView>
       <View style={bar.barPin} pointerEvents="box-none">
         <TopBar title="Contact support" state={bar.state} onBack={() => router.back()} testID="support-top" />
@@ -105,11 +116,13 @@ const styles = StyleSheet.create({
   ink: { color: COLOR.textPrimary },
   details: { borderRadius: RADIUS.sheet, backgroundColor: COLOR.surface, overflow: 'hidden' },
   detail: { flexDirection: 'row', alignItems: 'center', gap: SPACE.lg, paddingHorizontal: SPACE.lg, paddingVertical: SPACE.md, minHeight: SIZE.targetIos },
-  name: { flex: 1, color: COLOR.textPrimary },
+  inline: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: SPACE.lg },
+  stacked: { flex: 1, gap: SPACE.xxs },
+  name: { flexShrink: 1, flexGrow: 1, color: COLOR.textPrimary },
   value: { color: COLOR.textSecondary },
   hairline: { height: StyleSheet.hairlineWidth, backgroundColor: COLOR.hairline, marginLeft: SPACE.lg + ICON.control + SPACE.lg },
-  address: { flexDirection: 'row', alignSelf: 'center', alignItems: 'center', gap: SPACE.sm, minHeight: SIZE.targetIos, paddingHorizontal: SPACE.lg },
-  addressText: { color: COLOR.textPrimary },
+  address: { flexDirection: 'row', alignSelf: 'center', maxWidth: '100%', alignItems: 'center', gap: SPACE.sm, minHeight: SIZE.targetIos, paddingHorizontal: SPACE.lg },
+  addressText: { flexShrink: 1, color: COLOR.textPrimary },
   // At the foot of a short page, after the content of a long one.
   foot: { marginTop: 'auto', color: COLOR.textTertiary, textAlign: 'center' },
 })

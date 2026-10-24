@@ -631,3 +631,10 @@ describe('the bar at the scroll edge', () => {
     expect(screen.getByRole('button', { name: 'Not now' })).toBeTruthy()
   })
 })
+
+// D-M10: the hero's wordmark never breaks "Blend’ / n+" at AX. Negative control: without `numberOfLines={1}` it fails.
+it('sets the hero wordmark on one line, shrunk to fit', async () => {
+  await mount()
+  expect(screen.getByTestId('plus-wordmark').props.numberOfLines).toBe(1)
+  expect(screen.getByTestId('plus-wordmark').props.adjustsFontSizeToFit).toBe(true)
+})

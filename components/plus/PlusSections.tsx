@@ -187,7 +187,8 @@ export function PlusHero() {
   return (
     <View style={styles.hero}>
       <PlusMark size={HERO_MARK} />
-      <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.display} style={[font('display', bold), styles.ink, styles.centre]}>
+      {/* One line, shrunk to fit: a wordmark never breaks "Blend’ / n+" (D-M10). */}
+      <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.display} numberOfLines={1} adjustsFontSizeToFit style={[font('display', bold), styles.ink, styles.centre]} testID="plus-wordmark">
         Blend’n+
       </Text>
       <Text style={[font('body', bold), styles.secondary, styles.centre]}>More of the night, none of the creepy stuff.</Text>

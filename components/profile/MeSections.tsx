@@ -103,7 +103,8 @@ function Stat({ value, label, onPress, hint = 'Opens Going' }: { value: number; 
           {compactCount(value)}
         </Text>
       ) : (
-        <RollingNumber value={value} role="title" />
+        // Grouped (D-L2): "1,002" reads at a glance where "1002" ran to the card's edge.
+        <RollingNumber value={value} role="title" grouping />
       )}
       <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('label', bold), styles.muted]}>
         {label}

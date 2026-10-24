@@ -2,7 +2,7 @@
  * Contact support: the card says what the draft carries (app, phone, account), Email support opens the mail app with
  * it, no mail app is an info toast with the address, the address copies, and the Help centre failing is a toast.
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
 import * as WebBrowser from 'expo-web-browser'
 import { Linking } from 'react-native'
 
@@ -70,4 +70,27 @@ it('the Help centre opens in the app, and a refusal is a toast', async () => {
   ;(WebBrowser.openBrowserAsync as jest.Mock).mockRejectedValueOnce(new Error('no browser'))
   fireEvent.press(screen.getByLabelText(/^Help centre/))
   await waitFor(() => expect(mockToast).toHaveBeenCalledWith("That page didn’t open. Try again.", 'error'))
+})
+
+/*
+ * D-M9 / D-L12 at AX XXXL (3.571): a detail row stacks its label over its value (side by side the label was squeezed to
+ * nothing), both capped; the address stays one line and shrinks to fit rather than breaking mid-address.
+ * Negative control: the row as it was (one row, uncapped value) fails it.
+ */
+describe('at the accessibility sizes', () => {
+  const { Dimensions, StyleSheet } = require('react-native')
+  const window = Dimensions.get('window')
+  afterEach(() => act(async () => Dimensions.set({ window, screen: window })))
+
+  it('stacks each detail row, caps it, and keeps the address on one line', async () => {
+    await act(async () => Dimensions.set({ window: { ...window, fontScale: 3.571 }, screen: { ...window, fontScale: 3.571 } }))
+    await render(<SupportScreen />)
+    const row = screen.getByTestId('support-detail-0')
+    const column = row.children[1] as unknown as { props: { style: unknown } }
+    expect(StyleSheet.flatten(column.props.style).flexDirection).not.toBe('row')
+    expect(screen.getByText('App').props.maxFontSizeMultiplier).toBeLessThanOrEqual(2)
+    const address = screen.getByText(SUPPORT_EMAIL)
+    expect(address.props.numberOfLines).toBe(1)
+    expect(address.props.adjustsFontSizeToFit).toBe(true)
+  })
 })

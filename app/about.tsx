@@ -65,7 +65,8 @@ export default function AboutScreen() {
         </View>
 
         <View style={styles.lockup}>
-          <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.display} style={[font('display', bold), styles.name]}>
+          {/* One line, shrunk to fit: a wordmark never breaks "Blend’ / n" (D-M10). */}
+          <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.display} numberOfLines={1} adjustsFontSizeToFit style={[font('display', bold), styles.name]} testID="about-wordmark">
             Blend’n
           </Text>
           <ScalePress
