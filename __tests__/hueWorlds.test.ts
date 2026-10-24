@@ -14,7 +14,6 @@ const ROSE = [
   'app/crews/new.tsx',
   'app/crews/[crewId].tsx',
   'app/crews/invite/[crewId].tsx',
-  'app/user/[id].tsx',
   'app/friends/index.tsx',
   'app/room/friends-here.tsx',
   'app/friends/add.tsx',
@@ -40,6 +39,8 @@ const CARRIED: Record<string, string> = {
   'components/share/ShareHost.tsx': "<HueProvider value={target.kind === 'invite' ? 'rose' : 'ember'}>",
   // Blend'n+ is yours, not an outing, wherever its sheet is raised from (the venue, Going, the expiry prompt).
   'components/plus/TonightHost.tsx': '<HueProvider value="violet">',
+  // A person's page is rose; your own is violet, you (rc7 D11). One provider, its value picked by whose page it is.
+  'app/user/[id].tsx': '<HueProvider value={profileHue(own)}>',
 }
 /** Going out: ember is the default, so none of these sets a hue. */
 const EMBER = [
