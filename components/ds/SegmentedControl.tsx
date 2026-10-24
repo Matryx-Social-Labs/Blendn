@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Platform, Pressable, StyleSheet, Text, View, type LayoutChangeEvent, type ViewStyle } from 'react-native'
+import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent, type ViewStyle } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Animated, { Easing, ReduceMotion, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
@@ -63,8 +63,15 @@ export type SegmentedControlProps = Choice & {
   testID?: string
 }
 
-/** A segment's label and badge, drawn twice: 500 on the track, 700 inside the thumb. */
-function SegmentLabel({ item, badge, ink, pair, bold, android }: { item: string; badge: SegmentBadge; ink: boolean; pair: boolean; bold: boolean; android: boolean }) {
+/** The smallest a label shrinks to fit its segment: past it, it truncates. */
+const LABEL_MIN_SCALE = 0.8
+
+/**
+ * A segment's label and badge, drawn twice: 500 on the track, 700 inside the thumb. One line on both platforms, shrinking to
+ * fit (to 80%) rather than wrapping: a second line in the fixed 48 capsule was sliced (A2, D-L10), and the capsule cannot
+ * grow (the thumb and the ink row are laid out against it).
+ */
+function SegmentLabel({ item, badge, ink, pair, bold }: { item: string; badge: SegmentBadge; ink: boolean; pair: boolean; bold: boolean }) {
   const family = ink ? FONT_FAMILY.brand[700] : FONT_FAMILY.brand[500]
   const color = COLOR.textPrimary
   return (
@@ -72,7 +79,9 @@ function SegmentLabel({ item, badge, ink, pair, bold, android }: { item: string;
       <Text
         style={[font(pair ? 'meta' : 'button', bold, family), styles.label, { color }]}
         maxFontSizeMultiplier={CONTROL_FONT_CAP}
-        numberOfLines={android || pair ? 2 : 1}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={LABEL_MIN_SCALE}
       >
         {item}
       </Text>
@@ -125,7 +134,6 @@ export function SegmentedControl({
   previewPressed,
   testID,
 }: SegmentedControlProps) {
-  const android = Platform.OS === 'android'
   const reduceMotion = useReducedMotion()
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
@@ -230,13 +238,7 @@ export function SegmentedControl({
   const onLayout = (e: LayoutChangeEvent) => {
     segmentWidth.set(Math.max(1, (e.nativeEvent.layout.width - SPACE.xs * 2) / n))
   }
-  /*
-   * Wherever a label may take two lines (a pair; every control on Android) the track grows with it (`minHeight`); a plain
-   * control on iOS keeps one line and stays 48. Android's two lines in the fixed 48 sliced "Create account" in half at
-   * 360 dp and font scale 1.3 (RC drive 2 D-6).
-   */
-  const wraps = pair || android
-  const trackStyle: ViewStyle = { backgroundColor: trackFill(ground), ...(wraps ? { height: undefined, minHeight: SIZE.control } : null) }
+  const trackStyle: ViewStyle = { backgroundColor: trackFill(ground) }
   const dividerStyle = { opacity: selected === null ? 1 : 0, transition: DIVIDER_FADE } as unknown as ViewStyle
 
   return (
@@ -269,7 +271,7 @@ export function SegmentedControl({
                 accessibilityState={radio ? { checked: on, disabled } : { selected: on, disabled }}
                 style={({ pressed }) => [styles.segment, !on && (pressed || previewPressed === i) && { opacity: PRESSED_SEGMENT }]}
               >
-                <SegmentLabel item={item} badge={badges?.[i] ?? null} ink={false} pair={pair} bold={bold} android={android} />
+                <SegmentLabel item={item} badge={badges?.[i] ?? null} ink={false} pair={pair} bold={bold} />
               </Pressable>
             )
           })}
@@ -287,7 +289,7 @@ export function SegmentedControl({
                 >
                   {items.map((item, i) => (
                     <View key={item} style={styles.segment}>
-                      <SegmentLabel item={item} badge={badges?.[i] ?? null} ink pair={pair} bold={bold} android={android} />
+                      <SegmentLabel item={item} badge={badges?.[i] ?? null} ink pair={pair} bold={bold} />
                     </View>
                   ))}
                 </Animated.View>
@@ -320,7 +322,7 @@ const styles = StyleSheet.create({
   rim: { ...StyleSheet.absoluteFill, borderRadius: RADIUS.capsule, borderWidth: RIM },
   ink: { position: 'absolute', top: 0, bottom: 0, flexDirection: 'row' },
   divider: { position: 'absolute', top: '50%', left: '50%', width: 1, height: DIVIDER_HEIGHT, marginTop: -DIVIDER_HEIGHT / 2, backgroundColor: COLOR.hairlineStrong },
-  segment: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: SPACE.xs },
+  segment: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: SPACE.sm },
   labelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: BADGE_GAP, maxWidth: '100%' },
   label: { textAlign: 'center', flexShrink: 1 },
   dot: { width: DOT, height: DOT, borderRadius: RADIUS.capsule, backgroundColor: COLOR.live },

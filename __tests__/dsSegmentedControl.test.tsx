@@ -6,16 +6,17 @@
  */
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native'
 import React from 'react'
-import { AccessibilityInfo, Platform, StyleSheet } from 'react-native'
+import { AccessibilityInfo, Dimensions, Platform, StyleSheet } from 'react-native'
 import { State } from 'react-native-gesture-handler'
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils'
 import * as Reanimated from 'react-native-reanimated'
 
 import { GroundProvider, HueProvider } from '../components/ds/shared'
 import { landOn, rubberBand, SegmentedControl } from '../components/ds/SegmentedControl'
-import { COLOR, FONT_FAMILY, MATERIAL, RADIUS, SIZE, SPRING } from '../lib/design/tokens'
+import { COLOR, FONT_FAMILY, MATERIAL, RADIUS, SIZE, SPACE, SPRING } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { OPACITY } from '../lib/theme'
+import { clipped } from './helpers/ax'
 
 jest.mock('react-native-reanimated', () => {
   const actual = jest.requireActual('react-native-reanimated')
@@ -122,20 +123,38 @@ describe('<SegmentedControl>', () => {
     expect(onChange).not.toHaveBeenCalled()
   })
 
-  it('labels cap at 1.3×; past it Android wraps to two lines and iOS keeps one', async () => {
-    await draw()
-    expect(screen.getByText('Sign in').props.maxFontSizeMultiplier).toBe(1.3)
-    expect(screen.getByText('Sign in').props.numberOfLines).toBe(1)
-    on('android')
-    await draw()
-    expect(screen.getByText('Sign in').props.numberOfLines).toBe(2)
+  it('labels cap at 1.3× and keep one line on both platforms, fitting by shrinking to 80% at most (A2, D-L10)', async () => {
+    for (const os of ['ios', 'android'] as const) {
+      on(os)
+      for (const pair of [false, true]) {
+        await draw(pair ? { pair: true, selected: null } : {})
+        const label = screen.getByText('Sign in')
+        expect(label.props).toMatchObject({ maxFontSizeMultiplier: 1.3, numberOfLines: 1, adjustsFontSizeToFit: true, minimumFontScale: 0.8 })
+      }
+    }
   })
 
-  it('on Android the track grows with a two-line label instead of slicing it (RC drive 2 D-6: "Create account" at 360 dp, 1.3)', async () => {
+  it('the capsule stays 48 on both platforms (the thumb’s geometry is the track’s), with SPACE.sm inside each segment', async () => {
+    for (const os of ['ios', 'android'] as const) {
+      on(os)
+      await draw()
+      expect(flat('s').height).toBe(SIZE.control)
+      expect(flat('s-1').paddingHorizontal).toBe(SPACE.sm)
+    }
+  })
+
+  it('at 360 dp and 1.3 on Android, "Create account" is one line that fits rather than two that are sliced (RC drive 2 D-6)', async () => {
     on('android')
-    await draw()
-    expect(flat('s')).toMatchObject({ minHeight: SIZE.control })
-    expect(flat('s').height).toBeUndefined()
+    const window = Dimensions.get('window')
+    try {
+      await act(async () => Dimensions.set({ window: { ...window, width: 360, fontScale: 1.3 }, screen: { ...window, width: 360, fontScale: 1.3 } }))
+      await draw()
+      const label = screen.getByText('Create account')
+      expect(label.props).toMatchObject({ numberOfLines: 1, adjustsFontSizeToFit: true })
+      expect(clipped(screen.toJSON())).toEqual([])
+    } finally {
+      Dimensions.set({ window, screen: window })
+    }
   })
 
   it('focused draws the ring', async () => {
@@ -329,10 +348,10 @@ describe('the drag', () => {
 describe('a pair at large text (review L6, L7)', () => {
   const PAIR = ['Beach', 'Mountains']
 
-  it('grows instead of clipping a two-line label: a pair has minHeight 48, a plain control a height of 48', async () => {
+  it('a pair is 48 like a plain control: its labels keep one line and shrink to fit, so nothing is sliced (A2)', async () => {
     await draw({ pair: true, items: PAIR, selected: null })
-    expect(flat('s')).toMatchObject({ minHeight: SIZE.control })
-    expect(flat('s').height).toBeUndefined()
+    expect(flat('s').height).toBe(SIZE.control)
+    expect(screen.getByText('Mountains').props).toMatchObject({ numberOfLines: 1, adjustsFontSizeToFit: true })
     await screen.unmount()
     await draw()
     expect(flat('s').height).toBe(SIZE.control)
