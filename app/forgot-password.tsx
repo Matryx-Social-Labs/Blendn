@@ -18,7 +18,7 @@ import { Button } from '../components/ds/Button'
 import { GlyphWell } from '../components/ds/StateScreen'
 import { TextField } from '../components/ds/TextField'
 import { font, useBoldText } from '../components/ds/shared'
-import { COLOR, FONT_FAMILY, SPACE } from '../lib/design/tokens'
+import { COLOR, FONT_FAMILY, SPACE, MAX_FONT_SCALE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { KEYBOARD_BEHAVIOR, useKeyboardShown } from '../lib/keyboard'
 
@@ -186,10 +186,10 @@ export default function ForgotPassword() {
                 <GlyphWell icon="mail" size="screen" testID="forgot-sent-well" />
               </Animated.View>
               <View style={styles.headline}>
-                <Text style={[font('title', bold), styles.title, styles.centre]} accessibilityRole="header">
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.title, styles.centre]} accessibilityRole="header">
                   Check your inbox
                 </Text>
-                <Text style={[font('body', bold), styles.body, styles.centre]} testID="forgot-sent-body">
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.body, styles.centre]} testID="forgot-sent-body">
                   If{address.length > LONG_ADDRESS ? '\n' : ' '}
                   <Text style={[font('body', bold, FONT_FAMILY.brand[700]), styles.address]}>{address}</Text>
                   {address.length > LONG_ADDRESS ? '\n' : ' '}
@@ -234,10 +234,10 @@ export default function ForgotPassword() {
           <>
             <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} onScroll={onScroll} scrollEventThrottle={16}>
               <View style={styles.headline}>
-                <Text style={[font('title', bold), styles.title]} accessibilityRole="header">
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.title]} accessibilityRole="header">
                   Forgot your password?
                 </Text>
-                <Text style={[font('body', bold), styles.body]}>
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.body]}>
                   Enter your email and we’ll send a link to reset it. The link opens in your browser.
                 </Text>
               </View>

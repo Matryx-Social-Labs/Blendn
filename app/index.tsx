@@ -346,13 +346,13 @@ function IndexInner() {
         {error && (
           <View style={styles.message}>
             <Icon name="circle-alert" size={ICON.inline} color={COLOR.destructive} />
-            <Text style={[font('meta', bold), styles.errorText]} accessibilityRole="alert">
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.errorText]} accessibilityRole="alert">
               {error}
             </Text>
           </View>
         )}
         {!error && notice && (
-          <Text style={[font('meta', bold), styles.notice]} accessibilityRole="alert">
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.notice]} accessibilityRole="alert">
             {notice}
           </Text>
         )}
@@ -416,7 +416,7 @@ function IndexInner() {
         <FadeInUp {...rise(2)}>
           <View style={[styles.dividerRow, signingIn ? styles.dim : null]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
             <View style={styles.divider} />
-            <Text style={[font('caption', bold), styles.dividerText]}>or</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.dividerText]}>or</Text>
             <View style={styles.divider} />
           </View>
         </FadeInUp>

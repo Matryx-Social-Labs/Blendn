@@ -12,7 +12,7 @@ import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import { SolidBarFade } from '../../components/ui/GradientFill'
 import { apiClient } from '../../lib/apiClient'
 import { toPickerTree, type CategoryGroup, type CategoryNode } from '../../lib/categories'
-import { COLOR, SPACE } from '../../lib/design/tokens'
+import { COLOR, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { Logger } from '../../lib/logger'
 import { bioWithPrompt, promptFits } from '../../lib/onboarding'
 import { useOnboarding } from '../../lib/useOnboarding'
@@ -183,10 +183,10 @@ export default function DetailsScreen() {
 
         <View style={styles.interests}>
           <View style={styles.interestsHead}>
-            <Text accessibilityRole="header" style={[font('heading', bold), styles.heading]}>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.heading} accessibilityRole="header" style={[font('heading', bold), styles.heading]}>
               Interests
             </Text>
-            <Text
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption}
               accessibilityLabel={`${interestIds.length} of ${MAX_INTERESTS} chosen`}
               style={[monoCaption(bold), { color: atCap ? COLOR.warning : COLOR.textSecondary }]}
             >

@@ -65,6 +65,7 @@ import { showEventReportOptions } from '../lib/safetyUtils'
 import { showSheet } from '../lib/sheet'
 import { markOffline, markOnline } from '../lib/networkStatus'
 import { clockTime } from '../lib/time'
+import { MAX_FONT_SCALE } from '../lib/design/tokens'
 /* eslint-enable import/first */
 
 const api = apiClient as jest.Mocked<typeof apiClient>
@@ -168,14 +169,15 @@ describe('what changed while you were going (Flow 3 · 3.1)', () => {
     expect(screen.getByTestId('scene-change-venue').props.accessibilityLabel).toMatch(/^Updated, new venue\. Was The Old Room, now The New Room\./)
   })
 
-  it('grows with the reader\'s type: a sentence to read has no font cap, and 48 is its minimum height', async () => {
+  // DS-22: every text has a cap; a sentence to read grows to its role's (meta, 2×) and wraps, never to 3.571×.
+  it('grows with the reader\'s type to its role\'s cap, and 48 is its minimum height', async () => {
     api.getEvent.mockResolvedValue(detail(moved, { rsvpStatus: 'going' }) as never)
     await open()
     const line = await screen.findByTestId('scene-change-time')
     expect(StyleSheet.flatten(line.props.style).minHeight).toBe(48)
     expect(StyleSheet.flatten(line.props.style).height).toBeUndefined()
     const sentence = within(line).getByText(/Updated/, { includeHiddenElements: true }).parent
-    expect(sentence?.props.maxFontSizeMultiplier).toBeUndefined()
+    expect(sentence?.props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.meta)
   })
 
   it('says it to somebody who saved the night, not only to those who RSVP', async () => {

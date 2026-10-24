@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 
-import { COLOR, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, ICON, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import type { CrewMember } from '../../lib/crews'
 import { Avatar } from '../ds/Avatar'
 import { PRESSED_WASH, font, minTarget, useBoldText, useIncreaseContrast } from '../ds/shared'
@@ -47,10 +47,10 @@ export function CrewMembers({
               <View accessible accessibilityLabel={m.role === 'owner' ? `${who}, owner` : who} style={styles.who}>
                 {m.photo ? <Avatar kind="photo" uri={m.photo} size={FACE} /> : <Avatar kind="creature" pseudonym={m.name} size={FACE} />}
                 <View style={styles.text}>
-                  <Text numberOfLines={1} style={[font('bodyStrong', bold), styles.ink]}>
+                  <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} numberOfLines={1} style={[font('bodyStrong', bold), styles.ink]}>
                     {who}
                   </Text>
-                  {m.role === 'owner' ? <Text style={[font('meta', bold), { color: secondary }]}>Owner</Text> : null}
+                  {m.role === 'owner' ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: secondary }]}>Owner</Text> : null}
                 </View>
               </View>
               {isOwner && !me ? (
@@ -77,13 +77,13 @@ export function CrewMembers({
             <View style={styles.inviteWell}>
               <Icon name="user-plus" size={ICON.control} />
             </View>
-            <Text style={[font('bodyStrong', bold), styles.ink, styles.fill]}>Invite friends</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink, styles.fill]}>Invite friends</Text>
             <Icon name="chevron-right" size={ICON.control} color={COLOR.textTertiary} />
           </Pressable>
         ) : null}
       </RowsCard>
       {apart ? (
-        <Text style={[font('meta', bold), styles.footnote]}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.footnote]}>
           Someone you’ve blocked, or who blocked you, is in this crew. You don’t see each other here or in the chat. Nobody is told.
         </Text>
       ) : null}

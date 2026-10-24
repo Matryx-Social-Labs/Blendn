@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { GlyphWell } from '../ds/StateScreen'
 import { font, PRESSED_WASH, useBoldText } from '../ds/shared'
 import { Icon } from '../ui/Icon'
-import { COLOR, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, ICON, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { GONE, type GoneKind } from '../../lib/goneCopy'
 
 /**
@@ -25,8 +25,8 @@ export function GoneCard({ kind, onBack, testID }: { kind: GoneKind; onBack: () 
     >
       <GlyphWell icon={copy.icon} />
       <View style={styles.text}>
-        <Text style={[font('bodyStrong', bold), styles.title]}>{copy.title}</Text>
-        <Text style={[font('meta', bold), styles.body]}>{copy.body}</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.title]}>{copy.title}</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.body]}>{copy.body}</Text>
       </View>
       <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         <Icon name="chevron-left" size={ICON.inline} color={COLOR.textTertiary} />

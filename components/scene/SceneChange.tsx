@@ -1,7 +1,7 @@
 import { useRef } from 'react'
 import { FlatList, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native'
 
-import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { dayLabel, type EventDays } from '../../lib/eventDays'
 import type { ChangeLine } from '../../lib/eventChange'
 import { notificationWhen } from '../../lib/notificationRows'
@@ -36,7 +36,7 @@ export function SceneChangedLines({ lines, changedAt, testID }: { lines: readonl
         >
           <Icon name="refresh-cw" size={ICON.control} color={COLOR.textPrimary} />
           {/* A sentence to be read, not a control: it grows with the reader's type (the line's 48 is a minimum). */}
-          <Text style={[font('meta', bold), styles.text]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.text]}>
             <Text style={font('meta', bold, FONT_FAMILY.brand[500])}>{l.label}</Text>
             {'  '}
             <Text style={styles.was}>{l.was}</Text>

@@ -7,7 +7,7 @@ import { scheduleOnRN } from 'react-native-worklets'
 
 import { apiClient } from '../../lib/apiClient'
 import { DOCK_HISTORY, type ChatHistory } from '../../lib/dockHistory'
-import { COLOR, FONT_FAMILY, ICON, PRESS, RADIUS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, PRESS, RADIUS, SIZE, SPACE, SPRING, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { Logger } from '../../lib/logger'
 import { useRoomMembership } from '../../lib/roomMembership'
 import { subscribeToChatMessage } from '../../lib/socketClient'
@@ -212,7 +212,7 @@ export function ChatDock({
                 accessibilityLabel={state === 'failed' ? 'Try again' : 'Rejoin'}
                 testID="room-dock-action"
               >
-                <Text style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>{state === 'failed' ? 'Try again' : 'Rejoin'}</Text>
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>{state === 'failed' ? 'Try again' : 'Rejoin'}</Text>
               </Pressable>
             ) : fresh > 0 ? (
               <Badge text={`${fresh} new`} size={22} arrive testID="room-dock-new" />

@@ -6,7 +6,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-na
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { scheduleOnRN } from 'react-native-worklets'
 
-import { COLOR, SPACE, SPRING } from '../../lib/design/tokens'
+import { COLOR, SPACE, SPRING, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { MODAL_FADE_MS, useQueuedModal } from '../../lib/modalTurn'
 import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
@@ -301,7 +301,7 @@ export function Reposition({
             </GestureDetector>
           ) : null}
         </View>
-        <Text style={[font('meta', bold), styles.caption]}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.caption]}>
           {photo.main === false ? 'Drag and pinch. This is how this photo is cropped.' : 'Drag and pinch. This is how your main photo is cropped.'}
         </Text>
         <View style={[styles.actions, { paddingBottom: insets.bottom + SPACE.xl }]}>

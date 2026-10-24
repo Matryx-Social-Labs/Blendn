@@ -2,7 +2,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 import Animated, { Easing, FadeInUp, ReduceMotion } from 'react-native-reanimated'
 
 import { Icon } from '../ui/Icon'
-import { COLOR, EASING, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, EASING, ICON, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { font, minTarget, useBoldText } from './shared'
 
@@ -38,10 +38,10 @@ export function ReplyPreview({ name, text, onPress, onCancel, testID }: ReplyPre
   if (!onCancel) {
     const quote = (
       <View testID={testID} style={styles.quote}>
-        <Text numberOfLines={1} style={[font('caption', bold), styles.secondary]}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} numberOfLines={1} style={[font('caption', bold), styles.secondary]}>
           {name}
         </Text>
-        <Text numberOfLines={1} style={[font('meta', bold), styles.secondary]}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={1} style={[font('meta', bold), styles.secondary]}>
           {text}
         </Text>
       </View>
@@ -71,10 +71,10 @@ export function ReplyPreview({ name, text, onPress, onCancel, testID }: ReplyPre
     <Animated.View testID={testID} entering={rise} style={styles.bar}>
       <View testID={testID && `${testID}-rule`} style={styles.rule} />
       <View style={styles.lines} accessible accessibilityLabel={`Replying to ${name}: ${text}`}>
-        <Text numberOfLines={1} style={[font('caption', bold), styles.secondary]}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} numberOfLines={1} style={[font('caption', bold), styles.secondary]}>
           Replying to {name}
         </Text>
-        <Text numberOfLines={1} style={[font('meta', bold), styles.primary]}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={1} style={[font('meta', bold), styles.primary]}>
           {text}
         </Text>
       </View>

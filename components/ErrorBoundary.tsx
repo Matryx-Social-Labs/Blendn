@@ -1,7 +1,7 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react'
 import { Linking, StyleSheet, Text, View } from 'react-native'
 import Animated from 'react-native-reanimated'
-import { COLOR, TYPE } from '../lib/design/tokens'
+import { COLOR, MAX_FONT_SCALE, TYPE } from '../lib/design/tokens'
 import { scrubReportText, Sentry } from '../lib/sentry'
 import { SUPPORT_EMAIL, supportMailto } from '../lib/support'
 import { monoCaption } from './ds/MonoFamily'
@@ -160,17 +160,17 @@ export class ErrorBoundary extends Component<Props, State> {
                   stack-trace fragment that explains nothing and can leak internals. Development builds still show it.
                 */}
                 {__DEV__ && error?.message ? (
-                  <Text style={styles.devMessage} selectable>
+                  <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={styles.devMessage} selectable>
                     {error.message}
                   </Text>
                 ) : null}
                 {showAddress ? (
-                  <Text style={styles.line} selectable accessibilityLiveRegion="polite">
+                  <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={styles.line} selectable accessibilityLiveRegion="polite">
                     Write to {SUPPORT_EMAIL} and mention {errorId ?? 'this error'}.
                   </Text>
                 ) : null}
                 {errorId ? (
-                  <Text style={styles.errorId} selectable>
+                  <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={styles.errorId} selectable>
                     Error {errorId}
                   </Text>
                 ) : null}

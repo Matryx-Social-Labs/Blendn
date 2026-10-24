@@ -7,7 +7,7 @@ import { SettingsRow } from '../ds/SettingsRow'
 import { font, minTarget, useBoldText } from '../ds/shared'
 import { Icon, type IconName } from '../ui/Icon'
 import { useToast } from '../Toast'
-import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { Logger } from '../../lib/logger'
 import { offersApi, type RegularPrefs } from '../../lib/offers'
 
@@ -101,15 +101,15 @@ export function VenueRegulars({ venueId, venueName }: { venueId: string; venueNa
     <View style={styles.wrap} testID="venue-regulars">
       {state === 'offer' ? (
         <View style={styles.card}>
-          <Text accessibilityRole="header" style={[font('heading', bold), styles.ink]}>{`Let ${venueName} know you’re a regular`}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.heading} accessibilityRole="header" style={[font('heading', bold), styles.ink]}>{`Let ${venueName} know you’re a regular`}</Text>
           {ROWS(who).map((r) => (
             <View key={r.key} style={styles.item}>
               <View style={styles.itemIcon}>
                 <Icon name={r.icon} size={ICON.control} />
               </View>
               <View style={styles.fill}>
-                <Text style={[font('bodyStrong', bold), styles.ink]}>{r.key}</Text>
-                <Text style={[font('meta', bold), styles.secondary]}>{r.value}</Text>
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>{r.key}</Text>
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>{r.value}</Text>
               </View>
             </View>
           ))}
@@ -132,7 +132,7 @@ export function VenueRegulars({ venueId, venueName }: { venueId: string; venueNa
       {state === 'on' ? (
         <View style={styles.knows} testID="venue-regular-on">
           <Icon name="badge-check" size={ICON.control} />
-          <Text numberOfLines={2} style={[font('bodyStrong', bold), styles.ink, styles.fill]}>{`${venueName} knows you’re a regular`}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} numberOfLines={2} style={[font('bodyStrong', bold), styles.ink, styles.fill]}>{`${venueName} knows you’re a regular`}</Text>
           <Pressable
             onPress={() => void save({ known: false }, () => setState('off'))}
             disabled={saving === 'known'}
@@ -143,7 +143,7 @@ export function VenueRegulars({ venueId, venueName }: { venueId: string; venueNa
             style={styles.turnOff}
             testID="venue-regular-off"
           >
-            <Text style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink, styles.underline]}>Turn off</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink, styles.underline]}>Turn off</Text>
           </Pressable>
         </View>
       ) : null}
@@ -151,7 +151,7 @@ export function VenueRegulars({ venueId, venueName }: { venueId: string; venueNa
       {state === 'off' ? (
         <View style={styles.done} accessibilityLiveRegion="polite" testID="venue-regular-done">
           <Icon name="check" size={ICON.control} />
-          <Text style={[font('meta', bold), styles.ink, styles.fill]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink, styles.fill]}>
             {`Done — ${venueName} no longer sees you as a regular. Offers to regulars still reach you without your name.`}
           </Text>
         </View>

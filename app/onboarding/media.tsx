@@ -194,13 +194,13 @@ function MediaScreenInner() {
     >
       {mainWasPulled(pulled) ? (
         <View testID="media-main-pulled" style={styles.mainPulled}>
-          <Text style={[font('meta', bold), styles.noteStrong]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.noteStrong]}>
             {tiles.length > 0 ? 'Your main photo was removed. The next one is your main photo now.' : 'Your main photo was removed.'}
           </Text>
-          <Text style={[font('meta', bold), styles.note]}>Think we got it wrong? Write to {SUPPORT_EMAIL}.</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.note]}>Think we got it wrong? Write to {SUPPORT_EMAIL}.</Text>
         </View>
       ) : (
-        <Text style={[font('meta', bold), styles.note]}>{photoNote(tiles.length)}</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.note]}>{photoNote(tiles.length)}</Text>
       )}
       {/* The reposition step a chosen photo goes through (6.3 #08); it draws nothing until one is asked. */}
       <RepositionHost />

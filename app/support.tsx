@@ -91,7 +91,7 @@ export default function SupportScreen() {
           testID="support-address"
         >
           {/* One line, shrunk to fit: an address broken mid-way can't be read back (D-L13). */}
-          <Text style={[monoValue(bold), styles.addressText]} numberOfLines={1} adjustsFontSizeToFit>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[monoValue(bold), styles.addressText]} numberOfLines={1} adjustsFontSizeToFit>
             {SUPPORT_EMAIL}
           </Text>
           <Icon name="copy" size={ICON.inline} color={COLOR.textTertiary} />

@@ -13,7 +13,7 @@ import { TopBar } from '../components/ds/TopBar'
 import { openStoreSubscriptions } from '../components/plus/storeActions'
 import { useToast } from '../components/Toast'
 import { apiClient } from '../lib/apiClient'
-import { COLOR, SPACE } from '../lib/design/tokens'
+import { COLOR, SPACE, MAX_FONT_SCALE } from '../lib/design/tokens'
 import { grantManageLine, planRowFor, storeManageHint, waitForPlus, type PlusStatus } from '../lib/plus'
 import { manageCard, startsAgain } from '../lib/plusManage'
 import { canBuyAs, loadPlusOffers, restore, type PlusOffer, type RestoreOutcome } from '../lib/purchases'
@@ -136,7 +136,7 @@ function ManageContent() {
           <>
             <ManageStatusRow status={card.status} sentence={card.sentence} store={card.store} onFix={manage} testID="plus-manage-status" />
             {granted ? (
-              <Text testID="plus-manage-grant" style={[font('meta', bold), styles.grant]}>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} testID="plus-manage-grant" style={[font('meta', bold), styles.grant]}>
                 {grantManageLine(status?.expiresAt)}
               </Text>
             ) : null}
@@ -166,7 +166,7 @@ function ManageContent() {
                 testID="plus-manage-start"
               />
             ) : null}
-            {granted ? null : <Text style={[font('meta', bold), styles.foot]}>{FOOT}</Text>}
+            {granted ? null : <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.foot]}>{FOOT}</Text>}
           </>
         ) : null}
       </ScrollView>

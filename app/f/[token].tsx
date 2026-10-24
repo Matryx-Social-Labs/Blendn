@@ -15,7 +15,7 @@ import FadeInUp from '../../components/motion/FadeInUp'
 import { SkeletonBlock, SkeletonCircle } from '../../components/Skeleton'
 import { useToast } from '../../components/Toast'
 import { apiClient } from '../../lib/apiClient'
-import { COLOR, FONT_FAMILY, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { friendRefusal, type FriendRefusal } from '../../lib/friendRefusal'
 import { inviteCta, inviteLine, type FriendPerson, type FriendState } from '../../lib/friends'
 import { askFriendsSeeMe, useStillHere } from '../../lib/friendsSeeMeAsk'
@@ -194,7 +194,7 @@ function InviteScreen() {
                 <Text accessibilityRole="header" maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('display', bold, FONT_FAMILY.brand[900]), styles.title]}>
                   {headline(person.name, state)}
                 </Text>
-                <Text style={[font('body', bold), styles.line]}>{state ? inviteLine(state) : null}</Text>
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.line]}>{state ? inviteLine(state) : null}</Text>
               </View>
             </FadeInUp>
           )}

@@ -20,7 +20,7 @@ import { apiClient } from '../../lib/apiClient'
 import { blendnClosed, isLiveHint, openPass, takePendingPerson, useDoor, usePendingPerson } from '../../lib/blendnOverlay'
 import { crewsThatMayLikePeople, crewMessage, type BlendRef, type CrewsAtEvent } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
-import { COLOR, DURATION, EASING, FONT_FAMILY, MATERIAL, PRESS, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, MATERIAL, PRESS, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import type { TrayButton, TrayExtra } from '../../lib/locationFix'
 import { Logger } from '../../lib/logger'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
@@ -1147,7 +1147,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
         actions={tray.buttons.map((b) => ({ label: b.label, onPress: b.onPress, loading: b.loading, disabled: b.disabled, kind: b.kind ?? (b.variant === 'primary' ? 'primary' : b.variant === 'destructive' ? 'destructive' : 'secondary') }))}
         testID="blendn-tray"
       >
-        {tray.extra?.detail ? <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary]}>{tray.extra.detail}</Text> : null}
+        {tray.extra?.detail ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary]}>{tray.extra.detail}</Text> : null}
       </Sheet>
 
       <Sheet

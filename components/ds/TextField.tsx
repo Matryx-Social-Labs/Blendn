@@ -74,12 +74,12 @@ export function FieldNotes({ error, hint, bold }: { error?: string; hint?: strin
       {error ? (
         <View style={styles.note}>
           <Icon name="circle-alert" size={ICON.inline} color={COLOR.destructive} />
-          <Text accessibilityLiveRegion="assertive" style={[font('meta', bold), styles.noteText, { color: COLOR.destructive }]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} accessibilityLiveRegion="assertive" style={[font('meta', bold), styles.noteText, { color: COLOR.destructive }]}>
             {error}
           </Text>
         </View>
       ) : null}
-      {hint ? <Text style={[font('meta', bold), styles.hint]}>{hint}</Text> : null}
+      {hint ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.hint]}>{hint}</Text> : null}
     </>
   )
 }

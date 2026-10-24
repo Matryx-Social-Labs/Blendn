@@ -45,7 +45,7 @@ import { useOnBlock } from '../../lib/useOnBlock'
 import { boardSafetySheet } from '../../lib/safetyUtils'
 import { showSheet } from '../../lib/sheet'
 import { cursorOf, getBoardPage, goneFrom, type BoardPostView, type TakenDown } from '../../lib/chatPaging'
-import { COLOR, RADIUS, SPACE, STAGGER } from '../../lib/design/tokens'
+import { COLOR, RADIUS, SPACE, STAGGER, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useTopBarOverlay } from '../../lib/useTopBarState'
 
@@ -495,7 +495,7 @@ export function BoardScreen() {
     <View style={styles.header}>
       {offline}
       {refreshFailed && load.kind === 'ready' ? (
-        <Text style={[font('meta', bold), styles.secondary, styles.centre]}>The board didn’t refresh. Pull down to try again.</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.centre]}>The board didn’t refresh. Pull down to try again.</Text>
       ) : null}
       {load.kind === 'ready' && load.posts.length > 0 && !allPosts.some((p) => p.mine) ? (
         <Button label="Write a post" onPress={() => setComposing(true)} />

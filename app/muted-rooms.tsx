@@ -8,7 +8,7 @@ import { font, HueProvider, useBoldText } from '../components/ds/shared'
 import { StateScreen } from '../components/ds/StateScreen'
 import { TopBar } from '../components/ds/TopBar'
 import { SkeletonCircle, SkeletonLine } from '../components/Skeleton'
-import { COLOR, SPACE } from '../lib/design/tokens'
+import { COLOR, SPACE, MAX_FONT_SCALE } from '../lib/design/tokens'
 import { muteEnds, mutedRoomRoute, useMutedRooms, MUTED_PAGE_SIZE, MUTED_SCAN_PAGES, type MutedRoom } from '../lib/mutedRooms'
 import { Button } from '../components/ds/Button'
 import { useTopBarOverlay } from '../lib/useTopBarState'
@@ -66,7 +66,7 @@ function MutedRoomsContent() {
       testID="muted-rooms-failed"
     />
   ) : muted.scanning ? (
-    <Text style={[font('meta', bold), styles.foot]}>Checking your rooms…</Text>
+    <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.foot]}>Checking your rooms…</Text>
   ) : muted.partial ? (
     // Nothing found, but not everything was read: "No muted rooms" would be a guess.
     <StateScreen
@@ -89,11 +89,11 @@ function MutedRoomsContent() {
   const foot =
     muted.rooms.length > 0 && muted.partial ? (
       <View style={styles.partial} testID="muted-rooms-partial">
-        <Text style={[font('meta', bold), styles.foot]}>Some rooms didn’t load.</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.foot]}>Some rooms didn’t load.</Text>
         <Button kind="tertiary" size="sm" label="Try again" onPress={muted.refresh} />
       </View>
     ) : muted.rooms.length > 0 && (muted.scanning || muted.capped) ? (
-      <Text style={[font('meta', bold), styles.foot]}>{muted.scanning ? 'Checking more rooms…' : CAPPED_NOTE}</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.foot]}>{muted.scanning ? 'Checking more rooms…' : CAPPED_NOTE}</Text>
     ) : null
 
   return (

@@ -9,7 +9,7 @@ import { scheduleOnRN } from 'react-native-worklets'
 import { Glyph } from '../ui/Glyph'
 import { type IconName } from '../ui/Icon'
 import { Material } from '../ui/Material'
-import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, MATERIAL, RADIUS, SIZE, SPACE, SPRING, TYPE } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, MATERIAL, RADIUS, SIZE, SPACE, SPRING, TYPE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast, useScreenReader } from './shared'
@@ -220,7 +220,7 @@ export function Toast({ kind = 'info', text, action, onDismiss, aboveTabBar = fa
     <>
       {look.tint ? <View testID={testID && `${testID}-tint`} style={[StyleSheet.absoluteFill, { backgroundColor: look.tint }]} /> : null}
       <Glyph name={look.icon} size={ICON.control} play={kind === 'success' ? lit : undefined} testID={testID && `${testID}-glyph`} />
-      <Text style={[font('meta', bold, android ? undefined : FONT_FAMILY.brand[500]), styles.text]}>{text}</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, android ? undefined : FONT_FAMILY.brand[500]), styles.text]}>{text}</Text>
       {action ? (
         <Pressable
           accessibilityRole="button"
@@ -230,7 +230,7 @@ export function Toast({ kind = 'info', text, action, onDismiss, aboveTabBar = fa
             leave()
           }}
         >
-          <Text style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.action, !android && styles.underline]}>{action.label}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.action, !android && styles.underline]}>{action.label}</Text>
         </Pressable>
       ) : null}
     </>

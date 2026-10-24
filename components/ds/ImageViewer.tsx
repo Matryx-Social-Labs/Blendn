@@ -7,13 +7,13 @@ import Animated, { Easing, useAnimatedStyle, useSharedValue, withSpring, withTim
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { scheduleOnRN } from 'react-native-worklets'
 
-import { COLOR, EASING, FONT_FAMILY, MATERIAL, RADIUS, SPACE, SPRING } from '../../lib/design/tokens'
+import { COLOR, EASING, FONT_FAMILY, MATERIAL, RADIUS, SPACE, SPRING, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { useQueuedModal } from '../../lib/modalTurn'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { Avatar } from './Avatar'
 import { avatarOf, BUBBLE, timeFont, type ChatPerson, type Rect } from './chatShared'
 import { IconButton } from './IconButton'
-import { font, useBoldText, useScreenReader } from './shared'
+import { CONTROL_FONT_CAP, font, useBoldText, useScreenReader } from './shared'
 
 /** Pinch stops at 4×; a screen reader's Zoom in goes to 2×. */
 const MAX_ZOOM = 4
@@ -250,10 +250,10 @@ export function ImageViewer({ visible, uri, sender, time, onClose, onMore, from,
                 style={[styles.chrome, styles.foot, { bottom: insets.bottom + SPACE.xl }]}
               >
                 <Avatar {...avatarOf(sender, BUBBLE.avatar)} />
-                <Text numberOfLines={1} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.name]}>
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={1} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.name]}>
                   {sender.name}
                 </Text>
-                <Text style={timeFont(bold)}>{time}</Text>
+                <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={timeFont(bold)}>{time}</Text>
               </View>
             </>
           ) : null}

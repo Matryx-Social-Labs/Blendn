@@ -3,7 +3,7 @@ import { Platform, StyleSheet, Text, View, type StyleProp, type ViewStyle } from
 
 import ScalePress from '../motion/ScalePress'
 import { Icon, type IconName } from '../ui/Icon'
-import { COLOR, FONT_FAMILY, ICON, PRESS, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, PRESS, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { font, IC_HAIRLINE, PRESSED_WASH, useBoldText, useIncreaseContrast, useLargeText } from './shared'
 
 /** The tile's floor (the page); it grows with its text, nothing is capped. */
@@ -47,13 +47,13 @@ export function AmenityTile({ label, value, mono = false, icon, onPress, testID,
             <Icon name={icon} size={ICON.inline} color={ink} />
           </View>
         ) : null}
-        <Text style={[font('label', bold), { color: ink }]}>{label}</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), { color: ink }]}>{label}</Text>
       </View>
       {mono ? (
-        <Text style={[font('bodyStrong', bold, FONT_FAMILY.mono[500]), styles.value, styles.tabular]}>{value}</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold, FONT_FAMILY.mono[500]), styles.value, styles.tabular]}>{value}</Text>
       ) : (
         // One line, or up to three at the accessibility sizes: the tile's height is a minimum and grows (D2).
-        <Text numberOfLines={largeText ? 3 : 1} style={[font('bodyStrong', bold), styles.value]}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} numberOfLines={largeText ? 3 : 1} style={[font('bodyStrong', bold), styles.value]}>
           {value}
         </Text>
       )}

@@ -1,7 +1,7 @@
 import { router } from 'expo-router'
 import { StyleSheet, Text } from 'react-native'
 
-import { COLOR } from '../../lib/design/tokens'
+import { COLOR, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { font, useBoldText } from '../ds/shared'
 import { SettingsRow } from '../ds/SettingsRow'
 
@@ -19,7 +19,7 @@ export function MakeCrewRow() {
       icon="users-round"
       title="Make a crew"
       label="Make a crew, from your friends"
-      accessory={<Text style={[font('meta', bold), styles.meta]}>from your friends</Text>}
+      accessory={<Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.meta]}>from your friends</Text>}
       trail="chevron"
       onPress={() => router.push('/crews/new')}
     />

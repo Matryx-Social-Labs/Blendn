@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated'
 
-import { COLOR, EASING, FONT_FAMILY, RADIUS, SPACE, SPRING, TYPE } from '../../lib/design/tokens'
+import { COLOR, EASING, FONT_FAMILY, RADIUS, SPACE, SPRING, TYPE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast } from './shared'
 
@@ -70,7 +70,7 @@ export function CoachMark({ text, onDismiss, action = 'Got it', caret = 'top', c
         style={[styles.caret, { left: caretOffset }, caret === 'top' ? { top: -CARET.size / 2 } : { bottom: -CARET.size / 2 }]}
       />
       <View testID={testID && `${testID}-card`} style={[styles.card, contrast && IC_HAIRLINE]}>
-        <Text style={[font('meta', bold), styles.text]}>{text}</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.text]}>{text}</Text>
         {action ? (
           <Pressable
             accessibilityRole="button"
@@ -78,7 +78,7 @@ export function CoachMark({ text, onDismiss, action = 'Got it', caret = 'top', c
             onPress={onDismiss}
             style={styles.action}
           >
-            <Text style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.text]}>{action}</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.text]}>{action}</Text>
           </Pressable>
         ) : null}
       </View>

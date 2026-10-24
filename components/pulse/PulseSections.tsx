@@ -17,7 +17,7 @@ import { LocationAskCard } from './LocationAskCard'
 import { Rail, RAIL_GAP, SectionReveal } from './Rail'
 import { SetList } from './SetList'
 import type { BlendnEvent } from '../../lib/api'
-import { COLOR, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, ICON, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { categoryGlyph } from '../../lib/categoryGlyph'
 import { feedPlaylist } from '../../lib/feedMedia'
 import { featuredDateLabel, homeCardProps, peopleLabel, placeLabel } from '../../lib/pulse'
@@ -110,13 +110,13 @@ function WhyThese({ visible, onClose }: { visible: boolean; onClose: () => void 
       <View style={styles.whyRow}>
         <ScrimPill>
           <Icon name="megaphone" size={ICON.inline} color={COLOR.textSecondary} />
-          <Text style={[font('label', bold), styles.secondary]}>{PROMOTED_LABEL.toUpperCase()}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.secondary]}>{PROMOTED_LABEL.toUpperCase()}</Text>
         </ScrimPill>
-        <Text style={[font('meta', bold), styles.secondary, styles.fill]}>{WHY_THESE.promoted}</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.fill]}>{WHY_THESE.promoted}</Text>
       </View>
       <View style={styles.whyRow}>
         <Chip label="No label" variant="outline" />
-        <Text style={[font('meta', bold), styles.secondary, styles.fill]}>{WHY_THESE.picked}</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.fill]}>{WHY_THESE.picked}</Text>
       </View>
     </Sheet>
   )

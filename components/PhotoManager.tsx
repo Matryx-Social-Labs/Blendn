@@ -10,7 +10,7 @@ import { DraggableTile } from './profile/DraggableTile'
 import { AddFace, FailedFace, PhotoFace, PulledFace, UploadingFace } from './profile/PhotoGridTile'
 import { SkeletonBlock } from './Skeleton'
 import { useToast } from './Toast'
-import { COLOR, FONT_FAMILY, RADIUS, SPACE } from '../lib/design/tokens'
+import { COLOR, FONT_FAMILY, RADIUS, SPACE, MAX_FONT_SCALE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { Logger } from '../lib/logger'
 import { inSlotOrder, moveItem, reordered, type GridSpec } from '../lib/photoOrder'
@@ -514,13 +514,13 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
       </View>
       {mainWasPulled(pulled) ? (
         <View testID="photos-main-pulled" style={styles.mainPulled}>
-          <Text style={[font('meta', bold), styles.noteStrong]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.noteStrong]}>
             {photos.length > 0 ? 'Your main photo was removed. The next one is your main photo now.' : 'Your main photo was removed.'}
           </Text>
-          <Text style={[font('meta', bold), styles.note]}>Think we got it wrong? Write to {SUPPORT_EMAIL}.</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.note]}>Think we got it wrong? Write to {SUPPORT_EMAIL}.</Text>
         </View>
       ) : (
-        <Text style={[font('meta', bold), styles.note]}>Photos save on their own. Drag to reorder; the first is what people see.</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.note]}>Photos save on their own. Drag to reorder; the first is what people see.</Text>
       )}
     </View>
   )

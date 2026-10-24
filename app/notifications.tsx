@@ -20,7 +20,7 @@ import type { IconName } from '../components/ui/Icon'
 import { OfflineBanner, useOffline } from '../components/OfflineBanner'
 import { OverflowMenu } from '../components/crews/OverflowMenu'
 import { PullIndicator } from '../components/pulse/PullIndicator'
-import { COLOR, DURATION, EASING, RADIUS, RISE, SPACE } from '../lib/design/tokens'
+import { COLOR, DURATION, EASING, RADIUS, RISE, SPACE, MAX_FONT_SCALE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { Logger } from '../lib/logger'
 import { claimBannerHost } from '../lib/inAppBanners'
@@ -253,7 +253,7 @@ function NotificationsScreenContent() {
         <Spinner size={20} />
       </View>
     ) : (
-      <Text style={[font('meta', bold), styles.footnote]}>{FOOTNOTE}</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.footnote]}>{FOOTNOTE}</Text>
     )
   }
 

@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native'
 
-import { COLOR, SPACE } from '../../lib/design/tokens'
+import { COLOR, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { Button } from '../ds/Button'
 import { font, useBoldText } from '../ds/shared'
@@ -31,10 +31,10 @@ export function MessageRequestPrompt({
   const busy = answering !== null
   return (
     <View testID="message-request" style={styles.column}>
-      <Text accessibilityRole="header" style={[font('bodyStrong', bold), styles.ink]}>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} accessibilityRole="header" style={[font('bodyStrong', bold), styles.ink]}>
         {requestHeadline(name)}
       </Text>
-      {note ? <Text style={[font('body', bold), styles.note]}>{note}</Text> : null}
+      {note ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.note]}>{note}</Text> : null}
       <View style={styles.actions}>
         <Button
           kind="secondary"

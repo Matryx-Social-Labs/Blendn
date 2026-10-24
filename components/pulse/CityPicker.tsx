@@ -80,17 +80,17 @@ export function CityPicker({ visible, onClose, cities, selectedCity, deviceCity,
       >
         <Icon name="navigation" size={ICON.control} />
         <View style={styles.fill}>
-          <Text style={[font('bodyStrong', bold), styles.ink]}>Use my current location</Text>
-          {deviceCity ? <Text style={[font('meta', bold), styles.secondary]}>{deviceCity}</Text> : null}
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>Use my current location</Text>
+          {deviceCity ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>{deviceCity}</Text> : null}
         </View>
       </Pressable>
 
       {cities.length === 0 ? (
-        <Text style={[font('body', bold), styles.secondary]} testID="city-none">
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.secondary]} testID="city-none">
           {deviceCity ? 'No cities have published events yet.' : 'No cities have published events yet. Turn on location to browse where you are.'}
         </Text>
       ) : shown.length === 0 ? (
-        <Text style={[font('body', bold), styles.secondary]} testID="city-no-match">
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.secondary]} testID="city-no-match">
           No cities match “{query.trim()}”.
         </Text>
       ) : (
@@ -127,7 +127,7 @@ function CityRow({ option, active, here, first, onPress }: { option: CityOption;
     >
       <View style={styles.name}>
         {active ? <Icon name="check" size={ICON.inline + 2} /> : null}
-        <Text numberOfLines={1} style={[font('bodyStrong', bold), styles.ink, styles.fill]}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} numberOfLines={1} style={[font('bodyStrong', bold), styles.ink, styles.fill]}>
           {option.city}
         </Text>
         {here ? <Icon name="navigation" size={ICON.inline} color={COLOR.textSecondary} /> : null}

@@ -6,7 +6,7 @@ import { SettingsGroup } from '../components/ds/SettingsRow'
 import { font, HueProvider, useBoldText } from '../components/ds/shared'
 import { TopBar } from '../components/ds/TopBar'
 import { COACH_TIPS } from '../lib/coachMarks'
-import { COLOR, SPACE } from '../lib/design/tokens'
+import { COLOR, SPACE, MAX_FONT_SCALE } from '../lib/design/tokens'
 import { useTopBarOverlay } from '../lib/useTopBarState'
 
 const INTRO = 'Each tip shows once, on its own screen, the first time it applies. They’re all here to read again.'
@@ -27,13 +27,13 @@ function TipsContent() {
         showsVerticalScrollIndicator={false}
         {...bar.scrollProps}
       >
-        <Text style={[font('meta', bold), styles.intro]}>{INTRO}</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.intro]}>{INTRO}</Text>
         {COACH_TIPS.map((tip) => (
           <SettingsGroup key={tip.id} title={tip.screen} testID={`tip-${tip.id}`}>
             {/* Plain text in the card: a tip is read, never pressed, so no glyph and no row to ripple. */}
             <View style={styles.tip}>
-              <Text style={[font('body', bold), styles.text]}>{tip.text}</Text>
-              <Text style={[font('meta', bold), styles.when]}>{tip.when}</Text>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.text]}>{tip.text}</Text>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.when]}>{tip.when}</Text>
             </View>
           </SettingsGroup>
         ))}

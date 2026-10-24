@@ -11,7 +11,7 @@ import { TopBar } from '../components/ds/TopBar'
 import { bannerFadeIn, bannerIn, bannerOut } from '../components/motion/presence'
 import { OfflineBanner } from '../components/OfflineBanner'
 import { useToast } from '../components/Toast'
-import { COLOR, SPACE as DS_SPACE, SPRING } from '../lib/design/tokens'
+import { COLOR, SPACE as DS_SPACE, SPRING, MAX_FONT_SCALE } from '../lib/design/tokens'
 import type { IconName } from '../components/ui/Icon'
 import { H } from '../lib/haptics'
 import { PLUS_FREE_SHEET } from '../lib/plusFree'
@@ -323,7 +323,7 @@ function SettingsScreenContent() {
           'Your profile, photos, friends and sign-in are deleted now. Messages you sent stay in their conversations under a deleted account, and we keep your registration details for 180 days, as Indian law requires.',
         // A running store subscription keeps billing after the account is gone: say so first (review H1).
         content: storePlus ? (
-          <Text accessibilityLiveRegion="polite" style={[font('bodyStrong', bold), { color: COLOR.textPrimary }]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} accessibilityLiveRegion="polite" style={[font('bodyStrong', bold), { color: COLOR.textPrimary }]}>
             {`Cancel Blend’n+ in your ${store} subscriptions first. Deleting your account doesn’t cancel it.`}
           </Text>
         ) : undefined,

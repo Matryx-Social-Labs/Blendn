@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
-import { COLOR, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import type { Badge } from '../../lib/aboutYou'
 import { BADGE_MEANING } from '../../lib/profileBadges'
 import { AchievementBadge } from '../ds/AchievementBadge'
@@ -51,12 +51,12 @@ export function MeBadges({
                 announceOutcome(line)
               }}
             />
-            <Text accessibilityLiveRegion="polite" style={[font('meta', bold), styles.muted]}>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} accessibilityLiveRegion="polite" style={[font('meta', bold), styles.muted]}>
               {meaning ?? 'From your check-ins. They can’t be bought, and they come and go on their own.'}
             </Text>
           </>
         ) : (
-          <Text style={[font('meta', bold), styles.muted]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.muted]}>
             Badges come from your check-ins: showing up to what you said you would, and nights out. They appear here when you earn them.
             Nothing to unlock.
           </Text>

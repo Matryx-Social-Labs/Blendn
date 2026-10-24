@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native'
 import Animated, { FadeIn } from 'react-native-reanimated'
 
 import { Icon, type IconName } from '../ui/Icon'
-import { COLOR, FONT_FAMILY, ICON, MATERIAL, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, MATERIAL, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { tint } from '../../lib/theme'
@@ -64,7 +64,7 @@ export function CrewStrip({ crews, off = false, onTell, testID }: { crews: Strip
     return (
       <View testID={testID} style={[styles.strip, styles.off]}>
         <Icon name="users" size={ICON.control} color={COLOR.textSecondary} />
-        <Text style={[font('meta', bold), styles.fill, { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{OFF_LINE}</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.fill, { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{OFF_LINE}</Text>
       </View>
     )
   }
@@ -91,7 +91,7 @@ function CrewStripRow({ crew, onTell, testID }: { crew: StripCrew; onTell: (id: 
       <View accessible accessibilityLabel={`Crew ${crew.name}, ${here} of ${crew.size} here, ${sub}`} style={styles.row}>
         <CrewEmblem seed={crew.emblemSeed} size={EMBLEM} />
         <View style={styles.fill}>
-          <Text style={[font('bodyStrong', bold), styles.ink]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>
             {`Crew ${crew.name} `}
             <Text style={{ color: COLOR.textSecondary }}>·</Text>{' '}
             <Text style={[font('bodyStrong', bold, FONT_FAMILY.mono[500]), styles.tabular]}>
@@ -99,7 +99,7 @@ function CrewStripRow({ crew, onTell, testID }: { crew: StripCrew; onTell: (id: 
             </Text>
             {' in'}
           </Text>
-          <Text style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{sub}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{sub}</Text>
         </View>
         <CountTicks size={crew.size} here={here} />
       </View>

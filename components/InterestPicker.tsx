@@ -4,7 +4,7 @@ import { StyleSheet, Text, View } from 'react-native'
 import { apiClient } from '../lib/apiClient'
 import { pickableItems, toPickerTree, type CategoryGroup, type CategoryNode } from '../lib/categories'
 import { Logger } from '../lib/logger'
-import { COLOR, SPACE, TYPE } from '../lib/design/tokens'
+import { COLOR, MAX_FONT_SCALE, SPACE, TYPE } from '../lib/design/tokens'
 import { ChipSet } from './ds/ChipSet'
 
 /**
@@ -101,17 +101,17 @@ export function InterestPicker({
   return (
     <View>
       {showCount ? (
-        <Text style={styles.counter}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={styles.counter}>
           Selected: {selected.length}/{MAX_INTERESTS}
         </Text>
       ) : null}
 
       {loading ? (
-        <Text style={styles.notice}>Loading interests…</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={styles.notice}>Loading interests…</Text>
       ) : failed || available === 0 ? (
         // An honest message beats an empty grid that reads as "the app has
         // nothing to offer". The caller lets them continue regardless.
-        <Text style={styles.notice}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={styles.notice}>
           Couldn’t load interests. You can add them later from your profile.
         </Text>
       ) : null}

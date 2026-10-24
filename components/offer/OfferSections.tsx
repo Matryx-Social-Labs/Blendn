@@ -39,7 +39,7 @@ function Stamp({ text }: { text: string }) {
   return (
     <View accessible accessibilityLabel={text} style={styles.stamp}>
       <Icon name="check" size={ICON.inline} color={COLOR.selectionInk} active />
-      <Text style={[font('meta', bold, FONT_FAMILY.brand[500]), { color: COLOR.selectionInk }]}>{text}</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.brand[500]), { color: COLOR.selectionInk }]}>{text}</Text>
     </View>
   )
 }
@@ -84,12 +84,12 @@ export function DoorTicket({
   return (
     <View testID="door-ticket" style={[styles.ticket, contrast ? IC_HAIRLINE : styles.edge]}>
       <View accessible accessibilityLabel={`Door pass for ${venueName}. ${offerText}. Valid ${until}.`} style={styles.top}>
-        <Text style={[font('label', bold), styles.secondary]}>DOOR PASS</Text>
-        <Text accessibilityRole="header" style={[font('title', bold), styles.ink]}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.secondary]}>DOOR PASS</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} accessibilityRole="header" style={[font('title', bold), styles.ink]}>
           {venueName}
         </Text>
-        <Text style={[font('body', bold), styles.ink]}>{offerText}</Text>
-        <Text style={[font('meta', bold), styles.secondary]}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.ink]}>{offerText}</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
           Valid <Text style={monoCaption(bold)}>{until}</Text>
         </Text>
       </View>
@@ -125,8 +125,8 @@ function FactRow({ icon, title, text }: { icon: IconName; title?: string; text: 
     <View style={styles.fact}>
       <Icon name={icon} size={ICON.control} color={COLOR.textPrimary} />
       <View style={styles.fill}>
-        {title ? <Text style={[font('bodyStrong', bold), FACT_TITLE, styles.ink]}>{title}</Text> : null}
-        <Text style={[font('meta', bold), title ? styles.secondary : styles.ink]}>{text}</Text>
+        {title ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), FACT_TITLE, styles.ink]}>{title}</Text> : null}
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), title ? styles.secondary : styles.ink]}>{text}</Text>
       </View>
     </View>
   )
@@ -154,7 +154,7 @@ export function RegularAsk({
   const bold = useBoldText()
   return (
     <View testID="regular-ask" style={styles.card}>
-      <Text accessibilityRole="header" style={[font('heading', bold), styles.ink]}>{`Let ${venueName} know you’re a regular`}</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.heading} accessibilityRole="header" style={[font('heading', bold), styles.ink]}>{`Let ${venueName} know you’re a regular`}</Text>
       <FactRow icon="eye" title={`${venueName} will see`} text={knownLine(prefs, venueName)} />
       <FactRow icon="eye-off" title={`${venueName} won’t see`} text="your chats, who you met, or anywhere else you go" />
       <FactRow icon="hand-heart" title="Why" text="so the staff can say hi or look after you" />
@@ -194,7 +194,7 @@ export function RegularOff({ venueName }: { venueName: string }) {
   return (
     <View testID="regular-off" accessibilityLiveRegion="polite" style={styles.rowCard}>
       <Icon name="check" size={ICON.control} color={COLOR.textPrimary} />
-      <Text style={[font('meta', bold), styles.ink, styles.fill]}>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink, styles.fill]}>
         {`Done — ${venueName} no longer sees you as a regular. Offers to regulars still reach you without your name.`}
       </Text>
     </View>

@@ -12,7 +12,7 @@ import { TopBar } from '../../components/ds/TopBar'
 import { PersonRow, PersonRowSkeleton, usePersonRowsFixed } from '../../components/friends/PersonRow'
 import { useOffline } from '../../components/OfflineBanner'
 import { useToast } from '../../components/Toast'
-import { COLOR, FONT_FAMILY, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { groupedCount, useMessageFriend } from '../../lib/friendsHere'
 import { SEARCH_MAX, FRIEND_ROW_HEIGHT, layoutOf, useFriendsHereList, withLetters, type FriendsListItem } from '../../lib/friendsHereList'
 import { idParam } from '../../lib/routeParams'
@@ -58,7 +58,7 @@ function FriendsHereScreenContent() {
   const renderItem = ({ item }: { item: FriendsListItem }) =>
     item.kind === 'letter' ? (
       <View style={styles.letter} accessibilityRole="header">
-        <Text accessibilityLabel={item.letter} style={[font('label', bold, FONT_FAMILY.mono[500]), styles.letterText]}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} accessibilityLabel={item.letter} style={[font('label', bold, FONT_FAMILY.mono[500]), styles.letterText]}>
           {item.letter}
         </Text>
       </View>

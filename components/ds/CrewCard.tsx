@@ -116,7 +116,7 @@ export function CrewCard({
               {here ? `Crew of ${crew.size} · ${here} here now` : `Crew of ${crew.size}`}
             </Text>
             {crew.bio ? (
-              <Text numberOfLines={2} style={[font(compact ? 'meta' : 'body', bold), styles.ink]}>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={2} style={[font(compact ? 'meta' : 'body', bold), styles.ink]}>
                 {crew.bio}
               </Text>
             ) : null}
@@ -128,13 +128,13 @@ export function CrewCard({
             {crew.tags.map((t) => (
               <Chip key={t} label={t} variant="outline" />
             ))}
-            {crew.intent ? <Text style={[font('meta', bold), { color: detail }]}>{crew.intent}</Text> : null}
+            {crew.intent ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: detail }]}>{crew.intent}</Text> : null}
           </View>
         ) : null}
         {overlap ? (
           <View style={styles.overlap}>
             <Icon name="sparkles" size={ICON.inline} />
-            <Text style={[font('meta', bold), styles.ink, styles.text]}>{overlap}</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink, styles.text]}>{overlap}</Text>
           </View>
         ) : null}
       </Pressable>

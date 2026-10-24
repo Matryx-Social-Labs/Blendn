@@ -10,7 +10,7 @@ import { AccessibilityInfo, StyleSheet, Text } from 'react-native'
 
 import { badgeFadeIn, badgeIn } from '../components/motion/presence'
 import { Badge, LivePill, MonoRun, PresenceDot, Price, TimeBadge } from '../components/ds/MonoFamily'
-import { COLOR, FONT_FAMILY, MATERIAL, TYPE } from '../lib/design/tokens'
+import { COLOR, FONT_FAMILY, MATERIAL, MAX_FONT_SCALE, TYPE } from '../lib/design/tokens'
 
 const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id, { includeHiddenElements: true }).props.style)
 const text = (t: string) => screen.getByText(t, { includeHiddenElements: true })
@@ -148,9 +148,11 @@ describe('<Price>', () => {
     expect(screen.getByLabelText('Free')).toBeTruthy()
   })
 
-  it('scales freely: no cap', async () => {
+  // DS-22: every text has a cap. A price grows (no fixed box) up to its role's: `lg` is display (1.5), its unit body.
+  it('grows to its role’s cap, never past it', async () => {
     await render(<Price amount="₹49" per="tonight" size="lg" />)
-    expect(text('₹49').props.maxFontSizeMultiplier).toBeUndefined()
+    expect(text('₹49').props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.display)
+    expect(text('tonight').props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.body)
   })
 })
 

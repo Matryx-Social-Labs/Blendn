@@ -16,7 +16,7 @@ import type { Rect } from '../../components/ds/chatShared'
 import { SkeletonBlock } from '../../components/Skeleton'
 import { useToast } from '../../components/Toast'
 import { apiClient } from '../../lib/apiClient'
-import { COLOR, FONT_FAMILY, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { friendsSinceParts, type FriendProfile } from '../../lib/friends'
 import { noteFriendGone } from '../../lib/friendsGone'
 import { isGone } from '../../lib/loadFailure'
@@ -231,7 +231,7 @@ function FriendProfileScreenContent() {
         />
 
         <View style={styles.canvas}>
-          <Text style={[font('meta', bold), styles.since]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.since]}>
             {since.words}
             {since.date ? <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.sinceDate]}>{since.date}</Text> : null}
           </Text>

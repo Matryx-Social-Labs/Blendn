@@ -117,7 +117,7 @@ export function SectionHeader({
           </View>
         ) : null}
       </View>
-      {caption ? <Text style={[font('meta', bold), styles.muted]}>{caption}</Text> : null}
+      {caption ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.muted]}>{caption}</Text> : null}
     </View>
   )
 }

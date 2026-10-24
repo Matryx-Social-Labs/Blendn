@@ -66,7 +66,7 @@ export function RevealSheet({
     >
       <View style={styles.lock}>
         <Icon name="lock" size={ICON.inline} />
-        <Text style={[font('meta', bold), styles.ink]}>You can’t undo a reveal.</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink]}>You can’t undo a reveal.</Text>
       </View>
     </Sheet>
   )

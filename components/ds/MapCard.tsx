@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 
 import ScalePress from '../motion/ScalePress'
-import { COLOR, FONT_FAMILY, PRESS, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, PRESS, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { tint } from '../../lib/theme'
 import { ScrimPill } from './MonoFamily'
@@ -102,7 +102,7 @@ export function MapCard({
         </View>
         {/* One line, ended with "…": two lines bottom-anchored were clipped mid-word on Android (r7 L4); the card above has it in full. */}
         {address ? (
-          <Text numberOfLines={1} ellipsizeMode="tail" style={[font('caption', bold), styles.ink, styles.address]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} numberOfLines={1} ellipsizeMode="tail" style={[font('caption', bold), styles.ink, styles.address]}>
             {address}
           </Text>
         ) : null}

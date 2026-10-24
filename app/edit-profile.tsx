@@ -20,7 +20,7 @@ import { useToast } from '../components/Toast'
 import { queryCache } from '../lib/queryCache'
 import { showSheet } from '../lib/sheet'
 import { useTopBarState } from '../lib/useTopBarState'
-import { COLOR, FONT_FAMILY, RADIUS, SIZE, SPACE } from '../lib/design/tokens'
+import { COLOR, FONT_FAMILY, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../lib/design/tokens'
 import { useAuth, refreshAuthUser } from '../lib/useAuth'
 import { KEYBOARD_BEHAVIOR } from '../lib/keyboard'
 import { profileFormErrors } from '../lib/onboarding'
@@ -731,10 +731,10 @@ function EditCard({ title, sub, children, onLayout }: { title?: string; sub?: st
     <View style={styles.card} onLayout={onLayout ? (e) => onLayout(e.nativeEvent.layout.y) : undefined}>
       {title ? (
         <View style={styles.cardHeader}>
-          <Text accessibilityRole="header" style={[font('label', bold), styles.cardTitle]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} accessibilityRole="header" style={[font('label', bold), styles.cardTitle]}>
             {title}
           </Text>
-          {sub ? <Text style={[font('caption', bold, FONT_FAMILY.mono[500]), styles.cardSub]}>{sub}</Text> : null}
+          {sub ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold, FONT_FAMILY.mono[500]), styles.cardSub]}>{sub}</Text> : null}
         </View>
       ) : null}
       {children}

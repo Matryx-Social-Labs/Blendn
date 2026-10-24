@@ -6,7 +6,7 @@ import { measureAnchor } from '../ds/anchor'
 import type { Rect } from '../ds/chatShared'
 import { font, PRESSED_WASH, useBoldText } from '../ds/shared'
 import type { BlendnEvent } from '../../lib/api'
-import { COLOR, FONT_FAMILY, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { liveWindow } from '../../lib/eventSession'
 import { distanceText } from '../../lib/placesPane'
 import { clockTime } from '../../lib/roomMoments'
@@ -99,8 +99,8 @@ const Row = memo(function Row({ event, withDistance, stacked, onPress, onPressIn
     >
       {stacked ? null : (
         <View style={styles.timeCol}>
-          <Text style={[font('bodyStrong', bold, FONT_FAMILY.mono[700]), styles.ink, styles.tabular, styles.timeText]}>{time}</Text>
-          <Text style={[font('label', bold), styles.secondary]}>{meridiem}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold, FONT_FAMILY.mono[700]), styles.ink, styles.tabular, styles.timeText]}>{time}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.secondary]}>{meridiem}</Text>
         </View>
       )}
       <View style={styles.nodeCol} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
@@ -113,12 +113,12 @@ const Row = memo(function Row({ event, withDistance, stacked, onPress, onPressIn
       )}
       <View style={styles.text}>
         {stacked ? (
-          <Text style={[font('bodyStrong', bold, FONT_FAMILY.mono[700]), styles.ink, styles.tabular]}>{`${time} ${meridiem}`}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold, FONT_FAMILY.mono[700]), styles.ink, styles.tabular]}>{`${time} ${meridiem}`}</Text>
         ) : null}
-        <Text numberOfLines={stacked ? undefined : 1} style={[font('bodyStrong', bold), styles.ink]}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} numberOfLines={stacked ? undefined : 1} style={[font('bodyStrong', bold), styles.ink]}>
           {event.title}
         </Text>
-        <Text numberOfLines={stacked ? undefined : 1} style={[font('meta', bold), styles.secondary]}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={stacked ? undefined : 1} style={[font('meta', bold), styles.secondary]}>
           {event.venue_name ? `at ${event.venue_name}` : ''}
           {distance ? (
             <>
@@ -146,13 +146,13 @@ function NowTick({ clock, stacked }: { clock: string; stacked: boolean }) {
     <View style={[styles.nowRow, stacked && styles.rowStacked]} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden testID="set-now">
       {stacked ? null : (
         <View style={styles.timeCol}>
-          <Text style={[font('label', bold), styles.orange]}>NOW</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.orange]}>NOW</Text>
         </View>
       )}
       <View style={styles.nodeCol}>
         <View style={[styles.node, styles.nodeNow]} />
       </View>
-      <Text style={[font('label', bold), styles.orange, styles.nowClock]}>{stacked ? `NOW · ${clock}` : clock}</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.orange, styles.nowClock]}>{stacked ? `NOW · ${clock}` : clock}</Text>
     </View>
   )
 }

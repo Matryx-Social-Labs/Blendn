@@ -7,7 +7,7 @@ import { font, useBoldText, useSelection } from '../ds/shared'
 import { monoCaption } from '../ds/MonoFamily'
 import { Icon } from '../ui/Icon'
 import FadeInUp from '../motion/FadeInUp'
-import { COLOR, ICON, RADIUS, RISE, SPACE } from '../../lib/design/tokens'
+import { COLOR, ICON, RADIUS, RISE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 
 /**
  * The picture in the middle of a permission step (Flow 2 notifications 01, location 01), drawn from design-system parts: no
@@ -45,12 +45,12 @@ export function NotificationIllustration() {
           </View>
           <View style={styles.bannerText}>
             <View style={styles.bannerTop}>
-              <Text style={[font('caption', bold), styles.app]}>Blend’n</Text>
-              <Text style={[monoCaption(bold), styles.when]}>Just now</Text>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.app]}>Blend’n</Text>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[monoCaption(bold), styles.when]}>Just now</Text>
             </View>
             {/* Plain words, as a real push reads (audit A34): no Title Case, no exclamation mark. */}
-            <Text style={[font('button', bold), styles.bannerTitle]}>Someone’s around</Text>
-            <Text style={[font('meta', bold), styles.bannerBody]}>A person you’d get on with just checked in.</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.button} style={[font('button', bold), styles.bannerTitle]}>Someone’s around</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.bannerBody]}>A person you’d get on with just checked in.</Text>
           </View>
           <Icon name="zap" size={ICON.control} color={COLOR.textPrimary} />
         </View>
@@ -116,14 +116,14 @@ export function LocationIllustration({ city, notice = false }: { city?: string |
         <View testID="you-ring" style={[styles.youRing, { backgroundColor: sel.edge }]}>
           <Avatar kind="creature" pseudonym="You" size={YOU_SIZE - SPACE.sm} />
         </View>
-        <Text style={[font('caption', bold), styles.youTag]}>You</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.youTag]}>You</Text>
       </View>
       <View style={styles.footer}>
         <View style={styles.footerRow}>
           <Icon name="map-pin" size={ICON.inline} color={COLOR.textPrimary} />
-          <Text style={[font('label', bold), styles.footerLabel]}>{city ? `NEAR YOU · ${city.toUpperCase()}` : 'NEAR YOU'}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.footerLabel]}>{city ? `NEAR YOU · ${city.toUpperCase()}` : 'NEAR YOU'}</Text>
         </View>
-        <Text style={[font('meta', bold), styles.footerBody]}>Check-in only works while you’re inside the venue.</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.footerBody]}>Check-in only works while you’re inside the venue.</Text>
       </View>
     </View>
   )

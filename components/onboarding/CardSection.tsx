@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native'
 
 import { GroundProvider, font, useBoldText } from '../ds/shared'
 import { Icon, type IconName } from '../ui/Icon'
-import { COLOR, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, ICON, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 
 /** The icon badge's circle, 48 pt (Flow 2 `cardSection`). */
 const BADGE = 48
@@ -24,10 +24,10 @@ export function CardSection({ icon, title, caption, children }: { icon: IconName
           <Icon name={icon} size={ICON.control} color={COLOR.textPrimary} />
         </View>
         <View style={styles.headText}>
-          <Text accessibilityRole="header" style={[font('bodyStrong', bold), styles.title]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} accessibilityRole="header" style={[font('bodyStrong', bold), styles.title]}>
             {title}
           </Text>
-          {caption ? <Text style={[font('meta', bold), styles.caption]}>{caption}</Text> : null}
+          {caption ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.caption]}>{caption}</Text> : null}
         </View>
       </View>
       <GroundProvider value="surface">

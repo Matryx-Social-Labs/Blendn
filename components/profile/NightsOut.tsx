@@ -82,10 +82,10 @@ export function NightsOut({
   if (view.kind === 'first') {
     return (
       <View testID="nights-first" style={styles.first}>
-        <Text accessibilityRole="header" style={[font('heading', bold), styles.ink]}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.heading} accessibilityRole="header" style={[font('heading', bold), styles.ink]}>
           {FIRST_NIGHT.title}
         </Text>
-        <Text style={[font('meta', bold), styles.muted]}>{FIRST_NIGHT.body}</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.muted]}>{FIRST_NIGHT.body}</Text>
         <Button kind="lit" size="md" label={FIRST_NIGHT.action} onPress={onFirstNight} style={styles.firstAction} />
       </View>
     )
@@ -124,7 +124,7 @@ export function NightsOut({
 
       {view.kind === 'tiles' ? (
         <>
-          {view.nights > 0 ? <Text style={[font('meta', bold), styles.muted]}>{nightsLine(view.nights)}</Text> : null}
+          {view.nights > 0 ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.muted]}>{nightsLine(view.nights)}</Text> : null}
           <View testID="nights-grid" style={styles.grid}>
             {events.slice(0, NIGHT_TILES).map((event) => (
               <View key={event.id} style={cell}>

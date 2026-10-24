@@ -32,7 +32,7 @@ import {
   type SignSystem,
 } from '../lib/aboutYou'
 import { apiClient, ProfileCache } from '../lib/apiClient'
-import { COLOR, DURATION, EASING, RADIUS, SIZE, SPACE } from '../lib/design/tokens'
+import { COLOR, DURATION, EASING, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../lib/design/tokens'
 import { Logger } from '../lib/logger'
 import { useReducedMotion } from '../lib/motion'
 import { queryCache } from '../lib/queryCache'
@@ -454,7 +454,7 @@ function EditAboutYouScreenContent() {
 function Intro() {
   const bold = useBoldText()
   return (
-    <Text style={[font('meta', bold), styles.intro]}>
+    <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.intro]}>
       Where you’re from, what you speak, your sign. Each shows only to people who may already see who you are.
     </Text>
   )
@@ -465,7 +465,7 @@ function BirthdaySign({ text, onPress }: { text: string; onPress: () => void }) 
   const bold = useBoldText()
   return (
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={text} style={styles.birthday}>
-      <Text style={[font('meta', bold), styles.ink]}>{text}</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink]}>{text}</Text>
     </Pressable>
   )
 }

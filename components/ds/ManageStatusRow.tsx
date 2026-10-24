@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native'
 
 import { GradientFill } from '../ui/GradientFill'
-import { COLOR, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { Button } from './Button'
 import { DiscMark } from './DiscMark'
 import { font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from './shared'
@@ -73,10 +73,10 @@ export function ManageStatusRow({
       <View accessible accessibilityLabel={`${title}. ${sentence}`} style={styles.gap}>
         <View style={styles.head}>
           <PlusMark />
-          <Text style={[font('heading', bold), styles.title]}>{title}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold), styles.title]}>{title}</Text>
           <View testID={testID && `${testID}-dot`} style={[styles.dot, { backgroundColor: DOT[tone] }]} />
         </View>
-        <Text style={[font('body', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{sentence}</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{sentence}</Text>
       </View>
       {tone === 'warn' ? (
         <Button kind="lit" size="md" label={store === 'android' ? 'Fix it in Google Play' : 'Fix it in the App Store'} onPress={onFix} />

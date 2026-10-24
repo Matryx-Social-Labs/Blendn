@@ -7,7 +7,7 @@ import { IconButton } from '../ds/IconButton'
 import { ScrimPill } from '../ds/MonoFamily'
 import { font } from '../ds/shared'
 import type { BlendnEvent } from '../../lib/api'
-import { COLOR, SPACE } from '../../lib/design/tokens'
+import { COLOR, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 
 type Props = {
   event: BlendnEvent
@@ -52,7 +52,7 @@ export const MoreRow = memo(function MoreRow({ event, title, time, venue, distan
       </View>
       {note ? (
         <ScrimPill testID={`pulse-row-note-${event.id}`}>
-          <Text style={[font('caption', false), styles.ink]}>{note}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', false), styles.ink]}>{note}</Text>
         </ScrimPill>
       ) : null}
       {/* Saving is the whole of `event_favorites` and what the Going tab's Saved is built from: a silent toggle beside the row. */}

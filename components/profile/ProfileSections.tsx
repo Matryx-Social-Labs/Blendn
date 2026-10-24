@@ -58,7 +58,7 @@ export function ProfileSection({
         title={title}
         count={count}
         action={action}
-        right={trailing ? <Text style={[font('meta', bold), styles.muted]}>{trailing}</Text> : undefined}
+        right={trailing ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.muted]}>{trailing}</Text> : undefined}
       />
       {children}
     </View>
@@ -68,7 +68,7 @@ export function ProfileSection({
 /** The bio, in `body` on the page (Flow 6 draws it white, 17/24). */
 export function ProfileBio({ text }: { text: string }) {
   const bold = useBoldText()
-  return <Text style={[font('body', bold), styles.ink]}>{text}</Text>
+  return <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.ink]}>{text}</Text>
 }
 
 /**
@@ -95,8 +95,8 @@ export function ProfileDetail({ label, value, variant = 'card' }: { label: strin
   const bold = useBoldText()
   return (
     <View accessible accessibilityLabel={`${label.toLowerCase()}, ${value}`} style={variant === 'card' ? styles.detailCard : styles.detailRuled}>
-      <Text style={[font('label', bold, FONT_FAMILY.mono[500]), styles.muted]}>{label}</Text>
-      <Text style={[font('body', bold), styles.ink]}>{value}</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold, FONT_FAMILY.mono[500]), styles.muted]}>{label}</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.ink]}>{value}</Text>
     </View>
   )
 }

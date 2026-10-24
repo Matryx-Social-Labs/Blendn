@@ -3,7 +3,7 @@ import { Platform, StyleSheet, Text, View } from 'react-native'
 
 import ScalePress from '../motion/ScalePress'
 import { Icon } from '../ui/Icon'
-import { COLOR, FONT_FAMILY, PRESS, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, PRESS, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { OPACITY } from '../../lib/theme'
 import { Button } from './Button'
 import { monoCaption, spokenPrice } from './MonoFamily'
@@ -150,10 +150,10 @@ export function NotLiveNotice({ kind, onPress, testID }: { kind: 'notLive' | 'ro
       <View style={styles.well} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         <Icon name={notLive ? 'radio' : 'moon'} size={WELL_GLYPH} color={contrast ? COLOR.textPrimary : COLOR.textSecondary} />
       </View>
-      <Text accessibilityRole="header" style={[font('title', bold), styles.ink, styles.centre]}>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} accessibilityRole="header" style={[font('title', bold), styles.ink, styles.centre]}>
         {notLive ? 'Not live here any more' : 'Today’s room has closed'}
       </Text>
-      <Text style={[font('body', bold), styles.centre, { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.centre, { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>
         {notLive ? SERVER.notLive : SERVER.reset}
       </Text>
       <Button kind={notLive ? 'primary' : 'secondary'} label={notLive ? 'Go live again' : 'Back to Places'} onPress={onPress} style={styles.full} />

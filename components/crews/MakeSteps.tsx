@@ -149,8 +149,8 @@ export function NameStep(p: NameStepProps) {
       />
       <View style={styles.toggleRow}>
         <View style={styles.fill}>
-          <Text style={[font('bodyStrong', bold), styles.ink]}>Room for one more</Text>
-          <Text style={[font('meta', bold), { color: secondary }]}>Solo people who opt in can be liked for the crew. Crews of 6 or fewer.</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>Room for one more</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: secondary }]}>Solo people who opt in can be liked for the crew. Crews of 6 or fewer.</Text>
         </View>
         <Toggle value={p.openToSolo} onValueChange={p.onOpenToSolo} accessibilityLabel="Room for one more" />
       </View>
@@ -244,7 +244,7 @@ export function FriendsStep({ friends, picked, onToggle, onRetry, none = NO_FRIE
   const secondary = contrast ? COLOR.textPrimary : COLOR.textSecondary
   const windowHeight = useWindowDimensions().height
   const full = picked.length >= limit
-  const line = (text: string) => <Text style={[font('meta', bold), styles.centre, { color: secondary }]}>{text}</Text>
+  const line = (text: string) => <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.centre, { color: secondary }]}>{text}</Text>
   // As tall as its rows up to its share of the screen, and past that it scrolls.
   const listHeight = Array.isArray(friends) ? Math.min(friends.length * FRIEND_ROW + (paging && (paging.loadingMore || paging.moreFailed) ? FRIEND_ROW : 0), Math.round(windowHeight * LIST_SHARE)) : 0
   return (
@@ -309,11 +309,11 @@ export function FriendsStep({ friends, picked, onToggle, onRetry, none = NO_FRIE
         )}
       </View>
       <View style={styles.footer} accessibilityLiveRegion="polite">
-        <Text style={[font('body', bold), styles.ink]}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.ink]}>
           <Text style={[font('body', bold, FONT_FAMILY.mono[500]), styles.ink]}>{picked.length}</Text>
           {' invited'}
         </Text>
-        <Text style={[font('meta', bold), full ? styles.ink : { color: secondary }, styles.note]}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), full ? styles.ink : { color: secondary }, styles.note]}>
           {full ? 'A crew has at most 12 people.' : 'Invites last 14 days'}
         </Text>
       </View>
@@ -339,12 +339,12 @@ export function ConsentStep({ name, summary, previewSeed, keepAnonymous, onKeepA
       <View style={styles.consent}>
         <View style={styles.consentLine}>
           <Icon name="eye" size={ICON.control} />
-          <Text style={[font('body', bold), styles.ink, styles.fill]}>{CONSENT_LINE}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.ink, styles.fill]}>{CONSENT_LINE}</Text>
         </View>
         <View style={styles.anon}>
           <View style={styles.fill}>
-            <Text style={[font('bodyStrong', bold), styles.ink]}>{KEEP_ANONYMOUS_LABEL}</Text>
-            <Text style={[font('meta', bold), { color: secondary }]}>You can change this later. It applies from then on.</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>{KEEP_ANONYMOUS_LABEL}</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: secondary }]}>You can change this later. It applies from then on.</Text>
           </View>
           <Toggle value={keepAnonymous} onValueChange={onKeepAnonymous} accessibilityLabel={KEEP_ANONYMOUS_LABEL} />
         </View>
@@ -352,8 +352,8 @@ export function ConsentStep({ name, summary, previewSeed, keepAnonymous, onKeepA
       <View style={styles.summary} accessible accessibilityLabel={`${name}, ${summary}`}>
         <CrewEmblem seed={previewEmblemSeed(previewSeed)} size={56} />
         <View style={styles.fill}>
-          <Text style={[font('bodyStrong', bold), styles.ink]}>{name}</Text>
-          <Text style={[font('meta', bold), { color: secondary }]}>{summary}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>{name}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: secondary }]}>{summary}</Text>
         </View>
       </View>
     </>

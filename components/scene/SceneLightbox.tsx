@@ -18,7 +18,7 @@ import { MODAL_FADE_MS, useQueuedModal } from '../../lib/modalTurn'
 import { IconButton } from '../ds/IconButton'
 import { ScrimPill, monoCaption } from '../ds/MonoFamily'
 import { useBoldText } from '../ds/shared'
-import { COLOR, SPACE } from '../../lib/design/tokens'
+import { COLOR, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { SwipeToDismiss } from '../motion/SwipeToDismiss'
 import { ZoomableImage } from '../motion/ZoomableImage'
 
@@ -150,7 +150,7 @@ export function SceneLightbox({
         {items.length > 1 ? (
           <View style={[styles.counter, { top }]} pointerEvents="none">
             <ScrimPill>
-              <Text style={[monoCaption(bold), styles.ink]}>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[monoCaption(bold), styles.ink]}>
                 {index + 1} / {items.length}
               </Text>
             </ScrimPill>

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
-import { COLOR, SPACE } from '../../lib/design/tokens'
+import { COLOR, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { captureStory, coverReady, shareStory, storyCaptureWidth, type StoryOutcome } from '../../lib/storyShare'
 import type { ShareEvent } from '../ds/LinkPreviewCard'
 import { SettingsRow } from '../ds/SettingsRow'
@@ -140,7 +140,7 @@ export function StoryOptionsSheet({
           onValueChange={setOn}
           testID={testID && `${testID}-toggle`}
         />
-        <Text style={[font('caption', bold), styles.note]}>{copy.note}</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.note]}>{copy.note}</Text>
       </Sheet>
       {visible ? (
         <View ref={photograph} collapsable={false} pointerEvents="none" style={styles.offscreen} testID={testID && `${testID}-photo`}>

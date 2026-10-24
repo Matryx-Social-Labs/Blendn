@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { AccessibilityInfo, Platform, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 
 import { Icon, type IconName } from '../ui/Icon'
-import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE, TYPE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE, TYPE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { Button } from './Button'
 import { CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast, useMinMeasure } from './shared'
 
@@ -88,7 +88,7 @@ export function Banner({ kind, text, mono, icon, action, busy = false, testID }:
       </View>
       {/* The sentence and its action in a row that wraps: the action goes under the sentence rather than squeeze it. */}
       <View testID={testID && `${testID}-body`} style={[styles.body, under && styles.top]}>
-        <Text
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta}
           testID={testID && `${testID}-text`}
           accessibilityLiveRegion={kind === 'error' ? 'assertive' : announced ? 'polite' : 'none'}
           onLayout={(e) => setTextHeight(e.nativeEvent.layout.height)}

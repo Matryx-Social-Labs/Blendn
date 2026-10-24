@@ -9,7 +9,7 @@ import {
 } from '../../lib/communityGuidelines'
 import { openInApp } from '../../lib/links'
 import { Logger } from '../../lib/logger'
-import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE, TYPE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE, TYPE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { OPACITY } from '../../lib/theme'
 import { font, minTarget, useBoldText } from '../ds/shared'
 import { Icon } from '../ui/Icon'
@@ -64,7 +64,7 @@ export function RoomGuidelinesBanner({ userId, chatRoomId }: { userId?: string; 
     <View style={styles.root} testID="room-guidelines-banner" accessibilityRole="summary">
       <Icon name="shield" size={ICON.control} />
       <View style={styles.copy}>
-        <Text textBreakStrategy="balanced" style={[font('meta', bold), styles.ink, styles.centre]}>This room is anonymous. Be kind, keep it safe — people here are real.</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} textBreakStrategy="balanced" style={[font('meta', bold), styles.ink, styles.centre]}>This room is anonymous. Be kind, keep it safe — people here are real.</Text>
         <Pressable
           onPress={openGuidelines}
           hitSlop={(minTarget() - TYPE.meta.lineHeight) / 2}
@@ -74,7 +74,7 @@ export function RoomGuidelinesBanner({ userId, chatRoomId }: { userId?: string; 
           testID="room-guidelines-link"
         >
           {({ pressed }) => (
-            <Text style={[font('meta', bold), styles.ink, styles.centre, pressed && styles.pressed]}>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink, styles.centre, pressed && styles.pressed]}>
               Read the <Text style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.link]}>community guidelines</Text>.
             </Text>
           )}
@@ -87,7 +87,7 @@ export function RoomGuidelinesBanner({ userId, chatRoomId }: { userId?: string; 
             accessibilityLabel="Got it"
             accessibilityHint="Hides this for this room"
           >
-            <Text style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>Got it</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>Got it</Text>
           </Pressable>
         </View>
       </View>

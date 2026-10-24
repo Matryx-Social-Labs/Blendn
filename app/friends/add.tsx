@@ -15,7 +15,7 @@ import { PagedFooter } from '../../components/friends/PagedFooter'
 import { PersonRow } from '../../components/friends/PersonRow'
 import { RequestsRow } from '../../components/friends/RequestsRow'
 import { SettingsGroup } from '../../components/ds/SettingsRow'
-import { COLOR, SPACE } from '../../lib/design/tokens'
+import { COLOR, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { showSheet } from '../../lib/sheet'
 import { useAuth } from '../../lib/useAuth'
 import { useFriendInvite } from '../../lib/useFriendInvite'
@@ -110,7 +110,7 @@ function AddFriendsScreenContent() {
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
           <View style={styles.head}>
-            <Text style={[font('body', bold), styles.intro]}>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.intro]}>
               Nobody can find you on Blend’n by searching. Share your link, and anyone you send it to can ask to be your friend.
             </Text>
             <InviteLinkCard url={invite?.url} failed={failed} name={user?.name} photo={user?.image} />

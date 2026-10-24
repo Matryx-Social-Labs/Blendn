@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native'
 import { Button } from '../ds/Button'
 import { Spinner } from '../ds/Loader'
 import { font, useBoldText } from '../ds/shared'
-import { COLOR, SPACE } from '../../lib/design/tokens'
+import { COLOR, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 
 export type ListStatus = 'loading' | 'error' | 'ready'
 
@@ -30,13 +30,13 @@ export function ListLoadState({
     return (
       <View testID="list-loading" style={styles.row} accessibilityRole="progressbar" accessibilityLabel={`Loading ${what}`} accessibilityState={{ busy: true }}>
         <Spinner size={18} />
-        <Text style={[font('meta', bold), styles.muted]}>{`Loading ${what}`}</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.muted]}>{`Loading ${what}`}</Text>
       </View>
     )
   }
   return (
     <View style={styles.row}>
-      <Text accessibilityRole="alert" style={[font('meta', bold), styles.message]}>{`Couldn’t load the ${what}.`}</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} accessibilityRole="alert" style={[font('meta', bold), styles.message]}>{`Couldn’t load the ${what}.`}</Text>
       <Button label="Try again" kind="tertiary" size="sm" onPress={onRetry} />
     </View>
   )

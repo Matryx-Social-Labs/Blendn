@@ -2,7 +2,7 @@ import { useRef, type ComponentRef } from 'react'
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { Icon } from '../ui/Icon'
-import { COLOR, ICON, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
+import { COLOR, ICON, RADIUS, SIZE, SPACE, TYPE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { Button, type ButtonKind } from './Button'
 import { Spinner } from './Loader'
@@ -133,7 +133,7 @@ export function TonightSheet({
     <Sheet visible={visible} onClose={onClose} focusRef={header}>
       <View style={styles.head}>
         <View ref={header} accessible accessibilityRole="header" accessibilityLabel={copy.title} style={styles.fill}>
-          <Text style={[font('title', bold), styles.ink]}>{copy.title}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.ink]}>{copy.title}</Text>
         </View>
         <View style={styles.glyph} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
           <View style={styles.level}>
@@ -141,22 +141,22 @@ export function TonightSheet({
           </View>
         </View>
       </View>
-      <Text style={[font('body', bold), { color: detail }]}>{copy.line}</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), { color: detail }]}>{copy.line}</Text>
       <PlanList onSheet>
         <NightPassRow price={prices.night} selected={pick === 'night'} disabled={pending} onPress={() => onPick('night')} />
         <PlanCard name="Blend’n+ monthly" price={prices.monthly} per="/ month" selected={pick === 'monthly'} disabled={pending} onPress={() => onPick('monthly')} />
       </PlanList>
-      {status === 'cancelled' ? <Text style={[font('meta', bold), styles.centre, { color: detail }]}>Nothing was charged.</Text> : null}
+      {status === 'cancelled' ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.centre, { color: detail }]}>Nothing was charged.</Text> : null}
       {status === 'failed' ? (
         <View style={styles.line}>
           <Icon name="circle-alert" size={ICON.inline} color={COLOR.destructive} />
-          <Text style={[font('meta', bold), styles.shrink, { color: COLOR.destructive }]}>The store couldn’t complete it. Nothing was charged.</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.shrink, { color: COLOR.destructive }]}>The store couldn’t complete it. Nothing was charged.</Text>
         </View>
       ) : null}
       {pending ? (
         <View style={styles.line}>
           <Spinner size={16} />
-          <Text style={[font('meta', bold), styles.shrink, styles.ink]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.shrink, styles.ink]}>
             {`Waiting for ${store === 'android' ? 'Google Play' : 'the App Store'} to confirm. You can keep using Blend’n.`}
           </Text>
         </View>
@@ -181,7 +181,7 @@ export function TonightSheet({
       <View style={styles.foot}>
         <Button kind="tertiary" size="sm" label="See all plans" onPress={onSeeAll} style={styles.centred} />
         {terms ? (
-          <Text testID="tonight-legal" style={[font('meta', bold), styles.legalText, { color: quiet }]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} testID="tonight-legal" style={[font('meta', bold), styles.legalText, { color: quiet }]}>
             {terms}
           </Text>
         ) : null}
@@ -189,12 +189,12 @@ export function TonightSheet({
           {links.map(([label, onPress], i) => (
             <View key={label} style={styles.legal}>
               {i ? (
-                <Text accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[font('meta', bold), { color: quiet }]}>
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[font('meta', bold), { color: quiet }]}>
                   ·
                 </Text>
               ) : null}
               <Pressable onPress={onPress} hitSlop={LINK_SLOP} accessibilityRole="link" accessibilityLabel={label} accessibilityState={{ busy: restoring && i === 2 }}>
-                <Text style={[font('meta', bold), { color: quiet }]}>{label}</Text>
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: quiet }]}>{label}</Text>
               </Pressable>
             </View>
           ))}

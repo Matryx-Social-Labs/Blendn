@@ -7,7 +7,7 @@ import { CONTROL_FONT_CAP, font, PRESSED_WASH, useBoldText } from '../ds/shared'
 import { VenuePlate } from '../ds/VenuePlate'
 import { Icon } from '../ui/Icon'
 import type { VenueListItem } from '../../lib/apiClient'
-import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { bucketLabel, distanceText, foldNoun, guestTypeLabel, moreLine, placeArea, placeLabel, plateFor, type PlaceTypeFilter } from '../../lib/placesPane'
 import { openPlace } from './openPlace'
@@ -25,7 +25,7 @@ function TypeLine({ venue, area = false, small = false }: { venue: VenueListItem
   // A row that carries the area leads with it: five "The Pub" rows are told apart by where they are (audit A40).
   const lead = (area ? [placeArea(venue), guestTypeLabel(venue)] : [guestTypeLabel(venue)]).filter(Boolean).join(' · ')
   return (
-    <Text numberOfLines={1} style={[font('meta', bold), styles.secondary, small && styles.quietMeta]}>
+    <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={1} style={[font('meta', bold), styles.secondary, small && styles.quietMeta]}>
       {lead}
       {distance ? (
         <>
@@ -103,13 +103,13 @@ export const QuietRow = memo(function QuietRow({ venue, n, label, testID }: { ve
       {n !== undefined ? <Badge text={n} size={22} /> : null}
       <VenuePlate type={plateFor(venue.venueType)} size={QUIET_THUMB} radius={QUIET_THUMB_RADIUS} />
       <View style={styles.rowText}>
-        <Text numberOfLines={1} style={[font('bodyStrong', bold), styles.quietName, styles.ink]}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} numberOfLines={1} style={[font('bodyStrong', bold), styles.quietName, styles.ink]}>
           {venue.name}
         </Text>
         <TypeLine venue={venue} area small />
       </View>
       {words ? (
-        <Text numberOfLines={1} style={[font('meta', bold), styles.tertiary]}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={1} style={[font('meta', bold), styles.tertiary]}>
           {words}
         </Text>
       ) : null}

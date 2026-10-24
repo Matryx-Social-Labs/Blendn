@@ -4,7 +4,7 @@ import Animated, { Easing, useAnimatedStyle, useSharedValue, withSpring, withTim
 
 import ScalePress from '../motion/ScalePress'
 import { Icon, type IconName } from '../ui/Icon'
-import { COLOR, FONT_FAMILY, ICON, MATERIAL, PRESS, RADIUS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, MATERIAL, PRESS, RADIUS, SIZE, SPACE, SPRING, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
 import { AchievementBadge, type AchievementKind } from './AchievementBadge'
@@ -220,7 +220,7 @@ export function PersonCardContent({
       <View ref={headRef} accessible accessibilityRole="header" accessibilityLabel={heading} style={styles.head}>
         <Avatar size={FACE} ring={COLOR.ink} testID={id('face')} {...person.face} />
         <View style={styles.headText}>
-          <Text style={[font('title', bold), styles.ink]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.ink]}>
             {name}
             {age ? (
               <>
@@ -232,7 +232,7 @@ export function PersonCardContent({
           {line ? (
             <View style={styles.inline}>
               {variant === 'friend' ? <Icon name="user-check" size={ICON.inline} color={COLOR.textSecondary} /> : null}
-              <Text style={[font('meta', bold), { color: quiet }]}>{line}</Text>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: quiet }]}>{line}</Text>
             </View>
           ) : null}
           {presence ? (
@@ -244,7 +244,7 @@ export function PersonCardContent({
               ) : (
                 <PresenceDot kind="live" testID={id('presence-dot')} />
               )}
-              <Text style={[font('caption', bold), { color: quiet }]}>{presence}</Text>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), { color: quiet }]}>{presence}</Text>
             </View>
           ) : null}
         </View>
@@ -255,7 +255,7 @@ export function PersonCardContent({
           {panelReasons.map((r) => (
             <View key={r} style={styles.reason}>
               <Icon name="check" size={ICON.inline} color={COLOR.textSecondary} />
-              <Text style={[font('body', bold), styles.ink, styles.shrink]}>{r}</Text>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.ink, styles.shrink]}>{r}</Text>
             </View>
           ))}
         </View>
@@ -399,12 +399,12 @@ export function PersonCardContent({
 
       {refusal ? (
         <View style={styles.refusal}>
-          <Text style={[font('meta', bold), styles.ink, styles.shrink]}>{refusal.text}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink, styles.shrink]}>{refusal.text}</Text>
           {refusal.action ? <TextAction label={refusal.action.label} onPress={refusal.action.onPress} testID={id('refusal-action')} /> : null}
         </View>
       ) : null}
 
-      {note ? <Text style={[font('caption', bold), styles.note, { color: quiet }]}>{note}</Text> : null}
+      {note ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.note, { color: quiet }]}>{note}</Text> : null}
 
       <View style={styles.center}>
         <TextAction label="View profile" onPress={onViewProfile} testID={id('view-profile')} />
@@ -488,7 +488,7 @@ function TextAction({ label, onPress, testID }: { label: string; onPress?: () =>
       accessibilityLabel={label}
       style={[styles.textAction, { minHeight: minTarget() }]}
     >
-      <Text style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>{label}</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>{label}</Text>
     </Control>
   )
 }

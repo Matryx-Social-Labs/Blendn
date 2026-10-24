@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native'
 import { Button } from '../ds/Button'
 import { font, useBoldText } from '../ds/shared'
 import type { IconName } from '../ui/Icon'
-import { COLOR, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 
 /**
  * The card that asks for location in place (Flow 3's, shared by the Pulse's Nearby and Places' Near you): a
@@ -29,11 +29,11 @@ export function LocationAskCard({
   return (
     <View style={styles.card} testID={testID}>
       {heading ? (
-        <Text accessibilityRole="header" style={[font('heading', bold), styles.ink]}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.heading} accessibilityRole="header" style={[font('heading', bold), styles.ink]}>
           {heading}
         </Text>
       ) : null}
-      <Text style={[font('meta', bold), styles.secondary]}>{body}</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>{body}</Text>
       <Button kind="lit" size="raised" icon={icon} label={label} onPress={onAsk} style={styles.button} testID={testID && `${testID}-button`} />
     </View>
   )

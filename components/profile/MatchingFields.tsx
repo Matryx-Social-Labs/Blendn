@@ -15,7 +15,7 @@ import {
 import { ChipSet } from '../ds/ChipSet'
 import { font, minTarget, useBoldText, useIncreaseContrast } from '../ds/shared'
 import { FieldLabel } from '../ds/TextField'
-import { COLOR, SPACE } from '../../lib/design/tokens'
+import { COLOR, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 
 /**
  * The five fields matching runs on: intent, work field, and — only when dating
@@ -132,7 +132,7 @@ function WorkFieldsFailed({ onRetry, retrying }: { onRetry?: () => void; retryin
         hitSlop={{ top: SPACE.xs, bottom: SPACE.xs }}
         style={styles.failed}
       >
-        <Text style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textTertiary }]}>{retrying ? 'Trying again…' : WORK_FIELDS_FAILED}</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textTertiary }]}>{retrying ? 'Trying again…' : WORK_FIELDS_FAILED}</Text>
       </Pressable>
     </View>
   )

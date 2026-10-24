@@ -8,7 +8,7 @@ import { font, IC_HAIRLINE, useBoldText, useIncreaseContrast, useSelection } fro
 import { OptimizedImage } from '../OptimizedImage'
 import { Icon } from '../ui/Icon'
 import type { PhotoTile as Tile } from './photoTiles'
-import { COLOR, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, ICON, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 
 /** The main photo's height, as a multiple of a half-width slot (Flow 2 media). */
 export const MAIN_RATIO = 1.55
@@ -113,7 +113,7 @@ export function PhotoTile({
         <>
           <UploadRing progress={tile.progress} label="Uploading photo" />
           <View pointerEvents="none" style={styles.percent}>
-            <Text style={[monoCaption(bold), styles.ink]}>{`${Math.round(tile.progress * 100)}%`}</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[monoCaption(bold), styles.ink]}>{`${Math.round(tile.progress * 100)}%`}</Text>
           </View>
         </>
       ) : null}
@@ -121,7 +121,7 @@ export function PhotoTile({
       {tile.state === 'failed' ? (
         <View style={styles.failed} accessibilityRole="alert">
           <Icon name="circle-alert" size={ICON.nav} color={COLOR.textPrimary} />
-          <Text style={[font('meta', bold), styles.ink]}>Didn’t upload</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink]}>Didn’t upload</Text>
           <Button label="Retry" kind="lit" size="sm" onPress={onRetry} disabled={retryDisabled} testID={`photo-retry-${index}`} style={styles.centred} />
         </View>
       ) : null}
@@ -129,7 +129,7 @@ export function PhotoTile({
       {ready ? (
         <View pointerEvents="none" style={primary ? styles.tagTop : styles.tagBottom}>
           <ScrimPill>
-            <Text style={[font('caption', bold), styles.ink]}>{primary ? 'Main photo' : 'Make main'}</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.ink]}>{primary ? 'Main photo' : 'Make main'}</Text>
           </ScrimPill>
         </View>
       ) : null}

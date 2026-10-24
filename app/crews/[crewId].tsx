@@ -32,7 +32,7 @@ import {
 } from '../../lib/crews'
 import { crewsApi, type CrewPatch } from '../../lib/crewsApi'
 import { crewBarState, leaveSheet, removeSheet, textFieldOf } from '../../lib/crewsScreens'
-import { COLOR, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { FRIEND_SEARCH_OFFER } from '../../lib/friendsPaging'
 import { pickerView, useFriendsList } from '../../lib/useFriendsList'
 import { isMuted, rememberRoomMute, useRoomMute } from '../../lib/roomMembership'
@@ -345,7 +345,7 @@ function CrewScreenContent() {
           </RowsCard>
         </View>
         <Pressable onPress={confirmLeave} accessibilityRole="button" accessibilityLabel="Leave crew" style={styles.leave}>
-          <Text style={[font('button', bold), styles.destructive]}>Leave crew</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.button} style={[font('button', bold), styles.destructive]}>Leave crew</Text>
         </Pressable>
       </Animated.View>
     )

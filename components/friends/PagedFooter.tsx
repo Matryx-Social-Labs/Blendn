@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native'
 
-import { COLOR, SPACE } from '../../lib/design/tokens'
+import { COLOR, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { Button } from '../ds/Button'
 import { Spinner } from '../ds/Loader'
 import { font, useBoldText } from '../ds/shared'
@@ -24,7 +24,7 @@ export function PagedFooter({ loading, failed, onRetry, testID }: { loading: boo
         </View>
       ) : (
         <View style={styles.failed}>
-          <Text style={[font('meta', bold), styles.secondary]}>Couldn’t load more.</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>Couldn’t load more.</Text>
           <Button kind="secondary" size="sm" label="Try again" onPress={onRetry} testID={testID && `${testID}-retry`} />
         </View>
       )}

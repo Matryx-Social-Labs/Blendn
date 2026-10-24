@@ -10,7 +10,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated'
 
-import { COLOR, DURATION, EASING, FONT_FAMILY, RADIUS, SPACE, TYPE } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, RADIUS, SPACE, TYPE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
 import { tint } from '../../lib/theme'
 import { DiscMark } from './DiscMark'
@@ -156,13 +156,13 @@ export function Loader({
         </Animated.View>
       </View>
       {line ? (
-        <Text accessibilityLiveRegion="polite" style={[font('meta', bold), styles.line]}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} accessibilityLiveRegion="polite" style={[font('meta', bold), styles.line]}>
           {line}
         </Text>
       ) : null}
       {stage === 'retry' && onRetry ? (
         <Pressable accessibilityRole="button" hitSlop={hit} onPress={onRetry}>
-          <Text style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.retry]}>Try again</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.retry]}>Try again</Text>
         </Pressable>
       ) : null}
     </View>

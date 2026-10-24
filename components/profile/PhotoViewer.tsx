@@ -11,7 +11,7 @@ import { IconButton } from '../ds/IconButton'
 import { monoCaption, ScrimPill } from '../ds/MonoFamily'
 import { useBoldText } from '../ds/shared'
 import { ZoomableImage } from '../motion/ZoomableImage'
-import { COLOR, EASING, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
+import { COLOR, EASING, SIZE, SPACE, SPRING, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { useQueuedModal } from '../../lib/modalTurn'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 
@@ -150,7 +150,7 @@ export function PhotoViewer({ photos, initialIndex = 0, visible, onClose, from, 
               <View pointerEvents="none" style={[styles.counterRow, { top, height: circle }]}>
                 <View accessible accessibilityLabel={counter.spoken} testID={testID && `${testID}-counter`}>
                   <ScrimPill>
-                    <Text style={[monoCaption(bold), styles.counterText]}>{counter.text}</Text>
+                    <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[monoCaption(bold), styles.counterText]}>{counter.text}</Text>
                   </ScrimPill>
                 </View>
               </View>

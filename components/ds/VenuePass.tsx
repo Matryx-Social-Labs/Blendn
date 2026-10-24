@@ -6,7 +6,7 @@ import Svg, { Circle } from 'react-native-svg'
 
 import { Icon } from '../ui/Icon'
 import { Material } from '../ui/Material'
-import { COLOR, FONT_FAMILY, ICON, MATERIAL, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, MATERIAL, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { tint } from '../../lib/theme'
 import { HoldToConfirm } from './HoldToConfirm'
 import { CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from './shared'
@@ -92,11 +92,11 @@ export function VenuePass({
           {cover ? <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} /> : null}
         </View>
         <View style={styles.headText}>
-          <Text style={[font('label', bold), styles.secondary]}>YOU’RE HERE</Text>
-          <Text numberOfLines={1} style={[font('title', bold), styles.primary]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.secondary]}>YOU’RE HERE</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} numberOfLines={1} style={[font('title', bold), styles.primary]}>
             {title}
           </Text>
-          <Text style={[font('meta', bold), styles.secondary]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
             {hereCount > 0 ? (
               <>
                 <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.primary, styles.tabular]}>{hereCount}</Text> inside now
@@ -118,7 +118,7 @@ export function VenuePass({
               </View>
             ))}
           </View>
-          <Text style={[font('meta', bold), styles.secondary, styles.shrink]}>{tease}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.shrink]}>{tease}</Text>
         </View>
       ) : null}
       <HoldToConfirm
@@ -136,7 +136,7 @@ export function VenuePass({
       />
       {children}
       {/* The hold's hint already says it: the line is for the eye. */}
-      <Text accessibilityElementsHidden importantForAccessibility="no" style={[font('caption', bold), styles.secondary, styles.note]}>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} accessibilityElementsHidden importantForAccessibility="no" style={[font('caption', bold), styles.secondary, styles.note]}>
         {note}
       </Text>
       {pour ? <View style={StyleSheet.absoluteFill}>{pour}</View> : null}
@@ -244,20 +244,20 @@ export function DoorCode({ state, code = '', rotatesAt = 0, redeemedAt, endedLab
         }
         style={styles.doorText}
       >
-        <Text style={[font('label', bold), styles.secondary]}>{label}</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.secondary]}>{label}</Text>
         {live ? (
-          <Text style={[...codeFont, styles.primary]}>{grouped(code)}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.display} style={[...codeFont, styles.primary]}>{grouped(code)}</Text>
         ) : (
-          <Text style={[...codeFont, styles.tertiary]}>{still?.code ?? '··· ···'}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.display} style={[...codeFont, styles.tertiary]}>{still?.code ?? '··· ···'}</Text>
         )}
-        <Text style={[font('meta', bold), styles.secondary]}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
           {live ? `Changes every ${CODE_PERIOD_S} s · Today only` : still ? still.line(redeemedAt) : 'Today only'}
         </Text>
       </View>
       {live ? (
         <View testID={testID && `${testID}-ring`} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.ringCol}>
           <CountdownRing fraction={fraction} />
-          <Text style={[font('caption', bold, FONT_FAMILY.mono[500]), styles.secondary, styles.tabular]}>{`${left} s`}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold, FONT_FAMILY.mono[500]), styles.secondary, styles.tabular]}>{`${left} s`}</Text>
         </View>
       ) : state === 'offline' ? (
         <View testID={testID && `${testID}-offline`} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.well}>

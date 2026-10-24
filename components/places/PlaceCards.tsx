@@ -12,7 +12,7 @@ import { LocationAskCard } from '../pulse/LocationAskCard'
 import { Rail, RAIL_GAP } from '../pulse/Rail'
 import { SectionHeader } from '../ds/SectionHeader'
 import type { VenueListItem } from '../../lib/apiClient'
-import { COLOR, DURATION, EASING, FONT_FAMILY, PRESS, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, PRESS, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
 import {
@@ -114,7 +114,7 @@ function MetaLine({ parts, distance }: { parts: (string | null)[]; distance: str
   const bold = useBoldText()
   const lead = parts.filter(Boolean).join(' · ')
   return (
-    <Text numberOfLines={1} style={[font('meta', bold), styles.secondary]}>
+    <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={1} style={[font('meta', bold), styles.secondary]}>
       {lead}
       {distance ? (
         <>
@@ -148,7 +148,7 @@ export const LiveTile = memo(function LiveTile({ venue, now }: { venue: VenueLis
         ) : null}
       </View>
       <View style={styles.tileText}>
-        <Text numberOfLines={1} style={[font('bodyStrong', bold), styles.ink]}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} numberOfLines={1} style={[font('bodyStrong', bold), styles.ink]}>
           {venue.name}
         </Text>
         <MetaLine parts={[placeArea(venue)]} distance={distanceText(venue.distance)} />
@@ -168,19 +168,19 @@ export const OpenCard = memo(function OpenCard({ venue, now }: { venue: VenueLis
         <PlaceArt venue={venue} now={now} size={OPEN_CARD_WIDTH} radius={RADIUS.mediaInCard} />
       </View>
       <View style={styles.tileText}>
-        <Text numberOfLines={1} style={[font('bodyStrong', bold), styles.ink]}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} numberOfLines={1} style={[font('bodyStrong', bold), styles.ink]}>
           {venue.name}
         </Text>
         <MetaLine parts={[guestTypeLabel(venue), placeArea(venue)]} distance={distanceText(venue.distance)} />
         {tonight ? (
-          <Text numberOfLines={1} style={[font('meta', bold), styles.ink]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={1} style={[font('meta', bold), styles.ink]}>
             <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>
               <MonoRun text={tonight.when} />
             </Text>
             {` · ${tonight.title}`}
           </Text>
         ) : hours ? (
-          <Text numberOfLines={1} style={[font('meta', bold), styles.ink]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={1} style={[font('meta', bold), styles.ink]}>
             {`${hours.lead} `}
             <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>
               <MonoRun text={hours.time} />
@@ -265,7 +265,7 @@ export const KindGrid = memo(function KindGrid({ onSelect }: { onSelect: (venueT
             <View style={{ width: tile, height: tile, borderRadius: RADIUS.mediaInCard, overflow: 'hidden' }}>
               <VenuePlate type={plateFor(t.venueType)} />
             </View>
-            <Text numberOfLines={1} style={[font('bodyStrong', bold), styles.ink]}>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} numberOfLines={1} style={[font('bodyStrong', bold), styles.ink]}>
               {t.label}
             </Text>
           </ScalePress>

@@ -676,7 +676,7 @@ function UserProfileInner() {
                 <FoldBlock id="note" onTop={onBlockTop}>
                   <View accessible accessibilityLabel={stillAnonymous(identity.name)} style={styles.note}>
                     <Icon name="eye-off" size={ICON.control} color={COLOR.textPrimary} />
-                    <Text style={[font('meta', bold), styles.noteText]}>{stillAnonymous(identity.name)}</Text>
+                    <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.noteText]}>{stillAnonymous(identity.name)}</Text>
                   </View>
                 </FoldBlock>
               ) : null}

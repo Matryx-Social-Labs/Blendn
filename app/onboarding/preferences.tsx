@@ -138,7 +138,7 @@ function ShowOnProfile({ value, onValueChange }: { value: boolean; onValueChange
       <View style={styles.pillSwitch}>
         <Toggle value={value} />
       </View>
-      <Text style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.pillText]}>Show on profile</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.pillText]}>Show on profile</Text>
     </Pressable>
   )
 }
@@ -287,7 +287,7 @@ export default function PreferencesScreen() {
           >
             <Avatar kind="creature" pseudonym={EXAMPLE_PSEUDONYM} size={48} ring={COLOR.surface} />
             <View style={styles.cardText}>
-              <Text style={[font('bodyStrong', bold), styles.ink]}>Stay anonymous at events</Text>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>Stay anonymous at events</Text>
               {/* The preview line changes with the switch (Flow 2 preferences 04): the new one fades in on `quick`. */}
               <Animated.Text key={anonymous ? 'anon' : 'named'} entering={FadeIn.duration(motionTokens(reduceMotion).duration.quick)} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.tertiary]}>
                 {anonymous ? 'You’d appear under a made-up name' : 'Your name and photo, if you say so'}
@@ -295,7 +295,7 @@ export default function PreferencesScreen() {
             </View>
             <Toggle value={anonymous} />
           </ScalePress>
-          <Text style={[font('meta', bold), styles.secondary]}>{ANONYMITY_HELP}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>{ANONYMITY_HELP}</Text>
         </View>
       </View>
 

@@ -12,7 +12,7 @@ import { DoorTicket, OfferHeader, RegularAsk, RegularOff, RegularOn } from '../.
 import { SkeletonBlock } from '../../components/Skeleton'
 import { useToast } from '../../components/Toast'
 import { markCoachUsed, useCoachMark } from '../../lib/coachMarks'
-import { COLOR, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { Logger } from '../../lib/logger'
 import {
@@ -289,7 +289,7 @@ function PassBody({ offer, lastReadFailed, focused }: { offer: OpenedOffer; last
         active={focused}
         codeRef={codeRow}
       />
-      <Text accessibilityLiveRegion="polite" style={[font('meta', bold), styles.foot]}>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} accessibilityLiveRegion="polite" style={[font('meta', bold), styles.foot]}>
         {view.foot}
       </Text>
     </>

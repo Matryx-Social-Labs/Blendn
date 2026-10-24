@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 import Animated, { Easing, FadeIn, FadeOut, LinearTransition, ReduceMotion, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
 
 import { Icon } from '../ui/Icon'
-import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE, TYPE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
 import { tint } from '../../lib/theme'
@@ -111,8 +111,8 @@ export function OfferCard({
       <View style={styles.top}>
         <VenuePlate type={venue.type} size={PLATE} radius={RADIUS.thumb} />
         <View style={styles.fill}>
-          <Text style={[font('bodyStrong', bold), styles.ink]}>{venue.name}</Text>
-          <Text style={[font('meta', bold), { color: detail }]}>{`${venue.typeLabel} · ${venue.area}`}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>{venue.name}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: detail }]}>{`${venue.typeLabel} · ${venue.area}`}</Text>
         </View>
         {state === 'used' ? (
           <View style={[styles.pill, styles.used]}>
@@ -128,7 +128,7 @@ export function OfferCard({
             </Text>
           </View>
         ) : (
-          <Text style={[font('label', bold), { color: COLOR.textTertiary }]}>OFFER</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), { color: COLOR.textTertiary }]}>OFFER</Text>
         )}
         <Pressable
           onPress={onMore}
@@ -143,8 +143,8 @@ export function OfferCard({
       </View>
 
       <View accessible accessibilityLabel={`${venue.name}: ${offer}. ${window}, valid until ${validUntil}`} style={styles.body}>
-        <Text style={[font('heading', bold), { color: quiet }]}>{offer}</Text>
-        <Text style={[font('meta', bold), { color: detail }]}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold), { color: quiet }]}>{offer}</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: detail }]}>
           {`${window} `}
           <Text style={{ color: COLOR.textTertiary }}>·</Text>
           {' Valid '}
@@ -162,7 +162,7 @@ export function OfferCard({
         hitSlop={(minTarget() - TYPE.meta.lineHeight) / 2}
         style={styles.why}
       >
-        <Text style={[font('meta', bold, FONT_FAMILY.brand[500]), { color: quiet }]}>Why you got this</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.brand[500]), { color: quiet }]}>Why you got this</Text>
         <Animated.View testID={testID && `${testID}-chevron`} style={chevron}>
           <Icon name="chevron-right" size={ICON.inline} color={COLOR.textSecondary} />
         </Animated.View>
@@ -173,7 +173,7 @@ export function OfferCard({
           entering={reduceMotion ? FadeIn.duration(REDUCED_FADE_MS) : FadeIn.duration(DURATION.base).easing(GENTLE)}
           exiting={FadeOut.duration(DURATION.quick)}
         >
-          <Text style={[font('meta', bold), styles.ink]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink]}>
             {text.rule}
             <Text style={font('meta', bold, FONT_FAMILY.brand[500])}>{text.picked}</Text>
           </Text>
@@ -181,7 +181,7 @@ export function OfferCard({
       ) : null}
 
       <View style={styles.foot}>
-        <Text style={[font('caption', bold, FONT_FAMILY.brand[400]), { color: contrast ? COLOR.textSecondary : COLOR.textTertiary }]}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold, FONT_FAMILY.brand[400]), { color: contrast ? COLOR.textSecondary : COLOR.textTertiary }]}>
           Offers only go to groups of 5 or more, so no one can be singled out.
         </Text>
       </View>

@@ -190,12 +190,12 @@ export function TonightView({
                   testID="tonight-see-all"
                   style={styles.seeAll}
                 >
-                  <Text style={[font('button', bold), styles.secondary]}>See all</Text>
+                  <Text maxFontSizeMultiplier={MAX_FONT_SCALE.button} style={[font('button', bold), styles.secondary]}>See all</Text>
                   <Icon name="chevron-right" size={ICON.inline} color={COLOR.textSecondary} />
                 </Pressable>
               ) : null}
             </View>
-            <Text style={[font('meta', bold), styles.secondary]}>{sub}</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>{sub}</Text>
             {onRoomRetry ? (
               <Banner kind="info" text="Couldn’t check your room. You can still browse tonight." action={{ label: 'Try again', onPress: onRoomRetry }} testID="tonight-room-error" />
             ) : null}
@@ -269,7 +269,7 @@ export function TonightView({
         <View testID="tonight-approximate" style={[styles.passDock, { paddingBottom: bottomInset + SPACE.md }]}>
           <View style={styles.approx}>
             <Icon name="locate-off" size={ICON.control} color={COLOR.textPrimary} />
-            <Text style={[font('meta', bold), styles.ink, styles.grow]}>No pass without precise location</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink, styles.grow]}>No pass without precise location</Text>
             <Pressable
               onPress={() => void Linking.openSettings().catch(() => {})}
               hitSlop={(minTarget() - SPACE.xl) / 2}
@@ -277,7 +277,7 @@ export function TonightView({
               accessibilityLabel="Turn on Precise Location"
               testID="tonight-approximate-turn-on"
             >
-              <Text style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>Turn on</Text>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>Turn on</Text>
             </Pressable>
           </View>
         </View>

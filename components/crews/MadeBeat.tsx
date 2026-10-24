@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import Animated, { Easing, FadeIn, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated'
 
-import { COLOR, DURATION, EASING, RADIUS, SPACE, SPRING } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, RADIUS, SPACE, SPRING, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { madeLine } from '../../lib/crewsScreens'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { CrewEmblem } from '../ds/CrewEmblem'
@@ -55,12 +55,12 @@ export function MadeBeat({ name, emblemSeed, invited, onContinue }: { name: stri
           ) : null}
         </Animated.View>
         <View style={styles.text}>
-          <Text style={[font('moment', bold), styles.centre, styles.ink]} numberOfLines={2} adjustsFontSizeToFit>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.moment} style={[font('moment', bold), styles.centre, styles.ink]} numberOfLines={2} adjustsFontSizeToFit>
             {name}
           </Text>
-          <Text style={[font('body', bold), styles.centre, { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{madeLine(invited)}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.centre, { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{madeLine(invited)}</Text>
         </View>
-        <Text style={[font('meta', bold), styles.centre, styles.tertiary]}>The crew chat opens next.</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.centre, styles.tertiary]}>The crew chat opens next.</Text>
       </View>
     </Pressable>
   )

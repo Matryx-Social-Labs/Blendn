@@ -2,7 +2,7 @@ import { StyleSheet, Text, View } from 'react-native'
 
 import { font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from '../ds/shared'
 import { Icon } from '../ui/Icon'
-import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 
 /** The pill is a 48 pt capsule (Flow 15 `signInToOpen`). */
 const PILL_HEIGHT = 48
@@ -25,10 +25,10 @@ export function HeldLink() {
     >
       <Icon name="link" size={ICON.control} />
       <View style={styles.text}>
-        <Text style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.title]} numberOfLines={1}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.title]} numberOfLines={1}>
           {HELD_LINK_TITLE}
         </Text>
-        <Text style={[font('caption', bold), styles.what]} numberOfLines={1}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.what]} numberOfLines={1}>
           {HELD_LINK_WHAT}
         </Text>
       </View>

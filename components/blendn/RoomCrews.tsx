@@ -1,7 +1,7 @@
 import { router } from 'expo-router'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 
-import { COLOR, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, ICON, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import type { Crew, CrewCard as CrewCardData, CrewsAtEvent } from '../../lib/crews'
 import { Button } from '../ds/Button'
 import { CrewCard } from '../ds/CrewCard'
@@ -96,7 +96,7 @@ export function CrewsHead({
       {solo ? (
         <View testID="room-solo-card" style={styles.solo}>
           <View style={styles.soloRow}>
-            <Text style={[font('bodyStrong', bold), styles.ink, styles.fill]}>Open to joining a crew tonight?</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink, styles.fill]}>Open to joining a crew tonight?</Text>
             <Toggle
               value={open.value ?? false}
               onValueChange={(v) => void open.set(v)}
@@ -105,10 +105,10 @@ export function CrewsHead({
               testID="room-solo-toggle"
             />
           </View>
-          <Text style={[font('meta', bold), styles.secondary]}>{open.value ? SOLO_ON : SOLO_OFF}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>{open.value ? SOLO_ON : SOLO_OFF}</Text>
           {open.readFailed ? (
             <Pressable onPress={() => void open.read()} accessibilityRole="button">
-              <Text style={[font('meta', bold), styles.secondary]}>Couldn’t check whether this is on. Tap to try again.</Text>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>Couldn’t check whether this is on. Tap to try again.</Text>
             </Pressable>
           ) : null}
         </View>
@@ -121,7 +121,7 @@ export function CrewsHead({
         right={
           ready && likingAs !== undefined ? (
             <View style={styles.likingAs}>
-              <Text style={[font('meta', bold), styles.secondary]}>Liking as</Text>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>Liking as</Text>
               <LikingAsChip crew={likingAs} pseudonym={pseudonym} onPress={onLikingAs} testID="room-liking-as" />
             </View>
           ) : undefined
@@ -171,7 +171,7 @@ export function CrewsHead({
 
 function Line({ text }: { text: string }) {
   const bold = useBoldText()
-  return <Text style={[font('body', bold), styles.secondary]}>{text}</Text>
+  return <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.secondary]}>{text}</Text>
 }
 
 /**
@@ -213,7 +213,7 @@ export function CrewsFoot({ crews }: { crews: CrewsHereState }) {
   return (
     <View style={[styles.gutter, styles.foot]}>
       {pageFailed ? (
-        <Text accessibilityLiveRegion="polite" style={[font('meta', bold), styles.secondary]}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} accessibilityLiveRegion="polite" style={[font('meta', bold), styles.secondary]}>
           More crews didn’t load.
         </Text>
       ) : null}

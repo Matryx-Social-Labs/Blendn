@@ -5,7 +5,7 @@ import Animated, { Easing, FadeIn, FadeOut, ReduceMotion, withTiming } from 'rea
 
 import { Glyph } from '../ui/Glyph'
 import { Icon, type IconName } from '../ui/Icon'
-import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, PRESS, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, PRESS, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
 import { Avatar } from './Avatar'
@@ -193,7 +193,7 @@ function DoneLine({ text, answered, bold, reduceMotion, testID }: { text: string
   return (
     <Animated.View testID={testID} entering={answered ? (reduceMotion ? OUTCOME_IN_REDUCED : OUTCOME_IN) : undefined} accessibilityLiveRegion="polite" style={styles.done}>
       <Glyph name="check" size={ICON.inline} color={sel.glyph} active play={drawn} testID={testID && `${testID}-check`} />
-      <Text style={[font('meta', bold), styles.ink]}>{text}</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink]}>{text}</Text>
     </Animated.View>
   )
 }
@@ -253,13 +253,13 @@ export function NotificationRow({
           <NotificationVisual visual={visual} size={ROW_VISUAL} ground={ground} lit halo={actions?.length ? sel.edge : undefined} play={state === 'done'} testID={testID && `${testID}-art`} />
         </View>
         <View style={styles.text}>
-          <Text
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong}
             numberOfLines={2}
             style={[font('bodyStrong', bold, fresh ? FONT_FAMILY.brand[700] : FONT_FAMILY.brand[500]), { color: stale ? COLOR.textSecondary : COLOR.textPrimary }]}
           >
             {title}
           </Text>
-          <Text style={[font('meta', bold), { color: stale ? COLOR.textTertiary : detail }]}>{line}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: stale ? COLOR.textTertiary : detail }]}>{line}</Text>
         </View>
         {fresh && !pills ? (
           // Motion #29, unread → read: the dot leaves over `quick` as the title's weight swaps (at once, in the font above). Reduce Motion: it goes.

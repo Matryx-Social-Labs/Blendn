@@ -10,7 +10,7 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated'
 
-import { COLOR, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
 import { Avatar } from './Avatar'
 import { avatarOf, BUBBLE, plural, type ChatPerson } from './chatShared'
@@ -87,7 +87,7 @@ export function TypingIndicator({
           <Dot key={i} clock={clock} index={i} still={reduceMotion} testID={testID && `${testID}-dot-${i}`} />
         ))}
       </View>
-      {one ? null : <Text style={[font('meta', bold), styles.count]}>{label}</Text>}
+      {one ? null : <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.count]}>{label}</Text>}
     </View>
   )
 }

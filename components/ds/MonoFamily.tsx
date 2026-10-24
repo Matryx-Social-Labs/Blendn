@@ -2,7 +2,7 @@ import { Fragment, type ReactNode } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import Animated from 'react-native-reanimated'
 
-import { COLOR, FONT_FAMILY, MATERIAL, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, MATERIAL, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
 import { badgeFadeIn, badgeIn, badgeOut } from '../motion/presence'
 import { RollingNumber } from './RollingNumber'
@@ -232,7 +232,7 @@ export function spokenPrice(amount: string, per?: string) {
 
 /**
  * A price: Geist Mono 700, tabular, the ₹ in the string, an optional unit.
- * Scales freely (no fixed box). Inherits nothing: `color` defaults to white.
+ * Grows with the reader's type (no fixed box) to its role's cap (DS-22). Inherits nothing: `color` defaults to white.
  */
 export function Price({
   amount,
@@ -250,8 +250,8 @@ export function Price({
   const bold = useBoldText()
   return (
     <View testID={testID} accessible accessibilityLabel={spokenPrice(amount, per)} style={styles.price}>
-      <Text style={[font(PRICE_ROLE[size], bold, FONT_FAMILY.mono[700]), styles.tabular, { color }]}>{amount}</Text>
-      {per ? <Text style={[font(UNIT_ROLE[size], bold, FONT_FAMILY.brand[400]), styles.unit]}>{per}</Text> : null}
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE[PRICE_ROLE[size]]} style={[font(PRICE_ROLE[size], bold, FONT_FAMILY.mono[700]), styles.tabular, { color }]}>{amount}</Text>
+      {per ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE[UNIT_ROLE[size]]} style={[font(UNIT_ROLE[size], bold, FONT_FAMILY.brand[400]), styles.unit]}>{per}</Text> : null}
     </View>
   )
 }

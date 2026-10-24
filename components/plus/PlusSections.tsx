@@ -112,7 +112,7 @@ export function DockLine({ text, spinning = false, strong = false }: { text: str
   return (
     <View accessibilityLiveRegion="polite" style={styles.dockLine}>
       {spinning ? <Spinner size={16} /> : null}
-      <Text style={[font(strong ? 'bodyStrong' : 'meta', bold), strong ? styles.ink : styles.secondary, styles.centre, styles.fill]}>{text}</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font(strong ? 'bodyStrong' : 'meta', bold), strong ? styles.ink : styles.secondary, styles.centre, styles.fill]}>{text}</Text>
     </View>
   )
 }
@@ -191,7 +191,7 @@ export function PlusHero() {
       <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.display} numberOfLines={1} adjustsFontSizeToFit style={[font('display', bold), styles.ink, styles.centre]} testID="plus-wordmark">
         Blend’n+
       </Text>
-      <Text style={[font('body', bold), styles.secondary, styles.centre]}>More of the night, none of the creepy stuff.</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.secondary, styles.centre]}>More of the night, none of the creepy stuff.</Text>
     </View>
   )
 }
@@ -199,14 +199,14 @@ export function PlusHero() {
 /** A quiet line under a list (meta, `textTertiary`). */
 export function PlusNote({ text }: { text: string }) {
   const bold = useBoldText()
-  return <Text style={[font('meta', bold), styles.tertiary, styles.note]}>{text}</Text>
+  return <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.tertiary, styles.note]}>{text}</Text>
 }
 
 /** A section's heading (`heading`, 20/26). */
 export function PlusHeading({ children }: { children: string }) {
   const bold = useBoldText()
   return (
-    <Text accessibilityRole="header" style={[font('heading', bold), styles.ink]}>
+    <Text maxFontSizeMultiplier={MAX_FONT_SCALE.heading} accessibilityRole="header" style={[font('heading', bold), styles.ink]}>
       {children}
     </Text>
   )
@@ -229,8 +229,8 @@ export function WhatYouGet({ features, comingSoon }: { features: readonly PlusFe
             <View accessible accessibilityLabel={`${row.title}. ${row.detail}`} style={styles.feature}>
               <Icon name={row.icon} size={FEATURE_ICON} color={COLOR.textPrimary} />
               <View style={styles.fill}>
-                <Text style={[font('bodyStrong', bold), styles.ink]}>{row.title}</Text>
-                <Text style={[font('meta', bold), styles.secondary]}>{row.detail}</Text>
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>{row.title}</Text>
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>{row.detail}</Text>
               </View>
             </View>
           </Fragment>
@@ -261,7 +261,7 @@ function FooterLink({ label, role, onPress, disabled = false, busy = false }: { 
       accessibilityState={{ disabled, busy }}
       style={disabled && styles.dimmed}
     >
-      <Text style={[font('meta', bold), styles.tertiary]}>{label}</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.tertiary]}>{label}</Text>
     </Pressable>
   )
 }
@@ -301,12 +301,12 @@ export function PlusFooter({
   ] as const
   return (
     <View style={styles.footer}>
-      {forSale ? <Text style={[font('meta', bold), styles.tertiary]}>{[LEGAL[Platform.OS === 'android' ? 'android' : 'ios'], tax].filter(Boolean).join(' ')}</Text> : null}
+      {forSale ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.tertiary]}>{[LEGAL[Platform.OS === 'android' ? 'android' : 'ios'], tax].filter(Boolean).join(' ')}</Text> : null}
       <View style={styles.links}>
         {links.map((link, i) => (
           <Fragment key={link.label}>
             {i ? (
-              <Text accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[font('meta', bold), styles.tertiary]}>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[font('meta', bold), styles.tertiary]}>
                 ·
               </Text>
             ) : null}

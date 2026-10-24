@@ -6,7 +6,7 @@ import Animated from 'react-native-reanimated'
 import ScalePress from '../motion/ScalePress'
 import { Glyph } from '../ui/Glyph'
 import { type IconName } from '../ui/Icon'
-import { COLOR, ICON, MATERIAL, PRESS, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, ICON, MATERIAL, PRESS, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { GlyphWell } from './StateScreen'
 import { focusRing, font, quickTransition, useBoldText, useIncreaseContrast, useSelection } from './shared'
@@ -106,8 +106,8 @@ export function RadioCard({ title, hint, icon, avatar, selected = false, onPress
         style={[styles.card, { backgroundColor: selected ? sel.fill : COLOR.surface, opacity: disabled ? BLOCKED_OPACITY : 1 }, FILL]}
       >
         {icon ? <GlyphWell icon={icon} /> : avatar}
-        <Text style={[font('bodyStrong', bold), styles.title]}>{title}</Text>
-        {hint ? <Text style={[font('caption', bold), styles.center, { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{hint}</Text> : null}
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.title]}>{title}</Text>
+        {hint ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.center, { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{hint}</Text> : null}
         <CheckDisc selected={selected} testID={testID && `${testID}-check`} />
         <Animated.View testID={testID && `${testID}-ring`} pointerEvents="none" style={[StyleSheet.absoluteFill, styles.edge, ring, RING_FADE]} />
       </ScalePress>

@@ -7,7 +7,7 @@ import { SettingsGroup, SettingsRow } from '../components/ds/SettingsRow'
 import { font, HueProvider, useBoldText } from '../components/ds/shared'
 import { TopBar } from '../components/ds/TopBar'
 import { OffersFromPlacesRow } from '../components/notifications/OffersFromPlacesRow'
-import { COLOR, SPACE } from '../lib/design/tokens'
+import { COLOR, SPACE, MAX_FONT_SCALE } from '../lib/design/tokens'
 import { openChannelSettings } from '../lib/channelSettings'
 import { muteEnds, mutedRoomRoute, useMutedRooms } from '../lib/mutedRooms'
 import { OPACITY } from '../lib/theme'
@@ -130,7 +130,7 @@ function NotificationSettingsContent() {
             ) : null}
           </SettingsGroup>
         ) : null}
-        <Text style={[font('meta', bold), styles.foot]}>{(ANDROID ? ANDROID_FOOT : '') + PREFS_FOOT}</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.foot]}>{(ANDROID ? ANDROID_FOOT : '') + PREFS_FOOT}</Text>
       </ScrollView>
       <View style={bar.barPin} pointerEvents="box-none">
         <TopBar title="Notifications" state={bar.state} onBack={() => router.back()} testID="notification-settings-top" />

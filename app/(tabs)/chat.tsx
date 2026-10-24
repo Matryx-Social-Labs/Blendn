@@ -42,7 +42,7 @@ import { refreshAppIconBadge } from '../../lib/appBadge'
 import { BOARD_ENABLED } from '../../lib/board'
 import { dmThread, outboxLine, roomThread, useOutbox, type Thread } from '../../lib/chatOutbox'
 import { blendWith, crewRoomTitle, systemPreview, type CrewRoomRow } from '../../lib/crews'
-import { COLOR, DURATION, EASING, SPACE, SPRING, STAGGER } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, SPACE, SPRING, STAGGER, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { matchRowPreview } from '../../lib/matchOpener'
 import { ScreenProfiler } from '../../lib/perf'
 import { printable } from '../../lib/pulseSections'
@@ -408,7 +408,7 @@ function ChatInner() {
 
   const header = (
     <View style={styles.sections}>
-      {inbox.listFailed && items.length ? <Text style={[font('meta', bold), styles.secondary]}>Some chats couldn’t load. Pull down to try again.</Text> : null}
+      {inbox.listFailed && items.length ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>Some chats couldn’t load. Pull down to try again.</Text> : null}
 
       {!trimmed && (liveRooms.length || blendRooms.length) ? (
         <View style={styles.section}>

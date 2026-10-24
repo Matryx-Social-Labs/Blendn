@@ -46,7 +46,7 @@ function LivePill({ name, live, onZero, onPress }: { name: string; live: VenueDe
       style={[styles.pill, contrast && IC_HAIRLINE]}
     >
       <PresenceDot kind="live" />
-      <Text numberOfLines={1} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.ink, styles.pillText]}>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={1} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.ink, styles.pillText]}>
         {`Live · ${name}`}
         {time ? (
           <>
@@ -65,10 +65,10 @@ function LivePill({ name, live, onZero, onPress }: { name: string; live: VenueDe
       {ending ? (
         <>
           <View style={styles.endingChip} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-            <Text style={[font('caption', bold, FONT_FAMILY.brand[700]), styles.onWhite]}>Ending</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold, FONT_FAMILY.brand[700]), styles.onWhite]}>Ending</Text>
           </View>
           <View style={styles.extendChip} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-            <Text style={[font('caption', bold, FONT_FAMILY.brand[700]), styles.onWhite]}>Extend</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold, FONT_FAMILY.brand[700]), styles.onWhite]}>Extend</Text>
           </View>
         </>
       ) : null}

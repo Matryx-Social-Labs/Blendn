@@ -1013,7 +1013,7 @@ function MoreRow({ item, onPress }: { item: Extract<GoingItem, { kind: 'more' }>
 /** A status the row's time can't carry: "Cancelled" in destructive, "Waitlist" in textSecondary. */
 function RowNote({ text, bad = false }: { text: string; bad?: boolean }) {
   const bold = useBoldText()
-  return <Text style={[font('meta', bold), bad ? styles.bad : styles.secondary]}>{text}</Text>
+  return <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), bad ? styles.bad : styles.secondary]}>{text}</Text>
 }
 
 /** Saved: a 32 pt white disc with the ink heart; the tap removes the save (with Undo). */

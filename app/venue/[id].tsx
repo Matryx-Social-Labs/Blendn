@@ -36,7 +36,7 @@ import { apiClient, type VenueDetail } from '../../lib/apiClient'
 import { openBlendn } from '../../lib/blendnOverlay'
 import { checkOutOf, subscribeCheckInChanged } from '../../lib/checkIn'
 import { claimUrlFrom } from '../../lib/claimLink'
-import { COLOR, FONT_FAMILY, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { EXTEND_CHOICE, oneTapChoice, readLiveSession, venueAction, type GoLiveChoice } from '../../lib/goLive'
 import { type ShowTray, type TrayButton, type TrayExtra } from '../../lib/locationFix'
 import { Logger } from '../../lib/logger'
@@ -621,7 +621,7 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
         actions={trayActions}
         testID="venue-tray"
       >
-        {tray?.extra?.detail ? <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary]}>{tray.extra.detail}</Text> : null}
+        {tray?.extra?.detail ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary]}>{tray.extra.detail}</Text> : null}
       </Sheet>
     </View>
   )

@@ -14,7 +14,7 @@ import { Icon } from '../ui/Icon'
 import { Text } from '../ui/Text'
 import { BOARD_MAX_POST_LENGTH, boardMarkSeed, spacesLabel } from '../../lib/board'
 import type { BoardPostView } from '../../lib/chatPaging'
-import { COLOR, FONT_FAMILY, ICON as DS_ICON, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON as DS_ICON, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { ICON, OPACITY } from '../../lib/theme'
 
 /**
@@ -134,8 +134,8 @@ export const BoardPostCard = memo(function BoardPostCard({
     <View style={styles.byline}>
       <BoardMark seed={boardMarkSeed(post.author, eventId, post.id)} size={offer ? MARK.offer : MARK.seeking} />
       <View style={styles.bylineText}>
-        <RNText style={[font('bodyStrong', bold), styles.ink]}>{post.author}</RNText>
-        <RNText style={[font('meta', bold), styles.secondary]}>{post.mine ? `${kindWord} · yours` : kindWord}</RNText>
+        <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>{post.author}</RNText>
+        <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>{post.mine ? `${kindWord} · yours` : kindWord}</RNText>
       </View>
       {post.mine ? null : (
         <Pressable
@@ -162,7 +162,7 @@ export const BoardPostCard = memo(function BoardPostCard({
     <View style={offer ? styles.offer : styles.seeking}>
       {offer ? byline : null}
       {spaces ? <SpacesLine spacesLeft={post.spacesLeft} label={spaces} full={full} /> : null}
-      <RNText style={[font('body', bold), styles.ink]}>{post.body}</RNText>
+      <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.ink]}>{post.body}</RNText>
       {offer ? null : byline}
       {footer}
     </View>
@@ -181,8 +181,8 @@ function TakenDownCard({ onWriteNew }: { onWriteNew?: () => void }) {
     <View testID="board-taken-down" accessibilityLiveRegion="polite" style={styles.takenDown}>
       <GlyphWell icon="shield" />
       <View style={styles.takenDownText}>
-        <RNText style={[font('bodyStrong', bold), styles.ink]}>Your post was taken down.</RNText>
-        <RNText style={[font('meta', bold), styles.secondary]}>It didn’t meet the community guidelines.</RNText>
+        <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>Your post was taken down.</RNText>
+        <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>It didn’t meet the community guidelines.</RNText>
         {onWriteNew ? (
           <Pressable
             testID="board-taken-down-write"
@@ -205,10 +205,10 @@ function TakenDownCard({ onWriteNew }: { onWriteNew?: () => void }) {
 /** "2 spaces left": the count in Geist Mono at the title's size, the words in the title; "Full" in textSecondary. */
 function SpacesLine({ spacesLeft, label, full }: { spacesLeft: number | null; label: string; full: boolean }) {
   const bold = useBoldText()
-  if (full || spacesLeft === null) return <RNText style={[font('title', bold), styles.secondary]}>{label}</RNText>
+  if (full || spacesLeft === null) return <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.secondary]}>{label}</RNText>
   const count = String(spacesLeft)
   return (
-    <RNText style={[font('title', bold), styles.ink]}>
+    <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.ink]}>
       <RNText style={[font('title', bold, FONT_FAMILY.mono[700]), styles.tabular]}>{count}</RNText>
       {label.slice(count.length)}
     </RNText>
@@ -219,7 +219,7 @@ function MineFooter({ count, onTakeDown }: { count: number; onTakeDown: () => vo
   const bold = useBoldText()
   return (
     <View style={styles.footer}>
-      <RNText style={[font('meta', bold), styles.secondary, styles.footerLine]}>
+      <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.footerLine]}>
         {count === 0 ? 'Nobody has asked yet' : `${count} asked. Answer in the Banter.`}
       </RNText>
       <Pressable
@@ -250,17 +250,17 @@ function AskFooter({ ask, full, author, onAsk }: { ask: AskState; full: boolean;
   const bold = useBoldText()
   if (ask.kind === 'settled') {
     return (
-      <RNText accessibilityLiveRegion="polite" style={[font('meta', bold), styles.secondary]}>
+      <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.meta} accessibilityLiveRegion="polite" style={[font('meta', bold), styles.secondary]}>
         {ask.line}
       </RNText>
     )
   }
-  if (full) return <RNText style={[font('meta', bold), styles.secondary]}>No spaces left</RNText>
+  if (full) return <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>No spaces left</RNText>
 
   return (
     <View style={styles.footer}>
       {ask.kind === 'refused' ? (
-        <RNText accessibilityLiveRegion="polite" style={[font('meta', bold), styles.refused, styles.footerLine]}>
+        <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.meta} accessibilityLiveRegion="polite" style={[font('meta', bold), styles.refused, styles.footerLine]}>
           {ask.line}
         </RNText>
       ) : null}
@@ -368,7 +368,7 @@ export function BoardComposer({
         />
         {kind === 'offer' ? (
           <View style={styles.spacesRow}>
-            <RNText style={[font('bodyStrong', bold), styles.ink, styles.footerLine]}>Spaces</RNText>
+            <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink, styles.footerLine]}>Spaces</RNText>
             <Stepper label="Spaces" value={spaces} onChange={setSpaces} min={1} max={MAX_SPACES} onGlass={Platform.OS === 'ios'} disabled={posting} />
           </View>
         ) : null}

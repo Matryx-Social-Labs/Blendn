@@ -9,7 +9,7 @@ import { LocationIllustration } from '../../components/onboarding/PermissionIllu
 import { isPreciseLocationOff } from '../../components/onboarding/preciseLocation'
 import { Icon } from '../../components/ui/Icon'
 import { readStoredCity } from '../../lib/cityStorage'
-import { COLOR, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, ICON, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { askOsPermission } from '../../lib/onboarding'
 import { useOnboarding } from '../../lib/useOnboarding'
 
@@ -103,7 +103,7 @@ export default function LocationScreen() {
       {precise.off ? (
         <View testID="precise-off-notice" accessibilityRole="alert" style={styles.notice}>
           <Icon name="triangle-alert" size={ICON.control} color={COLOR.warning} />
-          <Text style={[font('meta', bold), styles.noticeText]}>{PRECISE_OFF_NOTICE}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.noticeText]}>{PRECISE_OFF_NOTICE}</Text>
         </View>
       ) : null}
       <LocationIllustration city={city} notice={precise.off} />

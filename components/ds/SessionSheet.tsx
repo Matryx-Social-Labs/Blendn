@@ -150,20 +150,20 @@ export function SessionSheet({
               {time.kind === 'minutes' ? String(time.left) : time.clock}
             </Text>
           )}
-          {time?.kind === 'minutes' ? <Text style={[font('title', bold), { color: COLOR.textSecondary }]}>min</Text> : null}
+          {time?.kind === 'minutes' ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), { color: COLOR.textSecondary }]}>min</Text> : null}
         </View>
-        {sub ? <Text style={[font('meta', bold), styles.centre, { color: detail }]}>{sub}</Text> : null}
+        {sub ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.centre, { color: detail }]}>{sub}</Text> : null}
         {extended && extendedLine ? (
           <View accessibilityLiveRegion="polite" style={styles.extended}>
             <Icon name="check" size={ICON.inline} active />
-            <Text style={[font('meta', bold), styles.ink]}>{extendedLine}</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink]}>{extendedLine}</Text>
           </View>
         ) : null}
       </View>
       {time?.kind === 'stay' ? (
         <View style={styles.info}>
           <Icon name="info" size={ICON.inline} color={COLOR.textSecondary} />
-          <Text style={[font('meta', bold), styles.fill, { color: detail }]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.fill, { color: detail }]}>
             {`Each time your phone sees you inside ${venue}, your time carries 20 minutes further.`}
           </Text>
         </View>

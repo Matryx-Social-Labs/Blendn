@@ -1,7 +1,7 @@
 import { Children, Fragment, isValidElement, useState, type ReactNode } from 'react'
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 
-import { COLOR, MATERIAL, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, MATERIAL, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { OPACITY, tint } from '../../lib/theme'
 import { Price, spokenPrice } from './MonoFamily'
@@ -76,8 +76,8 @@ export function PlanCard({ name, price, per, sub, selected = false, onPress, dis
       >
         <RadioRing selected={selected} testID={testID && `${testID}-ring`} />
         <View style={styles.text}>
-          <Text style={[font('bodyStrong', bold), styles.ink]}>{name}</Text>
-          {sub ? <Text style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{sub}</Text> : null}
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>{name}</Text>
+          {sub ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{sub}</Text> : null}
         </View>
         <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
           <Price amount={price} per={per} />

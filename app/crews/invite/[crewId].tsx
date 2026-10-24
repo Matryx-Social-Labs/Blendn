@@ -20,7 +20,7 @@ import { askCrewPush } from '../../../lib/crewPushAsk'
 import { CONSENT_LINE, KEEP_ANONYMOUS_LABEL, crewMessage, type CrewInvite } from '../../../lib/crews'
 import { crewsApi } from '../../../lib/crewsApi'
 import { inviteWho } from '../../../lib/crewsScreens'
-import { COLOR, ICON, RADIUS, SPACE } from '../../../lib/design/tokens'
+import { COLOR, ICON, RADIUS, SPACE, MAX_FONT_SCALE } from '../../../lib/design/tokens'
 import { H } from '../../../lib/haptics'
 import { showSheet } from '../../../lib/sheet'
 import { useAuth } from '../../../lib/useAuth'
@@ -97,7 +97,7 @@ function CrewInviteScreenContent() {
         <TopBar title="Crew invite" onBack={() => router.back()} testID="invite-top" />
         <View style={styles.state}>
           {load.kind === 'loading' ? (
-            <Text accessibilityLabel="Loading the invite" style={[font('meta', bold), styles.secondary]}>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} accessibilityLabel="Loading the invite" style={[font('meta', bold), styles.secondary]}>
               Loading…
             </Text>
           ) : load.kind === 'failed' ? (
@@ -179,10 +179,10 @@ function CrewInviteScreenContent() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.hero}>
           <CrewEmblem seed={invite.emblemSeed} size={EMBLEM} />
-          <Text accessibilityRole="header" style={[font('title', bold), styles.centre, styles.ink, styles.name]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} accessibilityRole="header" style={[font('title', bold), styles.centre, styles.ink, styles.name]}>
             {invite.name}
           </Text>
-          {invite.bio ? <Text style={[font('body', bold), styles.centre, { color: secondary }]}>{invite.bio}</Text> : null}
+          {invite.bio ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.centre, { color: secondary }]}>{invite.bio}</Text> : null}
           {invite.tags.length ? (
             <View style={styles.tags}>
               {invite.tags.map((t) => (
@@ -192,9 +192,9 @@ function CrewInviteScreenContent() {
           ) : null}
           <View accessible accessibilityLabel={inviteWho(invite)} style={styles.who}>
             {invite.invitedByPhoto ? <Avatar kind="photo" uri={invite.invitedByPhoto} size={24} ring={COLOR.ink} /> : null}
-            <Text style={[font('meta', bold), styles.ink]}>{inviteWho(invite)}</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink]}>{inviteWho(invite)}</Text>
           </View>
-          <Text style={[font('meta', bold), styles.centre, styles.tertiary]}>You’ll see who’s in it once you join.</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.centre, styles.tertiary]}>You’ll see who’s in it once you join.</Text>
         </View>
       </ScrollView>
       <View
@@ -205,10 +205,10 @@ function CrewInviteScreenContent() {
         <View style={[styles.consent, contrast && IC_HAIRLINE]}>
           <View style={styles.consentLine}>
             <Icon name="eye" size={ICON.control} />
-            <Text style={[font('meta', bold), styles.ink, styles.fill]}>{CONSENT_LINE}</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink, styles.fill]}>{CONSENT_LINE}</Text>
           </View>
           <View style={styles.anon}>
-            <Text style={[font('bodyStrong', bold), ANON_LABEL, styles.ink, styles.fill]}>{KEEP_ANONYMOUS_LABEL}</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), ANON_LABEL, styles.ink, styles.fill]}>{KEEP_ANONYMOUS_LABEL}</Text>
             <Toggle value={keepAnonymous} onValueChange={setKeepAnonymous} accessibilityLabel={KEEP_ANONYMOUS_LABEL} disabled={joining} />
           </View>
         </View>

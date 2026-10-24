@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { closeSheet, dismissSheet, showSheet, useSheet, type Sheet, type SheetAction, type SheetOutcome } from '../lib/sheet'
-import { COLOR, ICON, MATERIAL, SIZE, SPACE } from '../lib/design/tokens'
+import { COLOR, ICON, MATERIAL, SIZE, SPACE, MAX_FONT_SCALE } from '../lib/design/tokens'
 import { OPACITY } from '../lib/theme'
 import type { ButtonKind } from './ds/Button'
 import { Spinner } from './ds/Loader'
@@ -245,7 +245,7 @@ export function OptionRows({ rows }: { rows: OptionRow[] }) {
             ]}
           >
             {row.icon ? <Icon name={row.icon} size={ICON.inline} color={color} /> : null}
-            <Text style={[font('body', bold), styles.label, { color }]}>{row.label}</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.label, { color }]}>{row.label}</Text>
             {row.busy ? <Spinner size={16} color={color} /> : row.chevron ? <Icon name="chevron-right" size={ICON.inline} color={COLOR.textSecondary} /> : null}
           </Pressable>
         )
@@ -258,7 +258,7 @@ export function OptionRows({ rows }: { rows: OptionRow[] }) {
 function ErrorLine({ text }: { text: string }) {
   const bold = useBoldText()
   return (
-    <Text accessibilityLiveRegion="polite" textBreakStrategy="balanced" lineBreakStrategyIOS="standard" style={[font('meta', bold), styles.error]}>
+    <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} accessibilityLiveRegion="polite" textBreakStrategy="balanced" lineBreakStrategyIOS="standard" style={[font('meta', bold), styles.error]}>
       {text}
     </Text>
   )

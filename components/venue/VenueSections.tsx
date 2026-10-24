@@ -49,8 +49,8 @@ export function LiveCard({ live, name, onZero }: { live: VenueDetail['live']; na
         </View>
       </TimeRing>
       <View style={styles.cardText}>
-        <Text style={[font('bodyStrong', bold), styles.ink]}>{`You’re live at ${name}`}</Text>
-        <Text style={[font('meta', bold), styles.secondary]}>People live here can see you. Open the room from the Blend’n button.</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>{`You’re live at ${name}`}</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>People live here can see you. Open the room from the Blend’n button.</Text>
       </View>
     </View>
   )
@@ -74,18 +74,18 @@ export function EventOnCard({ tonight, now, onPress }: { tonight: NonNullable<Ve
     >
       <View style={styles.eventOnHead}>
         {when ? <TimeBadge when={when} /> : null}
-        <Text style={[font('label', bold), styles.secondary]}>ON HERE TONIGHT</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.secondary]}>ON HERE TONIGHT</Text>
       </View>
       {tonight ? (
         <>
-          <Text style={[font('title', bold), styles.ink]}>{tonight.title}</Text>
-          <Text style={[font('meta', bold), styles.secondary]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.ink]}>{tonight.title}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
             {`Doors ${timeRange(tonight.startTime, tonight.endTime, tonight.timezone)}. `}
             While an event is on, this room is the event’s room: check in to it.
           </Text>
         </>
       ) : (
-        <Text style={[font('meta', bold), styles.secondary]}>An event is on here. While it is, this room is the event’s room: check in to it.</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>An event is on here. While it is, this room is the event’s room: check in to it.</Text>
       )}
     </ScalePress>
   )
@@ -123,7 +123,7 @@ export function TonightHere({
           testID="venue-tonight"
         />
       ) : (
-        <Text style={[font('body', bold), styles.secondary]}>No event tonight. When you’re here, go live and see who else is.</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.secondary]}>No event tonight. When you’re here, go live and see who else is.</Text>
       )}
     </Section>
   )
@@ -191,7 +191,7 @@ export function WhosHere({ live, onSeeWho }: { live: VenueDetail['live']; onSeeW
       <SectionHeader title="Who’s here" />
       {live.youAreLive ? (
         <>
-          <Text style={[font('meta', bold), styles.secondary]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
             {liveWord ? `${liveWord} live · ` : ''}
             Pseudonyms only, until someone reveals.
           </Text>
@@ -202,7 +202,7 @@ export function WhosHere({ live, onSeeWho }: { live: VenueDetail['live']; onSeeW
           <View style={styles.noteIcon}>
             <Icon name="eye-off" size={ICON.inline} color={COLOR.textSecondary} />
           </View>
-          <Text style={[font('meta', bold), styles.secondary, styles.fill]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.fill]}>
             Go live here to see who else is. Everyone is a creature until they choose otherwise.
           </Text>
         </View>
@@ -225,8 +225,8 @@ export function BoardRow({ title, onPress }: { title: string; onPress: () => voi
     >
       <Icon name="users" size={ICON.nav} />
       <View style={styles.fill}>
-        <Text style={[font('bodyStrong', bold), styles.ink]}>The Board · tonight</Text>
-        <Text numberOfLines={1} style={[font('meta', bold), styles.secondary]}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>The Board · tonight</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={1} style={[font('meta', bold), styles.secondary]}>
           Heading here tonight? Find someone to go with.
         </Text>
       </View>
@@ -243,7 +243,7 @@ export function About({ text }: { text: string }) {
   return (
     <Section>
       <SectionHeader title="About" />
-      <Text
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body}
         numberOfLines={open ? undefined : READ_LINES}
         onTextLayout={(e) => !open && setClipped(e.nativeEvent.lines.length > READ_LINES)}
         style={[font('body', bold), styles.secondary]}
@@ -259,7 +259,7 @@ export function About({ text }: { text: string }) {
           hitSlop={(minTarget() - SPACE.xl) / 2}
           style={styles.readMore}
         >
-          <Text style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>{open ? 'Show less' : 'Read more'}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>{open ? 'Show less' : 'Read more'}</Text>
         </Pressable>
       ) : null}
     </Section>
@@ -294,10 +294,10 @@ export function Where({
         <View style={styles.whereTop}>
           <Icon name="map-pin" size={ICON.nav} />
           <View style={styles.fill}>
-            <Text style={[font('bodyStrong', bold), styles.ink]}>{venue.name}</Text>
-            {venue.address ? <Text style={[font('body', bold), styles.secondary]}>{venue.address}</Text> : null}
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>{venue.name}</Text>
+            {venue.address ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.secondary]}>{venue.address}</Text> : null}
             {city || distance ? (
-              <Text style={[font('meta', bold), styles.secondary]}>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
                 {city}
                 {distance ? (
                   <>
@@ -352,7 +352,7 @@ export function ClaimLine({ onPress }: { onPress: () => void }) {
         hitSlop={(minTarget() - SPACE.xl) / 2}
         style={styles.claim}
       >
-        <Text style={[font('meta', bold), styles.secondary]}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
           Own this place? <Text style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.ink, styles.underline]}>Claim it</Text>
         </Text>
         <Icon name="arrow-up-right" size={ICON.inline} color={COLOR.textSecondary} />

@@ -8,7 +8,7 @@ import { StateScreen } from '../components/ds/StateScreen'
 import { TopBar } from '../components/ds/TopBar'
 import { PersonRow } from '../components/friends/PersonRow'
 import { SkeletonCircle, SkeletonLine } from '../components/Skeleton'
-import { COLOR, SIZE, SPACE } from '../lib/design/tokens'
+import { COLOR, SIZE, SPACE, MAX_FONT_SCALE } from '../lib/design/tokens'
 import { Logger } from '../lib/logger'
 import { blockedLine } from '../lib/blockedLine'
 import { fetchBlockedPage } from '../lib/blockedUsersPage'
@@ -190,7 +190,7 @@ function BlockedUsersContent() {
     </View>
   ) : moreFailed ? (
     <View style={styles.moreFailed}>
-      <Text style={[font('meta', bold), styles.moreFailedText]}>The rest didn’t load.</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.moreFailedText]}>The rest didn’t load.</Text>
       <Button kind="tertiary" size="sm" label="Try again" onPress={() => loadMore(true)} />
     </View>
   ) : null

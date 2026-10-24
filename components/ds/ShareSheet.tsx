@@ -4,7 +4,7 @@ import Animated, { FadeIn } from 'react-native-reanimated'
 
 import ScalePress from '../motion/ScalePress'
 import { Icon, type IconName } from '../ui/Icon'
-import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { joinParts, LinkPreviewCard, type LinkPreview, type ShareEvent } from './LinkPreviewCard'
@@ -118,17 +118,17 @@ export function ShareSheet({
         <View style={[styles.cardEdge, contrast && IC_HAIRLINE]}>
           <LinkPreviewCard preview={previewOf(share)} width={width - 2 * SPACE.gutter} radius={RADIUS.rowInCard} />
         </View>
-        <Text style={[font('caption', bold, FONT_FAMILY.brand[400]), styles.centre, { color: COLOR.textTertiary }]}>This is what they’ll see</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold, FONT_FAMILY.brand[400]), styles.centre, { color: COLOR.textTertiary }]}>This is what they’ll see</Text>
       </View>
       <View style={styles.titleBlock}>
-        <Text style={[font('heading', bold), styles.ink]}>{title}</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold), styles.ink]}>{title}</Text>
         {share.kind === 'event' ? (
-          <Text style={[font('meta', bold), { color: detail }]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: detail }]}>
             {share.event.dateText ? <Text style={[monoCaption(bold), styles.ink]}>{share.event.dateText}</Text> : null}
             {` · ${placeOf(share.event)}`}
           </Text>
         ) : (
-          <Text style={[font('meta', bold), { color: detail }]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: detail }]}>
             {share.kind === 'venue' ? joinParts([share.typeLabel, share.area], ' · ') : 'A link only you can send · no name on the card'}
           </Text>
         )}
@@ -140,9 +140,9 @@ export function ShareSheet({
       </View>
       {share.kind === 'event' && share.event.url ? (
         <View style={styles.message}>
-          <Text style={[font('label', bold), { color: COLOR.textTertiary }]}>MESSAGE SENT WITH THE LINK</Text>
-          <Text style={[font('meta', bold), { color: detail }]}>{`${share.event.title}${share.event.dateText ? ` · ${share.event.dateText}` : ''}\n${placeOf(share.event)}`}</Text>
-          <Text style={[monoCaption(bold), styles.ink]}>{share.event.url}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), { color: COLOR.textTertiary }]}>MESSAGE SENT WITH THE LINK</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: detail }]}>{`${share.event.title}${share.event.dateText ? ` · ${share.event.dateText}` : ''}\n${placeOf(share.event)}`}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[monoCaption(bold), styles.ink]}>{share.event.url}</Text>
         </View>
       ) : null}
     </Sheet>

@@ -6,7 +6,7 @@ import { IconButton } from '../ds/IconButton'
 import { Badge } from '../ds/MonoFamily'
 import { SearchField } from '../ds/SearchField'
 import { font, useBoldText } from '../ds/shared'
-import { COLOR, FONT_FAMILY, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { HOW_FAR, PLACE_TYPES, WHATS_ON, type PlaceFilters } from '../../lib/placesPane'
 
 /**
@@ -18,7 +18,7 @@ export const PlacesTitle = memo(function PlacesTitle({ stat }: { stat: { text: s
   return (
     <View style={styles.titleWrap} testID="places-header">
       {stat ? (
-        <Text accessibilityLabel={stat.spoken} style={[font('label', bold, FONT_FAMILY.mono[500]), styles.secondary]} numberOfLines={1} testID="places-stat">
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} accessibilityLabel={stat.spoken} style={[font('label', bold, FONT_FAMILY.mono[500]), styles.secondary]} numberOfLines={1} testID="places-stat">
           {stat.text.toUpperCase()}
         </Text>
       ) : null}

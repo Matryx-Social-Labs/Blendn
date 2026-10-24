@@ -115,7 +115,7 @@ export default function AboutScreen() {
           </SettingsGroup>
         </View>
 
-        <Text style={[font('caption', bold), styles.credit]}>{FONT_CREDIT}</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.credit]}>{FONT_CREDIT}</Text>
       </ScrollView>
       <View style={bar.barPin} pointerEvents="box-none">
         <TopBar title="About Blend’n" state={bar.state} onBack={() => router.back()} testID="about-top" />
