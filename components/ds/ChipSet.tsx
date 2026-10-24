@@ -8,8 +8,8 @@ import { useReducedMotion } from '../../lib/motion'
 import { Chip } from './Chip'
 import { monoCaption } from './MonoFamily'
 import { RollingNumber } from './RollingNumber'
-import { CONTROL_FONT_CAP, minTarget, useBoldText, useIncreaseContrast } from './shared'
-import { FieldLabel, FieldNotes } from './TextField'
+import { CONTROL_FONT_CAP, minTarget, useBoldText } from './shared'
+import { FieldHeader, FieldNotes } from './TextField'
 
 export type ChipItem = {
   key: string
@@ -98,7 +98,6 @@ export function ChipSet({
   testID,
 }: ChipSetProps) {
   const bold = useBoldText()
-  const contrast = useIncreaseContrast()
   const reduceMotion = useReducedMotion()
   const [open, setOpen] = useState(false)
   const multi = selection === 'multi'
@@ -157,21 +156,24 @@ export function ChipSet({
   return (
     <View testID={testID} style={styles.set}>
       {label || text ? (
-        <View style={styles.header}>
-          {label ? <FieldLabel text={label} bold={bold} contrast={contrast} /> : <View />}
-          {rolling ? (
-            <View testID={testID && `${testID}-counter`} accessible accessibilityLabel={text} style={styles.counter}>
-              <RollingNumber value={selected.length} role="counter" color={COLOR.textSecondary} testID={testID && `${testID}-counter-n`} />
-              <Text style={[monoCaption(bold), { color: COLOR.textSecondary }]} maxFontSizeMultiplier={CONTROL_FONT_CAP}>
-                {` of ${max}`}
+        <FieldHeader
+          testID={testID && `${testID}-header`}
+          label={label}
+          counter={
+            rolling ? (
+              <View testID={testID && `${testID}-counter`} accessible accessibilityLabel={text} style={styles.counter}>
+                <RollingNumber value={selected.length} role="counter" color={COLOR.textSecondary} testID={testID && `${testID}-counter-n`} />
+                <Text style={[monoCaption(bold), { color: COLOR.textSecondary }]} maxFontSizeMultiplier={CONTROL_FONT_CAP}>
+                  {` of ${max}`}
+                </Text>
+              </View>
+            ) : text ? (
+              <Text testID={testID && `${testID}-counter`} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[monoCaption(bold), { color: COLOR.textSecondary }]}>
+                {text}
               </Text>
-            </View>
-          ) : text ? (
-            <Text testID={testID && `${testID}-counter`} style={[monoCaption(bold), { color: COLOR.textSecondary }]}>
-              {text}
-            </Text>
-          ) : null}
-        </View>
+            ) : null
+          }
+        />
       ) : null}
       <Animated.View layout={glide} testID={testID && `${testID}-wrap`} style={[styles.wrap, { rowGap: minTarget() - SIZE.tag }]}>
         {visible.map((item) =>
@@ -203,11 +205,6 @@ export function ChipSet({
 
 const styles = StyleSheet.create({
   set: { gap: SPACE.sm },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
   counter: { flexDirection: 'row', alignItems: 'center' },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
   item: { maxWidth: '100%' },

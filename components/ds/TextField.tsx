@@ -40,6 +40,27 @@ export function FieldLabel({ text, bold, contrast }: { text: string; bold: boole
 }
 
 /**
+ * A field's label and its counter (DS-07), one header for TextArea, ChipSet and the photo grid. Side by side, they keep a
+ * gap, the label shrinks and wraps, and the row wraps before the counter is pushed off the edge; at the accessibility
+ * sizes the counter goes under the label, at its end ("A LINE ABOUT THE CREW 0/14" clipped at AX XXXL, RC drive 5 D-3;
+ * "LANGUAGES YOU SPEAK0 of 5", D-M6; "PHOTOS1 of 6", D-M7). A string label is drawn as the FieldLabel; a node as given
+ * (it brings its own `flexShrink`).
+ *
+ * Counters: "n of max" for things picked, "n/max" for characters.
+ */
+export function FieldHeader({ label, counter, testID }: { label?: ReactNode; counter?: ReactNode; testID?: string }) {
+  const bold = useBoldText()
+  const contrast = useIncreaseContrast()
+  const large = useLargeText()
+  return (
+    <View testID={testID} style={[styles.labelRow, large ? styles.stacked : styles.spread]}>
+      {typeof label === 'string' ? <FieldLabel text={label} bold={bold} contrast={contrast} /> : (label ?? <View />)}
+      {counter}
+    </View>
+  )
+}
+
+/**
  * The one error sentence, with its glyph, and the hint, under the field. An
  * error is assertive (§14): spoken as it arrives, queued behind another when
  * a form refuses several at once (iOS), a live region on Android.
@@ -284,7 +305,6 @@ export function TextArea({
   const input = useRef<TextInput>(null)
   const near = limit !== undefined && limit - measure(value) < COUNTER_WARN_AT
   const over = limit !== undefined && measure(value) > limit
-  const large = useLargeText()
 
   let counter: ReactNode = null
   if (limit !== undefined) {
@@ -297,14 +317,7 @@ export function TextArea({
 
   return (
     <View testID={testID} style={[styles.field, disabled && { opacity: OPACITY.disabled }]}>
-      {label || counter ? (
-        // At the accessibility sizes the counter goes under the label; beside it, the label wraps rather than push the
-        // counter off the edge ("A LINE ABOUT THE CREW 0/14" was clipped at AX XXXL, RC drive 5 D-3).
-        <View testID={testID && `${testID}-label-row`} style={[styles.labelRow, large ? styles.stacked : styles.spread]}>
-          {label ? <FieldLabel text={label} bold={bold} contrast={contrast} /> : <View />}
-          {counter}
-        </View>
-      ) : null}
+      {label || counter ? <FieldHeader label={label} counter={counter} testID={testID && `${testID}-label-row`} /> : null}
       <Pressable testID={testID && `${testID}-box`} accessible={false} onPress={() => input.current?.focus()} disabled={disabled} style={[styles.area, { minHeight }]}>
         <TextInput
           {...rest}
@@ -346,7 +359,7 @@ const styles = StyleSheet.create({
   /** The counter under the label, at its end, as the field's own counter sits. */
   stacked: { gap: SPACE.xxs, alignItems: 'flex-end' },
   labelRow: { paddingRight: SPACE.xs },
-  spread: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
+  spread: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'baseline', gap: SPACE.sm },
   box: {
     height: SIZE.input,
     borderRadius: RADIUS.capsule,

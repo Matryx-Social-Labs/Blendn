@@ -4,14 +4,16 @@
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { AccessibilityInfo, Platform, StyleSheet } from 'react-native'
+import { AccessibilityInfo, Dimensions, Platform, StyleSheet } from 'react-native'
 import * as Reanimated from 'react-native-reanimated'
 
 import * as ChipModule from '../components/ds/Chip'
 import { ChipSet, foldedItems, type ChipItem } from '../components/ds/ChipSet'
-import { SPRING } from '../lib/design/tokens'
+import { CONTROL_FONT_CAP } from '../components/ds/shared'
+import { SPACE, SPRING } from '../lib/design/tokens'
 import { OPACITY } from '../lib/theme'
 import { H } from '../lib/haptics'
+import { AX_XXXL, uncapped } from './helpers/ax'
 
 jest.mock('react-native-reanimated', () => ({ ...jest.requireActual('react-native-reanimated'), __esModule: true, useReducedMotion: jest.fn(() => false) }))
 const reduceMotion = Reanimated.useReducedMotion as jest.Mock
@@ -246,5 +248,38 @@ describe('only the changed chip moves', () => {
     expect(second).toHaveBeenCalledTimes(1)
     expect(second).toHaveBeenCalledWith('k4')
     expect(select).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('the label and its counter (D-M6: "LANGUAGES YOU SPEAK0 of 5", the 5 past the card)', () => {
+  const window = Dimensions.get('window')
+  const at = (width: number, fontScale: number) => act(async () => Dimensions.set({ window: { ...window, width, fontScale }, screen: { ...window, width, fontScale } }))
+  afterEach(() => Dimensions.set({ window, screen: window }))
+  const header = () => StyleSheet.flatten(screen.getByTestId('s-header', { includeHiddenElements: true }).props.style)
+
+  it('at AX XXXL the counter stacks under the label', async () => {
+    await at(402, AX_XXXL)
+    await draw({ label: 'Languages you speak', max: 5 })
+    expect(header().flexDirection).not.toBe('row')
+    expect(header().alignItems).toBe('flex-end')
+    expect(uncapped(screen.toJSON())).toEqual([])
+  })
+
+  it('at 360 dp and 1.3 the two never touch: a gap, the row wraps, the label shrinks', async () => {
+    await at(360, 1.3)
+    await draw({ label: 'Languages you speak', max: 5 })
+    expect(header()).toMatchObject({ flexDirection: 'row', gap: SPACE.sm, flexWrap: 'wrap' })
+    expect(StyleSheet.flatten(screen.getByText('Languages you speak').props.style).flexShrink).toBe(1)
+  })
+
+  it('a picked-things counter reads "n of max"', async () => {
+    await draw({ max: 5, selected: ['a', 'b'] })
+    expect(screen.getByTestId('s-counter').props.accessibilityLabel).toMatch(/^\d+ of \d+$/)
+  })
+
+  it('a caller’s own counter word stops at the control cap', async () => {
+    await at(402, AX_XXXL)
+    await draw({ selection: 'single', counter: '2 chosen' })
+    expect(screen.getByText('2 chosen').props.maxFontSizeMultiplier).toBe(CONTROL_FONT_CAP)
   })
 })

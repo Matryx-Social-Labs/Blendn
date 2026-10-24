@@ -3,7 +3,9 @@ import { AccessibilityInfo, StyleSheet, Text, useWindowDimensions, View, type La
 import { useSharedValue } from 'react-native-reanimated'
 
 import { Banner } from './ds/Banner'
+import { MonoRun } from './ds/MonoFamily'
 import { CONTROL_FONT_CAP, font, useBoldText } from './ds/shared'
+import { FieldHeader } from './ds/TextField'
 import { DraggableTile } from './profile/DraggableTile'
 import { AddFace, FailedFace, PhotoFace, PulledFace, UploadingFace } from './profile/PhotoGridTile'
 import { SkeletonBlock } from './Skeleton'
@@ -362,17 +364,23 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
 
   const onLayout = (e: LayoutChangeEvent) => setContainerWidth(e.nativeEvent.layout.width)
 
+  // The shared field header (DS-07): a gap, a wrapping row and a shrinking label, the counter stacked under it at AX sizes.
   const header = (
-    <View style={styles.header}>
-      <Text accessibilityRole="header" maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('label', bold), styles.label]}>
-        Photos
-      </Text>
-      {loading || loadFailed ? null : (
-        <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold, FONT_FAMILY.mono[500]), styles.sub]}>
-          {photos.length} of {maxPhotos} · saved as you go
+    <FieldHeader
+      testID="photos-header"
+      label={
+        <Text accessibilityRole="header" maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('label', bold), styles.label]}>
+          Photos
         </Text>
-      )}
-    </View>
+      }
+      counter={
+        loading || loadFailed ? null : (
+          <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold, FONT_FAMILY.mono[500]), styles.sub]}>
+            <MonoRun text={`${photos.length} of ${maxPhotos} · saved as you go`} />
+          </Text>
+        )
+      }
+    />
   )
 
   if (loading) {
@@ -520,8 +528,7 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
 
 const styles = StyleSheet.create({
   container: { gap: SPACE.md },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
-  label: { color: COLOR.textSecondary },
+  label: { color: COLOR.textSecondary, flexShrink: 1 },
   sub: { color: COLOR.textTertiary },
   skeleton: { flexDirection: 'row', gap: GAP },
   note: { color: COLOR.textTertiary },
