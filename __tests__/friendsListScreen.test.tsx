@@ -7,7 +7,9 @@
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 
-import FriendsScreen from '../app/friends'
+import FriendsScreen, { friendItems, type FriendItem } from '../app/friends'
+import type { Friend } from '../lib/friends'
+import { SIZE } from '../lib/design/tokens'
 import { noteFriendGone, takeFriendsGone } from '../lib/friendsGone'
 import { PERSON_ROW_HEIGHT } from '../components/friends/PersonRow'
 
@@ -55,6 +57,9 @@ const open = async () => {
   await act(async () => {})
 }
 const list = () => screen.getByTestId('friends-list')
+/** The friends the list draws, once each: its rows minus the heads and the "Recently added" copies (D7). */
+const rows = (): Friend[] =>
+  (list().props.data as FriendItem[]).flatMap((item) => (item.kind === 'friend' && !item.key.startsWith('r:') ? [item.friend] : []))
 const reachEnd = async () => {
   await act(async () => {
     fireEvent(list(), 'endReached')
@@ -106,10 +111,10 @@ describe('101 friends', () => {
     mockGetFriends.mockResolvedValueOnce(page(friends(100), 101, 'c1')).mockResolvedValueOnce(page(friends(1, 100), 101))
     await open()
     expect(screen.getByText('101')).toBeTruthy()
-    expect(list().props.data).toHaveLength(100)
+    expect(rows()).toHaveLength(100)
     await reachEnd()
     expect(mockGetFriends).toHaveBeenLastCalledWith('c1', null)
-    expect(list().props.data).toHaveLength(101)
+    expect(rows()).toHaveLength(101)
     await reachEnd()
     expect(mockGetFriends).toHaveBeenCalledTimes(2)
   })
@@ -130,14 +135,14 @@ describe('101 friends', () => {
     mockGetFriends.mockResolvedValueOnce(page(friends(100), 101, 'c1')).mockResolvedValueOnce({ success: false })
     await open()
     await reachEnd()
-    expect(list().props.data).toHaveLength(100)
+    expect(rows()).toHaveLength(100)
     expect(screen.getByText('Couldn’t load more.')).toBeTruthy()
     mockGetFriends.mockResolvedValueOnce(page(friends(1, 100), 101))
     await act(async () => {
       fireEvent.press(screen.getByText('Try again'))
     })
     expect(mockGetFriends).toHaveBeenLastCalledWith('c1', null)
-    expect(list().props.data).toHaveLength(101)
+    expect(rows()).toHaveLength(101)
     expect(screen.queryByText('Couldn’t load more.')).toBeNull()
   })
 })
@@ -148,9 +153,13 @@ describe('1,000 friends', () => {
     await open()
     expect(screen.getByText('1,000')).toBeTruthy()
     for (let p = 1; p < 10; p++) await reachEnd()
-    expect(list().props.data).toHaveLength(1000)
+    expect(rows()).toHaveLength(1000)
     expect(mockGetFriends.mock.calls.map((c) => c[0])).toEqual([null, 'c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8', 'c9'])
-    expect(list().props.getItemLayout(null, 999)).toEqual({ length: PERSON_ROW_HEIGHT, offset: PERSON_ROW_HEIGHT * 999, index: 999 })
+    // Every row one fixed height, every head one fixed height: the last item's offset is their sum, so the list stays windowed.
+    const data = list().props.data as FriendItem[]
+    const last = data.length - 1
+    const heads = data.filter((i) => i.kind === 'head').length
+    expect(list().props.getItemLayout(null, last)).toEqual({ length: PERSON_ROW_HEIGHT, offset: PERSON_ROW_HEIGHT * (last - heads) + SIZE.tag * heads, index: last })
   })
 
   it('is a windowed FlatList: a small first render and a window of seven screens, never every row', async () => {
@@ -166,7 +175,7 @@ describe('1,000 friends', () => {
     mockGetFriends.mockResolvedValueOnce(page(friends(100), 1000, 'c1')).mockResolvedValueOnce(page(friends(100, 99), 1000, 'c2'))
     await open()
     await reachEnd()
-    expect(list().props.data).toHaveLength(199)
+    expect(rows()).toHaveLength(199)
   })
 })
 
@@ -175,7 +184,7 @@ describe('coming back to the list', () => {
     mockGetFriends.mockResolvedValueOnce(page(friends(100), 250, 'c1')).mockResolvedValueOnce(page(friends(100, 100), 250, 'c2'))
     await open()
     await reachEnd()
-    expect(list().props.data).toHaveLength(200)
+    expect(rows()).toHaveLength(200)
   }
   beforeEach(() => void takeFriendsGone())
 
@@ -185,12 +194,12 @@ describe('coming back to the list', () => {
     await act(async () => mockFocus())
     // The head is read with no cursor.
     expect(mockGetFriends.mock.calls.at(-1)).toEqual([null, null])
-    expect(list().props.data).toHaveLength(200)
+    expect(rows()).toHaveLength(200)
     // And the next page is still the one after what was read, not the second page over again.
     mockGetFriends.mockResolvedValueOnce(page(friends(50, 200), 250))
     await reachEnd()
     expect(mockGetFriends).toHaveBeenLastCalledWith('c2', null)
-    expect(list().props.data).toHaveLength(250)
+    expect(rows()).toHaveLength(250)
   })
 
   it('somebody removed on their profile leaves with it, from a page read earlier', async () => {
@@ -198,7 +207,7 @@ describe('coming back to the list', () => {
     noteFriendGone('u150')
     mockGetFriends.mockResolvedValueOnce(page(friends(100), 249, 'c1'))
     await act(async () => mockFocus())
-    const ids = (list().props.data as { userId: string }[]).map((f) => f.userId)
+    const ids = rows().map((f) => f.userId)
     expect(ids).toHaveLength(199)
     expect(ids).not.toContain('u150')
     expect(screen.getByText('249')).toBeTruthy()
@@ -238,7 +247,7 @@ describe('search (Friends)', () => {
     })
     expect(mockGetFriends).toHaveBeenCalledTimes(2)
     expect(mockGetFriends).toHaveBeenLastCalledWith(null, 'friend 1')
-    expect(list().props.data).toHaveLength(1)
+    expect(rows()).toHaveLength(1)
   })
 
   it('narrows to the server’s answer, pages it by cursor with q kept, and the title’s count stays the whole list', async () => {
@@ -250,7 +259,7 @@ describe('search (Friends)', () => {
     mockGetFriends.mockResolvedValueOnce(page(friends(100, 100).map((f) => ({ ...f, name: `Pri ${f.userId}` })), 230, 's2'))
     await reachEnd()
     expect(mockGetFriends).toHaveBeenLastCalledWith('s1', 'pri')
-    expect(list().props.data).toHaveLength(200)
+    expect(rows()).toHaveLength(200)
   })
 
   it('clearing it brings the whole list back, with its header rows', async () => {
@@ -261,7 +270,7 @@ describe('search (Friends)', () => {
     expect(screen.queryByTestId('make-crew-row')).toBeNull()
     mockGetFriends.mockResolvedValueOnce(page(friends(5), 5))
     await type('')
-    expect(list().props.data).toHaveLength(5)
+    expect(rows()).toHaveLength(5)
     expect(screen.getByTestId('make-crew-row')).toBeTruthy()
   })
 
@@ -284,7 +293,7 @@ describe('search (Friends)', () => {
     mockGetFriends.mockResolvedValueOnce(page([friend(4)], 1))
     await type('Friend 4')
     await act(async () => slow(page(friends(5), 5)))
-    expect(list().props.data).toHaveLength(1)
+    expect(rows()).toHaveLength(1)
   })
 
   it('an older server that ignores q: the page is filtered here, with no load more', async () => {
@@ -293,7 +302,7 @@ describe('search (Friends)', () => {
     // The same unfiltered page comes back for q=zed, still with a cursor and the whole count.
     mockGetFriends.mockResolvedValueOnce(page([friend(1), { ...friend(2), name: 'Zed' }], 400, 'c1'))
     await type('zed')
-    expect((list().props.data as { name: string }[]).map((f) => f.name)).toEqual(['Zed'])
+    expect(rows().map((f) => f.name)).toEqual(['Zed'])
     mockGetFriends.mockClear()
     await reachEnd()
     expect(mockGetFriends).not.toHaveBeenCalled()
@@ -305,7 +314,7 @@ describe('search (Friends)', () => {
     await open()
     mockGetFriends.mockResolvedValueOnce({ success: false })
     await type('fri')
-    expect(list().props.data).toHaveLength(5)
+    expect(rows()).toHaveLength(5)
     expect(screen.queryByText('Your friends didn’t load')).toBeNull()
   })
 })
@@ -349,5 +358,34 @@ describe('a failed first read', () => {
       fireEvent.press(screen.getByText('Try again'))
     })
     expect(screen.getByText('Friend 1')).toBeTruthy()
+  })
+})
+
+/*
+ * D7 (D-LM1): past a screenful the list is "Recently added" (the server's newest five) then A–Z under sticky heads, still one
+ * windowed FlatList with an exact `getItemLayout`. A search, or a short list, is one plain run.
+ * Negative control: the flat list as it was (no heads) fails the first two.
+ */
+describe('sections', () => {
+  it('1,002 friends: Recently added first, then A–Z heads that stick, from the loaded pages', async () => {
+    const named = ['Zain', 'arnav', 'Ábhi', 'Kai', '9lives', 'Fay', 'Aarav'].map((name, i) => ({ ...friend(i), name }))
+    mockGetFriends.mockResolvedValueOnce(page(named, 1002, 'c1'))
+    await open()
+    const data = list().props.data as FriendItem[]
+    const heads = data.filter((i) => i.kind === 'head').map((i) => (i as { title: string }).title)
+    expect(heads).toEqual(['Recently added', 'A', 'F', 'K', 'Z', '#'])
+    // The server's newest five, in its order, under Recently added.
+    expect(data.slice(1, 6).map((i) => (i as { friend: Friend }).friend.name)).toEqual(['Zain', 'arnav', 'Ábhi', 'Kai', '9lives'])
+    expect(rows().map((f) => f.name)).toEqual(['Aarav', 'Ábhi', 'arnav', 'Fay', 'Kai', 'Zain', '9lives'])
+    // Each drawn head sticks (the list passes on the ones in its window): its index, shifted by one for the Make a crew row above.
+    const sticky = list().props.stickyHeaderIndices as number[]
+    expect(sticky.length).toBeGreaterThan(1)
+    expect(sticky.every((n) => data[n - 1]?.kind === 'head')).toBe(true)
+  })
+
+  it('friendItems: a short list or a search is one plain run, with no heads', () => {
+    const few = friends(3)
+    expect(friendItems(few, false).every((i) => i.kind === 'friend')).toBe(true)
+    expect(friendItems(few, true)[0]).toEqual({ kind: 'head', key: 'h:recent', title: 'Recently added' })
   })
 })

@@ -9,6 +9,7 @@ import { IncomingRequestRow, RequestSkeleton } from '../../components/friends/In
 import { PagedFooter } from '../../components/friends/PagedFooter'
 import { OfflineStrip, useOffline } from '../../components/profile/OfflineStrip'
 import { COLOR, SPACE } from '../../lib/design/tokens'
+import { groupedCount } from '../../lib/friendsHere'
 import { useFriendRequests } from '../../lib/useFriendRequests'
 import { useTopBarState } from '../../lib/useTopBarState'
 import { HueProvider } from '../../components/ds/shared'
@@ -24,7 +25,7 @@ import { HueProvider } from '../../components/ds/shared'
  * the window.
  */
 function FriendRequestsScreenContent() {
-  const { incoming, incomingPage, loaded, failed, load, loadMore, respond, busy } = useFriendRequests()
+  const { incoming, incomingTotal, incomingPage, loaded, failed, load, loadMore, respond, busy } = useFriendRequests()
   const [refreshing, setRefreshing] = useState(false)
   const bar = useTopBarState()
   const insets = useSafeAreaInsets()
@@ -53,7 +54,8 @@ function FriendRequestsScreenContent() {
 
   return (
     <View style={styles.container}>
-      <TopBar title="Requests" state={bar.state} onBack={() => router.back()} />
+      {/* The server's count of everyone waiting, never the rows loaded (D-LM2). */}
+      <TopBar title="Requests" sub={incomingTotal > 0 ? requestsWaiting(incomingTotal) : undefined} state={bar.state} onBack={() => router.back()} />
       {offline ? (
         <View style={styles.offline}>
           <OfflineStrip offline />
@@ -108,3 +110,6 @@ export default function FriendRequestsScreen() {
     </HueProvider>
   )
 }
+
+/** "60 waiting", "1,204 waiting": the Requests title's sub line. */
+export const requestsWaiting = (n: number) => `${groupedCount(n)} waiting`
