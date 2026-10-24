@@ -5,7 +5,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Button } from '../../components/ds/Button'
 import { Grain } from '../../components/ds/Grain'
-import { Orbs } from '../../components/ds/Orbs'
 import { Banner } from '../../components/ds/Banner'
 import { SectionHeader } from '../../components/ds/SectionHeader'
 import { font, HueProvider, useBoldText } from '../../components/ds/shared'
@@ -77,7 +76,6 @@ function AddFriendsScreenContent() {
 
   return (
     <View style={styles.container}>
-      <Orbs set="brand" />
       <Grain />
       <TopBar title="Add friends" state={bar.state} onBack={() => router.back()} />
       <FlatList

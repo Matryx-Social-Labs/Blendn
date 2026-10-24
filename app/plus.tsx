@@ -6,7 +6,6 @@ import { Banner } from '../components/ds/Banner'
 import { Spinner } from '../components/ds/Loader'
 import { ManageStatusRow } from '../components/ds/ManageStatusRow'
 import { NeverForSalePanel } from '../components/ds/NeverForSalePanel'
-import { Orbs } from '../components/ds/Orbs'
 import { Grain } from '../components/ds/Grain'
 import { NightPassRow, PlanCard, PlanList } from '../components/ds/PlanCard'
 import { HueProvider } from '../components/ds/shared'
@@ -324,7 +323,6 @@ function PlusScreenContent() {
 
   return (
     <View style={styles.screen}>
-      <Orbs set="brand" />
       <Grain />
       {/* First in the tree for the focus order (it draws over the scroll by zIndex). */}
       <PlusHeader done={finished} onClose={close} state={bar.state === 'rest' ? 'rest' : 'scrolled'} />

@@ -1,7 +1,7 @@
 import { playsArrival } from '../../lib/backFromBackground'
 import { barCircleBottom } from '../../lib/barGeometry'
 import { ScreenProfiler } from '../../lib/perf'
-import { router, useFocusEffect, useIsFocused, useScrollToTop } from 'expo-router'
+import { router, useFocusEffect, useScrollToTop } from 'expo-router'
 import React, { useCallback, useMemo, useState } from 'react'
 import { Platform, StyleSheet, Text, View } from 'react-native'
 import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated'
@@ -9,7 +9,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { scheduleOnRN } from 'react-native-worklets'
 import { Button } from '../../components/ds/Button'
 import { Grain } from '../../components/ds/Grain'
-import { Orbs } from '../../components/ds/Orbs'
 import { PresenceDot } from '../../components/ds/MonoFamily'
 import { CONTROL_FONT_CAP, font, HueProvider, useBoldText } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
@@ -94,7 +93,6 @@ function ProfileInner() {
   const { user, loading: authLoading } = useAuth()
   const insets = useSafeAreaInsets()
   const bold = useBoldText()
-  const focused = useIsFocused()
   const offline = useOffline()
   const [profile, setProfile] = useState<UserProfileViewModel | null>(null)
   const [loading, setLoading] = useState(true)
@@ -546,7 +544,6 @@ function ProfileInner() {
 
   return (
     <View style={styles.screen}>
-      <Orbs set="brand" paused={!focused} />
       <Grain />
       {/* First in the tree for the focus order; it draws over the scroll by zIndex. */}
       {chrome}
