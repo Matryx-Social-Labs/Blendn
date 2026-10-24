@@ -66,6 +66,21 @@ describe('the venue page: upcoming (GET /venues/:id, /venues/:id/upcoming)', () 
     expect(upcomingRows([{ id: 'e1', title: 'Jazz', startTime: START, timezone: NY }])[0].day).toBe('Sat 24 Oct')
     expect(upcomingRows([{ id: 'e1', title: 'Jazz', startTime: START }])[0].day).toBe('Sun 25 Oct')
   })
+
+  it('each row’s time is the event’s clock, named when it is not the phone’s (RC 7: "6:30 PM" on a Los Angeles phone)', () => {
+    expect(upcomingRows([{ id: 'e1', title: 'Jazz', startTime: START, timezone: NY }])[0].time).toBe('7:30 PM EDT')
+    // The phone in the event's zone: nothing to name.
+    process.env.TZ = NY
+    refreshPhoneZone()
+    try {
+      expect(upcomingRows([{ id: 'e1', title: 'Jazz', startTime: START, timezone: NY }])[0].time).toBe('7:30 PM')
+    } finally {
+      process.env.TZ = 'Europe/Berlin'
+      refreshPhoneZone()
+    }
+    // An older server with no zone: the phone's clock, unnamed.
+    expect(upcomingRows([{ id: 'e1', title: 'Jazz', startTime: START }])[0].time).toBe('1:30 AM')
+  })
 })
 
 describe('Places’ next event (GET /venues)', () => {

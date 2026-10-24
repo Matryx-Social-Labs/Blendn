@@ -25,7 +25,7 @@ import { venueDayState } from './venueHours'
 /** A restaurant reuses the café's pair (owner's ruling on A87), as `VenuePlate` does. */
 const PLATE_PAIRS: Record<PlateKey, readonly [string, string]> = { ...VENUE_PLATES, restaurant: VENUE_PLATES.cafe }
 import { clockTime } from './roomMoments'
-import { calendarDate, clockIn, weekdayIn, zoneSuffix } from './time'
+import { calendarDate, clockIn, eventClock, weekdayIn, zoneSuffix } from './time'
 
 const MINUTE_MS = 60_000
 /** The expiry window: the last five minutes read as mm:ss and offer Extend. */
@@ -124,7 +124,7 @@ export const UPCOMING_MAX = 20
 /** A page of the sheet's list. */
 export const UPCOMING_PAGE = 20
 
-/** A coming event: its day, its start in its own clock ("9 PM"), and its title. */
+/** A coming event: its day, its start in its own clock, named when it is not the phone's ("9 PM", "9 PM IST"), and its title. */
 export type UpcomingRow = { id: string; title: string; day: string; time: string }
 
 export function upcomingRows(upcoming: VenueDetail['venue']['upcoming'], max: number = UPCOMING_MAX): UpcomingRow[] {
@@ -135,7 +135,7 @@ export function upcomingRows(upcoming: VenueDetail['venue']['upcoming'], max: nu
       id: e.id,
       title: e.title,
       day: dayLabel(e.startTime, e.timezone),
-      time: clockTime(Date.parse(e.startTime), e.timezone ?? undefined),
+      time: eventClock(e.startTime, e.timezone),
     }))
 }
 

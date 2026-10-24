@@ -23,7 +23,7 @@ import { DURATION, REDUCE_MOTION } from './design/tokens'
 import { liveNowLabel, type LiveNow } from './home'
 import { featureIdOf } from './mapStyleEmber'
 import { MAP_THEME } from './mapTheme'
-import { calendarDate, clockTime } from './time'
+import { calendarDate, eventClock } from './time'
 
 export type Ring = number[][]
 export type LngLat = [number, number]
@@ -384,7 +384,8 @@ function startLabel(startsAt: string | null, now: number, forSpeech: boolean): s
   const far = start.getTime() - now > WEEKDAY_ONLY_MS
   // No year: the chip's line is a pin's width, and an event a year off is not on the map (review L6).
   const day = calendarDate(start, { weekday: far ? true : 'only', year: false, timeZone: EVENT_TIME_ZONE })
-  const time = clockTime(start, EVENT_TIME_ZONE)
+  // Named when the phone is not in India: "8 PM IST" (the zone-name rule, `eventClock`).
+  const time = eventClock(start, EVENT_TIME_ZONE)
   return forSpeech ? `${day} ${time}` : `${day} · ${time}`
 }
 

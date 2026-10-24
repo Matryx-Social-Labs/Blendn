@@ -5,7 +5,7 @@
  * (`YYYY-MM-DD`) and whether it was called off (`cancelled`, and `cancelledAt` beside it). `dayNumber` is null when every day is
  * cancelled. Absent from a server that does not send it: no strip, which is what the Scene drew before.
  */
-import { calendarDate, clockTime, dateIn, MONTHS, WEEKDAYS } from './time'
+import { calendarDate, dateIn, eventClock, MONTHS, WEEKDAYS } from './time'
 
 export interface EventDay {
   date: string
@@ -97,11 +97,11 @@ export function runRange(
 /**
  * "Day 3 starts Tue 29 Sep, 9 PM" (frame 06): the server's sentence for a door that is refused between days
  * (`lib/checkin-messages.ts` in blendn-admin), said on the Scene before anybody asks, in the app's one date and clock
- * (`calendarDate`, `clockTime`) rather than en-US's "Tue, Sep 29, 9:00 PM". `nextStart` is the session's start, the next
+ * (`calendarDate`, `eventClock`: named when it is not the phone's, "9 PM IST") rather than en-US's "Tue, Sep 29, 9:00 PM". `nextStart` is the session's start, the next
  * day going ahead, so a day called off is already skipped; null when every day is called off or the start is not a time.
  */
 export function betweenDaysLine(e: EventDays, nextStart: string, timeZone: string | undefined): string | null {
   const at = Date.parse(nextStart)
   if (!e.dayNumber || !Number.isFinite(at)) return null
-  return `Day ${e.dayNumber} starts ${calendarDate(at, { weekday: true, timeZone })}, ${clockTime(at, timeZone)}`
+  return `Day ${e.dayNumber} starts ${calendarDate(at, { weekday: true, timeZone })}, ${eventClock(at, timeZone)}`
 }

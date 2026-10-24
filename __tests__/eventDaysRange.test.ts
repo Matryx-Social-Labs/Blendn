@@ -1,4 +1,5 @@
 import { betweenDaysLine, parseEventDays, runRange } from '../lib/eventDays'
+import { refreshPhoneZone } from '../lib/time'
 
 /**
  * Flow 3 · 3.2 frames 04 and 06: the hero's date range ("Sat 27 – Mon 29 Sep") and the between-days line ("Day 3 starts Tue
@@ -35,9 +36,31 @@ describe('the hero range of a run', () => {
 describe('the between-days line', () => {
   // Day 3 opens 2026-09-29 21:00 IST = 15:30Z.
   const next = '2026-09-29T15:30:00Z'
+  // A phone in India unless a test moves it: the event's clock is the phone's, so unnamed.
+  const phone = process.env.TZ
+  beforeAll(() => {
+    process.env.TZ = 'Asia/Kolkata'
+    refreshPhoneZone()
+  })
+  afterAll(() => {
+    process.env.TZ = phone
+    refreshPhoneZone()
+  })
 
   it('names the next day in the event zone, in the app\'s one date and clock', () => {
     expect(betweenDaysLine(run(['2026-09-27', '2026-09-28', '2026-09-29'], { dayNumber: 3 }), next, 'Asia/Kolkata')).toBe('Day 3 starts Tue 29 Sep, 9 PM')
+  })
+
+  it('names the event zone on a phone that is not in it: "9 PM IST" (RC 7, the zone-name rule)', () => {
+    const zone = process.env.TZ
+    process.env.TZ = 'America/Los_Angeles'
+    refreshPhoneZone()
+    try {
+      expect(betweenDaysLine(run(['2026-09-27', '2026-09-28', '2026-09-29'], { dayNumber: 3 }), next, 'Asia/Kolkata')).toBe('Day 3 starts Tue 29 Sep, 9 PM IST')
+    } finally {
+      process.env.TZ = zone
+      refreshPhoneZone()
+    }
   })
 
   it('names the next day going ahead, so a called-off day is skipped', () => {

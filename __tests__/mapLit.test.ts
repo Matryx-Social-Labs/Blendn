@@ -29,6 +29,7 @@ import {
 } from '../lib/mapLit'
 import { buildingHeights, CITY_BUILDINGS, cityColour, EMBER_MAP_STYLE, LABELS_FROM_LAYER_ID } from '../lib/mapStyleEmber'
 import { MAP_THEME } from '../lib/mapTheme'
+import { refreshPhoneZone } from '../lib/time'
 import { EMBER } from '../lib/theme'
 
 /**
@@ -289,6 +290,29 @@ describe('the ground glow', () => {
 })
 
 describe('chips above the roofs', () => {
+  // A phone in India: the chip's clock is its own, so unnamed. A phone elsewhere names it (the zone-name rule, below).
+  const zone = process.env.TZ
+  beforeAll(() => {
+    process.env.TZ = 'Asia/Kolkata'
+    refreshPhoneZone()
+  })
+  afterAll(() => {
+    process.env.TZ = zone
+    refreshPhoneZone()
+  })
+
+  it('name India’s zone on a phone that is not there: "Fri · 8 PM IST" (RC 7, the zone-name rule)', () => {
+    process.env.TZ = 'America/Los_Angeles'
+    refreshPhoneZone()
+    try {
+      const now = Date.UTC(2026, 9, 9, 6, 0)
+      expect(chipLine({ kind: 'event', live: false, startsAt: '2026-10-09T14:30:00Z', bucket: null }, now)).toBe('Fri · 8 PM IST')
+    } finally {
+      process.env.TZ = 'Asia/Kolkata'
+      refreshPhoneZone()
+    }
+  })
+
   it('rise with the roof and the tilt, and clear a flat view by the gap', () => {
     const view = { zoom: 16, pitch: 55, latitude: LAT }
     expect(chipLiftPx(50, view)).toBeGreaterThan(chipLiftPx(15, view))
