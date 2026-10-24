@@ -14,11 +14,23 @@ const FACE = 56
 const PILL_ALPHA = 0.45
 const PILL_EDGE_ALPHA = 0.3
 
+/** The token's tail shown, enough to tell two links apart. */
+const TAIL = 6
+
+/**
+ * The link's short form for the pill (A9: the raw URL broke mid-token over two lines): the host and the token's last six,
+ * "blendn.app/…qrstuv". Copy and Share carry the whole URL; a screen reader hears it whole. Any other shape is shown whole.
+ */
+export function shortInviteLink(url: string): string {
+  const parts = /^https?:\/\/(?:www\.)?([^/]+)\/f\/([^/?#]+)/.exec(url)
+  return parts ? `${parts[1]}/…${parts[2].slice(-TAIL)}` : url.replace(/^https?:\/\//, '')
+}
+
 /**
  * Your invite link, shown as what it is: a link (Flow 6 `add`, Flow 2 friends 01 · 02 · 03). A `surface` card at radius 32: your face
- * and name and "on Blend’n" above, and the link in a pill beneath, in Geist Mono and selectable.
+ * and name and "on Blend’n" above, and the link's short form in a pill beneath, in Geist Mono (Copy and Share carry it whole).
  *
- * Shown in full rather than hidden behind the Share button, so it is plain what is being handed out, and that it is the only
+ * Shown (in short) rather than hidden behind the Share button, so it is plain what is being handed out, and that it is the only
  * way anybody can reach you, since there is no search. Sharing goes through the OS sheet, which already offers Copy,
  * Messages, WhatsApp, Instagram and the rest. A failure keeps the card's height and says so in a sentence, with the primary
  * becoming Try again.
@@ -66,12 +78,13 @@ export function InviteLinkCard({
             <Icon name="link" size={ICON.inline} color={COLOR.textPrimary} />
             <Text
               testID="invite-link-url"
-              selectable
+              accessibilityLabel={`Your link, ${url.replace(/^https?:\/\//, '')}`}
               style={[font('body', bold, FONT_FAMILY.mono[500]), styles.url]}
-              numberOfLines={2}
+              numberOfLines={1}
+              ellipsizeMode="middle"
               maxFontSizeMultiplier={CONTROL_FONT_CAP}
             >
-              {url.replace(/^https:\/\//, '')}
+              {shortInviteLink(url)}
             </Text>
           </>
         ) : failed ? (

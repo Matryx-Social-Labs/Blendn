@@ -134,3 +134,19 @@ describe('PersonRow’s mono date (DS-09, D-L1: "Friends since Oct  2026")', () 
     expect(StyleSheet.flatten(space.props.style).fontFamily).toBe(FONT_FAMILY.brand[500])
   })
 })
+
+describe('the invite link’s short form (DS-16, A9: the raw URL broke mid-token over two lines)', () => {
+  it('shows the host and the token’s last six on one line, the middle ellipsized; a screen reader hears the whole link', async () => {
+    await at(402, 1)
+    await render(<InviteLinkCard url="https://www.blendn.app/f/abcdefghijklmnopqrstuv" />)
+    const url = screen.getByTestId('invite-link-url', hidden)
+    expect(url.props.children).toBe('blendn.app/…qrstuv')
+    expect(url.props).toMatchObject({ numberOfLines: 1, ellipsizeMode: 'middle' })
+    expect(url.props.accessibilityLabel).toBe('Your link, www.blendn.app/f/abcdefghijklmnopqrstuv')
+  })
+
+  it('a link that is not the expected shape is shown whole, still one line', async () => {
+    await render(<InviteLinkCard url="https://example.com/x" />)
+    expect(screen.getByTestId('invite-link-url', hidden).props.children).toBe('example.com/x')
+  })
+})
