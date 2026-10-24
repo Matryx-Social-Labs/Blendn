@@ -23,6 +23,7 @@ import {
   PLACE_TYPES,
   placesCount,
   plateFor,
+  guestTypeLabel,
   RAIL_CAP,
   splitPlaces,
   statLine,
@@ -60,6 +61,14 @@ const event = (startH: number, endH: number, day = 0) => ({
   endTime: at(endH, 0, day),
 })
 
+describe('a type a guest reads (GO-13, D24)', () => {
+  it('"other" is "Venue": the organiser-facing "Something else" never reaches a guest', () => {
+    expect(guestTypeLabel({ venueType: 'other', venueTypeLabel: 'Something else' })).toBe('Venue')
+    expect(guestTypeLabel({ venueType: null, venueTypeLabel: 'Something else' })).toBe('Venue')
+    expect(guestTypeLabel({ venueType: 'brewery', venueTypeLabel: 'Brewery' })).toBe('Brewery')
+  })
+})
+
 describe('the plates', () => {
   it('draws each server type on its plate, and the bar’s for a type with none', () => {
     expect(plateFor('pub_bar')).toBe('bar')
@@ -69,6 +78,8 @@ describe('the plates', () => {
     expect(plateFor('lounge_rooftop')).toBe('gardenBar')
     expect(plateFor('cafe')).toBe('cafe')
     expect(plateFor('restaurant')).toBe('restaurant')
+    // Co-working counts with the cafés (owner): its plate is the café's, not the bar's (D25, B-T4).
+    expect(plateFor('coworking')).toBe('cafe')
     expect(plateFor('stadium')).toBe('bar')
     expect(plateFor(null)).toBe('bar')
   })

@@ -9,7 +9,7 @@ import { Icon } from '../ui/Icon'
 import type { VenueListItem } from '../../lib/apiClient'
 import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
-import { bucketLabel, distanceText, foldNoun, moreLine, placeArea, placeLabel, plateFor, type PlaceTypeFilter } from '../../lib/placesPane'
+import { bucketLabel, distanceText, foldNoun, guestTypeLabel, moreLine, placeArea, placeLabel, plateFor, type PlaceTypeFilter } from '../../lib/placesPane'
 import { openPlace } from './openPlace'
 
 /** The quiet row: 56 tall, a 40 thumb. */
@@ -23,7 +23,7 @@ function TypeLine({ venue, area = false, small = false }: { venue: VenueListItem
   const bold = useBoldText()
   const distance = distanceText(venue.distance)
   // A row that carries the area leads with it: five "The Pub" rows are told apart by where they are (audit A40).
-  const lead = (area ? [placeArea(venue), venue.venueTypeLabel] : [venue.venueTypeLabel]).filter(Boolean).join(' · ')
+  const lead = (area ? [placeArea(venue), guestTypeLabel(venue)] : [guestTypeLabel(venue)]).filter(Boolean).join(' · ')
   return (
     <Text numberOfLines={1} style={[font('meta', bold), styles.secondary, small && styles.quietMeta]}>
       {lead}

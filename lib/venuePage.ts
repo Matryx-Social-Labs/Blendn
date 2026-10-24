@@ -71,9 +71,10 @@ export function tonightOpening(hours: VenueDetail['venue']['hours'], dayResetHou
 }
 
 /**
- * The page's tiles: Open · Live · Reset · Size. Each is drawn only when its
- * field is here, and Live only for a bucket the server tells that shows (a null
- * or under-5 bucket draws nothing, never "0" or "Under 5").
+ * The page's tiles: Open · Live · Size. Each is drawn only when its field is here, and Live only for a bucket the server
+ * tells that shows (a null or under-5 bucket draws nothing, never "0" or "Under 5"). No Reset tile (D6): the day's reset
+ * hour is staff's clock in 24-hour time, and Open ("Till 4 AM") already answers the guest's question. Size is words, so
+ * it is set in the sans (B-T5: in mono, "people" fell off at AX sizes).
  */
 export function venueTiles(detail: Pick<VenueDetail, 'venue' | 'live'>, now: number): TileSpec[] {
   const tiles: TileSpec[] = []
@@ -85,10 +86,8 @@ export function venueTiles(detail: Pick<VenueDetail, 'venue' | 'live'>, now: num
   }
   const liveWord = liveNowWord(detail.live.liveNow)
   if (liveWord) tiles.push({ label: 'LIVE', value: `${liveWord} so far`, mono: false })
-  const reset = detail.venue.dayResetHour
-  if (typeof reset === 'number' && Number.isInteger(reset) && reset >= 0 && reset <= 23) tiles.push({ label: 'RESET', value: `${pad(reset)}:00`, mono: true })
   const capacity = detail.venue.capacity
-  if (typeof capacity === 'number' && capacity > 0) tiles.push({ label: 'SIZE', value: `${capacity} ${capacity === 1 ? 'person' : 'people'}`, mono: true })
+  if (typeof capacity === 'number' && capacity > 0) tiles.push({ label: 'SIZE', value: `${capacity} ${capacity === 1 ? 'person' : 'people'}`, mono: false })
   return tiles
 }
 
@@ -125,7 +124,8 @@ export const UPCOMING_MAX = 20
 /** A page of the sheet's list. */
 export const UPCOMING_PAGE = 20
 
-export type UpcomingRow = { id: string; title: string; day: string }
+/** A coming event: its day, its start in its own clock ("9 PM"), and its title. */
+export type UpcomingRow = { id: string; title: string; day: string; time: string }
 
 export function upcomingRows(upcoming: VenueDetail['venue']['upcoming'], max: number = UPCOMING_MAX): UpcomingRow[] {
   return (upcoming ?? [])
@@ -135,6 +135,7 @@ export function upcomingRows(upcoming: VenueDetail['venue']['upcoming'], max: nu
       id: e.id,
       title: e.title,
       day: dayLabel(e.startTime, e.timezone),
+      time: clockTime(Date.parse(e.startTime), e.timezone ?? undefined),
     }))
 }
 

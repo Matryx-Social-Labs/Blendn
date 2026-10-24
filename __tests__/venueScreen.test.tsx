@@ -211,7 +211,7 @@ describe('the place, not live', () => {
     expect(screen.queryByLabelText(/^SIZE/)).toBeNull()
     await mount(venue({ venue: { hours: [{ day: new Date(NOW - 6 * 3_600_000).getDay(), open: wall(NOW - 2 * 3_600_000), close: wall(NOW + 4 * 3_600_000) }], dayResetHour: 6, capacity: 300 } }))
     expect(screen.getByLabelText(`OPEN, Till ${clockTime(NOW + 4 * 3_600_000)}`)).toBeTruthy()
-    expect(screen.getByLabelText('RESET, 06:00')).toBeTruthy()
+    expect(screen.queryByLabelText(/^RESET/)).toBeNull()
     expect(screen.getByLabelText('SIZE, 300 people')).toBeTruthy()
   })
 
@@ -297,6 +297,16 @@ describe('Coming up here', () => {
     const style = StyleSheet.flatten(day.props.style)
     expect(style.width).toBeUndefined()
     expect(style).toMatchObject({ minWidth: 84, flexShrink: 0 })
+  })
+
+  it('a row says when and that it opens (GO-13, C36): the start time and a chevron; the title may take two lines', async () => {
+    const start = min(60 * 24)
+    await mount(venue({ venue: { upcoming: [{ id: 'u1', title: 'A very long night of music and talk', startTime: start }] } }))
+    const row = screen.getByTestId('venue-upcoming-u1')
+    expect(within(row).getByText(clockTime(Date.parse(start)))).toBeTruthy()
+    expect(within(row).getByTestId('venue-upcoming-chevron', { includeHiddenElements: true })).toBeTruthy()
+    expect(within(row).getByText('A very long night of music and talk').props.numberOfLines).toBe(2)
+    expect(row.props.accessibilityLabel).toContain(clockTime(Date.parse(start)))
   })
 })
 

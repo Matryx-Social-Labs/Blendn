@@ -19,6 +19,7 @@ import {
   bucketLabel,
   distanceText,
   glowFor,
+  guestTypeLabel,
   hoursLine,
   KIND_TILES,
   nearLabel,
@@ -170,7 +171,7 @@ export const OpenCard = memo(function OpenCard({ venue, now }: { venue: VenueLis
         <Text numberOfLines={1} style={[font('bodyStrong', bold), styles.ink]}>
           {venue.name}
         </Text>
-        <MetaLine parts={[venue.venueTypeLabel, placeArea(venue)]} distance={distanceText(venue.distance)} />
+        <MetaLine parts={[guestTypeLabel(venue), placeArea(venue)]} distance={distanceText(venue.distance)} />
         {tonight ? (
           <Text numberOfLines={1} style={[font('meta', bold), styles.ink]}>
             <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{tonight.when}</Text>

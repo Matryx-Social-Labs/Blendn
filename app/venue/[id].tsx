@@ -42,7 +42,7 @@ import { type ShowTray, type TrayButton, type TrayExtra } from '../../lib/locati
 import { Logger } from '../../lib/logger'
 import { openInMaps } from '../../lib/openInMaps'
 import { openTonight } from '../../lib/paywall'
-import { placeArea } from '../../lib/placesPane'
+import { guestTypeLabel, placeArea } from '../../lib/placesPane'
 import { usePlusStatus } from '../../lib/plus'
 import { idParam } from '../../lib/routeParams'
 import { serverNow } from '../../lib/serverClock'
@@ -488,7 +488,7 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
         <VenueHero
           hero={venueHero(detail)}
           name={venue.name}
-          typeLabel={venue.venueTypeLabel}
+          typeLabel={guestTypeLabel(venue)}
           area={placeArea(venue)}
           km={km}
           live={live}

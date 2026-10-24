@@ -37,11 +37,22 @@ const PLATE_BY_TYPE: Record<string, PlateKey> = {
   pub_bar: 'bar',
   brewery: 'brewery',
   cafe: 'cafe',
+  // Co-working counts with the cafés (owner): the café's plate, never the bar's fallback (D25).
+  coworking: 'cafe',
   // A restaurant reuses the café's plate (owner's ruling on A87): VenuePlate does it.
   restaurant: 'restaurant',
   lounge_rooftop: 'gardenBar',
   nightclub: 'club',
   live_music_venue: 'liveMusic',
+}
+
+/**
+ * The type a guest reads. The server's label for `other` is "Something else", the organiser's picker word (admin
+ * `lib/venue-types.ts`); placeholder copy never reaches a guest, so it reads "Venue" (D24, C38).
+ */
+const OTHER_LABEL = 'Something else'
+export function guestTypeLabel(venue: { venueType?: string | null; venueTypeLabel: string }): string {
+  return venue.venueType === 'other' || venue.venueTypeLabel === OTHER_LABEL ? 'Venue' : venue.venueTypeLabel
 }
 
 /** Which plate a venue_type is drawn on. */
@@ -145,13 +156,13 @@ export function hoursLine(tonight: VenueListItem['tonight'], now: number): { lea
 
 /** What a live tile is read as: "{name}. {type}, {area}, {distance}. 10 to 19 people live." */
 export function tileLabel(venue: VenueListItem): string {
-  const where = [venue.venueTypeLabel, placeArea(venue), spokenDistance(venue.distance)].filter(Boolean).join(', ')
+  const where = [guestTypeLabel(venue), placeArea(venue), spokenDistance(venue.distance)].filter(Boolean).join(', ')
   return [venue.name, where, spokenBucket(venue.liveNow)].filter(Boolean).join('. ')
 }
 
 /** What an Open tonight card is read as: "{name}. {type}, {area}, {distance}. Tonight 9 PM, {title}." or "Open till 1 AM." */
 export function openLabel(venue: VenueListItem, now: number): string {
-  const where = [venue.venueTypeLabel, placeArea(venue), spokenDistance(venue.distance)].filter(Boolean).join(', ')
+  const where = [guestTypeLabel(venue), placeArea(venue), spokenDistance(venue.distance)].filter(Boolean).join(', ')
   const tonight = tonightEvent(venue.nextEvent, now)
   const hours = hoursLine(venue.tonight, now)
   const line = tonight ? `${/^\d/.test(tonight.when) ? `Tonight ${tonight.when}` : tonight.when}, ${tonight.title}.` : hours ? `${hours.lead} ${hours.time}.` : null
@@ -160,7 +171,7 @@ export function openLabel(venue: VenueListItem, now: number): string {
 
 /** What a Near you row is read as: "2 of 5 nearest. {name}, {type}, {area}, {distance}". */
 export function nearLabel(venue: VenueListItem, n: number): string {
-  const where = [venue.name, venue.venueTypeLabel, placeArea(venue), spokenDistance(venue.distance)].filter(Boolean).join(', ')
+  const where = [venue.name, guestTypeLabel(venue), placeArea(venue), spokenDistance(venue.distance)].filter(Boolean).join(', ')
   return `${n} of ${NEAR_COUNT} nearest. ${where}`
 }
 
@@ -425,7 +436,7 @@ export function placeLabel(venue: VenueListItem, now?: number): string {
   const tonight = now === undefined ? null : tonightEvent(venue.nextEvent, now)
   return [
     venue.name,
-    venue.venueTypeLabel,
+    guestTypeLabel(venue),
     distanceText(venue.distance),
     bucketLabel(venue.liveNow),
     tonight ? `${tonight.when}, ${tonight.title}` : null,

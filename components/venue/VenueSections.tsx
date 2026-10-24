@@ -4,14 +4,14 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { Button } from '../ds/Button'
 import { EventCard } from '../ds/EventCard'
 import { MapCard } from '../ds/MapCard'
-import { TimeBadge } from '../ds/MonoFamily'
+import { MonoRun, TimeBadge } from '../ds/MonoFamily'
 import { SectionHeader } from '../ds/SectionHeader'
 import { font, minTarget, PRESSED_WASH, useBoldText } from '../ds/shared'
 import { TimeRing } from '../ds/TimeRing'
 import { Icon } from '../ui/Icon'
 import ScalePress from '../motion/ScalePress'
 import type { VenueDetail } from '../../lib/apiClient'
-import { COLOR, FONT_FAMILY, ICON, PRESS, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, PRESS, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { distanceText } from '../../lib/placesPane'
 import { startsLabel } from '../../lib/roomMoments'
 import { useSessionTime } from '../../lib/useSessionTime'
@@ -156,16 +156,23 @@ export function UpcomingList({
           onPress={() => onOpen(r.id)}
           android_ripple={{ color: PRESSED_WASH.android }}
           accessibilityRole="button"
-          accessibilityLabel={`${r.title}, ${r.day}`}
+          accessibilityLabel={`${r.title}, ${r.day}, ${r.time}`}
           style={styles.upcoming}
           testID={`venue-upcoming-${r.id}`}
         >
-          <Text numberOfLines={1} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary, styles.tabular, styles.day]}>
-            {r.day}
+          <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary, styles.tabular, styles.day]}>
+            <MonoRun text={r.day} />
           </Text>
-          <Text numberOfLines={1} style={[font('bodyStrong', bold), styles.ink, styles.upcomingTitle]}>
+          {/* Two lines for the title; the start time and a chevron say when, and that the row opens the event (C36). */}
+          <Text numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink, styles.upcomingTitle]}>
             {r.title}
           </Text>
+          <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary, styles.tabular, styles.upcomingTime]}>
+            <MonoRun text={r.time} />
+          </Text>
+          <View testID="venue-upcoming-chevron" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+            <Icon name="chevron-right" size={ICON.inline} color={COLOR.textTertiary} />
+          </View>
         </Pressable>
       ))}
     </Section>
@@ -368,6 +375,7 @@ const styles = StyleSheet.create({
   // A date never wraps ("Sun 25 / Oct"): it is as wide as it needs, no narrower than the column, so titles still line up.
   day: { minWidth: DAY_WIDTH, flexShrink: 0 },
   upcomingTitle: { flex: 1 },
+  upcomingTime: { flexShrink: 0 },
   note: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.sm },
   noteIcon: { marginTop: SPACE.xxs },
   boardRow: {
