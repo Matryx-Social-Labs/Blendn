@@ -206,24 +206,27 @@ export type NightsView =
   /**
    * `locked`: the older nights kept behind Blend'n+, said under the tiles (S-1: a free account sees its latest 3 ended).
    * `running`: nights the count has that the grid doesn't yet, because they haven't ended (RC 7: "4 NIGHTS" over one tile).
+   * `ended`: every night that has ended, since you joined, the locked ones included: with `running`, the NIGHTS stat
+   * (rc7: the line counted the shown tiles in 12 weeks, "3 nights out" under 46).
    */
-  | { kind: 'tiles'; failed: boolean; nights: number; locked: number; running: number }
+  | { kind: 'tiles'; failed: boolean; ended: number; locked: number; running: number }
 
 export function nightsView(
   status: NightsStatus,
   rows: readonly { id: string; start_time: string }[],
   lockedCount: number = 0,
   total: number | null = null,
-  running: number = 0,
-  now: Date = new Date()
+  running: number = 0
 ): NightsView {
   if (rows.length > 0) {
+    const stillGoing = Math.max(0, running)
     return {
       kind: 'tiles',
       failed: status === 'failed',
-      nights: nightsGrid(rows as { id: string; start_time: string }[], now).nights,
+      // The stat's nights less those still going; an older server with no total: the ended nights listed.
+      ended: total !== null ? Math.max(rows.length, total - stillGoing) : rows.length,
       locked: Math.max(0, lockedCount),
-      running: Math.max(0, running),
+      running: stillGoing,
     }
   }
   if (status === 'loading') return { kind: 'loading' }

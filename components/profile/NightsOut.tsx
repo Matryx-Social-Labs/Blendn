@@ -1,6 +1,6 @@
 import { StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 
-import { nightLabel, nightsView, NIGHT_TILES, NIGHTS_WEEKS, type NightsStatus } from '../../lib/meProfile'
+import { nightLabel, nightsView, NIGHT_TILES, type NightsStatus } from '../../lib/meProfile'
 import { COLOR, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
 import { Banner } from '../ds/Banner'
 import { Button } from '../ds/Button'
@@ -26,8 +26,11 @@ export const FIRST_NIGHT = {
 /** Flow 6 `me` 05: the notice over the last good list. */
 export const NIGHTS_FAILED = { withTiles: 'Your nights didn’t load. Showing what we had.', alone: 'Your nights didn’t load.' } as const
 
-/** `n nights out in the last 12 weeks`, in one voice for the line and the screen reader. */
-export const nightsLine = (nights: number) => `${nights} ${nights === 1 ? 'night' : 'nights'} out in the last ${NIGHTS_WEEKS} weeks`
+/**
+ * What the count counts, and over what: every ended night since you joined. With the nights still running (said under the
+ * tiles) it is the NIGHTS stat; "in the last 12 weeks" counted the shown tiles only and read "3" under 46 (rc7).
+ */
+export const nightsLine = (ended: number) => `${ended.toLocaleString('en-US')} ended ${ended === 1 ? 'night' : 'nights'} since you joined`
 
 const nightsCount = (n: number) => `${n.toLocaleString('en-US')} ${n === 1 ? 'night' : 'nights'}`
 const landsOnceEnded = (n: number) => `${n === 1 ? 'it lands' : 'they land'} here once ${n === 1 ? 'it ends' : 'they end'}`
@@ -130,7 +133,7 @@ export function NightsOut({
 
       {view.kind === 'tiles' ? (
         <>
-          {view.nights > 0 ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.muted]}>{nightsLine(view.nights)}</Text> : null}
+          {view.ended > 0 ? <Text testID="nights-line" maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.muted]}>{nightsLine(view.ended)}</Text> : null}
           <View testID="nights-grid" style={styles.grid}>
             {events.slice(0, NIGHT_TILES).map((event) => (
               <View key={event.id} style={cell}>

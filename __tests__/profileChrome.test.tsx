@@ -109,13 +109,23 @@ describe('Nights out chooses its state (Me 04 · 05 · 06)', () => {
     expect(nightsCounts({ pagination: { totalCount: 4 }, lockedCount: 0, events }, NOW)).toEqual({ locked: 0, total: 4, running: 3 })
     expect(nightsView('ready', [night(1)], 0, 4, 3)).toMatchObject({ kind: 'tiles', running: 3, locked: 0 })
   })
+  // rc7 (drive 7 report, 4): "3 nights out in the last 12 weeks" under 46, and "40" against 44 ended. The line counted the
+  // shown tiles in a window; it now says every ended night since you joined, which with the running ones is the stat.
+  it('the line counts every ended night, so it and the running nights add up to the stat', () => {
+    const a = nightsView('ready', [night(1), night(2), night(3)], 43, 48, 0)
+    expect(a).toMatchObject({ kind: 'tiles', ended: 48, running: 0 })
+    const c = nightsView('ready', [night(1), night(2), night(3)], 41, 46, 2)
+    expect(c).toMatchObject({ kind: 'tiles', ended: 44, running: 2 })
+    // No total from an older server: the ended nights it listed.
+    expect(nightsView('ready', [night(1), night(2)], 0, null, 0)).toMatchObject({ ended: 2 })
+  })
   it('labels a night the way the tile reads', () => {
     expect(nightLabel(new Date(2025, 9, 3, 20).toISOString())).toBe('Fri 3 Oct')
     expect(nightLabel('nope')).toBe('')
   })
   it('counts in one voice', () => {
-    expect(nightsLine(1)).toBe('1 night out in the last 12 weeks')
-    expect(nightsLine(6)).toBe('6 nights out in the last 12 weeks')
+    expect(nightsLine(1)).toBe('1 ended night since you joined')
+    expect(nightsLine(1048)).toBe('1,048 ended nights since you joined')
   })
 
   const draw = (status: 'loading' | 'ready' | 'failed', events: ReturnType<typeof night>[]) =>
