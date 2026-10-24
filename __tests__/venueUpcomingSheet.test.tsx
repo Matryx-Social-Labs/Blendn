@@ -7,6 +7,7 @@
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
+import { Dimensions, StyleSheet } from 'react-native'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('react-native-reanimated', () => {
@@ -143,6 +144,57 @@ describe('the sheet', () => {
     await flush()
     expect(apiClient.getVenueUpcoming).toHaveBeenCalledTimes(2)
     expect(apiClient.getVenueUpcoming).toHaveBeenLastCalledWith('v1', 'c1', 20)
+  })
+})
+
+describe('a first page that fits without scrolling (GO-04, audit C1: "· 35" with 10 reachable)', () => {
+  const window = Dimensions.get('window')
+  const tall = (height: number) => act(async () => Dimensions.set({ window: { ...window, height }, screen: { ...window, height } }))
+  afterEach(() => tall(window.height))
+  const tens = () =>
+    (apiClient.getVenueUpcoming as jest.Mock)
+      .mockResolvedValueOnce(page(events(5, 10), 'c2', 35))
+      .mockResolvedValueOnce(page(events(15, 10), 'c3', 35))
+      .mockResolvedValueOnce(page(events(25, 10), null, 35))
+
+  it('pages on by itself while the rows fit the list, since no end can be scrolled to: all 35', async () => {
+    await tall(3000)
+    tens()
+    await render(sheet({ total: 35 }))
+    await flush()
+    await flush()
+    await flush()
+    expect(apiClient.getVenueUpcoming).toHaveBeenCalledTimes(3)
+    expect(apiClient.getVenueUpcoming).toHaveBeenNthCalledWith(2, 'v1', 'c2', 20)
+    expect(apiClient.getVenueUpcoming).toHaveBeenNthCalledWith(3, 'v1', 'c3', 20)
+    expect(held()).toHaveLength(35)
+  })
+
+  it('stops once the rows fill the list, and the end of the list brings the rest', async () => {
+    await tall(1400) // a list of 840: 15 rows of 56 still fit, 25 do not
+    tens()
+    await render(sheet({ total: 35 }))
+    await flush()
+    await flush()
+    expect(apiClient.getVenueUpcoming).toHaveBeenCalledTimes(2)
+    expect(held()).toHaveLength(25)
+    await act(async () => {
+      fireEvent(screen.getByTestId('venue-upcoming-list'), 'endReached')
+    })
+    await flush()
+    expect(held()).toHaveLength(35)
+  })
+
+  it('the day keeps its words: no fixed column to cut "Sat 24 Oct"; the title gives way instead', async () => {
+    ;(apiClient.getVenueUpcoming as jest.Mock).mockResolvedValue(page([], null, 5))
+    await render(sheet({ total: 5 }))
+    await flush()
+    const day = screen.getAllByTestId('venue-upcoming-day')[0]
+    const title = screen.getAllByTestId('venue-upcoming-title')[0]
+    const dayStyle = StyleSheet.flatten(day.props.style)
+    expect(dayStyle.width).toBeUndefined()
+    expect(dayStyle.flexShrink).toBe(0)
+    expect(StyleSheet.flatten(title.props.style).flexShrink).toBe(1)
   })
 })
 
