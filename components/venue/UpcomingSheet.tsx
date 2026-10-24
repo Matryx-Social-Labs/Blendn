@@ -128,7 +128,7 @@ export function UpcomingSheet({
             }}
             android_ripple={{ color: PRESSED_WASH.android }}
             accessibilityRole="button"
-            accessibilityLabel={`${item.title}, ${item.day}`}
+            accessibilityLabel={`${item.title}, ${item.day}, ${item.time}`}
             style={styles.row}
             testID={`venue-upcoming-all-${item.id}`}
           >
@@ -143,6 +143,9 @@ export function UpcomingSheet({
             </Text>
             <Text testID="venue-upcoming-title" numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold), styles.ink, styles.title]}>
               {item.title}
+            </Text>
+            <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary, styles.day]}>
+              <MonoRun text={item.time} />
             </Text>
           </Pressable>
         )}

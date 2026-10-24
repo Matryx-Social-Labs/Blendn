@@ -195,6 +195,8 @@ describe('a first page that fits without scrolling (GO-04, audit C1: "· 35" wit
     expect(dayStyle.width).toBeUndefined()
     expect(dayStyle.flexShrink).toBe(0)
     expect(StyleSheet.flatten(title.props.style).flexShrink).toBe(1)
+    // Each row says when, as the page's rows do (GO-13).
+    expect(screen.getByTestId('venue-upcoming-all-e0').props.accessibilityLabel).toBe(`Night 0, ${rows(0, 1)[0].day}, ${rows(0, 1)[0].time}`)
   })
 })
 
