@@ -657,7 +657,7 @@ function EditProfileContent() {
             )}
           </EditCard>
 
-          <EditCard title="Interests" sub={isLoading ? undefined : `${interestIds.length} / ${MAX_INTERESTS}`}>
+          <EditCard title="Interests" sub={isLoading ? undefined : `${interestIds.length} of ${MAX_INTERESTS}`}>
             {isLoading ? (
               <View style={styles.chipsSkeleton}>
                 {[...Array(5)].map((_, i) => (

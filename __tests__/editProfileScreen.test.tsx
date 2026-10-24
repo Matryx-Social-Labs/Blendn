@@ -72,6 +72,15 @@ it('draws the cards in the frame’s order, matching between Photos and Basics',
   expect(titles.filter((t: string) => order.includes(t))).toEqual(order)
 })
 
+// DS-07: picked things count "n of max", the one format ChipSet uses; the spaced "0 / 10" goes. Negative control: the
+// old format fails.
+it('counts the interests picked as "n of max"', async () => {
+  await render(<EditProfile />)
+  await screen.findByDisplayValue('Sam')
+  expect(screen.getByText('0 of 10')).toBeTruthy()
+  expect(screen.queryByText(/\d+ \/ \d+/)).toBeNull()
+})
+
 it('is the six fields’ shape while it loads, then the fields', async () => {
   api.getProfile.mockReturnValue(new Promise(() => {}))
   await render(<EditProfile />)
