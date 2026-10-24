@@ -5,10 +5,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Button } from '../ds/Button'
 import { PresenceDot } from '../ds/MonoFamily'
 import { font, IC_HAIRLINE, PRESSED_WASH, useBoldText, useIncreaseContrast } from '../ds/shared'
+import { Icon } from '../ui/Icon'
 import { Material } from '../ui/Material'
 import { useToastDock } from '../toastDock'
 import type { VenueDetail } from '../../lib/apiClient'
-import { COLOR, FONT_FAMILY, MATERIAL, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, MATERIAL, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useSessionTime } from '../../lib/useSessionTime'
 import { againLabel, spokenLeft, type DockMode } from '../../lib/venuePage'
@@ -79,6 +80,9 @@ function LivePill({ name, live, onZero, onPress }: { name: string; live: VenueDe
  * another time under it; the live pill with Open the room and Leave; the
  * hand-off to an event's check-in; or the server's sentence when going live is
  * not possible here. The client never draws a boundary: it asks the server.
+ *
+ * Go live stays the gradient primary: it is the dock's one CTA (FIX-ROUND-FINAL D1). When it can't be pressed there is
+ * no button at all, disabled or otherwise: a disabled slab can't say why (audit C8). The sentence and its reason do.
  */
 export function VenueDock({
   mode,
@@ -153,10 +157,28 @@ export function VenueDock({
       {mode.kind === 'handoff' ? (
         <Button label={eventTitle ? `Check in to ${eventTitle} instead` : 'Check in to the event'} kind="primary" onPress={onEvent} testID="venue-handoff" />
       ) : null}
-      {mode.kind === 'closed' ? (
-        <Button label={mode.message} kind="secondary" icon="map-pin-off" onGlass disabled testID="venue-closed" />
-      ) : null}
+      {mode.kind === 'closed' ? <ClosedLine message={mode.message} reason={mode.reason} /> : null}
     </Material>
+  )
+}
+
+/** Why going live is not possible here: one read-out, in full at every size (it is not a control, so it is not capped low). */
+function ClosedLine({ message, reason }: { message: string; reason: string | null }) {
+  const bold = useBoldText()
+  return (
+    <View testID="venue-closed" accessible accessibilityLabel={[message, reason].filter(Boolean).join(' ')} style={styles.closed}>
+      <Icon name="map-pin-off" size={ICON.control} color={COLOR.textSecondary} />
+      <View style={styles.closedWords}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>
+          {message}
+        </Text>
+        {reason ? (
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
+            {reason}
+          </Text>
+        ) : null}
+      </View>
+    </View>
   )
 }
 
@@ -188,6 +210,9 @@ const styles = StyleSheet.create({
   extendChip: { height: EXTEND_CHIP, justifyContent: 'center', paddingHorizontal: SPACE.md, borderRadius: RADIUS.capsule, backgroundColor: COLOR.textPrimary },
   endingChip: { height: ENDING_CHIP, justifyContent: 'center', paddingHorizontal: SPACE.sm, borderRadius: RADIUS.capsule, backgroundColor: COLOR.warning },
   ink: { color: COLOR.textPrimary },
+  secondary: { color: COLOR.textSecondary },
+  closed: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.md, minHeight: SIZE.primary, paddingVertical: SPACE.xs },
+  closedWords: { flex: 1, gap: SPACE.xxs },
   onWhite: { color: COLOR.ink },
   tabular: { fontVariant: ['tabular-nums'] },
 })

@@ -169,7 +169,7 @@ export type DockMode =
   | { kind: 'goLive'; again: GoLiveChoice | null }
   | { kind: 'live' }
   | { kind: 'handoff'; eventId: string }
-  | { kind: 'closed'; message: string }
+  | { kind: 'closed'; message: string; reason: string | null }
 
 export function dockMode(action: VenueAction, lastChoice: GoLiveChoice | null): DockMode {
   if (action.kind === 'goLive') return { kind: 'goLive', again: lastChoice }

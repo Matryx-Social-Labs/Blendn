@@ -201,7 +201,7 @@ describe('the dock', () => {
     expect(dockMode({ kind: 'goLive' }, { minutes: 45 })).toEqual({ kind: 'goLive', again: { minutes: 45 } })
     expect(dockMode({ kind: 'live' }, null)).toEqual({ kind: 'live' })
     expect(dockMode({ kind: 'handoff', eventId: 'e1' }, null)).toEqual({ kind: 'handoff', eventId: 'e1' })
-    expect(dockMode({ kind: 'closed', message: 'You can’t go live here yet.' }, null)).toEqual({ kind: 'closed', message: 'You can’t go live here yet.' })
+    expect(dockMode({ kind: 'closed', message: 'You can’t go live here yet.', reason: null }, null)).toEqual({ kind: 'closed', message: 'You can’t go live here yet.', reason: null })
   })
 
   it('go live again names the window; a stay is never repeated in one tap', () => {

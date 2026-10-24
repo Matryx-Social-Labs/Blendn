@@ -70,6 +70,7 @@ import type { VenueDetail } from '../lib/apiClient'
 import { apiClient } from '../lib/apiClient'
 import { openBlendn } from '../lib/blendnOverlay'
 import { checkOutOf } from '../lib/checkIn'
+import { NO_AREA_REASON } from '../lib/goLive'
 import { H } from '../lib/haptics'
 import { openInMaps } from '../lib/openInMaps'
 import { openTonight } from '../lib/paywall'
@@ -591,11 +592,13 @@ describe('the dock', () => {
     expect(screen.queryByText('Tonight here')).toBeNull()
   })
 
-  it('no check-in area: the server’s sentence on a disabled button, and nothing to press', async () => {
+  it('no check-in area (GO-06, audit C8): a sentence and its reason, never a disabled slab or a dead gradient', async () => {
     await mount(venue({ live: { open: false, closedReason: 'no_check_in_area' } }))
-    const closed = screen.getByRole('button', { name: 'You can’t go live here yet.' })
-    expect(closed.props.accessibilityState).toMatchObject({ disabled: true })
+    expect(screen.getByText('You can’t go live here yet.')).toBeTruthy()
+    expect(screen.getByText(NO_AREA_REASON)).toBeTruthy()
+    expect(screen.getByLabelText(`You can’t go live here yet. ${NO_AREA_REASON}`)).toBeTruthy()
     expect(screen.queryByTestId('venue-go-live')).toBeNull()
+    expect(within(screen.getByTestId('venue-dock')).queryAllByRole('button')).toHaveLength(0)
   })
 })
 
