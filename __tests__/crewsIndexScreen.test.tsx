@@ -103,6 +103,8 @@ describe('Crews', () => {
     expect(screen.getByLabelText('Orbit, Crew of 6')).toBeTruthy()
     expect(screen.getByLabelText('Your crews, 2')).toBeTruthy()
     expect(screen.getByText(FOOTNOTE)).toBeTruthy()
+    // rc7 first pass: it read "Where your crew is shows once you’ve checked in somewhere."
+    expect(FOOTNOTE).toBe('Once you’ve checked in somewhere, you’ll see where your crew is.')
     expect(screen.getByTestId('crews-make')).toBeTruthy()
     await fireEvent.press(screen.getByLabelText('Nebula, Crew of 4'))
     expect(router.push).toHaveBeenCalledWith({ pathname: '/crews/[crewId]', params: { crewId: 'c-nebula' } })

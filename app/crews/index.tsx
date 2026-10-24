@@ -40,7 +40,7 @@ const FIRST_ITEM_MS = 600
 /** Three rows of the card, so the list does not jump when it lands. */
 const SKELETON_ROWS = 3
 /** D-L18: what the footnote means, in one plain sentence. */
-export const FOOTNOTE = 'Where your crew is shows once you’ve checked in somewhere.'
+export const FOOTNOTE = 'Once you’ve checked in somewhere, you’ll see where your crew is.'
 
 /**
  * Your crews, and the invites waiting for you (Flow 10 · 10.1).
