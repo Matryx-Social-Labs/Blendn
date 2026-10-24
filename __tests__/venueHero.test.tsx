@@ -2,9 +2,9 @@
  * The venue hero's stretch (DS #32, audit P2): pulled past the top, the picture
  * grows from its foot by exactly what the bounce uncovers, and is still at rest.
  */
-import { render, screen } from '@testing-library/react-native'
+import { act, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { Animated, StyleSheet } from 'react-native'
+import { Animated, Dimensions, StyleSheet } from 'react-native'
 
 import { PLATE_FADE_BY, plateFade, stretchScale, VENUE_HERO_HEIGHT, VenueHero } from '../components/venue/VenueHero'
 import { PageWash, PAGE_WASH } from '../components/ui/GradientFill'
@@ -88,5 +88,47 @@ describe('the hero as it scrolls under the circles (r7 L2, L3)', () => {
     expect(wash.props.colors[0]).toBe(COLOR.ink)
     expect(wash.props.colors[wash.props.colors.length - 1]).toBe(COLOR.ink)
     expect(wash.props.locations).toEqual([0, PAGE_WASH.leadIn, 1])
+  })
+})
+
+describe('at AX XXXL (GO-05, audit C5/C37)', () => {
+  const window = Dimensions.get('window')
+  const atScale = (fontScale: number) => act(async () => Dimensions.set({ window: { ...window, fontScale }, screen: { ...window, fontScale } }))
+  afterEach(() => atScale(2))
+  /** The header reads what the hero shows: the name, then its line. */
+  const words = () => screen.getByRole('header').props.accessibilityLabel as string
+
+  it('the plate’s glyph rises to the top third, out of the way of the words that grow up into it', async () => {
+    await atScale(1)
+    await render(hero(new Animated.Value(0)))
+    expect(StyleSheet.flatten(screen.getByTestId('venue-hero-plate-frame', { includeHiddenElements: true }).props.style).top).toBe(0)
+    await screen.unmount()
+    await atScale(3.571)
+    await render(hero(new Animated.Value(0)))
+    const frame = StyleSheet.flatten(screen.getByTestId('venue-hero-plate-frame', { includeHiddenElements: true }).props.style)
+    // A frame from -H/3 to the foot is centred on H/3: the glyph's centre is a third of the way down.
+    expect(frame.top).toBeCloseTo(-VENUE_HERO_HEIGHT / 3)
+    expect(frame.bottom).toBe(0)
+  })
+
+  it('drops the address (Where has it in full) and caps what is left', async () => {
+    await atScale(3.571)
+    await render(hero())
+    expect(words()).not.toContain('Indiranagar')
+    expect(words()).toContain('Brewery')
+    // Every outermost Text is capped (a nested run is drawn at its parent's scale).
+    const uncapped: string[] = []
+    const walk = (n: { type: string; props: Record<string, unknown>; children: unknown[] | null }) => {
+      if (n.type === 'Text') return void (n.props.maxFontSizeMultiplier ? null : uncapped.push(JSON.stringify(n.children)))
+      ;(n.children ?? []).forEach((c) => typeof c === 'object' && c && walk(c as never))
+    }
+    walk(screen.toJSON() as never)
+    expect(uncapped).toEqual([])
+  })
+
+  it('at ordinary sizes the address stays', async () => {
+    await atScale(1)
+    await render(hero())
+    expect(words()).toContain('Indiranagar')
   })
 })

@@ -8,7 +8,7 @@
  */
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native'
 import React from 'react'
-import { AppState, Linking, StyleSheet } from 'react-native'
+import { AppState, Dimensions, Linking, StyleSheet } from 'react-native'
 
 const NOW = Date.parse('2026-10-09T20:00:00.000Z')
 const mockOpenURL = jest.fn(() => Promise.resolve())
@@ -192,7 +192,11 @@ describe('before it is drawn', () => {
 
 describe('the place, not live', () => {
   it('the hero names the place, its type, area and distance; the bucket is a pill; the dock offers Go live', async () => {
+    // At an ordinary text size: at the accessibility sizes the address leaves the hero (GO-05). Jest's window is at 2.
+    const window = Dimensions.get('window')
+    Dimensions.set({ window: { ...window, fontScale: 1 }, screen: { ...window, fontScale: 1 } })
     await mount()
+    Dimensions.set({ window, screen: window })
     expect(screen.getByRole('header', { name: 'The Humming Tree, Live music venue · 298, 100 Feet Road, 350 m' })).toBeTruthy()
     expect(screen.getByText('5–9 live')).toBeTruthy()
     expect(screen.queryByTestId('venue-you-live')).toBeNull()
