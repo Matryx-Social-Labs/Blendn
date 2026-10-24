@@ -8,6 +8,7 @@ import { readStoredCity } from './cityStorage'
 import { liveWindow } from './eventSession'
 import { getDistanceKm } from './geo'
 import { Logger } from './logger'
+import { printable } from './pulseSections'
 import { pickTonight } from './roomMoments'
 import { FIX_MAX_AGE_MS, FIX_REQUIRED_ACCURACY_M, fixOf, type PreciseFix } from './roomButton'
 import { getRoomSignal, publishRoomSignal, subscribeRoomSignal } from './roomSignal'
@@ -122,8 +123,8 @@ function toTonight(
     capacity: e.max_capacity > 0 ? e.max_capacity : null,
     going: e.is_favorited || goingIds.has(e.id),
     tasteMatchCount: null,
-    // The list's `goingCount` (RSVPs), the same number as the detail's `stats.rsvpCount`.
-    goingCount: e.going_count,
+    // The list's `goingCount` (RSVPs), the same number as the detail's `stats.rsvpCount`; under five it is not said.
+    goingCount: printable(e.going_count),
   }
 }
 

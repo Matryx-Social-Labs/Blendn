@@ -60,6 +60,16 @@ describe('hero and compact', () => {
     expect(screen.getByText('42 going', { includeHiddenElements: true })).toBeTruthy()
   })
 
+  it('says no count under five, from any caller: not "4 going", not "3 here now" (rc7 D2)', async () => {
+    await render(<EventCard kind="hero" {...VINYL} going={4} />)
+    expect(screen.queryByText('4 going', { includeHiddenElements: true })).toBeNull()
+    expect(screen.getByRole('button').props.accessibilityLabel).toBe('Vinyl Night, 9 PM, at Toit, 1.2 km')
+    await render(<EventCard kind="hero" {...VINYL} here={3} going={4} testID="e" />)
+    expect(screen.queryByTestId('e-here', { includeHiddenElements: true })).toBeNull()
+    await render(<EventCard kind="hero" {...VINYL} going={5} />)
+    expect(screen.getByText('5 going', { includeHiddenElements: true })).toBeTruthy()
+  })
+
   it('saved: the white ribbon, “You’re going · 9 PM”, the time in Geist Mono, read first', async () => {
     await render(<EventCard kind="compact" {...VINYL} saved="9 PM" testID="e" />)
     expect(flat('e-saved')).toMatchObject({ backgroundColor: COLOR.textPrimary, borderRadius: RADIUS.capsule })

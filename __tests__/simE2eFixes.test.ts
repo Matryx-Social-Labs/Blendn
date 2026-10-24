@@ -57,7 +57,7 @@ describe('the conversation ⋮ menu', () => {
 describe('Tonight reads "N going" off the list', () => {
   it('maps the list’s goingCount, with no per-event detail fetch (the N+1 it replaced)', () => {
     const src = read('lib', 'useTonight.ts')
-    expect(src).toContain('goingCount: e.going_count')
+    expect(src).toContain('goingCount: printable(e.going_count)')
     expect(src).not.toMatch(/apiClient\s*\.getEvent\(/)
   })
 })

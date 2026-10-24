@@ -11,7 +11,7 @@ import { PhotoScrim } from '../ui/GradientFill'
 import { COLOR, FONT_FAMILY, ICON, PRESS, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { Icon } from '../ui/Icon'
 import { VenuePlate } from './VenuePlate'
-import { PROMOTED_LABEL } from '../../lib/pulseSections'
+import { printable, PROMOTED_LABEL } from '../../lib/pulseSections'
 import { categoryGlyph } from '../../lib/categoryGlyph'
 import { MonoRun, ScrimPill, TimeBadge } from './MonoFamily'
 import { CONTROL_FONT_CAP, focusRing, font, IC_HAIRLINE, PRESSED_WASH, useBoldText, useIncreaseContrast, useSelection } from './shared'
@@ -32,7 +32,7 @@ export type EventCardProps = {
    */
   lead?: 'distance'
   going?: number
-  /** Inside now, shown as "{n} here now" in place of `going` on a live card. The caller applies the floor of five. */
+  /** Inside now, shown as "{n} here now" in place of `going` on a live card. Both stop at the floor of five (`printable`). */
   here?: number
   /** A paid placement: a "PROMOTED" scrim pill top-right, read first. Editorial picks carry none. */
   promoted?: boolean
@@ -95,6 +95,9 @@ const FOOT_FONT_CAP = 1.5
 const PILL_HEIGHT = 28
 const QUICK_ACTIONS = [{ name: 'quickActions', label: 'Quick actions' }]
 
+/** The counts the card may say: five and up, from any caller ("4 going" names who they are; rc7 D2). */
+const crowd = ({ here, going }: Pick<EventCardProps, 'here' | 'going'>) => ({ here: printable(here), going: printable(going) })
+
 /** "{You're going, }{title}, {time}, at {venue}, {distance}, {N} going": the pills are not separate elements. */
 export function eventLabel({
   title,
@@ -106,7 +109,8 @@ export function eventLabel({
   promoted,
   saved,
 }: Pick<EventCardProps, 'title' | 'time' | 'venue' | 'distance' | 'going' | 'here' | 'promoted' | 'saved'>) {
-  const people = here ? `${here} here now` : going ? `${going} going` : null
+  const { here: inside, going: coming } = crowd({ here, going })
+  const people = inside ? `${inside} here now` : coming ? `${coming} going` : null
   // "Live" leads the way "Promoted" does: it is the first thing to know about the card.
   const live = time === 'Live'
   const parts = [saved ? 'You’re going' : null, title, live ? null : time, `at ${venue}`, distance, people].filter(Boolean).join(', ')
@@ -130,12 +134,13 @@ export function eventLabel({
  * on the card and the scrim 20% deeper.
  */
 export function EventCard(props: EventCardProps) {
-  const { kind, title, time, venue, distance, lead, going, here, promoted, cover, plate, category, saved, onPress, onPressIn, onLongPress, previewState, scrimFoot, testID, style } = props
+  const { kind, title, time, venue, distance, lead, promoted, cover, plate, category, saved, onPress, onPressIn, onLongPress, previewState, scrimFoot, testID, style } = props
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const android = Platform.OS === 'android'
   const [focused, setFocused] = useState(false)
   const label = props.label ?? eventLabel(props)
+  const { here, going } = crowd(props)
   const box = useRef<View>(null)
   const hold = onLongPress
     ? () => {
