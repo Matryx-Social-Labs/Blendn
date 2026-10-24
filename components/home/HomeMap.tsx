@@ -592,7 +592,7 @@ export const HomeMap = memo(function HomeMap({
           />
         </GeoJSONSource>
         <Chips chips={lit.chips} onOpen={open} />
-        <NearPins pins={nearPins} />
+        <NearPins pins={nearPins} you={center} />
       </Map>
       {mapUp ? <MapCredit text={mapCreditLine(ownTiles, typeof style !== 'string')} top={topChrome + SPACE.sm} gestures={gestures} /> : null}
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.fade, fadeStyle]} />

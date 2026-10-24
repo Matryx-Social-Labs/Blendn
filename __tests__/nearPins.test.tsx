@@ -7,7 +7,7 @@ import React from 'react'
 
 jest.mock('@maplibre/maplibre-react-native', () => {
   const { View } = jest.requireActual('react-native')
-  return { Marker: ({ id, children }: { id: string; children: React.ReactNode }) => <View testID={`marker-${id}`}>{children}</View> }
+  return { Marker: ({ id, children, offset }: { id: string; children: React.ReactNode; offset?: [number, number] }) => <View testID={`marker-${id}`} offset={offset}>{children}</View> }
 })
 
 // eslint-disable-next-line import/first
@@ -30,5 +30,20 @@ describe('NearPins', () => {
   it('no pins, no markers', async () => {
     await render(<NearPins pins={[]} />)
     expect(screen.queryByTestId(/^marker-/)).toBeNull()
+  })
+})
+
+describe('a pin beside you (rc7 D16)', () => {
+  const { LIFT_NEAR_YOU } = jest.requireActual('../components/home/NearPins')
+  it('is lifted clear of the you-dot; one further off stays on its point', async () => {
+    const you = { latitude: 12.9, longitude: 77.6 }
+    await render(<NearPins you={you} pins={[{ id: 'a', lat: 12.9003, lon: 77.6, n: 4 }, { id: 'b', lat: 12.95, lon: 77.62, n: 2 }]} />)
+    expect(screen.getByTestId('marker-near-a').props.offset).toEqual([0, -LIFT_NEAR_YOU])
+    expect(screen.getByTestId('marker-near-b').props.offset).toBeUndefined()
+  })
+
+  it('with no fix, nothing moves', async () => {
+    await render(<NearPins pins={[{ id: 'a', lat: 12.9003, lon: 77.6, n: 4 }]} />)
+    expect(screen.getByTestId('marker-near-a').props.offset).toBeUndefined()
   })
 })
