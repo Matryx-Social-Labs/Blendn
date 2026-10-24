@@ -45,11 +45,14 @@ export function VenuePlate({
   type,
   size,
   radius,
+  glyph = true,
   testID,
 }: {
   type: string
   size?: number
   radius?: number
+  /** `false`: the two colours alone, for a plate behind words of its own. */
+  glyph?: boolean
   testID?: string
 }) {
   const plate: PlateType = Object.hasOwn(PLATE_COLOURS, type) ? (type as PlateType) : 'bar'
@@ -66,11 +69,7 @@ export function VenuePlate({
       importantForAccessibility="no-hide-descendants"
     >
       <View style={[styles.secondHalf, { backgroundColor: b }]} />
-      <Icon
-        name={VENUE_PLATE_GLYPHS[plate]}
-        size={Math.round((size ?? FILL_BASIS) * GLYPH_SHARE)}
-        color={PALETTE_GLYPH.plate}
-      />
+      {glyph ? <Icon name={VENUE_PLATE_GLYPHS[plate]} size={Math.round((size ?? FILL_BASIS) * GLYPH_SHARE)} color={PALETTE_GLYPH.plate} /> : null}
     </View>
   )
 }
