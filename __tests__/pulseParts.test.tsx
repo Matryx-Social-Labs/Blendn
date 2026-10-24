@@ -67,11 +67,13 @@ describe('the city picker', () => {
     expect(screen.getByTestId('city-no-match')).toBeTruthy()
   })
 
-  it('marks the chosen city, and counts in Geist Mono: "on" for events, "places" for a city with none, "Coming soon" for none', async () => {
+  it('marks the chosen city, and counts in Geist Mono: "events", "places" for a city with none, "Coming soon" for none', async () => {
     await render(picker())
     expect(screen.getByTestId('city-row-Bengaluru').props.accessibilityState).toMatchObject({ selected: true })
     expect(screen.getByTestId('city-row-Mumbai').props.accessibilityState).toMatchObject({ selected: false })
-    expect(screen.getByTestId('city-row-Mumbai')).toHaveTextContent(/9 on/)
+    // One unit cue per row (GO-10, A6): "9 events" beside "31 places", never a bare "9 on".
+    expect(screen.getByTestId('city-row-Mumbai')).toHaveTextContent(/9 events/)
+    expect(screen.getByRole('header', { name: 'Browse in' })).toBeTruthy()
     expect(screen.getByTestId('city-row-Mysuru')).toHaveTextContent(/31 places/)
     expect(screen.getByTestId('city-row-Goa')).toHaveTextContent(/Coming soon/)
   })
