@@ -9,7 +9,7 @@ import Animated, {
 } from 'react-native-reanimated'
 
 import { CategoryPlate } from '../ds/EventCard'
-import { ScrimPill, TimeBadge, monoCaption } from '../ds/MonoFamily'
+import { ScrimPill, TimeBadge } from '../ds/MonoFamily'
 import { CONTROL_FONT_CAP, font, useBoldText } from '../ds/shared'
 import { PhotoScrim, StatusScrim } from '../ui/GradientFill'
 import { COLOR, RADIUS, SPACE } from '../../lib/design/tokens'
@@ -134,15 +134,8 @@ export function SceneHero({
         accessibilityLabel={[title, whenSpoken ?? when, ...pills.map((p) => p.text), place].filter(Boolean).join('. ')}
       >
         <View style={styles.pills}>
-          {struck ? (
-            <ScrimPill>
-              <Text style={[monoCaption(bold), styles.ink, styles.struck]} maxFontSizeMultiplier={CONTROL_FONT_CAP}>
-                {when}
-              </Text>
-            </ScrimPill>
-          ) : (
-            <TimeBadge when={when} testID="scene-when" />
-          )}
+          {/* A cancelled night strikes the time, never the middot between (DS-20, B-S16). */}
+          <TimeBadge when={when} struck={struck} testID="scene-when" />
           {pills.map((p) =>
             p.white ? (
               <View key={p.key} testID={`scene-pill-${p.key}`} style={styles.whitePill}>
@@ -186,6 +179,5 @@ const styles = StyleSheet.create({
   pills: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm, marginBottom: SPACE.xs },
   ink: { color: COLOR.textPrimary },
   onWhite: { color: COLOR.ink },
-  struck: { textDecorationLine: 'line-through', textDecorationColor: COLOR.textSecondary },
   whitePill: { height: PILL_HEIGHT, justifyContent: 'center', paddingHorizontal: SPACE.md, borderRadius: RADIUS.capsule, backgroundColor: COLOR.textPrimary },
 })

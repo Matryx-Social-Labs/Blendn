@@ -127,13 +127,13 @@ describe('SceneHero', () => {
     expect(screen.queryByTestId('scene-hero-plate', { includeHiddenElements: true })).toBeNull()
   })
 
-  it('a cancelled event: the date struck through and a white Cancelled pill', async () => {
+  it('a cancelled event: the DS TimeBadge strikes the time but never the middot (DS-20, B-S16), and a white Cancelled pill', async () => {
     await render(hero({ struck: true, pills: [{ key: 'cancelled', text: 'Cancelled', white: true }] }))
-    expect(screen.getByText('Sat 24 Oct · 9 PM', { includeHiddenElements: true }).props.style).toEqual(
-      expect.arrayContaining([expect.objectContaining({ textDecorationLine: 'line-through' })])
-    )
+    const hidden = { includeHiddenElements: true }
+    expect(screen.getByTestId('scene-when', hidden)).toBeTruthy()
+    expect(StyleSheet.flatten(screen.getByText(' · ', hidden).props.style).textDecorationLine).toBeUndefined()
+    expect(StyleSheet.flatten(screen.getByText(/^9 PM$/, hidden).props.style).textDecorationLine).toBe('line-through')
     expect(screen.getByTestId('scene-pill-cancelled')).toBeTruthy()
-    expect(screen.queryByTestId('scene-when')).toBeNull()
   })
 
   it('shows the live badge as the DS TimeBadge', async () => {
