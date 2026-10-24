@@ -2,13 +2,13 @@ import { Fragment, useEffect, useRef } from 'react'
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { GradientFill } from '../ui/GradientFill'
-import { COLOR, FONT_FAMILY, MATERIAL, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, MATERIAL, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { tint } from '../../lib/theme'
 import { HoldToConfirm } from './HoldToConfirm'
 import { RadioRing } from './PlanCard'
 import { Sheet, type SheetAction } from './Sheet'
-import { CONTROL_FONT_CAP, font, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
+import { CONTROL_FONT_CAP, font, PRESSED_WASH, useBoldText, useIncreaseContrast, useSelection } from './shared'
 
 export type GoLiveChoice = 20 | 45 | 60 | 'stay'
 export type GoLiveRefusal = 'notHere' | 'eventOn' | 'noArea' | 'age' | 'closed' | 'gps' | 'timeout' | 'rate' | 'notFound' | 'stay' | 'other'
@@ -24,7 +24,7 @@ const SERVER = {
   notHere: (venue: string) => `You’re not at ${venue} yet.`,
   eventOn: 'An event is on here.',
   noArea: 'You can’t go live here yet.',
-  plus: 'Staying live is part of Blendn+.',
+  plus: 'Staying live is part of Blend’n+.',
 }
 /** The dial's rows: 56 pt; the chips at their end, 24 pt (Flow 11 `goLive`). */
 const ROW_HEIGHT = SIZE.primary
@@ -171,6 +171,7 @@ export function GoLiveSheet({
   const ios = Platform.OS === 'ios'
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
+  const sel = useSelection()
   useLiveHaptic(live, visible)
 
   if (refusal) {
@@ -185,15 +186,16 @@ export function GoLiveSheet({
       visible={visible}
       onClose={busy ? noop : onClose}
       onDismissed={onDismissed}
+      // The venue is named once, in the title; the body and the dial say "here" and "this place" (B-T1: three times).
       title={`Go live at ${venue}`}
-      body={`People in ${venue}’s room tonight see you by your nickname for today. Outside the room, ${venue} only shows how busy it is — never who.`}
+      body="People in the room here tonight see you by your nickname for today. Outside the room, this place only shows how busy it is — never who."
       testID={testID}
     >
       <View accessibilityRole="radiogroup" style={[styles.dial, { backgroundColor: ios ? MATERIAL.fillOnGlass : COLOR.surfaceSunken }]}>
         {CHOICES.map((c, i) => {
           const isStay = c.value === 'stay'
           const rowLocked = isStay && locked
-          const sub = isStay ? (rowLocked ? SERVER.plus : `Keeps you live as long as you’re at ${venue}, up to 4 hours`) : null
+          const sub = isStay ? (rowLocked ? SERVER.plus : 'Keeps you live while you’re here, up to 4 hours') : null
           const chip = isStay ? (rowLocked ? 'Blend’n+' : 'free today') : null
           const selected = choice === c.value
           return (
@@ -213,12 +215,23 @@ export function GoLiveSheet({
                 accessibilityLabel={[c.label, sub, chip].filter(Boolean).join(', ')}
                 accessibilityHint={rowLocked ? 'Opens Blend’n+' : undefined}
                 accessibilityState={{ checked: selected, disabled: busy }}
-                style={({ pressed }) => [styles.row, rowLocked && { opacity: LOCKED_OPACITY }, pressed && ios ? { backgroundColor: PRESSED_WASH.ios } : null]}
+                // The pick is lit (B-T2: a bare radio ring said it alone): the hue's fill behind the row, as a picked RadioCard's.
+                style={({ pressed }) => [
+                  styles.row,
+                  rowLocked && { opacity: LOCKED_OPACITY },
+                  selected ? { backgroundColor: sel.fill } : pressed && ios ? { backgroundColor: PRESSED_WASH.ios } : null,
+                ]}
               >
-                <RadioRing selected={selected} />
+                <RadioRing selected={selected} testID={testID && `${testID}-${c.value}-ring`} />
                 <View style={styles.text}>
-                  <Text style={[font('bodyStrong', bold), { color: rowLocked ? COLOR.textSecondary : COLOR.textPrimary }]}>{c.label}</Text>
-                  {sub ? <Text style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{sub}</Text> : null}
+                  <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold), { color: rowLocked ? COLOR.textSecondary : COLOR.textPrimary }]}>
+                    {c.label}
+                  </Text>
+                  {sub ? (
+                    <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>
+                      {sub}
+                    </Text>
+                  ) : null}
                 </View>
                 {rowLocked ? (
                   <View style={styles.plus} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
@@ -244,11 +257,14 @@ export function GoLiveSheet({
         busyLabel="Going live…"
         busy={busy}
         icon="radio"
+        kind="lit"
         srLabel={`Go live at ${venue} for ${picked.spoken} as ${pseudonym}`}
         onConfirm={onGoLive}
         testID={testID && `${testID}-hold`}
       />
-      <Text style={[font('meta', bold), styles.centre, { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>You can end it anytime.</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.centre, { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>
+        You can end it anytime.
+      </Text>
     </Sheet>
   )
 }

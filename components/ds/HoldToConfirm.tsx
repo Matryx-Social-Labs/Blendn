@@ -10,7 +10,7 @@ import { COLOR, DURATION, ICON, RADIUS, SIZE, SPACE, SPRING } from '../../lib/de
 import { H } from '../../lib/haptics'
 import { OPACITY } from '../../lib/theme'
 import { Button } from './Button'
-import { CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast, useScreenReader } from './shared'
+import { CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast, useScreenReader, useSelection } from './shared'
 
 /** A finger may drift this far and still be holding. */
 const MAX_DRIFT = SPACE.xl
@@ -38,6 +38,12 @@ export type HoldToConfirmProps = {
   /** The server said yes (#9): the fill stays full under this label ("You’re in"), with nothing left to hold. */
   confirmedLabel?: string
   icon?: IconName
+  /**
+   * `gradient` (the default): the check-in's hold, the gradient pouring over `surfaceSunken`. `lit`: a positive action
+   * inside a world (Go Live, PLAN-buttons L3), as `Button kind="lit"`: the hue's fill and 1 pt rim, the hue's flare
+   * pouring in as it fills, a white label. The hold is the same hold.
+   */
+  kind?: 'gradient' | 'lit'
   /** The design gallery only: the fill frozen this far in. */
   previewProgress?: number
   testID?: string
@@ -76,9 +82,12 @@ export function HoldToConfirm({
   refused = false,
   confirmedLabel,
   icon = 'fingerprint-pattern',
+  kind = 'gradient',
   previewProgress,
   testID,
 }: HoldToConfirmProps) {
+  const lit = kind === 'lit'
+  const sel = useSelection()
   const screenReader = useScreenReader()
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
@@ -164,7 +173,7 @@ export function HoldToConfirm({
   const text = confirmedLabel ?? (busy && busyLabel ? busyLabel : label)
   const labelRow = (color: string) => (
     <>
-      <Icon name={icon} size={ICON.control} color={color} />
+      <Icon name={icon} size={ICON.control} color={lit ? sel.glyph : color} />
       <Text
         numberOfLines={1}
         adjustsFontSizeToFit
@@ -192,17 +201,22 @@ export function HoldToConfirm({
           onAccessibilityAction={(e) => {
             if (e.nativeEvent.actionName === 'activate' && !inactive) commit()
           }}
-          style={styles.track}
+          style={[styles.track, lit && { backgroundColor: sel.fill }]}
         >
           <View style={styles.labelRow} pointerEvents="none">
-            {labelRow(COLOR.textSecondary)}
+            {labelRow(lit ? COLOR.textPrimary : COLOR.textSecondary)}
           </View>
           <Animated.View testID={testID && `${testID}-fill`} pointerEvents="none" style={[styles.fill, fillStyle]}>
-            <GradientFill style={StyleSheet.absoluteFill} />
+            {lit ? (
+              <View testID={testID && `${testID}-fill-ground`} style={[StyleSheet.absoluteFill, { backgroundColor: sel.flare }]} />
+            ) : (
+              <GradientFill style={StyleSheet.absoluteFill} />
+            )}
             <Animated.View testID={testID && `${testID}-fill-label`} style={[styles.labelRow, { width }, fillLabelStyle]}>
-              {labelRow(COLOR.textOnGradient)}
+              {labelRow(lit ? COLOR.textPrimary : COLOR.textOnGradient)}
             </Animated.View>
           </Animated.View>
+          {lit ? <View testID={testID && `${testID}-rim`} pointerEvents="none" style={[styles.edge, styles.rim, { borderColor: sel.edge }]} /> : null}
           {contrast ? <View testID={testID && `${testID}-contrast`} pointerEvents="none" style={[styles.edge, IC_HAIRLINE]} /> : null}
         </View>
       </GestureDetector>
@@ -230,4 +244,6 @@ const styles = StyleSheet.create({
   fill: { ...StyleSheet.absoluteFill, overflow: 'hidden' },
   shrink: { flexShrink: 1 },
   edge: { ...StyleSheet.absoluteFill, borderRadius: RADIUS.button },
+  /** The lit kind's rim, as the lit button's: 1 pt in the hue's edge. */
+  rim: { borderWidth: 1 },
 })

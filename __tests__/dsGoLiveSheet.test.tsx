@@ -7,10 +7,13 @@
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { AccessibilityInfo } from 'react-native'
+import { AccessibilityInfo, Dimensions, StyleSheet } from 'react-native'
 
 import { GoLiveSheet } from '../components/ds/GoLiveSheet'
+import { HueProvider } from '../components/ds/shared'
+import { COLOR } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
+import { AX_XXXL, uncapped } from './helpers/ax'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('react-native-reanimated', () => {
@@ -40,13 +43,13 @@ describe('<GoLiveSheet>', () => {
   it('names the room and what others see; four choices as radios', async () => {
     await render(sheet())
     expect(screen.getByRole('header', { name: 'Go live at Toit' })).toBeTruthy()
-    expect(screen.getByText('People in Toit’s room tonight see you by your nickname for today. Outside the room, Toit only shows how busy it is — never who.')).toBeTruthy()
+    expect(screen.getByText('People in the room here tonight see you by your nickname for today. Outside the room, this place only shows how busy it is — never who.')).toBeTruthy()
     const radios = screen.getAllByRole('radio')
     expect(radios.map((r) => r.props.accessibilityLabel)).toEqual([
       '20 min',
       '45 min',
       '1 hour',
-      'Stay while I’m here, Keeps you live as long as you’re at Toit, up to 4 hours, free today',
+      'Stay while I’m here, Keeps you live while you’re here, up to 4 hours, free today',
     ])
     expect(radios[1].props.accessibilityState).toMatchObject({ checked: true })
     expect(screen.getByText('You can end it anytime.')).toBeTruthy()
@@ -99,7 +102,7 @@ describe('<GoLiveSheet>', () => {
     const onChoice = jest.fn()
     await render(sheet({ stay: 'locked', onStayLocked, onChoice }))
     const stay = screen.getAllByRole('radio')[3]
-    expect(stay.props.accessibilityLabel).toBe('Stay while I’m here, Staying live is part of Blendn+., Blend’n+')
+    expect(stay.props.accessibilityLabel).toBe('Stay while I’m here, Staying live is part of Blend’n+., Blend’n+')
     expect(stay.props.accessibilityHint).toBe('Opens Blend’n+')
     await fireEvent.press(stay)
     expect(onStayLocked).toHaveBeenCalledTimes(1)
@@ -162,5 +165,55 @@ describe('<GoLiveSheet>', () => {
     await render(sheet({ refusal: 'eventOn' }))
     expect(screen.getByRole('header', { name: 'An event is on here' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Check in to the event' })).toBeTruthy()
+  })
+})
+
+describe('DS-13 (B-T1, B-T2, B-T3): the venue named once, the lit pick, the lit hold, the brand spelled', () => {
+  const hidden = { includeHiddenElements: true }
+  const allText = () =>
+    screen
+      .getAllByText(/./, hidden)
+      .map((t) => t.props.children)
+      .flat()
+      .filter((c: unknown) => typeof c === 'string')
+      .join(' ')
+
+  it('names the venue once, in the title; the rest says "this place" and "here"', async () => {
+    await render(sheet({ venue: 'The Big Pitcher' }))
+    expect(allText().split('The Big Pitcher').length - 1).toBe(1)
+  })
+
+  it('the picked duration is lit, as a picked RadioCard is: the hue’s fill behind the row and its ring in the hue’s edge, never a bare ring', async () => {
+    await render(
+      <HueProvider value="rose">
+        {sheet()}
+      </HueProvider>
+    )
+    expect(StyleSheet.flatten(screen.getByTestId('g-45').props.style).backgroundColor).toBe(COLOR.selectionRoseFill)
+    expect(StyleSheet.flatten(screen.getByTestId('g-20').props.style).backgroundColor).toBeUndefined()
+    expect(StyleSheet.flatten(screen.getByTestId('g-45-ring', hidden).props.style).borderColor).toBe(COLOR.brandRose)
+  })
+
+  it('the hold is the lit kind: the hue’s fill and rim on the track, the hue’s flare as it fills, no gradient', async () => {
+    await render(sheet())
+    expect(StyleSheet.flatten(screen.getByTestId('g-hold').props.style).backgroundColor).toBe(COLOR.selectionEmberFill)
+    expect(StyleSheet.flatten(screen.getByTestId('g-hold-rim', hidden).props.style).borderColor).toBe(COLOR.brandOrange)
+    expect(StyleSheet.flatten(screen.getByTestId('g-hold-fill-ground', hidden).props.style).backgroundColor).toBe(COLOR.selectionEmberFlare)
+  })
+
+  it('no “Blendn+” anywhere on the sheet, locked or not', async () => {
+    await render(sheet({ stay: 'locked' }))
+    expect(allText()).not.toMatch(/Blendn\+/)
+  })
+
+  it('at AX XXXL every line on the sheet is capped', async () => {
+    const window = Dimensions.get('window')
+    try {
+      await act(async () => Dimensions.set({ window: { ...window, fontScale: AX_XXXL }, screen: { ...window, fontScale: AX_XXXL } }))
+      await render(sheet({ stay: 'locked' }))
+      expect(uncapped(screen.toJSON())).toEqual([])
+    } finally {
+      Dimensions.set({ window, screen: window })
+    }
   })
 })
