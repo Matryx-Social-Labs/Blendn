@@ -322,7 +322,8 @@ export function RepositionHost() {
   const reduceMotion = useReducedMotion()
   useEffect(() => mountRepositionHost(), [])
   // One Modal on screen at a time on iOS (lib/modalTurn).
-  const turn = useQueuedModal(!!photo, { animationMs: reduceMotion ? 0 : MODAL_FADE_MS })
+  // A link mid-crop is a cancel, as system back is: the crop is let go.
+  const turn = useQueuedModal(!!photo, { animationMs: reduceMotion ? 0 : MODAL_FADE_MS, closeForLink: () => settleReposition({ kind: 'cancel' }) })
   return (
     <Modal
       visible={turn.visible}

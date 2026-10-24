@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, us
 import { AppState, Platform } from 'react-native'
 
 import { Logger } from './logger'
+import { onClosingForLink } from './pendingRoute'
 import { useLatest } from './useLatest'
 
 /**
@@ -244,9 +245,24 @@ export function useTurnWatch(gate: TurnGate, modalUp: boolean, { animationMs = 0
   return { refused, onShow, onDismiss }
 }
 
-/** A plain Modal (no exit of its own) that takes its turn: pass `visible`, `onShow` and `onDismiss` to it. */
-export function useQueuedModal(wanted: boolean, options: { animationMs?: number } = {}) {
+/**
+ * A link is somewhere new to go (RC drive 6): while `open`, a link or a notification tap closes this by `close`, its
+ * own close path (system back's), told before the link navigates (lib/pendingRoute `onClosingForLink`). For every Modal
+ * that takes a turn: the DS Sheet and ⋯ menus, and each plain Modal through `useQueuedModal`'s `closeForLink`.
+ */
+export function useClosedByLink(open: boolean, close: (() => void) | undefined): void {
+  const latest = useLatest(close)
+  const registered = open && !!close
+  useEffect(() => (registered ? onClosingForLink(() => latest.current?.()) : undefined), [registered, latest])
+}
+
+/**
+ * A plain Modal (no exit of its own) that takes its turn: pass `visible`, `onShow` and `onDismiss` to it.
+ * `closeForLink`: how a link closes it (its `onRequestClose`); without one a link leaves it up.
+ */
+export function useQueuedModal(wanted: boolean, options: { animationMs?: number; closeForLink?: () => void } = {}) {
   const gate = useTurnGate(wanted)
+  useClosedByLink(wanted, options.closeForLink)
   const watch = useTurnWatch(gate, gate.allowed, options)
   return { visible: gate.allowed && !watch.refused, onShow: watch.onShow, onDismiss: watch.onDismiss }
 }

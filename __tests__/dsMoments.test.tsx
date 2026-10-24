@@ -19,6 +19,7 @@ import { MomentRecap, type MomentRecapProps } from '../components/ds/MomentRecap
 import { COLOR, DURATION, MATERIAL, RADIUS, SPACE, SPRING } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { markOffline, markOnline } from '../lib/networkStatus'
+import { dismissModals } from '../lib/pendingRoute'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('react-native-reanimated', () => {
@@ -575,5 +576,25 @@ describe('/preview/ds-p5', () => {
     expect(screen.getByTestId('ds-recap-rated', HIDDEN)).toBeTruthy()
     expect(screen.getByTestId('ds-orbs-feed-late', HIDDEN)).toBeTruthy()
     expect(screen.getByTestId('ds-emblem-orbit-field', HIDDEN)).toBeTruthy()
+  })
+})
+
+describe('a link and a moment (RC drive 6)', () => {
+  it('closes the match by its own close, once: it is not shown again or asked again', async () => {
+    const { p, el } = match()
+    const view = await render(el)
+    await act(async () => dismissModals())
+    expect(p.onClose).toHaveBeenCalledTimes(1)
+    expect(p.onSayHi).not.toHaveBeenCalled()
+    await view.unmount()
+    await act(async () => dismissModals())
+    expect(p.onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it("leaves onboarding's Ready alone: its only way out (skip) navigates, so a link does not take it", async () => {
+    const onDone = jest.fn()
+    await render(<MomentReady name="Sam" onDone={onDone} testID="ready" />)
+    await act(async () => dismissModals())
+    expect(onDone).not.toHaveBeenCalled()
   })
 })

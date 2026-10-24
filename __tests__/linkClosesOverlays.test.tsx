@@ -9,6 +9,9 @@
  * the running app (expo-linking's `url` event, `+native-intent`). The overlay's own screen is a stand-in: its host is
  * what closes it.
  *
+ * And the plain Modals (the crew's ⋯ menu here; each kind in its own test file) through `useQueuedModal`'s
+ * `closeForLink`.
+ *
  * Negative controls: the tab layout without its `onClosingForLink(blendnClosed)` fails the overlay and intent tests;
  * the Sheet without its registration fails the two sheet-closing tests; `dismissModals` telling its listeners only when a
  * modal route is up (as before) fails the overlay and sheet tests.
@@ -78,6 +81,7 @@ jest.mock('expo-linear-gradient', () => {
 import { blendnClosed, isBlendnOpen, openBlendn } from '../lib/blendnOverlay'
 import { askIntentRoute, intentAnswered, untilIntentAnswered } from '../lib/checkIn'
 import { Sheet } from '../components/ds/Sheet'
+import { OverflowMenu } from '../components/crews/OverflowMenu'
 import { showSheet } from '../lib/sheet'
 import { Sentry } from '../lib/sentry'
 /* eslint-enable import/first */
@@ -98,11 +102,21 @@ const link = async (path: string) => {
 
 /** What the screen's own sheet saw: `closed` when its close request came. */
 const sheetCalls: string[] = []
-const mockSheet = { open: false, dismissible: true }
+const mockSheet = { open: false, dismissible: true, menu: false }
 function EventsTab() {
   const [open, setOpen] = useState(mockSheet.open)
+  const [menu, setMenu] = useState(mockSheet.menu)
   return (
     <View>
+      <OverflowMenu
+        visible={menu}
+        onClose={() => {
+          sheetCalls.push('menu closed')
+          setMenu(false)
+        }}
+        items={[{ icon: 'log-out', label: 'Leave crew', onPress: () => sheetCalls.push('left') }]}
+        testID="crew-menu"
+      />
       <Sheet
         visible={open}
         dismissible={mockSheet.dismissible}
@@ -154,6 +168,7 @@ beforeEach(() => {
   sheetCalls.length = 0
   mockSheet.open = false
   mockSheet.dismissible = true
+  mockSheet.menu = false
   deliverLink = null
   jest.spyOn(console, 'warn').mockImplementation(() => {})
   jest.spyOn(console, 'error').mockImplementation(() => {})
@@ -242,3 +257,14 @@ it('the intent question with a tab as the target: abandoned, and the Room does n
   expect(screen.queryByTestId('blendn-overlay')).toBeNull()
   expect(r.pathname()).toBe('/profile')
 })
+
+it("the crew's ⋯ menu open, then a link: the menu closes, nothing on it runs, the target is on top", async () => {
+  mockSheet.menu = true
+  const r = await mountApp()
+
+  await link('/settings')
+
+  expect(sheetCalls).toEqual(['menu closed'])
+  expect(r.pathname()).toBe('/settings')
+})
+

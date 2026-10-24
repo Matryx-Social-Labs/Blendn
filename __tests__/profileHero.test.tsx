@@ -18,6 +18,7 @@ import { ProfileBar } from '../components/profile/ProfileBar'
 import { MeIdentity } from '../components/profile/MeSections'
 import { ProfileHeroStage } from '../components/profile/ProfileHeroStage'
 import { SIZE, SPACE } from '../lib/design/tokens'
+import { dismissModals } from '../lib/pendingRoute'
 /* eslint-enable import/first */
 
 const stage = (props: Partial<React.ComponentProps<typeof ProfileHeroStage>> = {}) => (
@@ -167,4 +168,11 @@ describe('Me’s name line', () => {
     expect(screen.queryByText(', 28')).toBeNull()
     expect(screen.getByRole('header', { name: 'Rd Four, 28' })).toBeTruthy()
   })
+})
+
+it("a link closes the photo viewer through its own close (RC drive 6)", async () => {
+  const onClose = jest.fn()
+  await render(<PhotoViewer photos={['a', 'b']} visible onClose={onClose} testID="v" />)
+  await act(async () => dismissModals())
+  expect(onClose).toHaveBeenCalledTimes(1)
 })

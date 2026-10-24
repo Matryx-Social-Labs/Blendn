@@ -124,7 +124,7 @@ export function PhotoViewer({ photos, initialIndex = 0, visible, onClose, from, 
   const counter = counterOf(index, photos.length)
 
   // One Modal on screen at a time on iOS (lib/modalTurn).
-  const turn = useQueuedModal(visible)
+  const turn = useQueuedModal(visible, { closeForLink: onClose })
   return (
     <Modal
       testID={testID && `${testID}-modal`}

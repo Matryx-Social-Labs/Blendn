@@ -15,6 +15,7 @@ import { RouteModal } from '../components/system/RouteModal'
 import { Sheet } from '../components/ds/Sheet'
 import { holdTurnWhile, holdsTurn, requestTurn, resetModalTurns, retryDelay } from '../lib/modalTurn'
 import { afterSheetDismissed, HANDOFF_MS } from '../lib/sheetDismissed'
+import { dismissModals } from '../lib/pendingRoute'
 
 /** Modals whose onShow iOS never sends (refused): every other Modal says it is shown as it is drawn. */
 const mockRefused = new Set<string>()
@@ -374,4 +375,16 @@ it('a link opened from a sheet that stays up (Delete account → What’s kept) 
   })
   await act(async () => Promise.resolve())
   expect(opened).toBe(true)
+})
+
+describe('a link closes a plain Modal through its own close (RC drive 6)', () => {
+  it("the crew's ⋯ menu (OverflowMenu): open, a link closes it; closed, it is not asked", async () => {
+    const onClose = jest.fn()
+    const view = await render(<OverflowMenu visible onClose={onClose} items={[]} testID="menu" />)
+    await act(async () => dismissModals())
+    expect(onClose).toHaveBeenCalledTimes(1)
+    await view.rerender(<OverflowMenu visible={false} onClose={onClose} items={[]} testID="menu" />)
+    await act(async () => dismissModals())
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
 })

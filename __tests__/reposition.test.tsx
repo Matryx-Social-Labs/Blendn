@@ -20,6 +20,7 @@ import { Reposition, RepositionHost } from '../components/profile/Reposition'
 import { H } from '../lib/haptics'
 import { cropRect, maxZoomFor } from '../lib/photoCrop'
 import { requestReposition } from '../lib/photoReposition'
+import { dismissModals } from '../lib/pendingRoute'
 
 const PHOTO = { uri: 'file:///a.jpg', width: 4000, height: 3000 }
 const lay = async (width: number, height: number) => {
@@ -107,6 +108,17 @@ describe('the host', () => {
     await lay(400, 700)
     await fireEvent.press(screen.getByTestId('reposition-use'))
     await expect(asked).resolves.toEqual({ kind: 'use', rect: cropRect(PHOTO, { width: 400, height: 520 }, 1, { x: 0, y: 0 }) })
+    expect(screen.queryByText('Use photo')).toBeNull()
+  })
+
+  it('a link mid-crop is a cancel: the crop is let go (RC drive 6)', async () => {
+    await render(<RepositionHost />)
+    let asked!: ReturnType<typeof requestReposition>
+    await act(async () => {
+      asked = requestReposition(PHOTO)
+    })
+    await act(async () => dismissModals())
+    await expect(asked).resolves.toEqual({ kind: 'cancel' })
     expect(screen.queryByText('Use photo')).toBeNull()
   })
 
