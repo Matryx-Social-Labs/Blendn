@@ -2,6 +2,7 @@
  * The Me tab on the design system (Flow 6 `me`): its states render, its circles go where the frame puts them, and the entrance
  * is the DS list-enter (28 ms apart, capped), not the old 70 ms × 9.
  */
+import { SHOWS_UP_TITLE } from '../components/profile/MeBadges'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
 import { AccessibilityInfo, Platform, StyleSheet } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -240,6 +241,8 @@ describe('what GET /profiles/:you adds (blendn-admin #716): badges and photos ta
       await mount({ success: true, data: { profile: { badges, shows_up_badge: true } } })
       const row = await screen.findByTestId('me-shows-up')
       expect(screen.getByText('When 80%+ of your RSVPs turn into nights, 3 or more')).toBeTruthy()
+      // D-L31. Negative control: the old "Show “Shows up”" title fails this.
+      expect(screen.getByText(SHOWS_UP_TITLE)).toBeTruthy()
       await fireEvent.press(row)
       await waitFor(() => expect(api.updateProfile).toHaveBeenCalledWith('me', { shows_up_badge: false }))
       expect(await screen.findByText('Off · earned, not shown')).toBeTruthy()

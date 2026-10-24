@@ -70,6 +70,8 @@ export function MeBadges({
 const SHOWS_UP_ON = 'When 80%+ of your RSVPs turn into nights, 3 or more'
 const SHOWS_UP_OFF = 'Off · earned, not shown'
 
+export const SHOWS_UP_TITLE = 'Show badge: Shows up'
+
 /**
  * Show "Shows up" (Flow 14 · 14.5 #01 to #03): the one opt-in on the card, a switch under a hairline. It changes at once and
  * is written at once; a write the server refuses puts it back and says so under the row (`error`, which plays `H.error`).
@@ -101,7 +103,8 @@ function ShowsUpRow({ value, onChange }: { value: boolean; onChange: (next: bool
       <SettingsRow
         testID="me-shows-up"
         icon="calendar-check"
-        title="Show “Shows up”"
+        // D-L31: what the switch shows, said plainly; "Show “Shows up”" read as a stutter.
+        title={SHOWS_UP_TITLE}
         hint={failed ? 'Couldn’t save that. Try again.' : on ? SHOWS_UP_ON : SHOWS_UP_OFF}
         trail="switch"
         value={on}
