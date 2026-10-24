@@ -202,14 +202,22 @@ the screen reporting emptiness for a night that has not happened.
 
 - **Before `start_time`:** *Going* with the RSVP count, or *Interested* with the
   saved count when nobody has RSVP'd. A real number beats a dash.
-- **After:** *Attendees* with the check-in count.
+- **While it runs:** *Here now* with the check-in count.
+- **After:** *Went* with the check-in count.
+- **Cancelled:** no people tile at all; there is nobody to count.
+
+One word per state, the same in the tile and in the section heading (TG-05, D17;
+`crowdWord` in `EventDetailScreen.tsx`).
 
 ---
 
 ## The coverless case
 
-An event with no cover and no media renders the hero as a dark panel
-(`EMBER.surfaceSunken`) with the title and gradient on it.
+An event with no cover and no media draws its category plate (`CategoryPlate`,
+D8, TG-06): the category's glyph in the screen's hue on the hue's fill, or the
+fill alone when the category has none. The title and pills sit on it as they sit
+on a photograph. The hero reads the slug from `categories[0].slug`
+(`category_slug` on the screen's event).
 
 It previously fell back to `assets/images/icon.png` — a square app icon, drawn
 with `contentFit: 'cover'` into a 440×647 box, so it filled two thirds of the
