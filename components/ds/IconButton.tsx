@@ -8,7 +8,7 @@ import { Material } from '../ui/Material'
 import { COLOR, PRESS, RADIUS, SIZE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { OPACITY } from '../../lib/theme'
-import { focusRing, IC_HAIRLINE, PRESSED_WASH, useIncreaseContrast, useSelection } from './shared'
+import { chipRest, focusRing, IC_HAIRLINE, PRESSED_WASH, useGround, useIncreaseContrast, useSelection } from './shared'
 
 /** The lit disc's rim, as the lit button's and the selected chip's. */
 const LIT_RIM = 1
@@ -67,6 +67,9 @@ export function IconButton({
   const shape = { width: size, height: size, borderRadius: radius }
   const sel = useSelection()
   const white = tier === 'media'
+  // On a surface card (`GroundProvider value="surface"`) glass has nothing to refract and drew no disc (C20, the request
+  // card's "…" on iOS): the circle is solid there, in the card's chip tone, on both platforms.
+  const onCard = useGround() === 'surface' && tier === 'control'
   const glyphColor = !selected ? COLOR.textPrimary : white ? COLOR.selectionInk : sel.glyph
   const disc = white ? styles.selected : { backgroundColor: sel.fill, borderWidth: LIT_RIM, borderColor: sel.edge, borderRadius: radius }
 
@@ -101,6 +104,8 @@ export function IconButton({
             never see `selected` rise, and so never pop. */}
         {selected ? (
           <View testID={testID && `${testID}-selected`} style={[StyleSheet.absoluteFill, disc]} />
+        ) : onCard ? (
+          <View testID={testID && `${testID}-disc`} style={[StyleSheet.absoluteFill, { backgroundColor: chipRest('surface'), borderRadius: radius }]} />
         ) : (
           <Material role={tier} style={[StyleSheet.absoluteFill, { borderRadius: radius }]} />
         )}
