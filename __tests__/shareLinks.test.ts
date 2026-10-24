@@ -93,6 +93,14 @@ describe('the native intent: what the router gets for an incoming link', () => {
     expect(nativeIntentPath(`/event/${ID}`)).toBe(`/event/${ID}`)
   })
 
+  it('an invite by the app scheme reaches the invite screen in every slash form, a token the server will refuse included (rc7 R1)', () => {
+    // The drive's iOS link was `blendn:///f/<token>` (an empty host); `blendn://f/<token>` is what the web page opens.
+    for (const link of [`blendn:///f/${TOKEN}`, `blendn://f/${TOKEN}`, 'blendn:///f/RC5NOTATOKEN']) {
+      expect(nativeIntentPath(link)).toMatch(/^\/f\/[A-Za-z0-9_-]+$/)
+    }
+    expect(nativeIntentPath('blendn:///f/RC5NOTATOKEN')).toBe('/f/RC5NOTATOKEN')
+  })
+
   it.each([
     ['https event', `https://www.blendn.app/event/${ID}`, `/event/${ID}`],
     ['https short event', `https://www.blendn.app/e/${ID}`, `/event/${ID}`],
