@@ -123,3 +123,19 @@ describe('both: the one thing left once you can see each other is to add them (S
     expect(screen.queryByRole('button')).toBeNull()
   })
 })
+
+describe('rc7 D8', () => {
+  it('the eye line shrinks to one line with an ellipsis rather than run past the card at 1.3× / 360', async () => {
+    await draw()
+    const eye = screen.getAllByText('anonymous', { includeHiddenElements: true })[0]
+    expect(eye.props.numberOfLines).toBe(1)
+    expect(StyleSheet.flatten(eye.props.style)).toMatchObject({ flexShrink: 1 })
+  })
+
+  it('your side before you show yourself reads "You", never "You · anonymous" over an eye that says anonymous', async () => {
+    await draw({ you: { face: { kind: 'creature', pseudonym: 'You' }, name: 'You' } })
+    expect(screen.getByText('You', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.queryByText(/You · /, { includeHiddenElements: true })).toBeNull()
+    expect(screen.getByLabelText('You, anonymous. Cosmic Panda, anonymous.')).toBeTruthy()
+  })
+})

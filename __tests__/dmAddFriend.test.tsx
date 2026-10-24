@@ -305,7 +305,8 @@ describe('the card in the thread, once you can both see each other', () => {
 
   it('reads both sides as seen', async () => {
     await open(withFriend({ state: 'none', canAdd: true }))
-    expect(screen.getByLabelText(/^You, .*, seen\. Mika, seen\.$/)).toBeTruthy()
+    // Your first name when the account has one, else "You" alone (rc7 D8: never "You, You").
+    expect(screen.getByLabelText(/^You(, [^,]+)?, seen\. Mika, seen\.$/)).toBeTruthy()
   })
 
   it('an incoming request reads "Accept friend request"', async () => {

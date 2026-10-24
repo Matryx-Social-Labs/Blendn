@@ -31,6 +31,9 @@ const SIDE_FACE = 36
  * anonymous. Cosmic Panda, anonymous." then the actions. Names and the eye
  * line cap at 1.3×; Increase Contrast: the 50% hairline and the eye line white.
  */
+/** Your side's name before you have shown yourself. */
+export const YOU = 'You'
+
 export function RevealBar({
   state,
   you,
@@ -60,23 +63,26 @@ export function RevealBar({
   const themSeen = state === 'theyOnly' || state === 'both'
   const quiet = contrast ? COLOR.textPrimary : COLOR.textSecondary
   const seenWord = (seen: boolean) => (seen ? 'seen' : 'anonymous')
+  // Your side before you have shown yourself carries no name of its own ("You"), so it reads "You", never "You · You".
+  const yourName = you.name === YOU ? null : you.name
 
   const side = (who: RevealSide, mine: boolean, seen: boolean) => (
     <View style={styles.side}>
       <Avatar size={SIDE_FACE} {...who.face} />
       <View style={styles.sideText}>
-        {mine && narrow ? (
+        {mine && narrow && yourName ? (
           <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), styles.ink]}>
             You
           </Text>
         ) : null}
         {/* Each name may take two lines rather than be cut to a few letters (C26, C27). */}
         <Text numberOfLines={2} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), styles.ink]}>
-          {mine && !narrow ? `You · ${who.name}` : who.name}
+          {mine ? (yourName ? (narrow ? yourName : `You · ${yourName}`) : YOU) : who.name}
         </Text>
         <View style={styles.eye}>
           <Icon name={seen ? 'eye' : 'eye-off'} size={ICON.inline} color={quiet} />
-          <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), { color: quiet }]}>
+          {/* Shrinks and ends in "…" rather than run past the card at 1.3× / 360 dp ("anonymou|s", rc7 D8). */}
+          <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), styles.shrink, { color: quiet }]}>
             {seenWord(seen)}
           </Text>
         </View>
@@ -89,7 +95,7 @@ export function RevealBar({
       <Material role="sheet" style={[StyleSheet.absoluteFill, styles.radius]} />
       <View
         accessible
-        accessibilityLabel={`You, ${you.name}, ${seenWord(youSeen)}. ${them.name}, ${seenWord(themSeen)}.`}
+        accessibilityLabel={`${yourName ? `You, ${yourName}` : YOU}, ${seenWord(youSeen)}. ${them.name}, ${seenWord(themSeen)}.`}
         style={styles.sides}
       >
         {side(you, true, youSeen)}

@@ -19,7 +19,7 @@ import { LongPressMenu, type MenuItem } from '../../components/ds/ContextMenu'
 import type { Face } from '../../components/ds/Facepile'
 import { Grain } from '../../components/ds/Grain'
 import { ImageViewer } from '../../components/ds/ImageViewer'
-import { RevealBar } from '../../components/ds/RevealBar'
+import { RevealBar, YOU } from '../../components/ds/RevealBar'
 import { HueProvider } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { TypingIndicator } from '../../components/ds/TypingIndicator'
@@ -879,7 +879,7 @@ function PrivateChatInner() {
         >
           <RevealBar
             state={view.bar}
-            you={{ face: youFace, name: reveal?.youRevealed ? authUser?.name?.split(' ')[0] || 'You' : 'anonymous' }}
+            you={{ face: youFace, name: reveal?.youRevealed ? authUser?.name?.split(' ')[0] || YOU : YOU }}
             them={{ face: themFace, name }}
             onShow={() => setRevealSheet('confirm')}
             onAsk={askThem}
