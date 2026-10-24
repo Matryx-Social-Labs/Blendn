@@ -2,13 +2,15 @@ import { router } from 'expo-router'
 import { useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
+import { Avatar } from '../../components/ds/Avatar'
 import { InterestChip } from '../../components/ds/Chip'
 import { MomentReady } from '../../components/ds/MomentReady'
 import { font, useBoldText, useSelection } from '../../components/ds/shared'
 import { OptimizedImage } from '../../components/OptimizedImage'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import { Icon, type IconName } from '../../components/ui/Icon'
-import { COLOR, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, ICON, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
+import { useAuth } from '../../lib/useAuth'
 import { useOnboarding } from '../../lib/useOnboarding'
 
 /**
@@ -28,6 +30,7 @@ import { useOnboarding } from '../../lib/useOnboarding'
  */
 export default function ReadyScreen() {
   const { draft, saving, finish, goBack, jumpTo } = useOnboarding('ready')
+  const { user } = useAuth()
 
   const [celebrating, setCelebrating] = useState(false)
 
@@ -42,7 +45,9 @@ export default function ReadyScreen() {
     // sat below the fold, so the button looked dead: SCRUM-492).
   }
 
-  const name = draft.name?.trim()
+  // The draft holds a name only once Basics saved one; an account that came with a name (Google, Apple) may never have
+  // typed it. The account's name, then; never a placeholder that reads as someone else's card (audit A3).
+  const name = draft.name?.trim() || user?.name?.trim() || undefined
   const primaryPhoto = draft.photos?.[0]
   const bold = useBoldText()
   const sel = useSelection()
@@ -76,23 +81,32 @@ export default function ReadyScreen() {
            * uploaded, which `blendn-admin/docs/MEDIA.md` asks to be 2048 square. `width`/`height` are the decode hint, so the
            * bitmap is the size of the thing on screen.
            */}
-          <View style={[styles.avatarRing, { backgroundColor: sel.edge }, !primaryPhoto && styles.avatarRingEmpty]}>
+          <View style={[styles.avatarRing, { backgroundColor: sel.edge }]}>
             <View style={styles.avatarGap}>
               {primaryPhoto ? (
                 <OptimizedImage source={primaryPhoto} style={styles.avatar} width={AVATAR} height={AVATAR} contentFit="cover" />
               ) : (
-                <View style={[styles.avatar, styles.avatarEmpty]} />
+                // No photo: the DS creature, not an empty disc that reads as a failed upload.
+                <Avatar kind="creature" pseudonym={name ?? 'you'} size={AVATAR} testID="ready-avatar" />
               )}
             </View>
           </View>
 
-          <Text style={[font('title', bold), styles.name]}>{name || 'Your name'}</Text>
-          {draft.occupation ? <Text style={[font('meta', bold), styles.role]}>{draft.occupation}</Text> : null}
+          {name ? (
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.name]}>
+              {name}
+            </Text>
+          ) : null}
+          {draft.occupation ? (
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.role]}>
+              {draft.occupation}
+            </Text>
+          ) : null}
 
           {draft.bio ? (
             <>
               <View style={styles.divider} />
-              <Text style={[font('body', bold), styles.bio]}>{`“${draft.bio}”`}</Text>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.bio]}>{`“${draft.bio}”`}</Text>
             </>
           ) : null}
         </View>
@@ -101,7 +115,7 @@ export default function ReadyScreen() {
           "Primary hub" would read as data we lost rather than as skipped. */}
         {draft.interests?.length ? (
           <View style={styles.interestsCard}>
-            <Text accessibilityRole="header" style={[font('heading', bold), styles.heading]}>
+            <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold), styles.heading]}>
               Interests
             </Text>
             <View style={styles.interestsRow}>
@@ -126,8 +140,12 @@ function Summary({ icon, label, value }: { icon: IconName; label: string; value:
   return (
     <View accessible accessibilityLabel={`${label}, ${value}`} style={styles.summary}>
       <Icon name={icon} size={ICON.control} color={COLOR.textPrimary} />
-      <Text style={[font('meta', bold), styles.summaryLabel]}>{label}</Text>
-      <Text style={[font('bodyStrong', bold), styles.summaryValue]}>{value}</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.summaryLabel]}>
+        {label}
+      </Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.summaryValue]}>
+        {value}
+      </Text>
     </View>
   )
 }
@@ -162,10 +180,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   avatarRing: { width: RING, height: RING, borderRadius: RADIUS.capsule, alignItems: 'center', justifyContent: 'center', marginBottom: SPACE.sm },
-  avatarRingEmpty: { backgroundColor: COLOR.textTertiary },
   avatarGap: { width: GAP, height: GAP, borderRadius: RADIUS.capsule, backgroundColor: COLOR.surface, alignItems: 'center', justifyContent: 'center' },
   avatar: { width: AVATAR, height: AVATAR, borderRadius: RADIUS.capsule, overflow: 'hidden' },
-  avatarEmpty: { backgroundColor: COLOR.surfaceSunken },
   name: { color: COLOR.textPrimary, textAlign: 'center' },
   role: { color: COLOR.textSecondary, textAlign: 'center' },
   divider: { width: RULE, height: StyleSheet.hairlineWidth, backgroundColor: COLOR.hairlineStrong, marginVertical: SPACE.sm },

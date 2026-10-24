@@ -4,9 +4,10 @@ import { FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View } from
 import { Button } from '../ds/Button'
 import { Spinner } from '../ds/Loader'
 import { Sheet } from '../ds/Sheet'
-import { font, PRESSED_WASH, useBoldText } from '../ds/shared'
+import { MonoRun } from '../ds/MonoFamily'
+import { CONTROL_FONT_CAP, font, PRESSED_WASH, useBoldText } from '../ds/shared'
 import { apiClient } from '../../lib/apiClient'
-import { COLOR, FONT_FAMILY, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, MAX_FONT_SCALE, SIZE, SPACE } from '../../lib/design/tokens'
 import { Logger } from '../../lib/logger'
 import { appendUpcoming, upcomingRows, UPCOMING_PAGE, type UpcomingRow } from '../../lib/venuePage'
 
@@ -14,7 +15,6 @@ import { appendUpcoming, upcomingRows, UPCOMING_PAGE, type UpcomingRow } from '.
 const ROW = SIZE.primary
 /** The list's own height, as a share of the screen: it scrolls inside the tall sheet and windows its rows, so thousands cost a screenful. */
 const LIST_SHARE = 0.6
-const DAY_WIDTH = 84
 
 /**
  * Every coming event at a place, a page at a time (Flow 11 · the venue page, "See all"). It opens on what the page
@@ -22,8 +22,10 @@ const DAY_WIDTH = 84
  * hundreds of events costs one page, then one more each time it is asked.
  *
  * The list is a FlatList with a height of its own inside the tall sheet: it windows its rows (fixed heights) and
- * asks for the next page as the end comes into view. A failed page keeps what is there and says so with Try again;
- * nothing is ever shown as the end that is not.
+ * asks for the next page as the end comes into view. While the rows held still fit the list there is no end to scroll
+ * to (onEndReached never fires), so it asks for the next page by itself until they fill it or there are no more (audit
+ * C1: "· 35" with 10 reachable). A failed page keeps what is there and says so with Try again; nothing is ever shown
+ * as the end that is not.
  */
 export function UpcomingSheet({
   visible,
@@ -90,18 +92,21 @@ export function UpcomingSheet({
     [venueId]
   )
 
-  // Opening it brings in the first page of the rest: the person asked for all of them.
+  // Opening it brings in the first page of the rest: the person asked for all of them. After that, while the rows fit
+  // the list (fixed heights, so no measuring), the next page: nothing can be scrolled to its end to ask for it.
   const asked = useRef(false)
+  const fits = rows.length * ROW <= listHeight
   useEffect(() => {
     if (!visible) {
       asked.current = false
       return
     }
-    if (!asked.current && cursor) {
+    if (!cursor || loading || failed) return
+    if (!asked.current || fits) {
       asked.current = true
       more(cursor)
     }
-  }, [visible, cursor, more])
+  }, [visible, cursor, loading, failed, fits, more])
 
   return (
     <Sheet visible={visible} onClose={onClose} title={`Coming up here · ${total}`} detents={['tall']} testID="venue-upcoming-sheet">
@@ -123,15 +128,24 @@ export function UpcomingSheet({
             }}
             android_ripple={{ color: PRESSED_WASH.android }}
             accessibilityRole="button"
-            accessibilityLabel={`${item.title}, ${item.day}`}
+            accessibilityLabel={`${item.title}, ${item.day}, ${item.time}`}
             style={styles.row}
             testID={`venue-upcoming-all-${item.id}`}
           >
-            <Text numberOfLines={1} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary, styles.day]}>
-              {item.day}
+            {/* The day keeps its words ("Sat 24 Oct"); the title gives way. Capped: the row is a fixed-height target. */}
+            <Text
+              testID="venue-upcoming-day"
+              numberOfLines={1}
+              maxFontSizeMultiplier={CONTROL_FONT_CAP}
+              style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary, styles.day]}
+            >
+              <MonoRun text={item.day} />
             </Text>
-            <Text numberOfLines={1} style={[font('bodyStrong', bold), styles.ink, styles.title]}>
+            <Text testID="venue-upcoming-title" numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold), styles.ink, styles.title]}>
               {item.title}
+            </Text>
+            <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary, styles.day]}>
+              <MonoRun text={item.time} />
             </Text>
           </Pressable>
         )}
@@ -143,7 +157,9 @@ export function UpcomingSheet({
               </View>
             ) : failed ? (
               <View style={styles.center}>
-                <Text style={[font('meta', bold), styles.secondary]}>Couldn’t load more.</Text>
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
+                  Couldn’t load more.
+                </Text>
                 <Button kind="secondary" size="sm" label="Try again" onPress={() => cursor && more(cursor)} testID="venue-upcoming-retry" />
               </View>
             ) : null}
@@ -156,8 +172,8 @@ export function UpcomingSheet({
 
 const styles = StyleSheet.create({
   row: { height: ROW, flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
-  day: { width: DAY_WIDTH },
-  title: { flex: 1 },
+  day: { flexShrink: 0 },
+  title: { flex: 1, flexShrink: 1 },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
   foot: { paddingTop: SPACE.sm },

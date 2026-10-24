@@ -250,7 +250,7 @@ describe('forgot and the keyboard', () => {
     expect(router.push).toHaveBeenCalledWith({ pathname: '/forgot-password', params: { email: 'sam@example.com' } })
   })
 
-  it('with the keyboard up the dock is the primary alone, on glass', async () => {
+  it('with the keyboard up the dock keeps the primary and "Forgot your password?", on glass (GO-15, A29)', async () => {
     const listeners: Record<string, () => void> = {}
     ;(KeyboardEvents.addListener as jest.Mock).mockImplementation(((event: string, cb: () => void) => {
       listeners[event] = cb
@@ -261,7 +261,26 @@ describe('forgot and the keyboard', () => {
     await act(async () => {
       listeners.keyboardWillShow()
     })
-    expect(screen.queryByText('Forgot your password?')).toBeNull()
+    // The way out of a forgotten password is not under the keyboard: it rides with the primary.
+    expect(screen.getByText('Forgot your password?')).toBeTruthy()
     expect(screen.getByTestId('sign-in-primary')).toBeTruthy()
+  })
+})
+
+describe('an empty form (GO-15, D10)', () => {
+  it('Sign in stays pressable on empty fields and refuses with its reasons, one H.error, no round trip', async () => {
+    await render(<SignIn />)
+    expect(screen.getByTestId('sign-in-primary').props.accessibilityState).not.toMatchObject({ disabled: true })
+    await submit()
+    expect(screen.getByText('Enter a valid email address.')).toBeTruthy()
+    expect(screen.getByText('Enter your password.')).toBeTruthy()
+    expect(error).toHaveBeenCalledTimes(1)
+    expect(mockSignIn).not.toHaveBeenCalled()
+  })
+
+  it('the age asks for a number, not a yes: "Your age" (A31)', async () => {
+    await render(<SignIn />)
+    await createAccount()
+    expect(screen.getByTestId('sign-in-age-input').props.placeholder).toBe('Your age')
   })
 })

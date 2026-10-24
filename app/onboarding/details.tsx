@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native'
 
 import { Chip } from '../../components/ds/Chip'
 import { ChipSet } from '../../components/ds/ChipSet'
@@ -13,6 +13,7 @@ import { apiClient } from '../../lib/apiClient'
 import { toPickerTree, type CategoryGroup, type CategoryNode } from '../../lib/categories'
 import { COLOR, SPACE } from '../../lib/design/tokens'
 import { Logger } from '../../lib/logger'
+import { tint } from '../../lib/theme'
 import { bioWithPrompt, promptFits } from '../../lib/onboarding'
 import { useOnboarding } from '../../lib/useOnboarding'
 import { overCapMessage, PROFILE_LIMITS, serverLength } from '../../lib/profileLimits'
@@ -150,24 +151,33 @@ export default function DetailsScreen() {
             error={overCap ? bioOverCap : undefined}
             testID="onboarding-bio"
           />
-          {/* A tap puts the prompt in the bio (H.select, the chip's). */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-            contentContainerStyle={styles.prompts}
-          >
-            {BIO_PROMPTS.map((prompt) => (
-              <Chip
-                key={prompt}
-                label={prompt}
-                icon="plus"
-                dimmed={!promptFits(bio, prompt, BIO_LIMIT)}
-                onPress={() => setBio((current) => bioWithPrompt(current, prompt, BIO_LIMIT))}
-                testID={`onboarding-prompt-${prompt.slice(0, 6)}`}
-              />
-            ))}
-          </ScrollView>
+          {/*
+           * A tap puts the prompt in the bio (H.select, the chip's). The rail fades at its end rather than cutting a chip
+           * mid-word ("+ Lately I've be", audit A13): Android fades its own edge, iOS draws the page's ink over it.
+           */}
+          <View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              fadingEdgeLength={SPACE.xxxl}
+              contentContainerStyle={styles.prompts}
+            >
+              {BIO_PROMPTS.map((prompt) => (
+                <Chip
+                  key={prompt}
+                  label={prompt}
+                  icon="plus"
+                  dimmed={!promptFits(bio, prompt, BIO_LIMIT)}
+                  onPress={() => setBio((current) => bioWithPrompt(current, prompt, BIO_LIMIT))}
+                  testID={`onboarding-prompt-${prompt.slice(0, 6)}`}
+                />
+              ))}
+            </ScrollView>
+            {Platform.OS === 'ios' ? (
+              <View testID="onboarding-prompts-fade" pointerEvents="none" style={styles.promptsFade} />
+            ) : null}
+          </View>
         </View>
 
         <View style={styles.interests}>
@@ -206,9 +216,13 @@ export default function DetailsScreen() {
   )
 }
 
+/** The rail's end, clear to the page's ink. */
+const PROMPTS_FADE = `linear-gradient(90deg, ${tint(COLOR.ink, 0)} 0%, ${COLOR.ink} 100%)`
+
 const styles = StyleSheet.create({
   bio: { gap: SPACE.md },
-  prompts: { gap: SPACE.sm },
+  prompts: { gap: SPACE.sm, paddingRight: SPACE.xxxl },
+  promptsFade: { position: 'absolute', top: 0, bottom: 0, right: 0, width: SPACE.xxxl, experimental_backgroundImage: PROMPTS_FADE },
   interests: { gap: SPACE.lg },
   interestsHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
   heading: { color: COLOR.textPrimary },

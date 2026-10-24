@@ -48,11 +48,16 @@ export type VenueAction =
   | { kind: 'goLive' }
   /** A real event has the place: check in to it instead (`EVENT_LIVE_HERE`). */
   | { kind: 'handoff'; eventId: string }
-  /** Going live here would be refused for a reason that is not yours to fix. */
-  | { kind: 'closed'; message: string }
+  /**
+   * Going live here would be refused for a reason that is not yours to fix. `reason` says why when the server's code
+   * tells us (audit C8: the sentence alone gave no reason); null when it does not, and no time is ever invented.
+   */
+  | { kind: 'closed'; message: string; reason: string | null }
 
 /** The dock's sentence when going live is not possible here (Flow 11 `SRV.noArea`). */
 export const NO_AREA_MESSAGE = "You can’t go live here yet."
+/** Why: nobody has drawn the place's check-in area (`no_check_in_area`), so there is nowhere to be "here". */
+export const NO_AREA_REASON = 'This place has no check-in area yet.'
 
 export function venueAction(live: {
   open: boolean
@@ -64,8 +69,8 @@ export function venueAction(live: {
   if (live.youAreLive) return { kind: 'live' }
   if (live.closedReason === 'event_live_here' && live.eventId) return { kind: 'handoff', eventId: live.eventId }
   if (live.open) return { kind: 'goLive' }
-  if (live.closedReason === 'no_check_in_area') return { kind: 'closed', message: NO_AREA_MESSAGE }
-  return { kind: 'closed', message: "You can’t go live here right now." }
+  if (live.closedReason === 'no_check_in_area') return { kind: 'closed', message: NO_AREA_MESSAGE, reason: NO_AREA_REASON }
+  return { kind: 'closed', message: "You can’t go live here right now.", reason: null }
 }
 
 /** Codes `POST /venues/:venueId/live` answers with besides the check-in door's (blendn-admin/docs/API.md). */

@@ -10,12 +10,15 @@ import * as Reanimated from 'react-native-reanimated'
 import { H } from '../lib/haptics'
 
 const mockFinish = jest.fn()
+let mockDraft: Record<string, unknown> = { name: 'Sam', photos: [], interests: [] }
+let mockUser: { name?: string } | null = null
 jest.mock('expo-router', () => ({ router: { replace: jest.fn(), back: jest.fn(), push: jest.fn() } }))
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('react-native-reanimated', () => ({ ...jest.requireActual('react-native-reanimated'), __esModule: true, useReducedMotion: jest.fn(() => false) }))
 jest.mock('../lib/useOnboarding', () => ({
-  useOnboarding: () => ({ draft: { name: 'Sam', photos: [], interests: [] }, saving: false, finish: mockFinish, goBack: jest.fn(), jumpTo: jest.fn() }),
+  useOnboarding: () => ({ draft: mockDraft, saving: false, finish: mockFinish, goBack: jest.fn(), jumpTo: jest.fn() }),
 }))
+jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: mockUser }) }))
 jest.mock('../components/OptimizedImage', () => ({ OptimizedImage: () => null }))
 jest.mock('../components/onboarding/OnboardingScreen', () => {
   const { Pressable, Text, View } = jest.requireActual('react-native')
@@ -44,6 +47,8 @@ const press = async () => {
 let success: jest.SpyInstance
 let error: jest.SpyInstance
 beforeEach(() => {
+  mockDraft = { name: 'Sam', photos: [], interests: [] }
+  mockUser = null
   jest.useFakeTimers()
   jest.clearAllMocks()
   rm.mockReturnValue(false)
@@ -94,4 +99,29 @@ it('a refusal stays on the screen: no celebration, no replace, and no haptic fro
   expect(router.replace).not.toHaveBeenCalled()
   expect(success).not.toHaveBeenCalled()
   expect(error).not.toHaveBeenCalled()
+})
+
+describe('the card (GO-02, audit A3)', () => {
+  it('with no name in the draft it shows the account’s name, and with no photo the person’s creature, never "Your name"', async () => {
+    mockDraft = { photos: [], interests: [] }
+    mockUser = { name: 'Maya' }
+    await render(<ReadyScreen />)
+    expect(screen.getByText('Maya')).toBeTruthy()
+    expect(screen.queryByText('Your name')).toBeNull()
+    expect(screen.getByTestId('ready-avatar', { includeHiddenElements: true })).toBeTruthy()
+  })
+
+  it('the draft’s name wins over the account’s', async () => {
+    mockUser = { name: 'Maya' }
+    await render(<ReadyScreen />)
+    expect(screen.getByText('Sam')).toBeTruthy()
+    expect(screen.queryByText('Maya')).toBeNull()
+  })
+
+  it('with no name anywhere it draws no placeholder name', async () => {
+    mockDraft = { photos: [], interests: [] }
+    await render(<ReadyScreen />)
+    expect(screen.queryByText('Your name')).toBeNull()
+    expect(screen.getByTestId('ready-avatar', { includeHiddenElements: true })).toBeTruthy()
+  })
 })

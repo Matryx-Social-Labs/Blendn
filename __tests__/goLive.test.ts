@@ -16,6 +16,7 @@ import {
   rememberLiveSession,
   remainingMs,
   venueAction,
+  NO_AREA_REASON,
 } from '../lib/goLive'
 
 jest.mock('@react-native-async-storage/async-storage', () =>
@@ -138,7 +139,9 @@ describe('what the place screen offers', () => {
 
   it("hands off to the event when one has the place, and says why when nobody drew its area", () => {
     expect(venueAction({ ...live, open: false, closedReason: 'event_live_here', eventId: 'e1' })).toEqual({ kind: 'handoff', eventId: 'e1' })
-    expect(venueAction({ ...live, open: false, closedReason: 'no_check_in_area' })).toEqual({ kind: 'closed', message: 'You can’t go live here yet.' })
+    expect(venueAction({ ...live, open: false, closedReason: 'no_check_in_area' })).toEqual({ kind: 'closed', message: 'You can’t go live here yet.', reason: NO_AREA_REASON })
+    // A refusal the app has no reason for says only that: never an invented time.
+    expect(venueAction({ ...live, open: false, closedReason: null })).toEqual({ kind: 'closed', message: 'You can’t go live here right now.', reason: null })
   })
 })
 

@@ -9,7 +9,7 @@ import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import { PhotoTile, PulledPhotoTile, MAIN_RATIO } from '../../components/onboarding/PhotoTile'
 import { photoNote, readyPhotos, withMainFirst, withoutPulledDraftPhotos, type PhotoTile as Tile } from '../../components/onboarding/photoTiles'
 import { Icon } from '../../components/ui/Icon'
-import { COLOR, DURATION, ICON, PRESS, RADIUS, SPACE, SPRING } from '../../lib/design/tokens'
+import { COLOR, DURATION, ICON, MAX_FONT_SCALE, PRESS, RADIUS, SPACE, SPRING } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import ScalePress from '../../components/motion/ScalePress'
@@ -68,6 +68,8 @@ import { useOnboarding } from '../../lib/useOnboarding'
 const SLOTS = 6
 const GRID_GAP = SPACE.lg
 const WELL = 48
+const HINTS_ACROSS = 5
+const HINT_GAP = SPACE.sm
 
 let tileKey = 0
 const nextKey = () => `tile-${++tileKey}`
@@ -80,6 +82,8 @@ function MediaScreenInner() {
   const bold = useBoldText()
   const window = useWindowDimensions()
   const slot = Math.floor((window.width - SPACE.gutter * 2 - GRID_GAP) / 2)
+  /** The small places still free past the add well: five across, so all six places read at a glance (audit A11). */
+  const hintSlot = Math.floor((window.width - SPACE.gutter * 2 - HINT_GAP * (HINTS_ACROSS - 1)) / HINTS_ACROSS)
 
   const [tiles, setTiles] = useState<Tile[]>([])
   /** The photos moderation took down since they were added (`photo_states`, your own profile): empty tiles with a shield, until dismissed or replaced. */
@@ -118,6 +122,7 @@ function MediaScreenInner() {
 
   // The empty tiles never take the well's slot: the last one is always the way to add.
   const pulledShown = pulled.slice(0, Math.max(0, SLOTS - 1 - tiles.length))
+  const hints = Math.max(0, SLOTS - tiles.length - pulledShown.length - (tiles.length < SLOTS ? 1 : 0))
   const uploading = tiles.some((tile) => tile.state === 'uploading')
   const replace = (key: string, next: Tile) => setTiles((current) => current.map((tile) => (tile.key === key ? next : tile)))
 
@@ -183,7 +188,7 @@ function MediaScreenInner() {
       ctaBusy={saving}
       ctaDisabled={uploading}
       onContinue={() => void commit({ photos: readyPhotos(tiles) })}
-      secondaryLabel="Skip for now"
+      secondaryLabel="Skip"
       onSecondary={() => void skip()}
       onBack={goBack}
     >
@@ -244,8 +249,25 @@ function MediaScreenInner() {
               <View style={styles.wellDisc}>
                 <Icon name="plus" size={ICON.nav} color={COLOR.textPrimary} />
               </View>
-              {tiles.length === 0 ? <Text style={[font('meta', bold), styles.muted]}>Add a photo</Text> : null}
+              {/* The first place is the main one (A11): it says so before anything is in it. */}
+              {tiles.length === 0 ? (
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.muted]}>
+                  Main photo
+                </Text>
+              ) : null}
             </ScalePress>
+          </Animated.View>
+        ) : null}
+
+        {/*
+         * The places left past the add well, small and quiet: the six are seen at once without six large wells making the
+         * step twice as tall. Decorative: the well above is the one way to add, and says so.
+         */}
+        {hints > 0 ? (
+          <Animated.View layout={glide} style={styles.hints} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+            {Array.from({ length: hints }, (_, i) => (
+              <View key={i} testID={`media-slot-hint-${i}`} style={[styles.hint, { width: hintSlot, height: hintSlot }]} />
+            ))}
           </Animated.View>
         ) : null}
       </View>
@@ -262,6 +284,8 @@ const styles = StyleSheet.create({
   wide: { width: '100%' },
   well: { borderRadius: RADIUS.mediaInCard, backgroundColor: COLOR.surfaceSunken, borderWidth: 1, borderColor: COLOR.hairlineStrong, overflow: 'hidden' },
   wellPress: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: SPACE.md },
+  hints: { width: '100%', flexDirection: 'row', gap: HINT_GAP },
+  hint: { borderRadius: RADIUS.thumb, backgroundColor: COLOR.surfaceSunken, borderWidth: StyleSheet.hairlineWidth, borderColor: COLOR.hairline },
   wellDisc: { width: WELL, height: WELL, borderRadius: RADIUS.capsule, backgroundColor: COLOR.surface, alignItems: 'center', justifyContent: 'center' },
 })
 

@@ -9,9 +9,10 @@ export const readyPhotos = (tiles: readonly PhotoTile[]): string[] => tiles.flat
 
 /** What the caption says by how many photos there are. */
 export function photoNote(count: number): string {
-  if (count === 0) return 'Your main photo is the one people see on your profile and in messages. Add up to 6.'
+  // The limit is the subtitle's ("Up to six."): said once, not again here (audit A11).
+  if (count === 0) return 'Your main photo is the one people see on your profile and in messages.'
   if (count === 1) return 'This is your main photo. Add more and you can pick a different one.'
-  return 'Tap any photo to make it your main one. JPG and PNG, up to 6.'
+  return 'Tap any photo to make it your main one. JPG and PNG.'
 }
 
 /** The tiles with `key` moved to the front: `photos[0]` is what everyone else sees. An unknown key changes nothing. */

@@ -5,8 +5,9 @@
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { AppState, Platform, StyleSheet } from 'react-native'
+import { AppState, Dimensions, Platform, StyleSheet } from 'react-native'
 
+import { COLOR, MAX_FONT_SCALE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 
 jest.mock('@react-native-async-storage/async-storage', () => require('@react-native-async-storage/async-storage/jest/async-storage-mock'))
@@ -37,7 +38,7 @@ jest.mock('expo-apple-authentication', () => {
     isAvailableAsync: jest.fn(async () => true),
     signInAsync: jest.fn(),
     AppleAuthenticationButton: (props: object) => <View testID="apple-button" {...props} />,
-    AppleAuthenticationButtonType: { SIGN_IN: 0 },
+    AppleAuthenticationButtonType: { SIGN_IN: 0, CONTINUE: 1 },
     AppleAuthenticationButtonStyle: { WHITE: 0 },
     AppleAuthenticationScope: { FULL_NAME: 0, EMAIL: 1 },
   }
@@ -126,9 +127,13 @@ describe('the ways in', () => {
   })
 
   it('the lockup starts at the frame\'s 27% of the window, not 27% less the inset (the root is not inset)', async () => {
+    // At an ordinary text size (jest's window is at 2, an accessibility size: GO-12 moves the lockup up there).
+    const window = Dimensions.get('window')
+    Dimensions.set({ window: { ...window, fontScale: 1 }, screen: { ...window, fontScale: 1 } })
     await draw()
     const brand = screen.getByTestId('landing-brand')
-    expect(StyleSheet.flatten(brand.props.style).paddingTop).toBeCloseTo(require('react-native').Dimensions.get('window').height * 0.27, 1)
+    expect(StyleSheet.flatten(brand.props.style).paddingTop).toBeCloseTo(window.height * 0.27, 1)
+    Dimensions.set({ window, screen: window })
   })
 
   it('Android has no Apple button', async () => {
@@ -345,5 +350,25 @@ describe('one try at a time on the can’t-reach screen', () => {
       fireEvent.press(screen.getByLabelText('Try again'))
     })
     expect(mockRetry).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('the entry at large text and its parallel verbs (GO-12, A7/A27/A28)', () => {
+  it('Apple says Continue, as Google and email do', async () => {
+    await draw()
+    expect(screen.getByTestId('apple-button').props.buttonType).toBe(1)
+  })
+
+  it('the tagline stops at body’s cap; the brand block gives up its top room at the accessibility sizes', async () => {
+    await draw()
+    expect(screen.getByText('Same place. Same vibe. Instant connections.').props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.body)
+    // Jest's window is at fontScale 2: past AX_FONT_SCALE, so the lockup sits higher than its frame's 27%.
+    const top = StyleSheet.flatten(screen.getByTestId('landing-brand').props.style).paddingTop as number
+    expect(top).toBeLessThan(Dimensions.get('window').height * 0.27)
+  })
+
+  it('the "or" between the ways in reads at 4.5:1: textSecondary, not tertiary', async () => {
+    await draw()
+    expect(StyleSheet.flatten(screen.getByText('or', { includeHiddenElements: true }).props.style).color).toBe(COLOR.textSecondary)
   })
 })

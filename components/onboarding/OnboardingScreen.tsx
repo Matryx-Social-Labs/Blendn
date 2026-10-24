@@ -24,7 +24,7 @@ import { ONBOARDING_STEPS, progress, stepIndex, type OnboardingStep } from '../.
  * nobody notices are inconsistent until a device shows it.
  *
  * L0 the brand orbs at 0.45 (held while the keyboard is up), L2 a glass header with the back circle and "Step n of 8", the
- * 4 pt progress bar under it, the body, and an L2 glass dock with the gradient primary, a text secondary and the lock note.
+ * 4 pt progress bar under it, the body, and an L2 glass dock with the gradient primary, a text secondary and the lock note (a sentence in meta).
  */
 
 interface Props {
@@ -140,9 +140,12 @@ export function OnboardingScreen({
             ) : null}
             {footerNote && !keyboardUp ? (
               <View style={styles.note}>
-                {/* design-exception: the frame draws the lock at 14 and the note at 11/16, a step under the scale */}
-                <Icon name="lock" size={14} color={COLOR.textTertiary} />
-                <Text style={[font('label', bold), styles.noteText, styles.noteSize]}>{footerNote.toUpperCase()}</Text>
+                {/* design-exception: the frame draws the lock at 14 */}
+                <Icon name="lock" size={14} color={COLOR.textSecondary} />
+                {/* A sentence, set as one (D13): meta in sentence case, capped at meta's role, secondary grey (≥ 4.5:1 on ink). */}
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.noteText]}>
+                  {footerNote}
+                </Text>
               </View>
             ) : null}
           </>
@@ -186,9 +189,7 @@ const styles = StyleSheet.create({
   subtitle: { color: COLOR.textSecondary, maxWidth: SUBTITLE_MEASURE },
   body: { gap: SPACE.xl },
   note: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center', gap: SPACE.xs, paddingHorizontal: SPACE.sm },
-  noteText: { color: COLOR.textTertiary, textAlign: 'center', flexShrink: 1 },
-  // design-exception: the frame sets the note at 11/16 and the step label at 13 with 0.3 tracking, off the type scale
-  noteSize: { fontSize: 11, lineHeight: 16 },
+  noteText: { color: COLOR.textSecondary, textAlign: 'center', flexShrink: 1 },
   // design-exception: the frame's step label is Geist Mono 13 with 0.3 tracking
   stepLabel: { fontFamily: FONT_FAMILY.mono[500], fontSize: 13, lineHeight: 16, letterSpacing: 0.3, fontVariant: ['tabular-nums'] },
 })

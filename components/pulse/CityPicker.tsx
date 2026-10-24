@@ -7,8 +7,8 @@ import { SearchField } from '../ds/SearchField'
 import { Sheet } from '../ds/Sheet'
 import { font, PRESSED_WASH, useBoldText } from '../ds/shared'
 import { Icon } from '../ui/Icon'
-import { cityCountLabel, sameCity, type CityOption } from '../../lib/city'
-import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { cityCount, cityCountLabel, sameCity, type CityOption } from '../../lib/city'
+import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 
 /** The locate row: 52 pt, a dashed 38% hairline at the row radius (Flow 3 `city`). */
@@ -67,7 +67,7 @@ export function CityPicker({ visible, onClose, cities, selectedCity, deviceCity,
   }
 
   return (
-    <Sheet visible={visible} onClose={onClose} title="Browse events in" detents={['medium', 'tall']} testID="city-picker">
+    <Sheet visible={visible} onClose={onClose} title="Browse in" detents={['medium', 'tall']} testID="city-picker">
       <SearchField value={query} onChangeText={setQuery} placeholder="Search cities" inSheet testID="city-search" />
 
       <Pressable
@@ -113,8 +113,8 @@ export function CityPicker({ visible, onClose, cities, selectedCity, deviceCity,
 
 function CityRow({ option, active, here, first, onPress }: { option: CityOption; active: boolean; here: boolean; first: boolean; onPress: () => void }) {
   const bold = useBoldText()
-  const places = option.eventCount === 0 ? option.placeCount ?? 0 : 0
-  const count = option.eventCount || places
+  // One unit cue on every row ("53 events", "1,362 places"): a bare "53 on" beside "1362 places" read as a mistake (A6).
+  const { n: count, unit } = cityCount(option)
   return (
     <Pressable
       testID={`city-row-${option.city}`}
@@ -133,12 +133,14 @@ function CityRow({ option, active, here, first, onPress }: { option: CityOption;
         {here ? <Icon name="navigation" size={ICON.inline} color={COLOR.textSecondary} /> : null}
       </View>
       {count ? (
-        <Text style={[font('meta', bold), styles.secondary]}>
-          <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{count}</Text>
-          {places ? ' places' : ' on'}
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
+          <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{count.toLocaleString('en-US')}</Text>
+          {` ${unit}`}
         </Text>
       ) : (
-        <Text style={[font('meta', bold), styles.secondary]}>Coming soon</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
+          Coming soon
+        </Text>
       )}
     </Pressable>
   )

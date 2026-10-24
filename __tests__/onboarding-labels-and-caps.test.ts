@@ -21,6 +21,23 @@ describe('onboarding secondaries wired to skip()', () => {
   })
 })
 
+describe('one word per meaning for the secondary (GO-11, D12)', () => {
+  it.each([
+    ['preferences', 'Skip'],
+    ['journey', 'Skip'],
+    ['details', 'Skip'],
+    ['media', 'Skip'],
+    ['location', 'Maybe later'],
+    ['notifications', 'Maybe later'],
+  ])('%s says "%s"', (screen, label) => {
+    expect(read(`app/onboarding/${screen}.tsx`).match(/secondaryLabel="([^"]+)"/)?.[1]).toBe(label)
+  })
+
+  it('"Skip for now" is retired', () => {
+    for (const screen of ['preferences', 'journey', 'details', 'media', 'location', 'notifications', 'friends']) expect(read(`app/onboarding/${screen}.tsx`)).not.toContain('Skip for now')
+  })
+})
+
 describe('the bio cap', () => {
   it('is the same number on the onboarding step and the profile editor', () => {
     // Both read the one constant (lib/profileLimits), which is the server's `bio: max(500)`.

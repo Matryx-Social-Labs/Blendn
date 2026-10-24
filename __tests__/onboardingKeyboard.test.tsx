@@ -60,9 +60,9 @@ describe('the footer with the keyboard up', () => {
     await act(async () => listeners.keyboardWillShow())
     expect(screen.getByRole('button', { name: 'Continue' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Not you? Sign out' })).toBeTruthy()
-    expect(screen.queryByText('NEVER SHARED')).toBeNull()
+    expect(screen.queryByText('Never shared')).toBeNull()
     await act(async () => listeners.keyboardWillHide())
-    expect(screen.getByText('NEVER SHARED')).toBeTruthy()
+    expect(screen.getByText('Never shared')).toBeTruthy()
   })
 })
 

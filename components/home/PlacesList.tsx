@@ -98,6 +98,13 @@ export function PlacesList({
   const { venueType, whatsOn, radiusKm } = filters
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [quietOpen, setQuietOpen] = useState(false)
+  // A kind chosen (the grid, the chip or the sheet) opens the fold: its places are under it, and a closed fold under
+  // "91 BREWERIES" read as no results (audit A23). State adjusted in render, so every way a kind is set is covered.
+  const [kindSeen, setKindSeen] = useState(filters.venueType)
+  if (filters.venueType !== kindSeen) {
+    setKindSeen(filters.venueType)
+    if (filters.venueType) setQuietOpen(true)
+  }
   const [search, setSearch] = useState('')
   const searching = search.trim().length > 0
   // To ~100 m, as the key is: a GPS jitter is not a new request.
@@ -223,8 +230,8 @@ export function PlacesList({
   useEffect(() => onSummary?.(summary), [onSummary, summary])
 
   const rows = useMemo(
-    () => placeRows({ status: state.status, strata, more: state.hasMore, quietOpen, near, hasFix, filters, searching, rateLimited: state.rateLimit !== null }),
-    [state.status, strata, state.hasMore, quietOpen, near, hasFix, filters, searching, state.rateLimit]
+    () => placeRows({ status: state.status, strata, more: state.hasMore, quietOpen, near, hasFix, filters, searching, rateLimited: state.rateLimit !== null, total: state.total }),
+    [state.status, strata, state.hasMore, quietOpen, near, hasFix, filters, searching, state.rateLimit, state.total]
   )
 
   // The map's pins: Near you's rows, while Near you is on screen.
@@ -331,7 +338,7 @@ export function PlacesList({
         case 'fold':
           return (
             <View style={styles.foldRow}>
-              <QuietFold count={item.count} more={item.more} open={item.open} nearest={item.nearest} onPress={toggleFold} />
+              <QuietFold count={item.count} more={item.more} open={item.open} nearest={item.nearest} placeKind={item.placeKind} onPress={toggleFold} />
             </View>
           )
         case 'quiet':

@@ -67,8 +67,8 @@ describe('the tiles', () => {
     expect(venueTiles(full, NOW)).toEqual([
       { label: 'OPEN', value: 'Till 1 AM', mono: true },
       { label: 'LIVE', value: '5–9 so far', mono: false },
-      { label: 'RESET', value: '06:00', mono: true },
-      { label: 'SIZE', value: '300 people', mono: true },
+      // No RESET (D6): OPEN already answers the guest's question. SIZE is words, in the sans (B-T5).
+      { label: 'SIZE', value: '300 people', mono: false },
     ])
   })
 
@@ -125,7 +125,9 @@ describe('the tiles', () => {
 
   it('a reset hour that is not an hour, or an empty capacity, is not a tile', () => {
     expect(venueTiles(detail({ venue: { dayResetHour: 30, capacity: 0 }, live: { liveNow: null } }), NOW)).toEqual([])
-    expect(venueTiles(detail({ venue: { capacity: 1 }, live: { liveNow: null } }), NOW)).toEqual([{ label: 'SIZE', value: '1 person', mono: true }])
+    expect(venueTiles(detail({ venue: { capacity: 1 }, live: { liveNow: null } }), NOW)).toEqual([{ label: 'SIZE', value: '1 person', mono: false }])
+    // A reset hour alone draws nothing: it is staff's clock, not a guest's question (D6).
+    expect(venueTiles(detail({ venue: { dayResetHour: 6 }, live: { liveNow: null } }), NOW)).toEqual([])
   })
 })
 
@@ -157,7 +159,7 @@ describe('good to know, coming up, the board', () => {
     ])
     // All four are rows; the page shows UPCOMING_SHOWN of them and keeps the rest behind See all.
     expect(rows).toHaveLength(4)
-    expect(rows[0]).toEqual({ id: 'a', title: 'Bass Thursday', day: 'Thu 22 Oct' })
+    expect(rows[0]).toEqual({ id: 'a', title: 'Bass Thursday', day: 'Thu 22 Oct', time: '10 PM' })
     expect(upcomingRows(undefined)).toEqual([])
   })
 
@@ -201,7 +203,7 @@ describe('the dock', () => {
     expect(dockMode({ kind: 'goLive' }, { minutes: 45 })).toEqual({ kind: 'goLive', again: { minutes: 45 } })
     expect(dockMode({ kind: 'live' }, null)).toEqual({ kind: 'live' })
     expect(dockMode({ kind: 'handoff', eventId: 'e1' }, null)).toEqual({ kind: 'handoff', eventId: 'e1' })
-    expect(dockMode({ kind: 'closed', message: 'You can’t go live here yet.' }, null)).toEqual({ kind: 'closed', message: 'You can’t go live here yet.' })
+    expect(dockMode({ kind: 'closed', message: 'You can’t go live here yet.', reason: null }, null)).toEqual({ kind: 'closed', message: 'You can’t go live here yet.', reason: null })
   })
 
   it('go live again names the window; a stay is never repeated in one tap', () => {

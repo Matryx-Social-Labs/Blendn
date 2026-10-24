@@ -113,6 +113,12 @@ describe('the primary', () => {
     expect(screen.getByRole('button', { name: 'Show 1 place' })).toBeTruthy()
   })
 
+  it('without a fix the copy offers no distance: there is no Within to widen (GO-09)', async () => {
+    await draw({ countFor: async () => 0, hasFix: false })
+    await settle()
+    expect(screen.getByText('Nothing matches. Try another kind.')).toBeTruthy()
+  })
+
   it('zero disables it and says what to try, politely', async () => {
     const { onApply } = await draw({ countFor: async () => 0 })
     await settle()

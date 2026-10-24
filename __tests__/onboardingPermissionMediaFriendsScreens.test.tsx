@@ -4,7 +4,9 @@
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
 import React from 'react'
+import { StyleSheet } from 'react-native'
 
+import { TYPE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 
 jest.mock('@react-native-async-storage/async-storage', () => require('@react-native-async-storage/async-storage/jest/async-storage-mock'))
@@ -82,6 +84,21 @@ describe('photos', () => {
     expect(screen.getByLabelText('Add your main photo')).toBeTruthy()
     await fireEvent.press(screen.getByTestId('onboarding-primary'))
     expect(mockCommit).toHaveBeenCalledWith({ photos: [] })
+  })
+
+  it('an empty step draws its six places: the main well marked "Main photo", and five small slots under it (GO-11, A11)', async () => {
+    await render(<MediaScreen />)
+    expect(screen.getByText('Main photo')).toBeTruthy()
+    expect(screen.getAllByTestId(/^media-slot-hint-/, { includeHiddenElements: true })).toHaveLength(5)
+    // One copy line for the limit: the subtitle's "Up to six.", not a second "Add up to 6." under it.
+    expect(screen.queryByText(/up to 6/i)).toBeNull()
+  })
+
+  it('with two photos and the add well, three small slots say what is left', async () => {
+    mockDraft = { photos: ['a', 'b'].map((k) => `https://media/${k}`) }
+    await render(<MediaScreen />)
+    await screen.findByLabelText('Add a photo')
+    expect(screen.getAllByTestId(/^media-slot-hint-/, { includeHiddenElements: true })).toHaveLength(3)
   })
 
   it('an uploading tile shows its ring and percentage, is not “made main”, and carries no label pill', async () => {
@@ -278,6 +295,13 @@ describe('Bring your friends', () => {
     expect(screen.queryByTestId('onboarding-back')).toBeNull()
   })
 
+  it('under the link it says how a friend link works, so the screen is not a card over an empty page (GO-11, A9)', async () => {
+    mockInvite.mockReturnValue(invite({ invite: { url: 'https://blendn.app/i/8f3a' } }))
+    await render(<FriendsIntroScreen />)
+    expect(screen.getByTestId('friends-how')).toBeTruthy()
+    expect(screen.getByText('They tap it and ask to be your friend.')).toBeTruthy()
+  })
+
   it('while the link loads the primary is busy and the card says so', async () => {
     mockInvite.mockReturnValue(invite({}))
     await render(<FriendsIntroScreen />)
@@ -289,7 +313,8 @@ describe('Bring your friends', () => {
 describe('preferences', () => {
   it('anonymous by default; the switch flips it, and what is stored is the inverse', async () => {
     await render(<PreferencesScreen />)
-    expect(screen.getByText('You’d appear under a made-up name')).toBeTruthy()
+    // A sentence in Satoshi meta like its siblings, not Geist Mono (GO-11, A12).
+    expect(StyleSheet.flatten(screen.getByText('You’d appear under a made-up name').props.style).fontFamily).toBe(TYPE.meta.fontFamily)
     await fireEvent.press(screen.getByTestId('onboarding-anonymous'))
     expect(screen.getByText('Your name and photo, if you say so')).toBeTruthy()
     await fireEvent.press(screen.getByTestId('onboarding-primary'))

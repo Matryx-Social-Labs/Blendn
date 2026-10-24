@@ -19,11 +19,11 @@ import FadeInUp from '../components/motion/FadeInUp'
 import ScalePress from '../components/motion/ScalePress'
 import { DiscMark } from '../components/ds/DiscMark'
 import { Spinner } from '../components/ds/Loader'
-import { font, PRESSED_WASH, useBoldText } from '../components/ds/shared'
+import { font, PRESSED_WASH, useBoldText, useLargeText } from '../components/ds/shared'
 import { Icon } from '../components/ui/Icon'
 import { LegalLine } from '../components/LegalLine'
 import { Logger } from '../lib/logger'
-import { COLOR, DURATION, FONT_FAMILY, ICON, PRESS, RADIUS, RISE, SIZE, SPACE, STAGGER } from '../lib/design/tokens'
+import { COLOR, DURATION, FONT_FAMILY, ICON, MAX_FONT_SCALE, PRESS, RADIUS, RISE, SIZE, SPACE, STAGGER } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { OPACITY } from '../lib/theme'
 import { setAccountState, useAccountState } from '../lib/accountState'
@@ -43,6 +43,8 @@ import { HeldLink } from '../components/system/HeldLink'
 const MONOGRAM_HEIGHT = 96
 /** The lockup sits at 27% of the screen's height (Flow 1 landing 01). */
 const LOCKUP_TOP = 0.27
+/** At the accessibility sizes the lockup gives up most of its top room, so the tagline stays clear of the dock (audit A7). */
+const LOCKUP_TOP_LARGE = 0.1
 /** The buttons rise 12 pt from 200 ms in, 40 ms apart (motion #1). */
 const ENTRANCE_AT = 200
 
@@ -60,6 +62,7 @@ function IndexInner() {
   // An account the server refused: a screen of its own, with no sign-in buttons on it (Flow 15 15.1 to 15.3).
   const accountState = useAccountState()
   const bold = useBoldText()
+  const largeText = useLargeText()
   const insets = useSafeAreaInsets()
   const window = useWindowDimensions()
   const settle = useSettleIn()
@@ -325,9 +328,11 @@ function IndexInner() {
         </View>
       ) : null}
 
-      <Animated.View style={[styles.brand, { paddingTop: window.height * LOCKUP_TOP }, settle]} testID="landing-brand">
+      <Animated.View style={[styles.brand, { paddingTop: window.height * (largeText ? LOCKUP_TOP_LARGE : LOCKUP_TOP) }, settle]} testID="landing-brand">
         <Lockup size="landing" testID="landing-lockup" />
-        <Text style={[font('body', bold), styles.tagline]}>Same place. Same vibe. Instant connections.</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.tagline]}>
+          Same place. Same vibe. Instant connections.
+        </Text>
         {/* Whose invite is waiting, when an invite link brought them here. */}
         <PendingInvite />
       </Animated.View>
@@ -392,7 +397,8 @@ function IndexInner() {
             <View pointerEvents={signingIn ? 'none' : 'auto'} style={dimmed(apple)}>
               {/* The system draws this button and has no busy state; its spinner sits over it. */}
               <AppleAuthentication.AppleAuthenticationButton
-                buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                // "Continue with Apple", parallel to Google's and email's (D11).
+                buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
                 buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
                 cornerRadius={RADIUS.button}
                 style={styles.appleButton}
@@ -484,7 +490,8 @@ const styles = StyleSheet.create({
   appleButton: { width: '100%', height: SIZE.primary },
   dividerRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
   divider: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: COLOR.hairlineStrong },
-  dividerText: { color: COLOR.textTertiary },
+  // The one word between the ways in: textSecondary, 4.5:1 on ink (tertiary was under it, A28).
+  dividerText: { color: COLOR.textSecondary },
   emailButton: {
     flexDirection: 'row',
     alignItems: 'center',

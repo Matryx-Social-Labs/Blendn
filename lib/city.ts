@@ -57,11 +57,17 @@ export interface CityOption {
   centre?: { latitude: number; longitude: number } | null
 }
 
-/** What a picker row says a city holds: its events, or its places when it has no events. */
+/** What a city holds: its events, or its places when it has no events; the number and its unit, apart. */
+export function cityCount(option: Pick<CityOption, 'eventCount' | 'placeCount'>): { n: number; unit: string } {
+  const places = option.eventCount === 0 && !!option.placeCount
+  const n = places ? option.placeCount! : option.eventCount
+  return { n, unit: `${places ? 'place' : 'event'}${n === 1 ? '' : 's'}` }
+}
+
+/** What a picker row says a city holds: "53 events", "1,362 places" (grouped, as the Places header is: audit A6). */
 export function cityCountLabel(option: Pick<CityOption, 'eventCount' | 'placeCount'>): string {
-  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
-  if (option.eventCount === 0 && option.placeCount) return plural(option.placeCount, 'place')
-  return plural(option.eventCount, 'event')
+  const { n, unit } = cityCount(option)
+  return `${n.toLocaleString('en-US')} ${unit}`
 }
 
 /**

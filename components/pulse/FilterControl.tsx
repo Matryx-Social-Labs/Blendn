@@ -12,7 +12,7 @@ import {
   type EventFilters,
   type When,
 } from '../../lib/eventFilters'
-import { COLOR, SPACE } from '../../lib/design/tokens'
+import { COLOR, MAX_FONT_SCALE, SPACE } from '../../lib/design/tokens'
 import { categoryGlyph } from '../../lib/categoryGlyph'
 import { useDraftCount } from '../../lib/filterCount'
 
@@ -21,7 +21,9 @@ export interface CategoryOption {
   name: string
 }
 
-const NOTHING_MATCHES = 'Nothing matches. Try another day or a wider distance.'
+/** What an empty count tells you to try: only what is on the sheet. Without a fix there is no Within to widen (audit A19). */
+export const nothingMatches = (hasLocation: boolean) =>
+  hasLocation ? 'Nothing matches. Try another day or a wider distance.' : 'Nothing matches. Try another day or category.'
 /** What the count depends on: all three choices. */
 const countKey = (d: EventFilters) => `${d.categorySlug ?? '-'}|${d.when}|${d.radiusKm ?? '-'}`
 
@@ -118,8 +120,8 @@ export function FilterSheet({
           />
         ) : null}
         {empty ? (
-          <Text accessibilityLiveRegion="polite" style={[font('meta', bold), styles.nothing]}>
-            {NOTHING_MATCHES}
+          <Text accessibilityLiveRegion="polite" maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.nothing]}>
+            {nothingMatches(hasLocation)}
           </Text>
         ) : null}
       </View>

@@ -115,6 +115,13 @@ describe('Show n events', () => {
     expect(onApply).not.toHaveBeenCalled()
   })
 
+  it('without a fix the copy offers no distance: the sheet has no distance control (GO-09, A19)', async () => {
+    await draw({ countFor: async () => 0, hasLocation: false })
+    await settle()
+    expect(screen.getByText('Nothing matches. Try another day or category.')).toBeTruthy()
+    expect(screen.queryByText(/distance/)).toBeNull()
+  })
+
   it('without a counting function the button just says "Show results"', async () => {
     await draw({ countFor: undefined })
     await settle()

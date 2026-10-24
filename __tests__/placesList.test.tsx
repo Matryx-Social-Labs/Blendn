@@ -8,7 +8,7 @@
  */
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native'
 import React from 'react'
-import { Platform } from 'react-native'
+import { Platform, StyleSheet } from 'react-native'
 
 import type { VenueListItem } from '../lib/apiClient'
 
@@ -26,6 +26,7 @@ jest.mock('../lib/offers', () => ({ offersApi: { prefs: jest.fn() } }))
 /* eslint-disable import/first */
 import { router } from 'expo-router'
 import { PlacesList } from '../components/home/PlacesList'
+import { TAB_BAR_CLEARANCE } from '../app/(tabs)/_layout'
 import type { HomeBrowse } from '../components/home/HomeShell'
 import { apiClient } from '../lib/apiClient'
 import { offersApi } from '../lib/offers'
@@ -308,6 +309,26 @@ describe('the kinds', () => {
     await waitFor(() => expect(listCalls().at(-1)?.[0]).toMatchObject({ venueType: undefined }))
   })
 
+  it('choosing a kind opens the fold, so the list under its count is not read as empty (GO-07, A23)', async () => {
+    serve([venue('a', { liveNow: '5-9' }), venue('c', { name: 'Koshy’s' })])
+    await mount()
+    expect(screen.queryByTestId('place-quiet-c')).toBeNull()
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('places-kind-cafe'))
+    })
+    await waitFor(() => expect(screen.getByTestId('place-quiet-c')).toBeTruthy())
+    expect(screen.getByTestId('places-quiet-fold').props.accessibilityState).toMatchObject({ expanded: true })
+  })
+
+  it('a quiet row leads its line with the area, so rows of one chain can be told apart (A40)', async () => {
+    serve([venue('c', { name: '1522 The Pub', area: 'Koramangala', venueTypeLabel: 'Pub' })])
+    await mount()
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('places-quiet-fold'))
+    })
+    expect(screen.getByText(/^Koramangala · Pub/)).toBeTruthy()
+  })
+
   it('a kind with nothing in this city says so and keeps the chip to clear it', async () => {
     serve([venue('a', { liveNow: '5-9' })])
     await mount()
@@ -522,6 +543,14 @@ describe('the header stays while a kind is chosen', () => {
   })
 })
 
+describe('the search at 360 dp and 1.3 (GO-16, A39)', () => {
+  it('its placeholder is short enough not to be cut: "Search places"', async () => {
+    serve([venue('a')])
+    await mount()
+    expect(screen.getByTestId('places-search-input').props.placeholder).toBe('Search places')
+  })
+})
+
 describe('loading, failing, empty', () => {
   it('loading: the real header and search, then static blocks at the new sections’ geometry', async () => {
     getVenues.mockReturnValue(new Promise(() => {}))
@@ -538,6 +567,9 @@ describe('loading, failing, empty', () => {
     getVenues.mockResolvedValue(page([]))
     await mount()
     expect(screen.getByText('Couldn’t load places')).toBeTruthy()
+    // GO-08 (A24): offline the way back is Try again, never a location ask; and the list clears the floating tab bar.
+    expect(screen.queryByText(/Turn on location/)).toBeNull()
+    expect(StyleSheet.flatten(screen.getByTestId('places-list').props.contentContainerStyle).paddingBottom).toBeGreaterThanOrEqual(TAB_BAR_CLEARANCE)
     expect(screen.getByText('Check your connection and try again.')).toBeTruthy()
     serve([venue('a', { liveNow: '5-9' })])
     await act(async () => {

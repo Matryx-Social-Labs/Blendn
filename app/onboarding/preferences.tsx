@@ -8,7 +8,6 @@ import { SectionHeader } from '../../components/ds/SectionHeader'
 import { Toggle } from '../../components/ds/Toggle'
 import { font, minTarget, PRESSED_WASH, useBoldText } from '../../components/ds/shared'
 import ScalePress from '../../components/motion/ScalePress'
-import { monoCaption } from '../../components/ds/MonoFamily'
 import { LookingForCards } from '../../components/onboarding/LookingForCards'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import {
@@ -19,7 +18,7 @@ import {
   withoutDatingChoice,
   type Orientation,
 } from '../../lib/dating'
-import { COLOR, DURATION, EASING, FONT_FAMILY, PRESS, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, MAX_FONT_SCALE, PRESS, RADIUS, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { anonymousByDefault, isUnder18, orientationConsent } from '../../lib/onboarding'
@@ -290,7 +289,7 @@ export default function PreferencesScreen() {
             <View style={styles.cardText}>
               <Text style={[font('bodyStrong', bold), styles.ink]}>Stay anonymous at events</Text>
               {/* The preview line changes with the switch (Flow 2 preferences 04): the new one fades in on `quick`. */}
-              <Animated.Text key={anonymous ? 'anon' : 'named'} entering={FadeIn.duration(motionTokens(reduceMotion).duration.quick)} style={[monoCaption(bold), styles.tertiary]}>
+              <Animated.Text key={anonymous ? 'anon' : 'named'} entering={FadeIn.duration(motionTokens(reduceMotion).duration.quick)} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.tertiary]}>
                 {anonymous ? 'You’d appear under a made-up name' : 'Your name and photo, if you say so'}
               </Animated.Text>
             </View>

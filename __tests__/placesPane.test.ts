@@ -23,6 +23,7 @@ import {
   PLACE_TYPES,
   placesCount,
   plateFor,
+  guestTypeLabel,
   RAIL_CAP,
   splitPlaces,
   statLine,
@@ -60,6 +61,14 @@ const event = (startH: number, endH: number, day = 0) => ({
   endTime: at(endH, 0, day),
 })
 
+describe('a type a guest reads (GO-13, D24)', () => {
+  it('"other" is "Venue": the organiser-facing "Something else" never reaches a guest', () => {
+    expect(guestTypeLabel({ venueType: 'other', venueTypeLabel: 'Something else' })).toBe('Venue')
+    expect(guestTypeLabel({ venueType: null, venueTypeLabel: 'Something else' })).toBe('Venue')
+    expect(guestTypeLabel({ venueType: 'brewery', venueTypeLabel: 'Brewery' })).toBe('Brewery')
+  })
+})
+
 describe('the plates', () => {
   it('draws each server type on its plate, and the bar’s for a type with none', () => {
     expect(plateFor('pub_bar')).toBe('bar')
@@ -69,6 +78,8 @@ describe('the plates', () => {
     expect(plateFor('lounge_rooftop')).toBe('gardenBar')
     expect(plateFor('cafe')).toBe('cafe')
     expect(plateFor('restaurant')).toBe('restaurant')
+    // Co-working counts with the cafés (owner): its plate is the café's, not the bar's (D25, B-T4).
+    expect(plateFor('coworking')).toBe('cafe')
     expect(plateFor('stadium')).toBe('bar')
     expect(plateFor(null)).toBe('bar')
   })
@@ -102,6 +113,10 @@ describe('words', () => {
     expect(moreLine(12, false)).toBe('12 more places')
     // Pages remain: the number is what has been read, not a total.
     expect(moreLine(12, true)).toBe('12+ more places')
+    // A kind names itself (GO-07, audit A22): "753 more cafés" under "783 CAFÉS", not "30+ more places".
+    expect(moreLine(753, false, 'cafe')).toBe('753 more cafés')
+    expect(moreLine(1, false, 'brewery')).toBe('1 more brewery')
+    expect(moreLine(1234, false)).toBe('1,234 more places')
   })
 })
 
@@ -170,6 +185,16 @@ describe('the rows (BUILD-SPEC B)', () => {
   it('quiet rows only when the fold is open', () => {
     expect(kinds(viewOf([quiet, later], { quietOpen: true }))).toEqual(['title', 'search', 'kinds', 'fold', 'quiet', 'quiet'])
     expect(placeRows(viewOf([packed, open, quiet, later])).find((r) => r.kind === 'fold')).toMatchObject({ count: 2, more: false, open: false, nearest: true })
+  })
+
+  it('the fold counts the truth when the server gave a total (GO-07, A22): the total less what is shown above it', () => {
+    const fold = (over: Partial<PlaceView>) => placeRows(viewOf([packed, open, quiet, later], over)).find((r) => r.kind === 'fold')
+    // 783 cafés, 2 shown above (one live, one open): 781 more, and no "+" though pages remain.
+    expect(fold({ total: 783, more: true, filters: { ...NO_FILTERS, venueType: 'cafe' } })).toMatchObject({ count: 781, more: false, placeKind: 'cafe' })
+    // No total yet: what has been read, with "+" while pages remain.
+    expect(fold({ total: null, more: true })).toMatchObject({ count: 2, more: true, placeKind: null })
+    // A total under what has been read is not repeated.
+    expect(fold({ total: 3, more: true })).toMatchObject({ count: 2, more: true })
   })
 
   it('Live now and Open tonight are absent at 0: no quiet filler, no apology', () => {

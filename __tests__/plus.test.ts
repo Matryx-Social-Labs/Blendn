@@ -175,9 +175,9 @@ describe('nights kept behind Blendn+ (lockedCount)', () => {
     expect(withLockedNights([], 2).map((i) => i.key)).toEqual(['h:past', 'locked'])
   })
 
-  it('"{n} more nights with Blendn+"', () => {
-    expect(lockedNightsLabel(4)).toBe('4 more nights with Blendn+')
-    expect(lockedNightsLabel(1)).toBe('1 more night with Blendn+')
+  it('"{n} more nights with Blend’n+"', () => {
+    expect(lockedNightsLabel(4)).toBe('4 more nights with Blend’n+')
+    expect(lockedNightsLabel(1)).toBe('1 more night with Blend’n+')
   })
 })
 

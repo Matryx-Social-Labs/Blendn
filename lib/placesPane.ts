@@ -37,11 +37,22 @@ const PLATE_BY_TYPE: Record<string, PlateKey> = {
   pub_bar: 'bar',
   brewery: 'brewery',
   cafe: 'cafe',
+  // Co-working counts with the cafés (owner): the café's plate, never the bar's fallback (D25).
+  coworking: 'cafe',
   // A restaurant reuses the café's plate (owner's ruling on A87): VenuePlate does it.
   restaurant: 'restaurant',
   lounge_rooftop: 'gardenBar',
   nightclub: 'club',
   live_music_venue: 'liveMusic',
+}
+
+/**
+ * The type a guest reads. The server's label for `other` is "Something else", the organiser's picker word (admin
+ * `lib/venue-types.ts`); placeholder copy never reaches a guest, so it reads "Venue" (D24, C38).
+ */
+const OTHER_LABEL = 'Something else'
+export function guestTypeLabel(venue: { venueType?: string | null; venueTypeLabel: string }): string {
+  return venue.venueType === 'other' || venue.venueTypeLabel === OTHER_LABEL ? 'Venue' : venue.venueTypeLabel
 }
 
 /** Which plate a venue_type is drawn on. */
@@ -145,13 +156,13 @@ export function hoursLine(tonight: VenueListItem['tonight'], now: number): { lea
 
 /** What a live tile is read as: "{name}. {type}, {area}, {distance}. 10 to 19 people live." */
 export function tileLabel(venue: VenueListItem): string {
-  const where = [venue.venueTypeLabel, placeArea(venue), spokenDistance(venue.distance)].filter(Boolean).join(', ')
+  const where = [guestTypeLabel(venue), placeArea(venue), spokenDistance(venue.distance)].filter(Boolean).join(', ')
   return [venue.name, where, spokenBucket(venue.liveNow)].filter(Boolean).join('. ')
 }
 
 /** What an Open tonight card is read as: "{name}. {type}, {area}, {distance}. Tonight 9 PM, {title}." or "Open till 1 AM." */
 export function openLabel(venue: VenueListItem, now: number): string {
-  const where = [venue.venueTypeLabel, placeArea(venue), spokenDistance(venue.distance)].filter(Boolean).join(', ')
+  const where = [guestTypeLabel(venue), placeArea(venue), spokenDistance(venue.distance)].filter(Boolean).join(', ')
   const tonight = tonightEvent(venue.nextEvent, now)
   const hours = hoursLine(venue.tonight, now)
   const line = tonight ? `${/^\d/.test(tonight.when) ? `Tonight ${tonight.when}` : tonight.when}, ${tonight.title}.` : hours ? `${hours.lead} ${hours.time}.` : null
@@ -160,19 +171,38 @@ export function openLabel(venue: VenueListItem, now: number): string {
 
 /** What a Near you row is read as: "2 of 5 nearest. {name}, {type}, {area}, {distance}". */
 export function nearLabel(venue: VenueListItem, n: number): string {
-  const where = [venue.name, venue.venueTypeLabel, placeArea(venue), spokenDistance(venue.distance)].filter(Boolean).join(', ')
+  const where = [venue.name, guestTypeLabel(venue), placeArea(venue), spokenDistance(venue.distance)].filter(Boolean).join(', ')
   return `${n} of ${NEAR_COUNT} nearest. ${where}`
 }
+
+const thousands = (n: number) => n.toLocaleString('en-US')
 
 /** "3 places" / "1 place". */
 export const placesCount = (n: number) => `${n} ${n === 1 ? 'place' : 'places'}`
 
+/** What a kind's places are called in a count: one, many. */
+const KIND_NOUNS: Record<NonNullable<PlaceTypeFilter>, readonly [string, string]> = {
+  pub_bar: ['bar', 'bars'],
+  brewery: ['brewery', 'breweries'],
+  nightclub: ['club', 'clubs'],
+  live_music_venue: ['live music venue', 'live music venues'],
+  lounge_rooftop: ['rooftop', 'rooftops'],
+  cafe: ['café', 'cafés'],
+}
+
+/** "place" / "cafés": the noun for `count` of a kind (or of places). */
+export function foldNoun(count: number, more: boolean, kind: PlaceTypeFilter = null): string {
+  const [one, many] = (kind && KIND_NOUNS[kind]) || ['place', 'places']
+  return count === 1 && !more ? one : many
+}
+
 /**
- * The fold's line: "N more places". The list is paged: while there are pages left, the number is what has
- * been read so far, so it says "N+" rather than a total it does not know.
+ * The fold's line: "753 more cafés". With the server's total the count is the truth (`placeRows` takes what is shown
+ * above the fold from it); without one, the list is paged, and while there are pages left the number is what has been
+ * read so far, so it says "N+" rather than a total it does not know (audit A22: "30+ more places" under "783 CAFÉS").
  */
-export function moreLine(count: number, more: boolean): string {
-  return `${count}${more ? '+' : ''} more ${count === 1 && !more ? 'place' : 'places'}`
+export function moreLine(count: number, more: boolean, kind: PlaceTypeFilter = null): string {
+  return `${thousands(count)}${more ? '+' : ''} more ${foldNoun(count, more, kind)}`
 }
 
 /** "5–9 live" for a bucket the row prints; null below 5 and for a viewer the server tells nothing. */
@@ -272,7 +302,6 @@ export function nearPins(venues: readonly VenueListItem[]): NearPin[] {
   return pins
 }
 
-const thousands = (n: number) => n.toLocaleString('en-US')
 
 /**
  * The stat line under the title (B1, B8): "6,422 places · 4 live · 31 open tonight". `total` is the server's
@@ -323,7 +352,7 @@ export type PlaceRow =
   | { kind: 'near'; key: 'near'; venues: VenueListItem[]; hasFix: boolean }
   | { kind: 'areas'; key: 'areas'; areas: PlaceAreaSummary[] }
   | { kind: 'kinds'; key: 'kinds' }
-  | { kind: 'fold'; key: 'fold'; count: number; more: boolean; open: boolean; nearest: boolean }
+  | { kind: 'fold'; key: 'fold'; count: number; more: boolean; open: boolean; nearest: boolean; placeKind: PlaceTypeFilter }
   | { kind: 'quiet'; key: string; venue: VenueListItem }
   | { kind: 'label'; key: 'label'; text: string }
   | { kind: 'skeleton'; key: 'skeleton' }
@@ -345,6 +374,8 @@ export type PlaceView = {
   rateLimited?: boolean
   /** The top areas, from §C5 (not read yet): drawn only when `SHOW_AREA_SECTION` and there are two or more. */
   areas?: readonly PlaceAreaSummary[]
+  /** The server's count of everything the list matches (`totalCount`); null until it has said. */
+  total?: number | null
 }
 
 /**
@@ -388,7 +419,12 @@ export function placeRows(view: PlaceView): PlaceRow[] {
     rows.push({ kind: 'kinds', key: 'kinds' })
   }
   if (strata.quiet.length) {
-    rows.push({ kind: 'fold', key: 'fold', count: strata.quiet.length, more, open: quietOpen, nearest: hasFix })
+    // With the server's total the fold says how many are left under it: the total less Live now and Open tonight. A
+    // total under what has been read is not one to repeat (as `upcomingCount`): then what was read, "+" while paging.
+    const total = view.total ?? null
+    const told = total !== null && total >= all.length
+    const count = told ? total - strata.live.length - strata.open.length : strata.quiet.length
+    rows.push({ kind: 'fold', key: 'fold', count, more: told ? false : more, open: quietOpen, nearest: hasFix, placeKind: venueType })
     if (quietOpen) for (const venue of strata.quiet) rows.push({ kind: 'quiet', key: `quiet:${venue.id}`, venue })
   }
   return rows
@@ -400,7 +436,7 @@ export function placeLabel(venue: VenueListItem, now?: number): string {
   const tonight = now === undefined ? null : tonightEvent(venue.nextEvent, now)
   return [
     venue.name,
-    venue.venueTypeLabel,
+    guestTypeLabel(venue),
     distanceText(venue.distance),
     bucketLabel(venue.liveNow),
     tonight ? `${tonight.when}, ${tonight.title}` : null,

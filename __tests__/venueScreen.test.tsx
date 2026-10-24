@@ -8,7 +8,7 @@
  */
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native'
 import React from 'react'
-import { AppState, Linking, StyleSheet } from 'react-native'
+import { AppState, Dimensions, Linking, StyleSheet } from 'react-native'
 
 const NOW = Date.parse('2026-10-09T20:00:00.000Z')
 const mockOpenURL = jest.fn(() => Promise.resolve())
@@ -70,6 +70,7 @@ import type { VenueDetail } from '../lib/apiClient'
 import { apiClient } from '../lib/apiClient'
 import { openBlendn } from '../lib/blendnOverlay'
 import { checkOutOf } from '../lib/checkIn'
+import { NO_AREA_REASON } from '../lib/goLive'
 import { H } from '../lib/haptics'
 import { openInMaps } from '../lib/openInMaps'
 import { openTonight } from '../lib/paywall'
@@ -192,7 +193,11 @@ describe('before it is drawn', () => {
 
 describe('the place, not live', () => {
   it('the hero names the place, its type, area and distance; the bucket is a pill; the dock offers Go live', async () => {
+    // At an ordinary text size: at the accessibility sizes the address leaves the hero (GO-05). Jest's window is at 2.
+    const window = Dimensions.get('window')
+    Dimensions.set({ window: { ...window, fontScale: 1 }, screen: { ...window, fontScale: 1 } })
     await mount()
+    Dimensions.set({ window, screen: window })
     expect(screen.getByRole('header', { name: 'The Humming Tree, Live music venue · 298, 100 Feet Road, 350 m' })).toBeTruthy()
     expect(screen.getByText('5–9 live')).toBeTruthy()
     expect(screen.queryByTestId('venue-you-live')).toBeNull()
@@ -206,7 +211,7 @@ describe('the place, not live', () => {
     expect(screen.queryByLabelText(/^SIZE/)).toBeNull()
     await mount(venue({ venue: { hours: [{ day: new Date(NOW - 6 * 3_600_000).getDay(), open: wall(NOW - 2 * 3_600_000), close: wall(NOW + 4 * 3_600_000) }], dayResetHour: 6, capacity: 300 } }))
     expect(screen.getByLabelText(`OPEN, Till ${clockTime(NOW + 4 * 3_600_000)}`)).toBeTruthy()
-    expect(screen.getByLabelText('RESET, 06:00')).toBeTruthy()
+    expect(screen.queryByLabelText(/^RESET/)).toBeNull()
     expect(screen.getByLabelText('SIZE, 300 people')).toBeTruthy()
   })
 
@@ -292,6 +297,16 @@ describe('Coming up here', () => {
     const style = StyleSheet.flatten(day.props.style)
     expect(style.width).toBeUndefined()
     expect(style).toMatchObject({ minWidth: 84, flexShrink: 0 })
+  })
+
+  it('a row says when and that it opens (GO-13, C36): the start time and a chevron; the title may take two lines', async () => {
+    const start = min(60 * 24)
+    await mount(venue({ venue: { upcoming: [{ id: 'u1', title: 'A very long night of music and talk', startTime: start }] } }))
+    const row = screen.getByTestId('venue-upcoming-u1')
+    expect(within(row).getByText(clockTime(Date.parse(start)))).toBeTruthy()
+    expect(within(row).getByTestId('venue-upcoming-chevron', { includeHiddenElements: true })).toBeTruthy()
+    expect(within(row).getByText('A very long night of music and talk').props.numberOfLines).toBe(2)
+    expect(row.props.accessibilityLabel).toContain(clockTime(Date.parse(start)))
   })
 })
 
@@ -587,11 +602,13 @@ describe('the dock', () => {
     expect(screen.queryByText('Tonight here')).toBeNull()
   })
 
-  it('no check-in area: the server’s sentence on a disabled button, and nothing to press', async () => {
+  it('no check-in area (GO-06, audit C8): a sentence and its reason, never a disabled slab or a dead gradient', async () => {
     await mount(venue({ live: { open: false, closedReason: 'no_check_in_area' } }))
-    const closed = screen.getByRole('button', { name: 'You can’t go live here yet.' })
-    expect(closed.props.accessibilityState).toMatchObject({ disabled: true })
+    expect(screen.getByText('You can’t go live here yet.')).toBeTruthy()
+    expect(screen.getByText(NO_AREA_REASON)).toBeTruthy()
+    expect(screen.getByLabelText(`You can’t go live here yet. ${NO_AREA_REASON}`)).toBeTruthy()
     expect(screen.queryByTestId('venue-go-live')).toBeNull()
+    expect(within(screen.getByTestId('venue-dock')).queryAllByRole('button')).toHaveLength(0)
   })
 })
 

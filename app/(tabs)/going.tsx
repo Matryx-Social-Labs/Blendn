@@ -16,7 +16,8 @@ import { EventCard } from '../../components/ds/EventCard'
 import { PresenceDot, TimeBadge } from '../../components/ds/MonoFamily'
 import { SectionHeader } from '../../components/ds/SectionHeader'
 import { StateScreen } from '../../components/ds/StateScreen'
-import { CONTROL_FONT_CAP, font, minTarget, useBoldText } from '../../components/ds/shared'
+import { Button } from '../../components/ds/Button'
+import { CONTROL_FONT_CAP, font, minTarget, SELECTION, useBoldText } from '../../components/ds/shared'
 import { Icon, type IconName } from '../../components/ui/Icon'
 import { Toast, type ToastKind } from '../../components/ds/Toast'
 import { apiClient } from '../../lib/apiClient'
@@ -456,7 +457,7 @@ function GoingScreenInner() {
     // "New time" / "New venue": what moved under you (frame 03). Said once, and not over the waitlist or a cancel, which are the news.
     const moved = changedTag(row)
     return (
-      <View style={[styles.inset, styles.next]}>
+      <View testID="going-next" style={[styles.inset, styles.next]}>
         <SectionLabel text="Next up" />
         <View style={styles.hero}>
           <ScalePress
@@ -473,7 +474,7 @@ function GoingScreenInner() {
             accessibilityHint="Opens the event"
           >
             <View style={styles.heroPhoto}>
-              <EventCover uri={row.cover_image_url} height={HERO_PHOTO} radius={RADIUS.mediaInCard} retry={refreshCount} />
+              <EventCover uri={row.cover_image_url} height={HERO_PHOTO} radius={RADIUS.mediaInCard} retry={refreshCount} category={row.category} />
               {live ? (
                 <View style={styles.heroBadge}>
                   <TimeBadge when="Live" />
@@ -482,11 +483,15 @@ function GoingScreenInner() {
             </View>
             <View style={styles.heroBody}>
               {when ? <NextUpWhen when={when} live={live} /> : null}
-              <Text style={[font('title', bold), styles.ink]} numberOfLines={2}>{row.title}</Text>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.ink]} numberOfLines={2}>
+                {row.title}
+              </Text>
               {place ? (
                 <View style={styles.heroPlace}>
                   <Icon name="map-pin" size={ICON.inline} color={COLOR.textSecondary} />
-                  <Text style={[font('meta', bold), styles.secondary, styles.shrink]} numberOfLines={1}>{place}</Text>
+                  <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.shrink]} numberOfLines={2}>
+                    {place}
+                  </Text>
                 </View>
               ) : null}
               {cancelled ? (
@@ -499,12 +504,24 @@ function GoingScreenInner() {
             </View>
           </ScalePress>
 
-          {/* Directions (or Open Blend'n) keeps its word; Calendar and Share are icons. */}
+          {/*
+           * Directions (or Open Blend'n) keeps its word and is the card's one positive action, so it is the world's lit button
+           * (Direction C, audit C14: nothing on the tab was lit); Calendar and Share are icons.
+           */}
           <View style={styles.heroActions}>
             {live ? (
-              <HeroAction icon="radio" label="Open Blend’n" accessibilityLabel="Open Blend’n" onPress={() => openBlendn()} />
+              <Button kind="lit" size="md" icon="radio" label="Open Blend’n" onPress={() => openBlendn()} style={styles.heroLit} testID="going-open-blendn" />
             ) : (
-              <HeroAction icon="navigation" label="Directions" accessibilityLabel={`Directions to ${row.venue_name || row.title}`} onPress={() => void openInMaps(row)} />
+              <Button
+                kind="lit"
+                size="md"
+                icon="navigation"
+                label="Directions"
+                accessibilityLabel={`Directions to ${row.venue_name || row.title}`}
+                onPress={() => void openInMaps(row)}
+                style={styles.heroLit}
+                testID="going-directions"
+              />
             )}
             {live ? (
               <HeroAction icon="navigation" accessibilityLabel={`Directions to ${row.venue_name || row.title}`} onPress={() => void openInMaps(row)} />
@@ -558,9 +575,11 @@ function GoingScreenInner() {
         <GoingRow
           title={row.title}
           cover={row.cover_image_url}
+          category={row.category}
+          testID={`going-row-${row.id}`}
           retry={refreshCount}
-          // Today's day of a multi-day run, as the heading above it is.
-          time={timeLabel(liveWindow(row).start_time, row.timezone)}
+          // Today's day of a multi-day run. The headings are by week (D30), so a row past today names its own day.
+          time={rowWhen(liveWindow(row).start_time, row.timezone)}
           venue={placeLabel(row)}
           onPress={() => openEvent(row.id)}
           onLongPress={() => rowActions(row)}
@@ -576,22 +595,8 @@ function GoingScreenInner() {
 
     if (item.kind === 'locked') {
       // A tap on something that says Blendn+: the Tonight sheet for the earlier nights always opens (trigger `recap`); bought, the nights are read again.
-      const label = lockedNightsLabel(item.count)
-      return (
-        <ScalePress
-          style={[styles.inset, styles.locked]}
-          pressedScale={0.97}
-          haptic={false}
-          onPress={() => void openTonight({ trigger: 'night', venue: '', onUnlocked: () => reloadRef.current() }, { userInitiated: true })}
-          accessibilityRole="button"
-          accessibilityLabel={label}
-          accessibilityHint="Opens Blendn+"
-        >
-          <Icon name="lock" size={ICON.control} color={COLOR.textSecondary} />
-          <Text style={[font('bodyStrong', bold), styles.ink, styles.shrink]}>{label}</Text>
-          <Icon name="chevron-right" size={ICON.inline} color={COLOR.textSecondary} />
-        </ScalePress>
-      )
+      // Plus is violet (owner's ruling): the lock is Plus's, in its selection colours on an ember screen (audit C13).
+      return <LockedNights count={item.count} onPress={() => void openTonight({ trigger: 'night', venue: '', onUnlocked: () => reloadRef.current() }, { userInitiated: true })} />
     }
 
     if (item.kind === 'past' && item.row.visit) {
@@ -620,6 +625,7 @@ function GoingScreenInner() {
         <GoingRow
           title={row.title}
           cover={row.cover_image_url}
+          category={row.category}
           retry={refreshCount}
           time={featuredDateLabel(row.start_time, new Date(), row.timezone)}
           venue={placeLabel(row)}
@@ -652,6 +658,7 @@ function GoingScreenInner() {
         <GoingRow
           title={row.title}
           cover={row.cover_image_url}
+          category={row.category}
           retry={refreshCount}
           time={`${featuredDateLabel(row.start_time, new Date(), row.timezone)} · ${timeLabel(row.start_time, row.timezone)}`}
           venue={placeLabel(row)}
@@ -788,10 +795,48 @@ function GoingScreenInner() {
   )
 }
 
-/** "Next up": the label role, over the card. */
+/** "Next up": the label role, over the card. Capped: it is chrome, not reading text (audit C11). */
 function SectionLabel({ text }: { text: string }) {
   const bold = useBoldText()
-  return <Text style={[font('label', bold), styles.secondary, styles.label]}>{text}</Text>
+  return (
+    <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('label', bold), styles.secondary, styles.label]}>
+      {text}
+    </Text>
+  )
+}
+
+/** A row's when: the time alone today, its day and time past today ("Sat 4 Oct · 9 PM"), each in the event's own zone. */
+function rowWhen(start: string, timeZone?: string | null): string {
+  const day = featuredDateLabel(start, new Date(), timeZone)
+  const time = timeLabel(start, timeZone)
+  return day === 'Today' || !day ? time : `${day} · ${time}`
+}
+
+/**
+ * "{n} more nights with Blend'n+": Plus's door, in Plus's violet (its selection fill, edge and glyph). Named, not provided:
+ * the screen stays one ember world (hueWorlds), and the card is Plus's mark inside it, as a Plus badge would be.
+ */
+function LockedNights({ count, onPress }: { count: number; onPress: () => void }) {
+  const bold = useBoldText()
+  const sel = SELECTION.violet
+  const label = lockedNightsLabel(count)
+  return (
+    <ScalePress
+      style={[styles.inset, styles.locked, { backgroundColor: sel.fill, borderColor: sel.edge }]}
+      pressedScale={0.97}
+      haptic={false}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityHint="Opens Blend’n+"
+    >
+      <Icon name="lock" size={ICON.control} color={sel.glyph} />
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink, styles.shrink]}>
+        {label}
+      </Text>
+      <Icon name="chevron-right" size={ICON.inline} color={sel.glyph} />
+    </ScalePress>
+  )
 }
 
 /** "Tonight · 9 PM" with the time in Geist Mono, or the still live dot and "Happening now". */
@@ -801,13 +846,16 @@ function NextUpWhen({ when, live }: { when: string; live: boolean }) {
     return (
       <View style={styles.heroWhen}>
         <PresenceDot kind="live" />
-        <Text style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.ink]}>{when}</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.ink]}>
+          {when}
+        </Text>
       </View>
     )
   }
   const cut = when.lastIndexOf(' · ')
   return (
-    <Text style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.secondary]} numberOfLines={1}>
+    // Wraps rather than losing the time, the one fact the card is for (audit C11: "Tomorrow •…" at AX).
+    <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.secondary]}>
       {cut === -1 ? when : `${when.slice(0, cut)} · `}
       {cut === -1 ? null : <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.ink, styles.tabular]}>{when.slice(cut + 3)}</Text>}
     </Text>
@@ -825,12 +873,11 @@ function StatusTag({ icon, text, tint }: { icon: IconName; text: string; tint: s
   )
 }
 
-/** The hero's solid button group: 48 pt, surfaceSunken; the first keeps its word and grows. */
-function HeroAction({ icon, label, accessibilityLabel, onPress }: { icon: IconName; label?: string; accessibilityLabel: string; onPress: () => void }) {
-  const bold = useBoldText()
+/** The hero's icon actions (Calendar, Share): 48 pt circles on surfaceSunken, beside the lit Directions. */
+function HeroAction({ icon, accessibilityLabel, onPress }: { icon: IconName; accessibilityLabel: string; onPress: () => void }) {
   return (
     <ScalePress
-      style={[styles.heroAction, label ? styles.heroActionWide : styles.heroActionIcon]}
+      style={[styles.heroAction, styles.heroActionIcon]}
       pressedScale={0.97}
       haptic={false}
       onPress={onPress}
@@ -838,11 +885,6 @@ function HeroAction({ icon, label, accessibilityLabel, onPress }: { icon: IconNa
       accessibilityLabel={accessibilityLabel}
     >
       <Icon name={icon} size={ICON.control} color={COLOR.textPrimary} />
-      {label ? (
-        <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} numberOfLines={1} style={[font('button', bold), styles.ink]}>
-          {label}
-        </Text>
-      ) : null}
     </ScalePress>
   )
 }
@@ -856,6 +898,7 @@ function GoingRow({
   title,
   cover,
   plate,
+  category,
   label,
   inert,
   retry,
@@ -864,11 +907,15 @@ function GoingRow({
   onPress,
   onLongPress,
   trailing,
+  testID,
 }: {
   title: string
   cover?: string | null
   /** A place's type art in place of a cover (a visit). */
   plate?: string
+  /** The event's category: with no cover, its plate (DS-12, D8), never an empty box. */
+  category?: string
+  testID?: string
   label?: string
   inert?: boolean
   retry: number
@@ -881,7 +928,7 @@ function GoingRow({
 }) {
   return (
     <View style={[styles.inset, styles.row]}>
-      <EventCard key={retry} kind="row" title={title} cover={cover} plate={plate} label={label} inert={inert} time={time} venue={venue ?? ''} onPress={onPress} onLongPress={onLongPress ? () => onLongPress() : undefined} style={styles.shrink} />
+      <EventCard key={retry} kind="row" title={title} cover={cover} plate={plate} category={category} testID={testID} label={label} inert={inert} time={time} venue={venue ?? ''} onPress={onPress} onLongPress={onLongPress ? () => onLongPress() : undefined} style={styles.shrink} />
       {trailing ? <View style={styles.trailing}>{trailing}</View> : null}
     </View>
   )
@@ -1077,7 +1124,6 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.capsule,
     backgroundColor: COLOR.surfaceSunken,
   },
-  heroActionWide: { flex: 1, paddingHorizontal: SPACE.lg },
   heroActionIcon: { width: SIZE.control },
   // 24 under the hero, 12 between rows (flow4.js going `loading`).
   skeletonFirstRow: { marginTop: SPACE.xl },
@@ -1088,9 +1134,10 @@ const styles = StyleSheet.create({
     gap: SPACE.md,
     marginTop: SPACE.md,
     padding: SPACE.lg,
-    backgroundColor: COLOR.surface,
+    borderWidth: StyleSheet.hairlineWidth,
     borderRadius: RADIUS.rowInCard,
   },
+  heroLit: { flex: 1 },
   // The ⋯ and the "Show more" row: the row's own air, nothing bordered.
   // Controls beside each other keep their 44 apart (the Android 48 reach is 8 either side of a 32), so no two reaches overlap.
   trailing: { flexDirection: 'row', alignItems: 'center', gap: minTarget() - HEART },

@@ -5,14 +5,14 @@ import { ChipSet } from '../ds/ChipSet'
 import { Sheet } from '../ds/Sheet'
 import { font, useBoldText } from '../ds/shared'
 import { VENUE_PLATE_GLYPHS } from '../ds/VenuePlate'
-import { COLOR, SPACE } from '../../lib/design/tokens'
+import { COLOR, MAX_FONT_SCALE, SPACE } from '../../lib/design/tokens'
 import { useDraftCount } from '../../lib/filterCount'
 import { HOW_FAR, KIND_TILES, NO_FILTERS, plateFor, WHATS_ON, type PlaceFilters } from '../../lib/placesPane'
 
 const sameFilters = (a: PlaceFilters, b: PlaceFilters) => a.venueType === b.venueType && a.whatsOn === b.whatsOn && a.radiusKm === b.radiusKm
 /** What the count was asked of: the kind and the radius (What's on is judged here, on the strata, and has no count of its own). */
-/** What an empty result tells you to do. */
-const NOTHING_MATCHES = 'Nothing matches. Try a wider distance or another kind.'
+/** What an empty result tells you to do: only what is on the sheet. Without a fix there is no Within to widen. */
+const nothingMatches = (hasFix: boolean) => (hasFix ? 'Nothing matches. Try a wider distance or another kind.' : 'Nothing matches. Try another kind.')
 const countKey = (f: PlaceFilters) => `${f.venueType ?? '-'}|${f.radiusKm ?? '-'}`
 
 /**
@@ -95,8 +95,8 @@ export function PlacesFilterSheet({
           />
         ) : null}
         {empty ? (
-          <Text accessibilityLiveRegion="polite" style={[font('meta', bold), styles.nothing]}>
-            {NOTHING_MATCHES}
+          <Text accessibilityLiveRegion="polite" maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.nothing]}>
+            {nothingMatches(hasFix)}
           </Text>
         ) : null}
       </View>

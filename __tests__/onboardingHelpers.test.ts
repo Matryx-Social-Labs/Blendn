@@ -74,6 +74,8 @@ describe('photo tiles', () => {
   })
   it('captions by how many there are', () => {
     expect(photoNote(0)).toMatch(/main photo is the one people see/)
+    // The limit is said once, by the subtitle (GO-11, A11).
+    for (const n of [0, 1, 4]) expect(photoNote(n)).not.toMatch(/6|six/i)
     expect(photoNote(1)).toMatch(/This is your main photo/)
     expect(photoNote(4)).toMatch(/Tap any photo/)
   })
