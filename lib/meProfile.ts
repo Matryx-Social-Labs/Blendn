@@ -199,7 +199,8 @@ export type NightsView =
   | { kind: 'failed' }
   | { kind: 'locked'; total: number }
   | { kind: 'pending'; total: number }
-  | { kind: 'tiles'; failed: boolean; nights: number }
+  /** `locked`: the older nights kept behind Blend'n+, said under the tiles (S-1: a free account sees its latest 3 ended). */
+  | { kind: 'tiles'; failed: boolean; nights: number; locked: number }
 
 export function nightsView(
   status: NightsStatus,
@@ -208,7 +209,9 @@ export function nightsView(
   total: number | null = null,
   now: Date = new Date()
 ): NightsView {
-  if (rows.length > 0) return { kind: 'tiles', failed: status === 'failed', nights: nightsGrid(rows as { id: string; start_time: string }[], now).nights }
+  if (rows.length > 0) {
+    return { kind: 'tiles', failed: status === 'failed', nights: nightsGrid(rows as { id: string; start_time: string }[], now).nights, locked: Math.max(0, lockedCount) }
+  }
   if (status === 'loading') return { kind: 'loading' }
   if (status === 'failed') return { kind: 'failed' }
   const count = Math.max(total ?? 0, lockedCount)

@@ -72,7 +72,7 @@ describe('Nights out chooses its state (Me 04 · 05 · 06)', () => {
     expect(nightsView('ready', []).kind).toBe('first')
   })
   it('keeps the last good tiles when a refresh failed', () => {
-    expect(nightsView('failed', [night(1)])).toMatchObject({ kind: 'tiles', failed: true })
+    expect(nightsView('failed', [night(1)])).toMatchObject({ kind: 'tiles', failed: true, locked: 0 })
   })
   it('says a failure with nothing to show without tiles', () => {
     expect(nightsView('failed', []).kind).toBe('failed')
@@ -83,6 +83,10 @@ describe('Nights out chooses its state (Me 04 · 05 · 06)', () => {
   })
   it('never says "first night" under a count above 0: nights still going say they land later', () => {
     expect(nightsView('ready', [], 0, 2)).toEqual({ kind: 'pending', total: 2 })
+  })
+  // Admin S-1 (fixed): a free account sees its latest 3 ended nights; the rest are `lockedCount`, said under the tiles.
+  it('carries the locked nights with the tiles', () => {
+    expect(nightsView('ready', [night(1), night(2), night(3)], 43, 48)).toMatchObject({ kind: 'tiles', locked: 43 })
   })
   it('is the first night only when the count is 0, or unknown', () => {
     expect(nightsView('ready', [], 0, 0).kind).toBe('first')
@@ -142,6 +146,16 @@ describe('Nights out chooses its state (Me 04 · 05 · 06)', () => {
     expect(screen.queryByText(FIRST_NIGHT.title)).toBeNull()
     expect(screen.getByText('1 night · it lands here once it ends')).toBeTruthy()
     expect(screen.queryByText(NIGHTS_HELD.action)).toBeNull()
+  })
+  it('says the locked nights under the tiles, with a lit See Blend\'n+', async () => {
+    const onUnlock = jest.fn()
+    await render(
+      <NightsOut status="ready" events={[night(1), night(2), night(3)]} lockedCount={43} total={48} onUnlock={onUnlock} onOpenEvent={jest.fn()} onSeeAll={jest.fn()} onRetry={jest.fn()} onFirstNight={jest.fn()} />
+    )
+    expect(screen.getByTestId('nights-grid')).toBeTruthy()
+    expect(screen.getByText('43 more nights with Blend’n+')).toBeTruthy()
+    fireEvent.press(screen.getByText(NIGHTS_HELD.action))
+    expect(onUnlock).toHaveBeenCalledTimes(1)
   })
   it('draws at most six tiles', async () => {
     await draw('ready', [1, 2, 3, 4, 5, 6, 7, 8].map(night))

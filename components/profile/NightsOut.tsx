@@ -34,6 +34,8 @@ const nightsCount = (n: number) => `${n.toLocaleString('en-US')} ${n === 1 ? 'ni
 /** D-H1: a count above 0 with nothing the list may show yet. Never "your first night". */
 export const NIGHTS_HELD = {
   locked: (total: number) => `${nightsCount(total)} · the older ones are with Blend’n+`,
+  /** Under the tiles: the server's admin S-1 contract, the latest 3 ended nights shown and the rest counted. */
+  more: (locked: number) => `${locked.toLocaleString('en-US')} more ${locked === 1 ? 'night' : 'nights'} with Blend’n+`,
   pending: (total: number) => `${nightsCount(total)} · ${total === 1 ? 'it lands' : 'they land'} here once ${total === 1 ? 'it ends' : 'they end'}`,
   action: 'See Blend’n+',
 } as const
@@ -130,6 +132,14 @@ export function NightsOut({
               </View>
             ))}
           </View>
+          {view.locked > 0 ? (
+            <View testID="nights-more" style={styles.held}>
+              <Text style={[font('meta', bold), styles.muted]} maxFontSizeMultiplier={MAX_FONT_SCALE.meta}>
+                {NIGHTS_HELD.more(view.locked)}
+              </Text>
+              {onUnlock ? <Button kind="lit" size="md" label={NIGHTS_HELD.action} onPress={onUnlock} /> : null}
+            </View>
+          ) : null}
         </>
       ) : null}
     </ProfileSection>
