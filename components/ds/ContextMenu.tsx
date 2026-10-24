@@ -10,6 +10,8 @@ import type { ChatReaction } from '../../lib/chatReactions'
 import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, MATERIAL, PRESS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { useTurnGate, useTurnWatch } from '../../lib/modalTurn'
+import { onClosingForLink } from '../../lib/pendingRoute'
+import { useLatest } from '../../lib/useLatest'
 import { tint } from '../../lib/theme'
 import type { Rect } from './chatShared'
 import { ReactionBar, reactionBarWidth } from './ReactionBar'
@@ -190,6 +192,10 @@ export function LongPressMenu({ visible, anchor, side, items, reactions, onClose
   // One Modal on screen at a time on iOS (lib/modalTurn): asked for, it waits for the screen, like the Sheet.
   const gate = useTurnGate(visible && !!anchor)
   const shown = gate.allowed
+  // A link closes an open menu, as it does a sheet (lib/pendingRoute `onClosingForLink`): nothing it offers applies there.
+  const closeForLink = useLatest(onClose)
+  const open = visible && !!anchor
+  useEffect(() => (open ? onClosingForLink(() => closeForLink.current()) : undefined), [open, closeForLink])
   // The Modal stays up for the exit and goes after it (state adjusted in render), like the Sheet.
   const [mounted, setMounted] = useState(shown)
   if (shown && !mounted) setMounted(true)

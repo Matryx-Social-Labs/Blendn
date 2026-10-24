@@ -22,6 +22,8 @@ import { Material } from '../ui/Material'
 import { COLOR, DURATION, EASING, FONT_FAMILY, MATERIAL, MAX_FONT_SCALE, RADIUS, SIZE, SPACE, SPRING, TYPE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { PresentsHere, useTurnGate, useTurnWatch } from '../../lib/modalTurn'
+import { onClosingForLink } from '../../lib/pendingRoute'
+import { useLatest } from '../../lib/useLatest'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { notifySheetDismissed } from '../../lib/sheetDismissed'
 import { OPACITY, tint } from '../../lib/theme'
@@ -587,6 +589,13 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
   const requestClose = useCallback(() => {
     if (!busy && dismissible) onClose()
   }, [busy, dismissible, onClose])
+  /*
+   * A link is somewhere new to go: a sheet open over where the person was closes, by the same request as its scrim,
+   * so its owner's cancel path runs (a confirm resolves as cancel). One that must be answered (`dismissible={false}`)
+   * or is busy with an action stays, and is presented again over the link's target through its turn (lib/modalTurn).
+   */
+  const closeForLink = useLatest(requestClose)
+  useEffect(() => (wanted ? onClosingForLink(() => closeForLink.current()) : undefined), [wanted, closeForLink])
   const stops = [...new Set(detents)].sort((a, b) => DETENT[a] - DETENT[b])
   const heights = stops.map((d) => Math.round(window.height * DETENT[d]))
   const frame = sheetFrame({

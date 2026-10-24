@@ -11,7 +11,8 @@ import { useCoachMarkSpot } from '../../components/ds/CoachMarkHost'
 import { ForegroundBanners } from '../../components/notifications/ForegroundBanners'
 import { markCoachUsed, useCoachMark } from '../../lib/coachMarks'
 import { apiClient } from '../../lib/apiClient'
-import { openBlendn, setLiveHint, useBlendnOpen } from '../../lib/blendnOverlay'
+import { blendnClosed, openBlendn, setLiveHint, useBlendnOpen } from '../../lib/blendnOverlay'
+import { onClosingForLink } from '../../lib/pendingRoute'
 import { subscribeCheckInChanged } from '../../lib/checkIn'
 import { COLOR, DURATION, EASING, SIZE, SPACE } from '../../lib/design/tokens'
 import { Logger } from '../../lib/logger'
@@ -311,6 +312,11 @@ function useActiveRoomTitle() {
 
 export default function TabLayout() {
   const blendnOpen = useBlendnOpen()
+  /*
+   * A link closes the overlay, at once rather than by its animation (RC drive 6): it is not a route, so a link to a tab
+   * switched the tab under it and the Room stayed on top. Told before the link navigates (lib/pendingRoute).
+   */
+  useEffect(() => (blendnOpen ? onClosingForLink(blendnClosed) : undefined), [blendnOpen])
   const activeRoom = useActiveRoomTitle()
   return (
     <View style={styles.host}>

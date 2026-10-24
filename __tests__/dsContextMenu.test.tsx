@@ -14,6 +14,7 @@ import * as Reanimated from 'react-native-reanimated'
 import { ContextMenu, LongPressMenu, placeLongPress, type MenuItem } from '../components/ds/ContextMenu'
 import { COLOR, MATERIAL, SIZE, SPRING } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
+import { dismissModals } from '../lib/pendingRoute'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('react-native-reanimated', () => {
@@ -162,6 +163,17 @@ describe('<LongPressMenu>', () => {
     expect(reply).not.toHaveBeenCalled()
     await fireEvent(screen.getByTestId('lp-modal'), 'dismiss')
     expect(reply).toHaveBeenCalledTimes(1)
+  })
+
+  it('a link closes an open menu, as it does a sheet (RC drive 6); a closed one is not asked', async () => {
+    const onClose = jest.fn()
+    const view = await render(menu({ onClose }))
+    await act(async () => dismissModals())
+    expect(onClose).toHaveBeenCalledTimes(1)
+
+    await view.rerender(menu({ onClose, visible: false, anchor: null }))
+    await act(async () => dismissModals())
+    expect(onClose).toHaveBeenCalledTimes(1)
   })
 
   it('never opened (no anchor yet): nothing is mounted', async () => {

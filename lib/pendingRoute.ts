@@ -144,8 +144,10 @@ function linkHoldsReleased(): Promise<void> {
 
 /**
  * Be told, synchronously, the moment a link is about to close the modals (`dismissModals`), before the pop is dispatched
- * and before any screen unmounts. For what must know a link closed it, not the person: the check-in's intent question
- * (abandoned, so its room is not pushed over the link) and Make a crew (its draft kept). Returns the unsubscribe.
+ * and before any screen unmounts. For what must close or know a link closed it, not the person: every open dismissible
+ * DS Sheet and ⋯ menu (closed by their own close request, so a confirm resolves as its cancel), the Blend'n overlay
+ * (not a route: a tab link would switch the tab under it), the check-in's intent question (abandoned, so its room is
+ * not pushed over the link) and Make a crew (its draft kept). Returns the unsubscribe.
  *
  * It replaced a flag read in the closing screen's unmount (RC drive 6): the flag was cleared on the pop's first state
  * event, before the screen unmounted, so the check-in read "closed" and pushed the room over the link.
@@ -176,6 +178,9 @@ const DISMISS_FALLBACK_MS = 1000
  */
 export async function dismissModals(): Promise<void> {
   await linkHoldsReleased()
+  // Told first, whether or not a modal route is up: an open sheet, the Blend'n overlay and a waiting check-in are not
+  // routes, and each closes or gives up here (`onClosingForLink`) before anything is popped or unmounts.
+  ;[...linkClosers].forEach((listener) => listener())
   return popModals()
 }
 
@@ -196,8 +201,6 @@ function popModals(): Promise<void> {
           clearTimeout(timer)
           resolve()
         }
-        // Told first: by the time anything unmounts, whoever needed to know a link did this already does.
-        ;[...linkClosers].forEach((listener) => listener())
         navigator.dispatch({ type: 'POP', payload: { count: routes.length - lowest }, target: key })
       })
     }
