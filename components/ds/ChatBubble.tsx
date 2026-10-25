@@ -582,6 +582,7 @@ const styles = StyleSheet.create({
   secondary: { color: COLOR.textSecondary },
   tertiary: { color: COLOR.textTertiary },
   destructive: { color: COLOR.destructive },
-  removedText: { color: COLOR.textSecondary, fontStyle: 'italic' },
+  // No fontStyle: Satoshi ships no italic face, so Android synthesises one from the system face (Roboto). The dashed frame and the secondary colour say "removed".
+  removedText: { color: COLOR.textSecondary },
   centred: { textAlign: 'center' },
 })

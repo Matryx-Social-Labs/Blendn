@@ -201,7 +201,7 @@ describe('<ChatBubble>', () => {
     expect(onReactionPress).toHaveBeenCalledWith('🔥')
   })
 
-  it('removed: keeps its place in the DS dashed frame, italic; no hold, no swipe', async () => {
+  it('removed: keeps its place in the DS dashed frame, in the DS face and never italic; no hold, no swipe', async () => {
     const onLongPress = jest.fn()
     await render(bubble({ removed: true, onLongPress, onReply: jest.fn() }))
     expect(flat('b-bubble')).toMatchObject({ backgroundColor: 'transparent' })
@@ -215,7 +215,11 @@ describe('<ChatBubble>', () => {
     // As the SVG host receives them: the dash split, the colour processed.
     expect(rect).toMatchObject({ strokeDasharray: ['6', '4'], strokeWidth: 1.5, stroke: { payload: processColor(COLOR.inputBorder) }, fill: null, width: 238.5, height: 42.5 })
     expect(Number(rect.rx)).toBeCloseTo(BUBBLE.radius - 0.75)
-    expect(screen.getByText('This message was removed by moderation.', { includeHiddenElements: true })).toBeTruthy()
+    const words = screen.getByText('This message was removed by moderation.', { includeHiddenElements: true })
+    expect(words).toBeTruthy()
+    // rc9 #1: Satoshi has no italic face, so Android synthesised Roboto italic. Negative control: `fontStyle: 'italic'` on removedText fails this.
+    expect(StyleSheet.flatten(words.props.style)).toMatchObject({ fontFamily: expect.stringContaining('Satoshi') })
+    expect(StyleSheet.flatten(words.props.style).fontStyle).toBeUndefined()
     // L9: read without the full stop before the time.
     expect(message().props.accessibilityLabel).toBe('Cosmic Panda, This message was removed by moderation, 9:38 PM')
     await act(async () => fireGestureHandler(getByGestureTestId('b-hold'), [{ state: State.BEGAN }, { state: State.ACTIVE }, { state: State.END }]))
