@@ -71,7 +71,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   }, [])
   const dock = docks.length ? docks[docks.length - 1].height : 0
   const tabRoot = isTabRoot(pathname)
-  const inset = head && Platform.OS === 'android' && dock === 0 && !tabRoot ? headHeight + SPACE.lg : 0
+  // With a dock too: the toast stands on it, over whatever scrolls above it (a chat's newest row, rc8 #5).
+  const inset = head && Platform.OS === 'android' && !tabRoot ? headHeight + SPACE.lg : 0
   const value = useMemo(() => ({ showToast }), [showToast])
 
   return (

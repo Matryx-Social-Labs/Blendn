@@ -236,7 +236,25 @@ describe('docks and the room left under a snackbar (Android)', () => {
     expect(bottomOf()).toBe(90 + SPACE.lg)
   })
 
-  it('the inset is the toast’s height plus a gutter when it stands on the bare screen, and 0 with a dock or on a tab root', async () => {
+  // rc8 #5: over a chat's composer (and the keyboard) the snackbar covered the newest row, the withheld placeholder it was
+  // explaining. A dock lifts the toast, but what scrolls above the dock is covered all the same: the room is the toast's
+  // height plus the gutter there too. Negative control: the old rule (0 with a dock) fails it.
+  it('with a dock, the inset is still the toast’s height plus a gutter, so a chat feed scrolls its newest row clear (rc8 #5)', async () => {
+    android()
+    mockPath = '/private-chat/c1'
+    const seen: number[] = []
+    await render(
+      <ToastProvider>
+        <Screen dock={64} onInset={(n) => seen.push(n)} />
+      </ToastProvider>
+    )
+    await fireEvent.press(screen.getByRole('button', { name: 'save' }))
+    await act(async () => fireEvent(screen.getByTestId('toast'), 'layout', { nativeEvent: { layout: { width: 300, height: 52, x: 0, y: 0 } } }))
+    expect(bottomOf()).toBe(64 + SPACE.lg)
+    expect(seen.at(-1)).toBe(52 + SPACE.lg)
+  })
+
+  it('the inset is the toast’s height plus a gutter when it stands at the bottom, and 0 on a tab root', async () => {
     android()
     mockPath = '/settings'
     const seen: number[] = []

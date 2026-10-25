@@ -1,5 +1,6 @@
 import React from 'react'
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native'
+import { StyleSheet } from 'react-native'
 
 /**
  * The room (Flow 5 room frames, R2-D2, R3-D5), rendered: what it reads, what
@@ -77,6 +78,8 @@ jest.mock('../lib/useLiveSync', () => ({ useLiveSync: () => ({ state: 'connected
 jest.mock('../components/RealtimeStatusBanner', () => ({ __esModule: true, default: () => null }))
 jest.mock('../components/chat/RoomGuidelinesBanner', () => ({ RoomGuidelinesBanner: () => null }))
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockToast }) }))
+let mockToastInset = 0
+jest.mock('../components/toastDock', () => ({ ...jest.requireActual('../components/toastDock'), useToastInset: () => mockToastInset }))
 jest.mock('../lib/notifications', () => ({ useActiveThread: jest.fn() }))
 
 /* eslint-disable import/first */
@@ -128,6 +131,7 @@ beforeEach(() => {
   mockMessage.length = 0
   mockDeleted.length = 0
   mockParams = { id: 'g1' }
+  mockToastInset = 0
   mockAuth.user = { id: 'u-a', name: 'Asha' }
   api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [eventRow] } } as never)
   api.getChatMessages.mockResolvedValue(page([theirs]) as never)
@@ -495,4 +499,16 @@ describe('a message removed by moderation after it was delivered', () => {
     expect(screen.queryByTestId('bubble-m1')).toBeNull()
     expect(mockToast).not.toHaveBeenCalledWith('Your message was removed by moderation.', 'info')
   })
+})
+
+// rc8 #5, the room's half: the snackbar over the composer covered the newest row; the feed makes room while one shows.
+// Negative control: without `toastInset` in the feed's padding it fails.
+it('the feed makes room under the newest row for the Android snackbar over the composer (rc8 #5)', async () => {
+  const bottom = () => StyleSheet.flatten(screen.getByTestId('room-feed').props.contentContainerStyle).paddingBottom as number
+  await open()
+  const without = bottom()
+  await screen.unmount()
+  mockToastInset = 70
+  await open()
+  expect(bottom()).toBe(without + 70)
 })

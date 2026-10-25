@@ -53,6 +53,8 @@ jest.mock('../lib/useLiveSync', () => ({ useLiveSync: () => 'connected' }))
 jest.mock('../lib/notifications', () => ({ useActiveThread: () => {} }))
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockToast }) }))
 jest.mock('../components/RealtimeStatusBanner', () => () => null)
+let mockToastInset = 0
+jest.mock('../components/toastDock', () => ({ ...jest.requireActual('../components/toastDock'), useToastInset: () => mockToastInset }))
 jest.mock('../lib/logger', () => ({
   Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn(), journey: jest.fn() },
 }))
@@ -107,6 +109,7 @@ beforeEach(() => {
   clearOutbox()
   mockLive.length = 0
   mockParams = { conversationId: 'c1' }
+  mockToastInset = 0
   mockAuth.user = { id: 'u-a' }
   api.getConversation.mockResolvedValue({ success: true, data: anonymous } as never)
   api.getConversationMessages.mockResolvedValue(page([theirs]) as never)
@@ -515,4 +518,17 @@ describe('a DM withheld by moderation', () => {
     expect(polls).toHaveLength(0)
     spy.mockRestore()
   })
+})
+
+// rc8 #5: on Android the snackbar stands on the composer, and with the keyboard up it covered the withheld placeholder's
+// second line. The feed adds the toast's room under its newest row while one shows. Negative control: without
+// `toastInset` in the feed's padding it fails.
+it('the feed makes room under the newest row for the Android snackbar over the composer (rc8 #5)', async () => {
+  const bottom = () => StyleSheet.flatten(screen.getByTestId('dm-feed').props.contentContainerStyle).paddingBottom as number
+  await open()
+  const without = bottom()
+  await screen.unmount()
+  mockToastInset = 70
+  await open()
+  expect(bottom()).toBe(without + 70)
 })

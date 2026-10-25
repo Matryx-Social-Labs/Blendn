@@ -26,6 +26,7 @@ import { TypingIndicator } from '../../components/ds/TypingIndicator'
 import { DayPill, UnreadDivider as UnreadRule } from '../../components/ds/UnreadDivider'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useToast } from '../../components/Toast'
+import { useToastInset } from '../../components/toastDock'
 import { apiClient } from '../../lib/apiClient'
 import { scheduleIconBadgeRefresh } from '../../lib/appBadge'
 import { runPlace } from '../../lib/chatFeed'
@@ -160,6 +161,8 @@ function PrivateChatInner() {
   /** The reveal panel the person folded away (`revealPanelKey`): the feed is theirs again until it changes. */
   const [foldedPanel, setFoldedPanel] = useState<string | null>(null)
   const { showToast } = useToast()
+  // Android: the snackbar over the composer covers the newest row (the withheld placeholder it explains); the feed makes room (rc8 #5).
+  const toastInset = useToastInset()
 
   useEffect(() => {
     if (!conversationId) return
@@ -753,7 +756,7 @@ function PrivateChatInner() {
               keyExtractor={(item) => item.id}
               renderItem={renderChatItem}
               style={[styles.fill, chatFeedFrame(insets.top, barSpace).style]}
-              contentContainerStyle={[styles.listContent, { paddingTop: chatFeedFrame(insets.top).paddingTop, paddingBottom: dockHeight + dockBottom + SPACE.md }]}
+              contentContainerStyle={[styles.listContent, { paddingTop: chatFeedFrame(insets.top).paddingTop, paddingBottom: dockHeight + dockBottom + SPACE.md + toastInset }]}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode={KEYBOARD_DISMISS}

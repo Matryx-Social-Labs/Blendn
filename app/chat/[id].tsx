@@ -24,6 +24,7 @@ import { TypingIndicator } from '../../components/ds/TypingIndicator'
 import { DayPill } from '../../components/ds/UnreadDivider'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useToast } from '../../components/Toast'
+import { useToastInset } from '../../components/toastDock'
 import { apiClient, type ChatReaction } from '../../lib/apiClient'
 import { LINKS_LINE, refusalPlace, runPlace } from '../../lib/chatFeed'
 import { emitChatListUpdate } from '../../lib/chatListUpdates'
@@ -287,6 +288,8 @@ function GroupChatInner() {
   /** The event this room is, to ask its own door (`GET /events/:id/chat`), which knows when it opens. */
   const roomEventId = eventRoom ? (roomInfo.eventId ?? idParam(params.eventId)) : null
   const { showToast } = useToast()
+  // Android: the snackbar over the composer covers the newest row (the withheld placeholder it explains); the feed makes room (rc8 #5).
+  const toastInset = useToastInset()
 
   /* The long-press, a sender's card, your reaction's flight (#36, 5.1, #37). */
   const [menu, setMenu] = useState<{ message: Message; anchor: Rect } | null>(null)
@@ -966,7 +969,7 @@ function GroupChatInner() {
               renderItem={renderChatItem}
               keyExtractor={(item) => (item.kind === 'separator' ? item.id : item.message_id)}
               style={[styles.fill, chatFeedFrame(insets.top, blendRoom.barSpace).style]}
-              contentContainerStyle={[styles.listContent, { paddingTop: chatFeedFrame(insets.top).paddingTop, paddingBottom: dockHeight + dockBottom + SPACE.md }]}
+              contentContainerStyle={[styles.listContent, { paddingTop: chatFeedFrame(insets.top).paddingTop, paddingBottom: dockHeight + dockBottom + SPACE.md + toastInset }]}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode={KEYBOARD_DISMISS}

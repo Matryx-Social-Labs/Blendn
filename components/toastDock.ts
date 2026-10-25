@@ -26,7 +26,7 @@ export const ToastContext = createContext<ToastContextValue>({ showToast: () => 
 /** A screen's bottom dock or composer stands where the Android snackbar would; it registers its height while it is the screen in front. */
 export const ToastDockContext = createContext<(id: string, height: number) => () => void>(() => () => {})
 
-/** Room a screen leaves under its content for the showing snackbar (Android, off the tab roots, no dock); else 0. Its own context: only a screen that pads for it re-renders. */
+/** Room a screen leaves under its content for the showing snackbar (Android, off the tab roots, over a dock or not); else 0. Its own context: only a screen that pads for it re-renders. */
 export const ToastInsetContext = createContext(0)
 
 /** Whether this screen is the one in front (a stack keeps the screens under it mounted). Without a navigator (a test, a preview) it is. */
