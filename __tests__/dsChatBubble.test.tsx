@@ -171,17 +171,18 @@ describe('<ChatBubble>', () => {
     expect(flat('b-bubble').borderBottomLeftRadius).toBe(6)
   })
 
-  // rc9 #5: Android's tree showed a clickable 32 dp face with no label. Negative control: the old `accessibilityElementsHidden` face fails the first two.
-  it('inbound, the last: the face is a "View profile, <name>" button with a target the platform’s minimum wide, and a picture when it goes nowhere', async () => {
+  // rc9 #5 (revised): the face stays hidden from screen readers (the bubble's "View profile" action covers it, and a
+  // second stop per message would double a busy room); touch gets the platform minimum. Negative control: making the
+  // face a labelled button fails the first expectation.
+  it('inbound, the last: the face is a touch target the platform’s minimum wide, hidden from screen readers', async () => {
     const onSenderPress = jest.fn()
     await render(bubble({ first: false, last: true, onSenderPress }))
-    const face = screen.getByRole('button', { name: 'View profile, Cosmic Panda' })
+    expect(screen.queryByRole('button', { name: /View profile/ })).toBeNull()
+    const face = screen.getByTestId('b-avatar', { includeHiddenElements: true })
+    expect(face.props.importantForAccessibility).toBe('no-hide-descendants')
+    expect(BUBBLE.avatar + 2 * face.props.hitSlop).toBe(minTarget())
     await fireEvent.press(face)
     expect(onSenderPress).toHaveBeenCalledTimes(1)
-    const { hitSlop } = screen.getByTestId('b-avatar').props
-    expect(BUBBLE.avatar + 2 * hitSlop).toBe(minTarget())
-    await screen.rerender(bubble({ first: false, last: true }))
-    expect(screen.queryByRole('button', { name: 'View profile, Cosmic Panda' })).toBeNull()
   })
 
   it('yours: surfaceRaised, the tail on the right, no name or creature', async () => {

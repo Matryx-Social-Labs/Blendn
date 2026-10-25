@@ -295,7 +295,7 @@ function ChatBubbleBase(props: ChatBubbleProps) {
  */
 export const ChatBubble = memo(ChatBubbleBase)
 
-/** The 32 pt creature beside an inbound room group, on its last bubble; a button to their card, "View profile, <name>", with a 48 dp target on Android. */
+/** The 32 pt creature beside an inbound room group, on its last bubble: a touch target to their card (48 dp); screen readers use the bubble's "View profile" action. */
 function SenderAvatar({ sender, last, onPress, testID }: { sender: ChatPerson; last: boolean; onPress?: () => void; testID?: string }) {
   if (!last) return <View style={styles.avatarSpace} />
   return (
@@ -304,11 +304,10 @@ function SenderAvatar({ sender, last, onPress, testID }: { sender: ChatPerson; l
       onPress={onPress}
       disabled={!onPress}
       hitSlop={(minTarget() - BUBBLE.avatar) / 2}
-      // A tappable face is a labelled button, as the bubble's own "View profile" action; with nowhere to go it is only a picture.
-      accessibilityRole={onPress ? 'button' : undefined}
-      accessibilityLabel={onPress ? `View profile, ${sender.name}` : undefined}
-      accessibilityElementsHidden={!onPress}
-      importantForAccessibility={onPress ? 'yes' : 'no-hide-descendants'}
+      // Hidden from screen readers: the bubble already offers "View profile" as an action, and a second stop on
+      // every message would double each one in a busy room. Touch gets the 48 dp target.
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
     >
       <Avatar {...avatarOf(sender, BUBBLE.avatar)} />
     </Pressable>
