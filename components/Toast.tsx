@@ -70,7 +70,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     return () => setDocks((prev) => prev.filter((d) => d.id !== id))
   }, [])
   const dock = docks.length ? docks[docks.length - 1].height : 0
-  const tabRoot = isTabRoot(pathname)
+  // '/' is the Pulse tab AND the signed-out entry screen, which has no tab bar and docks its buttons: a toast cleared the bar's height and
+  // landed on "Continue with Google" (rc9). A registered dock is something to stand on; no tab root registers one.
+  const tabRoot = isTabRoot(pathname) && dock === 0
   // With a dock too: the toast stands on it, over whatever scrolls above it (a chat's newest row, rc8 #5).
   const inset = head && Platform.OS === 'android' && !tabRoot ? headHeight + SPACE.lg : 0
   const value = useMemo(() => ({ showToast }), [showToast])

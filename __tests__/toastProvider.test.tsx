@@ -12,6 +12,7 @@ let mockPath = '/events'
 let mockFocused = true
 jest.mock('expo-router', () => ({ usePathname: () => mockPath, useIsFocused: () => mockFocused }))
 
+import { TAB_BAR_HINT_RISE } from '../components/ds/TabBar'
 import { isTabRoot, ToastProvider, useToast, useToastDock, useToastInset } from '../components/Toast'
 import { SIZE, SPACE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
@@ -221,6 +222,28 @@ describe('docks and the room left under a snackbar (Android)', () => {
     )
     await fireEvent.press(screen.getByRole('button', { name: 'save' }))
     expect(bottomOf()).toBe(SPACE.lg)
+  })
+
+  // rc9: the entry screen is '/', which is also the Pulse tab. Its dock of buttons is what the toast stands above, not a tab bar's height
+  // (which landed it on "Continue with Google"). Negative control: `isTabRoot(pathname)` alone fails the first expectation.
+  it('the signed-out entry screen at "/" docks its buttons: the snackbar stands above them, and the Pulse tab, with no dock, still clears its bar', async () => {
+    android()
+    mockPath = '/'
+    await render(
+      <ToastProvider>
+        <Screen dock={300} />
+      </ToastProvider>
+    )
+    await fireEvent.press(screen.getByRole('button', { name: 'save' }))
+    expect(bottomOf()).toBe(300 + SPACE.lg)
+    await screen.unmount()
+    await render(
+      <ToastProvider>
+        <Screen />
+      </ToastProvider>
+    )
+    await fireEvent.press(screen.getByRole('button', { name: 'save' }))
+    expect(bottomOf()).toBe(SPACE.tabBarBottomGapAndroid + SIZE.tabBar + TAB_BAR_HINT_RISE + SPACE.md)
   })
 
   it('the last registrant wins', async () => {
