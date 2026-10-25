@@ -1585,7 +1585,9 @@ what is about to reach the public.
   gender). Tracking: No.
 - **Third-party AI.** Messages, posts and photos are checked by OpenAI for
   safety. The label has no field for it; the privacy policy says so, and the
-  app must too, where people first post (5.1.2(i)).
+  app says so where people first post (5.1.2(i)): `AI_MODERATION_NOTICE` in
+  `lib/communityGuidelines.ts`, shown in the room chat's guidelines banner. Its
+  wording is a draft until the owner approves it.
 - **Privacy report.** After archiving, Xcode › Organizer › Generate Privacy
   Report, and keep the PDF with the submission.
 - **URLs.** Privacy `https://www.blendn.app/privacy`. Support needs a real page.
