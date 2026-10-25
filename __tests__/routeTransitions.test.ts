@@ -34,3 +34,17 @@ describe('the root layout’s transitions', () => {
     expect(src).toMatch(/name="crews\/new"[^\n]*animation: 'none'/)
   })
 })
+
+/*
+ * Audit M2 (a11y-motion 2026-10-24): a nested stack that names its own transition follows the same rule. Onboarding's
+ * steps pushed with a slide under Reduce Motion while the root cross-faded.
+ */
+describe.each(['onboarding', 'preview', 'chat', 'private-chat'])('app/%s/_layout.tsx', (dir) => {
+  const nested = readFileSync(join(__dirname, '../app', dir, '_layout.tsx'), 'utf8')
+  const set = nested.split('\n').map((l) => l.trim()).filter((l) => /\banimation:/.test(l) && !l.startsWith('*') && !l.startsWith('//'))
+
+  it.each(set.length ? set : ['(none: the platform default, no push inside)'])('%s is none, a fade, or behind reduceMotion', (text) => {
+    if (!/\banimation:/.test(text)) return
+    expect(/\banimation:\s*('none'|'fade'|reduceMotion \?)/.test(text)).toBe(true)
+  })
+})
