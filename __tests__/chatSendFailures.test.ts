@@ -65,7 +65,9 @@ describe('a removed message is a placeholder, not a blank', () => {
     // No hold (so no menu) and no swipe on a removed message.
     expect(bubble).toContain('.enabled(!!onLongPress && !removed)')
     expect(bubble).toContain('.enabled(!!onReply && !removed && !failed)')
-    expect(bubble).toMatch(/removed: \{[^}]*borderStyle: 'dashed'/)
+    // Dashed by the DS frame (SVG), never a border dash, which draws solid on Android with any per-side width.
+    expect(bubble).toContain('{removed ? <DashedFrame radius={BUBBLE.radius}')
+    expect(bubble).not.toContain("borderStyle: 'dashed'")
   })
 })
 
