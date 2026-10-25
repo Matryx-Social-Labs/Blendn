@@ -58,8 +58,18 @@ describe('<MapCard>', () => {
     await render(<MapCard venue="Toit" address="8, Allied Grande Plaza, Koramangala" testID="m" />)
     expect(StyleSheet.flatten(screen.getByTestId('m-foot', { includeHiddenElements: true }).props.style)).toMatchObject({ position: 'absolute', flexDirection: 'row' })
     const address = StyleSheet.flatten(screen.getByText('8, Allied Grande Plaza, Koramangala', { includeHiddenElements: true }).props.style)
-    expect(address).toMatchObject({ flex: 1, textAlign: 'right' })
     expect(address.position).toBeUndefined()
+  })
+
+  // rc8 10a: right-aligned and ellipsized, Android drew the line at its full width, so "8," lost its "8" at 1.3× / 360.
+  // The address hugs its text and shrinks into what the pill leaves, pushed right by its margin.
+  // Negative control: the rc7 style (`flex: 1, textAlign: 'right'`) fails it.
+  it('the address is pushed right by its margin, never right-aligned text, so Android never clips its first character (rc8 10a)', async () => {
+    await render(<MapCard venue="Toit" address="8, Allied Grande Plaza, Koramangala" testID="m" />)
+    const address = StyleSheet.flatten(screen.getByText('8, Allied Grande Plaza, Koramangala', { includeHiddenElements: true }).props.style)
+    expect(address).toMatchObject({ flexShrink: 1, marginLeft: 'auto' })
+    expect(address.textAlign).not.toBe('right')
+    expect(address.flex).toBeUndefined()
   })
 
   it('focused rings it; Increase Contrast adds the 50% hairline', async () => {

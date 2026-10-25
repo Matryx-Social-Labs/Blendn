@@ -100,7 +100,9 @@ export function MapCard({
               {pill}
             </Text>
           </ScrimPill>
-          {/* One line, ended with "…": two lines bottom-anchored were clipped mid-word on Android (r7 L4); the card above has it in full. */}
+          {/* One line, ended with "…": two lines bottom-anchored were clipped mid-word on Android (r7 L4); the card above has it in full.
+              Pushed right by its margin, never `textAlign: 'right'`: Android lays an ellipsized line right-aligned at its
+              un-ellipsized width, so the first character fell off the left edge at 1.3× / 360 dp (rc8 10a). */}
           {address ? (
             <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} numberOfLines={1} ellipsizeMode="tail" style={[font('caption', bold), styles.ink, styles.address]}>
               {address}
@@ -237,7 +239,7 @@ const styles = StyleSheet.create({
   at: { position: 'absolute', width: 0, height: 0, alignItems: 'center', justifyContent: 'center' },
   ringed: { position: 'absolute', borderRadius: RADIUS.capsule },
   foot: { position: 'absolute', left: SPACE.md, right: SPACE.md, bottom: SPACE.md, flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
-  address: { flex: 1, textAlign: 'right' },
+  address: { flexShrink: 1, marginLeft: 'auto' },
   ink: { color: COLOR.textPrimary },
   tabular: { fontVariant: ['tabular-nums'] },
   cluster: {
