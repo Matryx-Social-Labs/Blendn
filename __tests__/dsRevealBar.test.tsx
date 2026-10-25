@@ -5,7 +5,7 @@
  * are" (white; a sheet confirms it), with "Ask them" beside it. Silent: the
  * sheet that confirms carries the outcome.
  */
-import { act, fireEvent, render, screen } from '@testing-library/react-native'
+import { act, fireEvent, render, screen, within } from '@testing-library/react-native'
 import React from 'react'
 import { AccessibilityInfo, StyleSheet } from 'react-native'
 
@@ -137,5 +137,32 @@ describe('rc7 D8', () => {
     expect(screen.getByText('You', { includeHiddenElements: true })).toBeTruthy()
     expect(screen.queryByText(/You · /, { includeHiddenElements: true })).toBeNull()
     expect(screen.getByLabelText('You, anonymous. Cosmic Panda, anonymous.')).toBeTruthy()
+  })
+})
+
+/*
+ * rc8 10d: at 1.3× / 360 dp both sides read "anony…": beside the face the eye line had about 54 dp, and "anonymous" is
+ * one word, so two lines cannot help it. Narrow, it goes under the face and the name, across the side; roomy, it stays
+ * under the name. Negative control: with the eye line inside the names column at every width, the narrow case fails.
+ */
+describe('rc8 10d: the eye line at 360 dp', () => {
+  const at = (width: number) => jest.spyOn(require('react-native'), 'useWindowDimensions').mockReturnValue({ width, height: 800, scale: 3, fontScale: 1.3 })
+  afterEach(() => jest.restoreAllMocks())
+
+  it('narrow: under the face and the name, across the whole side, on both sides', async () => {
+    at(360)
+    await draw()
+    for (const who of ['you', 'them']) {
+      const names = screen.getByTestId(`r-${who}-names`, { includeHiddenElements: true })
+      expect(within(names).queryByTestId(`r-${who}-eye`, { includeHiddenElements: true })).toBeNull()
+      expect(screen.getByTestId(`r-${who}-eye`, { includeHiddenElements: true })).toBeTruthy()
+    }
+  })
+
+  it('roomy: under the name, beside the face, as designed', async () => {
+    at(402)
+    await draw()
+    const names = screen.getByTestId('r-you-names', { includeHiddenElements: true })
+    expect(within(names).getByTestId('r-you-eye', { includeHiddenElements: true })).toBeTruthy()
   })
 })

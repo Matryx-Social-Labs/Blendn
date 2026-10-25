@@ -66,10 +66,10 @@ export function RevealBar({
   // Your side before you have shown yourself carries no name of its own ("You"), so it reads "You", never "You · You".
   const yourName = you.name === YOU ? null : you.name
 
-  const side = (who: RevealSide, mine: boolean, seen: boolean) => (
-    <View style={styles.side}>
-      <Avatar size={SIDE_FACE} {...who.face} />
-      <View style={styles.sideText}>
+  const side = (who: RevealSide, mine: boolean, seen: boolean) => {
+    const id = testID && `${testID}-${mine ? 'you' : 'them'}`
+    const names = (
+      <View testID={id && `${id}-names`} style={styles.sideText}>
         {mine && narrow && yourName ? (
           <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), styles.ink]}>
             You
@@ -79,14 +79,36 @@ export function RevealBar({
         <Text numberOfLines={2} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), styles.ink]}>
           {mine ? (yourName ? (narrow ? yourName : `You · ${yourName}`) : YOU) : who.name}
         </Text>
-        <View style={styles.eye}>
-          <Icon name={seen ? 'eye' : 'eye-off'} size={ICON.inline} color={quiet} />
-          {/* Shrinks and ends in "…" rather than run past the card at 1.3× / 360 dp ("anonymou|s", rc7 D8). */}
-          <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), styles.shrink, { color: quiet }]}>
-            {seenWord(seen)}
-          </Text>
-        </View>
+        {narrow ? null : eyeLine(seen, id)}
       </View>
+    )
+    const faceAndNames = (
+      <View style={narrow ? styles.faceRow : styles.side}>
+        <Avatar size={SIDE_FACE} {...who.face} />
+        {names}
+      </View>
+    )
+    /*
+     * Narrow, the eye line goes under the face and the name, across the whole side: beside the face it had about 54 dp
+     * at 1.3× / 360 dp, and "anonymous" is one word, so it read "anony…" on both sides (rc8 10d). Across the side it has
+     * about 107 dp, and it needs about 77.
+     */
+    return narrow ? (
+      <View style={styles.sideStack}>
+        {faceAndNames}
+        {eyeLine(seen, id)}
+      </View>
+    ) : (
+      faceAndNames
+    )
+  }
+  const eyeLine = (seen: boolean, id: string | undefined) => (
+    <View testID={id && `${id}-eye`} style={styles.eye}>
+      <Icon name={seen ? 'eye' : 'eye-off'} size={ICON.inline} color={quiet} />
+      {/* Shrinks and ends in "…" rather than run past the card at 1.3× / 360 dp ("anonymou|s", rc7 D8). */}
+      <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), styles.shrink, { color: quiet }]}>
+        {seenWord(seen)}
+      </Text>
     </View>
   )
 
@@ -150,6 +172,9 @@ const styles = StyleSheet.create({
   sides: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
   side: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   sideText: { flex: 1, minWidth: 0 },
+  /** Narrow: the face and the name in a row, the eye line under them across the side. */
+  sideStack: { flex: 1, minWidth: 0, gap: SPACE.xs },
+  faceRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   eye: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
