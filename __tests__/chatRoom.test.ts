@@ -283,7 +283,8 @@ describe('direct messages use the same bubble, minus what a DM does not need', (
   it('shows a receipt only under your own last message', () => {
     const src = DM()
     expect(src).toContain('receipt={mine && item.id === lastMineId ? receiptFor(item, myId) : null}')
-    expect(src).toContain('!isLocalMessage(m))?.id')
+    // Never a message that was not sent: one still on this phone, or one moderation withheld (rc8 #2).
+    expect(src).toContain('!isLocalMessage(m) && !m.removed)?.id')
   })
 
   it('keeps receipts out of the room', () => {
