@@ -17,7 +17,6 @@ import {
   grantManageLine,
   storeManageHint,
   taxLine,
-  PLUS_COMING_SOON,
   PLUS_FEATURES,
   PLUS_POLL_EVERY_MS,
   plusStatusLine,
@@ -112,9 +111,8 @@ describe('the page\'s own rules', () => {
   const monthly = offer('$rc_monthly', '₹199.00')
   const night = offer('night_pass', '₹49.00')
 
-  it('what is promised but not served is only ever the On the way line, never a live feature', () => {
-    expect(PLUS_COMING_SOON.map((f) => f.title)).toEqual(['Partner perks', 'Cosmetics', 'Crew extras'])
-    expect(PLUS_FEATURES.map((f) => f.title).join(' ')).not.toMatch(/perks|crew/i)
+  it('what is promised but not served is never named, not even as "on the way" (App Review 2.1 / 3.1.2)', () => {
+    expect(PLUS_FEATURES.map((f) => f.title).join(' ')).not.toMatch(/perks|crew|cosmetic/i)
   })
 
   // D2. Negative control: a GST line for any currency (the old hard-coded footer) fails the USD and mixed cases.

@@ -26,7 +26,6 @@ import {
   isNightPass,
   planRowFor,
   planSubline,
-  PLUS_COMING_SOON,
   PLUS_FEATURES,
   taxLine,
   waitForPlus,
@@ -345,7 +344,7 @@ function PlusScreenContent() {
           <>
             {card ? <ManageStatusRow status={card.status} sentence={card.sentence} store={card.store} testID="plus-status" /> : null}
             {launch ? <Banner kind="info" text={LAUNCH_LINE} testID="plus-launch" /> : null}
-            <WhatYouGet features={PLUS_FEATURES} comingSoon={PLUS_COMING_SOON} />
+            <WhatYouGet features={PLUS_FEATURES} />
             <NeverForSalePanel />
             {plansSection()}
           </>
