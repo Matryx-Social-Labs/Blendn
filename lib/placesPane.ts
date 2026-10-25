@@ -293,11 +293,12 @@ export function glowFor(bucket: VenueListItem['liveNow']): { alpha: number; radi
 }
 
 /** The map's numbered pins: Near you's rows, in order, those with a position. */
-export type NearPin = { id: string; lat: number; lon: number; n: number }
+/** `name`: what VoiceOver reads the pin as, with its number (the map's annotation is a button on iOS: audit M3). */
+export type NearPin = { id: string; lat: number; lon: number; n: number; name: string }
 export function nearPins(venues: readonly VenueListItem[]): NearPin[] {
   const pins: NearPin[] = []
   venues.slice(0, NEAR_COUNT).forEach((v, i) => {
-    if (v.latitude != null && v.longitude != null) pins.push({ id: v.id, lat: v.latitude, lon: v.longitude, n: i + 1 })
+    if (v.latitude != null && v.longitude != null) pins.push({ id: v.id, lat: v.latitude, lon: v.longitude, n: i + 1, name: v.name })
   })
   return pins
 }

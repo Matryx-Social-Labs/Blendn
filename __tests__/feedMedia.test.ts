@@ -170,7 +170,7 @@ describe('a hero clip restarts when the carousel comes back to it', () => {
   )
 
   it('mounts the clip only while it is the page in view', () => {
-    expect(heroSrc).toContain('item.kind === \'video\' && i === index ?')
+    expect(heroSrc).toContain('item.kind === \'video\' && i === index && mountClip ?')
     // The preload window that let a finished player survive the page.
     expect(heroSrc).not.toContain('Math.abs(i - index) <= 1')
   })

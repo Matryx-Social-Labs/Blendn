@@ -1,10 +1,11 @@
 import { router } from 'expo-router'
-import Reanimated, { Easing, FadeOut, LinearTransition, useReducedMotion } from 'react-native-reanimated'
+import Reanimated, { Easing, FadeOut, LinearTransition } from 'react-native-reanimated'
 
 import { DURATION, EASING } from '../../lib/design/tokens'
 import type { MessageRequest, useBanterInbox } from '../../lib/useBanterInbox'
 import { inboxTimeLabel } from './inbox'
 import { RequestCard, RequestFace } from './BanterParts'
+import { useReducedMotion } from '../../lib/motion'
 
 const REQUEST_REFLOW = LinearTransition.duration(DURATION.base).easing(Easing.bezier(...EASING.standard))
 

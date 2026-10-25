@@ -110,6 +110,7 @@ import Moon from 'lucide-react-native/icons/moon'
 import Music from 'lucide-react-native/icons/music'
 import Music2, { __iconData as music2Data } from 'lucide-react-native/icons/music-2'
 import Navigation from 'lucide-react-native/icons/navigation'
+import Pause from 'lucide-react-native/icons/pause'
 import PenLine from 'lucide-react-native/icons/pen-line'
 import Pencil from 'lucide-react-native/icons/pencil'
 import Play from 'lucide-react-native/icons/play'
@@ -269,6 +270,7 @@ const ICONS = {
   music: Music,
   'music-2': Music2,
   navigation: Navigation,
+  pause: Pause,
   'pen-line': PenLine,
   pencil: Pencil,
   play: Play,

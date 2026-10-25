@@ -32,6 +32,7 @@ jest.mock('../lib/apiClient', () => ({
   },
 }))
 const mockLive: { onMessage?: (data: unknown) => void }[] = []
+const mockToast = jest.fn()
 jest.mock('../lib/socketClient', () => {
   const noop = () => () => {}
   return {
@@ -50,7 +51,7 @@ const mockAuth: { user: { id: string; image?: string | null } } = { user: { id: 
 jest.mock('../lib/useAuth', () => ({ useAuth: () => mockAuth }))
 jest.mock('../lib/useLiveSync', () => ({ useLiveSync: () => 'connected' }))
 jest.mock('../lib/notifications', () => ({ useActiveThread: () => {} }))
-jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn() }) }))
+jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockToast }) }))
 jest.mock('../components/RealtimeStatusBanner', () => () => null)
 jest.mock('../lib/logger', () => ({
   Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn(), journey: jest.fn() },
@@ -459,5 +460,34 @@ describe('a jump from one open DM to another (RC drive 2 D-E, privacy)', () => {
     await view.unmount()
     expect(draftOf(dmThread('c1', 'u-a'))).toBe('only for zoe')
     expect(draftOf(dmThread('c2', 'u-a'))).toBe('kai’s own')
+  })
+})
+
+/*
+ * Audit M4: a DM is never removed after delivery (one that fails moderation is stored hidden and never sent), so the
+ * two cases are a send withheld by moderation (the dashed placeholder and the toast) and, in the history, your own
+ * photo that was withheld: the sender's view is the 220x160 dashed frame (round 4 #37), never a text-sized pill.
+ */
+describe('a DM withheld by moderation', () => {
+  it('withheld at send: the dashed placeholder, and the toast says so', async () => {
+    api.getConversationMessages.mockResolvedValue(page([]) as never)
+    api.sendPrivateMessage.mockResolvedValue({ success: true, data: { id: 'm2', moderation_hidden: true } } as never)
+    await open()
+    await act(async () => fireEvent.press(screen.getByLabelText(/Say hi/)))
+    await flush()
+    expect(screen.getByTestId('dm-bubble-m2-bubble').props.accessibilityLabel).toMatch(/^You, This message was removed by moderation, /)
+    expect(screen.getByTestId('dm-bubble-m2-dashed', { includeHiddenElements: true })).toBeTruthy()
+    expect(mockToast).toHaveBeenCalledWith('That message wasn’t delivered.', 'info')
+  })
+
+  it('your withheld photo: the photo-sized frame with the shield, read as a removed photo (round 4 #37)', async () => {
+    const minePhoto = { ...theirs, id: 'm3', senderId: 'u-a', sender: { id: 'u-a', name: null, image: null }, text: null, mediaUrl: 'https://cdn.blendn.app/dm/p.jpg', mediaType: 'image', moderation_hidden: true }
+    api.getConversationMessages.mockResolvedValue(page([theirs, minePhoto]) as never)
+    await open()
+    const frame = screen.getByTestId('dm-photo-m3-bubble')
+    expect(frame.props.accessibilityLabel).toMatch(/^You, Photo removed by moderation, /)
+    expect(StyleSheet.flatten(frame.props.style)).toMatchObject({ width: 220, height: 160 })
+    expect(screen.getByText('Removed by moderation', { includeHiddenElements: true })).toBeTruthy()
+    expect(imageUris()).not.toContain(minePhoto.mediaUrl)
   })
 })

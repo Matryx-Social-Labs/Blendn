@@ -40,6 +40,7 @@ import { TAB_BAR_CLEARANCE, tabBarTop } from './_layout'
 import { FilterSheet, type CategoryOption } from '../../components/pulse/FilterControl'
 import { HomeShell, type HomeBrowse } from '../../components/home/HomeShell'
 import { DRAWER_HEADER_HEIGHT } from '../../lib/home'
+import { useReducedMotion } from '../../lib/motion'
 import { searchTermOf } from '../../lib/searchTerm'
 import { showSheet } from '../../lib/sheet'
 import { useToast } from '../../components/Toast'
@@ -301,6 +302,7 @@ const proximityFor = (
 
 function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrowse) => void; visible: boolean; full: boolean }) {
   const { user, loading: authLoading } = useAuth()
+  const reduceMotion = useReducedMotion()
   const insets = useSafeAreaInsets()
   // The hero card sits under the home drawer's header too (components/home/HomeDrawer.tsx).
   const cardInsets = useMemo(() => ({ top: insets.top + DRAWER_HEADER_HEIGHT, bottom: insets.bottom }), [insets.top, insets.bottom])
@@ -1584,7 +1586,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     onDismiss: coach.dismiss,
     onLost: coach.lose,
     bottomLimit: tabBarTop(SCREEN_HEIGHT, insets.bottom),
-    onOverflow: (px) => listRef.current?.scrollToOffset({ offset: listOffsetRef.current + px, animated: true }),
+    onOverflow: (px) => listRef.current?.scrollToOffset({ offset: listOffsetRef.current + px, animated: !reduceMotion }),
     testID: 'pulse-coach-mark',
   })
   useEffect(() => {

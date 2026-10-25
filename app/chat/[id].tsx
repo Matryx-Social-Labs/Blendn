@@ -56,7 +56,7 @@ import { isSpeech, isTemp, roomMessageFromSocket, roomMessagesFrom, type RoomMes
 import { useHereCount, useRoomRow, type RoomRow } from '../../lib/roomRow'
 import { roomLockedIn } from '../../lib/roomState'
 import { blockStep, messageReportStep } from '../../lib/safetyUtils'
-import { sendOutcome } from '../../lib/sendOutcome'
+import { REMOVED_AFTER_DELIVERY, sendOutcome } from '../../lib/sendOutcome'
 import { showSheet } from '../../lib/sheet'
 import {
   rejoinChatSocket,
@@ -489,7 +489,10 @@ function GroupChatInner() {
       }),
       /* The server sends the whole tally, so this replaces rather than merges: counts, never who. */
       subscribeToChatReaction(roomId, (data) => setMessage(data.messageId, (m) => ({ ...m, reactions: withMine(data.tally, m.reactions) }))),
-      /* A moderation removal of your own message becomes the placeholder; everyone else's copy simply goes. */
+      /*
+       * A moderation removal of your own message becomes the placeholder, and the toast (a live region) tells a screen
+       * reader the bubble changed; everyone else's copy simply goes.
+       */
       subscribeToChatMessageDeleted(roomId, (data) => {
         const ownRemoval = data.moderation && data.userId && data.userId === currentUser?.id
         setMessages((prev) =>
@@ -497,6 +500,7 @@ function GroupChatInner() {
             ? prev.map((m) => (m.message_id === data.messageId ? { ...m, removed: true, message_text: '' } : m))
             : prev.filter((m) => m.message_id !== data.messageId)
         )
+        if (ownRemoval) showToast(REMOVED_AFTER_DELIVERY, 'info')
       }),
       // Removed while reading: the room becomes the removed state (R2-D2 #01), never a modal.
       subscribeToChatMemberBanned(roomId, (data) => {

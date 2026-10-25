@@ -2,9 +2,10 @@ import React, { useEffect, useState, useSyncExternalStore } from 'react'
 import type { ViewStyle } from 'react-native'
 import { connect, SocketConnectionStatus } from '../lib/socketClient'
 import { getNetworkState, subscribeNetworkState, type NetworkState } from '../lib/networkStatus'
-import Animated, { useReducedMotion } from 'react-native-reanimated'
+import Animated from 'react-native-reanimated'
 import { Banner } from './ds/Banner'
 import { bannerFadeIn, bannerIn, bannerOut } from './motion/presence'
+import { useReducedMotion } from '../lib/motion'
 
 /**
  * Two different failures wearing one banner.

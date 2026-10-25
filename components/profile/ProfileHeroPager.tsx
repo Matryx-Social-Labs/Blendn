@@ -13,12 +13,15 @@ export const HERO_DWELL_MS = 4000
 const PIP = 6
 const PIP_LONG = 16
 const PIP_DIM = 0.35
+/** The pip's growth to the current page. */
+const PIP_MS = 160
 
 /** The next page, wrapping: the hero is a loop until the person takes it over. */
 export const nextPage = (page: number, count: number) => (count ? (page + 1) % count : 0)
 
 /** Flow 6 `friend` pips: the current page long and white, the rest 35%. Decorative: the pager's own labels say where you are. */
 export function HeroPips({ count, page, top }: { count: number; page: number; top: number }) {
+  const reduceMotion = useReducedMotion()
   if (count < 2) return null
   return (
     <View testID="hero-pips" pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.pips, { top }]}>
@@ -28,7 +31,8 @@ export function HeroPips({ count, page, top }: { count: number; page: number; to
           style={[
             styles.pip,
             i === page ? styles.pipOn : styles.pipOff,
-            { transitionProperty: ['width', 'backgroundColor'], transitionDuration: 160 },
+            // A CSS transition ignores Reduce Motion in Reanimated 4.5 (audit L2): the pip changes at once under it.
+            { transitionProperty: ['width', 'backgroundColor'], transitionDuration: reduceMotion ? 0 : PIP_MS },
           ]}
         />
       ))}
@@ -65,12 +69,12 @@ export function ProfileHeroPager({
     if (!auto) return
     const id = setTimeout(() => {
       const next = nextPage(page, count)
-      scroll.current?.scrollTo({ x: next * width, animated: true })
+      scroll.current?.scrollTo({ x: next * width, animated: !reduceMotion })
       setPage(next)
       onPage?.(next)
     }, HERO_DWELL_MS)
     return () => clearTimeout(id)
-  }, [auto, page, count, width, onPage])
+  }, [auto, page, count, width, onPage, reduceMotion])
 
   const onSettle = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const next = Math.round(e.nativeEvent.contentOffset.x / width)

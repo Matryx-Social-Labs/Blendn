@@ -203,6 +203,9 @@ export function AddFace({ onPress, disabled, busy, label, accessible = true }: {
       onPress={onPress}
       disabled={disabled}
       accessible={accessible}
+      // Out of the reading order on Android too: TalkBack still lands on a clickable view that is only `accessible={false}`,
+      // and reads it with no name (audit L8; the first slot carries the one Add).
+      importantForAccessibility={accessible ? 'auto' : 'no'}
       accessibilityRole={accessible ? 'button' : undefined}
       accessibilityLabel={accessible ? label : undefined}
       accessibilityState={{ disabled, busy }}

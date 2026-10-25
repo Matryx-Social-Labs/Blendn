@@ -4,12 +4,12 @@ import { StyleSheet, View } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Animated, {
   useAnimatedStyle,
-  useReducedMotion,
   useSharedValue,
   withDecay,
   withSpring,
 } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
+import { useReducedMotion } from '../../lib/motion'
 
 const MAX_SCALE = 4
 const DOUBLE_TAP_SCALE = 2

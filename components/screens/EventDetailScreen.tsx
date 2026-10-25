@@ -5,7 +5,7 @@ import { H } from '../../lib/haptics'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { InteractionManager, Linking, Platform, StyleSheet, View } from 'react-native'
-import Animated, { FadeIn, LayoutAnimationConfig, LinearTransition, ReduceMotion, useAnimatedScrollHandler, useReducedMotion, useSharedValue } from 'react-native-reanimated'
+import Animated, { FadeIn, LayoutAnimationConfig, LinearTransition, ReduceMotion, useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { OverflowMenu } from '../crews/OverflowMenu'
 import { AmenityGrid, type AmenityTileProps } from '../ds/AmenityTile'
@@ -90,6 +90,7 @@ import { claimUrlFrom } from '../../lib/claimLink'
 import * as Location from 'expo-location'
 import { formatDistance, getDistanceKm } from '../../lib/geo'
 import { ROUGH_FIX_MAX_AGE_MS } from '../../lib/locationFix'
+import { useReducedMotion } from '../../lib/motion'
 
 /*
  * What the Scene says in the app's one Sheet (lib/sheet.ts, drawn by SheetHost on the DS Sheet), in the frame's words.

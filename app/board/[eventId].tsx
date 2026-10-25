@@ -2,7 +2,7 @@ import * as Notifications from 'expo-notifications'
 import { Redirect, router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native'
-import Animated, { useReducedMotion } from 'react-native-reanimated'
+import Animated from 'react-native-reanimated'
 
 import { PageFooter } from '../../components/chat/PageFooter'
 import { Button } from '../../components/ds/Button'
@@ -48,6 +48,7 @@ import { cursorOf, getBoardPage, goneFrom, type BoardPostView, type TakenDown } 
 import { COLOR, RADIUS, SPACE, STAGGER, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useTopBarOverlay } from '../../lib/useTopBarState'
+import { useReducedMotion } from '../../lib/motion'
 
 /**
  * The Board (Flow 4 Board, flow4.js `board`; the rules in docs/PLACEHOLDER_SCREENS.md §6).

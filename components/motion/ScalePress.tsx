@@ -2,6 +2,7 @@ import React, { useCallback } from 'react'
 import { Pressable, type GestureResponderEvent, type PressableProps, type StyleProp, type ViewStyle } from 'react-native'
 import Animated, { ReduceMotion, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated'
 
+import { notePressed } from '../../lib/focusReturn'
 import { PRESS, SPRING } from '../../lib/motion'
 
 type ScalePressProps = PressableProps & {
@@ -43,6 +44,7 @@ const RETENTION = { top: 16, bottom: 16, left: 16, right: 16 }
 export default function ScalePress({
   children,
   style,
+  onPress,
   onPressIn,
   onPressOut,
   pressedScale = PRESS.scale,
@@ -70,9 +72,19 @@ export default function ScalePress({
     [scale, onPressOut]
   )
 
+  // Noted as the opener of whatever this press opens, so an overlay can hand focus back to it (lib/focusReturn).
+  const handlePress = useCallback(
+    (event: GestureResponderEvent) => {
+      notePressed(event?.currentTarget)
+      onPress?.(event)
+    },
+    [onPress]
+  )
+
   return (
     <AnimatedPressable
       {...rest}
+      onPress={onPress ? handlePress : undefined}
       pressRetentionOffset={pressRetentionOffset}
       style={[style, animatedStyle]}
       onPressIn={handlePressIn}

@@ -7,7 +7,7 @@ import { COLOR, MATERIAL, RADIUS, SPACE } from '../../lib/design/tokens'
 import { useReduceTransparency } from '../ds/shared'
 import { tint } from '../../lib/theme'
 import { useVideoPlayer, VideoView } from 'expo-video'
-import { useReducedMotion } from 'react-native-reanimated'
+import { useReducedMotion } from '../../lib/motion'
 
 /**
  * The hero's media: a swipeable pager that also advances on its own.
@@ -57,12 +57,24 @@ export function SceneHeroMedia({
   width,
   height,
   onPress,
+  paused = false,
+  started = false,
+  onClipInView,
 }: {
   playlist: FeedMediaItem[]
   width: number
   height: number
   /** Opens the lightbox at the item currently shown. */
   onPress?: (index: number) => void
+  /**
+   * The hero's pause (WCAG 2.2.2, audit H2; `SceneHero` draws the control over the scrims): a clip holds its frame and
+   * nothing advances. Under Reduce Motion it starts paused.
+   */
+  paused?: boolean
+  /** Somebody pressed Play or Pause: a clip that never autoplayed (Reduce Motion) may now mount. */
+  started?: boolean
+  /** Whether the page in view is a clip, for the control (shown only over one). */
+  onClipInView?: (clip: boolean) => void
 }) {
   const [index, setIndex] = useState(0)
   const [manual, setManual] = useState(false)
@@ -92,9 +104,10 @@ export function SceneHeroMedia({
    * forever while the timer tried to move past it.
    *
    * Never under Reduce Motion: a page sliding away on its own is exactly the
-   * motion that setting asks us not to start. The viewer swipes, clips loop.
+   * motion that setting asks us not to start. The viewer swipes; a clip is its
+   * poster until they press Play, then loops. Never while paused (WCAG 2.2.2).
    */
-  const autoAdvances = !manual && !reduceMotion && playlist.length > 1
+  const autoAdvances = !manual && !reduceMotion && !paused && playlist.length > 1
   const autoAdvancesRef = useRef(autoAdvances)
 
   // The three refs above, refreshed on every commit rather than during render.
@@ -120,6 +133,14 @@ export function SceneHeroMedia({
     const id = setTimeout(() => goToRef.current(indexRef.current + 1), IMAGE_DWELL_MS)
     return () => clearTimeout(id)
   }, [autoAdvances, index, current?.kind])
+
+  const clipInView = current?.kind === 'video'
+  useEffect(() => onClipInView?.(clipInView), [clipInView, onClipInView])
+  /*
+   * A clip mounts (and so plays) unless it is paused before anybody chose to play it: under Reduce Motion the hero is
+   * the poster, and the tap still opens the lightbox, whose player has its own controls (FeedMedia's rule).
+   */
+  const mountClip = !paused || started
 
   const onMomentumEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const page = Math.round(e.nativeEvent.contentOffset.x / width)
@@ -191,10 +212,11 @@ export function SceneHeroMedia({
               "it plays" stops depending on a prop transition that a two-item
               playlist never performs.
             */}
-            {item.kind === 'video' && i === index ? (
+            {item.kind === 'video' && i === index && mountClip ? (
               <HeroVideo
                 key={`${item.url}-${i}`}
                 source={item.url}
+                paused={paused}
                 /*
                  * Loops exactly when nothing is going to advance past it.
                  *
@@ -288,11 +310,14 @@ const styles = StyleSheet.create({
  */
 function HeroVideo({
   source,
+  paused,
   loop,
   onEnded,
   onFailed,
 }: {
   source: string
+  /** Holds the frame it is on; Play carries on from there. */
+  paused: boolean
   loop: boolean
   onEnded: () => void
   /**
@@ -320,8 +345,9 @@ function HeroVideo({
      * Mounted only while it is the page in view, so arriving on it constructs
      * a new player at zero -- there is nothing to reset and no `replay()` call.
      */
-    player.play()
-  }, [player])
+    if (paused) player.pause()
+    else player.play()
+  }, [player, paused])
 
   const endedRef = useRef(onEnded)
   const failedRef = useRef(onFailed)

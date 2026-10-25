@@ -20,13 +20,22 @@ const REWIND = { ...SPRING.settle, reduceMotion: ReduceMotion.Never }
 /** A long label ("Go live when you’re here · 350 m") shrinks this far before it would lose its tail. */
 const LABEL_MIN_SCALE = 0.8
 
+/**
+ * What a screen reader's button says when the caller names nothing: "Hold to blend in" is "Blend in", because a
+ * double-tap commits and there is nothing to hold (audit L10).
+ */
+export const spokenVerb = (label: string): string => {
+  const verb = label.replace(/^hold to\s+/i, '')
+  return verb.charAt(0).toUpperCase() + verb.slice(1)
+}
+
 export type HoldToConfirmProps = {
   /** "Hold to blend in". */
   label: string
   onConfirm: () => void
   /** What confirming does, read as the hint: "Checks you in. Other people at this event will see you." */
   consequence?: string
-  /** The screen reader's button ("Check in"); the label when omitted. */
+  /** The screen reader's button ("Check in"); when omitted, the label's verb without "Hold to" (a double-tap commits). */
   srLabel?: string
   /** While the confirmed action runs: the fill stays full under `busyLabel`. When it drops, the fill drains. */
   busy?: boolean
@@ -160,7 +169,7 @@ export function HoldToConfirm({
     return (
       <Button
         kind="strong"
-        label={srLabel ?? label}
+        label={srLabel ?? spokenVerb(label)}
         accessibilityHint={consequence}
         onPress={commit}
         disabled={disabled || !!confirmedLabel}

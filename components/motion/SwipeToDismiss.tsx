@@ -6,7 +6,6 @@ import Animated, {
   Extrapolation,
   interpolate,
   useAnimatedStyle,
-  useReducedMotion,
   useSharedValue,
   withSpring,
   withTiming,
@@ -14,6 +13,7 @@ import Animated, {
 import { scheduleOnRN } from 'react-native-worklets'
 
 import { COLOR } from '../../lib/design/tokens'
+import { useReducedMotion } from '../../lib/motion'
 
 /** Past this, a slow drag dismisses. */
 const DISMISS_DISTANCE = 120
@@ -133,7 +133,8 @@ export function SwipeToDismiss({
     <GestureHandlerRootView style={styles.fill}>
       <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, backdropStyle]} pointerEvents="none" />
       <GestureDetector gesture={pan}>
-        <Animated.View style={[styles.fill, contentStyle]}>
+        {/* VoiceOver's two-finger Z dismisses it as the swipe does (audit L5); it is the whole screen, so modal to a reader. */}
+        <Animated.View testID="swipe-to-dismiss" accessibilityViewIsModal onAccessibilityEscape={onDismiss} style={[styles.fill, contentStyle]}>
           {/* A separate view: an entering animation and the drag's transform would fight over one. */}
           <Animated.View style={styles.fill} entering={reduceMotion ? fadeOpenIn : openIn}>
             {children}

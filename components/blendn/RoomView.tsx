@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { StyleSheet, View } from 'react-native'
 import { GestureDetector } from 'react-native-gesture-handler'
-import Animated, { Easing, LinearTransition, useReducedMotion, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming, type SharedValue } from 'react-native-reanimated'
+import Animated, { Easing, LinearTransition, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming, type SharedValue } from 'react-native-reanimated'
 
 import { DURATION, EASING, RISE, SPACE, SPRING, STAGGER } from '../../lib/design/tokens'
 import type { CrewCard } from '../../lib/crews'
@@ -17,6 +17,7 @@ import { SOCKET_GRACE_MS } from '../RealtimeStatusBanner'
 import { ChatDock, type DockLine } from './ChatDock'
 import { EveryoneHead, GRID_GAP, MeetNextRow, RoomGridFace, RoomHero, ShowMore, useGridCell } from './RoomSections'
 import { useStageScroll } from './RoomStage'
+import { useReducedMotion } from '../../lib/motion'
 
 /*
  * Motion #9, after the pour: the Room's hero rises 12 on M.travel and its

@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react'
 import type { StyleProp, ViewStyle } from 'react-native'
 import Animated, {
   Easing,
-  useReducedMotion,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
@@ -10,7 +9,7 @@ import Animated, {
 } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
 import { EASING, RISE } from '../../lib/design/tokens'
-import { motionTokens } from '../../lib/motion'
+import { motionTokens, useReducedMotion } from '../../lib/motion'
 
 type FadeInUpProps = {
   children: React.ReactNode
