@@ -8,6 +8,7 @@ import React from 'react'
 import { View } from 'react-native'
 
 import { SceneHero } from '../components/scene/SceneHero'
+import type { FeedMediaItem } from '../lib/feedMedia'
 
 const mockPlayer = { play: jest.fn(), pause: jest.fn(), addListener: () => ({ remove: () => {} }), loop: false, muted: false }
 jest.mock('expo-video', () => ({
@@ -23,7 +24,7 @@ jest.mock('../lib/motion', () => ({ ...jest.requireActual('../lib/motion'), useR
 
 const CLIP = { kind: 'video' as const, url: 'https://x.test/a.mp4', posterUrl: 'https://x.test/a.jpg' }
 const STILL = { kind: 'image' as const, url: 'https://x.test/b.jpg' }
-const hero = (playlist = [CLIP]) => (
+const hero = (playlist: FeedMediaItem[] = [CLIP]) => (
   <View>
     <SceneHero source={undefined} playlist={playlist} title="Vinyl night" when="9 PM" place="at Toit" />
   </View>
