@@ -9,7 +9,6 @@ import Animated, {
   ReduceMotion,
   cubicBezier,
   useAnimatedStyle,
-  useReducedMotion,
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated'
@@ -28,6 +27,7 @@ import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, MATERIAL, MAX_FONT_SCALE, R
 import { DARK_MAP_STYLE, LOCATION_CARD_DELTA } from '../../lib/mapStyle'
 import { printable } from '../../lib/pulseSections'
 import { avatarStack } from '../../lib/pseudonymAvatar'
+import { useReducedMotion } from '../../lib/motion'
 
 /*
  * The CTA's label change (#45, A78 approved in Prompt 10): the old label exits

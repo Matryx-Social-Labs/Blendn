@@ -1,7 +1,7 @@
 import { Image } from 'expo-image'
 import { useEffect } from 'react'
 import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
-import Animated, { useReducedMotion } from 'react-native-reanimated'
+import Animated from 'react-native-reanimated'
 
 import { Icon } from '../ui/Icon'
 import { COLOR, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
@@ -9,6 +9,7 @@ import { H } from '../../lib/haptics'
 import { Button } from '../ds/Button'
 import { CONTROL_FONT_CAP, font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast, useMinMeasure } from '../ds/shared'
 import { bannerFadeIn, bannerIn, bannerOut } from '../motion/presence'
+import { useReducedMotion } from '../../lib/motion'
 
 /** The cover's side: the frame's 48. */
 const COVER = 48

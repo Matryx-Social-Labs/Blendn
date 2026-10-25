@@ -1,5 +1,5 @@
 import { StyleSheet, View } from 'react-native'
-import Animated, { LinearTransition, useReducedMotion } from 'react-native-reanimated'
+import Animated, { LinearTransition } from 'react-native-reanimated'
 
 import { Banner } from '../ds/Banner'
 import { bannerFadeIn, bannerIn, bannerOut } from '../motion/presence'
@@ -7,6 +7,7 @@ import { RateLimitedBanner } from '../system/RateLimitedBanner'
 import RealtimeStatusBanner from '../RealtimeStatusBanner'
 import { SPACE, SPRING } from '../../lib/design/tokens'
 import type { SocketConnectionStatus } from '../../lib/socketClient'
+import { useReducedMotion } from '../../lib/motion'
 
 type BannersProps = {
   socketStatus: SocketConnectionStatus

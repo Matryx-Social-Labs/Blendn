@@ -53,12 +53,13 @@ import {
   styleHost,
 } from '../../lib/mapStyleEmber'
 import { MAP_THEME } from '../../lib/mapTheme'
+import { useReducedMotion } from '../../lib/motion'
 import { SPACE } from '../../lib/theme'
 import { fitBounds, type NearPin } from '../../lib/placesPane'
 import { LocateButton } from './LocateButton'
 import { MapCredit } from './MapCredit'
 import { NearPins } from './NearPins'
-import { Chips, CityBuildings, GroundGlow, LitBuildings, OwnBuildings, useReduceMotion } from './MapLitLayers'
+import { Chips, CityBuildings, GroundGlow, LitBuildings, OwnBuildings } from './MapLitLayers'
 import { useMapLighting, type Collection, type MapView, type Segment } from './useMapLighting'
 
 /** Where the map opens before the phone has a fix: central Bengaluru. */
@@ -193,7 +194,7 @@ export const HomeMap = memo(function HomeMap({
   const [gestures, setGestures] = useState(0)
   // "My location" asked the phone for a fix and is waiting (review L7).
   const [asking, setAsking] = useState(false)
-  const reduceMotion = useReduceMotion()
+  const reduceMotion = useReducedMotion()
   // Across cities the map's ground covers the jump, then fades off it.
   const fade = useSharedValue(0)
   const fadeStyle = useAnimatedStyle(() => ({ opacity: fade.get() }))

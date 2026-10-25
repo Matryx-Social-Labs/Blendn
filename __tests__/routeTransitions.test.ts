@@ -26,7 +26,7 @@ describe('the root layout’s transitions', () => {
   })
 
   it('reads Reduce Motion through lib/motion, not a second source', () => {
-    expect(src).toMatch(/import \{ useReducedMotion \} from '\.\.\/lib\/motion'/)
+    expect(src).toMatch(/import \{[^}]*\buseReducedMotion\b[^}]*\} from '\.\.\/lib\/motion'/)
   })
 
   it('leaves the screens that draw their own motion at none', () => {

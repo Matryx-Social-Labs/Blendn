@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { StyleSheet, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native'
-import Animated, { LinearTransition, useReducedMotion } from 'react-native-reanimated'
+import Animated, { LinearTransition } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { TAB_BAR_CLEARANCE } from '../../app/(tabs)/_layout'
@@ -49,6 +49,7 @@ import { RateLimitedBanner } from '../system/RateLimitedBanner'
 import { useNow } from '../../lib/useNow'
 import { usePullToRefresh } from '../../lib/usePullToRefresh'
 import type { HomeBrowse } from './HomeShell'
+import { useReducedMotion } from '../../lib/motion'
 
 const PAGE = 30
 /** The clock the strata are judged by moves a minute at a time: "In 25 min" does not need a render per second. */

@@ -7,7 +7,7 @@ import { COLOR, MATERIAL, RADIUS, SPACE } from '../../lib/design/tokens'
 import { useReduceTransparency } from '../ds/shared'
 import { tint } from '../../lib/theme'
 import { useVideoPlayer, VideoView } from 'expo-video'
-import { useReducedMotion } from 'react-native-reanimated'
+import { useReducedMotion } from '../../lib/motion'
 
 /**
  * The hero's media: a swipeable pager that also advances on its own.

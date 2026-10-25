@@ -17,7 +17,7 @@ import {
 } from '../lib/notifications';
 import { initSocketWithAppState, cleanup as cleanupSocket, disconnect as disconnectSocket } from '../lib/socketClient';
 import { ONBOARDING_ROUTES, mayParticipate, resumeStep } from '../lib/onboarding';
-import { useReducedMotion } from '../lib/motion';
+import { ReducedMotionFollower, useReducedMotion } from '../lib/motion';
 import { refreshPhoneZone } from '../lib/time';
 import { openWhenReady, setLinkNavigator, setRouteReady, takePendingRoute } from '../lib/pendingRoute';
 import { readOnboarding } from '../lib/onboardingStorage';
@@ -563,6 +563,8 @@ function RootLayout() {
             (`Appearance.setColorScheme('dark')` above).
           */}
           <StatusBar style="light" />
+          {/* Reduce Motion switched mid-session: every Reanimated default follows it from then on (audit M1). */}
+          <ReducedMotionFollower />
           {/* No launch animation (owner, 2026-10-21): the static native splash hands straight to the first screen. */}
           <Stack
             // Each screen laid out afresh when the text size changes (RC drive D2); nested navigators wrap their own.

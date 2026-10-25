@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, type ReactNode } from 'react'
 import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
-import Animated, { Easing, interpolate, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming, type SharedValue } from 'react-native-reanimated'
+import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
 
 import { Grabber } from '../ui/Grabber'
@@ -19,6 +19,7 @@ import {
 } from '../../lib/home'
 import { COLOR, EASING, RADIUS, REDUCE_MOTION, SPACE, SPRING } from '../../lib/design/tokens'
 import { tint } from '../../lib/theme'
+import { useReducedMotion } from '../../lib/motion'
 
 /** The drawer at full height is ink at 96%, not glass (Flow 3 `home` 03). */
 const FULL_INK = 0.96

@@ -4,7 +4,6 @@ import Animated, {
   Extrapolation,
   interpolate,
   useAnimatedStyle,
-  useReducedMotion,
   type SharedValue,
 } from 'react-native-reanimated'
 
@@ -15,6 +14,7 @@ import { PhotoScrim, StatusScrim } from '../ui/GradientFill'
 import { COLOR, RADIUS, SPACE } from '../../lib/design/tokens'
 import type { FeedMediaItem } from '../../lib/feedMedia'
 import { HERO_CAPTION_FOOT, SceneHeroMedia } from './SceneHeroMedia'
+import { useReducedMotion } from '../../lib/motion'
 
 /**
  * The Scene's hero (Flow 3 `scene`, 420 tall): the cover (or the organiser's clips and stills) full bleed under the

@@ -8,7 +8,7 @@ import {
   type VectorSourceRef,
 } from '@maplibre/maplibre-react-native'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { AccessibilityInfo, StyleSheet, View, type NativeSyntheticEvent } from 'react-native'
+import { StyleSheet, View, type NativeSyntheticEvent } from 'react-native'
 
 import { Logger } from '../../lib/logger'
 import { glowRadius, litFade, litStateTapped, type BandFeature, type GlowFeature } from '../../lib/mapLit'
@@ -20,6 +20,7 @@ import {
   type OwnBuildingState,
 } from '../../lib/mapStyleEmber'
 import { MAP_THEME } from '../../lib/mapTheme'
+import { useReducedMotion } from '../../lib/motion'
 import { COLOR, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
 import { Icon } from '../ui/Icon'
 import { Text } from '../ui/Text'
@@ -172,32 +173,13 @@ export const LitBuildings = memo(function LitBuildings({
   )
 })
 
-/** Reduce Motion, followed live: it is switched on and off mid-session (review M4). */
-export function useReduceMotion(): boolean {
-  const [on, setOn] = useState(false)
-  useEffect(() => {
-    let alive = true
-    AccessibilityInfo.isReduceMotionEnabled()
-      .then((value) => {
-        if (alive) setOn(value)
-      })
-      .catch((error) => Logger.warn('general', 'Could not read Reduce Motion', { error: String(error) }))
-    const sub = AccessibilityInfo.addEventListener('reduceMotionChanged', setOn)
-    return () => {
-      alive = false
-      sub.remove()
-    }
-  }, [])
-  return on
-}
-
 /**
  * The lit layers' one fade-in (motion #42): 0 until there is something to light, then 1 for good, so the layer arrives
  * over `long` (200 ms under Reduce Motion) the first time and is never faded again. `opacity` is a constant a paint
  * transition can carry; a data-driven one is not transitioned by the map.
  */
 function useLitFade(hasData: boolean) {
-  const reduceMotion = useReduceMotion()
+  const reduceMotion = useReducedMotion()
   const [arrived, setArrived] = useState(false)
   // A frame after the first data is drawn at 0, so the transition has a start to run from.
   useEffect(() => {

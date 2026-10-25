@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import { StyleSheet, View } from 'react-native'
-import Animated, { Easing, FadeIn, ReduceMotion, useReducedMotion } from 'react-native-reanimated'
+import Animated, { Easing, FadeIn, ReduceMotion } from 'react-native-reanimated'
 
 import type { FeedMediaItem } from '../../lib/feedMedia'
 import { DURATION, EASING } from '../../lib/design/tokens'
 import { useLatest } from '../../lib/useLatest'
 import { OptimizedImage } from '../OptimizedImage'
 import { FeedVideo } from './FeedVideo'
+import { useReducedMotion } from '../../lib/motion'
 
 /**
  * How long a still holds before the card moves on.

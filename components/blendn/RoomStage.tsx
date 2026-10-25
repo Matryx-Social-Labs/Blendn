@@ -8,7 +8,6 @@ import Animated, {
   ReduceMotion,
   useAnimatedScrollHandler,
   useAnimatedStyle,
-  useReducedMotion,
   useSharedValue,
   withSpring,
   withTiming,
@@ -22,6 +21,7 @@ import { Grain } from '../ds/Grain'
 import { Orbs } from '../ds/Orbs'
 import { useSelection } from '../ds/shared'
 import { GradientFill } from '../ui/GradientFill'
+import { useReducedMotion } from '../../lib/motion'
 
 /** Past this, a slow drag closes. */
 const CLOSE_DISTANCE = 140

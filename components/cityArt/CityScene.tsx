@@ -33,7 +33,6 @@ import Animated, {
   Easing,
   interpolate,
   useAnimatedStyle,
-  useReducedMotion,
   useSharedValue,
   withRepeat,
   withTiming,
@@ -48,6 +47,7 @@ import {
   type TimeOfDay,
 } from '../../lib/cityArt'
 import { buildScene } from './scenes'
+import { useReducedMotion } from '../../lib/motion'
 
 export const SCENE_W = 400
 export const SCENE_H = 260

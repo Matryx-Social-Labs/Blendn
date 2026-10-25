@@ -1,12 +1,13 @@
 import { BAR_BOTTOM, barTop } from '../../lib/barGeometry'
 import { Platform, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
-import Animated, { interpolate, useAnimatedStyle, useReducedMotion, type SharedValue } from 'react-native-reanimated'
+import Animated, { interpolate, useAnimatedStyle, type SharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { IconButton } from '../ds/IconButton'
 import { font, useBoldText } from '../ds/shared'
 import { Material } from '../ui/Material'
 import { COLOR, SIZE, SPACE } from '../../lib/design/tokens'
+import { useReducedMotion } from '../../lib/motion'
 
 /** DS #30: the glass materialises at 8 pt of scroll (never animated opacity); the small title crossfades from 24 to 56. */
 const GLASS_AT = SPACE.sm

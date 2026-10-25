@@ -6,7 +6,6 @@ import Animated, {
   Extrapolation,
   interpolate,
   useAnimatedStyle,
-  useReducedMotion,
   useSharedValue,
   withSpring,
   withTiming,
@@ -14,6 +13,7 @@ import Animated, {
 import { scheduleOnRN } from 'react-native-worklets'
 
 import { COLOR } from '../../lib/design/tokens'
+import { useReducedMotion } from '../../lib/motion'
 
 /** Past this, a slow drag dismisses. */
 const DISMISS_DISTANCE = 120

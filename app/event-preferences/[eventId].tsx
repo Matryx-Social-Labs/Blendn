@@ -3,7 +3,7 @@ import { useTopBarOverlay } from '../../lib/useTopBarState'
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useState } from 'react'
 import { ScrollView, StyleSheet, Text, View } from 'react-native'
-import Animated, { LinearTransition, useReducedMotion } from 'react-native-reanimated'
+import Animated, { LinearTransition } from 'react-native-reanimated'
 
 import { Avatar } from '../../components/ds/Avatar'
 import { Button } from '../../components/ds/Button'
@@ -23,6 +23,7 @@ import { Logger } from '../../lib/logger'
 import { revealReadiness, type RevealReadiness } from '../../lib/reveal'
 import { useAuth } from '../../lib/useAuth'
 import { RouteModal } from '../../components/system/RouteModal'
+import { useReducedMotion } from '../../lib/motion'
 
 /**
  * Why you are here tonight, and whether people can see who you are (Flow 3 `prefs`).

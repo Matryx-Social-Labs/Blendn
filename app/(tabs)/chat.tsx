@@ -1,7 +1,7 @@
 import { router, useScrollToTop } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FlatList, Platform, StyleSheet, Text, View } from 'react-native'
-import Reanimated, { Easing, FadeInUp, FadeOut, LinearTransition, useReducedMotion } from 'react-native-reanimated'
+import Reanimated, { Easing, FadeInUp, FadeOut, LinearTransition } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import {
@@ -51,6 +51,7 @@ import { roomStateLine } from '../../lib/roomState'
 import { SPONSORED, useBanterInbox, type GroupChat, type MessageRequest, type PersonalChat } from '../../lib/useBanterInbox'
 import { useCrewInbox } from '../../lib/useCrewInbox'
 import { TAB_BAR_CLEARANCE } from './_layout'
+import { useReducedMotion } from '../../lib/motion'
 
 /** A conversation as the Banter draws it, and what it takes to open, find and swipe it. */
 type Row = {

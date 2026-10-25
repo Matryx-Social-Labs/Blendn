@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Keyboard, ScrollView, StyleSheet, Text, View } from 'react-native'
-import Animated, { Easing, FadeIn, FadeOut, LinearTransition, useReducedMotion, withTiming } from 'react-native-reanimated'
+import Animated, { Easing, FadeIn, FadeOut, LinearTransition, withTiming } from 'react-native-reanimated'
 
 import { KeyboardFrame } from '../../components/chat/KeyboardFrame'
 import { Avatar } from '../../components/ds/Avatar'
@@ -27,6 +27,7 @@ import { Logger } from '../../lib/logger'
 import { askAboutNight, ratePeople, type RatePerson } from '../../lib/ratePeople'
 import { rateRefusal } from '../../lib/rateRefusal'
 import { isNightRated, markNightRated } from '../../lib/ratedNights'
+import { useReducedMotion } from '../../lib/motion'
 
 /**
  * After the night: how it was, and how the people you met were (Flow 3 `rate`).

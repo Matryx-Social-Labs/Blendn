@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import Animated, { useReducedMotion } from 'react-native-reanimated'
+import Animated from 'react-native-reanimated'
 
 import { Banner } from '../ds/Banner'
 import { bannerFadeIn, bannerIn, bannerOut } from '../motion/presence'
 import { formatCountdown, RATE_LIMITED_TEXT } from '../../lib/rateLimited'
+import { useReducedMotion } from '../../lib/motion'
 
 /**
  * A read the server refused for asking too fast (guidelines/flow-15 `rateLimit`): a solid banner where the list would
