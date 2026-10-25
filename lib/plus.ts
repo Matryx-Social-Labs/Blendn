@@ -35,19 +35,13 @@ export type PlusFeature = { icon: IconName; title: string; detail: string }
 /**
  * What Blendn+ is — what exists today, never anything on the never-sold list
  * (plan v2 §9.3). Partner perks and crew extras join this list when they are
- * built (SCRUM-584), not before: nothing is sold that cannot be used. Until
- * then they are the page's one "On the way" line (`PLUS_COMING_SOON`, D22).
+ * built (SCRUM-584), not before: nothing is sold that cannot be used, and
+ * nothing unbuilt is named on the paywall, not even as "on the way" (App
+ * Review 2.1 / 3.1.2, app-review-readiness 2026-10-24 #6).
  */
 export const PLUS_FEATURES: readonly PlusFeature[] = [
   { icon: 'radio', title: 'Stay live while you’re there', detail: 'Past the free window, up to 4 hours' },
   { icon: 'history', title: 'Your full night history', detail: 'Beyond the last 3 nights' },
-]
-
-/** Promised in the design, not served yet: named once, in the "On the way" line under What you get (D22), never as a row. */
-export const PLUS_COMING_SOON: readonly PlusFeature[] = [
-  { icon: 'gift', title: 'Partner perks', detail: 'At places that run them' },
-  { icon: 'sparkles', title: 'Cosmetics', detail: 'Looks for your disc and creature' },
-  { icon: 'users', title: 'Crew extras', detail: 'A crew photo seen only inside the crew · your pick of the 12 emblem palettes' },
 ]
 
 /** The app's one date (`calendarDate`), as Manage says it: the phone's locale wrote "23. Oct 2027" here (RC drive 3, en_DE). */

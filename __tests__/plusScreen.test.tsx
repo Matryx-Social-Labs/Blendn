@@ -129,12 +129,15 @@ it('Monthly is picked first, the Night Pass is set apart, and the dock carries t
   expect(button('Start Blend’n+ — ₹1,499.00 / year')).toBeTruthy()
 })
 
-// D22 (App Review 3.1.2): sell what exists. Negative control: the old "Coming soon" rows fail it.
-it('lists the shipped features only, and names the rest once in a quiet On the way line', async () => {
+// D22 (App Review 2.1 / 3.1.2): sell what exists, and name nothing else. Negative control: the old "Coming soon" rows and
+// the "On the way: partner perks, cosmetics and crew extras." line both fail it.
+it('lists the shipped features only, and names nothing unbuilt, not even as on the way', async () => {
   await mount()
+  expect(screen.getByLabelText(/^Stay live while you’re there\./)).toBeTruthy()
   expect(screen.queryByText('Coming soon')).toBeNull()
+  expect(screen.queryByText(/on the way/i)).toBeNull()
+  expect(screen.queryByText(/partner perks|cosmetics|crew extras/i)).toBeNull()
   expect(screen.queryByLabelText(/^Partner perks\./)).toBeNull()
-  expect(screen.getByText('On the way: partner perks, cosmetics and crew extras.')).toBeTruthy()
 })
 
 it('never buys while RevenueCat is not this account: the plans and the button are off and say so', async () => {

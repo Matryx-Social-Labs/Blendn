@@ -9,7 +9,7 @@
     "scheme": "blendn",
     "userInterfaceStyle": "dark",
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.matryxsociallabs.blendn",
       "usesAppleSignIn": true,
       "associatedDomains": ["applinks:www.blendn.app"],
@@ -138,7 +138,12 @@
           "iosUrlScheme": "com.googleusercontent.apps.689347751270-9fn9ofnpd5kedobrqtorafvlgg2mhnd6"
         }
       ],
-      "expo-secure-store",
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": false
+        }
+      ],
       [
         "expo-notifications",
         {

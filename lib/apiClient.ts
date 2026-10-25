@@ -1968,9 +1968,11 @@ class ApiClientClass {
     )
   }
 
-  async deleteAccount(): Promise<ApiResponse<{ deleted: boolean }>> {
+  /** `appleAuthorizationCode`: a fresh Sign in with Apple code, so the server can revoke the Apple grant (lib/appleRevocation). */
+  async deleteAccount(appleAuthorizationCode?: string): Promise<ApiResponse<{ deleted: boolean }>> {
     const result = await this.request<{ deleted: boolean }>('/api/mobile/account', {
       method: 'DELETE',
+      ...(appleAuthorizationCode ? { body: JSON.stringify({ appleAuthorizationCode }) } : {}),
     })
 
     if (result.success) {

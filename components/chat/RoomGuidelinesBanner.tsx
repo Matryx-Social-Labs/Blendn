@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 import {
+  AI_MODERATION_NOTICE,
   COMMUNITY_GUIDELINES_URL,
   dismissRoomGuidelines,
   hasDismissedRoomGuidelines,
   roomGuidelinesKey,
 } from '../../lib/communityGuidelines'
-import { openInApp } from '../../lib/links'
+import { BLENDN_LINKS, openInApp } from '../../lib/links'
 import { Logger } from '../../lib/logger'
 import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE, TYPE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { OPACITY } from '../../lib/theme'
@@ -30,6 +31,9 @@ import { Icon } from '../ui/Icon'
  * underlined always here, where the words around it are white too) — and it replaces the separate "Community guidelines"
  * action. It closes the copy as its own line, so it is one focusable link with a 44 pt target (a nested Text link can't take
  * a hitSlop).
+ *
+ * Under the ask, the AI-moderation disclosure (`AI_MODERATION_NOTICE`, App Review 5.1.2(i)): this is where people first
+ * post. The sentence and its "privacy policy" link are one focusable link, read whole, as the guidelines line is.
  */
 export function RoomGuidelinesBanner({ userId, chatRoomId }: { userId?: string; chatRoomId?: string }) {
   // The room it is showing for: a different room is hidden until its own read lands.
@@ -60,11 +64,29 @@ export function RoomGuidelinesBanner({ userId, chatRoomId }: { userId?: string; 
     )
   }
 
+  const openPrivacy = () => {
+    openInApp(BLENDN_LINKS.privacy).catch((error) => Logger.warn('chat', 'Could not open the privacy policy', { error }))
+  }
+
   return (
     <View style={styles.root} testID="room-guidelines-banner" accessibilityRole="summary">
       <Icon name="shield" size={ICON.control} />
       <View style={styles.copy}>
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} textBreakStrategy="balanced" style={[font('meta', bold), styles.ink, styles.centre]}>This room is anonymous. Be kind, keep it safe — people here are real.</Text>
+        <Pressable
+          onPress={openPrivacy}
+          hitSlop={(minTarget() - TYPE.meta.lineHeight) / 2}
+          accessibilityRole="link"
+          accessibilityLabel={`${AI_MODERATION_NOTICE} Privacy policy`}
+          accessibilityHint="Opens the privacy policy in your browser"
+          testID="room-ai-notice"
+        >
+          {({ pressed }) => (
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} textBreakStrategy="balanced" style={[font('meta', bold), styles.ink, styles.centre, pressed && styles.pressed]}>
+              {AI_MODERATION_NOTICE} See the <Text style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.link]}>privacy policy</Text>.
+            </Text>
+          )}
+        </Pressable>
         <Pressable
           onPress={openGuidelines}
           hitSlop={(minTarget() - TYPE.meta.lineHeight) / 2}

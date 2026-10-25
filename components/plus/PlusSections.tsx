@@ -214,9 +214,9 @@ export function PlusHeading({ children }: { children: string }) {
 
 /**
  * "What you get" (Flow 12 `GETS`, R3-G, D22): outlined rows on `surface`, what the server serves today and nothing else (App
- * Review 3.1.2: sell what exists). What is promised but not built is one quiet line under the list, never a row of its own.
+ * Review 3.1.2: sell what exists). What is promised but not built is not named at all, not even as "on the way" (2.1).
  */
-export function WhatYouGet({ features, comingSoon }: { features: readonly PlusFeature[]; comingSoon: readonly PlusFeature[] }) {
+export function WhatYouGet({ features }: { features: readonly PlusFeature[] }) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   return (
@@ -236,16 +236,8 @@ export function WhatYouGet({ features, comingSoon }: { features: readonly PlusFe
           </Fragment>
         ))}
       </View>
-      {comingSoon.length ? <PlusNote text={onTheWay(comingSoon)} /> : null}
     </View>
   )
-}
-
-/** "On the way: partner perks, cosmetics and crew extras." */
-export function onTheWay(features: readonly PlusFeature[]): string {
-  const names = features.map((f) => f.title.charAt(0).toLowerCase() + f.title.slice(1))
-  const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0]
-  return `On the way: ${list}.`
 }
 
 /** One footer link: meta text on a 44 / 48 target. `link` opens a page; `button` does something. */
