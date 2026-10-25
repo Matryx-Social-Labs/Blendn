@@ -1,4 +1,5 @@
 import { Image } from 'expo-image'
+import { useState } from 'react'
 import { StyleSheet, Text, View, useWindowDimensions } from 'react-native'
 import Animated, {
   Extrapolation,
@@ -7,12 +8,16 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated'
 
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+
 import { CategoryPlate } from '../ds/EventCard'
+import { IconButton } from '../ds/IconButton'
 import { ScrimPill, TimeBadge } from '../ds/MonoFamily'
 import { CONTROL_FONT_CAP, font, useBoldText } from '../ds/shared'
 import { PhotoScrim, StatusScrim } from '../ui/GradientFill'
 import { COLOR, RADIUS, SPACE } from '../../lib/design/tokens'
 import type { FeedMediaItem } from '../../lib/feedMedia'
+import { sceneBarHeight } from './SceneBar'
 import { HERO_CAPTION_FOOT, SceneHeroMedia } from './SceneHeroMedia'
 import { useReducedMotion } from '../../lib/motion'
 
@@ -90,6 +95,14 @@ export function SceneHero({
   const { width } = useWindowDimensions()
   const bold = useBoldText()
   const reduceMotion = useReducedMotion()
+  const insets = useSafeAreaInsets()
+  /*
+   * WCAG 2.2.2 (audit H2): a clip that plays and loops for more than 5 s can be paused. Null until somebody chooses, so
+   * it follows Reduce Motion (the poster, nothing playing) until they press Play.
+   */
+  const [chosen, setChosen] = useState<boolean | null>(null)
+  const paused = chosen ?? reduceMotion
+  const [clipInView, setClipInView] = useState(false)
 
   const clipStyle = useAnimatedStyle(() => {
     const y = scrollY ? scrollY.get() : 0
@@ -114,7 +127,15 @@ export function SceneHero({
       <Animated.View style={[styles.clip, clipStyle]}>
         <Animated.View style={[StyleSheet.absoluteFill, mediaStyle]}>
           {playlist && playlist.length > 0 ? (
-            <SceneHeroMedia playlist={playlist} width={width} height={h} onPress={onPressMedia} />
+            <SceneHeroMedia
+              playlist={playlist}
+              width={width}
+              height={h}
+              onPress={onPressMedia}
+              paused={paused}
+              started={chosen !== null}
+              onClipInView={setClipInView}
+            />
           ) : source ? (
             <Image source={source} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" transition={200} accessible={false} />
           ) : (
@@ -163,6 +184,18 @@ export function SceneHero({
           </Text>
         ) : null}
       </Animated.View>
+      {/* Over the head scrim (the media tier's dim), under the bar's right-hand circles; above the scrims, so never dimmed. */}
+      {!!playlist?.length && clipInView ? (
+        <View style={[styles.playback, { top: sceneBarHeight(insets.top) }]}>
+          <IconButton
+            tier="media"
+            icon={paused ? 'play' : 'pause'}
+            accessibilityLabel={paused ? 'Play video' : 'Pause video'}
+            onPress={() => setChosen(!paused)}
+            testID="scene-hero-playback"
+          />
+        </View>
+      ) : null}
     </View>
   )
 }
@@ -175,6 +208,7 @@ const styles = StyleSheet.create({
   clip: { ...StyleSheet.absoluteFill, overflow: 'hidden', backgroundColor: COLOR.surface },
   head: { position: 'absolute', top: 0, left: 0, right: 0, height: HEAD_SCRIM },
   foot: { position: 'absolute', bottom: 0, left: 0, right: 0, height: FOOT_SCRIM },
+  playback: { position: 'absolute', right: SPACE.lg },
   info: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: SPACE.gutter, paddingBottom: HERO_CAPTION_FOOT, gap: SPACE.sm },
   pills: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm, marginBottom: SPACE.xs },
   ink: { color: COLOR.textPrimary },
