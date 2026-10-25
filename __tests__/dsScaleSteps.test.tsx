@@ -41,7 +41,16 @@ it('lights the chosen pill in the hue and never in white', async () => {
   expect(on.borderColor).toBe(COLOR.brandRose)
   expect(on.backgroundColor).not.toBe(COLOR.textPrimary)
   expect(off.backgroundColor).not.toBe(on.backgroundColor)
-  expect(screen.getByTestId('s-4').props.accessibilityState).toMatchObject({ selected: true })
+  expect(screen.getByTestId('s-4').props.accessibilityState).toMatchObject({ checked: true })
+})
+
+it('is a radio group of five: the group named by what is rated, each step a radio, the chosen one checked (audit L11)', async () => {
+  await draw({ value: 4 })
+  // The group itself is not one element (that would fold the five into one on iOS): named, with the role.
+  expect(screen.getByLabelText('The night').props.accessibilityRole).toBe('radiogroup')
+  const radios = screen.getAllByRole('radio')
+  expect(radios).toHaveLength(5)
+  expect(radios.map((r) => r.props.accessibilityState?.checked)).toEqual([false, false, false, true, false])
 })
 
 it('a press chooses, with the selection haptic; disabled does neither', async () => {

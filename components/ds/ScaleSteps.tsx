@@ -40,7 +40,8 @@ export function ScaleSteps({
   const sel = useSelection()
   return (
     <View testID={testID} style={styles.column}>
-      <View style={styles.row}>
+      {/* One choice of five: a radio group (as SegmentedControl's radio form), so a screen reader hears the set (audit L11). */}
+      <View style={styles.row} accessibilityRole="radiogroup" accessibilityLabel={subject}>
         {STEPS.map((n) => {
           const selected = value === n
           return (
@@ -53,9 +54,9 @@ export function ScaleSteps({
               }}
               disabled={disabled}
               pressedScale={PRESS.scale}
-              accessibilityRole="button"
+              accessibilityRole="radio"
               accessibilityLabel={`${subject}: ${n} out of 5${n === 1 ? `, ${low}` : n === 5 ? `, ${high}` : ''}`}
-              accessibilityState={{ selected, disabled }}
+              accessibilityState={{ checked: selected, disabled }}
               style={[
                 styles.step,
                 {

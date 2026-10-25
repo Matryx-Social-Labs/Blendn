@@ -34,7 +34,7 @@ export function OverflowMenu({ visible, items, onClose, testID = 'menu' }: { vis
       onDismiss={turn.onDismiss}
       testID={`${testID}-modal`}
     >
-      <Pressable style={[styles.dim, { paddingTop: barCircleBottom(insets.top, Platform.OS === 'android') + MENU_GAP }]} onPress={onClose} accessibilityLabel="Close menu">
+      <Pressable style={[styles.dim, { paddingTop: barCircleBottom(insets.top, Platform.OS === 'android') + MENU_GAP }]} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close menu">
         <View style={styles.anchor}>
           <ContextMenu
             testID={testID}

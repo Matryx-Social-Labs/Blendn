@@ -99,7 +99,10 @@ it('a person: Submit is docked and disabled until a rating; issues are one radio
   await fireEvent.press(await screen.findByRole('button', { name: 'Skip to the people' }))
   expect(await screen.findByText('Night Cat')).toBeTruthy()
   expect(screen.getByRole('button', { name: 'Submit' }).props.accessibilityState).toMatchObject({ disabled: true })
-  expect(screen.getAllByRole('radio')).toHaveLength(5)
+  // Two radio groups now: the rating's five steps (audit L11) and the five issues.
+  const radios = screen.getAllByRole('radio').map((r) => String(r.props.accessibilityLabel))
+  expect(radios.filter((l) => / out of 5/.test(l))).toHaveLength(5)
+  expect(radios.filter((l) => !/ out of 5/.test(l))).toHaveLength(5)
   expect(screen.getByLabelText('Anything you want to tell us?')).toBeTruthy()
 
   await fireEvent.press(screen.getByLabelText(/^Meeting Night Cat: 4 out of 5/))
