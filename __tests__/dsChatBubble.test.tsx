@@ -19,7 +19,7 @@ import { ChatBubble, PRESS_DELAY_MS, type ChatBubbleProps } from '../components/
 import { avatarOf, BUBBLE, emojiOnly, linkHost, linkParts, replyOffset } from '../components/ds/chatShared'
 import { COLOR, FONT_FAMILY, MATERIAL } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
-import { CONTROL_FONT_CAP } from '../components/ds/shared'
+import { CONTROL_FONT_CAP, minTarget } from '../components/ds/shared'
 import { AX_XXXL, uncapped } from './helpers/ax'
 
 jest.mock('react-native-reanimated', () => {
@@ -169,6 +169,19 @@ describe('<ChatBubble>', () => {
     expect(screen.getByTestId('b-avatar', { includeHiddenElements: true })).toBeTruthy()
     expect(screen.getByText('9:38 PM', { includeHiddenElements: true })).toBeTruthy()
     expect(flat('b-bubble').borderBottomLeftRadius).toBe(6)
+  })
+
+  // rc9 #5: Android's tree showed a clickable 32 dp face with no label. Negative control: the old `accessibilityElementsHidden` face fails the first two.
+  it('inbound, the last: the face is a "View profile, <name>" button with a target the platform’s minimum wide, and a picture when it goes nowhere', async () => {
+    const onSenderPress = jest.fn()
+    await render(bubble({ first: false, last: true, onSenderPress }))
+    const face = screen.getByRole('button', { name: 'View profile, Cosmic Panda' })
+    await fireEvent.press(face)
+    expect(onSenderPress).toHaveBeenCalledTimes(1)
+    const { hitSlop } = screen.getByTestId('b-avatar').props
+    expect(BUBBLE.avatar + 2 * hitSlop).toBe(minTarget())
+    await screen.rerender(bubble({ first: false, last: true }))
+    expect(screen.queryByRole('button', { name: 'View profile, Cosmic Panda' })).toBeNull()
   })
 
   it('yours: surfaceRaised, the tail on the right, no name or creature', async () => {
