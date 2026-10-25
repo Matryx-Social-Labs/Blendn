@@ -535,8 +535,14 @@ function PrivateChatInner() {
     () => withUnreadDivider(withDaySeparators(messages, (m) => m.createdAt), unread?.firstId, unread?.count ?? 0),
     [messages, unread]
   )
-  /* Your last message carries the receipt, under it (Flow 5 DM #12–#13); never in a room. */
-  const lastMineId = useMemo(() => [...messages].reverse().find((m) => m.senderId === myId && !isLocalMessage(m))?.id, [messages, myId])
+  /*
+   * Your last message carries the receipt, under it (Flow 5 DM #12–#13); never in a room. One moderation withheld was
+   * never sent, so it is skipped: "Sent" under the placeholder was untrue, and it kept the thread polling (rc8 #2).
+   */
+  const lastMineId = useMemo(
+    () => [...messages].reverse().find((m) => m.senderId === myId && !isLocalMessage(m) && !m.removed)?.id,
+    [messages, myId]
+  )
 
   /*
    * Your last message not yet Read: re-read the thread now and then while

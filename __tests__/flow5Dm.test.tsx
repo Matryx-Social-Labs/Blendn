@@ -490,4 +490,29 @@ describe('a DM withheld by moderation', () => {
     expect(screen.getByText('Removed by moderation', { includeHiddenElements: true })).toBeTruthy()
     expect(imageUris()).not.toContain(minePhoto.mediaUrl)
   })
+
+  /*
+   * rc8 #2: the placeholder lasted only the session, because the history left the hidden message out. Once the server
+   * returns your own hidden DM (`moderation_hidden: true`, text null, as the room does), a reload keeps it. A withheld
+   * message was never sent, so it carries no receipt and the thread does not poll for one: the receipt stays on your
+   * last message that went. Negative control: with `lastMineId` counting removed messages, the "Sent" under the
+   * placeholder and the poll fail it.
+   */
+  it('after a reload, your withheld message is still the dashed placeholder, with no receipt and no poll for one (rc8 #2)', async () => {
+    const polls: Array<() => void> = []
+    const realSetInterval = global.setInterval
+    const spy = jest.spyOn(global, 'setInterval').mockImplementation(((fn: () => void, ms?: number) => {
+      if (ms === RECEIPT_POLL_MS) polls.push(fn)
+      return realSetInterval(() => {}, 1e9)
+    }) as typeof setInterval)
+    const read = { id: 'm4', conversationId: 'c1', senderId: 'u-a', sender: { id: 'u-a', name: null, image: null }, text: 'On my way', isRead: true, createdAt: '2026-10-15T19:04:00.000Z' }
+    const withheld = { ...read, id: 'm5', text: null, isRead: false, createdAt: '2026-10-15T19:05:00.000Z', moderation_hidden: true }
+    api.getConversationMessages.mockResolvedValue(page([withheld, read, theirs]) as never)
+    await open()
+    expect(screen.getByTestId('dm-bubble-m5-dashed', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByTestId('dm-bubble-m5-bubble').props.accessibilityLabel).not.toMatch(/Sent|Delivered|Read/)
+    expect(screen.getByTestId('dm-bubble-m4-bubble').props.accessibilityLabel).toMatch(/Read$/)
+    expect(polls).toHaveLength(0)
+    spy.mockRestore()
+  })
 })
